@@ -279,6 +279,44 @@ pub const WIND_DRIFT_CANDIDATE_MODULUS: u8 = 5;
 /// cardinal.
 pub const WIND_DRIFT_CALM_ACCEPT_MIN: u8 = 192;
 
+/// `weather.md §2` / `prng.md §4` / `combat.md §5.3`: one autonomous
+/// wind-drift check, expressed over an arbitrary draw source so the retry
+/// loop's shape can be exercised directly.
+///
+/// `draw(high)` must return a uniform value over `0..=high` from the
+/// caller's stream. The check draws the outer roll once and returns `None`
+/// without committing anything on the sixty-three-in-sixty-four common
+/// result. Otherwise it enters the retry loop.
+///
+/// **The retry loop has no static bound and none may be assumed.**
+/// `combat.md §5.3`: "the autonomous wind-drift roll draws once in the
+/// common case; on an uncommon result it enters a retry loop taking **one
+/// further draw at a time**, so its draw count per invocation is one, two,
+/// three, and so on upward. **No maximum is published, and an engine must
+/// not assume one** - the loop has no static bound". The retraction in that
+/// same section is explicit that "every integer from one upward *is*
+/// reachable", so this is written as an unbounded `loop`: there is no
+/// iteration ceiling and no exhaustion path that could return without
+/// committing a direction. A fired event always installs some direction.
+pub fn autonomous_wind_drift_with_draws(mut draw: impl FnMut(u8) -> u8) -> Option<WindState> {
+    if !WindState::autonomous_drift_outer_accepted(draw(WIND_DRIFT_OUTER_ROLL_MAX)) {
+        return None;
+    }
+    loop {
+        let candidate = draw(WIND_DRIFT_CANDIDATE_MODULUS - 1);
+        // Only a Calm candidate spends the confirmation draw, so an
+        // iteration costs one draw for a cardinal and two for Calm.
+        let accepted = if candidate == 0 {
+            WindState::autonomous_drift_accept_candidate(candidate, draw(u8::MAX))
+        } else {
+            WindState::autonomous_drift_accept_candidate(candidate, 0)
+        };
+        if let Some(state) = accepted {
+            return Some(state);
+        }
+    }
+}
+
 /// `weather.md §3` shared wind-setter outcome. Rel Hur, the Wind
 /// Change scroll, and any caller that programmatically targets a
 /// wind state all funnel through the same setter; the setter's
@@ -300,5 +338,72 @@ pub const fn wind_setter_outcome(old: WindState, new: WindState) -> WindSetterOu
     match (old, new) {
         (WindState::Calm, WindState::Calm) => WindSetterOutcome::NoOp,
         _ => WindSetterOutcome::Apply,
+    }
+}
+
+#[cfg(test)]
+mod autonomous_wind_drift_tests {
+    use super::*;
+
+    /// `combat.md §5.3`: "**Do not publish or assume a maximum for any of
+    /// the three world ticks.** The autonomous wind-drift roll draws once in
+    /// the common case; on an uncommon result it enters a retry loop taking
+    /// **one further draw at a time**, so its draw count per invocation is
+    /// one, two, three, and so on upward. **No maximum is published, and an
+    /// engine must not assume one** - the loop has no static bound".
+    ///
+    /// The same section's retraction is explicit that "every integer from
+    /// one upward *is* reachable", so a stream that rejects far more times
+    /// than any eight-bit ceiling would allow must still reach an accepted
+    /// direction: "a fired event always installs some direction". This
+    /// asserts the *absence* of the bound rather than any particular value.
+    #[test]
+    fn the_autonomous_wind_drift_retry_loop_has_no_static_bound() {
+        const RETRIES: usize = 1_000;
+        assert!(
+            RETRIES > usize::from(u8::MAX),
+            "the rejection run has to outlast any eight-bit ceiling to be evidence"
+        );
+
+        let mut draws = 0usize;
+        let mut candidate_draws = 0usize;
+        let accepted = autonomous_wind_drift_with_draws(|high| {
+            draws += 1;
+            if draws == 1 {
+                // The outer `0..=63` roll: zero is the one accepting value.
+                assert_eq!(high, WIND_DRIFT_OUTER_ROLL_MAX);
+                return 0;
+            }
+            if high == u8::MAX {
+                // The Calm confirmation, rejected every single time.
+                return WIND_DRIFT_CALM_ACCEPT_MIN - 1;
+            }
+            assert_eq!(high, WIND_DRIFT_CANDIDATE_MODULUS - 1);
+            candidate_draws += 1;
+            if candidate_draws > RETRIES { 3 } else { 0 }
+        });
+
+        assert_eq!(
+            accepted,
+            Some(WindState::East),
+            "a fired event always installs some direction, however long the retry ran"
+        );
+        // One outer roll, then `RETRIES` two-draw Calm rejections, then the
+        // single accepted cardinal candidate: "one further draw at a time".
+        assert_eq!(draws, 1 + 2 * RETRIES + 1);
+        assert_eq!(candidate_draws, RETRIES + 1);
+    }
+
+    /// `combat.md §5.3` / `prng.md §4`: the check "draws once and returns in
+    /// the common case - sixty-three invocations in sixty-four".
+    #[test]
+    fn a_rejected_outer_roll_costs_exactly_one_draw_and_commits_nothing() {
+        let mut draws = 0usize;
+        let accepted = autonomous_wind_drift_with_draws(|_| {
+            draws += 1;
+            1
+        });
+        assert_eq!(accepted, None);
+        assert_eq!(draws, 1);
     }
 }

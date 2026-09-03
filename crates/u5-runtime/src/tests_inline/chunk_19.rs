@@ -39,6 +39,191 @@
         assert_eq!(unprompted.turn, 0);
     }
 
+    /// `input.md` Section 8: a free-text prompt's Enter "terminates the
+    /// prompt, returning the accumulated string" to the caller that asked for
+    /// it. A typed line is an answer, never a command, so a conversation
+    /// keyword that happens to begin with a lowercase `q` must be consumed by
+    /// the conversation rather than by the harness-quit arm further down this
+    /// dispatcher. `commands.md` Section 9 puts the published program exit
+    /// behind Control + `E`'s "Exit to DOS?" confirmation, so no typed line
+    /// may end the session, and never silently.
+    ///
+    /// The guarantee is an ordering one: every session the shell treats as a
+    /// typed-line prompt returns from `handle_play_key_input_inner` before the
+    /// `key == 'q'` arm is reached. This pins that ordering for the keyword
+    /// prompt; moving the quit arm above it would turn a typed `quest` into an
+    /// unsaved exit.
+    #[test]
+    fn typed_conversation_keyword_starting_with_q_never_quits() {
+        let enc = |text: &str| text.bytes().map(|byte| byte ^ 0x80).collect::<Vec<u8>>();
+
+        for (key, suffix) in [('q', ""), ('q', "uest")] {
+            let raw = vec![
+                enc("Maris"),
+                enc("a quiet sage"),
+                enc("Greetings"),
+                enc("I read books"),
+                enc("Farewell"),
+            ];
+            let decoded = vec![
+                "Maris".to_string(),
+                "a quiet sage".to_string(),
+                "Greetings".to_string(),
+                "I read books".to_string(),
+                "Farewell".to_string(),
+            ];
+            let mut state = world_state(open_world_grid(), 4, 5);
+            state.active_conversation_npc_slot = Some(1);
+            state.active_conversation = Some(Box::new(
+                crate::conversation_session::ConversationSession::new(raw, decoded),
+            ));
+
+            let disposition =
+                handle_play_key_input(&mut state, key, suffix, Path::new("")).unwrap();
+
+            assert_eq!(
+                disposition,
+                PlayInputDisposition::Continue,
+                "typed keyword `{key}{suffix}` must be answered, not dispatched"
+            );
+            assert_eq!(state.turn, 0);
+            assert_eq!((state.player.x, state.player.y), (4, 5));
+        }
+    }
+
+    /// `commands.md` Section 9, the shared pre-dispatch control-code table:
+    /// Control + `E` "Prompts "Exit to DOS?"; a yes answer leaves the game,
+    /// anything else prints the refusal and continues", and "None of the four
+    /// consumes a turn in any mode".
+    ///
+    /// `dungeon-mode.md` Section 10 fixes which key owns it - "`Q` is the
+    /// ordinary save-game route; the "Exit to DOS?" prompt is a Control
+    /// binding in the mode-local table, not a letter" - and `input.md`
+    /// Section 8 fixes the shape of the answer: "Single-character prompts
+    /// (Y/N, a digit, a target-slot letter) run the loop exactly once", so the
+    /// prompt does not re-ask.
+    #[test]
+    fn control_e_prompts_exit_to_dos_and_only_yes_leaves_the_game() {
+        let open = |state: &mut PlayState| {
+            let disposition =
+                handle_play_key_input(state, PLAY_EXIT_TO_DOS_KEY, "", Path::new("")).unwrap();
+            assert_eq!(disposition, PlayInputDisposition::Continue);
+            assert_eq!(state.message, "Exit to DOS?");
+            assert!(state.active_yes_no_prompt.is_some());
+            assert_eq!(state.turn, 0, "the binding consumes no turn");
+        };
+
+        // A yes answer leaves the game.
+        let mut confirmed = world_state(open_world_grid(), 4, 5);
+        open(&mut confirmed);
+        assert_eq!(
+            handle_play_key_input(&mut confirmed, 'Y', "", Path::new("")).unwrap(),
+            PlayInputDisposition::Quit
+        );
+        assert_eq!(confirmed.message, "Yes. Exiting to DOS.");
+        assert_eq!(confirmed.turn, 0);
+
+        // Anything else prints the refusal and continues, in one read: the
+        // explicit no, the cancel key, and a key the prompt never named.
+        for answer in ['N', '\u{1b}', 'K'] {
+            let mut declined = world_state(open_world_grid(), 4, 5);
+            open(&mut declined);
+            assert_eq!(
+                handle_play_key_input(&mut declined, answer, "", Path::new("")).unwrap(),
+                PlayInputDisposition::Continue,
+                "`{answer:?}` must not leave the game"
+            );
+            assert_eq!(declined.message, "No.", "`{answer:?}` prints the refusal");
+            assert!(
+                declined.active_yes_no_prompt.is_none(),
+                "`{answer:?}` runs the loop exactly once, it does not re-ask"
+            );
+            assert_eq!(declined.turn, 0);
+        }
+    }
+
+    /// `dungeon-mode.md` Section 10: "`Q` is the ordinary save-game route; the
+    /// "Exit to DOS?" prompt is a Control binding in the mode-local table, not
+    /// a letter." `commands.md` Section 4's `Q` row is the route it takes -
+    /// "Save game. Routes to the save-game handler, which prompts whether to
+    /// save. On `N`, it returns without writing. On `Y`, it writes the save
+    /// files, acknowledges completion, and returns to the caller. This letter
+    /// is not the DOS-terminate path by itself." Section 5.2 fixes the echo at
+    /// exactly `Quit:`, and Section 3 files `Q` under "no action".
+    #[test]
+    fn dungeon_q_takes_the_save_route_not_the_program_exit() {
+        let mut state = dungeon_state(open_dungeon_record(), 0, 1, 1);
+
+        let disposition = handle_play_key_input(&mut state, 'Q', "", Path::new("")).unwrap();
+
+        assert_eq!(disposition, PlayInputDisposition::Continue);
+        assert_eq!(transcript_texts(&state), vec!["Quit:", SAVE_PROMPT_MESSAGE]);
+        assert!(state.message_entries()[0].is_command_echo);
+        assert!(!state.message_entries()[1].is_command_echo);
+        assert_eq!(state.turn, 0);
+        assert!(
+            matches!(
+                state.active_yes_no_prompt.as_ref().map(|session| session.kind),
+                Some(YesNoPromptKind::SaveGame)
+            ),
+            "the dungeon letter must open the save prompt, not the program exit"
+        );
+        assert_ne!(state.message, "Exit to DOS?");
+    }
+
+    /// The companion to the keyword case above, across the rest of the
+    /// typed-line set. `input.md` Section 8 names the prompts that read a whole
+    /// line - "NPC conversations accept a four- to six-character keyword;
+    /// character creation accepts a name; save filenames are typed in full;
+    /// hours-to-rest is a small unsigned number" - and every one of them
+    /// returns its accumulated string to its own caller. So each session must
+    /// consume a leading lowercase `q` itself, before the dispatcher's
+    /// harness-quit arm is reached. Any reordering that let one of these fall
+    /// through would make a typed word end the session with no save.
+    #[test]
+    fn every_typed_line_prompt_consumes_a_leading_q_before_the_quit_arm() {
+        let yell = |state: &mut PlayState| {
+            state.active_yell = Some(crate::z_stats::YellSession {
+                buffer: String::new(),
+            });
+        };
+        let shrine = |state: &mut PlayState| {
+            state.active_shrine = Some(crate::z_stats::ShrineSession {
+                virtue: crate::shrine_virtue::ShrineVirtue::Honesty,
+                phase: crate::z_stats::ShrinePhase::Mantra,
+                mantra_buffer: String::new(),
+            });
+        };
+        let wishing_well = |state: &mut PlayState| {
+            state.active_wishing_well = Some(crate::z_stats::WishingWellSession {
+                direction: Direction::North,
+                coin_accepted: true,
+            });
+        };
+
+        let cases: [(&str, &dyn Fn(&mut PlayState)); 3] = [
+            ("yell word", &yell),
+            ("shrine mantra", &shrine),
+            ("wishing well wish", &wishing_well),
+        ];
+
+        for (label, install) in cases {
+            for (key, suffix) in [('q', ""), ('q', "uest")] {
+                let mut state = world_state(open_world_grid(), 4, 5);
+                install(&mut state);
+
+                let disposition =
+                    handle_play_key_input(&mut state, key, suffix, Path::new("")).unwrap();
+
+                assert_ne!(
+                    disposition,
+                    PlayInputDisposition::Quit,
+                    "{label} must consume the typed `{key}{suffix}` itself"
+                );
+            }
+        }
+    }
+
     #[test]
     fn pending_prompt_suppresses_idle_visual_tick() {
         let mut prompted = world_state(open_world_grid(), 4, 5);

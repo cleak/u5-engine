@@ -70,26 +70,27 @@ use u5_runtime::{
     NARRATIVE_GATE_Y, NATURAL_MOONGATE_TERRAIN_TILE, NEGATE_MAGIC_COST, NEGATE_MAGIC_SPELL_INDEX,
     NPC_DIALOG_ID_NONE, NPC_SCHEDULE_AI_OFFSET, NPC_SCHEDULE_WAYPOINT_COUNT, NpcSlot,
     OOL_RECORD_LEN, OOL_SLOTS, OPEN_SPELL_COST, OPEN_SPELL_INDEX, PCS_GLYPH_HEIGHT, PEER_COST,
-    PEER_SPELL_INDEX, PLAY_MUSIC_TOGGLE_KEY, PLAY_SCRIPT_MAX_IDLE_TICKS, PLAY_TYPEAHEAD_TOGGLE_KEY,
-    POISON_FIELD_SPELL_INDEX, POISON_WIND_COST, POISON_WIND_SPELL_INDEX, PROPORTIONAL_DRAW_CLIP_Y,
-    PROPORTIONAL_WIDTH_TABLE, PROTECTION_COST, PROTECTION_SPELL_INDEX, PartyCapability,
-    PartyMember, PlayInputDisposition, PlayOptions, PlayState, PlayTarget, PotionFlashPlayback,
-    PreFlourishOutcome, ProportionalLayoutDescriptor, QUICKNESS_COST, QUICKNESS_SPELL_INDEX,
-    REAGENT_COUNT, REAGENT_SULFUR_ASH, REL_HUR_COST, REL_HUR_SPELL_INDEX, RESURRECT_COST,
-    RESURRECT_SPELL_INDEX, RTV_CAPTION_TEXT_ROW, RTV_PREVIEW_PIXEL_HEIGHT, RTV_PREVIEW_PIXEL_WIDTH,
-    RTV_PREVIEW_PIXEL_X, RTV_PREVIEW_PIXEL_Y, RTV_STRIP_VISIBLE_COLUMNS, RTV_STRIP_VISIBLE_ROWS,
-    RectangleDissolve, ReturnToViewFrameKind, SAVED_GAM_FILENAME, SAVED_OOL_FILENAME,
-    SAVED_OOL_LEN, SCENE_EMPATH_ABBEY, SCENE_JHELOM, SCENE_MOONGLOW, SCENE_SERPENTS_HOLD,
-    SCENE_STONEGATE, SCENE_THE_LYCAEUM, SHADOWLORD_COWARDICE_INDEX, SHADOWLORD_FALSEHOOD_INDEX,
-    SHADOWLORD_HATRED_INDEX, SHADOWLORD_HIDEOUT_VANQUISHED, SHADOWLORD_OBJECT_TILE_BASE,
-    SHADOWLORD_VANQUISHED, SHIP_NO_SKIFFS_WARNING, SHIPPED_PALETTE_REGISTERS,
-    SHRINE_ALTAR_TILE_FIRST, SLEEP_COST, SLEEP_FIELD_SPELL_INDEX, SLEEP_SPELL_INDEX,
-    SPECIAL_ITEM_HMS_CAPE_PLANS_INDEX, SPECIAL_ITEM_MAGIC_CARPET_INDEX, SPECIAL_ITEM_OWNED_VALUE,
-    SPECIAL_ITEM_POCKET_WATCH_INDEX, SPECIAL_ITEM_SCEPTRE_LB_INDEX, SPECIAL_ITEM_SEXTANT_INDEX,
-    SPECIAL_ITEM_SHARD_COWARDICE_INDEX, SPECIAL_ITEM_SHARD_FALSEHOOD_INDEX,
-    SPECIAL_ITEM_SHARD_HATRED_INDEX, SPECIAL_ITEM_SPYGLASS_INDEX, SPECIAL_ITEM_WOODEN_BOX_INDEX,
-    STEADY_PHASE, SURFACE_CHASM_X, SURFACE_CHASM_Y, Scene, Shipwright, ShrineVirtue, Stable,
-    StoryRecords, TALK_SHOP_TEXT_WINDOW_INDEX, TALK_STATUS_TILE_PRAYING, TALK_STATUS_TILE_SLEEPING,
+    PEER_SPELL_INDEX, PLAY_EXIT_TO_DOS_KEY, PLAY_MUSIC_TOGGLE_KEY, PLAY_SCRIPT_MAX_IDLE_TICKS,
+    PLAY_TYPEAHEAD_TOGGLE_KEY, POISON_FIELD_SPELL_INDEX, POISON_WIND_COST, POISON_WIND_SPELL_INDEX,
+    PROPORTIONAL_DRAW_CLIP_Y, PROPORTIONAL_WIDTH_TABLE, PROTECTION_COST, PROTECTION_SPELL_INDEX,
+    PartyCapability, PartyMember, PlayInputDisposition, PlayOptions, PlayState, PlayTarget,
+    PotionFlashPlayback, PreFlourishOutcome, ProportionalLayoutDescriptor, QUICKNESS_COST,
+    QUICKNESS_SPELL_INDEX, REAGENT_COUNT, REAGENT_SULFUR_ASH, REL_HUR_COST, REL_HUR_SPELL_INDEX,
+    RESURRECT_COST, RESURRECT_SPELL_INDEX, RTV_CAPTION_TEXT_ROW, RTV_PREVIEW_PIXEL_HEIGHT,
+    RTV_PREVIEW_PIXEL_WIDTH, RTV_PREVIEW_PIXEL_X, RTV_PREVIEW_PIXEL_Y, RTV_STRIP_VISIBLE_COLUMNS,
+    RTV_STRIP_VISIBLE_ROWS, RectangleDissolve, ReturnToViewFrameKind, SAVED_GAM_FILENAME,
+    SAVED_OOL_FILENAME, SAVED_OOL_LEN, SCENE_EMPATH_ABBEY, SCENE_JHELOM, SCENE_MOONGLOW,
+    SCENE_SERPENTS_HOLD, SCENE_STONEGATE, SCENE_THE_LYCAEUM, SHADOWLORD_COWARDICE_INDEX,
+    SHADOWLORD_FALSEHOOD_INDEX, SHADOWLORD_HATRED_INDEX, SHADOWLORD_HIDEOUT_VANQUISHED,
+    SHADOWLORD_OBJECT_TILE_BASE, SHADOWLORD_VANQUISHED, SHIP_NO_SKIFFS_WARNING,
+    SHIPPED_PALETTE_REGISTERS, SHRINE_ALTAR_TILE_FIRST, SLEEP_COST, SLEEP_FIELD_SPELL_INDEX,
+    SLEEP_SPELL_INDEX, SPECIAL_ITEM_HMS_CAPE_PLANS_INDEX, SPECIAL_ITEM_MAGIC_CARPET_INDEX,
+    SPECIAL_ITEM_OWNED_VALUE, SPECIAL_ITEM_POCKET_WATCH_INDEX, SPECIAL_ITEM_SCEPTRE_LB_INDEX,
+    SPECIAL_ITEM_SEXTANT_INDEX, SPECIAL_ITEM_SHARD_COWARDICE_INDEX,
+    SPECIAL_ITEM_SHARD_FALSEHOOD_INDEX, SPECIAL_ITEM_SHARD_HATRED_INDEX,
+    SPECIAL_ITEM_SPYGLASS_INDEX, SPECIAL_ITEM_WOODEN_BOX_INDEX, STEADY_PHASE, SURFACE_CHASM_X,
+    SURFACE_CHASM_Y, Scene, Shipwright, ShrineVirtue, Stable, StoryRecords,
+    TALK_SHOP_TEXT_WINDOW_INDEX, TALK_STATUS_TILE_PRAYING, TALK_STATUS_TILE_SLEEPING,
     TEXT_CTRL_CLEAR_WINDOW, TEXT_WINDOW_RENDER_HEIGHT, TEXT_WINDOW_RENDER_WIDTH, TILE_ATLAS_SIDE,
     TIME_STOP_COST, TIME_STOP_SPELL_INDEX, TITLE_BIT_INITIAL_SOURCE_PLACEMENTS,
     TITLE_BIT_REMAINING_PLACEMENTS, TITLE_FLOURISH_FRAME_COUNT,
@@ -224,9 +225,6 @@ const DISPLAY_PIXEL_ASPECT: f32 = 1.2;
 /// buffer and flushes queued type-ahead after each accepted action.
 const HELD_DIRECTION_INITIAL_DELAY: Duration = Duration::from_millis(500);
 const HELD_DIRECTION_REPEAT_INTERVAL: Duration = Duration::from_millis(100);
-/// Post-action combat redraws are brisk, but each automatic action must reach
-/// at least one host frame instead of collapsing into the final state.
-const PACED_COMBAT_PRESENTATION_INTERVAL_SECS: f32 = 0.08;
 
 /// The visual shell models the period 200-line EGA display seen in surviving
 /// DOS captures. The clean runtime keeps the specification's enhanced-display
@@ -796,9 +794,17 @@ impl IntroDisplayBuffer {
         background: u8,
     ) {
         let bytes = text.as_bytes();
-        let inner_width = usize::from(window.inner_width());
-        let text_width = bytes.len().min(inner_width);
-        let left_pad = inner_width.saturating_sub(text_width) / 2;
+        // `text-output.md §5`: the centred start column is
+        // `(columns_in_window - characters_in_line) / 2`, and
+        // `columns_in_window` is `bottom_right_x - top_left_x + 1`.
+        // "Implementations must not drop the 'plus one' and centre against
+        // `bottom_right_x - top_left_x`: that agrees on odd-length lines but
+        // shifts every even-length line one whole cell left."
+        // (`RETRACTIONS.md` R344.) `Journey Onward` is fourteen characters -
+        // even - so the budget form put this banner one cell left.
+        let columns_in_window = usize::from(window.column_count());
+        let text_width = bytes.len().min(columns_in_window);
+        let left_pad = columns_in_window.saturating_sub(text_width) / 2;
         let start_cell_x = usize::from(window.top_left_x) + left_pad;
         for (offset, byte) in bytes.iter().take(text_width).enumerate() {
             self.draw_fixed_glyph_cell(
@@ -10154,16 +10160,28 @@ impl Default for VisualIntroAnimationPump {
     }
 }
 
+/// Which cadence the gameplay pump runs at this frame.
+///
+/// While the round walk owes automatic combat actions the interval is
+/// **zero**: the pump fires on every host frame. Nothing published gives an
+/// automatic combat action a wall-clock delay, so the shell adds none. The
+/// only published constraint is `combat.md §7` step 7's per-action render -
+/// "Only after the hazard pass does the separate render step redraw changed
+/// cells and run any post-action sound or particle effect" - and in a
+/// frame-based shell one rendered frame per action is exactly that
+/// constraint and nothing more. Gating those actions on the BIOS user tick
+/// instead would be a 55 ms delay of the shell's own choosing, which is the
+/// same invention as the 80 ms one it replaced.
+///
+/// The visibility sweep still overrides, because `catalogs/item-list.md
+/// §7.2` does publish that presentation's per-frame pause.
 fn visual_animation_pump_interval(state: &PlayState, ordinary_interval: f32) -> (bool, f32) {
     state.visibility_sweep.map_or_else(
         || {
-            let paced_combat_waiting = state.combat_active
-                && state.pace_combat_presentations
-                && state.pending_combat_actor_slot.is_none();
             (
                 false,
-                if paced_combat_waiting {
-                    PACED_COMBAT_PRESENTATION_INTERVAL_SECS
+                if paced_combat_presentation_owed(state) {
+                    0.0
                 } else {
                     ordinary_interval
                 },
@@ -10176,6 +10194,37 @@ fn visual_animation_pump_interval(state: &PlayState, ordinary_interval: f32) -> 
             )
         },
     )
+}
+
+/// Whether the shell owes an automatic combat action this frame.
+///
+/// `combat.md §8` hands a keyboard-driven combatant's turn to the player
+/// command handler, so the pump declines while one is pending.
+fn paced_combat_presentation_owed(state: &PlayState) -> bool {
+    state.combat_active
+        && state.pace_combat_presentations
+        && state.pending_combat_actor_slot.is_none()
+}
+
+/// One pump firing's combat work: at most **one** automatic combat action.
+///
+/// `combat.md §7` step 7 publishes a render per action - "Only after the
+/// hazard pass does the separate render step redraw changed cells and run
+/// any post-action sound or particle effect" - so the shell advances one
+/// automatic action per firing and lets that firing's repaint show it.
+/// `§16`'s "A modern implementation can treat it as 'redraw every frame'
+/// without preserving the cadence" is scoped to the round counter's
+/// every-ten tile render; it permits dropping that cadence, not rendering
+/// fewer frames than there are actions.
+///
+/// Returns whether this firing owned the step, so the caller can skip the
+/// ordinary exploration pump.
+fn advance_paced_combat_pump_firing(state: &mut PlayState) -> bool {
+    if !paced_combat_presentation_owed(state) {
+        return false;
+    }
+    advance_paced_combat_presentation(state);
+    true
 }
 
 /// One firing of the gameplay world-tick pump, or none.
@@ -10267,15 +10316,12 @@ fn animate_static_tiles(
         // to `break` out of a catch-up loop; they now leave this block.
         'step: {
             let mut prompt_cursor_visible = visual.prompt_cursor_visible;
-            if visual.state.combat_active
-                && visual.state.pace_combat_presentations
-                && visual.state.pending_combat_actor_slot.is_none()
-            {
-                advance_paced_combat_presentation(&mut visual.state);
+            if advance_paced_combat_pump_firing(&mut visual.state) {
                 visual.prompt_cursor_visible = false;
                 visual.prompt_cursor_frame = visual.prompt_cursor_frame.wrapping_add(1);
-                // One automatic action owns one visible host frame. A slow frame
-                // must never collapse several combat actions into one redraw.
+                // One automatic action owns one visible host frame. A slow
+                // frame must never collapse several combat actions into one
+                // redraw.
                 pump.accumulator = 0.0;
                 advanced = true;
                 break 'step;
@@ -10300,7 +10346,8 @@ fn animate_static_tiles(
                 )
             );
             if !automatic_gate_pass {
-                advance_visual_wait_frame(&mut visual.state, &mut prompt_cursor_visible);
+                let game_dir = visual.game_dir.clone();
+                advance_visual_wait_frame(&mut visual.state, &game_dir, &mut prompt_cursor_visible);
             } else {
                 // Never catch up multiple automatic sleep/rescue passes in one
                 // host frame; each receives one ordinary visual-pump interval.
@@ -10480,7 +10527,7 @@ fn drive_visual_intro(
     if keyboard.just_pressed(KeyCode::Escape) && cancel_visual_intro_panel(&mut intro) {
         // `systems/intro.md §12`: Escape backs out of a panel. With no panel
         // open it does nothing - the published program exit is the
-        // `Control + E` "Exit to DOS?" prompt of `commands.md §5.1`, never a
+        // `Control + E` "Exit to DOS?" prompt of `commands.md §9`, never a
         // bare keypress.
         handled = true;
     }
@@ -12038,8 +12085,9 @@ fn drive_visual(
         keyboard.pressed(KeyCode::ShiftLeft) || keyboard.pressed(KeyCode::ShiftRight);
     let control_pressed =
         keyboard.pressed(KeyCode::ControlLeft) || keyboard.pressed(KeyCode::ControlRight);
-    let modal_prompt_active =
-        visual_line_prompt_active(&visual.state) || visual_modal_prompt_active(&visual.state);
+    let modal_prompt_active = visual_line_prompt_active(&visual.state)
+        || visual_modal_prompt_active(&visual.state)
+        || combat_targeting_cursor_owns_keyboard(&visual.state);
     let repeat_command = held_direction_repeat_command(
         &keyboard,
         time.delta(),
@@ -16658,15 +16706,41 @@ fn visual_modal_prompt_active(state: &PlayState) -> bool {
         || state.endgame.is_some()
 }
 
-fn visual_idle_tick(state: &mut PlayState) -> bool {
+/// The idle redraw tick, which is also the only pass that toggles the
+/// `combat.md §7` combat-overlay blink flag - it reaches it through
+/// `idle_wait_pass`, which calls `advance_visual_tick` on the command-wait
+/// pass and on the under-sail world step alike.
+///
+/// An open `§8.2` targeting cursor is deliberately **not** counted as a
+/// modal prompt here. `§7` gives the blink no modal exception - "It toggles
+/// a blink flag each pass" - and freezing it would leave the arena with no
+/// player cursor box and no aim marker on every dark-phase opening, for as
+/// long as the cursor stayed open. The cursor's real claim on the keyboard is
+/// expressed where it belongs, in [`combat_targeting_cursor_owns_keyboard`].
+fn visual_idle_tick(state: &mut PlayState, game_dir: &Path) -> bool {
     if visual_modal_prompt_active(state) {
         return false;
     }
-    state.advance_visual_tick();
+    // `timing.md §8.2`: this pump is the input helper's idle wait, so it owns
+    // the scripted step-and-wait and - when sails are set - the under-sail
+    // route, where "an **under-sail auto-advance pass costs two ticks and one
+    // world step and never enters the command wait at all**".
+    // `idle_wait_pass` performs the world step on the first pump of that pass
+    // and, on the second, the bare cursor poll plus the synthesized movement
+    // command `overworld.md §5` step 3 has the helper return "instead" of
+    // reading the keyboard. So a steered ship keeps sailing here with no
+    // keypress, at one world step and one sail command per two pumps.
+    if let Err(err) = state.idle_wait_pass(Some(game_dir)) {
+        state.message = format!("Sailing error: {err}");
+    }
     true
 }
 
-fn advance_visual_wait_frame(state: &mut PlayState, prompt_cursor_visible: &mut bool) -> bool {
+fn advance_visual_wait_frame(
+    state: &mut PlayState,
+    game_dir: &Path,
+    prompt_cursor_visible: &mut bool,
+) -> bool {
     if visual_line_prompt_active(state) {
         *prompt_cursor_visible = !*prompt_cursor_visible;
         true
@@ -16675,7 +16749,7 @@ fn advance_visual_wait_frame(state: &mut PlayState, prompt_cursor_visible: &mut 
         true
     } else {
         *prompt_cursor_visible = false;
-        visual_idle_tick(state)
+        visual_idle_tick(state, game_dir)
     }
 }
 
@@ -16687,7 +16761,7 @@ fn advance_visual_endgame_frame_operation(state: &mut PlayState) -> bool {
     state.advance_endgame_display_frame()
 }
 
-/// `systems/commands.md §5.1` gives the program exit its own prompt
+/// `systems/commands.md §9` gives the program exit its own prompt
 /// (`Control + E`, "Exit to DOS?"), and no published input contract gives
 /// Escape a gameplay meaning outside a prompt: `input.md §10` has the
 /// adjacent-tile direction prompt treat it as "another read like any other
@@ -16698,7 +16772,17 @@ fn advance_visual_endgame_frame_operation(state: &mut PlayState) -> bool {
 /// `AppExit` on it: one keypress ended the session with no prompt and no
 /// save. The name asserted a contract nothing published.
 fn escape_is_inert_in_gameplay(state: &PlayState) -> bool {
-    !visual_modal_prompt_active(state)
+    !(visual_modal_prompt_active(state) || combat_targeting_cursor_owns_keyboard(state))
+}
+
+/// `combat.md §8.2`: while the `A`-Attack targeting cursor is open it owns
+/// the keyboard. Escape is one of its published keys - "Escape | Cancels" -
+/// so the shell must not treat it as an inert gameplay Escape, and
+/// held-direction auto-repeat must not steer the cursor. This is keyboard
+/// routing only: unlike [`visual_modal_prompt_active`] it does not stop the
+/// idle redraw tick, which is what toggles the `§7` overlay blink.
+fn combat_targeting_cursor_owns_keyboard(state: &PlayState) -> bool {
+    state.active_combat_targeting.is_some()
 }
 
 fn handle_visual_line_key(
@@ -16833,7 +16917,12 @@ const NUM_LOCK_STATE_OBSERVABLE: bool = false;
 fn key_code_to_input_byte(key: KeyCode, shift_pressed: bool, control_pressed: bool) -> Option<u8> {
     use KeyCode::*;
     if control_pressed {
+        // `commands.md` Section 9: the shared pre-dispatch control-code table.
+        // Control + `E` prompts "Exit to DOS?" and Control + `S` toggles sound;
+        // neither consumes a turn. Control + `K` and Control + `V` are the two
+        // rows this shell does not yet carry.
         return match key {
+            KeyE => Some(PLAY_EXIT_TO_DOS_KEY as u8),
             KeyS => Some(PLAY_MUSIC_TOGGLE_KEY as u8),
             // `combat.md §8`: "`Ctrl-B` - combat's own copy of the
             // typeahead-buffer toggle, writing the same engine-wide setting as
@@ -20146,6 +20235,163 @@ mod tests {
         let _ = fs::remove_dir_all(&intro.game_dir);
     }
 
+    /// The whole published start-up order, in one test, because it is
+    /// routinely re-reported as a defect ("the menu is never shown on
+    /// its own; the engine goes from the publisher flourish straight
+    /// into the attract demo"). `systems/intro.md §3` publishes the
+    /// opposite: an unskipped title sequence plays "the one-shot
+    /// automatic Return-to-View preview before polling the menu", and
+    /// only a keystroke in an earlier title phase suppresses it. The
+    /// six labels are therefore genuinely not on screen for more than
+    /// the one poll pass between the loader returning and the preview
+    /// starting; the key that leaves the preview is what settles the
+    /// menu, and from there §6.2's two-hundred-pass idle timeout
+    /// re-enters the preview.
+    ///
+    /// Confirmed black-box against DOS Ultima V under DOSBox Staging
+    /// (`machine=ega`, 200 ms PrintWindow trace from launch): the
+    /// original is on its start screen at 10.2 s and is already running
+    /// the preview at 10.4 s, with no menu frame in the following
+    /// 13.4 s.
+    #[test]
+    fn automatic_preview_then_key_then_idle_timeout_reenters_the_preview() {
+        let dir = debug_game_dir();
+        let mut intro = visual_intro_state_with_panel(dir.clone(), VisualIntroPanel::Menu);
+        intro.pending_auto_return_to_view = true;
+
+        // 1. The one-shot runs before the menu is ever polled.
+        assert!(advance_visual_intro_animation_tick(&mut intro));
+        assert!(
+            matches!(intro.panel, VisualIntroPanel::ReturnToView { .. }),
+            "an unskipped run shows the attract preview before the first menu poll"
+        );
+
+        // 2. A key leaves the preview for the finished menu, with the
+        //    one-shot spent and the idle counter restarted.
+        assert!(step_visual_intro(&mut intro, ' '));
+        assert!(matches!(intro.panel, VisualIntroPanel::Menu));
+        assert!(!intro.pending_auto_return_to_view);
+        assert_eq!(intro.menu_idle_ticks, 0);
+
+        // 3. The idle timeout re-enters the preview. Only the first
+        //    automatic showing was conditional.
+        idle_the_intro_menu_through_the_return_to_view_timeout(&mut intro);
+        assert!(matches!(intro.panel, VisualIntroPanel::ReturnToView { .. }));
+        let _ = fs::remove_dir_all(dir);
+    }
+
+    /// `systems/intro.md §6.2`: "Two hundred consecutive no-key passes |
+    /// Commit `Return to the View` exactly as though `R` had been
+    /// pressed", and §5: each no-key pass "costs two BIOS ticks, not
+    /// one — the input poll waits one and the title tick waits another".
+    ///
+    /// The window is load-bearing *presentation*, not just a counter:
+    /// for the whole of it the six labels have to stay on screen. This
+    /// pins both ends — the menu survives every pump tick before the
+    /// two-hundredth pass and the preview starts on it — and the
+    /// arithmetic that turns passes into the wall-clock time the player
+    /// experiences.
+    #[test]
+    fn a_settled_menu_holds_for_the_whole_two_hundred_pass_idle_window() {
+        let dir = debug_game_dir();
+        let mut intro = visual_intro_state_with_panel(dir.clone(), VisualIntroPanel::Menu);
+        // The §3 one-shot has already been spent, so this is the
+        // ordinary polled menu.
+        intro.pending_auto_return_to_view = false;
+        intro.menu_idle_ticks = 0;
+        intro.menu_idle_bios_ticks = 0;
+
+        let pump_ticks = u32::from(INTRO_MENU_IDLE_RETURN_TO_VIEW_PASSES)
+            * u32::from(INTRO_MENU_IDLE_POLL_BIOS_TICKS);
+        assert_eq!(pump_ticks, 400, "200 poll passes of two BIOS ticks each");
+        for tick in 1..pump_ticks {
+            advance_visual_intro_animation_tick(&mut intro);
+            assert!(
+                matches!(intro.panel, VisualIntroPanel::Menu),
+                "the menu must still be the presented panel at pump tick {tick}"
+            );
+        }
+
+        advance_visual_intro_animation_tick(&mut intro);
+
+        assert!(
+            matches!(intro.panel, VisualIntroPanel::ReturnToView { .. }),
+            "the two-hundredth no-key poll pass commits Return to the View"
+        );
+        let window_secs = pump_ticks as f32 * BIOS_USER_TICK_INTERVAL_SECS;
+        assert!(
+            (window_secs - 21.970).abs() < 0.005,
+            "the idle window is ~21.97 s of wall clock, got {window_secs}"
+        );
+        let _ = fs::remove_dir_all(dir);
+    }
+
+    /// The other half of §3's conditional: a keystroke during an
+    /// earlier title phase "suppresses the Return-to-View preview", so
+    /// a skipped run settles on the menu straight away — and that menu
+    /// then holds for the same full two-hundred-pass window before the
+    /// preview starts. This is the only start-up path on which the
+    /// player sees the six labels for more than one poll pass without
+    /// pressing a second key.
+    #[test]
+    fn a_skipped_title_sequence_settles_on_the_menu_and_still_times_out() {
+        let dir = debug_game_dir();
+        install_intro_assets(&dir);
+        // The plain loader path never reaches §3 step 7, so `WD.BIT`
+        // being absent proves no subtitle ignition ran.
+        fs::remove_file(dir.join("WD.BIT")).unwrap();
+        let mut intro = visual_intro_state_with_panel(dir.clone(), VisualIntroPanel::Menu);
+        intro.dispatch = UnifiedMenuDispatch::new();
+        intro.title_flourish_step = title_flourish_total_steps() - 1;
+        intro.title_flourish_complete = true;
+        intro.title_signature_complete = true;
+        intro.title_sequence_skipped = true;
+
+        finish_visual_intro_title_to_menu(&mut intro, false);
+
+        assert!(matches!(intro.panel, VisualIntroPanel::Menu));
+        assert!(
+            !intro.pending_auto_return_to_view,
+            "a skipped run suppresses the automatic preview entirely"
+        );
+        // No key is pressed from here on: the menu is on screen for the
+        // whole window and only the idle timeout takes it away.
+        idle_the_intro_menu_through_the_return_to_view_timeout(&mut intro);
+        assert!(
+            matches!(intro.panel, VisualIntroPanel::ReturnToView { .. }),
+            "the idle timeout is unconditional; it fires on a skipped run too"
+        );
+        let _ = fs::remove_dir_all(dir);
+    }
+
+    /// Pump the intro animation until the two-hundred-pass idle timeout
+    /// fires, asserting the menu is the presented panel for every tick
+    /// before it. Panics if the timeout has not fired by then.
+    fn idle_the_intro_menu_through_the_return_to_view_timeout(intro: &mut VisualIntroState) {
+        let pump_ticks = u32::from(INTRO_MENU_IDLE_RETURN_TO_VIEW_PASSES)
+            * u32::from(INTRO_MENU_IDLE_POLL_BIOS_TICKS);
+        // The menu may be mid-pass when this is called, so allow one
+        // extra BIOS tick to reach the pass boundary.
+        for tick in 0..=pump_ticks {
+            if matches!(intro.panel, VisualIntroPanel::ReturnToView { .. }) {
+                assert!(
+                    tick + 1 >= pump_ticks,
+                    "the preview started after only {tick} of {pump_ticks} pump ticks"
+                );
+                return;
+            }
+            assert!(
+                matches!(intro.panel, VisualIntroPanel::Menu),
+                "the menu must still be the presented panel at pump tick {tick}"
+            );
+            advance_visual_intro_animation_tick(intro);
+        }
+        assert!(
+            matches!(intro.panel, VisualIntroPanel::ReturnToView { .. }),
+            "the idle timeout never fired"
+        );
+    }
+
     #[test]
     fn intro_final_pre_menu_frame_is_slot8_signature_and_slot9_only() {
         let blank = solid_bitmap(1, 1, 0);
@@ -20617,6 +20863,7 @@ mod tests {
         let mut prompt_cursor_visible = true;
         assert!(advance_visual_wait_frame(
             &mut state,
+            Path::new("."),
             &mut prompt_cursor_visible
         ));
 
@@ -21048,20 +21295,165 @@ mod tests {
         assert_eq!(interval, 3.0 * BIOS_USER_TICK_INTERVAL_SECS);
     }
 
-    #[test]
-    fn automatic_combat_actions_use_the_brisk_presentation_interval() {
+    /// A fight already under way with two automatic actors owing turns and
+    /// the keyboard-driven party actor still counting down. `combat.md §5.3`
+    /// step 8 runs the round-loop entry prologue once per encounter, so the
+    /// fixture marks it spent rather than paying its world tick here.
+    fn paced_two_monster_combat_state() -> PlayState {
         let mut state = world_state(open_world_grid(), 10, 20);
         state.combat_active = true;
         state.pace_combat_presentations = true;
         state.pending_combat_actor_slot = None;
+        state.combat_round_loop_prologue_ran = true;
+        state.combat_terrain = [[0x04; COMBAT_ARENA_SIDE]; COMBAT_ARENA_SIDE];
+        state.active_objects = vec![ActiveObject::empty(); u5_runtime::OOL_SLOTS];
+        state.active_objects[0] = ActiveObject {
+            type_byte: 0x80,
+            tile: 0x80,
+            x: 5,
+            y: 5,
+            ..ActiveObject::empty()
+        };
+        // The party actor's phase counter is still counting down, so this
+        // round walk owes only the two monsters.
+        state.combat_actors[0] = CombatActorDescriptor::from_row([
+            20,
+            1,
+            COMBAT_ACTOR_FLAG_SELECTABLE_80,
+            0,
+            0,
+            5,
+            5,
+            5,
+        ]);
+        for (slot, x) in [(8usize, 8u8), (9, 2)] {
+            state.active_objects[slot] = ActiveObject {
+                type_byte: 0x90,
+                tile: 0x90,
+                x: usize::from(x),
+                y: 5,
+                ..ActiveObject::empty()
+            };
+            state.combat_actors[slot] = CombatActorDescriptor::from_row([
+                10,
+                1,
+                u5_runtime::COMBAT_ACTOR_FLAG_SELECTABLE_40,
+                COMBAT_CLASS_GIANT_RAT,
+                slot as u8,
+                0,
+                x,
+                5,
+            ]);
+        }
+        state
+    }
+
+    /// `combat.md §7` step 7 gives every dispatched action its own render:
+    /// "Only after the hazard pass does the separate render step redraw
+    /// changed cells and run any post-action sound or particle effect."
+    /// One pump firing therefore advances one automatic action, never the
+    /// whole owed run - `§16`'s "redraw every frame" licence is scoped to the
+    /// round counter's every-ten tile render, not to collapsing actions.
+    #[test]
+    fn one_pump_firing_advances_exactly_one_automatic_combat_action() {
+        let mut state = paced_two_monster_combat_state();
+
+        assert!(advance_paced_combat_pump_firing(&mut state));
+        let after_first = state.next_combat_actor_slot;
+        assert_eq!(after_first, 9, "the first firing must stop after slot 8");
+        assert_eq!(state.pending_combat_actor_slot, None);
+
+        assert!(advance_paced_combat_pump_firing(&mut state));
+        assert_eq!(
+            state.next_combat_actor_slot, 10,
+            "the second firing owns the second automatic action"
+        );
+    }
+
+    /// `combat.md §7`: the shared tile-painting pass "toggles a blink flag
+    /// each pass", with no modal exception, and the shell's idle redraw tick
+    /// is the only caller of that toggle.
+    ///
+    /// An open `§8.2` targeting cursor owns the keyboard, but it must not
+    /// stop that tick. If it did, the flag would freeze at whatever value it
+    /// held when the cursor opened, and on a dark pass `§7`'s "dark blink
+    /// pass ... suppresses both overlays" would leave the arena with no
+    /// player cursor box and no aim marker for as long as the player kept
+    /// aiming.
+    #[test]
+    fn an_open_targeting_cursor_does_not_freeze_the_combat_overlay_blink() {
+        let mut state = paced_two_monster_combat_state();
+        state.pending_combat_actor_slot = Some(0);
+        assert!(state.begin_combat_attack_walk(0, true).cursor_open);
+
+        // Keyboard ownership is real - Escape belongs to the cursor, and
+        // held-direction auto-repeat must not steer it...
+        assert!(combat_targeting_cursor_owns_keyboard(&state));
+        assert!(!escape_is_inert_in_gameplay(&state));
+        // ...but it is not a blink-freezing modal prompt.
+        assert!(!visual_modal_prompt_active(&state));
+
+        let opened_with = state.combat_cursor_blink;
+        assert!(visual_idle_tick(&mut state, Path::new(".")));
+        assert_ne!(
+            state.combat_cursor_blink, opened_with,
+            "the idle redraw tick must keep toggling while the cursor is open"
+        );
+        assert!(visual_idle_tick(&mut state, Path::new(".")));
+        assert_eq!(state.combat_cursor_blink, opened_with);
+    }
+
+    /// The same gate must never steal a keyboard-driven combatant's turn:
+    /// `combat.md §8` hands the turn to the player command handler, and the
+    /// shell's pump has no business advancing the walk while it waits.
+    #[test]
+    fn the_combat_pump_declines_while_a_keyboard_driven_actor_is_pending() {
+        let mut state = paced_two_monster_combat_state();
+        state.pending_combat_actor_slot = Some(0);
+        let slot_before = state.next_combat_actor_slot;
+
+        assert!(!advance_paced_combat_pump_firing(&mut state));
+        assert_eq!(state.next_combat_actor_slot, slot_before);
+
+        state.pending_combat_actor_slot = None;
+        state.combat_active = false;
+        assert!(!advance_paced_combat_pump_firing(&mut state));
+        assert_eq!(state.next_combat_actor_slot, slot_before);
+    }
+
+    /// Nothing published gives an automatic combat action a wall-clock
+    /// delay, so the shell adds none: while the walk owes actions the pump
+    /// interval is zero and one action takes one rendered frame, which is
+    /// exactly `combat.md §7` step 7's per-action render. A pending
+    /// keyboard-driven actor restores the ordinary cadence, and the
+    /// published visibility-sweep pause still overrides.
+    #[test]
+    fn automatic_combat_actions_add_no_interval_of_the_shells_own() {
+        let mut state = paced_two_monster_combat_state();
 
         assert_eq!(
-            visual_animation_pump_interval(&state, 0.33),
-            (false, PACED_COMBAT_PRESENTATION_INTERVAL_SECS)
+            visual_animation_pump_interval(&state, GAMEPLAY_WORLD_TICK_INTERVAL_SECS),
+            (false, 0.0)
         );
 
         state.pending_combat_actor_slot = Some(0);
-        assert_eq!(visual_animation_pump_interval(&state, 0.33), (false, 0.33));
+        assert_eq!(
+            visual_animation_pump_interval(&state, GAMEPLAY_WORLD_TICK_INTERVAL_SECS),
+            (false, GAMEPLAY_WORLD_TICK_INTERVAL_SECS)
+        );
+        state.pending_combat_actor_slot = None;
+
+        state.visibility_sweep = Some(u5_runtime::VisibilitySweep {
+            frames_remaining: 20,
+            pause_bios_ticks_per_frame: 3,
+            center_x: 10,
+            center_y: 20,
+            visible_cells: [true; u5_runtime::VIEWPORT_SIDE * u5_runtime::VIEWPORT_SIDE],
+        });
+        assert_eq!(
+            visual_animation_pump_interval(&state, GAMEPLAY_WORLD_TICK_INTERVAL_SECS),
+            (true, 3.0 * BIOS_USER_TICK_INTERVAL_SECS)
+        );
     }
 
     #[test]
@@ -22726,6 +23118,42 @@ mod tests {
         let _ = fs::remove_dir_all(dir);
     }
 
+    /// `commands.md` Section 9: every mode loop's pre-dispatch control-code
+    /// table binds Control + `E` to the "Exit to DOS?" prompt, and none of the
+    /// four shared bindings consumes a turn. The shell has to deliver that
+    /// chord as the runtime's control byte, unshifted and unuppercased, or the
+    /// published program exit is unreachable from the window - which it was.
+    ///
+    /// `key_code_to_command_char` upper-cases what it maps, so this also pins
+    /// that the control byte survives that pass: `0x05` is not a letter.
+    #[test]
+    fn control_e_maps_to_the_published_program_exit_byte() {
+        assert_eq!(
+            key_code_to_input_byte(KeyCode::KeyE, false, true),
+            Some(PLAY_EXIT_TO_DOS_KEY as u8)
+        );
+        assert_eq!(
+            key_code_to_command_char(KeyCode::KeyE, false, true),
+            Some(PLAY_EXIT_TO_DOS_KEY)
+        );
+        assert_eq!(
+            key_code_to_command_char(KeyCode::KeyE, true, true),
+            Some(PLAY_EXIT_TO_DOS_KEY),
+            "the chord does not depend on shift"
+        );
+
+        // Without Control it stays the ordinary Enter/E-nter letter, and the
+        // typed-line reader never sees a control chord at all.
+        assert_eq!(
+            key_code_to_command_char(KeyCode::KeyE, false, false),
+            Some('E')
+        );
+        assert_eq!(
+            key_code_to_line_input_byte(KeyCode::KeyE, false, true),
+            None
+        );
+    }
+
     #[test]
     fn visual_key_map_emits_spec_input_bytes_for_commands_and_movement() {
         assert_eq!(key_code_to_char(KeyCode::KeyW, false, false), Some('w'));
@@ -23567,7 +23995,7 @@ mod tests {
         state.message = "Ready.".to_string();
         let clock_before = state.clock;
 
-        assert!(visual_idle_tick(&mut state));
+        assert!(visual_idle_tick(&mut state, Path::new(".")));
 
         assert_eq!(state.turn, 0);
         assert_eq!(state.clock, clock_before);
@@ -23576,12 +24004,58 @@ mod tests {
     }
 
     #[test]
+    fn visual_idle_tick_sails_a_steered_ship_with_no_keypress() {
+        // `timing.md §8.2` / `overworld.md §5` step 3: this pump is the input
+        // helper's idle wait, and under sail "this step does not read the
+        // keyboard at all: the input helper returns the cached sail direction
+        // instead, which is how a ship keeps moving with no keypress". The
+        // shell therefore has to advance the ship off the pump alone.
+        let mut state = u5_runtime::test_fixtures::world_state(
+            vec![u5_runtime::BRIT_DEEP_WATER_TILE; u5_runtime::WORLD_CELLS],
+            10,
+            20,
+        );
+        state.player.transport = TransportState::Ship {
+            type_byte: u5_runtime::TRANSPORT_MARKER_SHIP_HOISTED_FIRST,
+            tile: u5_runtime::FIRST_PLAYABLE_FRIGATE_TILE,
+            sails_hoisted: true,
+            hull: u5_runtime::FIRST_PLAYABLE_FULL_SHIP_HULL,
+            skiffs: 1,
+        };
+        // A north wind is perpendicular to an easterly heading, which
+        // `weather.md §5` releases immediately.
+        state.wind = WindState::North;
+
+        // With no cached direction the pump is the ordinary command wait:
+        // the world ticks and the ship stays put.
+        assert!(visual_idle_tick(&mut state, Path::new(".")));
+        assert_eq!((state.player.x, state.player.y), (10, 20));
+
+        // One keyed command establishes the cache; from there the pump alone
+        // keeps the ship sailing, one cell per two pumps.
+        assert_eq!(
+            state
+                .step_with_game_dir(Direction::East, None)
+                .expect("sidecar-free ship step"),
+            u5_runtime::MoveOutcome::Moved
+        );
+        assert_eq!((state.player.x, state.player.y), (11, 20));
+
+        for expected_x in [12usize, 13] {
+            assert!(visual_idle_tick(&mut state, Path::new(".")));
+            assert_eq!(state.player.x, expected_x - 1);
+            assert!(visual_idle_tick(&mut state, Path::new(".")));
+            assert_eq!((state.player.x, state.player.y), (expected_x, 20));
+        }
+    }
+
+    #[test]
     fn visual_idle_tick_suppresses_world_tick_during_modal_prompt() {
         let mut state = world_state(open_world_grid(), 10, 20);
         let _ = state.start_wishing_well_prompt(Direction::East);
         let clock_before = state.clock;
 
-        assert!(!visual_idle_tick(&mut state));
+        assert!(!visual_idle_tick(&mut state, Path::new(".")));
 
         assert_eq!(state.turn, 0);
         assert_eq!(state.clock, clock_before);
@@ -23598,6 +24072,7 @@ mod tests {
 
         assert!(advance_visual_wait_frame(
             &mut state,
+            Path::new("."),
             &mut prompt_cursor_visible
         ));
         assert!(prompt_cursor_visible);
@@ -23607,6 +24082,7 @@ mod tests {
 
         assert!(advance_visual_wait_frame(
             &mut state,
+            Path::new("."),
             &mut prompt_cursor_visible
         ));
         assert!(!prompt_cursor_visible);
@@ -23825,6 +24301,66 @@ mod tests {
 
         assert!(input_line.is_empty());
         assert!(state.active_conversation.is_some());
+    }
+
+    /// `input.md` Section 8: Enter at a free-text prompt "terminates the
+    /// prompt, returning the accumulated string" to the caller that asked for
+    /// it. The typed line is an answer, not a command, so a keyword that
+    /// begins with a lowercase `q` must reach the conversation and never the
+    /// dispatcher's harness-quit arm — `drive_visual` turns that arm into
+    /// `AppExit`, which would end the session with no prompt and no save.
+    /// `commands.md` Section 9 puts the published program exit behind
+    /// Control + `E`'s "Exit to DOS?" confirmation instead.
+    #[test]
+    fn visual_line_input_submit_never_quits_on_a_typed_q_keyword() {
+        fn letter_key(letter: char) -> KeyCode {
+            match letter {
+                'e' => KeyCode::KeyE,
+                'q' => KeyCode::KeyQ,
+                's' => KeyCode::KeyS,
+                't' => KeyCode::KeyT,
+                'u' => KeyCode::KeyU,
+                other => panic!("unmapped test letter {other}"),
+            }
+        }
+
+        for word in ["q", "quest"] {
+            let mut state = test_state(open_grid(), 1, 1);
+            install_test_conversation(&mut state);
+            let mut input_line = String::new();
+
+            for letter in word.chars() {
+                let typed = handle_visual_line_key(
+                    &mut state,
+                    &mut input_line,
+                    letter_key(letter),
+                    false,
+                    false,
+                    Path::new(""),
+                )
+                .unwrap();
+                assert_eq!(typed, Some(PlayInputDisposition::Continue));
+            }
+            assert_eq!(input_line, word);
+
+            let submitted = handle_visual_line_key(
+                &mut state,
+                &mut input_line,
+                KeyCode::Enter,
+                false,
+                false,
+                Path::new(""),
+            )
+            .unwrap();
+
+            assert_ne!(
+                submitted,
+                Some(PlayInputDisposition::Quit),
+                "the typed keyword `{word}` must not end the session"
+            );
+            assert_eq!(submitted, Some(PlayInputDisposition::Continue));
+            assert!(input_line.is_empty());
+        }
     }
 
     #[test]

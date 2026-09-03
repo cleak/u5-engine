@@ -224,11 +224,23 @@ impl PlayState {
                 self.message = PUSH_NOT_HERE_REFUSAL.to_string();
                 handled!(MoveOutcome::Blocked);
             }
+            // `commands.md` Section 4, the `Q` row: "Save game. Routes to the
+            // save-game handler, which prompts whether to save. On `N`, it
+            // returns without writing. On `Y`, it writes the save files,
+            // acknowledges completion, and returns to the caller. This letter
+            // is not the DOS-terminate path by itself." `dungeon-mode.md`
+            // Section 10 says the same of the dungeon in particular: "`Q` is
+            // the ordinary save-game route; the "Exit to DOS?" prompt is a
+            // Control binding in the mode-local table, not a letter."
+            //
+            // Section 3 files `Q` under "no action", so it costs no turn here
+            // either; the `Quit:` echo of Section 5.2 comes from the shared
+            // dungeon echo table.
             'q' => {
                 if inline_drink.is_some() {
-                    let _ = self.exit_to_dos_prompt(inline_drink);
+                    let _ = self.save_game_command(game_dir, inline_drink)?;
                 } else {
-                    let _ = self.start_exit_to_dos_prompt();
+                    let _ = self.start_save_game_prompt();
                 }
                 Ok(true)
             }

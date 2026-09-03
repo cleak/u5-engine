@@ -2,7 +2,7 @@
 //!
 //! Each test cites the spec section it pins.
 
-use u5_runtime::test_fixtures::{open_world_grid, world_state};
+use u5_runtime::test_fixtures::{open_grid, open_world_grid, test_state, world_state};
 use u5_runtime::*;
 
 // ---------------------------------------------------------------------------
@@ -538,66 +538,168 @@ fn composite_destinations_take_the_rotated_shoals_through_their_mask_tile() {
 }
 
 // ---------------------------------------------------------------------------
-// `visibility.md §8` variant lifetime// ---------------------------------------------------------------------------
-// `visibility.md §8` variant lifetime — runtime observation,
-// `cleak/u5-spec#179`.
+// `visibility.md §8.1` variant lifetime — the composite pass re-rolls.
 // ---------------------------------------------------------------------------
 
-/// `visibility.md §8`'s four-entry compositor variant must not be
-/// re-drawn by the animation tick.
-///
-/// Runtime observation, `cleak/u5-spec#179`: outside combat, actor
-/// sprites are static while the player is idle — the party sprite on the
-/// overworld and the Avatar seated in a chair were both bit-identical
-/// across 160 s idle windows with zero transitions. The engine used to
-/// mix the animation phase into the selector, so a stationary actor on
-/// one of the four-entry terrains re-stamped itself on every animation
-/// tick; at the measured 18.2 Hz world tick that is a visible flicker.
-///
-/// TODO(u5-spec question pending): `visibility.md §8.1` is normative that the
-/// variant is drawn "once per composite pass, per actor" and "never cached",
-/// and `§8.3` (published as *probable*) concludes the sprite changes on about
-/// three idle passes in four. This test pins the opposite, on the strength of
-/// the clean-side capture above. The conflict is being taken back to the spec
-/// as a question; until it is answered the stable variant is kept.
-#[test]
-fn the_compositor_variant_is_stable_across_animation_ticks() {
-    let mut grid = open_world_grid();
-    grid[world_cell_index(101, 100)] = 0x84;
-    let mut state = world_state(grid, 100, 100);
-    state.active_objects.truncate(1);
+/// One ordinary humanoid NPC sprite byte inside the merging band: at or above
+/// `0x40` so `visibility.md §8`'s terrain-aware entry test accepts it, and
+/// below `0x80` so the table does not route it to the plain stamp before the
+/// terrain rows are consulted.
+const SEATED_NPC_SPRITE: u8 = 0x60;
+
+/// Build a town floor with one chair and the neighbouring-row furniture the
+/// `§8` predicate reads: the `0x92` chair reads the row *below* it.
+fn seated_town_grid(chair: u8, neighbour: u8, chair_x: usize, chair_y: usize) -> Vec<u8> {
+    let mut grid = open_grid();
+    grid[chair_y * 32 + chair_x] = chair;
+    grid[(chair_y + 1) * 32 + chair_x] = neighbour;
+    grid
+}
+
+/// A town state with an NPC seated on `(10, 20)` and the party three cells
+/// south of it, so the seat and its neighbouring row are both well inside the
+/// eleven-by-eleven viewport.
+fn seated_npc_state(chair: u8, neighbour: u8) -> PlayState {
+    let mut state = test_state(seated_town_grid(chair, neighbour, 10, 20), 10, 23);
     state.active_objects.push(ActiveObject {
-        type_byte: 0x44,
-        tile: 0x44,
-        x: 101,
-        y: 100,
-        z: WorldPlane::Underworld.save_floor(),
-        phase: 0,
+        type_byte: SEATED_NPC_SPRITE,
+        tile: SEATED_NPC_SPRITE,
+        x: 10,
+        y: 20,
+        z: 0,
+        phase: STEADY_PHASE,
         aux1: 0,
         aux3: 0,
     });
-    let area = state.top_down_render_area().expect("a world area");
+    state.visibility_buffers_ready = false;
+    state
+}
 
-    let stamped = |state: &PlayState| {
-        state
-            .top_down_render_cell(area, 100, 100, 101, 100, VIEWPORT_PLAYER_ROW)
-            .expect("the adjacent cell is visible")
-            .1
-            .expect("the actor is composited over the terrain")
-    };
+/// Run one composite pass over the live buffers and report the byte left in
+/// the companion terrain band under the seat, together with the number of
+/// `0..3` draws the pass took off the shared gameplay stream.
+fn idle_composite_pass(state: &mut PlayState) -> (u8, u32) {
+    let before = state.prng_state;
+    state.refresh_top_down_visibility_buffers(TopDownRenderArea::Town, VIEWPORT_PLAYER_ROW);
+    let mut probe = before;
+    let mut draws = 0u32;
+    while probe != state.prng_state {
+        let _ = u5_prng_range_u16(&mut probe, 0, 3);
+        draws += 1;
+        assert!(draws < 64, "a composite pass drew far more than one value");
+    }
+    let row = 20 + VIEWPORT_PLAYER_ROW - 23;
+    let col = 10 + VIEWPORT_PLAYER_COL - 10;
+    let stamped = state.terrain_band[terrain_band_active_index(row, col).unwrap()];
+    (stamped, draws)
+}
 
-    let first = stamped(&state);
+/// `visibility.md §8.1`, normative: for an actor whose composite lands on one
+/// of the five selecting rows the variant is drawn "once per composite pass —
+/// not once per placement — and it is never cached anywhere." The section is
+/// explicit that "There is no cache to find", that the drawing path "derives
+/// the variant afresh from the terrain beneath the actor every time the actor
+/// is drawn", and that on the idle cheap path "every pass re-enters the same
+/// arm and draws again". `§8.3` puts the observable consequence at "about
+/// three passes in four", from "the probability that two draws separated by
+/// one to five steps differ is 0.7508".
+///
+/// This replaces an earlier pin that asserted the opposite — a variant held
+/// stable across animation ticks — on the strength of a runtime capture
+/// reported as `cleak/u5-spec#179`. `cleak/u5-spec#182` settled that capture
+/// rather than leaving the conflict open: the seat it used is a `§8`
+/// *fall-through*, whose fixed tile correctly never changes, and the
+/// named-cell recapture on seats that do qualify measured transitions on
+/// every one of them. `RETRACTIONS.md` R329 re-scoped which rows select; it
+/// did not withdraw the per-pass re-roll on the rows that do.
+///
+/// The pin is taken on `refresh_top_down_visibility_buffers`, the redraw's
+/// composite pass, because that is the only path `§8.1`'s per-pass count is
+/// defined over. The `&self` query helper reached from `top_down_render_cell`
+/// deliberately takes no draw — a query must not advance the single global
+/// stream — so a pin taken there could not observe a re-roll at all.
+#[test]
+fn the_compositor_variant_is_redrawn_on_every_composite_pass() {
+    // A `0x92` chair whose row below holds the laden table `0x9C`: one of the
+    // two qualifying seats among `§8`'s five selecting rows.
+    let mut state = seated_npc_state(0x92, 0x9C);
+
+    const PASSES: usize = 4_000;
+    let mut seen = [0usize; 4];
+    let mut transitions = 0usize;
+    let mut previous: Option<u8> = None;
+    for pass in 0..PASSES {
+        let (stamped, draws) = idle_composite_pass(&mut state);
+        assert_eq!(
+            draws, 1,
+            "pass {pass}: `§8.1` charges exactly one draw for a qualifying seat"
+        );
+        assert!(
+            (0x34..=0x37).contains(&stamped),
+            "pass {pass}: `§8` stamps 0x34..0x37 on this row, not {stamped:#04x}"
+        );
+        seen[usize::from(stamped - 0x34)] += 1;
+        if previous.is_some_and(|earlier| earlier != stamped) {
+            transitions += 1;
+        }
+        previous = Some(stamped);
+    }
+
+    // "it is never cached anywhere" — a cached variant would pin every pass
+    // to one entry and leave three of these at zero.
+    for (entry, count) in seen.iter().enumerate() {
+        assert!(
+            *count > 0,
+            "entry {:#04x} never appeared over {PASSES} passes: the variant is being cached",
+            0x34 + entry
+        );
+    }
+
+    // `§8.3`'s "about three passes in four", the same 0.7508 the published
+    // figure is computed from.
+    let rate = transitions as f64 / (PASSES - 1) as f64;
     assert!(
-        (0x60..=0x63).contains(&first),
-        "`visibility.md §8`: terrain 0x84 selects one of 0x60..0x63, got 0x{first:02x}"
+        (rate - ACTIVE_OBJECT_VARIANT_TRANSITION_PROBABILITY).abs() < 0.03,
+        "transition rate {rate} over {PASSES} idle passes is not the published ~0.75"
     );
 
+    // The passes above ran with the animation clock untouched, so the re-roll
+    // is a property of the pass and not of the animation phase. Driving the
+    // clock changes nothing about it.
+    let mut state = seated_npc_state(0x92, 0x9C);
+    let mut phase_seen = [0usize; 4];
     for phase in 0..STATIC_TILE_ANIMATION_PERIOD_TICKS {
         state.animation = AnimationClock::at_static_tile_phase(phase);
+        let (stamped, draws) = idle_composite_pass(&mut state);
+        assert_eq!(draws, 1, "phase {phase} still takes exactly one draw");
+        assert!((0x34..=0x37).contains(&stamped));
+        phase_seen[usize::from(stamped - 0x34)] += 1;
+    }
+    assert!(
+        phase_seen.iter().filter(|count| **count > 0).count() > 1,
+        "the variant never moved across the animation period: it is being cached"
+    );
+}
+
+/// The other half of `§8.3`: "a seated actor on any other chair is painted the
+/// same fixed tile every pass and correctly never changes", and `§8.1` charges
+/// it no draw. `RETRACTIONS.md` R329: "a seated actor that never changes tile
+/// is the expected result for the majority of seats, not a defect."
+#[test]
+fn a_fall_through_seat_is_one_fixed_tile_on_every_pass_and_takes_no_draw() {
+    // The same `0x92` chair over the plain table `0x95` — the shape of the
+    // cell that produced the original null observation.
+    let mut state = seated_npc_state(0x92, 0x95);
+
+    for pass in 0..64 {
+        let (stamped, draws) = idle_composite_pass(&mut state);
         assert_eq!(
-            stamped(&state),
-            first,
-            "phase {phase} must not re-roll the variant"
+            draws, 0,
+            "pass {pass}: a fall-through row must not touch the shared stream"
+        );
+        assert_eq!(
+            stamped, 0x32,
+            "pass {pass}: `§8` stamps the fixed occupied-chair tile 0x32 here"
         );
     }
 }

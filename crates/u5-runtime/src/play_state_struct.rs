@@ -58,6 +58,21 @@ pub struct PlayState {
     /// hour. Distinct from [`Self::status_pass_previous_hour`], which is the
     /// status/provision pass's own snapshot (`time.md §5`).
     pub cleanup_previous_hour: u8,
+    /// `formats/saved-gam.md §5` / `time.md §11` (spec `0170809`): save
+    /// byte `0x02DE`. "On a cleanup call whose snapshot at `0x02DA`
+    /// disagrees with the hour at `0x02D9`, the byte takes the twelve-hour
+    /// form of the hour ... That is the whole write rule; there is no
+    /// second writer." Its only consumer is the ambient-audio tick, which
+    /// "reads the byte as a count of remaining loud repeats ... and
+    /// decrements it toward zero on **two of every eight** of its own
+    /// calls". `RETRACTIONS.md` R338 withdraws the old "12-hour display"
+    /// reading: nothing in the shipped game renders it.
+    pub twelve_hour_audio_repeats: u8,
+    /// Free-running sub-tick behind the two-in-eight decrement above.
+    /// `time.md §11`: it uses "a small free-running sub-tick counter that
+    /// is not part of the save image", so this field is deliberately not
+    /// persisted.
+    pub ambient_audio_sub_tick: u8,
     /// `dungeon-mode.md §15`: the dungeon loop charges one minute at the
     /// head of every iteration, ungated on whether the command consumed a
     /// turn. This flag records that the iteration's minute is already spent so
@@ -127,6 +142,42 @@ pub struct PlayState {
     /// separate because some low-level time calls deliberately suppress that
     /// pass while still owing the NPC scheduler. Never serialized.
     pub pending_town_active_object_pass: bool,
+    /// Whether the deferred town tail also owes the per-slot **animator**
+    /// pass. It is a separate flag from the walker pass above because
+    /// `npc-schedules.md §5`'s three effect gates skip "**both** town walkers
+    /// — the object walker that moves loose horse-family objects and this
+    /// schedule processor" and the animator is neither: it "moves no actor"
+    /// (`RETRACTIONS.md` R316) and `npc-schedules.md §12` runs it
+    /// "independently each render frame". Never serialized.
+    pub pending_town_active_object_animate_pass: bool,
+    /// `npc-schedules.md §5` gate 1 / `encounters.md §2.1` gate 3: "While
+    /// the party's transport marker is one of the four values `0x12..0x15`,
+    /// a stored parity bit flips each turn and the loop skips **both** town
+    /// walkers on the turns where it comes up set". The bit is stored, not
+    /// derived from the turn counter, because "an early return leaves the
+    /// later gates' parity bits un-flipped" - so whether it advances on a
+    /// given turn depends on which mode's gate order reached it. Never
+    /// serialized.
+    pub transport_walker_gate_parity: bool,
+    /// `npc-schedules.md §5` gate 3 / `encounters.md §2.1` gate 2: the
+    /// Quickness parity bit, stored for the same reason as
+    /// [`Self::transport_walker_gate_parity`]. Never serialized.
+    pub quickness_walker_gate_parity: bool,
+    /// `encounters.md §2.1`: the three effect gates "sit ahead of the
+    /// encounter probe *and* ahead of the outdoor creature walker, so a gate
+    /// that fires costs the turn its probe as well as its creature movement".
+    /// The gates are evaluated once, in the per-turn clock routine, and the
+    /// outdoor post-action epilogue reads that one decision from here instead
+    /// of re-testing them - a second test would flip the stored parity bits
+    /// twice in one turn. Never serialized.
+    pub world_walkers_ran_this_turn: bool,
+    /// `timing.md §8.2`: which half of the under-sail auto-advance route the
+    /// next idle-wait pass owes. The route is "one world step followed by one
+    /// one-tick wait - before ... when sails are set, performing a bare
+    /// cursor poll instead", so a full pass is two ticks with the world step
+    /// on the first of them. Cleared whenever the route does not apply.
+    /// Never serialized.
+    pub under_sail_wait_cursor_poll_pending: bool,
     pub cached_moon_glyph_bytes: [u8; 2],
     pub food: u16,
     pub gold: u16,
@@ -139,9 +190,9 @@ pub struct PlayState {
     pub party_experience: Vec<u16>,
     pub party_stay_counters: Vec<u8>,
     pub party_strengths: Vec<u8>,
-    /// `combat.md §12` cached combat-defense byte, character record offset
-    /// `+0x18`. Read by the damage roller's defence subtraction for a
-    /// party defender; nothing in combat writes it back.
+    /// `combat.md §12`: the cached combat-defense byte the damage roller
+    /// reads for a party defender, at character-record offset `+0x18`,
+    /// one entry per roster slot.
     pub party_combat_defense: Vec<u8>,
     /// `combat.md §11`: "One class trait can route an attack into a cast-like
     /// ranged/effect branch, rather than ordinary melee, **when the combat
@@ -255,6 +306,19 @@ pub struct PlayState {
     pub pace_combat_presentations: bool,
     pub combat_frame_snapshot: Option<CombatFrameSnapshot>,
     pub pending_combat_actor_slot: Option<usize>,
+    /// `combat.md §8.2`: the live `A`-Attack attempt walk and its open
+    /// targeting cursor. `A` "opens a second, separate input read, and
+    /// it is not a one-shot direction key but an **interactive targeting
+    /// cursor**", entered "once per readied weapon, not once per Attack
+    /// command". Never serialized: combat cannot be saved mid-fight.
+    pub active_combat_targeting: Option<CombatTargetingCursorSession>,
+    /// `combat.md §8.2`: the targeting cursor "starts on **the attacker's**
+    /// remembered previous target when that target is still a valid, live,
+    /// visible actor within the maximum range, and on the attacker's own
+    /// cell otherwise." The remembered target is a property of the attacker,
+    /// so it is held per actor slot rather than once for the arena. Never
+    /// serialized: combat cannot be saved mid-fight (`§15`).
+    pub combat_remembered_targets: [Option<u8>; COMBAT_ACTOR_SLOTS],
     pub pending_combat_terrain_trigger_slot: Option<usize>,
     /// `town-mode.md §14`: the town NPC-conflict chain's carry-over.
     /// A-Attack on a town actor enters the ordinary terrain arena, and
@@ -274,11 +338,58 @@ pub struct PlayState {
     /// round loop, and the loop is entered once per encounter: the sweep
     /// restart jumps back past the prologue" (`RETRACTIONS.md` R308).
     pub combat_round_loop_prologue_ran: bool,
+    /// `combat.md §7`, "Loop-entry prologue": the bundle includes a
+    /// "per-slot scratch state reset". `§7` names the scratch only by that
+    /// phrase - it publishes no reader, no writer and no field layout for
+    /// it - so this engine models it as one opaque byte per actor slot,
+    /// zeroed by the prologue. Nothing else reads or writes it; the hedge is
+    /// recorded rather than filled in with an invented meaning.
+    pub combat_round_slot_scratch: [u8; COMBAT_ACTOR_SLOTS],
+    /// `combat.md §7`, "Loop-entry prologue": the bundle ends by "clearing
+    /// the 'any spell cast this round' flag". As with the scratch above, the
+    /// specification publishes the *clear* and nothing else - no reader and
+    /// no writer anywhere in `combat.md` or `magic.md` - so the flag exists
+    /// here with exactly the published lifetime and no invented consumer.
+    pub combat_spell_cast_this_round: bool,
+    /// `combat.md §4` restore phase: "If the resident tile-restoration flag
+    /// is set when the round loop returns, clear that flag and invoke the
+    /// display driver's tile-graphics save/restore/mutation entry with mode
+    /// value `1` before the ordinary world redraw." The setter is the
+    /// dungeon room painter's two-way ladder cell (`dungeon-mode.md §14.1`),
+    /// which is outside combat's contract: "combat owns only the
+    /// sampling/clear/call ordering, while the setter provenance and
+    /// tile-asset mutation details belong to the dungeon and driver specs."
+    /// Transient presentation handoff, never serialized.
+    pub tile_restoration_pending: bool,
+    /// Driver tile-graphics restores the combat framer sampled out of
+    /// [`Self::tile_restoration_pending`] and owes a frontend. The runtime
+    /// has no display driver of its own, so it records the request in the
+    /// published order - ahead of the restore phase's world redraw - and a
+    /// frontend drains it by issuing
+    /// [`crate::EgaDisplayOperation::RestoreLoadedTileGraphics`].
+    pub pending_driver_tile_graphics_restores: usize,
     pub combat_secondary_marker: Option<(u8, u8)>,
     pub combat_ambush_reveals: [Option<CombatAmbushRevealRecord>; COMBAT_AMBUSH_REVEAL_SLOT_COUNT],
     pub combat_actors: [CombatActorDescriptor; COMBAT_ACTOR_SLOTS],
     pub sail_cadence: u8,
     pub sail_stall_pending: bool,
+    /// `weather.md §5` / `overworld.md §5` step 3: the hoisted-sail ship's
+    /// **cached sail direction**. "Once the requested direction matches the
+    /// cached heading, the input helper can synthesize repeated movement
+    /// commands from the cached direction until the cache is cleared or
+    /// replaced", and at the loop's input step "under sail on the
+    /// wind-driven cadence, this step does not read the keyboard at all: the
+    /// input helper returns the cached sail direction instead, which is how a
+    /// ship keeps moving with no keypress".
+    ///
+    /// `None` means there is nothing to synthesize, so the loop reads a
+    /// command as usual. Docking, a sailing collision, furling, boarding or
+    /// leaving the ship, and the Pass command's stall report all clear it
+    /// (`overworld.md §6.2.5`, `vehicles.md` "Ship Sails", `weather.md §6`);
+    /// a wind change resets the counter but not the cache ("the next released
+    /// movement uses the same cadence again unless the wind, heading, or
+    /// cache changes"). Never serialized.
+    pub sail_cached_direction: Option<Direction>,
     /// Exact queued shipwright-delivery bytes from `SAVED.GAM`. The packed
     /// class is cleared only when world setup successfully delivers it.
     pub pending_vehicle_save: PendingVehicleSaveState,

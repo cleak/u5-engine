@@ -21,8 +21,10 @@ pub struct PlayOptions {
     pub party_experience: Vec<u16>,
     pub party_stay_counters: Vec<u8>,
     pub party_strengths: Vec<u8>,
-    /// `combat.md §12` cached combat-defense byte, character record offset
-    /// `+0x18` (`formats/saved-gam.md §3.1`). One entry per party slot.
+    /// `combat.md §12`: the cached combat-defense byte at character-record
+    /// offset `+0x18`, one entry per roster slot. A slot with no entry
+    /// falls back to [`crate::CHARACTER_DEFENSE_FACTORY_SEED`], the value
+    /// the spec publishes for factory-seed records.
     pub party_combat_defense: Vec<u8>,
     pub party_intelligence: Vec<u8>,
     pub party_equipment: Vec<[u8; EQUIPMENT_SLOT_COUNT]>,
@@ -50,6 +52,23 @@ pub struct PlayOptions {
     /// `formats/saved-gam.md §5`: saved pre-cascade hour snapshot
     /// (`0x02DA`) restored from the save image.
     pub cleanup_previous_hour: u8,
+    /// `formats/saved-gam.md §5` / `time.md §11` (spec `0170809`): the
+    /// twelve-hour value at `0x02DE`, which the ambient-audio tick reads
+    /// "as a count of remaining loud repeats". Restored verbatim from the
+    /// save image.
+    pub twelve_hour_audio_repeats: u8,
+    /// `formats/saved-gam.md §5.1` (spec `0170809`): the cached Trammel
+    /// and Felucca moon-phase digits at `0x02DF`/`0x02E0`, restored
+    /// verbatim. "**They are gameplay state, not scratch.**
+    /// Natural-moongate transit selects its destination from these two
+    /// cached bytes and from nothing else" (`RETRACTIONS.md` R339 is the
+    /// withdrawal that established them).
+    pub cached_moon_glyph_bytes: [u8; 2],
+    /// `formats/saved-gam.md §10` / `time.md §6` (spec `0170809`): the
+    /// cached ambient light level at `0x02FF`. A stored value of 51 or
+    /// higher "makes the recompute skip entirely", so the byte has to be
+    /// restored rather than reseeded.
+    pub ambient_light: u8,
     /// `overworld.md §9.1` (spec HEAD c00bf63): the shared
     /// natural-moongate gate-presence counter, restored from
     /// `SAVED.GAM` offset `0x02E1`. Persistent world state - it
@@ -144,6 +163,13 @@ impl Default for PlayOptions {
             moral_standing: 0,
             toll_progress: 0,
             cleanup_previous_hour: 0,
+            twelve_hour_audio_repeats: 0,
+            // `formats/saved-gam.md §5.1`: "Factory seed: both bytes are
+            // zero, and the first scene entry replaces them with the pair
+            // for day five of the shipped start date." The default is that
+            // seed, not a synthesised phase.
+            cached_moon_glyph_bytes: [0, 0],
+            ambient_light: 0,
             natural_moongate_counter: 0,
             animation_asset_buffer: AnimationAssetBuffer::AT_BOOT,
             avatar_stats: AvatarStats::default(),

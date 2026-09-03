@@ -87,9 +87,24 @@
         assert!(contact.hit_sound_played);
         assert!(contact.finalize_hook_ran);
         assert!(contact.raises_leave_combat_flag);
-        assert!(
-            middle.sound_effects_after(serial).is_empty(),
-            "no document publishes a program for the hazard tier's target sound"
+        // The tier itself is still silent. What the pass can emit is the cue
+        // `§11.1`'s "Damage zero or negative" row gives the **shared damage
+        // handler** - "the rising action-snap cue" - and the middle tier's
+        // rolled amount is free to land on that row. So the census here is
+        // exactly what that row prescribes for the damage that actually
+        // landed, and nothing else: no cue is attributable to the tier.
+        let grazed = matches!(
+            contact.field_contact.damage_application,
+            Some(CombatWeaponDamageApplication::Party { damage, .. }) if damage.grazed
+        );
+        assert_eq!(
+            middle.sound_effects_after(serial),
+            if grazed {
+                vec![SoundEffect::ActionSnap]
+            } else {
+                Vec::new()
+            },
+            "no document publishes a program for the hazard tier's target              sound; the only cue on this pass is `§11.1`'s graze action-snap,              which the shared damage handler owns"
         );
 
         // `§11`: the Sleep marker still writes its own status result, but it
@@ -648,6 +663,26 @@
         );
         assert!(monster_swing.ends_with_stop());
 
+        // `audio.md §7.4` gives the swing cue a wall clock as well as a
+        // count: "30 updates, roughly 130 ms". `§10` prices every duration it
+        // publishes at "plus or minus 10 percent" and says an implementation
+        // "may vary any duration below within its stated band" but "must not
+        // vary the counts", so both sweeps have to land inside 117..143 ms
+        // under `§5.2`/`§10.2`'s `delay x 0.88 ms + 0.17 ms` per update. This
+        // is what picks `ATTACK_SWING_DELAY` out of the pairs that satisfy the
+        // published 30-update ratio: at `delay = 4` the cue runs 111 ms, which
+        // is outside the band.
+        for (label, program) in [
+            ("party melee", &party_melee),
+            ("monster", &monster_swing),
+        ] {
+            let millis = program.duration(true).as_secs_f64() * 1000.0;
+            assert!(
+                (117.0..=143.0).contains(&millis),
+                "the {label} swing runs {millis:.1} ms, outside                  `audio.md §7.4`'s 130 ms +/- `§10`'s 10 percent"
+            );
+        }
+
         let party_ranged_program = audio::party_ranged_attack_swing();
         assert!(party_ranged_program.ends_with_stop());
         let party_ranged = party_ranged_program.frequencies();
@@ -670,7 +705,7 @@
             let serial = state.sound_effect_serial;
 
             let application = state
-                .resolve_and_apply_combat_monster_attack(8, 0, 7, 0, 0, false, 0, Some(forced_hit))
+                .resolve_and_apply_combat_monster_attack(8, 0, 0, false, 0, Some(forced_hit))
                 .expect("an adjacent monster attack resolves");
 
             let landed = matches!(
@@ -773,7 +808,7 @@
         ]);
         let serial = occupied.sound_effect_serial;
         let application = occupied
-            .resolve_and_apply_combat_monster_scattered_attack(8, 0, 7, 0, 0, 0)
+            .resolve_and_apply_combat_monster_scattered_attack(8, 0, 0, 0)
             .expect("the scatter arm resolves");
         assert_eq!(
             application.target_slot, 9,
@@ -789,52 +824,13 @@
         let mut empty = scatter_state();
         let serial = empty.sound_effect_serial;
         let application = empty
-            .resolve_and_apply_combat_monster_scattered_attack(8, 0, 7, 0, 0, 1)
+            .resolve_and_apply_combat_monster_scattered_attack(8, 0, 0, 1)
             .expect("the scatter arm resolves");
         assert_eq!(application.damage_application, None);
         assert!(
             empty.sound_effects_after(serial).is_empty(),
             "a scatter that lands on nobody is silent"
         );
-    }
-
-    #[test]
-    fn a_party_defender_reads_the_cached_combat_defense_byte_at_offset_0x18() {
-        // `combat.md §12`: "For party-member defenders, the damage roll reads
-        // the cached combat-defense byte in the character record at offset
-        // `+0x18`; factory-seed records carry value `7`. This is not one of the
-        // stat bytes earlier in the record - Strength `+0x0C`, Dexterity
-        // `+0x0D`, Intelligence `+0x0E`."
-        let mut state = combat_ai_turn_state(6, 5);
-        state.party_combat_defense = vec![21];
-        state.party_strengths = vec![3];
-        state.party_intelligence = vec![5];
-
-        assert_eq!(state.party_combat_defense_byte(0), 21);
-        assert_eq!(
-            state.combat_spell_target_defense_value(0),
-            21,
-            "the spell damage roll reads the cached byte, not the factory seed"
-        );
-        assert_ne!(state.combat_spell_target_defense_value(0), 3);
-        assert_ne!(state.combat_spell_target_defense_value(0), 5);
-
-        // A slot the roster does not carry falls back to the factory seed.
-        assert_eq!(
-            state.party_combat_defense_byte(5),
-            CHARACTER_DEFENSE_FACTORY_SEED
-        );
-        assert_eq!(CHARACTER_DEFENSE_FACTORY_SEED, 7);
-
-        // The byte comes off the save image at `+0x18`, not from a constant.
-        let mut bytes = vec![0u8; SAVE_ROSTER_OFFSET + 3 * SAVE_CHARACTER_RECORD_LEN];
-        for slot in 0..3usize {
-            bytes[SAVE_ROSTER_OFFSET
-                + slot * SAVE_CHARACTER_RECORD_LEN
-                + SAVE_CHARACTER_DEFENSE_BYTE_OFFSET] = 11 + slot as u8;
-        }
-        assert_eq!(decode_party_combat_defense(&bytes, 3), vec![11, 12, 13]);
-        assert_eq!(SAVE_CHARACTER_DEFENSE_BYTE_OFFSET, 0x18);
     }
 
     #[test]
@@ -860,7 +856,7 @@
         awake.party[0].max_hp = 30;
 
         let application = awake
-            .resolve_and_apply_combat_monster_attack(8, 0, 7, 0, 0, false, 0, Some(true))
+            .resolve_and_apply_combat_monster_attack(8, 0, 0, false, 0, Some(true))
             .expect("the gaze resolves");
         assert_eq!(
             application.stoning,
@@ -892,7 +888,7 @@
         asleep.party[0].max_hp = 30;
 
         let application = asleep
-            .resolve_and_apply_combat_monster_attack(8, 0, 7, 0, 0, false, 0, Some(true))
+            .resolve_and_apply_combat_monster_attack(8, 0, 0, false, 0, Some(true))
             .expect("the gaze resolves");
         assert_eq!(application.stoning, None);
         assert!(

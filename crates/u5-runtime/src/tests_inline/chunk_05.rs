@@ -1830,6 +1830,24 @@ fn a_attack_guard_like_town_npc_raises_alarm_and_opens_an_eight_monster_arena() 
     assert_eq!(&state.npcs[0].schedule[..3], &[7, 7, 7]);
     assert_eq!(&state.npcs[0].schedule[12..16], &[0, 0, 0, 0]);
 
+    // `combat.md` Section 12 (`RETRACTIONS.md` R336): a Guard brings its
+    // class attack value of 30 flat, less the party's inclusive `1..7`
+    // defence draw, so eight of them take a shipped party member apart in
+    // one walk. This regression is about the alarm, the arena and the
+    // transcript, not about surviving eight of them, so it holds all but
+    // the first hostile off their phase (Section 7: an actor comes round
+    // only when its phase counter reaches zero) and leaves the seated
+    // member on the shipped roster's 60 HP, which one guard's flat 30 less
+    // the party's `1..7` defence draw cannot end. (The freeze has to follow
+    // combat entry, which seats the actors.)
+    for slot in COMBAT_PARTY_ACTOR_SLOTS + 1..COMBAT_ACTOR_SLOTS {
+        state.combat_actors[slot].phase_counter = u8::MAX;
+    }
+    assert_eq!(
+        state.party[0].hp, DEFAULT_PARTY_HP,
+        "the fixture must exercise a shipped roster HP, not an inflated one"
+    );
+
     let walk = state
         .ensure_pending_combat_player_turn()
         .expect("guard combat must advance to a player-controlled actor");
@@ -1847,14 +1865,28 @@ fn a_attack_guard_like_town_npc_raises_alarm_and_opens_an_eight_monster_arena() 
     assert_eq!(state.message, "Attack-Aim! ");
     assert_eq!(state.pending_combat_actor_slot, Some(actor_slot));
 
+    // `combat.md §8.2`: the cursor owns the keystroke. A direction code
+    // steers the cursor and leaves the attacker on its seat; Enter confirms.
+    let seat = (
+        state.combat_actors[actor_slot].x,
+        state.combat_actors[actor_slot].y,
+    );
     assert_eq!(
         handle_play_key_input(&mut state, char::from(INPUT_CODE_EAST), "", &dir).unwrap(),
         PlayInputDisposition::Continue
     );
     assert_eq!(
-        (state.combat_actors[actor_slot].x, state.combat_actors[actor_slot].y),
-        (6, 7)
+        (
+            state.combat_actors[actor_slot].x,
+            state.combat_actors[actor_slot].y
+        ),
+        seat
     );
+    assert_eq!(
+        handle_play_key_input(&mut state, '\r', "", &dir).unwrap(),
+        PlayInputDisposition::Continue
+    );
+    assert!(state.active_combat_targeting.is_none());
     // `combat.md §8.1`: the transcript ends with the turn banner for the
     // next keyboard-driven actor, printed "before any key is read". Trim it
     // (and its leading blank line) before asserting on the attack result.
@@ -1864,7 +1896,7 @@ fn a_attack_guard_like_town_npc_raises_alarm_and_opens_an_eight_monster_arena() 
         .take_while(|line| !line.contains(COMBAT_TURN_BANNER_ARMED_WITH))
         .filter(|line| !line.is_empty())
         .collect::<Vec<_>>();
-    assert_eq!(result_lines.first(), Some(&"East"));
+    assert_eq!(result_lines.first().copied(), Some("Attack-Aim! Nothing!"));
     assert!(result_lines.len() > 1);
     assert!(
         result_lines

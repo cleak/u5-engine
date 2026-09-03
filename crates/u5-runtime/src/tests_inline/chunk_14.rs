@@ -2918,8 +2918,8 @@
             system.cell(MESSAGE_WINDOW_LEFT, MESSAGE_WINDOW_TOP).is_none(),
             "Talk entry newline leaves the window's first row untouched"
         );
-        // The window is fifteen columns wide, so the modal text wraps;
-        // compare with whitespace squeezed out.
+        // The window is sixteen columns wide (`RETRACTIONS.md` R344), so
+        // the modal text wraps; compare with whitespace squeezed out.
         let squished: String = main.chars().filter(|ch| !ch.is_whitespace()).collect();
         assert!(squished.contains("Iolo"), "{main}");
         assert!(squished.contains("Item1costs42gold"), "{main}");

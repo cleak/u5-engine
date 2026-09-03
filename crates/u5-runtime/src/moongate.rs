@@ -151,13 +151,6 @@ pub const FELUCCA_GLYPH_BY_DAY: [u8; MOON_GLYPH_DAYS_PER_MONTH] = [
 /// no day zero."
 pub const MOON_GLYPH_DAYS_PER_MONTH: usize = 28;
 
-/// `moons.md §2.2` cache pair meaning "neither moon selects a
-/// Moonstone slot". Built from the two cache-only encodings above, not
-/// from any table entry. Callers that cannot fail on an out-of-range
-/// day byte park this pair instead of synthesising a phase.
-pub const MOON_GLYPH_CACHE_NO_GATE: [u8; 2] =
-    [TRAMMEL_OFF_HORIZON_SENTINEL, FELUCCA_OFF_HORIZON_SENTINEL];
-
 /// `moons.md §2.2`: raw cached glyph bytes for a status/moon refresh on
 /// the supplied calendar day of the month (`1..=28`).
 ///

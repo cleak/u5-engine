@@ -24,6 +24,28 @@ pub const fn is_npc_floor_link_tile(tile: u8) -> bool {
     tile == NPC_FLOOR_LINK_TILE_A || tile == NPC_FLOOR_LINK_TILE_B
 }
 
+/// `npc-schedules.md §5` gate 1 / `encounters.md §2.1` gate 3: the transport
+/// marker window that arms the alternate-turn walker gate.
+///
+/// "While the party's transport marker is one of the four values
+/// `0x12..0x15`, a stored parity bit flips each turn and the loop skips
+/// **both** town walkers on the turns where it comes up set. Implement this
+/// as the four-value window, not as an 'is the party mounted or on a carpet'
+/// test. The traced gate is a numeric range on the marker byte, and the two
+/// readings of what that range *means* do not agree ... The value window is
+/// *established*; the family mapping behind the second reading is only
+/// *probable* ... A value test is correct under both readings, a family test
+/// only under one."
+pub const fn transport_marker_gates_per_turn_walkers(marker: u8) -> bool {
+    marker >= WALKER_GATE_TRANSPORT_MARKER_FIRST && marker <= WALKER_GATE_TRANSPORT_MARKER_LAST
+}
+
+/// Low bound of the published transport-marker walker-gate window.
+pub const WALKER_GATE_TRANSPORT_MARKER_FIRST: u8 = 0x12;
+/// High bound of the published transport-marker walker-gate window,
+/// inclusive.
+pub const WALKER_GATE_TRANSPORT_MARKER_LAST: u8 = 0x15;
+
 /// `vehicles.md` §6: a ship-transport marker byte (either hoisted
 /// `0x20..=0x23` or furled `0x24..=0x27`).
 pub const fn is_ship_transport_marker(byte: u8) -> bool {

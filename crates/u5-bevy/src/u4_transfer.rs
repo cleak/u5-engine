@@ -371,9 +371,15 @@ fn panel_cell(panel: U4PreviewPanel, column: u8, row: u8) -> (u8, u8) {
 }
 
 /// The absolute start column of a line centred in `window`.
+///
+/// `text-output.md §5`: centring measures against `columns_in_window`,
+/// `bottom_right_x - top_left_x + 1`. "Implementations must not drop the
+/// 'plus one' and centre against `bottom_right_x - top_left_x`: that agrees
+/// on odd-length lines but shifts every even-length line one whole cell
+/// left." (`RETRACTIONS.md` R344.)
 fn centred_column(window: TextWindowDescriptor, text: &str) -> u8 {
     let chars = u8::try_from(text.len()).unwrap_or(u8::MAX);
-    window.top_left_x + text_window_centred_start_column(window.inner_width(), chars)
+    window.top_left_x + text_window_centred_start_column(window.column_count(), chars)
 }
 
 /// `§6.1`: the lower prompt frame plus its accent rectangle, and the
@@ -671,7 +677,10 @@ fn apply_edit(buffer: &mut IntroDisplayBuffer, font: &FixedCellFont, edit: &U4Pr
         U4PreviewEdit::AcceptedName(name) => {
             let window = U4PreviewPanel::Result.window();
             let row = window.top_left_y + U4_PREVIEW_NAME_ROW;
-            blank_cells(buffer, window.top_left_x, row, window.inner_width());
+            // A row spans the window's capacity - both corner columns are
+            // inclusive (`text-output.md` §4, `RETRACTIONS.md` R344) - so
+            // the cell at `bottom_right_x` is one of the cells to clear.
+            blank_cells(buffer, window.top_left_x, row, window.column_count());
             draw_text(
                 buffer,
                 font,

@@ -2576,7 +2576,7 @@ fn save_calendar_offsets_chain_month_through_ampm() {
     assert_eq!(SAVE_MINUTE_OFFSET, 0x02db);
     assert_eq!(SAVE_COMBAT_ROUND_COUNTER_OFFSET, 0x02dc);
     assert_eq!(SAVE_PER_TURN_STATE_OFFSET, 0x02dd);
-    assert_eq!(SAVE_AMPM_DISPLAY_OFFSET, 0x02de);
+    assert_eq!(SAVE_TWELVE_HOUR_AUDIO_REPEAT_OFFSET, 0x02de);
 }
 
 #[test]
@@ -4594,7 +4594,7 @@ fn monster_reward_unit_derivation_constants_match_spec() {
         speed_seed: 0,
         endurance: 0,
         defense: 0,
-        attack_cap: 0,
+        attack_value: 0,
         max_hp: hp,
         default_spawn_count: 0,
         default_drop_cap: 0,
@@ -6103,21 +6103,27 @@ fn weapon_range_arena_wide_cap_covers_full_arena_diagonal() {
 
 #[test]
 fn combat_to_hit_bias_matches_spec_formula() {
-    // catalogs/item-list.md §5.3: the shared combat to-hit
-    // helper computes `(attacker - defender + 30) / 2` and
-    // compares it against a uniform random byte. Promote the
-    // +30 bias so combat_to_hit_score does not bake it as a
-    // bare literal. The bias is kept separate from the
-    // JIMMY_CHEST_THRESHOLD_BIAS (also 30) because the two
+    // systems/combat.md Section 11 "The score": the shared to-hit
+    // helper computes `truncate_toward_zero((defender - attacker +
+    // 30) / 2)` and compares it with one skewed `1..30` combat
+    // roll. Promote the +30 bias so combat_to_hit_score does not
+    // bake it as a bare literal. The bias is kept separate from
+    // the JIMMY_CHEST_THRESHOLD_BIAS (also 30) because the two
     // contracts share only the magnitude, not the meaning.
+    //
+    // RETRACTIONS.md R334 withdrew this test's former formula
+    // `(attacker - defender + 30) / 2`, and R335 withdrew its
+    // "uniform random byte" draw; the `combat_to_hit_score(60, 50)
+    // == 20` assertion those two lines justified goes with them.
     assert_eq!(COMBAT_TO_HIT_BIAS, 30);
-    // Two equal-rating actors land at the bias / 2 = 15
-    // threshold; combat_hit succeeds against rolls below it.
+    // Two equal-rating actors land at the bias / 2 = 15 score,
+    // which the published table reads as a 50.8 % chance to hit.
     assert_eq!(combat_to_hit_score(50, 50), 15);
     assert_eq!(combat_to_hit_score(0, 0), 15);
-    // Higher attacker raises the score linearly; +20 difference
-    // adds 10 to the score.
-    assert_eq!(combat_to_hit_score(60, 50), 20);
+    // A tougher defender raises the score - and a higher score is
+    // a *worse* chance to hit.
+    assert_eq!(combat_to_hit_score(50, 70), 25);
+    assert_eq!(combat_to_hit_score(70, 50), 5);
 }
 
 #[test]
@@ -10246,8 +10252,10 @@ fn outdoor_active_object_class_immobile_matches_spec_range() {
 
 #[test]
 fn text_window_inner_width_and_centred_start_match_spec() {
-    // text-output.md §4: window whose corners are columns 6 and 33
-    // has width 27 (27 chars fit before wrapping).
+    // text-output.md §4 (`RETRACTIONS.md` R344): a window whose corners
+    // are columns 6 and 33 carries an inclusive-endpoint budget of 27 -
+    // the last legal window-local column, NOT a character count. The row
+    // holds twenty-eight; the twenty-ninth forces the wrap.
     assert_eq!(text_window_inner_width(6, 33), 27);
     assert_eq!(text_window_inner_width(0, 39), 39);
     // Inverted corners collapse to zero.
@@ -10256,7 +10264,7 @@ fn text_window_inner_width_and_centred_start_match_spec() {
 
     // text-output.md §5: the centre branch measures against
     // `columns_in_window = bottom_right_x - top_left_x + 1`, one
-    // MORE than the wrap width above. Dropping the plus one agrees
+    // MORE than the inclusive-endpoint budget above. Dropping the plus one agrees
     // on odd-length lines but shifts every even-length line one
     // whole cell left, so `column_count()` - not `inner_width()` -
     // is what the helper takes.
@@ -10325,6 +10333,88 @@ fn centred_printer_uses_the_plus_one_column_count() {
     system.emit_byte(TEXT_CTRL_CENTRE_ON);
     system.print_wrapped_string("abcdefg");
     assert_eq!(system.cell(2, 0).unwrap().byte, b'a');
+}
+
+#[test]
+fn an_overlong_chunk_is_kept_whole_and_printed_from_column_zero() {
+    // `text-output.md §6` (`RETRACTIONS.md` R346): "A word longer than the
+    // row is **not** allowed to overflow the right edge. The collector never
+    // gathers more characters than the row can still hold, so nothing is ever
+    // written past `bottom_right_x`. When the collected chunk fills the
+    // remaining row and contains no break byte to retreat to, the printer
+    // keeps the whole chunk, first emits a line feed if the cursor is not
+    // already at the window's left edge, and prints the chunk from column 0 of
+    // the fresh row; the following chunk then continues on that same row at
+    // the column where the first one stopped."
+    //
+    // `RETRACTIONS.md` R349 works exactly this case for the dungeon exit:
+    // "With eight of sixteen columns left, the printer collects the eight
+    // characters that still fit, finds no break byte, keeps that chunk, emits
+    // a line feed because the cursor is not at the left edge, prints the chunk
+    // from column 0, and the **next** chunk continues on the same row at
+    // column eight." The rendered pixels are `Underworld!` whole on the new
+    // row - the truncated `Underwor` is never printed in place.
+    let mut system = TextWindowSystem::new();
+    // The gameplay message window: columns 24..=39, sixteen cells
+    // (`text-output.md §10.1`, `RETRACTIONS.md` R347).
+    system.set_window_rect(0, 24, 11, 39, 23);
+    for byte in b"Exit to " {
+        system.emit_byte(*byte);
+    }
+    assert_eq!(system.active_cursor(), (8, 0));
+
+    system.print_wrapped_string("Underworld!");
+
+    let row_below: String = (24..=34)
+        .map(|x| char::from(system.cell(x, 12).map(|cell| cell.byte).unwrap_or(b' ')))
+        .collect();
+    assert_eq!(row_below, "Underworld!");
+    // Nothing was written past `bottom_right_x`, and nothing landed in the
+    // eight columns the word did not fit into on the row above.
+    for x in 32..=39 {
+        assert_eq!(system.cell(x, 11), None, "column {x} of the entry row");
+    }
+    assert_eq!(system.active_cursor(), (11, 1));
+}
+
+#[test]
+fn a_word_longer_than_a_full_row_is_hard_broken_into_row_filling_pieces() {
+    // §6: "a word longer than a **full** row is hard-broken at the row edge
+    // into successive row-filling pieces, and an implementation that
+    // special-cases 'restart the whole word on a new line' diverges as soon as
+    // that happens."
+    let chunks = wrap_text_chunks("supercalifragilistic", 8, 0);
+    assert_eq!(
+        chunks
+            .iter()
+            .map(|chunk| (chunk.text.as_str(), chunk.row_filling))
+            .collect::<Vec<_>>(),
+        vec![
+            ("supercal", true),
+            ("ifragili", true),
+            ("stic", false),
+        ],
+    );
+
+    let mut system = TextWindowSystem::new();
+    system.set_window_rect(0, 0, 0, 7, 4);
+    system.print_wrapped_string("supercalifragilistic");
+    let rows: Vec<String> = (0..3)
+        .map(|y| {
+            (0..8)
+                .map(|x| char::from(system.cell(x, y).map(|cell| cell.byte).unwrap_or(b' ')))
+                .collect()
+        })
+        .collect();
+    assert_eq!(rows, vec!["supercal", "ifragili", "stic    "]);
+}
+
+#[test]
+fn an_ordinary_soft_wrap_is_not_flagged_row_filling() {
+    // Only the no-break-byte arm takes the R346 route; a line that ended on a
+    // remembered space still ends its row.
+    let chunks = wrap_text_chunks("the quick brown fox", 10, 0);
+    assert!(chunks.iter().all(|chunk| !chunk.row_filling), "{chunks:?}");
 }
 
 #[test]
@@ -10418,7 +10508,11 @@ fn text_window_system_scrolls_the_row_below_into_the_vacated_bottom() {
     for byte in b"ijkl" {
         system.emit_byte(*byte);
     }
-    system.set_window_rect(0, 0, 0, 4, 1);
+    // `text-output.md §4` (`RETRACTIONS.md` R344): both corner columns
+    // are inclusive, so a `0..=3` rectangle is the four-cell row this test
+    // needs; the former `0..=4` rectangle held four cells only under the
+    // withdrawn `bottom_right_x - top_left_x` width rule.
+    system.set_window_rect(0, 0, 0, 3, 1);
     system.set_active_cursor(0, 0);
 
     for byte in b"abcd" {
@@ -14267,8 +14361,11 @@ fn local_light_source_tile_matches_spec_candidates() {
 
 #[test]
 fn active_object_compositor_branch_matches_spec_table() {
-    // visibility.md §8
-    assert_eq!(VEHICLE_AVATAR_UNDERLAY_MARKER, 0x92);
+    // visibility.md §8. `RETRACTIONS.md` R330: the byte the `0x5C` arm
+    // tests is "the **chair terrain id** standing in the grid cell, not a
+    // marker".
+    assert_eq!(SINGLE_SPRITE_FAMILY_SEATED_CHAIR_TERRAIN, 0x92);
+    assert_eq!(SINGLE_SPRITE_FAMILY_SEATED_FRAME_FALLTHROUGH_DECREMENT, 8);
 
     // Water-bound class via type byte.
     for t in 0xE8u8..=0xEB {
@@ -14297,10 +14394,13 @@ fn active_object_compositor_branch_matches_spec_table() {
         ActiveObjectCompositorBranch::WaterCreatureCompanion
     );
 
-    // Vehicle/avatar branch.
+    // Single-sprite-family seated branch. `RETRACTIONS.md` R330: "`0x5C` is
+    // **one ordinary NPC sprite family** ..., not a vehicle or avatar marker,
+    // and the party's own type byte is the party sprite marker, which is
+    // **never `0x5C` outside combat**".
     assert_eq!(
         active_object_compositor_branch(0x5C, 0),
-        ActiveObjectCompositorBranch::VehicleAvatarCompanion
+        ActiveObjectCompositorBranch::SingleSpriteFamilySeated
     );
 
     // Default helper for everything else.
@@ -14457,7 +14557,7 @@ fn active_object_composite_dispatches_companion_and_guard_branches() {
         active_object_composite(
             0x5C,
             0x44,
-            VEHICLE_AVATAR_UNDERLAY_MARKER,
+            SINGLE_SPRITE_FAMILY_SEATED_CHAIR_TERRAIN,
             0x10,
             None,
             None,
@@ -14466,9 +14566,22 @@ fn active_object_composite_dispatches_companion_and_guard_branches() {
         ),
         ActiveObjectCompositeResult::Companion(0x44)
     );
+    // `RETRACTIONS.md` R330: "off that terrain the slot falls through to the
+    // default helper with its frame byte **reduced by eight**". `0x44` becomes
+    // `0x3C`, which is no longer terrain-aware, so it stamps unchanged.
     assert_eq!(
-        active_object_composite(0x5C, 0x44, 0x10, 0x57, None, None, 5, 0),
+        active_object_composite(0x5C, 0x44, 0x10, 0x10, None, None, 5, 0),
+        ActiveObjectCompositeResult::Companion(0x3C)
+    );
+    // A fall-through whose decremented byte is still terrain-aware reaches the
+    // terrain rows with the reduced value: `0x60` becomes `0x58`.
+    assert_eq!(
+        active_object_composite(0x5C, 0x60, 0x10, 0x57, None, None, 5, 0),
         ActiveObjectCompositeResult::Direct(0x38)
+    );
+    assert_eq!(
+        active_object_composite(0x5C, 0x60, 0x10, 0x10, None, None, 5, 0),
+        ActiveObjectCompositeResult::Companion(0x58)
     );
     assert_eq!(
         active_object_composite(
@@ -15785,6 +15898,62 @@ fn monster_wound_classifier_matches_spec_thresholds() {
     assert!(!monster_wound_sets_fleeing(80, 100, 251));
 }
 
+/// `combat.md §11.1`: "The quarter is the class maximum divided by four with
+/// truncation, and the three thresholds are one, two and three of those
+/// truncated quarters, so the boundaries sit slightly low for maxima that are
+/// not multiples of four." The test above uses maximum 100, where truncated
+/// and exact quarters coincide and cannot tell the two rules apart. These
+/// maxima can.
+#[test]
+fn monster_wound_classifier_truncates_the_quarter_at_every_boundary() {
+    // Maximum 10, the Giant Rat's row: the truncated quarter is 2, so the
+    // thresholds are 2, 4 and 6. An exact-fraction rule would put them at
+    // 2.5, 5 and 7.5 and mis-grade five of the eleven possible HP values.
+    for (hp, bucket) in [
+        (1u16, MonsterWoundBucket::Critical),
+        (2, MonsterWoundBucket::Wounded),
+        (3, MonsterWoundBucket::Wounded),
+        (4, MonsterWoundBucket::LightlyWounded),
+        (5, MonsterWoundBucket::LightlyWounded),
+        (6, MonsterWoundBucket::Healthy),
+        (7, MonsterWoundBucket::Healthy),
+    ] {
+        assert_eq!(monster_wound_bucket(hp, 10), bucket, "{hp} of 10");
+    }
+
+    // Maximum 99: truncated quarter 24, thresholds 24, 48 and 72 - not 24.75,
+    // 49.5 and 74.25. Each pair straddles one published boundary.
+    for (hp, bucket) in [
+        (23u16, MonsterWoundBucket::Critical),
+        (24, MonsterWoundBucket::Wounded),
+        (47, MonsterWoundBucket::Wounded),
+        (48, MonsterWoundBucket::LightlyWounded),
+        (71, MonsterWoundBucket::LightlyWounded),
+        (72, MonsterWoundBucket::Healthy),
+    ] {
+        assert_eq!(monster_wound_bucket(hp, 99), bucket, "{hp} of 99");
+    }
+
+    // `§11.1`: the graded wound lines use "the same four-bucket wound score
+    // the flee classifier of Section 9 computes", so the two classifiers must
+    // never disagree on any HP value of any reachable class maximum.
+    for max_hp in 1u16..=255 {
+        for hp in 0u16..=max_hp {
+            let section_9 = monster_wound_bucket(hp, max_hp);
+            let narration = combat_wound_score_bucket(hp as u8, max_hp as u8);
+            let expected = match narration {
+                CombatWoundScoreBucket::UnderOneQuarter => MonsterWoundBucket::Critical,
+                CombatWoundScoreBucket::OneQuarterToUnderHalf => MonsterWoundBucket::Wounded,
+                CombatWoundScoreBucket::HalfToUnderThreeQuarters => {
+                    MonsterWoundBucket::LightlyWounded
+                }
+                CombatWoundScoreBucket::ThreeQuartersOrMore => MonsterWoundBucket::Healthy,
+            };
+            assert_eq!(section_9, expected, "{hp} of {max_hp}");
+        }
+    }
+}
+
 #[test]
 fn combat_actor_record_offsets_match_spec_row_order() {
     // combat.md §6
@@ -16886,15 +17055,29 @@ fn sky_strip_renders_only_for_surface_and_town_family() {
 }
 
 #[test]
-fn sky_strip_hour_refresh_caches_nothing_below_the_surface() {
-    // `moons.md §3`: "below the surface, nothing is drawn, nothing is
-    // erased, and **nothing is cached**, exactly as for combat and
-    // dungeon scenes." The strip's only caller is the hour-change hook
-    // of the per-turn cleanup, "whose own gate already excludes a party
-    // Z with the high bit set (`systems/time.md` Section 5)". A cache
-    // written underground is therefore a cache the original never
-    // writes - and `moons.md §5` warns consumers not to infer "no
-    // phase" from "not drawn", so a stale-vs-fresh cache is observable.
+fn sky_strip_hour_refresh_gate_excludes_below_surface_but_scene_entry_does_not() {
+    // Two predicates, two gates. `time.md §5`, hour-change bundle item 2:
+    // "If the active scene is in the surface/town-family range and the
+    // party is not at dungeon depth, the engine refreshes the sky strip
+    // in the top viewport border." That floor test belongs to the
+    // hour-change hook alone - `moons.md §2.2`: "The renderer has several
+    // callers (Section 3), and only one of them - the hour-change hook of
+    // the per-turn cleanup - carries a gate that excludes a party Z with
+    // the high bit set (`systems/time.md` Section 5). The overworld and
+    // town-family scene-entry callers carry no such gate, so a
+    // below-surface entry (the Underworld plane, or a basement floor
+    // inside a town-family location) can reach the painter."
+    //
+    // That the reached refresh writes the cache is `moons.md §3`: "Each
+    // refresh caches the two glyph bytes for the current day *before* it
+    // tests whether either marker is on the visible horizon".
+    //
+    // `RETRACTIONS.md` R343 is the withdrawal behind both sentences. It
+    // also withdraws the negative this test used to quote, in its own
+    // words: "no negative about what is drawn, erased or cached below the
+    // surface is supported". So the below-surface rows below assert only
+    // the shape of the *hour hook's* published gate, and each is paired
+    // with the scene-entry caller, which does cache there.
     let sentinel = [0xAA, 0xBB];
 
     // Surface overworld: the hook runs and the cache is written.
@@ -16913,7 +17096,8 @@ fn sky_strip_hour_refresh_caches_nothing_below_the_surface() {
         "a surface hour change must refresh the cache"
     );
 
-    // Underworld plane - party Z has its high bit set.
+    // Underworld plane - party Z has its high bit set, so the hour hook's
+    // own gate excludes it. Scene entry into the same plane does not.
     let mut underworld = world_state(open_world_grid(), 5, 5);
     underworld.area = Area::World {
         plane: WorldPlane::Underworld,
@@ -16924,10 +17108,18 @@ fn sky_strip_hour_refresh_caches_nothing_below_the_surface() {
     underworld.refresh_cached_moon_glyphs();
     assert_eq!(
         underworld.cached_moon_glyph_bytes, sentinel,
-        "the underworld plane must not reach the strip, so nothing is cached"
+        "the hour hook's floor gate excludes a high-bit party Z"
+    );
+    assert!(underworld.sky_strip_scene_entry_refresh_runs());
+    underworld.refresh_cached_moon_glyphs_at_scene_entry();
+    assert_eq!(
+        underworld.cached_moon_glyph_bytes, surface_cache,
+        "an Underworld scene entry carries no floor gate and still caches"
     );
 
-    // Dungeon scene - excluded by the scene-range half of the gate.
+    // Dungeon scene - excluded from both callers by the scene class.
+    // `moons.md §2.2`: scenes outside the surface/town family "never reach
+    // the renderer at all. Nothing is drawn and nothing is cached."
     let mut dungeon = world_state(open_world_grid(), 5, 5);
     dungeon.area = Area::Dungeon {
         scene: DungeonScene::new(FIRST_DUNGEON_SCENE_BYTE).unwrap(),
@@ -16936,13 +17128,16 @@ fn sky_strip_hour_refresh_caches_nothing_below_the_surface() {
     dungeon.clock = GameClock::new(11, 0).unwrap();
     dungeon.set_cached_moon_glyph_bytes(sentinel[0], sentinel[1]);
     assert!(!dungeon.sky_strip_hour_refresh_runs());
+    assert!(!dungeon.sky_strip_scene_entry_refresh_runs());
     dungeon.refresh_cached_moon_glyphs();
+    dungeon.refresh_cached_moon_glyphs_at_scene_entry();
     assert_eq!(
         dungeon.cached_moon_glyph_bytes, sentinel,
-        "a dungeon scene must not reach the strip, so nothing is cached"
+        "a dungeon scene never reaches the renderer, so nothing is cached"
     );
 
-    // Town basement - a below-entry floor sets the Z high bit too.
+    // Town basement - a below-entry floor sets the Z high bit too, so the
+    // hour hook skips it and the scene-entry caller does not.
     let mut basement = world_state(open_world_grid(), 5, 5);
     basement.area = Area::Town {
         scene: Scene::new(13).unwrap(),
@@ -16954,10 +17149,16 @@ fn sky_strip_hour_refresh_caches_nothing_below_the_surface() {
     basement.refresh_cached_moon_glyphs();
     assert_eq!(
         basement.cached_moon_glyph_bytes, sentinel,
-        "a below-entry town floor must not reach the strip"
+        "the hour hook's floor gate excludes a below-entry town floor"
+    );
+    assert!(basement.sky_strip_scene_entry_refresh_runs());
+    basement.refresh_cached_moon_glyphs_at_scene_entry();
+    assert_eq!(
+        basement.cached_moon_glyph_bytes, surface_cache,
+        "a basement scene entry carries no floor gate and still caches"
     );
 
-    // The same town at ground level does reach it.
+    // The same town at ground level reaches both callers.
     let mut ground = world_state(open_world_grid(), 5, 5);
     ground.area = Area::Town {
         scene: Scene::new(13).unwrap(),
@@ -16966,6 +17167,7 @@ fn sky_strip_hour_refresh_caches_nothing_below_the_surface() {
     ground.clock = GameClock::new(11, 0).unwrap();
     ground.set_cached_moon_glyph_bytes(sentinel[0], sentinel[1]);
     assert!(ground.sky_strip_hour_refresh_runs());
+    assert!(ground.sky_strip_scene_entry_refresh_runs());
     ground.refresh_cached_moon_glyphs();
     assert_eq!(ground.cached_moon_glyph_bytes, surface_cache);
 }
@@ -19097,10 +19299,6 @@ fn moon_glyph_tables_match_published_day_index() {
     );
     assert_eq!(moonstone_slot_from_glyph_byte(b'8'), None);
     assert_eq!(moonstone_slot_from_glyph_byte(b'/'), None);
-    assert_eq!(
-        MOON_GLYPH_CACHE_NO_GATE,
-        [TRAMMEL_OFF_HORIZON_SENTINEL, FELUCCA_OFF_HORIZON_SENTINEL]
-    );
 }
 
 #[test]
@@ -20398,12 +20596,14 @@ fn cast_dispatcher_gate_matches_spec_order_and_messages() {
 }
 
 #[test]
-fn summoned_creatures_never_reach_the_player_command_path() {
-    // magic.md §8: "All three place their creature through the ordinary
-    // monster placement path, so the new actor keeps the monster-side
-    // class byte and monster AI drives its turns exactly as it drives
-    // any other monster. Nothing routes a summoned creature through the
-    // player command parser, and the player never gets to move it."
+fn the_controlled_bit_alone_decides_the_player_command_path() {
+    // magic.md §8: "That bit **is** a transfer of control ... a
+    // monster-side slot carrying the bit fails the self-acting test, so the
+    // round walker sends it to the keystroke/command path instead of to the
+    // automatic actor driver. It takes its turns at the player's prompt".
+    // The former reading - "monster AI drives its turns exactly as it drives
+    // any other monster ... the player never gets to move it" - is withdrawn
+    // by RETRACTIONS.md R354.
     //
     // combat.md §6.1a: "The walker sends the group ordinarily occupied
     // by seated party members to the keystroke/command path (Section 8)
@@ -20445,9 +20645,11 @@ fn summoned_creatures_never_reach_the_player_command_path() {
     ));
 
     // Conjure / Swarm / Summon stamp COMBAT_SUMMONED_ACTOR_FLAGS into a
-    // monster-side slot. The bit groups the creature with the party for
-    // the same-faction filter, but it must not hand the creature to the
-    // player's prompt.
+    // monster-side slot. magic.md §8: the bit groups the creature with the
+    // party for the same-faction filter *and* hands it to the player's
+    // prompt - "It takes its turns at the player's prompt, printing the
+    // reduced turn banner". The round walker already dispatches such a slot
+    // to PlayerReady, so this helper has to agree with it.
     let summoned = descriptor(COMBAT_SUMMONED_ACTOR_FLAGS, 20);
     assert!(summoned.is_controlled());
     assert_eq!(
@@ -20456,10 +20658,22 @@ fn summoned_creatures_never_reach_the_player_command_path() {
     );
     for slot in COMBAT_PARTY_ACTOR_SLOTS..COMBAT_ACTOR_SLOTS {
         assert!(
-            !combat_slot_takes_player_command_path(slot, summoned),
-            "summoned creature in slot {slot} reached the player command path"
+            combat_slot_takes_player_command_path(slot, summoned),
+            "summoned creature in slot {slot} was refused the player command path"
         );
     }
+
+    // A dead or empty descriptor takes no path at all, whatever its group:
+    // the group helper answers "party" for a dead actor, and that must not
+    // be read as a prompt.
+    let dead_summoned = descriptor(
+        COMBAT_SUMMONED_ACTOR_FLAGS | COMBAT_ACTOR_FLAG_MARKED_DEAD,
+        20,
+    );
+    assert!(!combat_slot_takes_player_command_path(
+        COMBAT_PARTY_ACTOR_SLOTS,
+        dead_summoned
+    ));
 
     // combat.md §9: the traitor-roster override applies "for both the
     // friendly-fire filter and the player-versus-AI dispatch gate".
@@ -20777,7 +20991,7 @@ fn save_calendar_offsets_and_bounds_match_spec() {
     assert_eq!(SAVE_MINUTE_OFFSET, 0x02DB);
     assert_eq!(SAVE_COMBAT_ROUND_COUNTER_OFFSET, 0x02DC);
     assert_eq!(SAVE_PER_TURN_STATE_OFFSET, 0x02DD);
-    assert_eq!(SAVE_AMPM_DISPLAY_OFFSET, 0x02DE);
+    assert_eq!(SAVE_TWELVE_HOUR_AUDIO_REPEAT_OFFSET, 0x02DE);
     // Bounds
     assert_eq!(SAVE_MONTH_MIN, 1);
     assert_eq!(SAVE_MONTH_MAX, 13);
@@ -22758,13 +22972,15 @@ fn wrap_text_breaks_a_prompt_line_at_the_last_space() {
 }
 
 #[test]
-fn wrap_text_matches_the_observed_fifteen_cell_message_window_wrap() {
-    // §5, observed in the original's 15-cell dungeon message window: every
-    // break lands on a space, never mid-word.
-    let lines = wrap_text("Wielding the Sceptre of Lord British...", 15, 0);
+fn wrap_text_matches_the_observed_message_window_wrap() {
+    // §5, observed in the original's message window: every break lands on
+    // a space, never mid-word. The rows are the same under the corrected
+    // sixteen-cell capacity (`RETRACTIONS.md` R344/R347) as under the
+    // withdrawn fifteen, which is why the observation still holds.
+    let lines = wrap_text("Wielding the Sceptre of Lord British...", 16, 0);
     assert_eq!(lines, vec!["Wielding the", "Sceptre of Lord", "British..."]);
     for line in &lines {
-        assert!(line.len() <= 15, "line {line:?} crosses the right edge");
+        assert!(line.len() <= 16, "line {line:?} crosses the right edge");
     }
 }
 
@@ -25051,18 +25267,33 @@ fn dungeon_mode_refuses_world_vehicle_and_entry_letters_without_turn() {
     assert_eq!(state.message, PUSH_NOT_HERE_REFUSAL);
     assert_eq!(state.turn, 0);
 
+    // `dungeon-mode.md` Section 10: `Q` is not one of the refused letters -
+    // "`Q` is the ordinary save-game route; the "Exit to DOS?" prompt is a
+    // Control binding in the mode-local table, not a letter."
     assert!(state.handle_dungeon_key('Q', Path::new("")).unwrap());
     assert!(state.active_yes_no_prompt.is_some());
-    assert_eq!(state.message, "Exit to DOS?");
+    assert_eq!(state.message, SAVE_PROMPT_MESSAGE);
     assert_eq!(state.turn, 0);
 }
 
 #[test]
-fn dungeon_q_exit_prompt_is_separate_from_save_command() {
+fn dungeon_q_is_the_ordinary_save_route() {
+    // `dungeon-mode.md` Section 10: "`Q` is the ordinary save-game route; the
+    // "Exit to DOS?" prompt is a Control binding in the mode-local table, not
+    // a letter."
+    //
+    // `commands.md` Section 4's `Q` row is the route it takes: "Save game.
+    // Routes to the save-game handler, which prompts whether to save. On `N`,
+    // it returns without writing. On `Y`, it writes the save files,
+    // acknowledges completion, and returns to the caller. This letter is not
+    // the DOS-terminate path by itself." Section 3 files it under "no action".
     let dir = debug_game_dir();
     let mut template = saved_game_seed_bytes(33, 0, 1, 1);
     template[SAVE_AVATAR_NAME_OFFSET] = b'A';
     fs::write(dir.join("SAVED.GAM"), &template).unwrap();
+    // The confirmed arm reaches the Q-save staging contract, which reads both
+    // per-plane mirrors.
+    write_empty_ool_mirrors(&dir);
     let mut state = dungeon_state(open_dungeon_record(), 0, 1, 1);
 
     assert_eq!(
@@ -25070,10 +25301,12 @@ fn dungeon_q_exit_prompt_is_separate_from_save_command() {
         PlayInputDisposition::Continue
     );
     assert!(state.active_yes_no_prompt.is_some());
-    assert_eq!(state.message, "Exit to DOS?");
+    assert_eq!(state.message, SAVE_PROMPT_MESSAGE);
+    assert_ne!(state.message, "Exit to DOS?");
     assert_eq!(state.turn, 0);
     assert!(!dir.join("SAVED.OOL").exists());
 
+    // "On `N`, it returns without writing."
     assert_eq!(
         handle_play_key_input(&mut state, 'N', "", &dir).unwrap(),
         PlayInputDisposition::Continue
@@ -25081,15 +25314,17 @@ fn dungeon_q_exit_prompt_is_separate_from_save_command() {
     assert_eq!(state.message, "No.");
     assert_eq!(state.turn, 0);
     assert!(!dir.join("SAVED.OOL").exists());
+    assert_eq!(fs::read(dir.join("SAVED.GAM")).unwrap(), template);
 
+    // "On `Y`, it writes the save files, acknowledges completion, and returns
+    // to the caller" - the letter never leaves the game.
     assert_eq!(
         handle_play_key_input(&mut state, 'Q', "Y", &dir).unwrap(),
-        PlayInputDisposition::Quit
+        PlayInputDisposition::Continue
     );
-    assert_eq!(state.message, "Yes. Exiting to DOS.");
+    assert_eq!(state.message, SAVE_DONE_MESSAGE);
     assert_eq!(state.turn, 0);
-    assert!(!dir.join("SAVED.OOL").exists());
-    assert_eq!(fs::read(dir.join("SAVED.GAM")).unwrap(), template);
+    assert!(dir.join("SAVED.OOL").exists());
     let _ = fs::remove_dir_all(dir);
 }
 

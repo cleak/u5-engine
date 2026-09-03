@@ -173,6 +173,15 @@ fn handle_play_key_input_inner(
         state.toggle_music();
         return Ok(PlayInputDisposition::Continue);
     }
+    // `commands.md` Section 9: Control + `E` "Prompts "Exit to DOS?"; a yes
+    // answer leaves the game, anything else prints the refusal and continues",
+    // and "None of the four consumes a turn in any mode". The prompt itself is
+    // the shared yes/no session, so the answer arrives on the next dispatch and
+    // the confirmed arm is what returns `Quit`.
+    if key == PLAY_EXIT_TO_DOS_KEY {
+        let _ = state.start_exit_to_dos_prompt();
+        return Ok(PlayInputDisposition::Continue);
+    }
     if state.combat_active
         && combat_has_dispatchable_player_actor(state)
         && (state.pending_combat_actor_slot.is_some() || combat_has_active_non_party_actor(state))
@@ -256,14 +265,11 @@ fn handle_play_key_input_inner(
     // call boundary, as §14 permits, and the single-directory runtime's
     // between-mode disk-prompt presentation pass is a no-op.
     let active_route = scene_route(state.current_scene_byte());
-    if active_route == SceneRoute::Dungeon && key == 'Q' {
-        state.begin_command_echo_for(Command::Quit);
-        if let Some(confirm) = parse_inline_yes_no(suffix) {
-            return Ok(state.exit_to_dos_prompt(Some(confirm)));
-        }
-        state.start_exit_to_dos_prompt();
-        return Ok(PlayInputDisposition::Continue);
-    }
+    // `dungeon-mode.md` Section 10: "`Q` is the ordinary save-game route; the
+    // "Exit to DOS?" prompt is a Control binding in the mode-local table, not
+    // a letter." So the dungeon has no `Q` interception of its own; the letter
+    // reaches the dungeon handler and takes the same save route every other
+    // scene takes. Control + `E` owns the program exit.
     let inline_direction = suffix.chars().find_map(Direction::from_play_key);
     let inline_rest = parse_inline_rest_request(suffix);
     let inline_drink = parse_inline_yes_no(suffix);
@@ -1568,16 +1574,44 @@ fn append_active_shop_surcharge(
     message
 }
 
+/// `shops.md §8.4` inn `R` (Rest for the night).
+///
+/// "Three world-state effects come with it, and an engine that treats the
+/// rest as a pure presentation will miss all three. The party's map position
+/// is written to the inn's bed cell for the duration ... The clock is then
+/// run forward in paced steps until the hour byte reads **six** ... On
+/// completion the location runs the same clear-and-re-place pass that town
+/// entry runs: every non-party active-object record is cleared, and every
+/// scheduled NPC is re-placed at the position its schedule gives for the new
+/// hour (`systems/npc-schedules.md` Section 12). That is why the town's
+/// residents are in their morning positions, not their overnight ones, the
+/// moment the party wakes."
+///
+/// `main-loop.md §9` makes the reclassification explicit: "a paced sequence
+/// of *real turns* - sailing into the wind, crossing difficult terrain,
+/// holing up, resting at an inn - is not a presentation at all, however much
+/// it looks like one from the outside."
+///
+/// The fixed eight-hour advance this replaces both ended at the wrong hour
+/// and left the roster wherever the walker had taken it.
 fn apply_paid_inn_rest(state: &mut PlayState, cost: u16) -> String {
-    const INN_REST_HOURS: u8 = 8;
+    // OPEN SPEC QUESTION. The first of the three effects - "The party's map
+    // position is written to the inn's bed cell for the duration" - is *not*
+    // implemented, because §8.4 names a specific authored cell per inn and no
+    // published table gives it. Any engine-side rule for picking one (nearest
+    // bed tile, first bed tile, the shop's own cells) is an invented
+    // coordinate policy, and this write is persistent world state: guessing
+    // wrong parks the party inside an unrelated building for the rest of the
+    // game. The party therefore stays where it stood until the cell is
+    // published. The other two effects below - the clock run to 06:00 and the
+    // clear-and-re-place pass - are fully specified and are implemented.
     state.mark_town_rest_sleepers();
-    for _ in 0..INN_REST_HOURS {
-        state.advance_turn_with_minutes(MINUTES_PER_HOUR);
-    }
+    let hours = state.advance_inn_rest_clock_to_morning();
     let woke = state.wake_town_rest_sleepers();
     let (recovered_hp, recovered_mana, cured) = state.apply_inn_rest_night_recovery();
+    state.clear_and_replace_scheduled_npcs();
     format!(
-        "Rested {INN_REST_HOURS} hours at the inn for {cost} gold; recovered {recovered_hp} HP and {recovered_mana} MP; cured {cured} poisoned member(s); woke {woke} asleep member(s)."
+        "Rested {hours} hours at the inn for {cost} gold; recovered {recovered_hp} HP and {recovered_mana} MP; cured {cured} poisoned member(s); woke {woke} asleep member(s)."
     )
 }
 
@@ -2503,12 +2537,15 @@ fn handle_endgame_key_input(
     Ok(PlayInputDisposition::Continue)
 }
 
-/// `magic.md §8`: "Nothing routes a summoned creature through the
-/// player command parser, and the player never gets to move it."
-/// The dispatch decision is `combat.md §6.1a`'s slot-to-group helper,
-/// not the controlled bit read directly - a party-side actor carrying
-/// that bit (Sword of Chaos, possession, Charm) goes to the automatic
-/// driver, and a monster-side actor never gets a keystroke prompt.
+/// The dispatch decision is `combat.md §6.1a`'s slot-to-group helper, not
+/// the controlled bit read directly, and the toggle cuts both ways: a
+/// party-side actor carrying that bit (Sword of Chaos, possession, Charm)
+/// goes to the automatic driver, and a monster-side actor carrying it goes
+/// to the prompt. `magic.md §8`: "a monster-side slot carrying the bit
+/// fails the self-acting test, so the round walker sends it to the
+/// keystroke/command path ... It takes its turns at the player's prompt."
+/// The former "nothing routes a summoned creature through the player command
+/// parser" is withdrawn - `RETRACTIONS.md` R354.
 fn combat_actor_accepts_player_input(slot: usize, actor: CombatActorDescriptor) -> bool {
     combat_actor_is_active_not_dead(actor) && combat_slot_takes_player_command_path(slot, actor)
 }
@@ -2523,7 +2560,7 @@ fn combat_has_dispatchable_player_actor(state: &PlayState) -> bool {
         .any(|(slot, actor)| combat_actor_accepts_player_input(slot, actor))
 }
 
-fn combat_has_active_non_party_actor(state: &PlayState) -> bool {
+pub(crate) fn combat_has_active_non_party_actor(state: &PlayState) -> bool {
     state
         .combat_actors
         .iter()
@@ -2598,7 +2635,101 @@ fn finish_combat_cast_actor_action(state: &mut PlayState, actor_slot: usize, had
     }
 }
 
+/// `combat.md §8.2`: append one attempt-walk advance to the transcript and,
+/// when no further cursor opens, spend the acting combatant's turn.
+/// "The acting character's turn is consumed either way: cancelling with
+/// Escape or Space does not return to the command prompt and does not give
+/// the turn back."
+fn finish_combat_attack_walk(
+    state: &mut PlayState,
+    actor_slot: usize,
+    had_foe: bool,
+    walk: CombatAttackWalkApplication,
+) {
+    if let Some((target_slot, attack)) = walk.attack
+        && let Some(line) = combat_weapon_attack_result_message(state, target_slot, attack)
+    {
+        append_combat_result_line(&mut state.message, &line);
+    }
+    state.message.push_str(&walk.text);
+    if walk.cursor_open {
+        // The turn is not over: `§8.2` opens one cursor per readied item and
+        // the acting combatant keeps the keyboard. `combat.md §7`'s
+        // `VICTORY!` belongs to the end of the dispatch, so a kill on this
+        // attempt is announced when the last attempt closes - the census
+        // that decides it is carried by the walk, not recomputed then.
+        state.pending_combat_actor_slot = Some(actor_slot);
+        return;
+    }
+
+    state.pending_combat_actor_slot = None;
+    let _ = apply_combat_committed_action_maintenance(state, actor_slot);
+    if state.combat_active
+        && matches!(
+            state.combat_round_loop_control(false, false),
+            CombatRoundLoopControl::Exit(CombatRoundLoopExit::Defeat)
+        )
+    {
+        state.apply_combat_round_loop_exit(CombatRoundLoopExit::Defeat);
+        return;
+    }
+    if state.combat_active {
+        // `combat.md §7`: "If party actors remain and foes do not, it prints
+        // `VICTORY!` once and continues" (`RETRACTIONS.md` R289).
+        if had_foe
+            && !combat_has_active_non_party_actor(state)
+            && state.announce_combat_victory_if_needed()
+        {
+            state
+                .message
+                .push_str(crate::combat_frame::COMBAT_VICTORY_LINE);
+        }
+        advance_combat_round_after_actor_and_append_message(state, actor_slot);
+    }
+}
+
+/// `combat.md §8.2`: while a targeting cursor is open it owns the keyboard.
+/// The cursor loop "reads another key" for every input outside its published
+/// table, so no keystroke reaches the combat command parser here.
+fn handle_combat_targeting_cursor_key(
+    state: &mut PlayState,
+    key: char,
+    suffix: &str,
+) -> PlayInputDisposition {
+    let Some(actor_slot) = state
+        .active_combat_targeting
+        .as_ref()
+        .map(|session| session.actor_slot)
+    else {
+        return PlayInputDisposition::Continue;
+    };
+    // `combat.md §8.2`: the cursor's own prints continue the line `A` opened
+    // - `Aim! ` carries no newline - and a discarded key prints nothing at
+    // all, so the standing transcript is appended to rather than replaced.
+    for cursor_key in std::iter::once(key).chain(suffix.chars()) {
+        // `combat.md §7`: `VICTORY!` is owed when "party actors remain and
+        // foes do not". The census belongs to the whole `A` walk, not to
+        // this keystroke: an earlier attempt in the same walk may already
+        // have killed the last foe, and re-asking here would answer `false`
+        // and lose the line.
+        let Some(had_foe) = state
+            .active_combat_targeting
+            .as_ref()
+            .map(|session| session.foes_present_at_walk_start)
+        else {
+            break;
+        };
+        if let Some(walk) = state.apply_combat_targeting_cursor_key(cursor_key) {
+            finish_combat_attack_walk(state, actor_slot, had_foe, walk);
+        }
+    }
+    PlayInputDisposition::Continue
+}
+
 fn handle_combat_key_input(state: &mut PlayState, key: char, suffix: &str) -> PlayInputDisposition {
+    if state.active_combat_targeting.is_some() {
+        return handle_combat_targeting_cursor_key(state, key, suffix);
+    }
     state.ensure_pending_combat_player_turn();
     let Some(actor_slot) = state.pending_combat_actor_slot.take() else {
         state.message.clear();
@@ -2624,7 +2755,7 @@ fn handle_combat_key_input(state: &mut PlayState, key: char, suffix: &str) -> Pl
         // the next keystroke, which is `§8`'s free re-prompt.
         return PlayInputDisposition::Continue;
     }
-    let input = combat_player_command_input_from_key_suffix(key, suffix);
+    let input = combat_player_command_input_from_key(key);
     // `combat.md §8.1`: the banner was already emitted into the transcript
     // when this turn opened - "before any key is read" - so this keystroke's
     // own transcript starts with the command output and never reprints it.
@@ -2654,9 +2785,29 @@ fn handle_combat_key_input(state: &mut PlayState, key: char, suffix: &str) -> Pl
         }
     } else if matches!(
         application.action,
-        CombatPlayerCommandAction::PromptForAttackDirection
+        CombatPlayerCommandAction::OpenTargetingCursor
     ) {
-        state.pending_combat_actor_slot = Some(actor_slot);
+        // `combat.md §8.2`: accepted Attack walks the readied slots, printing
+        // `Attack-` (and a per-item name line when two or three qualify) per
+        // attempt and opening one cursor per attempt that survives the
+        // interference abort.
+        let had_foe = combat_has_active_non_party_actor(state);
+        let walk = state.begin_combat_attack_walk(actor_slot, had_foe);
+        finish_combat_attack_walk(state, actor_slot, had_foe, walk);
+        // A scripted `A<keys>` token feeds the rest of its characters to the
+        // cursor one at a time, exactly as separate keystrokes would.
+        for cursor_key in suffix.chars() {
+            let Some(had_foe) = state
+                .active_combat_targeting
+                .as_ref()
+                .map(|session| session.foes_present_at_walk_start)
+            else {
+                break;
+            };
+            if let Some(walk) = state.apply_combat_targeting_cursor_key(cursor_key) {
+                finish_combat_attack_walk(state, actor_slot, had_foe, walk);
+            }
+        }
     } else if application.control_after.result_code().is_none() {
         advance_combat_round_after_actor_and_append_message(state, actor_slot);
     }
@@ -2883,12 +3034,7 @@ fn apply_combat_committed_action_maintenance(
     state: &mut PlayState,
     actor_slot: usize,
 ) -> Option<CombatMagicRingPassOutcome> {
-    let _ = state.apply_combat_absorbable_field_contact_for_actor_position(actor_slot);
-    let _ = state.apply_combat_post_dispatch_contact_for_actor_position(actor_slot);
-    state.clear_combat_interference_for_completed_action(actor_slot);
-    let ring_pass = state.apply_visible_combat_magic_ring_pass_to_slot(actor_slot);
-    let _ = state.age_active_effect();
-    ring_pass
+    state.apply_combat_committed_action_tail(actor_slot)
 }
 
 fn combat_cast_suffix_for_actor(suffix: &str, actor_slot: usize) -> String {
@@ -2915,18 +3061,13 @@ fn combat_cast_suffix_for_actor(suffix: &str, actor_slot: usize) -> String {
     }
 }
 
-fn combat_player_command_input_from_key_suffix(
-    key: char,
-    suffix: &str,
-) -> CombatPlayerCommandInput {
+fn combat_player_command_input_from_key(key: char) -> CombatPlayerCommandInput {
+    // `combat.md §8.2`: `A` no longer folds a following direction key into a
+    // one-shot attack direction. Accepting Attack "opens a second, separate
+    // input read, and it is not a one-shot direction key but an
+    // **interactive targeting cursor**", so any suffix after `A` is fed to
+    // that cursor a key at a time by the caller.
     if key.eq_ignore_ascii_case(&'A') {
-        if let Some(direction_code) = suffix
-            .chars()
-            .find_map(Direction::from_play_key)
-            .and_then(combat_direction_code_for_direction)
-        {
-            return CombatPlayerCommandInput::AttackDirection(direction_code);
-        }
         return CombatPlayerCommandInput::Key('A');
     }
     if key.is_ascii_uppercase() {
@@ -2948,10 +3089,11 @@ fn combat_player_command_message(action: &CombatPlayerCommandAction) -> String {
         }
         CombatPlayerCommandAction::Pass(_) => "Pass.".to_string(),
         // `combat.md §8.1`/`§8.2`: what `A` adds on top of the turn banner
-        // is `Attack-` and, "immediately before the cursor opens", `Aim! `.
-        CombatPlayerCommandAction::PromptForAttackDirection => {
-            format!("{COMBAT_ATTACK_LABEL}{COMBAT_ATTACK_AIM_PROMPT}")
-        }
+        // is `Attack-` and, "immediately before the cursor opens", `Aim! `,
+        // plus a per-item name line when two or three items qualify. All of
+        // that is produced per attempt by the attempt walker, so this arm
+        // contributes nothing of its own.
+        CombatPlayerCommandAction::OpenTargetingCursor => String::new(),
         // Every production step-or-attack transcript comes from
         // `combat_step_or_attack_application_message`, which prints the
         // `combat.md §3` lines (the direction word, then `Blocked!`,
@@ -3095,50 +3237,164 @@ fn combat_step_or_attack_application_message(
     }
 }
 
-/// Player-visible result lines observed in the original DOS presentation and
-/// described by `combat.md §12`. Internal slots, coordinates, rolls and raw
-/// damage never belong in this string.
-fn combat_weapon_attack_result_message(
+/// `combat.md §11.1` "The census": the party-side half of one attack
+/// outcome's printed result line. Internal slots, coordinates, rolls and
+/// raw damage never belong in this string.
+///
+/// Two rules from that section govern every string here. Rule 1: "**Every
+/// result line names the target, never the attacker.** ... `Bat missed!`
+/// ... is printed by a party member's failed swing **at** a Bat, never by
+/// the Bat's failed swing at the party. An engine that prints the
+/// attacker's name in the miss line produces a transcript that is wrong on
+/// every line it emits." Rule 2: the two sides "share the to-hit roll, the
+/// impact presentation, the damage roller and the result narrator".
+pub(crate) fn combat_weapon_attack_result_message(
     state: &PlayState,
     target_slot: usize,
     attack: CombatWeaponAttackApplication,
 ) -> Option<String> {
+    combat_attack_result_message(state, target_slot, None, attack)
+}
+
+fn combat_attack_result_message(
+    state: &PlayState,
+    target_slot: usize,
+    attacker_slot: Option<usize>,
+    attack: CombatWeaponAttackApplication,
+) -> Option<String> {
     let target_name = combat_actor_display_name(state, target_slot);
     match attack.resolution {
+        // `combat.md §11.1` census, "To-hit fails | **party melee** |
+        // `<target> missed!`, following the newline already printed before
+        // the roll". The line is target-named: "`Bat missed!` is a real
+        // original-game line, and it reads *the Bat was missed*: it is
+        // printed by a party member's failed swing **at** a Bat".
+        //
+        // The party ranged and thrown arm shares this line, and §11.1
+        // makes it conditional there: it prints "only when the resolver
+        // reports nobody **and** the originally aimed cell held a real
+        // actor". This engine models no scatter on that arm, so every
+        // failed party ranged roll is that case.
         CombatWeaponAttackResolution::Miss { .. } => Some(format!("{target_name} missed!")),
         CombatWeaponAttackResolution::Hit { .. } => match attack.damage_application {
-            Some(CombatWeaponDamageApplication::Party { damage, .. }) => Some(if damage.killed {
-                format!("{target_name} killed!")
-            } else {
-                format!("{target_name} hit!")
-            }),
-            Some(CombatWeaponDamageApplication::Monster { damage, .. }) => {
-                let class_name = combat_class_stats(damage.class)
-                    .map(|stats| stats.name)
-                    .unwrap_or(target_name.as_str());
-                if damage.killed {
-                    Some(format!("{class_name} killed!"))
-                } else {
-                    let actor = state.combat_actors.get(target_slot)?;
-                    let max_hp = combat_class_stats(damage.class)?.max_hp;
-                    let condition = match combat_wound_score_bucket(actor.hp_or_wound, max_hp) {
-                        CombatWoundScoreBucket::ThreeQuartersOrMore => "grazed",
-                        CombatWoundScoreBucket::HalfToUnderThreeQuarters => "lightly wounded",
-                        CombatWoundScoreBucket::OneQuarterToUnderHalf => "heavily wounded",
-                        CombatWoundScoreBucket::UnderOneQuarter => "critically wounded",
-                    };
-                    Some(format!("{class_name} {condition}!"))
-                }
+            Some(application) => {
+                combat_landed_damage_result_line(state, target_slot, attacker_slot, application)
             }
             None => Some(format!("{target_name} hit!")),
         },
+        // `combat.md §11.1` census: "Glass Sword swing | party melee |
+        // `Thy sword hath shattered!`, printed **inside** the damage roll,
+        // so it lands between the hit newline and the result line". The
+        // ordinary result line then follows - for the sentinel that is
+        // "Target dies | both | `<target> killed!`" - so the shatter line
+        // is a prefix, not a replacement.
+        CombatWeaponAttackResolution::Special { shattered, .. } => {
+            let mut lines = Vec::new();
+            if shattered {
+                lines.push(COMBAT_GLASS_SWORD_SHATTER_LINE.to_string());
+            }
+            if let Some(result) = attack.damage_application.and_then(|application| {
+                combat_landed_damage_result_line(state, target_slot, attacker_slot, application)
+            }) {
+                lines.push(result);
+            }
+            (!lines.is_empty()).then(|| lines.join("\n"))
+        }
         CombatWeaponAttackResolution::OutOfRange { .. }
-        | CombatWeaponAttackResolution::NoOrdinaryDamage { .. }
-        | CombatWeaponAttackResolution::Special { .. } => None,
+        | CombatWeaponAttackResolution::NoOrdinaryDamage { .. } => None,
     }
 }
 
-fn combat_actor_display_name(state: &PlayState, slot: usize) -> String {
+/// `combat.md §11.1` census rows for a landed swing, in the order the
+/// section's "Order, stated once" list gives them: the graze arm first
+/// (it "suppresses every later result line"), then the death arm, then
+/// the ordinary hit.
+fn combat_landed_damage_result_line(
+    state: &PlayState,
+    target_slot: usize,
+    attacker_slot: Option<usize>,
+    application: CombatWeaponDamageApplication,
+) -> Option<String> {
+    match application {
+        // `combat.md §11.1`: "Damage zero or negative | both | `<target>
+        // grazed!` **and nothing else** - the kill, sleep, hit and wound
+        // lines are all suppressed". `RETRACTIONS.md` R352 withdrew the
+        // former miss reading of this arm.
+        CombatWeaponDamageApplication::Party { damage, .. } if damage.grazed => Some(format!(
+            "{} grazed!",
+            combat_actor_display_name(state, target_slot)
+        )),
+        CombatWeaponDamageApplication::Party { damage, .. } => {
+            let target_name = combat_actor_display_name(state, target_slot);
+            if damage.killed {
+                // "Target dies | both | `<target> killed!`"
+                return Some(format!("{target_name} killed!"));
+            }
+            // `combat.md §11.1`: "**A party member who takes a solid
+            // landed hit always reads the flat `<target> hit!`** - or
+            // `<target> dragged under!` when the attacker is a Corpser."
+            // The grading "never applies to a **party** target".
+            if attacker_slot.is_some_and(|slot| {
+                state
+                    .combat_actors
+                    .get(slot)
+                    .is_some_and(|actor| actor.owner_target_class == COMBAT_CLASS_CORPSER)
+            }) {
+                return Some(format!("{target_name} dragged under!"));
+            }
+            Some(format!("{target_name} hit!"))
+        }
+        CombatWeaponDamageApplication::Monster { damage, .. } => {
+            let class_name = combat_class_stats(damage.class)
+                .map(|stats| stats.name.to_string())
+                .unwrap_or_else(|| combat_actor_display_name(state, target_slot));
+            if damage.grazed {
+                return Some(format!("{class_name} grazed!"));
+            }
+            if damage.killed {
+                // `combat.md §11.1`: "Monster dies, vanish class | party
+                // attacker | `<monster> vanishes!` ... printed inside the
+                // damage handler, which then suppresses the kill line."
+                // The vanish line itself is emitted by the death path in
+                // `combat_frame.rs`.
+                if damage.death_path == Some(CombatMonsterDeathPath::Vanish) {
+                    return None;
+                }
+                return Some(format!("{class_name} killed!"));
+            }
+            // `combat.md §11.1` "The graded wound lines are monster-target
+            // only": the result line "is graded by the target's remaining
+            // HP against its class maximum, using the same four-bucket
+            // wound score the flee classifier of Section 9 computes".
+            let actor = state.combat_actors.get(target_slot)?;
+            let max_hp = combat_class_stats(damage.class)?.max_hp;
+            let wound_line = combat_monster_wound_line_grade(actor.hp_or_wound, max_hp);
+            Some(format!("{class_name} {wound_line}!"))
+        }
+    }
+}
+
+/// `combat.md` 11.1, "The graded wound lines are monster-target only". The
+/// four strings are published verbatim there against the same four-bucket wound
+/// score the flee classifier of 9 computes:
+///
+/// | 1 | below one quarter | `<target> critical!` |
+/// | 2 | one quarter to just under one half | `<target> heavily wounded!` |
+/// | 3 | one half to just under three quarters | `<target> lightly wounded!` |
+/// | 4 | three quarters or more | `<target> barely wounded!` |
+///
+/// `grazed!` is **not** one of them: 11.1 reserves that line for the separate
+/// zero-or-negative-damage outcome, and 12 narrates it "and nothing else".
+pub(crate) fn combat_monster_wound_line_grade(current_hp: u8, max_hp: u8) -> &'static str {
+    match combat_wound_score_bucket(current_hp, max_hp) {
+        CombatWoundScoreBucket::ThreeQuartersOrMore => "barely wounded",
+        CombatWoundScoreBucket::HalfToUnderThreeQuarters => "lightly wounded",
+        CombatWoundScoreBucket::OneQuarterToUnderHalf => "heavily wounded",
+        CombatWoundScoreBucket::UnderOneQuarter => "critical",
+    }
+}
+
+pub(crate) fn combat_actor_display_name(state: &PlayState, slot: usize) -> String {
     if slot < COMBAT_PARTY_ACTOR_SLOTS {
         return state
             .combat_roster_slot_for_actor_slot(slot)
@@ -3156,7 +3412,14 @@ fn combat_actor_display_name(state: &PlayState, slot: usize) -> String {
         .unwrap_or_else(|| "Combatant".to_string())
 }
 
-fn combat_monster_attack_result_message(
+/// `combat.md §11.1` for a self-acting hostile's turn: the monster-side
+/// half of the published attack-outcome census. The two sides "join
+/// *below* the announcement layer, which is why an ordinary hostile
+/// monster prints no banner, no `Attack-`, no `Aim! `, no `Nothing!` and,
+/// on a melee miss, no line at all" (`RETRACTIONS.md` R353); below that
+/// layer it shares the impact presentation, the damage roller and the
+/// result narrator with the party side.
+pub(crate) fn combat_monster_attack_result_message(
     state: &PlayState,
     attack: CombatMonsterAttackApplication,
 ) -> Option<String> {
@@ -3165,35 +3428,63 @@ fn combat_monster_attack_result_message(
         attack.poison_status_outcome,
         Some(CombatPoisonStatusAttackOutcome::PoisonedPartyMember { .. })
     ) {
+        // 11.1: "Party target poisoned | monster attacker | `<target> is
+        // poisoned!` ... and the ordinary result line is then suppressed".
         return Some(format!("{target_name} is poisoned!"));
     }
+
+    // 11.1, the census row that carries the whole section: "**To-hit fails** |
+    // **monster melee** | **nothing at all**", and in the prose, "**an ordinary
+    // hostile monster's melee miss prints nothing and sounds nothing** - no
+    // newline, no name, no line, no tone". The reason is structural: "the
+    // routine that prints a miss line has exactly two call sites, both inside
+    // party-side attack helpers".
+    //
+    // Two things this must not become. It must not print an attacker-named
+    // line: rule 1 of 11.1 is that "**Every result line names the target, never
+    // the attacker**", and `<attacker> missed!` "produces a transcript that is
+    // wrong on every line it emits". And it must not be widened to every
+    // monster attacker - 11.1's announcement table gives a monster carrying the
+    // controlled/charmed bit (6.1a) "the **reduced** banner ... then one fixed
+    // attempt: `Attack-`, `Aim! `, and on a failed roll `<target> missed!`",
+    // because that slot is driven from the player's prompt.
+    //
+    // The ranged carve-out is **not** folded in here. 11.1: "A monster's failed
+    // **ranged or thrown** to-hit is not unconditionally silent ... the impact
+    // point is drawn from the three-by-three neighbourhood centred on the **aim
+    // cell** ... and the **full hit chain runs against that actor**." This
+    // engine does not model that scatter, so the miss arm stays silent on both
+    // routes; the gap is a missing hit chain against a scatter victim, never a
+    // miss line, so nothing here would print on either reading.
     if matches!(
         attack.resolution,
         Some(CombatWeaponAttackResolution::Miss { .. })
     ) {
-        let attacker_name = combat_actor_display_name(state, attack.attacker_slot);
-        return Some(format!("{attacker_name} missed!"));
+        // `combat.md §11.1` census: "To-hit fails | **monster melee** |
+        // **nothing at all**", and the section text - "an ordinary hostile
+        // monster's melee miss prints nothing and sounds nothing - no
+        // newline, no name, no line, no tone". §11.1's controlled-monster
+        // carve-out (a reduced banner and `<target> missed!`) does not
+        // apply here: a monster carrying the controlled bit is toggled
+        // into the party group and dispatched to `PlayerReady`, so it
+        // narrates through the party-side helper above instead of this
+        // one.
+        //
+        // The ranged carve-out - a failed monster ranged roll scatters and
+        // "the **full hit chain runs against that actor**" - is not
+        // modelled; this engine resolves a failed ranged roll as silent,
+        // which §11.1 lists as one of its three genuinely silent cases.
+        return None;
     }
-    match attack.damage_application {
-        Some(CombatWeaponDamageApplication::Party { damage, .. }) => Some(if damage.killed {
-            format!("{target_name} killed!")
-        } else {
-            format!("{target_name} hit!")
-        }),
-        Some(CombatWeaponDamageApplication::Monster { .. }) => {
-            attack.resolution.and_then(|resolution| {
-                combat_weapon_attack_result_message(
-                    state,
-                    attack.target_slot,
-                    CombatWeaponAttackApplication {
-                        resolution,
-                        damage_application: attack.damage_application,
-                    },
-                )
-            })
-        }
-        None => None,
-    }
+    combat_attack_result_message(
+        state,
+        attack.target_slot,
+        Some(attack.attacker_slot),
+        CombatWeaponAttackApplication {
+            resolution: attack.resolution?,
+            damage_application: attack.damage_application,
+        },
+    )
 }
 
 fn append_combat_result_line(message: &mut String, line: &str) {

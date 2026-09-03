@@ -1,4 +1,4 @@
-// Exact player-visible result lines and their fifteen-column rendering.
+// Exact player-visible result lines and their sixteen-column rendering.
 //
 // `overworld.md` Section 8.1, `doors-and-z-transitions.md` Section 12.1 and
 // `dungeon-mode.md` Section 8.1 publish these as literal transcripts, with
@@ -21,19 +21,57 @@ fn rendered_rows(text: &str) -> Vec<String> {
 }
 
 #[test]
-fn the_message_window_wraps_at_fifteen_columns() {
-    // `overworld.md §8.1`, "About the fifteen-column figure": "The printer's
-    // wrap test uses the difference between the window's right and left
-    // columns, which is fifteen."
-    assert_eq!(MESSAGE_WINDOW_WIDTH, 15);
+fn the_message_window_wraps_at_sixteen_columns() {
+    // `text-output.md §4`: "The gameplay message window spans columns 24
+    // through 39 and so holds **sixteen** characters per row."
+    //
+    // *(Re-derived: `RETRACTIONS.md` R347 withdraws "the fifteen-column
+    // gameplay message window" and "the message window's word wrap at
+    // width fifteen", and R344 withdraws the width rule behind them.
+    // Measured on `playtest/orig/cbt3/r6.png`, whose message pane draws
+    // `with Long Sword:` - sixteen cells - on one row, and on
+    // `cbt3/r13.png` / `cbt2/o8.png`, which draw `Iolo, armed with`.)*
+    assert_eq!(MESSAGE_WINDOW_WIDTH, 16);
+    assert_eq!(
+        MESSAGE_WINDOW_WIDTH,
+        usize::from(MESSAGE_WINDOW_RIGHT - MESSAGE_WINDOW_LEFT) + 1
+    );
+}
+
+/// The two rows the width question turns on, from the original's own
+/// combat captures: both are exactly sixteen cells and both wrap one word
+/// later than a fifteen-column window would allow.
+#[test]
+fn the_combat_turn_banner_wraps_as_the_original_draws_it() {
+    assert_eq!(
+        rendered_rows("Avatar, armed with Long Sword:"),
+        vec!["Avatar, armed".to_string(), "with Long Sword:".to_string()]
+    );
+    assert_eq!(
+        rendered_rows("Iolo, armed with Main Gauche, Short Sword:"),
+        vec![
+            "Iolo, armed with".to_string(),
+            "Main Gauche,".to_string(),
+            "Short Sword:".to_string(),
+        ]
+    );
+    // `combat.md §4.1`: the conflict banner "fills the message window edge
+    // to edge, absolute columns 24 through 39, on one row."
+    assert_eq!(rendered_rows("*** CONFLICT ***"), vec![
+        "*** CONFLICT ***".to_string()
+    ]);
 }
 
 #[test]
 fn the_falls_chain_renders_as_the_published_three_rows() {
     // `overworld.md §8.1`: "the full chain reads" F-A-L-L-S!!! / Falling into
     // / underworld!! - "The break inside `Falling into underworld!!` is **not**
-    // in the data. It is produced by the message window's word wrap at width
-    // fifteen: the printer breaks on the space after `into`."
+    // in the data. It is produced by the message window's word wrap ... the
+    // printer breaks on the space after `into`."
+    //
+    // *(The published width in that sentence, fifteen, is withdrawn by
+    // `RETRACTIONS.md` R347; the rendered rows are unchanged, "a
+    // coincidence of these particular strings".)*
     assert_eq!(
         rendered_rows(OVERWORLD_FALLS_BANNER),
         vec!["F-A-L-L-S!!!".to_string()]
@@ -57,11 +95,20 @@ fn the_whirlpool_banner_costs_one_leading_blank_row() {
 
 #[test]
 fn the_dungeon_exit_renders_blank_verb_plane_blank() {
-    // `doors-and-z-transitions.md §12.1`: the two prints compose to a blank
-    // row, `Exit to`, the plane name, and a trailing blank row. "The break
-    // between `Exit to` and the plane name is **not** in the data": the first
-    // string leaves the cursor at column eight and the plane name has no space
-    // to break on, so the printer restarts the word at column zero.
+    // `doors-and-z-transitions.md §12.1` publishes these rendered rows: a
+    // blank row, `Exit to`, the plane name, and a trailing blank row.
+    //
+    // Only the rows are pinned here. In the original the break before the
+    // plane name is R349's hard-chunk boundary - the second print starts
+    // with the cursor at column eight and "the printer collects the eight
+    // characters that still fit, finds no break byte, keeps that chunk,
+    // emits a line feed because the cursor is not at the left edge, prints
+    // the chunk from column 0, and the **next** chunk continues on the same
+    // row at column eight." This engine concatenates the two prints, so its
+    // break is the interior space instead; §12.1 states the rendered rows
+    // are the same either way. The mechanism is pinned cell by cell against
+    // the printer itself - this helper is line-oriented and cannot see a
+    // column-eight continuation.
     assert_eq!(
         rendered_rows(DUNGEON_EXIT_TO_UNDERWORLD_NARRATION),
         vec![
@@ -333,4 +380,233 @@ fn the_waterfall_family_is_the_falls_trigger_on_either_plane() {
     // `(54, 138)` survives only as the landing cell that gates the plane.
     assert!(is_surface_chasm_cell(54, 138));
     assert_eq!(OVERWORLD_FALLS_FORCED_STEPS_SOUTH, 2);
+}
+
+// ---------------------------------------------------------------------------
+// `combat.md` Section 11.1, "Attack outcome narration: what prints, on which
+// side, in what order". Published by spec commit `a915219` (issue #185) with
+// `RETRACTIONS.md` R352-R355. The census rows these pin were the three places
+// this document previously called the zero-or-negative outcome a miss, plus
+// the graded wound lines, which Sections 11 and 12 had never mentioned.
+// ---------------------------------------------------------------------------
+
+/// The census's single most consequential row: "**To-hit fails** | **monster
+/// melee** | **nothing at all**".
+#[test]
+fn an_ordinary_hostile_monsters_melee_miss_prints_nothing() {
+    // 11.1: "**an ordinary hostile monster's melee miss prints nothing and
+    // sounds nothing** - no newline, no name, no line, no tone - while a party
+    // member's melee miss prints one line." The structural reason is that "the
+    // routine that prints a miss line has exactly two call sites, both inside
+    // party-side attack helpers".
+    let mut state = combat_monster_attack_state(COMBAT_CLASS_GIANT_RAT, 6, 5);
+    let application = state
+        .resolve_and_apply_combat_monster_attack(8, 0, 255, false, 8, Some(false))
+        .unwrap();
+
+    assert!(matches!(
+        application.resolution,
+        Some(CombatWeaponAttackResolution::Miss {
+            route: CombatWeaponAttackRangeRoute::Melee,
+            ..
+        })
+    ));
+    assert_eq!(
+        crate::input_dispatch::combat_monster_attack_result_message(&state, application),
+        None
+    );
+}
+
+/// The one carve-out on that row: 11.1's announcement table gives a monster
+/// carrying the controlled/charmed bit "the **reduced** banner ... then one
+/// fixed attempt: `Attack-`, `Aim! `, and on a failed roll `<target>
+/// missed!`", because Section 6.1a's bit hands that slot to the player's
+/// prompt.
+///
+/// 11.1 is explicit that the two sides reach *different narrators*, not
+/// different strings: "the routine that prints a miss line has exactly two
+/// call sites, both inside party-side attack helpers ... Note the scoping:
+/// *party-side helper* describes the routine, not the actor - Section 6.1a's
+/// controlled bit lets a monster reach it and lets a party member bypass it."
+/// A controlled monster is therefore narrated by the party-side helper, which
+/// is where this test looks; the driver-side narrator, exercised by the test
+/// above, stays silent on every miss it sees.
+#[test]
+fn a_controlled_monsters_failed_roll_prints_the_target_named_miss_line() {
+    let mut state = combat_monster_attack_state(COMBAT_CLASS_GIANT_RAT, 6, 5);
+    state.combat_actors[8].flags |= COMBAT_ACTOR_FLAG_CONTROLLED;
+    let application = state
+        .resolve_and_apply_combat_monster_attack(8, 0, 255, false, 8, Some(false))
+        .unwrap();
+    let resolution = application.resolution.unwrap();
+    assert!(matches!(
+        resolution,
+        CombatWeaponAttackResolution::Miss { .. }
+    ));
+
+    // Rule 1 of 11.1: "**Every result line names the target, never the
+    // attacker.** ... `Bat missed!` ... reads *the Bat was missed*". The name
+    // in this line is the party defender's, never the acting monster's.
+    let line = crate::input_dispatch::combat_weapon_attack_result_message(
+        &state,
+        application.target_slot,
+        CombatWeaponAttackApplication {
+            resolution,
+            damage_application: application.damage_application,
+        },
+    );
+    assert_eq!(line.as_deref(), Some("Avatar missed!"));
+    assert!(!line.unwrap().contains("Giant Rat"));
+}
+
+/// "Damage zero or negative | both | `<target> grazed!` **and nothing else** -
+/// the kill, sleep, hit and wound lines are all suppressed | the rising
+/// action-snap cue".
+#[test]
+fn a_landed_swing_netting_zero_or_below_grazes_on_both_sides_with_its_cue() {
+    for raw_damage in [0i16, -1] {
+        // Party defender.
+        let mut state = combat_monster_attack_state(COMBAT_CLASS_GIANT_RAT, 6, 5);
+        let before = state.sound_effect_serial;
+        let damage_application = state
+            .apply_combat_weapon_damage_to_target(None, 0, raw_damage, false)
+            .unwrap();
+        let application = CombatMonsterAttackApplication {
+            attacker_slot: 8,
+            target_slot: 0,
+            poison_status_outcome: None,
+            stoning: None,
+            resolution: Some(CombatWeaponAttackResolution::Hit {
+                route: CombatWeaponAttackRangeRoute::Melee,
+                raw_damage,
+            }),
+            damage_application: Some(damage_application),
+        };
+        assert_eq!(
+            crate::input_dispatch::combat_monster_attack_result_message(&state, application)
+                .as_deref(),
+            Some("Avatar grazed!")
+        );
+        assert_eq!(state.party[0].hp, 12, "a graze costs no HP");
+        assert_eq!(
+            state.sound_effects_after(before),
+            vec![SoundEffect::ActionSnap]
+        );
+
+        // Monster defender, through the party-side narrator.
+        let mut state = combat_monster_attack_state(COMBAT_CLASS_GIANT_RAT, 6, 5);
+        let before = state.sound_effect_serial;
+        let damage_application = state
+            .apply_combat_weapon_damage_to_target(Some(0), 8, raw_damage, false)
+            .unwrap();
+        assert_eq!(
+            crate::input_dispatch::combat_weapon_attack_result_message(
+                &state,
+                8,
+                CombatWeaponAttackApplication {
+                    resolution: CombatWeaponAttackResolution::Hit {
+                        route: CombatWeaponAttackRangeRoute::Melee,
+                        raw_damage,
+                    },
+                    damage_application: Some(damage_application),
+                }
+            )
+            .as_deref(),
+            Some("Giant Rat grazed!")
+        );
+        assert_eq!(state.combat_actors[8].hp_or_wound, 10);
+        assert_eq!(
+            state.sound_effects_after(before),
+            vec![SoundEffect::ActionSnap]
+        );
+    }
+}
+
+/// "The graded wound lines are monster-target only", with the four lines
+/// published verbatim against the four-bucket wound score.
+#[test]
+fn an_ordinary_hit_on_a_monster_prints_the_published_graded_wound_line() {
+    let max_hp = combat_class_stats(COMBAT_CLASS_GIANT_RAT).unwrap().max_hp;
+    assert_eq!(max_hp, 10);
+    // 11.1: "The quarter is the class maximum divided by four with
+    // truncation, and the three thresholds are one, two and three of those
+    // truncated quarters" - here 2, 4 and 6 against a maximum of 10.
+    for (starting_hp, expected) in [
+        (10u8, "Giant Rat barely wounded!"),
+        (7, "Giant Rat barely wounded!"),
+        (6, "Giant Rat lightly wounded!"),
+        (4, "Giant Rat heavily wounded!"),
+        (2, "Giant Rat critical!"),
+    ] {
+        let mut state = combat_monster_attack_state(COMBAT_CLASS_GIANT_RAT, 6, 5);
+        state.combat_actors[8].hp_or_wound = starting_hp;
+        let damage_application = state
+            .apply_combat_weapon_damage_to_target(Some(0), 8, 1, false)
+            .unwrap();
+        assert_eq!(state.combat_actors[8].hp_or_wound, starting_hp - 1);
+        assert_eq!(
+            crate::input_dispatch::combat_weapon_attack_result_message(
+                &state,
+                8,
+                CombatWeaponAttackApplication {
+                    resolution: CombatWeaponAttackResolution::Hit {
+                        route: CombatWeaponAttackRangeRoute::Melee,
+                        raw_damage: 1,
+                    },
+                    damage_application: Some(damage_application),
+                }
+            )
+            .as_deref(),
+            Some(expected),
+            "surviving HP {} of {max_hp}",
+            starting_hp - 1
+        );
+    }
+
+    // The four grades are exactly the published strings, and `grazed` is not
+    // one of them: 11.1 reserves `<target> grazed!` for the zero-or-negative
+    // outcome above. The engine previously printed `grazed` for wound score 4
+    // and `critically wounded` for wound score 1.
+    for (hp, expected) in [
+        (1u8, "critical"),
+        (2, "heavily wounded"),
+        (4, "lightly wounded"),
+        (6, "barely wounded"),
+    ] {
+        assert_eq!(
+            crate::input_dispatch::combat_monster_wound_line_grade(hp, max_hp),
+            expected
+        );
+    }
+}
+
+/// "The grading never applies to a **party** target: the classifier refuses a
+/// party record outright ... **A party member who takes a solid landed hit
+/// always reads the flat `<target> hit!`**".
+#[test]
+fn a_party_target_reads_the_flat_hit_line_at_every_wound_level() {
+    for starting_hp in [20u16, 12, 6, 2] {
+        let mut state = combat_monster_attack_state(COMBAT_CLASS_GIANT_RAT, 6, 5);
+        state.party[0].hp = starting_hp;
+        let damage_application = state
+            .apply_combat_weapon_damage_to_target(None, 0, 1, false)
+            .unwrap();
+        let application = CombatMonsterAttackApplication {
+            attacker_slot: 8,
+            target_slot: 0,
+            poison_status_outcome: None,
+            stoning: None,
+            resolution: Some(CombatWeaponAttackResolution::Hit {
+                route: CombatWeaponAttackRangeRoute::Melee,
+                raw_damage: 1,
+            }),
+            damage_application: Some(damage_application),
+        };
+        assert_eq!(
+            crate::input_dispatch::combat_monster_attack_result_message(&state, application)
+                .as_deref(),
+            Some("Avatar hit!"),
+            "party HP {starting_hp}"
+        );
+    }
 }

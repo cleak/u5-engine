@@ -461,9 +461,9 @@ pub struct CombatMonsterAttackApplication {
 
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
 pub struct CombatMonsterAttackInputs {
-    pub party_defender_rating: u8,
-    pub hit_roll: u8,
-    pub damage_roll: u8,
+    /// `combat.md §11` "The draw": the inclusive `0..=60` raw draw behind
+    /// the shared skewed `1..30` roll.
+    pub hit_raw_roll_0_to_60: u8,
     pub poison_gate_accepts: bool,
     pub poison_damage_roll: u8,
     pub forced_hit: Option<bool>,
@@ -472,8 +472,14 @@ pub struct CombatMonsterAttackInputs {
 
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
 pub struct CombatPlayerWeaponAttackInputs {
-    pub hit_roll: u8,
-    pub damage_roll: u8,
+    /// `combat.md §11` "The draw": the inclusive `0..=60` raw draw.
+    pub hit_raw_roll_0_to_60: u8,
+    /// `combat.md §12` stage one, party row. `None` means "take the
+    /// inclusive `1..Attack max` draw from the shared stream, and only if
+    /// stage one actually rolls" - bare hands, a `0` or `1` `Attack max`
+    /// and the two per-item overrides "run before the roll" and draw
+    /// nothing. A `Some` value is a deterministic caller's injected roll.
+    pub damage_roll: Option<u8>,
     pub forced_hit: Option<bool>,
 }
 
@@ -770,7 +776,6 @@ pub struct CombatSleepWakeApplication {
 pub enum CombatPlayerCommandInput {
     Key(char),
     Direction(u8),
-    AttackDirection(u8),
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -778,9 +783,12 @@ pub enum CombatPlayerCommandAction {
     QuicknessSkipped,
     ActivePlayerSelection(CombatActivePlayerSelectionOutcome),
     Pass(CombatPassCommandOutcome),
-    PromptForAttackDirection,
+    /// `combat.md §8.2`: accepted Attack "opens a second, separate input
+    /// read, and it is not a one-shot direction key but an **interactive
+    /// targeting cursor**". The attempt walk itself is
+    /// [`PlayState::begin_combat_attack_walk`].
+    OpenTargetingCursor,
     StepOrAttack {
-        prompted_attack: bool,
         direction_code: u8,
         outcome: CombatStepOrAttackPrimitiveOutcome,
     },
@@ -860,7 +868,7 @@ pub const fn combat_player_command_action_defers_maintenance(
     action: &CombatPlayerCommandAction,
 ) -> bool {
     match action {
-        CombatPlayerCommandAction::PromptForAttackDirection => true,
+        CombatPlayerCommandAction::OpenTargetingCursor => true,
         CombatPlayerCommandAction::Branch { branch, .. } => {
             combat_command_branch_is_named_multistage(*branch)
                 || matches!(
@@ -914,7 +922,7 @@ pub const fn combat_player_command_action_reprompts(action: &CombatPlayerCommand
         ),
         CombatPlayerCommandAction::ActivePlayerSelection(_)
         | CombatPlayerCommandAction::Pass(_)
-        | CombatPlayerCommandAction::PromptForAttackDirection
+        | CombatPlayerCommandAction::OpenTargetingCursor
         | CombatPlayerCommandAction::StepOrAttack { .. }
         | CombatPlayerCommandAction::EscapeCleanup {
             application:
@@ -1258,6 +1266,22 @@ impl PlayState {
         .then_some(source_slot)
     }
 
+    /// `combat.md §8`: the committed non-digit action tail — the absorbable
+    /// field check, the common terrain/marker contact hook, the visible-ring
+    /// maintenance and the active timed-effect age. Multi-stage commands run
+    /// it when their continuation finally commits.
+    pub fn apply_combat_committed_action_tail(
+        &mut self,
+        actor_slot: usize,
+    ) -> Option<CombatMagicRingPassOutcome> {
+        let _ = self.apply_combat_absorbable_field_contact_for_actor_position(actor_slot);
+        let _ = self.apply_combat_post_dispatch_contact_for_actor_position(actor_slot);
+        self.clear_combat_interference_for_completed_action(actor_slot);
+        let ring_pass = self.apply_visible_combat_magic_ring_pass_to_slot(actor_slot);
+        let _ = self.age_active_effect();
+        ring_pass
+    }
+
     pub(crate) fn clear_combat_interference_for_completed_action(&mut self, victim_slot: usize) {
         if let Some(source) = self.combat_interference_sources.get_mut(victim_slot) {
             *source = COMBAT_INTERFERENCE_NO_SOURCE;
@@ -1441,6 +1465,49 @@ impl PlayState {
         Some(combat_actor_weight(target_slot, actor, negate_time_active))
     }
 
+    /// `combat.md §12` stage two of the ordinary attack damage roll:
+    /// "The defender's defence rating is the class defense byte for a
+    /// monster and the cached character combat-defense byte for a party
+    /// member." §13 (R337): "The **defense** byte reaches the damage
+    /// roller directly and never through the selector."
+    ///
+    /// The party term is the per-record byte §12 names: "the damage roll
+    /// reads the cached combat-defense byte in the character record at
+    /// offset `+0x18`; factory-seed records carry value `7`". `7` is the
+    /// value that byte holds in a factory-seed record, not a rule that
+    /// every record carries it, so this reads the loaded per-record byte
+    /// and falls back to the factory seed only for a slot the roster does
+    /// not cover. §12's negative - "No traced combat path recomputes the
+    /// character-defense byte from readied armour" - is why nothing
+    /// recomputes it here from equipment, not a claim that it is constant
+    /// across the roster.
+    pub fn combat_actor_defence_rating(&self, slot: usize) -> Option<u8> {
+        if slot < COMBAT_PARTY_ACTOR_SLOTS {
+            self.combat_actors.get(slot)?;
+            return Some(
+                self.combat_roster_slot_for_actor_slot(slot)
+                    .and_then(|roster_slot| self.party_combat_defense.get(roster_slot).copied())
+                    .unwrap_or(CHARACTER_DEFENSE_FACTORY_SEED),
+            );
+        }
+        let actor = self.combat_actors.get(slot).copied()?;
+        combat_class_stats(actor.owner_target_class).map(|stats| stats.defense)
+    }
+
+    /// `combat.md §12`: "**When that rating is non-zero the roller
+    /// subtracts an inclusive `1..rating` draw; when it is zero it takes
+    /// no draw at all and subtracts nothing.**" The skip "is part of PRNG
+    /// parity, not an optimisation - most low-tier classes, Bat included,
+    /// have defense `0`", so the draw is taken here, after the rating is
+    /// known, rather than pre-rolled with the rest of the attack inputs.
+    pub fn combat_defence_roll(&mut self, defence_rating: u8) -> u8 {
+        if combat_defence_draw_taken(defence_rating) {
+            self.random_mod_u8(defence_rating)
+        } else {
+            0
+        }
+    }
+
     pub fn combat_target_weight_gate_accepts(&mut self, target_slot: usize) -> bool {
         let weight = self.combat_target_weight(target_slot);
         let raw_roll = self.combat_resistance_raw_roll();
@@ -1448,44 +1515,32 @@ impl PlayState {
             .is_some_and(|weight| combat_target_weight_gate_accepts_from_raw_roll(weight, raw_roll))
     }
 
-    /// `combat.md §12`: "For party-member defenders, the damage roll reads the
-    /// cached combat-defense byte in the character record at offset `+0x18`;
-    /// factory-seed records carry value `7`."
+    /// `combat.md §12`: "Magic Missile and Fireball reach this handler only
+    /// after the spell-damage wrapper rolls raw damage ... and subtracts a
+    /// random defense roll based on the target's combat defense. ... For
+    /// party-member defenders, the damage roll reads the cached combat-defense
+    /// byte in the character record at offset `+0x18`; factory-seed records
+    /// carry value `7`."
     ///
-    /// The `7` is the value a factory-seed record happens to carry, not a
-    /// constant: a loaded record supplies its own byte
-    /// (`formats/saved-gam.md §3.1`). Every party-defender damage roll in
-    /// combat reads it through here.
-    pub fn party_combat_defense_byte(&self, party_slot: usize) -> u8 {
-        self.party_combat_defense
-            .get(party_slot)
-            .copied()
-            .unwrap_or(CHARACTER_DEFENSE_FACTORY_SEED)
-    }
-
+    /// `7` is what a factory-seed record happens to hold, not a rule about
+    /// every record, so this reads the loaded per-record byte - the same
+    /// `+0x18` value the melee arm's `combat_actor_defence_rating` reads - and
+    /// falls back to the factory seed only when no roster byte is available.
+    ///
+    /// `magic.md §8`: Protection occupies and displays the shared
+    /// timed-effect slot, but its intended defense computation is unreachable
+    /// and has no mechanical consequence, so no tag is consulted here.
     pub fn combat_spell_target_defense_value(&self, target_slot: usize) -> u8 {
         if target_slot < COMBAT_PARTY_ACTOR_SLOTS {
-            // `combat.md §12`: "For party-member defenders, the damage roll
-            // reads the cached combat-defense byte in the character record at
-            // offset `+0x18`; factory-seed records carry value `7`. This is
-            // not one of the stat bytes earlier in the record - Strength
-            // `+0x0C`, Dexterity `+0x0D`, Intelligence `+0x0E`."
-            //
-            // The factory seed is the value a fresh save carries, not a
-            // constant: a loaded record supplies its own byte, and `§12` adds
-            // that "no traced combat path recomputes the character-defense
-            // byte from readied armour", so this is a read of live state and
-            // nothing writes it back. `magic.md §8`: Protection's `P` tag adds
-            // nothing on top - its intended bonus rides on an unreachable
-            // per-item total.
-            self.party_combat_defense_byte(target_slot)
-        } else {
-            self.combat_actors
-                .get(target_slot)
-                .and_then(|actor| combat_class_stats(actor.owner_target_class))
-                .map(|stats| stats.defense)
-                .unwrap_or_default()
+            return self
+                .combat_actor_defence_rating(target_slot)
+                .unwrap_or(CHARACTER_DEFENSE_FACTORY_SEED);
         }
+        self.combat_actors
+            .get(target_slot)
+            .and_then(|actor| combat_class_stats(actor.owner_target_class))
+            .map(|stats| stats.defense)
+            .unwrap_or_default()
     }
 
     pub fn combat_spell_target_defense_roll(&mut self, target_slot: usize) -> u8 {
@@ -2923,18 +2978,14 @@ impl PlayState {
                             self.resolve_and_apply_combat_monster_scattered_attack(
                                 actor_slot,
                                 target_slot,
-                                inputs.party_defender_rating,
-                                inputs.hit_roll,
-                                inputs.damage_roll,
+                                inputs.hit_raw_roll_0_to_60,
                                 inputs.amulet_turning_scatter_roll,
                             )
                         } else {
                             self.resolve_and_apply_combat_monster_attack(
                                 actor_slot,
                                 target_slot,
-                                inputs.party_defender_rating,
-                                inputs.hit_roll,
-                                inputs.damage_roll,
+                                inputs.hit_raw_roll_0_to_60,
                                 inputs.poison_gate_accepts,
                                 inputs.poison_damage_roll,
                                 inputs.forced_hit,
@@ -3373,6 +3424,11 @@ impl PlayState {
         self.combat_magic_effects = [[0; COMBAT_ARENA_SIDE]; COMBAT_ARENA_SIDE];
         self.combat_cursor_blink = false;
         self.combat_secondary_marker = None;
+        // `combat.md §8.2`: the targeting cursor is per-turn scratch and
+        // combat cannot be saved mid-fight, so no cursor survives an arena
+        // boundary. Neither does an attacker's remembered previous target.
+        self.active_combat_targeting = None;
+        self.combat_remembered_targets = [None; COMBAT_ACTOR_SLOTS];
         self.combat_ambush_reveals = reveals;
         self.combat_active = true;
         self.combat_action_result = 0;
@@ -3411,6 +3467,27 @@ impl PlayState {
         snapshot: CombatFrameSnapshot,
         body_retrieval_exit: bool,
     ) {
+        // `combat.md §4` restore phase, first bullet: "If the resident
+        // tile-restoration flag is set when the round loop returns, clear
+        // that flag and invoke the display driver's tile-graphics
+        // save/restore/mutation entry with mode value `1` before the
+        // ordinary world redraw. The reached mode restores driver-saved
+        // tile graphics; combat owns only the sampling/clear/call
+        // ordering, while the setter provenance and tile-asset mutation
+        // details belong to the dungeon and driver specs."
+        //
+        // The sample/clear/call trio therefore runs at the very top of the
+        // restore phase, ahead of every redraw this function performs -
+        // the `mark_visibility_dirty()` at its tail and the panel refresh
+        // the frontend hangs off it. The runtime owns no display driver,
+        // so the "invoke" half is recorded as a drained request; a
+        // frontend issues `EgaDisplayOperation::RestoreLoadedTileGraphics`
+        // for each one. The setter is `dungeon-mode.md §14.1`'s room
+        // painter (a two-way ladder cell sets the flag, other non-empty
+        // icon classes clear it) and is deliberately not implemented here.
+        if std::mem::take(&mut self.tile_restoration_pending) {
+            self.pending_driver_tile_graphics_restores += 1;
+        }
         let pending_terrain_trigger = self.pending_combat_terrain_trigger_slot.take();
         self.area = snapshot.area;
         self.player = snapshot.player;
@@ -3422,6 +3499,11 @@ impl PlayState {
         self.combat_magic_effects = [[0; COMBAT_ARENA_SIDE]; COMBAT_ARENA_SIDE];
         self.combat_cursor_blink = false;
         self.combat_secondary_marker = None;
+        // `combat.md §8.2`: the targeting cursor is per-turn scratch and
+        // combat cannot be saved mid-fight, so no cursor survives an arena
+        // boundary. Neither does an attacker's remembered previous target.
+        self.active_combat_targeting = None;
+        self.combat_remembered_targets = [None; COMBAT_ACTOR_SLOTS];
         self.combat_ambush_reveals = [None; COMBAT_AMBUSH_REVEAL_SLOT_COUNT];
         self.combat_active = false;
         self.combat_action_result = 0;
@@ -3520,6 +3602,18 @@ impl PlayState {
             self.mark_visibility_dirty();
             false
         };
+        // `combat.md §5.3`, closing line: "One consumer outside this
+        // window, for completeness: the turn-clock advance run after
+        // combat ends is itself a draw consumer, sitting between the
+        // encounter and the next outdoor turn."
+        //
+        // It runs after the framer's restore phase - the world clock it
+        // advances is the restored world's, not the arena's - and it is
+        // the ordinary world turn advance, so its draws are the ones that
+        // advance owns (NPC schedules and the active-object epilogue).
+        // `§5.3` attaches no condition to it, so every way the round loop
+        // ends reaches it.
+        self.advance_turn();
         CombatRoundLoopExitApplication {
             exit,
             result_code,
@@ -3877,6 +3971,26 @@ impl PlayState {
         Some(child)
     }
 
+    /// `combat.md` 11.1, census row "Damage zero or negative | both |
+    /// `<target> grazed!` **and nothing else** ... | the rising action-snap cue
+    /// (`audio.md`, 1200 toward 2000 Hz)", and 12: the marker's "first [reader]
+    /// prints `<target> grazed!` followed by the rising action-snap cue".
+    ///
+    /// 11.1's ordered sequence puts the cue on the result line, step 5, after
+    /// damage application at step 4, "with a cue only on the graze and
+    /// dragged-under arms". The damage-and-status handler is where the marker
+    /// is raised and is the one point both the party and monster defender
+    /// routes pass through. `audio.md` 11 lists "per-victim combat damage or
+    /// kill narration" among the generic action snap's sites.
+    ///
+    /// Zero is included with negative deliberately (`RETRACTIONS.md` R352); the
+    /// instant-kill sentinel is decimal 99 and cannot reach this arm.
+    fn emit_combat_graze_cue(&mut self, raw_damage: i16) {
+        if raw_damage <= 0 {
+            self.emit_sound_effect(SoundEffect::ActionSnap);
+        }
+    }
+
     pub fn apply_combat_weapon_damage_to_target(
         &mut self,
         attacker_slot: Option<usize>,
@@ -3886,6 +4000,7 @@ impl PlayState {
     ) -> Option<CombatWeaponDamageApplication> {
         if target_slot < COMBAT_PARTY_ACTOR_SLOTS {
             let damage = self.apply_combat_party_damage_to_slot(target_slot, raw_damage)?;
+            self.emit_combat_graze_cue(raw_damage);
             return Some(CombatWeaponDamageApplication::Party {
                 target_slot,
                 damage,
@@ -3896,6 +4011,7 @@ impl PlayState {
             .combat_actors
             .get_mut(target_slot)?
             .apply_monster_damage(raw_damage, magical)?;
+        self.emit_combat_graze_cue(raw_damage);
         if damage.killed {
             self.apply_combat_monster_death_active_object_effect(target_slot, damage);
         } else {
@@ -4793,33 +4909,46 @@ impl PlayState {
         target_slot: usize,
         attacker_rating: u8,
         defender_rating: u8,
-        hit_roll: u8,
+        hit_raw_roll_0_to_60: u8,
         damage_roll: u8,
         forced_hit: Option<bool>,
         magical: bool,
     ) -> Option<CombatWeaponAttackApplication> {
         let attacker = *self.combat_actors.get(attacker_slot)?;
         let target = *self.combat_actors.get(target_slot)?;
-        let target_range = attacker.range_to(target);
+        let defence_rating = self.combat_actor_defence_rating(target_slot)?;
+        let mut input = combat_equipment_weapon_attack_input(
+            item_id,
+            attacker.range_to(target),
+            attacker_rating,
+            defender_rating,
+            defence_rating,
+            hit_raw_roll_0_to_60,
+            damage_roll,
+            0,
+            forced_hit,
+        )?;
         // `combat.md §11.1` publishes two different party swing cues, keyed by
-        // the arm the same range routing below selects: party **melee** gets
-        // "the same swing sweep in the opposite direction, roughly 400 Hz
+        // the arm the resolver's own range routing selects: party **melee**
+        // gets "the same swing sweep in the opposite direction, roughly 400 Hz
         // toward 750 Hz (`audio.md` section 7.4)", while party **ranged or
         // thrown** gets "a descending sweep, roughly 1300 Hz toward 300 Hz,
-        // after `Aim! ` and a confirmed cursor". So the route is resolved
-        // first and the cue chosen from it.
+        // after `Aim! ` and a confirmed cursor". The route is therefore read
+        // off the very `CombatWeaponAttackInput` that
+        // [`resolve_combat_weapon_attack`] routes on below, so the cue and the
+        // resolution cannot disagree.
         //
         // `audio.md §7.4` keeps the cue "unconditional[], before the to-hit
         // roll, and only then branches" - the miss arm that follows has "no
         // audio call anywhere on it" - so it still precedes the roll on both
-        // arms. It is withheld only where `resolve_combat_weapon_attack_range_route`
-        // reports no route at all, which is the out-of-range resolution: that
-        // attempt reaches no attack application and therefore no
-        // attack-application cue.
+        // arms, and ahead of the stage-two defence draw. It is withheld only
+        // where the route resolves to nothing at all, which is the
+        // `OutOfRange` resolution: that attempt reaches no attack application
+        // and therefore no attack-application cue.
         match resolve_combat_weapon_attack_range_route(
-            target_range,
-            equipment_weapon_range_cap(item_id)?,
-            equipment_weapon_effect_code(item_id)?,
+            input.target_range,
+            input.range_cap,
+            input.effect_code,
         ) {
             Some(CombatWeaponAttackRangeRoute::Melee) => {
                 self.emit_sound_effect(SoundEffect::PartyMeleeAttackSwing)
@@ -4829,15 +4958,10 @@ impl PlayState {
             }
             None => {}
         }
-        let resolution = resolve_combat_equipment_weapon_attack(
-            item_id,
-            target_range,
-            attacker_rating,
-            defender_rating,
-            hit_roll,
-            damage_roll,
-            forced_hit,
-        )?;
+        if combat_weapon_attack_takes_defence_draw(input) {
+            input.defence_roll = self.combat_defence_roll(defence_rating);
+        }
+        let resolution = resolve_combat_weapon_attack(input);
         let damage_application = match resolution {
             CombatWeaponAttackResolution::Hit { raw_damage, .. } => self
                 .apply_combat_weapon_damage_to_target(
@@ -4846,10 +4970,21 @@ impl PlayState {
                     raw_damage,
                     magical,
                 ),
+            // `combat.md §12`: "A magic value (decimal 99) is treated as
+            // **instant kill** - bypass HP, force the death path". The
+            // roller "short-circuits the whole roller and returns
+            // immediately - **before the defender's defence byte is
+            // read**", so the sentinel reaches the damage endpoint whole.
+            CombatWeaponAttackResolution::Special { .. } => self
+                .apply_combat_weapon_damage_to_target(
+                    Some(attacker_slot),
+                    target_slot,
+                    COMBAT_INSTANT_KILL_DAMAGE,
+                    magical,
+                ),
             CombatWeaponAttackResolution::OutOfRange { .. }
             | CombatWeaponAttackResolution::NoOrdinaryDamage { .. }
-            | CombatWeaponAttackResolution::Miss { .. }
-            | CombatWeaponAttackResolution::Special { .. } => None,
+            | CombatWeaponAttackResolution::Miss { .. } => None,
         };
 
         Some(CombatWeaponAttackApplication {
@@ -4863,9 +4998,7 @@ impl PlayState {
         &mut self,
         attacker_slot: usize,
         target_slot: usize,
-        party_defender_rating: u8,
-        hit_roll: u8,
-        damage_roll: u8,
+        hit_raw_roll_0_to_60: u8,
         poison_gate_accepts: bool,
         poison_damage_roll: u8,
         forced_hit: Option<bool>,
@@ -4898,17 +5031,24 @@ impl PlayState {
         if target_range == 1 && !attacker.is_controlled() {
             self.combat_interference_sources[target_slot] = attacker_slot as u8;
         }
-        // `combat.md §12`: a party defender's rating is the cached
-        // combat-defense byte at `+0x18`. `party_defender_rating` stays the
-        // fallback for a state whose roster does not carry that slot.
-        let defender_rating = if target_slot < COMBAT_PARTY_ACTOR_SLOTS {
-            self.party_combat_defense
-                .get(target_slot)
-                .copied()
-                .unwrap_or(party_defender_rating)
-        } else {
-            combat_class_stats(target.owner_target_class)?.defense
-        };
+        // `combat.md §11` selector, defender arm: "every ordinary melee and
+        // ranged/effect attack, party or monster | that actor's **combat
+        // weight**". `RETRACTIONS.md` R337 withdraws the class stat-row
+        // reading this used to carry - the defense byte "reaches the damage
+        // roller directly and never through the selector".
+        let defender_rating = self.combat_target_weight(target_slot)?;
+        // `combat.md §12` stage two: "class defense byte for a monster and
+        // the cached character combat-defense byte for a party member".
+        // Both sides of the arena read the one helper, so the party term
+        // is the loaded per-record `+0x18` byte rather than a constant.
+        let defence_rating = self.combat_actor_defence_rating(target_slot)?;
+        // `combat.md §11` selector, attacker arm: the class combat tier for
+        // the six `zero-selector stat row` classes, and the actor's own
+        // combat weight for the other forty-two.
+        let attacker_rating = combat_monster_attacker_rating(
+            attacker.owner_target_class,
+            self.combat_target_weight(attacker_slot)?,
+        )?;
 
         // `combat.md §6.1a` "Readers — the attack driver": a controlled actor's
         // attack is a fixed magic strike resolved by the shared
@@ -4925,17 +5065,25 @@ impl PlayState {
             if target_range != 1 {
                 return None;
             }
-            let resolution = resolve_combat_weapon_attack(
-                attacker_stats.attack_cap,
+            let mut input = CombatWeaponAttackInput {
+                source: CombatAttackerDamageSource::MonsterFlat {
+                    attack_value: attacker_stats.attack_value,
+                },
                 target_range,
-                1,
-                0,
-                attacker_stats.attack_cap,
+                range_cap: 1,
+                effect_code: 0,
+                attacker_rating,
                 defender_rating,
-                hit_roll,
-                damage_roll,
+                defence_rating,
+                hit_raw_roll_0_to_60,
+                damage_roll: 0,
+                defence_roll: 0,
                 forced_hit,
-            );
+            };
+            if combat_weapon_attack_takes_defence_draw(input) {
+                input.defence_roll = self.combat_defence_roll(defence_rating);
+            }
+            let resolution = resolve_combat_weapon_attack(input);
             let damage_application = match resolution {
                 CombatWeaponAttackResolution::Hit { raw_damage, .. } => {
                     self.apply_combat_weapon_damage_to_target(None, target_slot, raw_damage, true)
@@ -5047,21 +5195,31 @@ impl PlayState {
             }
         }
 
-        let resolution = resolve_combat_weapon_attack(
-            attacker_stats.attack_cap,
+        let mut input = CombatWeaponAttackInput {
+            source: CombatAttackerDamageSource::MonsterFlat {
+                attack_value: attacker_stats.attack_value,
+            },
             target_range,
-            ranged.range_effect_selector,
-            ranged.payload,
-            attacker_stats.attack_cap,
+            range_cap: ranged.range_effect_selector,
+            effect_code: ranged.payload,
+            attacker_rating,
             defender_rating,
-            hit_roll,
-            damage_roll,
+            defence_rating,
+            hit_raw_roll_0_to_60,
+            damage_roll: 0,
+            defence_roll: 0,
             forced_hit,
-        );
+        };
+        if combat_weapon_attack_takes_defence_draw(input) {
+            input.defence_roll = self.combat_defence_roll(defence_rating);
+        }
+        let resolution = resolve_combat_weapon_attack(input);
         let damage_application = match resolution {
             CombatWeaponAttackResolution::Hit { raw_damage, .. } => {
                 self.apply_combat_weapon_damage_to_target(None, target_slot, raw_damage, false)
             }
+            // The monster arm never reaches the instant-kill sentinel: its
+            // raw value is the class attack byte used flat.
             CombatWeaponAttackResolution::OutOfRange { .. }
             | CombatWeaponAttackResolution::NoOrdinaryDamage { .. }
             | CombatWeaponAttackResolution::Miss { .. }
@@ -5167,9 +5325,7 @@ impl PlayState {
         &mut self,
         attacker_slot: usize,
         intended_target_slot: usize,
-        party_defender_rating: u8,
-        hit_roll: u8,
-        damage_roll: u8,
+        hit_raw_roll_0_to_60: u8,
         scatter_roll: u8,
     ) -> Option<CombatMonsterAttackApplication> {
         if attacker_slot < COMBAT_PARTY_ACTOR_SLOTS || attacker_slot >= COMBAT_ACTOR_SLOTS {
@@ -5236,33 +5392,38 @@ impl PlayState {
         // with one downward sweep, so the ranged arm plays the same monster
         // cue the melee arm does.
         self.emit_sound_effect(SoundEffect::MonsterAttackSwing);
-        // `combat.md §12`: a party defender's rating is the cached
-        // combat-defense byte at `+0x18`. `party_defender_rating` stays the
-        // fallback for a state whose roster does not carry that slot.
-        let defender_rating = if target_slot < COMBAT_PARTY_ACTOR_SLOTS {
-            self.party_combat_defense
-                .get(target_slot)
-                .copied()
-                .unwrap_or(party_defender_rating)
-        } else {
-            combat_class_stats(self.combat_actors[target_slot].owner_target_class)?.defense
-        };
+        let defender_rating = self.combat_target_weight(target_slot)?;
+        let defence_rating = self.combat_actor_defence_rating(target_slot)?;
+        let attacker_rating = combat_monster_attacker_rating(
+            attacker.owner_target_class,
+            self.combat_target_weight(attacker_slot)?,
+        )?;
         let impact_range = combat_arena_range(attacker.x, attacker.y, impact_x, impact_y).max(2);
-        let resolution = resolve_combat_weapon_attack(
-            attacker_stats.attack_cap,
-            impact_range,
-            ranged.range_effect_selector,
-            ranged.payload,
-            attacker_stats.attack_cap,
+        let mut input = CombatWeaponAttackInput {
+            source: CombatAttackerDamageSource::MonsterFlat {
+                attack_value: attacker_stats.attack_value,
+            },
+            target_range: impact_range,
+            range_cap: ranged.range_effect_selector,
+            effect_code: ranged.payload,
+            attacker_rating,
             defender_rating,
-            hit_roll,
-            damage_roll,
-            Some(true),
-        );
+            defence_rating,
+            hit_raw_roll_0_to_60,
+            damage_roll: 0,
+            defence_roll: 0,
+            forced_hit: Some(true),
+        };
+        if combat_weapon_attack_takes_defence_draw(input) {
+            input.defence_roll = self.combat_defence_roll(defence_rating);
+        }
+        let resolution = resolve_combat_weapon_attack(input);
         let damage_application = match resolution {
             CombatWeaponAttackResolution::Hit { raw_damage, .. } => {
                 self.apply_combat_weapon_damage_to_target(None, target_slot, raw_damage, false)
             }
+            // The monster arm never reaches the instant-kill sentinel: its
+            // raw value is the class attack byte used flat.
             CombatWeaponAttackResolution::OutOfRange { .. }
             | CombatWeaponAttackResolution::NoOrdinaryDamage { .. }
             | CombatWeaponAttackResolution::Miss { .. }
@@ -5332,10 +5493,7 @@ impl PlayState {
         actor_slot: usize,
         input: CombatPlayerCommandInput,
     ) -> Option<CombatPlayerCommandApplication> {
-        let weapon_attack_inputs = if matches!(
-            input,
-            CombatPlayerCommandInput::Direction(_) | CombatPlayerCommandInput::AttackDirection(_)
-        ) {
+        let weapon_attack_inputs = if matches!(input, CombatPlayerCommandInput::Direction(_)) {
             self.combat_player_weapon_attack_inputs(actor_slot)
         } else {
             CombatPlayerWeaponAttackInputs::default()
@@ -5349,8 +5507,14 @@ impl PlayState {
     ) -> CombatPlayerWeaponAttackInputs {
         let _ = attacker_slot;
         CombatPlayerWeaponAttackInputs {
-            hit_roll: self.random_range_u8(0, u8::MAX),
-            damage_roll: self.random_range_u8(0, u8::MAX),
+            hit_raw_roll_0_to_60: self.random_range_u8(0, COMBAT_SKEWED_ROLL_RAW_MAX),
+            // `combat.md §12` stage one: "Values `0` and `1` pass through
+            // unchanged, and bare hands are a flat `1`", and the Glass
+            // Sword and Jeweled Sword overrides "run before the roll", so
+            // the draw cannot be taken here - it is taken at the attempt,
+            // once the readied item is known. Same reason the defence draw
+            // is lazy: "PRNG parity, not an optimisation".
+            damage_roll: None,
             forced_hit: None,
         }
     }
@@ -5457,16 +5621,16 @@ impl PlayState {
         }
         // `combat.md §6.1a`: the round walker picks the keystroke path
         // through the slot-to-group helper, so a party-side actor
-        // carrying the controlled bit runs on the automatic driver.
-        // `magic.md §8`: "Nothing routes a summoned creature through the
-        // player command parser, and the player never gets to move it."
+        // carrying the controlled bit runs on the automatic driver and a
+        // monster-side actor carrying it runs on the prompt. `magic.md
+        // §8`: a stamped creature "takes its turns at the player's
+        // prompt" (`RETRACTIONS.md` R354).
         if !combat_slot_takes_player_command_path(actor_slot, active_actor) {
             return None;
         }
 
         let action = match input {
-            CombatPlayerCommandInput::Direction(direction_code)
-            | CombatPlayerCommandInput::AttackDirection(direction_code) => {
+            CombatPlayerCommandInput::Direction(direction_code) => {
                 if !combat_direction_code_is_cardinal(direction_code) {
                     CombatPlayerCommandAction::InvalidDirection { direction_code }
                 } else {
@@ -5475,20 +5639,18 @@ impl PlayState {
                         self.combat_destination_walkable_for_direction(actor_slot, direction_code)?;
                     // `combat.md §8`/`§8.1` (`RETRACTIONS.md` R310): a bare
                     // direction key "is purely a step: there is no bump
-                    // attack". Only the `A` verb's own targeting
-                    // confirmation - which arrives here as
-                    // `AttackDirection` - resolves against an occupant.
-                    let prompted_attack =
-                        matches!(input, CombatPlayerCommandInput::AttackDirection(_));
+                    // attack". The `A` verb's own targeting cursor (`§8.2`)
+                    // resolves against an occupant instead, through
+                    // `PlayState::apply_combat_targeting_cursor_key`, so no
+                    // direction key ever reaches an attack here.
                     let outcome = self.apply_combat_step_or_attack_primitive(
                         actor_slot,
                         attacker_group,
                         direction_code,
                         destination_walkable,
-                        prompted_attack,
+                        false,
                     );
                     CombatPlayerCommandAction::StepOrAttack {
-                        prompted_attack,
                         direction_code,
                         outcome,
                     }
@@ -5507,7 +5669,7 @@ impl PlayState {
                             CombatPlayerCommandAction::Pass(resolve_combat_pass_command())
                         }
                         CombatCommandBranch::Attack => {
-                            CombatPlayerCommandAction::PromptForAttackDirection
+                            CombatPlayerCommandAction::OpenTargetingCursor
                         }
                         CombatCommandBranch::EscapeCleanup => {
                             CombatPlayerCommandAction::EscapeCleanup {
@@ -5698,38 +5860,161 @@ impl PlayState {
             } => *target_slot,
             _ => return None,
         };
-        let item_id = self
-            .party_equipment
-            .get(actor_slot)?
+        let roster_slot = self.combat_roster_slot_for_actor_slot(actor_slot)?;
+        // `combat.md §8.2`: the Attack walker scans "helm, weapon hand,
+        // shield hand" and each qualifying item "produces **one attack
+        // attempt**"; "A character with no qualifying item makes a single
+        // bare-handed attempt, which behaves as melee with range one."
+        //
+        // This engine's attack entry is one direction-keyed swing per
+        // command, so it can deliver at most one of §8.2's "zero to three
+        // attempts". Of the qualifying items it swings the weapon hand
+        // whenever that slot holds one and falls back to the published
+        // scan order otherwise, so a character readying a Spiked Helm
+        // (`Attack max` 4) beside a Halberd (30) still swings the halberd.
+        // The second and third attempts are an unimplemented part of
+        // §8.2, not a reading of it.
+        let equipment = self.party_equipment.get(roster_slot).copied()?;
+        let armaments = combat_armament_item_ids(&equipment);
+        let item_id = equipment
             .get(EQUIP_SLOT_WEAPON)
-            .copied()?;
-        if item_id == EQUIPMENT_EMPTY {
-            return None;
-        }
-        let attacker_rating = self
+            .copied()
+            .map(usize::from)
+            .filter(|item| armaments.contains(item))
+            .or_else(|| armaments.first().copied());
+        self.resolve_and_apply_combat_player_attack(actor_slot, target_slot, item_id, inputs)
+    }
+
+    /// One player-side attack attempt against a known target with a known
+    /// readied item, or `None` for `combat.md §8.2`'s bare-handed attempt.
+    ///
+    /// Shared by the one-swing command entry above and by the §8.2 targeting
+    /// cursor, so the two cannot drift apart on §11's selector or on §12's
+    /// lazy damage draw.
+    pub fn resolve_and_apply_combat_player_attack(
+        &mut self,
+        actor_slot: usize,
+        target_slot: usize,
+        item_id: Option<usize>,
+        inputs: CombatPlayerWeaponAttackInputs,
+    ) -> Option<CombatWeaponAttackApplication> {
+        let roster_slot = self.combat_roster_slot_for_actor_slot(actor_slot)?;
+        // `combat.md §11` selector, party attacker arm: Strength for the
+        // five strength-arm ids, otherwise the character's own combat
+        // weight - "the raw Dexterity byte copied at seating".
+        let strength = self
             .party_strengths
-            .get(actor_slot)
+            .get(roster_slot)
             .copied()
             .unwrap_or(AVATAR_STAT_MAX);
-        // `combat.md §12`: a party-member defender's damage roll reads the
-        // cached combat-defense byte at `+0x18`, not a hard-coded factory
-        // seed.
-        let defender_rating = if target_slot < COMBAT_PARTY_ACTOR_SLOTS {
-            self.party_combat_defense_byte(target_slot)
-        } else {
-            combat_class_stats(self.combat_actors.get(target_slot)?.owner_target_class)?.defense
+        let attacker_rating =
+            combat_party_attacker_rating(item_id, strength, self.combat_target_weight(actor_slot)?);
+        // `combat.md §11`: the defender term is "that actor's **combat
+        // weight**" on either side of the arena.
+        let defender_rating = self.combat_target_weight(target_slot)?;
+        let Some(item_id) = item_id else {
+            return self.resolve_and_apply_combat_bare_handed_attack(
+                actor_slot,
+                target_slot,
+                attacker_rating,
+                defender_rating,
+                inputs.hit_raw_roll_0_to_60,
+                inputs.forced_hit,
+            );
+        };
+        // `combat.md §12` stage one: the party arm's inclusive
+        // `1..Attack max` draw, taken here rather than with the rest of
+        // the attack inputs so the rows that "pass through unchanged" and
+        // the two per-item overrides that "run before the roll" spend
+        // nothing.
+        let damage_roll = match inputs.damage_roll {
+            Some(roll) => roll,
+            None => {
+                let attacker = *self.combat_actors.get(actor_slot)?;
+                let target = *self.combat_actors.get(target_slot)?;
+                let defence_rating = self.combat_actor_defence_rating(target_slot)?;
+                let probe = combat_equipment_weapon_attack_input(
+                    item_id,
+                    attacker.range_to(target),
+                    attacker_rating,
+                    defender_rating,
+                    defence_rating,
+                    inputs.hit_raw_roll_0_to_60,
+                    0,
+                    0,
+                    inputs.forced_hit,
+                )?;
+                if combat_weapon_attack_takes_damage_draw(probe) {
+                    self.random_range_u8(0, u8::MAX)
+                } else {
+                    0
+                }
+            }
         };
         self.resolve_and_apply_combat_equipment_weapon_attack(
-            item_id as usize,
+            item_id,
             actor_slot,
             target_slot,
             attacker_rating,
             defender_rating,
-            inputs.hit_roll,
-            inputs.damage_roll,
+            inputs.hit_raw_roll_0_to_60,
+            damage_roll,
             inputs.forced_hit,
             false,
         )
+    }
+
+    /// `combat.md §8.2` bare-handed attempt: "melee with range one".
+    /// `§12` stage one: "bare hands are a flat `1`".
+    #[allow(clippy::too_many_arguments)]
+    pub fn resolve_and_apply_combat_bare_handed_attack(
+        &mut self,
+        attacker_slot: usize,
+        target_slot: usize,
+        attacker_rating: u8,
+        defender_rating: u8,
+        hit_raw_roll_0_to_60: u8,
+        forced_hit: Option<bool>,
+    ) -> Option<CombatWeaponAttackApplication> {
+        let attacker = *self.combat_actors.get(attacker_slot)?;
+        let target = *self.combat_actors.get(target_slot)?;
+        let defence_rating = self.combat_actor_defence_rating(target_slot)?;
+        let mut input = CombatWeaponAttackInput {
+            source: CombatAttackerDamageSource::PartyBareHands,
+            target_range: attacker.range_to(target),
+            range_cap: 0,
+            effect_code: 0,
+            attacker_rating,
+            defender_rating,
+            defence_rating,
+            hit_raw_roll_0_to_60,
+            damage_roll: 0,
+            defence_roll: 0,
+            forced_hit,
+        };
+        if combat_weapon_attack_takes_defence_draw(input) {
+            input.defence_roll = self.combat_defence_roll(defence_rating);
+        }
+        let resolution = resolve_combat_weapon_attack(input);
+        let damage_application = match resolution {
+            CombatWeaponAttackResolution::Hit { raw_damage, .. } => self
+                .apply_combat_weapon_damage_to_target(
+                    Some(attacker_slot),
+                    target_slot,
+                    raw_damage,
+                    false,
+                ),
+            // A bare-handed attempt is a flat `1`; it can never reach the
+            // sentinel.
+            CombatWeaponAttackResolution::OutOfRange { .. }
+            | CombatWeaponAttackResolution::NoOrdinaryDamage { .. }
+            | CombatWeaponAttackResolution::Miss { .. }
+            | CombatWeaponAttackResolution::Special { .. } => None,
+        };
+        Some(CombatWeaponAttackApplication {
+            resolution,
+            damage_application,
+        })
     }
 
     /// Apply one geometric arena-edge attempt. Acceptance releases only the
@@ -5958,21 +6243,37 @@ impl PlayState {
     /// directly or transitively." Exactly one such tick therefore sits
     /// between the last monster placement and the first actor's action.
     ///
-    /// The world tick this engine runs is the presentation-only one of
-    /// `input.md §2` and `main-loop.md §9`; `§5.3`'s three drawing arms
-    /// (wind drift, the per-object animation roll, the visibility `[0, 3]`
-    /// draw) are the world tick's own contract and are not re-modelled
-    /// here, so this call reproduces the tick's placement and cadence but
-    /// not yet its draw count. On that presentation-only tick the prologue
-    /// draws nothing, so the encounter's PRNG stream is unchanged by it.
+    /// The world tick this engine runs is the shared one of `input.md §2`
+    /// and `main-loop.md §9`. `§5.3` step 6 lists that tick's three drawing
+    /// arms, and `RETRACTIONS.md` R329/R331 correct both their order and
+    /// their cost: "The order is animator, wind, composite; the composite
+    /// draws only on a selecting terrain row, which arena terrain almost
+    /// never is; and the animator's per-record count is not established."
+    /// This engine runs the arms in that order - the animator, then the wind
+    /// check, then (at the redraw) the composite, which takes a draw only for
+    /// an actor on one of the five selecting rows of `visibility.md §8`. The
+    /// animator's own per-record draws are the one arm still unmodelled here,
+    /// because `§5.3` publishes no count for them ("its per-record draw count
+    /// is record-dependent and is not characterised here").
     ///
-    /// Of the bundle's other four items only the redraw has engine-side
-    /// state. The overlay refresh and the flush are the frontend's, and
-    /// nothing here is identified by `§7` as the "per-slot scratch" or the
-    /// "any spell cast this round" flag: this engine's nearest analogue,
-    /// `combat_action_result`, is cleared before **every** dispatch under
-    /// `§6.3`, which is a different lifetime, so no clear is issued here
-    /// rather than asserting a mapping the spec does not make.
+    /// *Retracted:* the earlier wording here listed the arms as "wind drift,
+    /// the per-object animation roll, the visibility `[0, 3]` draw", which is
+    /// the reverse order R331 withdraws and the per-tick visibility draw R329
+    /// withdraws.
+    ///
+    /// Of the bundle's other four items the overlay refresh and the screen
+    /// flush are the frontend's. The remaining two - the "per-slot scratch
+    /// state reset" and the clearing of the "any spell cast this round"
+    /// flag - are **hedged in the specification**: `§7` names both only by
+    /// those phrases and publishes no field layout, no writer and no reader
+    /// for either, in `combat.md` or anywhere else. They are therefore
+    /// modelled here with exactly the published lifetime and nothing more -
+    /// [`PlayState::combat_round_slot_scratch`] is zeroed across all
+    /// thirty-two slots and [`PlayState::combat_spell_cast_this_round`] is
+    /// cleared - rather than being mapped onto an existing field the spec
+    /// does not name. In particular `combat_action_result` is *not* that
+    /// scratch: `§6.3` clears it before **every** dispatch, a different
+    /// lifetime from this once-per-encounter bundle.
     pub fn run_combat_round_loop_entry_prologue_if_needed(&mut self) {
         if !self.combat_active || self.combat_round_loop_prologue_ran {
             return;
@@ -5980,6 +6281,13 @@ impl PlayState {
         self.combat_round_loop_prologue_ran = true;
         self.advance_visual_tick();
         self.mark_visibility_dirty();
+        // `combat.md §7`: "per-slot scratch state reset, and clearing the
+        // 'any spell cast this round' flag". Both follow the tick, which
+        // `§5.3` step 8 fixes as "the prologue's very first action"; the
+        // spec gives no order among the bundle's remaining items and
+        // neither of these draws.
+        self.combat_round_slot_scratch = [0; COMBAT_ACTOR_SLOTS];
+        self.combat_spell_cast_this_round = false;
     }
 
     #[allow(clippy::too_many_arguments)]
@@ -6128,8 +6436,14 @@ impl PlayState {
         // keystroke/command path and the other group to the automatic actor
         // driver, so a party-side actor carrying the controlled/charmed bit
         // takes its turn through the driver instead of the player's prompt.
-        // The earlier reading that any slot carrying the bit is sent to the
-        // player command parser is expressly withdrawn.
+        // The toggle therefore cuts both ways, and `RETRACTIONS.md` R354
+        // is explicit about the monster-side half: the bit "**does** hand a
+        // monster to the player's prompt ... a monster carrying the bit is
+        // dispatched to the keystroke/command path and takes its turns
+        // under player control". That is why an ordinary hostile's melee
+        // miss is silent while a controlled monster's prints `<target>
+        // missed!` - the two reach different narrators, not different
+        // strings.
         let dispatch_group = self.combat_target_group_for_slot(slot);
         // `combat.md §9`: the Negate Time and Quickness gates live "at the head
         // of the automatic actor driver", so they are read only for the group
@@ -6252,19 +6566,31 @@ impl PlayState {
     /// overlays. The secondary coordinate is deliberately not range-checked;
     /// the display surface owns clipping.
     pub fn apply_combat_cursor_blink_tick(&mut self) -> CombatCursorBlinkReport {
-        let mut report = CombatCursorBlinkReport::default();
-
         if self.combat_active {
             self.combat_cursor_blink = !self.combat_cursor_blink;
-            report.cursor_blink_visible = self.combat_cursor_blink;
-            if self.combat_cursor_blink {
-                report.cursor_draw_cell = self.combat_cursor_actor_cell();
-                if report.cursor_draw_cell.is_some() {
-                    report.secondary_marker_cell = self.combat_secondary_marker;
-                }
+        }
+        self.combat_overlay_draw_cells()
+    }
+
+    /// `combat.md §7`: the two overlay coordinates for the current blink
+    /// state, without advancing it. "A dark blink pass, invalid active cell,
+    /// or non-player active group suppresses both overlays."
+    ///
+    /// A frontend that repaints more often than the blink toggles reads this
+    /// so the drawn overlays stay in step with the flag rather than with the
+    /// repaint.
+    pub fn combat_overlay_draw_cells(&self) -> CombatCursorBlinkReport {
+        let mut report = CombatCursorBlinkReport::default();
+        if !self.combat_active {
+            return report;
+        }
+        report.cursor_blink_visible = self.combat_cursor_blink;
+        if self.combat_cursor_blink {
+            report.cursor_draw_cell = self.combat_cursor_actor_cell();
+            if report.cursor_draw_cell.is_some() {
+                report.secondary_marker_cell = self.combat_secondary_marker;
             }
         }
-
         report
     }
 
@@ -6582,12 +6908,15 @@ impl PlayState {
         attacker_slot: usize,
     ) -> CombatMonsterAttackInputs {
         let _ = attacker_slot;
+        // `combat.md §12` stage one, monster row: "the class's **attack
+        // byte, used flat**, with **no random draw at all**", so no
+        // damage draw is taken here - `RETRACTIONS.md` R336.
+        // `combat.md §12` stage two reads the defender's own rating, so
+        // it is taken from the target record at resolution time rather
+        // than pre-drawn here: the AI's target is not chosen yet, and the
+        // rating is a record read, not a draw.
         CombatMonsterAttackInputs {
-            // `combat.md §12`: only a fallback - the resolver reads the
-            // defender's own cached `+0x18` byte when the roster carries one.
-            party_defender_rating: CHARACTER_DEFENSE_FACTORY_SEED,
-            hit_roll: self.random_range_u8(0, u8::MAX),
-            damage_roll: self.random_range_u8(0, u8::MAX),
+            hit_raw_roll_0_to_60: self.random_range_u8(0, COMBAT_SKEWED_ROLL_RAW_MAX),
             poison_gate_accepts: self.random_mod_u8(2) == 0,
             poison_damage_roll: self.random_mod_u8(20),
             forced_hit: None,
@@ -6779,6 +7108,350 @@ impl PlayState {
             self.advance_turn_with_minutes(tick.advance_time_minutes);
         }
         tick
+    }
+
+    /// `combat.md §8.2`: the attempt list one `A` produces for a
+    /// keyboard-driven combatant. Only party-side slots reach the command
+    /// prompt (`§6.1a`), so the readied-equipment scan is the party record's;
+    /// a slot with no roster equipment takes the published bare-handed
+    /// attempt.
+    pub fn combat_attack_attempts_for_actor(&self, actor_slot: usize) -> Vec<CombatAttackAttempt> {
+        self.combat_roster_slot_for_actor_slot(actor_slot)
+            .and_then(|roster_slot| self.party_equipment.get(roster_slot))
+            .map(combat_attack_attempts)
+            .unwrap_or_else(|| vec![CombatAttackAttempt::bare_handed()])
+    }
+
+    pub fn combat_actor_cell(&self, slot: usize) -> Option<(u8, u8)> {
+        let actor = self.combat_actors.get(slot).copied()?;
+        (usize::from(actor.x) < COMBAT_ARENA_SIDE && usize::from(actor.y) < COMBAT_ARENA_SIDE)
+            .then_some((actor.x, actor.y))
+    }
+
+    /// `combat.md §8.2` adjacent-attacker interference gate for the five
+    /// missile items. "The engine keeps, per combatant, the identity of
+    /// whichever actor most recently struck that combatant" - the same
+    /// per-slot map `magic.md §7` reads for `C`-Cast - and the abort fires
+    /// only when that actor "is on the automatic-driver side", is "neither
+    /// invisible nor asleep", Negate Time is inactive, and "its distance
+    /// from the attacker is exactly one".
+    pub fn combat_attack_interference_source_for_slot(
+        &self,
+        attacker_slot: usize,
+    ) -> Option<usize> {
+        let source_slot = usize::from(*self.combat_interference_sources.get(attacker_slot)?);
+        let attacker = self.combat_actors.get(attacker_slot).copied()?;
+        let source = self.combat_actors.get(source_slot).copied();
+        // "**An adjacent ordinary party member never interferes**": the test
+        // is which dispatch path the source runs on, not which side it
+        // fights for, so a party member carrying the controlled/charmed bit
+        // does interfere (`§6.1a`).
+        let source_on_automatic_driver_side = source
+            .is_some_and(|source| !combat_slot_takes_player_command_path(source_slot, source));
+        let negate_time_active = active_effect_is_active(
+            self.active_effect_tag,
+            self.active_effect_counter,
+            NEGATE_TIME_ACTIVE_EFFECT_TAG,
+        );
+
+        combat_attack_interference_aborts(
+            attacker,
+            source,
+            source_on_automatic_driver_side,
+            negate_time_active,
+        )
+        .then_some(source_slot)
+    }
+
+    /// `combat.md §8.2` cursor confirmation lookup: "it looks for an actor
+    /// occupying the cursor cell; if there is none, or the occupant is
+    /// dead-marked, invisible, or an empty/decoration slot, it prints
+    /// `Nothing!`. **The occupancy lookup does not filter by side**, so
+    /// confirming on a party member's cell attacks that party member."
+    ///
+    /// That exclusion list is exhaustive, and the asleep/magically-disabled
+    /// bit (`§6.1` bit `0x08`) is not on it, so this uses the no-status-term
+    /// predicate. `§7.1` says a non-acting actor "is returned by the
+    /// cell-occupancy lookup, so it can be **targeted, attacked and killed
+    /// normally**", and `§11`'s worked example computes a score against "**An
+    /// asleep defender**" rather than skipping it - "with the defender rating
+    /// floored to one the score is 2, 2, 1, 1 and 0 ... giving **98.4 %**, not
+    /// 100 %". `§5`/`§6.1` also pre-set `0x08` on every seated party member
+    /// whose status byte is not `'G'` or `'P'`, so a status filter here would
+    /// break "confirming on a party member's cell attacks that party member"
+    /// as well.
+    pub fn combat_targeting_occupant_at(&self, cell: (u8, u8)) -> Option<usize> {
+        self.combat_actors
+            .iter()
+            .copied()
+            .enumerate()
+            .take(COMBAT_ACTOR_SLOTS)
+            .find(|(_, actor)| {
+                actor.x == cell.0
+                    && actor.y == cell.1
+                    && combat_actor_is_present_not_dead(*actor)
+                    && !actor.is_hidden_or_unrevealed()
+                    && !combat_actor_is_passive_placement(*actor)
+            })
+            .map(|(slot, _)| slot)
+    }
+
+    /// Resolve one confirmed targeting-cursor attempt against the occupant
+    /// of the cursor cell. `combat.md §11` owns the resolution itself; this
+    /// only routes the attempt's own readied item into it.
+    pub fn resolve_and_apply_combat_targeting_attack(
+        &mut self,
+        attacker_slot: usize,
+        target_slot: usize,
+        item_id: usize,
+        inputs: Option<CombatPlayerWeaponAttackInputs>,
+    ) -> Option<CombatWeaponAttackApplication> {
+        let inputs =
+            inputs.unwrap_or_else(|| self.combat_player_weapon_attack_inputs(attacker_slot));
+        self.resolve_and_apply_combat_player_attack(
+            attacker_slot,
+            target_slot,
+            Some(item_id),
+            inputs,
+        )
+    }
+
+    /// The cursor's `combat.md §8.2` bare-handed arm: "A character with no
+    /// qualifying item makes a single bare-handed attempt, which behaves as
+    /// melee with range one."
+    pub fn resolve_and_apply_combat_targeting_bare_handed_attack(
+        &mut self,
+        attacker_slot: usize,
+        target_slot: usize,
+        inputs: Option<CombatPlayerWeaponAttackInputs>,
+    ) -> Option<CombatWeaponAttackApplication> {
+        let inputs =
+            inputs.unwrap_or_else(|| self.combat_player_weapon_attack_inputs(attacker_slot));
+        self.resolve_and_apply_combat_player_attack(attacker_slot, target_slot, None, inputs)
+    }
+
+    /// `combat.md §8.2`: open the `A`-Attack walk. Each attempt "prints
+    /// `Attack-` and then consults the item's **reach** ... Immediately
+    /// before the cursor opens the engine prints `Aim! `", and the five
+    /// missile items run the interference abort first, which "opens no
+    /// cursor" for that attempt.
+    ///
+    /// `foes_present` is the caller's census of live non-party actors taken
+    /// when the `A` was accepted. `combat.md §7` prints `VICTORY!` when
+    /// "party actors remain and foes do not", and a multi-attempt walk can
+    /// kill the last foe on a non-final attempt, so the answer is captured
+    /// once for the whole walk instead of being re-asked per keystroke.
+    pub fn begin_combat_attack_walk(
+        &mut self,
+        actor_slot: usize,
+        foes_present: bool,
+    ) -> CombatAttackWalkApplication {
+        let attempts = self.combat_attack_attempts_for_actor(actor_slot);
+        self.active_combat_targeting = None;
+        self.open_combat_attack_attempt(actor_slot, attempts, 0, foes_present)
+    }
+
+    /// Walk attempts from `index` until one opens its cursor or the list is
+    /// exhausted.
+    fn open_combat_attack_attempt(
+        &mut self,
+        actor_slot: usize,
+        attempts: Vec<CombatAttackAttempt>,
+        mut index: usize,
+        foes_present_at_walk_start: bool,
+    ) -> CombatAttackWalkApplication {
+        let mut text = String::new();
+        // `combat.md §7`: the overlay marker is drawn "at an explicit arena
+        // X/Y" only while its flag is set, and the base viewport repaint of
+        // the next pass "removes both old shapes". No cursor is open here
+        // until one is opened below, so the coordinate is dropped first.
+        self.combat_secondary_marker = None;
+        let Some(attacker) = self.combat_actor_cell(actor_slot) else {
+            self.active_combat_targeting = None;
+            return CombatAttackWalkApplication {
+                text,
+                cursor_open: false,
+                attack: None,
+            };
+        };
+        while let Some(attempt) = attempts.get(index).copied() {
+            if let Some(line) = combat_attack_item_line(&attempts, index) {
+                text.push_str(&line);
+            }
+            text.push_str(COMBAT_ATTACK_LABEL);
+            if attempt.runs_interference
+                && let Some(source_slot) =
+                    self.combat_attack_interference_source_for_slot(actor_slot)
+            {
+                text.push('\n');
+                // `combat.md §8.2`: "the interfering actor's name". The
+                // engine's one combat name lookup already serves every other
+                // narrated actor, so no second naming policy is introduced
+                // here.
+                text.push_str(&crate::input_dispatch::combat_actor_display_name(
+                    self,
+                    source_slot,
+                ));
+                text.push_str(COMBAT_INTERFERES_TAIL);
+                index += 1;
+                continue;
+            }
+            text.push_str(COMBAT_ATTACK_AIM_PROMPT);
+            // `combat.md §8.2`: the cursor "starts on **the attacker's**
+            // remembered previous target", so the lookup is keyed by the
+            // attacking slot.
+            let remembered = self
+                .combat_remembered_targets
+                .get(actor_slot)
+                .copied()
+                .flatten()
+                .and_then(|slot| self.combat_actors.get(usize::from(slot)).copied());
+            let cursor = combat_targeting_cursor_start(attacker, remembered, attempt.max_range);
+            self.active_combat_targeting = Some(CombatTargetingCursorSession {
+                actor_slot,
+                attempts,
+                index,
+                attacker,
+                cursor,
+                max_range: attempt.max_range,
+                melee_arm: attempt.melee_arm,
+                foes_present_at_walk_start,
+            });
+            // `combat.md §7` combat-overlay tail: after the player cursor
+            // box, "a separate flag can then draw an additional marker at an
+            // explicit arena X/Y", composed second so it "wins wherever the
+            // two overlays coincide". The open `§8.2` targeting cursor is
+            // what supplies that coordinate: it is the one arena X/Y the
+            // published contract lets the player move independently of the
+            // acting character's own cell, and §7 asks a flag with no
+            // reader or no producer to be treated as evidence the contract
+            // is not real. Filed as a spec question all the same, because
+            // §7 names the reader and not the producer.
+            self.combat_secondary_marker = Some(cursor);
+            self.mark_visibility_dirty();
+            return CombatAttackWalkApplication {
+                text,
+                cursor_open: true,
+                attack: None,
+            };
+        }
+        self.active_combat_targeting = None;
+        CombatAttackWalkApplication {
+            text,
+            cursor_open: false,
+            attack: None,
+        }
+    }
+
+    /// `combat.md §8.2` cursor loop body: feed one keystroke to the open
+    /// targeting cursor. Returns `None` when no cursor is open.
+    pub fn apply_combat_targeting_cursor_key(
+        &mut self,
+        key: char,
+    ) -> Option<CombatAttackWalkApplication> {
+        self.apply_combat_targeting_cursor_key_with_inputs(key, None)
+    }
+
+    /// [`Self::apply_combat_targeting_cursor_key`] with the confirmed
+    /// attempt's to-hit and damage draws supplied, for deterministic tests.
+    pub fn apply_combat_targeting_cursor_key_with_inputs(
+        &mut self,
+        key: char,
+        inputs: Option<CombatPlayerWeaponAttackInputs>,
+    ) -> Option<CombatAttackWalkApplication> {
+        let session = self.active_combat_targeting.clone()?;
+        let action = resolve_combat_targeting_cursor_key(
+            combat_targeting_cursor_input(key),
+            session.cursor,
+            session.attacker,
+            session.max_range,
+        );
+        match action {
+            // "If either test fails the cursor simply does not move: no
+            // message, no beep, no turn consumed, and the loop reads another
+            // key."
+            CombatTargetingCursorAction::Held => Some(CombatAttackWalkApplication {
+                text: String::new(),
+                cursor_open: true,
+                attack: None,
+            }),
+            CombatTargetingCursorAction::Moved(cell) => {
+                if let Some(open) = self.active_combat_targeting.as_mut() {
+                    open.cursor = cell;
+                }
+                // `combat.md §7`: the marker follows the cursor cell, and
+                // the next pass's base repaint erases the old shape.
+                self.combat_secondary_marker = Some(cell);
+                self.mark_visibility_dirty();
+                Some(CombatAttackWalkApplication {
+                    text: String::new(),
+                    cursor_open: true,
+                    attack: None,
+                })
+            }
+            // "On cancel the engine prints `Nothing!` (melee arm) or returns
+            // silently (ranged arm)." The turn is still spent: "cancelling
+            // with Escape or Space does not return to the command prompt and
+            // does not give the turn back."
+            CombatTargetingCursorAction::Cancelled => {
+                let mut walk = self.close_combat_attack_attempt(&session);
+                if session.melee_arm {
+                    walk.text.insert_str(0, COMBAT_TARGETING_NOTHING_LINE);
+                }
+                Some(walk)
+            }
+            CombatTargetingCursorAction::Confirmed(cell) => {
+                let target_slot = self.combat_targeting_occupant_at(cell);
+                let item_id = session.attempt().and_then(|attempt| attempt.item_id);
+                let attack = target_slot.and_then(|target_slot| {
+                    // `combat.md §8.2`: the cursor "starts on **the
+                    // attacker's** remembered previous target", so a
+                    // confirmation that found an occupant is what that
+                    // attacker remembers next time.
+                    if let Some(entry) = self.combat_remembered_targets.get_mut(session.actor_slot)
+                    {
+                        *entry = u8::try_from(target_slot).ok();
+                    }
+                    match item_id {
+                        Some(item_id) => self.resolve_and_apply_combat_targeting_attack(
+                            session.actor_slot,
+                            target_slot,
+                            item_id,
+                            inputs,
+                        ),
+                        // `combat.md §8.2`: a character with no qualifying
+                        // item "makes a single bare-handed attempt, which
+                        // behaves as melee with range one". It resolves like
+                        // any other melee attempt (`§11`, `§12`); there is no
+                        // readied item to look a row up for.
+                        None => self.resolve_and_apply_combat_targeting_bare_handed_attack(
+                            session.actor_slot,
+                            target_slot,
+                            inputs,
+                        ),
+                    }
+                });
+                let mut walk = self.close_combat_attack_attempt(&session);
+                match target_slot {
+                    Some(target_slot) => walk.attack = attack.map(|attack| (target_slot, attack)),
+                    None => walk.text.insert_str(0, COMBAT_TARGETING_NOTHING_LINE),
+                }
+                Some(walk)
+            }
+        }
+    }
+
+    fn close_combat_attack_attempt(
+        &mut self,
+        session: &CombatTargetingCursorSession,
+    ) -> CombatAttackWalkApplication {
+        self.active_combat_targeting = None;
+        self.open_combat_attack_attempt(
+            session.actor_slot,
+            session.attempts.clone(),
+            session.index + 1,
+            session.foes_present_at_walk_start,
+        )
     }
 }
 
@@ -7087,5 +7760,123 @@ mod combat_death_batch_tests {
             assert!(!state.combat_actors[0].is_controlled(), "item {item_id}");
             assert_eq!(state.active_player, Some(0), "item {item_id}");
         }
+    }
+
+    fn framed_combat_state() -> PlayState {
+        let mut state = world_state(open_world_grid(), 10, 20);
+        state
+            .enter_combat_frame(
+                vec![ActiveObject::empty(); COMBAT_ACTOR_SLOTS],
+                [CombatActorDescriptor::empty(); COMBAT_ACTOR_SLOTS],
+            )
+            .unwrap();
+        state
+    }
+
+    /// `combat.md §4` restore phase, first bullet: "If the resident
+    /// tile-restoration flag is set when the round loop returns, clear that
+    /// flag and invoke the display driver's tile-graphics
+    /// save/restore/mutation entry with mode value `1` before the ordinary
+    /// world redraw."
+    #[test]
+    fn a_set_tile_restoration_flag_clears_and_calls_the_driver_restore_on_frame_exit() {
+        let mut state = framed_combat_state();
+        state.tile_restoration_pending = true;
+        let restores_before = state.pending_driver_tile_graphics_restores;
+
+        state.apply_combat_round_loop_exit(CombatRoundLoopExit::LeaveCombat);
+
+        assert!(
+            !state.tile_restoration_pending,
+            "the framer clears the resident flag it sampled"
+        );
+        assert_eq!(
+            state.pending_driver_tile_graphics_restores,
+            restores_before + 1,
+            "the driver tile-graphics restore is invoked exactly once"
+        );
+    }
+
+    /// The same bullet is conditional: a clear flag reaches no driver call
+    /// at all, and the flag is not something combat sets for itself
+    /// (`dungeon-mode.md §14.1` owns the setter).
+    #[test]
+    fn a_clear_tile_restoration_flag_invokes_no_driver_restore() {
+        let mut state = framed_combat_state();
+        assert!(!state.tile_restoration_pending);
+
+        state.apply_combat_round_loop_exit(CombatRoundLoopExit::LeaveCombat);
+
+        assert!(!state.tile_restoration_pending);
+        assert_eq!(state.pending_driver_tile_graphics_restores, 0);
+    }
+
+    /// `combat.md §5.3`, closing line: "One consumer outside this window,
+    /// for completeness: the turn-clock advance run after combat ends is
+    /// itself a draw consumer, sitting between the encounter and the next
+    /// outdoor turn."
+    #[test]
+    fn combat_exit_runs_the_post_combat_turn_clock_advance() {
+        for exit in [
+            CombatRoundLoopExit::LeaveCombat,
+            CombatRoundLoopExit::Victory,
+            CombatRoundLoopExit::Defeat,
+        ] {
+            let mut state = framed_combat_state();
+            let turn_before = state.turn;
+            let clock_before = (state.clock.day, state.clock.hour, state.clock.minute);
+
+            state.apply_combat_round_loop_exit(exit);
+
+            assert_eq!(
+                state.turn,
+                turn_before + 1,
+                "{exit:?}: the post-combat turn advance did not run"
+            );
+            assert_ne!(
+                (state.clock.day, state.clock.hour, state.clock.minute),
+                clock_before,
+                "{exit:?}: the turn *clock* did not advance"
+            );
+        }
+    }
+
+    /// `combat.md §7`, "Loop-entry prologue": the bundle is "screen redraw,
+    /// combat-begin overlay refresh, screen flush, per-slot scratch state
+    /// reset, and clearing the \"any spell cast this round\" flag".
+    ///
+    /// `§7` publishes no reader, writer or layout for either of those last
+    /// two, so this asserts exactly the published lifetime: both are cleared
+    /// by the prologue, and - since "the prologue runs once per entry into
+    /// the round loop, and the loop is entered once per encounter" - neither
+    /// is cleared again on a later dispatch in the same encounter.
+    #[test]
+    fn the_round_loop_prologue_resets_slot_scratch_and_clears_the_spell_cast_flag() {
+        let mut state = world_state(open_world_grid(), 10, 20);
+        state.combat_active = true;
+        state.combat_round_loop_prologue_ran = false;
+        state.combat_round_slot_scratch = [0xaa; COMBAT_ACTOR_SLOTS];
+        state.combat_spell_cast_this_round = true;
+
+        state.run_combat_round_loop_entry_prologue_if_needed();
+
+        assert_eq!(
+            state.combat_round_slot_scratch, [0; COMBAT_ACTOR_SLOTS],
+            "the prologue resets the per-slot scratch state on all thirty-two slots"
+        );
+        assert!(
+            !state.combat_spell_cast_this_round,
+            "the prologue clears the any-spell-cast-this-round flag"
+        );
+
+        // Once per encounter, not once per round: the sweep restart jumps
+        // back past the prologue, so a second call changes nothing.
+        state.combat_round_slot_scratch = [0xaa; COMBAT_ACTOR_SLOTS];
+        state.combat_spell_cast_this_round = true;
+
+        state.run_combat_round_loop_entry_prologue_if_needed();
+
+        assert_eq!(state.combat_round_slot_scratch, [0xaa; COMBAT_ACTOR_SLOTS]);
+        assert!(state.combat_spell_cast_this_round);
     }
 }

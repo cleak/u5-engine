@@ -708,6 +708,7 @@ impl PlayState {
             self.player.transport = TransportState::Foot;
             self.sail_cadence = 0;
             self.sail_stall_pending = false;
+            self.sail_cached_direction = None;
             self.grid = return_world.grid;
             self.natural_moongate_live_cells.clear();
             self.npcs.clear();
@@ -717,6 +718,14 @@ impl PlayState {
             self.clear_open_town_door_state();
             self.pending_town_arrest = None;
             self.active_blackthorn = None;
+            // `moons.md §3`, refresh cadence: the strip renderer's callers are
+            // "every overworld scene entry; every town-family scene entry; the
+            // per-turn cleanup pass, when that pass observes the hour changing".
+            // This is an overworld scene entry, so the cached pair is rewritten
+            // here as well - a town or dungeon exit that left the restored pair
+            // standing would send the next natural gate to the wrong Moonstone
+            // slot (`formats/saved-gam.md §5.1`).
+            self.refresh_cached_moon_glyphs_at_scene_entry();
             self.mode_zero_cleanup();
             self.mark_visibility_dirty();
             self.message = format!(
@@ -774,6 +783,10 @@ impl PlayState {
             self.player.transport = self.player.transport.with_ship_sails_furled();
             self.sail_cadence = 0;
             self.sail_stall_pending = false;
+            // `overworld.md §6.2.5`: docking "prints `Docked!`, changes the
+            // marker to the same-facing furled frigate, clears the sailing
+            // cache, refuses the coordinate step".
+            self.sail_cached_direction = None;
             self.sync_player_object();
             self.mark_visibility_dirty();
             self.message = "Docked!".to_string();

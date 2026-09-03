@@ -3879,17 +3879,156 @@ fn combat_actor_range_uses_truncated_euclidean_arena_distance() {
 }
 
 #[test]
-fn combat_hit_roll_uses_strict_public_score_comparison() {
-    assert_eq!(combat_to_hit_score(30, 10), 25);
-    assert!(resolve_combat_hit(30, 10, 24));
-    assert!(!resolve_combat_hit(30, 10, 25));
+fn combat_hit_score_adds_the_defender_rating_and_subtracts_the_attacker() {
+    // `combat.md` Section 11 "The score": "With `A` the attacker's rating
+    // and `D` the defender's rating, `S = truncate_toward_zero((D - A +
+    // 30) / 2)`. **The defender's rating is the added term and the
+    // attacker's is the subtracted one**."
+    //
+    // `RETRACTIONS.md` R334 withdraws the `(attacker - defender + 30) / 2`
+    // this test used to pin: "The operands are the other way round", and
+    // with R232's `roll >= score` the old text "inverts who is favoured on
+    // **every** ordinary melee and ranged/effect attack in both
+    // directions". The old assertions here (`combat_to_hit_score(30, 10)
+    // == 25`, a hit on a roll strictly below the score) are removed under
+    // that retraction.
+    assert_eq!(COMBAT_TO_HIT_BIAS, 30);
+    assert_eq!(combat_to_hit_score(30, 10), 5);
+    assert_eq!(combat_to_hit_score(10, 30), 25);
+    // Signed and unclamped, truncating toward zero.
+    assert_eq!(combat_to_hit_score(99, 0), -34);
+    assert_eq!(combat_to_hit_score(0, 255), 142);
+    assert_eq!(combat_to_hit_score(0, 1), 15);
+    assert_eq!(combat_to_hit_score(1, 0), 14);
 
-    assert_eq!(combat_to_hit_score(0, 99), -34);
-    assert!(!resolve_combat_hit(0, 99, 0));
+    // "**The hit is accepted when `R >= S`.** The score is a difficulty
+    // number: a larger score is a *worse* chance to hit."
+    assert!(resolve_combat_hit(10, 30, 25));
+    assert!(!resolve_combat_hit(10, 30, 24));
 
-    assert_eq!(combat_to_hit_score(255, 0), 142);
-    assert!(resolve_combat_hit(255, 0, 141));
-    assert!(!resolve_combat_hit(255, 0, 142));
+    // "a score of `1` or less always hits, and a score of `31` or more
+    // always misses" - the draw never leaves `1..=30`.
+    for raw in 0..=COMBAT_SKEWED_ROLL_RAW_MAX {
+        assert!(resolve_combat_hit_from_raw_roll(58, 30, raw));
+        assert!(!resolve_combat_hit_from_raw_roll(0, 32, raw));
+    }
+}
+
+#[test]
+fn combat_hit_helper_reproduces_the_published_per_score_hit_table() {
+    // `combat.md` Section 11: "For `2 <= S <= 30` the **idealised** chance
+    // to hit is `(2 * (30 - S) + 1) / 61`", tabulated for scores 2, 5, 7,
+    // 8, 9, 12, 15, 20, 22, 25 and 30. Counting the sixty-one underlying
+    // `0..=60` values reproduces the table exactly, which is the check
+    // that the shared skewed helper - not a uniform `1..30` draw and not a
+    // `0..255` byte - is the one wired into the score.
+    let published: [(i16, f64); 11] = [
+        (2, 0.934),
+        (5, 0.836),
+        (7, 0.770),
+        (8, 0.738),
+        (9, 0.705),
+        (12, 0.607),
+        (15, 0.508),
+        (20, 0.344),
+        (22, 0.279),
+        (25, 0.180),
+        (30, 0.016),
+    ];
+    for (score, expected) in published {
+        // Any rating pair with this score; the helper reads only `D - A`.
+        let defender = u8::try_from(score * 2 - 30 + 30).unwrap();
+        assert_eq!(combat_to_hit_score(30, defender), score);
+        let hits = (0..=COMBAT_SKEWED_ROLL_RAW_MAX)
+            .filter(|raw| resolve_combat_hit_from_raw_roll(30, defender, *raw))
+            .count();
+        let realised = hits as f64 / 61.0;
+        assert!(
+            (realised - expected).abs() < 0.001,
+            "score {score}: helper gives {realised:.3}, spec table {expected:.3}"
+        );
+        assert_eq!(
+            hits as f64,
+            f64::from(2 * (30 - i32::from(score as i16)) + 1),
+            "score {score} must match `(2 * (30 - S) + 1) / 61`"
+        );
+    }
+}
+
+#[test]
+fn combat_rating_selector_returns_the_published_arm_per_side() {
+    // `combat.md` Section 11 "Which rating each side supplies": the
+    // defender term is always the actor's combat weight; the attacker term
+    // is the class combat tier for the six `zero-selector stat row`
+    // classes, its own combat weight for any other monster, Strength for
+    // the five strength-arm items, and the character's combat weight
+    // otherwise. `RETRACTIONS.md` R337: "The selector has **four**
+    // class-side arms, not two, and an ordinary melee or ranged/effect
+    // to-hit reads **neither** of these bytes for forty-two of the
+    // forty-eight classes."
+    assert_eq!(
+        COMBAT_TO_HIT_STRENGTH_ARM_ITEM_IDS,
+        [3, 6, 18, 24, 31],
+        "Spiked Helm, Spiked Shield, Club, Mace, 2H Hammer"
+    );
+    for (id, name) in [
+        (3usize, "Spiked Helm"),
+        (6, "Spiked Shield"),
+        (18, "Club"),
+        (24, "Mace"),
+        (31, "2H Hammer"),
+    ] {
+        assert_eq!(EQUIPMENT_NAMES[id], name);
+        assert!(combat_to_hit_item_selects_strength(id));
+        assert_eq!(combat_party_attacker_rating(Some(id), 15, 20), 15);
+    }
+    // "Every other readied item, and bare hands, leaves the attacker term
+    // as Dexterity" - the shipped starting weapon included.
+    assert!(!combat_to_hit_item_selects_strength(30));
+    assert_eq!(combat_party_attacker_rating(Some(30), 15, 20), 20);
+    assert_eq!(combat_party_attacker_rating(None, 15, 20), 20);
+
+    // The six zero-selector-stat-row classes supply the class tier.
+    for class in [26u8, 27, 30, 32, 35, 36] {
+        let stats = combat_class_stats(class).unwrap();
+        assert!(combat_class_traits(class).unwrap().zero_selector_stat_row);
+        assert_eq!(
+            combat_monster_attacker_rating(class, 29),
+            Some(stats.tier),
+            "{} takes the class tier arm",
+            stats.name
+        );
+    }
+    // Every other class, "Bat included, feeds its combat weight into the
+    // attacker term".
+    let zero_selector = (0..=47u8)
+        .filter(|class| {
+            combat_class_traits(*class).is_some_and(|traits| traits.zero_selector_stat_row)
+        })
+        .count();
+    assert_eq!(zero_selector, 6);
+    assert_eq!(combat_monster_attacker_rating(21, 29), Some(29));
+    assert_ne!(combat_class_stats(21).unwrap().tier, 29);
+}
+
+#[test]
+fn automatic_driver_party_attacker_score_collapses_to_fifteen() {
+    // `combat.md` Section 11 "Boundary: an automatic-driver party attacker
+    // has a fixed score of 15": the stale selector value "is precisely the
+    // defender rating it returned a moment earlier. The score therefore
+    // collapses to `(D - D + 30) / 2 = 15`", "about **50.8 %** of the time
+    // whatever either combatant's stats are".
+    assert_eq!(COMBAT_AUTOMATIC_DRIVER_PARTY_ATTACKER_SCORE, 15);
+    for rating in 0..=255u8 {
+        assert_eq!(
+            combat_to_hit_score(rating, rating),
+            COMBAT_AUTOMATIC_DRIVER_PARTY_ATTACKER_SCORE
+        );
+    }
+    let hits = (0..=COMBAT_SKEWED_ROLL_RAW_MAX)
+        .filter(|raw| resolve_combat_hit_from_raw_roll(15, 15, *raw))
+        .count();
+    assert!((hits as f64 / 61.0 - 0.508).abs() < 0.001);
 }
 
 #[test]
@@ -4500,29 +4639,42 @@ fn weapon_attack_resolver_applies_melee_and_ranged_range_gates() {
     assert_eq!(resolve_combat_weapon_attack_range_route(5, 4, 7), None);
     assert_eq!(resolve_combat_weapon_attack_range_route(2, 0, 7), None);
 
+    // A Club (id 18) against a defence-zero target: score
+    // `(10 - 30 + 30) / 2 = 5`, and a raw draw of 60 is the top of the
+    // skewed band, so the swing lands. `combat.md` Section 12: the
+    // defence rating of zero means "no draw at all and subtracts nothing".
     assert_eq!(
-        resolve_combat_equipment_weapon_attack(18, 1, 30, 10, 24, 7, None),
+        resolve_combat_equipment_weapon_attack(18, 1, 30, 10, 0, 60, 7, 0, None),
         Some(CombatWeaponAttackResolution::Hit {
             route: CombatWeaponAttackRangeRoute::Melee,
             raw_damage: 8,
         })
     );
+    // The same swing against a defence rating of 7 subtracts an inclusive
+    // `1..7` draw: roll byte 3 gives 4, so 8 - 4 = 4.
     assert_eq!(
-        resolve_combat_equipment_weapon_attack(17, 4, 30, 10, 24, 5, None),
+        resolve_combat_equipment_weapon_attack(18, 1, 30, 10, 7, 60, 7, 3, None),
+        Some(CombatWeaponAttackResolution::Hit {
+            route: CombatWeaponAttackRangeRoute::Melee,
+            raw_damage: 4,
+        })
+    );
+    assert_eq!(
+        resolve_combat_equipment_weapon_attack(17, 4, 30, 10, 0, 60, 5, 0, None),
         Some(CombatWeaponAttackResolution::Hit {
             route: CombatWeaponAttackRangeRoute::Ranged { effect_code: 7 },
             raw_damage: 6,
         })
     );
     assert_eq!(
-        resolve_combat_equipment_weapon_attack(17, 5, 30, 10, 24, 5, None),
+        resolve_combat_equipment_weapon_attack(17, 5, 30, 10, 0, 60, 5, 0, None),
         Some(CombatWeaponAttackResolution::OutOfRange {
             target_range: 5,
             range_cap: 4,
         })
     );
     assert_eq!(
-        resolve_combat_equipment_weapon_attack(18, 2, 30, 10, 24, 7, None),
+        resolve_combat_equipment_weapon_attack(18, 2, 30, 10, 0, 60, 7, 0, None),
         Some(CombatWeaponAttackResolution::OutOfRange {
             target_range: 2,
             range_cap: 0,
@@ -4530,45 +4682,234 @@ fn weapon_attack_resolver_applies_melee_and_ranged_range_gates() {
     );
 }
 
+/// `combat.md` Section 12 "The ordinary attack damage roll": two stages,
+/// and "the two sides are not symmetric".
+#[test]
+fn ordinary_damage_roller_uses_a_flat_monster_value_and_a_rolled_party_value() {
+    // "Monster | the class's **attack byte, used flat**, with **no random
+    // draw at all**" - `RETRACTIONS.md` R336: "A Bat brings exactly 6
+    // every time. An engine that rolls `1..attack` for monsters delivers
+    // about 39 % of the original's damage."
+    let bat = combat_class_stats(21).unwrap();
+    assert_eq!(bat.attack_value, 6);
+    for roll in 0..=255u8 {
+        assert_eq!(
+            resolve_combat_attacker_raw_damage(
+                CombatAttackerDamageSource::MonsterFlat {
+                    attack_value: bat.attack_value,
+                },
+                roll,
+            ),
+            Some(CombatAttackerRawDamage {
+                route: CombatWeaponDamageRoute::Damage { raw_damage: 6 },
+                shattered: false,
+            })
+        );
+    }
+
+    // "bare hands are a flat `1`".
+    assert_eq!(
+        resolve_combat_attacker_raw_damage(CombatAttackerDamageSource::PartyBareHands, 200),
+        Some(CombatAttackerRawDamage {
+            route: CombatWeaponDamageRoute::Damage { raw_damage: 1 },
+            shattered: false,
+        })
+    );
+
+    // The party arm keeps the `1..Attack max` roll the item catalog
+    // publishes.
+    assert_eq!(equipment_attack_max(30), Some(15));
+    assert_eq!(
+        resolve_combat_attacker_raw_damage(
+            CombatAttackerDamageSource::PartyItem { item_id: 30 },
+            10,
+        ),
+        Some(CombatAttackerRawDamage {
+            route: CombatWeaponDamageRoute::Damage { raw_damage: 11 },
+            shattered: false,
+        })
+    );
+
+    // "The **Glass Sword** id narrates `Thy sword hath shattered!` and
+    // substitutes the instant-kill sentinel `99`; the **Jeweled Sword** id
+    // forces the raw value to `0` whatever its table entry says."
+    assert_eq!(
+        resolve_combat_attacker_raw_damage(
+            CombatAttackerDamageSource::PartyItem {
+                item_id: EQUIPMENT_GLASS_SWORD,
+            },
+            0,
+        ),
+        Some(CombatAttackerRawDamage {
+            route: CombatWeaponDamageRoute::Special,
+            shattered: true,
+        })
+    );
+    // The Jeweled Sword override is a raw *value* of zero, not a
+    // zero-damage dispatcher row: only the sentinel "short-circuits the
+    // whole roller and returns immediately - **before the defender's
+    // defence byte is read**". `catalogs/item-list.md` Section 5.1: "Id 40
+    // carries `1`, which the same roller overrides to `0` before any
+    // roll", so the dispatcher never sees a zero row for it and stage two
+    // still runs.
+    assert_eq!(equipment_attack_max(EQUIPMENT_JEWELED_SWORD), Some(1));
+    for roll in [0u8, 7, 200, 255] {
+        assert_eq!(
+            resolve_combat_attacker_raw_damage(
+                CombatAttackerDamageSource::PartyItem {
+                    item_id: EQUIPMENT_JEWELED_SWORD,
+                },
+                roll,
+            ),
+            Some(CombatAttackerRawDamage {
+                route: CombatWeaponDamageRoute::Damage { raw_damage: 0 },
+                shattered: false,
+            }),
+            "the override runs before the roll, so no draw changes it"
+        );
+    }
+}
+
+#[test]
+fn defence_subtraction_rolls_one_to_rating_and_skips_a_zero_rating() {
+    // `combat.md` Section 12 stage two: "**When that rating is non-zero
+    // the roller subtracts an inclusive `1..rating` draw; when it is zero
+    // it takes no draw at all and subtracts nothing.**"
+    assert!(!combat_defence_draw_taken(0));
+    assert_eq!(combat_defence_subtraction(0, 200), 0);
+    assert!(combat_defence_draw_taken(7));
+    let mut seen = [false; 8];
+    for roll in 0..=255u8 {
+        let subtracted = combat_defence_subtraction(7, roll);
+        assert!((1..=7).contains(&subtracted));
+        seen[subtracted as usize] = true;
+    }
+    assert!(seen[1..=7].iter().all(|hit| *hit));
+
+    // "a flat subtraction of the rating instead of a roll is not a
+    // near-miss but a different game (against the shipped party defence of
+    // 7 it makes every Bat swing land for `6 - 7`, i.e. exactly zero HP,
+    // forever)" - the seven outcomes of the published Bat table.
+    let bat_attack = i16::from(combat_class_stats(21).unwrap().attack_value);
+    let lost: Vec<i16> = (0..7)
+        .map(|roll| {
+            resolve_combat_damage_after_defence(bat_attack, CHARACTER_DEFENSE_FACTORY_SEED, roll)
+        })
+        .collect();
+    assert_eq!(lost, vec![5, 4, 3, 2, 1, 0, -1]);
+}
+
 #[test]
 fn weapon_attack_resolver_tracks_miss_forced_hit_and_non_damage_routes() {
+    let melee = |attack_value: u8, hit_raw_roll_0_to_60: u8, forced_hit| {
+        resolve_combat_weapon_attack(CombatWeaponAttackInput {
+            source: CombatAttackerDamageSource::MonsterFlat { attack_value },
+            target_range: 1,
+            range_cap: 0,
+            effect_code: 0,
+            attacker_rating: 10,
+            defender_rating: 30,
+            defence_rating: 0,
+            hit_raw_roll_0_to_60,
+            damage_roll: 0,
+            defence_roll: 0,
+            forced_hit,
+        })
+    };
+    // Score `(30 - 10 + 30) / 2 = 25`; the skewed roll of a raw 48 is 24,
+    // one short of the score, so the swing misses.
     assert_eq!(
-        resolve_combat_weapon_attack(6, 1, 0, 0, 30, 10, 25, 5, None),
+        melee(6, 48, None),
         CombatWeaponAttackResolution::Miss {
             route: CombatWeaponAttackRangeRoute::Melee,
             hit_score: 25,
         }
     );
     assert_eq!(
-        resolve_combat_weapon_attack(6, 1, 0, 0, 30, 10, 25, 5, Some(true)),
+        melee(6, 48, Some(true)),
         CombatWeaponAttackResolution::Hit {
             route: CombatWeaponAttackRangeRoute::Melee,
             raw_damage: 6,
         }
     );
     assert_eq!(
-        resolve_combat_weapon_attack(6, 1, 0, 0, 30, 10, 0, 5, Some(false)),
+        melee(6, 60, Some(false)),
         CombatWeaponAttackResolution::Miss {
             route: CombatWeaponAttackRangeRoute::Melee,
             hit_score: 25,
         }
     );
     assert_eq!(
-        resolve_combat_weapon_attack(0, 1, 0, 0, 30, 10, 0, 5, None),
+        melee(0, 60, None),
         CombatWeaponAttackResolution::NoOrdinaryDamage {
             route: CombatWeaponAttackRangeRoute::Melee,
         }
     );
+    // `combat.md` Section 12: the monster row uses its class attack byte
+    // flat and still takes stage two's defence subtraction, so a class byte
+    // that happens to read 99 is a very large ordinary blow. The
+    // instant-kill sentinel belongs to the party arm's per-item overrides.
     assert_eq!(
-        resolve_combat_weapon_attack(99, 1, 0, 0, 30, 10, 0, 5, None),
-        CombatWeaponAttackResolution::Special {
+        melee(99, 60, None),
+        CombatWeaponAttackResolution::Hit {
             route: CombatWeaponAttackRangeRoute::Melee,
+            raw_damage: 99,
         }
     );
     assert_eq!(
-        resolve_combat_equipment_weapon_attack(EQUIPMENT_COUNT, 1, 30, 10, 0, 5, None),
+        resolve_combat_equipment_weapon_attack(EQUIPMENT_COUNT, 1, 30, 10, 0, 0, 5, 0, None),
         None
     );
+    // `combat.md` Section 11 "Always-hit cases ... the always-hit set is
+    // three readied equipment ids - **Sword of Chaos, Glass Sword and
+    // Jeweled Sword**", which `catalogs/item-list.md` Section 5.1 says
+    // "skips the to-hit score entirely". For ids 35 and 39 that outcome is
+    // delivered by stage one rather than by the flag - both "carry the
+    // instant-kill sentinel `99`", so they leave on the `Special` route
+    // before the score is computed. Id 40's override forces a raw *value*
+    // of `0` and still enters the roller, so there the flag is what
+    // carries the attempt past the score. Both cases are shown against the
+    // hopeless rating pair below (score 142, "a score of `31` or more
+    // always misses").
+    assert_eq!(
+        resolve_combat_equipment_weapon_attack(
+            EQUIPMENT_GLASS_SWORD,
+            1,
+            0,
+            255,
+            0,
+            0,
+            0,
+            0,
+            None,
+        ),
+        Some(CombatWeaponAttackResolution::Special {
+            route: CombatWeaponAttackRangeRoute::Melee,
+            shattered: true,
+        })
+    );
+    assert_eq!(
+        resolve_combat_equipment_weapon_attack(
+            EQUIPMENT_JEWELED_SWORD,
+            1,
+            0,
+            255,
+            0,
+            0,
+            0,
+            0,
+            None,
+        ),
+        Some(CombatWeaponAttackResolution::Hit {
+            route: CombatWeaponAttackRangeRoute::Melee,
+            raw_damage: 0,
+        }),
+        "the flag carries the forced-zero raw value past an impossible score"
+    );
+    assert!(EQUIPMENT_ALWAYS_HIT_ITEM_IDS
+        .into_iter()
+        .all(equipment_attack_is_always_hit));
+    assert!(!equipment_attack_is_always_hit(30));
 }
 
 #[test]
@@ -6079,7 +6420,12 @@ fn terrain_combat_victory_rewrites_water_trigger_slot_after_restore() {
             x: 11,
             y: 20,
             z: WorldPlane::Underworld.save_floor(),
-            phase: 0x07,
+            // `combat.md §5.3`, closing line: the post-combat turn-clock
+            // advance runs after the restore, and its active-object pass
+            // steps this slot's animation phase byte once
+            // (`active-objects.md §8`: the pass "writes nothing but the
+            // displayed tile and the packed phase/facing byte").
+            phase: 0x06,
             aux1: WATER_CREATURE_BODY_AUX1,
             aux3: WATER_CREATURE_BODY_AUX3,
         }
@@ -8837,6 +9183,53 @@ fn protection_active_effect_does_not_modify_live_party_spell_defense() {
     );
 }
 
+/// `combat.md §12`: "For party-member defenders, the damage roll reads the
+/// cached combat-defense byte in the character record at offset `+0x18`;
+/// factory-seed records carry value `7`." The seed is what a factory record
+/// holds, not a rule about every record, so the spell-damage arm has to read
+/// the same loaded byte the melee arm reads and not a constant.
+#[test]
+fn spell_damage_reads_the_loaded_party_combat_defense_byte() {
+    let mut state = world_state(open_world_grid(), 10, 20);
+
+    // A roster that is not factory-seeded. Both arms must report the loaded
+    // byte, because 12 gives them one defence term, not two.
+    state.party_combat_defense = vec![3];
+    assert_eq!(state.combat_spell_target_defense_value(0), 3);
+    assert_eq!(state.combat_actor_defence_rating(0), Some(3));
+
+    state.party_combat_defense = vec![0];
+    assert_eq!(state.combat_spell_target_defense_value(0), 0);
+    assert_eq!(state.combat_actor_defence_rating(0), Some(0));
+
+    // A slot the roster does not cover falls back to the published
+    // factory-seed value, matching the melee arm's own fallback.
+    state.party_combat_defense.clear();
+    assert_eq!(
+        state.combat_spell_target_defense_value(0),
+        CHARACTER_DEFENSE_FACTORY_SEED
+    );
+    assert_eq!(
+        state.combat_actor_defence_rating(0),
+        Some(CHARACTER_DEFENSE_FACTORY_SEED)
+    );
+
+    // The monster arm is untouched: it still reads the class defense byte.
+    let monster_slot = COMBAT_PARTY_ACTOR_SLOTS;
+    state.combat_actors[monster_slot] = CombatActorDescriptor::for_monster_placement(
+        combat_class_stats(COMBAT_CLASS_GIANT_RAT).unwrap(),
+        7,
+        4,
+        5,
+        0,
+        0,
+    );
+    assert_eq!(
+        state.combat_spell_target_defense_value(monster_slot),
+        combat_class_stats(COMBAT_CLASS_GIANT_RAT).unwrap().defense
+    );
+}
+
 #[test]
 fn combat_ai_step_vector_uses_axis_sign_and_flee_inversion() {
     assert_eq!(
@@ -8977,6 +9370,11 @@ fn combat_ai_target_picker_allows_status_disabled_targets() {
 
 fn combat_ai_turn_state(monster_x: u8, monster_y: u8) -> PlayState {
     let mut state = world_state(open_world_grid(), 10, 20);
+    // `combat.md` Section 12 stage two reads the defender's own cached
+    // combat-defense byte, and "when it is zero it takes no draw at all".
+    // These fixtures pin PRNG streams, so they state a zero byte on the
+    // roster rather than letting the factory seed add a draw.
+    state.party_combat_defense = vec![0; state.party.len().max(1)];
     state.combat_active = true;
     // `combat.md` Section 5.3 step 8 runs the round-loop entry prologue - one
     // full world tick, whose draw count that table marks "variable and
@@ -9473,9 +9871,7 @@ fn combat_ai_turn_applies_monster_attack_when_attack_inputs_are_supplied() {
             true,
             &[1, 2, 3, 4],
             Some(CombatMonsterAttackInputs {
-                party_defender_rating: 0,
-                hit_roll: 0,
-                damage_roll: 0,
+                hit_raw_roll_0_to_60: 0,
                 forced_hit: Some(true),
                 ..CombatMonsterAttackInputs::default()
             }),
@@ -9529,7 +9925,6 @@ fn negate_magic_skips_enemy_special_hook_but_preserves_ordinary_melee() {
             true,
             &[1, 2, 3, 4],
             Some(CombatMonsterAttackInputs {
-                party_defender_rating: 0,
                 forced_hit: Some(true),
                 ..CombatMonsterAttackInputs::default()
             }),
@@ -9602,7 +9997,6 @@ fn crown_bypasses_enemy_teleport_arm_and_continues_ordinary_step() {
 #[test]
 fn negate_magic_silently_consumes_only_scene_resistant_ranged_effects() {
     let attack_inputs = CombatMonsterAttackInputs {
-        party_defender_rating: 0,
         forced_hit: Some(true),
         ..CombatMonsterAttackInputs::default()
     };
@@ -9896,17 +10290,11 @@ fn combat_round_walk_production_path_applies_amulet_turning_scatter() {
     assert_eq!(state.party[0].hp, 20);
 }
 
-#[test]
-fn combat_round_walk_amulet_turning_scatter_can_hit_adjacent_impact_actor() {
+fn combat_amulet_turning_scatter_state(seed: u16) -> PlayState {
     let mut state = combat_ai_turn_state(8, 5);
     state.combat_actors[8].owner_target_class = 28;
     state.combat_actors[8].phase_counter = 1;
-    // Seed re-chosen after `RETRACTIONS.md` R311 moved the shared stream:
-    // the random-cardinal fallback is drawn lazily instead of four codes up
-    // front, so an AI dispatch that never reaches the fallback no longer
-    // spends four draws. R308's prologue world tick is the presentation-only
-    // one and draws nothing, so it is not why this seed changed.
-    state.prng_state = 0x004e;
+    state.prng_state = seed;
     state.party[0].status = b'G';
     state.party[0].hp = 20;
     state.party[0].max_hp = 20;
@@ -9935,6 +10323,18 @@ fn combat_round_walk_amulet_turning_scatter_can_hit_adjacent_impact_actor() {
         4,
         4,
     ]);
+    state
+}
+
+#[test]
+fn combat_round_walk_amulet_turning_scatter_can_hit_adjacent_impact_actor() {
+    // Seed re-chosen after `RETRACTIONS.md` R334-R336 moved the shared
+    // stream again: the to-hit draw narrowed from a `0..255` byte to the
+    // skewed roll's inclusive `0..=60` raw draw, the monster-side damage
+    // draw disappeared (the class attack byte is used flat), and a
+    // conditional `1..rating` defence draw took its place. The scatter cell
+    // is picked from that stream, so the impact cell moved with it.
+    let mut state = combat_amulet_turning_scatter_state(AMULET_TURNING_SCATTER_SEED);
 
     let application = state.apply_combat_round_walk_from_slot(8, 30, false);
     let monster_attack = application
@@ -9954,16 +10354,44 @@ fn combat_round_walk_amulet_turning_scatter_can_hit_adjacent_impact_actor() {
         .expect("turnable ranged attack should resolve at the scattered impact cell");
 
     assert_eq!(monster_attack.target_slot, 1);
+    let Some(CombatWeaponAttackResolution::Hit {
+        route: CombatWeaponAttackRangeRoute::Ranged { effect_code: 6 },
+        raw_damage,
+    }) = monster_attack.resolution
+    else {
+        panic!("expected a scattered ranged hit, got {:?}", monster_attack.resolution);
+    };
+    // `combat.md` Section 12 (`RETRACTIONS.md` R336): the attacker's raw
+    // value is the class attack byte "used flat, with no random draw at
+    // all", and the party's cached combat-defense byte of 7 then subtracts
+    // an inclusive `1..7` draw. The former expectation of 1 was the
+    // withdrawn `1..attack` monster roll. The fixture seed is fixed, so
+    // both the draw and the blow it leaves are exact.
+    let attack_value = combat_class_stats(28).unwrap().attack_value;
+    assert_eq!(attack_value, AMULET_TURNING_SCATTER_ATTACK_VALUE);
     assert_eq!(
-        monster_attack.resolution,
-        Some(CombatWeaponAttackResolution::Hit {
-            route: CombatWeaponAttackRangeRoute::Ranged { effect_code: 6 },
-            raw_damage: 1,
-        })
+        raw_damage, AMULET_TURNING_SCATTER_RAW_DAMAGE,
+        "the flat attack value less this seed's inclusive 1..7 defence draw"
     );
-    assert_eq!(state.party[0].hp, 20);
-    assert_eq!(state.party[1].hp, 19);
+    assert_eq!(state.party[0].hp, 20, "the intended target is untouched");
+    assert_eq!(
+        state.party[1].hp, AMULET_TURNING_SCATTER_IMPACT_HP,
+        "the scattered impact actor takes the blow"
+    );
 }
+
+/// Class 28's flat attack value (`catalogs/monster-bestiary.md`, the
+/// column `RETRACTIONS.md` R336 renames to **Attack value**).
+const AMULET_TURNING_SCATTER_ATTACK_VALUE: u8 = 10;
+/// That value less the inclusive `1..7` defence draw
+/// [`AMULET_TURNING_SCATTER_SEED`] produces, which is `3`.
+const AMULET_TURNING_SCATTER_RAW_DAMAGE: i16 = 7;
+/// The impact actor's 20 HP less that blow.
+const AMULET_TURNING_SCATTER_IMPACT_HP: u16 = 13;
+
+/// The PRNG seed at which the shipped scatter fixture lands its impact cell
+/// on the second seated party member.
+const AMULET_TURNING_SCATTER_SEED: u16 = 0x0002;
 
 fn combat_player_command_state(monster_x: u8, monster_y: u8) -> PlayState {
     let mut state = combat_ai_turn_state(monster_x, monster_y);
@@ -9971,17 +10399,32 @@ fn combat_player_command_state(monster_x: u8, monster_y: u8) -> PlayState {
     state
 }
 
-fn advance_expected_giant_rat_ai_input_prng(expected_prng: &mut u16) {
+fn advance_expected_giant_rat_ai_input_prng(expected_prng: &mut u16, defence_draw_taken: bool) {
     let _ = u5_prng_range_u16(expected_prng, 0, 1);
     // `combat.md §9` (`RETRACTIONS.md` R311): the random-cardinal fallback
     // draws one attempt at a time and commits the first accepted one, so
     // nothing is pre-rolled here - and an AI dispatch that resolves an
     // attack never reaches the movement arm at all.
-    let _ = u5_prng_range_u16(expected_prng, 0, u16::from(u8::MAX));
-    let _ = u5_prng_range_u16(expected_prng, 0, u16::from(u8::MAX));
+    //
+    // `combat.md §11` (R335): the to-hit draw is the shared skewed roll's
+    // inclusive `0..=60` raw draw, not a `0..255` byte. `§12` (R336): the
+    // monster's raw attack value is its class byte "used flat, with no
+    // random draw at all", so the second byte-wide draw this helper used to
+    // model is gone.
+    let _ = u5_prng_range_u16(expected_prng, 0, u16::from(COMBAT_SKEWED_ROLL_RAW_MAX));
     let _ = u5_prng_range_u16(expected_prng, 0, 1);
     let _ = u5_prng_range_u16(expected_prng, 0, 19);
     let _ = u5_prng_range_u16(expected_prng, 0, 7);
+    // `combat.md §12`: the defence term is an inclusive `1..rating` draw
+    // taken only when the rating is non-zero, and the poison/status branch
+    // returns before the ordinary roller ever asks for it.
+    if defence_draw_taken {
+        let _ = u5_prng_range_u16(
+            expected_prng,
+            0,
+            u16::from(CHARACTER_DEFENSE_FACTORY_SEED - 1),
+        );
+    }
 }
 
 #[test]
@@ -10195,7 +10638,11 @@ fn combat_klimb_vertical_suffix_exits_from_ladder_tile() {
     );
 
     assert_eq!(state.message, "Klimbed up from combat.");
-    assert_eq!(state.active_effect_counter, 2);
+    // `combat.md §5.3`, closing line: "the turn-clock advance run after
+    // combat ends is itself a draw consumer, sitting between the encounter
+    // and the next outdoor turn". That advance ages the timed effect a
+    // second time, so a three-tick Quickness leaves combat at one.
+    assert_eq!(state.active_effect_counter, 1);
     assert!(!state.combat_active);
     assert_eq!(state.pending_combat_actor_slot, None);
 }
@@ -10485,7 +10932,7 @@ fn combat_player_command_ignores_quickness_entirely() {
 }
 
 #[test]
-fn combat_player_command_routes_direction_and_attack_prompt_through_step_primitive() {
+fn combat_player_command_routes_a_bare_direction_through_the_step_primitive() {
     let mut move_state = combat_player_command_state(8, 5);
     move_state.visibility_dirty = false;
 
@@ -10496,7 +10943,6 @@ fn combat_player_command_routes_direction_and_attack_prompt_through_step_primiti
     assert_eq!(
         moved.action,
         CombatPlayerCommandAction::StepOrAttack {
-            prompted_attack: false,
             direction_code: 2,
             outcome: CombatStepOrAttackPrimitiveOutcome::Moved {
                 commit: CombatLinkedPositionCommitOutcome {
@@ -10521,57 +10967,570 @@ fn combat_player_command_routes_direction_and_attack_prompt_through_step_primiti
         (6, 5)
     );
     assert!(move_state.visibility_dirty);
+}
 
+/// `combat.md §8.2`: "accepting Attack opens a second, separate input read,
+/// and it is not a one-shot direction key but an **interactive targeting
+/// cursor**". `A` itself only opens it — "Immediately before the cursor
+/// opens the engine prints `Aim! `" — and consumes no randomness.
+#[test]
+fn combat_attack_opens_the_targeting_cursor_and_prints_aim() {
     let mut attack_state = combat_player_command_state(6, 5);
     attack_state.combat_terrain[5][5] = 0x05;
     attack_state.visibility_dirty = false;
     attack_state.party_equipment = default_party_equipment(1);
-    attack_state.party_equipment[0][EQUIP_SLOT_RING] = EQUIPMENT_ID_RING_REGENERATION as u8;
-    attack_state.party[0].hp = attack_state.party[0].hp.saturating_sub(1);
+    attack_state.party_equipment[0][EQUIP_SLOT_WEAPON] = 16;
     attack_state.prng_state = 0x0030;
     let prng_before_prompt = attack_state.prng_state;
+
     let prompted = attack_state
         .apply_combat_player_command_with_inputs(0, CombatPlayerCommandInput::Key('A'))
         .unwrap();
+
     assert_eq!(
         prompted.action,
-        CombatPlayerCommandAction::PromptForAttackDirection
+        CombatPlayerCommandAction::OpenTargetingCursor
     );
     assert_eq!(prompted.ring_pass, None);
     assert_eq!(attack_state.prng_state, prng_before_prompt);
 
-    let attacked = attack_state
-        .apply_combat_player_command_with_attack_inputs(
+    let walk = attack_state.begin_combat_attack_walk(0, true);
+
+    // Exactly one item qualifies, so no item-name line is printed.
+    assert_eq!(walk.text, "Attack-Aim! ");
+    assert!(walk.cursor_open);
+    // "It starts ... on the attacker's own cell" when nothing is remembered.
+    let session = attack_state.active_combat_targeting.clone().unwrap();
+    assert_eq!(session.cursor, (5, 5));
+    assert_eq!(session.attacker, (5, 5));
+    // Dagger reach 3 (`catalogs/item-list.md §5.3`).
+    assert_eq!(session.max_range, 3);
+    assert_eq!(attack_state.prng_state, prng_before_prompt);
+}
+
+/// `combat.md §8.2`: "Enter, or the letter `A` (either case) | Confirm at the
+/// cursor cell", and "The occupancy lookup does not filter by side".
+#[test]
+fn combat_targeting_cursor_confirmation_applies_readied_weapon_damage() {
+    let mut state = combat_player_command_state(6, 5);
+    state.party_equipment = default_party_equipment(1);
+    state.party_equipment[0][EQUIP_SLOT_WEAPON] = 16;
+    state.party_strengths = vec![30];
+    state.party_experience = vec![0];
+    let hp_before = state.combat_actors[8].hp_or_wound;
+
+    assert!(state.begin_combat_attack_walk(0, true).cursor_open);
+    // Internal direction code east moves the cursor onto the monster.
+    let held = state
+        .apply_combat_targeting_cursor_key_with_inputs(char::from(INPUT_CODE_EAST), None)
+        .unwrap();
+    assert!(held.cursor_open);
+    assert_eq!(
+        state.active_combat_targeting.as_ref().unwrap().cursor,
+        (6, 5)
+    );
+
+    let walk = state
+        .apply_combat_targeting_cursor_key_with_inputs(
+            '\r',
+            Some(CombatPlayerWeaponAttackInputs {
+                damage_roll: Some(0),
+                forced_hit: Some(true),
+                ..CombatPlayerWeaponAttackInputs::default()
+            }),
+        )
+        .unwrap();
+
+    assert!(!walk.cursor_open);
+    assert!(state.active_combat_targeting.is_none());
+    let (target_slot, attack) = walk.attack.expect("confirmation resolves an attack");
+    assert_eq!(target_slot, 8);
+    assert!(matches!(
+        attack,
+        CombatWeaponAttackApplication {
+            resolution: CombatWeaponAttackResolution::Hit {
+                route: CombatWeaponAttackRangeRoute::Melee,
+                raw_damage: 1,
+            },
+            damage_application: Some(CombatWeaponDamageApplication::Monster { target_slot: 8, .. }),
+        }
+    ));
+    assert_eq!(state.combat_actors[8].hp_or_wound, hp_before - 1);
+    assert_eq!(state.party_experience[0], 1);
+}
+
+/// `combat.md §8.2`: "On confirm it looks for an actor occupying the cursor
+/// cell; if there is none ... it prints `Nothing!`", and "cancelling with
+/// Escape or Space does not return to the command prompt and does not give
+/// the turn back".
+#[test]
+fn combat_targeting_cursor_reports_nothing_and_still_ends_the_walk() {
+    let mut state = combat_player_command_state(6, 5);
+    state.party_equipment = default_party_equipment(1);
+    state.party_equipment[0][EQUIP_SLOT_WEAPON] = 16;
+
+    assert!(state.begin_combat_attack_walk(0, true).cursor_open);
+    let empty = state
+        .apply_combat_targeting_cursor_key_with_inputs(char::from(INPUT_CODE_NORTH), None)
+        .unwrap();
+    assert!(empty.cursor_open);
+    let confirmed = state
+        .apply_combat_targeting_cursor_key_with_inputs('\r', None)
+        .unwrap();
+    assert_eq!(confirmed.text, "Nothing!");
+    assert!(!confirmed.cursor_open);
+    assert!(confirmed.attack.is_none());
+
+    // "On cancel the engine prints `Nothing!` (melee arm) or returns
+    // silently (ranged arm)." The Dagger's reach 3 is the ranged arm.
+    assert!(state.begin_combat_attack_walk(0, true).cursor_open);
+    let ranged_cancel = state
+        .apply_combat_targeting_cursor_key_with_inputs('\u{1b}', None)
+        .unwrap();
+    assert_eq!(ranged_cancel.text, "");
+    assert!(!ranged_cancel.cursor_open);
+    assert!(state.active_combat_targeting.is_none());
+
+    // Bare hands is the melee arm, so its cancel does print `Nothing!`.
+    state.party_equipment[0][EQUIP_SLOT_WEAPON] = EQUIPMENT_EMPTY;
+    assert!(state.begin_combat_attack_walk(0, true).cursor_open);
+    let melee_cancel = state
+        .apply_combat_targeting_cursor_key_with_inputs('\u{1b}', None)
+        .unwrap();
+    assert_eq!(melee_cancel.text, "Nothing!");
+    assert!(!melee_cancel.cursor_open);
+    assert!(state.active_combat_targeting.is_none());
+}
+
+/// `combat.md §8.2`: "Confirm at the cursor cell - **unless** the cursor is
+/// on the attacker's own cell, in which case nothing happens and the loop
+/// reads another key", and a move outside the range cap leaves the cursor
+/// where it is with "no message, no beep, no turn consumed".
+#[test]
+fn combat_targeting_cursor_holds_on_the_attacker_cell_and_out_of_range_moves() {
+    let mut state = combat_player_command_state(6, 5);
+    state.party_equipment = default_party_equipment(1);
+    // Bare hands: `§8.2` "a single bare-handed attempt, which behaves as
+    // melee with range one".
+    assert!(state.begin_combat_attack_walk(0, true).cursor_open);
+    assert_eq!(state.active_combat_targeting.as_ref().unwrap().max_range, 1);
+
+    let held = state
+        .apply_combat_targeting_cursor_key_with_inputs('\r', None)
+        .unwrap();
+    assert!(held.cursor_open);
+    assert!(held.text.is_empty());
+
+    // Two cells east is beyond a range-one cursor, so the cursor does not
+    // move.
+    assert!(
+        state
+            .apply_combat_targeting_cursor_key_with_inputs(char::from(INPUT_CODE_EAST), None)
+            .unwrap()
+            .cursor_open
+    );
+    let blocked = state
+        .apply_combat_targeting_cursor_key_with_inputs(char::from(INPUT_CODE_EAST), None)
+        .unwrap();
+    assert!(blocked.cursor_open);
+    assert!(blocked.text.is_empty());
+    assert_eq!(
+        state.active_combat_targeting.as_ref().unwrap().cursor,
+        (6, 5)
+    );
+}
+
+/// `combat.md §8.2`: "Five items - **sling, flaming oil, bow, crossbow and
+/// magic bow** - run an interference test before the cursor. ... On abort the
+/// engine prints a newline, the interfering actor's name, and ` interferes!`,
+/// opens no cursor, **and the turn is still spent**."
+#[test]
+fn combat_attack_missile_item_aborts_on_an_adjacent_recent_attacker() {
+    let mut state = combat_player_command_state(6, 5);
+    state.party_equipment = default_party_equipment(1);
+    state.party_equipment[0][EQUIP_SLOT_WEAPON] = 26; // Bow
+    // "The engine keeps, per combatant, the identity of whichever actor most
+    // recently struck that combatant".
+    state.combat_interference_sources[0] = 8;
+
+    let walk = state.begin_combat_attack_walk(0, true);
+
+    assert_eq!(walk.text, "Attack-\nGiant Rat interferes!");
+    assert!(!walk.cursor_open);
+    assert!(state.active_combat_targeting.is_none());
+
+    // "The other reach-bearing items - dagger, spear, throwing axe, morning
+    // star, halberd, magic axe - do **not** run this test".
+    state.party_equipment[0][EQUIP_SLOT_WEAPON] = 16; // Dagger
+    let walk = state.begin_combat_attack_walk(0, true);
+    assert_eq!(walk.text, "Attack-Aim! ");
+    assert!(walk.cursor_open);
+}
+
+/// `combat.md §8.2`: "the Negate Time effect is not currently active" is one
+/// of the five conditions the abort needs, and the source must be "on the
+/// automatic-driver side - a monster, or a party member acting under
+/// Sword-of-Chaos / charm control. **An adjacent ordinary party member never
+/// interferes**".
+#[test]
+fn combat_attack_interference_needs_a_live_adjacent_automatic_side_source() {
+    let mut state = combat_player_command_state(6, 5);
+    state.party_equipment = default_party_equipment(1);
+    state.party_equipment[0][EQUIP_SLOT_WEAPON] = 26;
+    state.combat_interference_sources[0] = 8;
+    assert_eq!(state.combat_attack_interference_source_for_slot(0), Some(8));
+
+    // Negate Time suppresses it.
+    state.active_effect_tag = Some(NEGATE_TIME_ACTIVE_EFFECT_TAG);
+    state.active_effect_counter = 3;
+    assert_eq!(state.combat_attack_interference_source_for_slot(0), None);
+    state.active_effect_tag = None;
+    state.active_effect_counter = 0;
+
+    // "it is neither invisible nor asleep".
+    state.combat_actors[8].flags |= COMBAT_ACTOR_FLAG_HIDDEN_OR_UNREVEALED;
+    assert_eq!(state.combat_attack_interference_source_for_slot(0), None);
+    state.combat_actors[8].flags &= !COMBAT_ACTOR_FLAG_HIDDEN_OR_UNREVEALED;
+    state.combat_actors[8].flags |= COMBAT_ACTOR_FLAG_STATUS_DISABLED;
+    assert_eq!(state.combat_attack_interference_source_for_slot(0), None);
+    state.combat_actors[8].flags &= !COMBAT_ACTOR_FLAG_STATUS_DISABLED;
+
+    // "its distance from the attacker is exactly one".
+    state.combat_actors[8].x = 8;
+    assert_eq!(state.combat_attack_interference_source_for_slot(0), None);
+    state.combat_actors[8].x = 6;
+    state.combat_actors[8].y = 6;
+    // "Distance uses the same truncated Euclidean metric as the cursor, so
+    // 'exactly one' means any of the eight surrounding cells, diagonals
+    // included."
+    assert_eq!(state.combat_attack_interference_source_for_slot(0), Some(8));
+}
+
+/// `combat.md §8.2`: "When two or three items qualify, each attempt
+/// additionally prints a newline, that item's name, and a colon **on its own
+/// line before its `Attack-`**", and the cursor "is entered once per readied
+/// weapon, not once per Attack command".
+#[test]
+fn combat_attack_walks_one_cursor_per_qualifying_readied_item() {
+    let mut state = combat_player_command_state(6, 5);
+    state.party_equipment = default_party_equipment(1);
+    state.party_equipment[0][EQUIP_SLOT_HELM] = 3; // Spiked Helm
+    state.party_equipment[0][EQUIP_SLOT_WEAPON] = 26; // Bow, reach 7
+
+    let opened = state.begin_combat_attack_walk(0, true);
+    assert_eq!(opened.text, "\nSpiked Helm:\nAttack-Aim! ");
+    assert!(opened.cursor_open);
+    // The Spiked Helm has no range cap, so its cursor is the range-one melee
+    // arm.
+    assert_eq!(state.active_combat_targeting.as_ref().unwrap().max_range, 1);
+
+    // Cancelling the first attempt still moves on to the second.
+    let second = state
+        .apply_combat_targeting_cursor_key_with_inputs('\u{1b}', None)
+        .unwrap();
+    assert_eq!(second.text, "Nothing!\nBow:\nAttack-Aim! ");
+    assert!(second.cursor_open);
+    assert_eq!(state.active_combat_targeting.as_ref().unwrap().index, 1);
+    assert_eq!(state.active_combat_targeting.as_ref().unwrap().max_range, 7);
+
+    // The Bow is the ranged arm, so its cancel is silent, and with no third
+    // attempt the whole walk is over.
+    let done = state
+        .apply_combat_targeting_cursor_key_with_inputs('\u{1b}', None)
+        .unwrap();
+    assert_eq!(done.text, "");
+    assert!(!done.cursor_open);
+    assert!(state.active_combat_targeting.is_none());
+}
+
+/// `combat.md §8.2`: "A character with no qualifying item makes a single
+/// bare-handed attempt, which behaves as melee with range one." It resolves.
+/// `§11`'s attacker-rating table carries the row "party member with any other
+/// readied item, or bare-handed", so the shared to-hit helper runs; `§12`'s
+/// stage-one damage row says "**bare hands are a flat `1`**".
+#[test]
+fn a_confirmed_bare_handed_attempt_resolves_a_flat_one_melee_hit() {
+    let mut state = combat_player_command_state(6, 5);
+    state.party_equipment = default_party_equipment(1);
+    state.party_experience = vec![0];
+    let hp_before = state.combat_actors[8].hp_or_wound;
+
+    let attempts = state.combat_attack_attempts_for_actor(0);
+    assert_eq!(attempts, vec![CombatAttackAttempt::bare_handed()]);
+
+    let prng_before = state.prng_state;
+    let application = state
+        .resolve_and_apply_combat_targeting_bare_handed_attack(
             0,
-            CombatPlayerCommandInput::AttackDirection(2),
-            CombatPlayerWeaponAttackInputs::default(),
+            8,
+            Some(CombatPlayerWeaponAttackInputs {
+                hit_raw_roll_0_to_60: 0,
+                damage_roll: Some(0),
+                forced_hit: Some(true),
+            }),
         )
         .unwrap();
 
     assert_eq!(
-        attacked.action,
-        CombatPlayerCommandAction::StepOrAttack {
-            prompted_attack: true,
-            direction_code: 2,
-            outcome: CombatStepOrAttackPrimitiveOutcome::Attack { target_slot: 8 },
+        application.resolution,
+        CombatWeaponAttackResolution::Hit {
+            route: CombatWeaponAttackRangeRoute::Melee,
+            raw_damage: 1,
         }
     );
+    assert_eq!(state.combat_actors[8].hp_or_wound, hp_before - 1);
     assert_eq!(
-        attacked.ring_pass,
-        Some(CombatMagicRingPassOutcome {
-            invisibility_applied: false,
-            regeneration_applied: 1,
-            vanished_ring: None,
-        })
+        state.prng_state, prng_before,
+        "supplied inputs must not draw, and a flat damage value never draws"
     );
+}
+
+/// `combat.md §8.2` lists the cursor's exclusions exhaustively - "if there is
+/// none, or the occupant is dead-marked, invisible, or an empty/decoration
+/// slot, it prints `Nothing!`" - and asleep is not among them. `§7.1`: a
+/// non-acting actor "is returned by the cell-occupancy lookup, so it can be
+/// **targeted, attacked and killed normally**", and `§11` computes a score
+/// against "**An asleep defender**" rather than skipping it.
+#[test]
+fn the_targeting_cursor_still_finds_an_asleep_occupant() {
+    let mut state = combat_player_command_state(6, 5);
+
+    assert_eq!(state.combat_targeting_occupant_at((6, 5)), Some(8));
+
+    state.combat_actors[8].flags |= COMBAT_ACTOR_FLAG_STATUS_DISABLED;
     assert_eq!(
-        (
-            attack_state.combat_actors[0].x,
-            attack_state.combat_actors[0].y
+        state.combat_targeting_occupant_at((6, 5)),
+        Some(8),
+        "the asleep/magically-disabled bit is not a targeting exclusion"
+    );
+
+    // The published exclusions still hold.
+    state.combat_actors[8].flags |= COMBAT_ACTOR_FLAG_HIDDEN_OR_UNREVEALED;
+    assert_eq!(state.combat_targeting_occupant_at((6, 5)), None);
+}
+
+/// `combat.md §8.2`: the cursor "starts on **the attacker's** remembered
+/// previous target" - a per-attacker property, not one arena-wide cell.
+#[test]
+fn the_remembered_previous_target_belongs_to_one_attacker() {
+    let mut state = combat_player_command_state(6, 5);
+    state.combat_actors[1] =
+        CombatActorDescriptor::from_row([20, 1, COMBAT_ACTOR_FLAG_SELECTABLE_80, 1, 1, 0, 5, 6]);
+
+    assert!(state.begin_combat_attack_walk(0, true).cursor_open);
+    let _ = state
+        .apply_combat_targeting_cursor_key_with_inputs(char::from(INPUT_CODE_EAST), None)
+        .unwrap();
+    let _ = state
+        .apply_combat_targeting_cursor_key_with_inputs('\r', None)
+        .unwrap();
+    assert_eq!(state.combat_remembered_targets[0], Some(8));
+    assert_eq!(state.combat_remembered_targets[1], None);
+
+    // Slot 1 has never aimed at anything, so its own cursor opens on its own
+    // cell rather than on slot 0's last target.
+    assert!(state.begin_combat_attack_walk(1, true).cursor_open);
+    let session = state.active_combat_targeting.clone().unwrap();
+    assert_eq!(session.attacker, (5, 6));
+    assert_eq!(session.cursor, (5, 6));
+
+    // `combat.md §7`: the open cursor is what supplies the "explicit arena
+    // X/Y" the overlay tail's second shape is drawn at, so slot 1's freshly
+    // opened cursor - on its own cell - is the marked cell.
+    assert_eq!(state.combat_secondary_marker, Some((5, 6)));
+}
+
+/// `combat.md §7` combat-overlay tail: on a lit, eligible pass it "draws
+/// the player cursor box around the eligible active player's arena cell" and
+/// then "a separate flag can then draw an additional marker at an explicit
+/// arena X/Y".
+///
+/// The open `§8.2` targeting cursor is what supplies that explicit
+/// coordinate, so the aim cell is marked on screen, the mark follows the
+/// cursor, and it is gone once the walk ends - `§7`: "The next pass's base
+/// repaint removes both old shapes."
+#[test]
+fn the_open_targeting_cursor_is_the_arena_marker_the_overlay_tail_draws() {
+    let mut state = combat_player_command_state(6, 5);
+    state.party_equipment = default_party_equipment(1);
+    state.party_equipment[0][EQUIP_SLOT_WEAPON] = 26; // Bow, reach 7
+    state.pending_combat_actor_slot = Some(0);
+    state.combat_cursor_blink = true;
+
+    assert_eq!(state.combat_secondary_marker, None);
+    assert_eq!(state.combat_overlay_draw_cells().secondary_marker_cell, None);
+
+    // "It starts ... on the attacker's own cell" with nothing remembered.
+    assert!(state.begin_combat_attack_walk(0, true).cursor_open);
+    assert_eq!(state.combat_secondary_marker, Some((5, 5)));
+    let opened = state.combat_overlay_draw_cells();
+    assert_eq!(opened.cursor_draw_cell, Some((5, 5)));
+    assert_eq!(opened.secondary_marker_cell, Some((5, 5)));
+
+    let _ = state
+        .apply_combat_targeting_cursor_key(char::from(INPUT_CODE_EAST))
+        .unwrap();
+    assert_eq!(
+        state.active_combat_targeting.as_ref().unwrap().cursor,
+        (6, 5)
+    );
+    assert_eq!(state.combat_secondary_marker, Some((6, 5)));
+    assert_eq!(
+        state.combat_overlay_draw_cells().secondary_marker_cell,
+        Some((6, 5))
+    );
+
+    // `§7`: "A dark blink pass ... suppresses both overlays."
+    state.combat_cursor_blink = false;
+    let dark = state.combat_overlay_draw_cells();
+    assert_eq!(dark.cursor_draw_cell, None);
+    assert_eq!(dark.secondary_marker_cell, None);
+    state.combat_cursor_blink = true;
+
+    // The Bow is the ranged arm, so Escape closes it silently and, with no
+    // further attempt, ends the walk. No coordinate is left lit.
+    let done = state.apply_combat_targeting_cursor_key('\u{1b}').unwrap();
+    assert!(!done.cursor_open);
+    assert_eq!(state.combat_secondary_marker, None);
+    assert_eq!(state.combat_overlay_draw_cells().secondary_marker_cell, None);
+}
+
+/// `combat.md §7`: "If party actors remain and foes do not, it prints
+/// `VICTORY!` once and continues" (`RETRACTIONS.md` R289).
+///
+/// `§8.2` opens one cursor per readied item, so the last foe can die on an
+/// attempt that is not the last one. The announcement belongs to the end of
+/// the acting combatant's dispatch, and the walk must still owe it after the
+/// next attempt's cursor has come and gone.
+#[test]
+fn a_kill_on_a_non_final_attack_attempt_still_announces_victory() {
+    let game_dir = std::path::Path::new(".");
+    let mut state = combat_player_command_state(6, 5);
+    state.active_player = Some(0);
+    state.party_equipment = default_party_equipment(1);
+    state.party_equipment[0][EQUIP_SLOT_HELM] = 3; // Spiked Helm, melee
+    state.party_equipment[0][EQUIP_SLOT_WEAPON] = 26; // Bow, reach 7
+    state.party_strengths = vec![255];
+    state.party_experience = vec![0];
+    // The Spiked Helm's weapon-capability entry is 4, and `§12`'s stage-one
+    // roll on a non-flat entry is `1 + roll % max`, so any landed swing does
+    // at least one point: a one-hit-point Giant Rat dies on the first
+    // attempt.
+    state.combat_actors[8].hp_or_wound = 1;
+    state.prng_state = 0x0000;
+
+    assert_eq!(
+        handle_play_key_input(
+            &mut state,
+            'A',
+            &format!("{}\r", char::from(INPUT_CODE_EAST)),
+            game_dir
+        )
+        .unwrap(),
+        PlayInputDisposition::Continue
+    );
+    assert!(
+        state.message.contains("Giant Rat killed!"),
+        "the first attempt must land the fatal blow: {:?}",
+        state.message
+    );
+    // The turn is not over: the Bow's cursor is open and owns the keyboard,
+    // so nothing is announced yet.
+    assert!(state.active_combat_targeting.is_some());
+    assert!(!state.message.contains("VICTORY!"));
+
+    assert_eq!(
+        handle_play_key_input(&mut state, '\u{1b}', "", game_dir).unwrap(),
+        PlayInputDisposition::Continue
+    );
+    assert!(state.active_combat_targeting.is_none());
+    assert!(
+        state.message.contains("VICTORY!"),
+        "the victory earned on the first attempt must survive the second cursor: {:?}",
+        state.message
+    );
+}
+
+/// The player-side attacker rating is read from the attacking character's
+/// own roster row, not from the descriptor index.
+///
+/// `combat.md §5` seats a packed party, so a character can sit at a
+/// descriptor slot below its roster slot; reading `party_strengths` by
+/// descriptor index would give a second party member the first one's rating.
+/// (This is the engine's held operand pair, not `§11`'s selector - see the
+/// doc comment on `combat_player_attack_ratings`.)
+#[test]
+fn a_player_attackers_rating_follows_its_roster_row_not_its_descriptor_slot() {
+    let mut state = combat_player_command_state(6, 5);
+    // A packed party: descriptor slot 1 belongs to roster slot 2, which is
+    // exactly the case an index-by-descriptor-slot read gets wrong.
+    state.combat_actors[1] =
+        CombatActorDescriptor::from_row([20, 1, COMBAT_ACTOR_FLAG_SELECTABLE_80, 2, 1, 0, 5, 6]);
+    state.party_strengths = vec![10, 10, 200];
+    assert_eq!(state.combat_roster_slot_for_actor_slot(1), Some(2));
+
+    // `combat_to_hit_score` is `(attacker - defender + 30) / 2` compared
+    // against the drawn roll, so a roll of 100 separates Strength 200 from
+    // Strength 10 for any small class defence.
+    let inputs = CombatPlayerWeaponAttackInputs {
+        hit_raw_roll_0_to_60: 100,
+        damage_roll: Some(0),
+        forced_hit: None,
+    };
+    // Descriptor slot 1 stands at (5, 6), adjacent to the Giant Rat (6, 5).
+    let application = state
+        .resolve_and_apply_combat_targeting_bare_handed_attack(1, 8, Some(inputs))
+        .expect("the bare-handed arm resolves");
+    assert!(
+        matches!(
+            application.resolution,
+            CombatWeaponAttackResolution::Hit { .. }
         ),
-        (5, 5)
+        "roster slot 2's Strength 200 lands; descriptor slot 1's row is 10"
     );
-    assert!(!attack_state.visibility_dirty);
+
+    // Swap the two rows: the roster read now sees 10 and the same swing must
+    // miss. A descriptor-indexed read would see 200 and still hit.
+    state.party_strengths = vec![10, 200, 10];
+    let low = state
+        .resolve_and_apply_combat_targeting_bare_handed_attack(1, 8, Some(inputs))
+        .expect("the bare-handed arm resolves");
+    assert!(matches!(
+        low.resolution,
+        CombatWeaponAttackResolution::Miss { .. }
+    ));
+}
+
+/// `combat.md §8.2`: the scripted combat driver reaches the same cursor, so
+/// headless scenarios can cover it. Confirming with `A` "either case" is the
+/// same as Enter.
+#[test]
+fn combat_scenario_script_drives_the_targeting_cursor() {
+    let mut state = combat_player_command_state(6, 5);
+    state.party_equipment = default_party_equipment(1);
+    state.party_equipment[0][EQUIP_SLOT_WEAPON] = 16;
+    state.party_strengths = vec![255];
+
+    let result = crate::combat_scenario::run_combat_scenario(
+        &mut state,
+        &[
+            crate::combat_scenario::CombatScenarioInput::Attack,
+            crate::combat_scenario::CombatScenarioInput::CursorKey(char::from(INPUT_CODE_EAST)),
+            crate::combat_scenario::CombatScenarioInput::CursorKey('a'),
+        ],
+    );
+
+    assert!(state.active_combat_targeting.is_none());
+    assert!(
+        result
+            .steps
+            .iter()
+            .any(|step| matches!(
+                step,
+                crate::combat_scenario::CombatScenarioStep::AppliedToSlot(0)
+            ))
+    );
+    assert!(state.combat_actors[8].hp_or_wound < 10 || state.combat_actors[8].is_marked_dead());
 }
 
 #[test]
@@ -10588,7 +11547,6 @@ fn combat_player_command_out_of_arena_direction_releases_only_the_actor() {
     assert_eq!(
         application.action,
         CombatPlayerCommandAction::StepOrAttack {
-            prompted_attack: false,
             direction_code: 2,
             outcome: CombatStepOrAttackPrimitiveOutcome::OutOfArena { x: 11, y: 5 },
         }
@@ -10618,76 +11576,42 @@ fn combat_player_command_out_of_arena_direction_releases_only_the_actor() {
     assert!(state.visibility_dirty);
 }
 
+/// `combat.md §7`: "If party actors remain and foes do not, it prints
+/// `VICTORY!` once and continues" (`RETRACTIONS.md` R289).
 #[test]
-fn combat_player_command_attack_applies_readied_weapon_damage() {
-    let mut state = combat_player_command_state(6, 5);
-    state.party_equipment = default_party_equipment(1);
-    state.party_equipment[0][EQUIP_SLOT_WEAPON] = 16;
-    state.party_strengths = vec![30];
-    state.party_experience = vec![0];
-    let hp_before = state.combat_actors[8].hp_or_wound;
-
-    let application = state
-        .apply_combat_player_command_with_attack_inputs(
-            0,
-            CombatPlayerCommandInput::AttackDirection(2),
-            CombatPlayerWeaponAttackInputs {
-                damage_roll: 0,
-                forced_hit: Some(true),
-                ..CombatPlayerWeaponAttackInputs::default()
-            },
-        )
-        .unwrap();
-
-    assert_eq!(
-        application.action,
-        CombatPlayerCommandAction::StepOrAttack {
-            prompted_attack: true,
-            direction_code: 2,
-            outcome: CombatStepOrAttackPrimitiveOutcome::Attack { target_slot: 8 },
-        }
-    );
-    assert!(matches!(
-        application.weapon_attack,
-        Some(CombatWeaponAttackApplication {
-            resolution: CombatWeaponAttackResolution::Hit {
-                route: CombatWeaponAttackRangeRoute::Melee,
-                raw_damage: 1,
-            },
-            damage_application: Some(CombatWeaponDamageApplication::Monster { target_slot: 8, .. }),
-        })
-    ));
-    assert_eq!(state.combat_actors[8].hp_or_wound, hp_before - 1);
-    assert_eq!(state.party_experience[0], 1);
-}
-
-#[test]
-fn combat_player_command_attack_announces_victory_and_continues_cleanup() {
+fn combat_targeting_cursor_kill_clears_the_last_foe_for_the_victory_line() {
     let mut state = combat_player_command_state(6, 5);
     state.party_equipment = default_party_equipment(1);
     state.party_equipment[0][EQUIP_SLOT_WEAPON] = 16;
     state.party_strengths = vec![30];
     state.combat_actors[8].hp_or_wound = 1;
 
-    let application = state
-        .apply_combat_player_command_with_attack_inputs(
-            0,
-            CombatPlayerCommandInput::AttackDirection(2),
-            CombatPlayerWeaponAttackInputs {
-                damage_roll: 0,
+    assert!(state.begin_combat_attack_walk(0, true).cursor_open);
+    assert!(
+        state
+            .apply_combat_targeting_cursor_key_with_inputs(char::from(INPUT_CODE_EAST), None)
+            .unwrap()
+            .cursor_open
+    );
+    let walk = state
+        .apply_combat_targeting_cursor_key_with_inputs(
+            '\r',
+            Some(CombatPlayerWeaponAttackInputs {
+                damage_roll: Some(0),
                 forced_hit: Some(true),
                 ..CombatPlayerWeaponAttackInputs::default()
-            },
+            }),
         )
         .unwrap();
 
+    assert!(!walk.cursor_open);
+    assert!(walk.attack.is_some());
     assert!(state.combat_actors[8].is_marked_dead());
     assert_eq!(
-        application.control_after,
+        state.combat_round_loop_control(false, false),
         CombatRoundLoopControl::ContinueActorWalk
     );
-    assert!(application.victory_announced);
-    assert!(application.weapon_attack.is_some());
+    assert!(state.announce_combat_victory_if_needed());
 }
 
 #[test]
@@ -10929,8 +11853,35 @@ fn combat_input_dispatch_routes_play_keys_to_combat_parser() {
 
     let mut attack_state = combat_player_command_state(6, 5);
     attack_state.active_player = Some(0);
+    // `combat.md §8.2`: `A` opens the targeting cursor; the cursor is then
+    // steered by internal direction codes and confirmed with Enter. The
+    // attacker itself never moves.
+    //
+    // This Avatar has nothing readied, so the walk is the published single
+    // bare-handed attempt, which "behaves as melee with range one" and
+    // resolves like any other melee attempt. `§11`'s attacker-rating table
+    // ends "| Attacker | party member with any other readied item, or
+    // bare-handed | its own **combat weight** |", so the shared to-hit
+    // helper runs and takes its **one** draw; `§12`'s stage-one damage row
+    // says "Values `0` and `1` pass through unchanged, and **bare hands are
+    // a flat `1`**", so no damage draw follows it. Nine of a ten-HP Giant
+    // Rat's hit points is "three quarters or more", which `§11.1`'s
+    // graded-wound table publishes as `<target> barely wounded!`.
+    let mut expected_prng = attack_state.prng_state;
+    let _bare_handed_hit_roll = u5_prng_range_u16(&mut expected_prng, 0, u16::from(u8::MAX));
+    // The Giant Rat's reply poisons the Avatar rather than dealing
+    // ordinary damage; `combat.md §12`'s "the poison/status branch returns
+    // before the ordinary roller ever asks for it" means its defence draw
+    // is skipped just as a miss's would be.
+    advance_expected_giant_rat_ai_input_prng(&mut expected_prng, false);
     assert_eq!(
-        handle_play_key_input(&mut attack_state, 'A', "6", game_dir).unwrap(),
+        handle_play_key_input(
+            &mut attack_state,
+            'A',
+            &format!("{}\r", char::from(INPUT_CODE_EAST)),
+            game_dir
+        )
+        .unwrap(),
         PlayInputDisposition::Continue
     );
     assert_eq!(
@@ -10941,12 +11892,16 @@ fn combat_input_dispatch_routes_play_keys_to_combat_parser() {
         (5, 5)
     );
     // `combat.md` Section 8.1 closes the turn with the unconditional turn
-    // banner. The Giant Rat's reply ahead of it is the stream re-baselined
-    // by `RETRACTIONS.md` R311: the lazily drawn cardinal fallback changes
-    // which roll the reply takes.
+    // banner, and the Giant Rat's reply sits ahead of it.
     assert_eq!(
         attack_state.message,
-        "East\nGiant Rat missed!\n\nAvatar, armed with bare hands:"
+        "Attack-Aim! \nGiant Rat barely wounded!\nAvatar is poisoned!\n\nAvatar, armed with bare hands:"
+    );
+    assert_eq!(attack_state.combat_actors[8].hp_or_wound, 9);
+    assert_eq!(attack_state.party_experience[0], 1);
+    assert_eq!(
+        attack_state.prng_state, expected_prng,
+        "a confirmed bare-handed attempt draws the to-hit roll and nothing else"
     );
     assert_eq!(attack_state.pending_combat_actor_slot, Some(0));
 
@@ -10990,21 +11945,45 @@ fn combat_input_dispatch_reports_weapon_hit_damage_and_xp() {
     state.party_equipment[0][EQUIP_SLOT_WEAPON] = 16;
     state.party_strengths = vec![255];
     state.party_experience = vec![0];
+    // `combat.md §5.1` / `§11`: a party actor's combat weight is "the raw
+    // Dexterity byte copied at seating", and with a Dagger readied - not one
+    // of the five strength-arm ids - that weight is also the attacker term.
+    // The shared fixture seats a base-step-1 actor, which after
+    // `RETRACTIONS.md` R334 is a Dexterity-1 character who essentially never
+    // lands a blow; this test is about a landed blow, so it seats a fast one.
+    state.combat_actors[0].base_step = 30;
     let mut expected_prng = state.prng_state;
-    let _hit_roll = u5_prng_range_u16(&mut expected_prng, 0, u16::from(u8::MAX));
+    let _hit_raw_roll =
+        u5_prng_range_u16(&mut expected_prng, 0, u16::from(COMBAT_SKEWED_ROLL_RAW_MAX));
     let damage_roll = u5_prng_range_u16(&mut expected_prng, 0, u16::from(u8::MAX)) as u8;
+    // `combat.md §12`: the Giant Rat's class defense byte is zero, so the
+    // roller "takes no draw at all and subtracts nothing".
+    assert_eq!(combat_class_stats(COMBAT_CLASS_GIANT_RAT).unwrap().defense, 0);
     let expected_damage =
         combat_spell_damage_roll(damage_roll, equipment_attack_max(16).unwrap()) as u8;
-    advance_expected_giant_rat_ai_input_prng(&mut expected_prng);
+    advance_expected_giant_rat_ai_input_prng(&mut expected_prng, false);
 
     assert_eq!(
-        handle_play_key_input(&mut state, 'A', "6", game_dir).unwrap(),
+        handle_play_key_input(
+            &mut state,
+            'A',
+            &format!("{}\r", char::from(INPUT_CODE_EAST)),
+            game_dir
+        )
+        .unwrap(),
         PlayInputDisposition::Continue
     );
 
+    // `combat.md` 11.1's graded wound lines, monster target: the Giant Rat's
+    // class maximum is 10, so the truncated quarter is 2 and the thresholds are
+    // 2, 4 and 6. The survivor sits at or above three truncated quarters, which
+    // is wound score 4, "`<target> barely wounded!`". The engine previously
+    // printed `grazed` for this bucket; 11.1 reserves `grazed!` for the
+    // zero-or-negative-damage outcome and gives score 4 its own line.
+    assert!(state.combat_actors[8].hp_or_wound >= 6);
     assert_eq!(
         state.message,
-        "East\nGiant Rat lightly wounded!\nGiant Rat missed!\n\nAvatar, armed with Dagger:"
+        "Attack-Aim! \nGiant Rat lightly wounded!\nGiant Rat missed!\n\nAvatar, armed with Dagger:"
     );
     assert_eq!(state.combat_actors[8].hp_or_wound, 10 - expected_damage);
     assert_eq!(state.party_experience[0], u16::from(expected_damage));
@@ -11020,10 +11999,19 @@ fn combat_input_dispatch_reports_weapon_kill_and_keeps_victory_cleanup_live() {
     state.party_equipment[0][EQUIP_SLOT_WEAPON] = 16;
     state.party_strengths = vec![255];
     state.party_experience = vec![0];
+    // See the sibling test: `combat.md` Section 11 makes the party
+    // attacker's own combat weight the attacker term for a Dagger.
+    state.combat_actors[0].base_step = 30;
     state.combat_actors[8].hp_or_wound = 1;
 
     assert_eq!(
-        handle_play_key_input(&mut state, 'A', "6", game_dir).unwrap(),
+        handle_play_key_input(
+            &mut state,
+            'A',
+            &format!("{}\r", char::from(INPUT_CODE_EAST)),
+            game_dir
+        )
+        .unwrap(),
         PlayInputDisposition::Continue
     );
 
@@ -11034,7 +12022,9 @@ fn combat_input_dispatch_reports_weapon_kill_and_keeps_victory_cleanup_live() {
     // the next keyboard-driven turn still follows it.
     assert_eq!(
         state.message,
-        format!("East\nGiant Rat killed!\n{COMBAT_VICTORY_LINE}\nAvatar, armed with Dagger:")
+        format!(
+            "Attack-Aim! \nGiant Rat killed!\n{COMBAT_VICTORY_LINE}\nAvatar, armed with Dagger:"
+        )
     );
     assert_eq!(state.party_experience[0], 3);
     assert!(state.combat_active);
@@ -11247,6 +12237,12 @@ fn combat_input_dispatch_escape_cleanup_restores_stored_frame_snapshot() {
         reconcile_post_combat_terrain_trigger_slot(&mut expected_objects, 2, true),
         PostCombatTriggerReconcile::BodyRetrieval
     );
+    // `combat.md §5.3`, closing line: the post-combat turn-clock advance
+    // runs after the framer restored the snapshot, and its active-object
+    // pass steps the surviving slot's animation phase byte once
+    // (`active-objects.md §8`). Everything the framer restores is still
+    // byte-for-byte the pre-combat table.
+    expected_objects[2].phase = expected_objects[2].phase.wrapping_sub(1);
     assert_eq!(state.active_objects, expected_objects);
     assert_eq!(
         state.combat_actors,
@@ -11383,20 +12379,21 @@ fn combat_input_dispatch_z_stats_refuses_missing_or_disabled_actor() {
 }
 
 #[test]
-fn combat_input_dispatch_refuses_controlled_non_party_actor_turn() {
-    // magic.md §8: "All three place their creature through the
-    // ordinary monster placement path, so the new actor keeps the
-    // monster-side class byte and monster AI drives its turns
-    // exactly as it drives any other monster. Nothing routes a
-    // summoned creature through the player command parser, and the
-    // player never gets to move it."
+fn combat_input_dispatch_accepts_a_controlled_non_party_actor_turn() {
+    // magic.md §8: "That bit **is** a transfer of control ... a
+    // monster-side slot carrying the bit fails the self-acting test, so the
+    // round walker sends it to the keystroke/command path instead of to the
+    // automatic actor driver. It takes its turns at the player's prompt".
     //
-    // combat.md §6.1a: the round walker picks the keystroke path
-    // through the slot-to-group helper, and only "the group
-    // ordinarily occupied by seated party members" reaches it. The
-    // controlled bit does move this monster into the party's group
-    // for the same-faction filter, which is why the withdrawn
-    // reading looked plausible.
+    // *Corrected.* This test previously asserted the opposite, quoting the
+    // withdrawn "monster AI drives its turns exactly as it drives any other
+    // monster ... the player never gets to move it". RETRACTIONS.md R354
+    // withdraws all of it and reverses the earlier R074 withdrawal.
+    //
+    // combat.md §6.1a: the round walker picks the keystroke path through
+    // the slot-to-group helper alone, and the controlled bit is that
+    // helper's team toggle, so it moves this monster into the party's group
+    // for the dispatch gate as well as for the same-faction filter.
     let game_dir = std::path::Path::new(".");
     let mut state = combat_player_command_state(8, 5);
     state.combat_actors[8].flags |= COMBAT_ACTOR_FLAG_TEAM_TOGGLE;
@@ -11409,11 +12406,14 @@ fn combat_input_dispatch_refuses_controlled_non_party_actor_turn() {
         PlayInputDisposition::Continue
     );
 
-    assert_eq!(state.message, "");
-    assert_eq!((state.combat_actors[8].x, state.combat_actors[8].y), (8, 5));
+    // The direction echo of Section 8, then the next actor's turn banner.
+    assert_eq!(state.message, "East
+
+Avatar, armed with bare hands:");
+    assert_eq!((state.combat_actors[8].x, state.combat_actors[8].y), (9, 5));
     assert_eq!(
         (state.active_objects[8].x, state.active_objects[8].y),
-        (8, 5)
+        (9, 5)
     );
 }
 
@@ -11559,8 +12559,13 @@ fn combat_input_dispatch_uses_pending_round_walker_actor_slot() {
     assert_eq!(state.message, "South\n\nAvatar, armed with bare hands:");
 }
 
+/// `combat.md §8.2`: while the targeting cursor is open it owns the
+/// keyboard. "Anything else | Discarded; the loop reads again", so an
+/// ordinary movement key neither steps the actor nor reaches the command
+/// parser, and confirming on an empty cell prints `Nothing!` while still
+/// spending the turn.
 #[test]
-fn combat_input_dispatch_attack_prompt_keeps_pending_actor_for_direction() {
+fn combat_input_dispatch_attack_cursor_owns_the_next_keystrokes() {
     let game_dir = std::path::Path::new(".");
     let mut state = combat_player_command_state(8, 5);
 
@@ -11572,13 +12577,32 @@ fn combat_input_dispatch_attack_prompt_keeps_pending_actor_for_direction() {
     // then `Aim! ` immediately before the targeting cursor opens.
     assert_eq!(state.message, "Attack-Aim! ");
     assert_eq!(state.pending_combat_actor_slot, Some(0));
+    assert!(state.active_combat_targeting.is_some());
 
     assert_eq!(
         handle_play_key_input(&mut state, 'd', "", game_dir).unwrap(),
         PlayInputDisposition::Continue
     );
-    assert_eq!((state.combat_actors[0].x, state.combat_actors[0].y), (6, 5));
-    assert_eq!(state.message, "East\n\nAvatar, armed with bare hands:");
+    assert_eq!((state.combat_actors[0].x, state.combat_actors[0].y), (5, 5));
+    assert_eq!(state.message, "Attack-Aim! ");
+    assert!(state.active_combat_targeting.is_some());
+
+    assert_eq!(
+        handle_play_key_input(&mut state, char::from(INPUT_CODE_EAST), "", game_dir).unwrap(),
+        PlayInputDisposition::Continue
+    );
+    assert_eq!((state.combat_actors[0].x, state.combat_actors[0].y), (5, 5));
+    assert_eq!(
+        state.active_combat_targeting.as_ref().unwrap().cursor,
+        (6, 5)
+    );
+
+    assert_eq!(
+        handle_play_key_input(&mut state, '\r', "", game_dir).unwrap(),
+        PlayInputDisposition::Continue
+    );
+    assert!(state.active_combat_targeting.is_none());
+    assert!(state.message.starts_with("Attack-Aim! Nothing!"));
 }
 
 #[test]
@@ -12373,7 +13397,6 @@ fn combat_actor_slot_dispatch_applies_slot_matched_monster_attack_inputs() {
             (
                 7,
                 CombatMonsterAttackInputs {
-                    party_defender_rating: 99,
                     forced_hit: Some(false),
                     ..CombatMonsterAttackInputs::default()
                 },
@@ -12381,8 +13404,6 @@ fn combat_actor_slot_dispatch_applies_slot_matched_monster_attack_inputs() {
             (
                 8,
                 CombatMonsterAttackInputs {
-                    party_defender_rating: 0,
-                    damage_roll: 0,
                     forced_hit: Some(true),
                     ..CombatMonsterAttackInputs::default()
                 },
@@ -12682,8 +13703,6 @@ fn combat_round_walk_carries_monster_attack_inputs_through_dispatch() {
         &[(
             8,
             CombatMonsterAttackInputs {
-                party_defender_rating: 0,
-                damage_roll: 0,
                 forced_hit: Some(true),
                 ..CombatMonsterAttackInputs::default()
             },
@@ -13300,37 +14319,65 @@ fn combat_ai_random_cardinal_fallback_is_four_independent_draws() {
 }
 
 #[test]
-fn combat_wound_morale_uses_quarter_buckets_and_documented_roll_rate() {
+fn combat_wound_morale_uses_truncated_quarter_thresholds_and_documented_roll_rate() {
+    // `combat.md` 11.1: "The quarter is the class maximum divided by four with
+    // truncation, and the three thresholds are one, two and three of those
+    // truncated quarters, so the boundaries sit slightly low for maxima that
+    // are not multiples of four."
+    //
+    // 99 is deliberately not a multiple of four: the truncated quarter is 24,
+    // so the thresholds are 24, 48 and 72 - not 24.75, 49.5 and 74.25. Each
+    // pair below straddles one of the three boundaries, which is what
+    // distinguishes the published rule from an exact-fraction comparison.
+    for (hp, bucket) in [
+        (23u8, CombatWoundScoreBucket::UnderOneQuarter),
+        (24, CombatWoundScoreBucket::OneQuarterToUnderHalf),
+        (47, CombatWoundScoreBucket::OneQuarterToUnderHalf),
+        (48, CombatWoundScoreBucket::HalfToUnderThreeQuarters),
+        (71, CombatWoundScoreBucket::HalfToUnderThreeQuarters),
+        (72, CombatWoundScoreBucket::ThreeQuartersOrMore),
+    ] {
+        assert_eq!(
+            combat_wound_score_bucket(hp, 99),
+            bucket,
+            "wound score bucket for {hp} of 99"
+        );
+    }
+
+    // 9's morale rule over the same buckets: "below one quarter sets fleeing,
+    // one-quarter through just under one-half rolls a morale check that sets
+    // fleeing on 252 of 256 possible random-byte results, and one-half or
+    // higher clears fleeing."
     assert_eq!(
-        resolve_combat_wound_morale(24, 99, 0),
+        resolve_combat_wound_morale(23, 99, 255),
         CombatWoundMorale {
             bucket: CombatWoundScoreBucket::UnderOneQuarter,
             fleeing: true,
         }
     );
     assert_eq!(
-        resolve_combat_wound_morale(25, 99, 251),
+        resolve_combat_wound_morale(24, 99, 251),
         CombatWoundMorale {
             bucket: CombatWoundScoreBucket::OneQuarterToUnderHalf,
             fleeing: true,
         }
     );
     assert_eq!(
-        resolve_combat_wound_morale(49, 99, 252),
+        resolve_combat_wound_morale(47, 99, 252),
         CombatWoundMorale {
             bucket: CombatWoundScoreBucket::OneQuarterToUnderHalf,
             fleeing: false,
         }
     );
     assert_eq!(
-        resolve_combat_wound_morale(50, 99, 255),
+        resolve_combat_wound_morale(48, 99, 0),
         CombatWoundMorale {
             bucket: CombatWoundScoreBucket::HalfToUnderThreeQuarters,
             fleeing: false,
         }
     );
     assert_eq!(
-        resolve_combat_wound_morale(75, 99, 255),
+        resolve_combat_wound_morale(72, 99, 0),
         CombatWoundMorale {
             bucket: CombatWoundScoreBucket::ThreeQuartersOrMore,
             fleeing: false,
@@ -13340,17 +14387,27 @@ fn combat_wound_morale_uses_quarter_buckets_and_documented_roll_rate() {
 
 #[test]
 fn combat_wound_morale_can_resolve_class_max_hp() {
+    // Class 32's maximum is 10, so the truncated quarter is 2 and the
+    // thresholds are 2, 4 and 6 (`combat.md` 11.1). HP 2 is the first value in
+    // the morale-roll band; HP 4 is already out of it.
     assert_eq!(
-        resolve_combat_wound_morale_for_class(4, 32, 0).unwrap(),
+        resolve_combat_wound_morale_for_class(2, 32, 0).unwrap(),
         CombatWoundMorale {
             bucket: CombatWoundScoreBucket::OneQuarterToUnderHalf,
             fleeing: true,
         }
     );
     assert_eq!(
-        resolve_combat_wound_morale_for_class(4, 32, 252).unwrap(),
+        resolve_combat_wound_morale_for_class(2, 32, 252).unwrap(),
         CombatWoundMorale {
             bucket: CombatWoundScoreBucket::OneQuarterToUnderHalf,
+            fleeing: false,
+        }
+    );
+    assert_eq!(
+        resolve_combat_wound_morale_for_class(4, 32, 0).unwrap(),
+        CombatWoundMorale {
+            bucket: CombatWoundScoreBucket::HalfToUnderThreeQuarters,
             fleeing: false,
         }
     );
@@ -13358,7 +14415,7 @@ fn combat_wound_morale_can_resolve_class_max_hp() {
 }
 
 #[test]
-fn combat_party_damage_clamps_miss_and_uses_saturating_hp_counter() {
+fn combat_party_damage_grazes_on_zero_or_negative_and_uses_saturating_hp_counter() {
     let mut member = PartyMember {
         slot: 0,
         class_byte: 1,
@@ -13370,18 +14427,28 @@ fn combat_party_damage_clamps_miss_and_uses_saturating_hp_counter() {
         level: 1,
     };
 
-    let miss = apply_combat_party_damage(&mut member, -1);
-    assert!(miss.missed);
-    assert!(!miss.instant_kill);
-    assert!(!miss.killed);
-    assert_eq!(miss.applied_damage, 0);
-    assert_eq!(miss.status_before, b'G');
-    assert_eq!(miss.status_after, b'G');
+    // `combat.md` 12: "The result may be zero or negative, and **both are
+    // narrated as a graze, not as a miss**"; `RETRACTIONS.md` R352 withdraws
+    // the three sentences that called this outcome a miss and states "There is
+    // no miss flag". Zero is asserted alongside negative because the marker's
+    // "two writers [are] both this zero-or-negative condition".
+    let graze = apply_combat_party_damage(&mut member, -1);
+    assert!(graze.grazed);
+    assert!(!graze.instant_kill);
+    assert!(!graze.killed);
+    assert_eq!(graze.applied_damage, 0);
+    assert_eq!(graze.status_before, b'G');
+    assert_eq!(graze.status_after, b'G');
     assert_eq!(member.hp, 12);
     assert_eq!(member.status, b'G');
 
+    let zero_graze = apply_combat_party_damage(&mut member, 0);
+    assert!(zero_graze.grazed);
+    assert_eq!(zero_graze.applied_damage, 0);
+    assert_eq!(member.hp, 12);
+
     let hit = apply_combat_party_damage(&mut member, 5);
-    assert!(!hit.missed);
+    assert!(!hit.grazed);
     assert_eq!(hit.applied_damage, 5);
     assert!(!hit.killed);
     assert_eq!(member.hp, 7);
@@ -13550,7 +14617,7 @@ fn combat_weapon_damage_application_routes_party_targets_through_party_damage() 
             damage: CombatPartyDamageOutcome {
                 raw_damage: 12,
                 applied_damage: 12,
-                missed: false,
+                grazed: false,
                 instant_kill: false,
                 killed: true,
                 status_before: b'G',
@@ -13610,7 +14677,7 @@ fn combat_weapon_damage_application_routes_monster_targets_and_credits_party_att
                 class: 32,
                 raw_damage: 4,
                 applied_damage: 4,
-                missed: false,
+                grazed: false,
                 instant_kill: false,
                 killed: false,
                 return_value: 4,
@@ -13630,7 +14697,7 @@ fn combat_weapon_damage_application_routes_monster_targets_and_credits_party_att
                 class: 32,
                 raw_damage: 2,
                 applied_damage: 2,
-                missed: false,
+                grazed: false,
                 instant_kill: false,
                 killed: false,
                 return_value: 2,
@@ -13654,7 +14721,7 @@ fn combat_weapon_damage_application_routes_monster_targets_and_credits_party_att
                 class: 32,
                 raw_damage: COMBAT_INSTANT_KILL_DAMAGE,
                 applied_damage: 4,
-                missed: false,
+                grazed: false,
                 instant_kill: true,
                 killed: true,
                 return_value: stats.reward_unit(),
@@ -14062,6 +15129,25 @@ fn combat_weapon_attack_application_uses_actor_range_and_applies_hit_damage() {
     state.combat_actors[target_slot] =
         CombatActorDescriptor::for_monster_placement(stats, 7, 8, 4, 0, 0);
 
+    // `combat.md §11`: the score is `(defender - attacker + 30) / 2 = 5`
+    // and "the hit is accepted when `R >= S`", so the top of the skewed
+    // `1..30` band lands. `§12`: the Orc's class defense byte is non-zero,
+    // so the roller subtracts an inclusive `1..defense` draw taken here,
+    // after the rating is known.
+    let attack_max = equipment_attack_max(17).unwrap();
+    let defence_rating = stats.defense;
+    assert_ne!(defence_rating, 0);
+    let mut expected_prng = state.prng_state;
+    let expected_defence_roll =
+        u5_prng_range_u16(&mut expected_prng, 0, u16::from(defence_rating - 1)) as u8;
+    // Worked out by hand rather than by re-running the helpers under
+    // test: stage one is `1 + 5 % 6 = 6`, stage two subtracts
+    // `1 + 0 % 2 = 1`, so the blow is `5`.
+    assert_eq!(attack_max, 6);
+    assert_eq!(defence_rating, 2);
+    assert_eq!(expected_defence_roll, 0);
+    let expected_damage: i16 = 5;
+    let expected_applied: u8 = 5;
     assert_eq!(
         state.resolve_and_apply_combat_equipment_weapon_attack(
             17,
@@ -14069,7 +15155,7 @@ fn combat_weapon_attack_application_uses_actor_range_and_applies_hit_damage() {
             target_slot,
             30,
             10,
-            0,
+            COMBAT_SKEWED_ROLL_RAW_MAX,
             5,
             None,
             false,
@@ -14077,26 +15163,30 @@ fn combat_weapon_attack_application_uses_actor_range_and_applies_hit_damage() {
         Some(CombatWeaponAttackApplication {
             resolution: CombatWeaponAttackResolution::Hit {
                 route: CombatWeaponAttackRangeRoute::Ranged { effect_code: 7 },
-                raw_damage: 6,
+                raw_damage: expected_damage,
             },
             damage_application: Some(CombatWeaponDamageApplication::Monster {
                 target_slot,
                 damage: CombatMonsterDamageOutcome {
                     class: 32,
-                    raw_damage: 6,
-                    applied_damage: 6,
-                    missed: false,
+                    raw_damage: expected_damage,
+                    applied_damage: expected_applied,
+                    grazed: false,
                     instant_kill: false,
                     killed: false,
-                    return_value: 6,
+                    return_value: expected_applied,
                     death_path: None,
                 },
-                credited_experience: Some(16),
+                credited_experience: Some(10 + u16::from(expected_applied)),
             }),
         })
     );
-    assert_eq!(state.combat_actors[target_slot].hp_or_wound, 4);
-    assert_eq!(state.party_experience[0], 16);
+    assert_eq!(state.prng_state, expected_prng, "one defence draw, no more");
+    assert_eq!(
+        state.combat_actors[target_slot].hp_or_wound,
+        stats.max_hp - expected_applied
+    );
+    assert_eq!(state.party_experience[0], 10 + u16::from(expected_applied));
 }
 
 #[test]
@@ -14132,6 +15222,9 @@ fn combat_weapon_attack_application_leaves_state_unchanged_for_no_hit_routes() {
     assert_eq!(state.combat_actors[target_slot].hp_or_wound, stats.max_hp);
 
     state.combat_actors[target_slot].x = 5;
+    // `combat.md §11` (R334): with the defender's rating added and the
+    // attacker's subtracted the score is `(10 - 30 + 30) / 2 = 5`, not the
+    // 25 the withdrawn formula produced, so a *low* draw is what misses.
     assert_eq!(
         state.resolve_and_apply_combat_equipment_weapon_attack(
             16,
@@ -14139,7 +15232,7 @@ fn combat_weapon_attack_application_leaves_state_unchanged_for_no_hit_routes() {
             target_slot,
             30,
             10,
-            25,
+            0,
             5,
             None,
             false,
@@ -14147,7 +15240,7 @@ fn combat_weapon_attack_application_leaves_state_unchanged_for_no_hit_routes() {
         Some(CombatWeaponAttackApplication {
             resolution: CombatWeaponAttackResolution::Miss {
                 route: CombatWeaponAttackRangeRoute::Melee,
-                hit_score: 25,
+                hit_score: 5,
             },
             damage_application: None,
         })
@@ -14215,7 +15308,7 @@ fn combat_monster_attack_applies_poison_status_before_ordinary_melee_damage() {
     let mut state = combat_monster_attack_state(COMBAT_CLASS_GIANT_SPIDER, 6, 5);
 
     let application = state
-        .resolve_and_apply_combat_monster_attack(8, 0, 7, 0, 7, true, 8, Some(true))
+        .resolve_and_apply_combat_monster_attack(8, 0, 0, true, 8, Some(true))
         .unwrap();
 
     assert_eq!(
@@ -14243,7 +15336,7 @@ fn combat_monster_adjacent_miss_overwrites_interference_but_controlled_attack_do
     automatic.combat_interference_sources[0] = 7;
 
     let missed = automatic
-        .resolve_and_apply_combat_monster_attack(8, 0, 7, 255, 1, false, 8, Some(false))
+        .resolve_and_apply_combat_monster_attack(8, 0, 255, false, 8, Some(false))
         .unwrap();
     assert!(matches!(
         missed.resolution,
@@ -14256,7 +15349,7 @@ fn combat_monster_adjacent_miss_overwrites_interference_but_controlled_attack_do
     controlled.combat_interference_sources[0] = 7;
     assert!(
         controlled
-            .resolve_and_apply_combat_monster_attack(8, 0, 7, 255, 1, false, 8, Some(false))
+            .resolve_and_apply_combat_monster_attack(8, 0, 255, false, 8, Some(false))
             .is_some()
     );
     assert_eq!(controlled.combat_interference_sources[0], 7);
@@ -14268,7 +15361,7 @@ fn combat_monster_attack_poison_branch_falls_back_to_damage_for_non_good_party()
     state.party[0].status = b'P';
 
     let application = state
-        .resolve_and_apply_combat_monster_attack(8, 0, 7, 0, 7, true, 8, Some(true))
+        .resolve_and_apply_combat_monster_attack(8, 0, 0, true, 8, Some(true))
         .unwrap();
 
     assert_eq!(
@@ -14286,7 +15379,7 @@ fn combat_monster_attack_poison_branch_falls_back_to_damage_for_non_good_party()
                 damage: CombatPartyDamageOutcome {
                     raw_damage: 9,
                     applied_damage: 9,
-                    missed: false,
+                    grazed: false,
                     instant_kill: false,
                     killed: false,
                     status_before: b'P',
@@ -14304,7 +15397,7 @@ fn combat_monster_attack_gate_rejection_uses_ordinary_melee_hit_resolution() {
     let mut state = combat_monster_attack_state(COMBAT_CLASS_GIANT_SPIDER, 6, 5);
 
     let application = state
-        .resolve_and_apply_combat_monster_attack(8, 0, 7, 255, 1, false, 8, Some(true))
+        .resolve_and_apply_combat_monster_attack(8, 0, 255, false, 8, Some(true))
         .unwrap();
 
     assert_eq!(
@@ -14314,16 +15407,21 @@ fn combat_monster_attack_gate_rejection_uses_ordinary_melee_hit_resolution() {
             target_slot: 0,
             poison_status_outcome: Some(CombatPoisonStatusAttackOutcome::GateRejected),
             stoning: None,
+            // `combat.md §12` (R336): the monster's raw value is its class
+            // attack byte "used flat, with no random draw at all", and the
+            // party's cached combat-defense byte of 7 then subtracts an
+            // inclusive `1..7` draw. The former expectation of 2 came from
+            // rolling `1..attack` on the monster side.
             resolution: Some(CombatWeaponAttackResolution::Hit {
                 route: CombatWeaponAttackRangeRoute::Melee,
-                raw_damage: 2,
+                raw_damage: 3,
             }),
             damage_application: Some(CombatWeaponDamageApplication::Party {
                 target_slot: 0,
                 damage: CombatPartyDamageOutcome {
-                    raw_damage: 2,
-                    applied_damage: 2,
-                    missed: false,
+                    raw_damage: 3,
+                    applied_damage: 3,
+                    grazed: false,
                     instant_kill: false,
                     killed: false,
                     status_before: b'G',
@@ -14332,7 +15430,7 @@ fn combat_monster_attack_gate_rejection_uses_ordinary_melee_hit_resolution() {
             }),
         }
     );
-    assert_eq!(state.party[0].hp, 10);
+    assert_eq!(state.party[0].hp, 9);
     assert_eq!(state.party[0].status, b'G');
 }
 
@@ -14342,7 +15440,7 @@ fn combat_monster_attack_uses_ranged_effect_route_for_in_range_non_adjacent_targ
     state.combat_interference_sources[0] = 7;
 
     let application = state
-        .resolve_and_apply_combat_monster_attack(8, 0, 7, 255, 4, true, 8, Some(true))
+        .resolve_and_apply_combat_monster_attack(8, 0, 255, true, 8, Some(true))
         .unwrap();
 
     assert_eq!(
@@ -14352,25 +15450,31 @@ fn combat_monster_attack_uses_ranged_effect_route_for_in_range_non_adjacent_targ
             target_slot: 0,
             poison_status_outcome: None,
             stoning: None,
+            // `combat.md §12` (R336): a Dragon brings its class attack
+            // value of 30 flat, less the party's inclusive `1..7` defence
+            // draw. The former expectation of 5 was the `1..attack` roll
+            // the retraction withdraws, and it is why "an engine that rolls
+            // `1..attack` for monsters delivers about 39 % of the
+            // original's melee damage".
             resolution: Some(CombatWeaponAttackResolution::Hit {
                 route: CombatWeaponAttackRangeRoute::Ranged { effect_code: 3 },
-                raw_damage: 5,
+                raw_damage: 25,
             }),
             damage_application: Some(CombatWeaponDamageApplication::Party {
                 target_slot: 0,
                 damage: CombatPartyDamageOutcome {
-                    raw_damage: 5,
-                    applied_damage: 5,
-                    missed: false,
+                    raw_damage: 25,
+                    applied_damage: 12,
+                    grazed: false,
                     instant_kill: false,
-                    killed: false,
+                    killed: true,
                     status_before: b'G',
-                    status_after: b'G',
+                    status_after: b'D',
                 },
             }),
         }
     );
-    assert_eq!(state.party[0].hp, 7);
+    assert_eq!(state.party[0].hp, 0);
     assert_eq!(state.combat_interference_sources[0], 7);
 }
 
@@ -14410,7 +15514,7 @@ fn active_target_spell_damage_application_applies_defense_and_credits_caster() {
                     class: 32,
                     raw_damage: 5,
                     applied_damage: 5,
-                    missed: false,
+                    grazed: false,
                     instant_kill: false,
                     killed: false,
                     return_value: 5,
@@ -15006,7 +16110,7 @@ fn active_target_spell_damage_application_preserves_kill_and_miss_routes() {
                     class: 32,
                     raw_damage: -4,
                     applied_damage: 0,
-                    missed: true,
+                    grazed: true,
                     instant_kill: false,
                     killed: false,
                     return_value: 0,
@@ -15036,7 +16140,7 @@ fn active_target_spell_damage_application_preserves_kill_and_miss_routes() {
                     class: 32,
                     raw_damage: COMBAT_INSTANT_KILL_DAMAGE,
                     applied_damage: stats.max_hp,
-                    missed: false,
+                    grazed: false,
                     instant_kill: true,
                     killed: true,
                     return_value: stats.reward_unit(),
@@ -15115,7 +16219,7 @@ fn tremor_spell_damage_application_scans_table_order_and_credits_caster() {
                         damage: CombatPartyDamageOutcome {
                             raw_damage: 3,
                             applied_damage: 3,
-                            missed: false,
+                            grazed: false,
                             instant_kill: false,
                             killed: false,
                             status_before: b'G',
@@ -15132,7 +16236,7 @@ fn tremor_spell_damage_application_scans_table_order_and_credits_caster() {
                             class: 32,
                             raw_damage: 5,
                             applied_damage: 5,
-                            missed: false,
+                            grazed: false,
                             instant_kill: false,
                             killed: false,
                             return_value: 5,
@@ -15822,7 +16926,7 @@ fn directed_spell_damage_application_applies_death_wind_in_table_order() {
                         damage: CombatPartyDamageOutcome {
                             raw_damage: COMBAT_INSTANT_KILL_DAMAGE,
                             applied_damage: 12,
-                            missed: false,
+                            grazed: false,
                             instant_kill: true,
                             killed: true,
                             status_before: b'G',
@@ -15839,7 +16943,7 @@ fn directed_spell_damage_application_applies_death_wind_in_table_order() {
                             class: 32,
                             raw_damage: COMBAT_INSTANT_KILL_DAMAGE,
                             applied_damage: stats.max_hp,
-                            missed: false,
+                            grazed: false,
                             instant_kill: true,
                             killed: true,
                             return_value: stats.reward_unit(),
@@ -15904,7 +17008,7 @@ fn directed_spell_damage_skips_disabled_targets_in_cone() {
                         class: 32,
                         raw_damage: COMBAT_INSTANT_KILL_DAMAGE,
                         applied_damage: stats.max_hp,
-                        missed: false,
+                        grazed: false,
                         instant_kill: true,
                         killed: true,
                         return_value: stats.reward_unit(),
@@ -15987,7 +17091,7 @@ fn directed_spell_damage_application_handles_flame_wind_rolls_and_non_damage_eff
                             class: 32,
                             raw_damage: 5,
                             applied_damage: 5,
-                            missed: false,
+                            grazed: false,
                             instant_kill: false,
                             killed: false,
                             return_value: 5,
@@ -16005,7 +17109,7 @@ fn directed_spell_damage_application_handles_flame_wind_rolls_and_non_damage_eff
                             class: 32,
                             raw_damage: 10,
                             applied_damage: 10,
-                            missed: false,
+                            grazed: false,
                             instant_kill: false,
                             killed: true,
                             return_value: stats.reward_unit(),
@@ -16171,7 +17275,7 @@ fn directed_spell_status_application_applies_poison_wind_gate_status_and_fallbac
                         damage: CombatPartyDamageOutcome {
                             raw_damage: 5,
                             applied_damage: 5,
-                            missed: false,
+                            grazed: false,
                             instant_kill: false,
                             killed: false,
                             status_before: b'P',
@@ -16188,7 +17292,7 @@ fn directed_spell_status_application_applies_poison_wind_gate_status_and_fallbac
                             class: 32,
                             raw_damage: 10,
                             applied_damage: 10,
-                            missed: false,
+                            grazed: false,
                             instant_kill: false,
                             killed: true,
                             return_value: stats.reward_unit(),
@@ -16303,7 +17407,7 @@ fn arena_field_contact_application_applies_party_status_and_no_xp_fallback_damag
                 damage: CombatPartyDamageOutcome {
                     raw_damage: 4,
                     applied_damage: 4,
-                    missed: false,
+                    grazed: false,
                     instant_kill: false,
                     killed: false,
                     status_before: b'P',
@@ -16326,7 +17430,7 @@ fn arena_field_contact_application_applies_party_status_and_no_xp_fallback_damag
                 damage: CombatPartyDamageOutcome {
                     raw_damage: 10,
                     applied_damage: 8,
-                    missed: false,
+                    grazed: false,
                     instant_kill: false,
                     killed: true,
                     status_before: b'P',
@@ -16391,7 +17495,7 @@ fn arena_field_contact_application_handles_non_party_damage_skip_and_sleep_repor
                     class: 32,
                     raw_damage: 10,
                     applied_damage: 10,
-                    missed: false,
+                    grazed: false,
                     instant_kill: false,
                     killed: true,
                     return_value: stats.reward_unit(),
@@ -16422,7 +17526,7 @@ fn arena_field_contact_application_targets_current_actor_and_ignores_energy() {
                 damage: CombatPartyDamageOutcome {
                     raw_damage: 10,
                     applied_damage: 10,
-                    missed: false,
+                    grazed: false,
                     instant_kill: false,
                     killed: false,
                     status_before: b'G',
@@ -17388,19 +18492,26 @@ fn combat_split_placement_checks_up_to_eight_candidate_slots() {
 }
 
 #[test]
-fn combat_actor_monster_damage_clamps_miss_and_subtracts_without_underflow() {
+fn combat_actor_monster_damage_grazes_on_zero_or_negative_and_subtracts_without_underflow() {
     let stats = combat_class_stats(32).unwrap();
     let mut descriptor = CombatActorDescriptor::for_monster_placement(stats, 7, 4, 5, 0, 0);
 
-    let miss = descriptor.apply_monster_damage(-1, false).unwrap();
-    assert!(miss.missed);
-    assert!(!miss.killed);
-    assert_eq!(miss.applied_damage, 0);
-    assert_eq!(miss.return_value, 0);
+    // Same zero-or-negative graze condition on the monster arm
+    // (`combat.md` 12, `RETRACTIONS.md` R352).
+    let graze = descriptor.apply_monster_damage(-1, false).unwrap();
+    assert!(graze.grazed);
+    assert!(!graze.killed);
+    assert_eq!(graze.applied_damage, 0);
+    assert_eq!(graze.return_value, 0);
+    assert_eq!(descriptor.hp_or_wound, 10);
+
+    let zero_graze = descriptor.apply_monster_damage(0, false).unwrap();
+    assert!(zero_graze.grazed);
+    assert_eq!(zero_graze.applied_damage, 0);
     assert_eq!(descriptor.hp_or_wound, 10);
 
     let hit = descriptor.apply_monster_damage(4, false).unwrap();
-    assert!(!hit.missed);
+    assert!(!hit.grazed);
     assert!(!hit.killed);
     assert_eq!(hit.applied_damage, 4);
     assert_eq!(hit.return_value, 4);
@@ -17500,18 +18611,86 @@ fn terrain_combat_setup_count_consumes_fortunes_flag_and_town_override() {
     assert_eq!(state.resolve_terrain_combat_setup_count(10, 7, 2, false), 3);
 }
 
+/// `combat.md §5.3` steps 5 and 6. The count draws come off the shared
+/// stream first, and then "the same non-sentinel branch that rolls a count
+/// runs a **full world tick before any monster is placed**".
+///
+/// *Retracted:* this test used to assert the stream was left exactly on the
+/// count roll, which is only true of an engine that omits step 6.
+/// `RETRACTIONS.md` R329/R331 additionally correct what that tick draws: the
+/// arms are animator, wind, composite, and the composite arm "takes one
+/// uniform `[0, 3]` draw **only** for a composited actor standing on one of
+/// the five selecting terrain rows ... and **zero** otherwise", so it
+/// contributes nothing here.
+///
+/// `§5.3` marks step 6 "**Variable and unbounded**", and `RETRACTIONS.md`
+/// R332 makes the wind arm's per-invocation count "**one, two, three, and so
+/// on upward** — every integer from one *is* reachable ... No maximum exists
+/// and an engine must still not assume one." So the published constraint on
+/// the tick's cost is a **lower bound of one draw and no upper bound**, and
+/// that is what is asserted here.
+///
+/// The *number* of ticks is pinned separately, and without running the tick
+/// to compute its own expectation: one world tick advances the shared
+/// `animation.md §6` phase counter exactly once, and that counter takes no
+/// generator draw, so it witnesses "exactly one tick" independently of
+/// whatever the tick draws. Step 5's own draws stay pinned exactly, by
+/// replaying `u5_prng_range_u16` off the pre-call state. The test therefore
+/// fails on zero ticks, on two ticks, on a tick that draws nothing, and on a
+/// different count range.
 #[test]
 fn terrain_combat_setup_count_rolls_from_resident_prng() {
+    // How many generator advances separate two states on the shared stream.
+    // The state transform is range-independent, so walking it forward counts
+    // draws whatever ranges they were taken over - and it runs no production
+    // code, so nothing here certifies itself.
+    fn stream_advances(before: u16, after: u16) -> u32 {
+        let mut probe = before;
+        for steps in 0..=u32::from(u16::MAX) {
+            if probe == after {
+                return steps;
+            }
+            probe = u5_prng_advance_state(probe);
+        }
+        panic!("the shared stream never reached the post-call state");
+    }
+
+    // One world tick advances the §6 phase counter once, whichever animation
+    // path it takes.
+    fn ticks_from_clock(before: u8, after: u8) -> u8 {
+        after.wrapping_sub(before) % STATIC_TILE_ANIMATION_PERIOD_TICKS
+    }
+
     let mut state = world_state(open_world_grid(), 10, 20);
     state.prng_state = 0x1234;
     let mut expected_prng = state.prng_state;
     let expected_count = u5_prng_range_u16(&mut expected_prng, 1, 10) as u8;
 
+    let before_prng = state.prng_state;
+    let before_clock = state.animation.frame;
     assert_eq!(
         state.roll_terrain_combat_setup_count(10, false),
         expected_count
     );
-    assert_eq!(state.prng_state, expected_prng);
+    // Step 5: exactly one count draw, at exactly the published range.
+    assert_eq!(
+        stream_advances(before_prng, expected_prng),
+        1,
+        "step 5's count is one draw off the pre-tick stream"
+    );
+    // Step 6: exactly one world tick, witnessed by the non-drawing clock.
+    assert_eq!(
+        ticks_from_clock(before_clock, state.animation.frame),
+        1,
+        "step 6's world tick runs exactly once after the count roll"
+    );
+    // ...which consumed at least one further draw. `§5.3` publishes no upper
+    // bound, so none is asserted.
+    let tick_draws = stream_advances(expected_prng, state.prng_state);
+    assert!(
+        tick_draws >= 1,
+        "step 6's world tick draws, so it must move the stream past the count"
+    );
 
     state.fortunes_of_war = 1;
     let mut expected_prng = state.prng_state;
@@ -17520,17 +18699,32 @@ fn terrain_combat_setup_count_rolls_from_resident_prng() {
     let first_roll = u5_prng_range_u16(&mut expected_prng, 1, 10) as u8;
     let expected_count = u5_prng_range_u16(&mut expected_prng, 1, u16::from(first_roll)) as u8;
 
+    let before_prng = state.prng_state;
+    let before_clock = state.animation.frame;
     assert!(expected_count <= first_roll);
     assert_eq!(
         state.roll_terrain_combat_setup_count(10, false),
         expected_count
     );
-    assert_eq!(state.prng_state, expected_prng);
+    // The damped branch takes two count draws, then the same single tick.
+    assert_eq!(stream_advances(before_prng, expected_prng), 2);
+    assert_eq!(ticks_from_clock(before_clock, state.animation.frame), 1);
+    assert!(stream_advances(expected_prng, state.prng_state) >= 1);
 
+    // Sentinel ratings and the town-style override skip the whole branch, so
+    // they take neither the count draws nor step 6's tick: §5.3 step 5,
+    // "Sentinel ratings consume nothing here."
     let unchanged_prng = state.prng_state;
+    let unchanged_clock = state.animation.frame;
     assert_eq!(state.roll_terrain_combat_setup_count(16, false), 16);
+    assert_eq!(state.roll_terrain_combat_setup_count(8, false), 8);
+    assert_eq!(state.roll_terrain_combat_setup_count(1, false), 1);
     assert_eq!(state.roll_terrain_combat_setup_count(10, true), 1);
     assert_eq!(state.prng_state, unchanged_prng);
+    assert_eq!(
+        state.animation.frame, unchanged_clock,
+        "a skipped branch runs no world tick either"
+    );
 }
 
 /// `combat.md §5`: "A town-style single-attacker override applies
@@ -18794,43 +19988,64 @@ fn negate_time_freezes_every_tile_animation_clock() {
 /// a uniform random entry from the four-value range; while it is active, the
 /// selector short-circuits and returns the first entry for every actor."
 /// `§8.3`: "The appearance freezes on variant 0 for the whole duration of
-/// Negate Time."
+/// Negate Time - **ten** turns when the effect came from the spell, **twenty**
+/// when it came from the scroll".
+///
+/// `§8.1`: the selector's "one side effect is the generator advance inside
+/// the shared draw itself, which is unconditional whenever the selector is
+/// entered on its random arm" - so the short-circuit arm takes no draw and
+/// leaves the shared stream where it was.
 #[test]
 fn active_object_variant_short_circuits_to_zero_under_negate_time() {
     let mut state = test_state(open_grid(), 10, 20);
-    let actor = ActiveObject {
-        type_byte: 0x90,
-        tile: 0x90,
-        x: 10,
-        y: 19,
-        z: 0,
-        phase: 0,
-        aux1: 0,
-        aux3: 0,
-    };
 
-    // Sweep the turn counter: without the short-circuit the draw visits more
-    // than one entry, so the freeze below is doing real work.
+    // The random arm is a fresh draw off the shared gameplay stream on every
+    // call, so a sweep visits more than one entry and each call moves the
+    // stream. `RETRACTIONS.md` R329 withdrew the once-per-turn cached reading.
     let mut unfrozen = std::collections::BTreeSet::new();
-    for turn in 0..64u64 {
-        state.turn = turn;
-        unfrozen.insert(state.active_object_render_variant(5, 4, actor));
+    let before = state.prng_state;
+    for _ in 0..64 {
+        unfrozen.insert(state.draw_active_object_composite_variant());
     }
-    assert!(
-        unfrozen.len() > 1,
-        "the unfrozen selector must not be constant"
+    assert_eq!(
+        unfrozen,
+        std::collections::BTreeSet::from([0, 1, 2, 3]),
+        "the random arm is a uniform draw over the four-value range"
     );
+    assert_ne!(before, state.prng_state, "the random arm advances the stream");
 
-    state.active_effect_tag = Some(NEGATE_TIME_ACTIVE_EFFECT_TAG);
-    state.active_effect_counter = 10;
-    for turn in 0..64u64 {
-        state.turn = turn;
+    // `RETRACTIONS.md` R333: the code has two producers, the spell at ten
+    // turns and the scroll at twenty, and it lives in a **shared timed-effect
+    // register**, so the freeze must key off that byte's value.
+    for duration in [TIME_STOP_DURATION, SCROLL_NEGATE_TIME_DURATION] {
+        state.active_effect_tag = Some(NEGATE_TIME_ACTIVE_EFFECT_TAG);
+        state.active_effect_counter = duration;
+        let frozen = state.prng_state;
+        for _ in 0..64 {
+            assert_eq!(
+                state.draw_active_object_composite_variant(),
+                0,
+                "Negate Time returns the first entry for every actor"
+            );
+        }
         assert_eq!(
-            state.active_object_render_variant(5, 4, actor),
-            0,
-            "Negate Time returns the first entry for every actor"
+            frozen, state.prng_state,
+            "the short-circuit arm is not entered on the random arm, so it draws nothing"
         );
     }
+
+    // Another effect's code in the same shared register does **not** freeze
+    // the selector: R333 calls it "a shared timed-effect register that other
+    // effects also write, not a Negate Time flag".
+    state.active_effect_tag = Some(NEGATE_MAGIC_ACTIVE_EFFECT_TAG);
+    state.active_effect_counter = 20;
+    let before = state.prng_state;
+    let mut other = std::collections::BTreeSet::new();
+    for _ in 0..64 {
+        other.insert(state.draw_active_object_composite_variant());
+    }
+    assert!(other.len() > 1, "a different timed effect must not freeze it");
+    assert_ne!(before, state.prng_state);
 }
 
 /// `timing.md §8.2`: "The shared wait tests the current scene value and

@@ -933,11 +933,28 @@ pub fn combat_template_impact() -> SpeakerProgram {
 /// increment `(750 - 400) * delay / span` truncates to 11 Hz for all of them.
 /// The realised run is therefore 400, 411, ... 719 Hz, which honours `§5.2`'s
 /// rule that the recipe "stop[s] ... strictly below 750 Hz" and "must not be
-/// implemented as reaching those values". `delay = 4` is chosen because it is
-/// the value that reproduces `§7.4`'s "roughly 130 ms" under the `§5.2`
-/// per-update cost.
-pub const ATTACK_SWING_SPAN: i32 = 120;
-pub const ATTACK_SWING_DELAY: u32 = 4;
+/// implemented as reaching those values".
+///
+/// The ratio leaves one free choice, and only the *duration* discriminates
+/// between the pairs that satisfy it. `§5.2` "In real time" and `§10.2` both
+/// price one update at `delay x 0.88 ms + 0.17 ms`, which is what
+/// [`sweep_tone_nanos`] implements. Setting 30 updates against `§7.4`'s
+/// "roughly 130 ms" gives `130 / 30 = 4.33 ms` per update, hence
+/// `delay = (4.33 - 0.17) / 0.88 = 4.73` calibrated units. `delay` is an
+/// integer count of those units and its two neighbours are not equivalent:
+/// `delay = 4` runs `30 x (4 x 0.88 + 0.17) = 111 ms`, about 15 percent short
+/// and **outside** the plus-or-minus-10-percent band `§10` publishes for its
+/// own durations (117 to 143 ms), while `delay = 5` runs
+/// `30 x (5 x 0.88 + 0.17) = 137 ms`, inside it. `§10` allows an
+/// implementation to "vary any duration below within its stated band" but
+/// "must not vary the counts", so the delay is the one that lands in the band
+/// and the span follows from the published count: `ceil(150 / 5) = 30`.
+///
+/// This is a choice inside a published tolerance, not a published pair. Every
+/// `(span, delay)` with the same ratio plays the same 30 frequencies; this one
+/// also puts the cue's wall clock where `§7.4` puts it.
+pub const ATTACK_SWING_SPAN: i32 = 150;
+pub const ATTACK_SWING_DELAY: u32 = 5;
 pub const ATTACK_SWING_LOW_HZ: i32 = 400;
 pub const ATTACK_SWING_HIGH_HZ: i32 = 750;
 /// `audio.md §7.4`: "30 updates".
@@ -963,7 +980,7 @@ pub fn party_melee_attack_swing() -> SpeakerProgram {
 /// **directions** as the one thing that pass established - "only the sweep
 /// **directions** were established in this pass, and the monster swing runs
 /// opposite to the party's" - while the absolute frequencies are inherited
-/// from the `audio.md` census. The increment `(400 - 750) * 4 / 120` truncates
+/// from the `audio.md` census. The increment `(400 - 750) * 5 / 150` truncates
 /// to -11 Hz, so the realised run is 750, 739, ... 431 Hz, which stops
 /// strictly above 400 Hz as `§5.2` requires.
 pub fn monster_attack_swing() -> SpeakerProgram {

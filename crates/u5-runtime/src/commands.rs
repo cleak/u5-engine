@@ -811,7 +811,19 @@ pub const DUNGEON_ROOM_ENTRY_NARRATION: &str = "Entering room...\n";
 /// `doors-and-z-transitions.md §12.1`, dungeon exit: two prints, `\nExit to `
 /// with a trailing space and no line feed of its own, then the plane name with
 /// `\n\n`. Silent: no key wait and no sound at all. Rendered into the
-/// fifteen-column window the plane name lands whole on its own row.
+/// sixteen-column window (`RETRACTIONS.md` R347) the published rows are a
+/// blank row, `Exit to`, the plane name, and a trailing blank row.
+///
+/// The engine ships the two prints as one concatenated literal. Its break
+/// before the plane name is then the interior space, which the collector
+/// remembers as a legal soft break - not R349's hard-chunk boundary, which
+/// is what the original's *separate* second print takes: "the printer
+/// collects the eight characters that still fit, finds no break byte ...
+/// and prints them from column 0". §12.1 states the rendered rows are the
+/// same under either mechanism for these two strings, so the concatenation
+/// is output-equivalent here. The hard-chunk mechanism itself lives in the
+/// wrap-aware printer (`text-output.md` §6, `RETRACTIONS.md` R346) and is
+/// exercised against it directly.
 pub const DUNGEON_EXIT_TO_BRITANNIA_NARRATION: &str = "\nExit to Britannia!\n\n";
 pub const DUNGEON_EXIT_TO_UNDERWORLD_NARRATION: &str = "\nExit to Underworld!\n\n";
 
@@ -836,8 +848,10 @@ pub const TOWN_EXIT_DECLINED_NARRATION: &str = "No\n";
 /// at all: the fall's per-member feedback is a stats-row flash and a rumble.
 pub const OVERWORLD_FALLS_BANNER: &str = "F-A-L-L-S!!!\n";
 /// `overworld.md §8.1` falls chain, step 7 — printed **only** when the party
-/// now stands on Britannia `(54, 138)`. Rendered into the fifteen-column
-/// window the printer breaks it on the space after `into`.
+/// now stands on Britannia `(54, 138)`. Rendered into the sixteen-column
+/// window the printer breaks it on the space after `into` - the same two
+/// rows either way, which is "a coincidence of these particular strings,
+/// not a vindication of the old number" (`RETRACTIONS.md` R347).
 pub const OVERWORLD_FALLS_UNDERWORLD_NARRATION: &str = "Falling into underworld!!\n";
 /// `overworld.md §8.1` whirlpool swallow, step 1 — "note the leading line
 /// feed, which costs one blank row". It is the first and only text on the

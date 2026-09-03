@@ -105,16 +105,44 @@ fn envelope_pin_at(segment: &EnvelopeSegment, index: u64) -> bool {
 }
 
 /// Render one program to mono PCM.
+///
+/// Operation lengths are placed on a **cumulative** timeline rather than
+/// rounded one at a time, so the render lands on
+/// `samples_for_nanos(program.total_nanos(audible))` exactly.
+///
+/// This matters because the frontend gives its one voice exactly
+/// [`SpeakerProgram::duration`] and then retires it (`audio.md §2`: an
+/// implementation "must stop the speaker at every specified effect end"). A
+/// render longer than its own program is audio that can never be heard; a
+/// render shorter than it is a voice holding an exhausted sink. Rounding each
+/// operation independently produces both, because for a run of identical short
+/// holds the per-operation error has the same sign every time and accumulates
+/// instead of cancelling:
+///
+/// - `§8.6.1`'s gated intro reveal - 16,160 retunes of 60.5 us each - rendered
+///   1.099320 s against a 0.977680 s program, **+12.44%**. Every 2.668-sample
+///   retune was emitted as 3, which both truncated 122 ms off the tail and put
+///   the per-retune hold at 68.0 us, outside the 50 to 60 us `§8.6.1` publishes
+///   for it.
+/// - `§7.1`'s subtitle-ignition burst - 25 holds of 148 us - rendered
+///   0.003968 s against 0.003700 s, **+7.25%**.
+/// - the `§5.2`/`§5.3` glissandi and rumbles rounded the other way, -0.4% to
+///   -1.7%.
 pub fn render_program(program: &SpeakerProgram, audible: bool) -> RenderedSpeaker {
     let total = samples_for_nanos(program.total_nanos(audible));
     let mut samples: Vec<f32> = Vec::with_capacity(total + 1);
     // Continuous square-wave phase in turns, so consecutive tones do not click.
     let mut phase = 0.0_f64;
+    // Nanoseconds of the program consumed so far. Each operation takes the
+    // samples between where the timeline was and where it now is, so a rounding
+    // error is corrected by the next operation instead of compounding.
+    let mut elapsed_nanos = 0_u64;
 
     for op in &program.ops {
+        elapsed_nanos += op.nanos(audible);
+        let count = samples_for_nanos(elapsed_nanos).saturating_sub(samples.len());
         match op {
-            SpeakerOp::Tone { divisor, nanos, .. } => {
-                let count = samples_for_nanos(*nanos);
+            SpeakerOp::Tone { divisor, .. } => {
                 let frequency = f64::from(frequency_for_divisor(*divisor));
                 let increment = frequency / f64::from(SAMPLE_RATE);
                 for _ in 0..count {
@@ -126,12 +154,10 @@ pub fn render_program(program: &SpeakerProgram, audible: bool) -> RenderedSpeake
                     });
                 }
             }
-            SpeakerOp::Silence { nanos } => {
-                let count = samples_for_nanos(*nanos);
+            SpeakerOp::Silence { .. } => {
                 samples.extend(std::iter::repeat_n(0.0, count));
             }
             SpeakerOp::Envelope(segment) => {
-                let count = samples_for_nanos(segment.total_nanos(audible));
                 if count == 0 {
                     continue;
                 }
@@ -421,5 +447,67 @@ mod tests {
         let first = render(SoundEffect::TrapRumble);
         let second = render(SoundEffect::TrapRumble);
         assert_eq!(first, second);
+    }
+
+    /// `audio.md §2`: an implementation "must stop the speaker at every
+    /// specified effect end". The frontend enforces that by giving its one
+    /// voice exactly [`SpeakerProgram::duration`] and then retiring it, so a
+    /// render may not be longer than its own program - that tail is audio the
+    /// speaker can never reach - nor shorter, which leaves the voice holding an
+    /// exhausted sink.
+    ///
+    /// Rounding each operation's length independently breaks this whenever a
+    /// program is a long run of identical sub-sample-accurate holds: the error
+    /// has the same sign every time and accumulates. `§8.6.1`'s gated reveal is
+    /// 16,160 such holds and used to render 12.44% long.
+    #[test]
+    fn a_run_of_short_holds_renders_to_exactly_its_program_duration() {
+        // 60.5 us is the `§8.6.1` per-retune hold: 2.668 samples at 44.1 kHz,
+        // so every individual hold rounds and only the cumulative timeline can
+        // keep the total honest.
+        const HOLD_NANOS: u64 = 60_500;
+        const HOLDS: usize = 16_160;
+        let mut ops: Vec<SpeakerOp> = (0..HOLDS)
+            .map(|index| SpeakerOp::tone(100 + (index as u32 % 1_400), HOLD_NANOS))
+            .collect();
+        ops.push(SpeakerOp::Stop);
+        let program = SpeakerProgram::new(ops);
+        let rendered = render_program(&program, true);
+        assert_eq!(
+            rendered.samples.len(),
+            samples_for_nanos(program.total_nanos(true)),
+        );
+        // The realised retune cadence, which is what `§8.6.1` describes as
+        // "roughly 50 to 60 microseconds". Per-operation rounding emitted every
+        // 2.668-sample hold as 3 and put this at 68,027 ns.
+        let per_hold_nanos = rendered.duration_secs() / HOLDS as f64 * 1.0e9;
+        assert!(
+            (per_hold_nanos - HOLD_NANOS as f64).abs() < 10.0,
+            "per-retune hold rendered {per_hold_nanos:.0} ns against a programmed {HOLD_NANOS} ns",
+        );
+    }
+
+    /// The same invariant on the `§7.1` subtitle-ignition burst, the other
+    /// effect the per-operation rounding inflated (0.003968 s rendered against
+    /// a 0.003700 s program, +7.25%), which put it outside the 3.4 to 4.0 ms
+    /// band `§10.1` publishes for it.
+    #[test]
+    fn the_subtitle_ignition_burst_renders_to_exactly_its_program_duration() {
+        let mut jitter = RumbleJitter::new();
+        let effect = SoundEffect::SubtitleIgnitionBurst {
+            pitches: (0..25u16)
+                .map(|index| 100 + index * 56)
+                .collect::<Vec<_>>()
+                .into(),
+        };
+        for audible in [true, false] {
+            let program = effect.program(&mut jitter);
+            let rendered = render_program(&program, audible);
+            assert_eq!(
+                rendered.samples.len(),
+                samples_for_nanos(program.total_nanos(audible)),
+                "audible={audible}",
+            );
+        }
     }
 }
