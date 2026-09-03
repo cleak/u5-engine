@@ -685,13 +685,18 @@
             aux1: 0,
             aux3: 0,
         });
+        // The blocker carries `active-objects.md §3`'s freeze sentinel so the
+        // draw accounting below stays the town object walker's own. A phase of
+        // zero is a decision-point record, and the `animation.md §5` per-slot
+        // coin (`visibility.md §8.4` consumer one) would take a draw ahead of
+        // the walker for a slot that is only here to be stood on.
         object_blocked.active_objects.push(ActiveObject {
             type_byte: 0xc0,
             tile: 0xc0,
             x: 6,
             y: 5,
             z: 0,
-            phase: 0,
+            phase: STEADY_PHASE,
             aux1: 0,
             aux3: 0,
         });
@@ -704,6 +709,62 @@
         }
         assert_eq!(object_blocked.prng_state, expected_prng);
         assert!(!object_blocked.visibility_dirty);
+
+        // Companion: the same fixture with the blocker left at a decision
+        // point, so the new consumer is accounted for rather than sidestepped.
+        // The `0xc0` record has a two-frame family and a zero low nibble, so
+        // the `animation.md §5` coin (`visibility.md §8.4` consumer one) is
+        // drawn for it, ahead of the walker, and the shared stream advances
+        // one step further than the case above. That shift is visible in the
+        // walker's own outcome: off the shifted stream it selects west
+        // instead, which is open, so it moves. **That is the disclosure, not
+        // a bug** - the point of the fixture change above is to keep this
+        // test's subject (the walker's blocked-destination accounting) on the
+        // stream it was written against, and the point of this block is to
+        // show what the new draw costs.
+        let mut animating_grid = town_free_roaming_grid();
+        animating_grid[6 * TOWN_GRID_SIDE + 5] = 0x04;
+        let mut animating = test_state(animating_grid, 1, 1);
+        animating.prng_state = 0x0070;
+        animating.active_objects.push(ActiveObject {
+            type_byte: 0x10,
+            tile: 0x10,
+            x: 5,
+            y: 5,
+            z: 0,
+            phase: 0,
+            aux1: 0,
+            aux3: 0,
+        });
+        animating.active_objects.push(ActiveObject {
+            type_byte: 0xc0,
+            tile: 0xc0,
+            x: 6,
+            y: 5,
+            z: 0,
+            phase: 0,
+            aux1: 0,
+            aux3: 0,
+        });
+
+        animating.advance_active_objects();
+
+        let mut expected_with_coin = 0x0070;
+        for _ in 0..4 {
+            expected_with_coin = u5_prng_advance_state(expected_with_coin);
+        }
+        assert_eq!(
+            animating.prng_state, expected_with_coin,
+            "one coin for the decision-point blocker, then the walker's three"
+        );
+        assert!(
+            [0xc0, 0xc1].contains(&animating.active_objects[2].tile),
+            "the blocker stays inside its own two-frame family"
+        );
+        assert_eq!(
+            animating.active_objects[2].phase, 0,
+            "the animator leaves byte 6 alone; see the disclosed inference on animate_active_object_decision_point"
+        );
     }
 
     #[test]
