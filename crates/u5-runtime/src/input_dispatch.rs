@@ -2742,7 +2742,23 @@ fn handle_combat_key_input(state: &mut PlayState, key: char, suffix: &str) -> Pl
         return PlayInputDisposition::Continue;
     };
     if !combat_pending_player_actor_is_active(state, actor_slot) {
-        state.message.clear();
+        // `combat.md §8` Shape A: "The helper prints the verb label, then
+        // requires that the acting combatant is still alive. A dead actor gets
+        // the short \"Can't!\" refusal and the prompt is re-issued at no
+        // cost." The six Shape-A letters are the only ones that publish a
+        // refusal here; every other key on a non-acting slot stays silent.
+        let branch = resolve_combat_command_branch(key);
+        state.message = if combat_command_branch_requires_live_active_actor(branch) {
+            let mut refusal = combat_command_branch_published_label(branch)
+                .unwrap_or("")
+                .to_string();
+            refusal.push_str(COMBAT_LIVE_ACTOR_REFUSAL);
+            refusal
+        } else {
+            String::new()
+        };
+        // The slot is not reinstated: the walker re-selects an acting slot on
+        // the next keystroke, which is `§8`'s free re-prompt.
         return PlayInputDisposition::Continue;
     }
     let input = combat_player_command_input_from_key(key);
@@ -2822,7 +2838,10 @@ fn handle_combat_multistage_command(
         live_actor_gate,
         CombatCommandLiveActorGate::RejectedDeadOrMissing
     ) {
-        state.message.clear();
+        // `combat.md §8` Shape A: the verb label is already in the slot, and
+        // the dead-actor arm appends the short published refusal before the
+        // free re-prompt. Clearing the slot printed nothing at all.
+        state.message.push_str(COMBAT_LIVE_ACTOR_REFUSAL);
         return false;
     }
 
@@ -2946,6 +2965,19 @@ fn handle_combat_multistage_command(
         | CombatCommandBranch::Jimmy
         | CombatCommandBranch::Open
         | CombatCommandBranch::Search => {
+            // `combat.md §7.1`: "Jimmy first requires the party to hold at
+            // least one key: with a key count of zero it prints `No keys!` and
+            // returns immediately, **before the direction prompt** and before
+            // any tile is examined."
+            if *branch == CombatCommandBranch::Jimmy && state.keys == 0 {
+                // `combat.md §8` Shape A prints the verb label first and the
+                // delegate's own line after it, which is why the dead-actor
+                // arm above appends too. The label is already in the slot.
+                state.message.push_str(COMBAT_JIMMY_NO_KEYS_MESSAGE);
+                let _ = apply_combat_committed_action_maintenance(state, actor_slot);
+                advance_combat_round_after_actor_and_append_message(state, actor_slot);
+                return true;
+            }
             if let Some(direction) = suffix
                 .chars()
                 .find_map(Direction::from_play_key)

@@ -13905,11 +13905,17 @@ fn spawn_terrain_branch_classifier_matches_spec_table() {
         usize::from(SPAWN_LOW_TILE_ALLOWANCE_DRAW_HIGH) + 1
     );
 
-    // Surface tile 1 -> whirlpool/aquatic special branch.
+    // `encounters.md §4` names the tile-1 row "Surface tile 1 **after the
+    // low-tile allowance gate**", and tile 1 is inside the low-tile family, so
+    // the classifier routes it to the allowance die first and the special
+    // branch is reached only once that die accepts.
     assert_eq!(
         spawn_terrain_branch(0x01, false),
-        SpawnTerrainBranch::SurfaceTile1WhirlpoolOrAquatic
+        SpawnTerrainBranch::LowTileAllowance
     );
+    assert!(spawn_surface_tile1_special_after_allowance(0x01, false));
+    assert!(!spawn_surface_tile1_special_after_allowance(0x01, true));
+    assert!(!spawn_surface_tile1_special_after_allowance(0x02, false));
     // Underworld tile 4 -> Rot Worm direct branch; surface tile 4
     // continues to the land bucket selected by plane.
     assert_eq!(

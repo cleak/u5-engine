@@ -1684,6 +1684,7 @@
                         attacker_slot: COMBAT_PARTY_ACTOR_SLOTS,
                         target_slot: 0,
                         poison_status_outcome: None,
+                        stoning: None,
                         resolution: Some(CombatWeaponAttackResolution::Hit {
                             route: CombatWeaponAttackRangeRoute::Melee,
                             raw_damage: soaked,
@@ -1709,6 +1710,7 @@
                     attacker_slot: COMBAT_PARTY_ACTOR_SLOTS,
                     target_slot: 0,
                     poison_status_outcome: None,
+                    stoning: None,
                     resolution: Some(CombatWeaponAttackResolution::Miss {
                         route: CombatWeaponAttackRangeRoute::Melee,
                         hit_score: 7,
@@ -1911,6 +1913,7 @@
                         attacker_slot,
                         target_slot: 0,
                         poison_status_outcome: None,
+                        stoning: None,
                         resolution: Some(CombatWeaponAttackResolution::Hit {
                             route: CombatWeaponAttackRangeRoute::Melee,
                             raw_damage: 4,

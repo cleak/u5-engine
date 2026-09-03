@@ -2527,7 +2527,15 @@ fn combat_class_traits_expose_published_behavior_rows() {
     assert_eq!(reserved.name, "Reserved gap");
     assert_eq!(reserved, traits_without_identity(42, "Reserved gap"));
 
-    assert_eq!(combat_class_traits(11), None);
+    // `combat.md §13`: the per-class flag word is "Sixteen bits per class"
+    // over the same forty-eight-row class space as the stat record, and
+    // "party combat classes, special NPC classes, and monsters share the same
+    // eight-byte row shape". Class 11 is a townsfolk/NPC row with no confirmed
+    // trait, so its word is all zero - not absent.
+    assert_eq!(
+        combat_class_traits(11),
+        Some(traits_without_identity(11, "Beggar"))
+    );
     assert_eq!(combat_class_traits(48), None);
 }
 
@@ -2621,8 +2629,14 @@ fn amulet_turning_scatter_requires_all_documented_preconditions() {
 
     assert!(resolve_amulet_turning_scatter_for_class(28, true, true, 0).unwrap());
     assert!(!resolve_amulet_turning_scatter_for_class(39, true, true, 0).unwrap());
+    // `combat.md §13`: class 11 carries an all-zero flag word, so it answers
+    // the turnable-attack question with `false` rather than with "no row".
     assert_eq!(
         resolve_amulet_turning_scatter_for_class(11, true, true, 0),
+        Some(false)
+    );
+    assert_eq!(
+        resolve_amulet_turning_scatter_for_class(48, true, true, 0),
         None
     );
 }
@@ -2798,37 +2812,30 @@ fn combat_possess_candidate_gate_accepts_only_live_visible_idle_party_slots() {
     assert!(combat_possess_candidate_reaches_resistance(
         0,
         possess_candidate(live, Some(possess_member(b'G', 10))),
-        None
     ));
     assert!(combat_possess_candidate_reaches_resistance(
         0,
         possess_candidate(live, Some(possess_member(b'P', 10))),
-        None
     ));
     assert!(!combat_possess_candidate_reaches_resistance(
         0,
         possess_candidate(live, Some(possess_member(b'S', 10))),
-        None
     ));
     assert!(!combat_possess_candidate_reaches_resistance(
         0,
         possess_candidate(live, Some(possess_member(b'D', 0))),
-        None
     ));
     assert!(!combat_possess_candidate_reaches_resistance(
         0,
         possess_candidate(hidden, Some(possess_member(b'G', 10))),
-        None
     ));
     assert!(!combat_possess_candidate_reaches_resistance(
         0,
         possess_candidate(dead, Some(possess_member(b'G', 10))),
-        None
     ));
     assert!(!combat_possess_candidate_reaches_resistance(
         0,
         possess_candidate(passive, Some(possess_member(b'G', 10))),
-        None
     ));
     assert!(!combat_possess_candidate_reaches_resistance(
         0,
@@ -2836,7 +2843,6 @@ fn combat_possess_candidate_gate_accepts_only_live_visible_idle_party_slots() {
             suppressed: true,
             ..possess_candidate(live, Some(possess_member(b'G', 10)))
         },
-        None
     ));
     assert!(!combat_possess_candidate_reaches_resistance(
         0,
@@ -2844,17 +2850,18 @@ fn combat_possess_candidate_gate_accepts_only_live_visible_idle_party_slots() {
             invisible_or_unrevealed: true,
             ..possess_candidate(live, Some(possess_member(b'G', 10)))
         },
-        None
     ));
-    assert!(!combat_possess_candidate_reaches_resistance(
+    // `combat.md §9`'s acceptance list does not include the active-player
+    // sentinel, and its own landing step - "the active-player sentinel is
+    // cleared to 'none' **if the sentinel currently names the possessed
+    // character**" - is unreachable unless such a target can be drawn.
+    assert!(combat_possess_candidate_reaches_resistance(
         0,
         possess_candidate(live, Some(possess_member(b'G', 10))),
-        Some(0)
     ));
     assert!(!combat_possess_candidate_reaches_resistance(
         COMBAT_PARTY_ACTOR_SLOTS,
         possess_candidate(live, Some(possess_member(b'G', 10))),
-        None
     ));
 }
 
@@ -2868,15 +2875,15 @@ fn combat_possess_random_slot_must_itself_reach_resistance() {
     candidates[4] = possess_candidate(live, Some(possess_member(b'S', 10)));
 
     assert_eq!(
-        resolve_combat_possess_candidate_slot(&candidates, 3, None),
+        resolve_combat_possess_candidate_slot(&candidates, 3),
         Some(3)
     );
     assert_eq!(
-        resolve_combat_possess_candidate_slot(&candidates, 4, None),
+        resolve_combat_possess_candidate_slot(&candidates, 4),
         None
     );
     assert_eq!(
-        resolve_combat_possess_candidate_slot(&candidates, COMBAT_ACTOR_SLOTS, None),
+        resolve_combat_possess_candidate_slot(&candidates, COMBAT_ACTOR_SLOTS),
         None
     );
 }
@@ -2969,8 +2976,15 @@ fn poison_status_attack_preserves_gate_and_fallback_damage_boundaries() {
             .unwrap(),
             CombatPoisonStatusAttackOutcome::NotPoisonStatusClass
         );
+    // `combat.md §13`: class 11's flag word exists and is all zero, so it
+    // answers "not a poison/status class" rather than removing the branch.
     assert_eq!(
-        resolve_poison_status_attack_for_party_target(11, &mut non_poison_attacker_target, true, 9,),
+        resolve_poison_status_attack_for_party_target(11, &mut non_poison_attacker_target, true, 9,)
+            .unwrap(),
+        CombatPoisonStatusAttackOutcome::NotPoisonStatusClass
+    );
+    assert_eq!(
+        resolve_poison_status_attack_for_party_target(48, &mut non_poison_attacker_target, true, 9,),
         None
     );
 }
@@ -8737,6 +8751,12 @@ fn combat_ai_summon_daemon_special_places_daemon_without_spell_resources() {
         application,
         CombatAiSpecialApplication::SummonDaemon {
             actor_slot,
+            flash: combat_summon_flash_playback(
+                COMBAT_CLASS_DAEMON,
+                summoned_actor_slot,
+                summoned_object_slot,
+                (6, 4),
+            ),
             summon: CombatSummonApplication {
                 class: COMBAT_CLASS_DAEMON,
                 actor_slot: summoned_actor_slot,
@@ -14393,6 +14413,7 @@ fn combat_ai_movement_commit_skips_blocked_or_inactive_actors() {
             &mut active_objects,
             CombatAiMovementOutcome::Blocked {
                 random_cardinal_attempts: 4,
+                action_consumed: true,
             },
         ),
         None
@@ -14436,7 +14457,8 @@ fn combat_ai_random_cardinal_fallback_is_four_independent_draws() {
             &[1, 3],
         ),
         CombatAiMovementOutcome::Blocked {
-            random_cardinal_attempts: 2
+            random_cardinal_attempts: 2,
+            action_consumed: true,
         }
     );
 
@@ -14475,7 +14497,10 @@ fn combat_ai_random_cardinal_fallback_is_four_independent_draws() {
             &[1, 3, 2, 4],
         ),
         CombatAiMovementOutcome::Blocked {
-            random_cardinal_attempts: 4
+            random_cardinal_attempts: 4,
+            // `combat.md §9`: the final draw (`4`) is not the first (`1`), so
+            // the exhausted fallback still reports the action consumed.
+            action_consumed: true,
         }
     );
 }
@@ -15490,6 +15515,7 @@ fn combat_monster_attack_applies_poison_status_before_ordinary_melee_damage() {
                 status_before: b'G',
                 status_after: b'P',
             }),
+            stoning: None,
             resolution: None,
             damage_application: None,
             // `combat.md §11.1`: the poison line prints "**inside** damage
@@ -15545,6 +15571,7 @@ fn combat_monster_attack_poison_branch_falls_back_to_damage_for_non_good_party()
             poison_status_outcome: Some(CombatPoisonStatusAttackOutcome::FallbackDamage {
                 raw_damage: 9
             }),
+            stoning: None,
             resolution: None,
             damage_application: Some(CombatWeaponDamageApplication::Party {
                 target_slot: 0,
@@ -15579,6 +15606,7 @@ fn combat_monster_attack_gate_rejection_uses_ordinary_melee_hit_resolution() {
             attacker_slot: 8,
             target_slot: 0,
             poison_status_outcome: Some(CombatPoisonStatusAttackOutcome::GateRejected),
+            stoning: None,
             // `combat.md §12` (R336): the monster's raw value is its class
             // attack byte "used flat, with no random draw at all", and the
             // party's cached combat-defense byte of 7 then subtracts an
@@ -15622,6 +15650,7 @@ fn combat_monster_attack_uses_ranged_effect_route_for_in_range_non_adjacent_targ
             attacker_slot: 8,
             target_slot: 0,
             poison_status_outcome: None,
+            stoning: None,
             // `combat.md §12` (R336): a Dragon brings its class attack
             // value of 30 flat, less the party's inclusive `1..7` defence
             // draw. The former expectation of 5 was the `1..attack` roll
@@ -17811,6 +17840,7 @@ fn terrain_poison_preempts_markers_even_when_poison_is_status_or_tile_gated() {
                 contact_outcome: CombatArenaFieldContactOutcome::PoisonedPartyMember { .. },
                 ..
             },
+            ..
         })
     ));
     assert_eq!(state.party[0].status, b'P');
@@ -17830,6 +17860,7 @@ fn terrain_poison_preempts_markers_even_when_poison_is_status_or_tile_gated() {
                 contact_outcome: CombatArenaFieldContactOutcome::PoisonSkippedByLinkedTileClass,
                 ..
             },
+            ..
         })
     ));
     assert_eq!(state.party[0].hp, hp_before_rejection);
@@ -17872,6 +17903,7 @@ fn lava_and_fireplace_terrain_use_one_inclusive_raw_fire_damage_draw() {
                     contact_outcome: CombatArenaFieldContactOutcome::FireDamage { raw_damage },
                     ..
                 },
+                ..
             }) if selected_tile == tile && raw_damage == expected_raw
         ));
         assert_eq!(state.prng_state, expected_prng);
@@ -18243,7 +18275,8 @@ fn combat_step_defers_field_contact_until_completed_dispatch_without_consuming_m
                 target_slot: 0,
                 contact_outcome: CombatArenaFieldContactOutcome::FireDamage { raw_damage },
                 ..
-            }
+            },
+            ..
         }) if raw_damage == expected_raw
     ));
     assert_eq!(state.prng_state, expected_prng);

@@ -194,6 +194,20 @@ pub struct PlayState {
     /// reads for a party defender, at character-record offset `+0x18`,
     /// one entry per roster slot.
     pub party_combat_defense: Vec<u8>,
+    /// `combat.md §11`: "One class trait can route an attack into a cast-like
+    /// ranged/effect branch, rather than ordinary melee, **when the combat
+    /// effect prerequisite state is active**."
+    ///
+    /// This is that state. `§11` names it, names the branch it gates, and
+    /// specifies what the branch does; **no shipped document names what turns
+    /// it on**. Rather than invent a trigger, this engine carries the state
+    /// with no production writer and implements everything downstream of it.
+    ///
+    /// The consequence is stated plainly rather than hidden: while this stays
+    /// `false` for want of a published trigger, the cast-like branch is
+    /// reachable only from a caller that sets the state itself, so the
+    /// contract is implemented but not yet exercised by ordinary play.
+    pub combat_effect_prerequisite_active: bool,
     pub party_intelligence: Vec<u8>,
     pub party_equipment: Vec<[u8; EQUIPMENT_SLOT_COUNT]>,
     pub party_roster: Vec<PartyRosterRecord>,
