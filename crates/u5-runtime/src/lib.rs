@@ -908,20 +908,24 @@ pub use u4_transfer::*;
 pub use u4_transfer_preview::*;
 pub use view_classes::{fc_sprite_proximity_mask_hits, tile_view_class};
 pub use visibility::{
-    ActiveObjectCompositeResult, ActiveObjectCompositorBranch, FOG_REFINE_SQUARED_THRESHOLD,
+    ACTIVE_OBJECT_VARIANT_RANGE_HIGH, ACTIVE_OBJECT_VARIANT_RANGE_LOW,
+    ACTIVE_OBJECT_VARIANT_TRANSITION_PROBABILITY, ActiveObjectCompositeResult,
+    ActiveObjectCompositeStep, ActiveObjectCompositorBranch, FOG_REFINE_SQUARED_THRESHOLD,
     LOCAL_LIGHT_MASK_SIDE, LOCAL_LIGHT_SOURCE_CELL_COUNT, LOCAL_LIGHT_SOURCE_SQUARED_THRESHOLD,
-    LightRadiusBranch, TERRAIN_BAND_LEN, TERRAIN_BAND_ROW_STRIDE, VEHICLE_AVATAR_UNDERLAY_MARKER,
-    VIEWPORT_CENTER, VIEWPORT_MAX_INDEX, VIEWPORT_PLAYER_COL, VIEWPORT_PLAYER_ROW,
-    VIEWPORT_ROW_STRIDE, VIEWPORT_SIDE, VISIBILITY_ALREADY_RENDERED,
+    LightRadiusBranch, SINGLE_SPRITE_FAMILY_SEATED_CHAIR_TERRAIN,
+    SINGLE_SPRITE_FAMILY_SEATED_FRAME_FALLTHROUGH_DECREMENT, TERRAIN_BAND_LEN,
+    TERRAIN_BAND_ROW_STRIDE, VIEWPORT_CENTER, VIEWPORT_MAX_INDEX, VIEWPORT_PLAYER_COL,
+    VIEWPORT_PLAYER_ROW, VIEWPORT_ROW_STRIDE, VIEWPORT_SIDE, VISIBILITY_ALREADY_RENDERED,
     VISIBILITY_CARVE_NEIGHBOR_ORDER, VISIBILITY_CLEAR, VISIBILITY_DIM_PERIPHERY,
     VISIBILITY_GRID_LEN, VISIBILITY_HIDDEN, VISIBILITY_USE_COMPANION, VisibilityMarker,
-    active_object_composite, active_object_composite_for_player, active_object_compositor_branch,
-    active_object_compositor_variant, active_object_default_composite,
-    active_object_default_tile_is_terrain_aware, composite_active_object_slot,
-    fog_refine_folded_coord, fog_refine_inside_clear_core, fog_refine_squared_distance,
-    is_local_light_source_tile, light_radius_branch, terrain_band_active_index,
-    visibility_cheap_path_needs_refill, visibility_grid_active_index, visibility_in_radius,
-    visibility_marker,
+    active_object_composite, active_object_composite_for_player, active_object_composite_step,
+    active_object_compositor_branch, active_object_compositor_variant,
+    active_object_default_composite, active_object_default_tile_is_terrain_aware,
+    active_object_default_variant_base, composite_active_object_slot,
+    composite_active_object_slot_draws_variant, fog_refine_folded_coord,
+    fog_refine_inside_clear_core, fog_refine_squared_distance, is_local_light_source_tile,
+    light_radius_branch, terrain_band_active_index, visibility_cheap_path_needs_refill,
+    visibility_grid_active_index, visibility_in_radius, visibility_marker,
 };
 pub use visual_asset_audit::*;
 pub use water_scroll::{
@@ -1004,6 +1008,7 @@ mod tests {
     include!("tests_inline/npc_schedules_conformance.rs");
     include!("tests_inline/save_fidelity.rs");
     include!("tests_inline/spec_conformance_chunk_07.rs");
+    include!("tests_inline/variant_rescope.rs");
     include!("tests_inline/combat_frame_conformance.rs");
     include!("tests_inline/result_lines_conformance.rs");
 }

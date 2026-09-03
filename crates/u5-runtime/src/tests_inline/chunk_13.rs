@@ -14355,8 +14355,11 @@ fn local_light_source_tile_matches_spec_candidates() {
 
 #[test]
 fn active_object_compositor_branch_matches_spec_table() {
-    // visibility.md §8
-    assert_eq!(VEHICLE_AVATAR_UNDERLAY_MARKER, 0x92);
+    // visibility.md §8. `RETRACTIONS.md` R330: the byte the `0x5C` arm
+    // tests is "the **chair terrain id** standing in the grid cell, not a
+    // marker".
+    assert_eq!(SINGLE_SPRITE_FAMILY_SEATED_CHAIR_TERRAIN, 0x92);
+    assert_eq!(SINGLE_SPRITE_FAMILY_SEATED_FRAME_FALLTHROUGH_DECREMENT, 8);
 
     // Water-bound class via type byte.
     for t in 0xE8u8..=0xEB {
@@ -14385,10 +14388,13 @@ fn active_object_compositor_branch_matches_spec_table() {
         ActiveObjectCompositorBranch::WaterCreatureCompanion
     );
 
-    // Vehicle/avatar branch.
+    // Single-sprite-family seated branch. `RETRACTIONS.md` R330: "`0x5C` is
+    // **one ordinary NPC sprite family** ..., not a vehicle or avatar marker,
+    // and the party's own type byte is the party sprite marker, which is
+    // **never `0x5C` outside combat**".
     assert_eq!(
         active_object_compositor_branch(0x5C, 0),
-        ActiveObjectCompositorBranch::VehicleAvatarCompanion
+        ActiveObjectCompositorBranch::SingleSpriteFamilySeated
     );
 
     // Default helper for everything else.
@@ -14545,7 +14551,7 @@ fn active_object_composite_dispatches_companion_and_guard_branches() {
         active_object_composite(
             0x5C,
             0x44,
-            VEHICLE_AVATAR_UNDERLAY_MARKER,
+            SINGLE_SPRITE_FAMILY_SEATED_CHAIR_TERRAIN,
             0x10,
             None,
             None,
@@ -14554,9 +14560,22 @@ fn active_object_composite_dispatches_companion_and_guard_branches() {
         ),
         ActiveObjectCompositeResult::Companion(0x44)
     );
+    // `RETRACTIONS.md` R330: "off that terrain the slot falls through to the
+    // default helper with its frame byte **reduced by eight**". `0x44` becomes
+    // `0x3C`, which is no longer terrain-aware, so it stamps unchanged.
     assert_eq!(
-        active_object_composite(0x5C, 0x44, 0x10, 0x57, None, None, 5, 0),
+        active_object_composite(0x5C, 0x44, 0x10, 0x10, None, None, 5, 0),
+        ActiveObjectCompositeResult::Companion(0x3C)
+    );
+    // A fall-through whose decremented byte is still terrain-aware reaches the
+    // terrain rows with the reduced value: `0x60` becomes `0x58`.
+    assert_eq!(
+        active_object_composite(0x5C, 0x60, 0x10, 0x57, None, None, 5, 0),
         ActiveObjectCompositeResult::Direct(0x38)
+    );
+    assert_eq!(
+        active_object_composite(0x5C, 0x60, 0x10, 0x10, None, None, 5, 0),
+        ActiveObjectCompositeResult::Companion(0x58)
     );
     assert_eq!(
         active_object_composite(

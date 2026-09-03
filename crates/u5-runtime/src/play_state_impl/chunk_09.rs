@@ -1498,16 +1498,41 @@ impl PlayState {
         let grid_index = visibility_grid_active_index(row, col).unwrap();
         let terrain_index = terrain_band_active_index(row, col).unwrap();
         let current_grid_byte = self.visibility_grid[grid_index];
-        let current_terrain = self.terrain_band[terrain_index];
-        let previous_row_terrain = (row > 0).then(|| {
-            let index = terrain_band_active_index(row - 1, col).unwrap();
-            self.terrain_band[index]
-        });
-        let next_row_terrain = (row + 1 < VIEWPORT_SIDE).then(|| {
-            let index = terrain_band_active_index(row + 1, col).unwrap();
-            self.terrain_band[index]
-        });
-        let variant = self.active_object_render_variant(col, row, object);
+        // `visibility.md §8`: "Terrain-aware stamps use the live
+        // world/combat tile at the object's coordinate, plus one
+        // neighbouring row for a few edge shapes." The read is against the map
+        // at the object's own world coordinate - not against the eleven-by-
+        // eleven companion terrain band, which has no row outside the viewport
+        // and which this pass overwrites as it walks slots thirty-one down to
+        // zero. See [`Self::top_down_live_terrain_at`].
+        let object_x = object.x as isize;
+        let object_y = object.y as isize;
+        let current_terrain = self
+            .top_down_live_terrain_at(area, object_x, object_y)
+            .unwrap_or(self.terrain_band[terrain_index]);
+        let previous_row_terrain = self.top_down_live_terrain_at(area, object_x, object_y - 1);
+        let next_row_terrain = self.top_down_live_terrain_at(area, object_x, object_y + 1);
+        // `visibility.md §8.1`, normative: "For an actor whose composite
+        // lands on one of the five selecting rows of the Section 8 table, the
+        // variant is drawn **once per composite pass** - not once per
+        // placement - and **it is never cached anywhere.** For every other
+        // composited actor, **no draw is taken at all.**" The skips above have
+        // already run, and `§8.1` is explicit that "every skip is evaluated
+        // before the compositor is invoked, so a skipped actor costs no draw
+        // at all. An implementation must not draw speculatively for an actor
+        // it is about to skip".
+        let variant = if composite_active_object_slot_draws_variant(
+            object.type_byte,
+            object.tile,
+            current_grid_byte,
+            current_terrain,
+            previous_row_terrain,
+            next_row_terrain,
+        ) {
+            self.draw_active_object_composite_variant()
+        } else {
+            0
+        };
         match composite_active_object_slot(
             player_slot,
             object.type_byte,
@@ -1615,10 +1640,7 @@ impl PlayState {
                 ) {
                     return None;
                 }
-                // `town-mode.md §15`: cells beyond the 32-by-32 floor take
-                // the loaded floor's southeast-corner terrain, not a hole.
-                let tile = self.surface_viewport_tile(x, y, false)?;
-                let terrain = self.animation.resolve_static_tile(tile);
+                let terrain = self.top_down_live_terrain_at(area, x, y)?;
                 Some((terrain, None))
             }
             TopDownRenderArea::World(_) => {
@@ -1636,14 +1658,44 @@ impl PlayState {
                 ) {
                     return None;
                 }
-                let wx = x.rem_euclid(WORLD_SIDE as isize) as usize;
-                let wy = y.rem_euclid(WORLD_SIDE as isize) as usize;
-                let terrain = self
-                    .animation
-                    .resolve_static_tile(self.world_live_tile_at(wx, wy));
+                let terrain = self.top_down_live_terrain_at(area, x, y)?;
                 Some((terrain, None))
             }
         }
+    }
+
+    /// `visibility.md §8`: the live map tile at one world coordinate, with no
+    /// lighting or visibility gate and with no composited sprite over it.
+    ///
+    /// The terrain-aware rows of the `§8` compositor table are defined against
+    /// this read, not against the companion terrain band: "Terrain-aware
+    /// stamps use the live world/combat tile at the object's coordinate, plus
+    /// one neighbouring row for a few edge shapes." The band is not a
+    /// substitute for it on either half of that sentence. It spans only the
+    /// eleven-by-eleven viewport, so the neighbouring row of an object on an
+    /// edge row is simply not in it; and every `Companion` stamp the pass has
+    /// already made has *overwritten* the band cell it wrote, so an actor
+    /// composited onto a laden-table cell erases the neighbour id a later slot
+    /// would read. Either way `§8.1`'s draw count is the casualty - "an engine
+    /// that draws from the shared stream on any other row advances the single
+    /// global generator when the original does not, and its stream position
+    /// diverges permanently" - and so is the stamped tile.
+    ///
+    /// This is the same accessor [`Self::top_down_render_cell_base`] uses once
+    /// its visibility gates have passed, so for a lit, un-composited viewport
+    /// cell the two agree byte for byte.
+    fn top_down_live_terrain_at(&self, area: TopDownRenderArea, x: isize, y: isize) -> Option<u8> {
+        let tile = match area {
+            // `town-mode.md §15`: cells beyond the 32-by-32 floor take
+            // the loaded floor's southeast-corner terrain, not a hole.
+            TopDownRenderArea::Town => self.surface_viewport_tile(x, y, false)?,
+            TopDownRenderArea::World(_) => {
+                let wx = x.rem_euclid(WORLD_SIDE as isize) as usize;
+                let wy = y.rem_euclid(WORLD_SIDE as isize) as usize;
+                self.world_live_tile_at(wx, wy)
+            }
+        };
+        Some(self.animation.resolve_static_tile(tile))
     }
 
     fn composite_top_down_object(
@@ -1666,21 +1718,41 @@ impl PlayState {
         let Some(cell) = prepared.get(index).and_then(|cell| *cell) else {
             return;
         };
-        let previous_row_terrain = (cell_y > 0)
-            .then(|| prepared[index - cells])
-            .flatten()
-            .map(|cell| cell.terrain);
-        let next_row_terrain = (cell_y + 1 < cells)
-            .then(|| prepared[index + cells])
-            .flatten()
-            .map(|cell| cell.terrain);
-        let variant = self.active_object_render_variant(cell_x, cell_y, object);
+        // The same live-map read the buffer pass takes - `visibility.md §8`:
+        // "Terrain-aware stamps use the live world/combat tile at the
+        // object's coordinate, plus one neighbouring row for a few edge
+        // shapes." Reading `prepared` instead would lose the neighbouring row
+        // of an object on an edge row and would see earlier slots' stamps
+        // rather than the map.
+        let object_x = object.x as isize;
+        let object_y = object.y as isize;
+        let current_terrain = self
+            .top_down_live_terrain_at(area, object_x, object_y)
+            .unwrap_or(cell.terrain);
+        let previous_row_terrain = self.top_down_live_terrain_at(area, object_x, object_y - 1);
+        let next_row_terrain = self.top_down_live_terrain_at(area, object_x, object_y + 1);
+        // This helper is `&self`: it answers *queries* about the composed
+        // grid (the text view, the outdoor ranged line-of-sight trace, and
+        // non-viewport radii), not the redraw's composite pass. `§8.1`
+        // charges one draw per selecting actor "per composite pass", so a
+        // query must take none - drawing here would advance the single global
+        // gameplay stream on a frame the original never composites.
+        // The canonical pass is
+        // [`Self::composite_top_down_object_into_visibility_buffers`].
+        //
+        // Recorded consequence: a caller that renders *only* through this
+        // helper - the text view, the visibility-sweep repaint, any radius
+        // that is not the viewport's - shows the first entry of a selecting
+        // row permanently, while the buffer path re-rolls it every pass. The
+        // no-draw side is what `§8.1` charges; which of the two a non-viewport
+        // presentation should show is not published, and is a spec question.
+        let variant = 0;
         match composite_active_object_slot(
             player_slot,
             object.type_byte,
             object.tile,
             cell.grid,
-            cell.terrain,
+            current_terrain,
             previous_row_terrain,
             next_row_terrain,
             cell_y,
@@ -1748,42 +1820,58 @@ impl PlayState {
     /// the selector short-circuits and returns the first entry for every
     /// actor".
     ///
-    /// The short-circuit input is the **global timed-magic-effect code**.
-    /// `§8` retracts the earlier "active character's class letter is Tinker"
-    /// reading in full, so no party member is consulted here.
+    /// **This is a fresh draw from the shared gameplay stream on every
+    /// composite pass, and it is never cached.** `§8.1` is normative: the
+    /// selector "is a helper that takes no arguments and stores nothing of
+    /// its own: it returns a value in `0..3` which the caller consumes
+    /// immediately. Its one side effect is the generator advance inside the
+    /// shared draw itself, which is unconditional whenever the selector is
+    /// entered on its random arm." And: "**There is no cache to find.** ...
+    /// there is no per-actor variant field, no scratch table keyed by actor,
+    /// and no frame counter anywhere in the path."
     ///
-    /// The animation phase is deliberately **not** an input. It used to be,
-    /// which made a stationary actor standing on one of the four-entry
-    /// terrains (`0x84`, `0x85`, `0x90`, `0x92`, `0x9D`, `0x9E`) re-stamp
-    /// itself on every animation tick — and correlated with the animation
-    /// phase rather than random. Runtime observation,
-    /// `cleak/u5-spec#179`: outside combat nothing of the sort happens.
-    /// The party sprite standing on the overworld and the Avatar seated in
-    /// a chair indoors were both bit-identical across 160 s idle windows,
-    /// with zero transitions.
+    /// The caller must therefore have already established that this actor
+    /// lands on one of the five selecting rows - see
+    /// [`composite_active_object_slot_draws_variant`] - because `§8.1` charges
+    /// "**zero draws for everything else**" and an engine that draws on any
+    /// other row "advances the single global generator when the original does
+    /// not, and its stream position diverges permanently".
     ///
-    /// TODO(u5-spec question pending): `visibility.md §8.1` is normative
-    /// that the variant is drawn "once per composite pass, per actor" from
-    /// the shared PRNG and "never cached", and `§8.3` (published as
-    /// *probable*) says the sprite therefore changes on about three idle
-    /// passes in four. This engine instead re-rolls a deterministic hash
-    /// once per consumed turn, which contradicts both sentences. The
-    /// clean-side capture above is direct evidence against the published
-    /// idle re-roll, so the conflict is being taken back to the spec as a
-    /// question rather than resolved here; until it is answered the
-    /// once-per-turn draw is kept and this comment records the divergence.
-    pub(crate) fn active_object_render_variant(
-        &self,
-        cell_x: usize,
-        cell_y: usize,
-        object: ActiveObject,
-    ) -> u8 {
-        let selector = (self.turn as u8)
-            ^ (cell_x as u8).wrapping_mul(3)
-            ^ (cell_y as u8).wrapping_mul(5)
-            ^ object.type_byte
-            ^ object.tile;
-        active_object_compositor_variant(self.negate_time_active(), selector)
+    /// The short-circuit input is the **shared timed-effect register byte**,
+    /// not a boolean and not a character class. `§8` retracts the "active
+    /// character's class letter is Tinker" reading in full, and its producer
+    /// census (`RETRACTIONS.md` R333) finds "**one site that installs a
+    /// different timed-effect code into the same byte** - this is a shared
+    /// timed-effect register that other effects also write, not a Negate Time
+    /// flag". [`Self::negate_time_active`] reads that whole byte and compares
+    /// it against the Negate Time code, so an install of some other effect's
+    /// code leaves the selector on its random arm. The code has two
+    /// producers: the spell at ten turns and the scroll at twenty.
+    ///
+    /// The short-circuit arm takes **no** draw: `§8.1` makes the generator
+    /// advance conditional on the selector being "entered on its random arm".
+    ///
+    /// *Retracted in this engine:* until `cleak/u5-spec#182` was answered
+    /// (spec commit `210aa41`, `RETRACTIONS.md` R329) this was a
+    /// deterministic hash of the turn counter, the cell and the actor's
+    /// bytes, re-rolled once per consumed turn. That was adopted because a
+    /// clean-side capture saw a seated Avatar never change tile; R329
+    /// explains the capture - the seat used was a fall-through, and "a seated
+    /// actor that never changes tile is the expected result for the majority
+    /// of seats, not a defect". A named-cell recapture then timed four
+    /// qualifying seats at 0.695, 0.709, 0.742 and 0.753 transitions per tick
+    /// and three fall-throughs at 0.000, which is the fresh per-pass draw.
+    pub fn draw_active_object_composite_variant(&mut self) -> u8 {
+        if self.negate_time_active() {
+            // `§8.2`: "The composite still runs while Negate Time is active;
+            // it just draws variant 0 every time."
+            return active_object_compositor_variant(true, 0);
+        }
+        let selector = self.random_range_u8(
+            ACTIVE_OBJECT_VARIANT_RANGE_LOW,
+            ACTIVE_OBJECT_VARIANT_RANGE_HIGH,
+        );
+        active_object_compositor_variant(false, selector)
     }
 
     /// Visibility + composited terrain/sprite lookup for one cell.

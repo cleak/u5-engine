@@ -5768,13 +5768,23 @@ impl PlayState {
     /// directly or transitively." Exactly one such tick therefore sits
     /// between the last monster placement and the first actor's action.
     ///
-    /// The world tick this engine runs is the presentation-only one of
-    /// `input.md §2` and `main-loop.md §9`; `§5.3`'s three drawing arms
-    /// (wind drift, the per-object animation roll, the visibility `[0, 3]`
-    /// draw) are the world tick's own contract and are not re-modelled
-    /// here, so this call reproduces the tick's placement and cadence but
-    /// not yet its draw count. On that presentation-only tick the prologue
-    /// draws nothing, so the encounter's PRNG stream is unchanged by it.
+    /// The world tick this engine runs is the shared one of `input.md §2`
+    /// and `main-loop.md §9`. `§5.3` step 6 lists that tick's three drawing
+    /// arms, and `RETRACTIONS.md` R329/R331 correct both their order and
+    /// their cost: "The order is animator, wind, composite; the composite
+    /// draws only on a selecting terrain row, which arena terrain almost
+    /// never is; and the animator's per-record count is not established."
+    /// This engine runs the arms in that order - the animator, then the wind
+    /// check, then (at the redraw) the composite, which takes a draw only for
+    /// an actor on one of the five selecting rows of `visibility.md §8`. The
+    /// animator's own per-record draws are the one arm still unmodelled here,
+    /// because `§5.3` publishes no count for them ("its per-record draw count
+    /// is record-dependent and is not characterised here").
+    ///
+    /// *Retracted:* the earlier wording here listed the arms as "wind drift,
+    /// the per-object animation roll, the visibility `[0, 3]` draw", which is
+    /// the reverse order R331 withdraws and the per-tick visibility draw R329
+    /// withdraws.
     ///
     /// Of the bundle's other four items the overlay refresh and the screen
     /// flush are the frontend's. The remaining two - the "per-slot scratch
