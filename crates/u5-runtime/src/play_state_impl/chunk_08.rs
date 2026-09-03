@@ -1243,18 +1243,29 @@ impl PlayState {
         self.message_flushed = self.message.clone();
     }
 
-    /// `moons.md §3` / `time.md §5`: the hour-change hook that refreshes
-    /// the sky strip runs only when the active scene is in the
-    /// surface/town-family range *and* the party is not below the
-    /// surface. `moons.md §3`: "below the surface, nothing is drawn,
-    /// nothing is erased, and **nothing is cached**, exactly as for
-    /// combat and dungeon scenes."
+    /// `time.md §5`, hour-change bundle item 2: "If the active scene is
+    /// in the surface/town-family range and the party is not at dungeon
+    /// depth, the engine refreshes the sky strip in the top viewport
+    /// border."
+    ///
+    /// This gate belongs to the hour-change hook **alone**.
+    /// `moons.md §2.2`: "The renderer has several callers (Section 3), and
+    /// only one of them - the hour-change hook of the per-turn cleanup -
+    /// carries a gate that excludes a party Z with the high bit set
+    /// (`systems/time.md` Section 5). The overworld and town-family
+    /// scene-entry callers carry no such gate". `RETRACTIONS.md` R343 is
+    /// the withdrawal that put that census on the record - its own wording
+    /// is "Only the hour-change caller excludes a party Z with the high bit
+    /// set" - but the sentence quoted above is `moons.md §2.2` body text,
+    /// not R343's.
+    /// Scene entry therefore uses
+    /// [`Self::sky_strip_scene_entry_refresh_runs`], not this predicate.
     ///
     /// The below-surface test is the party's saved Z with its high bit
-    /// set — the Underworld plane outdoors, or a below-entry floor
-    /// inside a town-family location. Ordinary dungeon levels count up
-    /// from zero and never set that bit, so they are excluded by the
-    /// scene-range half of the gate instead.
+    /// set - the Underworld plane outdoors, or a below-entry floor inside
+    /// a town-family location (`formats/saved-gam.md §6`, party Z row).
+    /// Ordinary dungeon levels count up from zero and never set that bit,
+    /// so they are excluded by the scene-range half of the gate instead.
     pub fn sky_strip_hour_refresh_runs(&self) -> bool {
         if self.current_floor().is_none_or(|floor| floor < 0) {
             return false;
@@ -1266,18 +1277,103 @@ impl PlayState {
         }
     }
 
-    /// `moons.md §5`: "Each refresh caches the two glyph bytes for the
+    /// `moons.md §2.2`, the scene-entry callers of the strip renderer:
+    /// "The overworld and town-family scene-entry callers carry no such
+    /// gate, so a below-surface entry (the Underworld plane, or a basement
+    /// floor inside a town-family location) can reach the painter."
+    ///
+    /// Reaching the renderer is enough to write the cache, and the rule
+    /// that says so is general rather than per-arm. `moons.md §3`: "Each
+    /// refresh caches the two glyph bytes for the current day *before* it
+    /// tests whether either marker is on the visible horizon, so the cache
+    /// holds the current day's phase for both moons even when neither
+    /// marker is drawn." (§2.2's "the two glyph bytes are still cached in
+    /// this case, because the cache is written before the visibility test"
+    /// is the same rule stated inside the Ararat bullet, and is scoped to
+    /// that arm; §3 is the sentence relied on here.)
+    ///
+    /// What `moons.md §2.2` leaves open is the *painter's* below-surface
+    /// erase arm alone: "that arm's reachability is **unresolved**", and
+    /// R343 adds that "no negative about what is drawn, erased or cached
+    /// below the surface is supported". That open question is about
+    /// drawing, which this engine does not do here; the cache write is
+    /// settled by §3 either way. It is carried as a spec question rather
+    /// than treated as answered.
+    ///
+    /// What is excluded is the scene class alone (`moons.md §2.2`):
+    /// "Scenes outside the surface/town family (combat, intro, and every
+    /// scene id at or above the location range) never reach the renderer
+    /// at all. Nothing is drawn and nothing is cached."
+    pub fn sky_strip_scene_entry_refresh_runs(&self) -> bool {
+        match self.area {
+            // Both planes: `moons.md §2.2` names "the Underworld plane" as
+            // a below-surface entry that reaches the painter, and the
+            // underworld suppression is the painter's erase arm, which
+            // runs after the cache write (§3).
+            Area::World { .. } => true,
+            Area::Town { scene, .. } => sky_strip_renders(scene.byte, false),
+            Area::Dungeon { .. } => false,
+        }
+    }
+
+    /// `moons.md §3`: "Each refresh caches the two glyph bytes for the
     /// current day *before* it tests whether either marker is on the
     /// visible horizon", so a reached refresh always writes the cache
-    /// even when neither marker is drawn. A refresh that is never
-    /// reached — below the surface, in a dungeon, in combat — writes
-    /// nothing at all.
+    /// even when neither marker is drawn.
+    ///
+    /// This is the **hour-change hook's** refresh and carries that
+    /// caller's scene-and-floor gate. Scene entry uses
+    /// [`Self::refresh_cached_moon_glyphs_at_scene_entry`].
     pub fn refresh_cached_moon_glyphs(&mut self) {
         if !self.sky_strip_hour_refresh_runs() {
             return;
         }
-        self.cached_moon_glyph_bytes =
-            cached_moon_glyph_bytes_for_day(self.clock.day).unwrap_or(MOON_GLYPH_CACHE_NO_GATE);
+        self.write_cached_moon_glyphs_for_day();
+    }
+
+    /// `formats/saved-gam.md §5.1`: "That renderer runs on every
+    /// overworld and town-family scene entry and again from the cleanup's
+    /// hour-change block while the party is on the surface or in a
+    /// town-family location, so the pair is refreshed deterministically at
+    /// least once on any load into such a scene."
+    ///
+    /// `RETRACTIONS.md` R343 makes this the mechanism "by which the cached
+    /// glyph digits are refreshed on a **Journey Onward**". It carries no
+    /// floor gate, so a Journey Onward onto a town basement floor - or
+    /// into the Underworld - refreshes `0x02DF`/`0x02E0` as well.
+    ///
+    /// Where the caller list is open, the restored pair stands. `moons.md
+    /// §3` names "the Blackthorn cutscene re-entries" and "two command
+    /// handlers that repaint the strip" as further callers without saying
+    /// which handlers, and says nothing about an in-place floor change
+    /// inside a location; none of those is wired to this refresh, so the
+    /// bytes restored from the save image survive them untouched. Since
+    /// `formats/saved-gam.md §5.1` has "Natural-moongate transit
+    /// selects its destination from these two cached bytes and from
+    /// nothing else", preserving what the file held is the conservative
+    /// side of every one of those open questions.
+    pub fn refresh_cached_moon_glyphs_at_scene_entry(&mut self) {
+        if !self.sky_strip_scene_entry_refresh_runs() {
+            return;
+        }
+        self.write_cached_moon_glyphs_for_day();
+    }
+
+    /// `moons.md §2.2`: the two day tables hold nothing but the ASCII
+    /// digits `'0'` through `'7'`, and "There is no day zero, so an
+    /// implementation should treat a zero or out-of-range day as a
+    /// save-data error rather than looking up a twenty-ninth entry."
+    ///
+    /// No sentinel is published for that case - "An implementation that
+    /// reserves a high-bit value for 'off horizon' is modelling something
+    /// the tables do not contain" - and the cache is the byte-compatible
+    /// save field of `formats/saved-gam.md §5.1`, so an out-of-range day
+    /// leaves the restored pair alone rather than stamping an invented
+    /// byte into it.
+    fn write_cached_moon_glyphs_for_day(&mut self) {
+        if let Some(bytes) = cached_moon_glyph_bytes_for_day(self.clock.day) {
+            self.cached_moon_glyph_bytes = bytes;
+        }
     }
 
     pub fn set_cached_moon_glyph_bytes(&mut self, trammel: u8, felucca: u8) {
@@ -1540,6 +1636,9 @@ impl PlayState {
             moral_standing: self.moral_standing,
             toll_progress: self.toll_progress,
             cleanup_previous_hour: self.cleanup_previous_hour,
+            twelve_hour_audio_repeats: self.twelve_hour_audio_repeats,
+            cached_moon_glyph_bytes: self.cached_moon_glyph_bytes,
+            ambient_light: self.ambient_light,
             // `overworld.md §9.1` (spec HEAD c00bf63): the
             // gate-presence counter survives scene changes.
             natural_moongate_counter: self.natural_moongate_counter,
@@ -1733,6 +1832,14 @@ impl PlayState {
         self.clear_town_visit_state();
         self.pending_town_arrest = None;
         self.active_blackthorn = None;
+        // `moons.md §3`, refresh cadence: the strip renderer's callers are
+        // "every overworld scene entry; every town-family scene entry; the
+        // per-turn cleanup pass, when that pass observes the hour changing".
+        // This is an overworld scene entry, so the cached pair is rewritten
+        // here as well - a town or dungeon exit that left the restored pair
+        // standing would send the next natural gate to the wrong Moonstone
+        // slot (`formats/saved-gam.md §5.1`).
+        self.refresh_cached_moon_glyphs_at_scene_entry();
         self.mode_zero_cleanup();
         self.mark_visibility_dirty();
         true
@@ -1797,6 +1904,14 @@ impl PlayState {
         self.return_world = None;
         self.pending_town_arrest = None;
         self.active_blackthorn = None;
+        // `moons.md §3`, refresh cadence: the strip renderer's callers are
+        // "every overworld scene entry; every town-family scene entry; the
+        // per-turn cleanup pass, when that pass observes the hour changing".
+        // This is an overworld scene entry, so the cached pair is rewritten
+        // here as well - a town or dungeon exit that left the restored pair
+        // standing would send the next natural gate to the wrong Moonstone
+        // slot (`formats/saved-gam.md §5.1`).
+        self.refresh_cached_moon_glyphs_at_scene_entry();
         self.mode_zero_cleanup();
         self.mark_visibility_dirty();
         Ok(())
@@ -1848,6 +1963,14 @@ impl PlayState {
         self.return_world = None;
         self.pending_town_arrest = None;
         self.active_blackthorn = None;
+        // `moons.md §3`, refresh cadence: the strip renderer's callers are
+        // "every overworld scene entry; every town-family scene entry; the
+        // per-turn cleanup pass, when that pass observes the hour changing".
+        // This is an overworld scene entry, so the cached pair is rewritten
+        // here as well - a town or dungeon exit that left the restored pair
+        // standing would send the next natural gate to the wrong Moonstone
+        // slot (`formats/saved-gam.md §5.1`).
+        self.refresh_cached_moon_glyphs_at_scene_entry();
         self.mode_zero_cleanup();
         self.mark_visibility_dirty();
         Ok(())

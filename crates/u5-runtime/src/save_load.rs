@@ -278,6 +278,23 @@ pub fn play_options_from_save_bytes_named(
         moral_standing: bytes[SAVE_MORAL_STANDING_OFFSET],
         toll_progress: bytes[SAVE_TOLL_PROGRESS_OFFSET],
         cleanup_previous_hour: bytes[SAVE_SAVED_HOUR_SNAPSHOT_OFFSET],
+        // `time.md §11` (spec `0170809`): the byte at `0x02DE` is written
+        // on a snapshot mismatch and then "counted down toward zero by the
+        // ambient-audio tick"; it is save-backed state, not a value to
+        // rederive from the clock.
+        twelve_hour_audio_repeats: bytes[SAVE_TWELVE_HOUR_AUDIO_REPEAT_OFFSET],
+        // `formats/saved-gam.md §5.1` (spec `0170809`): "An engine that
+        // treats the pair as disposable, or that recomputes the phase by a
+        // different route on load, sends the party through the wrong gate."
+        cached_moon_glyph_bytes: [
+            bytes[SAVE_CACHED_TRAMMEL_GLYPH_OFFSET],
+            bytes[SAVE_CACHED_FELUCCA_GLYPH_OFFSET],
+        ],
+        // `formats/saved-gam.md §10` (spec `0170809`): a stored ambient
+        // value of 51 or higher "makes the recompute skip entirely and
+        // freezes ambient light for that call", so the saved byte has to
+        // reach the recompute rather than being replaced by a fresh zero.
+        ambient_light: bytes[SAVE_AMBIENT_LIGHT_OFFSET],
         // `overworld.md §9.1` (spec HEAD c00bf63): the gate-presence
         // counter is save-backed, so a game saved mid-rise reloads at
         // the same gate height.

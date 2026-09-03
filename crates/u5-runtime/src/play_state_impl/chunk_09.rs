@@ -331,6 +331,14 @@ impl PlayState {
         self.return_world = None;
         self.pending_town_arrest = None;
         self.active_blackthorn = None;
+        // `moons.md §3`, refresh cadence: the strip renderer's callers are
+        // "every overworld scene entry; every town-family scene entry; the
+        // per-turn cleanup pass, when that pass observes the hour changing".
+        // This is an overworld scene entry, so the cached pair is rewritten
+        // here as well - a town or dungeon exit that left the restored pair
+        // standing would send the next natural gate to the wrong Moonstone
+        // slot (`formats/saved-gam.md §5.1`).
+        self.refresh_cached_moon_glyphs_at_scene_entry();
         self.mode_zero_cleanup();
         self.mark_visibility_dirty();
         // `overworld.md` Section 8.1: "Overworld re-initialisation does not
@@ -2618,8 +2626,14 @@ impl PlayState {
             age_stay_counters_month(&mut self.party_stay_counters);
             age_inn_registry_month(&mut self.inn_registry);
         }
-        if self.clock.hour != previous_hour {
-            self.refresh_cached_moon_glyphs();
+        // `time.md §11` (spec `0170809`): the bundle's gate is the
+        // snapshot at `0x02DA` disagreeing with the hour at `0x02D9`.
+        // Inside a time-advancing pass the snapshot was taken from the
+        // pre-cascade hour a few lines above, so here it is the ordinary
+        // hour-crossing test; the stale-snapshot case the published rule
+        // turns on is the mode-zero call in [`Self::mode_zero_cleanup`].
+        if self.cleanup_previous_hour != self.clock.hour {
+            self.fire_hour_change_bundle();
             self.camp_cooldown = camp_cooldown_after_hour_rollover(self.camp_cooldown);
         }
         self.decay_light_counters(effective_minutes);
@@ -2710,8 +2724,17 @@ impl PlayState {
             age_stay_counters_month(&mut self.party_stay_counters);
             age_inn_registry_month(&mut self.inn_registry);
         }
-        if self.clock.hour != previous_hour {
-            self.refresh_cached_moon_glyphs();
+        // `time.md §11` (spec `0170809`) / `RETRACTIONS.md` R338: the
+        // hour-change bundle's gate is the **saved-hour snapshot** at
+        // `0x02DA` disagreeing with the hour at `0x02D9`, "not ... a
+        // wall-clock hour boundary as such". Inside a time-advancing pass
+        // the snapshot was taken from the pre-cascade hour a few lines
+        // above, so here the snapshot form and the plain hour-crossing
+        // test coincide. The case that separates them - a snapshot the
+        // pass never refreshed - belongs to the mode-zero call, and lives
+        // in [`Self::mode_zero_cleanup`].
+        if self.cleanup_previous_hour != self.clock.hour {
+            self.fire_hour_change_bundle();
             // `rest-and-camp.md §5`: the camp cooldown counter is
             // "reduced by one, floored at zero, at every hour rollover".
             self.camp_cooldown = camp_cooldown_after_hour_rollover(self.camp_cooldown);
@@ -2980,7 +3003,95 @@ impl PlayState {
         }
     }
 
+    /// `time.md §5`, "Hour tick triggers a side bundle": the cached
+    /// twelve-hour value is rewritten from the new hour, and the sky-strip
+    /// renderer runs - which, "before it decides whether either moon glyph
+    /// is on screen, also rewrites the two cached moon-phase digits in the
+    /// save image (`formats/saved-gam.md` Section 5.1) from the day of the
+    /// month".
+    ///
+    /// The camp cooldown is deliberately **not** in here.
+    /// `rest-and-camp.md §5` ties it to an hour rollover, and the
+    /// mode-zero firing below crosses no hour, so it stays on the two
+    /// time-advancing paths that do.
+    fn fire_hour_change_bundle(&mut self) {
+        self.refresh_cached_moon_glyphs();
+        self.write_twelve_hour_audio_repeats();
+    }
+
+    /// `time.md §11` (spec `0170809`), the write half of save byte
+    /// `0x02DE`: "On a cleanup call whose snapshot at `0x02DA` disagrees
+    /// with the hour at `0x02D9`, the byte takes the twelve-hour form of
+    /// the hour (Section 2). That is the whole write rule; there is no
+    /// second writer."
+    pub fn write_twelve_hour_audio_repeats(&mut self) {
+        self.twelve_hour_audio_repeats = display_hour_12h(self.clock.hour);
+    }
+
+    /// `time.md §11` (spec `0170809`), the read half of save byte
+    /// `0x02DE`: "The ambient-audio tick is its only consumer. It reads
+    /// the byte as a count of remaining loud repeats ... and decrements it
+    /// toward zero on **two of every eight** of its own calls, using a
+    /// small free-running sub-tick counter that is not part of the save
+    /// image. It never writes any other value."
+    ///
+    /// `RETRACTIONS.md` R338: "An engine that stores a live twelve-hour
+    /// value and never decays it diverges from the original on essentially
+    /// every daylight save."
+    ///
+    /// Two hedges, both published as open:
+    ///
+    /// * *Which* two of the eight sub-ticks carry the decrement is not
+    ///   published. The counter runs free, so any fixed pair of residues
+    ///   gives the stated two-in-eight rate; this takes the two whose low
+    ///   two bits are clear.
+    /// * The cadence gate on the master redraw-enable byte at `0x02FE`
+    ///   ("when that byte is clear the world tick skips its whole body")
+    ///   is not modelled, because this engine has no redraw-enable byte -
+    ///   its world step is unconditional and `0x02FE` round-trips through
+    ///   the save image untouched.
+    /// * The step that reaches this pass is
+    ///   [`Self::advance_visual_tick`], and only the Bevy frontend pumps
+    ///   it today. A headless `u5-tui` load followed immediately by a
+    ///   Q-save therefore flushes the scene-entry write unattenuated,
+    ///   where the measured DOS file - taken after idle time had run -
+    ///   holds zero. That is a missing idle driver in the shell, not a
+    ///   different rule here; the chain from the entry write through the
+    ///   world step to the saved byte is pinned by
+    ///   `twelve_hour_byte_reaches_the_original_zero_over_shipped_idle_world_ticks`.
+    ///
+    /// `time.md §11` also states the limit on the cadence itself: "How
+    /// long the byte takes to reach zero in wall-clock terms is inferred,
+    /// not measured", so no seconds figure is modelled here either.
+    pub fn tick_ambient_audio_repeats(&mut self) {
+        let sub_tick = self.ambient_audio_sub_tick;
+        self.ambient_audio_sub_tick = (sub_tick + 1) % AMBIENT_AUDIO_SUB_TICK_PERIOD;
+        if sub_tick % AMBIENT_AUDIO_DECREMENT_STRIDE == 0 {
+            self.twelve_hour_audio_repeats = self.twelve_hour_audio_repeats.saturating_sub(1);
+        }
+    }
+
+    /// `time.md §3`, the mode-zero call: "Recompute the daylight value
+    /// and refresh the visible clock; do not advance time."
+    ///
+    /// `time.md §5`: "Because a mode-zero call performs the comparison
+    /// without refreshing the snapshot, **a stale snapshot fires the
+    /// bundle once at scene entry**, with no turn consumed. The shipped
+    /// factory seed is exactly such a save - its snapshot is zero against
+    /// a start hour of eight - so the first town-family entry after a new
+    /// game or a Journey Onward writes the twelve-hour value and refreshes
+    /// the moon digits before the player has taken a step. From the first
+    /// time-advancing turn or party-upkeep pass onward the snapshot equals
+    /// the hour and the bundle stops firing until the next real crossing."
+    ///
+    /// The snapshot at `0x02DA` is deliberately not written here.
+    /// `time.md §11`: it is "Written at the head of the time-advancing
+    /// path, before the minute increment, and again by the per-turn
+    /// party-upkeep pass; **not** written by a mode-zero call."
     pub fn mode_zero_cleanup(&mut self) {
+        if self.cleanup_previous_hour != self.clock.hour {
+            self.fire_hour_change_bundle();
+        }
         self.recompute_daylight();
         self.refresh_natural_moongates_for_current_counter();
     }
@@ -3304,6 +3415,26 @@ impl PlayState {
             } else {
                 None
             };
+        // `time.md §11` (spec `0170809`): "The audio tick runs once per idle
+        // world tick". It is a body-of-the-tick pass rather than part of the
+        // redraw half, so it rides the same `run_wind_check` flag that marks
+        // a full world step.
+        //
+        // It carries the Negate Time freeze as well, exactly like the wind
+        // check above. `animation.md §13.1`: while that effect is active
+        // "the world tick forces the gating byte into a skip state on
+        // *every* call ... For the effect's full duration nothing advances:
+        // no water rotation, no fire flicker, no fountain, no banner, no
+        // clock or bellows, no object animation, no AI roll, no wind check,
+        // no moongate refresh, no beacon step, and **no shrine/lava
+        // ambience tick**." `§13.2` names that tick as the pass that "on
+        // two of every eight enabled steps, decrements a shared countdown
+        // byte" - the decrement `time.md §11` attributes to the audio tick
+        // and save byte `0x02DE`. Freezing the tick therefore freezes that
+        // byte, which is what a save taken under Negate Time must show.
+        if run_wind_check && self.time_stop_counter == 0 && !self.negate_time_active() {
+            self.tick_ambient_audio_repeats();
+        }
         self.advance_animation_clock();
         // `combat.md §7`: the shared tile-painting pass - "run by the idle
         // redraw tick in *every* mode" - has a combat-band tail that "toggles
