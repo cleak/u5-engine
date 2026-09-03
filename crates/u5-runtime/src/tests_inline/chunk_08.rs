@@ -620,15 +620,23 @@
         let mut state = britannia_state(open_world_grid(), 1, 0);
         state.party[0].hp = 12;
 
+        // `commands.md §3` lists `D` and `W` as the two stock-refusal
+        // letters that report "no action". `Z` used to stand in here, but
+        // §4 makes Z-stats an unconditional "acted", so it can no longer
+        // demonstrate a zero-turn command.
         assert!(
             state
-                .handle_top_down_key_with_inline('Z', &dir, None, None, None, None)
+                .handle_top_down_key_with_inline('D', &dir, None, None, None, None)
                 .unwrap()
         );
 
         assert_eq!(state.turn, 0);
+        // `commands.md §4`: `D` is "Default refusal ... it falls through to
+        // the stock \"What?\" response when it reaches this dispatcher",
+        // so this pins that the command really ran rather than being
+        // swallowed before the dispatcher.
+        assert!(state.message.contains("What?"));
         assert_eq!(state.party[0].hp, 12);
-        assert!(state.message.contains("Player:"));
         assert!(!state.message.contains("drowning damage"));
         let _ = fs::remove_dir_all(dir);
     }

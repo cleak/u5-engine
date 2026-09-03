@@ -231,9 +231,12 @@
         .unwrap();
         let mut state = town_trap_door_origin_state();
 
+        // `commands.md §3`: `D` is one of the two stock-refusal letters
+        // that report "no action". `Z` used to stand in here, but §4 makes
+        // Z-stats an unconditional "acted".
         assert!(
             state
-                .handle_top_down_key_with_inline('Z', &dir, None, None, None, None)
+                .handle_top_down_key_with_inline('D', &dir, None, None, None, None)
                 .unwrap()
         );
 
@@ -245,8 +248,12 @@
             }
         );
         assert_eq!(state.turn, 0);
+        // `commands.md §4`: `D` is "Default refusal ... it falls through to
+        // the stock \"What?\" response when it reaches this dispatcher",
+        // so this pins that the command really ran rather than being
+        // swallowed before the dispatcher.
+        assert!(state.message.contains("What?"));
         assert_eq!(state.grid[32 + 1], 55);
-        assert!(state.message.contains("Player:"));
         assert!(!state.message.contains("A TRAPDOOR!"));
         let _ = fs::remove_dir_all(dir);
     }
@@ -1003,7 +1010,9 @@
 
         assert_eq!(state.party[0].status, b'G');
         assert!(!state.message.contains("poison gas doorway"));
-        assert_eq!(state.turn, 0);
+        // `town-mode.md §15`: the refused step still costs one town turn;
+        // what the mounted party escapes is the gas, not the clock.
+        assert_eq!(state.turn, 1);
     }
 
     #[test]

@@ -80,7 +80,7 @@ fn sync_player_object_recreates_empty_active_object_table() {
 }
 
 #[test]
-fn movement_blocks_impassable_tiles_without_spending_turn() {
+fn movement_blocks_impassable_tiles_but_still_spends_the_town_turn() {
     let mut grid = open_grid();
     grid[32 + 2] = 0x0c;
     let mut state = test_state(grid, 1, 1);
@@ -89,8 +89,16 @@ fn movement_blocks_impassable_tiles_without_spending_turn() {
 
     assert_eq!(state.step(Direction::East), MoveOutcome::Blocked);
     assert_eq!((state.player.x, state.player.y), (1, 1));
-    assert_eq!(state.turn, 0);
-    assert_eq!(state.animation.frame, 0);
+    // `town-mode.md §15`: a refused town step "Consumes one normal town
+    // turn: advance the clock by one minute, run underfoot/post-action
+    // processing, and run one NPC schedule step". This assertion used to
+    // read `state.turn, 0` with no citation behind it; `combat.md §11`
+    // ("A blocked step re-prompts at no cost") is the arena, not here.
+    assert_eq!(state.turn, 1);
+    // The consumed turn runs the ordinary epilogue, so the animator
+    // advances exactly as it does behind an accepted step; only the
+    // party coordinate and the viewport stay put.
+    assert_eq!(state.animation.frame, 1);
     assert!(!state.visibility_dirty);
 }
 
@@ -104,11 +112,12 @@ fn movement_ignores_optional_passability_bitmap_for_promoted_transport() {
     assert_eq!(state.step(Direction::East), MoveOutcome::Blocked);
 
     assert_eq!((state.player.x, state.player.y), (1, 1));
-    assert_eq!(state.turn, 0);
+    // `town-mode.md §15`: a refused town step still costs one town turn.
+    assert_eq!(state.turn, 1);
 }
 
 #[test]
-fn movement_blocks_same_floor_active_object_without_spending_turn() {
+fn movement_blocks_same_floor_active_object_but_still_spends_the_town_turn() {
     let mut state = test_state(open_grid(), 1, 1);
     state.active_objects.push(ActiveObject {
         type_byte: 192,
@@ -123,7 +132,13 @@ fn movement_blocks_same_floor_active_object_without_spending_turn() {
 
     assert_eq!(state.step(Direction::East), MoveOutcome::Blocked);
     assert_eq!((state.player.x, state.player.y), (1, 1));
-    assert_eq!(state.turn, 0);
+    // `town-mode.md §15` scores the ordinary town refusal at "one normal
+    // town turn". The table names the terrain arm; this occupancy arm is
+    // the same wrapper's other refusal, reaching the same blocked-feedback
+    // tail, so it is charged alike. (`audio.md §7.4`'s "share one tail" is
+    // about the beep and the type-ahead flush, not the clock.) Open spec
+    // question - see `turn-clock-wind-report.md`.
+    assert_eq!(state.turn, 1);
 }
 
 #[test]
@@ -246,6 +261,14 @@ fn world_movement_blocks_impassable_tiles_without_turn() {
     assert_eq!(state.step(Direction::East), MoveOutcome::Blocked);
 
     assert_eq!((state.player.x, state.player.y), (0, 0));
+    // `movement.md §8`: "Actions that fail before commit do not move the
+    // actor. Whether they consume a turn is owned by the caller; ordinary
+    // rejected movement is generally a consumed movement attempt only when
+    // the mode explicitly treats the bump or attack as a turn-taking
+    // action." Nothing in `overworld.md` makes the outdoor bump such an
+    // action - unlike `town-mode.md §15`, which does - so the refused
+    // overworld step stays free. See the open spec question in
+    // `turn-clock-wind-report.md`.
     assert_eq!(state.clock, GameClock::default());
     assert_eq!(state.turn, 0);
 }

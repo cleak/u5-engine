@@ -161,6 +161,17 @@ impl PlayState {
         if self.combat_active {
             return self.z_stats();
         }
+        // `commands.md §4`: "`R` Ready and `Z` Z-stats are worth calling
+        // out against the return contract of Section 3: the
+        // status/equipment overlay produces no status word of its own, and
+        // the dispatcher discards whatever it returns, so both letters
+        // always report the default 'acted'. Opening either panel and
+        // immediately backing out therefore costs a turn in every
+        // non-combat mode". R-Ready charges at entry in
+        // [`Self::charge_ready_equipment_turn`]; Z-stats charges here for
+        // the same reason, so a cancelled member selector costs the same
+        // as a fully browsed sheet.
+        self.advance_turn();
         self.start_party_selector(PartySelectorTarget::ZStats)
     }
 

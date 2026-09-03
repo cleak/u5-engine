@@ -686,17 +686,21 @@ impl PlayState {
     }
 
     pub fn idle_tick(&mut self) -> MoveOutcome {
-        self.advance_visual_tick();
-        if let Some(wind) = self.idle_wind_drift() {
-            // weather.md §2: on the underworld plane the wind state still
-            // updates, but the helper uses its non-surface presentation
-            // branch instead of printing the ordinary cardinal wind label.
-            let on_surface = matches!(
-                self.area,
-                Area::World {
-                    plane: WorldPlane::Britannia
-                }
-            );
+        // The wind check belongs to the world step itself
+        // (`animation.md §13.2`), so it runs inside `advance_visual_tick`
+        // and this shell only narrates the result.
+        if let Some(wind) = self.advance_visual_tick() {
+            // `weather.md §2.1`: the wind banner "is not drawn in
+            // combat-class scenes, in the underworld scene, or on
+            // below-surface map levels", so those are the cases that take
+            // the non-cardinal presentation branch. A surface town floor is
+            // not one of them - the paired Britain captures show the
+            // original naming the direction inside a town.
+            let on_surface = match self.area {
+                Area::World { plane } => plane == WorldPlane::Britannia,
+                Area::Town { floor, .. } => floor >= 0,
+                Area::Dungeon { .. } => false,
+            } && !self.combat_active;
             self.message = if on_surface {
                 format!("Idle animation tick. {}", wind.status_message())
             } else {
@@ -708,16 +712,47 @@ impl PlayState {
         MoveOutcome::IdleTick
     }
 
+    /// `weather.md §2` "Autonomous Wind Drift" / `animation.md §13.2`.
+    ///
+    /// One world step runs "one wind-change check - a single **1-in-64**
+    /// check, not a drift step. When it fires a new prevailing direction is
+    /// drawn, with 'calm' accepted only behind a further roughly 1-in-4
+    /// confirmation, so a fired event always installs some direction."
+    ///
+    /// Three things this used to get wrong:
+    ///
+    /// * **Scene gate.** It only ran on the world plane. `weather.md §2`:
+    ///   "The store happens before any scene test, so the state is always
+    ///   updated; only the banner repaint is conditional." The original
+    ///   changes wind while the party is inside a town, which is exactly
+    ///   what the paired Britain captures show.
+    /// * **Roll source.** The rolls come off the shared gameplay PRNG.
+    ///   `prng.md §4` names "**The per-pass wind check**, which draws
+    ///   **once** and returns in the common case - sixty-three invocations
+    ///   in sixty-four. On the uncommon result it enters a retry loop taking
+    ///   **one further draw at a time**, so its count per invocation is one,
+    ///   two, three, and so on upward, with each extra iteration continuing
+    ///   at roughly `0.15`" as the second of the **three** per-pass
+    ///   consumers behind "Rendering and idling perturb the gameplay
+    ///   stream". A private hash of the clock and position is not that
+    ///   stream. (The earlier "draws in pairs until it settles" reading is
+    ///   withdrawn by that section's own retraction paragraph, and this
+    ///   loop draws one at a time accordingly: the outer roll, then one
+    ///   candidate draw per iteration plus one confirmation draw only when
+    ///   the candidate is Calm.)
+    /// * **Cadence.** It only ran from the TUI `.` key, so no shell running
+    ///   the ordinary idle redraw ever changed the wind. It now hangs off
+    ///   the world step in [`Self::advance_visual_tick`].
     pub fn idle_wind_drift(&mut self) -> Option<WindState> {
-        if !matches!(self.area, Area::World { .. })
-            || !WindState::autonomous_drift_outer_accepted(self.idle_wind_roll(0))
-        {
+        if !WindState::autonomous_drift_outer_accepted(
+            self.wind_drift_roll(WIND_DRIFT_OUTER_ROLL_MAX),
+        ) {
             return None;
         }
-        for attempt in 0..=u8::MAX {
-            let candidate = self.idle_wind_candidate(attempt);
+        for _ in 0..=u8::MAX {
+            let candidate = self.idle_wind_candidate();
             if candidate != WindState::Calm
-                || self.idle_wind_roll(attempt.wrapping_add(2)) >= WIND_DRIFT_CALM_ACCEPT_MIN
+                || self.wind_drift_roll(u8::MAX) >= WIND_DRIFT_CALM_ACCEPT_MIN
             {
                 // `audio.md §7.3` is titled "Accepted wind change / Rel Hur"
                 // and every row of its table describes a transition the
@@ -733,8 +768,10 @@ impl PlayState {
         None
     }
 
-    pub fn idle_wind_candidate(&self, attempt: u8) -> WindState {
-        match self.idle_wind_roll(attempt.wrapping_add(1)) % WIND_DRIFT_CANDIDATE_MODULUS {
+    /// `weather.md §2`: "On a zero roll, it chooses a candidate wind in
+    /// `0..4`."
+    pub fn idle_wind_candidate(&mut self) -> WindState {
+        match self.wind_drift_roll(WIND_DRIFT_CANDIDATE_MODULUS - 1) {
             0 => WindState::Calm,
             1 => WindState::North,
             2 => WindState::South,
@@ -743,14 +780,10 @@ impl PlayState {
         }
     }
 
-    pub fn idle_wind_roll(&self, attempt: u8) -> u8 {
-        self.turn as u8
-            ^ self.clock.hour.wrapping_mul(3)
-            ^ self.clock.minute.wrapping_mul(5)
-            ^ (self.player.x as u8).wrapping_mul(7)
-            ^ (self.player.y as u8).wrapping_mul(11)
-            ^ self.animation.frame.wrapping_mul(13)
-            ^ attempt.wrapping_mul(17)
+    /// One gameplay-PRNG draw over `0..=high` for the wind selector
+    /// (`prng.md §4`).
+    fn wind_drift_roll(&mut self, high: u8) -> u8 {
+        self.random_range_u8(0, high)
     }
 
     pub fn ignite_torch(&mut self) -> MoveOutcome {

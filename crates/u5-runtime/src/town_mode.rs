@@ -101,6 +101,14 @@ pub const fn town_resident_name(scene_byte: u8) -> Option<&'static str> {
 pub const TOWN_GRID_SIDE: usize = 32;
 pub const TOWN_GRID_BYTES: usize = TOWN_GRID_SIDE * TOWN_GRID_SIDE;
 
+/// `town-mode.md §15`: "When that cell represents any coordinate outside
+/// a town floor, viewport construction substitutes the loaded floor's
+/// southeast-corner cell `(31,31)`." This is that cell's index into the
+/// loaded floor page, shared by the movement terrain test and by the
+/// viewport terrain the renderer paints beyond the floor edge.
+pub const TOWN_VIEWPORT_OFF_GRID_SAMPLE_INDEX: usize =
+    (TOWN_GRID_SIDE - 1) * TOWN_GRID_SIDE + (TOWN_GRID_SIDE - 1);
+
 /// `town-mode.md §3`: signed-eight-bit interpretation of the runtime
 /// floor byte. Returns the signed offset from the scene's resident base
 /// page; values `0..=127` are non-negative floors, values `128..=255`

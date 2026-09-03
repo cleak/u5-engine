@@ -937,6 +937,12 @@ fn rough_seas_hits_each_non_dead_member_after_one_repaint_tick() {
     state.party[2].status = PARTY_STATUS_DEAD;
     state.party[2].hp = 0;
     state.prng_state = 0x2468;
+    // `overworld.md §6.2.5` puts "one world repaint tick" between the
+    // impact rumble and absorption and scores the whole ordered sequence at
+    // "exactly `N` gameplay draws" - repeated by its conformance vector,
+    // "consume exactly `N` gameplay draws in `1..8`". The repaint therefore
+    // costs the gameplay stream nothing, so the expected stream position is
+    // the absorption draws alone.
     let mut expected_prng = state.prng_state;
     let expected_rolls = [0usize, 1, 3, 4, 5]
         .map(|slot| {

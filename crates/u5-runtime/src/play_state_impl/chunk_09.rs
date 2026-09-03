@@ -1522,9 +1522,6 @@ impl PlayState {
     ) -> Option<(u8, Option<u8>)> {
         match area {
             TopDownRenderArea::Town => {
-                if !(0..32).contains(&x) || !(0..32).contains(&y) {
-                    return None;
-                }
                 if self.surface_visibility_pitch_dark() {
                     return None;
                 }
@@ -1539,9 +1536,10 @@ impl PlayState {
                 ) {
                     return None;
                 }
-                let xu = x as usize;
-                let yu = y as usize;
-                let terrain = self.animation.resolve_static_tile(self.grid[yu * 32 + xu]);
+                // `town-mode.md §15`: cells beyond the 32-by-32 floor take
+                // the loaded floor's southeast-corner terrain, not a hole.
+                let tile = self.surface_viewport_tile(x, y, false)?;
+                let terrain = self.animation.resolve_static_tile(tile);
                 Some((terrain, None))
             }
             TopDownRenderArea::World(_) => {
@@ -2264,7 +2262,10 @@ impl PlayState {
                 }
                 considered[index] = true;
 
-                let Some(tile) = self.surface_visibility_tile(x, y, wrap_world) else {
+                // `town-mode.md §15`: the carve runs over the constructed
+                // viewport, so off-floor town cells carry the substituted
+                // southeast-corner terrain rather than dropping out.
+                let Some(tile) = self.surface_viewport_tile(x, y, wrap_world) else {
                     continue;
                 };
                 let verdict = classify(SurfaceCarveCandidate {
@@ -2410,6 +2411,44 @@ impl PlayState {
         } else {
             None
         }
+    }
+
+    /// `town-mode.md §15`: "movement reads the adjacent cell already
+    /// present in the party-centred viewport. When that cell represents any
+    /// coordinate outside a town floor, **viewport construction substitutes
+    /// the loaded floor's southeast-corner cell `(31,31)`**."
+    ///
+    /// The substitution belongs to viewport construction, so it applies to
+    /// the terrain the viewport paints and to the visibility carve that
+    /// runs over that viewport - not to the 32-by-32 map window itself.
+    /// [`Self::surface_visibility_tile`] therefore stays the raw map
+    /// accessor and keeps returning `None` off-grid for the local-light
+    /// scan of `visibility.md §12.1`, which explicitly "scan[s] the active
+    /// thirty-two by thirty-two map window".
+    ///
+    /// OPEN SPEC QUESTION (`turn-clock-wind-report.md`, question 3): the two
+    /// published sentences about an off-floor town read disagree.
+    /// `town-mode.md §15` gives the `(31,31)` substitution above;
+    /// `visibility.md §3` says the world-tile getter's "Out-of-range queries
+    /// to the location/dungeon-explore buffer return a sentinel byte address
+    /// (a fixed location whose contents act as a 'you walked off the map'
+    /// tile)". Applying the §15 reading to the carve as well as to the
+    /// painted terrain makes off-floor cells sight-propagating open ground.
+    /// The original capture shows those rows lit, so the painted half is
+    /// confirmed; if §3's sentinel is a distinct read, the carve should use
+    /// it instead.
+    ///
+    /// Without this a party standing within five cells of a town edge sees
+    /// the out-of-floor rows painted black; the original paints the corner
+    /// terrain there (Britain's is grass).
+    fn surface_viewport_tile(&self, x: isize, y: isize, wrap_world: bool) -> Option<u8> {
+        if let Some(tile) = self.surface_visibility_tile(x, y, wrap_world) {
+            return Some(tile);
+        }
+        if wrap_world || !matches!(self.area, Area::Town { .. }) {
+            return None;
+        }
+        self.grid.get(TOWN_VIEWPORT_OFF_GRID_SAMPLE_INDEX).copied()
     }
 
     pub fn advance_turn(&mut self) {
@@ -3090,13 +3129,36 @@ impl PlayState {
         )
     }
 
-    pub fn advance_visual_tick(&mut self) {
+    /// One world step (`animation.md §13.2`).
+    ///
+    /// Returns the wind state the step's wind check installed, if it fired,
+    /// so a shell that narrates the idle tick can report it. Every other
+    /// caller ignores it.
+    pub fn advance_visual_tick(&mut self) -> Option<WindState> {
+        self.advance_visual_tick_inner(true)
+    }
+
+    /// A bare repaint tick: the redraw half of a world step, without the
+    /// per-pass wind check and so without its gameplay-PRNG draw.
+    ///
+    /// `animation.md §13` separates the two: "The viewport rebuild and
+    /// redraw run whenever the master redraw gate is set, regardless of the
+    /// second gate", while §13.2's wind check is one of the things "one
+    /// world step advances" behind both gates. Callers that the spec
+    /// describes as repainting rather than stepping the world take this
+    /// entry point, so their published gameplay-draw counts stay exact -
+    /// see [`Self::apply_rough_seas_if_eligible`] and `overworld.md §6.2.5`.
+    pub fn advance_world_repaint_tick(&mut self) {
+        let _ = self.advance_visual_tick_inner(false);
+    }
+
+    fn advance_visual_tick_inner(&mut self, run_wind_check: bool) -> Option<WindState> {
         // A visibility-sweep repaint advances this same presentation state
         // from `advance_presentation_frame`. Suppress the ordinary frontend
         // tick so one displayed sweep frame cannot advance objects or tiles
         // twice.
         if self.visibility_sweep.is_some() {
-            return;
+            return None;
         }
         // `timing.md §8.2`: "The shared wait tests the current scene value and
         // performs no world step for values `0x21` through `0x7F`
@@ -3113,7 +3175,7 @@ impl PlayState {
         // band and step the world as before; combat is called out explicitly
         // as doing so.
         if idle_world_step_suppressed_for_scene(self.current_scene_byte()) {
-            return;
+            return None;
         }
         // Combat and endgame own temporary active-object tables. Their
         // presentation ticks must not recreate slot zero from the saved world
@@ -3158,6 +3220,19 @@ impl PlayState {
             // move one while the player is idle (R315).
             self.animate_active_objects();
         }
+        // `animation.md §13.2`: one world step advances "one wind-change
+        // check" alongside the object phases, and `§13.1` freezes it with
+        // the rest of the step while Negate Time runs ("no wind check").
+        // Unlike the object pass above it is not scene-gated -
+        // `weather.md §2`: "The store happens before any scene test, so
+        // the state is always updated; only the banner repaint is
+        // conditional."
+        let wind_change =
+            if run_wind_check && self.time_stop_counter == 0 && !self.negate_time_active() {
+                self.idle_wind_drift()
+            } else {
+                None
+            };
         self.advance_animation_clock();
         // `combat.md §7`: the shared tile-painting pass - "run by the idle
         // redraw tick in *every* mode" - has a combat-band tail that "toggles
@@ -3166,6 +3241,7 @@ impl PlayState {
         // flag only moved at a round boundary, and the box the original blinks
         // sat solid for a whole round. The helper is inert outside combat.
         let _ = self.apply_combat_cursor_blink_tick();
+        wind_change
     }
 
     // `timing.md §8.2` also publishes the under-sail wait pass's cost - "an
@@ -3722,7 +3798,20 @@ impl PlayState {
         self.push_impact_line("Rough seas!");
         self.outdoor_impact_presentation();
         self.emit_sound_effect(SoundEffect::RoughSeasImpactRumble);
-        self.advance_visual_tick();
+        // `overworld.md §6.2.5`: "Order is `Rough seas!`, impact figure at
+        // the party cell, impact rumble, one world repaint tick, then
+        // absorption." The same section scopes the whole sequence's cost
+        // over that same order - "`N` damaged members advance the audio
+        // LFSR `300 + 160N` times in all, while consuming exactly `N`
+        // gameplay draws" (the `300` is the impact rumble, which precedes
+        // the tick) - and its conformance vector repeats it: "consume
+        // exactly `N` gameplay draws in `1..8`". So the repaint tick here
+        // must cost the gameplay stream nothing, which is the repaint half
+        // `animation.md §13` separates out ("The viewport rebuild and
+        // redraw run whenever the master redraw gate is set, regardless of
+        // the second gate"), not a full §13.2 world step with its wind
+        // check.
+        self.advance_world_repaint_tick();
         Some(self.apply_outdoor_impact_absorption())
     }
 

@@ -1534,7 +1534,7 @@ impl PlayState {
         };
 
         if !(0..32).contains(&nx) || !(0..32).contains(&ny) {
-            let corner_tile = self.grid[31 * 32 + 31];
+            let corner_tile = self.grid[TOWN_VIEWPORT_OFF_GRID_SAMPLE_INDEX];
             if !self.tile_walkable(corner_tile) {
                 self.message = MOVEMENT_BLOCKED_REFUSAL.to_string();
                 // `audio.md §7.4`: the town tile-class refusal arm.
@@ -1558,6 +1558,29 @@ impl PlayState {
             self.message = MOVEMENT_BLOCKED_REFUSAL.to_string();
             // `audio.md §7.4`: the town object-occupancy refusal arm.
             self.emit_town_blocked_step();
+            // INFERENCE, not a citation. The only published town-refusal
+            // turn cost is `town-mode.md §15`'s table row "Terrain rejected
+            // | ... | Consumes one normal town turn: advance the clock by
+            // one minute, run underfoot/post-action processing, and run one
+            // NPC schedule step" - and that table is introduced by
+            // "**Boundary-exit attempts** have these exact turn effects",
+            // so on its face it scores only a boundary step whose terrain
+            // test (§15's `(31,31)` corner sample) rejects.
+            //
+            // Charging this interior occupancy refusal the same turn rests
+            // on two joins the spec does not state as one rule: §15 applies
+            // "the ordinary transport-sensitive terrain predicate" and §7
+            // says "The ordinary passability and occupancy tests run first
+            // and still win, so a destination the classifier rejects prints
+            // the blocked feedback instead of prompting", i.e. the same
+            // wrapper and the same classifier; and the occupancy arm
+            // reaches the identical blocked-feedback tail (`audio.md §7.4`:
+            // the two town arms "share one tail" - that sentence is about
+            // the beep and the type-ahead flush, not the clock). §7 itself
+            // says nothing about turn cost. Corroborated only in aggregate
+            // by the defect-13 replay. Open spec question 2 in
+            // `turn-clock-wind-report.md`.
+            self.advance_turn();
             return Ok(MoveOutcome::Blocked);
         }
         let tile = self.grid[ny * 32 + nx];
@@ -1605,6 +1628,13 @@ impl PlayState {
             self.message = MOVEMENT_BLOCKED_REFUSAL.to_string();
             // `audio.md §7.4`: the town tile-class refusal arm.
             self.emit_town_blocked_step();
+            // INFERENCE, not a citation, for the same reason as the
+            // occupancy arm above: `town-mode.md §15`'s "Terrain rejected |
+            // ... | Consumes one normal town turn" row is the terrain arm,
+            // but its table is scoped to "**Boundary-exit attempts**". This
+            // site is the interior step. See the derivation above and open
+            // spec question 2 in `turn-clock-wind-report.md`.
+            self.advance_turn();
             Ok(MoveOutcome::Blocked)
         }
     }
