@@ -2669,7 +2669,6 @@ impl PlayState {
         }
         self.apply_pending_town_object_epilogue();
         let negate_time_active = self.negate_time_active();
-        let turn_before = self.turn;
         let effective_minutes = if negate_time_active {
             0
         } else {
@@ -2750,22 +2749,46 @@ impl PlayState {
         self.advance_light_beacon();
         self.refresh_natural_moongates();
         self.sync_player_object();
+        self.world_walkers_ran_this_turn = false;
         if self.time_stop_counter != 0 {
             self.time_stop_counter = self.time_stop_counter.saturating_sub(1);
-        } else if !negate_time_active && !self.combat_active {
-            let world_object_epilogue_runs = !matches!(self.area, Area::World { .. })
-                || TimingStatusTag::from_save_byte(self.active_effect_tag.unwrap_or(0))
-                    .world_object_epilogue_runs(turn_before);
-            let ordinary_town_turn =
-                matches!(self.area, Area::Town { .. }) && minutes == MINUTES_PER_INDOOR_TURN;
-            if ordinary_town_turn || defer_stonegate_epilogue {
-                self.pending_town_npc_schedule_pass = true;
-                self.pending_town_active_object_pass =
-                    advance_active_objects && world_object_epilogue_runs;
-            } else {
-                self.advance_npc_schedules();
-                if advance_active_objects && world_object_epilogue_runs {
-                    self.advance_active_objects();
+        } else if !self.combat_active {
+            // `npc-schedules.md §5` / `encounters.md §2.1`: the same three
+            // effect gates guard both modes' per-turn walkers, tested in
+            // opposite orders, and each mode gets its own routine because
+            // "an engine that shares one gate routine between them will
+            // eventually put NPC and creature movement on the wrong turns".
+            // The dungeon loop invokes neither walker block
+            // (`npc-schedules.md §5`: "The overworld and dungeon mode loops
+            // do not invoke this scheduler"), so it keeps the plain
+            // Negate-Time freeze of `magic.md §8`.
+            let gate = match self.area {
+                Area::World { .. } => self.overworld_walker_effect_gates(),
+                Area::Town { .. } => self.town_walker_effect_gates(),
+                Area::Dungeon { .. } => {
+                    if negate_time_active {
+                        WalkerEffectGate::SkippedByNegateTime
+                    } else {
+                        WalkerEffectGate::Run
+                    }
+                }
+            };
+            self.world_walkers_ran_this_turn = gate.walkers_run();
+            if gate.walkers_run() {
+                let ordinary_town_turn =
+                    matches!(self.area, Area::Town { .. }) && minutes == MINUTES_PER_INDOOR_TURN;
+                if ordinary_town_turn || defer_stonegate_epilogue {
+                    self.pending_town_npc_schedule_pass = true;
+                    self.pending_town_active_object_pass = advance_active_objects;
+                } else {
+                    // `town-mode.md §7` step 4 (R328): "the walker runs
+                    // between the slot-zero coordinate copy and the schedule
+                    // processor". The deferred town tail below keeps the same
+                    // order; this is the direct-call arm.
+                    if advance_active_objects {
+                        self.advance_active_objects();
+                    }
+                    self.advance_npc_schedules();
                 }
             }
         }
@@ -3315,20 +3338,57 @@ impl PlayState {
         wind_change
     }
 
-    // `timing.md §8.2` also publishes the under-sail wait pass's cost - "an
-    // **under-sail auto-advance pass costs two ticks and one world step and
-    // never enters the command wait at all**". That sentence is about the
-    // *overworld command-wait helper*, and it is deliberately NOT implemented
-    // here. `advance_visual_tick` is the shared "advance one world tick"
-    // primitive: combat entry preserves `Area::World` and the hoisted-sail
-    // transport, and the `.` pass-turn command routes through it too, so a
-    // half-rate gate at this level would silently halve the combat
-    // presentation beats and the pass-turn command as well. Implementing only
-    // the cost half without the auto-advance would also leave a party sitting
-    // still with sails hoisted running the whole world at half rate, which is
-    // neither the original's behaviour nor anything published. If it is ever
-    // implemented it belongs at the idle pump (`u5-bevy::visual_idle_tick`),
-    // not here.
+    /// `timing.md §8.2`: does the overworld input helper take the under-sail
+    /// auto-advance route this pass?
+    ///
+    /// The route is the sails-set arm of the *command-wait helper*, so it is
+    /// deliberately not a gate inside [`Self::advance_visual_tick`]:
+    /// `advance_visual_tick` is the shared "advance one world tick"
+    /// primitive, combat entry preserves `Area::World` and the hoisted-sail
+    /// transport, and the `.` pass-turn command routes through it too. A
+    /// half-rate gate down there would silently halve the combat
+    /// presentation beats and the pass-turn command with them. The route
+    /// therefore lives here, at the idle wait, and excludes combat by name.
+    ///
+    /// The suppressed scene band is excluded for the same reason §8.2 states
+    /// it: the shared wait "performs no world step for values `0x21` through
+    /// `0x7F` **inclusive**", and there is no world step to schedule when the
+    /// band applies.
+    pub fn under_sail_wait_pass_applies(&self) -> bool {
+        matches!(self.area, Area::World { .. })
+            && self.player.transport.is_ship_under_sail()
+            && !self.combat_active
+            && !idle_world_step_suppressed_for_scene(self.current_scene_byte())
+    }
+
+    /// One pass of the input helper's idle wait (`timing.md §8.2`).
+    ///
+    /// "On the overworld the input helper performs one scripted step-and-wait
+    /// - one world step followed by one one-tick wait - before either
+    /// entering the command wait or, when sails are set, performing a bare
+    /// cursor poll instead; so an **under-sail auto-advance pass costs two
+    /// ticks and one world step and never enters the command wait at all**."
+    ///
+    /// So the under-sail route is two calls: the scripted world step, then a
+    /// bare poll that costs its tick and steps nothing. The second call
+    /// returns without a command wait, which is the auto-advance itself - the
+    /// caller loops rather than blocking on a keystroke. Every other caller
+    /// gets the ordinary single step-and-wait followed by the command wait,
+    /// exactly as before.
+    pub fn idle_wait_pass(&mut self) -> IdleWaitPass {
+        if !self.under_sail_wait_pass_applies() {
+            self.under_sail_wait_cursor_poll_pending = false;
+            self.advance_visual_tick();
+            return IdleWaitPass::CommandWait;
+        }
+        if self.under_sail_wait_cursor_poll_pending {
+            self.under_sail_wait_cursor_poll_pending = false;
+            return IdleWaitPass::UnderSailCursorPoll;
+        }
+        self.advance_visual_tick();
+        self.under_sail_wait_cursor_poll_pending = true;
+        IdleWaitPass::UnderSailWorldStep
+    }
 
     pub fn decay_light_counters(&mut self, units: u8) {
         self.torch_counter = self.torch_counter.saturating_sub(units);
@@ -3377,6 +3437,72 @@ impl PlayState {
     pub fn negate_time_active(&self) -> bool {
         self.active_effect_tag == Some(NEGATE_TIME_ACTIVE_EFFECT_TAG)
             && self.active_effect_counter != 0
+    }
+
+    /// `npc-schedules.md §5` gate 1 / `encounters.md §2.1` gate 3, in
+    /// isolation: flip the stored transport parity bit and report whether it
+    /// came up set. Returns `false` without flipping when the marker is
+    /// outside the published four-value window, because the whole gate is
+    /// introduced by "**While** the party's transport marker is one of the
+    /// four values `0x12..0x15`".
+    fn transport_walker_gate_fires(&mut self) -> bool {
+        if !transport_marker_gates_per_turn_walkers(self.player.transport.save_marker()) {
+            return false;
+        }
+        self.transport_walker_gate_parity = !self.transport_walker_gate_parity;
+        self.transport_walker_gate_parity
+    }
+
+    /// `npc-schedules.md §5` gate 3 / `encounters.md §2.1` gate 2: the
+    /// Quickness parity bit. Only the `Q` effect arms it; with no effect
+    /// active the gate is not reached and its bit does not move.
+    fn quickness_walker_gate_fires(&mut self) -> bool {
+        if self.active_effect_timing_status() != TimingStatusTag::HalfTime {
+            return false;
+        }
+        self.quickness_walker_gate_parity = !self.quickness_walker_gate_parity;
+        self.quickness_walker_gate_parity
+    }
+
+    /// `npc-schedules.md §5`, "**Gates the town turn loop applies before the
+    /// processor runs at all.** These sit in the town loop's per-turn
+    /// epilogue, ahead of both town walkers ... In the order the town loop
+    /// tests them: 1. **Transport marker.** ... 2. **Negate Time.** ...
+    /// 3. **Quickness.**"
+    ///
+    /// Each arm returns immediately, which is what leaves the later gates'
+    /// parity bits un-flipped; see [`WalkerEffectGate`]. This routine is
+    /// deliberately *not* shared with
+    /// [`Self::overworld_walker_effect_gates`].
+    pub fn town_walker_effect_gates(&mut self) -> WalkerEffectGate {
+        if self.transport_walker_gate_fires() {
+            return WalkerEffectGate::SkippedByTransportMarker;
+        }
+        if self.negate_time_active() {
+            return WalkerEffectGate::SkippedByNegateTime;
+        }
+        if self.quickness_walker_gate_fires() {
+            return WalkerEffectGate::SkippedByQuickness;
+        }
+        WalkerEffectGate::Run
+    }
+
+    /// `encounters.md §2.1`, "**The three effect gates, in the order the
+    /// outdoor block tests them.** All three sit ahead of the encounter probe
+    /// *and* ahead of the outdoor creature walker ... 1. **Negate Time.** ...
+    /// 2. **Quickness.** ... 3. **The transport marker.**" - the reverse of
+    /// the town order above.
+    pub fn overworld_walker_effect_gates(&mut self) -> WalkerEffectGate {
+        if self.negate_time_active() {
+            return WalkerEffectGate::SkippedByNegateTime;
+        }
+        if self.quickness_walker_gate_fires() {
+            return WalkerEffectGate::SkippedByQuickness;
+        }
+        if self.transport_walker_gate_fires() {
+            return WalkerEffectGate::SkippedByTransportMarker;
+        }
+        WalkerEffectGate::Run
     }
 
     pub fn has_personal_light(&self) -> bool {
@@ -3593,13 +3719,37 @@ impl PlayState {
                     ActiveShipWind::None
                 };
             let ship_wind_changed = !matches!(ship_wind, ActiveShipWind::None);
+            // `active-objects.md §8`: "**There is no outdoor equivalent of
+            // the town wander gate.** An ordinary land monster has no
+            // per-turn 'do I move at all' roll: every turn the walker runs,
+            // an eligible slot goes straight to the directed step planner.
+            // The per-turn randomness an implementation has to reproduce
+            // outdoors is only these, and they are all downstream of the
+            // decision to move: the fair coin that picks **which axis to
+            // attempt first** - an ordering roll, never a gate; the
+            // destination-terrain cadence gates in the step committer ...;
+            // the class-specific pacing of the whirlpool parity bit and the
+            // wind cadence for ship-like frames."
+            //
+            // This used to gate the whole planner on the slot's animation
+            // phase reaching zero and then reseed that phase to two on a
+            // committed step - a two-turn pacing gate applied to every class,
+            // which is exactly the "do I move at all" test the section
+            // denies. The class pacing that survives is the ship wind cadence
+            // handled above and the whirlpool parity inside the committer.
+            //
+            // What survives of the old phase test is only the steady marker.
+            // §8's phase table gives the all-ones nibble as "Steady; do not
+            // animate this slot. The animator skips", and this walker "applies
+            // only to the outdoor animated/monster predicate", so a slot
+            // flagged as not animated is not one of its slots at all. That is
+            // what keeps a parked frigate, skiff or carpet - written with the
+            // steady marker when the party disembarks - sitting where it was
+            // left.
             let wandered = movement_allowed
                 && !ship_wind_changed
-                && (self.active_objects[slot].phase & 0x0f) == 0
+                && !matches!(tick, PhaseTick::Steady)
                 && self.try_wander_active_object_with_last_vacated(slot, &mut last_vacated);
-            if wandered {
-                self.active_objects[slot].phase = (self.active_objects[slot].phase & 0xf0) | 0x02;
-            }
             if ship_wind_changed
                 || wandered
                 || matches!(tick, PhaseTick::Countdown | PhaseTick::DecisionPoint)
@@ -4622,9 +4772,17 @@ impl PlayState {
         Ok(Some(MoveOutcome::Used))
     }
 
-    pub fn world_object_epilogue_runs_for_turn(&self, turn_before: u64) -> bool {
-        TimingStatusTag::from_save_byte(self.active_effect_tag.unwrap_or(0))
-            .world_object_epilogue_runs(turn_before)
+    /// `encounters.md §2.1`: the three effect gates "sit ahead of the
+    /// encounter probe *and* ahead of the outdoor creature walker, so a gate
+    /// that fires costs the turn its probe as well as its creature movement".
+    ///
+    /// The gates were already tested once this turn, inside the clock
+    /// routine, and each arm that fired flipped a *stored* parity bit. Both
+    /// consumers therefore read that single decision; re-testing the gates
+    /// here would advance the same bits twice per turn and put the walker and
+    /// the probe on opposite phases.
+    pub const fn world_object_epilogue_runs_for_turn(&self, _turn_before: u64) -> bool {
+        self.world_walkers_ran_this_turn
     }
 
     /// `active-objects.md §8.1` overworld off-screen prune pass. Invoked by

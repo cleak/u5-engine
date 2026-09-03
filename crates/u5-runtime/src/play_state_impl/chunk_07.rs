@@ -3432,17 +3432,35 @@ impl PlayState {
     }
 
     /// Finish the scheduler/object half of the ordinary town epilogue after
-    /// underfoot effects and the shared status/provision pass. The explicit-T
-    /// arrest discriminator suppresses only the scheduler; it does not erase
-    /// the independently requested active-object animation pass.
+    /// underfoot effects and the shared status/provision pass.
+    ///
+    /// `town-mode.md §7` step 4, as corrected by **R328**: the turn's
+    /// movement work runs "in a fixed order: three effect gates, the **town
+    /// object walker** that moves the location's loose horse-family objects,
+    /// and finally the NPC schedule processor with the current hour byte".
+    /// The three gates were applied by the clock routine, which is what left
+    /// these two flags set; this is the walker half of that order.
+    ///
+    /// The explicit-T arrest discriminator is the fourth skip, and it is the
+    /// only one of the four that "skips the schedule processor *only*, and it
+    /// is tested after the object walker has already made its pass. ... That
+    /// is why a result-two turn can still move a loose horse-family object
+    /// while no scheduled NPC moves" (`npc-schedules.md §5`). Both walkers
+    /// raise the visibility-dirty flag from inside themselves, so §7 step 5's
+    /// "the test has to cover **both** walkers, not just the schedule
+    /// processor" holds on a result-two turn too.
+    ///
+    /// *Corrected (R328).* This used to call the schedule processor first and
+    /// the object pass afterwards, which left a repaint conditioned on the
+    /// processor's report blind to an object the walker had moved.
     pub(crate) fn apply_pending_town_object_epilogue(&mut self) {
         let run_npc_schedule = std::mem::take(&mut self.pending_town_npc_schedule_pass);
         let run_active_objects = std::mem::take(&mut self.pending_town_active_object_pass);
-        if run_npc_schedule && self.pending_town_arrest.is_none() {
-            self.advance_npc_schedules();
-        }
         if run_active_objects {
             self.advance_active_objects();
+        }
+        if run_npc_schedule && self.pending_town_arrest.is_none() {
+            self.advance_npc_schedules();
         }
     }
 
@@ -4833,6 +4851,11 @@ impl PlayState {
             recovered_hp += hp;
             recovered_mana += mana;
         }
+        // `npc-schedules.md §12`: the H-Hole-Up hours command is the second
+        // of the clear-and-re-place pass's three callers, and it runs "when
+        // it finishes its rested hours". An interrupted rest returns above
+        // and never reaches it.
+        self.clear_and_replace_scheduled_npcs();
         let woke = self.wake_town_rest_sleepers();
         self.message = format!(
             "Rested {hours} hour{} at the inn bed; recovered {recovered_hp} HP and {recovered_mana} MP; woke {woke} asleep member(s).",

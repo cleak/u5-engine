@@ -1568,16 +1568,40 @@ fn append_active_shop_surcharge(
     message
 }
 
+/// `shops.md §8.4` inn `R` (Rest for the night).
+///
+/// "Three world-state effects come with it, and an engine that treats the
+/// rest as a pure presentation will miss all three. The party's map position
+/// is written to the inn's bed cell for the duration ... The clock is then
+/// run forward in paced steps until the hour byte reads **six** ... On
+/// completion the location runs the same clear-and-re-place pass that town
+/// entry runs: every non-party active-object record is cleared, and every
+/// scheduled NPC is re-placed at the position its schedule gives for the new
+/// hour (`systems/npc-schedules.md` Section 12). That is why the town's
+/// residents are in their morning positions, not their overnight ones, the
+/// moment the party wakes."
+///
+/// `main-loop.md §9` makes the reclassification explicit: "a paced sequence
+/// of *real turns* - sailing into the wind, crossing difficult terrain,
+/// holing up, resting at an inn - is not a presentation at all, however much
+/// it looks like one from the outside."
+///
+/// The fixed eight-hour advance this replaces both ended at the wrong hour
+/// and left the roster wherever the walker had taken it.
 fn apply_paid_inn_rest(state: &mut PlayState, cost: u16) -> String {
-    const INN_REST_HOURS: u8 = 8;
-    state.mark_town_rest_sleepers();
-    for _ in 0..INN_REST_HOURS {
-        state.advance_turn_with_minutes(MINUTES_PER_HOUR);
+    if let Some((bed_x, bed_y)) = state.inn_rest_bed_cell() {
+        state.player.x = bed_x;
+        state.player.y = bed_y;
+        state.sync_player_object();
+        state.mark_visibility_dirty();
     }
+    state.mark_town_rest_sleepers();
+    let hours = state.advance_inn_rest_clock_to_morning();
     let woke = state.wake_town_rest_sleepers();
     let (recovered_hp, recovered_mana, cured) = state.apply_inn_rest_night_recovery();
+    state.clear_and_replace_scheduled_npcs();
     format!(
-        "Rested {INN_REST_HOURS} hours at the inn for {cost} gold; recovered {recovered_hp} HP and {recovered_mana} MP; cured {cured} poisoned member(s); woke {woke} asleep member(s)."
+        "Rested {hours} hours at the inn for {cost} gold; recovered {recovered_hp} HP and {recovered_mana} MP; cured {cured} poisoned member(s); woke {woke} asleep member(s)."
     )
 }
 

@@ -604,6 +604,55 @@ impl PlayState {
         (recovered_hp, recovered_mana)
     }
 
+    /// `shops.md §8.4`, the inn's `R` action: "The party's map position is
+    /// written to the inn's bed cell for the duration, so the party is
+    /// standing on the bed while the sequence plays."
+    ///
+    /// Which cell is *the* bed of a given inn is not published, so this picks
+    /// the nearest bed-family cell on the displayed floor (ties broken
+    /// row-major). Only the published fact - that the rest is not a pure
+    /// presentation and does move the party onto a bed - is being
+    /// implemented; the exact cell is an open spec question.
+    pub fn inn_rest_bed_cell(&self) -> Option<(usize, usize)> {
+        if !matches!(self.area, Area::Town { .. }) {
+            return None;
+        }
+        let mut best: Option<((usize, usize), usize)> = None;
+        for y in 0..TOWN_GRID_SIDE {
+            for x in 0..TOWN_GRID_SIDE {
+                let Some(tile) = self.grid.get(y * TOWN_GRID_SIDE + x).copied() else {
+                    continue;
+                };
+                if !is_town_rest_bed_tile(tile) {
+                    continue;
+                }
+                let distance = self.player.x.abs_diff(x) + self.player.y.abs_diff(y);
+                if best.is_none_or(|(_, best_distance)| distance < best_distance) {
+                    best = Some(((x, y), distance));
+                }
+            }
+        }
+        best.map(|(cell, _)| cell)
+    }
+
+    /// `shops.md §8.4`: "The clock is then run forward in paced steps until
+    /// the hour byte reads **six** - the rest always ends at 06:00, whatever
+    /// hour it began at, so a party that rents a room at 21:00 sleeps nine
+    /// hours and one that rents at 04:00 sleeps two." Returns the number of
+    /// paced hour steps the run took, which is what the result line reports.
+    ///
+    /// "The shared hourly provision cadence may apply as the clock advances",
+    /// so the steps go through the ordinary per-turn clock rather than
+    /// writing the hour byte directly.
+    pub fn advance_inn_rest_clock_to_morning(&mut self) -> u8 {
+        let mut hours = 0u8;
+        while self.clock.hour != INN_REST_WAKE_HOUR && hours < HOURS_PER_DAY {
+            self.advance_turn_with_minutes(MINUTES_PER_HOUR);
+            hours += 1;
+        }
+        hours
+    }
+
     pub fn apply_inn_rest_night_recovery(&mut self) -> (u16, u16, usize) {
         let mut recovered_hp = 0u16;
         let mut recovered_mana = 0u16;

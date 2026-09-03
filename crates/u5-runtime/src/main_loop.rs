@@ -207,6 +207,42 @@ pub const fn idle_world_step_suppressed_for_scene(scene_byte: u8) -> bool {
         && scene_byte <= IDLE_WORLD_STEP_SUPPRESSED_LAST_SCENE
 }
 
+/// `timing.md §8.2`: what one pass of the input helper's idle wait did.
+///
+/// "On the overworld the input helper performs one scripted step-and-wait -
+/// one world step followed by one one-tick wait - before either entering the
+/// command wait or, when sails are set, performing a bare cursor poll
+/// instead; so an **under-sail auto-advance pass costs two ticks and one
+/// world step and never enters the command wait at all**."
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum IdleWaitPass {
+    /// The ordinary route: the scripted step-and-wait ran, and the helper is
+    /// now entering the blocking command wait.
+    CommandWait,
+    /// Under sail, the first half of the auto-advance pass: the scripted
+    /// world step.
+    UnderSailWorldStep,
+    /// Under sail, the second half: the bare cursor poll, which costs a tick
+    /// and performs no world step. The helper returns after it instead of
+    /// waiting for a command, which is what makes the route auto-advance.
+    UnderSailCursorPoll,
+}
+
+impl IdleWaitPass {
+    /// `timing.md §8.2`: the under-sail route "never enters the command wait
+    /// at all", so only the ordinary route hands control to a blocking read.
+    pub const fn enters_command_wait(self) -> bool {
+        matches!(self, Self::CommandWait)
+    }
+
+    /// The pass performed the scripted world step. The bare cursor poll does
+    /// not - it is one of the pumps that "share the one-tick wait but not the
+    /// world step".
+    pub const fn performed_world_step(self) -> bool {
+        matches!(self, Self::CommandWait | Self::UnderSailWorldStep)
+    }
+}
+
 /// `main-loop.md §3,§4`: route the scene byte to the mode-loop branch
 /// the outer dispatch should run.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]

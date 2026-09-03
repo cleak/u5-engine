@@ -80,6 +80,10 @@ pub fn test_state(grid: Vec<u8>, x: usize, y: usize) -> PlayState {
         pending_stonegate_trapdoor_playback: None,
         pending_town_status_provision_pass: false,
         pending_town_npc_schedule_pass: false,
+        transport_walker_gate_parity: false,
+        quickness_walker_gate_parity: false,
+        world_walkers_ran_this_turn: false,
+        under_sail_wait_cursor_poll_pending: false,
         pending_town_active_object_pass: false,
         natural_moongate_live_cells: Vec::new(),
         cached_moon_glyph_bytes: cached_moon_glyph_bytes_for_day(PLAY_START_DAY)
@@ -266,6 +270,10 @@ pub fn dungeon_state(grid: Vec<u8>, level: u8, x: usize, y: usize) -> PlayState 
         pending_stonegate_trapdoor_playback: None,
         pending_town_status_provision_pass: false,
         pending_town_npc_schedule_pass: false,
+        transport_walker_gate_parity: false,
+        quickness_walker_gate_parity: false,
+        world_walkers_ran_this_turn: false,
+        under_sail_wait_cursor_poll_pending: false,
         pending_town_active_object_pass: false,
         natural_moongate_live_cells: Vec::new(),
         cached_moon_glyph_bytes: cached_moon_glyph_bytes_for_day(PLAY_START_DAY)
@@ -458,6 +466,10 @@ pub fn world_state(grid: Vec<u8>, x: usize, y: usize) -> PlayState {
         pending_stonegate_trapdoor_playback: None,
         pending_town_status_provision_pass: false,
         pending_town_npc_schedule_pass: false,
+        transport_walker_gate_parity: false,
+        quickness_walker_gate_parity: false,
+        world_walkers_ran_this_turn: false,
+        under_sail_wait_cursor_poll_pending: false,
         pending_town_active_object_pass: false,
         natural_moongate_live_cells: Vec::new(),
         cached_moon_glyph_bytes: cached_moon_glyph_bytes_for_day(PLAY_START_DAY)

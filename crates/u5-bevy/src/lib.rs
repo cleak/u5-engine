@@ -16662,7 +16662,12 @@ fn visual_idle_tick(state: &mut PlayState) -> bool {
     if visual_modal_prompt_active(state) {
         return false;
     }
-    state.advance_visual_tick();
+    // `timing.md §8.2`: this is the input helper's idle wait, so it owns the
+    // scripted step-and-wait and - when sails are set - the under-sail
+    // auto-advance route that replaces the command wait with a bare cursor
+    // poll. `idle_wait_pass` performs the world step on the first half of
+    // that route and nothing but the tick on the second.
+    let _pass = state.idle_wait_pass();
     true
 }
 

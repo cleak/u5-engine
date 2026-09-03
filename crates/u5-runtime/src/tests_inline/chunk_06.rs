@@ -341,6 +341,12 @@
             aux3: 0,
         });
         state.pending_outdoor_reaction_slots.push(1);
+        // `encounters.md §2.1`: the three effect gates "sit ahead of the
+        // encounter probe *and* ahead of the outdoor creature walker". The
+        // walker is the only thing that queues a pending reaction slot, so a
+        // unit test that seeds one by hand has to seed the same turn's gate
+        // decision with it; production reaches both through the clock.
+        state.world_walkers_ran_this_turn = true;
 
         let outcome = state
             .apply_world_post_turn_effects_after_turn(0, &dir)

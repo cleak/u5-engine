@@ -1565,6 +1565,9 @@ pub const WILDERNESS_CAMP_MINUTES_PER_TICK: u8 =
     crate::MINUTES_PER_HOUR / WILDERNESS_CAMP_TICKS_PER_HOUR;
 pub const TOWN_REST_TICKS_PER_HOUR: u8 = 6;
 pub const TOWN_REST_MINUTES_PER_TICK: u8 = crate::MINUTES_PER_HOUR / TOWN_REST_TICKS_PER_HOUR;
+/// `shops.md §8.4`: the inn's rest-for-the-night "always ends at 06:00,
+/// whatever hour it began at".
+pub const INN_REST_WAKE_HOUR: u8 = 6;
 pub const TOWN_REST_INITIAL_SCHEDULE_BURST_TICKS: u8 = 16;
 /// `rest-and-camp.md §4`: when the player's chosen rest digit lands the
 /// target hour past 23, the original engine subtracts 23 (not 24) to

@@ -127,6 +127,34 @@ pub struct PlayState {
     /// separate because some low-level time calls deliberately suppress that
     /// pass while still owing the NPC scheduler. Never serialized.
     pub pending_town_active_object_pass: bool,
+    /// `npc-schedules.md §5` gate 1 / `encounters.md §2.1` gate 3: "While
+    /// the party's transport marker is one of the four values `0x12..0x15`,
+    /// a stored parity bit flips each turn and the loop skips **both** town
+    /// walkers on the turns where it comes up set". The bit is stored, not
+    /// derived from the turn counter, because "an early return leaves the
+    /// later gates' parity bits un-flipped" - so whether it advances on a
+    /// given turn depends on which mode's gate order reached it. Never
+    /// serialized.
+    pub transport_walker_gate_parity: bool,
+    /// `npc-schedules.md §5` gate 3 / `encounters.md §2.1` gate 2: the
+    /// Quickness parity bit, stored for the same reason as
+    /// [`Self::transport_walker_gate_parity`]. Never serialized.
+    pub quickness_walker_gate_parity: bool,
+    /// `encounters.md §2.1`: the three effect gates "sit ahead of the
+    /// encounter probe *and* ahead of the outdoor creature walker, so a gate
+    /// that fires costs the turn its probe as well as its creature movement".
+    /// The gates are evaluated once, in the per-turn clock routine, and the
+    /// outdoor post-action epilogue reads that one decision from here instead
+    /// of re-testing them - a second test would flip the stored parity bits
+    /// twice in one turn. Never serialized.
+    pub world_walkers_ran_this_turn: bool,
+    /// `timing.md §8.2`: which half of the under-sail auto-advance route the
+    /// next idle-wait pass owes. The route is "one world step followed by one
+    /// one-tick wait - before ... when sails are set, performing a bare
+    /// cursor poll instead", so a full pass is two ticks with the world step
+    /// on the first of them. Cleared whenever the route does not apply.
+    /// Never serialized.
+    pub under_sail_wait_cursor_poll_pending: bool,
     pub cached_moon_glyph_bytes: [u8; 2],
     pub food: u16,
     pub gold: u16,
