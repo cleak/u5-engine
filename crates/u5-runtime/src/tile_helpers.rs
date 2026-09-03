@@ -786,16 +786,47 @@ pub const fn transport_marker_for_visual_tile(tile: u8, sails_hoisted: bool) -> 
     })
 }
 
-pub fn active_object_frame_tile(type_byte: u8, phase: u8) -> Option<u8> {
+/// The frame family one active-object type byte owns: the family's base tile
+/// and the mask that wraps a step inside it.
+///
+/// There is exactly one such map, and both arms of the per-slot animator go
+/// through it. `active-objects.md §8` gives the reason in one sentence:
+/// "Each animated class has its current-frame index in a separate
+/// animation-frame table; the renderer combines **the tile class** with that
+/// counter to pick the actual byte to paint." The family is a property of the
+/// class, so a type byte cannot belong to a four-frame family when a countdown
+/// resolves it and to no family at all when a decision point does. Before
+/// these two arms were split apart, `0x40..=0x7F` meant exactly that.
+///
+/// **Where the four-frame band starts is a disclosed gap.** `§8`'s early-out
+/// 5 says only that a slot "whose class lies **below the sprite-class floor**"
+/// is skipped; the floor's value is not published anywhere, and neither is the
+/// quad/pair boundary. The band is taken to start at
+/// [`OUTDOOR_COMBAT_TYPE_FIRST`] because `combat_class_sprite_byte` is
+/// `class * 4 + 0x40`, so every combat class - the four human/party classes at
+/// `0x40`, `0x44`, `0x48` and `0x4C` included - owns a four-tile group there,
+/// and [`crate::combat_party_actor_byte`] returns exactly those group bases for
+/// a seated party member. *Runtime observation, spec silent:* a black-box
+/// capture of the original in an outdoor arena shows the seated party sprites
+/// cycling **four** distinct tiles at the same per-slot cadence as the
+/// monsters.
+pub fn active_object_frame_family(type_byte: u8) -> Option<(u8, u8)> {
     if type_byte == PLAYER_TILE {
         return None;
     }
-    let low = phase & 0x0f;
     match type_byte {
-        128..=191 => Some((type_byte & !0x03) + (low & 0x03)),
-        192..=255 => Some((type_byte & !0x01) + (low & 0x01)),
+        OUTDOOR_COMBAT_TYPE_FIRST..=191 => Some((type_byte & !0x03, 0x03)),
+        192..=255 => Some((type_byte & !0x01, 0x01)),
         _ => None,
     }
+}
+
+/// `active-objects.md §8`: "The renderer combines the phase with the tile
+/// class to pick a frame." That is this function - the family of
+/// [`active_object_frame_family`] indexed by the phase's low nibble.
+pub fn active_object_frame_tile(type_byte: u8, phase: u8) -> Option<u8> {
+    let (base, span) = active_object_frame_family(type_byte)?;
+    Some(base + (phase & 0x0f & span))
 }
 
 /// `active-objects.md §3` gate 3 / `animation.md §4` case 4: the
@@ -813,20 +844,11 @@ pub fn active_object_frame_tile(type_byte: u8, phase: u8) -> Option<u8> {
 /// a quad family, two for the pairs - so a slot parked at a decision point
 /// cycles through exactly the frames its countdown would have shown.
 ///
-/// **The quad family starts at [`OUTDOOR_COMBAT_TYPE_FIRST`] here, not at
-/// `128`.** `combat_class_sprite_byte` is `class * 4 + 0x40`, so every combat
-/// class - the four human/party classes at `0x40`, `0x44`, `0x48`, `0x4C`
-/// included - owns a four-tile group in that band, and
-/// [`crate::combat_party_actor_byte`] returns exactly those four group bases
-/// for a seated party member. *Runtime observation, spec silent:* no published
-/// section gives the band's lower bound, and a black-box capture of the
-/// original in an outdoor arena shows the seated party sprites cycling
-/// **four** distinct tiles at the same per-slot cadence as the monsters
-/// (measured on the two party cells the turn cursor does not overlap: four
-/// distinct tiles each, 1.88 and 2.74 ticks per change). The countdown arm is
-/// deliberately left at its published `128` boundary: combat records sit at a
-/// decision point from placement (`COMBAT_PLACEMENT_ACTIVE_OBJECT_PHASE`) and
-/// never reach it.
+/// The families are [`active_object_frame_family`]'s, the same ones the
+/// countdown arm resolves a phase against, so a slot parked at a decision
+/// point cycles through exactly the frames its countdown would have shown.
+/// That doc carries the evidence for where the four-frame band starts and
+/// what is spec and what is observation.
 ///
 /// Every other type byte has no family and returns `None`, which the caller
 /// reads as `animation.md §4` case 4's "Some slots do nothing".
@@ -835,14 +857,7 @@ pub fn active_object_frame_tile(type_byte: u8, phase: u8) -> Option<u8> {
 /// `active-objects.md §3` gives byte 0 as the tile *class* and byte 1 as the
 /// "per-frame tile byte ... modified during animation playback".
 pub fn active_object_next_frame_tile(type_byte: u8, current_tile: u8) -> Option<u8> {
-    if type_byte == PLAYER_TILE {
-        return None;
-    }
-    let (base, span) = match type_byte {
-        OUTDOOR_COMBAT_TYPE_FIRST..=191 => (type_byte & !0x03, 0x03u8),
-        192..=255 => (type_byte & !0x01, 0x01u8),
-        _ => return None,
-    };
+    let (base, span) = active_object_frame_family(type_byte)?;
     let frame = current_tile.wrapping_sub(base) & span;
     Some(base + ((frame + 1) & span))
 }
