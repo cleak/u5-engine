@@ -911,13 +911,15 @@ impl PlayState {
                 ));
             }
         }
-        // `moons.md §3` / `RETRACTIONS.md` R343: the moon-phase
-        // status-strip renderer runs on "every overworld scene entry,
-        // every town-family scene entry" and rewrites both cached
-        // glyph digits from the day-of-month before it decides whether
-        // either glyph is on screen. The scene-entry callers "carry no
-        // such gate" as the hour-change hook's floor test, so a basement
-        // or Underworld entry refreshes the pair too.
+        // `moons.md §3` (the caller list `RETRACTIONS.md` R343 put on
+        // the record): the moon-phase status-strip renderer's callers are
+        // "every overworld scene entry; every town-family scene entry" and
+        // the hour-change hook, and "Each refresh caches the two glyph
+        // bytes for the current day *before* it tests whether either
+        // marker is on the visible horizon". `moons.md §2.2` adds that the
+        // scene-entry callers "carry no such gate" as the hour-change
+        // hook's floor test, so a basement or Underworld entry refreshes
+        // the pair too.
         state.refresh_cached_moon_glyphs_at_scene_entry();
         state.mode_zero_cleanup();
         state.mark_visibility_dirty();
@@ -1563,13 +1565,15 @@ impl PlayState {
         };
         state.sync_player_object();
         state.cache_current_world_overlay();
-        // `moons.md §3` / `RETRACTIONS.md` R343: the moon-phase
-        // status-strip renderer runs on "every overworld scene entry,
-        // every town-family scene entry" and rewrites both cached
-        // glyph digits from the day-of-month before it decides whether
-        // either glyph is on screen. The scene-entry callers "carry no
-        // such gate" as the hour-change hook's floor test, so a basement
-        // or Underworld entry refreshes the pair too.
+        // `moons.md §3` (the caller list `RETRACTIONS.md` R343 put on
+        // the record): the moon-phase status-strip renderer's callers are
+        // "every overworld scene entry; every town-family scene entry" and
+        // the hour-change hook, and "Each refresh caches the two glyph
+        // bytes for the current day *before* it tests whether either
+        // marker is on the visible horizon". `moons.md §2.2` adds that the
+        // scene-entry callers "carry no such gate" as the hour-change
+        // hook's floor test, so a basement or Underworld entry refreshes
+        // the pair too.
         state.refresh_cached_moon_glyphs_at_scene_entry();
         state.mode_zero_cleanup();
         state.mark_visibility_dirty();

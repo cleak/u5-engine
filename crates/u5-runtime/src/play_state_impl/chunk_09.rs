@@ -3050,6 +3050,15 @@ impl PlayState {
     ///   is not modelled, because this engine has no redraw-enable byte -
     ///   its world step is unconditional and `0x02FE` round-trips through
     ///   the save image untouched.
+    /// * The step that reaches this pass is
+    ///   [`Self::advance_visual_tick`], and only the Bevy frontend pumps
+    ///   it today. A headless `u5-tui` load followed immediately by a
+    ///   Q-save therefore flushes the scene-entry write unattenuated,
+    ///   where the measured DOS file - taken after idle time had run -
+    ///   holds zero. That is a missing idle driver in the shell, not a
+    ///   different rule here; the chain from the entry write through the
+    ///   world step to the saved byte is pinned by
+    ///   `twelve_hour_byte_reaches_the_original_zero_over_shipped_idle_world_ticks`.
     ///
     /// `time.md §11` also states the limit on the cadence itself: "How
     /// long the byte takes to reach zero in wall-clock terms is inferred,

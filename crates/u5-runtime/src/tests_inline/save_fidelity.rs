@@ -49,10 +49,13 @@ fn twelve_hour_byte_is_written_on_a_snapshot_mismatch_and_then_decays() {
         "the crossing writes the twelve-hour form of the new hour"
     );
 
-    // The ambient-audio tick is the byte's only consumer and takes it back
-    // down two calls in every eight.
-    for _ in 0..(AMBIENT_AUDIO_SUB_TICK_PERIOD * u8::from(display_hour_12h(19)) * 2) {
-        state.tick_ambient_audio_repeats();
+    // The ambient-audio tick is the byte's only consumer, it "runs once
+    // per idle world tick", and it takes the byte down two calls in every
+    // eight. `display_hour_12h(19)` is 7, so four periods of eight world
+    // steps are more than enough; drive them through the production step
+    // rather than the helper.
+    for _ in 0..(4 * usize::from(AMBIENT_AUDIO_SUB_TICK_PERIOD)) {
+        let _ = state.advance_visual_tick();
     }
     assert_eq!(state.twelve_hour_audio_repeats, 0);
 
@@ -289,13 +292,15 @@ const SHIPPED_IOLOS_HUT_BLOCK: usize = 4;
 ///
 /// * `0x02DE` - `time.md §5`: the shipped seed's snapshot is zero against
 ///   a start hour of eight, so "a stale snapshot fires the bundle once at
-///   scene entry, with no turn consumed" and the byte first takes the
-///   twelve-hour form of hour eight. `§11` then has it "counted down
-///   toward zero by the ambient-audio tick", so "a save taken any
-///   appreciable time after the last hour crossing reads zero here". The
-///   DOS load-and-save left it at zero; that run spent seconds of idle
-///   world ticks between Journey Onward and the Q-save, which is the decay
-///   this test runs explicitly below.
+///   scene entry, with no turn consumed" and the byte takes the
+///   twelve-hour form of hour eight - the literal `8`. This test takes the
+///   Q-save with no world tick in between, so `8` is what the shipped path
+///   writes, and that is what is asserted. The DOS reference file holds
+///   `0x00` because `§11`'s decay had run: "a save taken any appreciable
+///   time after the last hour crossing reads zero here". Reaching that
+///   zero needs idle world ticks, and it is driven through the production
+///   tick - not a helper - in
+///   [`twelve_hour_byte_reaches_the_original_zero_over_shipped_idle_world_ticks`].
 /// * `0x02DF`/`0x02E0` - `formats/saved-gam.md §5.1`: the cached Trammel
 ///   and Felucca digits for the day of the month, "stored as the printable
 ///   character for a digit". Day five of the shipped start date gives
@@ -337,14 +342,9 @@ fn shipped_layout_town_save_round_trips_every_answered_offset() {
 
     // `time.md §5`: the entry's mode-zero call compares a snapshot it does
     // not refresh, so the bundle fires once here and writes the twelve-hour
-    // form of hour eight.
-    assert_eq!(state.twelve_hour_audio_repeats, display_hour_12h(8));
-    // `time.md §11`: the ambient-audio tick is the byte's only consumer and
-    // takes it back to zero. Drive that decay directly rather than pumping
-    // visual ticks, which would also roll the wind this test pins.
-    for _ in 0..(AMBIENT_AUDIO_SUB_TICK_PERIOD * u8::from(display_hour_12h(8)) * 2) {
-        state.tick_ambient_audio_repeats();
-    }
+    // form of hour eight. Nothing else runs before the save below, so this
+    // is the value the shipped writer flushes.
+    assert_eq!(state.twelve_hour_audio_repeats, 8);
 
     assert_eq!(
         state.save_game_command(&dir, Some(true)).unwrap(),
@@ -352,7 +352,10 @@ fn shipped_layout_town_save_round_trips_every_answered_offset() {
     );
     let saved = fs::read(dir.join("SAVED.GAM")).unwrap();
 
-    assert_eq!(saved[SAVE_TWELVE_HOUR_AUDIO_REPEAT_OFFSET], 0x00);
+    // The entry write, unattenuated: no world tick has run, so the decay
+    // that takes the DOS reference file to `0x00` has not started. See the
+    // doc comment and the companion decay test.
+    assert_eq!(saved[SAVE_TWELVE_HOUR_AUDIO_REPEAT_OFFSET], 8);
     assert_eq!(saved[SAVE_CACHED_TRAMMEL_GLYPH_OFFSET], 0x32);
     assert_eq!(saved[SAVE_CACHED_FELUCCA_GLYPH_OFFSET], 0x33);
     assert_eq!(saved[SAVE_WIND_OFFSET], WindState::Calm.save_byte());
@@ -376,6 +379,70 @@ fn shipped_layout_town_save_round_trips_every_answered_offset() {
     // Two bytes the answer says a producer must leave alone.
     assert_eq!(saved[SAVE_SAVED_HOUR_SNAPSHOT_OFFSET], 0);
     assert_eq!(saved[SAVE_REDRAW_ENABLE_OFFSET], 1);
+    let _ = fs::remove_dir_all(dir);
+}
+
+/// The decay half of `0x02DE`, driven end to end through the shipped code
+/// path: load the same shipped-layout save, run the production idle world
+/// tick, Q-save through the real save writer, and land on the byte the DOS
+/// reference file holds.
+///
+/// `time.md §11`: "The audio tick runs once per idle world tick", and it
+/// "decrements it toward zero on **two of every eight** of its own calls".
+/// The scene-entry write of the twelve-hour form of hour eight is `8`, so
+/// eight decrements - four whole periods of eight world steps - take it to
+/// zero, and "a save taken any appreciable time after the last hour
+/// crossing reads zero here". That is the measured DOS load-and-save.
+///
+/// Nothing here calls the ambient helper directly: the only route to the
+/// decrement is [`PlayState::advance_visual_tick`], the same world step
+/// `u5-bevy` drives, so the whole shipped chain is pinned - entry write,
+/// world step, save writer, file bytes. The intermediate assertion is on
+/// the published two-in-eight *rate*; which two of the eight sub-ticks
+/// carry the decrement is not published and is not asserted.
+#[test]
+fn twelve_hour_byte_reaches_the_original_zero_over_shipped_idle_world_ticks() {
+    let dir = shipped_layout_iolos_hut_dir();
+    fs::write(dir.join("SAVED.GAM"), shipped_layout_iolos_hut_save()).unwrap();
+    fs::write(dir.join(SAVED_OOL_FILENAME), vec![0; SAVED_OOL_LEN]).unwrap();
+    write_empty_ool_mirrors(&dir);
+
+    let options = load_play_options_from_save(&dir).unwrap();
+    let scene = Scene::new(SHIPPED_IOLOS_HUT_SCENE).unwrap();
+    let mut state = PlayState::load_town_scene(&dir, scene, options).unwrap();
+    assert_eq!(state.twelve_hour_audio_repeats, 8);
+
+    let period = usize::from(AMBIENT_AUDIO_SUB_TICK_PERIOD);
+    for _ in 0..period {
+        let _ = state.advance_visual_tick();
+    }
+    assert_eq!(
+        state.twelve_hour_audio_repeats, 6,
+        "one period of eight world steps spends two decrements"
+    );
+
+    for _ in 0..(3 * period) {
+        let _ = state.advance_visual_tick();
+    }
+    assert_eq!(
+        state.twelve_hour_audio_repeats, 0,
+        "four periods of eight world steps spend the whole entry write of 8"
+    );
+
+    assert_eq!(
+        state.save_game_command(&dir, Some(true)).unwrap(),
+        MoveOutcome::Saved
+    );
+    let saved = fs::read(dir.join("SAVED.GAM")).unwrap();
+    assert_eq!(
+        saved[SAVE_TWELVE_HOUR_AUDIO_REPEAT_OFFSET], 0x00,
+        "the DOS load-and-save reference byte, reached through the world step"
+    );
+    // The world step touches neither of these, so the answered offsets the
+    // headline test pins survive the idle time as well.
+    assert_eq!(saved[SAVE_CACHED_TRAMMEL_GLYPH_OFFSET], 0x32);
+    assert_eq!(saved[SAVE_CACHED_FELUCCA_GLYPH_OFFSET], 0x33);
+    assert_eq!(saved[SAVE_SAVED_HOUR_SNAPSHOT_OFFSET], 0);
     let _ = fs::remove_dir_all(dir);
 }
 
@@ -410,9 +477,10 @@ fn wind_survives_load_and_save_unrerolled_for_every_direction() {
     }
 }
 
-/// `formats/saved-gam.md §5.1`: the cached digits are "the sole input to
-/// natural-gate destination selection", so a restored save has to carry the
-/// pair the day of the month gives, not a zeroed scratch pair.
+/// `formats/saved-gam.md §5.1`: "Natural-moongate transit selects its
+/// destination from these two cached bytes and from nothing else", so a
+/// restored save has to carry the pair the day of the month gives, not a
+/// zeroed scratch pair.
 #[test]
 fn cached_moon_glyph_digits_reload_and_reselect_the_same_moonstone_slots() {
     let dir = shipped_layout_iolos_hut_dir();

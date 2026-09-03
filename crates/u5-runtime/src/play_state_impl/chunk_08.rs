@@ -1249,10 +1249,15 @@ impl PlayState {
     /// border."
     ///
     /// This gate belongs to the hour-change hook **alone**.
-    /// `RETRACTIONS.md` R343: the renderer has several callers, and "only
-    /// one of them - the hour-change hook of the per-turn cleanup -
-    /// carries a gate that excludes a party Z with the high bit set. The
-    /// overworld and town-family scene-entry callers carry no such gate".
+    /// `moons.md §2.2`: "The renderer has several callers (Section 3), and
+    /// only one of them - the hour-change hook of the per-turn cleanup -
+    /// carries a gate that excludes a party Z with the high bit set
+    /// (`systems/time.md` Section 5). The overworld and town-family
+    /// scene-entry callers carry no such gate". `RETRACTIONS.md` R343 is
+    /// the withdrawal that put that census on the record - its own wording
+    /// is "Only the hour-change caller excludes a party Z with the high bit
+    /// set" - but the sentence quoted above is `moons.md §2.2` body text,
+    /// not R343's.
     /// Scene entry therefore uses
     /// [`Self::sky_strip_scene_entry_refresh_runs`], not this predicate.
     ///
@@ -1272,13 +1277,28 @@ impl PlayState {
         }
     }
 
-    /// `moons.md §2.2`: the scene-entry callers of the strip renderer.
-    /// `RETRACTIONS.md` R343: "The overworld and town-family scene-entry
-    /// callers carry no such gate, so a below-surface entry (the
-    /// Underworld plane, or a basement floor inside a town-family
-    /// location) can reach the painter." Even when the painter takes its
-    /// erase arm, "the two glyph bytes are still cached in this case,
-    /// because the cache is written before the visibility test".
+    /// `moons.md §2.2`, the scene-entry callers of the strip renderer:
+    /// "The overworld and town-family scene-entry callers carry no such
+    /// gate, so a below-surface entry (the Underworld plane, or a basement
+    /// floor inside a town-family location) can reach the painter."
+    ///
+    /// Reaching the renderer is enough to write the cache, and the rule
+    /// that says so is general rather than per-arm. `moons.md §3`: "Each
+    /// refresh caches the two glyph bytes for the current day *before* it
+    /// tests whether either marker is on the visible horizon, so the cache
+    /// holds the current day's phase for both moons even when neither
+    /// marker is drawn." (§2.2's "the two glyph bytes are still cached in
+    /// this case, because the cache is written before the visibility test"
+    /// is the same rule stated inside the Ararat bullet, and is scoped to
+    /// that arm; §3 is the sentence relied on here.)
+    ///
+    /// What `moons.md §2.2` leaves open is the *painter's* below-surface
+    /// erase arm alone: "that arm's reachability is **unresolved**", and
+    /// R343 adds that "no negative about what is drawn, erased or cached
+    /// below the surface is supported". That open question is about
+    /// drawing, which this engine does not do here; the cache write is
+    /// settled by §3 either way. It is carried as a spec question rather
+    /// than treated as answered.
     ///
     /// What is excluded is the scene class alone (`moons.md §2.2`):
     /// "Scenes outside the surface/town family (combat, intro, and every
@@ -1286,10 +1306,10 @@ impl PlayState {
     /// at all. Nothing is drawn and nothing is cached."
     pub fn sky_strip_scene_entry_refresh_runs(&self) -> bool {
         match self.area {
-            // Both planes: R343 names "the Underworld plane" as a
-            // below-surface entry that reaches the painter, and the
+            // Both planes: `moons.md §2.2` names "the Underworld plane" as
+            // a below-surface entry that reaches the painter, and the
             // underworld suppression is the painter's erase arm, which
-            // runs after the cache write.
+            // runs after the cache write (§3).
             Area::World { .. } => true,
             Area::Town { scene, .. } => sky_strip_renders(scene.byte, false),
             Area::Dungeon { .. } => false,
@@ -1321,6 +1341,17 @@ impl PlayState {
     /// glyph digits are refreshed on a **Journey Onward**". It carries no
     /// floor gate, so a Journey Onward onto a town basement floor - or
     /// into the Underworld - refreshes `0x02DF`/`0x02E0` as well.
+    ///
+    /// Where the caller list is open, the restored pair stands. `moons.md
+    /// §3` names "the Blackthorn cutscene re-entries" and "two command
+    /// handlers that repaint the strip" as further callers without saying
+    /// which handlers, and says nothing about an in-place floor change
+    /// inside a location; none of those is wired to this refresh, so the
+    /// bytes restored from the save image survive them untouched. Since
+    /// `formats/saved-gam.md §5.1` has "Natural-moongate transit
+    /// selects its destination from these two cached bytes and from
+    /// nothing else", preserving what the file held is the conservative
+    /// side of every one of those open questions.
     pub fn refresh_cached_moon_glyphs_at_scene_entry(&mut self) {
         if !self.sky_strip_scene_entry_refresh_runs() {
             return;

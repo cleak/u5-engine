@@ -16885,19 +16885,24 @@ fn sky_strip_hour_refresh_gate_excludes_below_surface_but_scene_entry_does_not()
     // "If the active scene is in the surface/town-family range and the
     // party is not at dungeon depth, the engine refreshes the sky strip
     // in the top viewport border." That floor test belongs to the
-    // hour-change hook alone - `RETRACTIONS.md` R343: the renderer has
-    // several callers and "only one of them - the hour-change hook of the
-    // per-turn cleanup - carries a gate that excludes a party Z with the
-    // high bit set. The overworld and town-family scene-entry callers
-    // carry no such gate, so a below-surface entry (the Underworld plane,
-    // or a basement floor inside a town-family location) can reach the
-    // painter."
+    // hour-change hook alone - `moons.md §2.2`: "The renderer has several
+    // callers (Section 3), and only one of them - the hour-change hook of
+    // the per-turn cleanup - carries a gate that excludes a party Z with
+    // the high bit set (`systems/time.md` Section 5). The overworld and
+    // town-family scene-entry callers carry no such gate, so a
+    // below-surface entry (the Underworld plane, or a basement floor
+    // inside a town-family location) can reach the painter."
     //
-    // R343 also withdraws the negative this test used to quote: "no
-    // negative about what is drawn, erased or cached below the surface is
-    // supported". So the below-surface rows below assert only the shape of
-    // the *hour hook's* published gate, and each is paired with the
-    // scene-entry caller, which does cache there.
+    // That the reached refresh writes the cache is `moons.md §3`: "Each
+    // refresh caches the two glyph bytes for the current day *before* it
+    // tests whether either marker is on the visible horizon".
+    //
+    // `RETRACTIONS.md` R343 is the withdrawal behind both sentences. It
+    // also withdraws the negative this test used to quote, in its own
+    // words: "no negative about what is drawn, erased or cached below the
+    // surface is supported". So the below-surface rows below assert only
+    // the shape of the *hour hook's* published gate, and each is paired
+    // with the scene-entry caller, which does cache there.
     let sentinel = [0xAA, 0xBB];
 
     // Surface overworld: the hook runs and the cache is written.

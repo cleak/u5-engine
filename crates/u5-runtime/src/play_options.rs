@@ -54,8 +54,10 @@ pub struct PlayOptions {
     pub twelve_hour_audio_repeats: u8,
     /// `formats/saved-gam.md §5.1` (spec `0170809`): the cached Trammel
     /// and Felucca moon-phase digits at `0x02DF`/`0x02E0`, restored
-    /// verbatim. They are "the sole input to natural-gate destination
-    /// selection" (`RETRACTIONS.md` R339).
+    /// verbatim. "**They are gameplay state, not scratch.**
+    /// Natural-moongate transit selects its destination from these two
+    /// cached bytes and from nothing else" (`RETRACTIONS.md` R339 is the
+    /// withdrawal that established them).
     pub cached_moon_glyph_bytes: [u8; 2],
     /// `formats/saved-gam.md §10` / `time.md §6` (spec `0170809`): the
     /// cached ambient light level at `0x02FF`. A stored value of 51 or
