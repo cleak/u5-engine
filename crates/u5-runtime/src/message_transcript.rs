@@ -43,10 +43,32 @@ impl PlayState {
         centered: bool,
         explicit_blank: bool,
     ) {
+        self.append_transcript_entry_on_row(
+            text,
+            glyphs,
+            is_command_echo,
+            centered,
+            explicit_blank,
+            false,
+        );
+    }
+
+    /// [`Self::append_transcript_entry`] for an echo written onto a marker
+    /// row an earlier print's line feed already opened (`combat.md §8.1`).
+    fn append_transcript_entry_on_row(
+        &mut self,
+        text: String,
+        glyphs: Vec<TlkRenderedGlyph>,
+        is_command_echo: bool,
+        centered: bool,
+        explicit_blank: bool,
+        continues_open_row: bool,
+    ) {
         self.message_transcript.push(MessageEntry {
             text,
             glyphs,
             is_command_echo,
+            continues_open_row,
             centered,
             explicit_blank,
         });
@@ -155,6 +177,131 @@ impl PlayState {
         self.push_message_transcript_lines(&text);
         self.message = text.clone();
         self.message_flushed = text;
+    }
+
+    /// `combat.md §8.1` + `text-output.md §10.2`: emit the echo of a key
+    /// read at the arena's own command prompt.
+    ///
+    /// The arena's turn handler prints the banner and then "emits the line
+    /// feed itself, unconditionally, between printing the banner and reading
+    /// the command byte", so the end-cap marker already stands on the row
+    /// that line feed opened. What the key echoes is written there: no
+    /// further line feed runs before it, and §10.4's derived blank row -
+    /// which *is* that line feed in the world loops - must not be added a
+    /// second time.
+    ///
+    /// Embedded line feeds behave as they do everywhere else: the first
+    /// segment is the echo, and each later one is its own row.
+    pub(crate) fn emit_combat_command_echo_line(&mut self, text: &str) {
+        self.close_open_verb_echo_before_combat_print();
+        self.flush_message_slot();
+        let mut segments = text.split('\n');
+        let first = segments.next().unwrap_or_default();
+        if !first.is_empty() {
+            let glyphs = ordinary_glyphs_from_engine_text(first);
+            self.append_transcript_entry_on_row(
+                first.to_string(),
+                glyphs,
+                true,
+                false,
+                false,
+                true,
+            );
+            self.message_transcript_revision = self.message_transcript_revision.wrapping_add(1);
+        }
+        let rest: Vec<&str> = segments.collect();
+        for (index, line) in rest.iter().enumerate() {
+            let is_last = index + 1 == rest.len();
+            if line.is_empty() {
+                if !is_last {
+                    self.push_explicit_blank_message_entry();
+                }
+                continue;
+            }
+            self.push_message_entry(*line, false);
+        }
+        self.record_combat_print(text);
+    }
+
+    /// Emit one arena print exactly as the original's per-cell emitter would
+    /// lay it out, `text` carrying its own leading and trailing line feeds.
+    ///
+    /// `combat.md §11.1` starts every narrated step with a newline - the
+    /// turn banner's own leading newline of `§8.1`, the party melee swing's
+    /// newline "before the roll", step 3's newline on a landed hit - and
+    /// `text-output.md §10.4` says what that costs: the line feed "advances
+    /// the row *and* returns the column to the window's left edge", so it
+    /// leaves a visible blank row exactly when the cursor was already at
+    /// column 0. [`PlayState::combat_transcript_row_open`] is that column
+    /// test; a print that lands mid-row - `Nothing!` after `Aim! ` - closes
+    /// the open row instead of blanking one.
+    pub(crate) fn emit_combat_print(&mut self, text: &str) {
+        self.close_open_verb_echo_before_combat_print();
+        self.flush_message_slot();
+        let row_open = self.combat_transcript_row_open;
+        let mut segments = text.split('\n').peekable();
+        let mut first = true;
+        while let Some(line) = segments.next() {
+            let is_last = segments.peek().is_none();
+            let continues_row = first && row_open;
+            first = false;
+            if line.is_empty() {
+                // A row that ends with nothing on it is a blank row the
+                // player sees - unless it is the row this print was already
+                // standing on, which the line feed merely closes, or the
+                // trailing "cursor is here" segment, which is not a row yet.
+                if !is_last && !continues_row {
+                    self.push_explicit_blank_message_entry();
+                }
+                continue;
+            }
+            if continues_row
+                && let Some(last) = self
+                    .message_transcript
+                    .last_mut()
+                    .filter(|entry| !entry.explicit_blank)
+            {
+                last.text.push_str(line);
+                last.glyphs.extend(ordinary_glyphs_from_engine_text(line));
+                self.message_transcript_revision = self.message_transcript_revision.wrapping_add(1);
+                continue;
+            }
+            self.push_message_entry(line, false);
+        }
+        self.record_combat_print(text);
+    }
+
+    /// Close a verb echo the combat command handler opened before the round
+    /// walker prints anything underneath it.
+    ///
+    /// `commands.md §5`: the handler's own output belongs on the row its
+    /// verb echo opened - `Push-` plus `East` is one row - and
+    /// [`Self::commit_command_echo`] can only fold it while that echo is
+    /// still the newest transcript entry. An arena print lands underneath
+    /// it, so the fold has to happen first. An echo whose handler printed
+    /// nothing is left alone: committing it there restores the slot the
+    /// echo replaced, which this path would then print a second time.
+    fn close_open_verb_echo_before_combat_print(&mut self) {
+        if self.pending_command_echo.is_some() && !self.message.is_empty() {
+            self.commit_command_echo();
+        }
+    }
+
+    /// Record where an arena print left the cursor, and append the printed
+    /// bytes to the compatibility slot.
+    ///
+    /// `text-output.md §10.4`: a line feed returns the column to the
+    /// window's left edge, so the cursor is mid-row exactly when the print
+    /// did not end with one. The slot accumulates the turn's printed stream
+    /// because the arena narrates several lines per keystroke and
+    /// `text-output.md §11` has "a second line produced in the same turn
+    /// print beneath" the first rather than instead of it; keeping
+    /// `message_flushed` level with it stops the safety-net flush from
+    /// recording the same bytes twice.
+    fn record_combat_print(&mut self, text: &str) {
+        self.combat_transcript_row_open = !text.ends_with('\n');
+        self.message.push_str(text);
+        self.message_flushed = self.message.clone();
     }
 
     /// Emit one line that the turn loop's own prompt marker belongs to.

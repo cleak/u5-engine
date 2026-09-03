@@ -292,6 +292,20 @@ pub struct PlayState {
     pub pace_combat_presentations: bool,
     pub combat_frame_snapshot: Option<CombatFrameSnapshot>,
     pub pending_combat_actor_slot: Option<usize>,
+    /// Whether the message window's cursor is standing part-way along a row
+    /// that already carries text.
+    ///
+    /// `text-output.md §10.4`: "the per-cell emitter treats the line-feed
+    /// byte as a combined carriage return and line feed: it advances the row
+    /// *and* returns the column to the window's left edge", so a print that
+    /// opens with a line feed lands on the next row and "the next cycle's
+    /// leading line feed advances again - producing exactly one blank row"
+    /// when the cursor was already at column 0. Combat prints line by line
+    /// as it produces them (`combat.md §11.1`'s order, whose every step
+    /// begins with a newline), so the arena transcript needs to know which
+    /// of the two cases it is in. Never serialized: it is presentation
+    /// position, not saved state.
+    pub combat_transcript_row_open: bool,
     /// `combat.md §8.2`: the live `A`-Attack attempt walk and its open
     /// targeting cursor. `A` "opens a second, separate input read, and
     /// it is not a one-shot direction key but an **interactive targeting
@@ -585,6 +599,18 @@ pub struct MessageEntry {
     /// the ordinary font; TLK `0x8E` spans retain their runic selection here.
     pub glyphs: Vec<TlkRenderedGlyph>,
     pub is_command_echo: bool,
+    /// Whether this echo was written onto a marker row some earlier print's
+    /// line feed had already opened.
+    ///
+    /// `text-output.md §10.2` runs the world loops' echo cycle as "1. Emit a
+    /// line feed into the message window. 2. Draw the right-pointing bracket
+    /// end-cap ... 3. Read the key", and §10.4 derives the blank row between
+    /// command turns from step 1. `combat.md §8.1` moves that line feed:
+    /// the arena's turn handler "emits the line feed itself, unconditionally,
+    /// between printing the banner and reading the command byte", so the
+    /// marker is drawn on the row the banner's own newline opened and no
+    /// second line feed - and therefore no derived blank row - precedes it.
+    pub continues_open_row: bool,
     /// Center this output line in the sixteen-cell message window. Cursor
     /// centering is presentation state, not ASCII padding in `text`.
     pub centered: bool,

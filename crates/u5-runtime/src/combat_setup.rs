@@ -1409,6 +1409,7 @@ impl PlayState {
         // banner".
         if surface_camp_ambush {
             self.emit_centered_message_line(combat_banner_line());
+            self.combat_transcript_row_open = false;
         }
 
         let requested_count =
@@ -1699,6 +1700,12 @@ impl PlayState {
         }
 
         self.emit_centered_message_line(combat_banner_line());
+        // `combat.md §4.1`: the banner fills the row edge to edge, so "the
+        // row is full when the line feed is reached ... the printer's
+        // full-row suppression consumes it. The cursor is left at column 0
+        // of the following row and **no blank row** appears under the
+        // banner." The next print's own line feed is what costs the blank.
+        self.combat_transcript_row_open = false;
 
         // Step 4: choose the monster count. The identity-gap classes
         // carry all-zero stat rows; terrain setup still creates the lead

@@ -2649,9 +2649,20 @@ fn finish_combat_attack_walk(
     if let Some((target_slot, attack)) = walk.attack
         && let Some(line) = combat_weapon_attack_result_message(state, target_slot, attack)
     {
-        append_combat_result_line(&mut state.message, &line);
+        // `combat.md §11.1`: the party melee arm emitted step 3's newline
+        // "before the roll", which is the same one leading this print; the
+        // cursor was left mid-row by `Aim! `, so it closes that row instead
+        // of blanking one.
+        state.emit_combat_print(&format!("\n{line}\n"));
     }
-    state.message.push_str(&walk.text);
+    if !walk.text.is_empty() {
+        // `combat.md §8.2`: `Attack-` and `Aim! ` are what `A` adds on top
+        // of the turn banner, and they are typed onto the marker row the
+        // banner opened - `text-output.md §10.2`: "echoed command lines
+        // carry it". `Aim! ` carries no newline, so the cursor stays on that
+        // row and the attempt's own result line follows it without a blank.
+        state.emit_combat_command_echo_line(&walk.text);
+    }
     if walk.cursor_open {
         // The turn is not over: `§8.2` opens one cursor per readied item and
         // the acting combatant keeps the keyboard. `combat.md §7`'s
@@ -2680,9 +2691,10 @@ fn finish_combat_attack_walk(
             && !combat_has_active_non_party_actor(state)
             && state.announce_combat_victory_if_needed()
         {
-            state
-                .message
-                .push_str(crate::combat_frame::COMBAT_VICTORY_LINE);
+            // `combat.md §7`: the resident `VICTORY!` string goes through
+            // the ordinary string printer with "one leading and one trailing
+            // newline", which is exactly one arena output print.
+            state.emit_combat_print(crate::combat_frame::COMBAT_VICTORY_LINE);
         }
         advance_combat_round_after_actor_and_append_message(state, actor_slot);
     }
@@ -2749,23 +2761,34 @@ fn handle_combat_key_input(state: &mut PlayState, key: char, suffix: &str) -> Pl
         state.message.clear();
         return PlayInputDisposition::Continue;
     };
-    state.message = combat_player_command_application_message(state, &application);
+    let echo = combat_player_command_application_message(state, &application);
+    state.message = echo.clone();
     if handle_combat_multistage_command(state, actor_slot, &application.action, suffix) {
         return PlayInputDisposition::Continue;
+    }
+    // `text-output.md §10.2`: the key was read on the marker row, so what
+    // it echoes is written there and "echoed command lines carry" the end
+    // cap. `combat.md §8.1` supplies that row's line feed from the turn
+    // banner, so the echo neither opens a row of its own nor takes §10.4's
+    // derived blank.
+    state.message.clear();
+    if !echo.is_empty() {
+        state.emit_combat_command_echo_line(&echo);
     }
     if application.reprompt {
         state.pending_combat_actor_slot = Some(actor_slot);
         return PlayInputDisposition::Continue;
     }
     if let CombatRoundLoopControl::Exit(exit) = application.control_after {
-        let edge_defeat_message = (exit == CombatRoundLoopExit::Defeat
+        let edge_defeat = exit == CombatRoundLoopExit::Defeat
             && application.out_of_arena_leave.is_some_and(|edge| {
                 matches!(edge.outcome, CombatOutOfArenaLeaveOutcome::Accepted { .. })
-            }))
-        .then(|| state.message.clone());
+            });
         state.apply_combat_round_loop_exit(exit);
-        if let Some(edge_message) = edge_defeat_message {
-            state.message = format!("{edge_message}\nBATTLE IS LOST!");
+        if edge_defeat {
+            // The edge-exit echo is already on the transcript, so the defeat
+            // line is its own print on the row below it.
+            state.emit_combat_print("\nBATTLE IS LOST!");
         }
     } else if matches!(
         application.action,
@@ -3055,7 +3078,11 @@ fn combat_player_command_message(action: &CombatPlayerCommandAction) -> String {
         CombatPlayerCommandAction::ActivePlayerSelection(_) => {
             "Active player selected.".to_string()
         }
-        CombatPlayerCommandAction::Pass(_) => "Pass.".to_string(),
+        // `text-output.md §10.3`, the representative-literal table:
+        // "`Pass` + newline | complete". The word carries no full stop,
+        // and its trailing newline closes the echo's row, which is what
+        // puts a blank row under it before the round's first result line.
+        CombatPlayerCommandAction::Pass(_) => "Pass\n".to_string(),
         // `combat.md §8.1`/`§8.2`: what `A` adds on top of the turn banner
         // is `Attack-` and, "immediately before the cursor opens", `Aim! `,
         // plus a per-item name line when two or three items qualify. All of
@@ -3455,14 +3482,6 @@ pub(crate) fn combat_monster_attack_result_message(
     )
 }
 
-fn append_combat_result_line(message: &mut String, line: &str) {
-    if !message.is_empty() && !message.ends_with('\n') {
-        message.push('\n');
-    }
-    message.push_str(line);
-    message.push('\n');
-}
-
 fn append_combat_round_walk_messages(
     state: &mut PlayState,
     application: &CombatRoundWalkApplication,
@@ -3484,7 +3503,9 @@ fn append_combat_round_walk_messages(
         })
         .collect::<Vec<_>>();
     for line in lines {
-        append_combat_result_line(&mut state.message, &line);
+        // `combat.md §11.1`, the order stated once: step 3 is "a newline",
+        // step 5 the result line - which carries its own trailing newline.
+        state.emit_combat_print(&format!("\n{line}\n"));
     }
 }
 

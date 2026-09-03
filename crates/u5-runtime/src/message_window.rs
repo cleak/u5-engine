@@ -271,7 +271,13 @@ pub fn message_log_from_entries<'a>(
             continue;
         };
         if entry.is_command_echo {
-            log.end_turn();
+            // `combat.md §8.1`: the arena's own prompt draws its marker on
+            // the row the turn banner's trailing line feed opened, so the
+            // echo written there takes no second line feed and none of
+            // §10.4's derived blank.
+            if !entry.continues_open_row {
+                log.end_turn();
+            }
             log.push_command(&text);
         } else if entry.centered && text == entry.text {
             let glyphs = entry.glyphs.clone();
@@ -291,6 +297,20 @@ pub fn message_log_from_entries<'a>(
     log
 }
 
+/// Whether the message window's live prompt row sits directly under the
+/// history rather than under a blank row.
+///
+/// `text-output.md §10.2`'s world-loop cycle emits its line feed and *then*
+/// the end-cap, and §10.4 turns that leading line feed into the blank row
+/// between command turns. `combat.md §8.1` spends the same line feed
+/// earlier - the arena's turn handler "emits the line feed itself,
+/// unconditionally, between printing the banner and reading the command
+/// byte" - so while an arena combatant is waiting at its prompt the marker
+/// row follows the banner's last row immediately.
+pub fn combat_prompt_row_follows_history(state: &crate::PlayState) -> bool {
+    state.combat_active && state.pending_combat_actor_slot.is_some()
+}
+
 /// Place a log — and optionally the live input line — into the window.
 ///
 /// History is bottom-anchored just above the live input row, so the
@@ -301,6 +321,25 @@ pub fn layout_message_window(
     live_input: Option<&str>,
 ) -> MessageWindowLayout {
     layout_message_window_with_open_prompt(log, live_input, None)
+}
+
+/// [`layout_message_window_with_open_prompt`] for a live prompt row whose
+/// leading line feed has already been spent.
+///
+/// `text-output.md §10.2`'s world-loop cycle emits a line feed and *then*
+/// the end-cap, which is what reserves the blank row above the live row.
+/// `combat.md §8.1` spends that line feed earlier: the arena turn handler
+/// "emits the line feed itself, unconditionally, between printing the
+/// banner and reading the command byte", so the marker row sits directly
+/// under the banner's last row. `live_row_follows_history` selects that
+/// shape.
+pub fn layout_message_window_with_prompt(
+    log: &GameplayMessageLog,
+    live_input: Option<&str>,
+    open_prompt: Option<&str>,
+    live_row_follows_history: bool,
+) -> MessageWindowLayout {
+    layout_message_window_inner(log, live_input, open_prompt, live_row_follows_history)
 }
 
 /// Place a log with a prompt that is still waiting for a key.
@@ -321,6 +360,15 @@ pub fn layout_message_window_with_open_prompt(
     log: &GameplayMessageLog,
     live_input: Option<&str>,
     open_prompt: Option<&str>,
+) -> MessageWindowLayout {
+    layout_message_window_inner(log, live_input, open_prompt, false)
+}
+
+fn layout_message_window_inner(
+    log: &GameplayMessageLog,
+    live_input: Option<&str>,
+    open_prompt: Option<&str>,
+    live_row_follows_history: bool,
 ) -> MessageWindowLayout {
     let open_prompt = open_prompt.filter(|prompt| {
         log.lines()
@@ -352,7 +400,9 @@ pub fn layout_message_window_with_open_prompt(
         .last()
         .is_some_and(|line| matches!(line.kind, MessageLineKind::Blank));
     let history_rows = match live_input {
-        Some(_) if history_ends_blank => MESSAGE_WINDOW_HISTORY_ROWS,
+        // `combat.md §8.1`: the arena prompt's line feed was the banner's
+        // own, so its marker row follows the history with no blank between.
+        Some(_) if history_ends_blank || live_row_follows_history => MESSAGE_WINDOW_HISTORY_ROWS,
         Some(_) => MESSAGE_WINDOW_HISTORY_ROWS - 1,
         // An open prompt keeps its *own* line (§10.6), so no line feed
         // has been emitted yet and every row can carry text.

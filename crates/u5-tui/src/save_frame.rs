@@ -13,7 +13,7 @@ use u5_runtime::{
     TEXT_WINDOW_RENDER_HEIGHT, TEXT_WINDOW_RENDER_WIDTH, TILE_ATLAS_SIDE, TOWN_GRID_SIDE,
     TextWindowSystem, TileGraphicsDepth, VIEWPORT_ORIGIN_X, VIEWPORT_ORIGIN_Y, ViewOverlayMode,
     WorldPlane, configure_play_text_windows, gameplay_chrome_content, hash_bytes,
-    layout_message_window_with_open_prompt, load_ibm_ch_font, load_runes_ch_font, load_tile_atlas,
+    layout_message_window_with_prompt, load_ibm_ch_font, load_runes_ch_font, load_tile_atlas,
     message_log_from_entries, paint_fixed_cell_glyph, paint_gameplay_frame_chrome,
     paint_message_line_cap, paint_stats_panel_text_window, prompt_cursor_glyph,
     render_text_panel_rgba, render_text_window_rgba,
@@ -873,7 +873,12 @@ pub fn compose_gameplay_screen(
     // open and carries the input cursor inline, so the headless
     // composition places it exactly where the Bevy renderer does.
     let open_prompt = state.open_prompt_line();
-    let layout = layout_message_window_with_open_prompt(&log, Some(""), open_prompt.as_deref());
+    let layout = layout_message_window_with_prompt(
+        &log,
+        Some(""),
+        open_prompt.as_deref(),
+        u5_runtime::combat_prompt_row_follows_history(state),
+    );
     let cursor_cell = layout.inline_cursor.or_else(|| {
         layout.rows.last().map(|live| {
             (
