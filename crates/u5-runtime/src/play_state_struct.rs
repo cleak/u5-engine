@@ -139,6 +139,19 @@ pub struct PlayState {
     pub party_experience: Vec<u16>,
     pub party_stay_counters: Vec<u8>,
     pub party_strengths: Vec<u8>,
+    /// `combat.md §12` cached combat-defense byte, character record offset
+    /// `+0x18`. Read by the damage roller's defence subtraction for a
+    /// party defender; nothing in combat writes it back.
+    pub party_combat_defense: Vec<u8>,
+    /// `combat.md §11`: "One class trait can route an attack into a cast-like
+    /// ranged/effect branch, rather than ordinary melee, **when the combat
+    /// effect prerequisite state is active**."
+    ///
+    /// This is that state. `§11` names it, names the branch it gates, and
+    /// specifies what the branch does; **no shipped document names what turns
+    /// it on**. Rather than invent a trigger, this engine carries the state
+    /// with no production writer and implements everything downstream of it.
+    pub combat_effect_prerequisite_active: bool,
     pub party_intelligence: Vec<u8>,
     pub party_equipment: Vec<[u8; EQUIPMENT_SLOT_COUNT]>,
     pub party_roster: Vec<PartyRosterRecord>,

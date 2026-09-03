@@ -747,6 +747,12 @@ pub fn equipment_weapon_effect_code(item_id: usize) -> Option<u8> {
     EQUIPMENT_WEAPON_EFFECT_CODES.get(item_id).copied()
 }
 
+/// `combat.md §12`: "factory-seed records carry value `7`" in the cached
+/// combat-defense byte, so a synthesised roster starts there.
+pub fn default_party_combat_defense(party_len: usize) -> Vec<u8> {
+    vec![crate::combat_frame::CHARACTER_DEFENSE_FACTORY_SEED; party_len]
+}
+
 pub fn default_party_strengths(party_len: usize) -> Vec<u8> {
     vec![AVATAR_STAT_MAX; party_len]
 }

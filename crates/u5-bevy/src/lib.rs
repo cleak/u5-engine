@@ -70,17 +70,17 @@ use u5_runtime::{
     NARRATIVE_GATE_Y, NATURAL_MOONGATE_TERRAIN_TILE, NEGATE_MAGIC_COST, NEGATE_MAGIC_SPELL_INDEX,
     NPC_DIALOG_ID_NONE, NPC_SCHEDULE_AI_OFFSET, NPC_SCHEDULE_WAYPOINT_COUNT, NpcSlot,
     OOL_RECORD_LEN, OOL_SLOTS, OPEN_SPELL_COST, OPEN_SPELL_INDEX, PCS_GLYPH_HEIGHT, PEER_COST,
-    PEER_SPELL_INDEX, PLAY_MUSIC_TOGGLE_KEY, PLAY_SCRIPT_MAX_IDLE_TICKS, POISON_FIELD_SPELL_INDEX,
-    POISON_WIND_COST, POISON_WIND_SPELL_INDEX, PROPORTIONAL_DRAW_CLIP_Y, PROPORTIONAL_WIDTH_TABLE,
-    PROTECTION_COST, PROTECTION_SPELL_INDEX, PartyCapability, PartyMember, PlayInputDisposition,
-    PlayOptions, PlayState, PlayTarget, PotionFlashPlayback, PreFlourishOutcome,
-    ProportionalLayoutDescriptor, QUICKNESS_COST, QUICKNESS_SPELL_INDEX, REAGENT_COUNT,
-    REAGENT_SULFUR_ASH, REL_HUR_COST, REL_HUR_SPELL_INDEX, RESURRECT_COST, RESURRECT_SPELL_INDEX,
-    RTV_CAPTION_TEXT_ROW, RTV_PREVIEW_PIXEL_HEIGHT, RTV_PREVIEW_PIXEL_WIDTH, RTV_PREVIEW_PIXEL_X,
-    RTV_PREVIEW_PIXEL_Y, RTV_STRIP_VISIBLE_COLUMNS, RTV_STRIP_VISIBLE_ROWS, RectangleDissolve,
-    ReturnToViewFrameKind, SAVED_GAM_FILENAME, SAVED_OOL_FILENAME, SAVED_OOL_LEN,
-    SCENE_EMPATH_ABBEY, SCENE_JHELOM, SCENE_MOONGLOW, SCENE_SERPENTS_HOLD, SCENE_STONEGATE,
-    SCENE_THE_LYCAEUM, SHADOWLORD_COWARDICE_INDEX, SHADOWLORD_FALSEHOOD_INDEX,
+    PEER_SPELL_INDEX, PLAY_MUSIC_TOGGLE_KEY, PLAY_SCRIPT_MAX_IDLE_TICKS, PLAY_TYPEAHEAD_TOGGLE_KEY,
+    POISON_FIELD_SPELL_INDEX, POISON_WIND_COST, POISON_WIND_SPELL_INDEX, PROPORTIONAL_DRAW_CLIP_Y,
+    PROPORTIONAL_WIDTH_TABLE, PROTECTION_COST, PROTECTION_SPELL_INDEX, PartyCapability,
+    PartyMember, PlayInputDisposition, PlayOptions, PlayState, PlayTarget, PotionFlashPlayback,
+    PreFlourishOutcome, ProportionalLayoutDescriptor, QUICKNESS_COST, QUICKNESS_SPELL_INDEX,
+    REAGENT_COUNT, REAGENT_SULFUR_ASH, REL_HUR_COST, REL_HUR_SPELL_INDEX, RESURRECT_COST,
+    RESURRECT_SPELL_INDEX, RTV_CAPTION_TEXT_ROW, RTV_PREVIEW_PIXEL_HEIGHT, RTV_PREVIEW_PIXEL_WIDTH,
+    RTV_PREVIEW_PIXEL_X, RTV_PREVIEW_PIXEL_Y, RTV_STRIP_VISIBLE_COLUMNS, RTV_STRIP_VISIBLE_ROWS,
+    RectangleDissolve, ReturnToViewFrameKind, SAVED_GAM_FILENAME, SAVED_OOL_FILENAME,
+    SAVED_OOL_LEN, SCENE_EMPATH_ABBEY, SCENE_JHELOM, SCENE_MOONGLOW, SCENE_SERPENTS_HOLD,
+    SCENE_STONEGATE, SCENE_THE_LYCAEUM, SHADOWLORD_COWARDICE_INDEX, SHADOWLORD_FALSEHOOD_INDEX,
     SHADOWLORD_HATRED_INDEX, SHADOWLORD_HIDEOUT_VANQUISHED, SHADOWLORD_OBJECT_TILE_BASE,
     SHADOWLORD_VANQUISHED, SHIP_NO_SKIFFS_WARNING, SHIPPED_PALETTE_REGISTERS,
     SHRINE_ALTAR_TILE_FIRST, SLEEP_COST, SLEEP_FIELD_SPELL_INDEX, SLEEP_SPELL_INDEX,
@@ -16835,6 +16835,12 @@ fn key_code_to_input_byte(key: KeyCode, shift_pressed: bool, control_pressed: bo
     if control_pressed {
         return match key {
             KeyS => Some(PLAY_MUSIC_TOGGLE_KEY as u8),
+            // `combat.md §8`: "`Ctrl-B` - combat's own copy of the
+            // typeahead-buffer toggle, writing the same engine-wide setting as
+            // the resident one (`commands.md`). Re-prompts." The runtime owns
+            // the toggle; without this binding the published chord reached
+            // nothing in this frontend.
+            KeyB => Some(PLAY_TYPEAHEAD_TOGGLE_KEY as u8),
             _ => None,
         };
     }
@@ -22770,6 +22776,32 @@ mod tests {
             key_code_to_input_byte(KeyCode::F10, false, false),
             Some(u5_runtime::INPUT_CODE_F10)
         );
+    }
+
+    #[test]
+    fn visual_control_chords_reach_the_published_engine_wide_toggles() {
+        // `combat.md §8`: "**Ctrl-S** - toggle sound. Re-prompts without even
+        // reaching the turn test." and "**Ctrl-B** - combat's own copy of the
+        // typeahead-buffer toggle, writing the same engine-wide setting as the
+        // resident one (`commands.md`). Re-prompts."
+        //
+        // Both chords are engine-wide, so the binding is the same in every
+        // mode; without the Ctrl-B row the published chord reached nothing in
+        // this frontend.
+        assert_eq!(
+            key_code_to_char(KeyCode::KeyB, false, true),
+            Some(PLAY_TYPEAHEAD_TOGGLE_KEY)
+        );
+        assert_eq!(
+            key_code_to_char(KeyCode::KeyS, false, true),
+            Some(PLAY_MUSIC_TOGGLE_KEY)
+        );
+        // The chord is the control form only: the bare and shifted letters stay
+        // ordinary command letters.
+        assert_eq!(key_code_to_char(KeyCode::KeyB, false, false), Some('b'));
+        assert_eq!(key_code_to_char(KeyCode::KeyB, true, false), Some('B'));
+        // No other control chord is bound.
+        assert_eq!(key_code_to_char(KeyCode::KeyC, false, true), None);
     }
 
     #[test]

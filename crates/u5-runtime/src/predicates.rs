@@ -694,9 +694,13 @@ pub const fn spawn_terrain_branch(tile: u8, underworld: bool) -> SpawnTerrainBra
     if tile == 0x07 {
         return SpawnTerrainBranch::SandTrapParchedDesert;
     }
-    if tile == 0x01 {
-        return SpawnTerrainBranch::SurfaceTile1WhirlpoolOrAquatic;
-    }
+    // `encounters.md §4` names the tile-1 row "Surface tile 1 **after the
+    // low-tile allowance gate**", and tile 1 is inside the low-tile family
+    // (`tile < 0x04`). It therefore classifies as `LowTileAllowance` here and
+    // reaches `SurfaceTile1WhirlpoolOrAquatic` only once the allowance die has
+    // accepted - see [`spawn_surface_tile1_special_after_allowance`]. Taking
+    // the special branch first accepted a tile-1 candidate outright instead of
+    // at sixteen-in-sixty-five, and consumed one draw fewer.
     if tile < 0x04
         || (tile >= 0x60 && tile <= 0x6F)
         || (tile >= 0xD4 && tile <= 0xD7)
@@ -708,6 +712,14 @@ pub const fn spawn_terrain_branch(tile: u8, underworld: bool) -> SpawnTerrainBra
         return SpawnTerrainBranch::LandBucket;
     }
     SpawnTerrainBranch::HighTileReject
+}
+
+/// `encounters.md §4`: the tile-1 special branch is taken "after the low-tile
+/// allowance gate", and only on the surface - the same row's underworld arm
+/// says "Allowed underworld candidates use the underworld default/aquatic
+/// bucket".
+pub const fn spawn_surface_tile1_special_after_allowance(tile: u8, underworld: bool) -> bool {
+    !underworld && tile == 0x01
 }
 
 /// `encounters.md §4` whirlpool-special chance gate on surface tile 1:

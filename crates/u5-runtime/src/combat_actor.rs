@@ -253,6 +253,10 @@ pub const COMBAT_CLASS_LORD_BRITISH: u8 = COMBAT_CLASS_BLACKTHORN + 1;
 pub const COMBAT_CLASS_GIANT_RAT: u8 = 20;
 pub const COMBAT_CLASS_GIANT_RAT_SPRITE_BASE: u8 = 0x90;
 pub const COMBAT_CLASS_MIMIC: u8 = 26;
+/// `catalogs/monster-bestiary.md §8` Gazer row. `combat.md §6.3` names it
+/// as the eye-burst special-death exception and `§12` as the class whose
+/// gaze carries the stoning-style effect.
+pub const COMBAT_CLASS_GAZER: u8 = 28;
 /// `catalogs/monster-bestiary.md §2` consecutive small-monster
 /// combat class ids (Giant Rat 20 / Bat 21 / Giant Spider 22).
 /// Anchor each successor to the chain.
@@ -338,10 +342,14 @@ pub enum CombatAiMovementOutcome {
     /// scan (`RETRACTIONS.md` R311). `§9`: "When all four attempts fail,
     /// the routine still reports the action as consumed unless the final
     /// draw happened to be the first direction tried, and the committed
-    /// displacement in that case is zero." That `unless` clause is **not**
-    /// modelled - see [`resolve_combat_ai_movement`] for why.
+    /// displacement in that case is zero." `action_consumed` carries that
+    /// report; the committed displacement is zero on both arms.
     Blocked {
         random_cardinal_attempts: u8,
+        /// `combat.md §9`: `false` only for the published exception -
+        /// four exhausted attempts whose **final** draw repeated the
+        /// **first** direction tried.
+        action_consumed: bool,
     },
 }
 
@@ -792,6 +800,22 @@ pub enum CombatAiAttackRoute {
         cast_like_branch: bool,
         pre_gate_bypass: bool,
     },
+    /// `combat.md §11`: "One class trait can route an attack into a
+    /// cast-like ranged/effect branch, rather than ordinary melee, when the
+    /// combat effect prerequisite state is active. That branch prints the
+    /// cast/effect narration, reuses the AI direction/effect dispatch, plays
+    /// the ranged animation, resets the scene state, and consumes the
+    /// action."
+    ///
+    /// `catalogs/monster-bestiary.md §3` marks exactly one shipped class,
+    /// the Gremlin (25). Its range/effect selector is `1`, which `§11` also
+    /// names as "the zero-damage sentinel that routes into the cast/effect
+    /// branch", so this route replaces the melee arm rather than the ranged
+    /// one.
+    CastLikeRangedEffect {
+        range_effect_selector: u8,
+        payload: u8,
+    },
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -952,6 +976,71 @@ pub enum CombatArenaFieldContactOutcome {
     SleptPartyMember { status_before: u8, status_after: u8 },
     SleepDisabledNonParty,
     FireDamage { raw_damage: u8 },
+}
+
+/// `combat.md §12`: "Gazer attacks have a separate stoning-style effect
+/// against awake defenders, and magic/effect attack tiles can also enter the
+/// same poison or stoning-style branches before falling back to ordinary
+/// damage." `§7` names the third reader: the standing-cell hazard pass's top
+/// damaging tier "routes the actor into the same petrify-style special effect
+/// a Gazer's gaze uses".
+///
+/// Those sentences publish the **routing and the gate** and nothing else. No
+/// shipped document states what the effect does to the defender - no status
+/// letter, no HP change, no tile, no message, no sound - so this engine models
+/// the branch being taken and stops there. Inventing a payload would invent a
+/// contract.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum CombatStoningEffectSource {
+    /// `combat.md §12`: a Gazer's own attack against an awake defender.
+    GazerGaze,
+    /// `combat.md §12`: a magic/effect attack tile entering the same branch.
+    MagicEffectAttackTile,
+    /// `combat.md §7` step 7: the standing-cell hazard pass's top damaging
+    /// tier.
+    HazardTopTier,
+}
+
+/// `combat.md §12` outcome of the shared petrify-style branch.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct CombatStoningEffectOutcome {
+    pub source: CombatStoningEffectSource,
+    pub target_slot: usize,
+}
+
+/// `combat.md §12`: the stoning-style effect applies "against awake
+/// defenders". The asleep/magically-disabled descriptor bit `0x08` and the
+/// party status letter `'S'` are the two ways an actor is asleep in combat
+/// (`§6.1`), so both fail the gate.
+pub fn combat_stoning_effect_defender_is_awake(
+    descriptor: CombatActorDescriptor,
+    member: Option<PartyMember>,
+) -> bool {
+    !descriptor.is_status_disabled() && !member.is_some_and(|member| member.status == b'S')
+}
+
+/// `combat.md §12` shared petrify-style branch: one entry point reached by
+/// the Gazer gaze, a magic/effect attack tile, and `§7`'s top hazard tier.
+/// Returns `None` when the awake gate rejects, which is `§12`'s "falling back
+/// to ordinary damage" for the two attack callers.
+pub fn resolve_combat_stoning_effect(
+    source: CombatStoningEffectSource,
+    target_slot: usize,
+    descriptor: CombatActorDescriptor,
+    member: Option<PartyMember>,
+) -> Option<CombatStoningEffectOutcome> {
+    combat_stoning_effect_defender_is_awake(descriptor, member).then_some(
+        CombatStoningEffectOutcome {
+            source,
+            target_slot,
+        },
+    )
+}
+
+/// `combat.md §12`: the Gazer's gaze is the class-keyed half of the
+/// stoning-style branch.
+pub const fn combat_class_gaze_stones(class: u8) -> bool {
+    class == COMBAT_CLASS_GAZER
 }
 
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
@@ -1797,22 +1886,39 @@ pub fn collect_directed_spell_actor_slots(
     slots
 }
 
-/// `magic.md §8` / `catalogs/monster-bestiary.md §6`: the repel-undead
-/// player spell targets the published undead/spectral combat classes.
-pub const fn combat_class_is_repel_undead_target(class: u8) -> bool {
-    matches!(class, 23 | 33)
+/// `combat.md §9` / `magic.md §8` / `catalogs/monster-bestiary.md §4`: Repel
+/// Undead's one extra condition over the Cause Fear sweep is that "the
+/// actor's class must also carry the undead class-flag bit". The bit lives in
+/// the per-class flag word ([`CombatClassTraits::undead`]); the two shipped
+/// classes carrying it are Ghost 23 and Skeleton 33.
+pub fn combat_class_is_repel_undead_target(class: u8) -> bool {
+    combat_class_traits(class).is_some_and(|traits| traits.undead)
 }
 
-pub fn collect_repel_undead_actor_slots(actors: &[CombatActorDescriptor]) -> Vec<usize> {
-    let mut slots = Vec::new();
-    for (slot, actor) in actors.iter().copied().enumerate() {
-        if directed_spell_actor_is_eligible(actor)
-            && combat_class_is_repel_undead_target(actor.owner_target_class)
-        {
-            slots.push(slot);
-        }
-    }
-    slots
+/// `combat.md §9`: "Repel Undead is exactly the same sweep with one extra
+/// condition: the actor's class must also carry the undead class-flag bit.
+/// It writes the same two values and **nothing else**."
+///
+/// "Exactly the same sweep" is load-bearing: the acceptance test is
+/// [`collect_cause_fear_actor_slots`]'s - live, monster-side, and not one of
+/// the three protected special classes - and **not** the directed-spell cursor
+/// predicate. A blinked Ghost or an asleep Skeleton is still swept, because
+/// the Cause Fear sweep tests neither the hidden bit nor the
+/// asleep/disabled bit.
+pub fn collect_repel_undead_actor_slots(
+    actors: &[CombatActorDescriptor],
+    groups: &[u8],
+    caster_group: u8,
+    protected_or_immune: &[bool],
+) -> Vec<usize> {
+    collect_cause_fear_actor_slots(actors, groups, caster_group, protected_or_immune)
+        .into_iter()
+        .filter(|slot| {
+            actors
+                .get(*slot)
+                .is_some_and(|actor| combat_class_is_repel_undead_target(actor.owner_target_class))
+        })
+        .collect()
 }
 
 pub fn collect_tremor_spell_actor_slots(
@@ -2204,6 +2310,11 @@ pub const fn resolve_combat_command_live_actor_gate(
         Some(_) | None => CombatCommandLiveActorGate::RejectedDeadOrMissing,
     }
 }
+
+/// `combat.md §8` Shape A: "The helper prints the verb label, then requires
+/// that the acting combatant is still alive. A dead actor gets the short
+/// \"Can't!\" refusal and the prompt is re-issued at no cost."
+pub const COMBAT_LIVE_ACTOR_REFUSAL: &str = "Can't!";
 
 pub const fn combat_command_branch_published_label(
     branch: CombatCommandBranch,
@@ -2720,9 +2831,33 @@ pub fn resolve_combat_split_placement(
 }
 
 pub fn resolve_combat_ai_attack_route(class: u8, target_range: u8) -> Option<CombatAiAttackRoute> {
+    resolve_combat_ai_attack_route_with_effect_prerequisite(class, target_range, false)
+}
+
+/// `combat.md §11` attack routing, with the cast-like branch's gate supplied
+/// by the caller.
+///
+/// `effect_prerequisite_active` is `§11`'s "combat effect prerequisite
+/// state". **The state itself is not named anywhere in the published
+/// specification**, so this engine does not synthesise a trigger for it: the
+/// caller passes the gate in, and [`resolve_combat_ai_attack_route`] passes
+/// `false`. What *is* published, and what this function implements, is that a
+/// class carrying the cast-like trait routes into the cast/effect branch
+/// "rather than ordinary melee" while that state is active.
+pub fn resolve_combat_ai_attack_route_with_effect_prerequisite(
+    class: u8,
+    target_range: u8,
+    effect_prerequisite_active: bool,
+) -> Option<CombatAiAttackRoute> {
     let ranged = combat_ranged_effect_stats(class)?;
     if target_range > ranged.range_effect_selector {
         return Some(CombatAiAttackRoute::OutOfRange);
+    }
+    if ranged.cast_like_branch && effect_prerequisite_active {
+        return Some(CombatAiAttackRoute::CastLikeRangedEffect {
+            range_effect_selector: ranged.range_effect_selector,
+            payload: ranged.payload,
+        });
     }
     if target_range <= 1 {
         return Some(CombatAiAttackRoute::Melee);
@@ -2797,18 +2932,17 @@ pub fn combat_possess_candidate_view(
 pub fn combat_possess_candidate_reaches_resistance(
     slot: usize,
     candidate: CombatPossessCandidateView,
-    active_player: Option<usize>,
 ) -> bool {
-    // `combat.md §9`: the active-player sentinel "is compared against
-    // the target's own owner/character byte, never against the caster's
-    // slot". `§5` makes that a real distinction - a party with a dead
-    // member "pack[s] into the low descriptor indexes rather than
-    // keeping their roster index" - so the sentinel, which names a
-    // roster slot, must be matched against the descriptor's
-    // owner/target/class byte and not against `slot`.
-    let owner_slot = usize::from(candidate.descriptor.owner_target_class);
+    // `combat.md §9` lists the acceptance test in full: "The drawn slot is
+    // accepted only if it is party-side and none of marked-dead,
+    // phased/blinked, asleep-or-disabled, hidden/not-yet-revealed, or already
+    // controlled is set."
+    //
+    // The active-player sentinel is **not** on that list, and adding it would
+    // make `§9`'s own landing step - "the active-player sentinel is cleared to
+    // 'none' *if the sentinel currently names the possessed character*" -
+    // unreachable. The sentinel is read only on landing, never as a filter.
     if slot >= COMBAT_PARTY_ACTOR_SLOTS
-        || active_player == Some(owner_slot)
         || candidate.descriptor.is_empty()
         || candidate.descriptor.is_marked_dead()
         || !candidate.descriptor.has_field_lookup_selectable_bit()
@@ -2829,11 +2963,9 @@ pub fn combat_possess_candidate_reaches_resistance(
 pub fn resolve_combat_possess_candidate_slot(
     candidates: &[CombatPossessCandidateView],
     random_slot: usize,
-    active_player: Option<usize>,
 ) -> Option<usize> {
     let candidate = *candidates.get(random_slot)?;
-    combat_possess_candidate_reaches_resistance(random_slot, candidate, active_player)
-        .then_some(random_slot)
+    combat_possess_candidate_reaches_resistance(random_slot, candidate).then_some(random_slot)
 }
 
 /// `combat.md §9`: on landing "the active-player sentinel is cleared to
@@ -3538,14 +3670,14 @@ pub fn commit_combat_ai_movement_outcome(
 /// draw happened to be the first direction tried, and the committed
 /// displacement in that case is zero."
 ///
-/// **The exception in that second sentence is not implemented.** The
-/// caller sees `Blocked` for every exhausted fallback and treats every
-/// `Blocked` alike, because nothing this engine does with an AI dispatch
-/// branches on consumed-versus-not: the displacement is zero either way,
-/// and `§9` does not say what a *not*-consumed report changes. Modelling
-/// it would add an outcome field no code reads. `random_cardinal_attempts`
-/// still records the draw count, which is the part of `§9` the shared PRNG
-/// stream depends on.
+/// The `unless` clause is reported on
+/// [`CombatAiMovementOutcome::Blocked::action_consumed`]: it is `false`
+/// exactly when all four attempts were spent and the fourth draw repeated
+/// the first direction tried. **What a not-consumed report changes further
+/// up is not published** - `§9` states the report and stops - so this
+/// engine surfaces the published state and leaves the round walker's
+/// response to it unchanged. `random_cardinal_attempts` still records the
+/// draw count, which is the part of `§9` the shared PRNG stream depends on.
 ///
 /// `random_cardinal_direction_codes` supplies those draws in order. At most
 /// four are read and reading stops at the first accepted one, so a caller
@@ -3594,11 +3726,13 @@ pub fn resolve_combat_ai_movement(
     }
 
     let mut random_cardinal_attempts = 0u8;
+    let mut drawn = [0u8; COMBAT_AI_RANDOM_CARDINAL_ATTEMPTS];
     for direction_code in random_cardinal_direction_codes
         .iter()
         .copied()
         .take(COMBAT_AI_RANDOM_CARDINAL_ATTEMPTS)
     {
+        drawn[usize::from(random_cardinal_attempts)] = direction_code;
         random_cardinal_attempts += 1;
         if !combat_direction_code_is_cardinal(direction_code) {
             continue;
@@ -3615,7 +3749,25 @@ pub fn resolve_combat_ai_movement(
 
     CombatAiMovementOutcome::Blocked {
         random_cardinal_attempts,
+        action_consumed: combat_ai_exhausted_fallback_consumes_action(
+            &drawn[..usize::from(random_cardinal_attempts)],
+        ),
     }
+}
+
+/// `combat.md §9`: "When all four attempts fail, the routine still reports
+/// the action as consumed **unless the final draw happened to be the first
+/// direction tried**, and the committed displacement in that case is zero."
+///
+/// `drawn` is the ordered cardinal-fallback draw sequence actually taken.
+/// The exception needs all four attempts spent, so a fallback that never ran
+/// (the direct axes were not even exhausted) and a short sequence both report
+/// the action consumed.
+pub fn combat_ai_exhausted_fallback_consumes_action(drawn: &[u8]) -> bool {
+    if drawn.len() < COMBAT_AI_RANDOM_CARDINAL_ATTEMPTS {
+        return true;
+    }
+    drawn[COMBAT_AI_RANDOM_CARDINAL_ATTEMPTS - 1] != drawn[0]
 }
 
 pub fn resolve_combat_wound_morale(

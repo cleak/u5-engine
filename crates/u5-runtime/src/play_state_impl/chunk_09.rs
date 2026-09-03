@@ -224,6 +224,8 @@ impl PlayState {
     ) -> Option<u8> {
         let underworld = plane == WorldPlane::Underworld;
         match spawn_terrain_branch(tile, underworld) {
+            // `encounters.md §4`: reached only through the low-tile allowance
+            // arm below, which is where the classifier now routes tile 1.
             SpawnTerrainBranch::SurfaceTile1WhirlpoolOrAquatic => {
                 if self.native_world_encounter_mod(0, 0x61, SPAWN_WHIRLPOOL_DENOMINATOR) == 0 {
                     Some(0xEC)
@@ -252,6 +254,19 @@ impl PlayState {
                 let allowance = self.random_range_u8(0, SPAWN_LOW_TILE_ALLOWANCE_DRAW_HIGH);
                 if !spawn_low_tile_allowance_accepts(allowance) {
                     return None;
+                }
+                // `encounters.md §4`: an accepted surface tile-1 candidate then
+                // takes the one-in-eight whirlpool special, "otherwise use the
+                // surface default/aquatic bucket". Every other accepted
+                // candidate goes straight to its plane's aquatic bucket.
+                if spawn_surface_tile1_special_after_allowance(tile, underworld) {
+                    return if self.native_world_encounter_mod(0, 0x61, SPAWN_WHIRLPOOL_DENOMINATOR)
+                        == 0
+                    {
+                        Some(0xEC)
+                    } else {
+                        self.native_world_encounter_bucket_pick(&SURFACE_AQUATIC_BUCKET, 0, 0x62)
+                    };
                 }
                 if underworld {
                     self.native_world_encounter_bucket_pick(&UNDERWORLD_AQUATIC_BUCKET, 0, 0x65)
@@ -2769,7 +2784,17 @@ impl PlayState {
                 }
             }
         }
-        self.age_active_effect();
+        // `combat.md §12`: the shared active-effect counter's "other values
+        // decrement when the committed non-digit action tail runs". It "is not
+        // the time system's torch/light-spell counter; do not model it as one
+        // decrement per minute or per full actor-table sweep", and `magic.md
+        // §8` adds that "the ordinary per-turn clock cleanup does not age this
+        // counter". Combat reaches this per-turn tail through the round
+        // counter's ten-dispatch wrap, so ageing here as well would spend a
+        // Quickness or Mass Charm tag on both the wrap and the action tail.
+        if !self.combat_active {
+            self.age_active_effect();
+        }
         if tick_doors && !self.combat_active {
             self.tick_door_tracker();
         }

@@ -180,6 +180,7 @@ pub fn play_options_from_save_bytes_named(
     let party_experience = decode_party_experience(bytes, party.len());
     let party_stay_counters = decode_party_stay_counters(bytes, party.len());
     let party_strengths = decode_party_strengths(bytes, party.len());
+    let party_combat_defense = decode_party_combat_defense(bytes, party.len());
     let party_intelligence = decode_party_intelligence(bytes, party.len());
     let party_equipment = decode_party_equipment(bytes, party.len());
     let party_roster = decode_party_roster(bytes);
@@ -247,6 +248,7 @@ pub fn play_options_from_save_bytes_named(
         party_experience,
         party_stay_counters,
         party_strengths,
+        party_combat_defense,
         party_intelligence,
         party_equipment,
         party_roster,
@@ -400,6 +402,19 @@ pub fn decode_party_stay_counters(bytes: &[u8], party_size: usize) -> Vec<u8> {
         .map(|slot| {
             let record = SAVE_ROSTER_OFFSET + slot * SAVE_CHARACTER_RECORD_LEN;
             bytes[record + SAVE_CHARACTER_STAY_COUNTER_OFFSET]
+        })
+        .collect()
+}
+
+/// `combat.md §12` / `formats/saved-gam.md §3.1`: the cached combat-defense
+/// byte at character-record offset `+0x18`. `§12` names it as the value the
+/// damage roll reads for a party defender, distinct from Strength `+0x0C`,
+/// Dexterity `+0x0D` and Intelligence `+0x0E`, with `7` as the factory seed.
+pub fn decode_party_combat_defense(bytes: &[u8], party_size: usize) -> Vec<u8> {
+    (0..party_size)
+        .map(|slot| {
+            let record = SAVE_ROSTER_OFFSET + slot * SAVE_CHARACTER_RECORD_LEN;
+            bytes[record + SAVE_CHARACTER_DEFENSE_BYTE_OFFSET]
         })
         .collect()
 }

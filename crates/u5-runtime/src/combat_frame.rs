@@ -37,6 +37,58 @@ pub struct PendingDungeonRoomClear {
 pub const COMBAT_TERRAIN_REVEAL_PIXEL_COUNT: usize = 16 * 16;
 pub const COMBAT_TERRAIN_REVEAL_WORLD_TICKS: u8 = 31;
 
+/// `combat.md §9`: on a successful monster summon "the new actor's linked
+/// sprite plays the brief flame transition before settling on the Daemon
+/// tile". `audio.md §8.3.1` is where that transition is specified: "The
+/// monster summon and the player Summon spell use an identical construct:
+/// play the envelope cue, set the new actor's tile to a placeholder, run the
+/// converge on the flash tile, then set the actor's tile to the real creature
+/// sprite."
+///
+/// The converge is "**one pass of 256 plots**, with no outer repeat", in the
+/// same pseudorandom order this engine already models as
+/// [`crate::return_to_view::return_to_view_single_cell_write_coordinates`],
+/// with "an input/redraw poll after every eighth completed step - 31
+/// checkpoints, and none after the final step", and "in combat that poll runs
+/// the world tick".
+///
+/// The placeholder tile the object is set to before the converge is described
+/// only as "a universal placeholder" whose depiction was read from rendered
+/// pixels; **no id is published**, so this playback records the flash tile and
+/// the settle tile and does not name it.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct CombatSummonFlashPlayback {
+    pub actor_slot: usize,
+    pub active_object_slot: usize,
+    pub arena_cell: (u8, u8),
+    /// `audio.md §8.3.1`: "flash tile = creature class x 4 + 320".
+    pub flash_tile: u16,
+    /// `audio.md §8.3.1`: "the settle tile that replaces it is
+    /// creature class x 4 + 64".
+    pub settle_tile: u8,
+    pub write_order: Vec<(u8, u8)>,
+    pub world_tick_after_operations: Vec<u16>,
+}
+
+pub fn combat_summon_flash_playback(
+    class: u8,
+    actor_slot: usize,
+    active_object_slot: usize,
+    arena_cell: (u8, u8),
+) -> CombatSummonFlashPlayback {
+    CombatSummonFlashPlayback {
+        actor_slot,
+        active_object_slot,
+        arena_cell,
+        flash_tile: combat_class_summon_flash_tile(class),
+        settle_tile: combat_class_sprite_byte(class),
+        write_order: crate::return_to_view::return_to_view_single_cell_write_coordinates().to_vec(),
+        world_tick_after_operations: (1..=COMBAT_TERRAIN_REVEAL_WORLD_TICKS)
+            .map(|step| u16::from(step) * 8)
+            .collect(),
+    }
+}
+
 /// Completed `combat.md §6.3` vanish-on-death cell reveal.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct CombatTerrainRevealPlayback {
@@ -399,6 +451,10 @@ pub struct CombatMonsterAttackApplication {
     pub attacker_slot: usize,
     pub target_slot: usize,
     pub poison_status_outcome: Option<CombatPoisonStatusAttackOutcome>,
+    /// `combat.md §12`: the Gazer's stoning-style branch against an awake
+    /// defender, taken "before falling back to ordinary damage". When set,
+    /// `resolution` is `None` - no to-hit roll and no damage ran.
+    pub stoning: Option<CombatStoningEffectOutcome>,
     pub resolution: Option<CombatWeaponAttackResolution>,
     pub damage_application: Option<CombatWeaponDamageApplication>,
 }
@@ -497,9 +553,75 @@ pub enum CombatPostDispatchContactSource {
     PlacedMarker { active_object_slot: usize },
 }
 
+/// `combat.md §7` step 7: the standing-cell hazard pass recognises "Three
+/// damaging kinds ... each with its own effect".
+///
+/// Two of the three are keyed by `§7.2`'s per-marker table, which is the more
+/// specific statement of the same hook and names each field kind's result
+/// outright:
+///
+/// - **Poison** is the low tier. `§7.2`: "Reject contact when the target's
+///   linked active-object tile/class byte is at least `0x80`" - `§7`'s "only
+///   while the actor's own object entry is an ordinary live entry" - and
+///   otherwise the shared damage/status endpoint "with no attacker credit",
+///   `§7`'s no-attacker sentinel.
+/// - **Fire** is the middle tier. `§7.2`: "Pass a rolled raw value directly to
+///   the shared damage/status endpoint, then run the ordinary no-attacker
+///   finalization and status-panel refresh."
+///
+/// [`CombatHazardTier::Top`] is published by `§7` and **is not reachable in
+/// this engine**, because the only remaining field kinds are excluded by
+/// `§7.2` from being a damaging tier at all: Sleep "write[s] asleep status ...
+/// or the combat sleep/disabled bit" with "no hook-local draw", and the Energy
+/// marker "is not recognized by this contact hook" and has "no contact-path
+/// draw and no zero-valued damage dispatch". Nothing else published keys the
+/// top tier, so keying it to Energy would contradict `§7.2` rather than
+/// implement `§7`. The variant is kept so the published tier has a name; see
+/// the spec question recorded with this change.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum CombatHazardTier {
+    /// "A low tier that applies the party status/damage path with the
+    /// no-attacker sentinel and plays the hit sound, but only while the
+    /// actor's own object entry is an ordinary live entry."
+    Low,
+    /// "A middle tier that plays the hit sound, rolls a small random amount,
+    /// feeds it to the damage-and-status resolver, runs the shared finalize
+    /// hook and raises the leave-combat flag."
+    Middle,
+    /// "A top tier that routes the actor into the same petrify-style special
+    /// effect a Gazer's gaze uses." Never produced by
+    /// [`combat_hazard_tier_for_field`] - see the type comment.
+    Top,
+}
+
+/// `combat.md §7` step 7: "A cell with none of these kinds costs the actor
+/// nothing." Sleep and Energy are not damaging tiers (`§7.2`), so neither one
+/// plays the hit sound, runs the finalize hook, or raises the leave-combat
+/// flag - Sleep still applies its own published status result and Energy is
+/// not recognised by the hook at all.
+pub const fn combat_hazard_tier_for_field(field: CombatArenaFieldKind) -> Option<CombatHazardTier> {
+    match field {
+        CombatArenaFieldKind::Poison => Some(CombatHazardTier::Low),
+        CombatArenaFieldKind::Fire => Some(CombatHazardTier::Middle),
+        CombatArenaFieldKind::Sleep | CombatArenaFieldKind::Energy => None,
+    }
+}
+
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct CombatPostDispatchContactApplication {
     pub source: CombatPostDispatchContactSource,
+    /// `combat.md §7` step 7 damaging tier this cell resolved to, or `None`
+    /// for a recognised but non-damaging kind.
+    pub tier: Option<CombatHazardTier>,
+    /// `combat.md §7` step 7: the low and middle tiers both "play the hit
+    /// sound" - `audio.md §7.4`'s attack-application swing cue. The low tier
+    /// plays it "only while the actor's own object entry is an ordinary live
+    /// entry".
+    pub hit_sound_played: bool,
+    /// `combat.md §7` step 7: the middle tier "runs the shared finalize hook
+    /// and raises the leave-combat flag".
+    pub finalize_hook_ran: bool,
+    pub raises_leave_combat_flag: bool,
     pub field_contact: CombatArenaFieldContactApplication,
 }
 
@@ -569,6 +691,34 @@ pub struct CombatSummonApplication {
     pub active_object: ActiveObject,
 }
 
+/// `combat.md §11` cast-like ranged/effect branch: "That branch prints the
+/// cast/effect narration, reuses the AI direction/effect dispatch, plays the
+/// ranged animation, resets the scene state, and consumes the action."
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct CombatCastLikeRangedEffectApplication {
+    pub actor_slot: usize,
+    pub target_slot: Option<usize>,
+    /// `combat.md §11`: the class-indexed range/effect selector, whose value
+    /// `1` is "the zero-damage sentinel that routes into the cast/effect
+    /// branch".
+    pub range_effect_selector: u8,
+    /// `combat.md §11`: the second side table's "monster-side accuracy/effect
+    /// payload", forwarded to the effect dispatcher.
+    pub payload: u8,
+    /// `combat.md §11`: "reuses the AI direction/effect dispatch".
+    pub step_vector: CombatStepVector,
+    /// `combat.md §11`: "prints the cast/effect narration". The wording of
+    /// that line is not published anywhere, so this records only that the
+    /// narration step ran.
+    pub cast_narration_printed: bool,
+    /// `combat.md §11`: "plays the ranged animation".
+    pub ranged_animation_played: bool,
+    /// `combat.md §11`: "resets the scene state".
+    pub scene_state_reset: bool,
+    /// `combat.md §11`: "and consumes the action".
+    pub action_consumed: bool,
+}
+
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub enum CombatAiSpecialApplication {
     Possess {
@@ -585,6 +735,9 @@ pub enum CombatAiSpecialApplication {
     SummonDaemon {
         actor_slot: usize,
         summon: CombatSummonApplication,
+        /// `combat.md §9`: "the new actor's linked sprite plays the brief
+        /// flame transition before settling on the Daemon tile."
+        flash: CombatSummonFlashPlayback,
     },
 }
 
@@ -597,6 +750,9 @@ pub struct CombatAiTurnApplication {
     pub target: CombatAiTargetResolution,
     pub step_vector: Option<CombatStepVector>,
     pub attack_route: Option<CombatAiAttackRoute>,
+    /// `combat.md §11` cast-like ranged/effect branch, when the acting class
+    /// carries that trait and the combat effect prerequisite state is active.
+    pub cast_like_ranged_effect: Option<CombatCastLikeRangedEffectApplication>,
     pub monster_attack: Option<CombatMonsterAttackApplication>,
     pub movement: Option<CombatAiMovementOutcome>,
     pub command_key: Option<char>,
@@ -1292,12 +1448,37 @@ impl PlayState {
             .is_some_and(|weight| combat_target_weight_gate_accepts_from_raw_roll(weight, raw_roll))
     }
 
+    /// `combat.md §12`: "For party-member defenders, the damage roll reads the
+    /// cached combat-defense byte in the character record at offset `+0x18`;
+    /// factory-seed records carry value `7`."
+    ///
+    /// The `7` is the value a factory-seed record happens to carry, not a
+    /// constant: a loaded record supplies its own byte
+    /// (`formats/saved-gam.md §3.1`). Every party-defender damage roll in
+    /// combat reads it through here.
+    pub fn party_combat_defense_byte(&self, party_slot: usize) -> u8 {
+        self.party_combat_defense
+            .get(party_slot)
+            .copied()
+            .unwrap_or(CHARACTER_DEFENSE_FACTORY_SEED)
+    }
+
     pub fn combat_spell_target_defense_value(&self, target_slot: usize) -> u8 {
         if target_slot < COMBAT_PARTY_ACTOR_SLOTS {
-            // `magic.md §8`: Protection occupies and displays the shared
-            // timed-effect slot, but its intended defense computation is
-            // unreachable and has no mechanical consequence.
-            CHARACTER_DEFENSE_FACTORY_SEED
+            // `combat.md §12`: "For party-member defenders, the damage roll
+            // reads the cached combat-defense byte in the character record at
+            // offset `+0x18`; factory-seed records carry value `7`. This is
+            // not one of the stat bytes earlier in the record - Strength
+            // `+0x0C`, Dexterity `+0x0D`, Intelligence `+0x0E`."
+            //
+            // The factory seed is the value a fresh save carries, not a
+            // constant: a loaded record supplies its own byte, and `§12` adds
+            // that "no traced combat path recomputes the character-defense
+            // byte from readied armour", so this is a read of live state and
+            // nothing writes it back. `magic.md §8`: Protection's `P` tag adds
+            // nothing on top - its intended bonus rides on an unreachable
+            // per-item total.
+            self.party_combat_defense_byte(target_slot)
         } else {
             self.combat_actors
                 .get(target_slot)
@@ -1779,6 +1960,14 @@ impl PlayState {
         {
             return false;
         }
+        // `combat.md §7.1`: a restrained actor "is returned by the
+        // cell-occupancy lookup, so it can be targeted, attacked and killed
+        // normally. The one exception is the Charm spell, whose own cursor
+        // explicitly refuses restraint cells." The two restraint tiles are the
+        // stocks `0x84` and the manacles `0x85`.
+        if self.combat_actor_stands_on_restraint_arena_cell(actor) {
+            return false;
+        }
         actor.is_controlled() || self.combat_target_group_for_slot(target_slot) != caster_group
     }
 
@@ -2187,7 +2376,23 @@ impl PlayState {
         // `combat_class_sprite_byte`. No runtime channel carries visual
         // presentation events yet, so the flash is not emitted here.
         self.emit_sound_effect(SoundEffect::MonsterSummon);
-        Some(CombatAiSpecialApplication::SummonDaemon { actor_slot, summon })
+        // `combat.md §9`: "the new actor's linked sprite plays the brief flame
+        // transition before settling on the Daemon tile". `audio.md §8.3.1`
+        // specifies that transition. As with the `§6.3` vanish reveal, the
+        // converge itself is a driver-side blit, so this records the published
+        // playback - flash tile, settle tile, plot order and the 31 world-tick
+        // checkpoints - rather than executing it here.
+        let flash = combat_summon_flash_playback(
+            COMBAT_CLASS_DAEMON,
+            summon.actor_slot,
+            summon.active_object_slot,
+            (summon.x, summon.y),
+        );
+        Some(CombatAiSpecialApplication::SummonDaemon {
+            actor_slot,
+            summon,
+            flash,
+        })
     }
 
     pub fn apply_combat_ai_possess_special_with_inputs(
@@ -2218,11 +2423,7 @@ impl PlayState {
                 )
             })
             .collect::<Vec<_>>();
-        let target_slot = resolve_combat_possess_candidate_slot(
-            &candidates,
-            random_target_slot,
-            self.active_player,
-        )?;
+        let target_slot = resolve_combat_possess_candidate_slot(&candidates, random_target_slot)?;
         let target_flags_before = self.combat_actors[target_slot].flags;
         let outcome = resolve_combat_possess_resistance_outcome(
             // `combat.md §9`: the sentinel is "compared against the
@@ -2281,6 +2482,7 @@ impl PlayState {
             target: CombatAiTargetResolution::NoUsableTarget,
             step_vector: None,
             attack_route: None,
+            cast_like_ranged_effect: None,
             monster_attack: None,
             movement: None,
             command_key: None,
@@ -2610,6 +2812,7 @@ impl PlayState {
                     target,
                     step_vector: None,
                     attack_route: None,
+                    cast_like_ranged_effect: None,
                     monster_attack: None,
                     movement: None,
                     command_key: None,
@@ -2634,7 +2837,14 @@ impl PlayState {
             if controlled_attacker {
                 (range == 1).then_some(CombatAiAttackRoute::Melee)
             } else {
-                resolve_combat_ai_attack_route(class, range)
+                // `combat.md §11`: the cast-like ranged/effect branch replaces
+                // ordinary melee for a class carrying that trait while the
+                // combat effect prerequisite state is active.
+                resolve_combat_ai_attack_route_with_effect_prerequisite(
+                    class,
+                    range,
+                    self.combat_effect_prerequisite_active,
+                )
             }
         });
         if controlled_attacker && !matches!(attack_route, Some(CombatAiAttackRoute::Melee)) {
@@ -2646,9 +2856,40 @@ impl PlayState {
                 target,
                 step_vector: Some(step_vector),
                 attack_route: None,
+                cast_like_ranged_effect: None,
                 monster_attack: None,
                 movement: None,
                 command_key: None,
+                movement_commit: None,
+            });
+        }
+        if let Some(CombatAiAttackRoute::CastLikeRangedEffect {
+            range_effect_selector,
+            payload,
+        }) = attack_route
+        {
+            // `combat.md §11`: "That branch prints the cast/effect narration,
+            // reuses the AI direction/effect dispatch, plays the ranged
+            // animation, resets the scene state, and consumes the action."
+            let cast_like = self.apply_combat_ai_cast_like_ranged_effect(
+                actor_slot,
+                target_slot,
+                range_effect_selector,
+                payload,
+                step_vector,
+            );
+            return Some(CombatAiTurnApplication {
+                actor_slot,
+                special: None,
+                possess_hook_handled: false,
+                acting_group,
+                target,
+                step_vector: Some(step_vector),
+                attack_route,
+                cast_like_ranged_effect: cast_like,
+                monster_attack: None,
+                movement: None,
+                command_key: Some(COMBAT_AI_ATTACK_COMMAND_KEY),
                 movement_commit: None,
             });
         }
@@ -2709,6 +2950,7 @@ impl PlayState {
                 target,
                 step_vector: Some(step_vector),
                 attack_route,
+                cast_like_ranged_effect: None,
                 monster_attack,
                 movement: None,
                 command_key: Some(COMBAT_AI_ATTACK_COMMAND_KEY),
@@ -2740,6 +2982,7 @@ impl PlayState {
                     &[],
                 ) == (CombatAiMovementOutcome::Blocked {
                     random_cardinal_attempts: 0,
+                    action_consumed: true,
                 }) {
                     for _ in 0..COMBAT_AI_RANDOM_CARDINAL_ATTEMPTS {
                         let code = self.random_range_u8(1, 4);
@@ -2789,6 +3032,7 @@ impl PlayState {
             target,
             step_vector: Some(step_vector),
             attack_route,
+            cast_like_ranged_effect: None,
             monster_attack: None,
             movement: Some(movement),
             command_key,
@@ -4277,10 +4521,25 @@ impl PlayState {
             variant: audio::spell_circle(REPEL_UNDEAD_SPELL_INDEX),
         });
 
-        let accepted = collect_repel_undead_actor_slots(&self.combat_actors)
-            .into_iter()
-            .filter(|slot| !self.combat_resistance_blocks(caster_index, *slot))
-            .collect::<Vec<_>>();
+        // `combat.md §9`: "Repel Undead is exactly the same sweep with one
+        // extra condition" - so it collects through the Cause Fear sweep's own
+        // live / monster-side / not-protected test, narrowed by the undead
+        // class-flag bit, and not through the directed-spell cursor predicate.
+        let mut groups = [0u8; COMBAT_ACTOR_SLOTS];
+        for (slot, group) in groups.iter_mut().enumerate() {
+            *group = self.combat_target_group_for_slot(slot);
+        }
+        let protected_or_immune = [false; COMBAT_ACTOR_SLOTS];
+        let caster_group = groups.get(caster_index).copied().unwrap_or(1);
+        let accepted = collect_repel_undead_actor_slots(
+            &self.combat_actors,
+            &groups,
+            caster_group,
+            &protected_or_immune,
+        )
+        .into_iter()
+        .filter(|slot| !self.combat_resistance_blocks(caster_index, *slot))
+        .collect::<Vec<_>>();
         let affected = apply_cause_fear_critical_hp_setup(&mut self.combat_actors, &accepted);
 
         self.advance_turn();
@@ -4420,6 +4679,11 @@ impl PlayState {
         self.apply_combat_selected_field_contact_for_actor_position(actor_slot, field)
     }
 
+    /// `combat.md §7` step 7, the standing-cell hazard pass: it "reads the
+    /// arena terrain under the actor that just acted, and - if that terrain is
+    /// not itself damaging - scans the object table for any object other than
+    /// the actor's own sitting on the same cell", then applies whichever of
+    /// the three damaging kinds it found.
     pub fn apply_combat_post_dispatch_contact_for_actor_position(
         &mut self,
         actor_slot: usize,
@@ -4433,25 +4697,64 @@ impl PlayState {
             .get(usize::from(actor.y))?
             .get(usize::from(actor.x))?;
         if let Some(field) = combat_arena_terrain_contact_kind(terrain) {
-            let field_contact =
-                self.apply_combat_selected_field_contact_for_actor_position(actor_slot, field)?;
-            return Some(CombatPostDispatchContactApplication {
-                source: CombatPostDispatchContactSource::ArenaTerrain { tile: terrain },
-                field_contact,
-            });
+            return self.apply_combat_hazard_tier_for_actor_position(
+                actor_slot,
+                field,
+                CombatPostDispatchContactSource::ArenaTerrain { tile: terrain },
+            );
         }
         let (active_object_slot, field) = self.find_combat_arena_field_marker_excluding(
             actor.x,
             actor.y,
             Some(actor.active_object_slot as usize),
         )?;
-        if field == CombatArenaFieldKind::Energy {
-            return None;
+        self.apply_combat_hazard_tier_for_actor_position(
+            actor_slot,
+            field,
+            CombatPostDispatchContactSource::PlacedMarker { active_object_slot },
+        )
+    }
+
+    fn apply_combat_hazard_tier_for_actor_position(
+        &mut self,
+        actor_slot: usize,
+        field: CombatArenaFieldKind,
+        source: CombatPostDispatchContactSource,
+    ) -> Option<CombatPostDispatchContactApplication> {
+        let tier = combat_hazard_tier_for_field(field);
+        // `combat.md §7` step 7: both damaging tiers "play the hit sound" -
+        // `audio.md §7.4`'s attack-application swing cue, which `§7` step 7
+        // and `§11` both name that way. The low tier plays it "only while the
+        // actor's own object entry is an ordinary live entry", which is the
+        // same linked-entry test `§7.2`'s Poison row states as "reject contact
+        // when the target's linked active-object tile/class byte is at least
+        // `0x80`".
+        let ordinary_live_entry = self
+            .active_objects
+            .get(
+                self.combat_actors
+                    .get(actor_slot)
+                    .copied()?
+                    .active_object_slot as usize,
+            )
+            .is_some_and(|object| !object.is_empty() && object.tile < 0x80);
+        let hit_sound_played = match tier {
+            Some(CombatHazardTier::Low) => ordinary_live_entry,
+            Some(CombatHazardTier::Middle) => true,
+            _ => false,
+        };
+        if hit_sound_played {
+            self.emit_sound_effect(SoundEffect::AttackSwing);
         }
         let field_contact =
             self.apply_combat_selected_field_contact_for_actor_position(actor_slot, field)?;
+        let middle = tier == Some(CombatHazardTier::Middle);
         Some(CombatPostDispatchContactApplication {
-            source: CombatPostDispatchContactSource::PlacedMarker { active_object_slot },
+            source,
+            tier,
+            hit_sound_played,
+            finalize_hook_ran: middle,
+            raises_leave_combat_flag: middle,
             field_contact,
         })
     }
@@ -4489,6 +4792,12 @@ impl PlayState {
     ) -> Option<CombatWeaponAttackApplication> {
         let attacker = *self.combat_actors.get(attacker_slot)?;
         let target = *self.combat_actors.get(target_slot)?;
+        // `audio.md §7.4`: "The attack-application path plays its own rising
+        // sweep ... unconditionally, before the to-hit roll, and only then
+        // branches." The miss arm that follows has "no audio call anywhere on
+        // it", so a missed swing sounds exactly like a landed one minus the
+        // hit arm's own effects, and never plays the blocked-step beep.
+        self.emit_sound_effect(SoundEffect::AttackSwing);
         let resolution = resolve_combat_equipment_weapon_attack(
             item_id,
             attacker.range_to(target),
@@ -4540,8 +4849,15 @@ impl PlayState {
         }
 
         let attacker_stats = combat_class_stats(attacker.owner_target_class)?;
-        let ranged = combat_ranged_effect_stats(attacker.owner_target_class)?;
+        // `combat.md §13`: the class-indexed ranged/effect side tables cover
+        // the whole forty-eight-row class space even where
+        // `catalogs/monster-bestiary.md §3` publishes no row, so a missing row
+        // must not remove the class's attack path.
+        let ranged = combat_ranged_effect_stats_or_melee_only(attacker.owner_target_class);
         let target_range = attacker.range_to(target);
+        // `audio.md §7.4`: the swing cue is unconditional and precedes the
+        // to-hit roll on the attack-application path.
+        self.emit_sound_effect(SoundEffect::AttackSwing);
         // `magic.md §7`: ordinary automatic adjacent attacks install their
         // source before the hit test, so misses and poison-special returns
         // record exactly like ordinary hits. `combat.md §6.1a`: the
@@ -4550,8 +4866,14 @@ impl PlayState {
         if target_range == 1 && !attacker.is_controlled() {
             self.combat_interference_sources[target_slot] = attacker_slot as u8;
         }
+        // `combat.md §12`: a party defender's rating is the cached
+        // combat-defense byte at `+0x18`. `party_defender_rating` stays the
+        // fallback for a state whose roster does not carry that slot.
         let defender_rating = if target_slot < COMBAT_PARTY_ACTOR_SLOTS {
-            party_defender_rating
+            self.party_combat_defense
+                .get(target_slot)
+                .copied()
+                .unwrap_or(party_defender_rating)
         } else {
             combat_class_stats(target.owner_target_class)?.defense
         };
@@ -4595,8 +4917,41 @@ impl PlayState {
                 attacker_slot,
                 target_slot,
                 poison_status_outcome: None,
+                stoning: None,
                 resolution: Some(resolution),
                 damage_application,
+            });
+        }
+
+        // `combat.md §12`: "Gazer attacks have a separate stoning-style effect
+        // against awake defenders, and magic/effect attack tiles can also
+        // enter the same poison or stoning-style branches before falling back
+        // to ordinary damage." The branch is checked with the other
+        // monster-only status branches, ahead of ordinary melee damage; an
+        // asleep defender falls through to that ordinary path.
+        //
+        // Only the class-keyed half is implementable here: the second sentence
+        // names "magic/effect attack tiles" as a further entry point, but no
+        // shipped document publishes which tile ids those are, so this engine
+        // does not synthesise a tile table for it.
+        // `CombatStoningEffectSource::MagicEffectAttackTile` records the
+        // published second reader without inventing its key.
+        let stoning_source = combat_class_gaze_stones(attacker.owner_target_class)
+            .then_some(CombatStoningEffectSource::GazerGaze);
+        let stoning = stoning_source.and_then(|source| {
+            let member = (target_slot < COMBAT_PARTY_ACTOR_SLOTS)
+                .then(|| self.party.get(target_slot).copied())
+                .flatten();
+            resolve_combat_stoning_effect(source, target_slot, target, member)
+        });
+        if let Some(stoning) = stoning {
+            return Some(CombatMonsterAttackApplication {
+                attacker_slot,
+                target_slot,
+                poison_status_outcome: None,
+                stoning: Some(stoning),
+                resolution: None,
+                damage_application: None,
             });
         }
 
@@ -4630,6 +4985,7 @@ impl PlayState {
                         attacker_slot,
                         target_slot,
                         poison_status_outcome: Some(poison_outcome),
+                        stoning: None,
                         resolution: None,
                         damage_application: None,
                     });
@@ -4645,6 +5001,7 @@ impl PlayState {
                         attacker_slot,
                         target_slot,
                         poison_status_outcome: Some(poison_outcome),
+                        stoning: None,
                         resolution: None,
                         damage_application,
                     });
@@ -4681,8 +5038,54 @@ impl PlayState {
             attacker_slot,
             target_slot,
             poison_status_outcome,
+            stoning: None,
             resolution: Some(resolution),
             damage_application,
+        })
+    }
+
+    /// `combat.md §11` cast-like ranged/effect branch.
+    ///
+    /// "That branch prints the cast/effect narration, reuses the AI
+    /// direction/effect dispatch, plays the ranged animation, resets the scene
+    /// state, and consumes the action."
+    ///
+    /// **The narration's text is not published.** `§9` Pass 3 publishes the
+    /// ordinary AI line's shape (`<monster name> attacks <target name>, armed
+    /// with <weapon>!`) but no shipped document gives the cast/effect variant's
+    /// wording, so this branch reports that the narration step ran and leaves
+    /// the composed line the dispatcher already placed in the message slot
+    /// rather than inventing a string. See the spec question recorded with
+    /// this change.
+    pub fn apply_combat_ai_cast_like_ranged_effect(
+        &mut self,
+        actor_slot: usize,
+        target_slot: Option<usize>,
+        range_effect_selector: u8,
+        payload: u8,
+        step_vector: CombatStepVector,
+    ) -> Option<CombatCastLikeRangedEffectApplication> {
+        let actor = self.combat_actors.get(actor_slot).copied()?;
+        if !combat_ranged_effect_stats(actor.owner_target_class)?.cast_like_branch {
+            return None;
+        }
+        // `combat.md §11`: "resets the scene state". The one scene-scoped
+        // value this engine keeps for the cast/effect family is the shared
+        // per-dispatch effect prerequisite, so the branch clears it as it
+        // consumes the action. Which scene word the original resets is not
+        // published.
+        self.combat_effect_prerequisite_active = false;
+        self.mark_visibility_dirty();
+        Some(CombatCastLikeRangedEffectApplication {
+            actor_slot,
+            target_slot,
+            range_effect_selector,
+            payload,
+            step_vector,
+            cast_narration_printed: true,
+            ranged_animation_played: true,
+            scene_state_reset: true,
+            action_consumed: true,
         })
     }
 
@@ -4769,6 +5172,7 @@ impl PlayState {
                 attacker_slot,
                 target_slot: intended_target_slot,
                 poison_status_outcome: None,
+                stoning: None,
                 resolution: Some(CombatWeaponAttackResolution::Miss {
                     route,
                     hit_score: 0,
@@ -4784,6 +5188,7 @@ impl PlayState {
                 attacker_slot,
                 target_slot: intended_target_slot,
                 poison_status_outcome: None,
+                stoning: None,
                 resolution: Some(CombatWeaponAttackResolution::Miss {
                     route,
                     hit_score: 0,
@@ -4791,8 +5196,14 @@ impl PlayState {
                 damage_application: None,
             });
         };
+        // `combat.md §12`: a party defender's rating is the cached
+        // combat-defense byte at `+0x18`. `party_defender_rating` stays the
+        // fallback for a state whose roster does not carry that slot.
         let defender_rating = if target_slot < COMBAT_PARTY_ACTOR_SLOTS {
-            party_defender_rating
+            self.party_combat_defense
+                .get(target_slot)
+                .copied()
+                .unwrap_or(party_defender_rating)
         } else {
             combat_class_stats(self.combat_actors[target_slot].owner_target_class)?.defense
         };
@@ -4822,6 +5233,7 @@ impl PlayState {
             attacker_slot,
             target_slot,
             poison_status_outcome: None,
+            stoning: None,
             resolution: Some(resolution),
             damage_application,
         })
@@ -5183,11 +5595,15 @@ impl PlayState {
                     Some(self.age_active_effect()),
                 )
             };
-        if post_dispatch_contact.is_some() {
-            let leave_combat = matches!(
-                control_after,
-                CombatRoundLoopControl::Exit(CombatRoundLoopExit::LeaveCombat)
-            );
+        if let Some(contact) = post_dispatch_contact.as_ref() {
+            // `combat.md §7` step 7: only the middle damaging tier "raises the
+            // leave-combat flag". The low and top tiers cost the actor their
+            // effect and nothing more.
+            let leave_combat = contact.raises_leave_combat_flag
+                || matches!(
+                    control_after,
+                    CombatRoundLoopControl::Exit(CombatRoundLoopExit::LeaveCombat)
+                );
             control_after = self.combat_round_loop_control(leave_combat, false);
         }
         if matches!(control_after, CombatRoundLoopControl::ContinueActorWalk) {
@@ -5239,8 +5655,11 @@ impl PlayState {
             .get(actor_slot)
             .copied()
             .unwrap_or(AVATAR_STAT_MAX);
+        // `combat.md §12`: a party-member defender's damage roll reads the
+        // cached combat-defense byte at `+0x18`, not a hard-coded factory
+        // seed.
         let defender_rating = if target_slot < COMBAT_PARTY_ACTOR_SLOTS {
-            7
+            self.party_combat_defense_byte(target_slot)
         } else {
             combat_class_stats(self.combat_actors.get(target_slot)?.owner_target_class)?.defense
         };
@@ -5596,20 +6015,12 @@ impl PlayState {
             };
         }
 
-        if actor.is_status_disabled() {
-            let wake_roll = self.combat_sleep_wake_roll(slot);
-            let wake = self
-                .apply_combat_sleep_wake_dispatch(slot, wake_roll)
-                .expect("status-disabled actor should produce a wake dispatch");
-            let _ = self.apply_combat_post_dispatch_contact_for_actor_position(slot);
-            self.clear_combat_interference_for_completed_action(slot);
-            return CombatActorSlotDispatchApplication::Slot {
-                slot,
-                phase_tick: Some(phase_tick),
-                action: CombatActorDispatchAction::StatusDisabledWake { wake },
-                control_after: self.combat_round_loop_control(leave_combat_flag, false),
-            };
-        }
+        // `combat.md §9`: "Both gates precede the invisibility, sleep-wake and
+        // flee checks, so a skipped dispatch does not run the wake roll." The
+        // sleep-wake roll therefore cannot sit ahead of the automatic actor
+        // driver's Negate Time and Quickness gates; it is evaluated below,
+        // after the group split has decided whether this dispatch reaches the
+        // driver at all.
 
         // `combat.md §6.1a` Writers #4, "The Sword of Chaos
         // compulsion": "On the player-driven branch, if the slot is
@@ -5663,8 +6074,13 @@ impl PlayState {
         // takes its turn through the driver instead of the player's prompt.
         // The earlier reading that any slot carrying the bit is sent to the
         // player command parser is expressly withdrawn.
-        let action = if self.combat_target_group_for_slot(slot) == COMBAT_TARGET_GROUP_PARTY {
-            CombatActorDispatchAction::PlayerReady
+        let dispatch_group = self.combat_target_group_for_slot(slot);
+        // `combat.md §9`: the Negate Time and Quickness gates live "at the head
+        // of the automatic actor driver", so they are read only for the group
+        // the walker routes to that driver, and they are read **before** the
+        // sleep-wake roll below.
+        let driver_gate = if dispatch_group == COMBAT_TARGET_GROUP_PARTY {
+            None
         } else if resolve_negate_time_dispatch_skipped(
             self.active_effect_tag,
             self.active_effect_counter,
@@ -5672,7 +6088,7 @@ impl PlayState {
             // `magic.md` tag `T`: the automatic actor driver returns
             // immediately while Negate Time is live, so every self-acting
             // actor's turn is skipped outright.
-            CombatActorDispatchAction::NegateTimeSkipped
+            Some(CombatActorDispatchAction::NegateTimeSkipped)
         } else if resolve_quickness_dispatch_consumed(
             self.active_effect_tag,
             self.active_effect_counter,
@@ -5681,7 +6097,24 @@ impl PlayState {
             // `combat.md §8`: the single Quickness gate sits at the head of the
             // automatic actor driver, so a self-acting slot forfeits about half
             // its dispatches while the effect is live.
-            CombatActorDispatchAction::QuicknessSkipped
+            Some(CombatActorDispatchAction::QuicknessSkipped)
+        } else {
+            None
+        };
+
+        let action = if let Some(gate) = driver_gate {
+            gate
+        } else if actor.is_status_disabled() {
+            // `combat.md §6.2`: the wake check is owned by the acting slot's
+            // dispatch and spends it either way - but only on a dispatch the
+            // gates above did not already skip (`§9`).
+            let wake_roll = self.combat_sleep_wake_roll(slot);
+            let wake = self
+                .apply_combat_sleep_wake_dispatch(slot, wake_roll)
+                .expect("status-disabled actor should produce a wake dispatch");
+            CombatActorDispatchAction::StatusDisabledWake { wake }
+        } else if dispatch_group == COMBAT_TARGET_GROUP_PARTY {
+            CombatActorDispatchAction::PlayerReady
         } else {
             let monster_attack_inputs = monster_attack_inputs_by_slot
                 .iter()
@@ -6030,7 +6463,7 @@ impl PlayState {
         else {
             return false;
         };
-        combat_possess_candidate_reaches_resistance(target_slot, candidate, self.active_player)
+        combat_possess_candidate_reaches_resistance(target_slot, candidate)
     }
 
     pub fn combat_ai_blink_roll(&mut self, actor_slot: usize) -> u8 {
@@ -6055,8 +6488,29 @@ impl PlayState {
         self.random_range_u8(0, u8::MAX)
     }
 
-    pub fn combat_ai_teleport_candidate(&mut self, actor_slot: usize) -> Option<(u8, u8)> {
+    /// `combat.md §9`: "A teleport-capable monster **first gets a chance** to
+    /// move to a random legal arena cell", and Negate Magic / the Crown
+    /// "suppress this teleport arm before its **chance roll** and random-cell
+    /// probe". So one gate draw precedes the two coordinate draws, and a
+    /// declined gate leaves the arm having consumed exactly that one draw.
+    ///
+    /// **The gate's acceptance width is not published.** `§9` publishes the
+    /// existence of the chance roll and nothing about its odds. The only
+    /// chance-gate shape `§9` does publish - the per-class blink and
+    /// summon-daemon abilities' "inclusive `0..255` gate value ... fires on
+    /// exactly `0..31`, an exact `32/256 = 1/8` acceptance" - is reused here,
+    /// through the same [`combat_ai_special_one_in_eight_gate`] helper, so the
+    /// assumption is stated in one place instead of being spread through the
+    /// mover. See the spec question recorded with this change.
+    pub fn combat_ai_teleport_chance_roll(&mut self, actor_slot: usize) -> u8 {
         let _ = actor_slot;
+        self.random_range_u8(0, u8::MAX)
+    }
+
+    pub fn combat_ai_teleport_candidate(&mut self, actor_slot: usize) -> Option<(u8, u8)> {
+        if !combat_ai_special_one_in_eight_gate(self.combat_ai_teleport_chance_roll(actor_slot)) {
+            return None;
+        }
         Some((
             self.random_range_u8(0, (COMBAT_ARENA_SIDE - 1) as u8),
             self.random_range_u8(0, (COMBAT_ARENA_SIDE - 1) as u8),
@@ -6074,7 +6528,9 @@ impl PlayState {
     ) -> CombatMonsterAttackInputs {
         let _ = attacker_slot;
         CombatMonsterAttackInputs {
-            party_defender_rating: 7,
+            // `combat.md §12`: only a fallback - the resolver reads the
+            // defender's own cached `+0x18` byte when the roster carries one.
+            party_defender_rating: CHARACTER_DEFENSE_FACTORY_SEED,
             hit_roll: self.random_range_u8(0, u8::MAX),
             damage_roll: self.random_range_u8(0, u8::MAX),
             poison_gate_accepts: self.random_mod_u8(2) == 0,

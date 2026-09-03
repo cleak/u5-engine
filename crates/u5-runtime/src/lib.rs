@@ -226,10 +226,10 @@ pub use combat_frame::*;
 pub use combat_setup::*;
 pub use combat_stats::*;
 pub use commands::{
-    Command, CommandEcho, CommandEchoJoin, CommandEchoMode, DEATH_VISION_LOOK_TILE,
-    DEATH_VISION_ROLL_HIGH, DEATH_VISION_ROLL_LOW, DIRECTION_PROMPT_CANCEL_LITERAL,
-    DUNGEON_BOMB_TRAP_LINE, DUNGEON_CHEST_GET_CONTENTS, DUNGEON_CHEST_GET_ECHO,
-    DUNGEON_CHEST_GET_MUST_OPEN_FIRST, DUNGEON_CHEST_GET_NOT_HERE,
+    COMBAT_JIMMY_NO_KEYS_MESSAGE, Command, CommandEcho, CommandEchoJoin, CommandEchoMode,
+    DEATH_VISION_LOOK_TILE, DEATH_VISION_ROLL_HIGH, DEATH_VISION_ROLL_LOW,
+    DIRECTION_PROMPT_CANCEL_LITERAL, DUNGEON_BOMB_TRAP_LINE, DUNGEON_CHEST_GET_CONTENTS,
+    DUNGEON_CHEST_GET_ECHO, DUNGEON_CHEST_GET_MUST_OPEN_FIRST, DUNGEON_CHEST_GET_NOT_HERE,
     DUNGEON_CHEST_JIMMY_ALREADY_OPEN, DUNGEON_CHEST_JIMMY_KEY_BROKE, DUNGEON_CHEST_JIMMY_NO_KEYS,
     DUNGEON_CHEST_JIMMY_UNLOCKED, DUNGEON_CHEST_JIMMY_WHAT, DUNGEON_CHEST_OPEN_ALREADY_OPEN,
     DUNGEON_CHEST_OPEN_WHAT, DUNGEON_CHEST_OPENED, DUNGEON_ELECTRIC_FIELD_LINE,
@@ -1005,4 +1005,5 @@ mod tests {
     include!("tests_inline/spec_conformance_chunk_07.rs");
     include!("tests_inline/combat_frame_conformance.rs");
     include!("tests_inline/result_lines_conformance.rs");
+    include!("tests_inline/combat_ai_effects_conformance.rs");
 }

@@ -921,6 +921,36 @@ pub fn combat_template_impact() -> SpeakerProgram {
     glissando(20, 1, 350, 1300)
 }
 
+/// `audio.md §7.4` attack-application swing cue: "400 Hz toward 750 Hz, 30
+/// updates, roughly 130 ms".
+///
+/// `§5.2` gives the glissando its `(span, delay, target, initial)` shape and
+/// `updates = ceil(span / delay)`, so "30 updates" fixes `span / delay = 30`.
+/// The absolute pair is **not published** - `§5.2` says of this recipe and the
+/// impact fall that "their span and per-update delay were not established" -
+/// but every pair with that ratio yields the same played sequence, because the
+/// increment `(750 - 400) * delay / span` truncates to 11 Hz for all of them.
+/// The realised run is therefore 400, 411, ... 719 Hz, which honours `§5.2`'s
+/// rule that the recipe "stop[s] ... strictly below 750 Hz" and "must not be
+/// implemented as reaching those values". `delay = 4` is chosen because it is
+/// the value that reproduces `§7.4`'s "roughly 130 ms" under the `§5.2`
+/// per-update cost.
+pub const ATTACK_SWING_SPAN: i32 = 120;
+pub const ATTACK_SWING_DELAY: u32 = 4;
+pub const ATTACK_SWING_INITIAL_HZ: i32 = 400;
+pub const ATTACK_SWING_TARGET_HZ: i32 = 750;
+/// `audio.md §7.4`: "30 updates".
+pub const ATTACK_SWING_UPDATES: usize = 30;
+
+pub fn attack_swing() -> SpeakerProgram {
+    glissando(
+        ATTACK_SWING_SPAN,
+        ATTACK_SWING_DELAY,
+        ATTACK_SWING_TARGET_HZ,
+        ATTACK_SWING_INITIAL_HZ,
+    )
+}
+
 /// `audio.md §6.1`: a spell's circle, `floor(id / 6) + 1`.
 pub const fn spell_circle(spell_id: usize) -> u8 {
     (spell_id / 6 + 1) as u8
@@ -1534,6 +1564,14 @@ pub enum SoundEffect {
     /// `§6.1` combat effect template impact: a descending 20-update glissando
     /// from 1300 Hz toward 350 Hz, played only on a resolved effect.
     CombatTemplateImpact,
+    /// `§7.4` the attack-application swing cue: "The attack-application path
+    /// plays its own rising sweep - 400 Hz toward 750 Hz, 30 updates, roughly
+    /// 130 ms ... **unconditionally, before the to-hit roll**, and only then
+    /// branches." The miss arm prints its line and returns with "**no audio
+    /// call anywhere on it**", so a miss is not silent overall but adds
+    /// nothing. `combat.md §7` step 7 and `§11` call this same cue "the hit
+    /// sound".
+    AttackSwing,
     /// `§8.3` monster possession success.
     Possession,
     /// `combat.md §6.3` controlled-party faint after a Vanish death. The
@@ -1629,6 +1667,7 @@ impl SoundEffect {
             SoundEffect::SharedVariant { variant } => shared_variant(*variant, jitter),
             SoundEffect::CircleRumbleLead { circle } => circle_rumble_lead(*circle, jitter),
             SoundEffect::CombatTemplateImpact => combat_template_impact(),
+            SoundEffect::AttackSwing => attack_swing(),
             SoundEffect::Possession => envelope_program(POSSESSION_ENVELOPE),
             SoundEffect::ControlledPartyFaint => envelope_program(POSSESSION_ENVELOPE),
             SoundEffect::SceptreReclaimed => envelope_program(SCEPTRE_RECLAIMED_ENVELOPE),
