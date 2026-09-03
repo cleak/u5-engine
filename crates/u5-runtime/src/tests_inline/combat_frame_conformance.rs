@@ -1096,8 +1096,13 @@
             &party_name_to_string(state.combat_party_name_for_slot(0).unwrap()).unwrap(),
             Some(&state.party_equipment[0]),
         );
+        // `combat.md §8.1`, as corrected: the banner is terminated by "a
+        // colon **and then a newline**" - "the turn handler emits the line
+        // feed itself, unconditionally, between printing the banner and
+        // reading the command byte". That line feed is what opens the row
+        // the end-cap marker is drawn on.
         assert!(
-            state.message.ends_with(&expected),
+            state.message.ends_with(&format!("{expected}\n")),
             "banner missing from {:?}",
             state.message
         );

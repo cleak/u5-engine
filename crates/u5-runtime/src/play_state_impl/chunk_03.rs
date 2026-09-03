@@ -146,6 +146,17 @@ impl PlayState {
         if let Some(session) = self.active_direction_prompt {
             return Self::direction_prompt_open_verb_echo(session.kind);
         }
+        // `combat.md §8.2`: each Attack attempt prints `Attack-` and then,
+        // "immediately before the cursor opens", `Aim! ` - which carries a
+        // trailing space and no newline, so the arena's targeting cursor
+        // waits on that same row, one cell past the prompt.
+        if self.active_combat_targeting.is_some() {
+            return Some(format!(
+                "{}{}",
+                crate::combat_frame::COMBAT_ATTACK_LABEL,
+                crate::combat_frame::COMBAT_ATTACK_AIM_PROMPT
+            ));
+        }
         None
     }
 

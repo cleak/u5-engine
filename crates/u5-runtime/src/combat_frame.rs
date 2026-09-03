@@ -1270,7 +1270,17 @@ impl PlayState {
         self.pending_combat_actor_slot = slot;
         let banner = slot.and_then(|slot| self.combat_turn_banner_for_actor(slot));
         if let Some(banner) = banner.as_deref() {
-            self.message.push_str(banner);
+            // `combat.md §8.1`: the banner is "a newline, the actor's name,
+            // ... a colon **and then a newline**". `combat_turn_banner`
+            // carries the leading newline; the turn handler's own trailing
+            // one is added here, because it is the line feed that opens the
+            // marker row the command byte is then read on.
+            //
+            // Emitting it rather than appending it to the message slot is
+            // what keeps it one print: the slot the entry banners had
+            // already flushed was re-flushed whole, which printed
+            // `*** CONFLICT ***` a second time.
+            self.emit_combat_print(&format!("{banner}\n"));
         }
     }
 

@@ -3232,7 +3232,7 @@ Mixed 1 IL charge; stock is 1.");
             // roll's `0..=60` raw draw, and R336 makes the monster's
             // attack value flat, so a Daemon that used to miss now
             // lands on this seed.
-            "Cause Fear affected 2 combat actor(s).\nAvatar hit!\n\nAvatar, armed with bare hands:"
+            "Cause Fear affected 2 combat actor(s).\nAvatar hit!\n\nAvatar, armed with bare hands:\n"
         );
     }
 

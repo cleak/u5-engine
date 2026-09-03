@@ -10507,7 +10507,12 @@ fn combat_push_reveal_marker_preempts_source_test_without_a_result_line() {
     assert_eq!(state.combat_terrain[2][2], 0x44);
     assert_eq!(state.combat_terrain[3][3], 0x44);
     assert_eq!((state.combat_actors[0].x, state.combat_actors[0].y), (5, 5));
-    assert_eq!(state.message_entries()[0].text, "Push-East");
+    assert!(
+        state
+            .message_entries()
+            .iter()
+            .any(|entry| entry.text == "Push-East" && entry.is_command_echo)
+    );
     assert!(state.message_entries().iter().all(|entry| {
         !matches!(
             entry.text.as_str(),
@@ -10548,8 +10553,12 @@ fn combat_input_dispatch_push_prompt_keeps_actor_until_direction() {
     assert_eq!(state.combat_terrain[5][6], PUSHABLE_GENERIC_FLOOR_STAMP);
     assert_eq!(state.combat_terrain[5][7], 0x91);
     assert!(state.message.starts_with("Pushed!"));
-    assert_eq!(state.message_entries()[0].text, "Push-East");
-    assert_eq!(state.message_entries()[1].text, "Pushed!");
+    let echo = state
+        .message_entries()
+        .iter()
+        .position(|entry| entry.text == "Push-East" && entry.is_command_echo)
+        .expect("the Push echo is on the transcript");
+    assert_eq!(state.message_entries()[echo + 1].text, "Pushed!");
     assert!(state.visibility_dirty);
     assert_eq!(state.active_effect_counter, 2);
 }
@@ -10574,7 +10583,12 @@ fn combat_input_dispatch_push_prompt_cancel_commits_actor_action() {
     );
     assert!(state.active_direction_prompt.is_some());
     assert_eq!(state.active_effect_counter, 3);
-    assert_eq!(state.message_entries()[0].text, "Push-");
+    assert!(
+        state
+            .message_entries()
+            .iter()
+            .any(|entry| entry.text == "Push-" && entry.is_command_echo)
+    );
 
     assert_eq!(
         handle_play_key_input(&mut state, ' ', "", game_dir).unwrap(),
@@ -10589,7 +10603,7 @@ fn combat_input_dispatch_push_prompt_cancel_commits_actor_action() {
     );
     assert_eq!(
         state.message,
-        format!("Push-{DIRECTION_PROMPT_LABEL_PASS}\nAvatar, armed with bare hands:")
+        format!("Push-{DIRECTION_PROMPT_LABEL_PASS}\nAvatar, armed with bare hands:\n")
     );
 }
 
@@ -10612,8 +10626,12 @@ fn combat_input_dispatch_inline_push_suffix_pushes_immediately() {
     assert_eq!(state.combat_terrain[5][6], PUSHABLE_GENERIC_FLOOR_STAMP);
     assert_eq!(state.combat_terrain[5][7], 0x91);
     assert!(state.message.starts_with("East\nPushed!"));
-    assert_eq!(state.message_entries()[0].text, "Push-East");
-    assert_eq!(state.message_entries()[1].text, "Pushed!");
+    let echo = state
+        .message_entries()
+        .iter()
+        .position(|entry| entry.text == "Push-East" && entry.is_command_echo)
+        .expect("the Push echo is on the transcript");
+    assert_eq!(state.message_entries()[echo + 1].text, "Pushed!");
     assert_eq!(state.active_effect_counter, 2);
 }
 
@@ -10634,7 +10652,7 @@ fn combat_klimb_cardinal_suffix_moves_actor_inside_arena() {
         (state.active_objects[0].x, state.active_objects[0].y),
         (5, 4)
     );
-    assert_eq!(state.message, "Klimbed North to (5, 4).\nAvatar, armed with bare hands:");
+    assert_eq!(state.message, "Klimbed North to (5, 4).\nAvatar, armed with bare hands:\n");
     assert!(state.visibility_dirty);
     assert!(state.combat_active);
 }
@@ -10708,7 +10726,7 @@ fn combat_klimb_prompt_cancel_commits_but_blocked_direction_reprompts() {
     );
     assert_eq!(
         cancelled.message,
-        format!("{DIRECTION_PROMPT_LABEL_PASS}\nAvatar, armed with bare hands:")
+        format!("{DIRECTION_PROMPT_LABEL_PASS}\nAvatar, armed with bare hands:\n")
     );
 
     let mut blocked = combat_player_command_state(10, 10);
@@ -10904,7 +10922,7 @@ fn combat_sjog_prompt_cancel_commits_actor_action() {
     );
     assert_eq!(
         state.message,
-        format!("{DIRECTION_PROMPT_LABEL_PASS}\nAvatar, armed with bare hands:")
+        format!("{DIRECTION_PROMPT_LABEL_PASS}\nAvatar, armed with bare hands:\n")
     );
 }
 
@@ -11859,7 +11877,7 @@ fn combat_input_dispatch_routes_play_keys_to_combat_parser() {
         (move_state.combat_actors[0].x, move_state.combat_actors[0].y),
         (6, 5)
     );
-    assert_eq!(move_state.message, "East\n\nAvatar, armed with bare hands:");
+    assert_eq!(move_state.message, "East\n\nAvatar, armed with bare hands:\n");
     assert_eq!(move_state.pending_combat_actor_slot, Some(0));
 
     let mut blocked_state = combat_player_command_state(8, 5);
@@ -11931,7 +11949,7 @@ fn combat_input_dispatch_routes_play_keys_to_combat_parser() {
     // banner, and the Giant Rat's reply sits ahead of it.
     assert_eq!(
         attack_state.message,
-        "Attack-Aim! \nGiant Rat missed!\nAvatar is poisoned!\n\nAvatar, armed with bare hands:"
+        "Attack-Aim! \nGiant Rat missed!\n\nAvatar is poisoned!\n\nAvatar, armed with bare hands:\n"
     );
     assert_eq!(attack_state.combat_actors[8].hp_or_wound, 10);
     assert_eq!(attack_state.party_experience[0], 0);
@@ -12024,7 +12042,7 @@ fn combat_input_dispatch_reports_weapon_hit_damage_and_xp() {
     // the poison branch returns before the ordinary roller's defence draw.
     assert_eq!(
         state.message,
-        "Attack-Aim! \nGiant Rat barely wounded!\nAvatar is poisoned!\n\nAvatar, armed with Dagger:"
+        "Attack-Aim! \nGiant Rat barely wounded!\n\nAvatar is poisoned!\n\nAvatar, armed with Dagger:\n"
     );
     assert_eq!(state.combat_actors[8].hp_or_wound, 10 - expected_damage);
     assert_eq!(state.party_experience[0], u16::from(expected_damage));
@@ -12064,7 +12082,7 @@ fn combat_input_dispatch_reports_weapon_kill_and_keeps_victory_cleanup_live() {
     assert_eq!(
         state.message,
         format!(
-            "Attack-Aim! \nGiant Rat killed!\n{COMBAT_VICTORY_LINE}\nAvatar, armed with Dagger:"
+            "Attack-Aim! \nGiant Rat killed!\n{COMBAT_VICTORY_LINE}\nAvatar, armed with Dagger:\n"
         )
     );
     assert_eq!(state.party_experience[0], 3);
@@ -12082,7 +12100,7 @@ fn combat_input_dispatch_reports_only_original_style_monster_attack_result() {
         PlayInputDisposition::Continue
     );
 
-    assert_eq!(state.message, "Pass.\nAvatar is poisoned!\n\nAvatar, armed with bare hands:");
+    assert_eq!(state.message, "Pass\n\nAvatar is poisoned!\n\nAvatar, armed with bare hands:\n");
     assert_eq!(state.party[0].status, b'P');
     assert_eq!(state.pending_combat_actor_slot, Some(0));
 }
@@ -12098,12 +12116,12 @@ fn paced_combat_presents_one_automatic_action_before_accepting_more_input() {
         handle_play_key_input(&mut state, ' ', "", game_dir).unwrap(),
         PlayInputDisposition::Continue
     );
-    assert_eq!(state.message, "Pass.");
+    assert_eq!(state.message, "Pass\n");
     assert_eq!(state.party[0].hp, hp_before);
     assert_eq!(state.pending_combat_actor_slot, None);
 
     advance_paced_combat_presentation(&mut state);
-    assert_eq!(state.message, "Pass.\nAvatar is poisoned!\n");
+    assert_eq!(state.message, "Pass\n\nAvatar is poisoned!\n");
     assert_eq!(state.pending_combat_actor_slot, None);
 
     advance_paced_combat_presentation(&mut state);
@@ -12203,7 +12221,7 @@ fn combat_input_dispatch_keeps_internal_monster_movement_out_of_transcript() {
         PlayInputDisposition::Continue
     );
 
-    assert_eq!(state.message, "Pass.\nAvatar, armed with bare hands:");
+    assert_eq!(state.message, "Pass\n\nAvatar, armed with bare hands:\n");
     assert_eq!((state.combat_actors[8].x, state.combat_actors[8].y), (7, 5));
     assert_eq!(state.pending_combat_actor_slot, Some(0));
 }
@@ -12550,7 +12568,7 @@ fn combat_input_dispatch_yell_word_uses_combat_no_effect_route() {
         PlayInputDisposition::Continue
     );
 
-    assert_eq!(state.message, "Yelled FALLAX. Nothing happens.\nAvatar, armed with bare hands:");
+    assert_eq!(state.message, "Yelled FALLAX. Nothing happens.\nAvatar, armed with bare hands:\n");
     assert!(!state.message.contains("Word of Power"));
     assert!(state.active_ready.is_none());
     assert!(state.active_z_stats.is_none());
@@ -12581,7 +12599,7 @@ fn combat_input_dispatch_yell_prompt_keeps_same_actor_pending() {
     );
 
     assert!(state.active_yell.is_none());
-    assert_eq!(state.message, "Yelled FALLAX. Nothing happens.\nAvatar, armed with bare hands:");
+    assert_eq!(state.message, "Yelled FALLAX. Nothing happens.\nAvatar, armed with bare hands:\n");
     assert_eq!(state.active_effect_counter, 2);
     assert_eq!(state.pending_combat_actor_slot, Some(0));
 }
@@ -12609,7 +12627,7 @@ fn combat_input_dispatch_empty_yell_commits_the_pending_actor_action() {
     assert!(state.active_yell.is_none());
     assert_eq!(
         state.message,
-        format!("{YELL_NOTHING_SAID_MESSAGE}\nAvatar, armed with bare hands:")
+        format!("{YELL_NOTHING_SAID_MESSAGE}\nAvatar, armed with bare hands:\n")
     );
     assert_eq!(state.active_effect_counter, 2);
     assert_eq!(state.pending_combat_actor_slot, Some(0));
@@ -12646,7 +12664,7 @@ fn combat_input_dispatch_uses_pending_round_walker_actor_slot() {
         (4, 6)
     );
     assert_ne!((state.combat_actors[0].x, state.combat_actors[0].y), (4, 6));
-    assert_eq!(state.message, "South\n\nAvatar, armed with bare hands:");
+    assert_eq!(state.message, "South\n\nAvatar, armed with bare hands:\n");
 }
 
 /// `combat.md §8.2`: while the targeting cursor is open it owns the
@@ -12733,7 +12751,7 @@ fn combat_input_dispatch_action_tail_does_not_run_encounter_ring_vanishal() {
         PlayInputDisposition::Continue
     );
 
-    assert_eq!(state.message, "Pass.\nAvatar, armed with bare hands:");
+    assert_eq!(state.message, "Pass\n\nAvatar, armed with bare hands:\n");
     assert_eq!(
         state.party_equipment[0][EQUIP_SLOT_RING],
         EQUIPMENT_ID_RING_INVISIBILITY as u8
@@ -12785,7 +12803,7 @@ fn combat_input_dispatch_cast_uses_pending_actor_as_caster() {
     assert_eq!(state.party[1].mana, 0);
     assert!(!state.combat_actors[0].is_hidden_or_unrevealed());
     assert!(state.combat_actors[1].is_hidden_or_unrevealed());
-    assert_eq!(state.message, "Invisibility!\nAvatar, armed with bare hands:");
+    assert_eq!(state.message, "Invisibility!\nAvatar, armed with bare hands:\n");
 }
 
 #[test]
@@ -12911,7 +12929,7 @@ fn combat_input_dispatch_blank_or_escape_cast_prompt_commits_actor_action() {
             COMBAT_INTERFERENCE_NO_SOURCE
         );
         assert_eq!((state.combat_actors[8].x, state.combat_actors[8].y), (7, 5));
-        assert_eq!(state.message, "None!\nAvatar, armed with bare hands:");
+        assert_eq!(state.message, "None!\nAvatar, armed with bare hands:\n");
     }
 }
 
@@ -12945,7 +12963,7 @@ fn combat_input_dispatch_cancelled_field_cursor_commits_spent_cast_action() {
             .iter()
             .all(|object| object.type_byte != COMBAT_FIELD_KIND_FIRE)
     );
-    assert_eq!(state.message, "None!\nAvatar, armed with bare hands:");
+    assert_eq!(state.message, "None!\nAvatar, armed with bare hands:\n");
 }
 
 #[test]
@@ -12964,7 +12982,7 @@ fn combat_input_dispatch_quickness_does_not_consume_a_player_cast() {
         PlayInputDisposition::Continue
     );
 
-    assert_eq!(state.message, "Invisibility!\nAvatar, armed with bare hands:");
+    assert_eq!(state.message, "Invisibility!\nAvatar, armed with bare hands:\n");
     assert_eq!(state.spell_charges[INVISIBILITY_SPELL_INDEX], 0);
     assert_eq!(state.party[0].mana, 0);
     assert!(state.combat_actors[0].is_hidden_or_unrevealed());

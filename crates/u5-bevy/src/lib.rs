@@ -158,7 +158,7 @@ use u5_runtime::{
 use u5_runtime::{
     CHROME_RULE_INDEX, ChromeFonts, ChromePalette, MESSAGE_WINDOW_RIGHT, MessageWindowRow,
     RibbonCapDirection, VIEWPORT_ORIGIN_X, VIEWPORT_ORIGIN_Y, configure_play_text_windows,
-    gameplay_chrome_content, layout_message_window_with_open_prompt, load_runes_ch_font,
+    gameplay_chrome_content, layout_message_window_with_prompt, load_runes_ch_font,
     message_log_from_entries, paint_fixed_cell_glyph, paint_gameplay_frame_chrome,
     paint_message_line_cap, prompt_cursor_glyph, ribbon_cap_sprite,
 };
@@ -16515,10 +16515,11 @@ fn render_integrated_status_framebuffer(
         // keeps its own line open and carries the cursor inline, so no
         // fresh live row (and no end-cap triangle) is drawn for it.
         let open_prompt = display_state.open_prompt_line();
-        let layout = layout_message_window_with_open_prompt(
+        let layout = layout_message_window_with_prompt(
             &log,
             Some(input_echo.unwrap_or("")),
             open_prompt.as_deref(),
+            u5_runtime::combat_prompt_row_follows_history(&display_state),
         );
         inline_prompt_cursor = layout.inline_cursor;
         message_rows = layout.rows;
