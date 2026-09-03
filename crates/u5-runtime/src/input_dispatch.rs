@@ -265,14 +265,11 @@ fn handle_play_key_input_inner(
     // call boundary, as §14 permits, and the single-directory runtime's
     // between-mode disk-prompt presentation pass is a no-op.
     let active_route = scene_route(state.current_scene_byte());
-    if active_route == SceneRoute::Dungeon && key == 'Q' {
-        state.begin_command_echo_for(Command::Quit);
-        if let Some(confirm) = parse_inline_yes_no(suffix) {
-            return Ok(state.exit_to_dos_prompt(Some(confirm)));
-        }
-        state.start_exit_to_dos_prompt();
-        return Ok(PlayInputDisposition::Continue);
-    }
+    // `dungeon-mode.md` Section 10: "`Q` is the ordinary save-game route; the
+    // "Exit to DOS?" prompt is a Control binding in the mode-local table, not
+    // a letter." So the dungeon has no `Q` interception of its own; the letter
+    // reaches the dungeon handler and takes the same save route every other
+    // scene takes. Control + `E` owns the program exit.
     let inline_direction = suffix.chars().find_map(Direction::from_play_key);
     let inline_rest = parse_inline_rest_request(suffix);
     let inline_drink = parse_inline_yes_no(suffix);

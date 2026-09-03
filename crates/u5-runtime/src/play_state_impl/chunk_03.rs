@@ -1667,6 +1667,14 @@ impl PlayState {
                     TOWN_EXIT_PROMPT.to_string()
                 }
                 YesNoPromptKind::SaveGame => SAVE_PROMPT_MESSAGE.to_string(),
+                // `commands.md` Section 9 quotes this prompt as "Exit to
+                // DOS?". Spec note, unresolved: `dungeon-mode.md` Section 8
+                // renders the same prompt inside backticks as `Exit to DOS? `,
+                // with a trailing space. Neither section uses that document's
+                // underscore-for-space echo convention here, so it is not
+                // decidable which of the two is the literal. This keeps the
+                // Section 9 form; a spec clarification should settle it before
+                // anyone pins the byte.
                 YesNoPromptKind::ExitToDos => "Exit to DOS?".to_string(),
             })
             .unwrap_or_else(|| "Yes or no?".to_string())
@@ -2621,23 +2629,6 @@ impl PlayState {
             SOUND_TOGGLE_OFF_MESSAGE
         }
         .to_string();
-    }
-
-    pub fn exit_to_dos_prompt(&mut self, confirm: Option<bool>) -> PlayInputDisposition {
-        match confirm {
-            None => {
-                self.message = "Exit to DOS? Use QY to exit or QN to cancel.".to_string();
-                PlayInputDisposition::Continue
-            }
-            Some(false) => {
-                self.message = "No.".to_string();
-                PlayInputDisposition::Continue
-            }
-            Some(true) => {
-                self.message = "Yes. Exiting to DOS.".to_string();
-                PlayInputDisposition::Quit
-            }
-        }
     }
 
     pub fn typeahead_status_label(&self) -> &'static str {

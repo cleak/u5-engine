@@ -142,6 +142,35 @@
         }
     }
 
+    /// `dungeon-mode.md` Section 10: "`Q` is the ordinary save-game route; the
+    /// "Exit to DOS?" prompt is a Control binding in the mode-local table, not
+    /// a letter." `commands.md` Section 4's `Q` row is the route it takes -
+    /// "Save game. Routes to the save-game handler, which prompts whether to
+    /// save. On `N`, it returns without writing. On `Y`, it writes the save
+    /// files, acknowledges completion, and returns to the caller. This letter
+    /// is not the DOS-terminate path by itself." Section 5.2 fixes the echo at
+    /// exactly `Quit:`, and Section 3 files `Q` under "no action".
+    #[test]
+    fn dungeon_q_takes_the_save_route_not_the_program_exit() {
+        let mut state = dungeon_state(open_dungeon_record(), 0, 1, 1);
+
+        let disposition = handle_play_key_input(&mut state, 'Q', "", Path::new("")).unwrap();
+
+        assert_eq!(disposition, PlayInputDisposition::Continue);
+        assert_eq!(transcript_texts(&state), vec!["Quit:", SAVE_PROMPT_MESSAGE]);
+        assert!(state.message_entries()[0].is_command_echo);
+        assert!(!state.message_entries()[1].is_command_echo);
+        assert_eq!(state.turn, 0);
+        assert!(
+            matches!(
+                state.active_yes_no_prompt.as_ref().map(|session| session.kind),
+                Some(YesNoPromptKind::SaveGame)
+            ),
+            "the dungeon letter must open the save prompt, not the program exit"
+        );
+        assert_ne!(state.message, "Exit to DOS?");
+    }
+
     /// The companion to the keyword case above, across the rest of the
     /// typed-line set. `input.md` Section 8 names the prompts that read a whole
     /// line - "NPC conversations accept a four- to six-character keyword;

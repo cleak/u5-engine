@@ -25045,18 +25045,33 @@ fn dungeon_mode_refuses_world_vehicle_and_entry_letters_without_turn() {
     assert_eq!(state.message, PUSH_NOT_HERE_REFUSAL);
     assert_eq!(state.turn, 0);
 
+    // `dungeon-mode.md` Section 10: `Q` is not one of the refused letters -
+    // "`Q` is the ordinary save-game route; the "Exit to DOS?" prompt is a
+    // Control binding in the mode-local table, not a letter."
     assert!(state.handle_dungeon_key('Q', Path::new("")).unwrap());
     assert!(state.active_yes_no_prompt.is_some());
-    assert_eq!(state.message, "Exit to DOS?");
+    assert_eq!(state.message, SAVE_PROMPT_MESSAGE);
     assert_eq!(state.turn, 0);
 }
 
 #[test]
-fn dungeon_q_exit_prompt_is_separate_from_save_command() {
+fn dungeon_q_is_the_ordinary_save_route() {
+    // `dungeon-mode.md` Section 10: "`Q` is the ordinary save-game route; the
+    // "Exit to DOS?" prompt is a Control binding in the mode-local table, not
+    // a letter."
+    //
+    // `commands.md` Section 4's `Q` row is the route it takes: "Save game.
+    // Routes to the save-game handler, which prompts whether to save. On `N`,
+    // it returns without writing. On `Y`, it writes the save files,
+    // acknowledges completion, and returns to the caller. This letter is not
+    // the DOS-terminate path by itself." Section 3 files it under "no action".
     let dir = debug_game_dir();
     let mut template = saved_game_seed_bytes(33, 0, 1, 1);
     template[SAVE_AVATAR_NAME_OFFSET] = b'A';
     fs::write(dir.join("SAVED.GAM"), &template).unwrap();
+    // The confirmed arm reaches the Q-save staging contract, which reads both
+    // per-plane mirrors.
+    write_empty_ool_mirrors(&dir);
     let mut state = dungeon_state(open_dungeon_record(), 0, 1, 1);
 
     assert_eq!(
@@ -25064,10 +25079,12 @@ fn dungeon_q_exit_prompt_is_separate_from_save_command() {
         PlayInputDisposition::Continue
     );
     assert!(state.active_yes_no_prompt.is_some());
-    assert_eq!(state.message, "Exit to DOS?");
+    assert_eq!(state.message, SAVE_PROMPT_MESSAGE);
+    assert_ne!(state.message, "Exit to DOS?");
     assert_eq!(state.turn, 0);
     assert!(!dir.join("SAVED.OOL").exists());
 
+    // "On `N`, it returns without writing."
     assert_eq!(
         handle_play_key_input(&mut state, 'N', "", &dir).unwrap(),
         PlayInputDisposition::Continue
@@ -25075,15 +25092,17 @@ fn dungeon_q_exit_prompt_is_separate_from_save_command() {
     assert_eq!(state.message, "No.");
     assert_eq!(state.turn, 0);
     assert!(!dir.join("SAVED.OOL").exists());
+    assert_eq!(fs::read(dir.join("SAVED.GAM")).unwrap(), template);
 
+    // "On `Y`, it writes the save files, acknowledges completion, and returns
+    // to the caller" - the letter never leaves the game.
     assert_eq!(
         handle_play_key_input(&mut state, 'Q', "Y", &dir).unwrap(),
-        PlayInputDisposition::Quit
+        PlayInputDisposition::Continue
     );
-    assert_eq!(state.message, "Yes. Exiting to DOS.");
+    assert_eq!(state.message, SAVE_DONE_MESSAGE);
     assert_eq!(state.turn, 0);
-    assert!(!dir.join("SAVED.OOL").exists());
-    assert_eq!(fs::read(dir.join("SAVED.GAM")).unwrap(), template);
+    assert!(dir.join("SAVED.OOL").exists());
     let _ = fs::remove_dir_all(dir);
 }
 
