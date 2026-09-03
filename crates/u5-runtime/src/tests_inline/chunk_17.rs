@@ -850,7 +850,58 @@ Mixed 1 IL charge; stock is 1.");
         );
         assert!(state.active_direction_prompt.is_none());
         assert_eq!(state.turn, 1);
-        assert_eq!(state.message, DIRECTION_PROMPT_LABEL_PASS);
+        // `commands.md` section 5.4: `Space` prints the cancel word on
+        // the open verb line - "A cancelled Look therefore renders as the
+        // verb, the hyphen and the cancel word on one line." Push already
+        // did this; Attack now matches it.
+        assert_eq!(
+            state.message,
+            format!("Attack-{DIRECTION_PROMPT_LABEL_PASS}")
+        );
+    }
+
+    /// `commands.md` section 5.3: for a verb whose echo ends in `-`,
+    /// "the chosen direction's name is appended on the same line", and
+    /// Attack outside dungeons is on that list. Section 5.4 prints the
+    /// direction word as the prompt accepts the key, before the command
+    /// runs, so the completed `Attack-East` line stands above whatever
+    /// the handler prints next.
+    #[test]
+    fn accepted_attack_direction_completes_the_open_verb_echo_before_the_handler_runs() {
+        let mut state = world_state(open_world_grid(), 5, 5);
+
+        assert_eq!(
+            handle_play_key_input(&mut state, 'A', "", Path::new("")).unwrap(),
+            PlayInputDisposition::Continue
+        );
+        assert_eq!(
+            state
+                .message_entries()
+                .iter()
+                .filter(|entry| entry.is_command_echo)
+                .map(|entry| entry.text.as_str())
+                .last(),
+            Some("Attack-")
+        );
+
+        assert_eq!(
+            handle_play_key_input(&mut state, char::from(INPUT_CODE_EAST), "", Path::new(""))
+                .unwrap(),
+            PlayInputDisposition::Continue
+        );
+
+        let entries = state.message_entries();
+        let echo_index = entries
+            .iter()
+            .rposition(|entry| entry.is_command_echo)
+            .expect("the Attack echo is on the transcript");
+        assert_eq!(entries[echo_index].text, "Attack-East");
+        assert!(
+            entries[echo_index + 1..]
+                .iter()
+                .all(|entry| !entry.is_command_echo),
+            "the handler's own lines follow the completed echo"
+        );
     }
 
     #[test]

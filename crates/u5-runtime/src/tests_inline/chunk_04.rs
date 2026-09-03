@@ -309,7 +309,7 @@ fn world_movement_into_combat_class_object_selects_brit_cbt_arena() {
     assert_eq!(state.turn, 1);
     assert!(state.combat_active);
     assert_eq!(state.pending_combat_terrain_trigger_slot, Some(1));
-    assert_eq!(state.message, COMBAT_BANNER);
+    assert_eq!(state.message, combat_banner_line());
     // `combat.md §5`: monster descriptors start at index six, but their
     // active-object records "continue from the first record left free by
     // the seated party", so "the descriptor's active-object link byte is

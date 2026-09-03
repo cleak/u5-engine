@@ -1448,6 +1448,14 @@ impl PlayState {
                     }
                     return Ok(Some(MoveOutcome::PromptDeclined));
                 }
+                // `commands.md §5.4`: `Space` prints `Pass` on the open
+                // verb line - "A cancelled Look therefore renders as the
+                // verb, the hyphen and the cancel word on one line."
+                if matches!(session.kind, DirectionPromptKind::Attack) {
+                    let _ =
+                        self.complete_open_direction_echo("Attack-", DIRECTION_PROMPT_LABEL_PASS);
+                    return Ok(Some(MoveOutcome::PromptDeclined));
+                }
                 self.message = DIRECTION_PROMPT_LABEL_PASS.to_string();
                 return Ok(Some(MoveOutcome::PromptDeclined));
             }

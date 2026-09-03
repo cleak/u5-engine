@@ -3040,6 +3040,24 @@ pub const fn combat_to_hit_score(attacker_rating: u8, defender_rating: u8) -> i1
     ((attacker_rating as i16 - defender_rating as i16) + COMBAT_TO_HIT_BIAS) / 2
 }
 
+/// **Held pending a spec answer - do not flip this comparison alone.**
+///
+/// `combat.md §11`, restated in `RETRACTIONS.md` R232, publishes the
+/// opposite direction to the one below: the hit is accepted when the
+/// drawn value is at or above the score, so the score reads as a
+/// difficulty number. The same retraction publishes, in the same breath,
+/// that "the attacker/defender labelling of the two operands feeding the
+/// score is now suspect and was not re-derived", and that the draw's own
+/// range is unverified.
+///
+/// Adopting the published direction while keeping this engine's own
+/// unverified operand selection was tried and backed out: with the
+/// attacker's rating in the minuend it makes a *low* rating the accurate
+/// one, so Strength, armour and every monster's attack cap all work
+/// backwards. Half of R232 is a worse model than neither half, so the
+/// engine keeps its existing comparison until the operand pair is
+/// published; the play-test's under-damaging hostile melee (defect 7) is
+/// blocked on that answer, filed as `cleak/u5-spec#183`.
 pub const fn resolve_combat_hit(attacker_rating: u8, defender_rating: u8, roll: u8) -> bool {
     combat_to_hit_score(attacker_rating, defender_rating) > roll as i16
 }

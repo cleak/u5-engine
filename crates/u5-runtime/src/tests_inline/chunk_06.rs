@@ -2770,7 +2770,7 @@
             .unwrap();
 
         assert!(state.combat_active);
-        assert_eq!(state.message, COMBAT_BANNER);
+        assert_eq!(state.message, combat_banner_line());
         assert_eq!(
             state.combat_actors[COMBAT_PARTY_ACTOR_SLOTS].owner_target_class,
             16

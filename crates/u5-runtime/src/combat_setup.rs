@@ -76,6 +76,49 @@ pub fn outdoor_combat_banner_name(type_byte: u8) -> Option<&'static str> {
         .map(|stats| stats.name)
 }
 
+/// `encounters.md §4`: the encounter's base class id "is what drives the
+/// plural encounter banner", so combat entry prints one plural group
+/// name above the conflict banner.
+///
+/// **The plural encounter-banner table itself is unpublished.**
+/// `catalogs/monster-bestiary.md §2` says the shipped name data is "two
+/// parallel tables" and that the "**plural** encounter-banner table"
+/// exists, but the catalog publishes only the *singular* rows. The one
+/// plural string this project has seen is the bat encounter's `BATS`,
+/// read cell by cell out of a capture of the original's own combat entry
+/// and matched against the shipped `IBM.CH`. Nothing published states the
+/// relation between the two tables, so no rule is derived from that one
+/// sample: every class the capture has not shown prints no name line
+/// rather than an invented one. The forty-eight-row plural table is
+/// pending publication as `cleak/u5-spec#185`.
+///
+/// *runtime observation, spec silent.*
+pub fn combat_class_plural_banner_name(class: u8) -> Option<&'static str> {
+    match class {
+        // Bat. Observed in the original at combat entry, one blank row
+        // under the direction echo and one above the conflict banner.
+        21 => Some("BATS"),
+        _ => None,
+    }
+}
+
+/// The plural encounter-banner line for one outdoor hostile sprite byte.
+///
+/// `encounters.md §4` says the ship family's "banner for this case prints
+/// a fixed pirate plural literal rather than the class-1 plural name",
+/// and `catalogs/monster-bestiary.md §2` says the plural table "does name
+/// class 8, and that banner is where the name "Pirate" used for row 8
+/// above comes from". Neither publishes the literal's own spelling, and
+/// it has not been observed, so this path prints no name line rather than
+/// guessing between the singular and plural spellings. Pending
+/// `cleak/u5-spec#185`.
+pub fn outdoor_combat_plural_banner_name(type_byte: u8) -> Option<&'static str> {
+    if outdoor_type_is_pirate(type_byte) {
+        return None;
+    }
+    outdoor_combat_class_id(type_byte).and_then(combat_class_plural_banner_name)
+}
+
 /// `encounters.md §4` water predicate before aquatic-class forcing.
 pub const fn outdoor_combat_terrain_is_water(terrain: u8) -> bool {
     terrain < 4 || ((terrain >= 0x60 && terrain <= 0x6f) && terrain != 0x6a && terrain != 0x6b)
@@ -300,6 +343,33 @@ pub const COMBAT_BANNER: &str = "CONFLICT";
 /// `The Sceptre is reclaimed!` followed by one newline. There is no
 /// terminating period and no leading blank line."
 pub const SCEPTRE_RECLAIMED_LINE: &str = "The Sceptre is reclaimed!";
+
+/// The character the original's combat banner flanks `CONFLICT` with.
+///
+/// The banner row was decoded cell by cell out of the original's own
+/// combat-entry capture and each cell matched against the shipped
+/// `IBM.CH`: the row is exactly `*** CONFLICT ***`, and the flank cell's
+/// eight-by-eight bitmap matches **one** slot of the shipped font,
+/// `0x2A` - the ASCII asterisk, which this font draws as a five-pixel
+/// pointed diamond. `formats/font-ch.md §3` gives every glyph an
+/// "eight-by-eight pixel cell" and §4 says "the printable ASCII region
+/// maps directly to matching glyph positions", which is what makes that
+/// unique bitmap match an identification of the *character* rather than
+/// of a picture.
+///
+/// *runtime observation, spec silent* - `combat.md §5` publishes the
+/// banner word but not its decoration.
+pub const COMBAT_BANNER_FLANK_GLYPH: char = '*';
+
+/// The complete combat banner line as the original prints it: three
+/// flank asterisks, a space, `CONFLICT`, a space, three more asterisks -
+/// exactly the sixteen cells of the message window's row.
+///
+/// *runtime observation, spec silent* (see [`COMBAT_BANNER_FLANK_GLYPH`]).
+pub fn combat_banner_line() -> String {
+    let flank: String = std::iter::repeat_n(COMBAT_BANNER_FLANK_GLYPH, 3).collect();
+    format!("{flank} {COMBAT_BANNER} {flank}")
+}
 
 /// Combat placements initialise byte seven of the renderer-facing active
 /// object to the all-ones "no linked descriptor" marker. The parallel combat
@@ -1372,14 +1442,42 @@ impl PlayState {
         let first_free_record = first_free_combat_active_object_record(&active_objects)
             .unwrap_or(COMBAT_PARTY_ACTOR_SLOTS);
 
-        // Step 3: the combat banner, before any monster is placed.
+        // Step 3: the encounter-name line and the combat banner, before
+        // any monster is placed. `combat.md §5.3` groups them as one
+        // draw-free step - "Conflict banner, arena-record load,
+        // encounter-name print" - and `encounters.md §4` says the base
+        // class id "drives the plural encounter banner". The name line is
+        // printed only for a class whose plural string is known; see
+        // [`combat_class_plural_banner_name`], which never invents one.
+        //
         // `text-output.md §11` / `combat.md §5`: the banner is produced
         // by setup and every production caller of this entry point
         // overwrites the message slot with its own diagnostic before the
-        // next turn-composition flush, so the banner has to be emitted
-        // into the transcript at the moment it is produced rather than
+        // next turn-composition flush, so these lines have to be emitted
+        // into the transcript at the moment they are produced rather than
         // parked in the slot.
-        self.emit_message_line(COMBAT_BANNER);
+        //
+        // The blank row under the direction echo is `text-output.md
+        // §10.4`'s derived blank: the completed verb echo leaves the
+        // cursor at column 0 of a fresh row and "the next cycle's leading
+        // line feed advances again — producing exactly one blank row
+        // after each completed command turn". This transcript is
+        // line-oriented rather than cell-based, so that derived row is
+        // materialised as an explicit blank entry.
+        //
+        // The second blank row - between the encounter name and the
+        // banner - and the print order, name above banner, are *runtime
+        // observation, spec silent*: they were read off a capture of the
+        // original's own combat entry, and `combat.md §5.3` lists banner
+        // and encounter-name print in one unordered row.
+        self.push_explicit_blank_message_entry();
+        if let Some(plural) = outdoor_combat_plural_banner_name(object.type_byte)
+            .or_else(|| combat_class_plural_banner_name(base_class.class))
+        {
+            self.emit_centered_message_line(plural);
+            self.push_explicit_blank_message_entry();
+        }
+        self.emit_centered_message_line(combat_banner_line());
 
         // `encounters.md §4` Shadow Lord branch, in the published order:
         //
@@ -1766,6 +1864,230 @@ mod combat_setup_batch_tests {
         }
     }
 
+    /// A `batch_arena_record` variant with in-arena party seats, so the
+    /// seated members can be looked up through the renderer.
+    fn seated_arena_record(seats: &[(u8, u8)]) -> Vec<u8> {
+        let mut record = batch_arena_record();
+        for (slot, (x, y)) in seats.iter().copied().enumerate() {
+            record[3 * COMBAT_ARENA_ROW_STRIDE + 11 + slot] = x;
+            record[3 * COMBAT_ARENA_ROW_STRIDE + 17 + slot] = y;
+        }
+        record
+    }
+
+    /// `combat.md §5` "Seating the party": every party slot that is not
+    /// `'D'` is "placed at arena `(X, Y)` taken from the selected arena's
+    /// party entry coordinate slices, indexed by *party slot*", and §5.4
+    /// adds that placement runs no terrain validation, so no seat is ever
+    /// dropped or relocated. A play-test reported only two of three party
+    /// members reaching the arena; this pins one rendered sprite per
+    /// living member, each on its own authored seat.
+    #[test]
+    fn every_living_party_member_reaches_its_own_authored_arena_seat() {
+        // The seat rows the shipped forest/hill outdoor arenas use.
+        let seats = [(5u8, 8u8), (6, 9), (4, 9), (5, 10), (7, 10), (3, 10)];
+        let (mut state, dir) = batch_combat_state(&[b'G', b'G', b'G']);
+        fs::write(
+            dir.join(BRIT_CBT_FILE),
+            seated_arena_record(&seats).repeat(BRIT_CBT_RECORDS),
+        )
+        .unwrap();
+
+        state
+            .enter_terrain_combat_from_world_object(&dir, WorldPlane::Britannia, 1, batch_trigger())
+            .unwrap();
+
+        for (roster_slot, (x, y)) in seats.iter().copied().take(3).enumerate() {
+            let descriptor = state
+                .combat_actors
+                .iter()
+                .find(|actor| {
+                    actor.flags & COMBAT_ACTOR_FLAG_SELECTABLE_80 != 0
+                        && usize::from(actor.owner_target_class) == roster_slot
+                })
+                .copied()
+                .unwrap_or_else(|| panic!("roster slot {roster_slot} has no party descriptor"));
+            assert_eq!(
+                (descriptor.x, descriptor.y),
+                (x, y),
+                "roster slot {roster_slot} seat"
+            );
+            assert_eq!(
+                state.combat_render_actor_byte_at(usize::from(x), usize::from(y)),
+                Some(combat_party_actor_byte(state.party[roster_slot].class_byte)),
+                "roster slot {roster_slot} must render on its own seat"
+            );
+        }
+
+        let rendered_party_cells = (0..COMBAT_ARENA_SIDE)
+            .flat_map(|y| (0..COMBAT_ARENA_SIDE).map(move |x| (x, y)))
+            .filter(|(x, y)| {
+                state
+                    .combat_render_actor_byte_at(*x, *y)
+                    .is_some_and(|byte| byte & 0xf0 == 0x40)
+            })
+            .count();
+        assert_eq!(rendered_party_cells, 3);
+        let _ = fs::remove_dir_all(dir);
+    }
+
+    /// `active-objects.md §9`: the party seating writes "arena
+    /// coordinates over the low records, record zero included", and
+    /// "record zero is overwritten because it is the first record the
+    /// party seating allocates, not because combat reserves a player
+    /// slot"; the framer restores the world value on combat exit. §5
+    /// scopes the world compositor's slot-zero refresh to "every
+    /// **world** frame", so nothing may refresh record zero from the
+    /// world globals while combat is live. This is play-test defect 18:
+    /// the refresh used to fire on the first combat turn and erase the
+    /// first party member's arena tile and coordinates.
+    #[test]
+    fn a_combat_turn_does_not_refresh_record_zero_from_the_world_globals() {
+        let seats = [(5u8, 8u8), (6, 9), (4, 9), (5, 10), (7, 10), (3, 10)];
+        let (mut state, dir) = batch_combat_state(&[b'G', b'G', b'G']);
+        fs::write(
+            dir.join(BRIT_CBT_FILE),
+            seated_arena_record(&seats).repeat(BRIT_CBT_RECORDS),
+        )
+        .unwrap();
+
+        state
+            .enter_terrain_combat_from_world_object(&dir, WorldPlane::Britannia, 1, batch_trigger())
+            .unwrap();
+        let seated_record_zero = state.active_objects[0];
+        assert_eq!(
+            (seated_record_zero.x, seated_record_zero.y),
+            (usize::from(seats[0].0), usize::from(seats[0].1))
+        );
+
+        state.sync_player_object();
+
+        assert_eq!(state.active_objects[0], seated_record_zero);
+        for (roster_slot, (x, y)) in seats.iter().copied().take(3).enumerate() {
+            assert_eq!(
+                state.combat_render_actor_byte_at(usize::from(x), usize::from(y)),
+                Some(combat_party_actor_byte(state.party[roster_slot].class_byte)),
+                "roster slot {roster_slot} must still render on its own seat"
+            );
+        }
+        let _ = fs::remove_dir_all(dir);
+    }
+
+    /// `encounters.md §4`: the base class id "drives the plural encounter
+    /// banner", and `combat.md §5.3` groups the encounter-name print with
+    /// the banner. The plural table is unpublished, so a class whose
+    /// plural string has not been observed prints the banner alone rather
+    /// than an invented name; the trigger here is an Orc (class 32), one
+    /// of those.
+    ///
+    /// The blank row is `text-output.md §10.4`'s derived blank and the
+    /// centring is `text-output.md §3`'s centre flag.
+    #[test]
+    fn combat_entry_prints_the_conflict_banner_under_one_blank_row() {
+        let (mut state, dir) = batch_combat_state(&[b'G']);
+
+        state
+            .enter_terrain_combat_from_world_object(&dir, WorldPlane::Britannia, 1, batch_trigger())
+            .unwrap();
+
+        let tail: Vec<(String, bool, bool)> = state
+            .message_entries()
+            .iter()
+            .rev()
+            .take(2)
+            .rev()
+            .map(|entry| (entry.text.clone(), entry.centered, entry.explicit_blank))
+            .collect();
+        assert_eq!(
+            tail,
+            vec![
+                (String::new(), false, true),
+                (combat_banner_line(), true, false),
+            ]
+        );
+        assert!(
+            state
+                .message_entries()
+                .iter()
+                .all(|entry| entry.text != "ORCS"),
+            "no plural name may be synthesised for an unpublished class"
+        );
+        let _ = fs::remove_dir_all(dir);
+    }
+
+    /// The one plural encounter-banner string this project has observed:
+    /// the bat encounter prints `BATS` centred one blank row above the
+    /// banner. Read cell by cell out of a capture of the original's own
+    /// combat entry and matched against the shipped `IBM.CH`.
+    #[test]
+    fn a_bat_encounter_prints_the_observed_plural_group_name_above_the_banner() {
+        let (mut state, dir) = batch_combat_state(&[b'G']);
+        let mut trigger = batch_trigger();
+        // `encounters.md §4`: `class = (sprite_byte - 0x40) / 4`, so
+        // `0x94` is class 21, Bat.
+        trigger.type_byte = 0x94;
+        trigger.tile = 0x94;
+
+        state
+            .enter_terrain_combat_from_world_object(&dir, WorldPlane::Britannia, 1, trigger)
+            .unwrap();
+
+        let tail: Vec<(String, bool, bool)> = state
+            .message_entries()
+            .iter()
+            .rev()
+            .take(4)
+            .rev()
+            .map(|entry| (entry.text.clone(), entry.centered, entry.explicit_blank))
+            .collect();
+        assert_eq!(
+            tail,
+            vec![
+                (String::new(), false, true),
+                ("BATS".to_string(), true, false),
+                (String::new(), false, true),
+                (combat_banner_line(), true, false),
+            ]
+        );
+        let _ = fs::remove_dir_all(dir);
+    }
+
+    /// The plural encounter-banner table is unpublished
+    /// (`catalogs/monster-bestiary.md §2` names only that it exists), so
+    /// exactly one class - the observed bat - has a name here, and no
+    /// class name is ever transformed into one. In particular the engine
+    /// catalog's own descriptive labels, such as class 7's
+    /// "Bard (second row)", must never reach the screen.
+    #[test]
+    fn only_the_observed_plural_encounter_banner_name_is_published_to_the_screen() {
+        assert_eq!(outdoor_combat_plural_banner_name(0x94), Some("BATS"));
+        assert_eq!(combat_class_plural_banner_name(21), Some("BATS"));
+        for class in 0..=47u8 {
+            if class == 21 {
+                continue;
+            }
+            assert_eq!(
+                combat_class_plural_banner_name(class),
+                None,
+                "class {class} has no published plural banner name"
+            );
+        }
+        // `encounters.md §4`'s ship family: the fixed pirate plural
+        // literal exists but its spelling is unpublished and unobserved.
+        assert_eq!(outdoor_combat_plural_banner_name(0x2c), None);
+    }
+
+    /// The combat banner row of the original's capture decodes, cell by
+    /// cell against the shipped `IBM.CH`, to sixteen characters:
+    /// `*** CONFLICT ***`, the flank cell matching font slot `0x2A`
+    /// uniquely.
+    #[test]
+    fn combat_banner_line_is_the_sixteen_cell_asterisk_flanked_literal() {
+        assert_eq!(combat_banner_line(), "*** CONFLICT ***");
+        assert_eq!(combat_banner_line().len(), 16);
+        assert_eq!(COMBAT_BANNER_FLANK_GLYPH, '*');
+    }
+
     /// `combat.md §5`: "A short combat banner ("CONFLICT") is printed at
     /// the start of setup, before any monsters are placed." The banner is
     /// a produced line, not a parked slot value: every production caller
@@ -1787,7 +2109,7 @@ mod combat_setup_batch_tests {
             state
                 .message_entries()
                 .iter()
-                .any(|entry| entry.text == COMBAT_BANNER),
+                .any(|entry| entry.text == combat_banner_line()),
             "combat banner missing from transcript: {:?}",
             state
                 .message_entries()
