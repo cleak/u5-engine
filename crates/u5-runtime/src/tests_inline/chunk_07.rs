@@ -621,7 +621,7 @@ fn potion_combat_and_white_visibility_effects_use_scene_gates() {
     );
     assert_eq!(world.potion_stock[POTION_WHITE_INDEX], 0);
     assert!(!world.visibility_dirty);
-    let sweep = world.white_potion_sweep.expect("White sweep should start");
+    let sweep = world.visibility_sweep.expect("White sweep should start");
     assert_eq!(sweep.frames_remaining, POTION_WHITE_SWEEP_FRAMES);
     assert_eq!(sweep.pause_bios_ticks_per_frame, 1);
     assert_eq!((sweep.center_x, sweep.center_y), (2, 1));

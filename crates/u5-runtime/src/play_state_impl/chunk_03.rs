@@ -3338,7 +3338,18 @@ impl PlayState {
         });
 
         self.advance_turn();
-        let _ = self.activate_x_ray_view_overlay();
+        // `systems/magic.md §8`: "X-Ray (*Wis An Ylem*) is one of the two
+        // callers of the shared visibility sweep — the other is the White
+        // potion — and that sweep is a full reveal of the whole eleven-by-
+        // eleven viewport window straight from the map, ignoring line of
+        // sight, followed by twenty repaint frames."
+        // `catalogs/item-list.md §7.2` adds that the sweep branch "does not
+        // ... enter the modal View overlay", so X-Ray reveals the live
+        // viewport rather than opening the 32x32 class map.
+        // R327: an engine that implemented the producer's negative-light
+        // branch as dead compatibility code "has no working White potion and
+        // no working X-Ray".
+        self.start_visibility_sweep();
         self.message.clear();
         MoveOutcome::Observed
     }
@@ -3426,6 +3437,14 @@ impl PlayState {
         format!("{}:\n{}", overlay.title, overlay.text_map)
     }
 
+    /// Diagnostic / visual-frame-suite entry point only.
+    ///
+    /// X-Ray itself no longer routes here: `systems/magic.md §8` makes the
+    /// spell the second caller of the shared visibility sweep, and
+    /// `catalogs/item-list.md §7.2` says that branch does not enter the modal
+    /// View overlay. `systems/view.md §4` still describes an "X-Ray-style"
+    /// palette bank for the shared 32x32 local raster, which is what this
+    /// renders, so the mode is kept for the frame galleries.
     pub fn activate_x_ray_view_overlay(&mut self) -> String {
         if matches!(self.area, Area::Dungeon { .. }) {
             return "Not here!".to_string();

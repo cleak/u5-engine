@@ -1680,7 +1680,7 @@ impl PlayState {
                     self.message = format!("{prefix}: No noticeable effect.");
                     return MoveOutcome::Blocked;
                 }
-                self.start_white_potion_sweep();
+                self.start_visibility_sweep();
                 self.advance_turn();
                 self.message = format!("{prefix}: Visibility sweep.");
                 MoveOutcome::Observed
@@ -1783,18 +1783,38 @@ impl PlayState {
         true
     }
 
-    pub fn start_white_potion_sweep(&mut self) {
+    /// `catalogs/item-list.md §7.2` (White visibility repaint sequence) and
+    /// `systems/magic.md §8` (X-Ray, *Wis An Ylem*): the shared spell/potion
+    /// visibility sweep. It "invokes the ordinary visibility producer exactly
+    /// once, centred on the party's local viewport position — and it invokes
+    /// it in the producer's **no-line-of-sight mode**, by passing the negative
+    /// sentinel in the light argument". Every one of the 121 cells of the
+    /// eleven-by-eleven window is refilled straight from the map: no distance
+    /// test, no propagation frontier, no blocker rule. "A wall does not stop
+    /// the reveal, and a cell in the far corner is revealed exactly as readily
+    /// as the party's own."
+    ///
+    /// **R318.** The withdrawn text had this call pass the value `32` as an
+    /// inclusive squared-Euclidean gate admitting 101 of the 121 cells, with a
+    /// blocker inside the gate visible but stopping propagation past itself.
+    /// That argument is never read by the producer.
+    ///
+    /// "The normal map reader supplies tiles, so overworld coordinate wrapping
+    /// and named-location bounds remain exactly their ordinary rules; White
+    /// adds no scan, clipping, or wrapping rule of its own" — the window-bound
+    /// clipping stays in the render grid, which is the map reader here.
+    pub fn start_visibility_sweep(&mut self) {
         let wrap_world = matches!(self.area, Area::World { .. });
-        let visible = self.surface_visibility_carve_with_light_threshold(
+        let visible = self.surface_visibility_produce(
             self.player.x as isize,
             self.player.y as isize,
             VIEWPORT_PLAYER_ROW,
-            u32::from(POTION_WHITE_VISIBILITY_THRESHOLD),
+            VISIBILITY_NO_LINE_OF_SIGHT_LIGHT,
             wrap_world,
         );
         let mut visible_cells = [false; VIEWPORT_SIDE * VIEWPORT_SIDE];
         visible_cells.copy_from_slice(&visible);
-        self.white_potion_sweep = Some(WhitePotionSweep {
+        self.visibility_sweep = Some(VisibilitySweep {
             frames_remaining: POTION_WHITE_SWEEP_FRAMES,
             pause_bios_ticks_per_frame: POTION_WHITE_SWEEP_BIOS_TICKS_PER_FRAME,
             center_x: self.player.x,

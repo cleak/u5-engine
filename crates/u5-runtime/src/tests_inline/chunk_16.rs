@@ -1066,8 +1066,19 @@ BRITANNIA 11 21
         assert!(state.active_view_overlay.is_none());
     }
 
+    /// `systems/magic.md §8`: X-Ray (*Wis An Ylem*) "is one of the two callers
+    /// of the shared visibility sweep — the other is the White potion".
+    /// `catalogs/item-list.md §7.2` says that branch "does not spend a gem,
+    /// enter the modal View overlay, set an active-effect tag, or persist a
+    /// detector flag", and reveals "the **whole** eleven-by-eleven viewport
+    /// window straight from the map".
+    ///
+    /// R327 replaces the previous body of this test, which asserted the modal
+    /// 32x32 class-map overlay: an engine that implemented the producer's
+    /// negative-light branch as dead compatibility code "has no working White
+    /// potion and no working X-Ray".
     #[test]
-    fn cast_x_ray_reports_surface_view_without_requiring_gems() {
+    fn cast_x_ray_runs_the_shared_visibility_sweep_without_requiring_gems() {
         let mut state = test_state(open_grid(), 5, 5);
         state.gems = 0;
         state.spell_charges[X_RAY_SPELL_INDEX] = 1;
@@ -1085,14 +1096,20 @@ BRITANNIA 11 21
         assert_eq!(state.turn, 1);
         assert_eq!(state.clock, GameClock::new(12, 1).unwrap());
         assert!(state.message.is_empty());
-        let overlay = state.active_view_overlay.as_ref().unwrap();
-        assert_eq!(
-            overlay.title,
-            "X-Ray view of CASTLE:0 floor 0 (spell; 32x32 class map)"
+        assert!(
+            state.active_view_overlay.is_none(),
+            "the sweep branch does not enter the modal View overlay"
         );
-        assert_eq!(overlay.kind, ViewOverlayKind::Surface);
-        assert_eq!(overlay.mode, ViewOverlayMode::XRaySpell);
-        assert!(overlay.text_map.contains('@'));
+        let sweep = state
+            .visibility_sweep
+            .expect("X-Ray starts the shared visibility sweep");
+        assert_eq!(sweep.frames_remaining, POTION_WHITE_SWEEP_FRAMES);
+        assert_eq!(sweep.pause_bios_ticks_per_frame, 1);
+        assert_eq!((sweep.center_x, sweep.center_y), (5, 5));
+        assert_eq!(
+            sweep.visible_cells.iter().filter(|cell| **cell).count(),
+            VIEWPORT_SIDE * VIEWPORT_SIDE
+        );
     }
 
     #[test]

@@ -3667,22 +3667,50 @@
         );
     }
 
+    /// `catalogs/item-list.md §7.2`: the sweep "invokes the ordinary
+    /// visibility producer exactly once ... in the producer's
+    /// **no-line-of-sight mode**", which "refills **every one of the 121
+    /// cells** of the eleven-by-eleven window directly from the map. There is
+    /// no distance test, no propagation frontier, and no blocker rule on this
+    /// branch: a wall does not stop the reveal, and a cell in the far corner
+    /// is revealed exactly as readily as the party's own."
+    ///
+    /// R318 withdrew the earlier assertion of this test — that "threshold 32
+    /// admits exactly 101 cells" and that the window corners stay dark.
     #[test]
-    fn white_potion_sweep_freezes_visibility_without_drawing_an_overlay() {
-        let mut state = test_state(open_grid(), 10, 10);
+    fn visibility_sweep_reveals_all_121_cells_and_then_freezes_them() {
+        // A tile the synthetic atlas paints in a colour the open-ground fill
+        // and the fog sentinel do not share.
+        const CORNER_MARKER_TILE: u8 = 0x23;
+
+        // A closed ring of sight-blocking wall (`visibility.md §6` tile 0x09)
+        // one cell out from the party, and a marker tile in the window's
+        // north-west corner at squared distance 50 - the farthest any cell
+        // gets, and outside every ordinary lighting threshold.
+        let mut grid = open_grid();
+        for dy in -1isize..=1 {
+            for dx in -1isize..=1 {
+                if dx == 0 && dy == 0 {
+                    continue;
+                }
+                grid[(10 + dy) as usize * 32 + (10 + dx) as usize] = 0x09;
+            }
+        }
+        grid[5 * 32 + 5] = CORNER_MARKER_TILE;
+        let mut state = test_state(grid, 10, 10);
         state.visibility_dirty = false;
-        state.start_white_potion_sweep();
-        let initial = state.white_potion_sweep.unwrap();
+        state.start_visibility_sweep();
+        let initial = state.visibility_sweep.unwrap();
         assert_eq!(
             initial.visible_cells.iter().filter(|visible| **visible).count(),
-            101,
-            "threshold 32 admits exactly 101 cells before blockers/local light"
+            VIEWPORT_SIDE * VIEWPORT_SIDE,
+            "the full-fill branch reveals all 121 cells, corners included"
         );
         let animation_before_idle_tick = state.animation;
         state.advance_visual_tick();
         assert_eq!(
             state.animation, animation_before_idle_tick,
-            "the ordinary visual pump must not double-advance a White repaint"
+            "the ordinary visual pump must not double-advance a sweep repaint"
         );
         let atlas = synthetic_tile_atlas(TileGraphicsDepth::Ega16);
 
@@ -3690,13 +3718,14 @@
 
         assert_ne!(first.pixel(24, 24), Some(15));
         assert_eq!(
-            state.white_potion_sweep.map(|sweep| sweep.frames_remaining),
+            state.visibility_sweep.map(|sweep| sweep.frames_remaining),
             Some(POTION_WHITE_SWEEP_FRAMES - 1)
         );
         assert!(!state.visibility_dirty);
 
-        // Rendering at the normal 11-by-11 radius uses the frozen field.
-        // Distance squared 32 is included; a corner at 50 is excluded.
+        // Rendering at the normal 11-by-11 radius uses the frozen field. The
+        // centre is the party and the corner - squared distance 50, outside
+        // every ordinary threshold - is now painted terrain, not fog.
         let full = state
             .render_top_down_frame(VIEWPORT_PLAYER_ROW, &atlas)
             .unwrap()
@@ -3705,25 +3734,32 @@
             full.pixel(5 * 16 + 8, 5 * 16 + 8),
             Some((PLAYER_SPRITE_TILE as u8) % 16)
         );
-        assert_eq!(full.pixel(8, 8), Some(0));
+        assert_eq!(
+            full.pixel(8, 8),
+            Some(CORNER_MARKER_TILE % 16),
+            "a wall does not stop the reveal and the corner is revealed              exactly as readily as the party's own cell"
+        );
 
         // Ambient changes cannot recompute the field during the blocking loop.
         state.ambient_light = 0;
-        let frozen = state.white_potion_sweep.unwrap().visible_cells;
-        while state.white_potion_sweep.is_some() {
+        let frozen = state.visibility_sweep.unwrap().visible_cells;
+        while state.visibility_sweep.is_some() {
             state
                 .render_top_down_frame(VIEWPORT_PLAYER_ROW, &atlas)
                 .unwrap()
                 .unwrap();
-            if let Some(sweep) = state.white_potion_sweep {
+            if let Some(sweep) = state.visibility_sweep {
                 assert_eq!(sweep.visible_cells, frozen);
             }
         }
         assert!(
             !state.visibility_dirty,
-            "White does not itself dirty the visibility field"
+            "the sweep does not itself dirty the visibility field"
         );
 
+        // "One ordinary idle world redraw runs afterward ... that redraw
+        // follows the normal dirty-versus-cheap redraw decision", so the
+        // reveal does not survive the sweep at the ambient threshold.
         let idle = state
             .render_top_down_frame(VIEWPORT_PLAYER_ROW, &atlas)
             .unwrap()

@@ -511,9 +511,13 @@ by the clean `town_locks.tsv` sidecar. `C1IQW` casts the narrow Peer hook in
 dungeon, indoor, or overworld mode, spending spell resources for the same
 clean modal map overlay as gem view without requiring or consuming a
 gem.
-`C1AWY` casts the narrow X-Ray hook in indoor or overworld mode, using the
-same clean modal surface map overlay after the saved charge/MP/level
-gates succeed.
+`C1AWY` casts X-Ray (*Wis An Ylem*) in indoor or overworld mode. Per
+`systems/magic.md §8` it is the second caller of the shared spell/potion
+visibility sweep — the other is the White potion — so after the saved
+charge/MP/level gates succeed it reveals all 121 cells of the eleven-by-eleven
+window straight from the map, through walls and into the corners, and holds
+that field through twenty repaint frames. It does not open the modal surface
+map overlay.
 `C1PRV2` casts the narrow Gate Travel hook from party slot 1 to saved Moonstone
 phase 2 in dungeon, indoor, and overworld play states; it refuses shipboard
 casting before spending resources, consumes the saved spell charge/MP/level

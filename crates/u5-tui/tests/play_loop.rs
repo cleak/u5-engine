@@ -57,12 +57,12 @@ fn text_only_terminal_frame_completes_blocking_potion_presentations() {
     let turn = state.turn;
     let clock = state.clock;
     state.pending_potion_flash = potion_flash_playback(POTION_WHITE_INDEX);
-    state.start_white_potion_sweep();
+    state.start_visibility_sweep();
 
     print_play_frame(&mut state, None).unwrap();
 
     assert_eq!(state.pending_potion_flash, None);
-    assert_eq!(state.white_potion_sweep, None);
+    assert_eq!(state.visibility_sweep, None);
     assert_eq!(
         state.animation.frame,
         POTION_WHITE_SWEEP_FRAMES % STATIC_TILE_ANIMATION_PERIOD_TICKS
@@ -76,13 +76,13 @@ fn raster_terminal_frame_runs_every_white_repaint_through_the_compositor() {
     let mut state = test_state(open_grid(), 10, 10);
     let atlas = synthetic_tile_atlas(TileGraphicsDepth::Ega16);
     state.pending_potion_flash = potion_flash_playback(POTION_WHITE_INDEX);
-    state.start_white_potion_sweep();
+    state.start_visibility_sweep();
     state.visibility_dirty = true;
 
     complete_headless_blocking_presentations(&mut state, Some(&atlas)).unwrap();
 
     assert_eq!(state.pending_potion_flash, None);
-    assert_eq!(state.white_potion_sweep, None);
+    assert_eq!(state.visibility_sweep, None);
     assert!(!state.visibility_dirty);
     assert_eq!(
         state.animation.frame,
@@ -1009,7 +1009,7 @@ fn route_smoke_cases_cover_representative_modes() {
     );
     assert!(cases.iter().any(|case| case.name == "castle-view-overlay"));
     assert!(cases.iter().any(|case| case.name == "castle-peer-overlay"));
-    assert!(cases.iter().any(|case| case.name == "castle-x-ray-overlay"));
+    assert!(cases.iter().any(|case| case.name == "castle-x-ray-sweep"));
     assert!(
         cases
             .iter()

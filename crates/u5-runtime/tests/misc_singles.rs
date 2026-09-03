@@ -178,7 +178,10 @@ fn ship_drift_moves_over(wind: WindState, frame_phase: u8, turns: usize) -> usiz
     let mut moves = 0;
     for _ in 0..turns {
         let before = (state.active_objects[1].x, state.active_objects[1].y);
-        state.animate_active_objects();
+        // `active-objects.md §8` (R316): the wind cadence for ship-like frames
+        // is the *outdoor per-turn walker's*, not the animator's. The animator
+        // "never writes a slot's column or row".
+        state.advance_outdoor_active_objects();
         let after = (state.active_objects[1].x, state.active_objects[1].y);
         if before != after {
             moves += 1;
@@ -232,7 +235,7 @@ fn active_ship_cadence_counter_lives_in_the_object_slot() {
             >> ACTIVE_SHIP_CADENCE_PHASE_SHIFT
     };
 
-    state.animate_active_objects();
+    state.advance_outdoor_active_objects();
     assert_eq!(
         state.active_objects[1].phase & 0xf0,
         0x00,
@@ -245,11 +248,11 @@ fn active_ship_cadence_counter_lives_in_the_object_slot() {
     );
     assert_eq!(counter(&state), 1, "one move of the 2-of-3 cycle spent");
 
-    state.animate_active_objects();
+    state.advance_outdoor_active_objects();
     assert_eq!(counter(&state), 2);
 
     // Third pass is the skip; the counter resets.
-    state.animate_active_objects();
+    state.advance_outdoor_active_objects();
     assert_eq!(counter(&state), 0);
 }
 
@@ -314,8 +317,11 @@ fn the_idle_visual_tick_animates_sprites_without_moving_actors() {
 }
 
 /// A wind-driven ship is world movement too, so the idle presentation
-/// tick must not drift it either. The per-turn animator still does; that
-/// is the `weather.md §7` cadence the ship tests above pin.
+/// tick must not drift it either — and neither may the animator, on any
+/// path. `active-objects.md §8` (R316): the per-slot animator "cannot move
+/// anything ... it never writes a slot's column or row". The drift belongs
+/// to the outdoor per-turn walker, which is the `weather.md §7` cadence the
+/// ship tests above pin.
 #[test]
 fn the_idle_visual_tick_does_not_drift_a_wind_driven_ship() {
     let mut state = world_state(vec![0x01; WORLD_CELLS], 100, 100);
@@ -334,20 +340,20 @@ fn the_idle_visual_tick_does_not_drift_a_wind_driven_ship() {
     let placed = (state.active_objects[1].x, state.active_objects[1].y);
 
     for _ in 0..16 {
-        state.animate_active_object_sprites_only();
+        state.animate_active_objects();
     }
     assert_eq!(
         (state.active_objects[1].x, state.active_objects[1].y),
         placed,
-        "a perpendicular frame drifts every turn, but never on an idle tick"
+        "a perpendicular frame drifts every turn, but never from the animator"
     );
 
-    // The movement-bearing pass is unchanged.
-    state.animate_active_objects();
+    // The movement-bearing pass is the outdoor per-turn walker.
+    state.advance_outdoor_active_objects();
     assert_ne!(
         (state.active_objects[1].x, state.active_objects[1].y),
         placed,
-        "the per-turn animator still drifts the ship"
+        "the outdoor per-turn walker still drifts the ship"
     );
 }
 
@@ -896,4 +902,195 @@ fn shipped_fire_masks_have_pixels_inside_their_noise_planes() {
             fixture.mask
         );
     }
+}
+
+// ---------------------------------------------------------------------------
+// `catalogs/item-list.md §7.2`, `systems/magic.md §8`, `systems/visibility.md
+// §3`/`§4` — the shared spell/potion visibility sweep (R318, R327).
+// ---------------------------------------------------------------------------
+
+/// A 32x32 town grid whose party cell is walled in on all eight sides by the
+/// `visibility.md §6` sight blocker `0x09`, with a distinct marker tile in the
+/// far north-west corner of the eleven-by-eleven window.
+fn walled_in_grid(px: usize, py: usize, marker: u8) -> Vec<u8> {
+    let mut grid = u5_runtime::test_fixtures::open_grid();
+    for dy in -1isize..=1 {
+        for dx in -1isize..=1 {
+            if dx == 0 && dy == 0 {
+                continue;
+            }
+            grid[(py as isize + dy) as usize * 32 + (px as isize + dx) as usize] = 0x09;
+        }
+    }
+    grid[(py - 5) * 32 + (px - 5)] = marker;
+    grid
+}
+
+/// `systems/visibility.md §3`, Negative row (corrected by R327): "Full-fill
+/// path — populate every cell from the world map with no carve, no threshold
+/// and no line-of-sight test."
+///
+/// `catalogs/item-list.md §7.2`: "There is no distance test, no propagation
+/// frontier, and no blocker rule on this branch: a wall does not stop the
+/// reveal, and a cell in the far corner is revealed exactly as readily as the
+/// party's own."
+///
+/// R318 withdrew the earlier reading of this effect — the "inclusive
+/// squared-Euclidean gate `dx*dx + dy*dy <= 32`" admitting "101 of the 121
+/// cells", with "a blocker inside the gate visible but stopping propagation
+/// past itself".
+#[test]
+fn the_negative_light_producer_branch_fills_all_121_cells_through_walls() {
+    let state = u5_runtime::test_fixtures::test_state(walled_in_grid(10, 10, 0x23), 10, 10);
+
+    let full_fill = state.surface_visibility_produce(
+        10,
+        10,
+        VIEWPORT_PLAYER_ROW,
+        VISIBILITY_NO_LINE_OF_SIGHT_LIGHT,
+        false,
+    );
+    assert_eq!(full_fill.len(), VIEWPORT_SIDE * VIEWPORT_SIDE);
+    assert_eq!(
+        full_fill.iter().filter(|cell| **cell).count(),
+        VIEWPORT_SIDE * VIEWPORT_SIDE,
+        "the full-fill branch reveals all 121 cells"
+    );
+    assert!(full_fill.iter().all(|cell| *cell));
+
+    // The withdrawn contract, evaluated on the same grid, for contrast: the
+    // ring of blockers stops the carve dead, so a positive threshold of 32
+    // reveals the party's cell and its eight walls and nothing else.
+    let withdrawn = state.surface_visibility_produce(10, 10, VIEWPORT_PLAYER_ROW, 32, false);
+    assert_eq!(
+        withdrawn.iter().filter(|cell| **cell).count(),
+        9,
+        "the retracted threshold reading is what the full-fill branch is not"
+    );
+
+    // `§4` Stage 2, threshold zero: "the carve is skipped outright and the
+    // grid is left fully obscured, including the player's own cell."
+    let blackout = state.surface_visibility_produce(10, 10, VIEWPORT_PLAYER_ROW, 0, false);
+    assert!(blackout.iter().all(|cell| !*cell));
+}
+
+/// `systems/magic.md §8`: "X-Ray (*Wis An Ylem*) is one of the two callers of
+/// the shared visibility sweep — the other is the White potion — and that
+/// sweep is a full reveal of the whole eleven-by-eleven viewport window
+/// straight from the map, ignoring line of sight."
+///
+/// R327: "An engine that implemented the branch as dead compatibility code has
+/// no working White potion and no working X-Ray."
+#[test]
+fn both_sweep_callers_reveal_the_same_121_cells() {
+    let grid = walled_in_grid(10, 10, 0x23);
+
+    let mut potion = u5_runtime::test_fixtures::test_state(grid.clone(), 10, 10);
+    potion.potion_stock[POTION_WHITE_INDEX] = 1;
+    assert_eq!(
+        potion.use_potion(POTION_WHITE_INDEX, Some(0)),
+        MoveOutcome::Observed
+    );
+
+    let mut spell = u5_runtime::test_fixtures::test_state(grid, 10, 10);
+    spell.spell_charges[X_RAY_SPELL_INDEX] = 1;
+    spell.party[0].mana = X_RAY_COST;
+    spell.party[0].level = X_RAY_COST;
+    assert_eq!(spell.cast_x_ray(0), MoveOutcome::Observed);
+
+    let from_potion = potion.visibility_sweep.expect("White starts the sweep");
+    let from_spell = spell.visibility_sweep.expect("X-Ray starts the sweep");
+
+    assert_eq!(from_potion.visible_cells, from_spell.visible_cells);
+    assert!(from_spell.visible_cells.iter().all(|cell| *cell));
+    assert_eq!(
+        from_spell.frames_remaining, POTION_WHITE_SWEEP_FRAMES,
+        "both callers run the same twenty repaint frames"
+    );
+    assert_eq!(
+        from_spell.pause_bios_ticks_per_frame,
+        POTION_WHITE_SWEEP_BIOS_TICKS_PER_FRAME
+    );
+    assert!(
+        spell.active_view_overlay.is_none(),
+        "`item-list.md §7.2`: the sweep branch does not enter the modal View overlay"
+    );
+}
+
+// ---------------------------------------------------------------------------
+// `systems/animation.md §13.5` — blocking presentations and actor movement.
+// ---------------------------------------------------------------------------
+
+/// `systems/animation.md §13.5`, claim 1: "No blocking presentation runs the
+/// town NPC schedule processor, the town object walker that moves loose
+/// horse-family objects, or the outdoor per-turn creature walker ...
+/// **Exceptions: none.**"
+///
+/// `catalogs/item-list.md §7.2` says the same of the sweep's own per-frame
+/// step: it "advances sprite appearance only and **moves no actor**".
+///
+/// The presentation still pays for everything `§13.2` lists — the sprite
+/// phases and the tile layers are expected to move here; only coordinates are
+/// not.
+#[test]
+fn a_presentation_sweep_leaves_every_actor_coordinate_unchanged() {
+    let mut state = world_state(open_world_grid(), 100, 100);
+    state.active_objects.truncate(1);
+    for (type_byte, x, y) in [
+        // A wandering land monster, orthogonally adjacent to the party.
+        (176u8, 101usize, 100usize),
+        // A wind-driven ship on the same plane.
+        (168, 104, 100),
+        // A loose horse-family object, the town object walker's only class.
+        (0x10, 98, 101),
+    ] {
+        state.active_objects.push(ActiveObject {
+            type_byte,
+            tile: type_byte,
+            x,
+            y,
+            z: WorldPlane::Underworld.save_floor(),
+            phase: 0,
+            aux1: 0,
+            aux3: 0,
+        });
+    }
+    state.wind = WindState::North;
+
+    let placed: Vec<(usize, usize)> = state
+        .active_objects
+        .iter()
+        .map(|object| (object.x, object.y))
+        .collect();
+    let party_before = (state.player.x, state.player.y);
+    let turn_before = state.turn;
+    let clock_before = state.clock;
+
+    state.start_visibility_sweep();
+    let mut frames = 0usize;
+    while state.visibility_sweep.is_some() {
+        state.advance_presentation_frame();
+        frames += 1;
+        assert_eq!(
+            state
+                .active_objects
+                .iter()
+                .map(|object| (object.x, object.y))
+                .collect::<Vec<_>>(),
+            placed,
+            "frame {frames} of a blocking presentation moved an actor"
+        );
+    }
+
+    assert_eq!(usize::from(POTION_WHITE_SWEEP_FRAMES), frames);
+    assert_eq!((state.player.x, state.player.y), party_before);
+    assert_eq!(
+        state.turn, turn_before,
+        "neither the loop nor the final idle redraw spends a turn"
+    );
+    assert_eq!(state.clock, clock_before);
+    assert!(
+        u32::from(state.animation.frame) > 0,
+        "`§13.5`: a presentation that pumps the world redraw still pays the tile layers"
+    );
 }
