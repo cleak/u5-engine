@@ -256,6 +256,36 @@ pub struct PlayState {
     /// round loop, and the loop is entered once per encounter: the sweep
     /// restart jumps back past the prologue" (`RETRACTIONS.md` R308).
     pub combat_round_loop_prologue_ran: bool,
+    /// `combat.md §7`, "Loop-entry prologue": the bundle includes a
+    /// "per-slot scratch state reset". `§7` names the scratch only by that
+    /// phrase - it publishes no reader, no writer and no field layout for
+    /// it - so this engine models it as one opaque byte per actor slot,
+    /// zeroed by the prologue. Nothing else reads or writes it; the hedge is
+    /// recorded rather than filled in with an invented meaning.
+    pub combat_round_slot_scratch: [u8; COMBAT_ACTOR_SLOTS],
+    /// `combat.md §7`, "Loop-entry prologue": the bundle ends by "clearing
+    /// the 'any spell cast this round' flag". As with the scratch above, the
+    /// specification publishes the *clear* and nothing else - no reader and
+    /// no writer anywhere in `combat.md` or `magic.md` - so the flag exists
+    /// here with exactly the published lifetime and no invented consumer.
+    pub combat_spell_cast_this_round: bool,
+    /// `combat.md §4` restore phase: "If the resident tile-restoration flag
+    /// is set when the round loop returns, clear that flag and invoke the
+    /// display driver's tile-graphics save/restore/mutation entry with mode
+    /// value `1` before the ordinary world redraw." The setter is the
+    /// dungeon room painter's two-way ladder cell (`dungeon-mode.md §14.1`),
+    /// which is outside combat's contract: "combat owns only the
+    /// sampling/clear/call ordering, while the setter provenance and
+    /// tile-asset mutation details belong to the dungeon and driver specs."
+    /// Transient presentation handoff, never serialized.
+    pub tile_restoration_pending: bool,
+    /// Driver tile-graphics restores the combat framer sampled out of
+    /// [`Self::tile_restoration_pending`] and owes a frontend. The runtime
+    /// has no display driver of its own, so it records the request in the
+    /// published order - ahead of the restore phase's world redraw - and a
+    /// frontend drains it by issuing
+    /// [`crate::EgaDisplayOperation::RestoreLoadedTileGraphics`].
+    pub pending_driver_tile_graphics_restores: usize,
     pub combat_secondary_marker: Option<(u8, u8)>,
     pub combat_ambush_reveals: [Option<CombatAmbushRevealRecord>; COMBAT_AMBUSH_REVEAL_SLOT_COUNT],
     pub combat_actors: [CombatActorDescriptor; COMBAT_ACTOR_SLOTS],

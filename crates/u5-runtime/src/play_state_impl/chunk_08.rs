@@ -743,29 +743,29 @@ impl PlayState {
     /// * **Cadence.** It only ran from the TUI `.` key, so no shell running
     ///   the ordinary idle redraw ever changed the wind. It now hangs off
     ///   the world step in [`Self::advance_visual_tick`].
+    ///
+    /// **The retry loop has no static bound.** `combat.md §5.3` and
+    /// `prng.md §4`: "on an uncommon result it enters a retry loop taking
+    /// **one further draw at a time**, so its draw count per invocation is
+    /// one, two, three, and so on upward. **No maximum is published, and an
+    /// engine must not assume one** - the loop has no static bound". The
+    /// retry is therefore delegated to
+    /// [`autonomous_wind_drift_with_draws`], which is written as an
+    /// unbounded `loop` with no exhaustion path. The earlier
+    /// `for _ in 0..=u8::MAX` here was exactly the assumed maximum that
+    /// sentence forbids: on exhaustion it returned without committing a
+    /// direction, and "a fired event always installs some direction".
     pub fn idle_wind_drift(&mut self) -> Option<WindState> {
-        if !WindState::autonomous_drift_outer_accepted(
-            self.wind_drift_roll(WIND_DRIFT_OUTER_ROLL_MAX),
-        ) {
-            return None;
-        }
-        for _ in 0..=u8::MAX {
-            let candidate = self.idle_wind_candidate();
-            if candidate != WindState::Calm
-                || self.wind_drift_roll(u8::MAX) >= WIND_DRIFT_CALM_ACCEPT_MIN
-            {
-                // `audio.md §7.3` is titled "Accepted wind change / Rel Hur"
-                // and every row of its table describes a transition the
-                // player accepted behind the direction prompt. An unprompted
-                // weather drift is not a published trigger, so it commits the
-                // identical state change without the shared variant — the
-                // alternative is a one-to-two-second blocking sequence firing
-                // on an idle tick at sea.
-                self.apply_wind_state_without_sound(candidate);
-                return Some(candidate);
-            }
-        }
-        None
+        let accepted = autonomous_wind_drift_with_draws(|high| self.wind_drift_roll(high))?;
+        // `audio.md §7.3` is titled "Accepted wind change / Rel Hur"
+        // and every row of its table describes a transition the
+        // player accepted behind the direction prompt. An unprompted
+        // weather drift is not a published trigger, so it commits the
+        // identical state change without the shared variant — the
+        // alternative is a one-to-two-second blocking sequence firing
+        // on an idle tick at sea.
+        self.apply_wind_state_without_sound(accepted);
+        Some(accepted)
     }
 
     /// `weather.md §2`: "On a zero roll, it chooses a candidate wind in

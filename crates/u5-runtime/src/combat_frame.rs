@@ -3167,6 +3167,27 @@ impl PlayState {
         snapshot: CombatFrameSnapshot,
         body_retrieval_exit: bool,
     ) {
+        // `combat.md §4` restore phase, first bullet: "If the resident
+        // tile-restoration flag is set when the round loop returns, clear
+        // that flag and invoke the display driver's tile-graphics
+        // save/restore/mutation entry with mode value `1` before the
+        // ordinary world redraw. The reached mode restores driver-saved
+        // tile graphics; combat owns only the sampling/clear/call
+        // ordering, while the setter provenance and tile-asset mutation
+        // details belong to the dungeon and driver specs."
+        //
+        // The sample/clear/call trio therefore runs at the very top of the
+        // restore phase, ahead of every redraw this function performs -
+        // the `mark_visibility_dirty()` at its tail and the panel refresh
+        // the frontend hangs off it. The runtime owns no display driver,
+        // so the "invoke" half is recorded as a drained request; a
+        // frontend issues `EgaDisplayOperation::RestoreLoadedTileGraphics`
+        // for each one. The setter is `dungeon-mode.md §14.1`'s room
+        // painter (a two-way ladder cell sets the flag, other non-empty
+        // icon classes clear it) and is deliberately not implemented here.
+        if std::mem::take(&mut self.tile_restoration_pending) {
+            self.pending_driver_tile_graphics_restores += 1;
+        }
         let pending_terrain_trigger = self.pending_combat_terrain_trigger_slot.take();
         self.area = snapshot.area;
         self.player = snapshot.player;
@@ -3276,6 +3297,18 @@ impl PlayState {
             self.mark_visibility_dirty();
             false
         };
+        // `combat.md §5.3`, closing line: "One consumer outside this
+        // window, for completeness: the turn-clock advance run after
+        // combat ends is itself a draw consumer, sitting between the
+        // encounter and the next outdoor turn."
+        //
+        // It runs after the framer's restore phase - the world clock it
+        // advances is the restored world's, not the arena's - and it is
+        // the ordinary world turn advance, so its draws are the ones that
+        // advance owns (NPC schedules and the active-object epilogue).
+        // `§5.3` attaches no condition to it, so every way the round loop
+        // ends reaches it.
+        self.advance_turn();
         CombatRoundLoopExitApplication {
             exit,
             result_code,
@@ -5491,13 +5524,19 @@ impl PlayState {
     /// not yet its draw count. On that presentation-only tick the prologue
     /// draws nothing, so the encounter's PRNG stream is unchanged by it.
     ///
-    /// Of the bundle's other four items only the redraw has engine-side
-    /// state. The overlay refresh and the flush are the frontend's, and
-    /// nothing here is identified by `§7` as the "per-slot scratch" or the
-    /// "any spell cast this round" flag: this engine's nearest analogue,
-    /// `combat_action_result`, is cleared before **every** dispatch under
-    /// `§6.3`, which is a different lifetime, so no clear is issued here
-    /// rather than asserting a mapping the spec does not make.
+    /// Of the bundle's other four items the overlay refresh and the screen
+    /// flush are the frontend's. The remaining two - the "per-slot scratch
+    /// state reset" and the clearing of the "any spell cast this round"
+    /// flag - are **hedged in the specification**: `§7` names both only by
+    /// those phrases and publishes no field layout, no writer and no reader
+    /// for either, in `combat.md` or anywhere else. They are therefore
+    /// modelled here with exactly the published lifetime and nothing more -
+    /// [`PlayState::combat_round_slot_scratch`] is zeroed across all
+    /// thirty-two slots and [`PlayState::combat_spell_cast_this_round`] is
+    /// cleared - rather than being mapped onto an existing field the spec
+    /// does not name. In particular `combat_action_result` is *not* that
+    /// scratch: `§6.3` clears it before **every** dispatch, a different
+    /// lifetime from this once-per-encounter bundle.
     pub fn run_combat_round_loop_entry_prologue_if_needed(&mut self) {
         if !self.combat_active || self.combat_round_loop_prologue_ran {
             return;
@@ -5505,6 +5544,13 @@ impl PlayState {
         self.combat_round_loop_prologue_ran = true;
         self.advance_visual_tick();
         self.mark_visibility_dirty();
+        // `combat.md §7`: "per-slot scratch state reset, and clearing the
+        // 'any spell cast this round' flag". Both follow the tick, which
+        // `§5.3` step 8 fixes as "the prologue's very first action"; the
+        // spec gives no order among the bundle's remaining items and
+        // neither of these draws.
+        self.combat_round_slot_scratch = [0; COMBAT_ACTOR_SLOTS];
+        self.combat_spell_cast_this_round = false;
     }
 
     #[allow(clippy::too_many_arguments)]
@@ -6576,5 +6622,123 @@ mod combat_death_batch_tests {
             assert!(!state.combat_actors[0].is_controlled(), "item {item_id}");
             assert_eq!(state.active_player, Some(0), "item {item_id}");
         }
+    }
+
+    fn framed_combat_state() -> PlayState {
+        let mut state = world_state(open_world_grid(), 10, 20);
+        state
+            .enter_combat_frame(
+                vec![ActiveObject::empty(); COMBAT_ACTOR_SLOTS],
+                [CombatActorDescriptor::empty(); COMBAT_ACTOR_SLOTS],
+            )
+            .unwrap();
+        state
+    }
+
+    /// `combat.md §4` restore phase, first bullet: "If the resident
+    /// tile-restoration flag is set when the round loop returns, clear that
+    /// flag and invoke the display driver's tile-graphics
+    /// save/restore/mutation entry with mode value `1` before the ordinary
+    /// world redraw."
+    #[test]
+    fn a_set_tile_restoration_flag_clears_and_calls_the_driver_restore_on_frame_exit() {
+        let mut state = framed_combat_state();
+        state.tile_restoration_pending = true;
+        let restores_before = state.pending_driver_tile_graphics_restores;
+
+        state.apply_combat_round_loop_exit(CombatRoundLoopExit::LeaveCombat);
+
+        assert!(
+            !state.tile_restoration_pending,
+            "the framer clears the resident flag it sampled"
+        );
+        assert_eq!(
+            state.pending_driver_tile_graphics_restores,
+            restores_before + 1,
+            "the driver tile-graphics restore is invoked exactly once"
+        );
+    }
+
+    /// The same bullet is conditional: a clear flag reaches no driver call
+    /// at all, and the flag is not something combat sets for itself
+    /// (`dungeon-mode.md §14.1` owns the setter).
+    #[test]
+    fn a_clear_tile_restoration_flag_invokes_no_driver_restore() {
+        let mut state = framed_combat_state();
+        assert!(!state.tile_restoration_pending);
+
+        state.apply_combat_round_loop_exit(CombatRoundLoopExit::LeaveCombat);
+
+        assert!(!state.tile_restoration_pending);
+        assert_eq!(state.pending_driver_tile_graphics_restores, 0);
+    }
+
+    /// `combat.md §5.3`, closing line: "One consumer outside this window,
+    /// for completeness: the turn-clock advance run after combat ends is
+    /// itself a draw consumer, sitting between the encounter and the next
+    /// outdoor turn."
+    #[test]
+    fn combat_exit_runs_the_post_combat_turn_clock_advance() {
+        for exit in [
+            CombatRoundLoopExit::LeaveCombat,
+            CombatRoundLoopExit::Victory,
+            CombatRoundLoopExit::Defeat,
+        ] {
+            let mut state = framed_combat_state();
+            let turn_before = state.turn;
+            let clock_before = (state.clock.day, state.clock.hour, state.clock.minute);
+
+            state.apply_combat_round_loop_exit(exit);
+
+            assert_eq!(
+                state.turn,
+                turn_before + 1,
+                "{exit:?}: the post-combat turn advance did not run"
+            );
+            assert_ne!(
+                (state.clock.day, state.clock.hour, state.clock.minute),
+                clock_before,
+                "{exit:?}: the turn *clock* did not advance"
+            );
+        }
+    }
+
+    /// `combat.md §7`, "Loop-entry prologue": the bundle is "screen redraw,
+    /// combat-begin overlay refresh, screen flush, per-slot scratch state
+    /// reset, and clearing the \"any spell cast this round\" flag".
+    ///
+    /// `§7` publishes no reader, writer or layout for either of those last
+    /// two, so this asserts exactly the published lifetime: both are cleared
+    /// by the prologue, and - since "the prologue runs once per entry into
+    /// the round loop, and the loop is entered once per encounter" - neither
+    /// is cleared again on a later dispatch in the same encounter.
+    #[test]
+    fn the_round_loop_prologue_resets_slot_scratch_and_clears_the_spell_cast_flag() {
+        let mut state = world_state(open_world_grid(), 10, 20);
+        state.combat_active = true;
+        state.combat_round_loop_prologue_ran = false;
+        state.combat_round_slot_scratch = [0xaa; COMBAT_ACTOR_SLOTS];
+        state.combat_spell_cast_this_round = true;
+
+        state.run_combat_round_loop_entry_prologue_if_needed();
+
+        assert_eq!(
+            state.combat_round_slot_scratch, [0; COMBAT_ACTOR_SLOTS],
+            "the prologue resets the per-slot scratch state on all thirty-two slots"
+        );
+        assert!(
+            !state.combat_spell_cast_this_round,
+            "the prologue clears the any-spell-cast-this-round flag"
+        );
+
+        // Once per encounter, not once per round: the sweep restart jumps
+        // back past the prologue, so a second call changes nothing.
+        state.combat_round_slot_scratch = [0xaa; COMBAT_ACTOR_SLOTS];
+        state.combat_spell_cast_this_round = true;
+
+        state.run_combat_round_loop_entry_prologue_if_needed();
+
+        assert_eq!(state.combat_round_slot_scratch, [0xaa; COMBAT_ACTOR_SLOTS]);
+        assert!(state.combat_spell_cast_this_round);
     }
 }
