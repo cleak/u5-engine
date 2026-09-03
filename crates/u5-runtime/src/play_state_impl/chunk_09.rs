@@ -1490,15 +1490,20 @@ impl PlayState {
         let grid_index = visibility_grid_active_index(row, col).unwrap();
         let terrain_index = terrain_band_active_index(row, col).unwrap();
         let current_grid_byte = self.visibility_grid[grid_index];
-        let current_terrain = self.terrain_band[terrain_index];
-        let previous_row_terrain = (row > 0).then(|| {
-            let index = terrain_band_active_index(row - 1, col).unwrap();
-            self.terrain_band[index]
-        });
-        let next_row_terrain = (row + 1 < VIEWPORT_SIDE).then(|| {
-            let index = terrain_band_active_index(row + 1, col).unwrap();
-            self.terrain_band[index]
-        });
+        // `visibility.md §8`: "Terrain-aware stamps use the live
+        // world/combat tile at the object's coordinate, plus one
+        // neighbouring row for a few edge shapes." The read is against the map
+        // at the object's own world coordinate - not against the eleven-by-
+        // eleven companion terrain band, which has no row outside the viewport
+        // and which this pass overwrites as it walks slots thirty-one down to
+        // zero. See [`Self::top_down_live_terrain_at`].
+        let object_x = object.x as isize;
+        let object_y = object.y as isize;
+        let current_terrain = self
+            .top_down_live_terrain_at(area, object_x, object_y)
+            .unwrap_or(self.terrain_band[terrain_index]);
+        let previous_row_terrain = self.top_down_live_terrain_at(area, object_x, object_y - 1);
+        let next_row_terrain = self.top_down_live_terrain_at(area, object_x, object_y + 1);
         // `visibility.md §8.1`, normative: "For an actor whose composite
         // lands on one of the five selecting rows of the Section 8 table, the
         // variant is drawn **once per composite pass** - not once per
@@ -1627,10 +1632,7 @@ impl PlayState {
                 ) {
                     return None;
                 }
-                // `town-mode.md §15`: cells beyond the 32-by-32 floor take
-                // the loaded floor's southeast-corner terrain, not a hole.
-                let tile = self.surface_viewport_tile(x, y, false)?;
-                let terrain = self.animation.resolve_static_tile(tile);
+                let terrain = self.top_down_live_terrain_at(area, x, y)?;
                 Some((terrain, None))
             }
             TopDownRenderArea::World(_) => {
@@ -1648,14 +1650,44 @@ impl PlayState {
                 ) {
                     return None;
                 }
-                let wx = x.rem_euclid(WORLD_SIDE as isize) as usize;
-                let wy = y.rem_euclid(WORLD_SIDE as isize) as usize;
-                let terrain = self
-                    .animation
-                    .resolve_static_tile(self.world_live_tile_at(wx, wy));
+                let terrain = self.top_down_live_terrain_at(area, x, y)?;
                 Some((terrain, None))
             }
         }
+    }
+
+    /// `visibility.md §8`: the live map tile at one world coordinate, with no
+    /// lighting or visibility gate and with no composited sprite over it.
+    ///
+    /// The terrain-aware rows of the `§8` compositor table are defined against
+    /// this read, not against the companion terrain band: "Terrain-aware
+    /// stamps use the live world/combat tile at the object's coordinate, plus
+    /// one neighbouring row for a few edge shapes." The band is not a
+    /// substitute for it on either half of that sentence. It spans only the
+    /// eleven-by-eleven viewport, so the neighbouring row of an object on an
+    /// edge row is simply not in it; and every `Companion` stamp the pass has
+    /// already made has *overwritten* the band cell it wrote, so an actor
+    /// composited onto a laden-table cell erases the neighbour id a later slot
+    /// would read. Either way `§8.1`'s draw count is the casualty - "an engine
+    /// that draws from the shared stream on any other row advances the single
+    /// global generator when the original does not, and its stream position
+    /// diverges permanently" - and so is the stamped tile.
+    ///
+    /// This is the same accessor [`Self::top_down_render_cell_base`] uses once
+    /// its visibility gates have passed, so for a lit, un-composited viewport
+    /// cell the two agree byte for byte.
+    fn top_down_live_terrain_at(&self, area: TopDownRenderArea, x: isize, y: isize) -> Option<u8> {
+        let tile = match area {
+            // `town-mode.md §15`: cells beyond the 32-by-32 floor take
+            // the loaded floor's southeast-corner terrain, not a hole.
+            TopDownRenderArea::Town => self.surface_viewport_tile(x, y, false)?,
+            TopDownRenderArea::World(_) => {
+                let wx = x.rem_euclid(WORLD_SIDE as isize) as usize;
+                let wy = y.rem_euclid(WORLD_SIDE as isize) as usize;
+                self.world_live_tile_at(wx, wy)
+            }
+        };
+        Some(self.animation.resolve_static_tile(tile))
     }
 
     fn composite_top_down_object(
@@ -1678,14 +1710,19 @@ impl PlayState {
         let Some(cell) = prepared.get(index).and_then(|cell| *cell) else {
             return;
         };
-        let previous_row_terrain = (cell_y > 0)
-            .then(|| prepared[index - cells])
-            .flatten()
-            .map(|cell| cell.terrain);
-        let next_row_terrain = (cell_y + 1 < cells)
-            .then(|| prepared[index + cells])
-            .flatten()
-            .map(|cell| cell.terrain);
+        // The same live-map read the buffer pass takes - `visibility.md §8`:
+        // "Terrain-aware stamps use the live world/combat tile at the
+        // object's coordinate, plus one neighbouring row for a few edge
+        // shapes." Reading `prepared` instead would lose the neighbouring row
+        // of an object on an edge row and would see earlier slots' stamps
+        // rather than the map.
+        let object_x = object.x as isize;
+        let object_y = object.y as isize;
+        let current_terrain = self
+            .top_down_live_terrain_at(area, object_x, object_y)
+            .unwrap_or(cell.terrain);
+        let previous_row_terrain = self.top_down_live_terrain_at(area, object_x, object_y - 1);
+        let next_row_terrain = self.top_down_live_terrain_at(area, object_x, object_y + 1);
         // This helper is `&self`: it answers *queries* about the composed
         // grid (the text view, the outdoor ranged line-of-sight trace, and
         // non-viewport radii), not the redraw's composite pass. `§8.1`
@@ -1700,7 +1737,7 @@ impl PlayState {
             object.type_byte,
             object.tile,
             cell.grid,
-            cell.terrain,
+            current_terrain,
             previous_row_terrain,
             next_row_terrain,
             cell_y,

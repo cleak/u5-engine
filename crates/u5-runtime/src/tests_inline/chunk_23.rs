@@ -17472,31 +17472,52 @@ fn terrain_combat_setup_count_consumes_fortunes_flag_and_town_override() {
 /// runs a **full world tick before any monster is placed**".
 ///
 /// *Retracted:* this test used to assert the stream was left exactly on the
-/// count roll, which is only true of an engine that omits step 6. `§5.3`
-/// step 6 is a "**Variable and unbounded**" consumer, so the post-condition
-/// is that the counts came off the pre-tick state and the stream then moved
-/// on - not a pinned final state. `RETRACTIONS.md` R329/R331 additionally
-/// correct what that tick draws: the arms are animator, wind, composite, and
-/// the composite arm "takes one uniform `[0, 3]` draw **only** for a
-/// composited actor standing on one of the five selecting terrain rows ...
-/// and **zero** otherwise", so it contributes nothing here.
+/// count roll, which is only true of an engine that omits step 6.
+/// `RETRACTIONS.md` R329/R331 additionally correct what that tick draws: the
+/// arms are animator, wind, composite, and the composite arm "takes one
+/// uniform `[0, 3]` draw **only** for a composited actor standing on one of
+/// the five selecting terrain rows ... and **zero** otherwise", so it
+/// contributes nothing here.
+///
+/// `§5.3` marks step 6 "**Variable and unbounded**" for the *original*, whose
+/// animator arm is uncharacterised. This engine's tick is not: the only arm
+/// that draws is the wind check, which is a pure function of `prng_state`, so
+/// the exact post-tick state is computable. The post-condition is therefore
+/// pinned against a clone stepped through the same tick, not weakened to a
+/// liveness check - a package about draw counts must not accept a test that
+/// would pass on two ticks, zero ticks, or a different range.
 #[test]
 fn terrain_combat_setup_count_rolls_from_resident_prng() {
+    // Run `advance_visual_tick` on a clone of `state` whose stream is already
+    // where the tick will find it, and return the exact state it leaves.
+    fn prng_after_step_six_tick(state: &PlayState, prng_after_count_draws: u16) -> u16 {
+        let mut probe = state.clone();
+        probe.prng_state = prng_after_count_draws;
+        probe.advance_visual_tick();
+        probe.prng_state
+    }
+
     let mut state = world_state(open_world_grid(), 10, 20);
     state.prng_state = 0x1234;
     let mut expected_prng = state.prng_state;
     let expected_count = u5_prng_range_u16(&mut expected_prng, 1, 10) as u8;
+    // Step 6's tick follows the roll on this branch. Its wind check "draws
+    // **once** and returns in the common case" (`prng.md §4`), so the tick is
+    // observable: it must move the stream, and to exactly this value.
+    let expected_after_tick = prng_after_step_six_tick(&state, expected_prng);
+    assert_ne!(
+        expected_after_tick, expected_prng,
+        "step 6's world tick draws, so it must move the stream"
+    );
 
     assert_eq!(
         state.roll_terrain_combat_setup_count(10, false),
         expected_count
     );
-    // Step 6's tick follows the roll on this branch. Its wind check "draws
-    // **once** and returns in the common case" (`prng.md §4`), so the stream
-    // has moved past the count draw rather than stopping on it.
-    assert_ne!(
-        state.prng_state, expected_prng,
-        "step 6's mid-setup world tick runs on the branch that rolled a count"
+    assert_eq!(
+        state.prng_state, expected_after_tick,
+        "the count draws come off the pre-tick stream and step 6's tick then \
+         runs exactly once"
     );
 
     state.fortunes_of_war = 1;
@@ -17505,13 +17526,15 @@ fn terrain_combat_setup_count_rolls_from_resident_prng() {
     // first roll's result, so it can only lower the count.
     let first_roll = u5_prng_range_u16(&mut expected_prng, 1, 10) as u8;
     let expected_count = u5_prng_range_u16(&mut expected_prng, 1, u16::from(first_roll)) as u8;
+    let expected_after_tick = prng_after_step_six_tick(&state, expected_prng);
+    assert_ne!(expected_after_tick, expected_prng);
 
     assert!(expected_count <= first_roll);
     assert_eq!(
         state.roll_terrain_combat_setup_count(10, false),
         expected_count
     );
-    assert_ne!(state.prng_state, expected_prng);
+    assert_eq!(state.prng_state, expected_after_tick);
 
     // Sentinel ratings and the town-style override skip the whole branch, so
     // they take neither the count draws nor step 6's tick: §5.3 step 5,

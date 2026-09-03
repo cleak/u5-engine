@@ -306,29 +306,50 @@ fn variant_pass_grid(chair: u8, neighbour: u8, chair_x: usize, chair_y: usize) -
     grid
 }
 
-fn composite_pass_draw_count(chair: u8, neighbour: u8) -> u32 {
-    let (chair_x, chair_y) = (10usize, 20usize);
-    // The party stands three cells south of the seat so that neither the
-    // party's own cell nor its composite touches the seat's neighbouring row.
-    let mut state = test_state(variant_pass_grid(chair, neighbour, chair_x, chair_y), 10, 23);
-    // One ordinary humanoid NPC seated on the chair, in a slot that is not
-    // slot zero: `§8.4` says "There is nothing avatar-specific anywhere in the
-    // merge: an NPC in the humanoid sprite range on a selecting terrain merges
-    // by exactly the same rules the party does."
-    // `§8.4`: "the merge applies only to the party's own sprite families
-    // (on foot, horse, magic carpet, skiff) and to the humanoid NPC sprite
-    // range" - the band the default helper treats as terrain-aware without
-    // passing it straight through, i.e. below `0x80`.
-    state.active_objects.push(ActiveObject {
+/// One ordinary humanoid NPC on a cell, in a slot that is not slot zero:
+/// `§8.4` says "There is nothing avatar-specific anywhere in the merge: an NPC
+/// in the humanoid sprite range on a selecting terrain merges by exactly the
+/// same rules the party does", and "the merge applies only to the party's own
+/// sprite families (on foot, horse, magic carpet, skiff) and to the humanoid
+/// NPC sprite range" - the band the default helper treats as terrain-aware
+/// without passing it straight through, i.e. below `0x80`.
+fn seated_humanoid_npc(x: usize, y: usize) -> ActiveObject {
+    ActiveObject {
         type_byte: HUMANOID_NPC_TEST_SPRITE,
         tile: HUMANOID_NPC_TEST_SPRITE,
-        x: chair_x,
-        y: chair_y,
+        x,
+        y,
         z: 0,
         phase: STEADY_PHASE,
         aux1: 0,
         aux3: 0,
-    });
+    }
+}
+
+/// Run one live composite pass and report both halves of the `§8.1` contract
+/// that must not drift apart: how many draws the pass took off the shared
+/// stream, and the byte it left in the companion terrain band under the seat.
+///
+/// `extra_actors` are pushed *after* the seated NPC, so the compositor's
+/// "thirty-one down to zero" walk reaches them **first** - which is how a
+/// stamp onto the seat's neighbouring cell gets to land before the seat reads
+/// that neighbour.
+fn composite_pass_at(
+    chair: u8,
+    neighbour: u8,
+    chair_xy: (usize, usize),
+    party_xy: (usize, usize),
+    extra_actors: &[ActiveObject],
+) -> (u32, u8) {
+    let (chair_x, chair_y) = chair_xy;
+    let (party_x, party_y) = party_xy;
+    let mut state = test_state(
+        variant_pass_grid(chair, neighbour, chair_x, chair_y),
+        party_x,
+        party_y,
+    );
+    state.active_objects.push(seated_humanoid_npc(chair_x, chair_y));
+    state.active_objects.extend_from_slice(extra_actors);
     state.visibility_buffers_ready = false;
     let before = state.prng_state;
     state.refresh_top_down_visibility_buffers(TopDownRenderArea::Town, VIEWPORT_PLAYER_ROW);
@@ -339,7 +360,17 @@ fn composite_pass_draw_count(chair: u8, neighbour: u8) -> u32 {
         draws += 1;
         assert!(draws < 64, "composite pass drew far more than one value");
     }
-    draws
+    let row = chair_y + VIEWPORT_PLAYER_ROW - party_y;
+    let col = chair_x + VIEWPORT_PLAYER_COL - party_x;
+    let stamped = state.terrain_band[terrain_band_active_index(row, col).unwrap()];
+    (draws, stamped)
+}
+
+fn composite_pass_draw_count(chair: u8, neighbour: u8) -> u32 {
+    // The party stands three cells south of the seat, so the seat and its
+    // neighbouring row are both comfortably inside the viewport. The two edge
+    // cases the band cannot answer have their own tests below.
+    composite_pass_at(chair, neighbour, (10, 20), (10, 23), &[]).0
 }
 
 #[test]
@@ -354,6 +385,76 @@ fn composite_pass_draws_once_for_a_qualifying_seat_and_never_otherwise() {
     assert_eq!(composite_pass_draw_count(0x90, 0x9B), 1);
     assert_eq!(composite_pass_draw_count(0x90, 0x9A), 0);
     assert_eq!(composite_pass_draw_count(0x90, 0x95), 0);
+}
+
+/// `visibility.md §8`: "Terrain-aware stamps use the live world/combat tile
+/// at the object's coordinate, plus one neighbouring row for a few edge
+/// shapes."
+///
+/// The eleven-by-eleven companion terrain band is not that read. A seat on the
+/// viewport's own edge row has its neighbouring row *outside* the band
+/// entirely, and the party has to be only five cells away for that to happen -
+/// ordinary tavern or castle walking. An engine that consults the band there
+/// sees no neighbour, takes no draw where `§8.1` charges one ("advances the
+/// single global generator when the original does not, and its stream position
+/// diverges permanently" - in the under-draw direction), and stamps the fixed
+/// fall-through tile instead of a variant.
+#[test]
+fn a_qualifying_seat_on_a_viewport_edge_row_still_reads_its_neighbour() {
+    // A `0x92` seat on the bottom viewport row (party five cells north): the
+    // laden table it faces is one row further south, off the band.
+    let (draws, stamped) = composite_pass_at(0x92, 0x9C, (10, 20), (10, 15), &[]);
+    assert_eq!(draws, 1, "the seat qualifies, so the pass takes one draw");
+    assert!(
+        (0x34..=0x37).contains(&stamped),
+        "expected one of 0x34..0x37, not the fall-through 0x32: {stamped:#04x}"
+    );
+
+    // The mirror image: a `0x90` seat on the top viewport row (party five
+    // cells south), its laden table one row further north and off the band.
+    let (draws, stamped) = composite_pass_at(0x90, 0x9B, (10, 20), (10, 25), &[]);
+    assert_eq!(draws, 1);
+    assert!(
+        (0x38..=0x3B).contains(&stamped),
+        "expected one of 0x38..0x3B, not the fall-through 0x30: {stamped:#04x}"
+    );
+
+    // The same two seats over furniture their facing rejects still take no
+    // draw when the neighbour is off-band - the read is restored, not widened.
+    assert_eq!(composite_pass_at(0x92, 0x9B, (10, 20), (10, 15), &[]).0, 0);
+    assert_eq!(composite_pass_at(0x90, 0x9A, (10, 20), (10, 25), &[]).0, 0);
+}
+
+/// The band is also not the live map *inside* the viewport: `§8` says the
+/// compositor's write set includes "the companion sprite band", and it walks
+/// "from slot thirty-one down to slot zero", so a stamp made earlier in the
+/// same pass overwrites the band cell a later slot would read. An actor
+/// standing on the laden table must not erase the table id the seat beside it
+/// reads.
+#[test]
+fn an_earlier_stamp_on_the_neighbouring_cell_does_not_erase_the_terrain() {
+    // Slot 2 stands on the laden table at (10, 21) and composites first; slot
+    // 1 is the seat at (10, 20) that reads that row afterwards.
+    let table_walker = [seated_humanoid_npc(10, 21)];
+    let (draws, stamped) = composite_pass_at(0x92, 0x9C, (10, 20), (10, 23), &table_walker);
+    assert_eq!(
+        draws, 1,
+        "the actor on the table stands on no selecting row and takes no draw; \
+         the seat still takes its one"
+    );
+    assert!(
+        (0x34..=0x37).contains(&stamped),
+        "expected one of 0x34..0x37, not the fall-through 0x32: {stamped:#04x}"
+    );
+
+    // And the mirror facing, with the walker on the row above the seat.
+    let table_walker = [seated_humanoid_npc(10, 19)];
+    let (draws, stamped) = composite_pass_at(0x90, 0x9B, (10, 20), (10, 23), &table_walker);
+    assert_eq!(draws, 1);
+    assert!(
+        (0x38..=0x3B).contains(&stamped),
+        "expected one of 0x38..0x3B, not the fall-through 0x30: {stamped:#04x}"
+    );
 }
 
 /// `visibility.md §8`: "Before the per-slot loop runs, and **only outside
