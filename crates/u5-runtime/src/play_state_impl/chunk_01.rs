@@ -801,6 +801,7 @@ impl PlayState {
             combat_actors: [CombatActorDescriptor::empty(); COMBAT_ACTOR_SLOTS],
             sail_cadence: 0,
             sail_stall_pending: false,
+            sail_cached_direction: None,
             pending_vehicle_save: options
                 .pending_vehicle
                 .map(PendingVehicleSaveState::from_acquisition)
@@ -1116,6 +1117,7 @@ impl PlayState {
             combat_actors: [CombatActorDescriptor::empty(); COMBAT_ACTOR_SLOTS],
             sail_cadence: 0,
             sail_stall_pending: false,
+            sail_cached_direction: None,
             pending_vehicle_save: options
                 .pending_vehicle
                 .map(PendingVehicleSaveState::from_acquisition)
@@ -1458,6 +1460,7 @@ impl PlayState {
             combat_actors: [CombatActorDescriptor::empty(); COMBAT_ACTOR_SLOTS],
             sail_cadence: 0,
             sail_stall_pending: false,
+            sail_cached_direction: None,
             pending_vehicle_save,
             turn: 0,
             // As above for the coordinate half. The wind half is a duplicate:

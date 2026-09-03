@@ -769,6 +769,7 @@ impl PlayState {
         self.player.transport = TransportState::Foot;
         self.sail_cadence = 0;
         self.sail_stall_pending = false;
+        self.sail_cached_direction = None;
     }
 
     pub fn free_active_object_slot(&mut self, slot: usize) {
@@ -1020,6 +1021,7 @@ impl PlayState {
                     .with_facing(self.player.facing);
                     self.sail_cadence = 0;
                     self.sail_stall_pending = false;
+                    self.sail_cached_direction = None;
                     self.sync_player_object();
                     self.mark_visibility_dirty();
                     self.advance_turn();
@@ -1049,6 +1051,7 @@ impl PlayState {
                     };
                     self.sail_cadence = 0;
                     self.sail_stall_pending = false;
+                    self.sail_cached_direction = None;
                     self.sync_player_object();
                     self.mark_visibility_dirty();
                     self.advance_turn();
@@ -1121,6 +1124,12 @@ impl PlayState {
         };
         self.sail_cadence = 0;
         self.sail_stall_pending = false;
+        // `vehicles.md` "Ship Sails": furling makes the ship "manually
+        // handled" and "wind-driven drift should not advance the ship while
+        // furled", so the toggle drops the cache the auto-advance route
+        // reads. Hoisting starts with none, since the cache is written by a
+        // movement command.
+        self.sail_cached_direction = None;
         self.advance_turn();
         self.message = if next {
             YELL_SAILS_HOISTED_MESSAGE.to_string()
@@ -2991,6 +3000,9 @@ impl PlayState {
         self.advance_turn();
         if self.sail_stall_pending {
             self.sail_stall_pending = false;
+            // `weather.md §6`: "A later Pass command reports the
+            // stalled-sailing feedback and clears the cached sailing state."
+            self.sail_cached_direction = None;
             self.message = "Ship remains stalled by the wind.".to_string();
         } else {
             // `commands.md §8.1` row B: `Pass` completes its own echo and
@@ -3442,10 +3454,11 @@ impl PlayState {
     /// these two flags set; this is the walker half of that order.
     ///
     /// The explicit-T arrest discriminator is the fourth skip, and it is the
-    /// only one of the four that "skips the schedule processor *only*, and it
-    /// is tested after the object walker has already made its pass. ... That
-    /// is why a result-two turn can still move a loose horse-family object
-    /// while no scheduled NPC moves" (`npc-schedules.md §5`). Both walkers
+    /// only one of the four that, in `town-mode.md §7` step 4's words,
+    /// "skips the schedule processor *only*, and it is tested after the
+    /// object walker has already made its pass". `npc-schedules.md §5` draws
+    /// the consequence: "That is why a result-two turn can still move a loose
+    /// horse-family object while no scheduled NPC moves." Both walkers
     /// raise the visibility-dirty flag from inside themselves, so §7 step 5's
     /// "the test has to cover **both** walkers, not just the schedule
     /// processor" holds on a result-two turn too.

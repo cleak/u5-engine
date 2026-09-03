@@ -89,9 +89,12 @@ pub enum WalkerEffectGate {
 }
 
 impl WalkerEffectGate {
-    /// `town-mode.md §7`: the three gates "can skip the schedule processor
-    /// *and* the town object walker for the turn", so one answer covers both
-    /// walkers.
+    /// `RETRACTIONS.md` R328: each of the three gates "can skip the schedule
+    /// processor *and* the town object walker for the turn", so one answer
+    /// covers both walkers. `npc-schedules.md §5` says the same in its own
+    /// words - the gates "sit in the town loop's per-turn epilogue, ahead of
+    /// both town walkers - the object walker that moves loose horse-family
+    /// objects and this schedule processor".
     pub const fn walkers_run(self) -> bool {
         matches!(self, Self::Run)
     }

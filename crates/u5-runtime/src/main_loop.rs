@@ -223,8 +223,11 @@ pub enum IdleWaitPass {
     /// world step.
     UnderSailWorldStep,
     /// Under sail, the second half: the bare cursor poll, which costs a tick
-    /// and performs no world step. The helper returns after it instead of
-    /// waiting for a command, which is what makes the route auto-advance.
+    /// and performs no world step of its own. Instead of entering the command
+    /// wait the helper "returns the cached sail direction ... which is how a
+    /// ship keeps moving with no keypress" (`overworld.md §5` step 3), and
+    /// the loop dispatches that direction as this pass's movement command.
+    /// That synthesized command is the auto-advance.
     UnderSailCursorPoll,
 }
 

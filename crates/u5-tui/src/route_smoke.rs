@@ -5685,6 +5685,37 @@ fn validate_harpsichord_route_consumed_no_time(
     Ok(())
 }
 
+/// How many draws separate two states of the shared generator, walking
+/// forward from `from` and giving up after `max_draws`.
+///
+/// `npc-schedules.md §9.1` "Random-stream consumption": "A wander-eligible NPC
+/// consumes one draw from the shared generator on a turn where the gate fails
+/// and two on a turn where it passes, so the number of draws a turn consumes
+/// depends on how many NPCs were eligible." A town route therefore cannot pin
+/// the post-turn stream position to a single recomputed value the way an
+/// overworld route can - but it can still pin it to a *recomputed* position:
+/// the state the published head draws leave behind, advanced by a draw count
+/// inside the bound that same sentence gives.
+fn prng_draws_between(from: u16, to: u16, max_draws: usize) -> Option<usize> {
+    let mut probe = from;
+    for draws in 0..=max_draws {
+        if probe == to {
+            return Some(draws);
+        }
+        probe = u5_prng_advance_state(probe);
+    }
+    None
+}
+
+/// The published bound on the draws one town turn's schedule pass may add
+/// after the turn's own rolls: at most two per NPC in the roster
+/// (`npc-schedules.md §9.1`, "one draw ... on a turn where the gate fails and
+/// two on a turn where it passes"), and the schedule processor gives "every
+/// NPC ... one chance to act per tick" (§5).
+fn town_schedule_pass_draw_bound(state: &PlayState) -> usize {
+    2 * state.npcs.len()
+}
+
 fn validate_route_smoke_case_state(
     state: &PlayState,
     case_name: &str,
@@ -6226,20 +6257,23 @@ fn validate_route_smoke_case_state(
             let poisoned_hp =
                 20u16 - u16::from(FIRST_PLAYABLE_HOURLY_POISON_DAMAGE) - poisoned_starvation;
             let good_hp = 20u16 - good_starvation;
-            // The two starvation draws still come off the head of the stream,
+            // The two starvation draws come off the head of the stream,
             // because the shared status/provision pass runs ahead of the two
-            // town walkers in the turn tail. The *final* stream position is no
-            // longer pinnable from those two draws alone:
-            // `npc-schedules.md §9.1` "Random-stream consumption" - "A
-            // wander-eligible NPC consumes one draw from the shared generator
-            // on a turn where the gate fails and two on a turn where it
-            // passes, so the number of draws a turn consumes depends on how
-            // many NPCs were eligible" - and this castle route walks a full
-            // roster. What is checked here is that the pass consumed the
-            // published starvation draws in the published order.
+            // town walkers in the turn tail; the damage equalities below pin
+            // both values and their order exactly. What follows them is the
+            // town schedule pass, whose draw count `npc-schedules.md §9.1`
+            // makes roster-dependent, so the end position is pinned as the
+            // recomputed post-starvation state advanced by a draw count
+            // inside that section's published per-NPC bound - not as "the
+            // stream moved".
+            let schedule_pass_draws = prng_draws_between(
+                expected_prng,
+                state.prng_state,
+                town_schedule_pass_draw_bound(state),
+            );
             if state.clock.hour != 9
                 || state.food != 0
-                || state.prng_state == 0x3456
+                || schedule_pass_draws.is_none()
                 || state
                     .party
                     .get(0)
@@ -6268,14 +6302,20 @@ fn validate_route_smoke_case_state(
         "castle-hourly-ring-regeneration-pass" => {
             let mut expected_prng = ring_regeneration_first_heal_seed();
             let roll = u5_prng_range_u16(&mut expected_prng, 0, 7);
-            // See the poison/starvation case above: `npc-schedules.md §9.1`
-            // "Random-stream consumption" makes the post-turn stream position
-            // depend on how many roster NPCs were wander-eligible, so the
-            // check is that the ring's own draw came off the head of the
-            // stream, not that nothing else drew afterwards.
+            // As in the poison/starvation case: the ring's own draw is the
+            // first off the seeded stream and the recovery equalities below
+            // pin its value, and the town schedule pass that follows it draws
+            // a roster-dependent number of times (`npc-schedules.md §9.1`).
+            // The end position is therefore pinned as the recomputed
+            // post-ring state advanced by a bounded draw count.
+            let schedule_pass_draws = prng_draws_between(
+                expected_prng,
+                state.prng_state,
+                town_schedule_pass_draw_bound(state),
+            );
             if roll != 0
                 || state.clock.hour != 8
-                || state.prng_state == ring_regeneration_first_heal_seed()
+                || schedule_pass_draws.is_none()
                 || state.party.first().is_none_or(|member| {
                     member.status != b'G' || member.hp != member.max_hp || member.mana != 8
                 })
@@ -6292,12 +6332,19 @@ fn validate_route_smoke_case_state(
         "castle-poison-gas-step" => {
             let mut expected_prng = poison_gas_first_poison_seed();
             let roll = u5_prng_range_u16(&mut expected_prng, 0, TOWN_GAS_DOORWAY_RANGE_MAX);
-            // As above: `npc-schedules.md §9.1` "Random-stream consumption"
-            // puts a variable number of roster wander draws after the gas
-            // roll on a town turn, so the pinned fact is that the gas roll is
-            // the first draw off the seeded stream.
+            // As above: the gas roll is the first draw off the seeded stream
+            // and its value is pinned by `roll` and the poisoned status
+            // below; the town schedule pass that follows draws a
+            // roster-dependent number of times (`npc-schedules.md §9.1`), so
+            // the end position is pinned as the recomputed post-gas state
+            // advanced by a bounded draw count.
+            let schedule_pass_draws = prng_draws_between(
+                expected_prng,
+                state.prng_state,
+                town_schedule_pass_draw_bound(state),
+            );
             if roll == 0
-                || state.prng_state == poison_gas_first_poison_seed()
+                || schedule_pass_draws.is_none()
                 || state.player.x != 16
                 || state.player.y != 15
                 || state

@@ -10300,7 +10300,8 @@ fn animate_static_tiles(
                 )
             );
             if !automatic_gate_pass {
-                advance_visual_wait_frame(&mut visual.state, &mut prompt_cursor_visible);
+                let game_dir = visual.game_dir.clone();
+                advance_visual_wait_frame(&mut visual.state, &game_dir, &mut prompt_cursor_visible);
             } else {
                 // Never catch up multiple automatic sleep/rescue passes in one
                 // host frame; each receives one ordinary visual-pump interval.
@@ -16658,27 +16659,30 @@ fn visual_modal_prompt_active(state: &PlayState) -> bool {
         || state.endgame.is_some()
 }
 
-fn visual_idle_tick(state: &mut PlayState) -> bool {
+fn visual_idle_tick(state: &mut PlayState, game_dir: &Path) -> bool {
     if visual_modal_prompt_active(state) {
         return false;
     }
-    // `timing.md §8.2`: this is the input helper's idle wait, so it owns the
-    // scripted step-and-wait and - when sails are set - the under-sail route,
-    // where "an **under-sail auto-advance pass costs two ticks and one world
-    // step and never enters the command wait at all**". `idle_wait_pass`
-    // performs the world step on the first pump of that pass and nothing but
-    // the tick on the second, which is the two-ticks-per-world-step cadence.
-    //
-    // The "never enters the command wait" half is not observable from this
-    // frontend: this pump is already non-blocking and keystrokes arrive as
-    // events, so there is no command wait here to skip. The returned pass
-    // classification is for callers that do block on a key; nothing here
-    // needs it.
-    state.idle_wait_pass();
+    // `timing.md §8.2`: this pump is the input helper's idle wait, so it owns
+    // the scripted step-and-wait and - when sails are set - the under-sail
+    // route, where "an **under-sail auto-advance pass costs two ticks and one
+    // world step and never enters the command wait at all**".
+    // `idle_wait_pass` performs the world step on the first pump of that pass
+    // and, on the second, the bare cursor poll plus the synthesized movement
+    // command `overworld.md §5` step 3 has the helper return "instead" of
+    // reading the keyboard. So a steered ship keeps sailing here with no
+    // keypress, at one world step and one sail command per two pumps.
+    if let Err(err) = state.idle_wait_pass(Some(game_dir)) {
+        state.message = format!("Sailing error: {err}");
+    }
     true
 }
 
-fn advance_visual_wait_frame(state: &mut PlayState, prompt_cursor_visible: &mut bool) -> bool {
+fn advance_visual_wait_frame(
+    state: &mut PlayState,
+    game_dir: &Path,
+    prompt_cursor_visible: &mut bool,
+) -> bool {
     if visual_line_prompt_active(state) {
         *prompt_cursor_visible = !*prompt_cursor_visible;
         true
@@ -16687,7 +16691,7 @@ fn advance_visual_wait_frame(state: &mut PlayState, prompt_cursor_visible: &mut 
         true
     } else {
         *prompt_cursor_visible = false;
-        visual_idle_tick(state)
+        visual_idle_tick(state, game_dir)
     }
 }
 
@@ -20623,6 +20627,7 @@ mod tests {
         let mut prompt_cursor_visible = true;
         assert!(advance_visual_wait_frame(
             &mut state,
+            Path::new("."),
             &mut prompt_cursor_visible
         ));
 
@@ -23547,7 +23552,7 @@ mod tests {
         state.message = "Ready.".to_string();
         let clock_before = state.clock;
 
-        assert!(visual_idle_tick(&mut state));
+        assert!(visual_idle_tick(&mut state, Path::new(".")));
 
         assert_eq!(state.turn, 0);
         assert_eq!(state.clock, clock_before);
@@ -23556,12 +23561,58 @@ mod tests {
     }
 
     #[test]
+    fn visual_idle_tick_sails_a_steered_ship_with_no_keypress() {
+        // `timing.md §8.2` / `overworld.md §5` step 3: this pump is the input
+        // helper's idle wait, and under sail "this step does not read the
+        // keyboard at all: the input helper returns the cached sail direction
+        // instead, which is how a ship keeps moving with no keypress". The
+        // shell therefore has to advance the ship off the pump alone.
+        let mut state = u5_runtime::test_fixtures::world_state(
+            vec![u5_runtime::BRIT_DEEP_WATER_TILE; u5_runtime::WORLD_CELLS],
+            10,
+            20,
+        );
+        state.player.transport = TransportState::Ship {
+            type_byte: u5_runtime::TRANSPORT_MARKER_SHIP_HOISTED_FIRST,
+            tile: u5_runtime::FIRST_PLAYABLE_FRIGATE_TILE,
+            sails_hoisted: true,
+            hull: u5_runtime::FIRST_PLAYABLE_FULL_SHIP_HULL,
+            skiffs: 1,
+        };
+        // A north wind is perpendicular to an easterly heading, which
+        // `weather.md §5` releases immediately.
+        state.wind = WindState::North;
+
+        // With no cached direction the pump is the ordinary command wait:
+        // the world ticks and the ship stays put.
+        assert!(visual_idle_tick(&mut state, Path::new(".")));
+        assert_eq!((state.player.x, state.player.y), (10, 20));
+
+        // One keyed command establishes the cache; from there the pump alone
+        // keeps the ship sailing, one cell per two pumps.
+        assert_eq!(
+            state
+                .step_with_game_dir(Direction::East, None)
+                .expect("sidecar-free ship step"),
+            u5_runtime::MoveOutcome::Moved
+        );
+        assert_eq!((state.player.x, state.player.y), (11, 20));
+
+        for expected_x in [12usize, 13] {
+            assert!(visual_idle_tick(&mut state, Path::new(".")));
+            assert_eq!(state.player.x, expected_x - 1);
+            assert!(visual_idle_tick(&mut state, Path::new(".")));
+            assert_eq!((state.player.x, state.player.y), (expected_x, 20));
+        }
+    }
+
+    #[test]
     fn visual_idle_tick_suppresses_world_tick_during_modal_prompt() {
         let mut state = world_state(open_world_grid(), 10, 20);
         let _ = state.start_wishing_well_prompt(Direction::East);
         let clock_before = state.clock;
 
-        assert!(!visual_idle_tick(&mut state));
+        assert!(!visual_idle_tick(&mut state, Path::new(".")));
 
         assert_eq!(state.turn, 0);
         assert_eq!(state.clock, clock_before);
@@ -23578,6 +23629,7 @@ mod tests {
 
         assert!(advance_visual_wait_frame(
             &mut state,
+            Path::new("."),
             &mut prompt_cursor_visible
         ));
         assert!(prompt_cursor_visible);
@@ -23587,6 +23639,7 @@ mod tests {
 
         assert!(advance_visual_wait_frame(
             &mut state,
+            Path::new("."),
             &mut prompt_cursor_visible
         ));
         assert!(!prompt_cursor_visible);

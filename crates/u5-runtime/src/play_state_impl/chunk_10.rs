@@ -959,16 +959,84 @@ impl PlayState {
             ));
         }
         if *searched {
+            // `npc-schedules.md §9.1`, "The same stepper is reached with the
+            // cap switched off": one of the two route-recovery entries is
+            // "the state-2/3 arm whose queue is exhausted and whose replan
+            // either failed or **was not attempted**". This is the
+            // not-attempted arm - §7's per-tick latch, "at most one NPC per
+            // tick may start a fresh search", has already spent the tick's
+            // one search.
+            return self.npc_route_recovery_wander(npc_index, floor, target_x, target_y);
+        }
+        // `npc-schedules.md §9.1`: "when the NPC's stuck counter is non-zero
+        // the walker only re-plans on a **one-in-three** draw and otherwise
+        // ages the counter for that turn." The draw is taken before the
+        // search latch is spent, so a stalled NPC does not deny the tick's
+        // one search to a later slot on the turns it does not replan.
+        if self.npcs[npc_index].stuck_counter != 0 && !self.town_npc_stuck_replan_draw_passes() {
             self.npcs[npc_index].note_failed_progress();
             return NpcScheduleStepOutcome::Stalled;
         }
         *searched = true;
         let Some(route) = self.npc_path_route(npc_index, start, target, floor) else {
-            self.npcs[npc_index].note_failed_progress();
-            return NpcScheduleStepOutcome::Stalled;
+            // The other published route-recovery entry: the replan failed.
+            return self.npc_route_recovery_wander(npc_index, floor, target_x, target_y);
         };
         self.npcs[npc_index].set_move_queue(route);
         self.advance_npc_replay_queue_step(npc_index, waypoint, target_x, target_y, target_z, floor)
+    }
+
+    /// `npc-schedules.md §9.1`, "**The same stepper is reached with the cap
+    /// switched off.**"
+    ///
+    /// "Two route-recovery paths in the state machine call the identical
+    /// wander step with cap zero: the queued-route replay when its next
+    /// queued step is refused, and the state-2/3 arm whose queue is exhausted
+    /// and whose replan either failed or was not attempted because a queue
+    /// pointer was still live. Both are still behind the same one-in-two
+    /// coin, so an NPC that is recovering from a blocked route also moves on
+    /// about half its turns, but without the waypoint-radius limit."
+    ///
+    /// The recovery step is the wander stepper itself, so it pays the coin
+    /// and the direction draw and spends the turn on a stage-3/4 rejection
+    /// exactly as the AI-dispatch entry does. It commits the cell the same
+    /// way the AI dispatch does - position plus sprite sync - and leaves the
+    /// state byte, the move queue and the cached waypoint alone, because none
+    /// of §7's route bookkeeping applies to a step the route did not choose.
+    /// The failed route step is still counted against the stuck counter
+    /// (§5 step 7, "if the NPC fails to make progress, the stuck counter is
+    /// bumped"); recovering sideways is not progress along the route.
+    fn npc_route_recovery_wander(
+        &mut self,
+        npc_index: usize,
+        floor: u8,
+        target_x: usize,
+        target_y: usize,
+    ) -> NpcScheduleStepOutcome {
+        self.npcs[npc_index].note_failed_progress();
+        let Some((nx, ny)) = self.town_npc_wander_step(
+            npc_index,
+            floor,
+            target_x,
+            target_y,
+            TOWN_NPC_UNBOUNDED_WANDER_CAP,
+        ) else {
+            return NpcScheduleStepOutcome::Stalled;
+        };
+        self.npcs[npc_index].x = nx;
+        self.npcs[npc_index].y = ny;
+        self.sync_npc_active_object(npc_index, floor);
+        NpcScheduleStepOutcome::Moved
+    }
+
+    /// `npc-schedules.md §9.1`: "when the NPC's stuck counter is non-zero the
+    /// walker only re-plans on a **one-in-three** draw and otherwise ages the
+    /// counter for that turn."
+    ///
+    /// Only the rate is published. The draw form here is the same range
+    /// primitive the wander gate uses, over `0..2`, accepted on one value.
+    fn town_npc_stuck_replan_draw_passes(&mut self) -> bool {
+        self.random_range_u8(0, TOWN_NPC_STUCK_REPLAN_DRAW_MAX) == 0
     }
 
     /// `npc-schedules.md §7` state 8 and the unexpected-state default:
@@ -1023,13 +1091,15 @@ impl PlayState {
             self.npcs[npc_index].set_idle();
             return NpcScheduleStepOutcome::Stalled;
         };
+        // `npc-schedules.md §9.1`: the first of the two cap-zero
+        // route-recovery entries is "the queued-route replay **when its next
+        // queued step is refused**". Both refusal arms below are that case -
+        // an unusable direction code and a cell the §10 checks reject.
         let Some((nx, ny)) = npc_step_from_direction_code(start, code) else {
-            self.npcs[npc_index].note_failed_progress();
-            return NpcScheduleStepOutcome::Stalled;
+            return self.npc_route_recovery_wander(npc_index, floor, target_x, target_y);
         };
         if !self.npc_can_step_toward(npc_index, nx, ny, floor, target_x, target_y) {
-            self.npcs[npc_index].note_failed_progress();
-            return NpcScheduleStepOutcome::Stalled;
+            return self.npc_route_recovery_wander(npc_index, floor, target_x, target_y);
         }
         self.npcs[npc_index].advance_move_queue_direction();
         let moved = self.commit_npc_schedule_position(
@@ -1570,6 +1640,9 @@ const TOWN_NPC_BOUNDED_WANDER_CAP: usize = 3;
 /// `npc-schedules.md §9` value `2`: "the waypoint-radius test switched off
 /// entirely (cap zero)".
 const TOWN_NPC_UNBOUNDED_WANDER_CAP: usize = 0;
+/// `npc-schedules.md §9.1`: the stuck-counter replan draw is "a
+/// **one-in-three** draw", so the range primitive runs over `0..2`.
+const TOWN_NPC_STUCK_REPLAN_DRAW_MAX: u8 = 2;
 /// `npc-schedules.md §9.1` stage 2: the direction draw is "a uniform value
 /// over the sixty-five integers `0..64`".
 const TOWN_NPC_WANDER_DIRECTION_DRAW_MAX: u8 = 64;

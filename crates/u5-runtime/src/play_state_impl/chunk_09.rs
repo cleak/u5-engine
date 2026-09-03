@@ -3376,9 +3376,21 @@ impl PlayState {
     /// it: the shared wait "performs no world step for values `0x21` through
     /// `0x7F` **inclusive**", and there is no world step to schedule when the
     /// band applies.
+    ///
+    /// A **cached sail direction** is required, not merely hoisted sails.
+    /// `overworld.md §5` step 3 is what the route rests on - "under sail on
+    /// the wind-driven cadence, this step does not read the keyboard at all:
+    /// the input helper returns the cached sail direction instead, which is
+    /// how a ship keeps moving with no keypress" - and `weather.md §5` only
+    /// lets the helper "synthesize repeated movement commands from the
+    /// cached direction" once one exists. With no cache there is nothing to
+    /// synthesize, so the loop reads a command and pays the ordinary
+    /// one-tick pass; a ship that has hoisted its sails but not yet been
+    /// steered therefore runs the world at the ordinary rate.
     pub fn under_sail_wait_pass_applies(&self) -> bool {
         matches!(self.area, Area::World { .. })
             && self.player.transport.is_ship_under_sail()
+            && self.sail_cached_direction.is_some()
             && !self.combat_active
             && !idle_world_step_suppressed_for_scene(self.current_scene_byte())
     }
@@ -3391,31 +3403,43 @@ impl PlayState {
     /// cursor poll instead; so an **under-sail auto-advance pass costs two
     /// ticks and one world step and never enters the command wait at all**."
     ///
-    /// So the under-sail route is two calls: the scripted world step, then a
-    /// bare poll that costs its tick and steps nothing. Every other caller
-    /// gets the ordinary single step-and-wait followed by the command wait,
-    /// exactly as before.
+    /// The under-sail pass is therefore two calls into this helper:
     ///
-    /// What this models is the **cadence** half of that sentence - two idle
-    /// passes per world step while sails are set. The "never enters the
-    /// command wait" half is a property of a caller that *blocks* on a key,
-    /// and this engine has no such caller: the frontend idle pump is already
-    /// non-blocking and keystrokes arrive as events. The returned
-    /// [`IdleWaitPass`] classification is published for a blocking caller;
-    /// nothing in the engine auto-advances off it today.
-    pub fn idle_wait_pass(&mut self) -> IdleWaitPass {
+    /// 1. [`IdleWaitPass::UnderSailWorldStep`] - the scripted step-and-wait:
+    ///    one world step, one tick.
+    /// 2. [`IdleWaitPass::UnderSailCursorPoll`] - the bare cursor poll: one
+    ///    tick, **no** world step ("two further idle pumps share the one-tick
+    ///    wait but not the world step"), and then, instead of entering the
+    ///    command wait, the helper "returns the cached sail direction"
+    ///    (`overworld.md §5` step 3) and the loop dispatches it as this
+    ///    pass's movement command. That synthesized command is the
+    ///    auto-advance: it either pays a wind-cadence wait pass or releases
+    ///    the ship's step, exactly as a keyed movement command would
+    ///    (`weather.md §5`).
+    ///
+    /// Every other caller gets the ordinary single step-and-wait and then
+    /// enters the command wait, exactly as before.
+    pub fn idle_wait_pass(&mut self, game_dir: Option<&Path>) -> io::Result<IdleWaitPass> {
         if !self.under_sail_wait_pass_applies() {
             self.under_sail_wait_cursor_poll_pending = false;
             self.advance_visual_tick();
-            return IdleWaitPass::CommandWait;
+            return Ok(IdleWaitPass::CommandWait);
         }
         if self.under_sail_wait_cursor_poll_pending {
             self.under_sail_wait_cursor_poll_pending = false;
-            return IdleWaitPass::UnderSailCursorPoll;
+            let direction = self
+                .sail_cached_direction
+                .expect("under_sail_wait_pass_applies requires a cached sail direction");
+            // `weather.md §5`: the synthesized command goes through the
+            // ordinary movement dispatcher, so the wind gate owns the
+            // cadence counter and the release, and `overworld.md §6.2.5`
+            // owns what a released step does when its destination refuses.
+            self.step_with_game_dir(direction, game_dir)?;
+            return Ok(IdleWaitPass::UnderSailCursorPoll);
         }
         self.advance_visual_tick();
         self.under_sail_wait_cursor_poll_pending = true;
-        IdleWaitPass::UnderSailWorldStep
+        Ok(IdleWaitPass::UnderSailWorldStep)
     }
 
     pub fn decay_light_counters(&mut self, units: u8) {
@@ -3564,6 +3588,15 @@ impl PlayState {
     /// tick, and is not driven by the animator." The dungeon loop runs
     /// neither. Neither pass returns a report: §8.1 forbids a pruning event
     /// that other systems observe.
+    ///
+    /// **Test-only.** No published turn tail calls the animator and the
+    /// walkers together: `npc-schedules.md §5`'s three effect gates sit ahead
+    /// of the walkers alone and `RETRACTIONS.md` R316 keeps the animator out
+    /// of that pair, so the town epilogue calls the two halves separately and
+    /// under different conditions. This bundled entry point survives only as
+    /// the shorthand a batch of `active-objects.md §8.1` tests was written
+    /// against; it is not a contract any mode loop implements.
+    #[cfg(test)]
     pub fn advance_active_objects(&mut self) {
         if matches!(self.area, Area::Town { .. }) {
             self.animate_active_objects();
@@ -4032,6 +4065,10 @@ impl PlayState {
         };
         self.sail_cadence = 0;
         self.sail_stall_pending = false;
+        // `overworld.md §6.2.5`: "The step remains refused, party
+        // coordinates do not change, and the cached sail direction is
+        // cleared." That is what stops the auto-advance route on impact.
+        self.sail_cached_direction = None;
         self.mark_visibility_dirty();
         self.emit_sound_effect(SoundEffect::ShipCollisionRumble);
         self.apply_outdoor_impact_absorption()

@@ -297,6 +297,23 @@ pub struct PlayState {
     pub combat_actors: [CombatActorDescriptor; COMBAT_ACTOR_SLOTS],
     pub sail_cadence: u8,
     pub sail_stall_pending: bool,
+    /// `weather.md §5` / `overworld.md §5` step 3: the hoisted-sail ship's
+    /// **cached sail direction**. "Once the requested direction matches the
+    /// cached heading, the input helper can synthesize repeated movement
+    /// commands from the cached direction until the cache is cleared or
+    /// replaced", and at the loop's input step "under sail on the
+    /// wind-driven cadence, this step does not read the keyboard at all: the
+    /// input helper returns the cached sail direction instead, which is how a
+    /// ship keeps moving with no keypress".
+    ///
+    /// `None` means there is nothing to synthesize, so the loop reads a
+    /// command as usual. Docking, a sailing collision, furling, boarding or
+    /// leaving the ship, and the Pass command's stall report all clear it
+    /// (`overworld.md §6.2.5`, `vehicles.md` "Ship Sails", `weather.md §6`);
+    /// a wind change resets the counter but not the cache ("the next released
+    /// movement uses the same cadence again unless the wind, heading, or
+    /// cache changes"). Never serialized.
+    pub sail_cached_direction: Option<Direction>,
     /// Exact queued shipwright-delivery bytes from `SAVED.GAM`. The packed
     /// class is cleared only when world setup successfully delivers it.
     pub pending_vehicle_save: PendingVehicleSaveState,
