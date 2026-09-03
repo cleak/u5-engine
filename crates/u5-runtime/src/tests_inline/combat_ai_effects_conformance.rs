@@ -13,7 +13,7 @@
         // Poison arm keys on, so start from a cell that selects nothing and
         // let each case name its own hazard.
         state.combat_terrain = [[TOWN_DOOR_CLEARED_TILE; COMBAT_ARENA_SIDE]; COMBAT_ARENA_SIDE];
-        // `combat.md §7.2`: an "ordinary live entry" is a linked record whose
+        // `combat.md §11`: an "ordinary live entry" is a linked record whose
         // tile/class byte is below `0x80`, which is what a seated party
         // member's class tile is (`§5`).
         state.active_objects[0].tile = 0x03;
@@ -35,7 +35,7 @@
         // feeds it to the damage-and-status resolver, runs the shared finalize
         // hook and raises the leave-combat flag".
         //
-        // `§7.2` keys those two: Poison is the tier whose contact is rejected
+        // `§11` keys those two: Poison is the tier whose contact is rejected
         // when the linked record's tile byte "is at least `0x80`" and whose
         // accepted arm runs "with no attacker credit"; Fire is the tier that
         // passes a rolled raw value to the shared endpoint "then run[s] the
@@ -87,7 +87,7 @@
             Some(&SoundEffect::AttackSwing)
         );
 
-        // `§7.2`: the Sleep marker still writes its own status result, but it
+        // `§11`: the Sleep marker still writes its own status result, but it
         // is not one of the damaging kinds, so it costs no hit sound, no
         // finalize hook and no leave-combat flag.
         let mut sleep = hazard_pass_state();
@@ -109,7 +109,7 @@
         assert!(sleep.sound_effects_after(serial).is_empty());
         assert_eq!(sleep.party[0].status, b'S');
 
-        // `§7.2`: "The Energy marker is not recognized by this contact hook."
+        // `§11`: "The Energy marker is not recognized by this contact hook."
         let mut energy = hazard_pass_state();
         energy.active_objects[1] = ActiveObject {
             type_byte: COMBAT_FIELD_KIND_ENERGY,
@@ -549,6 +549,11 @@
         // the ranged animation, resets the scene state, and consumes the
         // action." `catalogs/monster-bestiary.md §3` marks exactly one shipped
         // class, the Gremlin.
+        //
+        // Only the routing and the consumed action are pinned here. The
+        // narration's wording, the ranged animation, and which scene word is
+        // reset are all unpublished, so the branch performs none of those three
+        // and this test asserts none of them.
         let gremlin = 25;
         assert!(combat_ranged_effect_stats(gremlin).unwrap().cast_like_branch);
 
@@ -606,14 +611,14 @@
         assert_eq!(cast_like.target_slot, Some(0));
         assert_eq!(cast_like.range_effect_selector, selector);
         assert_eq!(cast_like.payload, payload);
-        assert!(cast_like.cast_narration_printed);
-        assert!(cast_like.ranged_animation_played);
-        assert!(cast_like.scene_state_reset);
         assert!(cast_like.action_consumed);
         assert_eq!(application.monster_attack, None);
         assert_eq!(application.movement, None);
         assert_eq!(application.command_key, Some(COMBAT_AI_ATTACK_COMMAND_KEY));
-        assert!(!state.combat_effect_prerequisite_active);
+        // The branch does not clear the prerequisite: no document says which
+        // scene word "resets the scene state" writes, and clearing this one
+        // would silently make the branch one-shot.
+        assert!(state.combat_effect_prerequisite_active);
     }
 
     #[test]
@@ -671,6 +676,61 @@
                 );
             }
         }
+
+        // `RETRACTIONS.md` R355, quoted in `audio.md §7.4`: when a self-acting
+        // actor's ranged shot scatters and "the scattered cell turns out to
+        // hold an actor, the ordinary hit chain runs against that actor with
+        // its full narration and its own sounds. The ranged arm is silent only
+        // when the scatter lands on nobody."
+        //
+        // The intended target sits at (5,5) and the attacker at (6,5), so a
+        // scatter roll of `0` selects offset `(-1,-1)` - cell (4,4) - and a
+        // roll of `1` selects `(0,-1)`, cell (5,4).
+        let scatter_state = || {
+            let mut state = combat_ai_turn_state(6, 5);
+            state.party[0].status = b'G';
+            state.party[0].hp = 30;
+            state.party[0].max_hp = 30;
+            state
+        };
+
+        // Lands on an actor: the ordinary hit chain, so the swing plays.
+        let mut occupied = scatter_state();
+        occupied.combat_actors[9] = CombatActorDescriptor::from_row([
+            20,
+            1,
+            COMBAT_ACTOR_FLAG_SELECTABLE_40,
+            COMBAT_CLASS_GIANT_RAT,
+            9,
+            0,
+            4,
+            4,
+        ]);
+        let serial = occupied.sound_effect_serial;
+        let application = occupied
+            .resolve_and_apply_combat_monster_scattered_attack(8, 0, 7, 0, 0, 0)
+            .expect("the scatter arm resolves");
+        assert_eq!(
+            application.target_slot, 9,
+            "the scattered cell holds actor 9"
+        );
+        assert_eq!(
+            occupied.sound_effects_after(serial).first(),
+            Some(&SoundEffect::AttackSwing),
+            "the scattered impact runs the ordinary hit chain with its own sounds"
+        );
+
+        // Lands on nobody: "the ranged arm is silent".
+        let mut empty = scatter_state();
+        let serial = empty.sound_effect_serial;
+        let application = empty
+            .resolve_and_apply_combat_monster_scattered_attack(8, 0, 7, 0, 0, 1)
+            .expect("the scatter arm resolves");
+        assert_eq!(application.damage_application, None);
+        assert!(
+            empty.sound_effects_after(serial).is_empty(),
+            "a scatter that lands on nobody is silent"
+        );
     }
 
     #[test]
@@ -719,8 +779,12 @@
         // the same poison or stoning-style branches before falling back to
         // ordinary damage."
         //
-        // The branch's payload is not published anywhere, so this pins the
-        // routing and the awake gate only.
+        // The branch's payload is not published anywhere - no status letter,
+        // no HP change, no tile, no message, no sound - and the sentence puts
+        // it "before falling back to ordinary damage", so this pins the
+        // routing and the awake gate only, and asserts that the ordinary
+        // damage path still runs. An ungated payload-free branch that
+        // swallowed the attack would claim more than the spec does.
         assert!(combat_class_gaze_stones(COMBAT_CLASS_GAZER));
         assert!(!combat_class_gaze_stones(COMBAT_CLASS_GIANT_RAT));
 
@@ -740,12 +804,20 @@
                 target_slot: 0,
             })
         );
-        assert_eq!(application.resolution, None);
-        assert_eq!(application.damage_application, None);
-        assert_eq!(awake.party[0].hp, 30);
+        assert!(
+            matches!(
+                application.resolution,
+                Some(CombatWeaponAttackResolution::Hit { .. })
+            ),
+            "the recorded branch still falls back to ordinary damage: {:?}",
+            application.resolution
+        );
+        assert!(application.damage_application.is_some());
+        assert!(awake.party[0].hp < 30);
 
-        // "against awake defenders": an asleep defender falls back to ordinary
-        // damage. `§6.1`: "Combat sleep for non-party targets stores into this
+        // "against awake defenders": an asleep defender does not enter the
+        // branch at all, and takes exactly the same ordinary damage path.
+        // `§6.1`: "Combat sleep for non-party targets stores into this
         // bit; party sleep uses the character status byte `'S'` instead", so a
         // party defender's sleep is the roster letter.
         let mut asleep = combat_ai_turn_state(6, 5);
@@ -760,8 +832,9 @@
         assert_eq!(application.stoning, None);
         assert!(
             application.resolution.is_some(),
-            "an asleep defender falls back to ordinary damage"
+            "an asleep defender takes the ordinary damage path"
         );
+        assert!(asleep.party[0].hp < 30);
 
         // The awake gate itself, stated directly.
         let live = CombatActorDescriptor::from_row([

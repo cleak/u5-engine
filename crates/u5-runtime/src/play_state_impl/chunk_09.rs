@@ -224,15 +224,6 @@ impl PlayState {
     ) -> Option<u8> {
         let underworld = plane == WorldPlane::Underworld;
         match spawn_terrain_branch(tile, underworld) {
-            // `encounters.md §4`: reached only through the low-tile allowance
-            // arm below, which is where the classifier now routes tile 1.
-            SpawnTerrainBranch::SurfaceTile1WhirlpoolOrAquatic => {
-                if self.native_world_encounter_mod(0, 0x61, SPAWN_WHIRLPOOL_DENOMINATOR) == 0 {
-                    Some(0xEC)
-                } else {
-                    self.native_world_encounter_bucket_pick(&SURFACE_AQUATIC_BUCKET, 0, 0x62)
-                }
-            }
             // `encounters.md §4`: "Terrain tile 7 (parched desert) |
             // **One-in-four** chance of the **Sand Trap** sprite run
             // `0xE0..0xE3`; a failed special roll rejects the candidate."

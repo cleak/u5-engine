@@ -646,10 +646,6 @@ pub const fn dungeon_room_clear_bit_position(dungeon: u8, room_id: u8) -> Option
 /// Caller supplies the world tile id and the underworld plane flag.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum SpawnTerrainBranch {
-    /// Surface tile `0x01` after the low-tile allowance — 1-in-8
-    /// special whirlpool roll, otherwise surface default/aquatic
-    /// bucket.
-    SurfaceTile1WhirlpoolOrAquatic,
     /// Terrain tile `0x07` (parched desert) — 1-in-4 Sand Trap special
     /// roll; failure rejects the candidate.
     ///
@@ -696,11 +692,12 @@ pub const fn spawn_terrain_branch(tile: u8, underworld: bool) -> SpawnTerrainBra
     }
     // `encounters.md §4` names the tile-1 row "Surface tile 1 **after the
     // low-tile allowance gate**", and tile 1 is inside the low-tile family
-    // (`tile < 0x04`). It therefore classifies as `LowTileAllowance` here and
-    // reaches `SurfaceTile1WhirlpoolOrAquatic` only once the allowance die has
-    // accepted - see [`spawn_surface_tile1_special_after_allowance`]. Taking
-    // the special branch first accepted a tile-1 candidate outright instead of
-    // at sixteen-in-sixty-five, and consumed one draw fewer.
+    // (`tile < 0x04`). It therefore classifies as `LowTileAllowance` here, and
+    // the tile-1 whirlpool special is taken inside that arm once the allowance
+    // die has accepted - see [`spawn_surface_tile1_special_after_allowance`].
+    // There is no separate tile-1 branch to return: taking one first accepted
+    // a tile-1 candidate outright instead of at sixteen-in-sixty-five, and
+    // consumed one draw fewer.
     if tile < 0x04
         || (tile >= 0x60 && tile <= 0x6F)
         || (tile >= 0xD4 && tile <= 0xD7)

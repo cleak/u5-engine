@@ -9506,11 +9506,7 @@ fn combat_ai_turn_applies_monster_attack_when_attack_inputs_are_supplied() {
 #[test]
 fn negate_magic_skips_enemy_special_hook_but_preserves_ordinary_melee() {
     let mut state = combat_ai_turn_state(6, 5);
-    // `combat.md §12`: a Gazer's attack takes the stoning-style branch against
-    // an awake defender and never reaches ordinary melee, so this test - whose
-    // subject is Negate Magic's gate over the per-class special hook - uses the
-    // Wisp (37), the other possess-capable class, which has no gaze branch.
-    state.combat_actors[8].owner_target_class = 37;
+    state.combat_actors[8].owner_target_class = 28;
     state.active_effect_tag = Some(NEGATE_MAGIC_ACTIVE_EFFECT_TAG);
     state.active_effect_counter = 20;
     state.party[0].status = b'G';

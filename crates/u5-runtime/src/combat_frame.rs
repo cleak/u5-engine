@@ -556,26 +556,26 @@ pub enum CombatPostDispatchContactSource {
 /// `combat.md §7` step 7: the standing-cell hazard pass recognises "Three
 /// damaging kinds ... each with its own effect".
 ///
-/// Two of the three are keyed by `§7.2`'s per-marker table, which is the more
+/// Two of the three are keyed by `§11`'s per-marker table, which is the more
 /// specific statement of the same hook and names each field kind's result
 /// outright:
 ///
-/// - **Poison** is the low tier. `§7.2`: "Reject contact when the target's
+/// - **Poison** is the low tier. `§11`: "Reject contact when the target's
 ///   linked active-object tile/class byte is at least `0x80`" - `§7`'s "only
 ///   while the actor's own object entry is an ordinary live entry" - and
 ///   otherwise the shared damage/status endpoint "with no attacker credit",
 ///   `§7`'s no-attacker sentinel.
-/// - **Fire** is the middle tier. `§7.2`: "Pass a rolled raw value directly to
+/// - **Fire** is the middle tier. `§11`: "Pass a rolled raw value directly to
 ///   the shared damage/status endpoint, then run the ordinary no-attacker
 ///   finalization and status-panel refresh."
 ///
 /// [`CombatHazardTier::Top`] is published by `§7` and **is not reachable in
 /// this engine**, because the only remaining field kinds are excluded by
-/// `§7.2` from being a damaging tier at all: Sleep "write[s] asleep status ...
+/// `§11` from being a damaging tier at all: Sleep "write[s] asleep status ...
 /// or the combat sleep/disabled bit" with "no hook-local draw", and the Energy
 /// marker "is not recognized by this contact hook" and has "no contact-path
 /// draw and no zero-valued damage dispatch". Nothing else published keys the
-/// top tier, so keying it to Energy would contradict `§7.2` rather than
+/// top tier, so keying it to Energy would contradict `§11` rather than
 /// implement `§7`. The variant is kept so the published tier has a name; see
 /// the spec question recorded with this change.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -595,7 +595,7 @@ pub enum CombatHazardTier {
 }
 
 /// `combat.md §7` step 7: "A cell with none of these kinds costs the actor
-/// nothing." Sleep and Energy are not damaging tiers (`§7.2`), so neither one
+/// nothing." Sleep and Energy are not damaging tiers (`§11`), so neither one
 /// plays the hit sound, runs the finalize hook, or raises the leave-combat
 /// flag - Sleep still applies its own published status result and Energy is
 /// not recognised by the hook at all.
@@ -694,6 +694,14 @@ pub struct CombatSummonApplication {
 /// `combat.md §11` cast-like ranged/effect branch: "That branch prints the
 /// cast/effect narration, reuses the AI direction/effect dispatch, plays the
 /// ranged animation, resets the scene state, and consumes the action."
+///
+/// Of those five steps only two are implementable from published text: the
+/// direction/effect dispatch inputs (carried below) and the consumed action.
+/// The narration's wording is not published anywhere, no shipped document
+/// names the ranged animation this branch plays, and no document says which
+/// scene word "resets the scene state" writes - so this record does **not**
+/// carry booleans claiming those three steps ran. See the spec question
+/// recorded with this change.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct CombatCastLikeRangedEffectApplication {
     pub actor_slot: usize,
@@ -707,14 +715,6 @@ pub struct CombatCastLikeRangedEffectApplication {
     pub payload: u8,
     /// `combat.md §11`: "reuses the AI direction/effect dispatch".
     pub step_vector: CombatStepVector,
-    /// `combat.md §11`: "prints the cast/effect narration". The wording of
-    /// that line is not published anywhere, so this records only that the
-    /// narration step ran.
-    pub cast_narration_printed: bool,
-    /// `combat.md §11`: "plays the ranged animation".
-    pub ranged_animation_played: bool,
-    /// `combat.md §11`: "resets the scene state".
-    pub scene_state_reset: bool,
     /// `combat.md §11`: "and consumes the action".
     pub action_consumed: bool,
 }
@@ -4725,10 +4725,13 @@ impl PlayState {
         // `combat.md §7` step 7: both damaging tiers "play the hit sound" -
         // `audio.md §7.4`'s attack-application swing cue, which `§7` step 7
         // and `§11` both name that way. The low tier plays it "only while the
-        // actor's own object entry is an ordinary live entry", which is the
-        // same linked-entry test `§7.2`'s Poison row states as "reject contact
-        // when the target's linked active-object tile/class byte is at least
-        // `0x80`".
+        // actor's own object entry is an ordinary live entry". The only
+        // linked-entry test any document publishes is `§11`'s Poison row -
+        // "reject contact when the target's linked active-object tile/class
+        // byte is at least `0x80`" - so the sound uses exactly that predicate
+        // rather than adding an unpublished emptiness conjunct on top of it;
+        // one published clause, one predicate, shared with the contact path
+        // below.
         let ordinary_live_entry = self
             .active_objects
             .get(
@@ -4737,7 +4740,7 @@ impl PlayState {
                     .copied()?
                     .active_object_slot as usize,
             )
-            .is_some_and(|object| !object.is_empty() && object.tile < 0x80);
+            .is_some_and(|object| object.tile < 0x80);
         let hit_sound_played = match tier {
             Some(CombatHazardTier::Low) => ordinary_live_entry,
             Some(CombatHazardTier::Middle) => true,
@@ -4925,10 +4928,22 @@ impl PlayState {
 
         // `combat.md §12`: "Gazer attacks have a separate stoning-style effect
         // against awake defenders, and magic/effect attack tiles can also
-        // enter the same poison or stoning-style branches before falling back
-        // to ordinary damage." The branch is checked with the other
-        // monster-only status branches, ahead of ordinary melee damage; an
-        // asleep defender falls through to that ordinary path.
+        // enter the same poison or stoning-style branches **before falling
+        // back to ordinary damage**."
+        //
+        // The published sentence gives the branch a gate and a position and
+        // nothing else: no status letter, no HP change, no tile, no message,
+        // no sound, and no statement that entering it replaces the damage. The
+        // sibling branch in the same paragraph - the poison/status cluster -
+        // always ends in either a status or a rolled damage delegate, so an
+        // ungated, payload-free branch that swallowed the attack would be a
+        // stronger claim than anything published. It would also make a Gazer
+        // deal zero damage forever and, sitting ahead of the range routing
+        // below, would make `§11`'s turnable ranged/effect arm - which lists
+        // the Gazer - unreachable. So the branch is **recorded** and the
+        // ordinary damage path still runs, which is the literal reading of
+        // "before falling back to ordinary damage". See the spec question
+        // recorded with this change.
         //
         // Only the class-keyed half is implementable here: the second sentence
         // names "magic/effect attack tiles" as a further entry point, but no
@@ -4944,16 +4959,6 @@ impl PlayState {
                 .flatten();
             resolve_combat_stoning_effect(source, target_slot, target, member)
         });
-        if let Some(stoning) = stoning {
-            return Some(CombatMonsterAttackApplication {
-                attacker_slot,
-                target_slot,
-                poison_status_outcome: None,
-                stoning: Some(stoning),
-                resolution: None,
-                damage_application: None,
-            });
-        }
 
         let mut poison_status_outcome = None;
         if target_range <= 1 {
@@ -4985,7 +4990,7 @@ impl PlayState {
                         attacker_slot,
                         target_slot,
                         poison_status_outcome: Some(poison_outcome),
-                        stoning: None,
+                        stoning,
                         resolution: None,
                         damage_application: None,
                     });
@@ -5001,7 +5006,7 @@ impl PlayState {
                         attacker_slot,
                         target_slot,
                         poison_status_outcome: Some(poison_outcome),
-                        stoning: None,
+                        stoning,
                         resolution: None,
                         damage_application,
                     });
@@ -5038,7 +5043,7 @@ impl PlayState {
             attacker_slot,
             target_slot,
             poison_status_outcome,
-            stoning: None,
+            stoning,
             resolution: Some(resolution),
             damage_application,
         })
@@ -5050,13 +5055,16 @@ impl PlayState {
     /// direction/effect dispatch, plays the ranged animation, resets the scene
     /// state, and consumes the action."
     ///
-    /// **The narration's text is not published.** `§9` Pass 3 publishes the
-    /// ordinary AI line's shape (`<monster name> attacks <target name>, armed
-    /// with <weapon>!`) but no shipped document gives the cast/effect variant's
-    /// wording, so this branch reports that the narration step ran and leaves
-    /// the composed line the dispatcher already placed in the message slot
-    /// rather than inventing a string. See the spec question recorded with
-    /// this change.
+    /// **Three of those five steps have no published payload.** `§9` Pass 3
+    /// withdrew the only AI attack line the spec ever quoted, and no shipped
+    /// document gives the cast/effect variant's wording, names the ranged
+    /// animation, or says which scene word is reset. This branch therefore
+    /// carries the published routing - the class trait, the effect
+    /// prerequisite state, the selector/payload/direction inputs, and the
+    /// consumed action - and prints no string, emits no animation and writes
+    /// no scene word. Clearing the effect prerequisite here was tried and
+    /// backed out: it is not published, and it silently made the branch
+    /// one-shot. See the spec question recorded with this change.
     pub fn apply_combat_ai_cast_like_ranged_effect(
         &mut self,
         actor_slot: usize,
@@ -5069,12 +5077,6 @@ impl PlayState {
         if !combat_ranged_effect_stats(actor.owner_target_class)?.cast_like_branch {
             return None;
         }
-        // `combat.md §11`: "resets the scene state". The one scene-scoped
-        // value this engine keeps for the cast/effect family is the shared
-        // per-dispatch effect prerequisite, so the branch clears it as it
-        // consumes the action. Which scene word the original resets is not
-        // published.
-        self.combat_effect_prerequisite_active = false;
         self.mark_visibility_dirty();
         Some(CombatCastLikeRangedEffectApplication {
             actor_slot,
@@ -5082,9 +5084,6 @@ impl PlayState {
             range_effect_selector,
             payload,
             step_vector,
-            cast_narration_printed: true,
-            ranged_animation_played: true,
-            scene_state_reset: true,
             action_consumed: true,
         })
     }
@@ -5196,6 +5195,16 @@ impl PlayState {
                 damage_application: None,
             });
         };
+        // `audio.md §7.4`, as corrected by `RETRACTIONS.md` R355: when a
+        // self-acting actor's ranged shot scatters and "the scattered cell
+        // turns out to hold an actor, the ordinary hit chain runs against that
+        // actor with its full narration and **its own sounds**". The ordinary
+        // hit chain's own sound is the attack-application swing, played
+        // "unconditionally, before the to-hit roll". The same paragraph says
+        // "the ranged arm is silent only when the scatter lands on nobody", so
+        // the cue sits after the impact-cell occupancy test above and before
+        // the roll below.
+        self.emit_sound_effect(SoundEffect::AttackSwing);
         // `combat.md §12`: a party defender's rating is the cached
         // combat-defense byte at `+0x18`. `party_defender_rating` stays the
         // fallback for a state whose roster does not carry that slot.
@@ -5595,17 +5604,20 @@ impl PlayState {
                     Some(self.age_active_effect()),
                 )
             };
-        if let Some(contact) = post_dispatch_contact.as_ref() {
-            // `combat.md §7` step 7: only the middle damaging tier "raises the
-            // leave-combat flag". The low and top tiers cost the actor their
-            // effect and nothing more.
-            let leave_combat = contact.raises_leave_combat_flag
-                || matches!(
-                    control_after,
-                    CombatRoundLoopControl::Exit(CombatRoundLoopExit::LeaveCombat)
-                );
-            control_after = self.combat_round_loop_control(leave_combat, false);
-        }
+        // `combat.md §7` step 7 says the middle damaging tier "raises the
+        // leave-combat flag" and names no reader for it; §11's more specific
+        // statements of the same Fire result - the arena-terrain row ("play the
+        // target sound, pass a rolled raw value ..., run no-attacker
+        // finalization, and request a status-panel refresh") and the per-marker
+        // Fire row - list no leave-combat consequence at all. `RETRACTIONS.md`
+        // R288 withdrew an earlier reading that mapped another combat event
+        // onto the leave-combat path and ended the round loop. So the flag is
+        // **recorded** on the contact record (`raises_leave_combat_flag`) and
+        // deliberately not wired to a round-loop exit here: standing on lava
+        // does not end the fight until a document names the flag's reader. The
+        // monster dispatch path (`apply_combat_actor_slot_dispatch_internal`)
+        // treats it the same way, so one published tier has one behaviour on
+        // both paths. See the spec question recorded with this change.
         if matches!(control_after, CombatRoundLoopControl::ContinueActorWalk) {
             control_after = self.combat_round_loop_control(false, false);
         }
@@ -6143,6 +6155,11 @@ impl PlayState {
         };
 
         if !matches!(action, CombatActorDispatchAction::PlayerReady) {
+            // `combat.md §7` step 7's hazard pass follows every dispatched
+            // action, monster or player alike. The middle tier's published
+            // "raises the leave-combat flag" has no published reader, so the
+            // returned record is observed by neither path's loop control - see
+            // the note on the player command tail.
             let _ = self.apply_combat_post_dispatch_contact_for_actor_position(slot);
             self.clear_combat_interference_for_completed_action(slot);
         }
@@ -6494,14 +6511,21 @@ impl PlayState {
     /// probe". So one gate draw precedes the two coordinate draws, and a
     /// declined gate leaves the arm having consumed exactly that one draw.
     ///
-    /// **The gate's acceptance width is not published.** `§9` publishes the
-    /// existence of the chance roll and nothing about its odds. The only
-    /// chance-gate shape `§9` does publish - the per-class blink and
+    /// **The gate's acceptance width is not published, and the width used
+    /// here is an unverified assumption, not a published contract.** `§9`
+    /// publishes the existence of the chance roll and nothing about its odds.
+    /// The only chance-gate shape `§9` does publish - the per-class blink and
     /// summon-daemon abilities' "inclusive `0..255` gate value ... fires on
-    /// exactly `0..31`, an exact `32/256 = 1/8` acceptance" - is reused here,
-    /// through the same [`combat_ai_special_one_in_eight_gate`] helper, so the
-    /// assumption is stated in one place instead of being spread through the
-    /// mover. See the spec question recorded with this change.
+    /// exactly `0..31`, an exact `32/256 = 1/8` acceptance" - is reused here
+    /// by analogy, through the same [`combat_ai_special_one_in_eight_gate`]
+    /// helper, so the assumption lives in one place instead of being spread
+    /// through the mover. Two consequences a reader must not mistake for
+    /// published behaviour: this draw advances the shared gameplay PRNG by one
+    /// byte, and it takes teleport frequency from every eligible dispatch down
+    /// to one in eight. Drawing nothing would also have been wrong - `§9` says
+    /// the arm is suppressed "before its **chance roll** and random-cell
+    /// probe", so a roll exists - but the width needs a clean-room answer. See
+    /// the spec question recorded with this change.
     pub fn combat_ai_teleport_chance_roll(&mut self, actor_slot: usize) -> u8 {
         let _ = actor_slot;
         self.random_range_u8(0, u8::MAX)
