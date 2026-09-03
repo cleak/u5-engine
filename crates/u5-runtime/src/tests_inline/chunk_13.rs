@@ -20571,12 +20571,14 @@ fn cast_dispatcher_gate_matches_spec_order_and_messages() {
 }
 
 #[test]
-fn summoned_creatures_never_reach_the_player_command_path() {
-    // magic.md §8: "All three place their creature through the ordinary
-    // monster placement path, so the new actor keeps the monster-side
-    // class byte and monster AI drives its turns exactly as it drives
-    // any other monster. Nothing routes a summoned creature through the
-    // player command parser, and the player never gets to move it."
+fn the_controlled_bit_alone_decides_the_player_command_path() {
+    // magic.md §8: "That bit **is** a transfer of control ... a
+    // monster-side slot carrying the bit fails the self-acting test, so the
+    // round walker sends it to the keystroke/command path instead of to the
+    // automatic actor driver. It takes its turns at the player's prompt".
+    // The former reading - "monster AI drives its turns exactly as it drives
+    // any other monster ... the player never gets to move it" - is withdrawn
+    // by RETRACTIONS.md R354.
     //
     // combat.md §6.1a: "The walker sends the group ordinarily occupied
     // by seated party members to the keystroke/command path (Section 8)
@@ -20618,9 +20620,11 @@ fn summoned_creatures_never_reach_the_player_command_path() {
     ));
 
     // Conjure / Swarm / Summon stamp COMBAT_SUMMONED_ACTOR_FLAGS into a
-    // monster-side slot. The bit groups the creature with the party for
-    // the same-faction filter, but it must not hand the creature to the
-    // player's prompt.
+    // monster-side slot. magic.md §8: the bit groups the creature with the
+    // party for the same-faction filter *and* hands it to the player's
+    // prompt - "It takes its turns at the player's prompt, printing the
+    // reduced turn banner". The round walker already dispatches such a slot
+    // to PlayerReady, so this helper has to agree with it.
     let summoned = descriptor(COMBAT_SUMMONED_ACTOR_FLAGS, 20);
     assert!(summoned.is_controlled());
     assert_eq!(
@@ -20629,10 +20633,22 @@ fn summoned_creatures_never_reach_the_player_command_path() {
     );
     for slot in COMBAT_PARTY_ACTOR_SLOTS..COMBAT_ACTOR_SLOTS {
         assert!(
-            !combat_slot_takes_player_command_path(slot, summoned),
-            "summoned creature in slot {slot} reached the player command path"
+            combat_slot_takes_player_command_path(slot, summoned),
+            "summoned creature in slot {slot} was refused the player command path"
         );
     }
+
+    // A dead or empty descriptor takes no path at all, whatever its group:
+    // the group helper answers "party" for a dead actor, and that must not
+    // be read as a prompt.
+    let dead_summoned = descriptor(
+        COMBAT_SUMMONED_ACTOR_FLAGS | COMBAT_ACTOR_FLAG_MARKED_DEAD,
+        20,
+    );
+    assert!(!combat_slot_takes_player_command_path(
+        COMBAT_PARTY_ACTOR_SLOTS,
+        dead_summoned
+    ));
 
     // combat.md §9: the traitor-roster override applies "for both the
     // friendly-fire filter and the player-versus-AI dispatch gate".

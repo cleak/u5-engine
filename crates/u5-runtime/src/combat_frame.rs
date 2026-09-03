@@ -1341,19 +1341,32 @@ impl PlayState {
             .is_some_and(|weight| combat_target_weight_gate_accepts_from_raw_roll(weight, raw_roll))
     }
 
+    /// `combat.md §12`: "Magic Missile and Fireball reach this handler only
+    /// after the spell-damage wrapper rolls raw damage ... and subtracts a
+    /// random defense roll based on the target's combat defense. ... For
+    /// party-member defenders, the damage roll reads the cached combat-defense
+    /// byte in the character record at offset `+0x18`; factory-seed records
+    /// carry value `7`."
+    ///
+    /// `7` is what a factory-seed record happens to hold, not a rule about
+    /// every record, so this reads the loaded per-record byte - the same
+    /// `+0x18` value the melee arm's `combat_actor_defence_rating` reads - and
+    /// falls back to the factory seed only when no roster byte is available.
+    ///
+    /// `magic.md §8`: Protection occupies and displays the shared
+    /// timed-effect slot, but its intended defense computation is unreachable
+    /// and has no mechanical consequence, so no tag is consulted here.
     pub fn combat_spell_target_defense_value(&self, target_slot: usize) -> u8 {
         if target_slot < COMBAT_PARTY_ACTOR_SLOTS {
-            // `magic.md §8`: Protection occupies and displays the shared
-            // timed-effect slot, but its intended defense computation is
-            // unreachable and has no mechanical consequence.
-            CHARACTER_DEFENSE_FACTORY_SEED
-        } else {
-            self.combat_actors
-                .get(target_slot)
-                .and_then(|actor| combat_class_stats(actor.owner_target_class))
-                .map(|stats| stats.defense)
-                .unwrap_or_default()
+            return self
+                .combat_actor_defence_rating(target_slot)
+                .unwrap_or(CHARACTER_DEFENSE_FACTORY_SEED);
         }
+        self.combat_actors
+            .get(target_slot)
+            .and_then(|actor| combat_class_stats(actor.owner_target_class))
+            .map(|stats| stats.defense)
+            .unwrap_or_default()
     }
 
     pub fn combat_spell_target_defense_roll(&mut self, target_slot: usize) -> u8 {
@@ -5167,9 +5180,10 @@ impl PlayState {
         }
         // `combat.md §6.1a`: the round walker picks the keystroke path
         // through the slot-to-group helper, so a party-side actor
-        // carrying the controlled bit runs on the automatic driver.
-        // `magic.md §8`: "Nothing routes a summoned creature through the
-        // player command parser, and the player never gets to move it."
+        // carrying the controlled bit runs on the automatic driver and a
+        // monster-side actor carrying it runs on the prompt. `magic.md
+        // §8`: a stamped creature "takes its turns at the player's
+        // prompt" (`RETRACTIONS.md` R354).
         if !combat_slot_takes_player_command_path(actor_slot, active_actor) {
             return None;
         }

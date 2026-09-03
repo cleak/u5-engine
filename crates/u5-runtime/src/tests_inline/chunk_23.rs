@@ -9163,6 +9163,53 @@ fn protection_active_effect_does_not_modify_live_party_spell_defense() {
     );
 }
 
+/// `combat.md §12`: "For party-member defenders, the damage roll reads the
+/// cached combat-defense byte in the character record at offset `+0x18`;
+/// factory-seed records carry value `7`." The seed is what a factory record
+/// holds, not a rule about every record, so the spell-damage arm has to read
+/// the same loaded byte the melee arm reads and not a constant.
+#[test]
+fn spell_damage_reads_the_loaded_party_combat_defense_byte() {
+    let mut state = world_state(open_world_grid(), 10, 20);
+
+    // A roster that is not factory-seeded. Both arms must report the loaded
+    // byte, because 12 gives them one defence term, not two.
+    state.party_combat_defense = vec![3];
+    assert_eq!(state.combat_spell_target_defense_value(0), 3);
+    assert_eq!(state.combat_actor_defence_rating(0), Some(3));
+
+    state.party_combat_defense = vec![0];
+    assert_eq!(state.combat_spell_target_defense_value(0), 0);
+    assert_eq!(state.combat_actor_defence_rating(0), Some(0));
+
+    // A slot the roster does not cover falls back to the published
+    // factory-seed value, matching the melee arm's own fallback.
+    state.party_combat_defense.clear();
+    assert_eq!(
+        state.combat_spell_target_defense_value(0),
+        CHARACTER_DEFENSE_FACTORY_SEED
+    );
+    assert_eq!(
+        state.combat_actor_defence_rating(0),
+        Some(CHARACTER_DEFENSE_FACTORY_SEED)
+    );
+
+    // The monster arm is untouched: it still reads the class defense byte.
+    let monster_slot = COMBAT_PARTY_ACTOR_SLOTS;
+    state.combat_actors[monster_slot] = CombatActorDescriptor::for_monster_placement(
+        combat_class_stats(COMBAT_CLASS_GIANT_RAT).unwrap(),
+        7,
+        4,
+        5,
+        0,
+        0,
+    );
+    assert_eq!(
+        state.combat_spell_target_defense_value(monster_slot),
+        combat_class_stats(COMBAT_CLASS_GIANT_RAT).unwrap().defense
+    );
+}
+
 #[test]
 fn combat_ai_step_vector_uses_axis_sign_and_flee_inversion() {
     assert_eq!(
@@ -11803,20 +11850,21 @@ fn combat_input_dispatch_z_stats_refuses_missing_or_disabled_actor() {
 }
 
 #[test]
-fn combat_input_dispatch_refuses_controlled_non_party_actor_turn() {
-    // magic.md §8: "All three place their creature through the
-    // ordinary monster placement path, so the new actor keeps the
-    // monster-side class byte and monster AI drives its turns
-    // exactly as it drives any other monster. Nothing routes a
-    // summoned creature through the player command parser, and the
-    // player never gets to move it."
+fn combat_input_dispatch_accepts_a_controlled_non_party_actor_turn() {
+    // magic.md §8: "That bit **is** a transfer of control ... a
+    // monster-side slot carrying the bit fails the self-acting test, so the
+    // round walker sends it to the keystroke/command path instead of to the
+    // automatic actor driver. It takes its turns at the player's prompt".
     //
-    // combat.md §6.1a: the round walker picks the keystroke path
-    // through the slot-to-group helper, and only "the group
-    // ordinarily occupied by seated party members" reaches it. The
-    // controlled bit does move this monster into the party's group
-    // for the same-faction filter, which is why the withdrawn
-    // reading looked plausible.
+    // *Corrected.* This test previously asserted the opposite, quoting the
+    // withdrawn "monster AI drives its turns exactly as it drives any other
+    // monster ... the player never gets to move it". RETRACTIONS.md R354
+    // withdraws all of it and reverses the earlier R074 withdrawal.
+    //
+    // combat.md §6.1a: the round walker picks the keystroke path through
+    // the slot-to-group helper alone, and the controlled bit is that
+    // helper's team toggle, so it moves this monster into the party's group
+    // for the dispatch gate as well as for the same-faction filter.
     let game_dir = std::path::Path::new(".");
     let mut state = combat_player_command_state(8, 5);
     state.combat_actors[8].flags |= COMBAT_ACTOR_FLAG_TEAM_TOGGLE;
@@ -11829,11 +11877,14 @@ fn combat_input_dispatch_refuses_controlled_non_party_actor_turn() {
         PlayInputDisposition::Continue
     );
 
-    assert_eq!(state.message, "");
-    assert_eq!((state.combat_actors[8].x, state.combat_actors[8].y), (8, 5));
+    // The direction echo of Section 8, then the next actor's turn banner.
+    assert_eq!(state.message, "East
+
+Avatar, armed with bare hands:");
+    assert_eq!((state.combat_actors[8].x, state.combat_actors[8].y), (9, 5));
     assert_eq!(
         (state.active_objects[8].x, state.active_objects[8].y),
-        (8, 5)
+        (9, 5)
     );
 }
 

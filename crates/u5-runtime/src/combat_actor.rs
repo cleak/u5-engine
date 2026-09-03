@@ -3629,18 +3629,27 @@ pub fn resolve_combat_target_group_for_actor(
 /// monster-side group "for both the friendly-fire filter and the
 /// player-versus-AI dispatch gate".
 ///
-/// A monster-side slot never reaches the keystroke path even when the
-/// controlled bit puts it in the party's group for the same-faction
-/// filter. `magic.md §8`: "All three place their creature through the
-/// ordinary monster placement path, so the new actor keeps the
-/// monster-side class byte and monster AI drives its turns exactly as
-/// it drives any other monster. Nothing routes a summoned creature
-/// through the player command parser, and the player never gets to
-/// move it." The earlier reading - that the controlled bit hands a
-/// summoned creature to the player's prompt - is withdrawn.
+/// The dispatch decision is therefore the slot-to-group helper alone, and
+/// the toggle cuts both ways. `magic.md §8`: "a monster-side slot carrying
+/// the bit fails the self-acting test, so the round walker sends it to the
+/// keystroke/command path instead of to the automatic actor driver. It takes
+/// its turns at the player's prompt, printing the reduced turn banner ...
+/// then `Attack-`, `Aim! `, `Nothing!` on a cancelled confirm, and `<target>
+/// missed!` on a failed roll."
+///
+/// *Corrected.* This helper previously required a party-side slot outright,
+/// on the reading that "monster AI drives its turns exactly as it drives any
+/// other monster" and that "nothing routes a summoned creature through the
+/// player command parser, and the player never gets to move it". All of that
+/// is withdrawn - `RETRACTIONS.md` R354, which also reverses the earlier R074
+/// withdrawal. The slot bound also disagreed with the round walker, which
+/// already dispatches by group and hands a stamped creature `PlayerReady`.
 pub fn combat_slot_takes_player_command_path(slot: usize, actor: CombatActorDescriptor) -> bool {
-    slot < COMBAT_PARTY_ACTOR_SLOTS
-        && resolve_combat_target_group_for_actor(actor, slot, None) == COMBAT_TARGET_GROUP_PARTY
+    if actor.is_empty() || actor.is_marked_dead() {
+        return false;
+    }
+    resolve_combat_target_group(slot, actor.owner_target_class, actor.team_toggled())
+        == COMBAT_TARGET_GROUP_PARTY
 }
 
 pub fn combat_target_candidate_view_from_descriptor(

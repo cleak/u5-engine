@@ -2503,12 +2503,15 @@ fn handle_endgame_key_input(
     Ok(PlayInputDisposition::Continue)
 }
 
-/// `magic.md §8`: "Nothing routes a summoned creature through the
-/// player command parser, and the player never gets to move it."
-/// The dispatch decision is `combat.md §6.1a`'s slot-to-group helper,
-/// not the controlled bit read directly - a party-side actor carrying
-/// that bit (Sword of Chaos, possession, Charm) goes to the automatic
-/// driver, and a monster-side actor never gets a keystroke prompt.
+/// The dispatch decision is `combat.md §6.1a`'s slot-to-group helper, not
+/// the controlled bit read directly, and the toggle cuts both ways: a
+/// party-side actor carrying that bit (Sword of Chaos, possession, Charm)
+/// goes to the automatic driver, and a monster-side actor carrying it goes
+/// to the prompt. `magic.md §8`: "a monster-side slot carrying the bit
+/// fails the self-acting test, so the round walker sends it to the
+/// keystroke/command path ... It takes its turns at the player's prompt."
+/// The former "nothing routes a summoned creature through the player command
+/// parser" is withdrawn - `RETRACTIONS.md` R354.
 fn combat_actor_accepts_player_input(slot: usize, actor: CombatActorDescriptor) -> bool {
     combat_actor_is_active_not_dead(actor) && combat_slot_takes_player_command_path(slot, actor)
 }
