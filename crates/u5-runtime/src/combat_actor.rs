@@ -4380,9 +4380,9 @@ pub fn commit_combat_ai_movement_outcome(
     }
 }
 
-/// `combat.md §9` "The two classes refused outright": "Before any of the above
-/// - before the party-side test, before the class flag, before the suppression
-/// tests - the arm returns immediately for two classes, the **Reaper** and the
+/// `combat.md §9` "The two classes refused outright": "Before any of the
+/// above - before the party-side test, before the class flag, before the
+/// suppression tests - the arm returns immediately for two classes, the **Reaper** and the
 /// **Mimic**, which are immobile by design. They never step and never
 /// teleport."
 pub const fn combat_ai_class_never_moves(class: u8) -> bool {

@@ -4020,11 +4020,10 @@ impl PlayState {
                     if let Some(tile) = active_object_frame_tile(
                         self.active_objects[slot].type_byte,
                         self.active_objects[slot].phase,
-                    ) {
-                        if self.active_objects[slot].tile != tile {
-                            self.active_objects[slot].tile = tile;
-                            self.mark_visibility_dirty();
-                        }
+                    ) && self.active_objects[slot].tile != tile
+                    {
+                        self.active_objects[slot].tile = tile;
+                        self.mark_visibility_dirty();
                     }
                 }
                 PhaseTick::DecisionPoint => self.animate_active_object_decision_point(slot),
@@ -4088,9 +4087,9 @@ impl PlayState {
     /// animator is mode-independent (`active-objects.md §8`: "**Exceptions:
     /// none.**"), so this coin is taken on the idle world step and the town
     /// epilogue too, for any record whose type byte has a frame family and
-    /// whose low nibble is zero. *Measured:* across every shipped object list
-    /// - `BRIT.OOL`, `UNDER.OOL`, `INIT.OOL` and the pristine `SAVED.OOL`/
-    /// `SAVED.GAM` live table - **no** record has a type byte at or above
+    /// whose low nibble is zero. *Measured:* across every shipped object
+    /// list - `BRIT.OOL`, `UNDER.OOL`, `INIT.OOL` and the pristine
+    /// `SAVED.OOL`/`SAVED.GAM` live table - **no** record has a type byte at or above
     /// [`OUTDOOR_COMBAT_TYPE_FIRST`] with a zero low nibble, so loading a
     /// shipped world costs no new draw. *Asserted, not measured:*
     /// runtime-spawned outdoor and town creatures do reach it -
