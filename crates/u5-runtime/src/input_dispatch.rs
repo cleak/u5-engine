@@ -173,6 +173,15 @@ fn handle_play_key_input_inner(
         state.toggle_music();
         return Ok(PlayInputDisposition::Continue);
     }
+    // `commands.md` Section 9: Control + `E` "Prompts "Exit to DOS?"; a yes
+    // answer leaves the game, anything else prints the refusal and continues",
+    // and "None of the four consumes a turn in any mode". The prompt itself is
+    // the shared yes/no session, so the answer arrives on the next dispatch and
+    // the confirmed arm is what returns `Quit`.
+    if key == PLAY_EXIT_TO_DOS_KEY {
+        let _ = state.start_exit_to_dos_prompt();
+        return Ok(PlayInputDisposition::Continue);
+    }
     if state.combat_active
         && combat_has_dispatchable_player_actor(state)
         && (state.pending_combat_actor_slot.is_some() || combat_has_active_non_party_actor(state))

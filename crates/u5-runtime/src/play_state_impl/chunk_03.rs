@@ -1725,6 +1725,21 @@ impl PlayState {
                 _ => {}
             }
         }
+        // `commands.md` Section 9, the Control + `E` row: "a yes answer leaves
+        // the game, anything else prints the refusal and continues". Read with
+        // `input.md` Section 8 - "Single-character prompts (Y/N, a digit, a
+        // target-slot letter) run the loop exactly once" - the program-exit
+        // prompt declines and hands the mode loop back rather than re-asking.
+        // The other three kinds keep the re-prompt they already had; no
+        // published section revises them here.
+        //
+        // Gap: Section 9 names "the refusal" without publishing its text, so
+        // this reuses the decline line this same prompt already prints for a
+        // typed `N` instead of inventing a second string.
+        if matches!(session.kind, YesNoPromptKind::ExitToDos) {
+            self.message = "No.".to_string();
+            return Ok(Some(PlayInputDisposition::Continue));
+        }
         self.active_yes_no_prompt = Some(session);
         self.message = self.render_active_yes_no_prompt();
         Ok(None)

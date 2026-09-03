@@ -91,6 +91,57 @@
         }
     }
 
+    /// `commands.md` Section 9, the shared pre-dispatch control-code table:
+    /// Control + `E` "Prompts "Exit to DOS?"; a yes answer leaves the game,
+    /// anything else prints the refusal and continues", and "None of the four
+    /// consumes a turn in any mode".
+    ///
+    /// `dungeon-mode.md` Section 10 fixes which key owns it - "`Q` is the
+    /// ordinary save-game route; the "Exit to DOS?" prompt is a Control
+    /// binding in the mode-local table, not a letter" - and `input.md`
+    /// Section 8 fixes the shape of the answer: "Single-character prompts
+    /// (Y/N, a digit, a target-slot letter) run the loop exactly once", so the
+    /// prompt does not re-ask.
+    #[test]
+    fn control_e_prompts_exit_to_dos_and_only_yes_leaves_the_game() {
+        let open = |state: &mut PlayState| {
+            let disposition =
+                handle_play_key_input(state, PLAY_EXIT_TO_DOS_KEY, "", Path::new("")).unwrap();
+            assert_eq!(disposition, PlayInputDisposition::Continue);
+            assert_eq!(state.message, "Exit to DOS?");
+            assert!(state.active_yes_no_prompt.is_some());
+            assert_eq!(state.turn, 0, "the binding consumes no turn");
+        };
+
+        // A yes answer leaves the game.
+        let mut confirmed = world_state(open_world_grid(), 4, 5);
+        open(&mut confirmed);
+        assert_eq!(
+            handle_play_key_input(&mut confirmed, 'Y', "", Path::new("")).unwrap(),
+            PlayInputDisposition::Quit
+        );
+        assert_eq!(confirmed.message, "Yes. Exiting to DOS.");
+        assert_eq!(confirmed.turn, 0);
+
+        // Anything else prints the refusal and continues, in one read: the
+        // explicit no, the cancel key, and a key the prompt never named.
+        for answer in ['N', '\u{1b}', 'K'] {
+            let mut declined = world_state(open_world_grid(), 4, 5);
+            open(&mut declined);
+            assert_eq!(
+                handle_play_key_input(&mut declined, answer, "", Path::new("")).unwrap(),
+                PlayInputDisposition::Continue,
+                "`{answer:?}` must not leave the game"
+            );
+            assert_eq!(declined.message, "No.", "`{answer:?}` prints the refusal");
+            assert!(
+                declined.active_yes_no_prompt.is_none(),
+                "`{answer:?}` runs the loop exactly once, it does not re-ask"
+            );
+            assert_eq!(declined.turn, 0);
+        }
+    }
+
     /// The companion to the keyword case above, across the rest of the
     /// typed-line set. `input.md` Section 8 names the prompts that read a whole
     /// line - "NPC conversations accept a four- to six-character keyword;
