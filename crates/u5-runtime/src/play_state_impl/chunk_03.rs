@@ -1763,9 +1763,12 @@ impl PlayState {
     /// selected member is dead or sleeping, or when a command changes
     /// the selection."
     ///
-    /// `moons.md §3`: the sky strip "is **not** driven by ordinary
-    /// stats-panel redraws", so this frame does not touch the cached
-    /// moon glyphs either; the per-turn hour-change pass owns that.
+    /// `moons.md §3`: the sky strip renderer "is **not** driven by
+    /// ordinary stats-panel redraws", so this frame does not touch the
+    /// cached moon glyphs either. A redraw is not one of the rows of
+    /// §3's caller census; the refresh comes from a scene entry, an
+    /// in-place floor change, the cleanup's hour-change hook, or one of
+    /// the other census callers instead.
     pub fn render_stats_panel_frame(&mut self) -> String {
         let active_cursor = self.active_player;
         let panel = render_stats_panel(self, active_cursor);
@@ -1782,8 +1785,17 @@ impl PlayState {
     /// Same two rules as [`PlayState::render_stats_panel_frame`]: the
     /// active-player selector survives the refresh unless the selected
     /// member is dead or sleeping (`stats-panel.md §4.1`, §11), and the
-    /// moon-glyph cache is refreshed only by the per-turn hour-change
-    /// pass, never by a redraw (`moons.md §3`).
+    /// moon-glyph cache is not touched by this redraw, because the strip
+    /// renderer "is **not** driven by ordinary stats-panel redraws"
+    /// (`moons.md §3`) and a redraw is not one of that section's caller
+    /// census rows.
+    ///
+    /// *Re-anchored (issue #190).* Both comments used to say the cache is
+    /// refreshed "only by the per-turn hour-change pass". That is the
+    /// exactly-one-caller model `RETRACTIONS.md` R343 withdrew, and this
+    /// engine now wires six of §3's seven census rows. Only the
+    /// stats-panel negative above survives, and it is all these two
+    /// functions need.
     pub fn render_text_window_frame(&mut self, input_echo: Option<&str>) -> String {
         let active_cursor = self.active_player;
         let frame = render_play_text_window_ascii(self, active_cursor, input_echo);

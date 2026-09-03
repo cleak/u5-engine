@@ -96,7 +96,7 @@ pub const fn natural_moongate_cached_glyph_slot(hour: u8) -> u8 {
 // `moons.md §2.2`: "**There is no sentinel byte in either table.** An
 // implementation that reserves a high-bit value for 'off horizon' is
 // modelling something the tables do not contain; whether a moon is
-// drawn is decided solely by the hour-driven visibility rule."
+// drawn is decided solely by the hour-driven visibility rule above."
 //
 // *Backed out (issue #190).* This module used to publish
 // `TRAMMEL_OFF_HORIZON_SENTINEL = 0xF0` and

@@ -17100,7 +17100,11 @@ fn below_surface_and_ararat_refresh_the_cache_but_paint_no_strip() {
     // §3 is the general rule the cache half rests on: "The cache writes
     // also precede the erase-arm tests, so a refresh that ends in the
     // erase arm still updates both bytes."
-    let sentinel = [0xAA, 0xBB];
+    // An arbitrary parked pair, deliberately not named `sentinel`:
+    // `moons.md §2.2` says an implementation that reserves a high-bit
+    // "off horizon" value "is modelling something the tables do not
+    // contain".
+    let parked = [0xAA, 0xBB];
     let expected = cached_moon_glyph_bytes_for_day(PLAY_START_DAY).unwrap();
 
     // Ararat: erase arm by the scene test, on any floor.
@@ -17110,7 +17114,7 @@ fn below_surface_and_ararat_refresh_the_cache_but_paint_no_strip() {
             scene: Scene::new(ARARAT_SCENE_BYTE).unwrap(),
             floor,
         };
-        ararat.set_cached_moon_glyph_bytes(sentinel[0], sentinel[1]);
+        ararat.set_cached_moon_glyph_bytes(parked[0], parked[1]);
         assert!(ararat.sky_strip_scene_entry_refresh_runs(), "floor {floor}");
         assert!(ararat.sky_strip_paints_erase_arm(), "floor {floor}");
         ararat.refresh_cached_moon_glyphs_at_scene_entry();
@@ -17124,7 +17128,7 @@ fn below_surface_and_ararat_refresh_the_cache_but_paint_no_strip() {
         scene: Scene::new(13).unwrap(),
         floor: -1,
     };
-    basement.set_cached_moon_glyph_bytes(sentinel[0], sentinel[1]);
+    basement.set_cached_moon_glyph_bytes(parked[0], parked[1]);
     assert!(basement.sky_strip_paints_erase_arm());
     basement.refresh_cached_moon_glyphs_at_scene_entry();
     assert_eq!(basement.cached_moon_glyph_bytes, expected);
@@ -17134,7 +17138,7 @@ fn below_surface_and_ararat_refresh_the_cache_but_paint_no_strip() {
     underworld.area = Area::World {
         plane: WorldPlane::Underworld,
     };
-    underworld.set_cached_moon_glyph_bytes(sentinel[0], sentinel[1]);
+    underworld.set_cached_moon_glyph_bytes(parked[0], parked[1]);
     assert!(underworld.sky_strip_paints_erase_arm());
     underworld.refresh_cached_moon_glyphs_at_scene_entry();
     assert_eq!(underworld.cached_moon_glyph_bytes, expected);
@@ -17352,7 +17356,9 @@ fn ambient_audio_sub_tick_residues_are_zero_and_four_tested_before_the_advance()
 
     // "The residue is tested **before** the counter advances, so the call
     // on which the counter reads zero is itself a decrementing call."
-    assert!(AMBIENT_AUDIO_RESIDUE_TESTED_BEFORE_ADVANCE);
+    // Pinned by behaviour below rather than by a constant asserted true:
+    // a call entered on residue zero must decrement, and the counter must
+    // still advance on a call that decrements nothing.
     let mut state = world_state(open_world_grid(), 5, 5);
     state.ambient_audio_sub_tick = 0;
     state.twelve_hour_audio_repeats = 8;

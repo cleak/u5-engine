@@ -2317,9 +2317,10 @@
     /// surface/town status strip and on a floor at or above the entry
     /// floor."
     ///
-    /// *Re-anchored (issue #190).* This comment used to quote "The strip
-    /// renderer runs from exactly one place: the per-turn cleanup pass",
-    /// which `RETRACTIONS.md` R343 withdrew; §3 now publishes a
+    /// *Re-anchored (issue #190).* This comment used to carry the model
+    /// `RETRACTIONS.md` R343 withdrew - that the renderer "runs from
+    /// **exactly one place**: the per-turn cleanup pass, and only when
+    /// that pass observes the hour changing". §3 now publishes a
     /// seven-row caller census. The other callers are pinned in
     /// `chunk_13.rs`; this test is about the redraw paths that are *not*
     /// callers.

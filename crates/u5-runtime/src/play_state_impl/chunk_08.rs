@@ -1084,8 +1084,9 @@ impl PlayState {
         //
         // "This matters most in the four locations with a basement, where
         // the arriving step is also the step that switches the strip into
-        // its erase arm (§2.2)" - the refresh still writes the cached pair
-        // there, because the cache writes precede the erase-arm tests.
+        // its erase arm (Section 2.2)." - the refresh still writes the
+        // cached pair there, because the cache writes precede the
+        // erase-arm tests.
         self.refresh_cached_moon_glyphs_at_scene_entry();
         self.clear_town_floor_reload_door_state();
         self.restore_revealed_town_secret_doors_for_floor(game_dir, scene, next_floor)?;
@@ -1368,8 +1369,8 @@ impl PlayState {
     /// taking the arm "by the scene test ... whatever the party's floor
     /// byte holds", while `time.md §5` item 2 gates this caller on the
     /// scene range and the Z high bit alone - and scene twenty-five is
-    /// inside that range, since §2.2 has it "reach[ing] the marker
-    /// painter".
+    /// inside that range, because §2.2 says scene twenty-five "reaches
+    /// the marker painter".
     ///
     /// This engine implements the mechanism (the two tests) rather than
     /// the summary, and reads both sentences as scoped to the arm the
@@ -1463,7 +1464,8 @@ impl PlayState {
     }
 
     /// `formats/saved-gam.md §5.1`: "That renderer runs on every
-    /// overworld and town-family scene entry and again from the cleanup's
+    /// overworld and town-family scene entry, on every in-place floor
+    /// change inside a town-family location, and again from the cleanup's
     /// hour-change block while the party is on the surface or in a
     /// town-family location, so the pair is refreshed deterministically at
     /// least once on any load into such a scene."
@@ -1547,6 +1549,11 @@ impl PlayState {
     /// byte which is not a phase digit must name the byte itself,
     /// through [`Self::set_cached_moon_glyph_bytes`].
     pub fn set_cached_moon_glyph_slots(&mut self, trammel_slot: usize, felucca_slot: usize) {
+        debug_assert!(
+            trammel_slot < MOONSTONE_SLOT_COUNT && felucca_slot < MOONSTONE_SLOT_COUNT,
+            "a Moonstone slot is 0..={}; a fixture that wants another byte must name it through set_cached_moon_glyph_bytes",
+            MOONSTONE_SLOT_COUNT - 1
+        );
         let encode = |slot: usize| b'0' + slot.min(MOONSTONE_SLOT_COUNT - 1) as u8;
         self.cached_moon_glyph_bytes = [encode(trammel_slot), encode(felucca_slot)];
     }
@@ -2018,13 +2025,15 @@ impl PlayState {
         self.clear_town_visit_state();
         self.pending_town_arrest = None;
         self.active_blackthorn = None;
-        // `moons.md §3`, refresh cadence: the strip renderer's callers are
-        // "every overworld scene entry; every town-family scene entry; the
-        // per-turn cleanup pass, when that pass observes the hour changing".
-        // This is an overworld scene entry, so the cached pair is rewritten
-        // here as well - a town or dungeon exit that left the restored pair
-        // standing would send the next natural gate to the wrong Moonstone
-        // slot (`formats/saved-gam.md §5.1`).
+        // `moons.md §3`, caller census: the overworld entry pass repaints on
+        // "Every entry into the overworld framer, whether that is a fresh
+        // scene entry or an in-place return", and §3's "Every in-place return
+        // to the overworld reaches the refresh." paragraph puts a dungeon
+        // exit, a town-boundary exit and a world-plane transition inside that
+        // row. So the cached pair is rewritten here as well - a town or
+        // dungeon exit that left the restored pair standing would send the
+        // next natural gate to the wrong Moonstone slot
+        // (`formats/saved-gam.md §5.1`).
         self.refresh_cached_moon_glyphs_at_scene_entry();
         self.mode_zero_cleanup();
         self.mark_visibility_dirty();
@@ -2090,13 +2099,15 @@ impl PlayState {
         self.return_world = None;
         self.pending_town_arrest = None;
         self.active_blackthorn = None;
-        // `moons.md §3`, refresh cadence: the strip renderer's callers are
-        // "every overworld scene entry; every town-family scene entry; the
-        // per-turn cleanup pass, when that pass observes the hour changing".
-        // This is an overworld scene entry, so the cached pair is rewritten
-        // here as well - a town or dungeon exit that left the restored pair
-        // standing would send the next natural gate to the wrong Moonstone
-        // slot (`formats/saved-gam.md §5.1`).
+        // `moons.md §3`, caller census: the overworld entry pass repaints on
+        // "Every entry into the overworld framer, whether that is a fresh
+        // scene entry or an in-place return", and §3's "Every in-place return
+        // to the overworld reaches the refresh." paragraph puts a dungeon
+        // exit, a town-boundary exit and a world-plane transition inside that
+        // row. So the cached pair is rewritten here as well - a town or
+        // dungeon exit that left the restored pair standing would send the
+        // next natural gate to the wrong Moonstone slot
+        // (`formats/saved-gam.md §5.1`).
         self.refresh_cached_moon_glyphs_at_scene_entry();
         self.mode_zero_cleanup();
         self.mark_visibility_dirty();
@@ -2149,13 +2160,15 @@ impl PlayState {
         self.return_world = None;
         self.pending_town_arrest = None;
         self.active_blackthorn = None;
-        // `moons.md §3`, refresh cadence: the strip renderer's callers are
-        // "every overworld scene entry; every town-family scene entry; the
-        // per-turn cleanup pass, when that pass observes the hour changing".
-        // This is an overworld scene entry, so the cached pair is rewritten
-        // here as well - a town or dungeon exit that left the restored pair
-        // standing would send the next natural gate to the wrong Moonstone
-        // slot (`formats/saved-gam.md §5.1`).
+        // `moons.md §3`, caller census: the overworld entry pass repaints on
+        // "Every entry into the overworld framer, whether that is a fresh
+        // scene entry or an in-place return", and §3's "Every in-place return
+        // to the overworld reaches the refresh." paragraph puts a dungeon
+        // exit, a town-boundary exit and a world-plane transition inside that
+        // row. So the cached pair is rewritten here as well - a town or
+        // dungeon exit that left the restored pair standing would send the
+        // next natural gate to the wrong Moonstone slot
+        // (`formats/saved-gam.md §5.1`).
         self.refresh_cached_moon_glyphs_at_scene_entry();
         self.mode_zero_cleanup();
         self.mark_visibility_dirty();
