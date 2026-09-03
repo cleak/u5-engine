@@ -151,10 +151,25 @@ pub enum ActiveObjectCompositorBranch {
     /// Frame byte exactly `0x1D` or `0x1E` — water-creature
     /// companion-band class. Same companion-band stamp.
     WaterCreatureCompanion,
-    /// Type byte exactly `0x5C` — vehicle/avatar-family companion
-    /// branch. Caller still needs to check the visibility-grid
-    /// underlay marker `0x92` before stamping the companion path.
-    VehicleAvatarCompanion,
+    /// Type byte exactly `0x5C` — the **single-sprite-family seated
+    /// branch**. The caller still has to check that the terrain byte
+    /// standing in the visibility-grid cell is the chair id `0x92`
+    /// before stamping the companion path.
+    ///
+    /// `RETRACTIONS.md` R330 withdraws the earlier "vehicle/avatar-family
+    /// companion branch" reading in full: "`0x5C` is **one ordinary NPC
+    /// sprite family** (the tile-name table calls it a minstrel), not a
+    /// vehicle or avatar marker, and the party's own type byte is the
+    /// party sprite marker, which is **never `0x5C` outside combat** — so
+    /// no vehicle and no avatar ever reaches this arm in a world scene.
+    /// The `0x92` it tests is the **chair terrain id** standing in the
+    /// grid cell, not a marker. The arm's meaning is that an actor of that
+    /// one family seated on a chair of that facing keeps its own sprite
+    /// instead of merging into an occupied-chair tile; off that terrain
+    /// the slot falls through to the default helper with its frame byte
+    /// **reduced by eight**, a remap recorded as observed and not
+    /// explained."
+    SingleSpriteFamilySeated,
     /// Anything else — falls through to the default tile compositor
     /// helper.
     DefaultHelper,
@@ -163,8 +178,8 @@ pub enum ActiveObjectCompositorBranch {
 /// `visibility.md §8`: classify a slot by its `(type, frame)` byte
 /// pair. The water-bound branch is keyed by the type byte; the
 /// water-creature branch is keyed by the frame byte; the
-/// vehicle/avatar branch is keyed by the type byte alone (caller
-/// applies the underlay-marker check).
+/// single-sprite-family seated branch is keyed by the type byte alone
+/// (caller applies the chair-terrain check).
 pub const fn active_object_compositor_branch(
     type_byte: u8,
     frame_byte: u8,
@@ -176,16 +191,26 @@ pub const fn active_object_compositor_branch(
         return ActiveObjectCompositorBranch::WaterCreatureCompanion;
     }
     if type_byte == 0x5C {
-        return ActiveObjectCompositorBranch::VehicleAvatarCompanion;
+        return ActiveObjectCompositorBranch::SingleSpriteFamilySeated;
     }
     ActiveObjectCompositorBranch::DefaultHelper
 }
 
-/// `visibility.md §8` vehicle/avatar underlay marker. The
-/// `VehicleAvatarCompanion` branch stamps through the companion
-/// path only when the visibility-grid cell currently holds this
-/// marker; otherwise it falls through to the default helper.
-pub const VEHICLE_AVATAR_UNDERLAY_MARKER: u8 = 0x92;
+/// `visibility.md §8`: the chair terrain id the single-sprite-family
+/// seated branch tests. The branch "stamps the slot's frame byte into the
+/// terrain band" only when "the terrain byte standing in the
+/// visibility-grid cell is the chair id `0x92`".
+///
+/// `RETRACTIONS.md` R330 renamed the value: it is the **chair terrain
+/// id**, not a vehicle/avatar underlay marker.
+pub const SINGLE_SPRITE_FAMILY_SEATED_CHAIR_TERRAIN: u8 = 0x92;
+
+/// `visibility.md §8` / `RETRACTIONS.md` R330: "When the type byte is
+/// `0x5C` but the terrain is anything else, the slot goes to the default
+/// helper with its frame byte reduced by eight, remapping it to a
+/// different sprite family; what that remap is *for* has not been
+/// established, only that it happens."
+pub const SINGLE_SPRITE_FAMILY_SEATED_FRAME_FALLTHROUGH_DECREMENT: u8 = 8;
 
 /// `visibility.md §8` result of stamping one active-object slot into the
 /// visibility/terrain-band pair.
@@ -225,14 +250,104 @@ pub const fn active_object_default_tile_is_terrain_aware(tile: u8) -> bool {
 /// An implementation that wired this to the party's classes will pick variant
 /// 0 for the wrong reason and will animate through Negate Time."
 ///
+/// That byte has **two** producers (`RETRACTIONS.md` R333): "the **Negate Time
+/// spell** handler, which writes the code as an immediate together with the
+/// effect's ten-turn duration; the shared **timed-effect setter**, which
+/// writes the code from its argument and is passed this code by exactly one of
+/// its call sites, the **Negate Time scroll**, with a twenty-turn duration" —
+/// and one further writer installs "a different timed-effect code into the
+/// same byte — this is a shared timed-effect register that other effects also
+/// write, not a Negate Time flag".
+///
 /// `visibility.md §8.2`: "The composite still runs while Negate Time is
 /// active; it just draws variant 0 every time." — so this is a selector
-/// short-circuit, not a suppression of the stamp.
+/// short-circuit, not a suppression of the stamp. `§8.1` adds that the
+/// generator advance is "unconditional whenever the selector is entered **on
+/// its random arm**", so the short-circuit arm takes no draw at all.
 pub const fn active_object_compositor_variant(negate_time_active: bool, selector: u8) -> u8 {
     if negate_time_active {
         0
     } else {
         selector & 0x03
+    }
+}
+
+/// `visibility.md §8`: the inclusive bounds of the shared variant
+/// selector's draw. `§8.1` calls it "a value in `0..3`", and `§8.3`
+/// derives the observable rate from the fact that "the requested span of four
+/// divides its output range exactly so the four outcomes are equally likely"
+/// - so the draw is `random(0, 3)` over the shared gameplay stream, not a
+/// modulo of a wider draw.
+pub const ACTIVE_OBJECT_VARIANT_RANGE_LOW: u8 = 0;
+/// See [`ACTIVE_OBJECT_VARIANT_RANGE_LOW`].
+pub const ACTIVE_OBJECT_VARIANT_RANGE_HIGH: u8 = 3;
+
+/// `visibility.md §8.3`: "the probability that two draws separated by one
+/// to five steps differ is 0.7508" - so a qualifying seat repaints a
+/// *different* variant on about three idle passes in four. The named-cell
+/// recapture on `cleak/u5-spec#182` measured 0.695..0.753 transitions per tick
+/// across six qualifying seats and 0.000 on three fall-throughs.
+pub const ACTIVE_OBJECT_VARIANT_TRANSITION_PROBABILITY: f64 = 0.7508;
+
+/// `visibility.md §8`'s **five selecting rows**, and only those: the base of
+/// the four-entry range a default-helper composite selects among, or `None`
+/// when the composite lands on any other row.
+///
+/// > **Normative, and the single most-misread line in this section.** Those
+/// > five rows are the **only** rows that reach the selector. **Every other
+/// > row of the table above — including both chair fall-throughs, the bed, the
+/// > two ladders, the two facing-only chairs, and the plain pass-through —
+/// > makes no selection at all.** An engine that draws from the shared stream
+/// > on any other row advances the single global generator when the original
+/// > does not, and its stream position diverges permanently from the
+/// > original's.
+///
+/// The two chair rows are gated on a *neighbouring-row* terrain byte, and
+/// "**the accepted set differs per facing, asymmetrically.** The `0x92` chair
+/// accepts `0x9A` or `0x9C` on the row below it and rejects `0x9B`; the `0x90`
+/// chair accepts `0x9B` or `0x9C` on the row above it and rejects `0x9A`. The
+/// two sets are not the same set, and neither is 'any laden table'." The plain
+/// tables `0x94..0x96` and every other neighbour fall through to a single
+/// fixed occupied-chair tile with no draw.
+///
+/// [`active_object_default_composite`] is written on top of this function so
+/// the "does this row draw?" question and the stamped tile can never drift
+/// apart.
+pub const fn active_object_default_variant_base(
+    effective_tile: u8,
+    current_terrain: u8,
+    previous_row_terrain: Option<u8>,
+    next_row_terrain: Option<u8>,
+) -> Option<u8> {
+    if !active_object_default_tile_is_terrain_aware(effective_tile) {
+        return None;
+    }
+    match current_terrain {
+        0xEC | 0x0A | 0x57 | 0x6A | 0x6B => None,
+        _ if effective_tile >= 0x80 => None,
+        // Stocks — an unconditional row, no neighbour predicate.
+        0x84 => Some(0x60),
+        // Manacles — an unconditional row, no neighbour predicate.
+        0x85 => Some(0x64),
+        0x90 => {
+            if matches!(previous_row_terrain, Some(0x9B | 0x9C)) {
+                Some(0x38)
+            } else {
+                None
+            }
+        }
+        0x92 => {
+            if matches!(next_row_terrain, Some(0x9A | 0x9C)) {
+                Some(0x34)
+            } else {
+                None
+            }
+        }
+        // `§8.4`: "**Terrain `0x9E` never appears as map terrain and its row
+        // is dead in the shipped game.** Only `0x9D` reaches the trapped-soul
+        // selection." The published table still lists both, so both are kept.
+        0x9D | 0x9E => Some(0x3C),
+        _ => None,
     }
 }
 
@@ -249,6 +364,16 @@ pub const fn active_object_default_composite(
         return ActiveObjectCompositeResult::Companion(effective_tile);
     }
 
+    match active_object_default_variant_base(
+        effective_tile,
+        current_terrain,
+        previous_row_terrain,
+        next_row_terrain,
+    ) {
+        Some(base) => return ActiveObjectCompositeResult::Companion(base + (variant & 0x03)),
+        None => {}
+    }
+
     match current_terrain {
         0xEC | 0x0A => ActiveObjectCompositeResult::Suppress,
         0x57 => ActiveObjectCompositeResult::Direct(0x38),
@@ -262,25 +387,16 @@ pub const fn active_object_default_composite(
             }
         }
         _ if effective_tile >= 0x80 => ActiveObjectCompositeResult::Companion(effective_tile),
-        0x84 => ActiveObjectCompositeResult::Companion(0x60 + (variant & 0x03)),
-        0x85 => ActiveObjectCompositeResult::Companion(0x64 + (variant & 0x03)),
-        0x90 => {
-            if matches!(previous_row_terrain, Some(0x9B | 0x9C)) {
-                ActiveObjectCompositeResult::Companion(0x38 + (variant & 0x03))
-            } else {
-                ActiveObjectCompositeResult::Companion(0x30)
-            }
-        }
+        // `§8`: "Current terrain `0x90`, without that previous-row match —
+        // Stamp `0x30`. **No variant is selected on this row.**"
+        0x90 => ActiveObjectCompositeResult::Companion(0x30),
         0x91 => ActiveObjectCompositeResult::Companion(0x31),
-        0x92 => {
-            if matches!(next_row_terrain, Some(0x9A | 0x9C)) {
-                ActiveObjectCompositeResult::Companion(0x34 + (variant & 0x03))
-            } else {
-                ActiveObjectCompositeResult::Companion(0x32)
-            }
-        }
+        // `§8`: "Current terrain `0x92`, without that next-row match — Stamp
+        // `0x32`. **No variant is selected on this row.**"
+        0x92 => ActiveObjectCompositeResult::Companion(0x32),
         0x93 => ActiveObjectCompositeResult::Companion(0x33),
-        0x9D | 0x9E => ActiveObjectCompositeResult::Companion(0x3C + (variant & 0x03)),
+        // `§8`: "Current terrain `0xAB` — Stamp `0x1A`. **A single fixed tile
+        // — not a variant, and no selection is made.**"
         0xAB => ActiveObjectCompositeResult::Companion(0x1A),
         0xC8 => ActiveObjectCompositeResult::Companion(0x17),
         0xC9 => ActiveObjectCompositeResult::Companion(0x18),
@@ -291,6 +407,102 @@ pub const fn active_object_default_composite(
             }
         }
         _ => ActiveObjectCompositeResult::Companion(effective_tile),
+    }
+}
+
+/// `visibility.md §8`/`§8.1`: which arm one active-object slot takes before
+/// the terrain-aware helper is consulted.
+///
+/// `§8.1`: "The three direct-stamp branches (the two water/companion classes
+/// and the single-sprite-family seated branch of Section 8) bypass the
+/// compositor entirely and therefore never draw, whatever terrain they are
+/// on." Splitting the dispatch out this way lets a caller answer "does this
+/// slot take a draw?" without stamping and without duplicating the arm list.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum ActiveObjectCompositeStep {
+    /// A cell guard or one of the three direct-stamp branches settled the
+    /// slot. **No draw is taken.**
+    Resolved(ActiveObjectCompositeResult),
+    /// The slot is handed to the default terrain-aware helper with this
+    /// effective tile byte. A draw is taken only when the terrain under it is
+    /// one of the five selecting rows
+    /// ([`active_object_default_variant_base`]).
+    DefaultHelper { effective_tile: u8 },
+}
+
+/// `visibility.md §8`: run the cell guards and the branch classifier for one
+/// slot, stopping short of the terrain-aware helper.
+pub const fn active_object_composite_step(
+    type_byte: u8,
+    frame_byte: u8,
+    current_grid_byte: u8,
+) -> ActiveObjectCompositeStep {
+    if current_grid_byte == VISIBILITY_HIDDEN || current_grid_byte == VISIBILITY_ALREADY_RENDERED {
+        return ActiveObjectCompositeStep::Resolved(ActiveObjectCompositeResult::Suppress);
+    }
+
+    match active_object_compositor_branch(type_byte, frame_byte) {
+        ActiveObjectCompositorBranch::WaterBoundCompanion => {
+            if current_grid_byte == VISIBILITY_USE_COMPANION {
+                ActiveObjectCompositeStep::Resolved(ActiveObjectCompositeResult::Suppress)
+            } else {
+                ActiveObjectCompositeStep::Resolved(ActiveObjectCompositeResult::Companion(
+                    frame_byte,
+                ))
+            }
+        }
+        ActiveObjectCompositorBranch::WaterCreatureCompanion => {
+            ActiveObjectCompositeStep::Resolved(ActiveObjectCompositeResult::Companion(frame_byte))
+        }
+        ActiveObjectCompositorBranch::SingleSpriteFamilySeated => {
+            if current_grid_byte == SINGLE_SPRITE_FAMILY_SEATED_CHAIR_TERRAIN {
+                ActiveObjectCompositeStep::Resolved(ActiveObjectCompositeResult::Companion(
+                    frame_byte,
+                ))
+            } else {
+                ActiveObjectCompositeStep::DefaultHelper {
+                    effective_tile: frame_byte
+                        .wrapping_sub(SINGLE_SPRITE_FAMILY_SEATED_FRAME_FALLTHROUGH_DECREMENT),
+                }
+            }
+        }
+        ActiveObjectCompositorBranch::DefaultHelper => ActiveObjectCompositeStep::DefaultHelper {
+            effective_tile: frame_byte,
+        },
+    }
+}
+
+/// `visibility.md §8.1`, the exact per-pass count: **one draw** for each actor
+/// that "(a) survives all of the pass's per-slot skips, (b) is handed to the
+/// default helper rather than to one of the three direct-stamp branches, and
+/// (c) stands on stocks, manacles, a mirror, or a chair whose neighbouring row
+/// on the correct side holds a laden-table id — and zero draws for everything
+/// else, including actors on chairs that do not qualify, on beds, on ladders,
+/// and on ordinary floor."
+///
+/// This answers (b) and (c) for a slot that already survived (a). Slot zero
+/// takes the same answer: the slot-zero contract of
+/// [`active_object_composite_for_player`] only rewrites a `Suppress` result
+/// after the fact, and no `Suppress` arm selects.
+pub const fn composite_active_object_slot_draws_variant(
+    type_byte: u8,
+    frame_byte: u8,
+    current_grid_byte: u8,
+    current_terrain: u8,
+    previous_row_terrain: Option<u8>,
+    next_row_terrain: Option<u8>,
+) -> bool {
+    match active_object_composite_step(type_byte, frame_byte, current_grid_byte) {
+        ActiveObjectCompositeStep::Resolved(_) => false,
+        ActiveObjectCompositeStep::DefaultHelper { effective_tile } => {
+            active_object_default_variant_base(
+                effective_tile,
+                current_terrain,
+                previous_row_terrain,
+                next_row_terrain,
+            )
+            .is_some()
+        }
     }
 }
 
@@ -306,43 +518,18 @@ pub const fn active_object_composite(
     viewport_row: usize,
     variant: u8,
 ) -> ActiveObjectCompositeResult {
-    if current_grid_byte == VISIBILITY_HIDDEN || current_grid_byte == VISIBILITY_ALREADY_RENDERED {
-        return ActiveObjectCompositeResult::Suppress;
-    }
-
-    match active_object_compositor_branch(type_byte, frame_byte) {
-        ActiveObjectCompositorBranch::WaterBoundCompanion => {
-            if current_grid_byte == VISIBILITY_USE_COMPANION {
-                ActiveObjectCompositeResult::Suppress
-            } else {
-                ActiveObjectCompositeResult::Companion(frame_byte)
-            }
+    match active_object_composite_step(type_byte, frame_byte, current_grid_byte) {
+        ActiveObjectCompositeStep::Resolved(result) => result,
+        ActiveObjectCompositeStep::DefaultHelper { effective_tile } => {
+            active_object_default_composite(
+                effective_tile,
+                current_terrain,
+                previous_row_terrain,
+                next_row_terrain,
+                viewport_row,
+                variant,
+            )
         }
-        ActiveObjectCompositorBranch::WaterCreatureCompanion => {
-            ActiveObjectCompositeResult::Companion(frame_byte)
-        }
-        ActiveObjectCompositorBranch::VehicleAvatarCompanion => {
-            if current_grid_byte == VEHICLE_AVATAR_UNDERLAY_MARKER {
-                ActiveObjectCompositeResult::Companion(frame_byte)
-            } else {
-                active_object_default_composite(
-                    frame_byte,
-                    current_terrain,
-                    previous_row_terrain,
-                    next_row_terrain,
-                    viewport_row,
-                    variant,
-                )
-            }
-        }
-        ActiveObjectCompositorBranch::DefaultHelper => active_object_default_composite(
-            frame_byte,
-            current_terrain,
-            previous_row_terrain,
-            next_row_terrain,
-            viewport_row,
-            variant,
-        ),
     }
 }
 
@@ -362,6 +549,12 @@ pub const fn active_object_composite(
 /// hidden marker (`0xFF`) is in fog and a cell carrying the already-rendered
 /// marker (`0x87`) has been claimed, and `visibility.md §8` step 3 skips both
 /// before any class branch runs. Only the terrain-aware rows are exempted.
+///
+/// The party never reaches the single-sprite-family seated branch:
+/// `visibility.md §8` says the slot-zero refresh "writes the party sprite
+/// marker into **both** the slot's type byte and its sprite byte, which is why
+/// the party can never satisfy the type-byte test of the single-sprite-family
+/// seated branch above".
 ///
 /// Deviation note: `visibility.md §8`'s terrain-aware table row "current
 /// terrain `0xEC` or `0x0A` - suppress the active-object stamp" carries no

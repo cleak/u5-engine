@@ -1808,6 +1808,32 @@ impl PlayState {
         )
     }
 
+    /// `combat.md §5.3` steps 5 and 6. Step 5 is the count roll: "The count is
+    /// rolled only when the class's spawn count rating is not one of the three
+    /// exact-count sentinels 1, 8 and 16. When it is rolled it is one uniform
+    /// draw in `[1, rating]`; and when the early-game damper flag is set, a
+    /// second uniform draw in `[1, result of the first]` immediately follows".
+    ///
+    /// Step 6 rides on the same branch: "The same non-sentinel branch that
+    /// rolls a count runs a **full world tick before any monster is placed**.
+    /// That tick is a variable PRNG consumer with three distinct drawing arms,
+    /// and they draw **in this order**: 1. The **active-object animation
+    /// pass** ... 2. The **autonomous wind-drift roll**. 3. The **viewport
+    /// composite** ... which takes one uniform `[0, 3]` draw **only** for a
+    /// composited actor standing on one of the five selecting terrain rows of
+    /// `systems/visibility.md` Section 8, and **zero** otherwise."
+    ///
+    /// [`Self::advance_visual_tick`] is that shared world tick and runs the
+    /// arms in exactly that order. "Arena terrain almost never carries a
+    /// selecting row ... So in ordinary combat entry the composite arm
+    /// contributes **nothing**", which is why adding the tick here does not
+    /// add a `[0, 3]` draw to combat entry - `RETRACTIONS.md` R329 withdrew
+    /// the per-tick visibility draw an earlier revision published, and R331
+    /// withdrew the reversed arm order that went with it.
+    ///
+    /// Sentinel ratings, the zero rating and the town-style override all skip
+    /// the branch entirely and so "consume nothing here" - no count roll and
+    /// no tick.
     pub fn roll_terrain_combat_setup_count(
         &mut self,
         base_count: u8,
@@ -1827,6 +1853,8 @@ impl PlayState {
                 if self.fortunes_of_war != 0 {
                     rolled = self.random_range_u8(1, rolled);
                 }
+                // Step 6, on this same branch and before any placement.
+                self.advance_visual_tick();
                 rolled
             }
         };

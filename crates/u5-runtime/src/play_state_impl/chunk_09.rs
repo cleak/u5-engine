@@ -1499,7 +1499,27 @@ impl PlayState {
             let index = terrain_band_active_index(row + 1, col).unwrap();
             self.terrain_band[index]
         });
-        let variant = self.active_object_render_variant(col, row, object);
+        // `visibility.md §8.1`, normative: "For an actor whose composite
+        // lands on one of the five selecting rows of the Section 8 table, the
+        // variant is drawn **once per composite pass** - not once per
+        // placement - and **it is never cached anywhere.** For every other
+        // composited actor, **no draw is taken at all.**" The skips above have
+        // already run, and `§8.1` is explicit that "every skip is evaluated
+        // before the compositor is invoked, so a skipped actor costs no draw
+        // at all. An implementation must not draw speculatively for an actor
+        // it is about to skip".
+        let variant = if composite_active_object_slot_draws_variant(
+            object.type_byte,
+            object.tile,
+            current_grid_byte,
+            current_terrain,
+            previous_row_terrain,
+            next_row_terrain,
+        ) {
+            self.draw_active_object_composite_variant()
+        } else {
+            0
+        };
         match composite_active_object_slot(
             player_slot,
             object.type_byte,
@@ -1666,7 +1686,15 @@ impl PlayState {
             .then(|| prepared[index + cells])
             .flatten()
             .map(|cell| cell.terrain);
-        let variant = self.active_object_render_variant(cell_x, cell_y, object);
+        // This helper is `&self`: it answers *queries* about the composed
+        // grid (the text view, the outdoor ranged line-of-sight trace, and
+        // non-viewport radii), not the redraw's composite pass. `§8.1`
+        // charges one draw per selecting actor "per composite pass", so a
+        // query must take none - drawing here would advance the single global
+        // gameplay stream on a frame the original never composites.
+        // The canonical pass is
+        // [`Self::composite_top_down_object_into_visibility_buffers`].
+        let variant = 0;
         match composite_active_object_slot(
             player_slot,
             object.type_byte,
@@ -1740,42 +1768,58 @@ impl PlayState {
     /// the selector short-circuits and returns the first entry for every
     /// actor".
     ///
-    /// The short-circuit input is the **global timed-magic-effect code**.
-    /// `§8` retracts the earlier "active character's class letter is Tinker"
-    /// reading in full, so no party member is consulted here.
+    /// **This is a fresh draw from the shared gameplay stream on every
+    /// composite pass, and it is never cached.** `§8.1` is normative: the
+    /// selector "is a helper that takes no arguments and stores nothing of
+    /// its own: it returns a value in `0..3` which the caller consumes
+    /// immediately. Its one side effect is the generator advance inside the
+    /// shared draw itself, which is unconditional whenever the selector is
+    /// entered on its random arm." And: "**There is no cache to find.** ...
+    /// there is no per-actor variant field, no scratch table keyed by actor,
+    /// and no frame counter anywhere in the path."
     ///
-    /// The animation phase is deliberately **not** an input. It used to be,
-    /// which made a stationary actor standing on one of the four-entry
-    /// terrains (`0x84`, `0x85`, `0x90`, `0x92`, `0x9D`, `0x9E`) re-stamp
-    /// itself on every animation tick — and correlated with the animation
-    /// phase rather than random. Runtime observation,
-    /// `cleak/u5-spec#179`: outside combat nothing of the sort happens.
-    /// The party sprite standing on the overworld and the Avatar seated in
-    /// a chair indoors were both bit-identical across 160 s idle windows,
-    /// with zero transitions.
+    /// The caller must therefore have already established that this actor
+    /// lands on one of the five selecting rows - see
+    /// [`composite_active_object_slot_draws_variant`] - because `§8.1` charges
+    /// "**zero draws for everything else**" and an engine that draws on any
+    /// other row "advances the single global generator when the original does
+    /// not, and its stream position diverges permanently".
     ///
-    /// TODO(u5-spec question pending): `visibility.md §8.1` is normative
-    /// that the variant is drawn "once per composite pass, per actor" from
-    /// the shared PRNG and "never cached", and `§8.3` (published as
-    /// *probable*) says the sprite therefore changes on about three idle
-    /// passes in four. This engine instead re-rolls a deterministic hash
-    /// once per consumed turn, which contradicts both sentences. The
-    /// clean-side capture above is direct evidence against the published
-    /// idle re-roll, so the conflict is being taken back to the spec as a
-    /// question rather than resolved here; until it is answered the
-    /// once-per-turn draw is kept and this comment records the divergence.
-    pub(crate) fn active_object_render_variant(
-        &self,
-        cell_x: usize,
-        cell_y: usize,
-        object: ActiveObject,
-    ) -> u8 {
-        let selector = (self.turn as u8)
-            ^ (cell_x as u8).wrapping_mul(3)
-            ^ (cell_y as u8).wrapping_mul(5)
-            ^ object.type_byte
-            ^ object.tile;
-        active_object_compositor_variant(self.negate_time_active(), selector)
+    /// The short-circuit input is the **shared timed-effect register byte**,
+    /// not a boolean and not a character class. `§8` retracts the "active
+    /// character's class letter is Tinker" reading in full, and its producer
+    /// census (`RETRACTIONS.md` R333) finds "**one site that installs a
+    /// different timed-effect code into the same byte** - this is a shared
+    /// timed-effect register that other effects also write, not a Negate Time
+    /// flag". [`Self::negate_time_active`] reads that whole byte and compares
+    /// it against the Negate Time code, so an install of some other effect's
+    /// code leaves the selector on its random arm. The code has two
+    /// producers: the spell at ten turns and the scroll at twenty.
+    ///
+    /// The short-circuit arm takes **no** draw: `§8.1` makes the generator
+    /// advance conditional on the selector being "entered on its random arm".
+    ///
+    /// *Retracted in this engine:* until `cleak/u5-spec#182` was answered
+    /// (spec commit `210aa41`, `RETRACTIONS.md` R329) this was a
+    /// deterministic hash of the turn counter, the cell and the actor's
+    /// bytes, re-rolled once per consumed turn. That was adopted because a
+    /// clean-side capture saw a seated Avatar never change tile; R329
+    /// explains the capture - the seat used was a fall-through, and "a seated
+    /// actor that never changes tile is the expected result for the majority
+    /// of seats in the game, not a defect". A named-cell recapture then saw
+    /// 0.695-0.753 transitions per tick on qualifying seats and 0.000 on
+    /// fall-throughs, which is the fresh per-pass draw.
+    pub fn draw_active_object_composite_variant(&mut self) -> u8 {
+        if self.negate_time_active() {
+            // `§8.2`: "The composite still runs while Negate Time is active;
+            // it just draws variant 0 every time."
+            return active_object_compositor_variant(true, 0);
+        }
+        let selector = self.random_range_u8(
+            ACTIVE_OBJECT_VARIANT_RANGE_LOW,
+            ACTIVE_OBJECT_VARIANT_RANGE_HIGH,
+        );
+        active_object_compositor_variant(false, selector)
     }
 
     /// Visibility + composited terrain/sprite lookup for one cell.

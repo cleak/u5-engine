@@ -17467,6 +17467,19 @@ fn terrain_combat_setup_count_consumes_fortunes_flag_and_town_override() {
     assert_eq!(state.resolve_terrain_combat_setup_count(10, 7, 2, false), 3);
 }
 
+/// `combat.md §5.3` steps 5 and 6. The count draws come off the shared
+/// stream first, and then "the same non-sentinel branch that rolls a count
+/// runs a **full world tick before any monster is placed**".
+///
+/// *Retracted:* this test used to assert the stream was left exactly on the
+/// count roll, which is only true of an engine that omits step 6. `§5.3`
+/// step 6 is a "**Variable and unbounded**" consumer, so the post-condition
+/// is that the counts came off the pre-tick state and the stream then moved
+/// on - not a pinned final state. `RETRACTIONS.md` R329/R331 additionally
+/// correct what that tick draws: the arms are animator, wind, composite, and
+/// the composite arm "takes one uniform `[0, 3]` draw **only** for a
+/// composited actor standing on one of the five selecting terrain rows ...
+/// and **zero** otherwise", so it contributes nothing here.
 #[test]
 fn terrain_combat_setup_count_rolls_from_resident_prng() {
     let mut state = world_state(open_world_grid(), 10, 20);
@@ -17478,7 +17491,13 @@ fn terrain_combat_setup_count_rolls_from_resident_prng() {
         state.roll_terrain_combat_setup_count(10, false),
         expected_count
     );
-    assert_eq!(state.prng_state, expected_prng);
+    // Step 6's tick follows the roll on this branch. Its wind check "draws
+    // **once** and returns in the common case" (`prng.md §4`), so the stream
+    // has moved past the count draw rather than stopping on it.
+    assert_ne!(
+        state.prng_state, expected_prng,
+        "step 6's mid-setup world tick runs on the branch that rolled a count"
+    );
 
     state.fortunes_of_war = 1;
     let mut expected_prng = state.prng_state;
@@ -17492,10 +17511,15 @@ fn terrain_combat_setup_count_rolls_from_resident_prng() {
         state.roll_terrain_combat_setup_count(10, false),
         expected_count
     );
-    assert_eq!(state.prng_state, expected_prng);
+    assert_ne!(state.prng_state, expected_prng);
 
+    // Sentinel ratings and the town-style override skip the whole branch, so
+    // they take neither the count draws nor step 6's tick: §5.3 step 5,
+    // "Sentinel ratings consume nothing here."
     let unchanged_prng = state.prng_state;
     assert_eq!(state.roll_terrain_combat_setup_count(16, false), 16);
+    assert_eq!(state.roll_terrain_combat_setup_count(8, false), 8);
+    assert_eq!(state.roll_terrain_combat_setup_count(1, false), 1);
     assert_eq!(state.roll_terrain_combat_setup_count(10, true), 1);
     assert_eq!(state.prng_state, unchanged_prng);
 }
@@ -18761,43 +18785,64 @@ fn negate_time_freezes_every_tile_animation_clock() {
 /// a uniform random entry from the four-value range; while it is active, the
 /// selector short-circuits and returns the first entry for every actor."
 /// `§8.3`: "The appearance freezes on variant 0 for the whole duration of
-/// Negate Time."
+/// Negate Time - **ten** turns when the effect came from the spell, **twenty**
+/// when it came from the scroll".
+///
+/// `§8.1`: the selector's "one side effect is the generator advance inside
+/// the shared draw itself, which is unconditional whenever the selector is
+/// entered **on its random arm**" - so the short-circuit arm takes no draw and
+/// leaves the shared stream where it was.
 #[test]
 fn active_object_variant_short_circuits_to_zero_under_negate_time() {
     let mut state = test_state(open_grid(), 10, 20);
-    let actor = ActiveObject {
-        type_byte: 0x90,
-        tile: 0x90,
-        x: 10,
-        y: 19,
-        z: 0,
-        phase: 0,
-        aux1: 0,
-        aux3: 0,
-    };
 
-    // Sweep the turn counter: without the short-circuit the draw visits more
-    // than one entry, so the freeze below is doing real work.
+    // The random arm is a fresh draw off the shared gameplay stream on every
+    // call, so a sweep visits more than one entry and each call moves the
+    // stream. `RETRACTIONS.md` R329 withdrew the once-per-turn cached reading.
     let mut unfrozen = std::collections::BTreeSet::new();
-    for turn in 0..64u64 {
-        state.turn = turn;
-        unfrozen.insert(state.active_object_render_variant(5, 4, actor));
+    let before = state.prng_state;
+    for _ in 0..64 {
+        unfrozen.insert(state.draw_active_object_composite_variant());
     }
-    assert!(
-        unfrozen.len() > 1,
-        "the unfrozen selector must not be constant"
+    assert_eq!(
+        unfrozen,
+        std::collections::BTreeSet::from([0, 1, 2, 3]),
+        "the random arm is a uniform draw over the four-value range"
     );
+    assert_ne!(before, state.prng_state, "the random arm advances the stream");
 
-    state.active_effect_tag = Some(NEGATE_TIME_ACTIVE_EFFECT_TAG);
-    state.active_effect_counter = 10;
-    for turn in 0..64u64 {
-        state.turn = turn;
+    // `RETRACTIONS.md` R333: the code has two producers, the spell at ten
+    // turns and the scroll at twenty, and it lives in a **shared timed-effect
+    // register**, so the freeze must key off that byte's value.
+    for duration in [TIME_STOP_DURATION, SCROLL_NEGATE_TIME_DURATION] {
+        state.active_effect_tag = Some(NEGATE_TIME_ACTIVE_EFFECT_TAG);
+        state.active_effect_counter = duration;
+        let frozen = state.prng_state;
+        for _ in 0..64 {
+            assert_eq!(
+                state.draw_active_object_composite_variant(),
+                0,
+                "Negate Time returns the first entry for every actor"
+            );
+        }
         assert_eq!(
-            state.active_object_render_variant(5, 4, actor),
-            0,
-            "Negate Time returns the first entry for every actor"
+            frozen, state.prng_state,
+            "the short-circuit arm is not entered on the random arm, so it draws nothing"
         );
     }
+
+    // Another effect's code in the same shared register does **not** freeze
+    // the selector: R333 calls it "a shared timed-effect register that other
+    // effects also write, not a Negate Time flag".
+    state.active_effect_tag = Some(NEGATE_MAGIC_ACTIVE_EFFECT_TAG);
+    state.active_effect_counter = 20;
+    let before = state.prng_state;
+    let mut other = std::collections::BTreeSet::new();
+    for _ in 0..64 {
+        other.insert(state.draw_active_object_composite_variant());
+    }
+    assert!(other.len() > 1, "a different timed effect must not freeze it");
+    assert_ne!(before, state.prng_state);
 }
 
 /// `timing.md §8.2`: "The shared wait tests the current scene value and
