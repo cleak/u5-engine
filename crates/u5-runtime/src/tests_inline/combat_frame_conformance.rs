@@ -1598,7 +1598,7 @@
         // 74.6 %) and the monster attack value was rolled instead of flat,
         // "about 39 % of the original's melee damage".
         let mut turns_to_death = Vec::new();
-        for seed in 0..8u16 {
+        for seed in 0..32u16 {
             let mut state = worked_bat_arena(&[(4, 5), (6, 5), (5, 4)], (seed % 8) as u8);
             state.prng_state = 0x1234u16.wrapping_add(seed.wrapping_mul(0x9e37));
             let game_dir = std::path::Path::new(".");
@@ -1628,11 +1628,20 @@
         // expected loss per *attempted* swing is `0.746 * 15/7 = 1.60` HP"
         // and "`21 * E[1/period] = 3.01`" attempts per Avatar turn - so
         // three bats held adjacent cost `3 * 3.01 * 1.60 = 14.4` HP per
-        // Avatar turn. This fixture measures 15.0 over its eight seeds,
-        // from turn counts 6, 5, 3, 3, 3, 3, 4, 5. The band is the
-        // published figure plus or minus about a sixth: wide enough for
-        // the eight-seed sample, narrow enough to exclude the pre-R334
-        // behaviour described above.
+        // Avatar turn. The band is the published figure plus or minus about
+        // a sixth: wide enough for the sample, narrow enough to exclude the
+        // pre-R334 behaviour described above.
+        //
+        // The sample was widened from eight seeds to thirty-two when
+        // `combat.md §9`'s draw budget moved the shared stream - a monster
+        // dispatch no longer pre-rolls the poison gate, the poison damage and
+        // the scatter cell it will not use, and the axis-priority coin is
+        // taken only by a dispatch that reaches ordinary stepping. Eight
+        // turn-count samples of a quantity whose per-seed values run from two
+        // to six put the mean well inside its own sampling noise; the wider
+        // sample is what makes the published band a real test rather than a
+        // seed-specific one. Thirty-two seeds currently measure 15.7 HP per
+        // Avatar turn, from a mean of 3.81 turns to death.
         assert!(
             (12.0..=17.0).contains(&hp_per_turn),
             "mean HP lost per Avatar turn was {hp_per_turn} over turns {turns_to_death:?}; Section 11 expects 14.4"

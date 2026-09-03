@@ -9262,6 +9262,9 @@ fn combat_target_view(descriptor: CombatActorDescriptor, group: u8) -> CombatTar
     }
 }
 
+/// `combat.md §9` **Target selection**: "*the lowest-numbered slot among
+/// candidates of equal distance wins*, biasing toward party members (low slots)
+/// when distances tie."
 #[test]
 fn combat_ai_target_picker_scans_backwards_and_keeps_low_slot_ties() {
     let mut actors = [combat_target_view(CombatActorDescriptor::empty(), 0); COMBAT_ACTOR_SLOTS];
@@ -9292,6 +9295,8 @@ fn combat_ai_target_picker_scans_backwards_and_keeps_low_slot_ties() {
 
     let pick = find_combat_ai_target(&actors, 10, 2, false);
 
+    // Slots 3 and 7 are both one cell from the acting slot; the published
+    // tie-break gives the pick to the lower-numbered one.
     assert_eq!(pick.slot, Some(3));
     assert!(pick.first_five_party_slot_survived);
 }
@@ -10406,7 +10411,17 @@ const AMULET_TURNING_SCATTER_IMPACT_HP: u16 = 13;
 
 /// The PRNG seed at which the shipped scatter fixture lands its impact cell
 /// on the second seated party member.
-const AMULET_TURNING_SCATTER_SEED: u16 = 0x0002;
+///
+/// Re-chosen again after `combat.md §9`'s draw budget was applied to the
+/// automatic driver: the monster attempt's to-hit draw, the poison gate and
+/// the scatter-cell draw are now taken at their own sites instead of being
+/// pre-rolled together, and the flee gate's morale draw moved to the head of
+/// the driver where `§9` Pass 1 puts it, so every roll this fixture pins sits
+/// at a different stream offset. This seed reproduces the same published
+/// outcome - the turning amulet scatters the blow onto the second seated
+/// member for the same flat attack value less the same inclusive `1..7`
+/// defence draw.
+const AMULET_TURNING_SCATTER_SEED: u16 = 0x19B8;
 
 fn combat_player_command_state(monster_x: u8, monster_y: u8) -> PlayState {
     let mut state = combat_ai_turn_state(monster_x, monster_y);
@@ -10414,22 +10429,37 @@ fn combat_player_command_state(monster_x: u8, monster_y: u8) -> PlayState {
     state
 }
 
-fn advance_expected_giant_rat_ai_input_prng(expected_prng: &mut u16, defence_draw_taken: bool) {
-    let _ = u5_prng_range_u16(expected_prng, 0, 1);
-    // `combat.md §9` (`RETRACTIONS.md` R311): the random-cardinal fallback
-    // draws one attempt at a time and commits the first accepted one, so
-    // nothing is pre-rolled here - and an AI dispatch that resolves an
-    // attack never reaches the movement arm at all.
-    //
-    // `combat.md §11` (R335): the to-hit draw is the shared skewed roll's
-    // inclusive `0..=60` raw draw, not a `0..255` byte. `§12` (R336): the
-    // monster's raw attack value is its class byte "used flat, with no
-    // random draw at all", so the second byte-wide draw this helper used to
-    // model is gone.
+/// The shared-PRNG draws one adjacent Giant Rat dispatch spends, in order.
+///
+/// `combat.md §9` charges an automatic dispatch only for the branches it
+/// actually enters. This fixture's dispatch - an adjacent Giant Rat that
+/// resolves an attack - enters the to-hit helper and the poison gate and
+/// nothing else:
+///
+///   - the flee gate's morale draw is **not** taken - the wound classifier
+///     only rolls in the quarter-to-under-half bucket and this Rat is at full
+///     class HP;
+///   - the axis-priority coin is **not** taken - `§9` puts it inside ordinary
+///     stepping, which a dispatch that resolves an attack never reaches;
+///   - `§11`'s to-hit draw is the shared skewed roll's inclusive `0..=60` raw
+///     draw, "taken fresh inside each attempt";
+///   - `§12` gives the poison gate to "classes with the poison/status attack
+///     flag cluster", which the Giant Rat carries, and the branch's small raw
+///     damage value is rolled only on the arm reached for a non-Good party
+///     member or a non-party target - "the Good-to-Poisoned arm consumes
+///     none";
+///   - the scatter-cell draw belongs to the turning-amulet arm and is not
+///     taken here at all.
+fn advance_expected_giant_rat_ai_input_prng(
+    expected_prng: &mut u16,
+    poison_damage_draw_taken: bool,
+    defence_draw_taken: bool,
+) {
     let _ = u5_prng_range_u16(expected_prng, 0, u16::from(COMBAT_SKEWED_ROLL_RAW_MAX));
     let _ = u5_prng_range_u16(expected_prng, 0, 1);
-    let _ = u5_prng_range_u16(expected_prng, 0, 19);
-    let _ = u5_prng_range_u16(expected_prng, 0, 7);
+    if poison_damage_draw_taken {
+        let _ = u5_prng_range_u16(expected_prng, 0, 19);
+    }
     // `combat.md §12`: the defence term is an inclusive `1..rating` draw
     // taken only when the rating is non-zero, and the poison/status branch
     // returns before the ordinary roller ever asks for it.
@@ -11927,7 +11957,7 @@ fn combat_input_dispatch_routes_play_keys_to_combat_parser() {
     // ordinary damage; `combat.md §12`'s "the poison/status branch returns
     // before the ordinary roller ever asks for it" means its defence draw
     // is skipped just as a miss's would be.
-    advance_expected_giant_rat_ai_input_prng(&mut expected_prng, false);
+    advance_expected_giant_rat_ai_input_prng(&mut expected_prng, false, false);
     assert_eq!(
         handle_play_key_input(
             &mut attack_state,
@@ -12015,7 +12045,7 @@ fn combat_input_dispatch_reports_weapon_hit_damage_and_xp() {
     assert_eq!(combat_class_stats(COMBAT_CLASS_GIANT_RAT).unwrap().defense, 0);
     let expected_damage =
         combat_spell_damage_roll(damage_roll, equipment_attack_max(16).unwrap()) as u8;
-    advance_expected_giant_rat_ai_input_prng(&mut expected_prng, false);
+    advance_expected_giant_rat_ai_input_prng(&mut expected_prng, false, false);
 
     assert_eq!(
         handle_play_key_input(

@@ -1018,4 +1018,5 @@ mod tests {
     include!("tests_inline/town_turn_loop_conformance.rs");
     include!("tests_inline/arena_animation_conformance.rs");
     include!("tests_inline/combat_transcript_rows.rs");
+    include!("tests_inline/damage_distribution_conformance.rs");
 }

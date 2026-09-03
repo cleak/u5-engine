@@ -5230,7 +5230,7 @@ fn seed_combat_spell_route(state: &mut PlayState, code: &str) -> io::Result<()> 
     }
     state.prng_state = match code {
         "GP" => first_nonzero_prng_roll_seed(15),
-        "FV" => first_nonzero_prng_roll_seed(29),
+        "FV" => COMBAT_FIREBALL_ROUTE_SEED,
         "IPVY" => first_nonzero_prng_roll_seed(19),
         "ACX" => 0x1234,
         _ => 0,
@@ -5416,6 +5416,27 @@ fn seed_dungeon_room_party_entry_route(state: &mut PlayState, game_dir: &Path) -
     )?;
     Ok(())
 }
+
+/// The shared-PRNG seed `combat-fireball-target` runs from.
+///
+/// The case needs two things from the stream at once. The Fireball's `1..30`
+/// raw damage roll has to be non-zero, or the cast lands for nothing and the
+/// validator's "did the targeted actor lose hit points" test proves nothing;
+/// and no `combat.md §9` summon-daemon gate may fire during the five keys,
+/// because the Dragon this case seats carries that bit, gets one dispatch per
+/// point of its speed, and a Daemon it summons both narrates ahead of the
+/// `Fireball!` line the validator reads and adds a second attacker that can
+/// kill the single-member route party before the cast resolves.
+///
+/// [`first_nonzero_prng_roll_seed`] supplies only the first of the two, and it
+/// supplies even that one only while nothing between the seed and the damage
+/// roll draws: once `§9`'s draw budget stopped pre-rolling the inputs a
+/// dispatch never uses, the monster turns ahead of the cast consumed a
+/// different number of draws and the derived seed stopped landing where it
+/// used to. So this case pins its seed rather than deriving it. Five is the
+/// lowest seed at which the case's own validator passes; seeds zero through
+/// four all summon a Daemon inside the script.
+const COMBAT_FIREBALL_ROUTE_SEED: u16 = 5;
 
 fn first_nonzero_prng_roll_seed(max: u16) -> u16 {
     for candidate in 0..=u16::MAX {
