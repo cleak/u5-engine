@@ -921,8 +921,9 @@ pub fn combat_template_impact() -> SpeakerProgram {
     glissando(20, 1, 350, 1300)
 }
 
-/// `audio.md §7.4` attack-application swing cue: "400 Hz toward 750 Hz, 30
-/// updates, roughly 130 ms".
+/// `combat.md §11.1` / `audio.md §7.4` the **party melee** swing cue: "the same
+/// swing sweep in the opposite direction, roughly 400 Hz toward 750 Hz", i.e.
+/// `§7.4`'s "rising sweep - 400 Hz toward 750 Hz, 30 updates, roughly 130 ms".
 ///
 /// `§5.2` gives the glissando its `(span, delay, target, initial)` shape and
 /// `updates = ceil(span / delay)`, so "30 updates" fixes `span / delay = 30`.
@@ -937,18 +938,61 @@ pub fn combat_template_impact() -> SpeakerProgram {
 /// per-update cost.
 pub const ATTACK_SWING_SPAN: i32 = 120;
 pub const ATTACK_SWING_DELAY: u32 = 4;
-pub const ATTACK_SWING_INITIAL_HZ: i32 = 400;
-pub const ATTACK_SWING_TARGET_HZ: i32 = 750;
+pub const ATTACK_SWING_LOW_HZ: i32 = 400;
+pub const ATTACK_SWING_HIGH_HZ: i32 = 750;
 /// `audio.md §7.4`: "30 updates".
 pub const ATTACK_SWING_UPDATES: usize = 30;
 
-pub fn attack_swing() -> SpeakerProgram {
+pub fn party_melee_attack_swing() -> SpeakerProgram {
     glissando(
         ATTACK_SWING_SPAN,
         ATTACK_SWING_DELAY,
-        ATTACK_SWING_TARGET_HZ,
-        ATTACK_SWING_INITIAL_HZ,
+        ATTACK_SWING_HIGH_HZ,
+        ATTACK_SWING_LOW_HZ,
     )
+}
+
+/// `combat.md §11.1` the **monster** swing cue, melee and ranged alike: "the
+/// swing sweep, played **before** the roll, running **downwards** (roughly
+/// 750 Hz toward 400 Hz)", against the party-melee row's "the same swing sweep
+/// in the opposite direction".
+///
+/// It is therefore the same recipe as [`party_melee_attack_swing`] with the
+/// endpoints exchanged: the same 30 updates `audio.md §7.4` publishes for the
+/// swing cue, run from 750 Hz down. `§11.1`'s evidence block marks the sweep
+/// **directions** as the one thing that pass established - "only the sweep
+/// **directions** were established in this pass, and the monster swing runs
+/// opposite to the party's" - while the absolute frequencies are inherited
+/// from the `audio.md` census. The increment `(400 - 750) * 4 / 120` truncates
+/// to -11 Hz, so the realised run is 750, 739, ... 431 Hz, which stops
+/// strictly above 400 Hz as `§5.2` requires.
+pub fn monster_attack_swing() -> SpeakerProgram {
+    glissando(
+        ATTACK_SWING_SPAN,
+        ATTACK_SWING_DELAY,
+        ATTACK_SWING_LOW_HZ,
+        ATTACK_SWING_HIGH_HZ,
+    )
+}
+
+/// `combat.md §11.1` the **party ranged or thrown** swing cue: "a descending
+/// sweep, roughly 1300 Hz toward 300 Hz, after `Aim! ` and a confirmed
+/// cursor". It is a different cue from the melee swing, which is why it has its
+/// own program here.
+///
+/// **The recipe is an identification, not a published row.** `§11.1` says of
+/// its own numbers that "the absolute frequencies quoted for the swing sweeps
+/// and cues are inherited from the existing `audio.md` census rather than
+/// re-derived here", and the census holds exactly one descending glissando
+/// starting at 1300 Hz: `§6.1`'s "**descending** glissando, 20 updates from
+/// 1300 Hz down toward 350 Hz" (`§5.2` lists it as the "20-update
+/// 1300-to-350 Hz impact fall"). This cue is therefore played with that
+/// recipe's shape. Neither document states that the two are one recipe, and
+/// `§5.2` says the impact fall's own "span and per-update delay were not
+/// established", so the update count here is inherited rather than published.
+/// See the spec question recorded with this change.
+pub fn party_ranged_attack_swing() -> SpeakerProgram {
+    combat_template_impact()
 }
 
 /// `audio.md §6.1`: a spell's circle, `floor(id / 6) + 1`.
@@ -1564,14 +1608,24 @@ pub enum SoundEffect {
     /// `§6.1` combat effect template impact: a descending 20-update glissando
     /// from 1300 Hz toward 350 Hz, played only on a resolved effect.
     CombatTemplateImpact,
-    /// `§7.4` the attack-application swing cue: "The attack-application path
-    /// plays its own rising sweep - 400 Hz toward 750 Hz, 30 updates, roughly
-    /// 130 ms ... **unconditionally, before the to-hit roll**, and only then
-    /// branches." The miss arm prints its line and returns with "**no audio
-    /// call anywhere on it**", so a miss is not silent overall but adds
-    /// nothing. `combat.md §7` step 7 and `§11` call this same cue "the hit
-    /// sound".
-    AttackSwing,
+    /// `§7.4` / `combat.md §11.1` the **party melee** swing cue: "The
+    /// attack-application path plays its own rising sweep - 400 Hz toward
+    /// 750 Hz, 30 updates, roughly 130 ms ... **unconditionally, before the
+    /// to-hit roll**, and only then branches." The miss arm prints its line
+    /// and returns with "**no audio call anywhere on it**", so a miss is not
+    /// silent overall but adds nothing.
+    PartyMeleeAttackSwing,
+    /// `combat.md §11.1` the **monster** swing cue, melee and ranged alike:
+    /// "the swing sweep, played **before** the roll, running **downwards**
+    /// (roughly 750 Hz toward 400 Hz)". It is the party melee sweep with its
+    /// endpoints exchanged, and `§11.1` marks the direction as established.
+    MonsterAttackSwing,
+    /// `combat.md §11.1` the **party ranged or thrown** swing cue: "a
+    /// descending sweep, roughly 1300 Hz toward 300 Hz, after `Aim! ` and a
+    /// confirmed cursor". See [`party_ranged_attack_swing`] for why its
+    /// program is the census's 1300-to-350 Hz descending recipe and what about
+    /// that is an identification rather than a published row.
+    PartyRangedAttackSwing,
     /// `§8.3` monster possession success.
     Possession,
     /// `combat.md §6.3` controlled-party faint after a Vanish death. The
@@ -1667,7 +1721,9 @@ impl SoundEffect {
             SoundEffect::SharedVariant { variant } => shared_variant(*variant, jitter),
             SoundEffect::CircleRumbleLead { circle } => circle_rumble_lead(*circle, jitter),
             SoundEffect::CombatTemplateImpact => combat_template_impact(),
-            SoundEffect::AttackSwing => attack_swing(),
+            SoundEffect::PartyMeleeAttackSwing => party_melee_attack_swing(),
+            SoundEffect::MonsterAttackSwing => monster_attack_swing(),
+            SoundEffect::PartyRangedAttackSwing => party_ranged_attack_swing(),
             SoundEffect::Possession => envelope_program(POSSESSION_ENVELOPE),
             SoundEffect::ControlledPartyFaint => envelope_program(POSSESSION_ENVELOPE),
             SoundEffect::SceptreReclaimed => envelope_program(SCEPTRE_RECLAIMED_ENVELOPE),

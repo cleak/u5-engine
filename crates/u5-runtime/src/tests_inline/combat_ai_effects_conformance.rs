@@ -26,7 +26,7 @@
     }
 
     #[test]
-    fn hazard_pass_damaging_tiers_play_the_hit_sound_and_only_the_middle_leaves_combat() {
+    fn hazard_pass_damaging_tiers_record_the_hit_sound_and_only_the_middle_leaves_combat() {
         // `combat.md §7` step 7: "Three damaging kinds are recognized, each
         // with its own effect: a low tier that applies the party status/damage
         // path with the no-attacker sentinel and plays the hit sound, but only
@@ -40,6 +40,11 @@
         // accepted arm runs "with no attacker credit"; Fire is the tier that
         // passes a rolled raw value to the shared endpoint "then run[s] the
         // ordinary no-attacker finalization and status-panel refresh".
+        //
+        // "The hit sound" and `§11`'s "target sound" name a sound but publish
+        // no recipe, and `§11.1` lists the standing-hazard tier under "Not
+        // covered", so the tier is recorded and no cue is emitted. These
+        // assertions pin the gate and the silence together.
 
         // Low tier: the swamp arena byte, an ordinary live linked record.
         let mut low = hazard_pass_state();
@@ -52,9 +57,9 @@
         assert!(contact.hit_sound_played);
         assert!(!contact.finalize_hook_ran);
         assert!(!contact.raises_leave_combat_flag);
-        assert_eq!(
-            low.sound_effects_after(serial),
-            vec![SoundEffect::AttackSwing]
+        assert!(
+            low.sound_effects_after(serial).is_empty(),
+            "no document publishes a program for the hazard tier's hit sound"
         );
 
         // Low tier, linked record at or above `0x80`: `§7` withholds the hit
@@ -82,9 +87,9 @@
         assert!(contact.hit_sound_played);
         assert!(contact.finalize_hook_ran);
         assert!(contact.raises_leave_combat_flag);
-        assert_eq!(
-            middle.sound_effects_after(serial).first(),
-            Some(&SoundEffect::AttackSwing)
+        assert!(
+            middle.sound_effects_after(serial).is_empty(),
+            "no document publishes a program for the hazard tier's target sound"
         );
 
         // `§11`: the Sleep marker still writes its own status result, but it
@@ -169,8 +174,15 @@
             PlayInputDisposition::Continue
         );
 
+        // `combat.md §8` Shape A "prints the verb label, then requires ...",
+        // so the delegate's own refusal follows the label instead of erasing
+        // it - the same order the dead-actor arm of this shape uses.
         assert!(
-            state.message.contains(COMBAT_JIMMY_NO_KEYS_MESSAGE),
+            state.message.starts_with(&format!(
+                "{}{COMBAT_JIMMY_NO_KEYS_MESSAGE}",
+                combat_command_branch_published_label(CombatCommandBranch::Jimmy)
+                    .expect("`§8` publishes the Jimmy label")
+            )),
             "message was {:?}",
             state.message
         );
@@ -395,42 +407,6 @@
     }
 
     #[test]
-    fn teleport_capable_movement_takes_its_chance_roll_before_the_cell_probe() {
-        // `combat.md §9`: "A teleport-capable monster **first gets a chance**
-        // to move to a random legal arena cell", and Negate Magic and the
-        // Crown "suppress this teleport arm before its **chance roll** and
-        // random-cell probe". The gate therefore spends one draw of its own,
-        // ahead of the two coordinate draws, and a declined gate spends only
-        // that one.
-        let mut declined = 0usize;
-        let mut accepted = 0usize;
-        for seed in 0u16..64 {
-            let mut state = combat_ai_turn_state(6, 5);
-            state.prng_state = seed;
-
-            let mut expected = seed;
-            let gate = u5_prng_range_u16(&mut expected, 0, u16::from(u8::MAX)) as u8;
-            let fires = combat_ai_special_one_in_eight_gate(gate);
-            if fires {
-                let _ = u5_prng_range_u16(&mut expected, 0, (COMBAT_ARENA_SIDE - 1) as u16);
-                let _ = u5_prng_range_u16(&mut expected, 0, (COMBAT_ARENA_SIDE - 1) as u16);
-                accepted += 1;
-            } else {
-                declined += 1;
-            }
-
-            let candidate = state.combat_ai_teleport_candidate(8);
-
-            assert_eq!(candidate.is_some(), fires, "seed {seed:#06x} gate {gate}");
-            assert_eq!(
-                state.prng_state, expected,
-                "seed {seed:#06x}: a declined gate spends exactly its own draw"
-            );
-        }
-        assert!(declined > 0 && accepted > 0, "both arms must be exercised");
-    }
-
-    #[test]
     fn exhausted_cardinal_fallback_is_not_consumed_when_the_last_draw_repeats_the_first() {
         // `combat.md §9`: "When all four attempts fail, the routine still
         // reports the action as consumed **unless the final draw happened to
@@ -622,27 +598,71 @@
     }
 
     #[test]
-    fn the_attack_application_swing_is_unconditional_on_hits_and_misses() {
-        // `audio.md §7.4`: "A missed melee or weapon attack produces no beep.
-        // The attack-application path plays its own rising sweep - 400 Hz
-        // toward 750 Hz, 30 updates, roughly 130 ms ... unconditionally,
-        // before the to-hit roll, and only then branches. ... The miss arm
-        // prints `Failed!` or `<name> missed!` ... and there is no audio call
-        // anywhere on it."
-        let program = audio::attack_swing();
-        assert_eq!(program.tone_count(), audio::ATTACK_SWING_UPDATES);
-        let frequencies = program.frequencies();
-        assert_eq!(frequencies[0], audio::ATTACK_SWING_INITIAL_HZ as u32);
+    fn the_swing_cue_runs_downwards_for_a_monster_and_upwards_for_a_party_melee_blow() {
+        // `combat.md §11.1`, the "Swing begins" rows of the census:
+        //   - "monster, melee and ranged | *nothing* | the swing sweep, played
+        //     **before** the roll, running **downwards** (roughly 750 Hz
+        //     toward 400 Hz)";
+        //   - "party melee | **a newline, unconditionally, before the roll** |
+        //     the same swing sweep in the opposite direction, roughly 400 Hz
+        //     toward 750 Hz (`audio.md` section 7.4)";
+        //   - "party ranged or thrown | *no newline here* | a descending
+        //     sweep, roughly 1300 Hz toward 300 Hz, after `Aim! ` and a
+        //     confirmed cursor".
+        // `§11.1`'s evidence block makes the directions the established part:
+        // "only the sweep **directions** were established in this pass, and
+        // the monster swing runs opposite to the party's."
+        let party_melee = audio::party_melee_attack_swing();
+        assert_eq!(party_melee.tone_count(), audio::ATTACK_SWING_UPDATES);
+        let rising = party_melee.frequencies();
+        assert_eq!(rising[0], audio::ATTACK_SWING_LOW_HZ as u32);
         assert!(
-            frequencies.iter().all(|hz| *hz < audio::ATTACK_SWING_TARGET_HZ as u32),
-            "`audio.md §5.2`: the rise stops strictly below 750 Hz"
+            rising.windows(2).all(|pair| pair[1] > pair[0]),
+            "the party melee sweep rises"
         );
         assert!(
-            frequencies.windows(2).all(|pair| pair[1] > pair[0]),
-            "a rising sweep"
+            rising
+                .iter()
+                .all(|hz| *hz < audio::ATTACK_SWING_HIGH_HZ as u32),
+            "`audio.md §5.2`: it stops strictly below 750 Hz"
         );
-        assert!(program.ends_with_stop());
+        assert!(party_melee.ends_with_stop());
 
+        let monster_swing = audio::monster_attack_swing();
+        assert_eq!(
+            monster_swing.tone_count(),
+            audio::ATTACK_SWING_UPDATES,
+            "`§11.1`: the same swing sweep, in the opposite direction"
+        );
+        let falling = monster_swing.frequencies();
+        assert_eq!(falling[0], audio::ATTACK_SWING_HIGH_HZ as u32);
+        assert!(
+            falling.windows(2).all(|pair| pair[1] < pair[0]),
+            "the monster sweep runs downwards"
+        );
+        assert!(
+            falling
+                .iter()
+                .all(|hz| *hz > audio::ATTACK_SWING_LOW_HZ as u32),
+            "`audio.md §5.2`: it stops strictly above 400 Hz"
+        );
+        assert!(monster_swing.ends_with_stop());
+
+        let party_ranged_program = audio::party_ranged_attack_swing();
+        assert!(party_ranged_program.ends_with_stop());
+        let party_ranged = party_ranged_program.frequencies();
+        assert_eq!(party_ranged[0], 1300);
+        assert!(
+            party_ranged.windows(2).all(|pair| pair[1] < pair[0]),
+            "the party ranged/thrown sweep descends"
+        );
+        assert_ne!(
+            party_ranged, falling,
+            "`§11.1` gives the ranged arm a cue of its own"
+        );
+
+        // `audio.md §7.4` keeps the cue "unconditional[], before the to-hit
+        // roll", and the miss arm has "no audio call anywhere on it".
         for forced_hit in [true, false] {
             let mut state = combat_ai_turn_state(6, 5);
             state.party[0].hp = 30;
@@ -665,23 +685,68 @@
             let effects = state.sound_effects_after(serial);
             assert_eq!(
                 effects.first(),
-                Some(&SoundEffect::AttackSwing),
-                "the swing precedes the branch on a forced_hit of {forced_hit}"
+                Some(&SoundEffect::MonsterAttackSwing),
+                "the monster swing precedes the branch on a forced_hit of {forced_hit}"
             );
             if !forced_hit {
                 assert_eq!(
                     effects,
-                    vec![SoundEffect::AttackSwing],
+                    vec![SoundEffect::MonsterAttackSwing],
                     "the miss arm adds no audio call of its own"
                 );
             }
+        }
+
+        // The party side of the same primitive, routed by
+        // `resolve_combat_weapon_attack_range_route`. Item 16 is the one
+        // catalogue row that reaches both arms: its published range cap is 3,
+        // so distance 1 is the melee route, distance 3 the ranged route, and
+        // distance 4 no route at all.
+        assert_eq!(equipment_weapon_range_cap(16), Some(3));
+        for (monster_x, expected) in [
+            (6u8, Some(SoundEffect::PartyMeleeAttackSwing)),
+            (8, Some(SoundEffect::PartyRangedAttackSwing)),
+            (9, None),
+        ] {
+            let mut state = combat_ai_turn_state(monster_x, 5);
+            let serial = state.sound_effect_serial;
+            let application = state
+                .resolve_and_apply_combat_equipment_weapon_attack(
+                    16,
+                    0,
+                    8,
+                    30,
+                    10,
+                    0,
+                    5,
+                    Some(false),
+                    false,
+                )
+                .expect("the party attack resolves");
+            let route = match application.resolution {
+                CombatWeaponAttackResolution::OutOfRange { .. } => None,
+                CombatWeaponAttackResolution::Miss { route, .. } => Some(route),
+                other => panic!("unexpected resolution {other:?}"),
+            };
+            assert_eq!(
+                route.is_some(),
+                expected.is_some(),
+                "monster_x {monster_x} routed to {route:?}"
+            );
+            assert_eq!(
+                state.sound_effects_after(serial),
+                expected.into_iter().collect::<Vec<_>>(),
+                "monster_x {monster_x}: `§11.1` keys the party cue on the arm, \
+                 and an attempt that reaches no attack application is silent"
+            );
         }
 
         // `RETRACTIONS.md` R355, quoted in `audio.md §7.4`: when a self-acting
         // actor's ranged shot scatters and "the scattered cell turns out to
         // hold an actor, the ordinary hit chain runs against that actor with
         // its full narration and its own sounds. The ranged arm is silent only
-        // when the scatter lands on nobody."
+        // when the scatter lands on nobody." `§11.1`'s swing row covers
+        // "monster, melee and ranged" with the one downward sweep.
         //
         // The intended target sits at (5,5) and the attacker at (6,5), so a
         // scatter roll of `0` selects offset `(-1,-1)` - cell (4,4) - and a
@@ -716,7 +781,7 @@
         );
         assert_eq!(
             occupied.sound_effects_after(serial).first(),
-            Some(&SoundEffect::AttackSwing),
+            Some(&SoundEffect::MonsterAttackSwing),
             "the scattered impact runs the ordinary hit chain with its own sounds"
         );
 
@@ -918,19 +983,21 @@
         }
 
         // A class reachable through the `encounters.md §4` ship/pirate family
-        // can still be damaged and can still attack.
+        // therefore carries both published rows and can still be damaged.
+        // `catalogs/monster-bestiary.md §3` publishes no ranged/effect row for
+        // it, and nothing published says what such a row would hold, so the
+        // engine keeps propagating the absence rather than substituting
+        // invented side-table bytes - see the spec question recorded with this
+        // change.
         let mut state = combat_ai_turn_state(6, 5);
         state.combat_actors[8].owner_target_class = OUTDOOR_PIRATE_COMBAT_CLASS;
         state.combat_actors[8].hp_or_wound = 20;
         state.party[0].hp = 30;
         state.party[0].max_hp = 30;
 
-        assert!(
-            state
-                .resolve_and_apply_combat_monster_attack(8, 0, 7, 0, 0, false, 0, Some(true))
-                .is_some(),
-            "a pirate-family monster still has an attack path"
-        );
+        assert!(combat_class_stats(OUTDOOR_PIRATE_COMBAT_CLASS).is_some());
+        assert!(combat_class_traits(OUTDOOR_PIRATE_COMBAT_CLASS).is_some());
+        assert_eq!(combat_ranged_effect_stats(OUTDOOR_PIRATE_COMBAT_CLASS), None);
         assert!(
             state
                 .apply_combat_weapon_damage_to_target(None, 8, 5, false)

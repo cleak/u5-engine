@@ -426,32 +426,6 @@ pub fn combat_ranged_effect_stats(class: u8) -> Option<CombatRangedEffectStats> 
     }
 }
 
-/// `combat.md §11` / `combat.md §13`: the two ranged/effect side tables are
-/// "one-byte side tables" read by the class-indexed attack path, so every row
-/// of the forty-eight-row class space has a byte.
-/// `catalogs/monster-bestiary.md §3` publishes those rows only for class 0 and
-/// classes 12 through 47; the eleven party/NPC rows 1..11 are unpublished.
-///
-/// A missing row must not be propagated as "this actor has no attack": class 1
-/// is reachable through the `encounters.md §4` ship/pirate family, and
-/// propagating `None` silently removes its whole attack path. This helper
-/// therefore falls back to a melee-only shape - selector `1`, payload `0`, no
-/// scene resistance, no cast-like branch, no pre-gate bypass - which is the
-/// shape every published melee-only row in that catalog carries. The
-/// **fallback values themselves are not published**; only the fact that a row
-/// exists for every class is.
-pub fn combat_ranged_effect_stats_or_melee_only(class: u8) -> CombatRangedEffectStats {
-    combat_ranged_effect_stats(class).unwrap_or(CombatRangedEffectStats {
-        class,
-        name: "Unpublished ranged/effect row",
-        range_effect_selector: RANGED_EFFECT_CAST_LIKE_SELECTOR,
-        payload: 0,
-        scene_resistance: false,
-        cast_like_branch: false,
-        pre_gate_bypass: false,
-    })
-}
-
 pub fn combat_class_for_sprite_byte(byte: u8) -> Option<u8> {
     match byte {
         0x70..=0x73 => Some(12),

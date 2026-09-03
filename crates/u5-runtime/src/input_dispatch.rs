@@ -2812,7 +2812,10 @@ fn handle_combat_multistage_command(
             // returns immediately, **before the direction prompt** and before
             // any tile is examined."
             if *branch == CombatCommandBranch::Jimmy && state.keys == 0 {
-                state.message = COMBAT_JIMMY_NO_KEYS_MESSAGE.to_string();
+                // `combat.md §8` Shape A prints the verb label first and the
+                // delegate's own line after it, which is why the dead-actor
+                // arm above appends too. The label is already in the slot.
+                state.message.push_str(COMBAT_JIMMY_NO_KEYS_MESSAGE);
                 let _ = apply_combat_committed_action_maintenance(state, actor_slot);
                 advance_combat_round_after_actor_and_append_message(state, actor_slot);
                 return true;
