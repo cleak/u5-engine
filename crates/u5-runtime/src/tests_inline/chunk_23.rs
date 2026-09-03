@@ -11324,8 +11324,12 @@ fn combat_input_dispatch_routes_play_keys_to_combat_parser() {
     // banner. The Giant Rat's reply ahead of it is the stream re-baselined
     // by `RETRACTIONS.md` R311: the lazily drawn cardinal fallback changes
     // which roll the reply takes.
-    // `combat.md` 11.1: the Giant Rat's failed melee to-hit prints "nothing
-    // at all", so only the direction echo and the next turn banner remain.
+    // `combat.md` 11.1: the party swing's own failed to-hit prints the
+    // target-named `Giant Rat missed!` - "it is printed by a party member's
+    // failed swing **at** a Bat, never by the Bat's failed swing at the
+    // party". The rat's own reply then takes the poison/status branch of
+    // Section 12, whose line is "printed **inside** damage resolution ...
+    // and the ordinary result line is then suppressed".
     assert_eq!(
         attack_state.message,
         "East\nGiant Rat missed!\nAvatar is poisoned!\n\nAvatar, armed with bare hands:"
@@ -11411,7 +11415,7 @@ fn combat_input_dispatch_reports_weapon_hit_damage_and_xp() {
         // the shared stream: `RETRACTIONS.md` R335 narrowed the to-hit
         // draw to the shared `0..=60` raw roll and R336 removed the
         // monster-side damage draw entirely.
-        "East\nGiant Rat lightly wounded!\nAvatar is poisoned!\n\nAvatar, armed with Dagger:"
+        "East\nGiant Rat barely wounded!\nAvatar is poisoned!\n\nAvatar, armed with Dagger:"
     );
     assert_eq!(state.combat_actors[8].hp_or_wound, 10 - expected_damage);
     assert_eq!(state.party_experience[0], u16::from(expected_damage));

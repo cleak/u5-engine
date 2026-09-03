@@ -15873,6 +15873,62 @@ fn monster_wound_classifier_matches_spec_thresholds() {
     assert!(!monster_wound_sets_fleeing(80, 100, 251));
 }
 
+/// `combat.md §11.1`: "The quarter is the class maximum divided by four with
+/// truncation, and the three thresholds are one, two and three of those
+/// truncated quarters, so the boundaries sit slightly low for maxima that are
+/// not multiples of four." The test above uses maximum 100, where truncated
+/// and exact quarters coincide and cannot tell the two rules apart. These
+/// maxima can.
+#[test]
+fn monster_wound_classifier_truncates_the_quarter_at_every_boundary() {
+    // Maximum 10, the Giant Rat's row: the truncated quarter is 2, so the
+    // thresholds are 2, 4 and 6. An exact-fraction rule would put them at
+    // 2.5, 5 and 7.5 and mis-grade five of the eleven possible HP values.
+    for (hp, bucket) in [
+        (1u16, MonsterWoundBucket::Critical),
+        (2, MonsterWoundBucket::Wounded),
+        (3, MonsterWoundBucket::Wounded),
+        (4, MonsterWoundBucket::LightlyWounded),
+        (5, MonsterWoundBucket::LightlyWounded),
+        (6, MonsterWoundBucket::Healthy),
+        (7, MonsterWoundBucket::Healthy),
+    ] {
+        assert_eq!(monster_wound_bucket(hp, 10), bucket, "{hp} of 10");
+    }
+
+    // Maximum 99: truncated quarter 24, thresholds 24, 48 and 72 - not 24.75,
+    // 49.5 and 74.25. Each pair straddles one published boundary.
+    for (hp, bucket) in [
+        (23u16, MonsterWoundBucket::Critical),
+        (24, MonsterWoundBucket::Wounded),
+        (47, MonsterWoundBucket::Wounded),
+        (48, MonsterWoundBucket::LightlyWounded),
+        (71, MonsterWoundBucket::LightlyWounded),
+        (72, MonsterWoundBucket::Healthy),
+    ] {
+        assert_eq!(monster_wound_bucket(hp, 99), bucket, "{hp} of 99");
+    }
+
+    // `§11.1`: the graded wound lines use "the same four-bucket wound score
+    // the flee classifier of Section 9 computes", so the two classifiers must
+    // never disagree on any HP value of any reachable class maximum.
+    for max_hp in 1u16..=255 {
+        for hp in 0u16..=max_hp {
+            let section_9 = monster_wound_bucket(hp, max_hp);
+            let narration = combat_wound_score_bucket(hp as u8, max_hp as u8);
+            let expected = match narration {
+                CombatWoundScoreBucket::UnderOneQuarter => MonsterWoundBucket::Critical,
+                CombatWoundScoreBucket::OneQuarterToUnderHalf => MonsterWoundBucket::Wounded,
+                CombatWoundScoreBucket::HalfToUnderThreeQuarters => {
+                    MonsterWoundBucket::LightlyWounded
+                }
+                CombatWoundScoreBucket::ThreeQuartersOrMore => MonsterWoundBucket::Healthy,
+            };
+            assert_eq!(section_9, expected, "{hp} of {max_hp}");
+        }
+    }
+}
+
 #[test]
 fn combat_actor_record_offsets_match_spec_row_order() {
     // combat.md §6

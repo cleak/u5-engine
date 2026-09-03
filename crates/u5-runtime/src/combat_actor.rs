@@ -44,13 +44,14 @@ pub const fn monster_kill_xp_reward(class_max_hp: u16) -> u16 {
 /// fleeing/morale decisions.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum MonsterWoundBucket {
-    /// HP `< 1/4 max` — always-fleeing critical band.
+    /// Below one truncated quarter — always-fleeing critical band.
     Critical,
-    /// HP in `[1/4, 1/2)` — morale-check band; fleeing on 252/256.
+    /// One to just under two truncated quarters — morale-check band;
+    /// fleeing on 252/256.
     Wounded,
-    /// HP in `[1/2, 3/4)` — light wounds.
+    /// Two to just under three truncated quarters — light wounds.
     LightlyWounded,
-    /// HP `>= 3/4 max` — healthy.
+    /// Three truncated quarters or more — healthy.
     Healthy,
 }
 
@@ -61,18 +62,25 @@ pub const WOUND_MORALE_FLEE_THRESHOLD: u16 = 252;
 
 /// `combat.md §9` monster wound-score classifier. Returns the
 /// four-bucket wound classification.
+///
+/// `§11.1` publishes the arithmetic behind this classifier for the first
+/// time, and it is not the exact-fraction comparison the band names suggest:
+/// "The quarter is the class maximum divided by four with truncation, and the
+/// three thresholds are one, two and three of those truncated quarters, so the
+/// boundaries sit slightly low for maxima that are not multiples of four."
+/// `§11.1` also states that the graded wound lines use "the same four-bucket
+/// wound score the flee classifier of Section 9 computes", so the two must
+/// agree: at class maximum 10 both read 2/4/6, not 2/5/7.
 pub const fn monster_wound_bucket(current_hp: u16, class_max_hp: u16) -> MonsterWoundBucket {
     if class_max_hp == 0 {
         return MonsterWoundBucket::Critical;
     }
     let quarter = class_max_hp / 4;
-    let half = class_max_hp / 2;
-    let three_quarters = (class_max_hp * 3) / 4;
     if current_hp < quarter {
         MonsterWoundBucket::Critical
-    } else if current_hp < half {
+    } else if current_hp < quarter * 2 {
         MonsterWoundBucket::Wounded
-    } else if current_hp < three_quarters {
+    } else if current_hp < quarter * 3 {
         MonsterWoundBucket::LightlyWounded
     } else {
         MonsterWoundBucket::Healthy
