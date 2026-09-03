@@ -33,7 +33,9 @@
         // while the actor's own object entry is an ordinary live entry; a
         // middle tier that plays the hit sound, rolls a small random amount,
         // feeds it to the damage-and-status resolver, runs the shared finalize
-        // hook and raises the leave-combat flag".
+        // hook and requests a party stats-panel refresh" (`RETRACTIONS.md`
+        // R358 withdrew that sentence's former "raises the leave-combat
+        // flag": "Nothing leaves combat on that byte").
         //
         // `§11` keys those two: Poison is the tier whose contact is rejected
         // when the linked record's tile byte "is at least `0x80`" and whose
@@ -56,7 +58,6 @@
         assert_eq!(contact.tier, Some(CombatHazardTier::Low));
         assert!(contact.hit_sound_played);
         assert!(!contact.finalize_hook_ran);
-        assert!(!contact.raises_leave_combat_flag);
         assert!(
             low.sound_effects_after(serial).is_empty(),
             "no document publishes a program for the hazard tier's hit sound"
@@ -86,7 +87,10 @@
         assert_eq!(contact.tier, Some(CombatHazardTier::Middle));
         assert!(contact.hit_sound_played);
         assert!(contact.finalize_hook_ran);
-        assert!(contact.raises_leave_combat_flag);
+        // `RETRACTIONS.md` R358: what the tier raises is the stats-panel
+        // refresh latch, and it is raised on the state, not recorded on the
+        // contact record.
+        assert!(middle.party_stats_panel_refresh_pending);
         // The tier itself is still silent. What the pass can emit is the cue
         // `§11.1`'s "Damage zero or negative" row gives the **shared damage
         // handler** - "the rising action-snap cue" - and the middle tier's
@@ -108,8 +112,8 @@
         );
 
         // `§11`: the Sleep marker still writes its own status result, but it
-        // is not one of the damaging kinds, so it costs no hit sound, no
-        // finalize hook and no leave-combat flag.
+        // is not one of the damaging kinds, so it costs no hit sound and no
+        // finalize hook.
         let mut sleep = hazard_pass_state();
         sleep.active_objects[1] = ActiveObject {
             type_byte: COMBAT_FIELD_KIND_SLEEP,
@@ -125,7 +129,6 @@
         assert_eq!(contact.tier, None);
         assert!(!contact.hit_sound_played);
         assert!(!contact.finalize_hook_ran);
-        assert!(!contact.raises_leave_combat_flag);
         assert!(sleep.sound_effects_after(serial).is_empty());
         assert_eq!(sleep.party[0].status, b'S');
 

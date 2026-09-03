@@ -764,10 +764,18 @@ pub struct CombatPostDispatchContactApplication {
     /// ordinary live entry". No document publishes a program for that sound,
     /// so this records that the tier reached it; nothing is emitted.
     pub hit_sound_played: bool,
-    /// `combat.md §7` step 7: the middle tier "runs the shared finalize hook
-    /// and raises the leave-combat flag".
+    /// `combat.md §7` step 7: the middle tier "runs the shared finalize
+    /// hook".
+    ///
+    /// The rest of that sentence - "and raises the leave-combat flag" - is
+    /// withdrawn by `RETRACTIONS.md` R358: the byte "is a one-bit 'the party
+    /// stats panel is stale' request", and "an engine that recorded the flag
+    /// on a contact record and wired it to nothing was modelling the wrong
+    /// thing, not merely an incomplete thing - the correct wiring is a shared
+    /// display latch owned by the stats panel". That latch is
+    /// [`PlayState::request_party_stats_panel_refresh`], raised where the
+    /// contact resolves, so no field records it here.
     pub finalize_hook_ran: bool,
-    pub raises_leave_combat_flag: bool,
     pub field_contact: CombatArenaFieldContactApplication,
 }
 
@@ -5562,7 +5570,6 @@ impl PlayState {
             tier,
             hit_sound_played,
             finalize_hook_ran: middle,
-            raises_leave_combat_flag: middle,
             field_contact,
         })
     }
@@ -6696,20 +6703,17 @@ impl PlayState {
                     Some(self.age_active_effect()),
                 )
             };
-        // `combat.md §7` step 7 says the middle damaging tier "raises the
-        // leave-combat flag" and names no reader for it; §11's more specific
-        // statements of the same Fire result - the arena-terrain row ("play the
-        // target sound, pass a rolled raw value ..., run no-attacker
-        // finalization, and request a status-panel refresh") and the per-marker
-        // Fire row - list no leave-combat consequence at all. `RETRACTIONS.md`
-        // R288 withdrew an earlier reading that mapped another combat event
-        // onto the leave-combat path and ended the round loop. So the flag is
-        // **recorded** on the contact record (`raises_leave_combat_flag`) and
-        // deliberately not wired to a round-loop exit: standing on lava does
-        // not end the fight until a document names the flag's reader. The
-        // monster dispatch path (`apply_combat_actor_slot_dispatch_internal`)
-        // treats it the same way, so one published tier has one behaviour on
-        // both paths. See the spec question recorded with this change.
+        // `combat.md §7` step 7's "raises the leave-combat flag" for the
+        // middle damaging tier is withdrawn by `RETRACTIONS.md` R358: the byte
+        // "requests a **party stats-panel refresh**", and "nothing leaves
+        // combat on that byte: it has four readers corpus-wide, one at the top
+        // of each mode loop's per-turn entry point, and every one of them
+        // redraws the full party stats panel and clears it". §11's more
+        // specific statements of the same Fire result had already said so.
+        // The refresh is raised where the contact resolves, through
+        // [`Self::request_party_stats_panel_refresh`]; standing on lava does
+        // not end the fight, and no contact record carries a leave-combat
+        // flag for a caller to wire.
         //
         // The re-evaluation below is **not** that flag's reader and predates
         // this change: the hazard pass can mutate actor state, so the
