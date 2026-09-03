@@ -11449,18 +11449,26 @@ fn a_player_attackers_rating_follows_its_roster_row_not_its_descriptor_slot() {
     state.party_strengths = vec![10, 10, 200];
     assert_eq!(state.combat_roster_slot_for_actor_slot(1), Some(2));
 
-    // `combat_to_hit_score` is `(attacker - defender + 30) / 2` compared
-    // against the drawn roll, so a roll of 100 separates Strength 200 from
-    // Strength 10 for any small class defence.
+    // `combat.md §11`'s selector reads Strength for the party attacker
+    // only on the five strength-arm ids - bare hands take the combat-weight
+    // arm instead - so this exercises item id 3 (Spiked Helm), one of the
+    // five, rather than the bare-handed arm.
+    assert!(combat_to_hit_item_selects_strength(3));
+    // `combat_to_hit_score` is `(defender - attacker + 30) / 2` compared
+    // against the skewed roll. The shared fixture's Giant Rat is
+    // base-step 1, so Strength 200 scores `(1 - 200 + 30) / 2 = -84` -
+    // always a hit - while Strength 10 scores `(1 - 10 + 30) / 2 = 10`; a
+    // raw draw of 10 halves to a skewed roll of 5, which falls short of
+    // that score and misses.
     let inputs = CombatPlayerWeaponAttackInputs {
-        hit_raw_roll_0_to_60: 100,
+        hit_raw_roll_0_to_60: 10,
         damage_roll: Some(0),
         forced_hit: None,
     };
     // Descriptor slot 1 stands at (5, 6), adjacent to the Giant Rat (6, 5).
     let application = state
-        .resolve_and_apply_combat_targeting_bare_handed_attack(1, 8, Some(inputs))
-        .expect("the bare-handed arm resolves");
+        .resolve_and_apply_combat_targeting_attack(1, 8, 3, Some(inputs))
+        .expect("the item arm resolves");
     assert!(
         matches!(
             application.resolution,
@@ -11473,8 +11481,8 @@ fn a_player_attackers_rating_follows_its_roster_row_not_its_descriptor_slot() {
     // miss. A descriptor-indexed read would see 200 and still hit.
     state.party_strengths = vec![10, 200, 10];
     let low = state
-        .resolve_and_apply_combat_targeting_bare_handed_attack(1, 8, Some(inputs))
-        .expect("the bare-handed arm resolves");
+        .resolve_and_apply_combat_targeting_attack(1, 8, 3, Some(inputs))
+        .expect("the item arm resolves");
     assert!(matches!(
         low.resolution,
         CombatWeaponAttackResolution::Miss { .. }
@@ -11489,7 +11497,12 @@ fn combat_scenario_script_drives_the_targeting_cursor() {
     let mut state = combat_player_command_state(6, 5);
     state.party_equipment = default_party_equipment(1);
     state.party_equipment[0][EQUIP_SLOT_WEAPON] = 16;
-    state.party_strengths = vec![255];
+    // `combat.md §11`'s selector reads Strength only for the five
+    // strength-arm ids; the Dagger is not one of them, so it is the
+    // attacker's own combat weight that has to be raised to land a natural
+    // (non-forced) blow reliably here, the same knob the sibling weapon-hit
+    // test above uses.
+    state.combat_actors[0].base_step = 30;
 
     let result = crate::combat_scenario::run_combat_scenario(
         &mut state,
@@ -11844,11 +11857,19 @@ fn combat_input_dispatch_routes_play_keys_to_combat_parser() {
     // bare-handed | its own **combat weight** |", so the shared to-hit
     // helper runs and takes its **one** draw; `§12`'s stage-one damage row
     // says "Values `0` and `1` pass through unchanged, and **bare hands are
-    // a flat `1`**", so no damage draw follows it. Nine of a ten-HP Giant
-    // Rat's hit points is "three quarters or more", which `§11.1`'s
-    // graded-wound table publishes as `<target> barely wounded!`.
+    // a flat `1`**", so no damage draw would follow a landed hit. This
+    // fixture's shared base-step-1 Avatar and base-step-1 Giant Rat put
+    // both terms of `§11`'s score at `1`, so the score is the bias term's
+    // own half - `(1 - 1 + 30) / 2 = 15` - and the fixed stream's skewed
+    // roll of `9` falls short of it: "the hit is accepted when `R >= S`",
+    // so this swing misses and the Giant Rat is untouched.
     let mut expected_prng = attack_state.prng_state;
-    let _bare_handed_hit_roll = u5_prng_range_u16(&mut expected_prng, 0, u16::from(u8::MAX));
+    let _bare_handed_hit_roll =
+        u5_prng_range_u16(&mut expected_prng, 0, u16::from(COMBAT_SKEWED_ROLL_RAW_MAX));
+    // `§11.1`'s census: "**To-hit fails** | **party melee** | `<target>
+    // missed!`" and no damage draw follows a miss, so this side of the
+    // exchange draws nothing beyond the to-hit roll.
+    //
     // The Giant Rat's reply poisons the Avatar rather than dealing
     // ordinary damage; `combat.md §12`'s "the poison/status branch returns
     // before the ordinary roller ever asks for it" means its defence draw
@@ -11875,10 +11896,10 @@ fn combat_input_dispatch_routes_play_keys_to_combat_parser() {
     // banner, and the Giant Rat's reply sits ahead of it.
     assert_eq!(
         attack_state.message,
-        "Attack-Aim! \nGiant Rat barely wounded!\nAvatar is poisoned!\n\nAvatar, armed with bare hands:"
+        "Attack-Aim! \nGiant Rat missed!\nAvatar is poisoned!\n\nAvatar, armed with bare hands:"
     );
-    assert_eq!(attack_state.combat_actors[8].hp_or_wound, 9);
-    assert_eq!(attack_state.party_experience[0], 1);
+    assert_eq!(attack_state.combat_actors[8].hp_or_wound, 10);
+    assert_eq!(attack_state.party_experience[0], 0);
     assert_eq!(
         attack_state.prng_state, expected_prng,
         "a confirmed bare-handed attempt draws the to-hit roll and nothing else"
@@ -11961,9 +11982,14 @@ fn combat_input_dispatch_reports_weapon_hit_damage_and_xp() {
     // printed `grazed` for this bucket; 11.1 reserves `grazed!` for the
     // zero-or-negative-damage outcome and gives score 4 its own line.
     assert!(state.combat_actors[8].hp_or_wound >= 6);
+    // The Giant Rat's reply poisons the Avatar (`combat.md §11.1`: "Party
+    // target poisoned | monster attacker | `<target> is poisoned!` ... and
+    // the ordinary result line is then suppressed"), which is why
+    // `advance_expected_giant_rat_ai_input_prng` above is passed `false`:
+    // the poison branch returns before the ordinary roller's defence draw.
     assert_eq!(
         state.message,
-        "Attack-Aim! \nGiant Rat lightly wounded!\nGiant Rat missed!\n\nAvatar, armed with Dagger:"
+        "Attack-Aim! \nGiant Rat barely wounded!\nAvatar is poisoned!\n\nAvatar, armed with Dagger:"
     );
     assert_eq!(state.combat_actors[8].hp_or_wound, 10 - expected_damage);
     assert_eq!(state.party_experience[0], u16::from(expected_damage));

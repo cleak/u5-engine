@@ -1971,24 +1971,30 @@
         state.party_equipment[0][EQUIP_SLOT_HELM] = SPIKED_HELM;
         state.party_equipment[0][EQUIP_SLOT_WEAPON] = HALBERD;
 
-        assert!(state.begin_combat_attack_walk(0, true).cursor_open);
-        let held = state
-            .apply_combat_targeting_cursor_key_with_inputs(char::from(INPUT_CODE_EAST), None)
-            .expect("the cursor accepts the move");
-        assert!(held.cursor_open);
-        let walk = state
-            .apply_combat_targeting_cursor_key_with_inputs(
-                '\r',
-                Some(CombatPlayerWeaponAttackInputs {
+        // This is the single direction-keyed swing entry
+        // ([`PlayState::apply_combat_player_weapon_attack_for_action`]), not
+        // the `§8.2` multi-attempt cursor walk: it is the weapon-hand
+        // priority this test exercises, not the cursor's scan-order attempt
+        // list.
+        let action = CombatPlayerCommandAction::StepOrAttack {
+            direction_code: 2,
+            outcome: CombatStepOrAttackPrimitiveOutcome::Attack {
+                target_slot: COMBAT_PARTY_ACTOR_SLOTS,
+            },
+        };
+        let application = state
+            .apply_combat_player_weapon_attack_for_action(
+                0,
+                &action,
+                CombatPlayerWeaponAttackInputs {
                     // `1 + 10 % 30 = 11` for the halberd against
                     // `1 + 10 % 4 = 3` for the spiked helm.
                     damage_roll: Some(10),
                     forced_hit: Some(true),
                     ..CombatPlayerWeaponAttackInputs::default()
-                }),
+                },
             )
-            .expect("the confirm resolves");
-        let (_, application) = walk.attack.expect("confirmation resolves an attack");
+            .expect("the attack resolves");
 
         assert!(
             matches!(
