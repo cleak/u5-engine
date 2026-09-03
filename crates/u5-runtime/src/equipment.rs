@@ -872,13 +872,24 @@ pub const COMBAT_TURN_BANNER_ARMED_WITH: &str = ", armed with ";
 pub const COMBAT_TURN_BANNER_ITEM_SEPARATOR: &str = ", ";
 /// `combat.md §8.1` stand-in printed "when none qualifies".
 pub const COMBAT_TURN_BANNER_BARE_HANDS: &str = "bare hands";
-/// `combat.md §8.1`: the banner is "terminated by a colon".
-pub const COMBAT_TURN_BANNER_TERMINATOR: &str = ":";
+/// `combat.md §8.1`: the banner is "terminated by a colon **and then a
+/// newline**".
+///
+/// `RETRACTIONS.md` R356: the colon literal itself carries no line feed,
+/// "but the turn handler emits one unconditionally between printing the
+/// banner and reading the command byte, on the first pass and on every
+/// re-prompt", so the two are inseparable from a consumer's point of view
+/// and the terminator is published here as the pair. "`Attack-` breaks to
+/// a new line after **both** the turn banner and the multi-item item-name
+/// line of Section 8.2 - an implementation that keeps either on the same
+/// row is wrong on both."
+pub const COMBAT_TURN_BANNER_TERMINATOR: &str = ":\n";
 
 /// `combat.md §8.1`, the turn banner: "a newline, the actor's name, and -
 /// for a party-side actor - the clause `, armed with ` followed by the
 /// names of that actor's readied items separated by `, `, or `bare hands`
-/// when none qualifies, terminated by a colon."
+/// when none qualifies, terminated by a colon **and then a newline**"
+/// (`RETRACTIONS.md` R356).
 ///
 /// `equipment` is `None` for the other keyboard-driven case the section
 /// names: "A charmed monster acting under player control gets only its

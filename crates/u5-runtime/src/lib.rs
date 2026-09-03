@@ -1015,6 +1015,7 @@ mod tests {
     include!("tests_inline/combat_descriptors_conformance.rs");
     include!("tests_inline/result_lines_conformance.rs");
     include!("tests_inline/combat_ai_effects_conformance.rs");
+    include!("tests_inline/spec_dd21c58_conformance.rs");
     include!("tests_inline/town_turn_loop_conformance.rs");
     include!("tests_inline/arena_animation_conformance.rs");
     include!("tests_inline/combat_transcript_rows.rs");

@@ -3701,6 +3701,41 @@ pub(crate) fn combat_monster_attack_result_message(
     state: &PlayState,
     attack: CombatMonsterAttackApplication,
 ) -> Option<String> {
+    // `combat.md §11` (`RETRACTIONS.md` R361), the Gremlin food-theft
+    // branch: on acceptance it prints "a newline, `A `, the acting
+    // creature's name, and ` stole some food!` with its own trailing
+    // newline - i.e. `A <monster> stole some food!` on its own row", and
+    // "**Consume the attack action and return.** The branch replaces the
+    // entire damage and narration chain ... no result line". The line is
+    // returned bare, like every sibling line in this narrator: the caller's
+    // `append_combat_result_line` is what supplies the leading newline and
+    // the trailing one, so embedding them here would double both.
+    // The two rejecting outcomes fall through to ordinary resolution and
+    // narrate nothing of their own.
+    if matches!(
+        attack.food_theft,
+        Some(CombatFoodTheftOutcome::Stole { .. })
+    ) {
+        let acting_creature_name = combat_actor_display_name(state, attack.attacker_slot);
+        return Some(format!(
+            "{COMBAT_FOOD_THEFT_LINE_LEAD}{acting_creature_name}{COMBAT_FOOD_THEFT_LINE_TAIL}"
+        ));
+    }
+    // `combat.md §11.1`: "Target slept | both | `<target> slept!` | none"
+    // (`RETRACTIONS.md` R359 corrects the row's former "slept or stoned").
+    // The message "is not printed by the sleep routine itself: the narration
+    // code it sets is what makes the shared result narrator print `<target>
+    // slept!` on the caller's next narration step".
+    if matches!(
+        attack.sleep_effect,
+        Some(CombatSleepEffectOutcome::PartyMemberSlept { .. })
+            | Some(CombatSleepEffectOutcome::NonPartyDisabled)
+    ) {
+        return Some(format!(
+            "{} slept!",
+            combat_actor_display_name(state, attack.target_slot)
+        ));
+    }
     if let Some(line) = combat_monster_attack_poison_line(state, attack) {
         return Some(line);
     }
@@ -3828,17 +3863,9 @@ fn drive_combat_round_walk_and_append_message(state: &mut PlayState) {
     for _ in 0..COMBAT_ROUND_WALK_DRAIN_LIMIT {
         let start_slot = state.next_combat_actor_slot.min(COMBAT_ACTOR_SLOTS);
         let application = if state.pace_combat_presentations {
-            state.apply_combat_round_walk_from_slot_paced(
-                start_slot,
-                COMBAT_PHASE_REFRESH_CONSTANT,
-                false,
-            )
+            state.apply_combat_round_walk_from_slot_paced(start_slot, COMBAT_PHASE_REFRESH_CONSTANT)
         } else {
-            state.apply_combat_round_walk_from_slot(
-                start_slot,
-                COMBAT_PHASE_REFRESH_CONSTANT,
-                false,
-            )
+            state.apply_combat_round_walk_from_slot(start_slot, COMBAT_PHASE_REFRESH_CONSTANT)
         };
         append_combat_round_walk_messages(state, &application);
         state.next_combat_actor_slot = match application.stop_reason {

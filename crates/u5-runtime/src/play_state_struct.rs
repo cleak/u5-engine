@@ -194,20 +194,6 @@ pub struct PlayState {
     /// reads for a party defender, at character-record offset `+0x18`,
     /// one entry per roster slot.
     pub party_combat_defense: Vec<u8>,
-    /// `combat.md §11`: "One class trait can route an attack into a cast-like
-    /// ranged/effect branch, rather than ordinary melee, **when the combat
-    /// effect prerequisite state is active**."
-    ///
-    /// This is that state. `§11` names it, names the branch it gates, and
-    /// specifies what the branch does; **no shipped document names what turns
-    /// it on**. Rather than invent a trigger, this engine carries the state
-    /// with no production writer and implements everything downstream of it.
-    ///
-    /// The consequence is stated plainly rather than hidden: while this stays
-    /// `false` for want of a published trigger, the cast-like branch is
-    /// reachable only from a caller that sets the state itself, so the
-    /// contract is implemented but not yet exercised by ordinary play.
-    pub combat_effect_prerequisite_active: bool,
     pub party_intelligence: Vec<u8>,
     pub party_equipment: Vec<[u8; EQUIPMENT_SLOT_COUNT]>,
     pub party_roster: Vec<PartyRosterRecord>,
@@ -365,19 +351,6 @@ pub struct PlayState {
     /// round loop, and the loop is entered once per encounter: the sweep
     /// restart jumps back past the prologue" (`RETRACTIONS.md` R308).
     pub combat_round_loop_prologue_ran: bool,
-    /// `combat.md §7`, "Loop-entry prologue": the bundle includes a
-    /// "per-slot scratch state reset". `§7` names the scratch only by that
-    /// phrase - it publishes no reader, no writer and no field layout for
-    /// it - so this engine models it as one opaque byte per actor slot,
-    /// zeroed by the prologue. Nothing else reads or writes it; the hedge is
-    /// recorded rather than filled in with an invented meaning.
-    pub combat_round_slot_scratch: [u8; COMBAT_ACTOR_SLOTS],
-    /// `combat.md §7`, "Loop-entry prologue": the bundle ends by "clearing
-    /// the 'any spell cast this round' flag". As with the scratch above, the
-    /// specification publishes the *clear* and nothing else - no reader and
-    /// no writer anywhere in `combat.md` or `magic.md` - so the flag exists
-    /// here with exactly the published lifetime and no invented consumer.
-    pub combat_spell_cast_this_round: bool,
     /// `combat.md §4` restore phase: "If the resident tile-restoration flag
     /// is set when the round loop returns, clear that flag and invoke the
     /// display driver's tile-graphics save/restore/mutation entry with mode
@@ -387,6 +360,29 @@ pub struct PlayState {
     /// sampling/clear/call ordering, while the setter provenance and
     /// tile-asset mutation details belong to the dungeon and driver specs."
     /// Transient presentation handoff, never serialized.
+    ///
+    /// `combat.md §4` now settles the call's operand set and the flag's
+    /// setter census, and both confirm this model: "**The operand set is the
+    /// mode value and nothing else.** The framer's wrapper writes the
+    /// dispatch index into the driver call cell, places the mode value in
+    /// the driver's single argument register, and makes the call. It sets no
+    /// other register, and it passes no coordinate, no rectangle, no handle
+    /// and no pointer to a saved pair ... An implementation with no driver
+    /// handle and no saved pair to pass is not missing an operand - there is
+    /// none to pass." The setter is "the dungeon room painter's
+    /// two-way-ladder cell", which "issues the matching **save** in the same
+    /// breath, through the same driver entry with mode value `0`" - so the
+    /// pair is a driver-private save-and-substitute, `display-driver.md`.
+    ///
+    /// **A second reader constrains the ordering**: "The dungeon K-Klimb
+    /// handler consults the same flag to decide whether the ladder under the
+    /// party goes both ways ... so the restore phase's clear must not be
+    /// reordered ahead of a Klimb that could still read it"
+    /// (`dungeon-mode.md §13.1`/`§14.1`). This engine has no room-entry-mode
+    /// Klimb path - its dungeon rooms are entered as combat and its Klimb
+    /// classifier reads the underfoot nibble
+    /// ([`crate::dungeon_klimb_apply`]) - so that reader has no site here
+    /// yet, and the ordering constraint is recorded rather than enforced.
     pub tile_restoration_pending: bool,
     /// Driver tile-graphics restores the combat framer sampled out of
     /// [`Self::tile_restoration_pending`] and owes a frontend. The runtime
@@ -395,7 +391,45 @@ pub struct PlayState {
     /// frontend drains it by issuing
     /// [`crate::EgaDisplayOperation::RestoreLoadedTileGraphics`].
     pub pending_driver_tile_graphics_restores: usize,
-    pub combat_secondary_marker: Option<(u8, u8)>,
+    /// `combat.md §7`, "The middle tier's flag is a stats-panel refresh
+    /// request, not a leave-combat flag" (`RETRACTIONS.md` R358).
+    ///
+    /// "It is a one-bit 'the party stats panel is stale' request with a
+    /// single consumer shape: each of the four world/combat mode loops -
+    /// combat, dungeon, outdoor and town - reads it once at the top of its
+    /// per-turn entry point and, if it is set, redraws the full party stats
+    /// panel and clears it. That is the whole contract ... The request is
+    /// raised in twenty-three places across the game, every one of them a
+    /// routine that has just changed a number the panel shows - spell mana,
+    /// food, gold, HP from a hazard, or the active-player marker - so an
+    /// engine should model it as a shared display latch owned by the stats
+    /// panel, not as combat state and certainly not as a contact-record
+    /// field."
+    ///
+    /// Transient display state, never serialized.
+    pub party_stats_panel_refresh_pending: bool,
+    /// `combat.md §7`, "What owns that coordinate": the aim marker's arena
+    /// X/Y pair. The `§8.2` targeting cursor is its only writer - it
+    /// "**seeds** them when it opens", "**rewrites** them on every accepted
+    /// move", leaves them alone on a rejected move, and "**The coordinate
+    /// itself is never cleared**".
+    ///
+    /// `None` is *unwritten*, not a cell: `§7` contemplates exactly that
+    /// state ("an engine that leaves the coordinate unwritten draws no aim
+    /// marker at all") and publishes no initial value, so the engine does
+    /// not invent one. Modelling the unwritten state as the literal `(0, 0)`
+    /// would be an invented seed - `(0, 0)` is a real arena cell that passes
+    /// [`PlayState::combat_field_cursor_cell_in_range`] for every live
+    /// caster - and would make `§8.2`'s published "attacker's own cell
+    /// otherwise" fallback unreachable until a cursor had opened once.
+    pub combat_aim_marker_cell: Option<(u8, u8)>,
+    /// `combat.md §7`, "What owns that coordinate": the marker's separate
+    /// **gate** byte. "The cursor raises it as its first act and lowers it
+    /// as its last, so the marker is on screen **if and only if an arena
+    /// targeting cursor is currently open** ... The round loop additionally
+    /// clears it as part of the per-action scratch reset before each acting
+    /// slot, which is belt and braces rather than a second mechanism."
+    pub combat_aim_marker_gate: bool,
     pub combat_ambush_reveals: [Option<CombatAmbushRevealRecord>; COMBAT_AMBUSH_REVEAL_SLOT_COUNT],
     pub combat_actors: [CombatActorDescriptor; COMBAT_ACTOR_SLOTS],
     pub sail_cadence: u8,

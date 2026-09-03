@@ -340,7 +340,7 @@
                 let _ = u5_prng_range_u16(&mut expected, 0, 1);
             }
 
-            let application = state.apply_combat_actor_slot_dispatch(8, 30, false);
+            let application = state.apply_combat_actor_slot_dispatch(8, 30);
 
             assert!(
                 matches!(
@@ -532,50 +532,39 @@
     }
 
     #[test]
-    fn the_cast_like_branch_replaces_melee_while_the_effect_prerequisite_is_active() {
-        // `combat.md §11`: "One class trait can route an attack into a
-        // cast-like ranged/effect branch, rather than ordinary melee, when the
-        // combat effect prerequisite state is active. That branch prints the
-        // cast/effect narration, reuses the AI direction/effect dispatch, plays
-        // the ranged animation, resets the scene state, and consumes the
-        // action." `catalogs/monster-bestiary.md §3` marks exactly one shipped
-        // class, the Gremlin.
+    fn the_gremlins_class_trait_no_longer_routes_the_attack_away_from_melee() {
+        // This test replaced `the_cast_like_branch_replaces_melee_while_the_
+        // effect_prerequisite_is_active`, which pinned the routing
+        // `RETRACTIONS.md` R361 withdrew: "One class trait can route an attack
+        // into a **cast-like ranged/effect branch**, rather than ordinary
+        // melee, when the combat effect prerequisite state is active."
         //
-        // Only the routing and the consumed action are pinned here. The
-        // narration's wording, the ranged animation, and which scene word is
-        // reset are all unpublished, so the branch performs none of those three
-        // and this test asserts none of them.
-        let gremlin = 25;
-        assert!(combat_ranged_effect_stats(gremlin).unwrap().cast_like_branch);
-
-        // Prerequisite clear: the ordinary melee arm.
+        // R361: "Only 'consumes the action' was right. The branch is a **food
+        // theft**, not a cast: it casts nothing, aims nothing, animates no
+        // projectile and resets no scene state ... The prerequisite state
+        // nobody could find a writer for is just the party's food supply being
+        // non-empty, so the branch is live in ordinary play rather than
+        // unreachable." `combat.md §11` puts it inside attack resolution,
+        // "**after** the to-hit roll", not in the AI's routing table.
+        //
+        // The theft branch itself is pinned by the
+        // `spec_dd21c58_conformance` suite; what this test holds is the
+        // negative the retraction leaves behind - the trait no longer diverts
+        // the route.
+        let gremlin = COMBAT_CLASS_GREMLIN;
+        assert!(combat_ranged_effect_stats(gremlin).unwrap().food_theft_branch);
         assert_eq!(
-            resolve_combat_ai_attack_route_with_effect_prerequisite(gremlin, 1, false),
+            resolve_combat_ai_attack_route(gremlin, 1),
             Some(CombatAiAttackRoute::Melee)
         );
-        // Prerequisite active: the cast-like branch replaces it.
-        let selector = combat_ranged_effect_stats(gremlin)
-            .unwrap()
-            .range_effect_selector;
-        let payload = combat_ranged_effect_stats(gremlin).unwrap().payload;
         assert_eq!(
-            resolve_combat_ai_attack_route_with_effect_prerequisite(gremlin, 1, true),
-            Some(CombatAiAttackRoute::CastLikeRangedEffect {
-                range_effect_selector: selector,
-                payload,
-            })
-        );
-        // A class without the trait is unaffected in either state.
-        assert_eq!(
-            resolve_combat_ai_attack_route_with_effect_prerequisite(COMBAT_CLASS_GIANT_RAT, 1, true),
+            resolve_combat_ai_attack_route(COMBAT_CLASS_GIANT_RAT, 1),
             Some(CombatAiAttackRoute::Melee)
         );
 
-        // The dispatcher consumes the action through the branch.
+        // And the dispatcher takes the ordinary melee arm for it.
         let mut state = combat_ai_turn_state(6, 5);
         state.combat_actors[8].owner_target_class = gremlin;
-        state.combat_effect_prerequisite_active = true;
-
         let application = state
             .apply_combat_ai_turn_with_inputs(
                 8,
@@ -594,22 +583,8 @@
                 Some(CombatMonsterAttackInputs::default()),
             )
             .unwrap();
-
-        let cast_like = application
-            .cast_like_ranged_effect
-            .expect("the cast-like branch has a consumer");
-        assert_eq!(cast_like.actor_slot, 8);
-        assert_eq!(cast_like.target_slot, Some(0));
-        assert_eq!(cast_like.range_effect_selector, selector);
-        assert_eq!(cast_like.payload, payload);
-        assert!(cast_like.action_consumed);
-        assert_eq!(application.monster_attack, None);
-        assert_eq!(application.movement, None);
-        assert_eq!(application.command_key, Some(COMBAT_AI_ATTACK_COMMAND_KEY));
-        // The branch does not clear the prerequisite: no document says which
-        // scene word "resets the scene state" writes, and clearing this one
-        // would silently make the branch one-shot.
-        assert!(state.combat_effect_prerequisite_active);
+        assert_eq!(application.attack_route, Some(CombatAiAttackRoute::Melee));
+        assert!(application.monster_attack.is_some());
     }
 
     #[test]
@@ -834,21 +809,22 @@
     }
 
     #[test]
-    fn a_gazer_gaze_takes_the_stoning_branch_against_an_awake_defender() {
-        // `combat.md §12`: "Gazer attacks have a separate stoning-style effect
-        // against awake defenders, and magic/effect attack tiles can also enter
-        // the same poison or stoning-style branches before falling back to
-        // ordinary damage."
+    fn a_gazer_gaze_replaces_ordinary_damage_with_sleep() {
+        // This test replaced `a_gazer_gaze_takes_the_stoning_branch_against_
+        // an_awake_defender`, which pinned the sentence `RETRACTIONS.md` R359
+        // withdrew: "Gazer attacks have a separate **stoning-style** effect
+        // against awake defenders ... **before falling back to ordinary
+        // damage**". R359: "The effect is **sleep**, and nothing in the
+        // shipped game petrifies or stones anything. It also **replaces**
+        // ordinary damage rather than preceding it ... An engine that recorded
+        // 'the branch was reached' and then ran ordinary damage was wrong
+        // twice: the damage should not happen and the effect should."
         //
-        // The branch's payload is not published anywhere - no status letter,
-        // no HP change, no tile, no message, no sound - and the sentence puts
-        // it "before falling back to ordinary damage", so this pins the
-        // routing and the awake gate only, and asserts that the ordinary
-        // damage path still runs. An ungated payload-free branch that
-        // swallowed the attack would claim more than the spec does.
-        assert!(combat_class_gaze_stones(COMBAT_CLASS_GAZER));
-        assert!(!combat_class_gaze_stones(COMBAT_CLASS_GIANT_RAT));
-
+        // `combat.md §12`: "When the attacker is a monster of the Gazer class
+        // and the defender is not already asleep, the resolver applies the
+        // asleep state and returns straight to its own epilogue: **no damage
+        // roll, no defence roll, no HP change, no experience credit**", and
+        // for a party defender "the status byte becomes `'S'`".
         let mut awake = combat_ai_turn_state(6, 5);
         awake.combat_actors[8].owner_target_class = COMBAT_CLASS_GAZER;
         awake.party[0].status = b'G';
@@ -858,60 +834,37 @@
         let application = awake
             .resolve_and_apply_combat_monster_attack(8, 0, 0, false, 0, Some(true))
             .expect("the gaze resolves");
-        assert_eq!(
-            application.stoning,
-            Some(CombatStoningEffectOutcome {
-                source: CombatStoningEffectSource::GazerGaze,
-                target_slot: 0,
-            })
-        );
         assert!(
             matches!(
-                application.resolution,
-                Some(CombatWeaponAttackResolution::Hit { .. })
+                application.sleep_effect,
+                Some(CombatSleepEffectOutcome::PartyMemberSlept { .. })
             ),
-            "the recorded branch still falls back to ordinary damage: {:?}",
-            application.resolution
+            "the gaze is a sleep application: {:?}",
+            application.sleep_effect
         );
-        assert!(application.damage_application.is_some());
-        assert!(awake.party[0].hp < 30);
+        assert_eq!(
+            application.resolution, None,
+            "no to-hit roll and no damage roll ran"
+        );
+        assert_eq!(application.damage_application, None);
+        assert_eq!(awake.party[0].hp, 30, "no HP change on the sleep arm");
+        assert_eq!(awake.party[0].status, b'S');
 
-        // "against awake defenders": an asleep defender does not enter the
-        // branch at all, and takes exactly the same ordinary damage path.
-        // `§6.1`: "Combat sleep for non-party targets stores into this
-        // bit; party sleep uses the character status byte `'S'` instead", so a
-        // party defender's sleep is the roster letter.
-        let mut asleep = combat_ai_turn_state(6, 5);
-        asleep.combat_actors[8].owner_target_class = COMBAT_CLASS_GAZER;
-        asleep.party[0].status = b'S';
-        asleep.party[0].hp = 30;
-        asleep.party[0].max_hp = 30;
-
-        let application = asleep
+        // A non-Gazer attacker on the same seating still takes the ordinary
+        // damage path, so the assertions above are the branch and not the
+        // fixture.
+        let mut ordinary = combat_ai_turn_state(6, 5);
+        ordinary.combat_actors[8].owner_target_class = COMBAT_CLASS_GIANT_RAT;
+        ordinary.party[0].status = b'G';
+        ordinary.party[0].hp = 30;
+        ordinary.party[0].max_hp = 30;
+        let application = ordinary
             .resolve_and_apply_combat_monster_attack(8, 0, 0, false, 0, Some(true))
-            .expect("the gaze resolves");
-        assert_eq!(application.stoning, None);
-        assert!(
-            application.resolution.is_some(),
-            "an asleep defender takes the ordinary damage path"
-        );
-        assert!(asleep.party[0].hp < 30);
-
-        // The awake gate itself, stated directly.
-        let live = CombatActorDescriptor::from_row([
-            20,
-            1,
-            COMBAT_ACTOR_FLAG_SELECTABLE_80,
-            0,
-            0,
-            0,
-            5,
-            5,
-        ]);
-        let mut disabled = live;
-        disabled.set_status_disabled();
-        assert!(combat_stoning_effect_defender_is_awake(live, None));
-        assert!(!combat_stoning_effect_defender_is_awake(disabled, None));
+            .expect("the swing resolves");
+        assert_eq!(application.sleep_effect, None);
+        assert!(application.resolution.is_some());
+        assert!(ordinary.party[0].hp < 30);
+        assert_eq!(ordinary.party[0].status, b'G');
     }
 
     #[test]
@@ -979,12 +932,19 @@
         }
 
         // A class reachable through the `encounters.md §4` ship/pirate family
-        // therefore carries both published rows and can still be damaged.
-        // `catalogs/monster-bestiary.md §3` publishes no ranged/effect row for
-        // it, and nothing published says what such a row would hold, so the
-        // engine keeps propagating the absence rather than substituting
-        // invented side-table bytes - see the spec question recorded with this
-        // change.
+        // therefore carries every published row and can still be damaged.
+        //
+        // *Corrected.* This block used to assert that
+        // `combat_ranged_effect_stats` returned `None` for the class,
+        // "because `catalogs/monster-bestiary.md §3` publishes no
+        // ranged/effect row for it". Section 3 now publishes all forty-eight:
+        // "**Both side tables are dense forty-eight-entry arrays with a
+        // defined byte for every class id, and every one of those rows is now
+        // published below** ... the eleven party/NPC rows one through eleven
+        // that earlier rounds recorded as 'absent' were a gap in this
+        // catalog, not in the data, and an engine that resolves 'a class with
+        // no row' to 'no attack' is answering a question the data never
+        // asks." The outdoor pirate class is id one, so it has a row.
         let mut state = combat_ai_turn_state(6, 5);
         state.combat_actors[8].owner_target_class = OUTDOOR_PIRATE_COMBAT_CLASS;
         state.combat_actors[8].hp_or_wound = 20;
@@ -993,7 +953,9 @@
 
         assert!(combat_class_stats(OUTDOOR_PIRATE_COMBAT_CLASS).is_some());
         assert!(combat_class_traits(OUTDOOR_PIRATE_COMBAT_CLASS).is_some());
-        assert_eq!(combat_ranged_effect_stats(OUTDOOR_PIRATE_COMBAT_CLASS), None);
+        let pirate_row = combat_ranged_effect_stats(OUTDOOR_PIRATE_COMBAT_CLASS)
+            .expect("section 3 publishes a row for every class id");
+        assert_eq!(pirate_row.class, OUTDOOR_PIRATE_COMBAT_CLASS);
         assert!(
             state
                 .apply_combat_weapon_damage_to_target(None, 8, 5, false)

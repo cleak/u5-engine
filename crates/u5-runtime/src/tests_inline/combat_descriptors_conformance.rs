@@ -681,9 +681,8 @@
 
         // Slot 1 is empty, so the visit takes the inactive arm.
         let application = state.apply_combat_actor_slot_dispatch_with_inputs(
-            1, 30, false, false, 0, false, 1, 1, &[], None, 0, false, None, true, &[1, 2, 3, 4],
-            &[],
-        );
+            1, 30, false, 0, false, 1, 1, &[], None, 0, false, None, true, &[1, 2, 3, 4],
+            &[]);
 
         assert_eq!(
             application,
@@ -710,7 +709,6 @@
         let end_of_round = state.apply_combat_actor_slot_dispatch_with_inputs(
             COMBAT_ACTOR_SLOTS,
             30,
-            false,
             false,
             0,
             false,
@@ -916,7 +914,6 @@
             8,
             30,
             false,
-            false,
             0,
             false,
             1,
@@ -991,7 +988,6 @@
         let walk = state.apply_combat_round_walk_from_slot_with_inputs(
             8,
             30,
-            false,
             false,
             0,
             false,

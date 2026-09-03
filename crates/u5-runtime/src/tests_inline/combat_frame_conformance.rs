@@ -285,7 +285,7 @@
         );
 
         let application = state.apply_combat_actor_slot_dispatch_with_inputs(
-            0, 30, false, false, 0, false, 1, 1, &[], None, 0, false, None, true, &[1, 2, 3, 4],
+            0, 30, false, 0, false, 1, 1, &[], None, 0, false, None, true, &[1, 2, 3, 4],
             &[],
         );
         let CombatActorSlotDispatchApplication::Slot { action, .. } = application else {
@@ -301,7 +301,7 @@
         // controlled monster still lands in the party's group.
         let mut clear = combat_ai_turn_state(8, 5);
         let application = clear.apply_combat_actor_slot_dispatch_with_inputs(
-            0, 30, false, false, 0, false, 1, 1, &[], None, 0, false, None, true, &[1, 2, 3, 4],
+            0, 30, false, 0, false, 1, 1, &[], None, 0, false, None, true, &[1, 2, 3, 4],
             &[],
         );
         if let CombatActorSlotDispatchApplication::Slot { action, .. } = application {
@@ -959,7 +959,7 @@
                 break;
             }
             let application =
-                state.apply_combat_round_walk_from_slot(slot, COMBAT_PHASE_REFRESH_CONSTANT, false);
+                state.apply_combat_round_walk_from_slot(slot, COMBAT_PHASE_REFRESH_CONSTANT);
             for entry in &application.applications {
                 if let CombatActorSlotDispatchApplication::Slot {
                     slot: acted,
@@ -1028,7 +1028,7 @@
         let mut equipment = [EQUIPMENT_EMPTY; EQUIPMENT_SLOT_COUNT];
         assert_eq!(
             combat_turn_banner("Iolo", Some(&equipment)),
-            "\nIolo, armed with bare hands:"
+            "\nIolo, armed with bare hands:\n"
         );
 
         // "Only the helm, weapon-hand and shield-hand slots are scanned, and
@@ -1052,7 +1052,7 @@
         equipment[EQUIP_SLOT_OFFHAND] = large_shield;
         assert_eq!(
             combat_turn_banner("Iolo", Some(&equipment)),
-            "\nIolo, armed with bare hands:"
+            "\nIolo, armed with bare hands:\n"
         );
 
         // "- while the **spiked helm and spiked shield do**, because they
@@ -1063,12 +1063,12 @@
         equipment[EQUIP_SLOT_OFFHAND] = spiked_shield;
         assert_eq!(
             combat_turn_banner("Iolo", Some(&equipment)),
-            "\nIolo, armed with Spiked Helm, Dagger, Spiked Shield:"
+            "\nIolo, armed with Spiked Helm, Dagger, Spiked Shield:\n"
         );
 
         // "A charmed monster acting under player control gets only its name
         // and the colon, with no armament clause."
-        assert_eq!(combat_turn_banner("Troll", None), "\nTroll:");
+        assert_eq!(combat_turn_banner("Troll", None), "\nTroll:\n");
     }
 
     /// `combat.md §8.1`: the banner is "emitted at the start of every
@@ -1100,9 +1100,9 @@
         // colon **and then a newline**" - "the turn handler emits the line
         // feed itself, unconditionally, between printing the banner and
         // reading the command byte". That line feed is what opens the row
-        // the end-cap marker is drawn on.
+        // the end-cap marker is drawn on, and `combat_turn_banner` carries it.
         assert!(
-            state.message.ends_with(&format!("{expected}\n")),
+            state.message.ends_with(&expected),
             "banner missing from {:?}",
             state.message
         );
@@ -1485,7 +1485,7 @@
         state.combat_actors[bat_slot].phase_counter = 1;
         let hp_before = state.party[0].hp;
         let application = state
-            .apply_combat_actor_slot_dispatch(bat_slot, COMBAT_PHASE_REFRESH_CONSTANT, false);
+            .apply_combat_actor_slot_dispatch(bat_slot, COMBAT_PHASE_REFRESH_CONSTANT);
         let monster_attack = match application {
             CombatActorSlotDispatchApplication::Slot {
                 action:
@@ -1698,12 +1698,13 @@
                         attacker_slot: COMBAT_PARTY_ACTOR_SLOTS,
                         target_slot: 0,
                         poison_status_outcome: None,
-                        stoning: None,
                         resolution: Some(CombatWeaponAttackResolution::Hit {
                             route: CombatWeaponAttackRangeRoute::Melee,
                             raw_damage: soaked,
                         }),
                         damage_application: Some(application),
+                        food_theft: None,
+                        sleep_effect: None,
                         generic_chain_suppressed: false,
                     },
                 )
@@ -1724,12 +1725,13 @@
                     attacker_slot: COMBAT_PARTY_ACTOR_SLOTS,
                     target_slot: 0,
                     poison_status_outcome: None,
-                    stoning: None,
                     resolution: Some(CombatWeaponAttackResolution::Miss {
                         route: CombatWeaponAttackRangeRoute::Melee,
                         hit_score: 7,
                     }),
                     damage_application: None,
+                    food_theft: None,
+                    sleep_effect: None,
                     generic_chain_suppressed: false,
                 },
             ),
@@ -1755,14 +1757,97 @@
             Some("Bat missed!"),
         );
 
-        // No line this engine can emit from an attack outcome is
-        // attacker-named: "An engine that prints the attacker's name in
-        // the miss line produces a transcript that is wrong on every line
-        // it emits."
-        assert!(
-            !std::include_str!("../input_dispatch.rs").contains("attacker_name"),
-            "R353's own suggested check: grep the narration module for any              attacker-named combat line"
-        );
+        // No *result line* this engine can emit is attacker-named: "An
+        // engine that prints the attacker's name in the miss line produces
+        // a transcript that is wrong on every line it emits."
+        //
+        // R353's own suggested check is "grep an implementation for any
+        // attacker-named combat line". A grep for one binding name is
+        // defeated by a rename, so the guard is behavioural instead: sweep
+        // both narrators over every resolution shape and every damage
+        // outcome and require that no line they produce mentions the
+        // attacker.
+        //
+        // The one line that names the acting creature is not a result line:
+        // `combat.md §11`'s food-theft branch "replaces the entire damage
+        // and narration chain: no damage roll, no defence roll, no HP
+        // change, **no result line**", and prints `A <monster> stole some
+        // food!` with the creature's own name (`RETRACTIONS.md` R361). It
+        // carries no `resolution` at all, so it is outside this sweep by
+        // construction rather than by exemption.
+        let routes = [
+            CombatWeaponAttackRangeRoute::Melee,
+            CombatWeaponAttackRangeRoute::Ranged { effect_code: 0 },
+        ];
+        for raw_damage in [-1i16, 0, 3, i16::from(COMBAT_INSTANT_KILL_DAMAGE)] {
+            for route in routes {
+                for resolution in [
+                    CombatWeaponAttackResolution::Miss {
+                        route,
+                        hit_score: 7,
+                    },
+                    CombatWeaponAttackResolution::Hit { route, raw_damage },
+                    CombatWeaponAttackResolution::Special {
+                        route,
+                        shattered: true,
+                    },
+                    CombatWeaponAttackResolution::Special {
+                        route,
+                        shattered: false,
+                    },
+                    CombatWeaponAttackResolution::NoOrdinaryDamage { route },
+                    CombatWeaponAttackResolution::OutOfRange {
+                        target_range: 9,
+                        range_cap: 1,
+                    },
+                ] {
+                    // Monster attacker, party defender: the Bat swings at
+                    // the Avatar, so no line may contain "Bat".
+                    let mut state = worked_bat_arena(&[(6, 5)], 0);
+                    let damage_application =
+                        state.apply_combat_weapon_damage_to_target(None, 0, raw_damage, false);
+                    let line = crate::input_dispatch::combat_monster_attack_result_message(
+                        &state,
+                        CombatMonsterAttackApplication {
+                            attacker_slot: COMBAT_PARTY_ACTOR_SLOTS,
+                            target_slot: 0,
+                            poison_status_outcome: None,
+                            resolution: Some(resolution),
+                            damage_application,
+                            food_theft: None,
+                            sleep_effect: None,
+                            generic_chain_suppressed: false,
+                        },
+                    );
+                    assert!(
+                        !line.as_deref().unwrap_or_default().contains("Bat"),
+                        "monster-side result line names the attacker: {line:?}"
+                    );
+
+                    // Party attacker, monster defender: the Avatar swings
+                    // at the Bat, so no line may contain "Avatar".
+                    let mut state = worked_bat_arena(&[(6, 5)], 0);
+                    let damage_application = state.apply_combat_weapon_damage_to_target(
+                        Some(0),
+                        COMBAT_PARTY_ACTOR_SLOTS,
+                        raw_damage,
+                        false,
+                    );
+                    let line = crate::input_dispatch::combat_weapon_attack_result_message(
+                        &state,
+                        COMBAT_PARTY_ACTOR_SLOTS,
+                        CombatWeaponAttackApplication {
+                            resolution,
+                            damage_application,
+                        },
+                    );
+                    assert!(
+                        !line.as_deref().unwrap_or_default().contains("Avatar"),
+                        "party-side result line names the attacker: {line:?}"
+                    );
+                }
+            }
+        }
     }
 
     #[test]
@@ -1927,7 +2012,6 @@
                         attacker_slot,
                         target_slot: 0,
                         poison_status_outcome: None,
-                        stoning: None,
                         resolution: Some(CombatWeaponAttackResolution::Hit {
                             route: CombatWeaponAttackRangeRoute::Melee,
                             raw_damage: 4,
@@ -1944,6 +2028,8 @@
                                 status_after: b'G',
                             },
                         }),
+                        food_theft: None,
+                        sleep_effect: None,
                         generic_chain_suppressed: false,
                     },
                 )

@@ -773,7 +773,6 @@ impl PlayState {
             party_stay_counters: options.party_stay_counters,
             party_strengths: options.party_strengths,
             party_combat_defense: options.party_combat_defense,
-            combat_effect_prerequisite_active: false,
             party_intelligence: options.party_intelligence,
             party_equipment: options.party_equipment,
             party_roster: options.party_roster,
@@ -843,11 +842,11 @@ impl PlayState {
             combat_magic_effects: [[0; COMBAT_ARENA_SIDE]; COMBAT_ARENA_SIDE],
             combat_cursor_blink: false,
             combat_round_loop_prologue_ran: false,
-            combat_round_slot_scratch: [0; COMBAT_ACTOR_SLOTS],
-            combat_spell_cast_this_round: false,
             tile_restoration_pending: false,
             pending_driver_tile_graphics_restores: 0,
-            combat_secondary_marker: None,
+            party_stats_panel_refresh_pending: false,
+            combat_aim_marker_cell: None,
+            combat_aim_marker_gate: false,
             combat_ambush_reveals: [None; COMBAT_AMBUSH_REVEAL_SLOT_COUNT],
             combat_actors: [CombatActorDescriptor::empty(); COMBAT_ACTOR_SLOTS],
             sail_cadence: 0,
@@ -1124,7 +1123,6 @@ impl PlayState {
             party_stay_counters: options.party_stay_counters,
             party_strengths: options.party_strengths,
             party_combat_defense: options.party_combat_defense,
-            combat_effect_prerequisite_active: false,
             party_intelligence: options.party_intelligence,
             party_equipment: options.party_equipment,
             party_roster: options.party_roster,
@@ -1194,11 +1192,11 @@ impl PlayState {
             combat_magic_effects: [[0; COMBAT_ARENA_SIDE]; COMBAT_ARENA_SIDE],
             combat_cursor_blink: false,
             combat_round_loop_prologue_ran: false,
-            combat_round_slot_scratch: [0; COMBAT_ACTOR_SLOTS],
-            combat_spell_cast_this_round: false,
             tile_restoration_pending: false,
             pending_driver_tile_graphics_restores: 0,
-            combat_secondary_marker: None,
+            party_stats_panel_refresh_pending: false,
+            combat_aim_marker_cell: None,
+            combat_aim_marker_gate: false,
             combat_ambush_reveals: [None; COMBAT_AMBUSH_REVEAL_SLOT_COUNT],
             combat_actors: [CombatActorDescriptor::empty(); COMBAT_ACTOR_SLOTS],
             sail_cadence: 0,
@@ -1492,7 +1490,6 @@ impl PlayState {
             party_stay_counters: options.party_stay_counters,
             party_strengths: options.party_strengths,
             party_combat_defense: options.party_combat_defense,
-            combat_effect_prerequisite_active: false,
             party_intelligence: options.party_intelligence,
             party_equipment: options.party_equipment,
             party_roster: options.party_roster,
@@ -1562,11 +1559,11 @@ impl PlayState {
             combat_magic_effects: [[0; COMBAT_ARENA_SIDE]; COMBAT_ARENA_SIDE],
             combat_cursor_blink: false,
             combat_round_loop_prologue_ran: false,
-            combat_round_slot_scratch: [0; COMBAT_ACTOR_SLOTS],
-            combat_spell_cast_this_round: false,
             tile_restoration_pending: false,
             pending_driver_tile_graphics_restores: 0,
-            combat_secondary_marker: None,
+            party_stats_panel_refresh_pending: false,
+            combat_aim_marker_cell: None,
+            combat_aim_marker_gate: false,
             combat_ambush_reveals: [None; COMBAT_AMBUSH_REVEAL_SLOT_COUNT],
             combat_actors: [CombatActorDescriptor::empty(); COMBAT_ACTOR_SLOTS],
             sail_cadence: 0,
@@ -1679,6 +1676,24 @@ impl PlayState {
         };
 
         if !(0..32).contains(&nx) || !(0..32).contains(&ny) {
+            // `town-mode.md §15`, "Where the substitution comes from, and who
+            // else takes it" (issue #188 question 3): the substituted byte is
+            // "the loaded floor's `(31,31)` cell", and it "differs per floor"
+            // - there is no constant off-map tile (`RETRACTIONS.md` R366).
+            // The value this reads is therefore right for every shipped exit.
+            //
+            // The *shape* is not: "the movement handler calls no accessor. It
+            // reads the cell already sitting in the party-centred viewport,
+            // and the substituted byte is there only because the *grid
+            // producer* fetched it through the same accessor when it filled
+            // that viewport", with the qualification that "the movement
+            // sample sees the substituted byte verbatim only where nothing
+            // overwrote that grid cell after the producer filled it". This
+            // engine samples the loaded floor page directly, which is the
+            // accessor's own value rather than the grid's; the two agree in
+            // every ordinary town frame, and the difference is recorded here
+            // rather than restructured, because nothing in the shipped
+            // content can distinguish them.
             let corner_tile = self.grid[TOWN_VIEWPORT_OFF_GRID_SAMPLE_INDEX];
             if !self.tile_walkable(corner_tile) {
                 self.message = MOVEMENT_BLOCKED_REFUSAL.to_string();
