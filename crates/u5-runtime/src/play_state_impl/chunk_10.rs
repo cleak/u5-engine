@@ -29,6 +29,22 @@ impl PlayState {
     }
 
     pub fn sync_player_object(&mut self) {
+        // `active-objects.md §5`: the compositor refreshes bytes 0..4 of
+        // slot zero from the world-state globals "every **world**
+        // frame". Combat is not a world frame: §9 has the framer back the
+        // whole table up and the party seating write "arena coordinates
+        // over the low records, record zero included", so during combat
+        // record zero is the seated first party member - "record zero is
+        // overwritten because it is the first record the party seating
+        // allocates, not because combat reserves a player slot" - and the
+        // framer restores the world value on exit. Refreshing it here
+        // while combat is live overwrote that member's arena tile and
+        // coordinates with the world avatar marker, which erased the
+        // first party member from the arena on the first turn after
+        // entry (play-test defect 18).
+        if self.combat_active {
+            return;
+        }
         let z = match self.area {
             Area::Town { floor, .. } => floor,
             Area::Dungeon { level, .. } => level as i8,

@@ -227,9 +227,13 @@ pub fn message_log_from_entries<'a>(
         // An explicit blank row carries no text, so it is placed before
         // the renderer is consulted: a caller that drops empty lines - the
         // Bevy shell's own `keep` filter does - must not be able to erase
-        // a row the producer asked for. `text-output.md` section 10.4
-        // makes the blank row part of the printed sequence, not filler the
-        // window derives.
+        // a row the producer asked for. Such a row is output the original
+        // produces, not padding this window adds: `text-output.md` section
+        // 10.4 derives one from the leading line feed of the next print
+        // ("the next cycle's leading line feed advances again - producing
+        // exactly one blank row after each completed command turn"), and
+        // section 10.3 lists echoes that emit one deliberately ("two
+        // newlines | Complete, plus one deliberate extra blank row").
         if entry.explicit_blank {
             log.lines.push(MessageLogLine {
                 text: String::new(),

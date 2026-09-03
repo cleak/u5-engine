@@ -1794,13 +1794,6 @@ fn a_attack_guard_like_town_npc_raises_alarm_and_opens_an_eight_monster_arena() 
     }
     fs::write(dir.join(BRIT_CBT_FILE), record.repeat(BRIT_CBT_RECORDS)).unwrap();
     let mut state = test_state(open_grid(), 1, 1);
-    // `combat.md` section 11's corrected to-hit polarity makes a Guard
-    // band (attack cap 30) land most of its blows, so the fixture party
-    // needs enough hit points to survive the round this case is about.
-    for member in state.party.iter_mut() {
-        member.max_hp = 900;
-        member.hp = 900;
-    }
     let slots = [
         NpcSlot {
             slot: 0,

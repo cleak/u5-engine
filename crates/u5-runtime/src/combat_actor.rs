@@ -1518,12 +1518,9 @@ pub const fn resolve_combat_weapon_attack(
         CombatWeaponDamageRoute::Special => CombatWeaponAttackResolution::Special { route },
         CombatWeaponDamageRoute::Damage { raw_damage } => {
             let hit_score = combat_to_hit_score(attacker_rating, defender_rating);
-            // `combat.md §11`: "**The hit is accepted when the drawn value
-            // is at or above the score**". See [`resolve_combat_hit`], which
-            // owns the published comparison for both callers.
             let hit = match forced_hit {
                 Some(hit) => hit,
-                None => resolve_combat_hit(attacker_rating, defender_rating, hit_roll),
+                None => hit_score > hit_roll as i16,
             };
             if hit {
                 CombatWeaponAttackResolution::Hit { route, raw_damage }
@@ -3035,30 +3032,34 @@ pub fn find_combat_actor_at_field_coordinate_skipping(
 /// `catalogs/item-list.md §5.3` shared combat to-hit score bias.
 /// The shared to-hit helper computes the score as
 /// `(attacker - defender + COMBAT_TO_HIT_BIAS) / 2` and compares it
-/// against a uniform random draw.
+/// against a uniform random byte. The +30 bias balances the score
+/// so that two equal-rating actors clear the median of `0..=255`.
 pub const COMBAT_TO_HIT_BIAS: i16 = 30;
 
 pub const fn combat_to_hit_score(attacker_rating: u8, defender_rating: u8) -> i16 {
     ((attacker_rating as i16 - defender_rating as i16) + COMBAT_TO_HIT_BIAS) / 2
 }
 
-/// `combat.md §11`: the shared to-hit helper "resolves attacker and
-/// defender combat ratings, computes `(attacker - defender + 30) / 2`,
-/// and compares that score against a uniform random draw. **The hit is
-/// accepted when the drawn value is at or above the score**, so the
-/// score behaves as a difficulty number: a larger score means a
-/// *smaller* chance to hit. *An earlier revision said the opposite -
-/// that the hit is accepted when the score beats the draw - and that is
-/// withdrawn.*"
+/// **Held pending a spec answer - do not flip this comparison alone.**
 ///
-/// Two limits ride along with the correction and are **not** resolved
-/// here, because §11 publishes neither: the attacker/defender labelling
-/// of the two ratings fed in "is **suspect and was not re-derived**",
-/// and "the draw's own range is unverified". This engine keeps its
-/// existing rating selection and its existing uniform `0..=255` draw and
-/// changes only the published comparison direction.
+/// `combat.md §11`, restated in `RETRACTIONS.md` R232, publishes the
+/// opposite direction to the one below: the hit is accepted when the
+/// drawn value is at or above the score, so the score reads as a
+/// difficulty number. The same retraction publishes, in the same breath,
+/// that "the attacker/defender labelling of the two operands feeding the
+/// score is now suspect and was not re-derived", and that the draw's own
+/// range is unverified.
+///
+/// Adopting the published direction while keeping this engine's own
+/// unverified operand selection was tried and backed out: with the
+/// attacker's rating in the minuend it makes a *low* rating the accurate
+/// one, so Strength, armour and every monster's attack cap all work
+/// backwards. Half of R232 is a worse model than neither half, so the
+/// engine keeps its existing comparison until the operand pair is
+/// published; the play-test's under-damaging hostile melee (defect 7) is
+/// blocked on that answer, filed as `cleak/u5-spec#183`.
 pub const fn resolve_combat_hit(attacker_rating: u8, defender_rating: u8, roll: u8) -> bool {
-    roll as i16 >= combat_to_hit_score(attacker_rating, defender_rating)
+    combat_to_hit_score(attacker_rating, defender_rating) > roll as i16
 }
 
 pub const fn resolve_mass_charm_target_group(normal_group: u8, threshold: u8, roll: u8) -> u8 {

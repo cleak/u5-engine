@@ -268,12 +268,7 @@ mod tests {
         state.party[0].status = b'G';
         state.party[0].hp = 1;
         state.party[0].max_hp = 20;
-        // `combat.md §11`: the corrected to-hit polarity accepts the hit
-        // "when the drawn value is at or above the score", so this
-        // fixture's old seed now draws a miss. 0x0078 is the first seed
-        // at or after it whose first hostile roll lands, keeping the
-        // scenario a one-blow defeat.
-        state.prng_state = 0x0078;
+        state.prng_state = 0x0070;
         state
     }
 
