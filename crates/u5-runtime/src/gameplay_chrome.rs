@@ -277,6 +277,15 @@ const FIXED_RULES: [(usize, usize, usize, usize); 8] = [
 /// pair may be interrupted by the timing-glyph slot.
 const DIVIDER_RULE_ROWS: [usize; 4] = [56, 63, 80, 87];
 
+/// The [`RIBBON_BANDS`] entry that fills the divider band between the
+/// roster box and the counters box.
+const STATS_DIVIDER_BAND: (usize, usize, usize, usize) = (192, 57, 312, 63);
+
+/// The two rule fragments that close the panel's left and right edges
+/// across that band when the panel is drawn as one tall box.
+const STATS_SINGLE_BOX_RULES: [(usize, usize, usize, usize); 2] =
+    [(191, 57, 191, 62), (312, 57, 312, 62)];
+
 /// Which pointing direction a ribbon end cap has. The ribbon always
 /// points *into* the gap it terminates.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -346,6 +355,17 @@ pub struct GameplayChromeContent {
     /// plain ribbon band with no caps and no placeholder. While the arms
     /// sell browser is open, its page-status glyph owns this slot instead.
     pub timing_glyph: Option<u8>,
+    /// Draw the stats panel as one tall box, rows 1..=9, instead of the
+    /// standing roster box + divider band + counters box.
+    ///
+    /// Runtime observation, spec silent: `inventory.md §4.7` has the
+    /// Z-stats attribute page clear the whole panel, and a capture of
+    /// the original's stat sheet shows the divider band's two rules at
+    /// `y = 56` and `y = 63` gone with the left and right panel rules
+    /// running unbroken from `y = 7` to `y = 80`. The counters and date
+    /// rows the band separated are not drawn while a page is open, so
+    /// there is nothing left for it to divide.
+    pub stats_panel_single_box: bool,
 }
 
 /// The two fixed-cell fonts the chrome pass draws from.
@@ -679,6 +699,9 @@ pub fn paint_gameplay_frame_chrome(
     let timing = timing_glyph_gap(content.timing_glyph);
 
     for (x0, y0, x1, y1) in RIBBON_BANDS {
+        if content.stats_panel_single_box && (x0, y0, x1, y1) == STATS_DIVIDER_BAND {
+            continue;
+        }
         fill_rect(rgba, width, height, x0, y0, x1, y1, palette.chrome);
     }
     carve_rounded_corners(rgba, width, height, fonts.ibm, palette);
@@ -706,15 +729,21 @@ pub fn paint_gameplay_frame_chrome(
     for (x0, y0, x1, y1) in FIXED_RULES {
         fill_rect(rgba, width, height, x0, y0, x1, y1, palette.accent);
     }
+    if content.stats_panel_single_box {
+        // Close the left and right panel rules across the vacated band.
+        for (x0, y0, x1, y1) in STATS_SINGLE_BOX_RULES {
+            fill_rect(rgba, width, height, x0, y0, x1, y1, palette.accent);
+        }
+    }
     paint_interrupted_rule(rgba, width, height, 7, 7, 184, top, palette);
     paint_interrupted_rule(rgba, width, height, 184, 7, 184, bottom, palette);
     paint_interrupted_rule(rgba, width, height, 7, 191, 312, stats_label, palette);
     for row_y in DIVIDER_RULE_ROWS {
-        let gap = if row_y == 56 || row_y == 63 {
-            timing
-        } else {
-            None
-        };
+        let band_rule = row_y == 56 || row_y == 63;
+        if band_rule && content.stats_panel_single_box {
+            continue;
+        }
+        let gap = if band_rule { timing } else { None };
         paint_interrupted_rule(rgba, width, height, row_y, 191, 312, gap, palette);
     }
 
@@ -1141,7 +1170,7 @@ pub fn gameplay_chrome_content(state: &crate::PlayState) -> GameplayChromeConten
     let browser = crate::stats_panel::active_arms_sell_browser(state);
     let stats_label = browser
         .map(|_| crate::stats_panel::ARMS_SELL_BROWSER_STATS_LABEL.to_string())
-        .or_else(|| state.roster_box_label().map(str::to_string));
+        .or_else(|| state.roster_box_label());
     let timing_glyph = if let Some(browser) = browser {
         use crate::shop_runtime::ArmsSellPageIndicator;
 
@@ -1158,12 +1187,14 @@ pub fn gameplay_chrome_content(state: &crate::PlayState) -> GameplayChromeConten
     } else {
         state.active_effect_tag.filter(|tag| *tag != 0)
     };
+    let stats_panel_single_box = state.active_z_stats.is_some();
     match state.area {
         crate::Area::Dungeon { level, .. } => GameplayChromeContent {
             top: ChromeGap::Label(dungeon_level_label(level)),
             bottom: ChromeGap::Label(dungeon_direction_label(state.player.facing.name())),
             stats_label,
             timing_glyph,
+            stats_panel_single_box,
         },
         crate::Area::World { plane } if plane == crate::WorldPlane::Underworld => {
             GameplayChromeContent {
@@ -1171,6 +1202,7 @@ pub fn gameplay_chrome_content(state: &crate::PlayState) -> GameplayChromeConten
                 bottom: ChromeGap::Unbroken,
                 stats_label,
                 timing_glyph,
+                stats_panel_single_box,
             }
         }
         crate::Area::World { .. } | crate::Area::Town { .. } => GameplayChromeContent {
@@ -1181,6 +1213,7 @@ pub fn gameplay_chrome_content(state: &crate::PlayState) -> GameplayChromeConten
             bottom: ChromeGap::Label(wind_banner_text(wind_banner_direction_name(state))),
             stats_label,
             timing_glyph,
+            stats_panel_single_box,
         },
     }
 }

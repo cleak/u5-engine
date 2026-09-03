@@ -326,38 +326,8 @@ fn handle_play_key_input_inner(
             debug_assert!(false, "non-playable scene reached world input dispatch");
         }
     }
-    state.message = format!("Unhandled command `{}`.", unhandled_command_key_label(key));
+    state.emit_command_echo_line(UNRECOGNISED_COMMAND_MESSAGE);
     Ok(PlayInputDisposition::Continue)
-}
-
-/// Render an unmatched dispatch key for the engine's own refusal line.
-///
-/// `input.md §5`: the four cardinal and four diagonal direction codes
-/// "neither collides with printable ASCII", and the diagonals "fall
-/// through as non-movement input" everywhere outside the combat targeting
-/// cursor and the paging lists — so they reach this fallback. Such a code
-/// is an input byte, not a character: printing it as one would put a value
-/// the `.CH` fonts cannot address into message text (`formats/font-ch.md
-/// §4`), which the fixed-cell emitter would then have to drop. Print the
-/// code numerically instead, so the diagnostic stays both drawable and
-/// informative.
-fn unhandled_command_key_label(key: char) -> String {
-    if matches!(key, ' '..='~') {
-        return key.to_string();
-    }
-    match input_byte_from_char(key) {
-        Some(byte) => format!("0x{byte:02X}"),
-        None => format!("U+{:04X}", key as u32),
-    }
-}
-
-const fn input_byte_from_char(key: char) -> Option<u8> {
-    let scalar = key as u32;
-    if scalar <= u8::MAX as u32 {
-        Some(scalar as u8)
-    } else {
-        None
-    }
 }
 
 fn handle_active_z_stats_key_input(
@@ -3327,59 +3297,24 @@ fn combat_interference_actor_name(state: &PlayState, slot: usize) -> String {
         .unwrap_or_else(|| format!("Combatant {slot}"))
 }
 
-#[cfg(test)]
-mod unhandled_command_key_label_tests {
-    use super::*;
+/// `commands.md §5.2` verb-echo table, last row: "any unmapped key" ->
+/// `What?` plus a newline, and "the same text answers a key that is
+/// recognised but meaningless in the current mode".
+/// `text-output.md §10.3` repeats it: "An unrecognised command key
+/// prints `What?` followed by a newline and **consumes no turn**."
+///
+/// The engine used to print an internal diagnostic naming the raw input
+/// code here, which leaked a hex byte to the player and has no
+/// counterpart in the original.
+pub const UNRECOGNISED_COMMAND_MESSAGE: &str = "What?";
 
-    /// An ordinary printable key still prints as itself, so the refusal
-    /// line the rest of the suite asserts on is unchanged.
-    #[test]
-    fn printable_keys_print_as_themselves() {
-        assert_eq!(unhandled_command_key_label('?'), "?");
-        assert_eq!(unhandled_command_key_label('5'), "5");
-        assert_eq!(unhandled_command_key_label(' '), " ");
-        assert_eq!(unhandled_command_key_label('~'), "~");
-    }
-
-    /// `input.md` section 5: the diagonal direction codes are disjoint
-    /// from printable ASCII and "fall through as non-movement input"
-    /// outside combat targeting and the paging lists, so they land on this
-    /// refusal. They are input bytes, not characters — printing one as a
-    /// character puts a value the `.CH` fonts cannot address
-    /// (`formats/font-ch.md` section 4) into message text.
-    #[test]
-    fn direction_codes_print_as_codes_not_as_characters() {
-        for code in [
-            INPUT_CODE_NORTHWEST,
-            INPUT_CODE_SOUTHWEST,
-            INPUT_CODE_NORTHEAST,
-            INPUT_CODE_SOUTHEAST,
-        ] {
-            let label = unhandled_command_key_label(char::from(code));
-            assert_eq!(label, format!("0x{code:02X}"));
-            assert!(
-                label.is_ascii() && label.chars().all(|ch| ch.is_ascii_graphic()),
-                "the refusal line must stay drawable: {label}"
-            );
-        }
-    }
-
-    /// Whatever the key, the assembled line has to be paintable.
-    #[test]
-    fn every_refusal_line_stays_inside_the_ch_font_range() {
-        for code in 0..=u8::MAX {
-            let text = format!(
-                "Unhandled command `{}`.",
-                unhandled_command_key_label(char::from(code))
-            );
-            let glyphs = crate::ordinary_glyphs_from_engine_text(&text);
-            assert_eq!(
-                glyphs.len(),
-                text.chars().count(),
-                "no character of the refusal line may be dropped as unpaintable: {text:?}"
-            );
-            assert!(glyphs.iter().all(|glyph| glyph.byte < 0x80));
-        }
+/// The raw input byte behind a dispatch key, when the key is one.
+const fn input_byte_from_char(key: char) -> Option<u8> {
+    let scalar = key as u32;
+    if scalar <= u8::MAX as u32 {
+        Some(scalar as u8)
+    } else {
+        None
     }
 }
 

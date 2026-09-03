@@ -1539,7 +1539,22 @@ fn top_down_q_yes_routes_to_save_and_q_no_cancels() {
             .handle_top_down_key_with_inline('Q', &dir, None, None, Some(true), None)
             .unwrap()
     );
-    assert_eq!(state.message, "Yes. Saving... Done.");
+    // `save-load.md §5.2` steps 2 and 8: `Yes` on the open prompt line,
+    // then `Saving...`, then `Done.` - three rows, not one wrapped run.
+    assert_eq!(state.message, SAVE_DONE_MESSAGE);
+    assert_eq!(
+        state
+            .message_entries()
+            .iter()
+            .rev()
+            .take(3)
+            .map(|entry| entry.text.as_str())
+            .collect::<Vec<_>>(),
+        // This call answers `Q` inline, so no `Save game?` prompt line
+        // was ever opened for the reply to land on; the prompted path is
+        // covered by `save_prompt_reply_lands_on_the_open_prompt_line`.
+        vec![SAVE_DONE_MESSAGE, SAVE_IN_PROGRESS_MESSAGE, SAVE_PROMPT_YES_REPLY]
+    );
     let saved = fs::read(dir.join("SAVED.GAM")).unwrap();
     assert_eq!(saved[SAVE_SCENE_OFFSET], 17);
     assert_eq!(saved[SAVE_X_OFFSET], 5);

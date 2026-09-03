@@ -24414,10 +24414,14 @@ fn party_name_records_inside_the_travelling_party_must_be_readable() {
 }
 
 #[test]
-fn z_stats_selector_cancels_with_the_observed_none_result() {
-    // inventory.md section 4: "Escape cancels the selector." Observed
-    // message window: `Z-stats...`, `Player:`, then `Player: None!`.
-    for cancel in ['\u{1b}', ' '] {
+fn z_stats_selector_cancels_with_the_published_none_result() {
+    // text-output.md section 10.6: the shared active-player picker takes
+    // "Escape to cancel, and `0` for 'no active player', which prints
+    // `None!` and a newline"; commands.md section 5.6 lists `None!\n` as
+    // "the universal cancel response". Space is NOT a cancel key there -
+    // 10.6 accepts on "Return or Space" - so it is covered by the accept
+    // test below instead.
+    for cancel in ['\u{1b}', '0'] {
         let mut state = test_state(open_grid(), 5, 5);
         assert!(
             state
@@ -24425,7 +24429,7 @@ fn z_stats_selector_cancels_with_the_observed_none_result() {
                 .unwrap()
         );
         assert!(state.active_party_selector.is_some());
-        assert_eq!(state.roster_box_label(), Some("Select:"));
+        assert_eq!(state.roster_box_label().as_deref(), Some("Select:"));
         assert_eq!(
             transcript_texts(&state),
             vec!["Z-stats...", PARTY_SELECTION_PROMPT]
@@ -24438,6 +24442,48 @@ fn z_stats_selector_cancels_with_the_observed_none_result() {
         assert_eq!(state.selector_highlight(), None);
         assert_eq!(state.roster_box_label(), None);
         assert_eq!(state.message, "Player: None!");
+    }
+}
+
+#[test]
+fn z_stats_selector_accepts_the_indicated_row_on_return_or_space() {
+    // text-output.md section 10.6: the active-player picker takes
+    // "Return or Space to accept". inventory.md section 4.3 makes this
+    // the one surface shared by "Z-stats, R-Ready, New Order, and the
+    // rest", and inventory.md section 5 step 4 has the picker the same
+    // flow opens next test "the two keys separately" for the same
+    // reason. Space must therefore commit the indicated row, not cancel.
+    for accept in ['\r', '\n', ' '] {
+        let mut state = test_state(open_grid(), 5, 5);
+        assert!(
+            state
+                .handle_top_down_key_with_inline('Z', Path::new(""), None, None, None, None)
+                .unwrap()
+        );
+        assert!(state.active_party_selector.is_some());
+        let indicated = state.selector_highlight().expect("selector row");
+        let name = state.party_member_display_name(indicated);
+
+        assert!(state.step_active_party_selector(accept, ""));
+        assert!(state.active_party_selector.is_none());
+        assert!(
+            state.active_z_stats.is_some(),
+            "{accept:?} must open the page for the indicated member"
+        );
+        assert_eq!(
+            state
+                .active_z_stats
+                .as_ref()
+                .map(|session| session.selected_party_index),
+            Some(indicated)
+        );
+        // commands.md section 5.6: `Player:_` is "colon then exactly one
+        // trailing space", so the accepted name completes that line.
+        assert!(
+            transcript_texts(&state).contains(&format!("{PARTY_SELECTION_PROMPT}{name}")),
+            "{:?}",
+            transcript_texts(&state)
+        );
     }
 }
 
@@ -24466,7 +24512,7 @@ fn use_picker_labels_the_roster_box_for_the_panel_renderer() {
             .handle_top_down_key_with_inline('U', Path::new(""), None, None, None, None)
             .unwrap()
     );
-    assert_eq!(state.roster_box_label(), Some("Items:"));
+    assert_eq!(state.roster_box_label().as_deref(), Some("Items:"));
     assert_eq!(state.selector_highlight(), None);
 }
 
@@ -24637,7 +24683,7 @@ fn transcript_is_capped_so_a_long_session_cannot_grow_without_bound() {
 #[test]
 fn top_down_uppercase_command_letters_preempt_vi_movement() {
     for (key, expected) in [
-        ('A', "Attack where?"),
+        ('A', "Attack-"),
         ('C', "Spell name:"),
         ('D', "What?"),
         ('M', MMIX_SPELL_PROMPT_MESSAGE),

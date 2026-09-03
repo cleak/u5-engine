@@ -238,6 +238,13 @@ pub fn transcribe_cell_frame_for_plain_text(frame: &str) -> String {
     for ch in frame.chars() {
         if ch == char::from(STATS_PANEL_ACTIVE_MARKER_GLYPH) {
             out.push(STATS_PANEL_ACTIVE_MARKER_ASCII);
+        } else if ch == char::from(crate::SAVE_GENDER_MALE_BYTE) {
+            // Same convention as the marker above: the Z-stats
+            // attribute page's leading glyph is an `IBM.CH` code
+            // (`formats/saved-gam.md §3.1` gender byte), not ASCII.
+            out.push('M');
+        } else if ch == char::from(crate::SAVE_GENDER_FEMALE_BYTE) {
+            out.push('F');
         } else {
             out.push(ch);
         }
@@ -452,11 +459,62 @@ pub fn active_shop_side_panel_border_rows(state: &PlayState) -> Option<(u8, u8)>
     }
 }
 
+/// Panel-local rows of a Z-stats page body, top row first.
+///
+/// `inventory.md §4.7`: the attribute page "clears the panel [...] and
+/// then appends value after value", so while a page is open the roster
+/// rows, the food/gold line and the date line are all gone. §4.1 puts
+/// every one of those surfaces in window 1.
+pub fn z_stats_page_panel_rows(state: &PlayState) -> Option<Vec<String>> {
+    let session = state.active_z_stats.as_ref()?;
+    Some(state.z_stats_panel_rows(session))
+}
+
+/// Paint a live Z-stats page over the roster panel.
+pub fn paint_z_stats_page_text_window(system: &mut TextWindowSystem, state: &PlayState) -> bool {
+    let Some(rows) = z_stats_page_panel_rows(state) else {
+        return false;
+    };
+    system.set_active_window(STATS_PANEL_TEXT_WINDOW_INDEX);
+    system.emit_byte(TEXT_CTRL_CLEAR_WINDOW);
+    system.clear_active_flags();
+    // Runtime observation, spec silent: a capture of the original's
+    // equipment page shows its `Arms` heading underlined, which the text
+    // system does with its own underline control byte
+    // (`text-output.md §3`), not with a rule of glyphs.
+    let underline_row = state
+        .active_z_stats
+        .as_ref()
+        .filter(|session| session.page == crate::ZStatsPage::Equipment)
+        .map(|_| 0usize);
+    for (row, line) in rows.iter().enumerate() {
+        if line.trim_end().is_empty() {
+            continue;
+        }
+        system.set_active_cursor(0, row.min(u8::MAX as usize) as u8);
+        if underline_row == Some(row) {
+            system.emit_byte(TEXT_CTRL_UNDERLINE_TOGGLE);
+        }
+        for byte in line.trim_end().bytes().take(STATS_PANEL_WIDTH) {
+            system.emit_byte(byte);
+        }
+        if underline_row == Some(row) {
+            system.emit_byte(TEXT_CTRL_UNDERLINE_TOGGLE);
+        }
+    }
+    // §2.1: a refresh always returns with the message window selected.
+    system.set_active_window(MESSAGE_TEXT_WINDOW_INDEX);
+    true
+}
+
 pub fn paint_stats_panel_text_window(
     system: &mut TextWindowSystem,
     state: &PlayState,
     active_cursor: Option<usize>,
 ) {
+    if paint_z_stats_page_text_window(system, state) {
+        return;
+    }
     system.set_active_window(STATS_PANEL_TEXT_WINDOW_INDEX);
     system.emit_byte(TEXT_CTRL_CLEAR_WINDOW);
     system.clear_active_flags();
@@ -631,7 +689,14 @@ fn paint_stats_panel_party_row(
     let status = overlay
         .status_override
         .or_else(|| state.party.get(index).copied().map(|member| member.status));
-    if overlay.highlighted {
+    // `inventory.md §4.3`: while the shared party-member selector is
+    // live, "the currently indicated member is shown by **inverting a
+    // rectangle covering the full fifteen content cells of that row**",
+    // and "moving the indicator inverts the old row back and inverts
+    // the new one". `stats-panel.md §9` adds that member selection
+    // "leaves the body alone" apart from that one inverted row.
+    let highlighted = overlay.highlighted || state.selector_highlight() == Some(index);
+    if highlighted {
         system.emit_byte(TEXT_CTRL_INVERSE_TOGGLE);
     }
     let active_marker = stats_panel_active_marker_drawn(state, active_cursor, index);
@@ -653,7 +718,7 @@ fn paint_stats_panel_party_row(
     } else {
         system.emit_byte(b' ');
     }
-    if overlay.highlighted {
+    if highlighted {
         system.emit_byte(TEXT_CTRL_INVERSE_TOGGLE);
     }
 }
@@ -798,7 +863,7 @@ fn current_ship_hull(state: &PlayState) -> Option<u8> {
     }
 }
 
-fn truncate_ascii_chars(value: &str, max_chars: usize) -> String {
+pub(crate) fn truncate_ascii_chars(value: &str, max_chars: usize) -> String {
     value.chars().take(max_chars).collect()
 }
 

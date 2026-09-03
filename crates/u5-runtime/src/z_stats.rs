@@ -708,7 +708,34 @@ pub fn ready_first_input_key(key: char, suffix: &str) -> char {
         .unwrap_or(key)
 }
 
+/// Which way one of the four direction keys moves a list indicator.
+///
+/// `inventory.md §4.3`: "the four direction keys move the indicator."
+/// It does not publish which way each key goes; South/East step forward
+/// and North/West step back, matching the R-Ready picker's own
+/// North/South scan (`§5` step 4) and a capture of the original, where
+/// `RIGHT` moves the `Select:` bar from the Avatar down to Shamino.
+pub fn party_selector_direction_step(key: char) -> Option<bool> {
+    let byte = u8::try_from(key as u32).ok()?;
+    if byte == INPUT_CODE_SOUTH || byte == INPUT_CODE_EAST {
+        return Some(true);
+    }
+    if byte == INPUT_CODE_NORTH || byte == INPUT_CODE_WEST {
+        return Some(false);
+    }
+    None
+}
+
 pub fn z_stats_input_action(key: char) -> ZStatsInputAction {
+    // `inventory.md §4`: "Direction-style navigation moves backward or
+    // forward through the visible page sequence."
+    if let Some(forward) = party_selector_direction_step(key) {
+        return if forward {
+            ZStatsInputAction::NextPage
+        } else {
+            ZStatsInputAction::PreviousPage
+        };
+    }
     match key {
         ' ' | '\u{1b}' => ZStatsInputAction::Exit,
         '>' | '+' | '\r' | '\n' => ZStatsInputAction::NextPage,
@@ -831,3 +858,64 @@ impl PartySelectorSession {
 pub enum PartySelectorTarget {
     ZStats,
 }
+
+/// `inventory.md §4.7` page-loop sub-prompt literal `\nStatus:_` — the
+/// line the Z-stats page loop leaves open in the message window while it
+/// waits for a page key.
+pub const Z_STATS_STATUS_PROMPT: &str = "Status: ";
+/// `inventory.md §4.7`: "Leaving the pages prints `Done\n` in the
+/// message window."
+pub const Z_STATS_DONE_MESSAGE: &str = "Done";
+
+/// `inventory.md §4.7` attribute-page label literals. Underscores in the
+/// published table are literal spaces and `\n` a newline; the labels
+/// carry their own interior spacing, which is why nothing here pads.
+pub const Z_STATS_LEVEL_LABEL: &str = " Lv-";
+pub const Z_STATS_STRENGTH_LABEL: &str = "Str=";
+pub const Z_STATS_HP_LABEL: &str = "  HP:";
+pub const Z_STATS_INTELLIGENCE_LABEL: &str = "Int=";
+/// `inventory.md §4.7` publishes this literal as the label for "Magic
+/// points". A capture of the original's Avatar sheet contradicts that
+/// pairing: it reads `HP: 60` / `HM: 60` / `Magic: 0` on a save whose
+/// character record carries 60 maximum hit points and no magic points,
+/// so `__HM:` is the **maximum hit points** field and `____Magic:` is
+/// the magic-point pool. The capture is followed here and the spec
+/// pairing is flagged as a question to file.
+pub const Z_STATS_MAX_HP_LABEL: &str = "  HM:";
+pub const Z_STATS_DEXTERITY_LABEL: &str = "Dex=";
+pub const Z_STATS_EXPERIENCE_LABEL: &str = "  Ex:";
+pub const Z_STATS_MAGIC_LABEL: &str = "    Magic:";
+/// `inventory.md §4.7` equipment-page heading literal `Arms\n\n`.
+pub const Z_STATS_ARMS_HEADING: &str = "Arms";
+
+/// Width of the attribute page's right-hand numeric column.
+///
+/// Runtime observation, spec silent: `inventory.md §4.7` calls the page
+/// "label-driven, not column-driven" and publishes no field width. A
+/// capture of the original's Avatar sheet puts `HP: 60` and `Ex: 150`
+/// with their last digit in screen column 38 — the same right edge the
+/// roster rows use — so the value after `__HP:` / `__HM:` / `__Ex:` is
+/// right-justified in four cells.
+pub const Z_STATS_ATTRIBUTE_VALUE_CELLS: usize = 4;
+
+/// The condition line beneath the name on the attribute page.
+///
+/// Runtime observation, spec silent: `inventory.md §4.7` does not list a
+/// health literal, and the only status a capture covers is Good, which
+/// renders as the centred `Good Health`. The other four letters reuse
+/// the engine's existing status wording rather than inventing new
+/// published-looking text; they need a spec answer.
+pub fn z_stats_health_line(status: u8) -> &'static str {
+    match status {
+        b'G' => "Good Health",
+        b'P' => "Poisoned",
+        b'S' => "Asleep",
+        b'D' => "Dead",
+        b'A' => "Ashes",
+        _ => "",
+    }
+}
+
+/// Rows of the stats panel a Z-stats page body owns: screen rows 1..=9
+/// of window 1 (`inventory.md §4.1`).
+pub const Z_STATS_PANEL_ROWS: usize = 9;

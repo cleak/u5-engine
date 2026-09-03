@@ -157,9 +157,9 @@ use u5_runtime::{
 use u5_runtime::{
     CHROME_RULE_INDEX, ChromeFonts, ChromePalette, MESSAGE_WINDOW_RIGHT, MessageWindowRow,
     RibbonCapDirection, VIEWPORT_ORIGIN_X, VIEWPORT_ORIGIN_Y, configure_play_text_windows,
-    gameplay_chrome_content, layout_message_window, load_runes_ch_font, message_log_from_entries,
-    paint_fixed_cell_glyph, paint_gameplay_frame_chrome, paint_message_line_cap,
-    prompt_cursor_glyph, ribbon_cap_sprite,
+    gameplay_chrome_content, layout_message_window_with_open_prompt, load_runes_ch_font,
+    message_log_from_entries, paint_fixed_cell_glyph, paint_gameplay_frame_chrome,
+    paint_message_line_cap, prompt_cursor_glyph, ribbon_cap_sprite,
 };
 #[cfg(test)]
 use u5_runtime::{MISCMAPS_RTV_COMMAND_SECTION_OFFSET, RTV_COMMAND_STREAM_BYTES};
@@ -16427,6 +16427,7 @@ fn render_integrated_status_framebuffer(
         .map(|shop| shop.modal_text(&display_state.message))
         .unwrap_or_else(|| display_state.message.clone());
     let mut message_rows = Vec::new();
+    let mut inline_prompt_cursor: Option<(u8, u8)> = None;
     if display_state.active_shop.is_some() {
         configure_talk_shop_text_window(&mut system);
         paint_talk_shop_text_window(&mut system, &message);
@@ -16452,7 +16453,17 @@ fn render_integrated_status_framebuffer(
         {
             log.push_output(&text);
         }
-        message_rows = layout_message_window(&log, Some(input_echo.unwrap_or(""))).rows;
+        // `text-output.md §10.6`: a prompt that is waiting for a key
+        // keeps its own line open and carries the cursor inline, so no
+        // fresh live row (and no end-cap triangle) is drawn for it.
+        let open_prompt = display_state.open_prompt_line();
+        let layout = layout_message_window_with_open_prompt(
+            &log,
+            Some(input_echo.unwrap_or("")),
+            open_prompt.as_deref(),
+        );
+        inline_prompt_cursor = layout.inline_cursor;
+        message_rows = layout.rows;
     }
     paint_stats_panel_text_window(&mut system, &display_state, active_cursor);
     if display_state.active_shop.is_some() {
@@ -16487,16 +16498,23 @@ fn render_integrated_status_framebuffer(
     // line prompts. `prompt_cursor_visible` therefore no longer gates
     // it; it only drives the shop path's own prompt window.
     if display_state.active_shop.is_none() {
-        if let Some(live) = message_rows.last() {
-            let column = live.column + live.glyphs.len().min(15) as u8;
+        let cursor_cell = inline_prompt_cursor.or_else(|| {
+            message_rows.last().map(|live| {
+                (
+                    (live.column + live.glyphs.len().min(15) as u8).min(MESSAGE_WINDOW_RIGHT),
+                    live.row,
+                )
+            })
+        });
+        if let Some((column, row)) = cursor_cell {
             paint_fixed_cell_glyph(
                 &mut rgba,
                 VISUAL_PLAY_FRAME_WIDTH as usize,
                 VISUAL_PLAY_FRAME_HEIGHT as usize,
                 ctx.ibm,
                 prompt_cursor_glyph(ctx.cursor_frame),
-                column.min(MESSAGE_WINDOW_RIGHT),
-                live.row,
+                column,
+                row,
                 CHROME_RULE_INDEX,
             );
         }
@@ -22747,7 +22765,10 @@ mod tests {
     #[test]
     fn visual_unshifted_letters_reach_original_command_dispatch() {
         for (physical_key, expected_key, expected_message) in [
-            (KeyCode::KeyA, 'A', "Attack where?"),
+            // `commands.md §5.2`: the `A` echo is `Attack-` outside
+            // dungeons, and §5.4 has the shared direction prompt print
+            // nothing of its own.
+            (KeyCode::KeyA, 'A', "Attack-"),
             (KeyCode::KeyG, 'G', "Get-"),
             (KeyCode::KeyJ, 'J', "Jimmy-"),
             (KeyCode::KeyL, 'L', "Look-"),

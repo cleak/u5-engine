@@ -1,3 +1,14 @@
+    /// `inventory.md §4.7`: a live Z-stats page draws its body over the
+    /// stats panel, so page content is asserted there rather than in the
+    /// message window.
+    fn z_stats_panel_text(state: &PlayState) -> String {
+        let session = state
+            .active_z_stats
+            .clone()
+            .expect("a live Z-stats page to read");
+        state.z_stats_panel_rows(&session).join("|")
+    }
+
     #[test]
     fn z_stats_opens_browser_stats_page_without_turn() {
         let mut state = test_state(open_grid(), 5, 5);
@@ -39,7 +50,7 @@
         // outside combat they use the normal party-member selector."
         assert!(state.active_z_stats.is_none());
         assert_eq!(state.selector_highlight(), Some(0));
-        assert_eq!(state.roster_box_label(), Some("Select:"));
+        assert_eq!(state.roster_box_label().as_deref(), Some("Select:"));
         assert_eq!(state.message, PARTY_SELECTION_PROMPT);
 
         assert_eq!(
@@ -53,18 +64,34 @@
             state.active_z_stats.as_ref().map(|session| session.page),
             Some(ZStatsPage::Stats)
         );
-        // §4 stats-page field list, with no invented field labels in
-        // front of the class and status label-table values.
-        assert!(state.message.contains("AVATAR"));
-        assert!(state.message.contains("Bard"));
-        assert!(state.message.contains("good"));
-        assert!(state.message.contains("Strength     12"));
-        assert!(state.message.contains("Dexterity    11"));
-        assert!(state.message.contains("Intellect    16"));
-        assert!(state.message.contains("HP        10/20"));
-        assert!(state.message.contains("MP            4"));
-        assert!(state.message.contains("Exp        1234"));
-        assert!(!state.message.contains("STR "));
+        // `inventory.md §4.7`: the page body is drawn over the panel;
+        // the message window carries only the `Status:_` sub-prompt.
+        assert_eq!(state.message, Z_STATS_STATUS_PROMPT);
+        let session = state.active_z_stats.clone().expect("a live page");
+        let panel = state.z_stats_panel_rows(&session);
+        // The name line: leading spaces that centre it in the panel's
+        // sixteen columns, the record's leading glyph, ` Lv-` and the
+        // level, then the name.
+        assert_eq!(
+            panel[0],
+            format!(" {} Lv-2 AVATAR", char::from(SAVE_GENDER_MALE_BYTE))
+        );
+        assert_eq!(panel[1], "  Good Health");
+        assert_eq!(panel[2], "");
+        // `Str=`/`__HP:`, `Int=`/`__HM:`, `Dex=`/`__Ex:`, values
+        // right-justified in four cells so the last digit lands in the
+        // roster field's own last column.
+        assert_eq!(panel[3], "Str=12  HP:  10");
+        // Runtime observation over `§4.7`'s label table: the capture
+        // pairs `__HM:` with maximum hit points and `____Magic:` with
+        // the magic points that table assigns to `__HM:`.
+        assert_eq!(panel[4], "Int=16  HM:  20");
+        assert_eq!(panel[5], "Dex=11  Ex:1234");
+        assert_eq!(panel[6], "");
+        assert_eq!(panel[7], "    Magic: 4");
+        // The prose dump the engine used to print is gone entirely.
+        assert!(!state.message.contains("Z-stats:"));
+        assert!(!state.message.contains("Strength"));
     }
 
     #[test]
@@ -105,9 +132,16 @@
             state.active_z_stats.as_ref().map(|session| session.page),
             Some(ZStatsPage::Equipment)
         );
-        assert!(state.message.contains("helm: "));
-        assert!(state.message.contains(equipment_name(EQUIPMENT_ID_BOW)));
-        assert!(!state.message.contains("offhand:"));
+        let session = state.active_z_stats.clone().expect("a live page");
+        let panel = state.z_stats_panel_rows(&session).join("|");
+        // `inventory.md §4.7` heading literal `Arms`, then the readied
+        // list, all inside the panel rather than in the message window.
+        // Runtime observation: the capture lists the item names alone,
+        // with no slot label in front of them.
+        assert!(panel.contains("Arms"));
+        assert!(panel.contains(equipment_name(EQUIPMENT_ID_BOW)));
+        assert!(!panel.contains("helm:"));
+        assert!(!panel.contains("offhand:"));
 
         assert!(state.step_active_z_stats('2', ""));
         assert_eq!(
@@ -119,7 +153,7 @@
         );
         // `inventory.md §4.7`: "if all six slots are empty the page prints
         // the `(None ready)` placeholder rather than a blank list."
-        assert!(state.message.contains(Z_STATS_NONE_READY_PLACEHOLDER));
+        assert!(z_stats_panel_text(&state).contains(Z_STATS_NONE_READY_PLACEHOLDER));
     }
 
     /// `inventory.md §4.7`: "Long pages **do not paginate**: the navigator
@@ -165,36 +199,36 @@
             state.active_z_stats.as_ref().map(|session| session.page),
             Some(ZStatsPage::Reagents)
         );
-        assert!(state.message.contains("Sulfur Ash: 3"));
+        assert!(z_stats_panel_text(&state).contains("Sulfur Ash: 3"));
         // The seven empty reagent slots are skipped, not drawn as blank or
         // zero rows.
         assert!(
-            !state.message.contains("Ginseng"),
+            !z_stats_panel_text(&state).contains("Ginseng"),
             "reagents page message was {:?}",
-            state.message
+            z_stats_panel_text(&state)
         );
-        assert!(!state.message.contains(": 0"));
+        assert!(!z_stats_panel_text(&state).contains(": 0"));
 
         assert!(state.step_active_z_stats('>', ""));
         assert_eq!(
             state.active_z_stats.as_ref().map(|session| session.page),
             Some(ZStatsPage::Spells)
         );
-        assert!(state.message.contains("IL Light: 2"));
+        assert!(z_stats_panel_text(&state).contains("IL Light: 2"));
         // No page counter, and none of the forty-seven zero-charge slots.
         assert!(
-            !state.message.contains("Rows"),
+            !z_stats_panel_text(&state).contains("Rows"),
             "spells page message was {:?}",
-            state.message
+            z_stats_panel_text(&state)
         );
-        assert!(!state.message.contains("Magic Missile"));
-        assert!(!state.message.contains("(zero)"));
+        assert!(!z_stats_panel_text(&state).contains("Magic Missile"));
+        assert!(!z_stats_panel_text(&state).contains("(zero)"));
 
         // One displayable slot, so a forward scan finds no next non-zero slot
         // and the band stays where it is.
         assert!(state.step_active_z_stats(']', ""));
-        assert!(state.message.contains("IL Light: 2"));
-        assert!(!state.message.contains("Rows"));
+        assert!(z_stats_panel_text(&state).contains("IL Light: 2"));
+        assert!(!z_stats_panel_text(&state).contains("Rows"));
 
         // Ten displayable slots on a forty-eight-slot band: the panel holds
         // eight, and each key moves the scan by **one** non-zero slot rather
@@ -214,55 +248,55 @@
             .collect();
 
         assert!(state.step_active_z_stats('Z', ""));
-        assert!(state.message.contains(&rows[0]));
-        assert!(state.message.contains(&rows[7]));
-        assert!(!state.message.contains(&rows[8]));
+        assert!(z_stats_panel_text(&state).contains(&rows[0]));
+        assert!(z_stats_panel_text(&state).contains(&rows[7]));
+        assert!(!z_stats_panel_text(&state).contains(&rows[8]));
 
         assert!(state.step_active_z_stats(']', ""));
         assert!(
-            !state.message.contains(&rows[0]),
+            !z_stats_panel_text(&state).contains(&rows[0]),
             "one forward scan should drop exactly the first slot: {:?}",
-            state.message
+            z_stats_panel_text(&state)
         );
-        assert!(state.message.contains(&rows[1]));
-        assert!(state.message.contains(&rows[8]));
-        assert!(!state.message.contains(&rows[9]));
+        assert!(z_stats_panel_text(&state).contains(&rows[1]));
+        assert!(z_stats_panel_text(&state).contains(&rows[8]));
+        assert!(!z_stats_panel_text(&state).contains(&rows[9]));
 
         assert!(state.step_active_z_stats(']', ""));
-        assert!(state.message.contains(&rows[2]));
-        assert!(state.message.contains(&rows[9]));
-        assert!(!state.message.contains(&rows[1]));
+        assert!(z_stats_panel_text(&state).contains(&rows[2]));
+        assert!(z_stats_panel_text(&state).contains(&rows[9]));
+        assert!(!z_stats_panel_text(&state).contains(&rows[1]));
 
         // §4.7 publishes the scan but not what happens past the end of a
         // band; the engine's conservative reading is that a scan with no
         // further non-zero slot leaves the cursor alone, and in particular
         // never wraps back to the top of the band.
         assert!(state.step_active_z_stats(']', ""));
-        assert!(state.message.contains(&rows[9]));
-        assert!(!state.message.contains(&rows[1]));
+        assert!(z_stats_panel_text(&state).contains(&rows[9]));
+        assert!(!z_stats_panel_text(&state).contains(&rows[1]));
 
         assert!(state.step_active_z_stats('[', ""));
-        assert!(state.message.contains(&rows[1]));
-        assert!(!state.message.contains(&rows[9]));
+        assert!(z_stats_panel_text(&state).contains(&rows[1]));
+        assert!(!z_stats_panel_text(&state).contains(&rows[9]));
 
         assert!(state.step_active_z_stats('>', ""));
         assert_eq!(
             state.active_z_stats.as_ref().map(|session| session.page),
             Some(ZStatsPage::SpecialUse)
         );
-        assert!(state.message.contains("Gems: 2"));
-        assert!(state.message.contains("Grapple: 1"));
-        assert!(state.message.contains("Sextant: 1"));
-        assert!(state.message.contains("Scroll LV: 1"));
-        assert!(state.message.contains("Blue Potion: 4"));
-        assert!(!state.message.contains("Keys:"));
+        assert!(z_stats_panel_text(&state).contains("Gems: 2"));
+        assert!(z_stats_panel_text(&state).contains("Grapple: 1"));
+        assert!(z_stats_panel_text(&state).contains("Sextant: 1"));
+        assert!(z_stats_panel_text(&state).contains("Scroll LV: 1"));
+        assert!(z_stats_panel_text(&state).contains("Blue Potion: 4"));
+        assert!(!z_stats_panel_text(&state).contains("Keys:"));
 
         assert!(state.step_active_z_stats('>', ""));
-        assert!(state.message.contains(&format!(
+        assert!(z_stats_panel_text(&state).contains(&format!(
             "{}: 2",
             equipment_name(EQUIPMENT_ID_BOW)
         )));
-        assert!(!state.message.contains(equipment_name(EQUIPMENT_ID_CROSSBOW)));
+        assert!(!z_stats_panel_text(&state).contains(equipment_name(EQUIPMENT_ID_CROSSBOW)));
     }
 
     /// `inventory.md §4.7`: "`(None owned!)` | An inventory page has no slot
@@ -304,9 +338,9 @@
                 Some(page)
             );
             assert!(
-                state.message.contains(Z_STATS_NONE_OWNED_PLACEHOLDER),
+                z_stats_panel_text(&state).contains(Z_STATS_NONE_OWNED_PLACEHOLDER),
                 "{page:?} page message was {:?}",
-                state.message
+                z_stats_panel_text(&state)
             );
         }
     }
@@ -360,13 +394,12 @@
             !ZStatsPage::ORDERED.contains(&ZStatsPage::SpellBook),
             "inventory.md §4.7 publishes six pages and no spell-book page"
         );
-        state.message = state.render_z_stats_session(&session);
-        assert!(state.message.contains("Z-stats: Spell Book page"));
-        assert!(state.message.contains("C1 MP1 IL"));
-        assert!(state.message.contains("In Lor / Light"));
-        assert!(state.message.contains("C2 MP2 AS"));
-        assert!(!state.message.contains("C3 LV"));
-        assert!(!state.message.contains("IL Light: 0"));
+        let page = state.z_stats_panel_rows(&session).join("|");
+        assert!(page.contains("C1 MP1 IL"));
+        assert!(page.contains("In Lor / Light"));
+        assert!(page.contains("C2 MP2 AS"));
+        assert!(!page.contains("C3 LV"));
+        assert!(!page.contains("IL Light: 0"));
 
         // The Fighter in slot 2 is one of the classes that "see a smaller
         // subset" - here, none at all. Rendered directly for the same reason:
@@ -378,8 +411,8 @@
             page: ZStatsPage::SpellBook,
             inventory_cursor: 0,
         };
-        state.message = state.render_z_stats_session(&fighter);
-        assert!(state.message.contains("No spell access."));
+        let page = state.z_stats_panel_rows(&fighter).join("|");
+        assert!(page.contains("No spell access."));
     }
 
     #[test]
@@ -421,7 +454,8 @@
 
         assert!(state.step_active_z_stats(' ', ""));
         assert!(state.active_z_stats.is_none());
-        assert_eq!(state.message, "Z-stats closed.");
+        // `inventory.md §4.7`: leaving the pages prints `Done`.
+        assert_eq!(state.message, Z_STATS_DONE_MESSAGE);
         assert_eq!(state.turn, 0);
     }
 
@@ -786,7 +820,10 @@ Mixed 1 IL charge; stock is 1.");
             PlayInputDisposition::Continue
         );
         assert!(state.active_direction_prompt.is_some());
-        assert_eq!(state.message, "Attack where?");
+        // `commands.md §5.2`: the `A` echo is `Attack-` outside dungeons,
+        // and §5.4 says the shared direction prompt "prints **nothing**
+        // before waiting".
+        assert_eq!(state.message, "Attack-");
 
         assert_eq!(
             handle_play_key_input(&mut state, '9', "x", Path::new("")).unwrap(),
@@ -835,7 +872,8 @@ Mixed 1 IL charge; stock is 1.");
             PlayInputDisposition::Continue
         );
         assert!(ship.active_direction_prompt.is_some());
-        assert_eq!(ship.message, "Fire- which direction?");
+        // `commands.md §5.2`: the `F` echo is the bare `Fire-`.
+        assert_eq!(ship.message, "Fire-");
         assert_eq!(
             handle_play_key_input(&mut ship, '4', "", &dir).unwrap(),
             PlayInputDisposition::Continue
@@ -1713,7 +1751,7 @@ Mixed 1 IL charge; stock is 1.");
                 .map(|session| (session.selected_party_index, session.page)),
             Some((1, ZStatsPage::Stats))
         );
-        assert!(state.message.contains("MARIA"));
+        assert!(z_stats_panel_text(&state).contains("MARIA"));
     }
 
     #[test]

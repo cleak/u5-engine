@@ -161,9 +161,18 @@ impl GameplayMessageLog {
         self.trim();
     }
 
+    /// Drop rows that can no longer reach the window.
+    ///
+    /// The cap is the window's own row count, not `ROWS - 1`.
+    /// `text-output.md §10.1` gives window 2 the cell rectangle
+    /// `(24, 11) - (39, 23)`, thirteen rows, and §10.6 puts the live
+    /// prompt on "the message window's own last row" rather than on an
+    /// extra row below the log, so all thirteen rows can carry content
+    /// in the same frame. Measured on `playtest/orig/zz/z1.png`, which
+    /// shows text on row 11 *and* the open `Status:_` prompt on row 23.
     fn trim(&mut self) {
-        if self.lines.len() > MESSAGE_WINDOW_HISTORY_ROWS {
-            let excess = self.lines.len() - MESSAGE_WINDOW_HISTORY_ROWS;
+        if self.lines.len() > MESSAGE_WINDOW_ROWS {
+            let excess = self.lines.len() - MESSAGE_WINDOW_ROWS;
             self.lines.drain(0..excess);
         }
     }
@@ -190,6 +199,11 @@ pub struct MessageWindowRow {
 pub struct MessageWindowLayout {
     /// Rows to draw, top to bottom.
     pub rows: Vec<MessageWindowRow>,
+    /// Absolute `(column, row)` of the input cursor when a prompt keeps
+    /// its own line open, so the cursor belongs on that line rather
+    /// than on a fresh live row. `None` leaves the cursor where the
+    /// renderer's ordinary rule puts it - after the last placed row.
+    pub inline_cursor: Option<(u8, u8)>,
 }
 
 impl MessageWindowLayout {
@@ -224,13 +238,11 @@ pub fn message_log_from_entries<'a>(
 ) -> GameplayMessageLog {
     let mut log = GameplayMessageLog::new();
     for entry in entries {
-        let Some(text) = render(&entry.text) else {
-            continue;
-        };
-        if entry.is_command_echo {
-            log.end_turn();
-            log.push_command(&text);
-        } else if entry.explicit_blank {
+        // A stored blank row is a line feed the producer emitted, not
+        // text: `render` substitutes names into text and drops lines it
+        // does not want drawn, and every caller's "drop the empty ones"
+        // filter would otherwise swallow the deliberate blank as well.
+        if entry.explicit_blank {
             log.lines.push(MessageLogLine {
                 text: String::new(),
                 glyphs: Vec::new(),
@@ -238,6 +250,14 @@ pub fn message_log_from_entries<'a>(
                 centered: false,
             });
             log.trim();
+            continue;
+        }
+        let Some(text) = render(&entry.text) else {
+            continue;
+        };
+        if entry.is_command_echo {
+            log.end_turn();
+            log.push_command(&text);
         } else if entry.centered && text == entry.text {
             let glyphs = entry.glyphs.clone();
             log.lines.push(MessageLogLine {
@@ -265,9 +285,62 @@ pub fn layout_message_window(
     log: &GameplayMessageLog,
     live_input: Option<&str>,
 ) -> MessageWindowLayout {
+    layout_message_window_with_open_prompt(log, live_input, None)
+}
+
+/// Place a log with a prompt that is still waiting for a key.
+///
+/// `text-output.md §10.6`: "Typed input happens on the message window's
+/// own last row, so the visible layout is a log whose final line is
+/// being edited — for example `Player: ` followed by the input cursor".
+/// `commands.md §5.1` puts the cursor "in the cell immediately to the
+/// right of the prompt triangle" for a fresh input line, but a prompt
+/// such as `Player:_` or `Save game?` has already opened its own line,
+/// so no new prompt row is started and no end-cap triangle is drawn:
+/// the cursor sits one cell past the prompt text on that same row.
+///
+/// `open_prompt` is the prompt literal. It is honoured only when the
+/// log's newest row is that prompt, so a line that has already been
+/// answered (`Player: None!`) falls back to the ordinary live row.
+pub fn layout_message_window_with_open_prompt(
+    log: &GameplayMessageLog,
+    live_input: Option<&str>,
+    open_prompt: Option<&str>,
+) -> MessageWindowLayout {
+    let open_prompt = open_prompt.filter(|prompt| {
+        log.lines()
+            .last()
+            .is_some_and(|line| line.text == prompt.trim_end())
+    });
+    let live_input = if open_prompt.is_some() {
+        None
+    } else {
+        live_input
+    };
     let mut rows = Vec::new();
+    // The live row is the *next* command cycle's own row, and
+    // `text-output.md §10.2` runs that cycle as "1. Emit a line feed
+    // into the message window. 2. Draw the right-pointing bracket
+    // end-cap ... 3. Read the key." §10.4 spells out what the first step
+    // costs: a completed turn "leaves the cursor at column 0 of a fresh
+    // row, and the next cycle's leading line feed advances again -
+    // producing exactly one blank row after each completed command
+    // turn". So a blank row always separates the history from the fresh
+    // prompt row. Measured on `playtest/orig/qsave2/00_Y.png`,
+    // `orig/walk/07_DOWN.png` and `orig/exit/06_DOWN.png`: the
+    // marker-plus-cursor row 23 sits under a blank row 22 in all three.
+    //
+    // Exactly one, though: a log that already ends in the blank an
+    // earlier `end_turn` stored needs no second one.
+    let history_ends_blank = log
+        .lines()
+        .last()
+        .is_some_and(|line| matches!(line.kind, MessageLineKind::Blank));
     let history_rows = match live_input {
-        Some(_) => MESSAGE_WINDOW_HISTORY_ROWS,
+        Some(_) if history_ends_blank => MESSAGE_WINDOW_HISTORY_ROWS,
+        Some(_) => MESSAGE_WINDOW_HISTORY_ROWS - 1,
+        // An open prompt keeps its *own* line (§10.6), so no line feed
+        // has been emitted yet and every row can carry text.
         None => MESSAGE_WINDOW_ROWS,
     };
     let lines = log.lines();
@@ -309,7 +382,25 @@ pub fn layout_message_window(
             prefixed: true,
         });
     }
-    MessageWindowLayout { rows }
+    // The cursor cell is the one the prompt literal leaves the cursor
+    // in, measured from the row's own first column and counting the
+    // literal's trailing space (which the drawn row has trimmed).
+    // `Player: ` starts in column 24 and puts the cursor in 32;
+    // `Open-` starts in column 25 - one past its end cap - and puts it
+    // in 30, which is where the direction word then lands.
+    let inline_cursor = open_prompt.and_then(|prompt| {
+        rows.last().map(|row| {
+            (
+                (row.column as usize + prompt.chars().count()).min(MESSAGE_WINDOW_RIGHT as usize)
+                    as u8,
+                row.row,
+            )
+        })
+    });
+    MessageWindowLayout {
+        rows,
+        inline_cursor,
+    }
 }
 
 fn wrap_rendered_to_width(

@@ -48,8 +48,15 @@ fn directed_utility_success_variant(spell_index: usize) -> Option<u8> {
 /// one observed in the original's message window (`Player:` followed by
 /// the selection, `Player: None!` on cancel).
 pub const PARTY_SELECTOR_PROMPT_MESSAGE: &str = PARTY_SELECTION_PROMPT;
-/// The cancel result printed on Escape or Space.
+/// The cancel result printed on Escape, and on the `0` explicit-none
+/// key of `text-output.md §10.6`.
 pub const PARTY_SELECTOR_CANCELLED_MESSAGE: &str = "Player: None!";
+/// `commands.md §5.6`: `None!` is "the universal cancel response". It
+/// continues the still-open `Player:_` line rather than starting a new
+/// one - `text-output.md §11` models the window as a stream continuing
+/// from wherever the cursor was left, and a capture of the original
+/// shows the single line `Player: None!`.
+pub const PARTY_SELECTOR_CANCEL_REPLY: &str = "None!";
 /// `stats-panel.md §4` + observation: the party-roster box's border label
 /// while the party-member selector is live.
 pub const PARTY_SELECTOR_ROSTER_BOX_LABEL: &str = "Select:";
@@ -83,15 +90,61 @@ impl PlayState {
     /// equipment pages no label at all, which is what
     /// [`ZStatsPage::border_label`] encodes; a live Z-stats page therefore
     /// paints its own published literal into this same slot.
-    pub fn roster_box_label(&self) -> Option<&'static str> {
+    /// Runtime observation, spec silent on one row: `§4.7`'s page table
+    /// gives the attribute and equipment pages "none" for a *page*
+    /// label, but a capture of the original shows the selected member's
+    /// own name framed in that band on both of them - `>Avatar<` above
+    /// the stat sheet and above the `Arms` list. The four inventory
+    /// pages keep their published page literals.
+    pub fn roster_box_label(&self) -> Option<String> {
         if self.active_party_selector.is_some() {
-            return Some(PARTY_SELECTOR_ROSTER_BOX_LABEL);
+            return Some(PARTY_SELECTOR_ROSTER_BOX_LABEL.to_string());
         }
         if self.active_use.is_some() {
-            return Some(USE_PICKER_ROSTER_BOX_LABEL);
+            return Some(USE_PICKER_ROSTER_BOX_LABEL.to_string());
         }
         if let Some(session) = &self.active_z_stats {
-            return session.page.border_label();
+            return session
+                .page
+                .border_label()
+                .map(str::to_string)
+                .or_else(|| Some(self.party_member_display_name(session.selected_party_index)));
+        }
+        None
+    }
+
+    /// The prompt literal whose message-window line is still open,
+    /// waiting for a key.
+    ///
+    /// `text-output.md §10.6`: "the visible layout is a log whose final
+    /// line is being edited — for example `Player: ` followed by the
+    /// input cursor". `commands.md §5.6` publishes `Player:_` as
+    /// "colon then exactly one trailing space", `inventory.md §4.7`
+    /// publishes the Z-stats page loop's `\nStatus:_`, and
+    /// `save-load.md §5.2` step 1 has the save handler print
+    /// `Save game?` and then "block on a keystroke", and `commands.md
+    /// §5.4` has the shared direction prompt wait on the hyphen its verb
+    /// echo ended with. None of them opens a fresh prompt row: the
+    /// cursor sits on the prompt's own line.
+    pub fn open_prompt_line(&self) -> Option<String> {
+        if self.active_party_selector.is_some() {
+            return Some(PARTY_SELECTOR_PROMPT_MESSAGE.to_string());
+        }
+        if self.active_z_stats.is_some() {
+            return Some(Z_STATS_STATUS_PROMPT.to_string());
+        }
+        if self
+            .active_yes_no_prompt
+            .is_some_and(|session| matches!(session.kind, YesNoPromptKind::SaveGame))
+        {
+            return Some(SAVE_PROMPT_LINE.to_string());
+        }
+        // `commands.md §5.4`: the shared direction prompt "prints
+        // **nothing** before waiting. The hyphen at the end of the verb
+        // echo *is* the prompt", so the cursor waits in the cell the
+        // direction word will be printed into.
+        if let Some(session) = self.active_direction_prompt {
+            return Self::direction_prompt_open_verb_echo(session.kind);
         }
         None
     }
@@ -126,31 +179,84 @@ impl PlayState {
 
     /// Feed one key to a live party-member selector.
     ///
-    /// `inventory.md §4`: number keys `1..6` pick the matching active
-    /// party slot, jumps beyond the active party size are rejected, and
-    /// Escape cancels the selector.
+    /// `text-output.md §10.6` publishes this surface's whole key set:
+    /// "the active-player prompt prints `Player: ` and then runs a
+    /// highlight picker - digit keys `1` through `6`, up and down,
+    /// Return or Space to accept, Escape to cancel, and `0` for 'no
+    /// active player', which prints `None!` and a newline".
+    /// `inventory.md §4.3` adds that the same surface is shared by
+    /// "Z-stats, R-Ready, New Order, and the rest", that the digits are
+    /// "bounded by the current party size", and that "the four direction
+    /// keys move the indicator".
     pub fn step_active_party_selector(&mut self, key: char, suffix: &str) -> bool {
         let Some(session) = self.active_party_selector else {
             return false;
         };
         let key = z_stats_first_input_key(key, suffix);
-        if matches!(key, '\u{1b}' | ' ' | '0') {
+        // Escape cancels, and `commands.md §5.6` makes `None!` "the
+        // universal cancel response"; `0` is §10.6's explicit-none key,
+        // which prints the same word. Space is deliberately absent:
+        // §10.6 accepts on Return *or* Space.
+        //
+        // Open spec question on `0` only: `inventory.md §4`'s own
+        // paragraph on this selector says "Escape cancels the selector,
+        // while the explicit none/retry result only redraws the prompt
+        // path and does not select a character", which would keep the
+        // selector live on `0` rather than closing it - and that is what
+        // the R-Ready arm of `step_active_ready` already does. Closing it
+        // here is the engine's pre-existing behaviour and no capture of
+        // the original settles which reading is right, so it is left
+        // alone until the spec answers.
+        if matches!(key, '\u{1b}' | '0') {
             self.active_party_selector = None;
-            self.message = PARTY_SELECTOR_CANCELLED_MESSAGE.to_string();
+            if !self
+                .complete_open_direction_echo(PARTY_SELECTION_PROMPT, PARTY_SELECTOR_CANCEL_REPLY)
+            {
+                self.message = PARTY_SELECTOR_CANCELLED_MESSAGE.to_string();
+            }
             return true;
         }
-        let Some(digit) = key.to_digit(10) else {
-            // Any other key redraws the prompt; the selector stays live.
+        // `inventory.md §4.3`: "Number keys `1` through `6` select
+        // directly, bounded by the current party size; the four
+        // direction keys move the indicator." Moving "inverts the old
+        // row back and inverts the new one", which is what the panel
+        // paints from `selector_highlight`.
+        if let Some(forward) = party_selector_direction_step(key) {
+            let mut session = session;
+            let last = self.party.len().saturating_sub(1);
+            session.highlight = if forward {
+                session.highlight.saturating_add(1).min(last)
+            } else {
+                session.highlight.saturating_sub(1)
+            };
+            self.active_party_selector = Some(session);
             self.message = PARTY_SELECTOR_PROMPT_MESSAGE.to_string();
             return true;
+        }
+        // `text-output.md §10.6`: "Return or Space to accept". The
+        // shared R-Ready picker of `inventory.md §5` step 4 tests the
+        // same two keys separately and reaches the same cascade, so both
+        // commit the indicated row here too.
+        let index = match key.to_digit(10) {
+            Some(digit) => (digit as usize).saturating_sub(1),
+            None if matches!(key, '\r' | '\n' | ' ') => session.highlight,
+            None => {
+                // Any other key redraws the prompt; the selector stays live.
+                self.message = PARTY_SELECTOR_PROMPT_MESSAGE.to_string();
+                return true;
+            }
         };
-        let index = digit as usize - 1;
         if index >= self.party.len() {
             // "Jumps beyond the active party size are rejected."
             self.message = PARTY_SELECTOR_PROMPT_MESSAGE.to_string();
             return true;
         }
         self.active_party_selector = None;
+        // `commands.md §5.6`: `Player:_` is "colon then exactly one
+        // trailing space", so the chosen name lands on that same line -
+        // the original shows `Player: Avatar`.
+        let chosen = self.party_member_display_name(index);
+        let _ = self.complete_open_direction_echo(PARTY_SELECTION_PROMPT, &chosen);
         match session.target {
             PartySelectorTarget::ZStats => {
                 self.z_stats_for_party(index);
@@ -171,6 +277,19 @@ impl PlayState {
         }
         let selected = selected.min(self.party.len() - 1);
         self.active_z_stats = Some(ZStatsSession::new(selected));
+        // `inventory.md §4.7` publishes the page loop's sub-prompt as
+        // `\nStatus:_` - the literal leads with a newline. Whatever
+        // opened the page has already closed its own line (the
+        // `Z-stats...` echo of `text-output.md §10.3` ends in a newline;
+        // the member selector's accepted name ends the `Player:_` line),
+        // so by §10.4's combined carriage-return/line-feed rule that
+        // leading newline lands on an already-fresh row and leaves one
+        // blank row above the prompt. Measured on
+        // `playtest/orig/zz/z1.png`: `Player: Avatar` on text row 21,
+        // row 22 blank, `Status:_` and its cursor on row 23.
+        if !self.message_transcript.is_empty() {
+            self.push_explicit_blank_message_entry();
+        }
         self.message = self.render_active_z_stats();
         MoveOutcome::Observed
     }
@@ -1166,11 +1285,52 @@ impl PlayState {
         MoveOutcome::Observed
     }
 
+    /// The open `Verb-` echo a live direction prompt is waiting on.
+    ///
+    /// `commands.md §5.3`: a `-` suffix means "a **direction** is
+    /// awaited. The chosen direction's name is appended on the same
+    /// line." §5.4 adds that the prompt itself "prints **nothing**
+    /// before waiting. The hyphen at the end of the verb echo *is* the
+    /// prompt." So the direction word — or `Pass` — must land on the
+    /// line the verb opened, not on a fresh one.
+    pub fn direction_prompt_open_verb_echo(kind: DirectionPromptKind) -> Option<String> {
+        let echo = match kind {
+            DirectionPromptKind::Attack => "Attack-".to_string(),
+            DirectionPromptKind::Fire => "Fire-".to_string(),
+            DirectionPromptKind::Get => "Get-".to_string(),
+            DirectionPromptKind::Jimmy => "Jimmy-".to_string(),
+            DirectionPromptKind::Klimb | DirectionPromptKind::CombatKlimb { .. } => {
+                "Klimb-".to_string()
+            }
+            DirectionPromptKind::Look => "Look-".to_string(),
+            DirectionPromptKind::Open => "Open-".to_string(),
+            DirectionPromptKind::Push | DirectionPromptKind::CombatPush { .. } => {
+                "Push-".to_string()
+            }
+            DirectionPromptKind::Search => "Search-".to_string(),
+            DirectionPromptKind::Talk => "Talk-".to_string(),
+            DirectionPromptKind::CombatSjog { branch, .. } => {
+                combat_command_branch_published_label(branch)?.to_string()
+            }
+            // The remaining kinds are member/focus pickers, not the
+            // shared hyphenated direction prompt.
+            DirectionPromptKind::DungeonLook { .. }
+            | DirectionPromptKind::SurfaceFountainDrink { .. }
+            | DirectionPromptKind::SurfaceDeathVision { .. }
+            | DirectionPromptKind::DungeonSearch => return None,
+        };
+        echo.ends_with('-').then_some(echo)
+    }
+
     pub fn render_active_direction_prompt(&self) -> String {
         self.active_direction_prompt
             .as_ref()
             .map(|session| match session.kind {
-                DirectionPromptKind::Attack => "Attack where?".to_string(),
+                // `commands.md §5.2`: the `A` echo is `Attack-` outside
+                // dungeons; §5.4 says the shared direction prompt
+                // "prints **nothing** before waiting", so there is no
+                // `where?` line in the original.
+                DirectionPromptKind::Attack => "Attack-".to_string(),
                 DirectionPromptKind::DungeonLook {
                     party_index: None, ..
                 } => {
@@ -1203,7 +1363,8 @@ impl PlayState {
                         .unwrap_or("Direction?")
                         .to_string()
                 }
-                DirectionPromptKind::Fire => "Fire- which direction?".to_string(),
+                // `commands.md §5.2`: the `F` echo is the bare `Fire-`.
+                DirectionPromptKind::Fire => "Fire-".to_string(),
                 DirectionPromptKind::Get => "Get-".to_string(),
                 DirectionPromptKind::Jimmy => "Jimmy-".to_string(),
                 DirectionPromptKind::Look => "Look-".to_string(),
@@ -1271,8 +1432,13 @@ impl PlayState {
                 if matches!(session.kind, DirectionPromptKind::Klimb) {
                     self.advance_turn();
                 }
+                if let Some(verb) = Self::direction_prompt_open_verb_echo(session.kind) {
+                    // `commands.md §5.4`: `Space` prints `Pass` on the
+                    // open verb line, "the same word the Pass command
+                    // echoes".
+                    let _ = self.complete_open_direction_echo(&verb, DIRECTION_PROMPT_LABEL_PASS);
+                }
                 if push_prompt {
-                    let _ = self.complete_open_direction_echo("Push-", DIRECTION_PROMPT_LABEL_PASS);
                     if matches!(session.kind, DirectionPromptKind::Push) {
                         match self.area {
                             Area::World { .. } => self.advance_turn(),
@@ -1366,6 +1532,15 @@ impl PlayState {
             else {
                 continue;
             };
+            // `commands.md §5.3`/§5.4: the chosen direction's name is
+            // appended to the still-open `Verb-` line before the handler
+            // runs, so its own output starts on the next row. Push keeps
+            // its post-dispatch completion because a dungeon Push
+            // refusal replaces the echo entirely (`commands.md §5.2`).
+            if !push_prompt && let Some(verb) = Self::direction_prompt_open_verb_echo(session.kind)
+            {
+                let _ = self.complete_open_direction_echo(&verb, direction.name());
+            }
             let outcome = match session.kind {
                 DirectionPromptKind::Attack => {
                     self.attack_command_with_game_dir(Some(direction), Some(game_dir))?
@@ -1570,25 +1745,126 @@ impl PlayState {
         frame
     }
 
-    pub fn render_z_stats_session(&self, session: &ZStatsSession) -> String {
-        let mut lines = vec![format!(
-            "Z-stats: {} page, party member {} of {}.",
-            session.page.title(),
-            session.selected_party_index + 1,
-            self.party.len()
-        )];
+    /// `inventory.md §4.7`: while a Z-stats page is open the message
+    /// window carries only the page loop's own `Status:_` sub-prompt.
+    /// The page body is drawn over the panel by
+    /// [`crate::stats_panel::paint_z_stats_page_text_window`], which
+    /// reads [`Self::z_stats_panel_rows`].
+    ///
+    /// The engine used to dump the whole page into the message window as
+    /// a paragraph of prose ("Z-stats: Stats page, party member 1 of
+    /// 3." and a stat list), which the original prints nowhere.
+    pub fn render_z_stats_session(&self, _session: &ZStatsSession) -> String {
+        Z_STATS_STATUS_PROMPT.to_string()
+    }
+
+    /// The nine panel rows (screen rows 1..=9) a live Z-stats page owns.
+    ///
+    /// `inventory.md §4.1` puts the roster rows, the food/gold line and
+    /// the date line all in window 1, and §4.7 has the attribute page
+    /// clear that window before drawing, so a page body replaces all
+    /// nine rows.
+    pub fn z_stats_panel_rows(&self, session: &ZStatsSession) -> Vec<String> {
+        let mut rows = vec![String::new(); Z_STATS_PANEL_ROWS];
         match session.page {
-            ZStatsPage::Stats => self.render_z_stats_character_page(session, &mut lines),
-            ZStatsPage::Equipment => self.render_z_stats_equipment_page(session, &mut lines),
-            ZStatsPage::SpellBook => self.render_z_stats_spell_book_page(session, &mut lines),
-            ZStatsPage::Reagents => self.render_z_stats_reagent_page(session, &mut lines),
-            ZStatsPage::Spells => self.render_z_stats_spell_page(session, &mut lines),
-            ZStatsPage::SpecialUse => self.render_z_stats_special_use_page(session, &mut lines),
-            ZStatsPage::EquipmentStock => {
-                self.render_z_stats_equipment_stock_page(session, &mut lines)
+            ZStatsPage::Stats => self.z_stats_attribute_page_rows(session, &mut rows),
+            ZStatsPage::Equipment => {
+                // `inventory.md §4.7` heading literal `Arms` plus two
+                // newlines: the heading, one blank row, then the list.
+                rows[0] = z_stats_centred_panel_row(Z_STATS_ARMS_HEADING);
+                let mut lines = Vec::new();
+                self.render_z_stats_equipment_page(session, &mut lines);
+                // Runtime observation, spec silent: `§4.7` publishes the
+                // page's `(None ready)` placeholder but no row format. A
+                // capture of the original lists the readied items by name
+                // alone from screen column 25, with no slot label.
+                for line in &mut lines {
+                    if line != Z_STATS_NONE_READY_PLACEHOLDER {
+                        *line = format!(" {}", line.rsplit(": ").next().unwrap_or(line));
+                    }
+                }
+                z_stats_place_panel_rows(&mut rows, 2, &lines);
+            }
+            page => {
+                let mut lines = Vec::new();
+                match page {
+                    ZStatsPage::SpellBook => {
+                        self.render_z_stats_spell_book_page(session, &mut lines)
+                    }
+                    ZStatsPage::Reagents => self.render_z_stats_reagent_page(session, &mut lines),
+                    ZStatsPage::Spells => self.render_z_stats_spell_page(session, &mut lines),
+                    ZStatsPage::SpecialUse => {
+                        self.render_z_stats_special_use_page(session, &mut lines)
+                    }
+                    _ => self.render_z_stats_equipment_stock_page(session, &mut lines),
+                }
+                z_stats_place_panel_rows(&mut rows, 0, &lines);
             }
         }
-        lines.join("\n")
+        rows
+    }
+
+    /// `inventory.md §4.7` attribute page, built from its published
+    /// label literals.
+    ///
+    /// The published sequence is leading spaces that centre the line,
+    /// the record's leading glyph, the `_Lv-` label and the level, then
+    /// the name; then `Str=`/`__HP:`, `Int=`/`__HM:`, `Dex=`/`__Ex:` and
+    /// `____Magic:`, each label carrying its own interior spacing. The
+    /// condition line under the name and the four-cell right-justified
+    /// value column are runtime observations - see
+    /// [`z_stats_health_line`] and [`Z_STATS_ATTRIBUTE_VALUE_CELLS`].
+    fn z_stats_attribute_page_rows(&self, session: &ZStatsSession, rows: &mut [String]) {
+        let index = session.selected_party_index;
+        let Some(member) = self.party.get(index).copied() else {
+            return;
+        };
+        let name = self.party_member_display_name(index);
+        let gender = crate::party::party_roster_record_for_active_slot(
+            &self.party_roster,
+            index,
+            self.party_names.get(index),
+        )
+        .map(|record| record.gender)
+        .unwrap_or(crate::SAVE_GENDER_MALE_BYTE);
+        let strength = self
+            .party_strengths
+            .get(index)
+            .copied()
+            .unwrap_or(self.avatar_stats.strength);
+        let intelligence = self
+            .party_intelligence
+            .get(index)
+            .copied()
+            .unwrap_or(self.avatar_stats.intelligence);
+        let experience = self.party_experience.get(index).copied().unwrap_or(0);
+
+        rows[0] = z_stats_centred_panel_row(&format!(
+            "{}{}{} {name}",
+            char::from(gender),
+            Z_STATS_LEVEL_LABEL,
+            member.level
+        ));
+        rows[1] = z_stats_centred_panel_row(z_stats_health_line(member.status));
+        rows[3] = z_stats_attribute_row(
+            Z_STATS_STRENGTH_LABEL,
+            strength.into(),
+            Z_STATS_HP_LABEL,
+            member.hp,
+        );
+        rows[4] = z_stats_attribute_row(
+            Z_STATS_INTELLIGENCE_LABEL,
+            intelligence.into(),
+            Z_STATS_MAX_HP_LABEL,
+            member.max_hp,
+        );
+        rows[5] = z_stats_attribute_row(
+            Z_STATS_DEXTERITY_LABEL,
+            member.dexterity().into(),
+            Z_STATS_EXPERIENCE_LABEL,
+            experience,
+        );
+        rows[7] = format!("{Z_STATS_MAGIC_LABEL} {}", member.mana);
     }
 
     pub fn step_active_z_stats(&mut self, key: char, suffix: &str) -> bool {
@@ -1598,7 +1874,14 @@ impl PlayState {
         let key = z_stats_first_input_key(key, suffix);
         match z_stats_input_action(key) {
             ZStatsInputAction::Exit => {
-                self.message = "Z-stats closed.".to_string();
+                // `inventory.md §4.7`: "Leaving the pages prints `Done`"
+                // plus a newline "in the message window." The page
+                // loop's `Status:_` prompt left the cursor on its own
+                // line, and `text-output.md §11` continues the stream
+                // from there, so the word lands on that line.
+                if !self.complete_open_direction_echo(Z_STATS_STATUS_PROMPT, Z_STATS_DONE_MESSAGE) {
+                    self.message = Z_STATS_DONE_MESSAGE.to_string();
+                }
             }
             ZStatsInputAction::NextPage => {
                 session.move_next_page();
@@ -2063,47 +2346,6 @@ impl PlayState {
                 .count()
     }
 
-    fn render_z_stats_character_page(&self, session: &ZStatsSession, lines: &mut Vec<String>) {
-        let Some(member) = self.party.get(session.selected_party_index).copied() else {
-            lines.push("No party member selected.".to_string());
-            return;
-        };
-        let name = self.party_member_display_name(session.selected_party_index);
-        let class = character_class_for_byte(member.class_byte)
-            .map(CharacterClass::display_name)
-            .unwrap_or("Unknown");
-        let status = party_status_name(member.status);
-        let strength = self
-            .party_strengths
-            .get(session.selected_party_index)
-            .copied()
-            .unwrap_or(self.avatar_stats.strength);
-        let dexterity = member.climb_stat;
-        let intellect = self
-            .party_intelligence
-            .get(session.selected_party_index)
-            .copied()
-            .unwrap_or(self.avatar_stats.intelligence);
-        let experience = self
-            .party_experience
-            .get(session.selected_party_index)
-            .copied()
-            .unwrap_or(0);
-        lines.push(z_stats_stat_row("", &name));
-        lines.push(z_stats_stat_row("", &class.to_string()));
-        lines.push(z_stats_stat_row("", status));
-        lines.push(z_stats_stat_row("Level", &member.level.to_string()));
-        lines.push(z_stats_stat_row("Strength", &strength.to_string()));
-        lines.push(z_stats_stat_row("Dexterity", &dexterity.to_string()));
-        lines.push(z_stats_stat_row("Intellect", &intellect.to_string()));
-        lines.push(z_stats_stat_row(
-            "HP",
-            &format!("{}/{}", member.hp, member.max_hp),
-        ));
-        lines.push(z_stats_stat_row("MP", &member.mana.to_string()));
-        lines.push(z_stats_stat_row("Exp", &experience.to_string()));
-    }
-
     /// `inventory.md §4.7`: "The empty equipment value in the six-slot
     /// block is the all-bits-set byte; if all six slots are empty the page
     /// prints the `(None ready)` placeholder rather than a blank list."
@@ -2256,7 +2498,7 @@ impl PlayState {
         append_inventory_rows(lines, rows, session.inventory_cursor);
     }
 
-    fn party_member_display_name(&self, index: usize) -> String {
+    pub fn party_member_display_name(&self, index: usize) -> String {
         self.party_names
             .get(index)
             .and_then(|name| party_name_to_string(name))
@@ -4081,6 +4323,49 @@ fn rune_echo_for_buffer(buffer: &str) -> String {
 /// the none placeholder and waits for a key before returning to the page
 /// loop", and the placeholder for an inventory page with no non-zero slot
 /// is the parenthesised `(None owned!)`.
+/// Centre one panel row the way `inventory.md §4.7` describes the
+/// attribute page's name line: by "emitting leading spaces".
+///
+/// Measured against the fifteen content cells `§4.1` gives the roster
+/// rows, which is what a capture of the original shows: the thirteen-cell
+/// name line takes one leading space, the eleven-cell `Good Health` line
+/// takes two, and the four-cell `Arms` heading takes five.
+fn z_stats_centred_panel_row(text: &str) -> String {
+    let width = crate::STATS_PANEL_WIDTH;
+    let length = text.chars().count();
+    if length >= width {
+        return crate::stats_panel::truncate_ascii_chars(text, crate::STATS_PANEL_WIDTH);
+    }
+    format!("{}{text}", " ".repeat((width - length) / 2))
+}
+
+/// One `Str=`/`__HP:`-shaped attribute row: the left label and its value
+/// at natural width, then the right label, then that value
+/// right-justified in [`Z_STATS_ATTRIBUTE_VALUE_CELLS`] cells.
+fn z_stats_attribute_row(
+    left_label: &str,
+    left_value: u16,
+    right_label: &str,
+    right_value: u16,
+) -> String {
+    let line = format!(
+        "{left_label}{left_value}{right_label}{right_value:>Z_STATS_ATTRIBUTE_VALUE_CELLS$}"
+    );
+    crate::stats_panel::truncate_ascii_chars(&line, crate::STATS_PANEL_WIDTH)
+}
+
+/// Drop a page's already-built lines into the panel's nine rows. The
+/// painter clips each row to the panel's fifteen cells, so the rows
+/// themselves keep their full text for callers that read them back.
+fn z_stats_place_panel_rows(rows: &mut [String], first: usize, lines: &[String]) {
+    for (offset, line) in lines.iter().enumerate() {
+        let Some(slot) = rows.get_mut(first + offset) else {
+            break;
+        };
+        slot.clone_from(line);
+    }
+}
+
 fn append_inventory_rows(lines: &mut Vec<String>, rows: Vec<String>, cursor: usize) {
     if rows.is_empty() {
         lines.push(Z_STATS_NONE_OWNED_PLACEHOLDER.to_string());
@@ -4106,30 +4391,4 @@ fn append_inventory_rows(lines: &mut Vec<String>, rows: Vec<String>, cursor: usi
 /// where it was. Nothing here wraps.
 fn z_stats_inventory_last_cursor(row_count: usize) -> usize {
     row_count.saturating_sub(Z_STATS_INVENTORY_PANEL_ROWS)
-}
-
-/// `inventory.md §4` Z-stats stats page: "Shows class, status, level,
-/// Strength, Dexterity, Intellect, current and maximum hit points, magic
-/// points, and experience for the selected character. Class and status
-/// are looked up through label tables rather than printed from the raw
-/// record byte. Numeric fields use the resident number printer."
-///
-/// The page's visible width, matching the party-roster rows it replaces.
-///
-/// cleak/u5-spec#81: the page's literal row labels and per-field column
-/// offsets are not published. Until they are, each §4 field takes one row
-/// with its §4 field name at the left and the value right-justified into
-/// the visible cells; class and status are bare label-table values with
-/// no invented field name in front of them.
-pub const Z_STATS_PAGE_ROW_WIDTH: usize = 15;
-
-/// One `label` + right-justified `value` row of the Z-stats stats page.
-pub fn z_stats_stat_row(label: &str, value: &str) -> String {
-    if label.is_empty() {
-        // Bare label-table values (name, class, status) print verbatim.
-        return value.to_string();
-    }
-    let used = label.chars().count() + value.chars().count();
-    let pad = Z_STATS_PAGE_ROW_WIDTH.saturating_sub(used).max(1);
-    format!("{label}{}{value}", " ".repeat(pad))
 }

@@ -11246,7 +11246,9 @@ fn combat_input_dispatch_z_stats_ends_actor_action_when_modal_closes() {
         state.active_z_stats.as_ref().unwrap().selected_party_index,
         0
     );
-    assert!(state.message.starts_with("Z-stats: Stats page"));
+    // `inventory.md §4.7`: the page body goes to the panel; the message
+    // window carries the page loop's `Status:_` sub-prompt.
+    assert_eq!(state.message, Z_STATS_STATUS_PROMPT);
     assert_eq!(state.active_effect_counter, 3);
 
     assert_eq!(

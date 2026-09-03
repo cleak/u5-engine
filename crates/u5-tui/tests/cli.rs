@@ -1120,10 +1120,16 @@ fn cli_binary_play_script_confirmed_save_round_trips_to_temp_save() {
     assert!(output.status.success());
     let stdout = String::from_utf8(output.stdout).unwrap();
     assert!(stdout.contains("Script mode: 3 command(s)."));
-    // The message window is fifteen columns wide, so the confirmation
-    // wraps across two rows.
+    // `save-load.md §5.2` steps 2 and 8: the handler prints `Yes`, then
+    // `Saving...`, then `Done.` as three separate lines rather than the
+    // one `Yes. Saving... Done.` run the engine used to emit and the
+    // fifteen-cell window then wrapped. This ASCII harness paints only
+    // the newest line of the stream (`text-output.md §11`), so the last
+    // of the three is what reaches stdout; the full three-line sequence
+    // is pinned by `u5-runtime`'s `zstats_text` batch.
     let squished: String = stdout.chars().filter(|ch| !ch.is_whitespace()).collect();
-    assert!(squished.contains("Yes.Saving...Done."), "{stdout}");
+    assert!(squished.contains("Done."), "{stdout}");
+    assert!(!squished.contains("Yes.Saving..."), "{stdout}");
     assert!(String::from_utf8(output.stderr).unwrap().is_empty());
 
     let reloaded = load_play_options_from_save(&dir).unwrap();
