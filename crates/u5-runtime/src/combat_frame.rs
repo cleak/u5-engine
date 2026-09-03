@@ -405,9 +405,9 @@ pub struct CombatMonsterAttackApplication {
 
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
 pub struct CombatMonsterAttackInputs {
-    pub party_defender_rating: u8,
-    pub hit_roll: u8,
-    pub damage_roll: u8,
+    /// `combat.md §11` "The draw": the inclusive `0..=60` raw draw behind
+    /// the shared skewed `1..30` roll.
+    pub hit_raw_roll_0_to_60: u8,
     pub poison_gate_accepts: bool,
     pub poison_damage_roll: u8,
     pub forced_hit: Option<bool>,
@@ -416,8 +416,14 @@ pub struct CombatMonsterAttackInputs {
 
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
 pub struct CombatPlayerWeaponAttackInputs {
-    pub hit_roll: u8,
-    pub damage_roll: u8,
+    /// `combat.md §11` "The draw": the inclusive `0..=60` raw draw.
+    pub hit_raw_roll_0_to_60: u8,
+    /// `combat.md §12` stage one, party row. `None` means "take the
+    /// inclusive `1..Attack max` draw from the shared stream, and only if
+    /// stage one actually rolls" - bare hands, a `0` or `1` `Attack max`
+    /// and the two per-item overrides "run before the roll" and draw
+    /// nothing. A `Some` value is a deterministic caller's injected roll.
+    pub damage_roll: Option<u8>,
     pub forced_hit: Option<bool>,
 }
 
@@ -1283,6 +1289,49 @@ impl PlayState {
             NEGATE_TIME_ACTIVE_EFFECT_TAG,
         );
         Some(combat_actor_weight(target_slot, actor, negate_time_active))
+    }
+
+    /// `combat.md §12` stage two of the ordinary attack damage roll:
+    /// "The defender's defence rating is the class defense byte for a
+    /// monster and the cached character combat-defense byte for a party
+    /// member." §13 (R337): "The **defense** byte reaches the damage
+    /// roller directly and never through the selector."
+    ///
+    /// The party term is the per-record byte §12 names: "the damage roll
+    /// reads the cached combat-defense byte in the character record at
+    /// offset `+0x18`; factory-seed records carry value `7`". `7` is the
+    /// value that byte holds in a factory-seed record, not a rule that
+    /// every record carries it, so this reads the loaded per-record byte
+    /// and falls back to the factory seed only for a slot the roster does
+    /// not cover. §12's negative - "No traced combat path recomputes the
+    /// character-defense byte from readied armour" - is why nothing
+    /// recomputes it here from equipment, not a claim that it is constant
+    /// across the roster.
+    pub fn combat_actor_defence_rating(&self, slot: usize) -> Option<u8> {
+        if slot < COMBAT_PARTY_ACTOR_SLOTS {
+            self.combat_actors.get(slot)?;
+            return Some(
+                self.combat_roster_slot_for_actor_slot(slot)
+                    .and_then(|roster_slot| self.party_combat_defense.get(roster_slot).copied())
+                    .unwrap_or(CHARACTER_DEFENSE_FACTORY_SEED),
+            );
+        }
+        let actor = self.combat_actors.get(slot).copied()?;
+        combat_class_stats(actor.owner_target_class).map(|stats| stats.defense)
+    }
+
+    /// `combat.md §12`: "**When that rating is non-zero the roller
+    /// subtracts an inclusive `1..rating` draw; when it is zero it takes
+    /// no draw at all and subtracts nothing.**" The skip "is part of PRNG
+    /// parity, not an optimisation - most low-tier classes, Bat included,
+    /// have defense `0`", so the draw is taken here, after the rating is
+    /// known, rather than pre-rolled with the rest of the attack inputs.
+    pub fn combat_defence_roll(&mut self, defence_rating: u8) -> u8 {
+        if combat_defence_draw_taken(defence_rating) {
+            self.random_mod_u8(defence_rating)
+        } else {
+            0
+        }
     }
 
     pub fn combat_target_weight_gate_accepts(&mut self, target_slot: usize) -> bool {
@@ -2682,18 +2731,14 @@ impl PlayState {
                             self.resolve_and_apply_combat_monster_scattered_attack(
                                 actor_slot,
                                 target_slot,
-                                inputs.party_defender_rating,
-                                inputs.hit_roll,
-                                inputs.damage_roll,
+                                inputs.hit_raw_roll_0_to_60,
                                 inputs.amulet_turning_scatter_roll,
                             )
                         } else {
                             self.resolve_and_apply_combat_monster_attack(
                                 actor_slot,
                                 target_slot,
-                                inputs.party_defender_rating,
-                                inputs.hit_roll,
-                                inputs.damage_roll,
+                                inputs.hit_raw_roll_0_to_60,
                                 inputs.poison_gate_accepts,
                                 inputs.poison_damage_roll,
                                 inputs.forced_hit,
@@ -4515,22 +4560,29 @@ impl PlayState {
         target_slot: usize,
         attacker_rating: u8,
         defender_rating: u8,
-        hit_roll: u8,
+        hit_raw_roll_0_to_60: u8,
         damage_roll: u8,
         forced_hit: Option<bool>,
         magical: bool,
     ) -> Option<CombatWeaponAttackApplication> {
         let attacker = *self.combat_actors.get(attacker_slot)?;
         let target = *self.combat_actors.get(target_slot)?;
-        let resolution = resolve_combat_equipment_weapon_attack(
+        let defence_rating = self.combat_actor_defence_rating(target_slot)?;
+        let mut input = combat_equipment_weapon_attack_input(
             item_id,
             attacker.range_to(target),
             attacker_rating,
             defender_rating,
-            hit_roll,
+            defence_rating,
+            hit_raw_roll_0_to_60,
             damage_roll,
+            0,
             forced_hit,
         )?;
+        if combat_weapon_attack_takes_defence_draw(input) {
+            input.defence_roll = self.combat_defence_roll(defence_rating);
+        }
+        let resolution = resolve_combat_weapon_attack(input);
         let damage_application = match resolution {
             CombatWeaponAttackResolution::Hit { raw_damage, .. } => self
                 .apply_combat_weapon_damage_to_target(
@@ -4539,10 +4591,21 @@ impl PlayState {
                     raw_damage,
                     magical,
                 ),
+            // `combat.md §12`: "A magic value (decimal 99) is treated as
+            // **instant kill** - bypass HP, force the death path". The
+            // roller "short-circuits the whole roller and returns
+            // immediately - **before the defender's defence byte is
+            // read**", so the sentinel reaches the damage endpoint whole.
+            CombatWeaponAttackResolution::Special { .. } => self
+                .apply_combat_weapon_damage_to_target(
+                    Some(attacker_slot),
+                    target_slot,
+                    COMBAT_INSTANT_KILL_DAMAGE,
+                    magical,
+                ),
             CombatWeaponAttackResolution::OutOfRange { .. }
             | CombatWeaponAttackResolution::NoOrdinaryDamage { .. }
-            | CombatWeaponAttackResolution::Miss { .. }
-            | CombatWeaponAttackResolution::Special { .. } => None,
+            | CombatWeaponAttackResolution::Miss { .. } => None,
         };
 
         Some(CombatWeaponAttackApplication {
@@ -4556,9 +4619,7 @@ impl PlayState {
         &mut self,
         attacker_slot: usize,
         target_slot: usize,
-        party_defender_rating: u8,
-        hit_roll: u8,
-        damage_roll: u8,
+        hit_raw_roll_0_to_60: u8,
         poison_gate_accepts: bool,
         poison_damage_roll: u8,
         forced_hit: Option<bool>,
@@ -4583,11 +4644,24 @@ impl PlayState {
         if target_range == 1 && !attacker.is_controlled() {
             self.combat_interference_sources[target_slot] = attacker_slot as u8;
         }
-        let defender_rating = if target_slot < COMBAT_PARTY_ACTOR_SLOTS {
-            party_defender_rating
-        } else {
-            combat_class_stats(target.owner_target_class)?.defense
-        };
+        // `combat.md §11` selector, defender arm: "every ordinary melee and
+        // ranged/effect attack, party or monster | that actor's **combat
+        // weight**". `RETRACTIONS.md` R337 withdraws the class stat-row
+        // reading this used to carry - the defense byte "reaches the damage
+        // roller directly and never through the selector".
+        let defender_rating = self.combat_target_weight(target_slot)?;
+        // `combat.md §12` stage two: "class defense byte for a monster and
+        // the cached character combat-defense byte for a party member".
+        // Both sides of the arena read the one helper, so the party term
+        // is the loaded per-record `+0x18` byte rather than a constant.
+        let defence_rating = self.combat_actor_defence_rating(target_slot)?;
+        // `combat.md §11` selector, attacker arm: the class combat tier for
+        // the six `zero-selector stat row` classes, and the actor's own
+        // combat weight for the other forty-two.
+        let attacker_rating = combat_monster_attacker_rating(
+            attacker.owner_target_class,
+            self.combat_target_weight(attacker_slot)?,
+        )?;
 
         // `combat.md §6.1a` "Readers — the attack driver": a controlled actor's
         // attack is a fixed magic strike resolved by the shared
@@ -4604,17 +4678,25 @@ impl PlayState {
             if target_range != 1 {
                 return None;
             }
-            let resolution = resolve_combat_weapon_attack(
-                attacker_stats.attack_cap,
+            let mut input = CombatWeaponAttackInput {
+                source: CombatAttackerDamageSource::MonsterFlat {
+                    attack_value: attacker_stats.attack_value,
+                },
                 target_range,
-                1,
-                0,
-                attacker_stats.attack_cap,
+                range_cap: 1,
+                effect_code: 0,
+                attacker_rating,
                 defender_rating,
-                hit_roll,
-                damage_roll,
+                defence_rating,
+                hit_raw_roll_0_to_60,
+                damage_roll: 0,
+                defence_roll: 0,
                 forced_hit,
-            );
+            };
+            if combat_weapon_attack_takes_defence_draw(input) {
+                input.defence_roll = self.combat_defence_roll(defence_rating);
+            }
+            let resolution = resolve_combat_weapon_attack(input);
             let damage_application = match resolution {
                 CombatWeaponAttackResolution::Hit { raw_damage, .. } => {
                     self.apply_combat_weapon_damage_to_target(None, target_slot, raw_damage, true)
@@ -4689,21 +4771,31 @@ impl PlayState {
             }
         }
 
-        let resolution = resolve_combat_weapon_attack(
-            attacker_stats.attack_cap,
+        let mut input = CombatWeaponAttackInput {
+            source: CombatAttackerDamageSource::MonsterFlat {
+                attack_value: attacker_stats.attack_value,
+            },
             target_range,
-            ranged.range_effect_selector,
-            ranged.payload,
-            attacker_stats.attack_cap,
+            range_cap: ranged.range_effect_selector,
+            effect_code: ranged.payload,
+            attacker_rating,
             defender_rating,
-            hit_roll,
-            damage_roll,
+            defence_rating,
+            hit_raw_roll_0_to_60,
+            damage_roll: 0,
+            defence_roll: 0,
             forced_hit,
-        );
+        };
+        if combat_weapon_attack_takes_defence_draw(input) {
+            input.defence_roll = self.combat_defence_roll(defence_rating);
+        }
+        let resolution = resolve_combat_weapon_attack(input);
         let damage_application = match resolution {
             CombatWeaponAttackResolution::Hit { raw_damage, .. } => {
                 self.apply_combat_weapon_damage_to_target(None, target_slot, raw_damage, false)
             }
+            // The monster arm never reaches the instant-kill sentinel: its
+            // raw value is the class attack byte used flat.
             CombatWeaponAttackResolution::OutOfRange { .. }
             | CombatWeaponAttackResolution::NoOrdinaryDamage { .. }
             | CombatWeaponAttackResolution::Miss { .. }
@@ -4769,9 +4861,7 @@ impl PlayState {
         &mut self,
         attacker_slot: usize,
         intended_target_slot: usize,
-        party_defender_rating: u8,
-        hit_roll: u8,
-        damage_roll: u8,
+        hit_raw_roll_0_to_60: u8,
         scatter_roll: u8,
     ) -> Option<CombatMonsterAttackApplication> {
         if attacker_slot < COMBAT_PARTY_ACTOR_SLOTS || attacker_slot >= COMBAT_ACTOR_SLOTS {
@@ -4824,27 +4914,38 @@ impl PlayState {
                 damage_application: None,
             });
         };
-        let defender_rating = if target_slot < COMBAT_PARTY_ACTOR_SLOTS {
-            party_defender_rating
-        } else {
-            combat_class_stats(self.combat_actors[target_slot].owner_target_class)?.defense
-        };
+        let defender_rating = self.combat_target_weight(target_slot)?;
+        let defence_rating = self.combat_actor_defence_rating(target_slot)?;
+        let attacker_rating = combat_monster_attacker_rating(
+            attacker.owner_target_class,
+            self.combat_target_weight(attacker_slot)?,
+        )?;
         let impact_range = combat_arena_range(attacker.x, attacker.y, impact_x, impact_y).max(2);
-        let resolution = resolve_combat_weapon_attack(
-            attacker_stats.attack_cap,
-            impact_range,
-            ranged.range_effect_selector,
-            ranged.payload,
-            attacker_stats.attack_cap,
+        let mut input = CombatWeaponAttackInput {
+            source: CombatAttackerDamageSource::MonsterFlat {
+                attack_value: attacker_stats.attack_value,
+            },
+            target_range: impact_range,
+            range_cap: ranged.range_effect_selector,
+            effect_code: ranged.payload,
+            attacker_rating,
             defender_rating,
-            hit_roll,
-            damage_roll,
-            Some(true),
-        );
+            defence_rating,
+            hit_raw_roll_0_to_60,
+            damage_roll: 0,
+            defence_roll: 0,
+            forced_hit: Some(true),
+        };
+        if combat_weapon_attack_takes_defence_draw(input) {
+            input.defence_roll = self.combat_defence_roll(defence_rating);
+        }
+        let resolution = resolve_combat_weapon_attack(input);
         let damage_application = match resolution {
             CombatWeaponAttackResolution::Hit { raw_damage, .. } => {
                 self.apply_combat_weapon_damage_to_target(None, target_slot, raw_damage, false)
             }
+            // The monster arm never reaches the instant-kill sentinel: its
+            // raw value is the class attack byte used flat.
             CombatWeaponAttackResolution::OutOfRange { .. }
             | CombatWeaponAttackResolution::NoOrdinaryDamage { .. }
             | CombatWeaponAttackResolution::Miss { .. }
@@ -4930,8 +5031,14 @@ impl PlayState {
     ) -> CombatPlayerWeaponAttackInputs {
         let _ = attacker_slot;
         CombatPlayerWeaponAttackInputs {
-            hit_roll: self.random_range_u8(0, u8::MAX),
-            damage_roll: self.random_range_u8(0, u8::MAX),
+            hit_raw_roll_0_to_60: self.random_range_u8(0, COMBAT_SKEWED_ROLL_RAW_MAX),
+            // `combat.md §12` stage one: "Values `0` and `1` pass through
+            // unchanged, and bare hands are a flat `1`", and the Glass
+            // Sword and Jeweled Sword overrides "run before the roll", so
+            // the draw cannot be taken here - it is taken at the attempt,
+            // once the readied item is known. Same reason the defence draw
+            // is lazy: "PRNG parity, not an optimisation".
+            damage_roll: None,
             forced_hit: None,
         }
     }
@@ -5259,35 +5366,144 @@ impl PlayState {
             } => *target_slot,
             _ => return None,
         };
-        let item_id = self
-            .party_equipment
-            .get(actor_slot)?
+        let roster_slot = self.combat_roster_slot_for_actor_slot(actor_slot)?;
+        // `combat.md §8.2`: the Attack walker scans "helm, weapon hand,
+        // shield hand" and each qualifying item "produces **one attack
+        // attempt**"; "A character with no qualifying item makes a single
+        // bare-handed attempt, which behaves as melee with range one."
+        //
+        // This engine's attack entry is one direction-keyed swing per
+        // command, so it can deliver at most one of §8.2's "zero to three
+        // attempts". Of the qualifying items it swings the weapon hand
+        // whenever that slot holds one and falls back to the published
+        // scan order otherwise, so a character readying a Spiked Helm
+        // (`Attack max` 4) beside a Halberd (30) still swings the halberd.
+        // The second and third attempts are an unimplemented part of
+        // §8.2, not a reading of it.
+        let equipment = self.party_equipment.get(roster_slot).copied()?;
+        let armaments = combat_armament_item_ids(&equipment);
+        let item_id = equipment
             .get(EQUIP_SLOT_WEAPON)
-            .copied()?;
-        if item_id == EQUIPMENT_EMPTY {
-            return None;
-        }
-        let attacker_rating = self
+            .copied()
+            .map(usize::from)
+            .filter(|item| armaments.contains(item))
+            .or_else(|| armaments.first().copied());
+        // `combat.md §11` selector, party attacker arm: Strength for the
+        // five strength-arm ids, otherwise the character's own combat
+        // weight - "the raw Dexterity byte copied at seating".
+        let strength = self
             .party_strengths
-            .get(actor_slot)
+            .get(roster_slot)
             .copied()
             .unwrap_or(AVATAR_STAT_MAX);
-        let defender_rating = if target_slot < COMBAT_PARTY_ACTOR_SLOTS {
-            7
-        } else {
-            combat_class_stats(self.combat_actors.get(target_slot)?.owner_target_class)?.defense
+        let attacker_rating =
+            combat_party_attacker_rating(item_id, strength, self.combat_target_weight(actor_slot)?);
+        // `combat.md §11`: the defender term is "that actor's **combat
+        // weight**" on either side of the arena.
+        let defender_rating = self.combat_target_weight(target_slot)?;
+        let Some(item_id) = item_id else {
+            return self.resolve_and_apply_combat_bare_handed_attack(
+                actor_slot,
+                target_slot,
+                attacker_rating,
+                defender_rating,
+                inputs.hit_raw_roll_0_to_60,
+                inputs.forced_hit,
+            );
+        };
+        // `combat.md §12` stage one: the party arm's inclusive
+        // `1..Attack max` draw, taken here rather than with the rest of
+        // the attack inputs so the rows that "pass through unchanged" and
+        // the two per-item overrides that "run before the roll" spend
+        // nothing.
+        let damage_roll = match inputs.damage_roll {
+            Some(roll) => roll,
+            None => {
+                let attacker = *self.combat_actors.get(actor_slot)?;
+                let target = *self.combat_actors.get(target_slot)?;
+                let defence_rating = self.combat_actor_defence_rating(target_slot)?;
+                let probe = combat_equipment_weapon_attack_input(
+                    item_id,
+                    attacker.range_to(target),
+                    attacker_rating,
+                    defender_rating,
+                    defence_rating,
+                    inputs.hit_raw_roll_0_to_60,
+                    0,
+                    0,
+                    inputs.forced_hit,
+                )?;
+                if combat_weapon_attack_takes_damage_draw(probe) {
+                    self.random_range_u8(0, u8::MAX)
+                } else {
+                    0
+                }
+            }
         };
         self.resolve_and_apply_combat_equipment_weapon_attack(
-            item_id as usize,
+            item_id,
             actor_slot,
             target_slot,
             attacker_rating,
             defender_rating,
-            inputs.hit_roll,
-            inputs.damage_roll,
+            inputs.hit_raw_roll_0_to_60,
+            damage_roll,
             inputs.forced_hit,
             false,
         )
+    }
+
+    /// `combat.md §8.2` bare-handed attempt: "melee with range one".
+    /// `§12` stage one: "bare hands are a flat `1`".
+    #[allow(clippy::too_many_arguments)]
+    pub fn resolve_and_apply_combat_bare_handed_attack(
+        &mut self,
+        attacker_slot: usize,
+        target_slot: usize,
+        attacker_rating: u8,
+        defender_rating: u8,
+        hit_raw_roll_0_to_60: u8,
+        forced_hit: Option<bool>,
+    ) -> Option<CombatWeaponAttackApplication> {
+        let attacker = *self.combat_actors.get(attacker_slot)?;
+        let target = *self.combat_actors.get(target_slot)?;
+        let defence_rating = self.combat_actor_defence_rating(target_slot)?;
+        let mut input = CombatWeaponAttackInput {
+            source: CombatAttackerDamageSource::PartyBareHands,
+            target_range: attacker.range_to(target),
+            range_cap: 0,
+            effect_code: 0,
+            attacker_rating,
+            defender_rating,
+            defence_rating,
+            hit_raw_roll_0_to_60,
+            damage_roll: 0,
+            defence_roll: 0,
+            forced_hit,
+        };
+        if combat_weapon_attack_takes_defence_draw(input) {
+            input.defence_roll = self.combat_defence_roll(defence_rating);
+        }
+        let resolution = resolve_combat_weapon_attack(input);
+        let damage_application = match resolution {
+            CombatWeaponAttackResolution::Hit { raw_damage, .. } => self
+                .apply_combat_weapon_damage_to_target(
+                    Some(attacker_slot),
+                    target_slot,
+                    raw_damage,
+                    false,
+                ),
+            // A bare-handed attempt is a flat `1`; it can never reach the
+            // sentinel.
+            CombatWeaponAttackResolution::OutOfRange { .. }
+            | CombatWeaponAttackResolution::NoOrdinaryDamage { .. }
+            | CombatWeaponAttackResolution::Miss { .. }
+            | CombatWeaponAttackResolution::Special { .. } => None,
+        };
+        Some(CombatWeaponAttackApplication {
+            resolution,
+            damage_application,
+        })
     }
 
     /// Apply one geometric arena-edge attempt. Acceptance releases only the
@@ -5707,8 +5923,14 @@ impl PlayState {
         // keystroke/command path and the other group to the automatic actor
         // driver, so a party-side actor carrying the controlled/charmed bit
         // takes its turn through the driver instead of the player's prompt.
-        // The earlier reading that any slot carrying the bit is sent to the
-        // player command parser is expressly withdrawn.
+        // The toggle therefore cuts both ways, and `RETRACTIONS.md` R354
+        // is explicit about the monster-side half: the bit "**does** hand a
+        // monster to the player's prompt ... a monster carrying the bit is
+        // dispatched to the keystroke/command path and takes its turns
+        // under player control". That is why an ordinary hostile's melee
+        // miss is silent while a controlled monster's prints `<target>
+        // missed!` - the two reach different narrators, not different
+        // strings.
         let action = if self.combat_target_group_for_slot(slot) == COMBAT_TARGET_GROUP_PARTY {
             CombatActorDispatchAction::PlayerReady
         } else if resolve_negate_time_dispatch_skipped(
@@ -6119,10 +6341,15 @@ impl PlayState {
         attacker_slot: usize,
     ) -> CombatMonsterAttackInputs {
         let _ = attacker_slot;
+        // `combat.md §12` stage one, monster row: "the class's **attack
+        // byte, used flat**, with **no random draw at all**", so no
+        // damage draw is taken here - `RETRACTIONS.md` R336.
+        // `combat.md §12` stage two reads the defender's own rating, so
+        // it is taken from the target record at resolution time rather
+        // than pre-drawn here: the AI's target is not chosen yet, and the
+        // rating is a record read, not a draw.
         CombatMonsterAttackInputs {
-            party_defender_rating: 7,
-            hit_roll: self.random_range_u8(0, u8::MAX),
-            damage_roll: self.random_range_u8(0, u8::MAX),
+            hit_raw_roll_0_to_60: self.random_range_u8(0, COMBAT_SKEWED_ROLL_RAW_MAX),
             poison_gate_accepts: self.random_mod_u8(2) == 0,
             poison_damage_roll: self.random_mod_u8(20),
             forced_hit: None,

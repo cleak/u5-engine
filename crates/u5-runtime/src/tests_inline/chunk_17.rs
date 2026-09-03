@@ -3216,7 +3216,13 @@ Mixed 1 IL charge; stock is 1.");
         );
         assert_eq!(
             state.message,
-            "Cause Fear affected 2 combat actor(s).\nDaemon missed!\n\nAvatar, armed with bare hands:"
+            // The Daemon's reply re-baselines with the shared stream:
+            // `RETRACTIONS.md` R334 flips which side the score
+            // favours, R335 narrows the to-hit draw to the skewed
+            // roll's `0..=60` raw draw, and R336 makes the monster's
+            // attack value flat, so a Daemon that used to miss now
+            // lands on this seed.
+            "Cause Fear affected 2 combat actor(s).\nAvatar hit!\n\nAvatar, armed with bare hands:"
         );
     }
 

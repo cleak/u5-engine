@@ -42,7 +42,12 @@ pub struct CombatClassStats {
     pub speed_seed: u8,
     pub endurance: u8,
     pub defense: u8,
-    pub attack_cap: u8,
+    /// `combat.md §13` (R336): the class stat row's byte `+4`, renamed
+    /// from `Attack cap`. "A monster's attack value is that class byte
+    /// used flat, with no random draw at all" - `RETRACTIONS.md` R336.
+    /// Only the *party* side of the damage roller randomizes, and it
+    /// does so from the readied item's `Attack max`.
+    pub attack_value: u8,
     pub max_hp: u8,
     pub default_spawn_count: u8,
     pub default_drop_cap: u8,
@@ -70,7 +75,7 @@ impl CombatClassStats {
             self.speed_seed,
             self.endurance,
             self.defense,
-            self.attack_cap,
+            self.attack_value,
             self.max_hp,
             self.default_spawn_count,
             self.default_drop_cap,
@@ -100,7 +105,13 @@ pub struct CombatClassTraits {
     pub splits: bool,
     pub physical_half: bool,
     pub physical_immune: bool,
-    pub team_override: bool,
+    /// `combat.md §11` / `§13`: the per-class flag the shared actor-rating
+    /// selector tests. "monster whose class carries the `zero-selector stat
+    /// row` trait | the class **combat tier**" - the six classes carrying it
+    /// in the analyzed v1 data are Mimic, Reaper, Gargoyle, Orc, Ettin and
+    /// Headless; every other class feeds its combat weight into the attacker
+    /// term. Renamed from `team_override` by `RETRACTIONS.md` R337.
+    pub zero_selector_stat_row: bool,
     pub vanish_branch: bool,
     /// `combat.md §6.3` "Death-marker tile bytes": the class-flag
     /// word's low bit, "call it the *incorporeal* bit". `§12`
@@ -127,7 +138,7 @@ macro_rules! stats {
             speed_seed: $speed,
             endurance: $hp_cmp,
             defense: $defense,
-            attack_cap: $attack,
+            attack_value: $attack,
             max_hp: $hp,
             default_spawn_count: $spawn,
             default_drop_cap: $drop,
@@ -178,7 +189,7 @@ impl CombatClassTraits {
             splits: false,
             physical_half: false,
             physical_immune: false,
-            team_override: false,
+            zero_selector_stat_row: false,
             vanish_branch: false,
             incorporeal: false,
             special_death: false,
@@ -292,8 +303,13 @@ pub fn combat_class_traits(class: u8) -> Option<CombatClassTraits> {
         23 => Some(traits!(23, "Ghost", physical_half, incorporeal, blink)),
         24 => Some(traits!(24, "Slime", splits, incorporeal)),
         25 => Some(traits!(25, "Gremlin")),
-        26 => Some(traits!(26, "Mimic", team_override)),
-        27 => Some(traits!(27, "Reaper", team_override, turnable_attack)),
+        26 => Some(traits!(26, "Mimic", zero_selector_stat_row)),
+        27 => Some(traits!(
+            27,
+            "Reaper",
+            zero_selector_stat_row,
+            turnable_attack
+        )),
         28 => Some(traits!(
             28,
             "Gazer",
@@ -306,15 +322,15 @@ pub fn combat_class_traits(class: u8) -> Option<CombatClassTraits> {
             30,
             "Gargoyle",
             splits,
-            team_override,
+            zero_selector_stat_row,
             special_death
         )),
         31 => Some(traits!(31, "Insect Swarm", incorporeal)),
-        32 => Some(traits!(32, "Orc", team_override)),
+        32 => Some(traits!(32, "Orc", zero_selector_stat_row)),
         33 => Some(traits!(33, "Skeleton", physical_half)),
         34 => Some(traits!(34, "Python", poison_status_attack)),
-        35 => Some(traits!(35, "Ettin", team_override)),
-        36 => Some(traits!(36, "Headless", team_override)),
+        35 => Some(traits!(35, "Ettin", zero_selector_stat_row)),
+        36 => Some(traits!(36, "Headless", zero_selector_stat_row)),
         37 => Some(traits!(37, "Wisp", incorporeal, possess, teleport_capable)),
         38 => Some(traits!(
             38,

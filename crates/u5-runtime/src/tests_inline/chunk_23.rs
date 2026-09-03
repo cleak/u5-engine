@@ -3865,17 +3865,156 @@ fn combat_actor_range_uses_truncated_euclidean_arena_distance() {
 }
 
 #[test]
-fn combat_hit_roll_uses_strict_public_score_comparison() {
-    assert_eq!(combat_to_hit_score(30, 10), 25);
-    assert!(resolve_combat_hit(30, 10, 24));
-    assert!(!resolve_combat_hit(30, 10, 25));
+fn combat_hit_score_adds_the_defender_rating_and_subtracts_the_attacker() {
+    // `combat.md` Section 11 "The score": "With `A` the attacker's rating
+    // and `D` the defender's rating, `S = truncate_toward_zero((D - A +
+    // 30) / 2)`. **The defender's rating is the added term and the
+    // attacker's is the subtracted one**."
+    //
+    // `RETRACTIONS.md` R334 withdraws the `(attacker - defender + 30) / 2`
+    // this test used to pin: "The operands are the other way round", and
+    // with R232's `roll >= score` the old text "inverts who is favoured on
+    // **every** ordinary melee and ranged/effect attack in both
+    // directions". The old assertions here (`combat_to_hit_score(30, 10)
+    // == 25`, a hit on a roll strictly below the score) are removed under
+    // that retraction.
+    assert_eq!(COMBAT_TO_HIT_BIAS, 30);
+    assert_eq!(combat_to_hit_score(30, 10), 5);
+    assert_eq!(combat_to_hit_score(10, 30), 25);
+    // Signed and unclamped, truncating toward zero.
+    assert_eq!(combat_to_hit_score(99, 0), -34);
+    assert_eq!(combat_to_hit_score(0, 255), 142);
+    assert_eq!(combat_to_hit_score(0, 1), 15);
+    assert_eq!(combat_to_hit_score(1, 0), 14);
 
-    assert_eq!(combat_to_hit_score(0, 99), -34);
-    assert!(!resolve_combat_hit(0, 99, 0));
+    // "**The hit is accepted when `R >= S`.** The score is a difficulty
+    // number: a larger score is a *worse* chance to hit."
+    assert!(resolve_combat_hit(10, 30, 25));
+    assert!(!resolve_combat_hit(10, 30, 24));
 
-    assert_eq!(combat_to_hit_score(255, 0), 142);
-    assert!(resolve_combat_hit(255, 0, 141));
-    assert!(!resolve_combat_hit(255, 0, 142));
+    // "a score of `1` or less always hits, and a score of `31` or more
+    // always misses" - the draw never leaves `1..=30`.
+    for raw in 0..=COMBAT_SKEWED_ROLL_RAW_MAX {
+        assert!(resolve_combat_hit_from_raw_roll(58, 30, raw));
+        assert!(!resolve_combat_hit_from_raw_roll(0, 32, raw));
+    }
+}
+
+#[test]
+fn combat_hit_helper_reproduces_the_published_per_score_hit_table() {
+    // `combat.md` Section 11: "For `2 <= S <= 30` the **idealised** chance
+    // to hit is `(2 * (30 - S) + 1) / 61`", tabulated for scores 2, 5, 7,
+    // 8, 9, 12, 15, 20, 22, 25 and 30. Counting the sixty-one underlying
+    // `0..=60` values reproduces the table exactly, which is the check
+    // that the shared skewed helper - not a uniform `1..30` draw and not a
+    // `0..255` byte - is the one wired into the score.
+    let published: [(i16, f64); 11] = [
+        (2, 0.934),
+        (5, 0.836),
+        (7, 0.770),
+        (8, 0.738),
+        (9, 0.705),
+        (12, 0.607),
+        (15, 0.508),
+        (20, 0.344),
+        (22, 0.279),
+        (25, 0.180),
+        (30, 0.016),
+    ];
+    for (score, expected) in published {
+        // Any rating pair with this score; the helper reads only `D - A`.
+        let defender = u8::try_from(score * 2 - 30 + 30).unwrap();
+        assert_eq!(combat_to_hit_score(30, defender), score);
+        let hits = (0..=COMBAT_SKEWED_ROLL_RAW_MAX)
+            .filter(|raw| resolve_combat_hit_from_raw_roll(30, defender, *raw))
+            .count();
+        let realised = hits as f64 / 61.0;
+        assert!(
+            (realised - expected).abs() < 0.001,
+            "score {score}: helper gives {realised:.3}, spec table {expected:.3}"
+        );
+        assert_eq!(
+            hits as f64,
+            f64::from(2 * (30 - i32::from(score as i16)) + 1),
+            "score {score} must match `(2 * (30 - S) + 1) / 61`"
+        );
+    }
+}
+
+#[test]
+fn combat_rating_selector_returns_the_published_arm_per_side() {
+    // `combat.md` Section 11 "Which rating each side supplies": the
+    // defender term is always the actor's combat weight; the attacker term
+    // is the class combat tier for the six `zero-selector stat row`
+    // classes, its own combat weight for any other monster, Strength for
+    // the five strength-arm items, and the character's combat weight
+    // otherwise. `RETRACTIONS.md` R337: "The selector has **four**
+    // class-side arms, not two, and an ordinary melee or ranged/effect
+    // to-hit reads **neither** of these bytes for forty-two of the
+    // forty-eight classes."
+    assert_eq!(
+        COMBAT_TO_HIT_STRENGTH_ARM_ITEM_IDS,
+        [3, 6, 18, 24, 31],
+        "Spiked Helm, Spiked Shield, Club, Mace, 2H Hammer"
+    );
+    for (id, name) in [
+        (3usize, "Spiked Helm"),
+        (6, "Spiked Shield"),
+        (18, "Club"),
+        (24, "Mace"),
+        (31, "2H Hammer"),
+    ] {
+        assert_eq!(EQUIPMENT_NAMES[id], name);
+        assert!(combat_to_hit_item_selects_strength(id));
+        assert_eq!(combat_party_attacker_rating(Some(id), 15, 20), 15);
+    }
+    // "Every other readied item, and bare hands, leaves the attacker term
+    // as Dexterity" - the shipped starting weapon included.
+    assert!(!combat_to_hit_item_selects_strength(30));
+    assert_eq!(combat_party_attacker_rating(Some(30), 15, 20), 20);
+    assert_eq!(combat_party_attacker_rating(None, 15, 20), 20);
+
+    // The six zero-selector-stat-row classes supply the class tier.
+    for class in [26u8, 27, 30, 32, 35, 36] {
+        let stats = combat_class_stats(class).unwrap();
+        assert!(combat_class_traits(class).unwrap().zero_selector_stat_row);
+        assert_eq!(
+            combat_monster_attacker_rating(class, 29),
+            Some(stats.tier),
+            "{} takes the class tier arm",
+            stats.name
+        );
+    }
+    // Every other class, "Bat included, feeds its combat weight into the
+    // attacker term".
+    let zero_selector = (0..=47u8)
+        .filter(|class| {
+            combat_class_traits(*class).is_some_and(|traits| traits.zero_selector_stat_row)
+        })
+        .count();
+    assert_eq!(zero_selector, 6);
+    assert_eq!(combat_monster_attacker_rating(21, 29), Some(29));
+    assert_ne!(combat_class_stats(21).unwrap().tier, 29);
+}
+
+#[test]
+fn automatic_driver_party_attacker_score_collapses_to_fifteen() {
+    // `combat.md` Section 11 "Boundary: an automatic-driver party attacker
+    // has a fixed score of 15": the stale selector value "is precisely the
+    // defender rating it returned a moment earlier. The score therefore
+    // collapses to `(D - D + 30) / 2 = 15`", "about **50.8 %** of the time
+    // whatever either combatant's stats are".
+    assert_eq!(COMBAT_AUTOMATIC_DRIVER_PARTY_ATTACKER_SCORE, 15);
+    for rating in 0..=255u8 {
+        assert_eq!(
+            combat_to_hit_score(rating, rating),
+            COMBAT_AUTOMATIC_DRIVER_PARTY_ATTACKER_SCORE
+        );
+    }
+    let hits = (0..=COMBAT_SKEWED_ROLL_RAW_MAX)
+        .filter(|raw| resolve_combat_hit_from_raw_roll(15, 15, *raw))
+        .count();
+    assert!((hits as f64 / 61.0 - 0.508).abs() < 0.001);
 }
 
 #[test]
@@ -4486,29 +4625,42 @@ fn weapon_attack_resolver_applies_melee_and_ranged_range_gates() {
     assert_eq!(resolve_combat_weapon_attack_range_route(5, 4, 7), None);
     assert_eq!(resolve_combat_weapon_attack_range_route(2, 0, 7), None);
 
+    // A Club (id 18) against a defence-zero target: score
+    // `(10 - 30 + 30) / 2 = 5`, and a raw draw of 60 is the top of the
+    // skewed band, so the swing lands. `combat.md` Section 12: the
+    // defence rating of zero means "no draw at all and subtracts nothing".
     assert_eq!(
-        resolve_combat_equipment_weapon_attack(18, 1, 30, 10, 24, 7, None),
+        resolve_combat_equipment_weapon_attack(18, 1, 30, 10, 0, 60, 7, 0, None),
         Some(CombatWeaponAttackResolution::Hit {
             route: CombatWeaponAttackRangeRoute::Melee,
             raw_damage: 8,
         })
     );
+    // The same swing against a defence rating of 7 subtracts an inclusive
+    // `1..7` draw: roll byte 3 gives 4, so 8 - 4 = 4.
     assert_eq!(
-        resolve_combat_equipment_weapon_attack(17, 4, 30, 10, 24, 5, None),
+        resolve_combat_equipment_weapon_attack(18, 1, 30, 10, 7, 60, 7, 3, None),
+        Some(CombatWeaponAttackResolution::Hit {
+            route: CombatWeaponAttackRangeRoute::Melee,
+            raw_damage: 4,
+        })
+    );
+    assert_eq!(
+        resolve_combat_equipment_weapon_attack(17, 4, 30, 10, 0, 60, 5, 0, None),
         Some(CombatWeaponAttackResolution::Hit {
             route: CombatWeaponAttackRangeRoute::Ranged { effect_code: 7 },
             raw_damage: 6,
         })
     );
     assert_eq!(
-        resolve_combat_equipment_weapon_attack(17, 5, 30, 10, 24, 5, None),
+        resolve_combat_equipment_weapon_attack(17, 5, 30, 10, 0, 60, 5, 0, None),
         Some(CombatWeaponAttackResolution::OutOfRange {
             target_range: 5,
             range_cap: 4,
         })
     );
     assert_eq!(
-        resolve_combat_equipment_weapon_attack(18, 2, 30, 10, 24, 7, None),
+        resolve_combat_equipment_weapon_attack(18, 2, 30, 10, 0, 60, 7, 0, None),
         Some(CombatWeaponAttackResolution::OutOfRange {
             target_range: 2,
             range_cap: 0,
@@ -4516,45 +4668,234 @@ fn weapon_attack_resolver_applies_melee_and_ranged_range_gates() {
     );
 }
 
+/// `combat.md` Section 12 "The ordinary attack damage roll": two stages,
+/// and "the two sides are not symmetric".
+#[test]
+fn ordinary_damage_roller_uses_a_flat_monster_value_and_a_rolled_party_value() {
+    // "Monster | the class's **attack byte, used flat**, with **no random
+    // draw at all**" - `RETRACTIONS.md` R336: "A Bat brings exactly 6
+    // every time. An engine that rolls `1..attack` for monsters delivers
+    // about 39 % of the original's damage."
+    let bat = combat_class_stats(21).unwrap();
+    assert_eq!(bat.attack_value, 6);
+    for roll in 0..=255u8 {
+        assert_eq!(
+            resolve_combat_attacker_raw_damage(
+                CombatAttackerDamageSource::MonsterFlat {
+                    attack_value: bat.attack_value,
+                },
+                roll,
+            ),
+            Some(CombatAttackerRawDamage {
+                route: CombatWeaponDamageRoute::Damage { raw_damage: 6 },
+                shattered: false,
+            })
+        );
+    }
+
+    // "bare hands are a flat `1`".
+    assert_eq!(
+        resolve_combat_attacker_raw_damage(CombatAttackerDamageSource::PartyBareHands, 200),
+        Some(CombatAttackerRawDamage {
+            route: CombatWeaponDamageRoute::Damage { raw_damage: 1 },
+            shattered: false,
+        })
+    );
+
+    // The party arm keeps the `1..Attack max` roll the item catalog
+    // publishes.
+    assert_eq!(equipment_attack_max(30), Some(15));
+    assert_eq!(
+        resolve_combat_attacker_raw_damage(
+            CombatAttackerDamageSource::PartyItem { item_id: 30 },
+            10,
+        ),
+        Some(CombatAttackerRawDamage {
+            route: CombatWeaponDamageRoute::Damage { raw_damage: 11 },
+            shattered: false,
+        })
+    );
+
+    // "The **Glass Sword** id narrates `Thy sword hath shattered!` and
+    // substitutes the instant-kill sentinel `99`; the **Jeweled Sword** id
+    // forces the raw value to `0` whatever its table entry says."
+    assert_eq!(
+        resolve_combat_attacker_raw_damage(
+            CombatAttackerDamageSource::PartyItem {
+                item_id: EQUIPMENT_GLASS_SWORD,
+            },
+            0,
+        ),
+        Some(CombatAttackerRawDamage {
+            route: CombatWeaponDamageRoute::Special,
+            shattered: true,
+        })
+    );
+    // The Jeweled Sword override is a raw *value* of zero, not a
+    // zero-damage dispatcher row: only the sentinel "short-circuits the
+    // whole roller and returns immediately - **before the defender's
+    // defence byte is read**". `catalogs/item-list.md` Section 5.1: "Id 40
+    // carries `1`, which the same roller overrides to `0` before any
+    // roll", so the dispatcher never sees a zero row for it and stage two
+    // still runs.
+    assert_eq!(equipment_attack_max(EQUIPMENT_JEWELED_SWORD), Some(1));
+    for roll in [0u8, 7, 200, 255] {
+        assert_eq!(
+            resolve_combat_attacker_raw_damage(
+                CombatAttackerDamageSource::PartyItem {
+                    item_id: EQUIPMENT_JEWELED_SWORD,
+                },
+                roll,
+            ),
+            Some(CombatAttackerRawDamage {
+                route: CombatWeaponDamageRoute::Damage { raw_damage: 0 },
+                shattered: false,
+            }),
+            "the override runs before the roll, so no draw changes it"
+        );
+    }
+}
+
+#[test]
+fn defence_subtraction_rolls_one_to_rating_and_skips_a_zero_rating() {
+    // `combat.md` Section 12 stage two: "**When that rating is non-zero
+    // the roller subtracts an inclusive `1..rating` draw; when it is zero
+    // it takes no draw at all and subtracts nothing.**"
+    assert!(!combat_defence_draw_taken(0));
+    assert_eq!(combat_defence_subtraction(0, 200), 0);
+    assert!(combat_defence_draw_taken(7));
+    let mut seen = [false; 8];
+    for roll in 0..=255u8 {
+        let subtracted = combat_defence_subtraction(7, roll);
+        assert!((1..=7).contains(&subtracted));
+        seen[subtracted as usize] = true;
+    }
+    assert!(seen[1..=7].iter().all(|hit| *hit));
+
+    // "a flat subtraction of the rating instead of a roll is not a
+    // near-miss but a different game (against the shipped party defence of
+    // 7 it makes every Bat swing land for `6 - 7`, i.e. exactly zero HP,
+    // forever)" - the seven outcomes of the published Bat table.
+    let bat_attack = i16::from(combat_class_stats(21).unwrap().attack_value);
+    let lost: Vec<i16> = (0..7)
+        .map(|roll| {
+            resolve_combat_damage_after_defence(bat_attack, CHARACTER_DEFENSE_FACTORY_SEED, roll)
+        })
+        .collect();
+    assert_eq!(lost, vec![5, 4, 3, 2, 1, 0, -1]);
+}
+
 #[test]
 fn weapon_attack_resolver_tracks_miss_forced_hit_and_non_damage_routes() {
+    let melee = |attack_value: u8, hit_raw_roll_0_to_60: u8, forced_hit| {
+        resolve_combat_weapon_attack(CombatWeaponAttackInput {
+            source: CombatAttackerDamageSource::MonsterFlat { attack_value },
+            target_range: 1,
+            range_cap: 0,
+            effect_code: 0,
+            attacker_rating: 10,
+            defender_rating: 30,
+            defence_rating: 0,
+            hit_raw_roll_0_to_60,
+            damage_roll: 0,
+            defence_roll: 0,
+            forced_hit,
+        })
+    };
+    // Score `(30 - 10 + 30) / 2 = 25`; the skewed roll of a raw 48 is 24,
+    // one short of the score, so the swing misses.
     assert_eq!(
-        resolve_combat_weapon_attack(6, 1, 0, 0, 30, 10, 25, 5, None),
+        melee(6, 48, None),
         CombatWeaponAttackResolution::Miss {
             route: CombatWeaponAttackRangeRoute::Melee,
             hit_score: 25,
         }
     );
     assert_eq!(
-        resolve_combat_weapon_attack(6, 1, 0, 0, 30, 10, 25, 5, Some(true)),
+        melee(6, 48, Some(true)),
         CombatWeaponAttackResolution::Hit {
             route: CombatWeaponAttackRangeRoute::Melee,
             raw_damage: 6,
         }
     );
     assert_eq!(
-        resolve_combat_weapon_attack(6, 1, 0, 0, 30, 10, 0, 5, Some(false)),
+        melee(6, 60, Some(false)),
         CombatWeaponAttackResolution::Miss {
             route: CombatWeaponAttackRangeRoute::Melee,
             hit_score: 25,
         }
     );
     assert_eq!(
-        resolve_combat_weapon_attack(0, 1, 0, 0, 30, 10, 0, 5, None),
+        melee(0, 60, None),
         CombatWeaponAttackResolution::NoOrdinaryDamage {
             route: CombatWeaponAttackRangeRoute::Melee,
         }
     );
+    // `combat.md` Section 12: the monster row uses its class attack byte
+    // flat and still takes stage two's defence subtraction, so a class byte
+    // that happens to read 99 is a very large ordinary blow. The
+    // instant-kill sentinel belongs to the party arm's per-item overrides.
     assert_eq!(
-        resolve_combat_weapon_attack(99, 1, 0, 0, 30, 10, 0, 5, None),
-        CombatWeaponAttackResolution::Special {
+        melee(99, 60, None),
+        CombatWeaponAttackResolution::Hit {
             route: CombatWeaponAttackRangeRoute::Melee,
+            raw_damage: 99,
         }
     );
     assert_eq!(
-        resolve_combat_equipment_weapon_attack(EQUIPMENT_COUNT, 1, 30, 10, 0, 5, None),
+        resolve_combat_equipment_weapon_attack(EQUIPMENT_COUNT, 1, 30, 10, 0, 0, 5, 0, None),
         None
     );
+    // `combat.md` Section 11 "Always-hit cases ... the always-hit set is
+    // three readied equipment ids - **Sword of Chaos, Glass Sword and
+    // Jeweled Sword**", which `catalogs/item-list.md` Section 5.1 says
+    // "skips the to-hit score entirely". For ids 35 and 39 that outcome is
+    // delivered by stage one rather than by the flag - both "carry the
+    // instant-kill sentinel `99`", so they leave on the `Special` route
+    // before the score is computed. Id 40's override forces a raw *value*
+    // of `0` and still enters the roller, so there the flag is what
+    // carries the attempt past the score. Both cases are shown against the
+    // hopeless rating pair below (score 142, "a score of `31` or more
+    // always misses").
+    assert_eq!(
+        resolve_combat_equipment_weapon_attack(
+            EQUIPMENT_GLASS_SWORD,
+            1,
+            0,
+            255,
+            0,
+            0,
+            0,
+            0,
+            None,
+        ),
+        Some(CombatWeaponAttackResolution::Special {
+            route: CombatWeaponAttackRangeRoute::Melee,
+            shattered: true,
+        })
+    );
+    assert_eq!(
+        resolve_combat_equipment_weapon_attack(
+            EQUIPMENT_JEWELED_SWORD,
+            1,
+            0,
+            255,
+            0,
+            0,
+            0,
+            0,
+            None,
+        ),
+        Some(CombatWeaponAttackResolution::Hit {
+            route: CombatWeaponAttackRangeRoute::Melee,
+            raw_damage: 0,
+        }),
+        "the flag carries the forced-zero raw value past an impossible score"
+    );
+    assert!(EQUIPMENT_ALWAYS_HIT_ITEM_IDS
+        .into_iter()
+        .all(equipment_attack_is_always_hit));
+    assert!(!equipment_attack_is_always_hit(30));
 }
 
 #[test]
@@ -8962,6 +9303,11 @@ fn combat_ai_target_picker_allows_status_disabled_targets() {
 
 fn combat_ai_turn_state(monster_x: u8, monster_y: u8) -> PlayState {
     let mut state = world_state(open_world_grid(), 10, 20);
+    // `combat.md` Section 12 stage two reads the defender's own cached
+    // combat-defense byte, and "when it is zero it takes no draw at all".
+    // These fixtures pin PRNG streams, so they state a zero byte on the
+    // roster rather than letting the factory seed add a draw.
+    state.party_combat_defense = vec![0; state.party.len().max(1)];
     state.combat_active = true;
     // `combat.md` Section 5.3 step 8 runs the round-loop entry prologue - one
     // full world tick, whose draw count that table marks "variable and
@@ -9458,9 +9804,7 @@ fn combat_ai_turn_applies_monster_attack_when_attack_inputs_are_supplied() {
             true,
             &[1, 2, 3, 4],
             Some(CombatMonsterAttackInputs {
-                party_defender_rating: 0,
-                hit_roll: 0,
-                damage_roll: 0,
+                hit_raw_roll_0_to_60: 0,
                 forced_hit: Some(true),
                 ..CombatMonsterAttackInputs::default()
             }),
@@ -9514,7 +9858,6 @@ fn negate_magic_skips_enemy_special_hook_but_preserves_ordinary_melee() {
             true,
             &[1, 2, 3, 4],
             Some(CombatMonsterAttackInputs {
-                party_defender_rating: 0,
                 forced_hit: Some(true),
                 ..CombatMonsterAttackInputs::default()
             }),
@@ -9587,7 +9930,6 @@ fn crown_bypasses_enemy_teleport_arm_and_continues_ordinary_step() {
 #[test]
 fn negate_magic_silently_consumes_only_scene_resistant_ranged_effects() {
     let attack_inputs = CombatMonsterAttackInputs {
-        party_defender_rating: 0,
         forced_hit: Some(true),
         ..CombatMonsterAttackInputs::default()
     };
@@ -9881,17 +10223,11 @@ fn combat_round_walk_production_path_applies_amulet_turning_scatter() {
     assert_eq!(state.party[0].hp, 20);
 }
 
-#[test]
-fn combat_round_walk_amulet_turning_scatter_can_hit_adjacent_impact_actor() {
+fn combat_amulet_turning_scatter_state(seed: u16) -> PlayState {
     let mut state = combat_ai_turn_state(8, 5);
     state.combat_actors[8].owner_target_class = 28;
     state.combat_actors[8].phase_counter = 1;
-    // Seed re-chosen after `RETRACTIONS.md` R311 moved the shared stream:
-    // the random-cardinal fallback is drawn lazily instead of four codes up
-    // front, so an AI dispatch that never reaches the fallback no longer
-    // spends four draws. R308's prologue world tick is the presentation-only
-    // one and draws nothing, so it is not why this seed changed.
-    state.prng_state = 0x004e;
+    state.prng_state = seed;
     state.party[0].status = b'G';
     state.party[0].hp = 20;
     state.party[0].max_hp = 20;
@@ -9920,6 +10256,18 @@ fn combat_round_walk_amulet_turning_scatter_can_hit_adjacent_impact_actor() {
         4,
         4,
     ]);
+    state
+}
+
+#[test]
+fn combat_round_walk_amulet_turning_scatter_can_hit_adjacent_impact_actor() {
+    // Seed re-chosen after `RETRACTIONS.md` R334-R336 moved the shared
+    // stream again: the to-hit draw narrowed from a `0..255` byte to the
+    // skewed roll's inclusive `0..=60` raw draw, the monster-side damage
+    // draw disappeared (the class attack byte is used flat), and a
+    // conditional `1..rating` defence draw took its place. The scatter cell
+    // is picked from that stream, so the impact cell moved with it.
+    let mut state = combat_amulet_turning_scatter_state(AMULET_TURNING_SCATTER_SEED);
 
     let application = state.apply_combat_round_walk_from_slot(8, 30, false);
     let monster_attack = application
@@ -9939,16 +10287,44 @@ fn combat_round_walk_amulet_turning_scatter_can_hit_adjacent_impact_actor() {
         .expect("turnable ranged attack should resolve at the scattered impact cell");
 
     assert_eq!(monster_attack.target_slot, 1);
+    let Some(CombatWeaponAttackResolution::Hit {
+        route: CombatWeaponAttackRangeRoute::Ranged { effect_code: 6 },
+        raw_damage,
+    }) = monster_attack.resolution
+    else {
+        panic!("expected a scattered ranged hit, got {:?}", monster_attack.resolution);
+    };
+    // `combat.md` Section 12 (`RETRACTIONS.md` R336): the attacker's raw
+    // value is the class attack byte "used flat, with no random draw at
+    // all", and the party's cached combat-defense byte of 7 then subtracts
+    // an inclusive `1..7` draw. The former expectation of 1 was the
+    // withdrawn `1..attack` monster roll. The fixture seed is fixed, so
+    // both the draw and the blow it leaves are exact.
+    let attack_value = combat_class_stats(28).unwrap().attack_value;
+    assert_eq!(attack_value, AMULET_TURNING_SCATTER_ATTACK_VALUE);
     assert_eq!(
-        monster_attack.resolution,
-        Some(CombatWeaponAttackResolution::Hit {
-            route: CombatWeaponAttackRangeRoute::Ranged { effect_code: 6 },
-            raw_damage: 1,
-        })
+        raw_damage, AMULET_TURNING_SCATTER_RAW_DAMAGE,
+        "the flat attack value less this seed's inclusive 1..7 defence draw"
     );
-    assert_eq!(state.party[0].hp, 20);
-    assert_eq!(state.party[1].hp, 19);
+    assert_eq!(state.party[0].hp, 20, "the intended target is untouched");
+    assert_eq!(
+        state.party[1].hp, AMULET_TURNING_SCATTER_IMPACT_HP,
+        "the scattered impact actor takes the blow"
+    );
 }
+
+/// Class 28's flat attack value (`catalogs/monster-bestiary.md`, the
+/// column `RETRACTIONS.md` R336 renames to **Attack value**).
+const AMULET_TURNING_SCATTER_ATTACK_VALUE: u8 = 10;
+/// That value less the inclusive `1..7` defence draw
+/// [`AMULET_TURNING_SCATTER_SEED`] produces, which is `3`.
+const AMULET_TURNING_SCATTER_RAW_DAMAGE: i16 = 7;
+/// The impact actor's 20 HP less that blow.
+const AMULET_TURNING_SCATTER_IMPACT_HP: u16 = 13;
+
+/// The PRNG seed at which the shipped scatter fixture lands its impact cell
+/// on the second seated party member.
+const AMULET_TURNING_SCATTER_SEED: u16 = 0x0002;
 
 fn combat_player_command_state(monster_x: u8, monster_y: u8) -> PlayState {
     let mut state = combat_ai_turn_state(monster_x, monster_y);
@@ -9956,17 +10332,32 @@ fn combat_player_command_state(monster_x: u8, monster_y: u8) -> PlayState {
     state
 }
 
-fn advance_expected_giant_rat_ai_input_prng(expected_prng: &mut u16) {
+fn advance_expected_giant_rat_ai_input_prng(expected_prng: &mut u16, defence_draw_taken: bool) {
     let _ = u5_prng_range_u16(expected_prng, 0, 1);
     // `combat.md §9` (`RETRACTIONS.md` R311): the random-cardinal fallback
     // draws one attempt at a time and commits the first accepted one, so
     // nothing is pre-rolled here - and an AI dispatch that resolves an
     // attack never reaches the movement arm at all.
-    let _ = u5_prng_range_u16(expected_prng, 0, u16::from(u8::MAX));
-    let _ = u5_prng_range_u16(expected_prng, 0, u16::from(u8::MAX));
+    //
+    // `combat.md §11` (R335): the to-hit draw is the shared skewed roll's
+    // inclusive `0..=60` raw draw, not a `0..255` byte. `§12` (R336): the
+    // monster's raw attack value is its class byte "used flat, with no
+    // random draw at all", so the second byte-wide draw this helper used to
+    // model is gone.
+    let _ = u5_prng_range_u16(expected_prng, 0, u16::from(COMBAT_SKEWED_ROLL_RAW_MAX));
     let _ = u5_prng_range_u16(expected_prng, 0, 1);
     let _ = u5_prng_range_u16(expected_prng, 0, 19);
     let _ = u5_prng_range_u16(expected_prng, 0, 7);
+    // `combat.md §12`: the defence term is an inclusive `1..rating` draw
+    // taken only when the rating is non-zero, and the poison/status branch
+    // returns before the ordinary roller ever asks for it.
+    if defence_draw_taken {
+        let _ = u5_prng_range_u16(
+            expected_prng,
+            0,
+            u16::from(CHARACTER_DEFENSE_FACTORY_SEED - 1),
+        );
+    }
 }
 
 #[test]
@@ -10621,7 +11012,7 @@ fn combat_player_command_attack_applies_readied_weapon_damage() {
             0,
             CombatPlayerCommandInput::AttackDirection(2),
             CombatPlayerWeaponAttackInputs {
-                damage_roll: 0,
+                damage_roll: Some(0),
                 forced_hit: Some(true),
                 ..CombatPlayerWeaponAttackInputs::default()
             },
@@ -10663,7 +11054,7 @@ fn combat_player_command_attack_announces_victory_and_continues_cleanup() {
             0,
             CombatPlayerCommandInput::AttackDirection(2),
             CombatPlayerWeaponAttackInputs {
-                damage_roll: 0,
+                damage_roll: Some(0),
                 forced_hit: Some(true),
                 ..CombatPlayerWeaponAttackInputs::default()
             },
@@ -10935,7 +11326,7 @@ fn combat_input_dispatch_routes_play_keys_to_combat_parser() {
     // which roll the reply takes.
     assert_eq!(
         attack_state.message,
-        "East\nGiant Rat missed!\n\nAvatar, armed with bare hands:"
+        "East\nGiant Rat missed!\nAvatar is poisoned!\n\nAvatar, armed with bare hands:"
     );
     assert_eq!(attack_state.pending_combat_actor_slot, Some(0));
 
@@ -10979,12 +11370,23 @@ fn combat_input_dispatch_reports_weapon_hit_damage_and_xp() {
     state.party_equipment[0][EQUIP_SLOT_WEAPON] = 16;
     state.party_strengths = vec![255];
     state.party_experience = vec![0];
+    // `combat.md §5.1` / `§11`: a party actor's combat weight is "the raw
+    // Dexterity byte copied at seating", and with a Dagger readied - not one
+    // of the five strength-arm ids - that weight is also the attacker term.
+    // The shared fixture seats a base-step-1 actor, which after
+    // `RETRACTIONS.md` R334 is a Dexterity-1 character who essentially never
+    // lands a blow; this test is about a landed blow, so it seats a fast one.
+    state.combat_actors[0].base_step = 30;
     let mut expected_prng = state.prng_state;
-    let _hit_roll = u5_prng_range_u16(&mut expected_prng, 0, u16::from(u8::MAX));
+    let _hit_raw_roll =
+        u5_prng_range_u16(&mut expected_prng, 0, u16::from(COMBAT_SKEWED_ROLL_RAW_MAX));
     let damage_roll = u5_prng_range_u16(&mut expected_prng, 0, u16::from(u8::MAX)) as u8;
+    // `combat.md §12`: the Giant Rat's class defense byte is zero, so the
+    // roller "takes no draw at all and subtracts nothing".
+    assert_eq!(combat_class_stats(COMBAT_CLASS_GIANT_RAT).unwrap().defense, 0);
     let expected_damage =
         combat_spell_damage_roll(damage_roll, equipment_attack_max(16).unwrap()) as u8;
-    advance_expected_giant_rat_ai_input_prng(&mut expected_prng);
+    advance_expected_giant_rat_ai_input_prng(&mut expected_prng, false);
 
     assert_eq!(
         handle_play_key_input(&mut state, 'A', "6", game_dir).unwrap(),
@@ -10993,7 +11395,14 @@ fn combat_input_dispatch_reports_weapon_hit_damage_and_xp() {
 
     assert_eq!(
         state.message,
-        "East\nGiant Rat lightly wounded!\nGiant Rat missed!\n\nAvatar, armed with Dagger:"
+        // The Giant Rat's reply is its poison/status branch, which
+        // `combat.md` Section 12 resolves "instead of the default melee
+        // roll" and which returns before the ordinary roller ever asks
+        // for its defence draw. Which branch the rat takes moved with
+        // the shared stream: `RETRACTIONS.md` R335 narrowed the to-hit
+        // draw to the shared `0..=60` raw roll and R336 removed the
+        // monster-side damage draw entirely.
+        "East\nGiant Rat lightly wounded!\nAvatar is poisoned!\n\nAvatar, armed with Dagger:"
     );
     assert_eq!(state.combat_actors[8].hp_or_wound, 10 - expected_damage);
     assert_eq!(state.party_experience[0], u16::from(expected_damage));
@@ -11009,6 +11418,9 @@ fn combat_input_dispatch_reports_weapon_kill_and_keeps_victory_cleanup_live() {
     state.party_equipment[0][EQUIP_SLOT_WEAPON] = 16;
     state.party_strengths = vec![255];
     state.party_experience = vec![0];
+    // See the sibling test: `combat.md` Section 11 makes the party
+    // attacker's own combat weight the attacker term for a Dagger.
+    state.combat_actors[0].base_step = 30;
     state.combat_actors[8].hp_or_wound = 1;
 
     assert_eq!(
@@ -12368,7 +12780,6 @@ fn combat_actor_slot_dispatch_applies_slot_matched_monster_attack_inputs() {
             (
                 7,
                 CombatMonsterAttackInputs {
-                    party_defender_rating: 99,
                     forced_hit: Some(false),
                     ..CombatMonsterAttackInputs::default()
                 },
@@ -12376,8 +12787,6 @@ fn combat_actor_slot_dispatch_applies_slot_matched_monster_attack_inputs() {
             (
                 8,
                 CombatMonsterAttackInputs {
-                    party_defender_rating: 0,
-                    damage_roll: 0,
                     forced_hit: Some(true),
                     ..CombatMonsterAttackInputs::default()
                 },
@@ -12677,8 +13086,6 @@ fn combat_round_walk_carries_monster_attack_inputs_through_dispatch() {
         &[(
             8,
             CombatMonsterAttackInputs {
-                party_defender_rating: 0,
-                damage_roll: 0,
                 forced_hit: Some(true),
                 ..CombatMonsterAttackInputs::default()
             },
@@ -13361,7 +13768,7 @@ fn combat_party_damage_clamps_miss_and_uses_saturating_hp_counter() {
     };
 
     let miss = apply_combat_party_damage(&mut member, -1);
-    assert!(miss.missed);
+    assert!(miss.grazed);
     assert!(!miss.instant_kill);
     assert!(!miss.killed);
     assert_eq!(miss.applied_damage, 0);
@@ -13371,7 +13778,7 @@ fn combat_party_damage_clamps_miss_and_uses_saturating_hp_counter() {
     assert_eq!(member.status, b'G');
 
     let hit = apply_combat_party_damage(&mut member, 5);
-    assert!(!hit.missed);
+    assert!(!hit.grazed);
     assert_eq!(hit.applied_damage, 5);
     assert!(!hit.killed);
     assert_eq!(member.hp, 7);
@@ -13540,7 +13947,7 @@ fn combat_weapon_damage_application_routes_party_targets_through_party_damage() 
             damage: CombatPartyDamageOutcome {
                 raw_damage: 12,
                 applied_damage: 12,
-                missed: false,
+                grazed: false,
                 instant_kill: false,
                 killed: true,
                 status_before: b'G',
@@ -13600,7 +14007,7 @@ fn combat_weapon_damage_application_routes_monster_targets_and_credits_party_att
                 class: 32,
                 raw_damage: 4,
                 applied_damage: 4,
-                missed: false,
+                grazed: false,
                 instant_kill: false,
                 killed: false,
                 return_value: 4,
@@ -13620,7 +14027,7 @@ fn combat_weapon_damage_application_routes_monster_targets_and_credits_party_att
                 class: 32,
                 raw_damage: 2,
                 applied_damage: 2,
-                missed: false,
+                grazed: false,
                 instant_kill: false,
                 killed: false,
                 return_value: 2,
@@ -13644,7 +14051,7 @@ fn combat_weapon_damage_application_routes_monster_targets_and_credits_party_att
                 class: 32,
                 raw_damage: COMBAT_INSTANT_KILL_DAMAGE,
                 applied_damage: 4,
-                missed: false,
+                grazed: false,
                 instant_kill: true,
                 killed: true,
                 return_value: stats.reward_unit(),
@@ -14052,6 +14459,25 @@ fn combat_weapon_attack_application_uses_actor_range_and_applies_hit_damage() {
     state.combat_actors[target_slot] =
         CombatActorDescriptor::for_monster_placement(stats, 7, 8, 4, 0, 0);
 
+    // `combat.md §11`: the score is `(defender - attacker + 30) / 2 = 5`
+    // and "the hit is accepted when `R >= S`", so the top of the skewed
+    // `1..30` band lands. `§12`: the Orc's class defense byte is non-zero,
+    // so the roller subtracts an inclusive `1..defense` draw taken here,
+    // after the rating is known.
+    let attack_max = equipment_attack_max(17).unwrap();
+    let defence_rating = stats.defense;
+    assert_ne!(defence_rating, 0);
+    let mut expected_prng = state.prng_state;
+    let expected_defence_roll =
+        u5_prng_range_u16(&mut expected_prng, 0, u16::from(defence_rating - 1)) as u8;
+    // Worked out by hand rather than by re-running the helpers under
+    // test: stage one is `1 + 5 % 6 = 6`, stage two subtracts
+    // `1 + 0 % 2 = 1`, so the blow is `5`.
+    assert_eq!(attack_max, 6);
+    assert_eq!(defence_rating, 2);
+    assert_eq!(expected_defence_roll, 0);
+    let expected_damage: i16 = 5;
+    let expected_applied: u8 = 5;
     assert_eq!(
         state.resolve_and_apply_combat_equipment_weapon_attack(
             17,
@@ -14059,7 +14485,7 @@ fn combat_weapon_attack_application_uses_actor_range_and_applies_hit_damage() {
             target_slot,
             30,
             10,
-            0,
+            COMBAT_SKEWED_ROLL_RAW_MAX,
             5,
             None,
             false,
@@ -14067,26 +14493,30 @@ fn combat_weapon_attack_application_uses_actor_range_and_applies_hit_damage() {
         Some(CombatWeaponAttackApplication {
             resolution: CombatWeaponAttackResolution::Hit {
                 route: CombatWeaponAttackRangeRoute::Ranged { effect_code: 7 },
-                raw_damage: 6,
+                raw_damage: expected_damage,
             },
             damage_application: Some(CombatWeaponDamageApplication::Monster {
                 target_slot,
                 damage: CombatMonsterDamageOutcome {
                     class: 32,
-                    raw_damage: 6,
-                    applied_damage: 6,
-                    missed: false,
+                    raw_damage: expected_damage,
+                    applied_damage: expected_applied,
+                    grazed: false,
                     instant_kill: false,
                     killed: false,
-                    return_value: 6,
+                    return_value: expected_applied,
                     death_path: None,
                 },
-                credited_experience: Some(16),
+                credited_experience: Some(10 + u16::from(expected_applied)),
             }),
         })
     );
-    assert_eq!(state.combat_actors[target_slot].hp_or_wound, 4);
-    assert_eq!(state.party_experience[0], 16);
+    assert_eq!(state.prng_state, expected_prng, "one defence draw, no more");
+    assert_eq!(
+        state.combat_actors[target_slot].hp_or_wound,
+        stats.max_hp - expected_applied
+    );
+    assert_eq!(state.party_experience[0], 10 + u16::from(expected_applied));
 }
 
 #[test]
@@ -14122,6 +14552,9 @@ fn combat_weapon_attack_application_leaves_state_unchanged_for_no_hit_routes() {
     assert_eq!(state.combat_actors[target_slot].hp_or_wound, stats.max_hp);
 
     state.combat_actors[target_slot].x = 5;
+    // `combat.md §11` (R334): with the defender's rating added and the
+    // attacker's subtracted the score is `(10 - 30 + 30) / 2 = 5`, not the
+    // 25 the withdrawn formula produced, so a *low* draw is what misses.
     assert_eq!(
         state.resolve_and_apply_combat_equipment_weapon_attack(
             16,
@@ -14129,7 +14562,7 @@ fn combat_weapon_attack_application_leaves_state_unchanged_for_no_hit_routes() {
             target_slot,
             30,
             10,
-            25,
+            0,
             5,
             None,
             false,
@@ -14137,7 +14570,7 @@ fn combat_weapon_attack_application_leaves_state_unchanged_for_no_hit_routes() {
         Some(CombatWeaponAttackApplication {
             resolution: CombatWeaponAttackResolution::Miss {
                 route: CombatWeaponAttackRangeRoute::Melee,
-                hit_score: 25,
+                hit_score: 5,
             },
             damage_application: None,
         })
@@ -14205,7 +14638,7 @@ fn combat_monster_attack_applies_poison_status_before_ordinary_melee_damage() {
     let mut state = combat_monster_attack_state(COMBAT_CLASS_GIANT_SPIDER, 6, 5);
 
     let application = state
-        .resolve_and_apply_combat_monster_attack(8, 0, 7, 0, 7, true, 8, Some(true))
+        .resolve_and_apply_combat_monster_attack(8, 0, 0, true, 8, Some(true))
         .unwrap();
 
     assert_eq!(
@@ -14232,7 +14665,7 @@ fn combat_monster_adjacent_miss_overwrites_interference_but_controlled_attack_do
     automatic.combat_interference_sources[0] = 7;
 
     let missed = automatic
-        .resolve_and_apply_combat_monster_attack(8, 0, 7, 255, 1, false, 8, Some(false))
+        .resolve_and_apply_combat_monster_attack(8, 0, 255, false, 8, Some(false))
         .unwrap();
     assert!(matches!(
         missed.resolution,
@@ -14245,7 +14678,7 @@ fn combat_monster_adjacent_miss_overwrites_interference_but_controlled_attack_do
     controlled.combat_interference_sources[0] = 7;
     assert!(
         controlled
-            .resolve_and_apply_combat_monster_attack(8, 0, 7, 255, 1, false, 8, Some(false))
+            .resolve_and_apply_combat_monster_attack(8, 0, 255, false, 8, Some(false))
             .is_some()
     );
     assert_eq!(controlled.combat_interference_sources[0], 7);
@@ -14257,7 +14690,7 @@ fn combat_monster_attack_poison_branch_falls_back_to_damage_for_non_good_party()
     state.party[0].status = b'P';
 
     let application = state
-        .resolve_and_apply_combat_monster_attack(8, 0, 7, 0, 7, true, 8, Some(true))
+        .resolve_and_apply_combat_monster_attack(8, 0, 0, true, 8, Some(true))
         .unwrap();
 
     assert_eq!(
@@ -14274,7 +14707,7 @@ fn combat_monster_attack_poison_branch_falls_back_to_damage_for_non_good_party()
                 damage: CombatPartyDamageOutcome {
                     raw_damage: 9,
                     applied_damage: 9,
-                    missed: false,
+                    grazed: false,
                     instant_kill: false,
                     killed: false,
                     status_before: b'P',
@@ -14292,7 +14725,7 @@ fn combat_monster_attack_gate_rejection_uses_ordinary_melee_hit_resolution() {
     let mut state = combat_monster_attack_state(COMBAT_CLASS_GIANT_SPIDER, 6, 5);
 
     let application = state
-        .resolve_and_apply_combat_monster_attack(8, 0, 7, 255, 1, false, 8, Some(true))
+        .resolve_and_apply_combat_monster_attack(8, 0, 255, false, 8, Some(true))
         .unwrap();
 
     assert_eq!(
@@ -14301,16 +14734,21 @@ fn combat_monster_attack_gate_rejection_uses_ordinary_melee_hit_resolution() {
             attacker_slot: 8,
             target_slot: 0,
             poison_status_outcome: Some(CombatPoisonStatusAttackOutcome::GateRejected),
+            // `combat.md §12` (R336): the monster's raw value is its class
+            // attack byte "used flat, with no random draw at all", and the
+            // party's cached combat-defense byte of 7 then subtracts an
+            // inclusive `1..7` draw. The former expectation of 2 came from
+            // rolling `1..attack` on the monster side.
             resolution: Some(CombatWeaponAttackResolution::Hit {
                 route: CombatWeaponAttackRangeRoute::Melee,
-                raw_damage: 2,
+                raw_damage: 3,
             }),
             damage_application: Some(CombatWeaponDamageApplication::Party {
                 target_slot: 0,
                 damage: CombatPartyDamageOutcome {
-                    raw_damage: 2,
-                    applied_damage: 2,
-                    missed: false,
+                    raw_damage: 3,
+                    applied_damage: 3,
+                    grazed: false,
                     instant_kill: false,
                     killed: false,
                     status_before: b'G',
@@ -14319,7 +14757,7 @@ fn combat_monster_attack_gate_rejection_uses_ordinary_melee_hit_resolution() {
             }),
         }
     );
-    assert_eq!(state.party[0].hp, 10);
+    assert_eq!(state.party[0].hp, 9);
     assert_eq!(state.party[0].status, b'G');
 }
 
@@ -14329,7 +14767,7 @@ fn combat_monster_attack_uses_ranged_effect_route_for_in_range_non_adjacent_targ
     state.combat_interference_sources[0] = 7;
 
     let application = state
-        .resolve_and_apply_combat_monster_attack(8, 0, 7, 255, 4, true, 8, Some(true))
+        .resolve_and_apply_combat_monster_attack(8, 0, 255, true, 8, Some(true))
         .unwrap();
 
     assert_eq!(
@@ -14338,25 +14776,31 @@ fn combat_monster_attack_uses_ranged_effect_route_for_in_range_non_adjacent_targ
             attacker_slot: 8,
             target_slot: 0,
             poison_status_outcome: None,
+            // `combat.md §12` (R336): a Dragon brings its class attack
+            // value of 30 flat, less the party's inclusive `1..7` defence
+            // draw. The former expectation of 5 was the `1..attack` roll
+            // the retraction withdraws, and it is why "an engine that rolls
+            // `1..attack` for monsters delivers about 39 % of the
+            // original's melee damage".
             resolution: Some(CombatWeaponAttackResolution::Hit {
                 route: CombatWeaponAttackRangeRoute::Ranged { effect_code: 3 },
-                raw_damage: 5,
+                raw_damage: 25,
             }),
             damage_application: Some(CombatWeaponDamageApplication::Party {
                 target_slot: 0,
                 damage: CombatPartyDamageOutcome {
-                    raw_damage: 5,
-                    applied_damage: 5,
-                    missed: false,
+                    raw_damage: 25,
+                    applied_damage: 12,
+                    grazed: false,
                     instant_kill: false,
-                    killed: false,
+                    killed: true,
                     status_before: b'G',
-                    status_after: b'G',
+                    status_after: b'D',
                 },
             }),
         }
     );
-    assert_eq!(state.party[0].hp, 7);
+    assert_eq!(state.party[0].hp, 0);
     assert_eq!(state.combat_interference_sources[0], 7);
 }
 
@@ -14396,7 +14840,7 @@ fn active_target_spell_damage_application_applies_defense_and_credits_caster() {
                     class: 32,
                     raw_damage: 5,
                     applied_damage: 5,
-                    missed: false,
+                    grazed: false,
                     instant_kill: false,
                     killed: false,
                     return_value: 5,
@@ -14992,7 +15436,7 @@ fn active_target_spell_damage_application_preserves_kill_and_miss_routes() {
                     class: 32,
                     raw_damage: -4,
                     applied_damage: 0,
-                    missed: true,
+                    grazed: true,
                     instant_kill: false,
                     killed: false,
                     return_value: 0,
@@ -15022,7 +15466,7 @@ fn active_target_spell_damage_application_preserves_kill_and_miss_routes() {
                     class: 32,
                     raw_damage: COMBAT_INSTANT_KILL_DAMAGE,
                     applied_damage: stats.max_hp,
-                    missed: false,
+                    grazed: false,
                     instant_kill: true,
                     killed: true,
                     return_value: stats.reward_unit(),
@@ -15101,7 +15545,7 @@ fn tremor_spell_damage_application_scans_table_order_and_credits_caster() {
                         damage: CombatPartyDamageOutcome {
                             raw_damage: 3,
                             applied_damage: 3,
-                            missed: false,
+                            grazed: false,
                             instant_kill: false,
                             killed: false,
                             status_before: b'G',
@@ -15118,7 +15562,7 @@ fn tremor_spell_damage_application_scans_table_order_and_credits_caster() {
                             class: 32,
                             raw_damage: 5,
                             applied_damage: 5,
-                            missed: false,
+                            grazed: false,
                             instant_kill: false,
                             killed: false,
                             return_value: 5,
@@ -15808,7 +16252,7 @@ fn directed_spell_damage_application_applies_death_wind_in_table_order() {
                         damage: CombatPartyDamageOutcome {
                             raw_damage: COMBAT_INSTANT_KILL_DAMAGE,
                             applied_damage: 12,
-                            missed: false,
+                            grazed: false,
                             instant_kill: true,
                             killed: true,
                             status_before: b'G',
@@ -15825,7 +16269,7 @@ fn directed_spell_damage_application_applies_death_wind_in_table_order() {
                             class: 32,
                             raw_damage: COMBAT_INSTANT_KILL_DAMAGE,
                             applied_damage: stats.max_hp,
-                            missed: false,
+                            grazed: false,
                             instant_kill: true,
                             killed: true,
                             return_value: stats.reward_unit(),
@@ -15890,7 +16334,7 @@ fn directed_spell_damage_skips_disabled_targets_in_cone() {
                         class: 32,
                         raw_damage: COMBAT_INSTANT_KILL_DAMAGE,
                         applied_damage: stats.max_hp,
-                        missed: false,
+                        grazed: false,
                         instant_kill: true,
                         killed: true,
                         return_value: stats.reward_unit(),
@@ -15973,7 +16417,7 @@ fn directed_spell_damage_application_handles_flame_wind_rolls_and_non_damage_eff
                             class: 32,
                             raw_damage: 5,
                             applied_damage: 5,
-                            missed: false,
+                            grazed: false,
                             instant_kill: false,
                             killed: false,
                             return_value: 5,
@@ -15991,7 +16435,7 @@ fn directed_spell_damage_application_handles_flame_wind_rolls_and_non_damage_eff
                             class: 32,
                             raw_damage: 10,
                             applied_damage: 10,
-                            missed: false,
+                            grazed: false,
                             instant_kill: false,
                             killed: true,
                             return_value: stats.reward_unit(),
@@ -16157,7 +16601,7 @@ fn directed_spell_status_application_applies_poison_wind_gate_status_and_fallbac
                         damage: CombatPartyDamageOutcome {
                             raw_damage: 5,
                             applied_damage: 5,
-                            missed: false,
+                            grazed: false,
                             instant_kill: false,
                             killed: false,
                             status_before: b'P',
@@ -16174,7 +16618,7 @@ fn directed_spell_status_application_applies_poison_wind_gate_status_and_fallbac
                             class: 32,
                             raw_damage: 10,
                             applied_damage: 10,
-                            missed: false,
+                            grazed: false,
                             instant_kill: false,
                             killed: true,
                             return_value: stats.reward_unit(),
@@ -16289,7 +16733,7 @@ fn arena_field_contact_application_applies_party_status_and_no_xp_fallback_damag
                 damage: CombatPartyDamageOutcome {
                     raw_damage: 4,
                     applied_damage: 4,
-                    missed: false,
+                    grazed: false,
                     instant_kill: false,
                     killed: false,
                     status_before: b'P',
@@ -16312,7 +16756,7 @@ fn arena_field_contact_application_applies_party_status_and_no_xp_fallback_damag
                 damage: CombatPartyDamageOutcome {
                     raw_damage: 10,
                     applied_damage: 8,
-                    missed: false,
+                    grazed: false,
                     instant_kill: false,
                     killed: true,
                     status_before: b'P',
@@ -16377,7 +16821,7 @@ fn arena_field_contact_application_handles_non_party_damage_skip_and_sleep_repor
                     class: 32,
                     raw_damage: 10,
                     applied_damage: 10,
-                    missed: false,
+                    grazed: false,
                     instant_kill: false,
                     killed: true,
                     return_value: stats.reward_unit(),
@@ -16408,7 +16852,7 @@ fn arena_field_contact_application_targets_current_actor_and_ignores_energy() {
                 damage: CombatPartyDamageOutcome {
                     raw_damage: 10,
                     applied_damage: 10,
-                    missed: false,
+                    grazed: false,
                     instant_kill: false,
                     killed: false,
                     status_before: b'G',
@@ -17375,14 +17819,14 @@ fn combat_actor_monster_damage_clamps_miss_and_subtracts_without_underflow() {
     let mut descriptor = CombatActorDescriptor::for_monster_placement(stats, 7, 4, 5, 0, 0);
 
     let miss = descriptor.apply_monster_damage(-1, false).unwrap();
-    assert!(miss.missed);
+    assert!(miss.grazed);
     assert!(!miss.killed);
     assert_eq!(miss.applied_damage, 0);
     assert_eq!(miss.return_value, 0);
     assert_eq!(descriptor.hp_or_wound, 10);
 
     let hit = descriptor.apply_monster_damage(4, false).unwrap();
-    assert!(!hit.missed);
+    assert!(!hit.grazed);
     assert!(!hit.killed);
     assert_eq!(hit.applied_damage, 4);
     assert_eq!(hit.return_value, 4);

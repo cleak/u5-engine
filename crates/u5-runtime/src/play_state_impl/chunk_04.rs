@@ -2000,6 +2000,7 @@ impl PlayState {
             party_experience: self.party_experience.clone(),
             party_stay_counters: self.party_stay_counters.clone(),
             party_strengths: self.party_strengths.clone(),
+            party_combat_defense: self.party_combat_defense.clone(),
             party_intelligence: self.party_intelligence.clone(),
             party_equipment: self.party_equipment.clone(),
             party_roster: self.synced_party_roster(),
