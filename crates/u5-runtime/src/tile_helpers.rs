@@ -798,6 +798,55 @@ pub fn active_object_frame_tile(type_byte: u8, phase: u8) -> Option<u8> {
     }
 }
 
+/// `active-objects.md §3` gate 3 / `animation.md §4` case 4: the
+/// **decision-point** arm of the per-slot animator.
+///
+/// "Low nibble zero - fall through to the eligibility gates (a frame-byte
+/// test, then a tile-class threshold), which may advance the script step and
+/// rewrite the byte", and `animation.md §4`: "Decision-point slot. Consult
+/// the slot's class behaviour. Some slots do nothing; some roll for a facing
+/// change; **some rewrite their displayed frame.**"
+///
+/// This is that rewrite: one step forward inside the slot's own frame family,
+/// wrapping. It uses the same two families [`active_object_frame_tile`]
+/// resolves a countdown against - four frames for the actor bytes it treats as
+/// a quad family, two for the pairs - so a slot parked at a decision point
+/// cycles through exactly the frames its countdown would have shown.
+///
+/// **The quad family starts at [`OUTDOOR_COMBAT_TYPE_FIRST`] here, not at
+/// `128`.** `combat_class_sprite_byte` is `class * 4 + 0x40`, so every combat
+/// class - the four human/party classes at `0x40`, `0x44`, `0x48`, `0x4C`
+/// included - owns a four-tile group in that band, and
+/// [`crate::combat_party_actor_byte`] returns exactly those four group bases
+/// for a seated party member. *Runtime observation, spec silent:* no published
+/// section gives the band's lower bound, and a black-box capture of the
+/// original in an outdoor arena shows the seated party sprites cycling
+/// **four** distinct tiles at the same per-slot cadence as the monsters
+/// (measured on the two party cells the turn cursor does not overlap: four
+/// distinct tiles each, 1.88 and 2.74 ticks per change). The countdown arm is
+/// deliberately left at its published `128` boundary: combat records sit at a
+/// decision point from placement (`COMBAT_PLACEMENT_ACTIVE_OBJECT_PHASE`) and
+/// never reach it.
+///
+/// Every other type byte has no family and returns `None`, which the caller
+/// reads as `animation.md §4` case 4's "Some slots do nothing".
+///
+/// `current_tile` is byte 1 of the record (the per-frame tile), not byte 0:
+/// `active-objects.md §3` gives byte 0 as the tile *class* and byte 1 as the
+/// "per-frame tile byte ... modified during animation playback".
+pub fn active_object_next_frame_tile(type_byte: u8, current_tile: u8) -> Option<u8> {
+    if type_byte == PLAYER_TILE {
+        return None;
+    }
+    let (base, span) = match type_byte {
+        OUTDOOR_COMBAT_TYPE_FIRST..=191 => (type_byte & !0x03, 0x03u8),
+        192..=255 => (type_byte & !0x01, 0x01u8),
+        _ => return None,
+    };
+    let frame = current_tile.wrapping_sub(base) & span;
+    Some(base + ((frame + 1) & span))
+}
+
 pub fn is_ambient_wanderer_object(object: ActiveObject) -> bool {
     (192..=255).contains(&object.type_byte) || (192..=255).contains(&object.tile)
 }

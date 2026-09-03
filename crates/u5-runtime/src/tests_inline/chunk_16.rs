@@ -22,7 +22,16 @@
                 x: 4,
                 y: 5,
                 z: 0,
-                phase: 0x22,
+                // The repair preserves byte 6, but the turn's animator pass
+                // reaches slot zero before it and spends one countdown step:
+                // `active-objects.md §3` gate 2 is "decrement it and write the
+                // recombined byte back. **This write is unconditional and has
+                // no tile-class precondition**, and it applies to every slot
+                // the walk reaches, **slot zero included**." A shipped save
+                // carries zero here (`PLAYER_ACTIVE_OBJECT_PHASE`), which
+                // routes past the decrement; this fixture's `0x22` is part of
+                // the deliberately bogus record the repair is being tested on.
+                phase: 0x21,
                 aux1: 0,
                 aux3: 0,
             }

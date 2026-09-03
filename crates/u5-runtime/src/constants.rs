@@ -350,6 +350,28 @@ pub const STEADY_PHASE: u8 = 0x0f;
 /// again — with no turns, and again after four turns across an hour
 /// boundary — leaves the slot-zero record as `1C 1C 0F 0F 00 00 00 00`.
 pub const PLAYER_ACTIVE_OBJECT_PHASE: u8 = 0x00;
+/// Phase byte (`+0x06`) an arena active-object record carries after
+/// combat setup has written it.
+///
+/// `active-objects.md §7` enumerates exactly what combat placement writes
+/// into a record, and byte 6 is not in the list: "The setup pass **first
+/// clears all thirty-two records**, then seats the party, then places
+/// monsters. ... Each spawned monster gets one renderer-facing active-object
+/// slot with the monster's class-derived tile in byte 0, the per-frame tile
+/// byte at byte 1, arena coordinates in bytes 2 and 3, and a floor/plane flag
+/// at byte 4. A seated party member's record uses the same shape, with the
+/// class-derived party sprite in bytes 0 and 1, its arena seat in bytes 2 and
+/// 3, and its roster slot index in byte 5. ... At placement time byte 5
+/// receives the placed monster's starting HP, byte 4 receives the arena
+/// plane/Z argument, and byte 7 receives an all-ones marker."
+///
+/// So byte 6 keeps the value the clear left, which is zero - and zero is not
+/// the freeze sentinel. `active-objects.md §3`: the all-ones low nibble is
+/// what makes the animator "bail immediately, **writing nothing**", while a
+/// low nibble of zero falls through to the decision-point gates. Seeding
+/// [`STEADY_PHASE`] here instead freezes every arena sprite for the whole
+/// fight, which is exactly what the pre-fix engine did.
+pub const COMBAT_PLACEMENT_ACTIVE_OBJECT_PHASE: u8 = 0x00;
 /// `systems/weather.md §7`: "The cadence counter is stored per
 /// active-object slot ... The cadence counter is persisted with the
 /// object, so it survives save and reload."

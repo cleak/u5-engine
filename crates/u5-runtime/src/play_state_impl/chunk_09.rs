@@ -1441,6 +1441,22 @@ impl PlayState {
                 self.visibility_grid[grid_index] = visibility_marker_for_viewport_cell(col, row);
             }
         }
+        // `visibility.md §11` says this branch "copies the loaded arena
+        // terrain grid byte-for-byte into the visibility grid, then runs the
+        // post-pass and the renderer over it. The producer is not called; the
+        // post-pass is." **This engine does not run the post-pass here, and
+        // that is a disclosed gap, not a claim about the original.** The
+        // shipped arena rasteriser is [`Self::render_combat_viewport`], which
+        // reads `combat_terrain` and the active-object table directly and
+        // never consumes these buffers; [`Self::render_top_down_viewport`]
+        // dispatches into it before this branch can be reached, so nothing in
+        // a combat frame observes what is written here. A combat arm on the
+        // compositor without the arena rasteriser also routed through these
+        // buffers is code nothing executes, and routing the rasteriser
+        // through them is a presentation change - the `§8` furniture merge
+        // would begin replacing seated actors with occupied-furniture
+        // sprites - that this package has no capture to justify. Left
+        // deliberately undone; see the package's spec question.
         self.visibility_dirty = false;
         self.visibility_buffers_ready = true;
     }
@@ -3970,7 +3986,27 @@ impl PlayState {
     /// town object walker ..., or the outdoor per-turn creature walker.
     /// **Exceptions: none.**"
     pub fn animate_active_objects(&mut self) {
-        for slot in 1..self.active_objects.len() {
+        // `active-objects.md §8`: the animator walks "the table from slot zero
+        // to slot thirty-one", and `§3` is explicit that the walk is not
+        // narrowed for the player - the decrement "applies to every slot the
+        // walk reaches, **slot zero included**", and "what protects it in a
+        // shipped save is the stored **value** zero, which routes past the
+        // decrement into a class gate the player's class fails."
+        //
+        // Reaching slot zero costs nothing in a world scene: every transport
+        // marker the slot-zero refresh writes is below
+        // [`OUTDOOR_COMBAT_TYPE_FIRST`] (foot `0x1C`, carpet `0x14`, horse
+        // `0x10`, ship `0x20`/`0x24`, skiff `0x28`), so
+        // [`active_object_next_frame_tile`] finds no family, nothing is
+        // rewritten and no coin is drawn. It matters in an arena, where
+        // `active-objects.md §9` gives record zero to the party seating -
+        // "record zero is overwritten because it is the first record the party
+        // seating allocates, not because combat reserves a player slot" - so
+        // the first seated member's sprite lives there and has a family.
+        // Capture of the original shows all three seated party sprites
+        // animating; before this the engine froze whichever member seated into
+        // record zero.
+        for slot in 0..self.active_objects.len() {
             if self.active_objects[slot].is_empty()
                 || (matches!(self.area, Area::Town { .. })
                     && town_free_roaming_object_eligible(self.active_objects[slot]))
@@ -3978,18 +4014,123 @@ impl PlayState {
                 continue;
             }
             let tick = self.active_objects[slot].tick_phase();
-            if matches!(tick, PhaseTick::Countdown | PhaseTick::DecisionPoint) {
-                if let Some(tile) = active_object_frame_tile(
-                    self.active_objects[slot].type_byte,
-                    self.active_objects[slot].phase,
-                ) {
-                    if self.active_objects[slot].tile != tile {
-                        self.active_objects[slot].tile = tile;
-                        self.mark_visibility_dirty();
+            match tick {
+                PhaseTick::Steady => {}
+                PhaseTick::Countdown => {
+                    if let Some(tile) = active_object_frame_tile(
+                        self.active_objects[slot].type_byte,
+                        self.active_objects[slot].phase,
+                    ) {
+                        if self.active_objects[slot].tile != tile {
+                            self.active_objects[slot].tile = tile;
+                            self.mark_visibility_dirty();
+                        }
                     }
                 }
+                PhaseTick::DecisionPoint => self.animate_active_object_decision_point(slot),
             }
         }
+    }
+
+    /// `active-objects.md §3` gate 3 and `animation.md §4` case 4: the
+    /// decision-point arm of the per-slot pass.
+    ///
+    /// A slot whose low nibble is zero does not decrement. It "fall[s] through
+    /// to the eligibility gates ..., which may advance the script step and
+    /// rewrite the byte", and `animation.md §5` names the gate this engine
+    /// implements: "Some classes are gated by a random roll, so they change
+    /// facing only on a fraction of eligible ticks; **one common form is a
+    /// fair coin that decides whether this slot's animation advances at all
+    /// this pass.**" On the advancing arm the slot "rewrite[s] [its] displayed
+    /// frame" (`animation.md §4`) one step through its own frame family
+    /// ([`active_object_next_frame_tile`]); no coordinate is touched, which is
+    /// `animation.md §5` R316's whole point.
+    ///
+    /// **The coin is a draw from the shared gameplay stream, and that is
+    /// published.** `visibility.md §8.4` lists the three per-tick consumers an
+    /// engine "must reproduce ... in this order" and puts this one first: "The
+    /// **active-object animator**, first. It draws from within its per-record
+    /// loop at three separate points. *This consumer was omitted from this
+    /// document's earlier inventory entirely.* Its per-pass count is
+    /// record-dependent and has not been characterised here." Because the
+    /// count is *not* characterised, this engine takes **exactly one** draw,
+    /// and only on the decision-point arm - the narrowest reading of §5's
+    /// "fair coin ... this pass" that still reproduces the measured cadence.
+    /// The two other draw points §8.4 counts are deliberately not invented
+    /// here; see the package report.
+    ///
+    /// **Two disclosed inferences, both unresolved by the published text.**
+    ///
+    /// 1. *Byte 6 is never rewritten on this arm.* `active-objects.md §3`
+    ///    gate 3 says a zero low nibble falls through to gates "which **may**
+    ///    advance the script step and rewrite the byte", and `animation.md §5`
+    ///    says the decision "rewrites the slot's stored facing and its
+    ///    displayed frame byte, and it **can reseed the phase counter**".
+    ///    Neither says when. This engine rewrites only byte 1 and leaves byte
+    ///    6 alone, so a record placed at a decision point stays at one
+    ///    forever: every tick is a decision point and every eligible tick pays
+    ///    a coin. That choice - not the coin alone - is what produces the
+    ///    measured ~2-tick cadence; an arm that reseeded a non-zero low nibble
+    ///    would give a longer dwell and would need the reseed distribution the
+    ///    spec does not give. **Inference, not spec.** It is asked as a spec
+    ///    question by this package. Note also that §5's "stored facing" is in
+    ///    tension with §3's R340 ("byte 6 carries **no facing**"), which is
+    ///    part of the same question.
+    /// 2. *One draw, not three.* §8.4 says the animator "draws from within its
+    ///    per-record loop at **three** separate points" and that "**usually
+    ///    more**" than one draw comes from it on an idle pass. This engine
+    ///    draws at one point and draws nothing at all for a record with no
+    ///    frame family, so its per-pass count is a lower bound on the
+    ///    original's. §8.4 explicitly leaves the count uncharacterised, so
+    ///    this is the conservative reading, not a measurement.
+    ///
+    /// **Scope of the new consumer, and it is wider than "arenas".** The
+    /// animator is mode-independent (`active-objects.md §8`: "**Exceptions:
+    /// none.**"), so this coin is taken on the idle world step and the town
+    /// epilogue too, for any record whose type byte has a frame family and
+    /// whose low nibble is zero. *Measured:* across every shipped object list
+    /// - `BRIT.OOL`, `UNDER.OOL`, `INIT.OOL` and the pristine `SAVED.OOL`/
+    /// `SAVED.GAM` live table - **no** record has a type byte at or above
+    /// [`OUTDOOR_COMBAT_TYPE_FIRST`] with a zero low nibble, so loading a
+    /// shipped world costs no new draw. *Asserted, not measured:*
+    /// runtime-spawned outdoor and town creatures do reach it -
+    /// [`active_object_phase_toward_player`] returns a zero low nibble - so an
+    /// overworld with a live spawned monster now draws one coin per animator
+    /// pass per such record. Any expectation elsewhere that pins the shared
+    /// stream across idle world ticks with a spawned creature on the map
+    /// shifts by that count.
+    ///
+    /// **Measured, not guessed.** A black-box capture of the original in a
+    /// sixteen-bat outdoor arena (200 PrintWindow samples over 7.97 s, one ROI
+    /// per arena cell) gives its eighteen animated non-cursor cells **1.73 to
+    /// 2.74 ticks per frame change, mean 2.05**, against the 54.9254 ms step
+    /// of `animation.md §2` - the dwell a per-pass fair coin produces - with
+    /// each cell visiting the **four** frames of its family. The same capture
+    /// shows the sixteen bats spread 5/5/4/2 over those four frames at entry
+    /// rather than moving in lockstep, which only a per-slot random gate
+    /// produces. The engine after this change measures 1.73 to 2.39, mean
+    /// 2.00, over the same eighteen cells.
+    fn animate_active_object_decision_point(&mut self, slot: usize) {
+        let object = self.active_objects[slot];
+        let Some(next) = active_object_next_frame_tile(object.type_byte, object.tile) else {
+            // No frame family: `animation.md §4` case 4's "Some slots do
+            // nothing". Costs no draw, exactly as an ineligible slot must.
+            return;
+        };
+        if !self.active_object_animation_coin() {
+            return;
+        }
+        if self.active_objects[slot].tile != next {
+            self.active_objects[slot].tile = next;
+            self.mark_visibility_dirty();
+        }
+    }
+
+    /// `animation.md §5`'s "fair coin that decides whether this slot's
+    /// animation advances at all this pass", drawn from the shared gameplay
+    /// stream (`visibility.md §8.4` consumer one).
+    fn active_object_animation_coin(&mut self) -> bool {
+        self.random_range_u8(0, 1) == 1
     }
 
     pub fn advance_outdoor_active_objects(&mut self) {

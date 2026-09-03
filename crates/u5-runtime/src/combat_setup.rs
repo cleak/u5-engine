@@ -675,7 +675,7 @@ pub fn dungeon_room_combat_instance_from_setup_after_party(
                     x: usize::from(source.x),
                     y: usize::from(source.y),
                     z,
-                    phase: STEADY_PHASE,
+                    phase: COMBAT_PLACEMENT_ACTIVE_OBJECT_PHASE,
                     aux1: stats.max_hp,
                     aux3: COMBAT_ACTIVE_OBJECT_NO_DESCRIPTOR,
                 };
@@ -1086,7 +1086,7 @@ pub fn terrain_combat_place_monsters_after_party(
             x: usize::from(placement.x),
             y: usize::from(placement.y),
             z,
-            phase: STEADY_PHASE,
+            phase: COMBAT_PLACEMENT_ACTIVE_OBJECT_PHASE,
             aux1: stats.max_hp,
             aux3: COMBAT_ACTIVE_OBJECT_NO_DESCRIPTOR,
         };
@@ -1442,7 +1442,7 @@ impl PlayState {
                 x: usize::from(x),
                 y: usize::from(y),
                 z,
-                phase: STEADY_PHASE,
+                phase: COMBAT_PLACEMENT_ACTIVE_OBJECT_PHASE,
                 aux1: stats.max_hp,
                 aux3: COMBAT_ACTIVE_OBJECT_NO_DESCRIPTOR,
             };
@@ -1878,7 +1878,7 @@ impl PlayState {
                 x: usize::from(x),
                 y: usize::from(y),
                 z,
-                phase: STEADY_PHASE,
+                phase: COMBAT_PLACEMENT_ACTIVE_OBJECT_PHASE,
                 aux1: roster_slot as u8,
                 aux3: COMBAT_ACTIVE_OBJECT_NO_DESCRIPTOR,
             };
@@ -2179,6 +2179,57 @@ mod combat_setup_batch_tests {
             record[7 * COMBAT_ARENA_ROW_STRIDE + 11 + index] = 15 - index as u8;
         }
         record
+    }
+
+    /// `active-objects.md §7`: combat setup "first clears all thirty-two
+    /// records, then seats the party, then places monsters", and the bytes it
+    /// then writes are enumerated - byte 0, byte 1, bytes 2 and 3, byte 4,
+    /// byte 5 and byte 7. **Byte 6 is not among them**, so an arena record
+    /// keeps the zero the clear left.
+    ///
+    /// That value is load-bearing. `active-objects.md §3` gives the animator's
+    /// gates in order: an all-ones low nibble makes it "bail immediately,
+    /// **writing nothing**", while a low nibble of zero "fall[s] through to the
+    /// eligibility gates ..., which may advance the script step and rewrite the
+    /// byte". Seeding [`STEADY_PHASE`] at placement therefore freezes every
+    /// sprite in the arena for the whole fight - measured against the original
+    /// as sixteen identical bat tiles where the original shows the four frames
+    /// of the family spread 5/5/4/2 across the same sixteen cells.
+    #[test]
+    fn combat_placement_leaves_arena_records_at_a_decision_point() {
+        let seats = [(5u8, 8u8), (6, 9), (4, 9), (5, 10), (7, 10), (3, 10)];
+        let (mut state, dir) = batch_combat_state(&[b'G', b'G', b'G']);
+        fs::write(
+            dir.join(BRIT_CBT_FILE),
+            seated_arena_record(&seats).repeat(BRIT_CBT_RECORDS),
+        )
+        .unwrap();
+
+        state
+            .enter_terrain_combat_from_world_object(&dir, WorldPlane::Britannia, 1, batch_trigger())
+            .unwrap();
+
+        let occupied: Vec<usize> = (0..state.active_objects.len())
+            .filter(|slot| !state.active_objects[*slot].is_empty())
+            .collect();
+        assert!(
+            occupied.len() > 3,
+            "the arena must hold the seated party and at least one monster, got {occupied:?}"
+        );
+        for slot in occupied {
+            let object = state.active_objects[slot];
+            assert_eq!(
+                object.phase, COMBAT_PLACEMENT_ACTIVE_OBJECT_PHASE,
+                "record {slot} (type {:#04x}) must keep the clear's zero in byte 6",
+                object.type_byte
+            );
+            assert_ne!(
+                object.phase & 0x0f,
+                STEADY_PHASE,
+                "record {slot} must not carry the freeze sentinel"
+            );
+        }
+        let _ = fs::remove_dir_all(dir);
     }
 
     fn batch_party_member(slot: u8, status: u8) -> PartyMember {
