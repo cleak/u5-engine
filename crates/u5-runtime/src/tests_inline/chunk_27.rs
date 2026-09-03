@@ -422,12 +422,17 @@ fn message_window_wraps_and_scrolls_within_its_thirteen_rows() {
             .all(|row| row.text.chars().count() <= MESSAGE_WINDOW_WIDTH)
     );
 
-    // The log keeps only the rows that can still scroll into view.
+    // The log keeps only the rows that can still scroll into view -
+    // text-output.md section 10.1 makes window 2 thirteen rows tall
+    // ((24, 11) - (39, 23)), and section 10.6 keeps the live prompt on
+    // that window's own last row, so every one of the thirteen can hold
+    // content at once.
     for index in 0..40 {
         log.push_command(&format!("Cmd{index}"));
         log.end_turn();
     }
-    assert!(log.lines().len() <= MESSAGE_WINDOW_HISTORY_ROWS);
+    assert!(log.lines().len() <= MESSAGE_WINDOW_ROWS);
+    assert!(log.lines().len() > MESSAGE_WINDOW_HISTORY_ROWS);
     let layout = layout_message_window(&log, Some(""));
     assert!(layout.rows.iter().all(|row| {
         row.row >= MESSAGE_WINDOW_TOP && row.row <= MESSAGE_WINDOW_BOTTOM

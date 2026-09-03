@@ -48,7 +48,8 @@ fn directed_utility_success_variant(spell_index: usize) -> Option<u8> {
 /// one observed in the original's message window (`Player:` followed by
 /// the selection, `Player: None!` on cancel).
 pub const PARTY_SELECTOR_PROMPT_MESSAGE: &str = PARTY_SELECTION_PROMPT;
-/// The cancel result printed on Escape or Space.
+/// The cancel result printed on Escape, and on the `0` explicit-none
+/// key of `text-output.md §10.6`.
 pub const PARTY_SELECTOR_CANCELLED_MESSAGE: &str = "Player: None!";
 /// `commands.md §5.6`: `None!` is "the universal cancel response". It
 /// continues the still-open `Player:_` line rather than starting a new
@@ -178,15 +179,35 @@ impl PlayState {
 
     /// Feed one key to a live party-member selector.
     ///
-    /// `inventory.md §4`: number keys `1..6` pick the matching active
-    /// party slot, jumps beyond the active party size are rejected, and
-    /// Escape cancels the selector.
+    /// `text-output.md §10.6` publishes this surface's whole key set:
+    /// "the active-player prompt prints `Player: ` and then runs a
+    /// highlight picker - digit keys `1` through `6`, up and down,
+    /// Return or Space to accept, Escape to cancel, and `0` for 'no
+    /// active player', which prints `None!` and a newline".
+    /// `inventory.md §4.3` adds that the same surface is shared by
+    /// "Z-stats, R-Ready, New Order, and the rest", that the digits are
+    /// "bounded by the current party size", and that "the four direction
+    /// keys move the indicator".
     pub fn step_active_party_selector(&mut self, key: char, suffix: &str) -> bool {
         let Some(session) = self.active_party_selector else {
             return false;
         };
         let key = z_stats_first_input_key(key, suffix);
-        if matches!(key, '\u{1b}' | ' ' | '0') {
+        // Escape cancels, and `commands.md §5.6` makes `None!` "the
+        // universal cancel response"; `0` is §10.6's explicit-none key,
+        // which prints the same word. Space is deliberately absent:
+        // §10.6 accepts on Return *or* Space.
+        //
+        // Open spec question on `0` only: `inventory.md §4`'s own
+        // paragraph on this selector says "Escape cancels the selector,
+        // while the explicit none/retry result only redraws the prompt
+        // path and does not select a character", which would keep the
+        // selector live on `0` rather than closing it - and that is what
+        // the R-Ready arm of `step_active_ready` already does. Closing it
+        // here is the engine's pre-existing behaviour and no capture of
+        // the original settles which reading is right, so it is left
+        // alone until the spec answers.
+        if matches!(key, '\u{1b}' | '0') {
             self.active_party_selector = None;
             if !self
                 .complete_open_direction_echo(PARTY_SELECTION_PROMPT, PARTY_SELECTOR_CANCEL_REPLY)
@@ -212,14 +233,13 @@ impl PlayState {
             self.message = PARTY_SELECTOR_PROMPT_MESSAGE.to_string();
             return true;
         }
-        // Runtime observation, spec silent: §4.3 publishes the digits
-        // and the direction keys but names no confirm key for this
-        // selector. A capture of the original commits the indicated row
-        // on Enter, and the shared item picker of `inventory.md §5`
-        // step 4 confirms the same way, so Enter is accepted here too.
+        // `text-output.md §10.6`: "Return or Space to accept". The
+        // shared R-Ready picker of `inventory.md §5` step 4 tests the
+        // same two keys separately and reaches the same cascade, so both
+        // commit the indicated row here too.
         let index = match key.to_digit(10) {
             Some(digit) => (digit as usize).saturating_sub(1),
-            None if matches!(key, '\r' | '\n') => session.highlight,
+            None if matches!(key, '\r' | '\n' | ' ') => session.highlight,
             None => {
                 // Any other key redraws the prompt; the selector stays live.
                 self.message = PARTY_SELECTOR_PROMPT_MESSAGE.to_string();
@@ -257,6 +277,19 @@ impl PlayState {
         }
         let selected = selected.min(self.party.len() - 1);
         self.active_z_stats = Some(ZStatsSession::new(selected));
+        // `inventory.md §4.7` publishes the page loop's sub-prompt as
+        // `\nStatus:_` - the literal leads with a newline. Whatever
+        // opened the page has already closed its own line (the
+        // `Z-stats...` echo of `text-output.md §10.3` ends in a newline;
+        // the member selector's accepted name ends the `Player:_` line),
+        // so by §10.4's combined carriage-return/line-feed rule that
+        // leading newline lands on an already-fresh row and leaves one
+        // blank row above the prompt. Measured on
+        // `playtest/orig/zz/z1.png`: `Player: Avatar` on text row 21,
+        // row 22 blank, `Status:_` and its cursor on row 23.
+        if !self.message_transcript.is_empty() {
+            self.push_explicit_blank_message_entry();
+        }
         self.message = self.render_active_z_stats();
         MoveOutcome::Observed
     }

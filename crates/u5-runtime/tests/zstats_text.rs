@@ -50,7 +50,22 @@ fn an_unrecognised_key_prints_the_published_refusal_and_no_input_code() {
 /// rather than the original's `>Open-South`.
 #[test]
 fn a_prompted_direction_completes_the_open_verb_echo_on_its_own_line() {
-    for (key, verb) in [('O', "Open-"), ('G', "Get-")] {
+    // Every hyphen verb `commands.md` §5.3 lists that this fixture can
+    // reach without a game directory, with the two directions the
+    // play-test report named spelled out (`Attack-East`, `Open-South`).
+    // `complete_open_direction_echo` no-ops when the open line is not
+    // exactly the verb literal, so covering the whole family is what
+    // keeps a drifting echo literal from silently dropping the
+    // direction word again.
+    for (key, verb, direction_key, direction) in [
+        ('O', "Open-", '2', "South"),
+        ('G', "Get-", '2', "South"),
+        ('A', "Attack-", '6', "East"),
+        ('J', "Jimmy-", '8', "North"),
+        ('K', "Klimb-", '4', "West"),
+        ('P', "Push-", '2', "South"),
+        ('S', "Search-", '6', "East"),
+    ] {
         let mut state = test_state(open_grid(), 5, 5);
         assert_eq!(
             handle_play_key_input(&mut state, key, "", Path::new("")).unwrap(),
@@ -59,7 +74,7 @@ fn a_prompted_direction_completes_the_open_verb_echo_on_its_own_line() {
         assert_eq!(state.message, verb);
 
         assert_eq!(
-            handle_play_key_input(&mut state, '2', "", Path::new("")).unwrap(),
+            handle_play_key_input(&mut state, direction_key, "", Path::new("")).unwrap(),
             PlayInputDisposition::Continue
         );
         let echo = state
@@ -68,7 +83,11 @@ fn a_prompted_direction_completes_the_open_verb_echo_on_its_own_line() {
             .find(|entry| entry.is_command_echo && entry.text.starts_with(verb))
             .map(|entry| entry.text.clone())
             .unwrap_or_default();
-        assert_eq!(echo, format!("{verb}South"), "{key} echo was {echo:?}");
+        assert_eq!(
+            echo,
+            format!("{verb}{direction}"),
+            "{key} echo was {echo:?}"
+        );
     }
 }
 
@@ -450,4 +469,153 @@ fn the_selector_inverts_exactly_the_indicated_roster_row() {
         1,
         "the cancel word continues the prompt line: {texts:?}"
     );
+}
+
+/// `text-output.md §10.6` publishes the whole key set of the shared
+/// active-player picker: "digit keys `1` through `6`, up and down,
+/// Return or Space to accept, Escape to cancel, and `0` for 'no active
+/// player', which prints `None!` and a newline". `inventory.md §4.3`
+/// makes it one surface for "Z-stats, R-Ready, New Order, and the rest",
+/// and `inventory.md §5` step 4 has the picker it opens next confirm on
+/// "**Enter or Space**".
+///
+/// The engine mapped Space to *cancel*, so a player who accepted with
+/// Space got `Player: None!` instead of the page.
+#[test]
+fn the_selector_accepts_on_return_or_space_and_cancels_on_escape_or_zero() {
+    for accept in ['\r', '\n', ' '] {
+        let mut state = test_state(open_grid(), 5, 5);
+        assert_eq!(
+            handle_play_key_input(&mut state, 'Z', "", Path::new("")).unwrap(),
+            PlayInputDisposition::Continue
+        );
+        assert_eq!(state.selector_highlight(), Some(0));
+        assert_eq!(
+            handle_play_key_input(&mut state, accept, "", Path::new("")).unwrap(),
+            PlayInputDisposition::Continue
+        );
+        assert!(
+            state.active_z_stats.is_some(),
+            "{accept:?} must accept the indicated row"
+        );
+        assert_eq!(state.message, Z_STATS_STATUS_PROMPT);
+        assert_ne!(state.message, "Player: None!");
+    }
+    for cancel in ['\u{1b}', '0'] {
+        let mut state = test_state(open_grid(), 5, 5);
+        assert_eq!(
+            handle_play_key_input(&mut state, 'Z', "", Path::new("")).unwrap(),
+            PlayInputDisposition::Continue
+        );
+        assert_eq!(
+            handle_play_key_input(&mut state, cancel, "", Path::new("")).unwrap(),
+            PlayInputDisposition::Continue
+        );
+        assert!(state.active_z_stats.is_none(), "{cancel:?} must cancel");
+        assert_eq!(state.message, "Player: None!");
+    }
+}
+
+/// `inventory.md §4.7` publishes the page loop's sub-prompt as
+/// `\nStatus:_`, leading newline included, and `text-output.md §10.4`
+/// makes a line feed a combined carriage return and line feed: landing
+/// on a row the previous line already closed, it leaves one blank row.
+///
+/// Measured on `playtest/orig/zz/z1.png`: `>Z-stats...` on text row 20,
+/// `Player: Avatar` on 21, row 22 blank, `Status:_` and its cursor on
+/// 23. The engine drew those three lines on rows 21, 22 and 23 with no
+/// blank between them, so the whole window sat one row high.
+#[test]
+fn the_status_sub_prompt_keeps_one_blank_row_under_the_player_line() {
+    let mut state = test_state(open_grid(), 5, 5);
+    assert_eq!(
+        handle_play_key_input(&mut state, 'Z', "", Path::new("")).unwrap(),
+        PlayInputDisposition::Continue
+    );
+    assert_eq!(
+        handle_play_key_input(&mut state, '\r', "", Path::new("")).unwrap(),
+        PlayInputDisposition::Continue
+    );
+    assert!(state.active_z_stats.is_some());
+
+    // The blank is stored as its own transcript entry, between the
+    // completed `Player:_` line and the sub-prompt.
+    let entries = state.message_entries();
+    let player = entries
+        .iter()
+        .position(|entry| entry.text.starts_with(PARTY_SELECTION_PROMPT))
+        .expect("the completed Player: line");
+    assert!(
+        entries[player + 1].explicit_blank,
+        "entries were {:?}",
+        entries.iter().map(|e| e.text.clone()).collect::<Vec<_>>()
+    );
+
+    // And it survives a renderer whose text filter drops empty lines,
+    // which is how both the Bevy compositor and `--save-screen` build
+    // the window.
+    let log = message_log_from_entries(state.message_entries(), |text| {
+        (!text.trim().is_empty()).then(|| text.to_string())
+    });
+    let open = state.open_prompt_line();
+    let layout = layout_message_window_with_open_prompt(&log, Some(""), open.as_deref());
+    let placed = layout
+        .rows
+        .iter()
+        .map(|row| (row.row, row.text.clone()))
+        .collect::<Vec<_>>();
+    let prompt = layout.rows.last().expect("the open Status: row");
+    assert_eq!(prompt.text, Z_STATS_STATUS_PROMPT.trim_end());
+    assert_eq!(prompt.row, 23);
+    let above = layout.rows[layout.rows.len() - 2].row;
+    assert_eq!(
+        above, 21,
+        "one blank row must sit between the Player: line and the prompt: {placed:?}"
+    );
+}
+
+/// `text-output.md §10.2`: every mode loop "1. Emit a line feed into the
+/// message window. 2. Draw the right-pointing bracket end-cap ... 3.
+/// Read the key", and §10.4: a completed turn "leaves the cursor at
+/// column 0 of a fresh row, and the next cycle's leading line feed
+/// advances again - producing exactly one blank row after each completed
+/// command turn".
+///
+/// So the live prompt row the turn loop is waiting on always has a blank
+/// row above it. Measured on `playtest/orig/qsave2/00_Y.png`,
+/// `playtest/orig/walk/07_DOWN.png` and `playtest/orig/exit/06_DOWN.png`:
+/// the marker-and-cursor row 23 sits under a blank row 22 in all three,
+/// where the engine packed its last output line into row 22.
+#[test]
+fn the_live_prompt_row_keeps_one_blank_row_above_the_last_output() {
+    let mut log = GameplayMessageLog::new();
+    log.push_command("Quit:");
+    log.push_output("Save game? Yes");
+    log.push_output("Saving...");
+    log.push_output("Done.");
+
+    let layout = layout_message_window(&log, Some(""));
+    let placed = layout
+        .rows
+        .iter()
+        .map(|row| (row.row, row.text.clone()))
+        .collect::<Vec<_>>();
+    assert_eq!(
+        placed,
+        vec![
+            (18, "Quit:".to_string()),
+            (19, "Save game? Yes".to_string()),
+            (20, "Saving...".to_string()),
+            (21, "Done.".to_string()),
+            (23, String::new()),
+        ],
+        "row 22 must stay blank"
+    );
+
+    // Exactly one blank, though: a log that already ends in the blank an
+    // earlier `end_turn` stored must not gain a second.
+    log.end_turn();
+    let layout = layout_message_window(&log, Some(""));
+    let rows = layout.rows.iter().map(|row| row.row).collect::<Vec<_>>();
+    assert_eq!(rows, vec![18, 19, 20, 21, 23]);
 }

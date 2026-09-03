@@ -2392,6 +2392,22 @@ fn play_input_talk_without_suffix_opens_keyword_session() {
     assert!(state.active_direction_prompt.is_none());
     assert!(state.active_conversation.is_some());
     assert_eq!(state.turn, 1);
+    // commands.md section 5.3: the `-` suffix means "a direction is
+    // awaited. The chosen direction's name is appended on the same
+    // line", so the transcript keeps one `Talk-East` echo rather than a
+    // bare `Talk-` plus a separate direction line.
+    assert!(
+        state
+            .message_entries()
+            .iter()
+            .any(|entry| entry.is_command_echo && entry.text == "Talk-East"),
+        "{:?}",
+        state
+            .message_entries()
+            .iter()
+            .map(|entry| entry.text.clone())
+            .collect::<Vec<_>>()
+    );
 
     assert_eq!(
         handle_play_key_input(&mut state, 'J', "OB", &dir).unwrap(),
