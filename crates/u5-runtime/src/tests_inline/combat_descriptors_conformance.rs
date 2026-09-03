@@ -758,3 +758,152 @@
             "transcript was {transcript:?}"
         );
     }
+
+    #[test]
+    fn the_party_death_arm_emits_no_cue_of_its_own() {
+        // `combat.md §11.1` declares itself "the complete printed-and-audible
+        // census of one attack outcome in the arena, in both directions", and
+        // its "Target dies" row reads "no cue of its own; the party death arm
+        // runs a full stats redraw, the monster death arms write their tiles
+        // (Section 6.3)". `§6.3`'s own party-member row still lists "death
+        // audio played" among that branch's writes, but it names no envelope
+        // and `audio.md` publishes no combat party-death trigger at all, so
+        // the later, complete and more specific census governs: this arm
+        // emits the redraw and no sound. The wording conflict is filed as an
+        // open spec question.
+        let mut state = combat_descriptor_state();
+        state.combat_actors[0] =
+            CombatActorDescriptor::from_row([20, 1, COMBAT_ACTOR_FLAG_SELECTABLE_80, 0, 0, 0, 5, 5]);
+        state.party[0].hp = 5;
+        state.visibility_dirty = false;
+        let sounds_before = state.sound_effect_history.len();
+
+        state
+            .apply_combat_weapon_damage_to_target(None, 0, COMBAT_INSTANT_KILL_DAMAGE, false)
+            .unwrap();
+
+        assert_eq!(state.party[0].status, b'D');
+        assert_eq!(state.party[0].hp, 0);
+        assert_eq!(
+            state.sound_effect_history.len(),
+            sounds_before,
+            "the party death arm has no cue of its own; history was {:?}",
+            state.sound_effect_history
+        );
+        assert!(state.visibility_dirty);
+    }
+
+    #[test]
+    fn the_narrator_gate_runs_at_dispatch_time_not_after_the_round_walk() {
+        // `combat.md §6.3`: "If that narrator is not reached, the combat
+        // walker replaces the whole field with zero before the next actor
+        // dispatch." The shared action-result field therefore describes one
+        // dispatch only. A round walk visits several slots before any
+        // transcript is assembled, so a gate applied after the walk reads a
+        // field that a later slot has already zeroed and the vanish
+        // suppression silently does not fire.
+        let mut state = combat_descriptor_state();
+        state.party_names = default_party_names(1);
+        state.party[0].hp = 30;
+        // Party member far from the vanish kill, adjacent to the second
+        // hostile.
+        state.combat_actors[0] =
+            CombatActorDescriptor::from_row([30, 1, COMBAT_ACTOR_FLAG_SELECTABLE_80, 0, 0, 0, 2, 2]);
+        // A hostile monster next to a controlled (group-0) vanish-class
+        // creature: `§16.1` "Controlled/charmed bit on an ordinary monster
+        // descriptor" resolves to "Group 0", so it is a legal target for the
+        // group-1 attacker beside it.
+        state.combat_actors[8] = CombatActorDescriptor::from_row([
+            10,
+            1,
+            COMBAT_ACTOR_FLAG_SELECTABLE_40,
+            COMBAT_CLASS_GIANT_RAT,
+            8,
+            1,
+            6,
+            5,
+        ]);
+        state.combat_actors[9] = CombatActorDescriptor::from_row([
+            1,
+            1,
+            COMBAT_ACTOR_FLAG_SELECTABLE_40 | COMBAT_ACTOR_FLAG_CONTROLLED,
+            47,
+            9,
+            1,
+            7,
+            5,
+        ]);
+        // A second hostile whose own dispatch zeroes the field before any
+        // transcript is built.
+        state.combat_actors[10] = CombatActorDescriptor::from_row([
+            10,
+            1,
+            COMBAT_ACTOR_FLAG_SELECTABLE_40,
+            COMBAT_CLASS_GIANT_RAT,
+            10,
+            1,
+            3,
+            2,
+        ]);
+        for slot in [0usize, 8, 9, 10] {
+            let actor = state.combat_actors[slot];
+            state.active_objects[slot] = ActiveObject {
+                type_byte: 0x90,
+                tile: 0x90,
+                x: usize::from(actor.x),
+                y: usize::from(actor.y),
+                ..ActiveObject::empty()
+            };
+        }
+        let strike = CombatMonsterAttackInputs {
+            party_defender_rating: 7,
+            forced_hit: Some(true),
+            damage_roll: 200,
+            ..CombatMonsterAttackInputs::default()
+        };
+
+        let walk = state.apply_combat_round_walk_from_slot_with_inputs(
+            8,
+            30,
+            false,
+            false,
+            0,
+            false,
+            1,
+            1,
+            &[(7, 5)],
+            None,
+            0,
+            false,
+            None,
+            true,
+            &[],
+            &[(8, strike), (10, strike)],
+        );
+        crate::input_dispatch::append_combat_round_walk_messages(&mut state, &walk);
+
+        let transcript = combat_descriptor_transcript(&state);
+        // The vanish branch's own line still prints.
+        assert!(
+            transcript.contains("Shadow Lord vanishes!"),
+            "transcript was {transcript:?}"
+        );
+        // `§6.3`: the surviving `0x02` "skips the generic killed/slept/hit
+        // chain", even though a later slot's dispatch has since zeroed the
+        // field.
+        assert!(
+            !state.message.contains("killed!"),
+            "message was {:?}",
+            state.message
+        );
+        assert!(
+            !transcript.contains("killed!"),
+            "transcript was {transcript:?}"
+        );
+        // The later dispatch's own line is unaffected.
+        assert!(
+            state.message.contains("hit!"),
+            "message was {:?}",
+            state.message
+        );
+    }

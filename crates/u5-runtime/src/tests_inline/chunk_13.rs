@@ -20392,7 +20392,7 @@ fn cast_dispatcher_gate_matches_spec_order_and_messages() {
 }
 
 #[test]
-fn summoned_creatures_take_the_player_command_path() {
+fn summoned_creatures_reach_the_command_handler_but_are_never_prompted() {
     // combat.md §6.1a writer 3: summoned creatures "are still placed
     // through the ordinary monster placement path, so their class byte
     // is the monster-side one - but the bit **does** hand the creature
@@ -20482,6 +20482,20 @@ fn summoned_creatures_take_the_player_command_path() {
     // friendly-fire filter and the player-versus-AI dispatch gate".
     let traitor = descriptor(COMBAT_ACTOR_FLAG_SELECTABLE_80, TRAITOR_ROSTER_RECORD);
     assert!(!combat_slot_takes_player_command_path(1, traitor));
+
+    // Reaching the handler is not being prompted by it. §16.1: it
+    // "prompts only for an eligible selected party member, while a
+    // monster descriptor that control moved to group 0 still synthesizes
+    // an automatic action" - so the keystroke gate is narrower than the
+    // dispatch gate by exactly the summoned/charmed monster.
+    assert!(combat_slot_prompts_for_player_command(0, party));
+    assert!(!combat_slot_prompts_for_player_command(0, controlled_party));
+    for slot in COMBAT_PARTY_ACTOR_SLOTS..COMBAT_ACTOR_SLOTS {
+        assert!(
+            !combat_slot_prompts_for_player_command(slot, summoned),
+            "summoned creature in slot {slot} was offered the prompt"
+        );
+    }
 }
 
 #[test]

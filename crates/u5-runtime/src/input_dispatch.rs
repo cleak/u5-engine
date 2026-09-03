@@ -2503,16 +2503,22 @@ fn handle_endgame_key_input(
     Ok(PlayInputDisposition::Continue)
 }
 
-/// The dispatch decision is `combat.md §6.1a`'s slot-to-group helper,
-/// not the controlled bit read directly: a party-side actor carrying
-/// that bit (Sword of Chaos, possession, Charm) resolves to group 1 and
-/// goes to the automatic driver, while a monster-side actor carrying it
-/// resolves to group 0 and "is dispatched to the keystroke/command path,
-/// not to the automatic driver" (`§6.1a` writer 3; `magic.md`'s
-/// "the player never gets to move it" is withdrawn by
-/// `RETRACTIONS.md` R354).
+/// Which slots the player may actually type a command for. `combat.md
+/// §6.1a`'s slot-to-group helper decides who reaches the combined command
+/// handler - a party-side actor carrying the controlled bit (Sword of
+/// Chaos, possession, Charm) resolves to group 1 and goes to the automatic
+/// driver, while a monster-side actor carrying it resolves to group 0 and
+/// "is dispatched to the keystroke/command path, not to the automatic
+/// driver" (`§6.1a` writer 3; `magic.md`'s "the player never gets to move
+/// it" is withdrawn by `RETRACTIONS.md` R354).
+///
+/// The prompt is narrower than that path. `§16.1`: the handler "prompts
+/// only for an eligible selected party member, while a monster descriptor
+/// that control moved to group 0 still synthesizes an automatic action" -
+/// so a controlled monster is dispatched by the walker and never consumes
+/// a keystroke.
 fn combat_actor_accepts_player_input(slot: usize, actor: CombatActorDescriptor) -> bool {
-    combat_actor_is_active_not_dead(actor) && combat_slot_takes_player_command_path(slot, actor)
+    combat_actor_is_active_not_dead(actor) && combat_slot_prompts_for_player_command(slot, actor)
 }
 
 fn combat_has_dispatchable_player_actor(state: &PlayState) -> bool {
@@ -3111,16 +3117,6 @@ pub(crate) fn combat_weapon_resolution_reaches_generic_chain(
     matches!(resolution, CombatWeaponAttackResolution::Hit { .. })
 }
 
-fn combat_weapon_damage_application_killed(
-    damage_application: Option<CombatWeaponDamageApplication>,
-) -> bool {
-    match damage_application {
-        Some(CombatWeaponDamageApplication::Party { damage, .. }) => damage.killed,
-        Some(CombatWeaponDamageApplication::Monster { damage, .. }) => damage.killed,
-        None => false,
-    }
-}
-
 fn combat_weapon_attack_result_message(
     state: &mut PlayState,
     target_slot: usize,
@@ -3133,25 +3129,21 @@ fn combat_weapon_attack_result_message(
     combat_apply_attack_narrator_gate(state, line, narrates_kill, reaches_generic_chain)
 }
 
+/// The narrator gate for a monster-side attack already ran, inside the
+/// dispatch that resolved the attack
+/// ([`PlayState::apply_combat_monster_attack_narrator_gate`]). `combat.md
+/// §6.3` gives the shared result field a one-dispatch lifetime - "the
+/// combat walker replaces the whole field with zero before the next actor
+/// dispatch" - and a round walk visits several slots before any transcript
+/// is assembled, so this stage only honours the verdict recorded then.
 fn combat_monster_attack_result_message(
-    state: &mut PlayState,
+    state: &PlayState,
     attack: CombatMonsterAttackApplication,
 ) -> Option<String> {
-    let line = combat_monster_attack_result_line(state, attack);
-    let narrates_kill = combat_weapon_damage_application_killed(attack.damage_application);
-    // `§11.1` puts the poison line inside damage resolution, ahead of the
-    // result line it then suppresses, so it is not the generic chain
-    // either.
-    let poisoned = matches!(
-        attack.poison_status_outcome,
-        Some(CombatPoisonStatusAttackOutcome::PoisonedPartyMember { .. })
-    );
-    let reaches_generic_chain = line.is_some()
-        && !poisoned
-        && attack
-            .resolution
-            .is_some_and(combat_weapon_resolution_reaches_generic_chain);
-    combat_apply_attack_narrator_gate(state, line, narrates_kill, reaches_generic_chain)
+    if attack.generic_chain_suppressed {
+        return None;
+    }
+    combat_monster_attack_result_line(state, attack)
 }
 
 /// Player-visible result lines observed in the original DOS presentation and
@@ -3263,7 +3255,7 @@ fn append_combat_result_line(message: &mut String, line: &str) {
     message.push('\n');
 }
 
-fn append_combat_round_walk_messages(
+pub(crate) fn append_combat_round_walk_messages(
     state: &mut PlayState,
     application: &CombatRoundWalkApplication,
 ) {
@@ -3278,11 +3270,22 @@ fn append_combat_round_walk_messages(
                     },
                 ..
             } => ai_turn.monster_attack,
+            // `combat.md §16.1`'s synthesized turn for a controlled monster
+            // resolves its one fixed attempt through the same shared
+            // attack primitive, so it narrates through the same line.
+            CombatActorSlotDispatchApplication::Slot {
+                action:
+                    CombatActorDispatchAction::ControlledMonsterAttempt {
+                        attempt: Some(attempt),
+                    },
+                ..
+            } => attempt.monster_attack,
             _ => None,
         })
         .collect::<Vec<_>>();
-    // `combat.md §6.3`: the narrator gate is per attack result, so each
-    // one runs it in dispatch order rather than after the whole walk.
+    // `combat.md §6.3`: the narrator gate already ran inside each attack's
+    // own dispatch, while the shared result field still described that
+    // slot; this loop only prints what the gate let through.
     for attack in attacks {
         if let Some(line) = combat_monster_attack_result_message(state, attack) {
             append_combat_result_line(&mut state.message, &line);

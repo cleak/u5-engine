@@ -11378,16 +11378,19 @@ fn combat_input_dispatch_z_stats_refuses_missing_or_disabled_actor() {
 }
 
 #[test]
-fn combat_input_dispatch_hands_a_controlled_non_party_actor_the_prompt() {
+fn combat_input_dispatch_never_prompts_a_controlled_non_party_actor() {
     // combat.md §6.1a writer 3: "the bit **does** hand the creature to
     // the player's prompt: a monster-side slot carrying it is dispatched
-    // to the keystroke/command path, not to the automatic driver".
-    // §16.1: the controlled bit resolves an "ordinary monster
-    // descriptor" to "Group 0", and "Group-0 actors enter the combined
-    // command handler". magic.md, Summoning and conjuration, carries the
-    // matching correction; RETRACTIONS.md R354 withdraws the earlier
-    // "the player never gets to move it" reading, which this test used
-    // to assert.
+    // to the keystroke/command path, not to the automatic driver"
+    // (RETRACTIONS.md R354). That is the dispatch half, and §16.1 gives
+    // the other half: "Group-0 actors enter the combined command handler;
+    // it prompts only for an eligible selected party member, while a
+    // monster descriptor that control moved to group 0 still synthesizes
+    // an automatic action." §11.1 publishes that synthesized turn as one
+    // fixed attempt, and magic.md's Summoning and conjuration records that
+    // "What the player can usefully do with such a creature beyond that
+    // attack path is not established here" - so no ordinary command is
+    // accepted for it.
     let game_dir = std::path::Path::new(".");
     let mut state = combat_player_command_state(8, 5);
     state.combat_actors[8].flags |= COMBAT_ACTOR_FLAG_TEAM_TOGGLE;
@@ -11395,22 +11398,45 @@ fn combat_input_dispatch_hands_a_controlled_non_party_actor_the_prompt() {
     state.next_combat_actor_slot = 9;
     state.visibility_dirty = false;
 
+    // The slot resolves to group 0 and so reaches the command handler ...
     assert_eq!(
         resolve_combat_target_group_for_actor(state.combat_actors[8], 8, None),
         COMBAT_TARGET_GROUP_PARTY
     );
+    assert!(combat_slot_takes_player_command_path(
+        8,
+        state.combat_actors[8]
+    ));
+    // ... but the handler never prompts it, while the seated party member
+    // in slot 0 is prompted.
+    assert!(!combat_slot_prompts_for_player_command(
+        8,
+        state.combat_actors[8]
+    ));
+    assert!(combat_slot_prompts_for_player_command(
+        0,
+        state.combat_actors[0]
+    ));
 
     assert_eq!(
         handle_play_key_input(&mut state, '6', "", game_dir).unwrap(),
         PlayInputDisposition::Continue
     );
 
-    assert_eq!((state.combat_actors[8].x, state.combat_actors[8].y), (9, 5));
+    // The movement command is refused: no step, no transcript line.
+    assert_eq!(state.message, "");
+    assert_eq!((state.combat_actors[8].x, state.combat_actors[8].y), (8, 5));
     assert_eq!(
         (state.active_objects[8].x, state.active_objects[8].y),
-        (9, 5)
+        (8, 5)
     );
-    assert!(state.message.starts_with("East"));
+
+    // The round walk never opens a pending turn on that slot either.
+    let mut walked = combat_player_command_state(8, 5);
+    walked.combat_actors[8].flags |= COMBAT_ACTOR_FLAG_TEAM_TOGGLE;
+    walked.next_combat_actor_slot = 8;
+    walked.ensure_pending_combat_player_turn();
+    assert_ne!(walked.pending_combat_actor_slot, Some(8));
 
     // The same slot without the bit stays on the automatic driver and
     // ignores the keystroke.
@@ -12318,13 +12344,35 @@ fn combat_actor_slot_dispatch_runs_ready_monster_ai_after_phase_refresh() {
     assert_eq!((state.combat_actors[8].x, state.combat_actors[8].y), (7, 5));
 }
 
-#[test]
-fn combat_actor_slot_dispatch_routes_controlled_non_party_actor_to_player_path() {
-    let mut state = combat_ai_turn_state(8, 5);
+fn controlled_monster_dispatch_state(foe_x: u8, foe_y: u8) -> PlayState {
+    let mut state = combat_ai_turn_state(6, 5);
     state.combat_actors[8].flags |= COMBAT_ACTOR_FLAG_CONTROLLED;
     state.combat_actors[8].phase_counter = 1;
+    // One hostile foe. The controlled creature resolves to group 0, and
+    // `combat.md §16.1` target selection "rejects candidates in the acting
+    // slot's group", so this is its only legal target.
+    state.active_objects[9] = ActiveObject {
+        type_byte: 0x90,
+        tile: 0x90,
+        x: usize::from(foe_x),
+        y: usize::from(foe_y),
+        ..ActiveObject::empty()
+    };
+    state.combat_actors[9] = CombatActorDescriptor::from_row([
+        10,
+        1,
+        COMBAT_ACTOR_FLAG_SELECTABLE_40,
+        COMBAT_CLASS_GIANT_RAT,
+        9,
+        0,
+        foe_x,
+        foe_y,
+    ]);
+    state
+}
 
-    let application = state.apply_combat_actor_slot_dispatch_with_inputs(
+fn dispatch_controlled_monster_slot(state: &mut PlayState) -> CombatActorSlotDispatchApplication {
+    state.apply_combat_actor_slot_dispatch_with_inputs(
         8,
         30,
         false,
@@ -12340,22 +12388,98 @@ fn combat_actor_slot_dispatch_routes_controlled_non_party_actor_to_player_path()
         None,
         true,
         &[1, 2, 3, 4],
-        &[],
-    );
+        &[(
+            8,
+            CombatMonsterAttackInputs {
+                forced_hit: Some(true),
+                damage_roll: 4,
+                ..CombatMonsterAttackInputs::default()
+            },
+        )],
+    )
+}
 
+#[test]
+fn combat_dispatch_synthesizes_the_controlled_monster_turn_instead_of_prompting() {
+    // combat.md §16.1: "Group-0 actors enter the combined command handler;
+    // it prompts only for an eligible selected party member, while a
+    // monster descriptor that control moved to group 0 still synthesizes
+    // an automatic action." §11.1's announcement table publishes that turn
+    // as the reduced banner "then one fixed attempt", and §6.1a's attack
+    // driver reader supplies the attempt: it "still picks a target the
+    // normal way", the target "must be at straight-line distance exactly
+    // one", and the strike skips the attacker back-link.
+    let mut state = controlled_monster_dispatch_state(7, 5);
+
+    let application = dispatch_controlled_monster_slot(&mut state);
+
+    let CombatActorSlotDispatchApplication::Slot {
+        slot,
+        action,
+        control_after,
+        ..
+    } = application
+    else {
+        panic!("the controlled monster slot should dispatch");
+    };
+    assert_eq!(slot, 8);
+    assert_eq!(control_after, CombatRoundLoopControl::ContinueActorWalk);
+    let CombatActorDispatchAction::ControlledMonsterAttempt {
+        attempt: Some(attempt),
+    } = action
+    else {
+        panic!("a controlled monster must never be handed the prompt: {action:?}");
+    };
+    assert_eq!(attempt.actor_slot, 8);
     assert_eq!(
-        application,
-        CombatActorSlotDispatchApplication::Slot {
-            slot: 8,
-            phase_tick: Some(CombatActorPhaseTick::Ready {
-                counter_before: 1,
-                refreshed_counter: 29,
-            }),
-            action: CombatActorDispatchAction::PlayerReady,
-            control_after: CombatRoundLoopControl::ContinueActorWalk,
+        attempt.target,
+        CombatAiTargetResolution::ChosenActor { slot: 9, x: 7, y: 5 }
+    );
+    let attack = attempt
+        .monster_attack
+        .expect("the adjacent foe takes the one fixed attempt");
+    assert_eq!((attack.attacker_slot, attack.target_slot), (8, 9));
+    assert!(matches!(
+        attack.resolution,
+        Some(CombatWeaponAttackResolution::Hit { .. })
+    ));
+    // §6.1a: "the pre-attack animation, the attacker back-link, the
+    // class-specific attack overrides and the monster ranged-spell branch
+    // are all skipped", and the turn does not step.
+    assert_eq!((state.combat_actors[8].x, state.combat_actors[8].y), (6, 5));
+    assert_eq!(state.combat_interference_sources[9], 0);
+}
+
+#[test]
+fn a_controlled_monster_with_no_adjacent_foe_produces_no_action_at_all() {
+    // combat.md §6.1a: if the chosen target "is further away the actor's
+    // turn produces **no action at all**: the driver does not fall through
+    // to the ranged branch, does not consult the class's
+    // maximum-attack-range byte, and does not step".
+    let mut state = controlled_monster_dispatch_state(10, 5);
+
+    let application = dispatch_controlled_monster_slot(&mut state);
+
+    let CombatActorSlotDispatchApplication::Slot { action, .. } = application else {
+        panic!("the controlled monster slot should dispatch");
+    };
+    let CombatActorDispatchAction::ControlledMonsterAttempt {
+        attempt: Some(attempt),
+    } = action
+    else {
+        panic!("a controlled monster must never be handed the prompt: {action:?}");
+    };
+    assert_eq!(
+        attempt.target,
+        CombatAiTargetResolution::ChosenActor {
+            slot: 9,
+            x: 10,
+            y: 5
         }
     );
-    assert_eq!((state.combat_actors[8].x, state.combat_actors[8].y), (8, 5));
+    assert_eq!(attempt.monster_attack, None);
+    assert_eq!((state.combat_actors[8].x, state.combat_actors[8].y), (6, 5));
+    assert_eq!(state.combat_actors[9].hp_or_wound, 10);
 }
 
 #[test]
@@ -14239,6 +14363,10 @@ fn combat_monster_attack_applies_poison_status_before_ordinary_melee_damage() {
             }),
             resolution: None,
             damage_application: None,
+            // `combat.md §11.1`: the poison line prints "**inside** damage
+            // resolution ... and the ordinary result line is then
+            // suppressed", so this arm never reaches the gated chain.
+            generic_chain_suppressed: false,
         }
     );
     assert_eq!(state.party[0].status, b'P');
@@ -14301,6 +14429,7 @@ fn combat_monster_attack_poison_branch_falls_back_to_damage_for_non_good_party()
                     status_after: b'P',
                 },
             }),
+            generic_chain_suppressed: false,
         }
     );
     assert_eq!(state.party[0].hp, 3);
@@ -14337,6 +14466,7 @@ fn combat_monster_attack_gate_rejection_uses_ordinary_melee_hit_resolution() {
                     status_after: b'G',
                 },
             }),
+            generic_chain_suppressed: false,
         }
     );
     assert_eq!(state.party[0].hp, 10);
@@ -14374,6 +14504,7 @@ fn combat_monster_attack_uses_ranged_effect_route_for_in_range_non_adjacent_targ
                     status_after: b'G',
                 },
             }),
+            generic_chain_suppressed: false,
         }
     );
     assert_eq!(state.party[0].hp, 7);

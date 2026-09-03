@@ -5500,12 +5500,16 @@ fn validate_combat_spell_route_state(state: &PlayState, case_name: &str) -> io::
             }
         }
         "combat-mass-charm-effect" => {
-            // `combat.md §16.1`: "Mass Charm's local target-picker override"
-            // does not affect side counting, so the charmed foe still counts
-            // and the scripted route runs on past the cast turn instead of
-            // ending it. Re-derived on that corrected route, the shared
-            // effect slot ages four steps before the script stops, so the
-            // expectation is exact rather than a range.
+            // How far the shared effect slot has aged when the scripted
+            // route stops is a property of the route, not of any published
+            // rule, so it is re-derived by running the route rather than
+            // read out of the spec. It moved in this change because the
+            // `combat.md §16.1` placement tags a few lines above now stamp
+            // `0x40` instead of `0x80` on the spawned monsters, which
+            // changes how many script steps the fight survives - not
+            // because of Mass Charm's own target-picker override, which
+            // §16.1 says "does not" affect side counting either way. The
+            // expectation is pinned exactly rather than as a range.
             const MASS_CHARM_ROUTE_AGE_STEPS: u8 = 4;
             if !state.message.starts_with("Mass charm!")
                 || state.active_effect_tag != Some(MASS_CHARM_ACTIVE_EFFECT_TAG)

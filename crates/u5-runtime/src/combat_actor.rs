@@ -1107,6 +1107,15 @@ impl CombatActorDescriptor {
         self.flags & COMBAT_ACTOR_FLAG_CONTROLLED != 0
     }
 
+    /// `combat.md §6.1`, bit `0x80`: "Party-side actor. ... Monster and
+    /// object descriptors never carry it." `§6.1a` adds that the
+    /// slot-to-group helper "reads the party-class bit `0x80` only to
+    /// choose which rule applies", so this is the descriptor-level
+    /// party-side/monster-side discriminator.
+    pub const fn is_party_side(self) -> bool {
+        self.flags & COMBAT_ACTOR_FLAG_SELECTABLE_80 != 0
+    }
+
     pub const fn eligible_for_field_coordinate_lookup(self, linked_active_object_tile: u8) -> bool {
         self.has_field_lookup_selectable_bit()
             && !self.is_marked_dead()
@@ -2129,10 +2138,6 @@ impl CombatSideCensus {
 
 pub fn combat_has_active_not_dead_non_party_actor(actors: &[CombatActorDescriptor]) -> bool {
     combat_side_census(actors).foes_remain()
-}
-
-pub fn combat_has_active_not_dead_friendly_actor(actors: &[CombatActorDescriptor]) -> bool {
-    combat_side_census(actors).friends_remain()
 }
 
 pub fn resolve_combat_victory(actors: &[CombatActorDescriptor]) -> bool {
@@ -3426,6 +3431,27 @@ pub fn resolve_combat_target_group_for_actor(
 /// re-impose the withdrawn reading, so there is none here.
 pub fn combat_slot_takes_player_command_path(slot: usize, actor: CombatActorDescriptor) -> bool {
     resolve_combat_target_group_for_actor(actor, slot, None) == COMBAT_TARGET_GROUP_PARTY
+}
+
+/// Reaching the combined command handler and being *prompted* by it are
+/// two different things. `combat.md §16.1`: "Group-0 actors enter the
+/// combined command handler; it prompts only for an eligible selected
+/// party member, while a monster descriptor that control moved to group
+/// 0 still synthesizes an automatic action."
+///
+/// So this predicate - the keystroke gate - is the group test of
+/// [`combat_slot_takes_player_command_path`] **and** the descriptor's
+/// party-side bit `0x80` (`§6.1a`: the helper "reads the party-class bit
+/// `0x80` only to choose which rule applies"). A controlled monster is
+/// still handed to the handler; it is simply never asked for a key.
+/// `§11.1` publishes the whole of the turn it gets instead - the reduced
+/// banner "then one fixed attempt: `Attack-`, `Aim! `, and on a failed
+/// roll `<target> missed!`" - and `magic.md`, Summoning and conjuration,
+/// records that "What the player can usefully do with such a creature
+/// beyond that attack path is not established here", so no ordinary
+/// command is accepted for it.
+pub fn combat_slot_prompts_for_player_command(slot: usize, actor: CombatActorDescriptor) -> bool {
+    combat_slot_takes_player_command_path(slot, actor) && actor.is_party_side()
 }
 
 pub fn combat_target_candidate_view_from_descriptor(
