@@ -3259,12 +3259,17 @@ pub fn run_route_smoke_case(
     )?];
 
     let reload_checkpoints = route_reload_checkpoints(case.name);
+    let mut previous_area = state.area;
     let result = replay_play_script_commands(
         &mut state,
         command_game_dir,
         &commands,
         |state, index, command| {
             commands_run += 1;
+            if state.area != previous_area {
+                state.prng_state = route_smoke_prng_seed();
+                previous_area = state.area;
+            }
             if reload_checkpoints.contains(&(index + 1)) {
                 let Some(save_dir) = reload_save_dir.as_deref() else {
                     return Err(io::Error::other(format!(
@@ -3273,6 +3278,7 @@ pub fn run_route_smoke_case(
                     )));
                 };
                 reload_route_smoke_state_from_checkpoint(state, game_dir, save_dir)?;
+                previous_area = state.area;
             }
             let raster = raster_diagnostic_line(state, VIEWPORT_RADIUS, atlas)?;
             require_raster_hash(case, &raster)?;
@@ -3595,6 +3601,9 @@ fn reload_route_smoke_state_from_checkpoint(
     state.save_game_command(save_dir, Some(true))?;
     let options = load_play_options_from_save(save_dir)?;
     *state = PlayState::load_scene(game_dir, options)?;
+    // A production load starts a new host-clock-seeded stream. The fixed-input
+    // regression lane must resume from its fixed stream instead.
+    state.prng_state = route_smoke_prng_seed();
     Ok(())
 }
 
@@ -4378,6 +4387,10 @@ fn seed_town_ordinary_talk_route(state: &mut PlayState) {
             name: None,
         },
     ]);
+    // The production stranger opening uses a host-clock seed. Route smoke is
+    // deterministic, so use the acquainted-NPC path; explicit-seed unit tests
+    // cover both stranger branches without weakening production behavior.
+    let _ = state.set_active_talk_branch_flag(1);
     state.mark_visibility_dirty();
 }
 

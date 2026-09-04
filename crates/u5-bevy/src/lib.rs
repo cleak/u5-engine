@@ -1339,6 +1339,11 @@ pub struct VisualFrameReport {
     pub nonblack_pixels: usize,
 }
 
+/// Fixed shared-generator state for visual regression cases that do not
+/// deliberately install a more specific stream. Production scene creation
+/// remains host-clock seeded; only the deterministic suite overrides it.
+const VISUAL_SUITE_PRNG_SEED: u16 = 0x1234;
+
 pub fn run_visual_frame_suite(
     game_dir: &Path,
     raster_depth: TileGraphicsDepth,
@@ -1411,6 +1416,7 @@ pub fn visual_frame_suite(
 
     for case in visual_gameplay_frame_cases() {
         let mut state = PlayState::load_scene(game_dir, case.options)?;
+        state.prng_state = VISUAL_SUITE_PRNG_SEED;
         if case.synthetic_combat {
             seed_visual_suite_combat(&mut state, game_dir)?;
         }
@@ -1632,6 +1638,7 @@ pub fn visual_route_suite(
         let reload_checkpoints = visual_route_reload_checkpoints(case.label);
         let command_game_dir = route_game_dir.as_deref().unwrap_or(game_dir);
         let mut state = PlayState::load_scene(game_dir, case.options)?;
+        state.prng_state = VISUAL_SUITE_PRNG_SEED;
         if let Some(configure) = case.configure {
             configure(&mut state);
         }
@@ -1645,6 +1652,7 @@ pub fn visual_route_suite(
             ctx,
         )?;
         let mut previous_hash = initial.byte_hash;
+        let mut previous_area = state.area;
         reports.push(initial);
 
         for (index, command) in case.script.iter().enumerate() {
@@ -1658,6 +1666,10 @@ pub fn visual_route_suite(
                     ),
                 )
             })?;
+            if state.area != previous_area {
+                state.prng_state = VISUAL_SUITE_PRNG_SEED;
+                previous_area = state.area;
+            }
             if reload_checkpoints.contains(&(index + 1)) {
                 let Some(save_dir) = reload_save_dir.as_deref() else {
                     return Err(io::Error::other(format!(
@@ -1666,6 +1678,7 @@ pub fn visual_route_suite(
                     )));
                 };
                 reload_visual_route_state_from_checkpoint(&mut state, game_dir, save_dir)?;
+                previous_area = state.area;
             }
             let report = write_visual_play_report(
                 out_dir,
@@ -2094,6 +2107,7 @@ fn push_visual_key_route_reports(
 ) -> io::Result<()> {
     for case in visual_key_route_suite_cases() {
         let mut state = PlayState::load_scene(game_dir, case.options)?;
+        state.prng_state = VISUAL_SUITE_PRNG_SEED;
         if let Some(configure) = case.configure {
             configure(&mut state);
         }
@@ -2424,6 +2438,9 @@ fn reload_visual_route_state_from_checkpoint(
     state.save_game_command(save_dir, Some(true))?;
     let options = load_play_options_from_save(save_dir)?;
     *state = PlayState::load_scene(game_dir, options)?;
+    // A production load begins a host-clock-seeded stream; deterministic
+    // visual routes resume from their fixed suite seed.
+    state.prng_state = VISUAL_SUITE_PRNG_SEED;
     Ok(())
 }
 
@@ -7278,6 +7295,10 @@ fn seed_visual_route_talk_ordinary_keyword(state: &mut PlayState) {
             name: None,
         },
     ]);
+    // Conversation openings intentionally sample a host-clock seed for a
+    // stranger. This fixture exercises the repeatable acquainted-NPC path;
+    // host-seed branching has focused tests through the explicit-seed API.
+    let _ = state.set_active_talk_branch_flag(1);
     state.mark_visibility_dirty();
 }
 
