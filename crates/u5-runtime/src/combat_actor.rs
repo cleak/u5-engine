@@ -4061,7 +4061,8 @@ pub fn resolve_combat_target_group_for_actor(
 ///
 /// The decision is the resolved group and nothing else: `§16.1`
 /// "The round walker sends group-1 actors to the automatic action
-/// driver. Group-0 actors enter the combined command handler". So a
+/// driver. Group-0 actors enter the player-command handler, which
+/// **prompts, and never synthesizes**". So a
 /// monster-side slot carrying the controlled bit resolves to group 0 and
 /// **does** reach this path - `§6.1a` writer 3: "the bit **does** hand
 /// the creature to the player's prompt: a monster-side slot carrying it
