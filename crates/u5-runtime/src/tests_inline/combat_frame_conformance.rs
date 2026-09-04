@@ -385,6 +385,103 @@
         );
     }
 
+    /// The positive half of `combat.md §6.1a`'s "**The attack driver —
+    /// party-side slots only.**" The three behaviours the test above withdraws
+    /// from a monster-side slot still hold for the slot the section keeps them
+    /// on: a **party-side** descriptor carrying the controlled bit, which the
+    /// round walker sends to the automatic driver.
+    ///
+    /// `is_party_side` is the descriptor-level discriminator (`§6.1`, bit
+    /// `0x80`: "Monster and object descriptors never carry it"), so the
+    /// fixture sets that bit rather than moving the actor to a party slot
+    /// index.
+    #[test]
+    fn a_party_side_controlled_actor_takes_the_fixed_magic_strike() {
+        // 1. `§6.1a`: the strike "requires straight-line distance exactly one",
+        //    and further away "the turn produces no action at all".
+        let mut distant = combat_ai_turn_state(9, 5);
+        distant.combat_actors[8].flags =
+            COMBAT_ACTOR_FLAG_SELECTABLE_80 | COMBAT_ACTOR_FLAG_CONTROLLED;
+        assert!(
+            distant
+                .resolve_and_apply_combat_monster_attack(8, 0, 0, false, 0, Some(true))
+                .is_none(),
+            "a party-side controlled attacker refuses a target beyond distance one"
+        );
+
+        // 2. `magic.md §7` installs the attacker back-link for ordinary
+        //    adjacent attacks; `§6.1a`'s fixed magic strike "explicitly skips
+        //    the attacker back-link", and the class poison/status branch with
+        //    it.
+        let mut adjacent = combat_ai_turn_state(6, 5);
+        adjacent.combat_actors[8].owner_target_class = COMBAT_CLASS_GIANT_RAT;
+        adjacent.combat_actors[8].flags =
+            COMBAT_ACTOR_FLAG_SELECTABLE_80 | COMBAT_ACTOR_FLAG_CONTROLLED;
+        assert!(
+            combat_class_traits(COMBAT_CLASS_GIANT_RAT)
+                .unwrap()
+                .poison_status_attack,
+            "the fixture class must have a poison/status branch to skip"
+        );
+        adjacent.party = vec![PartyMember {
+            slot: 0,
+            class_byte: 1,
+            status: b'G',
+            climb_stat: 0,
+            mana: 0,
+            hp: 20,
+            max_hp: 20,
+            level: 1,
+        }];
+        adjacent.combat_interference_sources[0] = 7;
+
+        let application = adjacent
+            .resolve_and_apply_combat_monster_attack(8, 0, 0, true, 0, Some(true))
+            .expect("an adjacent party-side controlled attacker resolves an attack");
+
+        assert!(
+            application.poison_status_outcome.is_none(),
+            "the poison/status branch is skipped for the fixed magic strike"
+        );
+        assert!(application.resolution.is_some());
+        assert_eq!(
+            adjacent.combat_interference_sources[0], 7,
+            "the fixed magic strike writes no attacker back-link"
+        );
+
+        // 3. `§6.1a`: "the damage is fed as magical because the published
+        //    flavour is a magic strike, not a weapon blow", so a
+        //    half-physical-damage class takes the full number. A Daemon
+        //    (class 38) carries `physical_half`.
+        let mut magical = combat_ai_turn_state(6, 5);
+        magical.combat_actors[8].owner_target_class = COMBAT_CLASS_TROLL;
+        magical.combat_actors[8].flags =
+            COMBAT_ACTOR_FLAG_SELECTABLE_80 | COMBAT_ACTOR_FLAG_CONTROLLED;
+        magical.combat_actors[9] =
+            CombatActorDescriptor::from_row([40, 1, COMBAT_ACTOR_FLAG_SELECTABLE_40, 38, 9, 0, 7, 5]);
+        assert!(
+            combat_class_traits(38).unwrap().physical_half,
+            "the target class must halve ordinary physical damage"
+        );
+
+        let strike = magical
+            .resolve_and_apply_combat_monster_attack(8, 9, 0, false, 0, Some(true))
+            .expect("an adjacent party-side controlled attacker resolves an attack");
+        let Some(CombatWeaponAttackResolution::Hit { raw_damage, .. }) = strike.resolution else {
+            panic!("the forced hit must resolve as a hit: {strike:?}");
+        };
+        let Some(CombatWeaponDamageApplication::Monster { damage, .. }) = strike.damage_application
+        else {
+            panic!("the strike must apply monster damage: {strike:?}");
+        };
+        assert!(raw_damage > 1, "the fixture must roll a halvable number");
+        assert_eq!(
+            i16::from(damage.applied_damage),
+            raw_damage,
+            "the magic strike is fed as magical, so `physical_half` does not halve it"
+        );
+    }
+
     fn combat_charm_state(target_slot: usize, target_flags: u8, target_class: u8) -> PlayState {
         let mut state = world_state(open_world_grid(), 10, 20);
         state.combat_active = true;
