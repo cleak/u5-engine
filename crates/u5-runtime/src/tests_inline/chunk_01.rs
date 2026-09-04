@@ -257,7 +257,10 @@
 
     #[test]
     fn tile_graphics_local_clean_tiles_decode_when_present() {
-        let game_dir = Path::new(DEFAULT_GAME_DIR);
+        let Some(game_dir) = crate::test_fixtures::configured_original_asset_dir() else {
+            return;
+        };
+        let game_dir = game_dir.as_path();
         if !game_dir.join(TILES_EGA_FILE).exists() || !game_dir.join(TILES_CGA_FILE).exists() {
             return;
         }
@@ -367,7 +370,10 @@
 
     #[test]
     fn tile_graphics_local_clean_sprite_sheets_decode_when_present() {
-        let game_dir = Path::new(DEFAULT_GAME_DIR);
+        let Some(game_dir) = crate::test_fixtures::configured_original_asset_dir() else {
+            return;
+        };
+        let game_dir = game_dir.as_path();
         for depth in [TileGraphicsDepth::Ega16, TileGraphicsDepth::Cga4] {
             if game_dir
                 .join(tile_graphics_file_name("ITEMS", depth))
@@ -392,7 +398,10 @@
 
     #[test]
     fn tile_graphics_local_clean_image_directories_decode_when_present() {
-        let game_dir = Path::new(DEFAULT_GAME_DIR);
+        let Some(game_dir) = crate::test_fixtures::configured_original_asset_dir() else {
+            return;
+        };
+        let game_dir = game_dir.as_path();
         for (stem, expected_images) in [("TEXT", 6), ("DNG1", 28), ("DNG2", 28), ("DNG3", 28)] {
             for depth in [TileGraphicsDepth::Ega16, TileGraphicsDepth::Cga4] {
                 if !game_dir.join(tile_graphics_file_name(stem, depth)).exists() {
@@ -614,7 +623,10 @@
 
     #[test]
     fn bit_graphics_local_clean_bitmaps_decode_when_present() {
-        let game_dir = Path::new(DEFAULT_GAME_DIR);
+        let Some(game_dir) = crate::test_fixtures::configured_original_asset_dir() else {
+            return;
+        };
+        let game_dir = game_dir.as_path();
         if game_dir.join(TITLE_BIT_FILE).exists() {
             let title = load_title_bit(game_dir).unwrap();
             assert_eq!(title.blocks.len(), 10);
@@ -995,7 +1007,10 @@
 
     #[test]
     fn font_graphics_local_clean_fonts_decode_when_present() {
-        let game_dir = Path::new(DEFAULT_GAME_DIR);
+        let Some(game_dir) = crate::test_fixtures::configured_original_asset_dir() else {
+            return;
+        };
+        let game_dir = game_dir.as_path();
         for file_name in [IBM_CH_FILE, RUNES_CH_FILE] {
             if !game_dir.join(file_name).exists() {
                 continue;

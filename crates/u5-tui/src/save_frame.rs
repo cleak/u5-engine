@@ -647,7 +647,7 @@ mod tests {
     use std::time::{SystemTime, UNIX_EPOCH};
 
     use super::*;
-    use u5_runtime::{DEFAULT_GAME_DIR, TILES_EGA_FILE};
+    use u5_runtime::TILES_EGA_FILE;
 
     fn temp_output_dir(name: &str) -> std::path::PathBuf {
         let nonce = SystemTime::now()
@@ -685,7 +685,10 @@ mod tests {
 
     #[test]
     fn save_frame_suite_local_clean_writes_pngs_and_manifest_when_present() {
-        let game_dir = Path::new(DEFAULT_GAME_DIR);
+        let Some(game_dir) = u5_runtime::test_fixtures::configured_original_asset_dir() else {
+            return;
+        };
+        let game_dir = game_dir.as_path();
         if !game_dir.join("CASTLE.DAT").exists() || !game_dir.join(TILES_EGA_FILE).exists() {
             return;
         }

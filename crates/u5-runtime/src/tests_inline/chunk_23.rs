@@ -19846,7 +19846,10 @@ fn terrain_combat_class_selector_uses_active_object_type_not_tile() {
 
 #[test]
 fn terrain_combat_local_brit_cbt_records_drive_all_outdoor_arenas_when_present() {
-    let game_dir = std::path::Path::new(DEFAULT_GAME_DIR);
+    let Some(game_dir) = crate::test_fixtures::configured_original_asset_dir() else {
+        return;
+    };
+    let game_dir = game_dir.as_path();
     if !game_dir.join(BRIT_CBT_FILE).exists() {
         return;
     }
@@ -19939,7 +19942,10 @@ fn combat_arena_bank_validates_expected_record_counts() {
 
 #[test]
 fn combat_arena_local_clean_cbt_banks_decode_when_present() {
-    let game_dir = std::path::Path::new(DEFAULT_GAME_DIR);
+    let Some(game_dir) = crate::test_fixtures::configured_original_asset_dir() else {
+        return;
+    };
+    let game_dir = game_dir.as_path();
     if !game_dir.join(BRIT_CBT_FILE).exists() || !game_dir.join(DUNGEON_CBT_FILE).exists() {
         return;
     }
@@ -19966,7 +19972,10 @@ fn combat_arena_local_clean_cbt_banks_decode_when_present() {
 
 #[test]
 fn dungeon_cbt_local_clean_room_source_census_when_present() {
-    let game_dir = std::path::Path::new(DEFAULT_GAME_DIR);
+    let Some(game_dir) = crate::test_fixtures::configured_original_asset_dir() else {
+        return;
+    };
+    let game_dir = game_dir.as_path();
     if !game_dir.join(DUNGEON_CBT_FILE).exists() {
         return;
     }

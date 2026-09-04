@@ -721,7 +721,10 @@ fn play_script_state_line_hashes_message_without_printing_it() {
 // from chunk_19
 #[test]
 fn play_script_local_clean_smoke_runs_default_scene_when_present() {
-    let game_dir = Path::new(DEFAULT_GAME_DIR);
+    let Some(game_dir) = u5_runtime::test_fixtures::configured_original_asset_dir() else {
+        return;
+    };
+    let game_dir = game_dir.as_path();
     if !game_dir.join("CASTLE.DAT").exists() || !game_dir.join(TILES_EGA_FILE).exists() {
         return;
     }
@@ -1484,7 +1487,10 @@ fn route_smoke_cases_cover_representative_modes() {
 
 #[test]
 fn route_smoke_local_clean_cases_run_when_present() {
-    let game_dir = Path::new(DEFAULT_GAME_DIR);
+    let Some(game_dir) = u5_runtime::test_fixtures::configured_original_asset_dir() else {
+        return;
+    };
+    let game_dir = game_dir.as_path();
     if !game_dir.join("CASTLE.DAT").exists() || !game_dir.join(TILES_EGA_FILE).exists() {
         return;
     }

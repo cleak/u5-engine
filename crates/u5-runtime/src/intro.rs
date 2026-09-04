@@ -1068,7 +1068,8 @@ mod tests {
     /// skip when it is not, so a checkout without game files still
     /// passes.
     fn local_ultima_directory() -> Option<GraphicImageDirectory> {
-        let game_dir = Path::new(crate::DEFAULT_GAME_DIR);
+        let game_dir = crate::test_fixtures::configured_original_asset_dir()?;
+        let game_dir = game_dir.as_path();
         if !game_dir
             .join(crate::tile_graphics_file_name(
                 ULTIMA_PANEL_STEM,
@@ -1184,7 +1185,10 @@ mod tests {
 
     #[test]
     fn ultima_logo_panel_is_the_published_319_by_61_menu_art() {
-        let game_dir = Path::new(crate::DEFAULT_GAME_DIR);
+        let Some(game_dir) = crate::test_fixtures::configured_original_asset_dir() else {
+            return;
+        };
+        let game_dir = game_dir.as_path();
         if local_ultima_directory().is_none() {
             eprintln!("skipping: local ULTIMA.16 is not present");
             return;

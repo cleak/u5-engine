@@ -1653,9 +1653,7 @@ mod tests {
     /// Same skip discipline as the other asset-backed tests: no asset
     /// bytes are ever embedded in the crate.
     fn local_clean_assets() -> Option<std::path::PathBuf> {
-        let dir = std::env::var_os("U5_CLEAN_ASSETS")
-            .map(std::path::PathBuf::from)
-            .unwrap_or_else(|| std::path::PathBuf::from(crate::DEFAULT_GAME_DIR));
+        let dir = crate::test_fixtures::configured_original_asset_dir()?;
         dir.join("CASTLE.TLK").is_file().then_some(dir)
     }
 

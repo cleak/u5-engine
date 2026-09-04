@@ -8679,7 +8679,10 @@ fn shipped_return_to_view_strips_are_nineteen_across_by_four_down() {
     // cell of every strip carries a real terrain byte and every padding
     // byte is zero, which is what makes the terrain-first cell rule
     // total for a loaded strip.
-    let game_dir = Path::new(DEFAULT_GAME_DIR);
+    let Some(game_dir) = crate::test_fixtures::configured_original_asset_dir() else {
+        return;
+    };
+    let game_dir = game_dir.as_path();
     if !game_dir.join(MISCMAPS_DAT_FILE).exists() {
         return;
     }
@@ -8726,7 +8729,10 @@ fn shipped_return_to_view_script_keeps_every_placed_actor_inside_the_strip() {
     // `#54`: "script coordinates never leave `x = 0..18` / `y = 0..3`,
     // so nothing is clipped and no clipping rule is needed". Replaying
     // the shipped stream must therefore never fail on a bounds check.
-    let game_dir = Path::new(DEFAULT_GAME_DIR);
+    let Some(game_dir) = crate::test_fixtures::configured_original_asset_dir() else {
+        return;
+    };
+    let game_dir = game_dir.as_path();
     if !game_dir.join(MISCMAPS_DAT_FILE).exists() {
         return;
     }
@@ -25098,7 +25104,10 @@ fn shipped_dungeon_room_party_positions_come_from_the_record_not_arena_origin() 
     // coordinates are published record data, not an engine default. The
     // combat visual suite showed the leader clipped at arena cell (0, 0),
     // so pin down that the record read actually supplies real cells.
-    let game_dir = Path::new(DEFAULT_GAME_DIR);
+    let Some(game_dir) = crate::test_fixtures::configured_original_asset_dir() else {
+        return;
+    };
+    let game_dir = game_dir.as_path();
     if !game_dir.join(DUNGEON_CBT_FILE).exists() {
         return;
     }
@@ -25941,7 +25950,10 @@ fn shipped_dungeon_billboard_banks_match_the_published_directory() {
     // The two empty slots are the band-0 entries of the forward wall and
     // forward flavour-wall families, which the renderer never requests
     // because band 0 overrides every blocker to one 80-wide image.
-    let game_dir = Path::new(DEFAULT_GAME_DIR);
+    let Some(game_dir) = crate::test_fixtures::configured_original_asset_dir() else {
+        return;
+    };
+    let game_dir = game_dir.as_path();
     if !game_dir.join("DNG1.16").exists() {
         return;
     }

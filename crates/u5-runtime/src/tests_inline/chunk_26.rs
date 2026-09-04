@@ -140,7 +140,10 @@ fn visual_asset_audit_summarizes_image_directories_and_sprite_sheets_without_raw
 
 #[test]
 fn shipped_visual_asset_audit_covers_paired_graphics_and_fixed_fonts_when_assets_present() {
-    let game_dir = Path::new(DEFAULT_GAME_DIR);
+    let Some(game_dir) = crate::test_fixtures::configured_original_asset_dir() else {
+        return;
+    };
+    let game_dir = game_dir.as_path();
     let mut required = [
         TILES_EGA_FILE,
         TILES_CGA_FILE,

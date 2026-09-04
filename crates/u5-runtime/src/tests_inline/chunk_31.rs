@@ -361,7 +361,8 @@ mod light_beacon_stencils {
     /// read. The pristine install is never opened directly and never
     /// written to (`CLAUDE.md` clean-room rules).
     pub(super) fn shipped_asset_copy(files: &[&str]) -> Option<std::path::PathBuf> {
-        let source = Path::new(DEFAULT_GAME_DIR);
+        let source = crate::test_fixtures::configured_original_asset_dir()?;
+        let source = source.as_path();
         if files.iter().any(|file| !source.join(file).exists()) {
             return None;
         }
@@ -792,7 +793,8 @@ mod light_beacon_shipped_map_sources {
     use super::*;
 
     fn shipped_world_copy() -> Option<std::path::PathBuf> {
-        let source = Path::new(DEFAULT_GAME_DIR);
+        let source = crate::test_fixtures::configured_original_asset_dir()?;
+        let source = source.as_path();
         let files = [DATA_OVL_FILENAME, "BRIT.DAT", "UNDER.DAT"];
         if files.iter().any(|file| !source.join(file).exists()) {
             return None;

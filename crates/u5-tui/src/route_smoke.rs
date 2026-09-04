@@ -8171,11 +8171,13 @@ mod tests {
 #[cfg(test)]
 mod scratch_run {
     use super::*;
-    use u5_runtime::DEFAULT_GAME_DIR;
 
     #[test]
     fn scratch_run_harpsichord_routes() {
-        let game_dir = Path::new(DEFAULT_GAME_DIR);
+        let Some(game_dir) = u5_runtime::test_fixtures::configured_original_asset_dir() else {
+            return;
+        };
+        let game_dir = game_dir.as_path();
         if !game_dir.join("CASTLE.DAT").exists() {
             println!("no assets");
             return;

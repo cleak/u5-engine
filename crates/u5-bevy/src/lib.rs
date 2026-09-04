@@ -17172,17 +17172,16 @@ mod tests {
     };
     use u5_runtime::tlk_control_codes::TLK_TEXT_XOR_MASK;
     use u5_runtime::{
-        Area, ArmsShop, CH_CELL_SIDE, CH_FONT_LEN, COMBAT_ARENA_SIDE, DEFAULT_GAME_DIR, Direction,
-        GuildShop, Herbalist, IBM_CH_FILE, INIT_GAM_FILENAME, INIT_OOL_FILENAME,
-        INTRO_START_MENU_REVEAL_RECT, INTRO_STEP_1_RECT_TRANSITION, OOL_PLANE_LEN, PenStroke,
-        ProportionalFont, ProportionalGlyph, ProportionalWidthTable, REAGENT_COUNT,
-        REAGENT_SPIDER_SILK, SAVE_CHARACTER_DEX_OFFSET, SAVE_CHARACTER_GENDER_OFFSET,
-        SAVE_CHARACTER_INT_OFFSET, SAVE_CHARACTER_NAME_LEN, SAVE_CHARACTER_STR_OFFSET,
-        SAVE_ROSTER_OFFSET, SAVED_GAM_FILENAME, SAVED_GAM_LEN, SAVED_OOL_FILENAME,
-        SHOPPE_RECORDS_ARMS_DESCRIPTIONS_FIRST, SHRINE_TABLE_FILE, STORY_DAT_FILE, ShrineVirtue,
-        SurfaceChestVerb, TILES_EGA_FILE, Tavern, TileGraphicsDepth, TlkRenderedGlyph, WorldPlane,
-        dungeon_cell_index, parse_british_bit, parse_ch_font, parse_title_bit, world_cell_index,
-        wrap_text_panel_lines,
+        Area, ArmsShop, CH_CELL_SIDE, CH_FONT_LEN, COMBAT_ARENA_SIDE, Direction, GuildShop,
+        Herbalist, IBM_CH_FILE, INIT_GAM_FILENAME, INIT_OOL_FILENAME, INTRO_START_MENU_REVEAL_RECT,
+        INTRO_STEP_1_RECT_TRANSITION, OOL_PLANE_LEN, PenStroke, ProportionalFont,
+        ProportionalGlyph, ProportionalWidthTable, REAGENT_COUNT, REAGENT_SPIDER_SILK,
+        SAVE_CHARACTER_DEX_OFFSET, SAVE_CHARACTER_GENDER_OFFSET, SAVE_CHARACTER_INT_OFFSET,
+        SAVE_CHARACTER_NAME_LEN, SAVE_CHARACTER_STR_OFFSET, SAVE_ROSTER_OFFSET, SAVED_GAM_FILENAME,
+        SAVED_GAM_LEN, SAVED_OOL_FILENAME, SHOPPE_RECORDS_ARMS_DESCRIPTIONS_FIRST,
+        SHRINE_TABLE_FILE, STORY_DAT_FILE, ShrineVirtue, SurfaceChestVerb, TILES_EGA_FILE, Tavern,
+        TileGraphicsDepth, TlkRenderedGlyph, WorldPlane, dungeon_cell_index, parse_british_bit,
+        parse_ch_font, parse_title_bit, world_cell_index, wrap_text_panel_lines,
     };
 
     fn enc_tlk_text(text: &str) -> Vec<u8> {
@@ -17272,9 +17271,25 @@ mod tests {
             .expect("panic payload must be a string")
     }
 
+    fn original_asset_dir() -> &'static Path {
+        static ASSET_DIR: std::sync::OnceLock<PathBuf> = std::sync::OnceLock::new();
+        ASSET_DIR
+            .get_or_init(|| {
+                let path = std::env::var_os("U5_TEST_ASSET_DIR")
+                    .map(PathBuf::from)
+                    .expect("original-asset tests require U5_TEST_ASSET_DIR");
+                assert!(
+                    path.is_absolute(),
+                    "U5_TEST_ASSET_DIR must be an absolute path"
+                );
+                path
+            })
+            .as_path()
+    }
+
     fn install_intro_assets(dir: &Path) {
         u5_runtime::test_fixtures::assert_writable_game_dir(dir, "install_intro_assets");
-        let source_dir = Path::new(DEFAULT_GAME_DIR);
+        let source_dir = original_asset_dir();
         for file_name in [
             "IBM.CH",
             "PROPORT.PCS",
@@ -17999,6 +18014,7 @@ mod tests {
     }
 
     #[test]
+    #[cfg(feature = "original-asset-tests")]
     fn intro_animation_is_inert_after_framebuffer_transfers_to_gameplay() {
         let dir = debug_game_dir();
         let intro = visual_intro_state_with_panel(dir.clone(), VisualIntroPanel::Menu);
@@ -18027,6 +18043,7 @@ mod tests {
     }
 
     #[test]
+    #[cfg(feature = "original-asset-tests")]
     fn intro_menu_frame_renders_nonblank_rgba() {
         let dir = debug_game_dir();
         install_intro_assets(&dir);
@@ -18073,6 +18090,7 @@ mod tests {
     }
 
     #[test]
+    #[cfg(feature = "original-asset-tests")]
     fn intro_menu_render_renders_with_placeholder_title_tick_band() {
         // `systems/display-driver.md §5` + post-`cleak/u5-spec#65`
         // wiring: when no `EGA.DRV` locator is configured the
@@ -18093,6 +18111,7 @@ mod tests {
     }
 
     #[test]
+    #[cfg(feature = "original-asset-tests")]
     fn intro_title_signature_dump_pngs_for_visual_inspection() {
         // Dump three snapshots of the title sequence so we can
         // visually verify the signature animation matches the
@@ -18131,6 +18150,7 @@ mod tests {
     }
 
     #[test]
+    #[cfg(feature = "original-asset-tests")]
     fn intro_menu_dump_png_for_visual_inspection() {
         // Renders a complete menu frame (ULTIMA logo + title tick +
         // §6.1 frame + §6.2 labels) and the acknowledgements frame,
@@ -18212,6 +18232,7 @@ mod tests {
     }
 
     #[test]
+    #[cfg(feature = "original-asset-tests")]
     fn intro_menu_text_window_frame_draws_the_measured_blue_chrome() {
         // `cleak/u5-spec#78`: `systems/intro.md §6.1`'s single-line
         // box-glyph rectangle is not what the original draws. A
@@ -18421,6 +18442,7 @@ mod tests {
     }
 
     #[test]
+    #[cfg(feature = "original-asset-tests")]
     fn apply_pre_flourish_outcome_journey_shortcut_stamps_banner_and_loads_save() {
         // `systems/intro.md §3` step 6 J shortcut: the banner stamps
         // through the IBM slot, the dispatch advances to the load
@@ -18557,6 +18579,7 @@ mod tests {
     }
 
     #[test]
+    #[cfg(feature = "original-asset-tests")]
     fn intro_start_menu_art_blits_the_ultima_logo_over_a_cleared_surface() {
         // `cleak/u5-spec#78`: the menu backing is `ULTIMA` slot 0
         // (319x61) at (0, 0), not the `STARTSC` composition
@@ -18600,6 +18623,7 @@ mod tests {
     }
 
     #[test]
+    #[cfg(feature = "original-asset-tests")]
     fn startsc_panels_remain_the_acknowledgements_credits_composition() {
         // `cleak/u5-spec#78`: `STARTSC.16` is the Acknowledgements
         // subflow's credits artwork, the published 16 + 288 + 16 by 137
@@ -19170,6 +19194,7 @@ mod tests {
     }
 
     #[test]
+    #[cfg(feature = "original-asset-tests")]
     fn visual_intro_menu_invalid_key_is_silent() {
         let mut intro = visual_intro_state_with_panel(debug_game_dir(), VisualIntroPanel::Menu);
 
@@ -19196,6 +19221,7 @@ mod tests {
     }
 
     #[test]
+    #[cfg(feature = "original-asset-tests")]
     fn intro_first_reveal_abort_consumes_key_downgrades_loader_and_keeps_preview() {
         // `cleak/u5-spec#122`: a key first discovered by the logo dissolve
         // is consumed by the loader's immediate read. Only the loader's local
@@ -19269,6 +19295,7 @@ mod tests {
     }
 
     #[test]
+    #[cfg(feature = "original-asset-tests")]
     fn completed_title_key_is_spent_by_first_reveal_not_menu_dispatch() {
         let dir = debug_game_dir();
         install_intro_assets(&dir);
@@ -19293,6 +19320,7 @@ mod tests {
     }
 
     #[test]
+    #[cfg(feature = "original-asset-tests")]
     fn intro_subtitle_ignition_preserves_its_abort_key_for_menu() {
         // Subtitle ignition has the distinct non-consuming contract from
         // `#118`: after an uninterrupted logo reveal enters ignition, its
@@ -19456,6 +19484,7 @@ mod tests {
     }
 
     #[test]
+    #[cfg(feature = "original-asset-tests")]
     fn intro_signature_phase_key_abandons_strokes_but_still_draws_the_card() {
         let dir = debug_game_dir();
         install_intro_assets(&dir);
@@ -19564,6 +19593,7 @@ mod tests {
     }
 
     #[test]
+    #[cfg(feature = "original-asset-tests")]
     fn intro_signature_completion_shows_final_title_before_start_menu() {
         let dir = debug_game_dir();
         install_intro_assets(&dir);
@@ -19674,6 +19704,7 @@ mod tests {
     }
 
     #[test]
+    #[cfg(feature = "original-asset-tests")]
     fn intro_signature_tick_saturates_at_path_length_and_completes() {
         // With SIGNATURE_STEPS_PER_TICK > 1, an in-progress signature
         // tick can land past the path's final byte on the last tick.
@@ -19726,6 +19757,7 @@ mod tests {
     }
 
     #[test]
+    #[cfg(feature = "original-asset-tests")]
     fn intro_title_phase_renders_into_persistent_surface() {
         let dir = debug_game_dir();
         install_intro_assets(&dir);
@@ -19768,6 +19800,7 @@ mod tests {
     }
 
     #[test]
+    #[cfg(feature = "original-asset-tests")]
     fn intro_menu_idle_draws_current_title_tick_once_per_poll_pass() {
         // `cleak/u5-spec#78`: a no-key menu poll pass costs two DOS
         // BIOS user-ticks (~110 ms), and the clear-carry title tick
@@ -19858,6 +19891,7 @@ mod tests {
     }
 
     #[test]
+    #[cfg(feature = "original-asset-tests")]
     fn intro_menu_render_emits_the_leading_blank_at_the_origin_cell() {
         // `debug_game_dir` installs an all-0xff IBM.CH, so every glyph
         // is a solid block: a plain row paints solid foreground across
@@ -19891,6 +19925,7 @@ mod tests {
     }
 
     #[test]
+    #[cfg(feature = "original-asset-tests")]
     fn unskipped_title_sequence_arms_the_single_automatic_return_to_view() {
         // `systems/intro.md §3`: whether the start/menu loader takes
         // its animated or plain path is decided by the "player skipped
@@ -19928,6 +19963,7 @@ mod tests {
     }
 
     #[test]
+    #[cfg(feature = "original-asset-tests")]
     fn skipped_title_sequence_takes_the_plain_loader_path() {
         // A skipped run takes the plain path: `WD.BIT` and the step-7
         // subtitle ignition are not touched at all, and no automatic
@@ -19954,6 +19990,7 @@ mod tests {
     }
 
     #[test]
+    #[cfg(feature = "original-asset-tests")]
     fn armed_automatic_preview_enters_return_to_view_on_the_next_tick() {
         // End-to-end: the armed one-shot actually dispatches the
         // preview through the ordinary `R` path before the menu is
@@ -19977,6 +20014,7 @@ mod tests {
     }
 
     #[test]
+    #[cfg(feature = "original-asset-tests")]
     fn intro_menu_keystroke_spends_the_automatic_preview_one_shot() {
         // The automatic preview runs before the menu is polled for the
         // first time; once a key has been read the one-shot is spent.
@@ -20002,6 +20040,7 @@ mod tests {
     /// bar follows the highlight index, not a withdrawn
     /// recent-selection cache.
     #[test]
+    #[cfg(feature = "original-asset-tests")]
     fn intro_menu_enters_with_journey_onward_highlighted() {
         let mut intro = visual_intro_state_with_panel(debug_game_dir(), VisualIntroPanel::Menu);
         assert_eq!(intro.dispatch.intro.highlight_row, 0);
@@ -20021,6 +20060,7 @@ mod tests {
     }
 
     #[test]
+    #[cfg(feature = "original-asset-tests")]
     fn intro_menu_arrow_keys_move_the_highlight_and_wrap() {
         let mut intro = visual_intro_state_with_panel(debug_game_dir(), VisualIntroPanel::Menu);
         let down = char::from(u5_runtime::INPUT_CODE_SOUTH);
@@ -20055,6 +20095,7 @@ mod tests {
     }
 
     #[test]
+    #[cfg(feature = "original-asset-tests")]
     fn intro_menu_space_activates_the_highlighted_row() {
         // Space and Enter both activate whatever row is highlighted.
         // Walking the highlight down to "Acknowledgements" and
@@ -20091,6 +20132,7 @@ mod tests {
     /// Journey Onward, which surfaces the missing-save path rather than
     /// being silently ignored.
     #[test]
+    #[cfg(feature = "original-asset-tests")]
     fn intro_menu_enter_without_a_prior_selection_takes_the_default_row() {
         let dir = debug_game_dir();
         let mut intro = visual_intro_state_with_panel(dir.clone(), VisualIntroPanel::Menu);
@@ -20143,6 +20185,7 @@ mod tests {
     }
 
     #[test]
+    #[cfg(feature = "original-asset-tests")]
     fn visual_intro_menu_message_wait_consumes_next_key_without_dispatch() {
         let mut intro = visual_intro_state_with_panel(debug_game_dir(), VisualIntroPanel::Menu);
         intro.message = "No active game".to_string();
@@ -20164,6 +20207,7 @@ mod tests {
     }
 
     #[test]
+    #[cfg(feature = "original-asset-tests")]
     fn visual_intro_journey_without_save_panics() {
         let dir = debug_game_dir();
         let mut intro = visual_intro_state_with_panel(dir.clone(), VisualIntroPanel::Menu);
@@ -20180,6 +20224,7 @@ mod tests {
     }
 
     #[test]
+    #[cfg(feature = "original-asset-tests")]
     fn visual_intro_journey_empty_save_uses_published_no_active_game_message() {
         let dir = debug_game_dir();
         fs::write(dir.join(SAVED_GAM_FILENAME), vec![0u8; SAVED_GAM_LEN]).unwrap();
@@ -20229,6 +20274,7 @@ mod tests {
     }
 
     #[test]
+    #[cfg(feature = "original-asset-tests")]
     fn visual_intro_missing_question_dat_panics() {
         let dir = debug_game_dir();
         let mut intro = visual_intro_state_with_panel(dir.clone(), VisualIntroPanel::Menu);
@@ -20245,6 +20291,7 @@ mod tests {
     }
 
     #[test]
+    #[cfg(feature = "original-asset-tests")]
     fn visual_intro_missing_u4_transfer_source_returns_to_menu_without_writing() {
         // `u4-transfer.md §3`: missing or wrong media is a retryable
         // condition, not a hard process failure, and `§5`'s "no
@@ -20271,6 +20318,7 @@ mod tests {
     }
 
     #[test]
+    #[cfg(feature = "original-asset-tests")]
     fn visual_intro_menu_idle_tick_uses_authored_title_art_without_fallback() {
         let mut intro = visual_intro_state_with_panel(debug_game_dir(), VisualIntroPanel::Menu);
         intro.menu_idle_ticks = INTRO_MENU_IDLE_RETURN_TO_VIEW_PASSES - 2;
@@ -20305,6 +20353,7 @@ mod tests {
     /// the preview at 10.4 s, with no menu frame in the following
     /// 13.4 s.
     #[test]
+    #[cfg(feature = "original-asset-tests")]
     fn automatic_preview_then_key_then_idle_timeout_reenters_the_preview() {
         let dir = debug_game_dir();
         let mut intro = visual_intro_state_with_panel(dir.clone(), VisualIntroPanel::Menu);
@@ -20343,6 +20392,7 @@ mod tests {
     /// arithmetic that turns passes into the wall-clock time the player
     /// experiences.
     #[test]
+    #[cfg(feature = "original-asset-tests")]
     fn a_settled_menu_holds_for_the_whole_two_hundred_pass_idle_window() {
         let dir = debug_game_dir();
         let mut intro = visual_intro_state_with_panel(dir.clone(), VisualIntroPanel::Menu);
@@ -20385,6 +20435,7 @@ mod tests {
     /// player sees the six labels for more than one poll pass without
     /// pressing a second key.
     #[test]
+    #[cfg(feature = "original-asset-tests")]
     fn a_skipped_title_sequence_settles_on_the_menu_and_still_times_out() {
         let dir = debug_game_dir();
         install_intro_assets(&dir);
@@ -20778,6 +20829,7 @@ mod tests {
     }
 
     #[test]
+    #[cfg(feature = "original-asset-tests")]
     fn intro_title_art_rejects_active_signature_at_completed_progress() {
         let dir = debug_game_dir();
         install_intro_assets(&dir);
@@ -21033,6 +21085,7 @@ mod tests {
     }
 
     #[test]
+    #[cfg(feature = "original-asset-tests")]
     fn visual_play_frame_stops_tableau_overlay_after_victory_throne() {
         let font = parse_ch_font(&vec![0xff; CH_FONT_LEN], IBM_CH_FILE).unwrap();
         let atlas = synthetic_tile_atlas(TileGraphicsDepth::Ega16);
@@ -21065,7 +21118,7 @@ mod tests {
         // `endgame.md §8.3` step 5: the window composes a real panel out
         // of `END1`/`END2`, and `§8.2`'s title strips come out of `TEXT`,
         // so this half of the test needs the shipped archives.
-        let game_dir = Path::new(DEFAULT_GAME_DIR);
+        let game_dir = original_asset_dir();
         if !game_dir.join("END1.16").exists() {
             eprintln!("skipping the composed-frame half: local clean assets are not installed");
             return;
@@ -21774,6 +21827,7 @@ mod tests {
     }
 
     #[test]
+    #[cfg(feature = "original-asset-tests")]
     fn visual_frame_suite_menu_frame_carries_the_chrome_and_labels() {
         // Regression guard for the defect where the frame suite seeded
         // `font_slots: None` and the menu compositor silently dropped
@@ -21783,7 +21837,7 @@ mod tests {
         // than one that fails: it launders the error into every
         // downstream comparison — the Return-to-View frame inherited
         // this one through its preserved backing.
-        let game_dir = Path::new(DEFAULT_GAME_DIR);
+        let game_dir = original_asset_dir();
         if !game_dir.join(IBM_CH_FILE).exists()
             || !game_dir.join("ULTIMA.16").exists()
             || !game_dir.join("WD.BIT").exists()
@@ -21877,11 +21931,12 @@ mod tests {
     }
 
     #[test]
+    #[cfg(feature = "original-asset-tests")]
     fn visual_frame_suite_local_clean_renders_the_return_to_view_preview_when_present() {
         // `cleak/u5-spec#54` is published and implemented, so the suite
         // no longer refuses at the Return-to-View preview: the frame is
         // rendered from the shipped `MISCMAPS.DAT` and is not blank.
-        let game_dir = Path::new(DEFAULT_GAME_DIR);
+        let game_dir = original_asset_dir();
         if !game_dir.join("CASTLE.DAT").exists()
             || !game_dir.join(TILES_EGA_FILE).exists()
             || !game_dir.join(IBM_CH_FILE).exists()
@@ -22598,8 +22653,9 @@ mod tests {
     }
 
     #[test]
+    #[cfg(feature = "original-asset-tests")]
     fn visual_route_stonegate_trapdoor_runs_rescue_at_next_command_boundary_when_present() {
-        let game_dir = Path::new(DEFAULT_GAME_DIR);
+        let game_dir = original_asset_dir();
         if !game_dir.join("TOWNE.DAT").exists()
             || !game_dir.join(TILES_EGA_FILE).exists()
             || !game_dir.join(IBM_CH_FILE).exists()
@@ -22776,8 +22832,9 @@ mod tests {
     }
 
     #[test]
+    #[cfg(feature = "original-asset-tests")]
     fn visual_route_suite_local_clean_writes_per_step_pngs_when_present() {
-        let game_dir = Path::new(DEFAULT_GAME_DIR);
+        let game_dir = original_asset_dir();
         if !game_dir.join("CASTLE.DAT").exists()
             || !game_dir.join(TILES_EGA_FILE).exists()
             || !game_dir.join(IBM_CH_FILE).exists()
@@ -24146,6 +24203,7 @@ mod tests {
     }
 
     #[test]
+    #[cfg(feature = "original-asset-tests")]
     fn visual_prompt_cursor_animates_through_its_four_barber_pole_frames() {
         // The live input line's cursor is always present and cycles
         // `IBM.CH` 0x05..=0x08 rather than blinking on and off, so the
@@ -24153,7 +24211,7 @@ mod tests {
         // the rendered surface. The real IBM.CH is needed here: the
         // all-0xff fixture renders every glyph as the same solid block,
         // so the four frames would be indistinguishable.
-        let game_dir = Path::new(DEFAULT_GAME_DIR);
+        let game_dir = original_asset_dir();
         if !game_dir.join(IBM_CH_FILE).exists() {
             return;
         }
@@ -24720,11 +24778,12 @@ mod tests {
     }
 
     #[test]
+    #[cfg(feature = "original-asset-tests")]
     fn visual_return_to_view_summary_renders_the_published_strip_rectangle() {
         // `cleak/u5-spec#54`: nineteen 16x16 cells across by four down,
         // rendered through the ordinary viewport tile entry, giving the
         // 304x64 strip that lands at (8, 128).
-        let source_dir = Path::new(DEFAULT_GAME_DIR);
+        let source_dir = original_asset_dir();
         if !source_dir.join(TILES_EGA_FILE).exists() {
             return;
         }
@@ -24796,12 +24855,13 @@ mod tests {
     }
 
     #[test]
+    #[cfg(feature = "original-asset-tests")]
     fn visual_intro_story_render_repaints_the_whole_slide() {
         // Observation (`cleak/u5-spec#70`): every captured story slide shows
         // only that step's own art and text over black, so the slide loop
         // repaints the screen rather than compositing over the previous one.
         // Assets are needed to draw the art; skip without them.
-        let game_dir = Path::new(DEFAULT_GAME_DIR);
+        let game_dir = original_asset_dir();
         if !game_dir.join(STORY_DAT_FILE).exists()
             || !game_dir.join("PROPORT.PCS").exists()
             || !game_dir.join("STORY1.16").exists()
@@ -24840,12 +24900,13 @@ mod tests {
         // Never delete it from a test.
     }
     #[test]
+    #[cfg(feature = "original-asset-tests")]
     fn visual_intro_story_step_six_renders_the_published_doorway_lines() {
         // `systems/intro.md` section 10.1 (`cleak/u5-spec#69`): step 6 renders
         // two published inline lines instead of a STORY.DAT record, at pen
         // origins (32, 9) and (32, 180), after its art. Needs the local assets
         // for the art and the font.
-        let game_dir = Path::new(DEFAULT_GAME_DIR);
+        let game_dir = original_asset_dir();
         if !game_dir.join("PROPORT.PCS").exists() || !game_dir.join("STORY2.16").exists() {
             return;
         }
@@ -24912,6 +24973,7 @@ mod tests {
     }
 
     #[test]
+    #[cfg(feature = "original-asset-tests")]
     fn visual_intro_story_step_six_advances_on_input_like_any_other_step() {
         let mut intro = visual_intro_state_with_panel(
             debug_game_dir(),
@@ -24940,11 +25002,12 @@ mod tests {
     }
 
     #[test]
+    #[cfg(feature = "original-asset-tests")]
     fn visual_intro_story_render_repaints_the_slide_and_draws_measured_text() {
         // `cleak/u5-spec#70`: the story slide loop repaints the screen per
         // step and draws the record through the observation-derived
         // proportional layout. Needs the local clean asset set.
-        let game_dir = Path::new(DEFAULT_GAME_DIR);
+        let game_dir = original_asset_dir();
         if !game_dir.join(STORY_DAT_FILE).exists()
             || !game_dir.join("PROPORT.PCS").exists()
             || !game_dir.join("STORY6.16").exists()
@@ -24987,6 +25050,7 @@ mod tests {
         );
     }
     #[test]
+    #[cfg(feature = "original-asset-tests")]
     fn visual_intro_story_panel_pages_back_to_menu_after_final_step() {
         let dir = debug_game_dir();
         install_intro_assets(&dir);
@@ -25049,7 +25113,7 @@ mod tests {
     /// Unlike [`visual_intro_state_with_panel`] this never calls
     /// `install_intro_assets`, which copies and rewrites canonical `.BIT`
     /// files into the target directory - harmless for a temp fixture dir,
-    /// destructive for `DEFAULT_GAME_DIR`. Tests using this must not write to
+    /// destructive for `U5_TEST_ASSET_DIR`. Tests using this must not write to
     /// or delete `game_dir` either.
     fn read_only_intro_state_for_local_assets(
         game_dir: &Path,
@@ -25135,6 +25199,7 @@ mod tests {
     }
 
     #[test]
+    #[cfg(feature = "original-asset-tests")]
     fn visual_intro_character_creation_writes_save_and_returns_to_menu() {
         let dir = debug_game_dir();
         fs::write(
@@ -25210,6 +25275,7 @@ mod tests {
     }
 
     #[test]
+    #[cfg(feature = "original-asset-tests")]
     fn visual_intro_chargen_prompt_renders_from_persistent_surface() {
         let dir = debug_game_dir();
         if load_ibm_ch_font(&dir).is_err() {
@@ -25299,6 +25365,7 @@ mod tests {
     /// `(0, 63)`, record 1 at `(16, 63)`, record 2 at `(304, 63)` -
     /// across visible rows `63..=199`, and nothing is authored over it.
     #[test]
+    #[cfg(feature = "original-asset-tests")]
     fn visual_intro_acknowledgements_part_phase_publishes_the_startsc_band() {
         let dir = debug_game_dir();
         let (mut intro, _menu) = visual_intro_state_with_acknowledgements(dir.clone());
@@ -25335,6 +25402,7 @@ mod tests {
     /// restage both write it above row 63 - so this checks the visible
     /// page across the whole path, not the hidden one.
     #[test]
+    #[cfg(feature = "original-asset-tests")]
     fn visual_intro_acknowledgements_never_writes_a_visible_pixel_above_row_63() {
         let dir = debug_game_dir();
         let (mut intro, menu) = visual_intro_state_with_acknowledgements(dir.clone());
@@ -25373,6 +25441,7 @@ mod tests {
     /// handful of the 137 rows match. It must be decoded from the
     /// archive and drawn as decoded.
     #[test]
+    #[cfg(feature = "original-asset-tests")]
     fn visual_intro_acknowledgements_decodes_record_2_instead_of_mirroring_record_0() {
         let dir = debug_game_dir();
         install_intro_assets(&dir);
@@ -25422,6 +25491,7 @@ mod tests {
     /// first - so every column outside `144..=175` still holds the menu
     /// when the rise phase ends.
     #[test]
+    #[cfg(feature = "original-asset-tests")]
     fn visual_intro_acknowledgements_rise_draws_over_the_live_menu_window() {
         let dir = debug_game_dir();
         let (mut intro, menu) = visual_intro_state_with_acknowledgements(dir.clone());
@@ -25446,6 +25516,7 @@ mod tests {
     /// on the hidden surface while the credits are still displayed, and
     /// the Acknowledgements row carries the inverse-video toggle.
     #[test]
+    #[cfg(feature = "original-asset-tests")]
     fn visual_intro_acknowledgements_menu_rebuild_lands_on_the_hidden_surface() {
         let dir = debug_game_dir();
         let (mut intro, _menu) = visual_intro_state_with_acknowledgements(dir.clone());
@@ -25474,6 +25545,7 @@ mod tests {
     /// and sink phases publish the rebuilt menu from the outside inward,
     /// and only then does the path return to the menu poll loop.
     #[test]
+    #[cfg(feature = "original-asset-tests")]
     fn visual_intro_acknowledgements_any_key_plays_the_close_and_sink_phases() {
         let dir = debug_game_dir();
         let (mut intro, _menu) = visual_intro_state_with_acknowledgements(dir.clone());
@@ -25519,6 +25591,7 @@ mod tests {
     /// here. It is an ordinary key - it satisfies the poll and the close
     /// phase still plays.
     #[test]
+    #[cfg(feature = "original-asset-tests")]
     fn visual_intro_acknowledgements_esc_is_an_ordinary_key() {
         let dir = debug_game_dir();
         let (mut intro, _menu) = visual_intro_state_with_acknowledgements(dir.clone());
@@ -25544,6 +25617,7 @@ mod tests {
     /// eighteen pump ticks each. The rise and sink phases carry no wait
     /// and are complete the moment their phase opens.
     #[test]
+    #[cfg(feature = "original-asset-tests")]
     fn visual_intro_acknowledgements_paces_only_the_part_and_close_phases() {
         let dir = debug_game_dir();
         let (mut intro, _menu) = visual_intro_state_with_acknowledgements(dir.clone());
@@ -25575,6 +25649,7 @@ mod tests {
     }
 
     #[test]
+    #[cfg(feature = "original-asset-tests")]
     fn visual_intro_character_creation_escape_returns_to_menu_without_save() {
         let dir = debug_game_dir();
         let session = ChargenSession::new(chargen_records(), (0u8..=127).collect()).unwrap();
@@ -25665,6 +25740,7 @@ mod tests {
     }
 
     #[test]
+    #[cfg(feature = "original-asset-tests")]
     fn return_to_view_intro_input_aborts_the_preview_immediately() {
         // `cleak/u5-spec#54` retraction 3: "every preview tick polls the
         // keyboard once, and any pending key aborts the preview
@@ -25685,6 +25761,7 @@ mod tests {
     }
 
     #[test]
+    #[cfg(feature = "original-asset-tests")]
     fn return_to_view_abort_key_is_consumed_before_fresh_menu_poll() {
         // `cleak/u5-spec#122`: the per-preview reader consumes the key and
         // discards its identity. A `C` used to abort cannot immediately enter
@@ -25724,6 +25801,7 @@ mod tests {
     /// band changes across 11 s of attract demo while the original cycles four
     /// frames at ~110 ms.
     #[test]
+    #[cfg(feature = "original-asset-tests")]
     fn return_to_view_frame_redraws_the_idle_band_from_the_live_counter() {
         let dir = debug_game_dir();
         let mut intro = return_to_view_intro_state(
@@ -25761,6 +25839,7 @@ mod tests {
     /// ticks, which is what keeps the band on the original's ~110 ms cadence
     /// instead of running it twice as fast.
     #[test]
+    #[cfg(feature = "original-asset-tests")]
     fn return_to_view_preview_tick_spans_two_bios_ticks_and_advances_the_band() {
         let dir = debug_game_dir();
         let mut intro = return_to_view_intro_state(
@@ -25789,6 +25868,7 @@ mod tests {
     /// polling the menu", so it is not a menu command and must not leave the
     /// bar parked on `Return to the View`.
     #[test]
+    #[cfg(feature = "original-asset-tests")]
     fn automatic_preview_returns_to_the_menu_on_journey_onward() {
         let dir = debug_game_dir();
         let mut intro = return_to_view_intro_state(
@@ -25814,6 +25894,7 @@ mod tests {
     }
 
     #[test]
+    #[cfg(feature = "original-asset-tests")]
     fn return_to_view_intro_escape_is_an_ordinary_aborting_key() {
         // `#54` retraction 3: there is no ESC special case.
         let dir = debug_game_dir();
@@ -25830,6 +25911,7 @@ mod tests {
     }
 
     #[test]
+    #[cfg(feature = "original-asset-tests")]
     fn return_to_view_intro_frame_blits_the_strip_at_the_published_origin() {
         // `#54`: the preview's top-left pixel is `(8, 128)`, and there is
         // no clear and no full repaint — everything outside the strip
@@ -25855,6 +25937,7 @@ mod tests {
     }
 
     #[test]
+    #[cfg(feature = "original-asset-tests")]
     fn return_to_view_caption_repaints_the_border_either_side_of_itself() {
         // `systems/intro.md §12.1`: before the text, the helper draws
         // two filled slot-2 rectangles over y = 193..=199 spanning
@@ -25915,6 +25998,7 @@ mod tests {
     }
 
     #[test]
+    #[cfg(feature = "original-asset-tests")]
     fn return_to_view_intro_frame_draws_the_chapter_caption_in_the_bottom_border() {
         // `#54` / `systems/intro.md §12.1`: fixed-cell text on text row
         // 24 starting at column `18 - floor(len / 2)`.
@@ -25993,6 +26077,7 @@ mod tests {
     }
 
     #[test]
+    #[cfg(feature = "original-asset-tests")]
     fn return_to_view_intro_frame_leaves_the_preserved_backing_unmutated() {
         let dir = debug_game_dir();
         let mut intro = return_to_view_intro_state(
@@ -26009,6 +26094,7 @@ mod tests {
     }
 
     #[test]
+    #[cfg(feature = "original-asset-tests")]
     fn return_to_view_intro_frame_draws_the_fixed_wipe_rectangles() {
         // `#54`: the `0x0B` pairs are absolute framebuffer pixel
         // rectangles in user-interface colour slot 1, deliberately not
@@ -26033,6 +26119,7 @@ mod tests {
     }
 
     #[test]
+    #[cfg(feature = "original-asset-tests")]
     fn return_to_view_intro_frame_paints_out_the_menu_select_caption() {
         // `#54`: on preview entry the menu's top-border `Select:`
         // caption is painted out.
@@ -26115,6 +26202,7 @@ mod tests {
     }
 
     #[test]
+    #[cfg(feature = "original-asset-tests")]
     fn return_to_view_intro_summary_reports_the_published_geometry() {
         let dir = debug_game_dir();
         let mut intro = return_to_view_intro_state(
@@ -26133,8 +26221,9 @@ mod tests {
     }
 
     #[test]
+    #[cfg(feature = "original-asset-tests")]
     fn visual_return_to_view_summary_renders_the_shipped_preview_when_present() {
-        let game_dir = Path::new(DEFAULT_GAME_DIR);
+        let game_dir = original_asset_dir();
         if !game_dir.join(MISCMAPS_DAT_FILE).exists() || !game_dir.join(TILES_EGA_FILE).exists() {
             return;
         }
@@ -26196,6 +26285,7 @@ mod tests {
     /// which repaints the band statically from record `1` while the
     /// counter keeps its own position (section 11.2, step 6)."
     #[test]
+    #[cfg(feature = "original-asset-tests")]
     fn acknowledgements_return_leaves_the_title_tick_counter_alone() {
         let dir = debug_game_dir();
         let (mut intro, _menu) = visual_intro_state_with_acknowledgements(dir.clone());
@@ -26238,6 +26328,7 @@ mod tests {
     /// phase per menu poll pass. ... The instant a poll returns a key
     /// the cell is overwritten with a space."
     #[test]
+    #[cfg(feature = "original-asset-tests")]
     fn intro_menu_cursor_cell_cycles_one_phase_per_poll_pass() {
         let dir = debug_game_dir();
         let mut intro = visual_intro_state_with_panel(dir.clone(), VisualIntroPanel::Menu);
@@ -26602,10 +26693,11 @@ mod tests {
     /// text through the full-screen fixed-cell window and drew no panel
     /// at all, so a frame with the panel present cannot match one.
     #[test]
+    #[cfg(feature = "original-asset-tests")]
     fn endgame_narrative_window_frame_composes_its_published_panel() {
         use u5_runtime::story_layout::endgame_narrative_panel;
 
-        let game_dir = Path::new(DEFAULT_GAME_DIR);
+        let game_dir = original_asset_dir();
         if !game_dir.join("END1.16").exists() {
             eprintln!("skipping: local clean assets are not installed");
             return;

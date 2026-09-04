@@ -976,7 +976,10 @@ fn a_dungeon_idle_tick_runs_no_world_step_at_all() {
 /// no artwork is committed and nothing is dumped.
 #[test]
 fn shipped_fire_masks_have_pixels_inside_their_noise_planes() {
-    let game_dir = std::path::Path::new(DEFAULT_GAME_DIR);
+    let Some(game_dir) = u5_runtime::test_fixtures::configured_original_asset_dir() else {
+        return;
+    };
+    let game_dir = game_dir.as_path();
     if !game_dir.join(TILES_EGA_FILE).exists() {
         return;
     }

@@ -1308,7 +1308,10 @@ fn parsed_tlk_caps_each_blob_to_runtime_window() {
 
 #[test]
 fn shipped_tlk_corpus_parses_and_runner_smokes_sanitized_fields() {
-    let game_dir = Path::new(DEFAULT_GAME_DIR);
+    let Some(game_dir) = crate::test_fixtures::configured_original_asset_dir() else {
+        return;
+    };
+    let game_dir = game_dir.as_path();
     if !game_dir.join(TOWNE_TLK_FILENAME).exists() {
         return;
     }
@@ -1403,7 +1406,10 @@ fn shipped_tlk_corpus_parses_and_runner_smokes_sanitized_fields() {
 
 #[test]
 fn shipped_tlk_corpus_contains_public_action_payment_and_flag_controls() {
-    let game_dir = Path::new(DEFAULT_GAME_DIR);
+    let Some(game_dir) = crate::test_fixtures::configured_original_asset_dir() else {
+        return;
+    };
+    let game_dir = game_dir.as_path();
     if !game_dir.join(TOWNE_TLK_FILENAME).exists() {
         return;
     }
@@ -1515,7 +1521,10 @@ fn shipped_tlk_corpus_contains_public_action_payment_and_flag_controls() {
 
 #[test]
 fn shipped_npc_roster_corpus_matches_public_catalog_counts() {
-    let game_dir = Path::new(DEFAULT_GAME_DIR);
+    let Some(game_dir) = crate::test_fixtures::configured_original_asset_dir() else {
+        return;
+    };
+    let game_dir = game_dir.as_path();
     if !game_dir.join(TOWNE_NPC_FILENAME).exists() {
         return;
     }

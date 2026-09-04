@@ -3,6 +3,10 @@ name = "u5-bevy"
 version.workspace = true
 edition.workspace = true
 
+[features]
+default = []
+original-asset-tests = []
+
 [dependencies]
 u5-runtime = { workspace = true }
 bevy = { workspace = true }

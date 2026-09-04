@@ -647,7 +647,10 @@ fn dungeon_billboard_bank_is_chosen_by_flavour_byte_not_declaration_order() {
     // The three banks are distinguishable by their dominant ink, which
     // is the whole "different dungeons look different" mechanism: one
     // geometry, three texture sets.
-    let game_dir = Path::new(DEFAULT_GAME_DIR);
+    let Some(game_dir) = crate::test_fixtures::configured_original_asset_dir() else {
+        return;
+    };
+    let game_dir = game_dir.as_path();
     if !game_dir.join("DNG1.16").exists() {
         return;
     }

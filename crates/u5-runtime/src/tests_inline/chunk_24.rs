@@ -160,7 +160,10 @@ fn synthetic_location_dat_audit_reads_all_four_families_without_raw_report_rows(
 
 #[test]
 fn shipped_location_dat_audit_covers_authored_cell_facets_when_assets_present() {
-    let game_dir = Path::new(DEFAULT_GAME_DIR);
+    let Some(game_dir) = crate::test_fixtures::configured_original_asset_dir() else {
+        return;
+    };
+    let game_dir = game_dir.as_path();
     if ![
         "TOWNE.DAT",
         "DWELLING.DAT",

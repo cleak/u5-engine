@@ -154,7 +154,10 @@ fn synthetic_ool_audit_reads_all_roles_without_raw_report_rows() {
 
 #[test]
 fn shipped_ool_audit_covers_clean_overlay_files_when_assets_present() {
-    let game_dir = Path::new(DEFAULT_GAME_DIR);
+    let Some(game_dir) = crate::test_fixtures::configured_original_asset_dir() else {
+        return;
+    };
+    let game_dir = game_dir.as_path();
     if ![
         SAVED_GAM_FILENAME,
         SAVED_OOL_FILENAME,

@@ -1583,7 +1583,10 @@
 
     #[test]
     fn shipped_npc_scheduler_corpus_initializes_and_ticks_when_present() {
-        let game_dir = Path::new(DEFAULT_GAME_DIR);
+        let Some(game_dir) = crate::test_fixtures::configured_original_asset_dir() else {
+            return;
+        };
+        let game_dir = game_dir.as_path();
         if !game_dir.join(TOWNE_NPC_FILENAME).exists() {
             return;
         }
@@ -1862,7 +1865,10 @@
     /// violation, which only held while the classifier's polarity was inverted.
     #[test]
     fn shipped_npc_scheduler_corpus_runs_boundary_routes_when_present() {
-        let game_dir = Path::new(DEFAULT_GAME_DIR);
+        let Some(game_dir) = crate::test_fixtures::configured_original_asset_dir() else {
+            return;
+        };
+        let game_dir = game_dir.as_path();
         if !game_dir.join(TOWNE_NPC_FILENAME).exists() {
             return;
         }

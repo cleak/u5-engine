@@ -723,7 +723,10 @@ mod tests {
 
     #[test]
     fn local_shoppe_dat_asset_renders_sanitized_audit_when_present() {
-        let game_dir = Path::new(crate::DEFAULT_GAME_DIR);
+        let Some(game_dir) = crate::test_fixtures::configured_original_asset_dir() else {
+            return;
+        };
+        let game_dir = game_dir.as_path();
         let path = game_dir.join("SHOPPE.DAT");
         if !path.exists() {
             return;

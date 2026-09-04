@@ -3,9 +3,7 @@
     /// test that reads original game data is skipped without it; the runtime
     /// crate never embeds asset bytes.
     fn local_clean_assets() -> Option<std::path::PathBuf> {
-        let dir = std::env::var_os("U5_CLEAN_ASSETS")
-            .map(std::path::PathBuf::from)
-            .unwrap_or_else(|| std::path::PathBuf::from(DEFAULT_GAME_DIR));
+        let dir = crate::test_fixtures::configured_original_asset_dir()?;
         dir.join(PROPORT_PCS_FILE).is_file().then_some(dir)
     }
 

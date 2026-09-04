@@ -355,7 +355,10 @@ mod tests {
 
     #[test]
     fn ega_load_against_local_clean_assets_when_present() {
-        let game_dir = Path::new(crate::DEFAULT_GAME_DIR);
+        let Some(game_dir) = crate::test_fixtures::configured_original_asset_dir() else {
+            return;
+        };
+        let game_dir = game_dir.as_path();
         if !game_dir.join(IBM_CH_FILE).exists() || !game_dir.join(RUNES_CH_FILE).exists() {
             return;
         }
@@ -401,7 +404,10 @@ mod tests {
 
     #[test]
     fn run_pre_flourish_against_local_clean_assets_when_present() {
-        let game_dir = Path::new(crate::DEFAULT_GAME_DIR);
+        let Some(game_dir) = crate::test_fixtures::configured_original_asset_dir() else {
+            return;
+        };
+        let game_dir = game_dir.as_path();
         if !game_dir.join(IBM_CH_FILE).exists() || !game_dir.join(RUNES_CH_FILE).exists() {
             return;
         }

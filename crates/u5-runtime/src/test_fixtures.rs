@@ -711,6 +711,21 @@ pub fn copy_asset_writable(source: &Path, destination: &Path) -> std::io::Result
     clear_readonly(destination)
 }
 
+/// Return the explicitly configured original-asset test source.
+///
+/// Source-only tests leave `U5_TEST_ASSET_DIR` unset, so optional asset-backed
+/// tests skip consistently on every operating system instead of discovering
+/// the historical Windows default directory. The RemoteGameDev asset gate sets
+/// this variable to a complete writable profile.
+pub fn configured_original_asset_dir() -> Option<PathBuf> {
+    let path = std::env::var_os("U5_TEST_ASSET_DIR").map(PathBuf::from)?;
+    assert!(
+        path.is_absolute(),
+        "U5_TEST_ASSET_DIR must be an absolute path"
+    );
+    Some(path)
+}
+
 #[cfg(test)]
 mod pristine_game_dir_guard_tests {
     use super::*;
