@@ -16,7 +16,7 @@
                 descriptor: CombatActorDescriptor::empty(),
                 group: COMBAT_TARGET_GROUP_MONSTER,
                 suppressed: false,
-                invisible_or_unrevealed: false,
+                dragged_under: false,
             };
             COMBAT_ACTOR_SLOTS
         ];
@@ -34,7 +34,7 @@
                 ]),
                 group: COMBAT_TARGET_GROUP_PARTY,
                 suppressed: false,
-                invisible_or_unrevealed: false,
+                dragged_under: false,
             };
         }
         candidates
@@ -59,7 +59,7 @@
             ]),
             group: COMBAT_TARGET_GROUP_MONSTER,
             suppressed: false,
-            invisible_or_unrevealed: false,
+            dragged_under: false,
         };
     }
 

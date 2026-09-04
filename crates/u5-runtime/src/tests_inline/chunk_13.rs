@@ -21032,7 +21032,7 @@ fn cast_dispatcher_gate_matches_spec_order_and_messages() {
 }
 
 #[test]
-fn summoned_creatures_reach_the_command_handler_but_are_never_prompted() {
+fn summoned_creatures_reach_the_command_handler_and_are_prompted_by_it() {
     // combat.md §6.1a writer 3: summoned creatures "are still placed
     // through the ordinary monster placement path, so their class byte
     // is the monster-side one - but the bit **does** hand the creature
@@ -21135,19 +21135,47 @@ fn summoned_creatures_reach_the_command_handler_but_are_never_prompted() {
     let traitor = descriptor(COMBAT_ACTOR_FLAG_SELECTABLE_80, TRAITOR_ROSTER_RECORD);
     assert!(!combat_slot_takes_player_command_path(1, traitor));
 
-    // Reaching the handler is not being prompted by it. §16.1: it
-    // "prompts only for an eligible selected party member, while a
-    // monster descriptor that control moved to group 0 still synthesizes
-    // an automatic action" - so the keystroke gate is narrower than the
-    // dispatch gate by exactly the summoned/charmed monster.
-    assert!(combat_slot_prompts_for_player_command(0, party));
-    assert!(!combat_slot_prompts_for_player_command(0, controlled_party));
+    // `combat.md` §16.1: the handler "**prompts, and never synthesizes**.
+    // Its one gate is the active-player sentinel: while the sentinel is
+    // unset ... **every** group-0 slot is prompted." The keystroke gate is
+    // therefore exactly the dispatch gate plus that sentinel, and the
+    // summoned/charmed monster is prompted like a party member.
+    //
+    // *(The withdrawn assertions - that the prompt was narrower than the
+    // dispatch path by exactly the summoned/charmed monster - implemented
+    // §16.1's "still synthesizes an automatic action" clause;
+    // `RETRACTIONS.md` R377 and R378 withdraw it.)*
+    assert!(combat_slot_prompted_by_player_command_handler(None, 0, party));
+    assert!(!combat_slot_prompted_by_player_command_handler(
+        None,
+        0,
+        controlled_party
+    ));
     for slot in COMBAT_PARTY_ACTOR_SLOTS..COMBAT_ACTOR_SLOTS {
         assert!(
-            !combat_slot_prompts_for_player_command(slot, summoned),
-            "summoned creature in slot {slot} was offered the prompt"
+            combat_slot_prompted_by_player_command_handler(None, slot, summoned),
+            "summoned creature in slot {slot} was refused the prompt"
         );
+        // "while a character is selected with `1`-`6`, only the party-side
+        // slot that sentinel names is prompted and every other group-0 slot,
+        // party or monster, is skipped without a banner, a keystroke or an
+        // action."
+        assert!(!combat_slot_prompted_by_player_command_handler(
+            Some(0),
+            slot,
+            summoned
+        ));
     }
+    assert!(combat_slot_prompted_by_player_command_handler(
+        Some(0),
+        0,
+        party
+    ));
+    assert!(!combat_slot_prompted_by_player_command_handler(
+        Some(1),
+        0,
+        party
+    ));
 }
 
 #[test]

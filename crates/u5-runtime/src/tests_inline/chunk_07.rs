@@ -658,7 +658,7 @@ fn potion_combat_and_white_visibility_effects_use_scene_gates() {
         combat.use_potion_with_effect(POTION_BLACK_INDEX, 0, POTION_BLACK_INDEX),
         MoveOutcome::Used
     );
-    assert!(combat.combat_actors[0].is_hidden_or_unrevealed());
+    assert!(combat.combat_actors[0].is_phase_suppressed());
     assert_eq!(
         combat.active_objects[1].tile,
         COMBAT_HIDDEN_ACTIVE_OBJECT_TILE
@@ -751,15 +751,163 @@ fn combat_orange_wake_dispatch_restores_status_and_retained_display_tile() {
     assert_eq!(combat.active_objects[1].type_byte, 0x81);
     assert_eq!(combat.active_objects[1].tile, 0x81);
 
+    // `catalogs/item-list.md`, "Orange combat sleep presentation": wake
+    // "selects the retained base/type tile as the display tile, except that an
+    // actor still under the combat invisibility state uses tile `0x1D`". The
+    // invisibility state is set here by the production writer, not by hand:
+    // `RETRACTIONS.md` R380 puts it on the phase/blink bit `0x10`.
     combat.party[0].status = b'S';
     assert!(combat.apply_combat_party_sleep_presentation(0));
-    combat.combat_actors[0].flags |= COMBAT_ACTOR_FLAG_HIDDEN_OR_UNREVEALED;
+    assert!(apply_combat_invisibility(&mut combat.combat_actors[0]));
+    assert!(combat.combat_actors[0].is_phase_suppressed());
     combat.apply_combat_sleep_wake_dispatch(0, COMBAT_SLEEP_WAKE_SUCCESS_ROLL);
     assert_eq!(combat.party[0].status, b'G');
     assert_eq!(
         combat.active_objects[1].tile,
         COMBAT_POTION_INVISIBLE_WAKE_DISPLAY_TILE
     );
+}
+
+/// The end-to-end path `catalogs/item-list.md` publishes for the Black potion
+/// ("In combat, mark the active combatant hidden/suppressed and update its
+/// linked presentation record") and for the Ring of Invisibility ("when worn by
+/// a combatant, it marks that combatant hidden/suppressed"), followed by the
+/// Orange sleep/wake pair: wake "selects the retained base/type tile as the
+/// display tile, except that an actor still under the combat invisibility
+/// state uses tile `0x1D`". Every invisibility writer sets bit `0x10`
+/// (`RETRACTIONS.md` R380), so the wake branch has to read that bit.
+#[test]
+fn combat_invisibility_writers_all_reach_the_orange_wake_hidden_tile() {
+    for writer in ["black-potion", "ring", "spell"] {
+        let mut combat = test_state(open_grid(), 1, 1);
+        combat.combat_active = true;
+        combat.active_objects.push(ActiveObject {
+            type_byte: 0x81,
+            tile: 0x81,
+            x: 5,
+            y: 5,
+            ..ActiveObject::empty()
+        });
+        combat.combat_actors[0] = CombatActorDescriptor::from_row([
+            20,
+            0,
+            COMBAT_ACTOR_FLAG_SELECTABLE_80,
+            0,
+            1,
+            1,
+            5,
+            5,
+        ]);
+
+        match writer {
+            // The Black potion's combat arm: mark hidden and update the linked
+            // presentation record.
+            "black-potion" => {
+                assert!(
+                    apply_combat_linked_invisibility(
+                        &mut combat.combat_actors[0],
+                        &mut combat.active_objects,
+                    )
+                    .is_some()
+                );
+            }
+            // The ring marks the combatant without a presentation rewrite of
+            // its own.
+            "ring" => {
+                assert!(apply_combat_invisibility(&mut combat.combat_actors[0]));
+            }
+            // A later reveal pass clears it; re-hiding through the linked
+            // visibility writer is the spell-side shape.
+            _ => {
+                assert!(
+                    set_combat_linked_visibility(
+                        &mut combat.combat_actors[0],
+                        &mut combat.active_objects,
+                        true,
+                    )
+                    .is_some()
+                );
+            }
+        }
+        assert!(
+            combat.combat_actors[0].is_phase_suppressed(),
+            "{writer} must set the invisibility bit"
+        );
+
+        combat.party[0].status = b'G';
+        assert!(combat.apply_combat_party_sleep_presentation(0));
+        assert_eq!(
+            combat.active_objects[1].tile,
+            COMBAT_POTION_SLEEP_DISPLAY_TILE
+        );
+
+        assert_eq!(
+            combat.apply_combat_sleep_wake_dispatch(0, COMBAT_SLEEP_WAKE_SUCCESS_ROLL),
+            Some(CombatSleepWakeApplication {
+                slot: 0,
+                roll: COMBAT_SLEEP_WAKE_SUCCESS_ROLL,
+                woke: true,
+            }),
+            "{writer}"
+        );
+        assert_eq!(
+            combat.active_objects[1].tile,
+            COMBAT_POTION_INVISIBLE_WAKE_DISPLAY_TILE,
+            "{writer}: an actor still invisible on wake uses tile 0x1D"
+        );
+
+        // The same branch through the potion-side helper.
+        assert!(combat.apply_combat_party_sleep_presentation(0));
+        assert!(combat.clear_combat_party_sleep_presentation(0));
+        assert_eq!(
+            combat.active_objects[1].tile,
+            COMBAT_POTION_INVISIBLE_WAKE_DISPLAY_TILE,
+            "{writer}: the potion-side wake helper reads the same bit"
+        );
+
+        // A revealed actor gets its retained base/type tile back instead.
+        assert!(clear_combat_invisibility(&mut combat.combat_actors[0]));
+        assert!(combat.apply_combat_party_sleep_presentation(0));
+        assert!(combat.clear_combat_party_sleep_presentation(0));
+        assert_eq!(combat.active_objects[1].tile, 0x81, "{writer}");
+    }
+}
+
+/// `catalogs/item-list.md`, the Black potion's combat arm: "mark the active
+/// combatant hidden/suppressed and update its linked presentation record", and
+/// `combat.md` §6.1 bit `0x10` is "**Invisible / phase-hidden.** The
+/// phase/blink filter". The arena compositor's descriptor-side suppression
+/// therefore reads `0x10`, not the dragged-under bit `0x04`
+/// (`RETRACTIONS.md` R380).
+#[test]
+fn the_arena_compositor_suppresses_an_invisible_actor_not_a_dragged_under_one() {
+    let mut combat = test_state(open_grid(), 1, 1);
+    combat.combat_active = true;
+    combat.active_objects[0] = ActiveObject {
+        type_byte: 0x81,
+        tile: 0x81,
+        x: 5,
+        y: 5,
+        ..ActiveObject::empty()
+    };
+    combat.combat_actors[0] =
+        CombatActorDescriptor::from_row([20, 0, COMBAT_ACTOR_FLAG_SELECTABLE_80, 0, 0, 1, 5, 5]);
+
+    assert_eq!(combat.combat_render_actor_byte_at(5, 5), Some(0x81));
+
+    combat.combat_actors[0].flags |= COMBAT_ACTOR_FLAG_DRAGGED_UNDER;
+    assert_eq!(
+        combat.combat_render_actor_byte_at(5, 5),
+        Some(0x81),
+        "the drag arm blanks the sprite by writing the presentation record"
+    );
+
+    combat.combat_actors[0].flags &= !COMBAT_ACTOR_FLAG_DRAGGED_UNDER;
+    assert!(apply_combat_invisibility(&mut combat.combat_actors[0]));
+    assert_eq!(combat.combat_render_actor_byte_at(5, 5), None);
+
+    assert!(clear_combat_invisibility(&mut combat.combat_actors[0]));
+    assert_eq!(combat.combat_render_actor_byte_at(5, 5), Some(0x81));
 }
 
 #[test]

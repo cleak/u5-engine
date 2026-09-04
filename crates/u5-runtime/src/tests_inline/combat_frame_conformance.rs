@@ -318,62 +318,49 @@
         );
     }
 
+    /// `combat.md §6.1a`, the first of the three direct readers - "**The
+    /// attack driver — party-side slots only.**" The fixed magic strike, with
+    /// its "the chosen target must be at straight-line distance exactly one"
+    /// requirement and its "**no action at all**" refusal, "lives inside the
+    /// automatic driver's attack path and is reached from nowhere else, so
+    /// only the slots the round walker sends to that driver can take it:
+    /// party-side descriptors carrying the bit". "A **monster-side** slot
+    /// carrying the bit is dispatched to the player-command handler instead
+    /// and never enters this branch at all: it attacks through the prompted
+    /// path of Sections 8.1, 8.2 and 11.1, where the same distance-one number
+    /// appears as a **cursor clamp rather than a refusal**."
+    /// (`RETRACTIONS.md` R378.)
+    ///
+    /// *(These three tests previously pinned the withdrawn universal form on a
+    /// controlled **monster**: `controlled_actor_with_a_non_adjacent_target_takes_no_action`,
+    /// `controlled_actor_adjacent_attack_skips_the_class_cascade_and_back_link`
+    /// and `controlled_actor_attack_out_of_range_resolves_nothing`.)*
     #[test]
-    fn controlled_actor_with_a_non_adjacent_target_takes_no_action() {
-        // `combat.md §6.1a` "Readers — the attack driver": when the chosen
-        // target is further than straight-line distance one the controlled
-        // actor's turn produces no action at all — no ranged fallthrough, no
-        // max-range consult, and no step.
-        let mut state = combat_ai_turn_state(9, 5);
-        state.combat_actors[8].flags |= COMBAT_ACTOR_FLAG_CONTROLLED;
-        let position_before = (state.combat_actors[8].x, state.combat_actors[8].y);
-
-        let turn = state
-            .apply_combat_ai_turn_with_inputs(
-                8,
-                false,
-                0,
-                false,
-                255,
-                255,
-                &[],
-                None,
-                0,
-                false,
-                None,
-                true,
-                &[1, 2, 3, 4],
-                Some(CombatMonsterAttackInputs::default()),
-            )
-            .expect("a controlled monster still takes a dispatch");
-
-        assert!(turn.attack_route.is_none());
-        assert!(turn.monster_attack.is_none());
-        assert!(turn.movement.is_none());
-        assert!(turn.movement_commit.is_none());
-        assert_eq!(
-            (state.combat_actors[8].x, state.combat_actors[8].y),
-            position_before,
-            "a controlled actor with no adjacent target must not step"
+    fn a_controlled_monster_never_takes_the_party_side_fixed_magic_strike() {
+        // Out of range: no refusal. The shared primitive resolves the ordinary
+        // class attempt, and the cursor - not this driver - is what keeps a
+        // distant cell unselectable on the prompted path.
+        let mut distant = combat_ai_turn_state(9, 5);
+        distant.combat_actors[8].flags |= COMBAT_ACTOR_FLAG_CONTROLLED;
+        assert!(
+            distant
+                .resolve_and_apply_combat_monster_attack(8, 0, 0, false, 0, Some(true))
+                .is_some(),
+            "a controlled monster has no distance-one refusal of its own"
         );
-    }
 
-    #[test]
-    fn controlled_actor_adjacent_attack_skips_the_class_cascade_and_back_link() {
-        // `combat.md §6.1a`: adjacent, the strike goes through the shared
-        // attack-application primitive; the attacker back-link, the class
-        // attack overrides, the poison/status branch and the monster
-        // ranged-spell branch are all skipped.
-        let mut state = combat_ai_turn_state(5, 6);
-        state.combat_actors[8].owner_target_class = COMBAT_CLASS_GIANT_RAT;
-        state.combat_actors[8].flags |= COMBAT_ACTOR_FLAG_CONTROLLED;
+        // Adjacent: the ordinary class cascade runs, back-link and poison
+        // branch included.
+        let mut adjacent = combat_ai_turn_state(5, 6);
+        adjacent.combat_actors[8].owner_target_class = COMBAT_CLASS_GIANT_RAT;
+        adjacent.combat_actors[8].flags |= COMBAT_ACTOR_FLAG_CONTROLLED;
         assert!(
             combat_class_traits(COMBAT_CLASS_GIANT_RAT)
                 .unwrap()
                 .poison_status_attack,
-            "the fixture class must have a poison/status branch to skip"
+            "the fixture class must have a poison/status branch"
         );
-        state.party = vec![PartyMember {
+        adjacent.party = vec![PartyMember {
             slot: 0,
             class_byte: 1,
             status: b'G',
@@ -384,30 +371,17 @@
             level: 1,
         }];
 
-        let application = state
+        let application = adjacent
             .resolve_and_apply_combat_monster_attack(8, 0, 0, true, 0, Some(true))
-            .expect("an adjacent controlled attacker still resolves an attack");
+            .expect("an adjacent controlled monster resolves an attack");
 
         assert!(
-            application.poison_status_outcome.is_none(),
-            "the poison/status branch must be skipped for a controlled attacker"
+            application.poison_status_outcome.is_some(),
+            "the class poison/status branch is not skipped for a monster-side actor"
         );
-        assert!(application.resolution.is_some());
         assert_eq!(
-            state.combat_interference_sources[0], 0,
-            "the controlled attack writes no attacker back-link"
-        );
-    }
-
-    #[test]
-    fn controlled_actor_attack_out_of_range_resolves_nothing() {
-        let mut state = combat_ai_turn_state(9, 5);
-        state.combat_actors[8].flags |= COMBAT_ACTOR_FLAG_CONTROLLED;
-        assert!(
-            state
-                .resolve_and_apply_combat_monster_attack(8, 0, 0, false, 0, Some(true))
-                .is_none(),
-            "a controlled attacker requires straight-line distance exactly one"
+            adjacent.combat_interference_sources[0], 8,
+            "the ordinary attacker back-link is written"
         );
     }
 
@@ -566,7 +540,7 @@
 
         let hidden = combat_charm_state(
             target_slot,
-            COMBAT_ACTOR_FLAG_SELECTABLE_80 | COMBAT_ACTOR_FLAG_HIDDEN_OR_UNREVEALED,
+            COMBAT_ACTOR_FLAG_SELECTABLE_80 | COMBAT_ACTOR_FLAG_DRAGGED_UNDER,
             COMBAT_CLASS_DAEMON,
         );
         assert!(!hidden.charm_prompt_target_is_eligible(target_slot, caster_group));

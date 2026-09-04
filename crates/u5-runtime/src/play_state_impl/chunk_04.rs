@@ -1739,7 +1739,12 @@ impl PlayState {
             return false;
         }
         actor.clear_status_disabled();
-        let hidden = actor.is_hidden_or_unrevealed();
+        // `catalogs/item-list.md` "Orange combat sleep presentation": wake
+        // "selects the retained base/type tile as the display tile, except
+        // that an actor still under the combat invisibility state uses tile
+        // `0x1D`". Invisibility "rides on bit `0x10`, the phase/blink bit"
+        // (`RETRACTIONS.md` R380); bit `0x04` is the dragged-under state.
+        let hidden = actor.is_phase_suppressed();
         let active_object_slot = usize::from(actor.active_object_slot);
         if let Some(object) = self.active_objects.get_mut(active_object_slot) {
             object.tile = if hidden {

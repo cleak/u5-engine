@@ -226,13 +226,25 @@
         ));
     }
 
+    /// `combat.md` §8 Shape A: "The helper prints the verb label, then
+    /// requires that the acting combatant is a **party-side** descriptor. An
+    /// actor that is not gets the short `Can't!` refusal, the banner is
+    /// reprinted (Section 8.1) and the prompt is re-issued at no cost. In
+    /// practice the refusal has exactly one live population: a **monster
+    /// acting under player control**." `C`-Cast "carries its own copy of the
+    /// same party-side test and refuses the same way, after printing
+    /// `Cast...`; so **seven** letters in total are unusable by a controlled
+    /// monster."
+    ///
+    /// *(Was `combat_shape_a_dead_actor_prints_the_published_refusal`. "That
+    /// test is withdrawn: the gate reads the party-side bit, not liveness,
+    /// and the dead-actor case it describes is unreachable" -
+    /// `RETRACTIONS.md` R381.)*
     #[test]
-    fn combat_shape_a_dead_actor_prints_the_published_refusal() {
-        // `combat.md §8` Shape A: "The helper prints the verb label, then
-        // requires that the acting combatant is still alive. A dead actor gets
-        // the short \"Can't!\" refusal and the prompt is re-issued at no cost."
+    fn combat_shape_a_refuses_a_monster_side_actor_with_the_published_refusal() {
         let game_dir = std::path::Path::new(".");
         for (key, branch) in [
+            ('C', CombatCommandBranch::CastSpell),
             ('G', CombatCommandBranch::Get),
             ('J', CombatCommandBranch::Jimmy),
             ('O', CombatCommandBranch::Open),
@@ -240,27 +252,52 @@
             ('S', CombatCommandBranch::Search),
             ('U', CombatCommandBranch::UseItem),
         ] {
-            assert!(combat_command_branch_requires_live_active_actor(branch));
+            assert!(combat_command_branch_requires_party_side_actor(branch));
             let mut state = combat_player_command_state(10, 10);
             state.keys = 1;
-            state.pending_combat_actor_slot = Some(0);
-            state.combat_actors[0].flags |= COMBAT_ACTOR_FLAG_MARKED_DEAD;
+            state.combat_actors[8].flags |= COMBAT_ACTOR_FLAG_CONTROLLED;
+            state.open_pending_combat_player_turn(Some(8));
+            let banner = state
+                .combat_turn_banner_for_actor(8)
+                .expect("a controlled monster gets the reduced banner");
             let round_before = state.combat_round_counter;
+            state.message_transcript.clear();
 
             handle_play_key_input(&mut state, key, "", game_dir).unwrap();
 
-            assert!(
-                state.message.ends_with(COMBAT_LIVE_ACTOR_REFUSAL),
-                "{key} printed {:?}",
-                state.message
-            );
-            if let Some(label) = combat_command_branch_published_label(branch) {
+            let printed = state
+                .message_transcript
+                .iter()
+                .map(|entry| entry.text.as_str())
+                .collect::<String>();
+            let label = match branch {
+                CombatCommandBranch::CastSpell => Some(COMBAT_CAST_COMMAND_LABEL),
+                _ => combat_command_branch_published_label(branch),
+            };
+            if let Some(label) = label {
                 assert!(
-                    state.message.starts_with(label),
-                    "{key} must print the verb label before the refusal, got {:?}",
-                    state.message
+                    printed.contains(&format!("{label}{COMBAT_PARTY_SIDE_REFUSAL}")),
+                    "{key} must print its label then the refusal, got {printed:?}"
+                );
+            } else {
+                assert!(
+                    printed.contains(COMBAT_PARTY_SIDE_REFUSAL),
+                    "{key} printed {printed:?}"
                 );
             }
+            // §8.1: "**Full re-prompt, the whole banner reprinted from its
+            // leading newline:** ... every `Can't!` refusal". The transcript
+            // splits on the banner's own newlines, so the visible tail is the
+            // banner line itself.
+            assert!(
+                printed.ends_with(banner.trim_matches('\n')),
+                "{key} must reprint the whole banner, got {printed:?}"
+            );
+            assert!(
+                state.combat_prompt_row_opened_by_banner,
+                "{key} must reopen the turn's prompt row with the banner"
+            );
+            assert_eq!(state.pending_combat_actor_slot, Some(8));
             assert!(
                 state.active_direction_prompt.is_none(),
                 "{key} must not open a follow-up prompt"
@@ -269,16 +306,9 @@
                 state.combat_round_counter, round_before,
                 "the re-prompt is free"
             );
-
-            // A key that is not one of the six Shape-A letters stays silent on
-            // the same non-acting slot.
-            let mut quiet = combat_player_command_state(10, 10);
-            quiet.pending_combat_actor_slot = Some(0);
-            quiet.combat_actors[0].flags |= COMBAT_ACTOR_FLAG_MARKED_DEAD;
-            handle_play_key_input(&mut quiet, 'Z', "", game_dir).unwrap();
-            assert_eq!(quiet.message, "");
         }
-        assert_eq!(COMBAT_LIVE_ACTOR_REFUSAL, "Can't!");
+        assert_eq!(COMBAT_PARTY_SIDE_REFUSAL, "Can't!");
+        assert_eq!(COMBAT_CAST_COMMAND_LABEL, "Cast...");
     }
 
     #[test]
@@ -470,7 +500,7 @@
         actors[ghost] = CombatActorDescriptor::from_row([
             20,
             1,
-            COMBAT_ACTOR_FLAG_SELECTABLE_40 | COMBAT_ACTOR_FLAG_HIDDEN_OR_UNREVEALED,
+            COMBAT_ACTOR_FLAG_SELECTABLE_40 | COMBAT_ACTOR_FLAG_DRAGGED_UNDER,
             23,
             ghost as u8,
             0,

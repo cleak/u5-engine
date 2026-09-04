@@ -2020,7 +2020,7 @@ impl PlayState {
     /// loop reads.
     ///
     /// In combat §8 spends the acting combatant's action instead of a
-    /// world turn, and only an actor that fails the live-actor gate
+    /// world turn, and only an actor that fails the party-side gate
     /// escapes the cost; the combat-side action accounting is owned by the
     /// round walk, so no world turn is charged here.
     fn charge_ready_equipment_turn(&mut self) {
@@ -2054,7 +2054,7 @@ impl PlayState {
         }
 
         // Reached from combat only after `start_combat_ready_equipment`'s
-        // live-actor gate, which is the one escape `inventory.md §8`
+        // party-side gate, which is the one escape `inventory.md §8`
         // allows; that path charges no world turn.
         self.charge_ready_equipment_turn();
         let mut session = ReadySession::with_party(party_index);

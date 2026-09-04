@@ -2803,7 +2803,7 @@ fn combat_possess_candidate_gate_accepts_only_live_visible_idle_party_slots() {
     let hidden = CombatActorDescriptor::from_row([
         20,
         1,
-        COMBAT_ACTOR_FLAG_SELECTABLE_80 | COMBAT_ACTOR_FLAG_HIDDEN_OR_UNREVEALED,
+        COMBAT_ACTOR_FLAG_SELECTABLE_80 | COMBAT_ACTOR_FLAG_DRAGGED_UNDER,
         0,
         0,
         0,
@@ -2860,7 +2860,7 @@ fn combat_possess_candidate_gate_accepts_only_live_visible_idle_party_slots() {
     assert!(!combat_possess_candidate_reaches_resistance(
         0,
         CombatPossessCandidateView {
-            invisible_or_unrevealed: true,
+            dragged_under: true,
             ..possess_candidate(live, Some(possess_member(b'G', 10)))
         },
     ));
@@ -3561,7 +3561,7 @@ fn combat_actor_descriptor_preserves_published_row_order() {
     assert_eq!(COMBAT_ACTOR_FLAG_CONTROLLED, 0x01);
     assert_eq!(COMBAT_ACTOR_FLAG_TEAM_TOGGLE, COMBAT_ACTOR_FLAG_CONTROLLED);
     assert_eq!(COMBAT_ACTOR_FLAG_FLEEING, 0x02);
-    assert_eq!(COMBAT_ACTOR_FLAG_HIDDEN_OR_UNREVEALED, 0x04);
+    assert_eq!(COMBAT_ACTOR_FLAG_DRAGGED_UNDER, 0x04);
     assert_eq!(COMBAT_ACTOR_FLAG_STATUS_DISABLED, 0x08);
     assert_eq!(COMBAT_SLEEP_WAKE_ROLL_LOW, 0);
     assert_eq!(COMBAT_SLEEP_WAKE_ROLL_HIGH, 16);
@@ -3610,7 +3610,7 @@ fn combat_actor_field_lookup_filter_matches_published_bits() {
     let hidden = CombatActorDescriptor::from_row([
         1,
         2,
-        COMBAT_ACTOR_FLAG_SELECTABLE_80 | COMBAT_ACTOR_FLAG_HIDDEN_OR_UNREVEALED,
+        COMBAT_ACTOR_FLAG_SELECTABLE_80 | COMBAT_ACTOR_FLAG_DRAGGED_UNDER,
         3,
         4,
         5,
@@ -3632,7 +3632,7 @@ fn combat_actor_field_coordinate_lookup_scans_slots_and_linked_objects() {
     descriptors[1] = CombatActorDescriptor::from_row([
         1,
         2,
-        COMBAT_ACTOR_FLAG_SELECTABLE_80 | COMBAT_ACTOR_FLAG_HIDDEN_OR_UNREVEALED,
+        COMBAT_ACTOR_FLAG_SELECTABLE_80 | COMBAT_ACTOR_FLAG_DRAGGED_UNDER,
         3,
         1,
         5,
@@ -3692,16 +3692,16 @@ fn combat_invisibility_marks_live_actor_hidden_only_once() {
         CombatActorDescriptor::from_row([10, 1, COMBAT_ACTOR_FLAG_SELECTABLE_80, 32, 7, 0, 4, 5]);
 
     assert!(apply_combat_invisibility(&mut actor));
-    assert!(actor.is_hidden_or_unrevealed());
+    assert!(actor.is_phase_suppressed());
     assert_eq!(
         actor.flags,
-        COMBAT_ACTOR_FLAG_SELECTABLE_80 | COMBAT_ACTOR_FLAG_HIDDEN_OR_UNREVEALED
+        COMBAT_ACTOR_FLAG_SELECTABLE_80 | COMBAT_ACTOR_FLAG_PHASE_BLINK_FILTER
     );
 
     assert!(!apply_combat_invisibility(&mut actor));
     assert_eq!(
         actor.flags,
-        COMBAT_ACTOR_FLAG_SELECTABLE_80 | COMBAT_ACTOR_FLAG_HIDDEN_OR_UNREVEALED
+        COMBAT_ACTOR_FLAG_SELECTABLE_80 | COMBAT_ACTOR_FLAG_PHASE_BLINK_FILTER
     );
 }
 
@@ -3722,7 +3722,7 @@ fn combat_invisibility_can_be_cleared_from_actor_row() {
     let mut actor = CombatActorDescriptor::from_row([
         20,
         1,
-        COMBAT_ACTOR_FLAG_SELECTABLE_80 | COMBAT_ACTOR_FLAG_HIDDEN_OR_UNREVEALED,
+        COMBAT_ACTOR_FLAG_SELECTABLE_80 | COMBAT_ACTOR_FLAG_PHASE_BLINK_FILTER,
         0,
         0,
         0,
@@ -3731,7 +3731,7 @@ fn combat_invisibility_can_be_cleared_from_actor_row() {
     ]);
 
     assert!(clear_combat_invisibility(&mut actor));
-    assert!(!actor.is_hidden_or_unrevealed());
+    assert!(!actor.is_phase_suppressed());
     assert!(!clear_combat_invisibility(&mut actor));
 }
 
@@ -3760,7 +3760,7 @@ fn linked_combat_invisibility_updates_actor_flag_and_visual_tile() {
         hidden.visual_tile_after,
         Some(COMBAT_HIDDEN_ACTIVE_OBJECT_TILE)
     );
-    assert!(actor.is_hidden_or_unrevealed());
+    assert!(actor.is_phase_suppressed());
     assert_eq!(active_objects[1].tile, COMBAT_HIDDEN_ACTIVE_OBJECT_TILE);
 
     let visible = clear_combat_linked_invisibility(&mut actor, &mut active_objects).unwrap();
@@ -3772,7 +3772,7 @@ fn linked_combat_invisibility_updates_actor_flag_and_visual_tile() {
         Some(COMBAT_HIDDEN_ACTIVE_OBJECT_TILE)
     );
     assert_eq!(visible.visual_tile_after, Some(0xc0));
-    assert!(!actor.is_hidden_or_unrevealed());
+    assert!(!actor.is_phase_suppressed());
     assert_eq!(active_objects[1].tile, 0xc0);
 }
 
@@ -3794,10 +3794,11 @@ fn combat_blink_phase_toggles_same_linked_visibility_state() {
 
     let disappeared = toggle_combat_blink_phase(&mut actor, &mut active_objects).unwrap();
     assert_eq!(disappeared.visibility, CombatLinkedVisibility::Hidden);
-    // `combat.md §6.1`: blink/phase is bit `0x10`, and `§9` keeps
-    // "ordinary invisibility" (`0x04`) a separate, non-bypassable filter.
+    // `combat.md §6.1`: blink/phase is bit `0x10`, which
+    // `RETRACTIONS.md` R380 also makes the invisibility bit; bit `0x04` is the
+    // dragged-under state and is untouched here.
     assert!(actor.is_phase_suppressed());
-    assert!(!actor.is_hidden_or_unrevealed());
+    assert!(!actor.is_dragged_under());
     assert_eq!(active_objects[1].tile, COMBAT_HIDDEN_ACTIVE_OBJECT_TILE);
 
     let returned = toggle_combat_blink_phase(&mut actor, &mut active_objects).unwrap();
@@ -3848,7 +3849,7 @@ fn combat_ai_blink_special_toggles_linked_visibility_and_marks_dirty() {
         } if slot == actor_slot
     ));
     assert!(state.combat_actors[actor_slot].is_phase_suppressed());
-    assert!(!state.combat_actors[actor_slot].is_hidden_or_unrevealed());
+    assert!(!state.combat_actors[actor_slot].is_dragged_under());
     assert_eq!(
         state.active_objects[actor_slot].tile,
         COMBAT_HIDDEN_ACTIVE_OBJECT_TILE
@@ -3863,7 +3864,7 @@ fn combat_reveal_clears_live_hidden_actor_flags_only() {
         CombatActorDescriptor::from_row([
             10,
             1,
-            COMBAT_ACTOR_FLAG_SELECTABLE_80 | COMBAT_ACTOR_FLAG_HIDDEN_OR_UNREVEALED,
+            COMBAT_ACTOR_FLAG_SELECTABLE_80 | COMBAT_ACTOR_FLAG_PHASE_BLINK_FILTER,
             32,
             7,
             0,
@@ -3874,7 +3875,7 @@ fn combat_reveal_clears_live_hidden_actor_flags_only() {
         CombatActorDescriptor::from_row([
             10,
             1,
-            COMBAT_ACTOR_FLAG_MARKED_DEAD | COMBAT_ACTOR_FLAG_HIDDEN_OR_UNREVEALED,
+            COMBAT_ACTOR_FLAG_MARKED_DEAD | COMBAT_ACTOR_FLAG_PHASE_BLINK_FILTER,
             32,
             7,
             0,
@@ -3887,7 +3888,7 @@ fn combat_reveal_clears_live_hidden_actor_flags_only() {
     assert_eq!(apply_combat_reveal(&mut actors), 1);
     assert_eq!(actors[0].flags, COMBAT_ACTOR_FLAG_SELECTABLE_80);
     assert_eq!(actors[1], CombatActorDescriptor::empty());
-    assert!(actors[2].is_hidden_or_unrevealed());
+    assert!(actors[2].is_phase_suppressed());
     assert_eq!(actors[3].flags, COMBAT_ACTOR_FLAG_SELECTABLE_40);
 }
 
@@ -4250,7 +4251,7 @@ fn combat_step_or_attack_inner_pass_ignores_suppressed_hidden_or_dead_occupants(
         ..combat_target_view(live, COMBAT_TARGET_GROUP_MONSTER)
     };
     candidates[7] = CombatTargetCandidateView {
-        invisible_or_unrevealed: true,
+        dragged_under: true,
         ..combat_target_view(live, COMBAT_TARGET_GROUP_MONSTER)
     };
     candidates[8] = combat_target_view(
@@ -4489,19 +4490,19 @@ fn combat_out_of_arena_leave_resolves_refusals_direction_lock_and_presentation()
     assert!(!combat_direction_code_is_cardinal(5));
 
     assert_eq!(
-        resolve_combat_out_of_arena_leave(true, 1, false, false, None, true),
+        resolve_combat_out_of_arena_leave(true, 1, false, false, None, true, true),
         CombatOutOfArenaLeaveOutcome::InArena
     );
     assert_eq!(
-        resolve_combat_out_of_arena_leave(false, 0, false, false, None, true),
+        resolve_combat_out_of_arena_leave(false, 0, false, false, None, true, true),
         CombatOutOfArenaLeaveOutcome::NotCardinalMove
     );
     assert_eq!(
-        resolve_combat_out_of_arena_leave(false, 1, true, false, None, true),
+        resolve_combat_out_of_arena_leave(false, 1, true, false, None, true, true),
         CombatOutOfArenaLeaveOutcome::RefusedShipStyle
     );
     assert_eq!(
-        resolve_combat_out_of_arena_leave(false, 2, false, true, Some(1), true),
+        resolve_combat_out_of_arena_leave(false, 2, false, true, Some(1), true, true),
         CombatOutOfArenaLeaveOutcome::RefusedConstrainedDirection {
             required_direction_code: 1,
             attempted_direction_code: 2,
@@ -4509,7 +4510,7 @@ fn combat_out_of_arena_leave_resolves_refusals_direction_lock_and_presentation()
     );
 
     assert_eq!(
-        resolve_combat_out_of_arena_leave(false, 1, false, true, None, true),
+        resolve_combat_out_of_arena_leave(false, 1, false, true, None, true, true),
         CombatOutOfArenaLeaveOutcome::Accepted {
             direction_code: 1,
             presentation: CombatOutOfArenaLeavePresentation::EscapeWithFoes,
@@ -4517,7 +4518,7 @@ fn combat_out_of_arena_leave_resolves_refusals_direction_lock_and_presentation()
         }
     );
     assert_eq!(
-        resolve_combat_out_of_arena_leave(false, 1, false, true, Some(1), false),
+        resolve_combat_out_of_arena_leave(false, 1, false, true, Some(1), false, true),
         CombatOutOfArenaLeaveOutcome::Accepted {
             direction_code: 1,
             presentation: CombatOutOfArenaLeavePresentation::OrdinaryCleanup,
@@ -4525,7 +4526,7 @@ fn combat_out_of_arena_leave_resolves_refusals_direction_lock_and_presentation()
         }
     );
     assert_eq!(
-        resolve_combat_out_of_arena_leave(false, 4, false, false, None, false),
+        resolve_combat_out_of_arena_leave(false, 4, false, false, None, false, true),
         CombatOutOfArenaLeaveOutcome::Accepted {
             direction_code: 4,
             presentation: CombatOutOfArenaLeavePresentation::OrdinaryCleanup,
@@ -5004,7 +5005,7 @@ fn directed_spell_actor_scan_is_table_ordered_and_non_factional() {
     actors[7] = CombatActorDescriptor::from_row([
         20,
         1,
-        COMBAT_ACTOR_FLAG_HIDDEN_OR_UNREVEALED,
+        COMBAT_ACTOR_FLAG_DRAGGED_UNDER,
         34,
         0,
         0,
@@ -5424,6 +5425,86 @@ fn combat_frame_entry_clears_or_installs_ambush_reveal_records() {
     let snapshot = state.combat_frame_snapshot.take().unwrap();
     state.restore_combat_frame(snapshot);
     assert!(state.combat_ambush_reveals.iter().all(Option::is_none));
+}
+
+/// `combat.md` §16.1: the player-command handler's "one gate is the
+/// active-player sentinel: while the sentinel is unset - **its state on combat
+/// entry**, and the state it returns to whenever `0` is pressed - every
+/// group-0 slot is prompted; while a character is selected with `1`-`6`, only
+/// the party-side slot that sentinel names is prompted and every other group-0
+/// slot, party or monster, is skipped without a banner, a keystroke or an
+/// action."
+///
+/// The sentinel is save-backed (`decode_active_player_slot` maps a saved byte
+/// `0..5` to `Some(n)`), so combat entry has to clear it or a save carrying a
+/// selected character would silence every other slot for the whole fight. §4's
+/// snapshot restores the pre-combat value on the way out.
+#[test]
+fn combat_frame_entry_clears_the_active_player_sentinel_and_exit_restores_it() {
+    let mut state = world_state(open_world_grid(), 10, 20);
+    // Roster slot 2 has to exist for the exit restore to hand it back
+    // (`resolve_post_combat_active_player_restore` drops a dead or sleeping
+    // slot).
+    let seed = state.party[0];
+    state.party = (0..3)
+        .map(|slot| PartyMember {
+            slot: slot as u8,
+            ..seed
+        })
+        .collect();
+    state.active_player = Some(2);
+
+    let mut actors = [CombatActorDescriptor::empty(); COMBAT_ACTOR_SLOTS];
+    // A party member seated at roster slot 0, and a monster that control moved
+    // into group 0 - both group-0 slots that §16.1 requires to be prompted.
+    actors[0] = CombatActorDescriptor::from_row([20, 1, COMBAT_ACTOR_FLAG_SELECTABLE_80, 0, 0, 0, 4, 4]);
+    actors[8] = CombatActorDescriptor::from_row([
+        20,
+        1,
+        COMBAT_ACTOR_FLAG_SELECTABLE_40 | COMBAT_ACTOR_FLAG_CONTROLLED,
+        12,
+        8,
+        0,
+        6,
+        6,
+    ]);
+
+    // With the saved sentinel still standing, neither slot would be prompted.
+    assert!(!combat_slot_prompted_by_player_command_handler(
+        Some(2),
+        0,
+        actors[0]
+    ));
+    assert!(!combat_slot_prompted_by_player_command_handler(
+        Some(2),
+        8,
+        actors[8]
+    ));
+
+    state
+        .enter_combat_frame(vec![ActiveObject::empty(); OOL_SLOTS], actors)
+        .expect("combat frame should enter");
+
+    assert_eq!(state.active_player, None, "the sentinel is unset on entry");
+    assert!(combat_slot_prompted_by_player_command_handler(
+        state.active_player,
+        0,
+        state.combat_actors[0]
+    ));
+    assert!(combat_slot_prompted_by_player_command_handler(
+        state.active_player,
+        8,
+        state.combat_actors[8]
+    ));
+
+    let snapshot = state.combat_frame_snapshot.take().unwrap();
+    assert_eq!(snapshot.active_player, Some(2));
+    state.restore_combat_frame(snapshot);
+    assert_eq!(
+        state.active_player,
+        Some(2),
+        "the pre-combat value comes back with the frame"
+    );
 }
 
 #[test]
@@ -5887,7 +5968,13 @@ fn combat_ctrl_s_and_escape_are_no_turn_top_level_controls() {
     );
     assert_eq!(state.turn, 0);
     assert_eq!(state.pending_combat_actor_slot, Some(0));
-    assert_eq!(state.message, "Escape-Not yet!\n");
+    // `combat.md §8.1`: "a declined Escape" takes the **full** re-prompt,
+    // "the whole banner reprinted from its leading newline"
+    // (`RETRACTIONS.md` R380).
+    assert_eq!(
+        state.message,
+        "Escape-Not yet!\n\nAvatar, armed with bare hands:\n"
+    );
     assert_eq!(
         (state.combat_actors[8].x, state.combat_actors[8].y),
         (10, 10)
@@ -5900,7 +5987,13 @@ fn combat_ctrl_s_and_escape_are_no_turn_top_level_controls() {
     );
     assert!(state.combat_active);
     assert_eq!(state.pending_combat_actor_slot, Some(0));
-    assert_eq!(state.message, "Escape-Not yet!\n");
+    // `combat.md §8.1`: "a declined Escape" takes the **full** re-prompt,
+    // "the whole banner reprinted from its leading newline"
+    // (`RETRACTIONS.md` R380).
+    assert_eq!(
+        state.message,
+        "Escape-Not yet!\n\nAvatar, armed with bare hands:\n"
+    );
 }
 
 #[test]
@@ -6164,10 +6257,13 @@ fn combat_raster_renders_arena_terrain_and_visible_actor_sprites() {
         aux1: 0,
         aux3: 0,
     };
+    // `combat.md §6.1` bit `0x10` is the "**Invisible / phase-hidden**"
+    // phase/blink filter, and `RETRACTIONS.md` R380 makes it the invisibility
+    // bit. That is the descriptor-side term the compositor suppresses on.
     state.combat_actors[6] = CombatActorDescriptor::from_row([
         10,
         1,
-        COMBAT_ACTOR_FLAG_HIDDEN_OR_UNREVEALED,
+        COMBAT_ACTOR_FLAG_PHASE_BLINK_FILTER,
         0,
         6,
         0,
@@ -6177,7 +6273,7 @@ fn combat_raster_renders_arena_terrain_and_visible_actor_sprites() {
     state.combat_actors[9] = CombatActorDescriptor::from_row([
         10,
         1,
-        COMBAT_ACTOR_FLAG_HIDDEN_OR_UNREVEALED,
+        COMBAT_ACTOR_FLAG_PHASE_BLINK_FILTER,
         0,
         12,
         0,
@@ -6749,9 +6845,19 @@ fn combat_command_branch_classifier_matches_published_dispatch_map() {
     );
 }
 
+/// `combat.md` §8: "Six letters use this shape: `G` Get, `J` Jimmy, `O`
+/// Open, `R` Ready, `S` Search and `U` Use ... `C`-Cast carries its own copy
+/// of the same party-side test and refuses the same way, after printing
+/// `Cast...`; so **seven** letters in total are unusable by a controlled
+/// monster."
+///
+/// *(Was `combat_command_live_actor_gate_applies_only_to_specified_branches`,
+/// which kept Cast out of the group because the withdrawn text described
+/// Cast's refusal as a dead-caster test. `RETRACTIONS.md` R381.)*
 #[test]
-fn combat_command_live_actor_gate_applies_only_to_specified_branches() {
+fn combat_command_party_side_gate_covers_the_seven_published_letters() {
     for branch in [
+        CombatCommandBranch::CastSpell,
         CombatCommandBranch::Get,
         CombatCommandBranch::Jimmy,
         CombatCommandBranch::Open,
@@ -6759,12 +6865,13 @@ fn combat_command_live_actor_gate_applies_only_to_specified_branches() {
         CombatCommandBranch::Search,
         CombatCommandBranch::UseItem,
     ] {
-        assert!(combat_command_branch_requires_live_active_actor(branch));
+        assert!(combat_command_branch_requires_party_side_actor(branch));
     }
 
+    // §8's `P` row: Push "calls the shared movable-static-tile handler
+    // directly, without the party-side gate used by Shape A".
     for branch in [
         CombatCommandBranch::Attack,
-        CombatCommandBranch::CastSpell,
         CombatCommandBranch::DWhatRefusal,
         CombatCommandBranch::Klimb,
         CombatCommandBranch::Push,
@@ -6776,15 +6883,37 @@ fn combat_command_live_actor_gate_applies_only_to_specified_branches() {
         CombatCommandBranch::ToggleMusic,
         CombatCommandBranch::Invalid,
     ] {
-        assert!(!combat_command_branch_requires_live_active_actor(branch));
+        assert!(!combat_command_branch_requires_party_side_actor(branch));
     }
 }
 
+/// `combat.md` §8: "The helper prints the verb label, then requires that the
+/// acting combatant is a **party-side** descriptor." `RETRACTIONS.md` R381:
+/// "The gate reads the party-side bit, not liveness, and the dead-actor case
+/// it describes is unreachable - the round walker filters marked-dead slots
+/// before dispatch ... The refusal's one live population is a **monster
+/// acting under player control**."
+///
+/// *(Was `combat_command_live_actor_gate_rejects_missing_empty_and_dead_actors`,
+/// whose dead- and empty-descriptor rows pinned the withdrawn liveness
+/// test.)*
 #[test]
-fn combat_command_live_actor_gate_rejects_missing_empty_and_dead_actors() {
-    let live =
+fn combat_command_party_side_gate_refuses_only_a_monster_side_actor() {
+    let party =
         CombatActorDescriptor::from_row([10, 1, COMBAT_ACTOR_FLAG_SELECTABLE_80, 32, 7, 0, 4, 5]);
-    let dead = CombatActorDescriptor::from_row([
+    let controlled_monster = CombatActorDescriptor::from_row([
+        10,
+        1,
+        COMBAT_ACTOR_FLAG_SELECTABLE_40 | COMBAT_ACTOR_FLAG_CONTROLLED,
+        20,
+        7,
+        0,
+        4,
+        5,
+    ]);
+    // A dead party descriptor still passes: the gate is not a liveness test,
+    // and the walker never sends a marked-dead slot here anyway.
+    let dead_party = CombatActorDescriptor::from_row([
         10,
         1,
         COMBAT_ACTOR_FLAG_SELECTABLE_80 | COMBAT_ACTOR_FLAG_MARKED_DEAD,
@@ -6794,32 +6923,36 @@ fn combat_command_live_actor_gate_rejects_missing_empty_and_dead_actors() {
         4,
         5,
     ]);
-    let unselectable = CombatActorDescriptor::from_row([10, 1, 0, 32, 7, 0, 4, 5]);
+
+    for branch in [CombatCommandBranch::Get, CombatCommandBranch::CastSpell] {
+        assert_eq!(
+            resolve_combat_command_party_side_gate(branch, Some(party)),
+            CombatCommandPartySideGate::Accepted
+        );
+        assert_eq!(
+            resolve_combat_command_party_side_gate(branch, Some(dead_party)),
+            CombatCommandPartySideGate::Accepted
+        );
+        assert_eq!(
+            resolve_combat_command_party_side_gate(branch, Some(controlled_monster)),
+            CombatCommandPartySideGate::RefusedMonsterSide
+        );
+        assert_eq!(
+            resolve_combat_command_party_side_gate(branch, None),
+            CombatCommandPartySideGate::RefusedMonsterSide
+        );
+    }
 
     assert_eq!(
-        resolve_combat_command_live_actor_gate(CombatCommandBranch::Get, Some(live)),
-        CombatCommandLiveActorGate::Accepted
+        resolve_combat_command_party_side_gate(CombatCommandBranch::Push, None),
+        CombatCommandPartySideGate::NotRequired
     );
     assert_eq!(
-        resolve_combat_command_live_actor_gate(CombatCommandBranch::Get, Some(dead)),
-        CombatCommandLiveActorGate::RejectedDeadOrMissing
-    );
-    assert_eq!(
-        resolve_combat_command_live_actor_gate(CombatCommandBranch::Get, Some(unselectable)),
-        CombatCommandLiveActorGate::RejectedDeadOrMissing
-    );
-    assert_eq!(
-        resolve_combat_command_live_actor_gate(CombatCommandBranch::Get, None),
-        CombatCommandLiveActorGate::RejectedDeadOrMissing
-    );
-
-    assert_eq!(
-        resolve_combat_command_live_actor_gate(CombatCommandBranch::Push, None),
-        CombatCommandLiveActorGate::NotRequired
-    );
-    assert_eq!(
-        resolve_combat_command_live_actor_gate(CombatCommandBranch::EscapeCleanup, Some(dead)),
-        CombatCommandLiveActorGate::NotRequired
+        resolve_combat_command_party_side_gate(
+            CombatCommandBranch::EscapeCleanup,
+            Some(controlled_monster)
+        ),
+        CombatCommandPartySideGate::NotRequired
     );
 }
 
@@ -6957,10 +7090,27 @@ fn combat_cast_interference_requires_live_visible_awake_adjacent_target_without_
         CombatActorDescriptor::from_row([10, 1, COMBAT_ACTOR_FLAG_SELECTABLE_40, 2, 1, 0, 6, 5]);
     let far =
         CombatActorDescriptor::from_row([10, 1, COMBAT_ACTOR_FLAG_SELECTABLE_40, 2, 1, 0, 7, 5]);
+    // `magic.md` §7 condition 3: "The source is visible/revealed and awake; a
+    // hidden, not-yet-revealed, asleep, or disabled source does not
+    // interfere." The visibility half is the invisibility bit, which
+    // `RETRACTIONS.md` R380 puts on `0x10`, the phase/blink filter - the same
+    // bit §8.2's missile-interference gate reads for the same clause.
     let hidden = CombatActorDescriptor::from_row([
         10,
         1,
-        COMBAT_ACTOR_FLAG_SELECTABLE_40 | COMBAT_ACTOR_FLAG_HIDDEN_OR_UNREVEALED,
+        COMBAT_ACTOR_FLAG_SELECTABLE_40 | COMBAT_ACTOR_FLAG_PHASE_BLINK_FILTER,
+        2,
+        1,
+        0,
+        6,
+        5,
+    ]);
+    // Bit `0x04` is the dragged-under state; §7's list does not name it, so it
+    // is not what this gate reads.
+    let dragged_under = CombatActorDescriptor::from_row([
+        10,
+        1,
+        COMBAT_ACTOR_FLAG_SELECTABLE_40 | COMBAT_ACTOR_FLAG_DRAGGED_UNDER,
         2,
         1,
         0,
@@ -6991,6 +7141,22 @@ fn combat_cast_interference_requires_live_visible_awake_adjacent_target_without_
 
     assert!(combat_cast_interference_target_is_live_visible(adjacent));
     assert!(!combat_cast_interference_target_is_live_visible(hidden));
+    // Both copies of the one published clause read the same bits.
+    assert!(!combat_attack_interference_aborts(
+        caster,
+        Some(hidden),
+        true,
+        false
+    ));
+    assert!(combat_attack_interference_aborts(
+        caster,
+        Some(dragged_under),
+        true,
+        false
+    ));
+    assert!(combat_cast_interference_target_is_live_visible(
+        dragged_under
+    ));
     assert!(!combat_cast_interference_target_is_live_visible(sleeping));
     assert!(!combat_cast_interference_target_is_live_visible(dead));
     assert!(!combat_cast_interference_target_is_live_visible(
@@ -7016,6 +7182,10 @@ fn combat_cast_interference_requires_live_visible_awake_adjacent_target_without_
     assert_eq!(
         resolve_combat_cast_interference(caster, Some(hidden), true, false),
         CombatCastInterferenceOutcome::ContinueToSpellDispatcher
+    );
+    assert_eq!(
+        resolve_combat_cast_interference(caster, Some(dragged_under), true, false),
+        CombatCastInterferenceOutcome::Interfered
     );
     assert_eq!(
         resolve_combat_cast_interference(caster, Some(sleeping), true, false),
@@ -7287,7 +7457,7 @@ fn tremor_scan_uses_table_order_gate_and_no_faction_filter() {
     actors[7] = CombatActorDescriptor::from_row([
         20,
         1,
-        COMBAT_ACTOR_FLAG_HIDDEN_OR_UNREVEALED,
+        COMBAT_ACTOR_FLAG_DRAGGED_UNDER,
         34,
         0,
         0,
@@ -7344,7 +7514,7 @@ fn cause_fear_scan_uses_monster_side_not_faction_and_skips_protected_targets() {
     actors[7] = CombatActorDescriptor::from_row([
         20,
         1,
-        COMBAT_ACTOR_FLAG_HIDDEN_OR_UNREVEALED,
+        COMBAT_ACTOR_FLAG_DRAGGED_UNDER,
         34,
         0,
         0,
@@ -7472,7 +7642,7 @@ fn cause_fear_critical_hp_setup_mutates_accepted_live_actor_slots_only() {
     actors[4] = CombatActorDescriptor::from_row([
         20,
         1,
-        COMBAT_ACTOR_FLAG_HIDDEN_OR_UNREVEALED,
+        COMBAT_ACTOR_FLAG_DRAGGED_UNDER,
         COMBAT_CLASS_PYTHON,
         0,
         0,
@@ -7505,7 +7675,7 @@ fn cause_fear_critical_hp_setup_mutates_accepted_live_actor_slots_only() {
     );
     assert_eq!(
         actors[4].flags,
-        COMBAT_ACTOR_FLAG_HIDDEN_OR_UNREVEALED | COMBAT_ACTOR_FLAG_FLEEING
+        COMBAT_ACTOR_FLAG_DRAGGED_UNDER | COMBAT_ACTOR_FLAG_FLEEING
     );
     assert_eq!(actors[6].hp_or_wound, 20);
     assert_eq!(actors[8].hp_or_wound, 20);
@@ -7724,7 +7894,7 @@ fn creature_prompt_target_gate_rejects_empty_disabled_controlled_same_faction_an
         CombatActorDescriptor::from_row([
             20,
             1,
-            COMBAT_ACTOR_FLAG_HIDDEN_OR_UNREVEALED,
+            COMBAT_ACTOR_FLAG_DRAGGED_UNDER,
             32,
             0,
             0,
@@ -9097,7 +9267,7 @@ fn combat_target_candidate_view_helper_packages_group_and_visibility_inputs() {
     assert_eq!(view.descriptor, descriptor);
     assert_eq!(view.group, COMBAT_TARGET_GROUP_PARTY);
     assert!(view.suppressed);
-    assert!(!view.invisible_or_unrevealed);
+    assert!(!view.dragged_under);
 }
 
 #[test]
@@ -9294,7 +9464,7 @@ fn combat_target_view(descriptor: CombatActorDescriptor, group: u8) -> CombatTar
         descriptor,
         group,
         suppressed: false,
-        invisible_or_unrevealed: false,
+        dragged_under: false,
     }
 }
 
@@ -9372,7 +9542,7 @@ fn combat_ai_target_picker_applies_group_suppression_and_visibility_filters() {
         )
     };
     actors[6] = CombatTargetCandidateView {
-        invisible_or_unrevealed: true,
+        dragged_under: true,
         ..combat_target_view(
             CombatActorDescriptor::from_row([
                 10, 1, COMBAT_ACTOR_FLAG_SELECTABLE_80, 0, 0, 0, 4, 5,
@@ -11033,7 +11203,7 @@ fn combat_player_command_ignores_quickness_entirely() {
         quit.action,
         CombatPlayerCommandAction::Branch {
             branch: CombatCommandBranch::SceneMessageAbort(CombatSceneAbortVerb::Quit),
-            live_actor_gate: CombatCommandLiveActorGate::NotRequired,
+            party_side_gate: CombatCommandPartySideGate::NotRequired,
         }
     );
     assert!(quit.reprompt);
@@ -11304,10 +11474,11 @@ fn combat_attack_interference_needs_a_live_adjacent_automatic_side_source() {
     state.active_effect_tag = None;
     state.active_effect_counter = 0;
 
-    // "it is neither invisible nor asleep".
-    state.combat_actors[8].flags |= COMBAT_ACTOR_FLAG_HIDDEN_OR_UNREVEALED;
+    // "it is neither invisible nor asleep" - and `RETRACTIONS.md` R380 puts
+    // invisibility on the phase/blink bit `0x10`, not on `0x04`.
+    state.combat_actors[8].flags |= COMBAT_ACTOR_FLAG_PHASE_BLINK_FILTER;
     assert_eq!(state.combat_attack_interference_source_for_slot(0), None);
-    state.combat_actors[8].flags &= !COMBAT_ACTOR_FLAG_HIDDEN_OR_UNREVEALED;
+    state.combat_actors[8].flags &= !COMBAT_ACTOR_FLAG_PHASE_BLINK_FILTER;
     state.combat_actors[8].flags |= COMBAT_ACTOR_FLAG_STATUS_DISABLED;
     assert_eq!(state.combat_attack_interference_source_for_slot(0), None);
     state.combat_actors[8].flags &= !COMBAT_ACTOR_FLAG_STATUS_DISABLED;
@@ -11425,7 +11596,7 @@ fn the_targeting_cursor_still_finds_an_asleep_occupant() {
     );
 
     // The published exclusions still hold.
-    state.combat_actors[8].flags |= COMBAT_ACTOR_FLAG_HIDDEN_OR_UNREVEALED;
+    state.combat_actors[8].flags |= COMBAT_ACTOR_FLAG_DRAGGED_UNDER;
     assert_eq!(state.combat_targeting_occupant_at((6, 5)), None);
 }
 
@@ -11869,7 +12040,7 @@ fn combat_player_command_handles_digits_pass_branches_and_escape_cleanup() {
         get.action,
         CombatPlayerCommandAction::Branch {
             branch: CombatCommandBranch::Get,
-            live_actor_gate: CombatCommandLiveActorGate::Accepted,
+            party_side_gate: CombatCommandPartySideGate::Accepted,
         }
     );
 
@@ -11880,7 +12051,7 @@ fn combat_player_command_handles_digits_pass_branches_and_escape_cleanup() {
         refused_xit.action,
         CombatPlayerCommandAction::Branch {
             branch: CombatCommandBranch::SceneMessageAbort(CombatSceneAbortVerb::Xit),
-            live_actor_gate: CombatCommandLiveActorGate::NotRequired,
+            party_side_gate: CombatCommandPartySideGate::NotRequired,
         }
     );
     assert!(refused_xit.reprompt);
@@ -12051,7 +12222,12 @@ fn combat_input_dispatch_routes_play_keys_to_combat_parser() {
         handle_play_key_input(&mut quit_state, 'q', "", game_dir).unwrap(),
         PlayInputDisposition::Continue
     );
-    assert_eq!(quit_state.message, "Quit-Not here");
+    // `combat.md `§8.1`: a shape-B letter takes the banner-reprinting
+    // re-prompt (`RETRACTIONS.md` R380).
+    assert_eq!(
+        quit_state.message,
+        "Quit-Not here\nAvatar, armed with bare hands:\n"
+    );
     assert!(quit_state.combat_active);
     assert_eq!(quit_state.pending_combat_actor_slot, Some(0));
     assert_eq!(
@@ -12069,7 +12245,15 @@ fn combat_input_dispatch_routes_play_keys_to_combat_parser() {
             handle_play_key_input(&mut quit_state, key, "", game_dir).unwrap(),
             PlayInputDisposition::Continue
         );
-        assert_eq!(quit_state.message, expected);
+        // `combat.md` §8.1: every shape-B letter takes the full re-prompt,
+        // "the whole banner reprinted from its leading newline"
+        // (`RETRACTIONS.md` R380).
+        assert_eq!(
+            quit_state.message,
+            format!("{expected}
+Avatar, armed with bare hands:
+")
+        );
         assert_eq!(quit_state.pending_combat_actor_slot, Some(0));
         assert_eq!(
             (quit_state.combat_actors[8].x, quit_state.combat_actors[8].y),
@@ -12524,29 +12708,18 @@ fn combat_input_dispatch_z_stats_refuses_missing_or_disabled_actor() {
     assert_eq!(cast.prng_state, 0x2345);
 }
 
+/// `combat.md` §16.1: "Group-0 actors enter the player-command handler, which
+/// **prompts, and never synthesizes**. Its one gate is the active-player
+/// sentinel: while the sentinel is unset ... **every** group-0 slot is
+/// prompted, party or monster."
+///
+/// *(Was `combat_input_dispatch_never_prompts_a_controlled_non_party_actor`,
+/// which pinned §16.1's withdrawn "still synthesizes an automatic action"
+/// clause and refused the keystroke. `RETRACTIONS.md` R377 withdraws it and
+/// upholds R354/R364; R378 withdraws the distance-gated strike that came with
+/// it.)*
 #[test]
-fn combat_input_dispatch_never_prompts_a_controlled_non_party_actor() {
-    // combat.md §6.1a writer 3: "the bit **does** hand the creature to
-    // the player's prompt: a monster-side slot carrying it is dispatched
-    // to the keystroke/command path, not to the automatic driver"
-    // (RETRACTIONS.md R354). That is the dispatch half, and §16.1 gives
-    // the other half: "Group-0 actors enter the combined command handler;
-    // it prompts only for an eligible selected party member, while a
-    // monster descriptor that control moved to group 0 still synthesizes
-    // an automatic action." §11.1 publishes that synthesized turn as one
-    // fixed attempt, and magic.md's Summoning and conjuration records that
-    // "What the player can usefully do with such a creature beyond that
-    // attack path is not established here" - so no ordinary command is
-    // accepted for it.
-    //
-    // The two halves do not sit together comfortably: R354 also gives the
-    // slot "`Nothing!` on a cancelled confirm", which presupposes a player
-    // confirm, and R364 says it "is driven from the player's prompt", so
-    // refusing the keystroke re-establishes in outcome what R354 withdrew.
-    // This test pins the §16.1 reading, which
-    // `combat_slot_prompts_for_player_command` documents as an open spec
-    // question; if the ruling goes the other way, this is the test that
-    // must change with it.
+fn combat_input_dispatch_prompts_a_controlled_non_party_actor() {
     let game_dir = std::path::Path::new(".");
     let mut state = combat_player_command_state(8, 5);
     state.combat_actors[8].flags |= COMBAT_ACTOR_FLAG_TEAM_TOGGLE;
@@ -12554,7 +12727,7 @@ fn combat_input_dispatch_never_prompts_a_controlled_non_party_actor() {
     state.next_combat_actor_slot = 9;
     state.visibility_dirty = false;
 
-    // The slot resolves to group 0 and so reaches the command handler ...
+    // The slot resolves to group 0, so it reaches the command handler ...
     assert_eq!(
         resolve_combat_target_group_for_actor(state.combat_actors[8], 8, None),
         COMBAT_TARGET_GROUP_PARTY
@@ -12563,13 +12736,15 @@ fn combat_input_dispatch_never_prompts_a_controlled_non_party_actor() {
         8,
         state.combat_actors[8]
     ));
-    // ... but the handler never prompts it, while the seated party member
-    // in slot 0 is prompted.
-    assert!(!combat_slot_prompts_for_player_command(
+    // ... and with the sentinel unset the handler prompts it, exactly as it
+    // prompts the seated party member in slot 0.
+    assert!(combat_slot_prompted_by_player_command_handler(
+        None,
         8,
         state.combat_actors[8]
     ));
-    assert!(combat_slot_prompts_for_player_command(
+    assert!(combat_slot_prompted_by_player_command_handler(
+        None,
         0,
         state.combat_actors[0]
     ));
@@ -12579,20 +12754,28 @@ fn combat_input_dispatch_never_prompts_a_controlled_non_party_actor() {
         PlayInputDisposition::Continue
     );
 
-    // The movement command is refused: no step, no transcript line.
-    assert_eq!(state.message, "");
-    assert_eq!((state.combat_actors[8].x, state.combat_actors[8].y), (8, 5));
+    // §8: "Movement *inside* the arena is identical for both." The step is
+    // taken; there is no distance-one refusal on this path (`R378`).
+    assert_eq!((state.combat_actors[8].x, state.combat_actors[8].y), (9, 5));
+
+    // §16.1: "while a character is selected with `1`-`6`, only the party-side
+    // slot that sentinel names is prompted and every other group-0 slot, party
+    // or monster, is skipped without a banner, a keystroke or an action."
+    let mut selected = combat_player_command_state(8, 5);
+    selected.combat_actors[8].flags |= COMBAT_ACTOR_FLAG_TEAM_TOGGLE;
+    selected.active_player = Some(0);
+    selected.pending_combat_actor_slot = Some(8);
+    selected.next_combat_actor_slot = 9;
+
     assert_eq!(
-        (state.active_objects[8].x, state.active_objects[8].y),
+        handle_play_key_input(&mut selected, '6', "", game_dir).unwrap(),
+        PlayInputDisposition::Continue
+    );
+    assert_eq!(selected.message, "");
+    assert_eq!(
+        (selected.combat_actors[8].x, selected.combat_actors[8].y),
         (8, 5)
     );
-
-    // The round walk never opens a pending turn on that slot either.
-    let mut walked = combat_player_command_state(8, 5);
-    walked.combat_actors[8].flags |= COMBAT_ACTOR_FLAG_TEAM_TOGGLE;
-    walked.next_combat_actor_slot = 8;
-    walked.ensure_pending_combat_player_turn();
-    assert_ne!(walked.pending_combat_actor_slot, Some(8));
 
     // The same slot without the bit stays on the automatic driver and
     // ignores the keystroke.
@@ -12813,7 +12996,12 @@ fn combat_input_dispatch_quickness_never_consumes_the_ready_player() {
         PlayInputDisposition::Continue
     );
 
-    assert_eq!(state.message, "Quit-Not here");
+    // `combat.md §8.1`: "every shape-B \"means nothing here\" letter"
+    // takes the banner-reprinting re-prompt (`RETRACTIONS.md` R380).
+    assert_eq!(
+        state.message,
+        "Quit-Not here\nAvatar, armed with bare hands:\n"
+    );
     assert!(state.combat_active);
     assert_eq!(state.pending_combat_actor_slot, Some(0));
     assert_eq!((state.combat_actors[8].x, state.combat_actors[8].y), (8, 5));
@@ -12843,7 +13031,7 @@ fn combat_input_dispatch_action_tail_does_not_run_encounter_ring_vanishal() {
         state.party_equipment[0][EQUIP_SLOT_RING],
         EQUIPMENT_ID_RING_INVISIBILITY as u8
     );
-    assert!(state.combat_actors[0].is_hidden_or_unrevealed());
+    assert!(state.combat_actors[0].is_phase_suppressed());
     assert_eq!(state.prng_state, expected_prng);
 }
 
@@ -12888,8 +13076,8 @@ fn combat_input_dispatch_cast_uses_pending_actor_as_caster() {
     assert_eq!(state.spell_charges[INVISIBILITY_SPELL_INDEX], 0);
     assert_eq!(state.party[0].mana, 0);
     assert_eq!(state.party[1].mana, 0);
-    assert!(!state.combat_actors[0].is_hidden_or_unrevealed());
-    assert!(state.combat_actors[1].is_hidden_or_unrevealed());
+    assert!(!state.combat_actors[0].is_phase_suppressed());
+    assert!(state.combat_actors[1].is_phase_suppressed());
     assert_eq!(state.message, "Invisibility!\nAvatar, armed with bare hands:\n");
 }
 
@@ -12940,9 +13128,12 @@ fn combat_cast_interference_revalidates_hostility_visibility_status_range_and_ne
     state.combat_interference_sources[0] = 8;
     assert_eq!(state.combat_cast_interference_source_for_slot(0), Some(8));
 
-    state.combat_actors[8].flags |= COMBAT_ACTOR_FLAG_HIDDEN_OR_UNREVEALED;
+    // `magic.md` §7 condition 3: "The source is visible/revealed and awake."
+    // The visibility half is the invisibility bit `0x10` (`RETRACTIONS.md`
+    // R380), not the dragged-under bit `0x04`.
+    state.combat_actors[8].flags |= COMBAT_ACTOR_FLAG_PHASE_BLINK_FILTER;
     assert_eq!(state.combat_cast_interference_source_for_slot(0), None);
-    state.combat_actors[8].flags &= !COMBAT_ACTOR_FLAG_HIDDEN_OR_UNREVEALED;
+    state.combat_actors[8].flags &= !COMBAT_ACTOR_FLAG_PHASE_BLINK_FILTER;
 
     state.combat_actors[8].flags |= COMBAT_ACTOR_FLAG_STATUS_DISABLED;
     assert_eq!(state.combat_cast_interference_source_for_slot(0), None);
@@ -13072,7 +13263,7 @@ fn combat_input_dispatch_quickness_does_not_consume_a_player_cast() {
     assert_eq!(state.message, "Invisibility!\nAvatar, armed with bare hands:\n");
     assert_eq!(state.spell_charges[INVISIBILITY_SPELL_INDEX], 0);
     assert_eq!(state.party[0].mana, 0);
-    assert!(state.combat_actors[0].is_hidden_or_unrevealed());
+    assert!(state.combat_actors[0].is_phase_suppressed());
     assert!(state.combat_active);
 }
 
@@ -13558,17 +13749,20 @@ fn dispatch_controlled_monster_slot(state: &mut PlayState) -> CombatActorSlotDis
         )])
 }
 
+/// `combat.md` §16.1, upheld by `RETRACTIONS.md` R377: "the handler contains
+/// no synthesis path for any slot". A monster descriptor that
+/// control moved to group 0 is dispatched to the prompt like a party member,
+/// and nothing is resolved for it until the player presses a key.
+///
+/// *(Was `combat_dispatch_synthesizes_the_controlled_monster_turn_instead_of_prompting`
+/// together with `a_controlled_monster_with_no_adjacent_foe_produces_no_action_at_all`;
+/// both pinned the withdrawn §16.1 clause and R378's withdrawn universal
+/// distance-one rule.)*
 #[test]
-fn combat_dispatch_synthesizes_the_controlled_monster_turn_instead_of_prompting() {
-    // combat.md §16.1: "Group-0 actors enter the combined command handler;
-    // it prompts only for an eligible selected party member, while a
-    // monster descriptor that control moved to group 0 still synthesizes
-    // an automatic action." §11.1's announcement table publishes that turn
-    // as the reduced banner "then one fixed attempt", and §6.1a's attack
-    // driver reader supplies the attempt: it "still picks a target the
-    // normal way", the target "must be at straight-line distance exactly
-    // one", and the strike skips the attacker back-link.
+fn combat_dispatch_prompts_the_controlled_monster_instead_of_synthesizing() {
     let mut state = controlled_monster_dispatch_state(7, 5);
+    let hp_before = state.combat_actors[9].hp_or_wound;
+    let prng_before = state.prng_state;
 
     let application = dispatch_controlled_monster_slot(&mut state);
 
@@ -13583,38 +13777,38 @@ fn combat_dispatch_synthesizes_the_controlled_monster_turn_instead_of_prompting(
     };
     assert_eq!(slot, 8);
     assert_eq!(control_after, CombatRoundLoopControl::ContinueActorWalk);
-    let CombatActorDispatchAction::ControlledMonsterAttempt {
-        attempt: Some(attempt),
-    } = action
-    else {
-        panic!("a controlled monster must never be handed the prompt: {action:?}");
-    };
-    assert_eq!(attempt.actor_slot, 8);
-    assert_eq!(
-        attempt.target,
-        CombatAiTargetResolution::ChosenActor { slot: 9, x: 7, y: 5 }
-    );
-    let attack = attempt
-        .monster_attack
-        .expect("the adjacent foe takes the one fixed attempt");
-    assert_eq!((attack.attacker_slot, attack.target_slot), (8, 9));
-    assert!(matches!(
-        attack.resolution,
-        Some(CombatWeaponAttackResolution::Hit { .. })
-    ));
-    // §6.1a: "the pre-attack animation, the attacker back-link, the
-    // class-specific attack overrides and the monster ranged-spell branch
-    // are all skipped", and the turn does not step.
+    assert_eq!(action, CombatActorDispatchAction::PlayerReady);
+    // No strike, no step, no shared-stream draw: the turn waits for a key.
+    assert_eq!(state.combat_actors[9].hp_or_wound, hp_before);
     assert_eq!((state.combat_actors[8].x, state.combat_actors[8].y), (6, 5));
-    assert_eq!(state.combat_interference_sources[9], 0);
+    assert_eq!(state.prng_state, prng_before);
 }
 
+/// `combat.md` §16.1: with `1`-`6` naming a character, "every other group-0
+/// slot, party or monster, is skipped without a banner, a keystroke or an
+/// action".
 #[test]
-fn a_controlled_monster_with_no_adjacent_foe_produces_no_action_at_all() {
-    // combat.md §6.1a: if the chosen target "is further away the actor's
-    // turn produces **no action at all**: the driver does not fall through
-    // to the ranged branch, does not consult the class's
-    // maximum-attack-range byte, and does not step".
+fn the_active_player_sentinel_skips_every_other_group_zero_slot() {
+    let mut state = controlled_monster_dispatch_state(7, 5);
+    state.active_player = Some(0);
+
+    let application = dispatch_controlled_monster_slot(&mut state);
+
+    let CombatActorSlotDispatchApplication::Slot { action, .. } = application else {
+        panic!("the controlled monster slot should dispatch");
+    };
+    assert_eq!(action, CombatActorDispatchAction::ActivePlayerSentinelSkipped);
+    assert_eq!((state.combat_actors[8].x, state.combat_actors[8].y), (6, 5));
+    assert_eq!(state.combat_actors[9].hp_or_wound, 10);
+}
+
+/// `RETRACTIONS.md` R378: a monster-side slot carrying the controlled bit
+/// "attacks through the prompted path, where the same distance-one number is
+/// the **targeting cursor's range clamp** - the cursor silently refuses to
+/// move out of range, so a too-far target cannot be selected and no turn is
+/// wasted on one." A distant foe therefore changes nothing about the dispatch.
+#[test]
+fn a_distant_foe_does_not_change_the_controlled_monster_dispatch() {
     let mut state = controlled_monster_dispatch_state(10, 5);
 
     let application = dispatch_controlled_monster_slot(&mut state);
@@ -13622,21 +13816,7 @@ fn a_controlled_monster_with_no_adjacent_foe_produces_no_action_at_all() {
     let CombatActorSlotDispatchApplication::Slot { action, .. } = application else {
         panic!("the controlled monster slot should dispatch");
     };
-    let CombatActorDispatchAction::ControlledMonsterAttempt {
-        attempt: Some(attempt),
-    } = action
-    else {
-        panic!("a controlled monster must never be handed the prompt: {action:?}");
-    };
-    assert_eq!(
-        attempt.target,
-        CombatAiTargetResolution::ChosenActor {
-            slot: 9,
-            x: 10,
-            y: 5
-        }
-    );
-    assert_eq!(attempt.monster_attack, None);
+    assert_eq!(action, CombatActorDispatchAction::PlayerReady);
     assert_eq!((state.combat_actors[8].x, state.combat_actors[8].y), (6, 5));
     assert_eq!(state.combat_actors[9].hp_or_wound, 10);
 }
@@ -14145,7 +14325,7 @@ fn combat_ai_center_fallback_marks_live_monster_side_slots_backwards() {
     actors[31] = CombatActorDescriptor::from_row([
         20,
         1,
-        COMBAT_ACTOR_FLAG_SELECTABLE_40 | COMBAT_ACTOR_FLAG_HIDDEN_OR_UNREVEALED,
+        COMBAT_ACTOR_FLAG_SELECTABLE_40 | COMBAT_ACTOR_FLAG_DRAGGED_UNDER,
         COMBAT_CLASS_PYTHON,
         0,
         0,
@@ -14265,7 +14445,7 @@ fn combat_ai_legal_cell_mask_layers_actor_occupancy_over_terrain_passability() {
     actors[6] = CombatActorDescriptor::from_row([
         20,
         1,
-        COMBAT_ACTOR_FLAG_SELECTABLE_80 | COMBAT_ACTOR_FLAG_HIDDEN_OR_UNREVEALED,
+        COMBAT_ACTOR_FLAG_SELECTABLE_80 | COMBAT_ACTOR_FLAG_DRAGGED_UNDER,
         COMBAT_CLASS_DAEMON,
         0,
         0,
@@ -14690,7 +14870,7 @@ fn combat_party_damage_grazes_on_zero_or_negative_and_uses_saturating_hp_counter
     // the three sentences that called this outcome a miss and states "There is
     // no miss flag". Zero is asserted alongside negative because the marker's
     // "two writers [are] both this zero-or-negative condition".
-    let graze = apply_combat_party_damage(&mut member, -1);
+    let graze = apply_combat_party_damage_deferring_death_letter(&mut member, -1);
     assert!(graze.grazed);
     assert!(!graze.instant_kill);
     assert!(!graze.killed);
@@ -14700,28 +14880,31 @@ fn combat_party_damage_grazes_on_zero_or_negative_and_uses_saturating_hp_counter
     assert_eq!(member.hp, 12);
     assert_eq!(member.status, b'G');
 
-    let zero_graze = apply_combat_party_damage(&mut member, 0);
+    let zero_graze = apply_combat_party_damage_deferring_death_letter(&mut member, 0);
     assert!(zero_graze.grazed);
     assert_eq!(zero_graze.applied_damage, 0);
     assert_eq!(member.hp, 12);
 
-    let hit = apply_combat_party_damage(&mut member, 5);
+    let hit = apply_combat_party_damage_deferring_death_letter(&mut member, 5);
     assert!(!hit.grazed);
     assert_eq!(hit.applied_damage, 5);
     assert!(!hit.killed);
     assert_eq!(member.hp, 7);
     assert_eq!(member.status, b'G');
 
-    let death = apply_combat_party_damage(&mut member, 30);
+    let death = apply_combat_party_damage_deferring_death_letter(&mut member, 30);
     assert_eq!(death.applied_damage, 7);
     assert!(death.killed);
     assert_eq!(death.status_after, b'D');
     assert_eq!(member.hp, 0);
-    assert_eq!(member.status, b'D');
+    // `combat.md §6.3` orders the marked-dead bit ahead of the `'D'` roster
+    // letter (`RETRACTIONS.md` R379), so this helper leaves the letter to the
+    // caller that owns the descriptor.
+    assert_eq!(member.status, b'G', "the letter is deferred to the caller");
 }
 
 #[test]
-fn combat_party_damage_instant_kill_forces_death_status() {
+fn combat_party_damage_instant_kill_reports_death_status() {
     let mut member = PartyMember {
         slot: 1,
         class_byte: 1,
@@ -14733,7 +14916,7 @@ fn combat_party_damage_instant_kill_forces_death_status() {
         level: 1,
     };
 
-    let kill = apply_combat_party_damage(&mut member, COMBAT_INSTANT_KILL_DAMAGE);
+    let kill = apply_combat_party_damage_deferring_death_letter(&mut member, COMBAT_INSTANT_KILL_DAMAGE);
 
     assert!(kill.instant_kill);
     assert!(kill.killed);
@@ -14741,7 +14924,10 @@ fn combat_party_damage_instant_kill_forces_death_status() {
     assert_eq!(kill.status_before, b'S');
     assert_eq!(kill.status_after, b'D');
     assert_eq!(member.hp, 0);
-    assert_eq!(member.status, b'D');
+    // The reported `status_after` is the letter the arm ends on; the write
+    // itself belongs to the caller, after the marked-dead bit (`§6.3`,
+    // `RETRACTIONS.md` R379).
+    assert_eq!(member.status, b'S', "the letter is deferred to the caller");
 }
 
 #[test]
@@ -15601,29 +15787,33 @@ fn combat_monster_attack_applies_poison_status_before_ordinary_melee_damage() {
     assert_eq!(state.combat_interference_sources[0], 8);
 }
 
+/// `magic.md §7`: an adjacent monster attack installs its attacker
+/// back-link before the hit test, so a miss records like a hit.
+///
+/// *(**Corrected.** The second half of this test asserted that a **controlled
+/// monster's** attack skips the back-link, on `combat.md` §6.1a's fixed
+/// magic strike. That branch "lives inside the automatic driver's attack path
+/// ... A **monster-side** slot carrying the bit goes to the player-command
+/// handler and never enters the branch" - `RETRACTIONS.md` R378 - so a
+/// controlled monster records its source like any other attacker.)*
 #[test]
-fn combat_monster_adjacent_miss_overwrites_interference_but_controlled_attack_does_not() {
-    let mut automatic = combat_monster_attack_state(COMBAT_CLASS_GIANT_RAT, 6, 5);
-    automatic.combat_interference_sources[0] = 7;
+fn combat_monster_adjacent_miss_overwrites_interference_on_both_control_states() {
+    for controlled in [false, true] {
+        let mut state = combat_monster_attack_state(COMBAT_CLASS_GIANT_RAT, 6, 5);
+        if controlled {
+            state.combat_actors[8].flags |= COMBAT_ACTOR_FLAG_CONTROLLED;
+        }
+        state.combat_interference_sources[0] = 7;
 
-    let missed = automatic
-        .resolve_and_apply_combat_monster_attack(8, 0, 255, false, 8, Some(false))
-        .unwrap();
-    assert!(matches!(
-        missed.resolution,
-        Some(CombatWeaponAttackResolution::Miss { .. })
-    ));
-    assert_eq!(automatic.combat_interference_sources[0], 8);
-
-    let mut controlled = combat_monster_attack_state(COMBAT_CLASS_GIANT_RAT, 6, 5);
-    controlled.combat_actors[8].flags |= COMBAT_ACTOR_FLAG_CONTROLLED;
-    controlled.combat_interference_sources[0] = 7;
-    assert!(
-        controlled
+        let missed = state
             .resolve_and_apply_combat_monster_attack(8, 0, 255, false, 8, Some(false))
-            .is_some()
-    );
-    assert_eq!(controlled.combat_interference_sources[0], 7);
+            .unwrap();
+        assert!(matches!(
+            missed.resolution,
+            Some(CombatWeaponAttackResolution::Miss { .. })
+        ));
+        assert_eq!(state.combat_interference_sources[0], 8, "controlled {controlled}");
+    }
 }
 
 #[test]
@@ -16472,7 +16662,7 @@ fn tremor_spell_damage_application_scans_table_order_and_credits_caster() {
     state.combat_actors[target_slot + 1] = CombatActorDescriptor::from_row([
         20,
         1,
-        COMBAT_ACTOR_FLAG_HIDDEN_OR_UNREVEALED,
+        COMBAT_ACTOR_FLAG_DRAGGED_UNDER,
         33,
         8,
         0,
@@ -17432,7 +17622,7 @@ fn directed_spell_status_application_applies_sleep_to_party_and_reports_non_part
     state.combat_actors[target_slot + 1] = CombatActorDescriptor::from_row([
         20,
         1,
-        COMBAT_ACTOR_FLAG_HIDDEN_OR_UNREVEALED,
+        COMBAT_ACTOR_FLAG_DRAGGED_UNDER,
         33,
         8,
         0,
@@ -18485,7 +18675,7 @@ fn combat_entry_magic_ring_pass_applies_invisibility_and_vanish_clears_it() {
             vanished_ring: None,
         })
     );
-    assert!(state.combat_actors[0].is_hidden_or_unrevealed());
+    assert!(state.combat_actors[0].is_phase_suppressed());
     assert_eq!(
         state.active_objects[0].tile,
         COMBAT_HIDDEN_ACTIVE_OBJECT_TILE
@@ -18504,7 +18694,7 @@ fn combat_entry_magic_ring_pass_applies_invisibility_and_vanish_clears_it() {
         })
     );
     assert_eq!(state.party_equipment[0][EQUIP_SLOT_RING], EQUIPMENT_EMPTY);
-    assert!(!state.combat_actors[0].is_hidden_or_unrevealed());
+    assert!(!state.combat_actors[0].is_phase_suppressed());
     assert_eq!(state.active_objects[0].tile, 0x5c);
     assert!(state.visibility_dirty);
     assert_eq!(state.message, "A ring has vanished!");
@@ -18569,8 +18759,11 @@ fn combat_seating_runs_the_ring_vanish_check_before_the_ring_effect_step() {
     assert_eq!(state.party_equipment[0][EQUIP_SLOT_RING], EQUIPMENT_EMPTY);
     // The wearer is seated, and visible: the ring-effect step's
     // invisibility arm never runs for a ring that has just vanished.
+    // Invisibility is bit `0x10` (`RETRACTIONS.md` R380), so
+    // `is_phase_suppressed()` is the bit to read back - `is_dragged_under()`
+    // (`0x04`) has no writer on any invisibility path and could not fail here.
     assert!(!actors[0].is_empty());
-    assert!(!actors[0].is_hidden_or_unrevealed());
+    assert!(!actors[0].is_phase_suppressed());
     // Exactly one draw: the vanish check. Seating itself charges none.
     assert_eq!(state.prng_state, expected_prng);
     assert_eq!(state.message, "A ring has vanished!");

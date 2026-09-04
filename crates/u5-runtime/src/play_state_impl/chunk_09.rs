@@ -887,7 +887,18 @@ impl PlayState {
                 let linked_actor = self.combat_actors.iter().copied().find(|actor| {
                     !actor.is_empty() && usize::from(actor.active_object_slot) == slot
                 });
-                if linked_actor.is_some_and(CombatActorDescriptor::is_hidden_or_unrevealed) {
+                // `catalogs/item-list.md`: the Black potion's combat arm is
+                // "mark the active combatant hidden/suppressed and update its
+                // linked presentation record", and the Ring of Invisibility,
+                // "when worn by a combatant," it "marks that combatant
+                // hidden/suppressed";
+                // `combat.md` §6.1 puts that state on bit `0x10`, the
+                // phase/blink filter - "invisibility rides on bit `0x10`"
+                // (`RETRACTIONS.md` R380). Bit `0x04` is the dragged-under
+                // state, whose sprite is blanked by writing the linked
+                // presentation record (`§11.1`), not by a render-time
+                // descriptor test.
+                if linked_actor.is_some_and(CombatActorDescriptor::is_phase_suppressed) {
                     return None;
                 }
                 Some(object.tile)
