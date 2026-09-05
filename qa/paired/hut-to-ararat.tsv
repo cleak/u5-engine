@@ -1,0 +1,90 @@
+# Create a character, Journey Onward, then exercise stateless commands inside the starting hut.
+both	wait	9000
+both	key	space
+both	wait	4000
+both	key	c
+both	wait	2500
+both	type	Avatar
+both	key	Return
+both	wait	1500
+both	key	m
+both	wait	3000
+both	key	space
+both	wait	3000
+both	key	a
+both	wait	3000
+both	key	a
+both	wait	3000
+both	key	a
+both	wait	3000
+both	key	a
+both	wait	3000
+both	key	a
+both	wait	3000
+both	key	a
+both	wait	3000
+both	key	a
+both	wait	3000
+both	key	space
+both	wait	4000
+both	key	j
+both	wait	7000
+both	shot	start	Starting hut after Journey Onward
+both	key	Down
+both	wait	1500
+both	key	Down
+both	wait	1500
+both	key	Down
+both	wait	1500
+both	key	Down
+both	wait	1500
+both	key	Down
+both	wait	1500
+both	key	o
+both	wait	1500
+both	key	Down
+both	wait	2500
+both	key	Down
+both	wait	1500
+both	key	Down
+both	wait	2500
+both	key	Down
+both	wait	2500
+both	key	Down
+both	wait	3000
+both	shot	overworld	On the overworld outside the hut
+both	key	Up
+both	wait	2000
+both	key	Right
+both	wait	2000
+both	key	Right
+both	wait	2000
+both	shot	east-2	Two steps east
+both	key	Right
+both	wait	2000
+both	key	Right
+both	wait	2000
+both	shot	east-4	Four steps east
+both	key	Up
+both	wait	2000
+both	key	Up
+both	wait	2000
+both	shot	north-2	Two steps north
+both	key	Up
+both	wait	2000
+both	key	Up
+both	wait	2000
+both	shot	north-4	Four steps north
+both	key	Right
+both	wait	2000
+both	key	Up
+both	wait	2000
+both	shot	approach	Approaching Ararat
+both	key	e
+both	wait	4000
+both	shot	enter	Enter attempt
+both	key	l
+both	wait	1500
+both	key	Up
+both	wait	2500
+both	shot	look	Look north
