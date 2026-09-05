@@ -1,0 +1,76 @@
+# Create a character, Journey Onward, then exercise stateless commands inside the starting hut.
+both	wait	9000
+both	key	space
+both	wait	4000
+both	key	c
+both	wait	2500
+both	type	Avatar
+both	key	Return
+both	wait	1500
+both	key	m
+both	wait	3000
+both	key	space
+both	wait	3000
+both	key	a
+both	wait	3000
+both	key	a
+both	wait	3000
+both	key	a
+both	wait	3000
+both	key	a
+both	wait	3000
+both	key	a
+both	wait	3000
+both	key	a
+both	wait	3000
+both	key	a
+both	wait	3000
+both	key	space
+both	wait	4000
+both	key	j
+both	wait	7000
+both	shot	start	Starting hut after Journey Onward
+both	key	Down
+both	wait	1500
+both	key	Down
+both	wait	1500
+both	key	Down
+both	wait	1500
+both	key	Down
+both	wait	1500
+both	key	Down
+both	wait	1500
+both	shot	at-door	At the hut door
+both	key	o
+both	wait	1500
+both	key	Down
+both	wait	2500
+both	shot	opened	After opening the door
+both	key	Down
+both	wait	1500
+both	key	Down
+both	wait	2500
+both	shot	doorway	Standing in the doorway
+both	key	Down
+both	wait	2500
+both	key	Down
+both	wait	2500
+both	shot	outside	Outside the hut
+both	key	Down
+both	wait	3000
+both	shot	overworld	On the overworld
+both	key	l
+both	wait	1500
+both	key	Down
+both	wait	2500
+both	shot	look-south	Look south outdoors
+both	key	Left
+both	wait	2000
+both	key	Left
+both	wait	2000
+both	shot	west-2	Two steps west
+both	key	q
+both	wait	1500
+both	key	y
+both	wait	3000
+both	shot	saved	Saved outdoors
