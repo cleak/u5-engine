@@ -1946,12 +1946,20 @@ impl PlayState {
                 // page's `(None ready)` placeholder but no row format. A
                 // capture of the original lists the readied items by name
                 // alone from screen column 25, with no slot label.
+                // Every row on this page carries a one-column indent,
+                // the placeholder included: the stock game draws
+                // `(None ready)` at window columns 1..12.
                 for line in &mut lines {
-                    if line != Z_STATS_NONE_READY_PLACEHOLDER {
-                        *line = format!(" {}", line.rsplit(": ").next().unwrap_or(line));
-                    }
+                    *line = if line == Z_STATS_NONE_READY_PLACEHOLDER {
+                        format!(" {line}")
+                    } else {
+                        format!(" {}", line.rsplit(": ").next().unwrap_or(line))
+                    };
                 }
-                z_stats_place_panel_rows(&mut rows, 2, &lines);
+                // Measured: the stock game puts the `Arms` list - or its
+                // `(None ready)` placeholder - on panel row 4, not
+                // directly under the heading.
+                z_stats_place_panel_rows(&mut rows, 4, &lines);
             }
             ZStatsPage::Counters => self.z_stats_counters_page_rows(&mut rows),
             page => {
@@ -1984,18 +1992,24 @@ impl PlayState {
     /// All three labels are twelve characters, so the count is
     /// right-aligned in the panel's remaining width.
     fn z_stats_counters_page_rows(&self, rows: &mut [String]) {
-        let right = |label: &str, value: u32| {
+        let right = |label: &str, value: u32, field: usize| {
             let value = value.to_string();
-            let pad = STATS_PANEL_WIDTH
+            let pad = field
                 .saturating_sub(label.chars().count())
                 .saturating_sub(value.chars().count());
             format!("{label}{}{value}", " ".repeat(pad))
         };
-        rows[0] = right(" Food:", u32::from(self.food));
-        rows[1] = right(" Gold:", u32::from(self.gold));
-        rows[3] = right(" Keys.......", u32::from(self.keys));
-        rows[4] = right(" Gems.......", u32::from(self.gems));
-        rows[5] = right(" Torches....", u32::from(self.torches));
+        // Measured against the stock game: the two money rows sit on
+        // panel rows 1 and 2 with their values right-aligned to column
+        // 10, then a blank row, then the three dotted-leader rows on
+        // rows 4..6 with their values right-aligned to column 13.
+        // §4.7's "label-driven, not column-driven" note is why the two
+        // groups do not share a right margin.
+        rows[1] = right(" Food:", u32::from(self.food), 11);
+        rows[2] = right(" Gold:", u32::from(self.gold), 11);
+        rows[4] = right(" Keys.......", u32::from(self.keys), 14);
+        rows[5] = right(" Gems.......", u32::from(self.gems), 14);
+        rows[6] = right(" Torches....", u32::from(self.torches), 14);
     }
 
     /// `inventory.md §4.7` attribute page, built from its published

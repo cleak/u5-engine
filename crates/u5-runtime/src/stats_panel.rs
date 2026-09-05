@@ -740,30 +740,53 @@ pub fn paint_z_stats_page_text_window(system: &mut TextWindowSystem, state: &Pla
         .active_z_stats
         .as_ref()
         .is_some_and(|session| z_stats_page_is_framed(session.page));
-    let (indent, first_row) = if framed {
+    // Measured from a capture of the stock game's framed pages: a list
+    // starts on the frame's first interior row, indented one column
+    // (`4-Sulfur Ash` occupies window columns 2..13), while a page whose
+    // whole content is one placeholder line centres that line on interior
+    // row 4 at column 1 - `(None owned!)` is thirteen characters and
+    // fills the content width exactly.
+    let single_placeholder =
+        framed && rows.iter().filter(|line| !line.trim_end().is_empty()).count() == 1;
+    if framed {
         paint_panel_picker_frame(system);
-        (1u8, 1usize)
-    } else {
-        (0u8, 0usize)
+    }
+    let (indent, first_row) = match (framed, single_placeholder) {
+        (true, true) => (1u8, 4usize),
+        (true, false) => (2u8, 1usize),
+        (false, _) => (0u8, 0usize),
     };
     for (row, line) in rows.iter().enumerate() {
-        if line.trim_end().is_empty() {
+        if line.trim_end_matches(' ').is_empty() {
             continue;
         }
-        let row = row + first_row;
-        if framed && row > usize::from(PANEL_PICKER_ROWS) {
+        let row = if single_placeholder { first_row } else { row + first_row };
+        if framed && row > PANEL_PICKER_ROWS {
             break;
         }
-        system.set_active_cursor(indent, row.min(u8::MAX as usize) as u8);
+        // Advance past a centred row's leading spaces before emitting, so
+        // a style toggle covers the text and not the padding: the stock
+        // game's underlined `Arms` heading rules only the four glyphs,
+        // while emitting the spaces inside the toggle ruled the whole
+        // left half of the row.
+        // Trim *spaces* only. The attribute page's first row leads with
+        // the record's own glyph byte `0x0B`, which Rust's `trim_start`
+        // treats as whitespace and would silently eat.
+        let text = line.trim_end_matches(' ');
+        let lead = (text.len() - text.trim_start_matches(' ').len()) as u8;
+        system.set_active_cursor(
+            indent.saturating_add(lead),
+            row.min(u8::MAX as usize) as u8,
+        );
         if underline_row == Some(row) {
             system.emit_byte(TEXT_CTRL_UNDERLINE_TOGGLE);
         }
         let width = if framed {
-            PANEL_PICKER_CONTENT_COLUMNS
+            PANEL_PICKER_CONTENT_COLUMNS + 1 - usize::from(indent)
         } else {
             STATS_PANEL_WIDTH
         };
-        for byte in line.trim_end().bytes().take(width) {
+        for byte in text.trim_start_matches(' ').bytes().take(width) {
             system.emit_byte(byte);
         }
         if underline_row == Some(row) {
