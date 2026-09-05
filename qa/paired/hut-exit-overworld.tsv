@@ -1,0 +1,69 @@
+# Create a character, Journey Onward, walk south out of the hut and onto the overworld.
+both	wait	9000
+both	key	space
+both	wait	4000
+both	key	c
+both	wait	2500
+both	type	Avatar
+both	key	Return
+both	wait	1500
+both	key	m
+both	wait	3000
+both	key	space
+both	wait	3000
+both	key	a
+both	wait	3000
+both	key	a
+both	wait	3000
+both	key	a
+both	wait	3000
+both	key	a
+both	wait	3000
+both	key	a
+both	wait	3000
+both	key	a
+both	wait	3000
+both	key	a
+both	wait	3000
+both	key	space
+both	wait	4000
+both	key	j
+both	wait	7000
+both	shot	start	Starting hut after Journey Onward
+both	key	Down
+both	wait	1500
+both	key	Down
+both	wait	1500
+both	key	Down
+both	wait	1500
+both	shot	south-3	Three steps south
+both	key	Down
+both	wait	1500
+both	key	Down
+both	wait	1500
+both	shot	door	At the hut door
+both	key	Down
+both	wait	1500
+both	key	Down
+both	wait	1500
+both	shot	south-7	Past the door
+both	key	Down
+both	wait	1500
+both	key	Down
+both	wait	1500
+both	key	Down
+both	wait	2500
+both	shot	exit	Leaving the hut
+both	key	Down
+both	wait	2500
+both	shot	overworld	First overworld frame
+both	key	Left
+both	wait	1500
+both	key	Left
+both	wait	1500
+both	shot	west-2	Two steps west outside
+both	key	Up
+both	wait	1500
+both	key	Up
+both	wait	1500
+both	shot	north-2	Two steps north outside

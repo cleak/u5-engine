@@ -16,4 +16,13 @@ development plan before any fix: engine defect, harness defect, spec gap,
 asset/profile problem, or platform defect.
 
 The DOS boot preamble (production card, title flourish, signature) is skipped
-with a Space keypress on both sides; the engine accepts the same skip.
+with a Space keypress on both sides; the engine accepts the same skip. The
+shipped `SAVED.GAM` has no active Avatar, so every gameplay scenario first
+creates a character with identical answers; the questionnaire's virtue pairs
+are PRNG-selected and legitimately differ between the two sides.
+
+| Scenario | Coverage |
+|---|---|
+| `chargen-journey-basics` | menu, name/gender prompts, gypsy pages, Journey Onward, first steps, Z-stats |
+| `hut-commands` | Look, Z-stats for two members, X-it refusal, Search, Yell cancel, Quit/save |
+| `hut-exit-overworld` | walking out of the starting hut onto the overworld |

@@ -1,0 +1,73 @@
+# Create a character, Journey Onward, then exercise stateless commands inside the starting hut.
+both	wait	9000
+both	key	space
+both	wait	4000
+both	key	c
+both	wait	2500
+both	type	Avatar
+both	key	Return
+both	wait	1500
+both	key	m
+both	wait	3000
+both	key	space
+both	wait	3000
+both	key	a
+both	wait	3000
+both	key	a
+both	wait	3000
+both	key	a
+both	wait	3000
+both	key	a
+both	wait	3000
+both	key	a
+both	wait	3000
+both	key	a
+both	wait	3000
+both	key	a
+both	wait	3000
+both	key	space
+both	wait	4000
+both	key	j
+both	wait	7000
+both	shot	start	Starting hut after Journey Onward
+both	key	l
+both	wait	1500
+both	shot	look-prompt	Look direction prompt
+both	key	Up
+both	wait	2000
+both	shot	look-north	Look north result
+both	key	z
+both	wait	2000
+both	key	1
+both	wait	2500
+both	shot	zstats-avatar	Z-stats for the Avatar
+both	key	Escape
+both	wait	1500
+both	key	z
+both	wait	2000
+both	key	2
+both	wait	2500
+both	shot	zstats-second	Z-stats for the second member
+both	key	Escape
+both	wait	1500
+both	key	x
+both	wait	2000
+both	shot	xit	X-it refusal on foot
+both	key	s
+both	wait	2000
+both	shot	search-prompt	Search direction prompt
+both	key	Down
+both	wait	2500
+both	shot	search-south	Search south result
+both	key	y
+both	wait	2000
+both	shot	yell-prompt	Yell prompt
+both	key	Escape
+both	wait	2000
+both	shot	after-yell	After cancelling Yell
+both	key	q
+both	wait	2000
+both	shot	quit-prompt	Quit/save prompt
+both	key	y
+both	wait	3000
+both	shot	saved	After saving

@@ -1,0 +1,60 @@
+# Skip the flourish, create a character on both sides with identical answers, Journey Onward, first moves, Z-stats.
+both	wait	9000
+both	key	space
+both	wait	4000
+both	shot	menu	Start menu after the flourish skip
+both	key	c
+both	wait	2500
+both	shot	chargen-name	Name prompt
+both	type	Avatar
+both	key	Return
+both	wait	1500
+both	shot	chargen-gender	Gender prompt with the accepted name
+both	key	m
+both	wait	3000
+both	shot	chargen-gypsy	Opening gypsy paragraph
+both	key	space
+both	wait	3000
+both	shot	chargen-q1	First virtue question
+both	key	a
+both	wait	3000
+both	key	a
+both	wait	3000
+both	key	a
+both	wait	3000
+both	key	a
+both	wait	3000
+both	shot	chargen-q5	Fifth virtue question
+both	key	a
+both	wait	3000
+both	key	a
+both	wait	3000
+both	key	a
+both	wait	3000
+both	shot	chargen-result	Result paragraph
+both	key	space
+both	wait	4000
+both	shot	menu-after-chargen	Menu after character creation
+both	key	j
+both	wait	7000
+both	shot	journey	Journey Onward into the starting hut
+both	key	Up
+both	wait	2000
+both	shot	north	After one step north
+both	key	Left
+both	wait	2000
+both	shot	west	After one step west
+both	key	Right
+both	wait	2000
+both	key	Down
+both	wait	2000
+both	shot	back	After returning
+both	key	z
+both	wait	2500
+both	shot	zstats-prompt	Z-stats prompt
+both	key	1
+both	wait	2500
+both	shot	zstats	Z-stats sheet for the Avatar
+both	key	Escape
+both	wait	2000
+both	shot	after-zstats	After leaving Z-stats
