@@ -347,7 +347,48 @@ pub fn layout_message_window_with_prompt(
     open_prompt: Option<&str>,
     live_row_follows_history: bool,
 ) -> MessageWindowLayout {
-    layout_message_window_inner(log, live_input, open_prompt, live_row_follows_history)
+    layout_message_window_inner(
+        log,
+        live_input,
+        open_prompt,
+        live_row_follows_history,
+        LiveRowKind::CommandRow,
+    )
+}
+
+/// What the live row *is*, which decides whether it carries an end cap.
+///
+/// `text-output.md §10.2`: the end-cap triangle belongs to the command
+/// cycle - "emit a line feed, draw the end cap, read the key" - so a row
+/// that starts a fresh command turn carries one. A row that continues a
+/// block an earlier prompt already opened does not: the spell-name colon
+/// line of `magic.md §5`/`§6` sits directly under `For what spell?` with
+/// no cap and no blank row between, because the whole exchange is one
+/// command turn.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum LiveRowKind {
+    /// A fresh command row: blank row above it, end cap on it.
+    CommandRow,
+    /// A continuation of the block above: no blank row, no end cap.
+    Continuation,
+}
+
+/// Place a log whose live row continues the block above it rather than
+/// opening a new command row. See [`LiveRowKind`].
+pub fn layout_message_window_with_continuation(
+    log: &GameplayMessageLog,
+    live_input: Option<&str>,
+    open_prompt: Option<&str>,
+    live_row_follows_history: bool,
+    live_row: LiveRowKind,
+) -> MessageWindowLayout {
+    layout_message_window_inner(
+        log,
+        live_input,
+        open_prompt,
+        live_row_follows_history,
+        live_row,
+    )
 }
 
 /// Place a log with a prompt that is still waiting for a key.
@@ -369,7 +410,7 @@ pub fn layout_message_window_with_open_prompt(
     live_input: Option<&str>,
     open_prompt: Option<&str>,
 ) -> MessageWindowLayout {
-    layout_message_window_inner(log, live_input, open_prompt, false)
+    layout_message_window_inner(log, live_input, open_prompt, false, LiveRowKind::CommandRow)
 }
 
 fn layout_message_window_inner(
@@ -377,7 +418,9 @@ fn layout_message_window_inner(
     live_input: Option<&str>,
     open_prompt: Option<&str>,
     live_row_follows_history: bool,
+    live_row: LiveRowKind,
 ) -> MessageWindowLayout {
+    let live_row_prefixed = live_row == LiveRowKind::CommandRow;
     let open_prompt = open_prompt.filter(|prompt| {
         log.lines()
             .last()
@@ -410,7 +453,11 @@ fn layout_message_window_inner(
     let history_rows = match live_input {
         // `combat.md §8.1`: the arena prompt's line feed was the banner's
         // own, so its marker row follows the history with no blank between.
-        Some(_) if history_ends_blank || live_row_follows_history => MESSAGE_WINDOW_HISTORY_ROWS,
+        // A continuation row needs no separating blank either: the block
+        // it continues is still open.
+        Some(_) if history_ends_blank || live_row_follows_history || !live_row_prefixed => {
+            MESSAGE_WINDOW_HISTORY_ROWS
+        }
         Some(_) => MESSAGE_WINDOW_HISTORY_ROWS - 1,
         // An open prompt keeps its *own* line (§10.6), so no line feed
         // has been emitted yet and every row can carry text.
@@ -453,10 +500,10 @@ fn layout_message_window_inner(
             .collect();
         rows.push(MessageWindowRow {
             row: MESSAGE_WINDOW_BOTTOM,
-            column: MESSAGE_WINDOW_LEFT + 1,
+            column: MESSAGE_WINDOW_LEFT + u8::from(live_row_prefixed),
             text,
             glyphs,
-            prefixed: true,
+            prefixed: live_row_prefixed,
         });
     }
     // The cursor cell is the one the prompt literal leaves the cursor

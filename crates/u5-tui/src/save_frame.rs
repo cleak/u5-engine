@@ -12,11 +12,10 @@ use u5_runtime::{
     MESSAGE_WINDOW_RIGHT, PlayOptions, PlayState, PlayTarget, STATS_PANEL_TEXT_LEFT, Scene,
     TEXT_WINDOW_RENDER_HEIGHT, TEXT_WINDOW_RENDER_WIDTH, TILE_ATLAS_SIDE, TOWN_GRID_SIDE,
     TextWindowSystem, TileGraphicsDepth, VIEWPORT_ORIGIN_X, VIEWPORT_ORIGIN_Y, ViewOverlayMode,
-    WorldPlane, configure_play_text_windows, gameplay_chrome_content, hash_bytes,
-    layout_message_window_with_prompt, load_ibm_ch_font, load_runes_ch_font, load_tile_atlas,
-    message_log_from_entries, paint_fixed_cell_glyph, paint_gameplay_frame_chrome,
-    paint_message_line_cap, paint_stats_panel_text_window, prompt_cursor_glyph,
-    render_text_panel_rgba, render_text_window_rgba,
+    WorldPlane, configure_play_text_windows, gameplay_chrome_content, hash_bytes, load_ibm_ch_font,
+    load_runes_ch_font, load_tile_atlas, message_log_from_entries, paint_fixed_cell_glyph,
+    paint_gameplay_frame_chrome, paint_message_line_cap, paint_stats_panel_text_window,
+    prompt_cursor_glyph, render_text_panel_rgba, render_text_window_rgba,
 };
 
 use crate::{
@@ -863,24 +862,48 @@ pub fn compose_gameplay_screen(
         dst.copy_from_slice(src);
     }
 
-    let mut log = message_log_from_entries(state.message_entries(), |text| Some(text.to_string()));
-    if !state.message.trim().is_empty()
-        && !state
-            .message_entries()
-            .last()
-            .is_some_and(|entry| entry.text == state.message)
+    // Keep this in step with the Bevy shell's own message-window
+    // assembly: this path exists so `--save-screen` is a native-resolution
+    // oracle for the same screen, and it is only an oracle while the two
+    // agree. Both drop blank slot text, both append the slot only when
+    // the transcript has not recorded it yet, and both suppress the live
+    // row for a prompt that is waiting on a key.
+    fn keep(text: &str) -> Option<String> {
+        (!text.trim().is_empty()).then(|| text.to_string())
+    }
+    let mut log = message_log_from_entries(state.message_entries(), keep);
+    if let Some(text) = state
+        .message_slot_needs_flush()
+        .then(|| keep(&state.message))
+        .flatten()
     {
-        log.push_output(&state.message);
+        log.push_output(&text);
     }
     // `text-output.md §10.6`: a prompt awaiting a key keeps its own line
     // open and carries the input cursor inline, so the headless
     // composition places it exactly where the Bevy renderer does.
     let open_prompt = state.open_prompt_line();
-    let layout = layout_message_window_with_prompt(
+    // The spell-name colon line is a live row served from the cast/mix
+    // session rather than from the log, so the oracle has to ask for it
+    // the same way the shell does. There is no typed-input buffer here,
+    // which is the one live-row source this path cannot mirror.
+    let spell_echo = state.spell_prompt_echo();
+    let live_row = if state.mix_reagent_selection_active() {
+        None
+    } else {
+        Some(spell_echo.as_deref().unwrap_or(""))
+    };
+    let live_row_kind = if spell_echo.is_some() {
+        u5_runtime::LiveRowKind::Continuation
+    } else {
+        u5_runtime::LiveRowKind::CommandRow
+    };
+    let layout = u5_runtime::layout_message_window_with_continuation(
         &log,
-        Some(""),
+        live_row,
         open_prompt.as_deref(),
         u5_runtime::combat_prompt_row_follows_history(state),
+        live_row_kind,
     );
     let cursor_cell = layout.inline_cursor.or_else(|| {
         layout.rows.last().map(|live| {

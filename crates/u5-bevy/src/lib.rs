@@ -158,9 +158,8 @@ use u5_runtime::{
 use u5_runtime::{
     CHROME_RULE_INDEX, ChromeFonts, ChromePalette, MESSAGE_WINDOW_RIGHT, MessageWindowRow,
     RibbonCapDirection, VIEWPORT_ORIGIN_X, VIEWPORT_ORIGIN_Y, configure_play_text_windows,
-    gameplay_chrome_content, layout_message_window_with_prompt, load_runes_ch_font,
-    message_log_from_entries, paint_fixed_cell_glyph, paint_gameplay_frame_chrome,
-    paint_message_line_cap, prompt_cursor_glyph, ribbon_cap_sprite,
+    gameplay_chrome_content, load_runes_ch_font, message_log_from_entries, paint_fixed_cell_glyph,
+    paint_gameplay_frame_chrome, paint_message_line_cap, prompt_cursor_glyph, ribbon_cap_sprite,
 };
 #[cfg(test)]
 use u5_runtime::{MISCMAPS_RTV_COMMAND_SECTION_OFFSET, RTV_COMMAND_STREAM_BYTES};
@@ -16683,11 +16682,19 @@ fn render_integrated_status_framebuffer(
         } else {
             Some(spell_echo.as_deref().or(input_echo).unwrap_or(""))
         };
-        let layout = layout_message_window_with_prompt(
+        // The spell-name colon line continues the block `For what
+        // spell?` opened, so it carries no end cap (`LiveRowKind`).
+        let live_row_kind = if spell_echo.is_some() {
+            u5_runtime::LiveRowKind::Continuation
+        } else {
+            u5_runtime::LiveRowKind::CommandRow
+        };
+        let layout = u5_runtime::layout_message_window_with_continuation(
             &log,
             live_row,
             open_prompt.as_deref(),
             u5_runtime::combat_prompt_row_follows_history(&display_state),
+            live_row_kind,
         );
         inline_prompt_cursor = layout.inline_cursor;
         message_rows = layout.rows;
