@@ -175,14 +175,16 @@ fn save_game_command_writes_supported_saved_gam_and_stages_saved_ool_mirrors() {
     assert_eq!(saved[SAVE_SPELL_CHARGES_OFFSET + REL_HUR_SPELL_INDEX], 4);
     assert_eq!(saved[SAVE_SCROLL_STOCK_OFFSET + 6], 8);
     assert_eq!(saved[SAVE_POTION_STOCK_OFFSET + 7], 9);
-    assert_eq!(saved[SAVE_REAGENTS_OFFSET], 4);
-    assert_eq!(saved[SAVE_REAGENTS_OFFSET + 1], 5);
+    // `state.reagents` is in mixing order and the `0x02AA` block is too
+    // (`cleak/u5-spec#201`), so the counters round-trip unpermuted.
+    assert_eq!(saved[SAVE_REAGENTS_OFFSET], 9);
+    assert_eq!(saved[SAVE_REAGENTS_OFFSET + 1], 8);
     assert_eq!(saved[SAVE_REAGENTS_OFFSET + 2], 7);
-    assert_eq!(saved[SAVE_REAGENTS_OFFSET + 3], 8);
-    assert_eq!(saved[SAVE_REAGENTS_OFFSET + 4], 2);
-    assert_eq!(saved[SAVE_REAGENTS_OFFSET + 5], 3);
-    assert_eq!(saved[SAVE_REAGENTS_OFFSET + 6], 6);
-    assert_eq!(saved[SAVE_REAGENTS_OFFSET + 7], 9);
+    assert_eq!(saved[SAVE_REAGENTS_OFFSET + 3], 6);
+    assert_eq!(saved[SAVE_REAGENTS_OFFSET + 4], 5);
+    assert_eq!(saved[SAVE_REAGENTS_OFFSET + 5], 4);
+    assert_eq!(saved[SAVE_REAGENTS_OFFSET + 6], 3);
+    assert_eq!(saved[SAVE_REAGENTS_OFFSET + 7], 2);
     assert_eq!(saved[SAVE_MOONSTONE_X_OFFSET + 2], 77);
     assert_eq!(saved[SAVE_MOONSTONE_Y_OFFSET + 2], 88);
     assert_eq!(saved[SAVE_MOONSTONE_SCENE_OFFSET + 2], 0);
@@ -1826,7 +1828,9 @@ fn save_play_options_reads_reagents_in_recipe_order() {
 
     let options = play_options_from_save_bytes(&bytes).unwrap();
 
-    assert_eq!(options.reagents, [5, 6, 7, 2, 6, 4, 3, 1]);
+    // The block needs no permutation: it is already in mixing order
+    // (`cleak/u5-spec#201`), so the counters come through unchanged.
+    assert_eq!(options.reagents, [4, 6, 7, 6, 1, 3, 2, 5]);
 }
 
 #[test]

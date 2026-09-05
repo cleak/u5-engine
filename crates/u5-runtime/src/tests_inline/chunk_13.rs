@@ -408,14 +408,20 @@ fn chargen_reagent_seeds_alias_to_default_reagents_slots() {
         CHARGEN_SEED_REAGENT_SULFUROUS_ASH,
         DEFAULT_REAGENTS[REAGENT_SULFUR_ASH],
     );
-    assert_eq!(CHARGEN_SEED_REAGENT_BLACK_PEARL, 4);
-    assert_eq!(CHARGEN_SEED_REAGENT_BLOOD_MOSS, 6);
-    assert_eq!(CHARGEN_SEED_REAGENT_GARLIC, 7);
+    // `saved-gam.md §9` gives the fresh-seed reagents under that
+    // document's alphabetical naming of the `0x02AA` block. The block is
+    // actually in mixing order (`cleak/u5-spec#201`), so the same bytes
+    // name different reagents: the stock game's own Z-stats page renders
+    // this save as `4-Sulfur Ash, 6-Ginseng, 7-Garlic, 6-Sp. Silk,
+    // 3-Blk. Pearl`.
+    assert_eq!(CHARGEN_SEED_REAGENT_SULFUROUS_ASH, 4);
     assert_eq!(CHARGEN_SEED_REAGENT_GINSENG, 6);
+    assert_eq!(CHARGEN_SEED_REAGENT_GARLIC, 7);
+    assert_eq!(CHARGEN_SEED_REAGENT_SPIDER_SILK, 6);
+    assert_eq!(CHARGEN_SEED_REAGENT_BLOOD_MOSS, 0);
+    assert_eq!(CHARGEN_SEED_REAGENT_BLACK_PEARL, 3);
+    assert_eq!(CHARGEN_SEED_REAGENT_NIGHTSHADE, 0);
     assert_eq!(CHARGEN_SEED_REAGENT_MANDRAKE, 0);
-    assert_eq!(CHARGEN_SEED_REAGENT_NIGHTSHADE, 3);
-    assert_eq!(CHARGEN_SEED_REAGENT_SPIDER_SILK, 0);
-    assert_eq!(CHARGEN_SEED_REAGENT_SULFUROUS_ASH, 0);
 }
 
 #[test]
@@ -9032,14 +9038,20 @@ fn chargen_seed_inventory_constants_match_published_seed() {
     assert_eq!(CHARGEN_SEED_TORCHES, 4);
     assert_eq!(CHARGEN_SEED_MAGIC_POWDER, 0);
 
-    assert_eq!(CHARGEN_SEED_REAGENT_BLACK_PEARL, 4);
-    assert_eq!(CHARGEN_SEED_REAGENT_BLOOD_MOSS, 6);
-    assert_eq!(CHARGEN_SEED_REAGENT_GARLIC, 7);
+    // `saved-gam.md §9` gives the fresh-seed reagents under that
+    // document's alphabetical naming of the `0x02AA` block. The block is
+    // actually in mixing order (`cleak/u5-spec#201`), so the same bytes
+    // name different reagents: the stock game's own Z-stats page renders
+    // this save as `4-Sulfur Ash, 6-Ginseng, 7-Garlic, 6-Sp. Silk,
+    // 3-Blk. Pearl`.
+    assert_eq!(CHARGEN_SEED_REAGENT_SULFUROUS_ASH, 4);
     assert_eq!(CHARGEN_SEED_REAGENT_GINSENG, 6);
+    assert_eq!(CHARGEN_SEED_REAGENT_GARLIC, 7);
+    assert_eq!(CHARGEN_SEED_REAGENT_SPIDER_SILK, 6);
+    assert_eq!(CHARGEN_SEED_REAGENT_BLOOD_MOSS, 0);
+    assert_eq!(CHARGEN_SEED_REAGENT_BLACK_PEARL, 3);
+    assert_eq!(CHARGEN_SEED_REAGENT_NIGHTSHADE, 0);
     assert_eq!(CHARGEN_SEED_REAGENT_MANDRAKE, 0);
-    assert_eq!(CHARGEN_SEED_REAGENT_NIGHTSHADE, 3);
-    assert_eq!(CHARGEN_SEED_REAGENT_SPIDER_SILK, 0);
-    assert_eq!(CHARGEN_SEED_REAGENT_SULFUROUS_ASH, 0);
 }
 
 #[test]

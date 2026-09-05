@@ -1309,17 +1309,40 @@ pub const REAGENT_MASKS: [u8; REAGENT_COUNT] = [
     REAGENT_MASK_NIGHTSHADE,
     REAGENT_MASK_MANDRAKE,
 ];
+/// Order of the eight reagent counters inside the `0x02AA` save block.
+///
+/// `formats/saved-gam.md §7` describes this block as alphabetical -
+/// "black pearl in the first byte and sulfurous ash in the last" - and
+/// says that order "matches the in-world spell-mixing UI". Both halves of
+/// that are wrong, and they also contradict `catalogs/item-list.md §6`,
+/// which publishes the mixing display order as sulfur ash, ginseng,
+/// garlic, spider silk, blood moss, black pearl, nightshade, mandrake.
+///
+/// A capture settles it. The shipped save this engine writes carries
+/// `0x02AA..0x02B1 = [4, 6, 7, 6, 0, 3, 0, 0]`, and the stock game's
+/// Z-stats reagent page renders that as
+/// `4-Sulfur Ash, 6-Ginseng, 7-Garlic, 6-Sp. Silk, 3-Blk. Pearl` - the
+/// mixing order, read straight through. The alphabetical reading of the
+/// same bytes is `Black Pearl 4, Blood Moss 6, Garlic 7, Ginseng 6,
+/// Nightshade 3`, which is exactly what this engine used to display.
+///
+/// So the block is already in mixing order and needs no permutation.
+/// Reported as `cleak/u5-spec#201`.
 pub const REAGENT_SAVE_ORDER: [usize; REAGENT_COUNT] = [
-    REAGENT_BLACK_PEARL,
-    REAGENT_BLOOD_MOSS,
-    REAGENT_GARLIC,
-    REAGENT_GINSENG,
-    REAGENT_MANDRAKE,
-    REAGENT_NIGHTSHADE,
-    REAGENT_SPIDER_SILK,
     REAGENT_SULFUR_ASH,
+    REAGENT_GINSENG,
+    REAGENT_GARLIC,
+    REAGENT_SPIDER_SILK,
+    REAGENT_BLOOD_MOSS,
+    REAGENT_BLACK_PEARL,
+    REAGENT_NIGHTSHADE,
+    REAGENT_MANDRAKE,
 ];
-pub const DEFAULT_REAGENTS: [u8; REAGENT_COUNT] = [0, 6, 7, 0, 6, 4, 3, 0];
+/// Factory reagent record, in [`REAGENT_SAVE_ORDER`]. `saved-gam.md §9`
+/// gives the fresh-seed values under its alphabetical naming; corrected
+/// to the mixing order they are sulfur ash 4, ginseng 6, garlic 7,
+/// spider silk 6 and black pearl 3.
+pub const DEFAULT_REAGENTS: [u8; REAGENT_COUNT] = [4, 6, 7, 6, 0, 3, 0, 0];
 pub const IN_LOR_SPELL_INDEX: usize = 0;
 pub const IN_LOR_COST: u8 = (IN_LOR_SPELL_INDEX / SPELLS_PER_CIRCLE) as u8 + 1;
 /// `lighting.md §8`: In Lor (ordinary Light spell) overwrites the

@@ -1,0 +1,29 @@
+# Z-stats: page through the whole sequence and record every screen.
+both	wait	9000
+both	key	space
+both	wait	4000
+both	key	j
+both	wait	9000
+both	key	z
+both	wait	2000
+both	key	Return
+both	wait	2500
+both	shot	p1	Page 1
+both	key	Right
+both	wait	2000
+both	shot	p2	Page 2
+both	key	Right
+both	wait	2000
+both	shot	p3	Page 3
+both	key	Right
+both	wait	2000
+both	shot	p4	Page 4
+both	key	Right
+both	wait	2000
+both	shot	p5	Page 5
+both	key	Right
+both	wait	2000
+both	shot	p6	Page 6
+both	key	Right
+both	wait	2000
+both	shot	p7	Page 7 (should wrap to page 1)

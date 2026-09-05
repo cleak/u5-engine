@@ -486,9 +486,14 @@ pub const CHARGEN_SEED_TORCHES: u8 = crate::DEFAULT_TORCH_STOCK;
 pub const CHARGEN_SEED_MAGIC_POWDER: u8 = 0;
 
 /// `chargen.md §8` seeded reagent counters for a fresh
-/// questionnaire-created save. Mandrake, spider silk, and sulfurous
-/// ash start at zero — the player must source them before mixing the
+/// questionnaire-created save. Blood moss, nightshade and mandrake
+/// start at zero — the player must source them before mixing the
 /// spells those reagents gate.
+///
+/// *Corrected:* this used to name mandrake, spider silk and sulfurous
+/// ash as the empty three, following `saved-gam.md §7`'s alphabetical
+/// reading of the `0x02AA` block. That block is in mixing order
+/// (`cleak/u5-spec#201`), so the same bytes name different reagents.
 ///
 /// Each CHARGEN_SEED_REAGENT_* equals the matching
 /// `crate::DEFAULT_REAGENTS[crate::REAGENT_*]` slot. Anchor each
