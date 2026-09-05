@@ -22972,8 +22972,9 @@ mod tests {
             visual_route_suite(&writable_game_dir, TileGraphicsDepth::Ega16, &dir).unwrap();
 
         // route-endgame-tableau-walk-in adds 29 (endgame.md §4 walk-in);
-        // the full-victory cinematic now runs to the §9.5 terminal hold.
-        assert_eq!(reports.len(), 1953);
+        // the full-victory cinematic now runs to the §9.5 terminal hold;
+        // the New Order key route commits each pick with Return (+2).
+        assert_eq!(reports.len(), 1955);
         for report in &reports {
             assert!(report.path.exists());
             assert_eq!(report.width, VISUAL_PLAY_FRAME_WIDTH);
@@ -22988,7 +22989,7 @@ mod tests {
             }
         }
         let manifest = fs::read_to_string(dir.join("manifest.txt")).unwrap();
-        assert!(manifest.contains("coverage\tvisual-route-steps\t1953"));
+        assert!(manifest.contains("coverage\tvisual-route-steps\t1955"));
         assert!(manifest.contains("coverage\tvisual-key-route-steps\t88"));
         assert!(manifest.contains("coverage\tvisual-route-combat-steps\t"));
         assert!(manifest.contains("route-world-movement-01-d\t320x200\t"));
