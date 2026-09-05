@@ -9281,7 +9281,17 @@ fn run_visual_intro_menu_app(
     app.add_plugins(DefaultPlugins.set(WindowPlugin {
         primary_window: Some(Window {
             title: "Ultima V Intro".into(),
-            resolution: (820.0, 620.0).into(),
+            // The same 960x720 window as gameplay, so Journey Onward never
+            // resizes the window (the resize left stale compositor pixels
+            // beside the gameplay surface on the streaming display).
+            resolution: {
+                let size = aspect_corrected_display_size(
+                    INTRO_FRAMEBUFFER_WIDTH,
+                    INTRO_FRAMEBUFFER_HEIGHT,
+                    DISPLAY_SCALE,
+                );
+                (size.x, size.y).into()
+            },
             resizable: true,
             ..default()
         }),
@@ -9345,6 +9355,9 @@ fn add_visual_intro_update_systems(app: &mut App) {
             // correctly but every key after the transition was ignored.
             drive_visual,
             drive_visual_intro,
+            // Letterbox the intro frame too, so both shells present the
+            // same window and Journey Onward needs no resize.
+            fit_display_to_window,
             animate_visual_intro_title_effects,
             // Inert while the intro owns the framebuffer; after Journey
             // Onward this is the resident idle wait-loop redraw tick.
@@ -10689,7 +10702,9 @@ fn transition_visual_intro_to_gameplay(
         .single_mut()
         .expect("Journey Onward requires exactly one Bevy window");
     window.title = "Ultima V".to_string();
-    window.resolution.set(display.x, display.y);
+    // No window resize: both shells share one window size and
+    // `fit_display_to_window` letterboxes the frame inside whatever size the
+    // compositor grants.
     commands.insert_resource(VisualState {
         game_dir,
         state,
@@ -13071,12 +13086,14 @@ fn render_chargen_intro_frame(intro: &mut VisualIntroState) -> Vec<u8> {
         unreachable!("character creation intro panel match must either produce data or panic");
     };
 
+    let cursor_glyph = visual_intro_menu_cursor_glyph(intro);
     render_chargen_intro_graphics(
         &mut intro.surface,
         &intro.game_dir,
         intro.raster_depth,
         session,
         input_line,
+        cursor_glyph,
     )
 }
 
@@ -13126,6 +13143,7 @@ fn paint_chargen_prompt_screen(
     font: &FixedCellFont,
     session: &ChargenSession,
     input_line: &str,
+    cursor_glyph: u8,
 ) {
     paint_chargen_prompt_reset(buffer);
     overlay_fixed_cell_text_intro_buffer(
@@ -13167,6 +13185,19 @@ fn paint_chargen_prompt_screen(
     }
 
     if accepted_name.is_empty() {
+        // `input.md §8`: "While any free-text prompt is active, the cursor
+        // blink continues - the player sees the same blinking cursor
+        // described in Section 3 at the end of what they have typed."
+        let cursor_column =
+            CHARGEN_NAME_ECHO_COLUMN + echo.len().min(u5_runtime::CHARGEN_NAME_INPUT_LIMIT);
+        overlay_fixed_cell_text_intro_buffer(
+            buffer,
+            font,
+            &((cursor_glyph & 0x7f) as char).to_string(),
+            cursor_column,
+            CHARGEN_NAME_ECHO_ROW,
+            false,
+        );
         return;
     }
 
@@ -13187,6 +13218,17 @@ fn paint_chargen_prompt_screen(
             buffer,
             font,
             &(key as char).to_string(),
+            CHARGEN_GENDER_ECHO_COLUMN,
+            CHARGEN_GENDER_PROMPT_ROW,
+            false,
+        );
+    } else {
+        // `input.md §3`: the single-key poll paints the blink frame at the
+        // cursor the prompt left, the cell the accepted letter will occupy.
+        overlay_fixed_cell_text_intro_buffer(
+            buffer,
+            font,
+            &((cursor_glyph & 0x7f) as char).to_string(),
             CHARGEN_GENDER_ECHO_COLUMN,
             CHARGEN_GENDER_PROMPT_ROW,
             false,
@@ -13226,11 +13268,12 @@ fn render_chargen_intro_graphics(
     depth: TileGraphicsDepth,
     session: &ChargenSession,
     input_line: &str,
+    cursor_glyph: u8,
 ) -> Vec<u8> {
     let font = load_ibm_ch_font(game_dir).expect("character creation requires IBM fixed-cell font");
     match session.current_step() {
         ChargenSessionStep::PromptName | ChargenSessionStep::PromptGender => {
-            paint_chargen_prompt_screen(buffer, &font, session, input_line);
+            paint_chargen_prompt_screen(buffer, &font, session, input_line, cursor_glyph);
             buffer.to_rgba()
         }
         ChargenSessionStep::PresentIntro { record, text } => {
@@ -15115,7 +15158,13 @@ fn write_visual_chargen_prompt_report(
         intro_menu_select_caption_cursor_glyph(0),
     );
     let font = load_ibm_ch_font(game_dir)?;
-    paint_chargen_prompt_screen(&mut buffer, &font, session, input_line);
+    paint_chargen_prompt_screen(
+        &mut buffer,
+        &font,
+        session,
+        input_line,
+        intro_menu_select_caption_cursor_glyph(0),
+    );
     write_visual_report(
         out_dir,
         label,
@@ -25377,6 +25426,7 @@ mod tests {
                 TileGraphicsDepth::Ega16,
                 &session,
                 "",
+                intro_menu_select_caption_cursor_glyph(0),
             );
         }));
 
@@ -26219,7 +26269,8 @@ mod tests {
         let font = load_ibm_ch_font(&dir).unwrap();
         let records = vec![String::new(); u5_runtime::QUESTION_DAT_RECORDS];
         let session = ChargenSession::new(records, Vec::new()).unwrap();
-        paint_chargen_prompt_screen(&mut buffer, &font, &session, "");
+        let cursor_glyph = intro_menu_select_caption_cursor_glyph(0);
+        paint_chargen_prompt_screen(&mut buffer, &font, &session, "", cursor_glyph);
 
         for row in CHARGEN_INTERIOR_Y0 - 8..CHARGEN_INTERIOR_Y0 - 1 {
             for column in 120..200 {
@@ -26241,6 +26292,16 @@ mod tests {
             buffer.pixels[CHARGEN_INTERIOR_Y0 * buffer.width + CHARGEN_INTERIOR_X0],
             0
         );
+
+        // `input.md §8`: the free-text prompt keeps painting the blink cursor
+        // at the end of the typed text - here the empty name's first cell.
+        let cursor_x = CHARGEN_NAME_ECHO_COLUMN * CH_CELL_SIDE;
+        let cursor_y = CHARGEN_NAME_ECHO_ROW * CH_CELL_SIDE;
+        let lit = (0..CH_CELL_SIDE)
+            .flat_map(|dy| (0..CH_CELL_SIDE).map(move |dx| (dx, dy)))
+            .filter(|(dx, dy)| buffer.pixels[(cursor_y + dy) * buffer.width + cursor_x + dx] != 0)
+            .count();
+        assert!(lit > 0, "name prompt must show the blink cursor cell");
         let _ = fs::remove_dir_all(dir);
     }
 
