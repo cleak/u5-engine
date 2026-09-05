@@ -1141,9 +1141,8 @@ fn y_yell_wrong_scene_words_and_names_consume_turn_with_generic_no_effect() {
     );
 
     assert_eq!(dungeon.turn, 1);
-    assert!(dungeon.message.contains("Yelled FALLAX"));
-    assert!(dungeon.message.contains("Nothing happens."));
-    assert!(!dungeon.message.contains("Word of Power"));
+    // cleak/u5-spec#194 capture: a plain no-effect yell prints `No effect!`.
+    assert_eq!(dungeon.message, YELL_NO_EFFECT_MESSAGE);
 
     let mut world = world_state(open_world_grid(), 5, 5);
 
@@ -1153,7 +1152,7 @@ fn y_yell_wrong_scene_words_and_names_consume_turn_with_generic_no_effect() {
     );
 
     assert_eq!(world.turn, 1);
-    assert_eq!(world.message, "Yelled FAULINEI. Nothing happens.");
+    assert_eq!(world.message, YELL_NO_EFFECT_MESSAGE);
 }
 
 #[test]
@@ -1360,7 +1359,7 @@ fn y_yell_shadowlord_name_observes_vanquished_state() {
     );
 
     assert_eq!(town.turn, 1);
-    assert_eq!(town.message, "Yelled FAULINEI. Nothing happens.");
+    assert_eq!(town.message, YELL_NO_EFFECT_MESSAGE);
 }
 
 #[test]
@@ -1412,7 +1411,7 @@ fn y_yell_shadowlord_name_spawns_in_any_eternal_flame_keep() {
     );
 
     assert_eq!(wrong_town.active_objects.len(), 1);
-    assert_eq!(wrong_town.message, "Yelled FAULINEI. Nothing happens.");
+    assert_eq!(wrong_town.message, YELL_NO_EFFECT_MESSAGE);
 }
 
 #[test]
@@ -1443,11 +1442,7 @@ fn y_yell_shadowlord_name_refuses_when_no_active_object_slot_is_free() {
     );
 
     assert_eq!(town.turn, 1);
-    assert!(
-        town.message.contains("Nothing happens."),
-        "unexpected message: {}",
-        town.message
-    );
+    assert_eq!(town.message, YELL_NO_EFFECT_MESSAGE, "unexpected message");
     assert!(!town.visibility_dirty);
     assert_eq!(town.summoned_shadowlord, None);
     assert!(

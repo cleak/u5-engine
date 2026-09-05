@@ -957,7 +957,11 @@ impl PlayState {
         }
         let transport = self.player.transport;
         if transport.is_foot() {
-            self.message = "On foot!".to_string();
+            // `commands.md §5.3`: `X-it ` is an operand-follows echo, and the
+            // on-foot refusal completes that same line (`cleak/u5-spec#194`).
+            if !self.complete_open_direction_echo("X-it ", XIT_ON_FOOT_REFUSAL) {
+                self.message = format!("X-it {XIT_ON_FOOT_REFUSAL}");
+            }
             return Ok(MoveOutcome::Blocked);
         }
         if matches!(
@@ -1197,7 +1201,7 @@ impl PlayState {
                             "Yelled {word}, the name of {shadowlord}. {shadowlord} appears in active-object slot {slot}."
                         )
                     } else {
-                        format!("Yelled {word}. Nothing happens.")
+                        YELL_NO_EFFECT_MESSAGE.to_string()
                     };
                     return MoveOutcome::Used;
                 }
@@ -1205,7 +1209,7 @@ impl PlayState {
             YellInputContext::NoEffect => {}
         }
 
-        self.message = format!("Yelled {word}. Nothing happens.");
+        self.message = YELL_NO_EFFECT_MESSAGE.to_string();
         MoveOutcome::Used
     }
 

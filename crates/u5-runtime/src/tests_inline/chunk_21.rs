@@ -435,8 +435,7 @@ fn town_look_direction_samples_selected_direction_without_turn_or_turning() {
         MoveOutcome::Observed
     );
 
-    assert!(state.message.contains("east road at (2, 1)"));
-    assert!(!state.message.contains("south road"));
+    assert_eq!(state.message, format!("{LOOK_RESULT_PREFIX}\neast road"));
     assert_eq!(state.player.facing, Direction::South);
     assert_eq!(state.turn, 0);
     assert_eq!(state.clock, GameClock::default());
@@ -474,7 +473,7 @@ fn town_look_visibility_gate_hides_dark_unlit_target() {
         MoveOutcome::Observed
     );
 
-    assert!(lit.message.contains("east road at (2, 1)"));
+    assert_eq!(lit.message, format!("{LOOK_RESULT_PREFIX}\neast road"));
     assert_eq!(lit.turn, 0);
 }
 

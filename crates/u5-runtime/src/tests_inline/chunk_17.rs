@@ -819,9 +819,7 @@ Mixed 1 IL charge; stock is 1.");
 
         assert!(state.active_yell.is_none());
         assert_eq!(state.turn, 1);
-        assert!(state.message.contains("Yelled FALLAX"));
-        assert!(state.message.contains("Nothing happens."));
-        assert!(!state.message.contains("Word of Power"));
+        assert_eq!(state.message, YELL_NO_EFFECT_MESSAGE);
     }
 
     #[test]
@@ -1077,8 +1075,7 @@ Mixed 1 IL charge; stock is 1.");
             PlayInputDisposition::Continue
         );
         assert!(state.active_direction_prompt.is_none());
-        assert!(state.message.contains("east road at (2, 1)"));
-        assert!(!state.message.contains("south road"));
+        assert_eq!(state.message, format!("{LOOK_RESULT_PREFIX}\neast road"));
         assert_eq!(state.player.facing, Direction::South);
         assert_eq!(state.turn, 0);
 

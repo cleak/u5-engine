@@ -2757,7 +2757,7 @@ impl PlayState {
                 let x = self.player.x as isize + dx;
                 let y = self.player.y as isize + dy;
                 if !(0..32).contains(&x) || !(0..32).contains(&y) {
-                    self.message = "You see: the location boundary.".to_string();
+                    self.message = format!("{LOOK_RESULT_PREFIX}\nthe location boundary");
                     return Ok(MoveOutcome::Observed);
                 }
                 if !self.surface_look_target_visible(x, y) {
@@ -2783,13 +2783,15 @@ impl PlayState {
                             .unwrap_or_else(|| "Sign:\n".to_string());
                         return Ok(MoveOutcome::Observed);
                     }
+                    // `cleak/u5-spec#194` (black-box): the stock game prints
+                    // `Thou dost see` and the description on the next row.
                     self.message = if look_table.is_some() {
                         format!(
-                            "You see: {} at ({x}, {y}).",
+                            "{LOOK_RESULT_PREFIX}\n{}",
                             self.look_object_description(object.tile, look_table)
                         )
                     } else {
-                        format!("You see: an actor tile {} at ({x}, {y}).", object.tile)
+                        format!("{LOOK_RESULT_PREFIX}\nan actor tile {}", object.tile)
                     };
                     return Ok(MoveOutcome::Observed);
                 }
@@ -2821,7 +2823,7 @@ impl PlayState {
                     return Ok(self.start_surface_fountain_drink_prompt(direction));
                 }
                 self.message = format!(
-                    "You see: {} at ({x}, {y}).",
+                    "{LOOK_RESULT_PREFIX}\n{}",
                     self.look_description(tile, look_table)
                 );
                 Ok(MoveOutcome::Observed)
@@ -2851,11 +2853,11 @@ impl PlayState {
                     }
                     self.message = if look_table.is_some() {
                         format!(
-                            "You see: {} at ({x}, {y}).",
+                            "{LOOK_RESULT_PREFIX}\n{}",
                             self.look_object_description(object.tile, look_table)
                         )
                     } else {
-                        format!("You see: an object tile {} at ({x}, {y}).", object.tile)
+                        format!("{LOOK_RESULT_PREFIX}\nan object tile {}", object.tile)
                     };
                     return Ok(MoveOutcome::Observed);
                 }
@@ -2895,7 +2897,7 @@ impl PlayState {
         member_index: usize,
     ) -> MoveOutcome {
         let Some(tile) = self.surface_look_target_tile(direction) else {
-            self.message = "You see: the location boundary.".to_string();
+            self.message = format!("{LOOK_RESULT_PREFIX}\nthe location boundary");
             return MoveOutcome::Observed;
         };
         if !surface_town_fountain_look_tile(tile) {

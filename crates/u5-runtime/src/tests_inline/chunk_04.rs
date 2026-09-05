@@ -1073,7 +1073,8 @@ fn exit_vehicle_reports_on_foot_without_turn_when_walking() {
 
     assert_eq!(state.exit_vehicle(), MoveOutcome::Blocked);
 
-    assert_eq!(state.message, "On foot!");
+    // cleak/u5-spec#194 capture: the refusal completes the `X-it ` echo line.
+    assert_eq!(state.message, format!("X-it {XIT_ON_FOOT_REFUSAL}"));
     assert_eq!(state.player.transport, TransportState::Foot);
     assert_eq!(state.turn, 0);
 }

@@ -791,6 +791,16 @@ pub const DIRECTION_PROMPT_CANCEL_LITERAL: &str = "Pass";
 /// trailing space, printed into the message window on the line after the
 /// verb echo.
 pub const PARTY_SELECTION_PROMPT: &str = "Player: ";
+/// `view.md §3` entry-dispatch row 3: "the shared \"thou dost see\" preamble
+/// is printed here" for the object, sign and terrain arms; the description
+/// follows on the next row (`cleak/u5-spec#194` capture).
+pub const LOOK_RESULT_PREFIX: &str = "Thou dost see";
+/// `cleak/u5-spec#194` (black-box): X-it on foot completes its own
+/// `X-it ` echo line with `what?`.
+pub const XIT_ON_FOOT_REFUSAL: &str = "what?";
+/// `cleak/u5-spec#194` (black-box): a plain Yell that matches neither a
+/// Shadowlord name nor a Word of Power prints `No effect!`.
+pub const YELL_NO_EFFECT_MESSAGE: &str = "No effect!";
 pub const ITEM_SELECTION_PROMPT: &str = "Item: ";
 /// The cancel result appended to an open selection prompt line.
 pub const SELECTION_CANCELLED_LITERAL: &str = "None!";

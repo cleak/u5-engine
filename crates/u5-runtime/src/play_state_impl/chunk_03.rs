@@ -1120,13 +1120,11 @@ impl PlayState {
             .unwrap_or_else(yell_prompt_message)
     }
 
+    /// `commands.md §11`: "the ordinary `Yell what?` question". The typed
+    /// word echoes on the next row behind a colon, folded to upper case
+    /// (`cleak/u5-spec#194` capture: `Yell what?` / `:HELLO`).
     pub fn render_yell_session(&self, session: &YellSession) -> String {
-        let word = if session.buffer.is_empty() {
-            "_".to_string()
-        } else {
-            session.buffer.clone()
-        };
-        format!("Yell what? {word}\nType a word and press Enter; Esc cancels.")
+        format!("Yell what?\n:{}", session.buffer.to_ascii_uppercase())
     }
 
     pub fn step_active_yell(&mut self, key: char, suffix: &str) -> Option<MoveOutcome> {
