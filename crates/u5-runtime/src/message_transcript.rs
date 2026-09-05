@@ -492,7 +492,15 @@ impl PlayState {
         let mut lines = message.split('\n');
         let first = lines.next().unwrap_or_default();
 
-        if echo_is_last && first == verb {
+        if first.is_empty() {
+            // The handler's text opens with a line feed, which asks for a
+            // blank row under the echo rather than for a continuation of
+            // it (`text-output.md §10.3` lists echoes that "emit one
+            // deliberately"). Pushing it as an ordinary empty entry would
+            // let the Bevy shell's `keep` filter drop the row, which is
+            // the same trap [`message_log_from_entries`] guards against.
+            self.push_explicit_blank_message_entry();
+        } else if echo_is_last && first == verb {
             // The handler re-emitted exactly the verb; keep one copy.
             // `#81`: only an exact repeat folds — a refusal that merely
             // starts with the verb is still a separate line, because the
@@ -512,7 +520,17 @@ impl PlayState {
         } else {
             self.push_message_entry(first, false);
         }
-        for line in lines {
+        let mut lines = lines.peekable();
+        while let Some(line) = lines.next() {
+            if line.is_empty() {
+                // Same rule as `push_message_transcript_lines`: an empty
+                // segment is a blank row unless it is the trailing one a
+                // final line feed leaves behind.
+                if lines.peek().is_some() {
+                    self.push_explicit_blank_message_entry();
+                }
+                continue;
+            }
             self.push_message_entry(line, false);
         }
         true

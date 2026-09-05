@@ -155,6 +155,20 @@ impl PlayState {
             .map(|session| format!(":{}", rune_echo_for_buffer(&session.spell_buffer)))
     }
 
+    /// Whether the M-Mix reagent selection owns the keyboard.
+    ///
+    /// `text-output.md §10.6`: "a prompt that is waiting for a key keeps
+    /// its own line open and carries the cursor inline", so no fresh live
+    /// row and no end-cap triangle is drawn for it. Reagent selection is
+    /// exactly that state - its keys are commands, not typed text - and a
+    /// capture of the original shows the help's `Type M to mix:` as the
+    /// window's last row with the cursor on it, not an end-cap below it.
+    pub fn mix_reagent_selection_active(&self) -> bool {
+        self.active_mix
+            .as_ref()
+            .is_some_and(|session| session.phase == MixPhase::Reagents)
+    }
+
     pub fn open_prompt_line(&self) -> Option<String> {
         if self.active_party_selector.is_some() {
             return Some(PARTY_SELECTOR_PROMPT_MESSAGE.to_string());
@@ -937,35 +951,32 @@ impl PlayState {
                 // [`Self::open_prompt_line`] rather than re-emitted into
                 // the log on every keystroke - which is what printed
                 // `For what spell?` once per typed letter.
-                MMIX_SPELL_PROMPT_MESSAGE.to_string()
+                // The blank row between the `Mix Reagents` verb echo and
+                // this prompt is the original's, not a stray line feed.
+                format!("\n{MMIX_SPELL_PROMPT_MESSAGE}")
             }
             MixPhase::Reagents => {
-                let mut lines =
-                    vec!["Mix reagents: Enter/Space toggles, M accepts, Esc cancels.".to_string()];
-                let visible = self.mix_visible_reagents();
-                for (row, index) in visible.iter().copied().enumerate() {
-                    let reagent = REAGENT_VENDOR_ORDER[index];
-                    let marker = if row == session.reagent_cursor {
-                        ">"
-                    } else {
-                        " "
-                    };
-                    let selected = if session.reagent_mask & REAGENT_MASKS[index] != 0 {
-                        "*"
-                    } else {
-                        " "
-                    };
-                    lines.push(format!(
-                        "{marker}{selected} {}. {} ({})",
-                        row + 1,
-                        reagent.abbreviation(),
-                        self.reagents[index]
-                    ));
+                // The list itself is a stats-panel surface
+                // ([`crate::stats_panel::active_panel_picker`]); the
+                // message window carries only the key help under the
+                // spell prompt. Observed (`cleak/u5-spec#203`) - §6
+                // describes the selection's behaviour but publishes
+                // nothing it draws, and reading §6 alone puts the whole
+                // list in the message window, which is what this did.
+                if self.mix_visible_reagents().is_empty() {
+                    MMIX_NO_REAGENTS_OWNED_MESSAGE.to_string()
+                } else {
+                    // Leaving the Spell phase retires the live colon row
+                    // of [`Self::spell_prompt_echo`], so commit it to the
+                    // log here - the original keeps `:IN LOR` on screen
+                    // under `For what spell?` for the whole of reagent
+                    // selection - and follow it with the blank row the
+                    // capture shows before the help.
+                    format!(
+                        ":{}\n\n{MMIX_REAGENT_HELP_MESSAGE}",
+                        rune_echo_for_buffer(&session.spell_buffer)
+                    )
                 }
-                if visible.is_empty() {
-                    lines.push(MMIX_NO_REAGENTS_OWNED_MESSAGE.to_string());
-                }
-                lines.join("\n")
             }
             MixPhase::Quantity => {
                 let quantity = if session.quantity_buffer.is_empty() {
@@ -1049,6 +1060,23 @@ impl PlayState {
                     session.quantity_buffer.clear();
                     None
                 }
+                // `magic.md §6` step 3: "The selection cursor moves with
+                // the same four directional keys used by compact menus".
+                // Those arrive as the shared directional input codes, the
+                // same ones the U-Use picker reads through
+                // [`crate::use_input_action`] - the printable aliases
+                // below are the terminal harness's own and are not what a
+                // player pressing an arrow key sends. Without the codes
+                // the mixer's cursor could not be moved from the visual
+                // harness at all.
+                ch if ch as u32 == u32::from(crate::INPUT_CODE_SOUTH) => {
+                    self.move_mix_reagent_cursor(session, 1);
+                    None
+                }
+                ch if ch as u32 == u32::from(crate::INPUT_CODE_NORTH) => {
+                    self.move_mix_reagent_cursor(session, -1);
+                    None
+                }
                 '>' | '+' | '2' | 'j' | 'J' => {
                     self.move_mix_reagent_cursor(session, 1);
                     None
@@ -1117,6 +1145,29 @@ impl PlayState {
             session.spell_buffer, session.reagent_mask, amount
         );
         Some(self.mix_reagents_from_suffix(&suffix))
+    }
+
+    /// The M-Mix reagent rows the stats panel draws: `(count, selected,
+    /// name)` for every reagent the party owns, in reagent-index order.
+    ///
+    /// `magic.md §6` step 3: "shows only the reagent rows whose
+    /// inventory counters are nonzero". The names are the Z-stats
+    /// abbreviations (`Sp. Silk`, `Blk. Pearl`), which is what the
+    /// capture behind `cleak/u5-spec#203` shows.
+    pub fn mix_reagent_picker_rows(&self) -> Vec<(u8, bool, String)> {
+        let Some(session) = self.active_mix.as_ref() else {
+            return Vec::new();
+        };
+        self.mix_visible_reagents()
+            .into_iter()
+            .map(|index| {
+                (
+                    self.reagents[index],
+                    session.reagent_mask & REAGENT_MASKS[index] != 0,
+                    REAGENT_VENDOR_ORDER[index].z_stats_name().to_string(),
+                )
+            })
+            .collect()
     }
 
     fn mix_visible_reagents(&self) -> Vec<usize> {

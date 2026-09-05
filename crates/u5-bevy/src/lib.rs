@@ -16678,10 +16678,14 @@ fn render_integrated_status_framebuffer(
         // The spell-name colon line is a live row whose text comes from
         // the cast/mix session rather than the shell's own input buffer.
         let spell_echo = display_state.spell_prompt_echo();
-        let live_row = spell_echo.as_deref().or(input_echo).unwrap_or("");
+        let live_row = if display_state.mix_reagent_selection_active() {
+            None
+        } else {
+            Some(spell_echo.as_deref().or(input_echo).unwrap_or(""))
+        };
         let layout = layout_message_window_with_prompt(
             &log,
-            Some(live_row),
+            live_row,
             open_prompt.as_deref(),
             u5_runtime::combat_prompt_row_follows_history(&display_state),
         );

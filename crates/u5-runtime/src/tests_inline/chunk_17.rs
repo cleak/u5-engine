@@ -752,14 +752,25 @@
             PlayInputDisposition::Continue
         );
         assert!(state.active_mix.is_some());
-        assert!(state.message.contains("Mix reagents:"));
-        assert!(state.message.contains("Sulfur Ash (2)"));
+        // `cleak/u5-spec#203`: the reagent list is a stats-panel
+        // surface, so the message window carries only the key help.
+        assert_eq!(
+            state.message,
+            format!(":IN LOR \n\n{MMIX_REAGENT_HELP_MESSAGE}")
+        );
+        assert_eq!(
+            state.mix_reagent_picker_rows(),
+            vec![(2u8, false, "Sulfur Ash".to_string())]
+        );
 
         assert_eq!(
             handle_play_key_input(&mut state, '1', "", Path::new("")).unwrap(),
             PlayInputDisposition::Continue
         );
-        assert!(state.message.contains(">* 1. Sulfur Ash"));
+        assert_eq!(
+            state.mix_reagent_picker_rows(),
+            vec![(2u8, true, "Sulfur Ash".to_string())]
+        );
 
         assert_eq!(
             handle_play_key_input(&mut state, 'M', "", Path::new("")).unwrap(),

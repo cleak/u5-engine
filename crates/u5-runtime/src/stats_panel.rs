@@ -478,9 +478,16 @@ pub fn active_shop_side_panel_border_rows(state: &PlayState) -> Option<(u8, u8)>
 pub struct PanelPickerRow {
     pub quantity: Option<u8>,
     /// Selector cell byte. `cleak/u5-spec#195` asks for the per-family
-    /// runic codes; until they are published the cell is blank.
+    /// runic codes; until they are published the U-Use cell is blank.
+    /// The M-Mix reagent list does use it, for
+    /// [`PANEL_PICKER_SELECTOR_SELECTED`].
     pub selector: u8,
     pub name: String,
+    /// `04 Sulfur Ash`, not `_4 Sulfur Ash`: the M-Mix reagent rows pad
+    /// their count with a leading zero where the U-Use picker of
+    /// `inventory.md §4.5` right-aligns in two cells. Observed
+    /// (`cleak/u5-spec#203`).
+    pub zero_padded: bool,
 }
 
 impl PanelPickerRow {
@@ -488,6 +495,9 @@ impl PanelPickerRow {
     pub fn text(&self) -> String {
         let content = match self.quantity {
             None => self.name.clone(),
+            Some(count) if self.zero_padded => {
+                format!("{count:02}{}{}", self.selector as char, self.name)
+            }
             Some(0) => format!("--{}{}", self.selector as char, self.name),
             Some(count) => format!("{count:>2}{}{}", self.selector as char, self.name),
         };
@@ -506,6 +516,15 @@ pub struct PanelPickerView {
     pub label: String,
     pub rows: Vec<PanelPickerRow>,
     pub selected: usize,
+    /// Whether `inventory.md §4.4`'s ornamental border is drawn.
+    ///
+    /// The U-Use and R-Ready pickers carry it. The M-Mix reagent list
+    /// does not: a capture of the original shows it on the plain panel
+    /// box, with square white corners rather than §4.4's curls
+    /// (`cleak/u5-spec#203`). With no side rules in the way its
+    /// inverse-video bar also spans all fifteen columns instead of
+    /// stopping at columns 1 and 13.
+    pub ornamental_frame: bool,
 }
 
 /// Private-use code point range that marks a panel character as a runic
@@ -538,6 +557,16 @@ pub const PANEL_PICKER_ROWS: usize = 7;
 pub const PANEL_PICKER_CONTENT_COLUMNS: usize = 13;
 /// Selector cell placeholder while `cleak/u5-spec#195` is open.
 pub const PANEL_PICKER_SELECTOR_BLANK: u8 = b' ';
+/// The selector cell of a row the M-Mix mixer has toggled into the mix.
+///
+/// `magic.md §6` step 3 says the player "toggle[s] a selected set" but
+/// not how a selected row reads. A capture of the original shows a small
+/// solid diamond in the cell between the count and the name. Matching
+/// that cell's eight glyph rows against the whole of `IBM.CH` returns
+/// exactly one code, so this is derived rather than guessed;
+/// [`mix_selector_glyph_is_the_only_font_match`] re-derives it whenever
+/// assets are present.
+pub const PANEL_PICKER_SELECTOR_SELECTED: u8 = 0x0f;
 
 /// The seven `IBM.CH` frame glyphs `inventory.md §4.4` builds the picker
 /// border from: "a top-left ornament, thirteen top-edge glyphs, a
@@ -622,6 +651,7 @@ pub fn active_panel_picker(state: &PlayState) -> Option<PanelPickerView> {
                 quantity: row.quantity,
                 selector: PANEL_PICKER_SELECTOR_BLANK,
                 name: row.label,
+                zero_padded: false,
             })
             .collect();
         if rows.is_empty() {
@@ -631,6 +661,7 @@ pub fn active_panel_picker(state: &PlayState) -> Option<PanelPickerView> {
             label: state.roster_box_label().unwrap_or_default(),
             selected: state.use_picker_cursor(session),
             rows,
+            ornamental_frame: true,
         });
     }
     if let Some(session) = state.active_ready.as_ref() {
@@ -645,6 +676,7 @@ pub fn active_panel_picker(state: &PlayState) -> Option<PanelPickerView> {
             .map(|item_id| PanelPickerRow {
                 quantity: Some(state.equipment_stock[item_id]),
                 selector: PANEL_PICKER_SELECTOR_BLANK,
+                zero_padded: false,
                 name: crate::EQUIPMENT_SHORT_LABELS
                     .get(item_id)
                     .copied()
@@ -656,6 +688,35 @@ pub fn active_panel_picker(state: &PlayState) -> Option<PanelPickerView> {
             label: state.party_member_display_name(party_index),
             selected,
             rows,
+            ornamental_frame: true,
+        });
+    }
+    if let Some(session) = state.active_mix.as_ref() {
+        if session.phase != crate::MixPhase::Reagents {
+            return None;
+        }
+        let rows: Vec<PanelPickerRow> = state
+            .mix_reagent_picker_rows()
+            .into_iter()
+            .map(|(count, selected, name)| PanelPickerRow {
+                quantity: Some(count),
+                selector: if selected {
+                    PANEL_PICKER_SELECTOR_SELECTED
+                } else {
+                    PANEL_PICKER_SELECTOR_BLANK
+                },
+                name,
+                zero_padded: true,
+            })
+            .collect();
+        if rows.is_empty() {
+            return None;
+        }
+        return Some(PanelPickerView {
+            label: crate::MMIX_REAGENT_PANEL_LABEL.to_string(),
+            selected: session.reagent_cursor.min(rows.len() - 1),
+            rows,
+            ornamental_frame: false,
         });
     }
     None
@@ -703,16 +764,28 @@ pub fn paint_panel_picker_text_window(system: &mut TextWindowSystem, state: &Pla
     system.set_active_window(STATS_PANEL_TEXT_WINDOW_INDEX);
     system.emit_byte(TEXT_CTRL_CLEAR_WINDOW);
     system.clear_active_flags();
-    paint_panel_picker_frame(system);
+    if picker.ornamental_frame {
+        paint_panel_picker_frame(system);
+    }
     let start = picker.page_start();
     for (offset, row) in picker.visible_rows().iter().enumerate() {
         let selected = start + offset == picker.selected;
-        system.set_active_cursor(1, (offset + 1) as u8);
+        // Without the frame there are no side rules to leave clear, so
+        // the highlight starts in window column 0 and the text is padded
+        // into columns 1..=13 instead of being cursored there.
+        let column = if picker.ornamental_frame { 1 } else { 0 };
+        system.set_active_cursor(column, (offset + 1) as u8);
         if selected {
             system.emit_byte(TEXT_CTRL_INVERSE_TOGGLE);
         }
+        if !picker.ornamental_frame {
+            system.emit_byte(b' ');
+        }
         for byte in row.text().bytes().take(PANEL_PICKER_CONTENT_COLUMNS) {
             system.emit_byte(byte);
+        }
+        if !picker.ornamental_frame {
+            system.emit_byte(b' ');
         }
         if selected {
             system.emit_byte(TEXT_CTRL_INVERSE_TOGGLE);
@@ -1215,6 +1288,39 @@ mod panel_picker_frame_tests {
     /// match is unique, so the constants stay honest if the font ever
     /// changes and so the derivation is auditable without re-running the
     /// original.
+    /// `magic.md §6` step 3 says the mixer lets the player "toggle a
+    /// selected set" but not how a toggled row reads. A capture of the
+    /// original shows a small solid diamond in the selector cell. This
+    /// re-derives the code the way it was found: scan the whole font for
+    /// that bitmap and assert the match is unique.
+    #[test]
+    fn mix_selector_glyph_is_the_only_font_match() {
+        let Some(game_dir) = crate::test_fixtures::configured_original_asset_dir() else {
+            return;
+        };
+        if !game_dir.join(crate::IBM_CH_FILE).exists() {
+            return;
+        }
+        let font = load_ibm_ch_font(game_dir.as_path()).expect("IBM.CH must parse");
+        let rows = |code: u8| -> [u8; 8] {
+            let mut out = [0u8; 8];
+            for (row, cell) in out.iter_mut().enumerate() {
+                *cell = font.glyph_row(code, row).expect("glyph row");
+            }
+            out
+        };
+        // The cell as it was decoded from the capture: two blank rows, a
+        // two-pixel cap, two four-pixel rows, a two-pixel foot, two more
+        // blank rows.
+        let diamond = [0x00, 0x00, 0x18, 0x3c, 0x3c, 0x18, 0x00, 0x00];
+        let matches: Vec<u8> = (0u8..=0x7f).filter(|code| rows(*code) == diamond).collect();
+        assert_eq!(
+            matches,
+            vec![PANEL_PICKER_SELECTOR_SELECTED],
+            "exactly one IBM.CH glyph is the mixer's selection diamond"
+        );
+    }
+
     #[test]
     fn panel_picker_frame_glyphs_match_the_published_shapes() {
         let Some(game_dir) = crate::test_fixtures::configured_original_asset_dir() else {

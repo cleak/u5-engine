@@ -13,6 +13,15 @@ both	shot	spell-typed	Spell code typed
 both	key	Return
 both	wait	3000
 both	shot	reagents	The reagent selection surface
+both	key	Return
+both	wait	1500
+both	shot	reagent-toggled	Sulfur Ash toggled into the mix
+both	key	Down
+both	wait	1500
+both	shot	reagent-cursor-moved	Cursor on Ginseng, Sulfur Ash still selected
+both	key	Return
+both	wait	1500
+both	shot	reagent-two-selected	Ginseng toggled in as well
 both	key	Escape
 both	wait	2000
 both	shot	cancelled	After cancelling

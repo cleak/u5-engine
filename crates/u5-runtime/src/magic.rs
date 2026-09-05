@@ -724,6 +724,25 @@ pub const MMIX_QUANTITY_PROMPT_MESSAGE: &str = "How much?";
 pub const MMIX_MIXING_MESSAGE: &str = "Mixing...";
 pub const MMIX_COMBAT_REFUSAL_MESSAGE: &str = "Mix-Not here";
 
+/// The reagent-selection surface's border label and on-screen key help.
+///
+/// `magic.md §6` step 3 describes the selection's *behaviour* - four
+/// directional keys, Return or Space toggles, `M` accepts, Escape
+/// cancels - but publishes nothing it draws. Both literals below were
+/// read off a capture of the original (`cleak/u5-spec#203`): the list is
+/// a stats-panel surface labelled `Reagents:`, and the message window
+/// carries the help line under the spell prompt.
+///
+/// The four arrows are the `IBM.CH` codes `0x1B`, `0x1A`, `0x18` and
+/// `0x19`, decoded from that capture cell by cell. The line word-wraps
+/// in the sixteen-column message window to exactly the three rows the
+/// original shows, so it is stored as one string rather than three.
+/// Note the help says `RETURN selects` and mentions neither Space nor
+/// Escape, both of which §6 says the mixer accepts.
+pub const MMIX_REAGENT_PANEL_LABEL: &str = "Reagents:";
+pub const MMIX_REAGENT_HELP_MESSAGE: &str =
+    "\u{1b},\u{1a},\u{18},\u{19} to move, RETURN selects. Type M to mix:";
+
 /// `magic.md §6` M-Mix quantity-prompt digit count. Step 4 of the
 /// mix flow reads a two-digit unsigned quantity ("How much?"); the
 /// player can therefore request 0..=99 charges in one mix.
