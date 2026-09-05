@@ -25224,6 +25224,35 @@ fn z_stats_selector_accepts_the_indicated_row_on_return_or_space() {
 }
 
 #[test]
+fn z_stats_selector_digit_moves_the_highlight_without_committing() {
+    // cleak/u5-spec#192 (black-box): `2` moves the inverse bar to the
+    // second row and leaves the `Player: ` poll open; Return then commits
+    // that row.
+    let mut state = test_state(open_grid(), 5, 5);
+    let mut second = state.party[0];
+    second.slot = 1;
+    second.class_byte = b'F';
+    state.party.push(second);
+    state.party_names = vec![*b"AVATAR\0\0\0", *b"SHAMINO\0\0"];
+    assert_eq!(state.z_stats_command(), MoveOutcome::Observed);
+    assert!(state.step_active_party_selector('2', ""));
+    assert!(state.active_party_selector.is_some());
+    assert_eq!(state.selector_highlight(), Some(1));
+    assert!(state.active_z_stats.is_none());
+    assert_eq!(state.message, PARTY_SELECTION_PROMPT);
+
+    assert!(state.step_active_party_selector('\r', ""));
+    assert!(state.active_party_selector.is_none());
+    assert_eq!(
+        state
+            .active_z_stats
+            .as_ref()
+            .map(|session| session.selected_party_index),
+        Some(1)
+    );
+}
+
+#[test]
 fn z_stats_selector_rejects_slots_beyond_the_travelling_party() {
     // inventory.md section 4: "Jumps beyond the active party size are
     // rejected."

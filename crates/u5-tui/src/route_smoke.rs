@@ -4604,6 +4604,12 @@ fn seed_town_attack_guard_alarm_route(state: &mut PlayState) {
 
 fn seed_town_hostile_adjacent_alarm_route(state: &mut PlayState) {
     seed_town_route_scheduled_npc(state, 1, 0x50, 6, 5, 4);
+    // `npc-schedules.md §9` value `4` (spec `b6558f0`): only an NPC with a
+    // dialogue entry raises the attack event, and this route is about the
+    // alarm that event raises.
+    if let Some(npc) = state.npcs.iter_mut().find(|npc| npc.slot == 1) {
+        npc.dialog_id = 1;
+    }
 }
 
 fn seed_town_guard_arrest_route(state: &mut PlayState) {

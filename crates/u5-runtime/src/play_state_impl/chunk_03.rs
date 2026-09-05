@@ -255,24 +255,30 @@ impl PlayState {
             self.message = PARTY_SELECTOR_PROMPT_MESSAGE.to_string();
             return true;
         }
+        // `cleak/u5-spec#192` (black-box, stock `ULTIMA.EXE`): a digit
+        // `1..=party size` moves the inverse bar to that row and leaves the
+        // `Player: ` poll open; it does not commit. "Jumps beyond the
+        // active party size are rejected" (`inventory.md §4`).
+        if let Some(digit) = key.to_digit(10) {
+            let row = (digit as usize).saturating_sub(1);
+            if row < self.party.len() {
+                let mut session = session;
+                session.highlight = row;
+                self.active_party_selector = Some(session);
+            }
+            self.message = PARTY_SELECTOR_PROMPT_MESSAGE.to_string();
+            return true;
+        }
         // `text-output.md §10.6`: "Return or Space to accept". The
         // shared R-Ready picker of `inventory.md §5` step 4 tests the
         // same two keys separately and reaches the same cascade, so both
         // commit the indicated row here too.
-        let index = match key.to_digit(10) {
-            Some(digit) => (digit as usize).saturating_sub(1),
-            None if matches!(key, '\r' | '\n' | ' ') => session.highlight,
-            None => {
-                // Any other key redraws the prompt; the selector stays live.
-                self.message = PARTY_SELECTOR_PROMPT_MESSAGE.to_string();
-                return true;
-            }
-        };
-        if index >= self.party.len() {
-            // "Jumps beyond the active party size are rejected."
+        if !matches!(key, '\r' | '\n' | ' ') {
+            // Any other key redraws the prompt; the selector stays live.
             self.message = PARTY_SELECTOR_PROMPT_MESSAGE.to_string();
             return true;
         }
+        let index = session.highlight;
         self.active_party_selector = None;
         // `commands.md §5.6`: `Player:_` is "colon then exactly one
         // trailing space", so the chosen name lands on that same line -
@@ -1910,8 +1916,15 @@ impl PlayState {
             .unwrap_or(self.avatar_stats.intelligence);
         let experience = self.party_experience.get(index).copied().unwrap_or(0);
 
+        // `cleak/u5-spec#193` (black-box, stock `ULTIMA.EXE`): the level
+        // value is followed by one space and the member's **class** name -
+        // `Lv-2 Fighter` for Shamino, `Lv-2 Avatar` for the Avatar - not
+        // the member's name, which `§4.7` already centres above.
+        let class_name = crate::character_class_for_byte(member.class_byte)
+            .map(|class| class.display_name())
+            .unwrap_or_else(|| name.as_str());
         rows[0] = z_stats_centred_panel_row(&format!(
-            "{}{}{} {name}",
+            "{}{}{} {class_name}",
             char::from(gender),
             Z_STATS_LEVEL_LABEL,
             member.level

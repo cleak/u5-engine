@@ -59,8 +59,15 @@
         assert_eq!(state.roster_box_label().as_deref(), Some("Select:"));
         assert_eq!(state.message, PARTY_SELECTION_PROMPT);
 
+        // cleak/u5-spec#192 (black-box): the digit only moves the bar;
+        // Return commits the indicated row.
         assert_eq!(
             handle_play_key_input(&mut state, '1', "", Path::new("")).unwrap(),
+            PlayInputDisposition::Continue
+        );
+        assert!(state.active_party_selector.is_some());
+        assert_eq!(
+            handle_play_key_input(&mut state, '\r', "", Path::new("")).unwrap(),
             PlayInputDisposition::Continue
         );
         assert_eq!(state.turn, 1);
@@ -75,12 +82,12 @@
         assert_eq!(state.message, Z_STATS_STATUS_PROMPT);
         let session = state.active_z_stats.clone().expect("a live page");
         let panel = state.z_stats_panel_rows(&session);
-        // The name line: leading spaces that centre it in the panel's
+        // The level line: leading spaces that centre it in the panel's
         // sixteen columns, the record's leading glyph, ` Lv-` and the
-        // level, then the name.
+        // level, then the class name (cleak/u5-spec#193, black-box).
         assert_eq!(
             panel[0],
-            format!(" {} Lv-2 AVATAR", char::from(SAVE_GENDER_MALE_BYTE))
+            format!("  {} Lv-2 Bard", char::from(SAVE_GENDER_MALE_BYTE))
         );
         assert_eq!(panel[1], "  Good Health");
         assert_eq!(panel[2], "");
@@ -1813,7 +1820,10 @@ Mixed 1 IL charge; stock is 1.");
                 .map(|session| (session.selected_party_index, session.page)),
             Some((1, ZStatsPage::Stats))
         );
-        assert!(z_stats_panel_text(&state).contains("MARIA"));
+        // The member's name is the panel's border label; the level line
+        // carries the class (cleak/u5-spec#193).
+        assert_eq!(state.roster_box_label().as_deref(), Some("MARIA"));
+        assert!(z_stats_panel_text(&state).contains("Lv-2 Mage"));
     }
 
     #[test]
