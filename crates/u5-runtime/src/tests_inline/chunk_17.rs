@@ -215,7 +215,9 @@
             state.active_z_stats.as_ref().map(|session| session.page),
             Some(ZStatsPage::Reagents)
         );
-        assert!(z_stats_panel_text(&state).contains("Sulfur Ash: 3"));
+        // Observed row format: count, hyphen, abbreviated name
+        // (`cleak/u5-spec#202`).
+        assert!(z_stats_panel_text(&state).contains("3-Sulfur Ash"));
         // The seven empty reagent slots are skipped, not drawn as blank or
         // zero rows.
         assert!(
@@ -223,7 +225,7 @@
             "reagents page message was {:?}",
             z_stats_panel_text(&state)
         );
-        assert!(!z_stats_panel_text(&state).contains(": 0"));
+        assert!(!z_stats_panel_text(&state).contains("0-"));
 
         assert!(state.step_active_z_stats('>', ""));
         assert_eq!(

@@ -2665,7 +2665,11 @@ impl PlayState {
             .iter()
             .filter_map(|reagent| {
                 let count = self.reagents[reagent.inventory_index()];
-                (count > 0).then(|| format!("{}: {count}", reagent.display_name()))
+                // Observed row format: count, hyphen, abbreviated name -
+                // `4-Sulfur Ash`, not `Sulfur Ash: 4`. This is not
+                // `§4.5`'s picker row shape either
+                // (`cleak/u5-spec#202`).
+                (count > 0).then(|| format!("{count}-{}", reagent.z_stats_name()))
             })
             .collect::<Vec<_>>();
         append_inventory_rows(lines, rows, session.inventory_cursor);

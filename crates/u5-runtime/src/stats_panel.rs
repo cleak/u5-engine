@@ -508,6 +508,16 @@ pub struct PanelPickerView {
     pub selected: usize,
 }
 
+/// Whether a Z-stats page draws inside the `§4.4` ornamental frame.
+///
+/// The four inventory pages do; the attribute page, the `Arms` page and
+/// the counters screen paint straight onto the cleared panel. Observed
+/// (`cleak/u5-spec#202`).
+pub fn z_stats_page_is_framed(page: crate::ZStatsPage) -> bool {
+    use crate::ZStatsPage::*;
+    matches!(page, Reagents | Spells | SpecialUse | EquipmentStock)
+}
+
 /// `inventory.md §4.4`: seven interior item rows, thirteen content columns.
 pub const PANEL_PICKER_ROWS: usize = 7;
 pub const PANEL_PICKER_CONTENT_COLUMNS: usize = 13;
@@ -522,24 +532,27 @@ pub const PANEL_PICKER_SELECTOR_BLANK: u8 = b' ';
 /// ornament. The top edge is a single rule and the bottom edge is a
 /// double rule; the four corners are curved ornaments."
 ///
-/// The section names the shapes but not their codes. Reading the local
-/// `IBM.CH` at runtime resolves all seven uniquely, because exactly one
-/// glyph in the font carries each named shape: `0x11` is a lone
-/// horizontal rule, `0x15` is a pair of them, `0x17` is a full-height
-/// vertical rule, and `0x7B`/`0x7C`/`0x7D`/`0x7E` are the four curved
-/// corner ornaments - the family `display-driver.md §7` phase 2 draws
-/// the screen's own three rounded corners from, whose fourth member that
-/// section notes the font contains but the game-screen frame does not
-/// use. Clean runtime observation of a shipped asset, not a private
-/// constant; [`panel_picker_frame_glyphs_match_the_published_shapes`]
-/// re-derives it from the font on every test run.
-pub const PANEL_PICKER_FRAME_TOP_LEFT: u8 = 0x7B;
+/// The section names the shapes but not their codes. The three rules are
+/// unique in the font's graphics band and can be derived from it - `0x11`
+/// is a lone horizontal rule, `0x15` a pair of them, `0x17` a
+/// full-height vertical rule - and
+/// [`panel_picker_frame_glyphs_match_the_published_shapes`] re-derives
+/// those three on every test run.
+///
+/// The four corners cannot be derived that way, and an earlier revision
+/// guessed them as `0x7B`/`0x7C`/`0x7D`/`0x7E`, the rounded bevels
+/// `display-driver.md §7` phase 2 stamps the *screen's* corners from.
+/// That was wrong: those are solid quarter-bevels, and the frame's are
+/// thin curls. The real codes were read off a capture by matching each
+/// corner cell's eight glyph rows against the whole font, which matched
+/// exactly one code apiece. The same capture confirms the three rules.
+pub const PANEL_PICKER_FRAME_TOP_LEFT: u8 = 0x10;
 /// See [`PANEL_PICKER_FRAME_TOP_LEFT`].
-pub const PANEL_PICKER_FRAME_TOP_RIGHT: u8 = 0x7C;
+pub const PANEL_PICKER_FRAME_TOP_RIGHT: u8 = 0x13;
 /// See [`PANEL_PICKER_FRAME_TOP_LEFT`].
-pub const PANEL_PICKER_FRAME_BOTTOM_LEFT: u8 = 0x7D;
+pub const PANEL_PICKER_FRAME_BOTTOM_LEFT: u8 = 0x14;
 /// See [`PANEL_PICKER_FRAME_TOP_LEFT`].
-pub const PANEL_PICKER_FRAME_BOTTOM_RIGHT: u8 = 0x7E;
+pub const PANEL_PICKER_FRAME_BOTTOM_RIGHT: u8 = 0x16;
 /// See [`PANEL_PICKER_FRAME_TOP_LEFT`]: the single-rule top edge.
 pub const PANEL_PICKER_FRAME_TOP_EDGE: u8 = 0x11;
 /// See [`PANEL_PICKER_FRAME_TOP_LEFT`]: the double-rule bottom edge.
@@ -716,15 +729,41 @@ pub fn paint_z_stats_page_text_window(system: &mut TextWindowSystem, state: &Pla
         .as_ref()
         .filter(|session| session.page == crate::ZStatsPage::Equipment)
         .map(|_| 0usize);
+    // The four inventory pages are drawn inside the `inventory.md §4.4`
+    // ornamental frame, exactly like the U-Use/R-Ready picker: a capture
+    // of the stock game shows the same border glyphs around the Reagents,
+    // Spells, Items and Armaments lists, with the same page badge under
+    // it when the list overflows. §4.7 does not say they share the
+    // picker's frame (`cleak/u5-spec#202`), but they plainly do. The two
+    // character-specific pages and the counters screen are unframed.
+    let framed = state
+        .active_z_stats
+        .as_ref()
+        .is_some_and(|session| z_stats_page_is_framed(session.page));
+    let (indent, first_row) = if framed {
+        paint_panel_picker_frame(system);
+        (1u8, 1usize)
+    } else {
+        (0u8, 0usize)
+    };
     for (row, line) in rows.iter().enumerate() {
         if line.trim_end().is_empty() {
             continue;
         }
-        system.set_active_cursor(0, row.min(u8::MAX as usize) as u8);
+        let row = row + first_row;
+        if framed && row > usize::from(PANEL_PICKER_ROWS) {
+            break;
+        }
+        system.set_active_cursor(indent, row.min(u8::MAX as usize) as u8);
         if underline_row == Some(row) {
             system.emit_byte(TEXT_CTRL_UNDERLINE_TOGGLE);
         }
-        for byte in line.trim_end().bytes().take(STATS_PANEL_WIDTH) {
+        let width = if framed {
+            PANEL_PICKER_CONTENT_COLUMNS
+        } else {
+            STATS_PANEL_WIDTH
+        };
+        for byte in line.trim_end().bytes().take(width) {
             system.emit_byte(byte);
         }
         if underline_row == Some(row) {
@@ -1178,33 +1217,27 @@ mod panel_picker_frame_tests {
             "exactly one IBM.CH glyph is a full-height vertical rule"
         );
 
-        // The four curved corners are the solid quarter-bevels: each row
-        // is a run of set bits anchored to one side, growing to a full
-        // row, and the vertical mirror distinguishes top from bottom.
-        assert_eq!(rows(PANEL_PICKER_FRAME_TOP_LEFT)[7], 0xff);
-        assert_eq!(rows(PANEL_PICKER_FRAME_TOP_RIGHT)[7], 0xff);
-        assert_eq!(rows(PANEL_PICKER_FRAME_BOTTOM_LEFT)[0], 0xff);
-        assert_eq!(rows(PANEL_PICKER_FRAME_BOTTOM_RIGHT)[0], 0xff);
-        // Top-left and bottom-left are vertical mirrors of each other, as
-        // are top-right and bottom-right; left and right forms are
-        // horizontal mirrors. That fixes all four assignments uniquely.
-        let mirror_v = |g: [u8; 8]| {
-            let mut out = g;
-            out.reverse();
-            out
-        };
-        let mirror_h = |g: [u8; 8]| g.map(|byte| byte.reverse_bits());
+        // The four corners are not derivable from shape alone - the
+        // font holds several curl glyphs. These four codes were read off
+        // a capture of the stock game by matching each corner cell's
+        // eight rows against the whole font; each matched exactly one
+        // code. Assert they are still those glyphs, so a font change or a
+        // constant edit is caught.
         assert_eq!(
-            mirror_v(rows(PANEL_PICKER_FRAME_TOP_LEFT)),
-            rows(PANEL_PICKER_FRAME_BOTTOM_LEFT)
+            rows(PANEL_PICKER_FRAME_TOP_LEFT),
+            [0x00, 0x3f, 0x6c, 0x66, 0x36, 0x06, 0x0c, 0x18]
         );
         assert_eq!(
-            mirror_v(rows(PANEL_PICKER_FRAME_TOP_RIGHT)),
-            rows(PANEL_PICKER_FRAME_BOTTOM_RIGHT)
+            rows(PANEL_PICKER_FRAME_TOP_RIGHT),
+            [0x00, 0xf8, 0x0c, 0x06, 0x06, 0x06, 0x0c, 0x18]
         );
         assert_eq!(
-            mirror_h(rows(PANEL_PICKER_FRAME_TOP_LEFT)),
-            rows(PANEL_PICKER_FRAME_TOP_RIGHT)
+            rows(PANEL_PICKER_FRAME_BOTTOM_LEFT),
+            [0x18, 0x18, 0x30, 0x60, 0x63, 0x66, 0x3f, 0x00]
+        );
+        assert_eq!(
+            rows(PANEL_PICKER_FRAME_BOTTOM_RIGHT),
+            [0x18, 0x18, 0x18, 0x30, 0xfe, 0x06, 0xfc, 0x00]
         );
     }
 }

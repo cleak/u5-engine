@@ -868,6 +868,23 @@ impl Reagent {
         }
     }
 
+    /// The name as the Z-stats reagent page abbreviates it.
+    ///
+    /// A capture of the stock game's reagent page reads
+    /// `4-Sulfur Ash / 6-Ginseng / 7-Garlic / 6-Sp. Silk /
+    /// 3-Blk. Pearl`, so two of the eight are shortened to fit the
+    /// picker frame's thirteen content columns. The shop and mixing
+    /// surfaces keep [`Self::display_name`]; only this page abbreviates.
+    /// Reported with the rest of the page's format as
+    /// `cleak/u5-spec#202`.
+    pub const fn z_stats_name(self) -> &'static str {
+        match self {
+            Self::SpiderSilk => "Sp. Silk",
+            Self::BlackPearl => "Blk. Pearl",
+            other => other.display_name(),
+        }
+    }
+
     pub const fn inventory_index(self) -> usize {
         match self {
             Self::SulfurAsh => REAGENT_SULFUR_ASH,
