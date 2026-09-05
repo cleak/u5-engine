@@ -1287,7 +1287,13 @@ impl PlayState {
             y,
             false,
         );
-        blit_dungeon_sprite(viewport, right_sprite, DUNGEON_VANISHING_X, y, true);
+        // The monster halves reflect the same way the corridor and object
+        // images do.
+        let right_x = dungeon_billboard_right_x(
+            DUNGEON_MONSTER_LEFT_X[depth],
+            right_sprite.image.width as i32,
+        );
+        blit_dungeon_sprite(viewport, right_sprite, right_x, y, true);
     }
 
     fn draw_dungeon_wall_decoration(
@@ -1357,8 +1363,13 @@ impl PlayState {
         } else {
             DUNGEON_OBJECT_FLOOR_Y[band] - sprite.image.height as i32
         };
-        blit_dungeon_sprite(viewport, sprite, DUNGEON_OBJECT_LEFT_X[band], y, false);
-        blit_dungeon_sprite(viewport, sprite, DUNGEON_VANISHING_X, y, true);
+        let left_x = DUNGEON_OBJECT_LEFT_X[band];
+        blit_dungeon_sprite(viewport, sprite, left_x, y, false);
+        // Same reflection as the corridor images (`dungeon-mode.md §6.6`:
+        // "a mirrored right half beginning at the centre line"), taken
+        // through the shared helper so the two families cannot drift.
+        let right_x = dungeon_billboard_right_x(left_x, sprite.image.width as i32);
+        blit_dungeon_sprite(viewport, sprite, right_x, y, true);
     }
 
     fn plot_dungeon_screen_pixel(

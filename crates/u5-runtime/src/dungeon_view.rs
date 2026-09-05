@@ -48,9 +48,37 @@ pub const DUNGEON_BILLBOARD_ORIGIN_Y: i32 = 14;
 pub const DUNGEON_BILLBOARD_ROWS: usize = 164;
 
 /// The reflection constant in the placement rule
-/// `x_right = 192 - x_left - width`, which mirrors the left rectangle
-/// about the vertical centre line at x = 95.5.
-pub const DUNGEON_MIRROR_SPAN: i32 = 192;
+/// `x_right = 191 - x_left - width`, which mirrors the left rectangle
+/// about the vertical centre line at **x = 95**.
+///
+/// `dungeon-mode.md §6.3` publishes `192 - x_left - width` and a centre
+/// line at x = 95.5, and tabulates the right-hand x for every band from
+/// it. Measured against the shipped game that whole column is one pixel
+/// too far right.
+///
+/// The measurement is not a judgement call. Captured at an exact 2x
+/// window with square pixels and no shader, downscaled 2:1 to native
+/// 320x200 and compared against the engine's own native frame, in Deceit
+/// level 1 at `(1, 1)`:
+///
+/// | region | at the published x | one pixel left |
+/// |---|---|---|
+/// | band-0 side wall, left copy | **0.0%** differ | 35.8% |
+/// | band-0 side wall, mirrored copy | 34.5% | **0.0%** |
+/// | band-1 forward wall, left copy | **0.0%** | 22.5% |
+/// | band-1 forward wall, mirrored copy | 23.8% | **0.0%** |
+///
+/// Every left copy is already pixel-exact, so this is not a global
+/// alignment error; only the mirrored copies move. The corollary is
+/// visible without any reference: reflecting about 95.5 makes the
+/// corridor perfectly symmetric, and the shipped game's corridor is
+/// **not** - 23.5% of its pixels break left-right symmetry, because
+/// reflecting about 95 makes the two halves overlap in column 95 rather
+/// than abut. The overlap is invisible, since the mirrored copy's first
+/// column carries the same value as the left copy's last.
+///
+/// Reported to the spec as `cleak/u5-spec#199`.
+pub const DUNGEON_MIRROR_SPAN: i32 = 191;
 
 /// Directory slot count in each corridor art bank.
 pub const DUNGEON_BILLBOARD_SLOTS: usize = 28;

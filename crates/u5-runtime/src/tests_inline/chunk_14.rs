@@ -352,9 +352,19 @@
                 dungeon_billboard_width(DungeonBillboardRole::ForwardWall, band).unwrap(),
             ));
         }
+        // The left column is `dungeon-mode.md §6.3`'s table verbatim.
         assert_eq!(left, vec![16, 40, 72, 88]);
-        assert_eq!(side_right, vec![152, 120, 104, 96]);
-        assert_eq!(forward_right, vec![96, 96, 96, 96]);
+        // The right column is that table minus one. §6.3 publishes
+        // `192 - x_left - width`, reflecting about x = 95.5, and gives
+        // `[152, 120, 104, 96]` / `[96, 96, 96, 96]`. Measured against the
+        // shipped game every mirrored copy sits one pixel to the left of
+        // that: with the corrected reflection about x = 95 the corridor is
+        // pixel-exact, and with the published one every mirrored region
+        // differs by roughly a third of its pixels while every left copy
+        // is already exact. See `DUNGEON_MIRROR_SPAN` and
+        // `cleak/u5-spec#199`.
+        assert_eq!(side_right, vec![151, 119, 103, 95]);
+        assert_eq!(forward_right, vec![95, 95, 95, 95]);
     }
 
     #[test]
