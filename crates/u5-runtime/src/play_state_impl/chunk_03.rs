@@ -2704,7 +2704,9 @@ impl PlayState {
                 // `4-Sulfur Ash`, not `Sulfur Ash: 4`. This is not
                 // `§4.5`'s picker row shape either
                 // (`cleak/u5-spec#202`).
-                (count > 0).then(|| format!("{count}-{}", reagent.z_stats_name()))
+                // The reagent rows carry a leading space, so they sit one
+                // column right of the moonstone rows on the items page.
+                (count > 0).then(|| format!(" {count}-{}", reagent.z_stats_name()))
             })
             .collect::<Vec<_>>();
         append_inventory_rows(lines, rows, session.inventory_cursor);
@@ -2746,8 +2748,11 @@ impl PlayState {
         // wants (`cleak/u5-spec#195`). Emitting the rune byte through the
         // text font would print a digit, which is worse than a gap.
         for phase in 0..MOONSTONE_SLOT_COUNT {
-            let _ = phase;
-            rows.push(format!("{Z_STATS_MOONSTONE_LABEL} "));
+            let rune = crate::gameplay_chrome::SKY_STRIP_MOON_PHASE_RUNE_BASE + phase as u8;
+            rows.push(format!(
+                "{Z_STATS_MOONSTONE_LABEL} {}",
+                crate::stats_panel::panel_runic_char(rune)
+            ));
         }
         // Keys, gems, torches and the grapple belong to the counters
         // screen (`§4.7`'s `Equipment` literals), not here; the stock

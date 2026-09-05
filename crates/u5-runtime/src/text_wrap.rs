@@ -207,6 +207,20 @@ pub struct TextCell {
     pub color: u8,
     pub underline: bool,
     pub inverse: bool,
+    /// Draw this one cell from the runic alphabet rather than the text
+    /// font.
+    ///
+    /// `inventory.md §4.5`: "Selector characters below the printable
+    /// range are drawn from the **runic** font rather than the text font;
+    /// the renderer switches fonts for that one cell and switches back."
+    /// The same switch draws the moonstone rows' phase glyph
+    /// (`cleak/u5-spec#202`).
+    ///
+    /// This is a per-cell renderer property, not one of `text-output.md
+    /// §3`'s control bytes - the published control range `0xFB..=0xFF` is
+    /// full and none of it selects a font - so it is carried on the cell
+    /// and set through [`TextWindowSystem::set_runic_output`].
+    pub runic: bool,
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -285,6 +299,7 @@ pub struct TextWindowSystem {
     active_window: usize,
     cells: Vec<Option<TextCell>>,
     cursor_advance_enabled: bool,
+    runic_output: bool,
 }
 
 impl Default for TextWindowSystem {
@@ -299,6 +314,7 @@ impl TextWindowSystem {
             windows: [TextWindowDescriptor::default(); TEXT_WINDOW_COUNT],
             active_window: TEXT_WINDOW_DEFAULT_ACTIVE_INDEX as usize,
             cells: vec![None; TEXT_SCREEN_COLUMNS as usize * TEXT_SCREEN_ROWS as usize],
+            runic_output: false,
             cursor_advance_enabled: true,
         }
     }
@@ -338,6 +354,13 @@ impl TextWindowSystem {
 
     pub fn set_active_flags(&mut self, flags: u8) {
         self.windows[self.active_window].flags = flags;
+    }
+
+    /// Select the runic alphabet for subsequent glyph emits, per
+    /// [`TextCell::runic`]. Callers switch it on for the one cell that
+    /// needs it and off again immediately.
+    pub fn set_runic_output(&mut self, runic: bool) {
+        self.runic_output = runic;
     }
 
     pub fn clear_active_flags(&mut self) {
@@ -504,11 +527,13 @@ impl TextWindowSystem {
         let window = self.active_window();
         if let Some((x, y)) = window.absolute_cursor() {
             let index = usize::from(y) * TEXT_SCREEN_COLUMNS as usize + usize::from(x);
+            let runic = self.runic_output;
             self.cells[index] = Some(TextCell {
                 byte: glyph,
                 color: window.color,
                 underline: window.underline_enabled(),
                 inverse: window.inverse_enabled(),
+                runic,
             });
         }
         if self.cursor_advance_enabled {

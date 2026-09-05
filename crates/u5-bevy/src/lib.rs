@@ -131,10 +131,10 @@ use u5_runtime::{
     paint_stats_panel_text_window, paint_talk_shop_text_window, play_options_from_save_bytes_named,
     published_world_location_entries, read_save_image_file, render_play_text_window_system,
     render_return_to_view_playback_frame_over, render_text_panel_rgba, render_text_window_rgba,
-    resolve_palette_register, return_to_view_caption_start_column,
-    return_to_view_fixed_wipe_rectangles, run_intro_pre_flourish_phase,
-    run_potion_flash_soundless_timing, run_return_to_view_playback_until_restart,
-    save_image_has_active_avatar,
+    render_text_window_rgba_with_runes, resolve_palette_register,
+    return_to_view_caption_start_column, return_to_view_fixed_wipe_rectangles,
+    run_intro_pre_flourish_phase, run_potion_flash_soundless_timing,
+    run_return_to_view_playback_until_restart, save_image_has_active_avatar,
     shop_runtime::{
         ArmsShopState, GuildShopState, HealerShopState, HorseTraderState, InnkeeperState,
         ReagentShopState, SageState, ShipBrokerState, TavernState,
@@ -15943,7 +15943,7 @@ fn render_endgame_full_screen_framebuffer(
     system.emit_byte(TEXT_CTRL_CLEAR_WINDOW);
     system.set_active_cursor(0, 0);
     system.print_wrapped_string(&display_state.message);
-    let mut rgba = render_text_window_rgba(&system, ctx.ibm)
+    let mut rgba = render_text_window_rgba_with_runes(&system, ctx.ibm, Some(ctx.runes))
         .unwrap_or_else(|err| panic!("visual endgame text window render failed: {err}"));
     apply_endgame_fade_to_black_mask(&mut rgba, &display_state);
     rgba
@@ -16702,7 +16702,7 @@ fn render_integrated_status_framebuffer(
     if stats_panel_active_cursor_resets(state, active_cursor) {
         state.active_player = None;
     }
-    let mut rgba = render_text_window_rgba(&system, ctx.ibm)
+    let mut rgba = render_text_window_rgba_with_runes(&system, ctx.ibm, Some(ctx.runes))
         .unwrap_or_else(|err| panic!("visual integrated text window render failed: {err}"));
     apply_endgame_fade_to_black_mask(&mut rgba, &display_state);
     // The live input line always carries a cursor in the cell after its

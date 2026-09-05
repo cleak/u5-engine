@@ -340,6 +340,20 @@ pub fn render_text_window_rgba(
     system: &TextWindowSystem,
     font: &FixedCellFont,
 ) -> io::Result<Vec<u8>> {
+    render_text_window_rgba_with_runes(system, font, None)
+}
+
+/// [`render_text_window_rgba`] with the runic alphabet available.
+///
+/// A cell whose [`TextCell::runic`] flag is set draws from `runes`
+/// instead of `font` (`inventory.md §4.5`: "the renderer switches fonts
+/// for that one cell and switches back"). Passing `None` falls back to
+/// the text font, which is what the terminal transcripts want.
+pub fn render_text_window_rgba_with_runes(
+    system: &TextWindowSystem,
+    font: &FixedCellFont,
+    runes: Option<&FixedCellFont>,
+) -> io::Result<Vec<u8>> {
     let pixel_count = TEXT_WINDOW_RENDER_WIDTH
         .checked_mul(TEXT_WINDOW_RENDER_HEIGHT)
         .ok_or_else(|| {
@@ -367,15 +381,23 @@ pub fn render_text_window_rgba(
             let foreground = EGA_PALETTE_RGB[usize::from(text_color_foreground(cell.color))];
             let background = EGA_PALETTE_RGB[usize::from(text_color_background(cell.color))];
             for glyph_y in 0..CH_CELL_SIDE {
-                let mut row_bits = font.glyph_row(cell.byte & 0x7f, glyph_y).ok_or_else(|| {
-                    io::Error::new(
-                        io::ErrorKind::InvalidData,
-                        format!(
-                            "fixed font glyph {} is missing row {glyph_y}",
-                            cell.byte & 0x7f
-                        ),
-                    )
-                })?;
+                let cell_font = if cell.runic {
+                    runes.unwrap_or(font)
+                } else {
+                    font
+                };
+                let mut row_bits =
+                    cell_font
+                        .glyph_row(cell.byte & 0x7f, glyph_y)
+                        .ok_or_else(|| {
+                            io::Error::new(
+                                io::ErrorKind::InvalidData,
+                                format!(
+                                    "fixed font glyph {} is missing row {glyph_y}",
+                                    cell.byte & 0x7f
+                                ),
+                            )
+                        })?;
                 if cell.underline && glyph_y + 1 == CH_CELL_SIDE {
                     row_bits = 0xff;
                 }

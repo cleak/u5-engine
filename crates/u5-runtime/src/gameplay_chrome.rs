@@ -273,6 +273,10 @@ const FIXED_RULES: [(usize, usize, usize, usize); 8] = [
     (312, 63, 312, 80),
 ];
 
+/// The [`FIXED_RULES`] entry for the message box's top edge, which
+/// shares row 87 with the lower divider band.
+const MESSAGE_BOX_TOP_RULE: (usize, usize, usize, usize) = (191, 87, 319, 87);
+
 /// Horizontal rules bounding the two stats divider bands. The first
 /// pair may be interrupted by the timing-glyph slot.
 const DIVIDER_RULE_ROWS: [usize; 4] = [56, 63, 80, 87];
@@ -758,7 +762,20 @@ pub fn paint_gameplay_frame_chrome(
     }
 
     for (x0, y0, x1, y1) in FIXED_RULES {
+        // The message box's top rule shares row 87 with the lower divider
+        // band, so a page badge sitting in that band has to interrupt it
+        // too - otherwise the rule runs straight through the badge's
+        // bottom row. The stock game leaves only the two caps' own accent
+        // strokes there.
+        if picker_page.is_some() && (x0, y0, x1, y1) == MESSAGE_BOX_TOP_RULE {
+            continue;
+        }
         fill_rect(rgba, width, height, x0, y0, x1, y1, palette.accent);
+    }
+    if let Some(gap) = picker_page {
+        let (x0, y0, x1, y1) = MESSAGE_BOX_TOP_RULE;
+        paint_interrupted_rule(rgba, width, height, y0, x0, x1, Some(gap), palette);
+        let _ = y1;
     }
     if content.stats_panel_single_box {
         // Close the left and right panel rules across the vacated band.

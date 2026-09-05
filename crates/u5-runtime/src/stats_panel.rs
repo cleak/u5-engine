@@ -508,6 +508,21 @@ pub struct PanelPickerView {
     pub selected: usize,
 }
 
+/// Private-use code point range that marks a panel character as a runic
+/// glyph.
+///
+/// Panel rows are built as ordinary `String`s, so a row that needs one
+/// cell from `RUNES.CH` - the moonstone phase glyph of `inventory.md
+/// §4.5`, and eventually the picker's selector cell - encodes it as
+/// `PANEL_RUNIC_CHAR_BASE + code`. The painter unwraps it, sets the
+/// cell's runic flag for that one emit, and clears it again.
+pub const PANEL_RUNIC_CHAR_BASE: u32 = 0xE000;
+
+/// Wrap a `RUNES.CH` code point for embedding in a panel row string.
+pub fn panel_runic_char(code: u8) -> char {
+    char::from_u32(PANEL_RUNIC_CHAR_BASE + u32::from(code)).expect("private-use range is valid")
+}
+
 /// Whether a Z-stats page draws inside the `§4.4` ornamental frame.
 ///
 /// The four inventory pages do; the attribute page, the `Arms` page and
@@ -755,9 +770,12 @@ pub fn paint_z_stats_page_text_window(system: &mut TextWindowSystem, state: &Pla
     if framed {
         paint_panel_picker_frame(system);
     }
+    // Framed content always starts at interior column 1; a row that sits
+    // further right carries its own leading space, which is how the
+    // reagent rows land at column 2 while the moonstone rows land at 1.
     let (indent, first_row) = match (framed, single_placeholder) {
         (true, true) => (1u8, 4usize),
-        (true, false) => (2u8, 1usize),
+        (true, false) => (1u8, 1usize),
         (false, _) => (0u8, 0usize),
     };
     for (row, line) in rows.iter().enumerate() {
@@ -791,8 +809,16 @@ pub fn paint_z_stats_page_text_window(system: &mut TextWindowSystem, state: &Pla
         } else {
             STATS_PANEL_WIDTH
         };
-        for byte in text.trim_start_matches(' ').bytes().take(width) {
-            system.emit_byte(byte);
+        for ch in text.trim_start_matches(' ').chars().take(width) {
+            let code = ch as u32;
+            if (PANEL_RUNIC_CHAR_BASE..PANEL_RUNIC_CHAR_BASE + 0x80).contains(&code) {
+                // `§4.5`: switch fonts for this one cell and switch back.
+                system.set_runic_output(true);
+                system.emit_byte((code - PANEL_RUNIC_CHAR_BASE) as u8);
+                system.set_runic_output(false);
+            } else {
+                system.emit_byte(code as u8);
+            }
         }
         if underline_row == Some(row) {
             system.emit_byte(TEXT_CTRL_UNDERLINE_TOGGLE);
