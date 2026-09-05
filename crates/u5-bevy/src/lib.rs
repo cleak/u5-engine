@@ -22990,7 +22990,7 @@ mod tests {
         }
         let manifest = fs::read_to_string(dir.join("manifest.txt")).unwrap();
         assert!(manifest.contains("coverage\tvisual-route-steps\t1955"));
-        assert!(manifest.contains("coverage\tvisual-key-route-steps\t88"));
+        assert!(manifest.contains("coverage\tvisual-key-route-steps\t90"));
         assert!(manifest.contains("coverage\tvisual-route-combat-steps\t"));
         assert!(manifest.contains("route-world-movement-01-d\t320x200\t"));
         assert!(manifest.contains("review=route-step route=route-world-movement step=01 input=d"));
