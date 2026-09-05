@@ -3715,9 +3715,11 @@ const VISUAL_KEY_YELL_STEPS: &[VisualKeyStep] = &[
 // Enter steps in a row therefore produce the same frame, so the route
 // equips once and then exits. Unequip stays covered by the runtime test
 // `active_ready_picker_charges_one_turn_for_the_whole_invocation`.
+// inventory.md §5 step 1 / cleak/u5-spec#192: Return commits the indicated
+// member (a digit only moves the bar), then the picker opens in the panel.
 const VISUAL_KEY_READY_STEPS: &[VisualKeyStep] = &[
     VisualKeyStep::shifted("key_r", KeyCode::KeyR),
-    VisualKeyStep::key("digit_1", KeyCode::Digit1),
+    VisualKeyStep::key("enter", KeyCode::Enter),
     VisualKeyStep::key("space", KeyCode::Space),
     VisualKeyStep::key("escape", KeyCode::Escape),
 ];
@@ -3739,10 +3741,14 @@ const VISUAL_KEY_REST_WATCH_STEPS: &[VisualKeyStep] = &[
     VisualKeyStep::key("key_y", KeyCode::KeyY),
     VisualKeyStep::key("digit_2", KeyCode::Digit2),
 ];
+// commands.md §6 through the shared selector: each digit moves the bar and
+// Return commits (`Swap ` then `with `).
 const VISUAL_KEY_NEW_ORDER_STEPS: &[VisualKeyStep] = &[
     VisualKeyStep::shifted("key_n", KeyCode::KeyN),
     VisualKeyStep::key("digit_2", KeyCode::Digit2),
+    VisualKeyStep::key("enter", KeyCode::Enter),
     VisualKeyStep::key("digit_3", KeyCode::Digit3),
+    VisualKeyStep::key("enter", KeyCode::Enter),
 ];
 const VISUAL_KEY_DUNGEON_CONTROL_STEPS: &[VisualKeyStep] = &[
     VisualKeyStep::key("key_w", KeyCode::KeyW),
@@ -23001,7 +23007,7 @@ mod tests {
         assert!(manifest.contains("route-key-use-picker-02-space"));
         assert!(manifest.contains("route-key-mix-prompt-02-escape"));
         assert!(manifest.contains("route-key-rest-watch-prompt-04-digit_2"));
-        assert!(manifest.contains("route-key-new-order-picker-03-digit_3"));
+        assert!(manifest.contains("route-key-new-order-picker-05-enter"));
         assert!(
             manifest.contains(
                 "review=route-step route=route-key-talk-keyword-buffer step=03 input=key_b"
