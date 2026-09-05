@@ -862,7 +862,33 @@ pub enum PartySelectorTarget {
     Search {
         direction: crate::Direction,
     },
+    /// `commands.md §6`: N-New Order "prompts for two party members
+    /// through the shared party-member selector". `cleak/u5-spec#194`
+    /// capture: the prompts read `Swap ` and `with `.
+    NewOrder {
+        first: Option<usize>,
+    },
+    /// `magic.md §5` step 1 / `text-output.md §10.6`: with no active player
+    /// set, C-Cast runs the `Player: ` active-player prompt first.
+    Cast,
 }
+
+impl PartySelectorTarget {
+    /// The message-window prompt the selector opens with.
+    pub fn prompt(self) -> &'static str {
+        match self {
+            Self::NewOrder { first: None } => NEW_ORDER_FIRST_PROMPT,
+            Self::NewOrder { first: Some(_) } => NEW_ORDER_SECOND_PROMPT,
+            _ => crate::PARTY_SELECTION_PROMPT,
+        }
+    }
+}
+
+/// `cleak/u5-spec#194` capture: the two N-New Order selector prompts.
+pub const NEW_ORDER_FIRST_PROMPT: &str = "Swap ";
+pub const NEW_ORDER_SECOND_PROMPT: &str = "with ";
+/// `cleak/u5-spec#194` capture: picking the leader in either prompt.
+pub const NEW_ORDER_LEADER_REFUSAL: &str = "Avatar must lead!";
 
 /// `inventory.md §4.7` page-loop sub-prompt literal `\nStatus:_` — the
 /// line the Z-stats page loop leaves open in the message window while it

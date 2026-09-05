@@ -209,7 +209,7 @@ impl PlayState {
         }
         let highlight = self.z_stats_initial_party_index().min(self.party.len() - 1);
         self.active_party_selector = Some(PartySelectorSession::new(target, highlight));
-        self.message = PARTY_SELECTOR_PROMPT_MESSAGE.to_string();
+        self.message = target.prompt().to_string();
         MoveOutcome::Observed
     }
 
@@ -254,10 +254,9 @@ impl PlayState {
         // alone until the spec answers.
         if matches!(key, '\u{1b}' | '0') {
             self.active_party_selector = None;
-            if !self
-                .complete_open_direction_echo(PARTY_SELECTION_PROMPT, PARTY_SELECTOR_CANCEL_REPLY)
-            {
-                self.message = PARTY_SELECTOR_CANCELLED_MESSAGE.to_string();
+            let prompt = session.target.prompt();
+            if !self.complete_open_direction_echo(prompt, PARTY_SELECTOR_CANCEL_REPLY) {
+                self.message = format!("{prompt}{PARTY_SELECTOR_CANCEL_REPLY}");
             }
             return true;
         }
@@ -275,7 +274,7 @@ impl PlayState {
                 session.highlight.saturating_sub(1)
             };
             self.active_party_selector = Some(session);
-            self.message = PARTY_SELECTOR_PROMPT_MESSAGE.to_string();
+            self.message = session.target.prompt().to_string();
             return true;
         }
         // `cleak/u5-spec#192` (black-box, stock `ULTIMA.EXE`): a digit
@@ -289,7 +288,7 @@ impl PlayState {
                 session.highlight = row;
                 self.active_party_selector = Some(session);
             }
-            self.message = PARTY_SELECTOR_PROMPT_MESSAGE.to_string();
+            self.message = session.target.prompt().to_string();
             return true;
         }
         // `text-output.md §10.6`: "Return or Space to accept". The
@@ -298,7 +297,7 @@ impl PlayState {
         // commit the indicated row here too.
         if !matches!(key, '\r' | '\n' | ' ') {
             // Any other key redraws the prompt; the selector stays live.
-            self.message = PARTY_SELECTOR_PROMPT_MESSAGE.to_string();
+            self.message = session.target.prompt().to_string();
             return true;
         }
         let index = session.highlight;
@@ -307,7 +306,7 @@ impl PlayState {
         // trailing space", so the chosen name lands on that same line -
         // the original shows `Player: Avatar`.
         let chosen = self.party_member_display_name(index);
-        let _ = self.complete_open_direction_echo(PARTY_SELECTION_PROMPT, &chosen);
+        let _ = self.complete_open_direction_echo(session.target.prompt(), &chosen);
         match session.target {
             PartySelectorTarget::ZStats => {
                 self.z_stats_for_party(index);
@@ -316,6 +315,35 @@ impl PlayState {
                 if let Err(error) = self.search_direction_with_game_dir(direction, game_dir) {
                     self.message = error.to_string();
                 }
+            }
+            PartySelectorTarget::NewOrder { first: None } => {
+                // `commands.md §6`: "If either selected slot is slot zero,
+                // the command refuses because the leader must remain
+                // first" - without consuming a turn.
+                if index == 0 {
+                    self.message = NEW_ORDER_LEADER_REFUSAL.to_string();
+                } else {
+                    self.start_party_selector(PartySelectorTarget::NewOrder { first: Some(index) });
+                }
+            }
+            PartySelectorTarget::NewOrder { first: Some(first) } => {
+                if index == 0 {
+                    self.message = NEW_ORDER_LEADER_REFUSAL.to_string();
+                } else {
+                    // The result completes the `with ` line with `!`; the
+                    // shared swap routine moves the whole records and
+                    // charges the turn (`commands.md §6`).
+                    let _ = self.complete_open_direction_echo(
+                        &format!("{}{chosen}", NEW_ORDER_SECOND_PROMPT),
+                        "!",
+                    );
+                    let _ = self.new_order_from_suffix(&format!("{}{}", first + 1, index + 1));
+                    self.message = String::new();
+                }
+            }
+            PartySelectorTarget::Cast => {
+                self.active_player = Some(index);
+                self.start_cast_spell_prompt();
             }
         }
         true
@@ -382,10 +410,12 @@ impl PlayState {
             self.message = "No party members are available.".to_string();
             return MoveOutcome::Blocked;
         }
-        let caster_index = self
-            .active_player
-            .filter(|slot| *slot < self.party.len())
-            .unwrap_or(0);
+        // `magic.md §5` step 1 reads the active-player slot; with none set
+        // the stock game runs the `text-output.md §10.6` active-player
+        // prompt first (`cleak/u5-spec#194` capture: `Cast...` / `Player: `).
+        let Some(caster_index) = self.active_player.filter(|slot| *slot < self.party.len()) else {
+            return self.start_party_selector(PartySelectorTarget::Cast);
+        };
         self.active_cast = Some(CastSession::new(caster_index));
         self.message = self.render_active_cast();
         MoveOutcome::Observed
@@ -428,15 +458,9 @@ impl PlayState {
     /// [`PlayState::step_active_cast`] still consumes the raw selector
     /// buffer, so typing `VAS FLAM` still just feeds selector letters.
     pub fn render_cast_session(&self, session: &CastSession) -> String {
-        let prompt = if session.buffer.is_empty() {
-            "Spell name: _".to_string()
-        } else {
-            format!("Spell name: {}", rune_echo_for_buffer(&session.buffer))
-        };
-        format!(
-            "Cast: party member {}. {prompt}\nType selector letters; Enter/Space casts; Backspace erases; Esc cancels.",
-            session.caster_index + 1
-        )
+        // `magic.md §5` step 2: "prints `Spell name:` and a colon-prompt";
+        // the compact selector echo follows the colon.
+        format!("Spell name:\n:{}", rune_echo_for_buffer(&session.buffer))
     }
 
     pub fn step_active_cast(
@@ -855,14 +879,9 @@ impl PlayState {
     pub fn render_mix_session(&self, session: &MixSession) -> String {
         match session.phase {
             MixPhase::Spell => {
-                let spell = if session.spell_buffer.is_empty() {
-                    "_".to_string()
-                } else {
-                    session.spell_buffer.clone()
-                };
-                format!(
-                    "{MMIX_SPELL_PROMPT_MESSAGE} {spell}\nType selector letters; Enter accepts; Esc cancels."
-                )
+                // `magic.md §6` step 2: `For what spell?` then the same
+                // colon-prompt as C-Cast (`cleak/u5-spec#194` capture).
+                format!("{MMIX_SPELL_PROMPT_MESSAGE}\n:{}", session.spell_buffer)
             }
             MixPhase::Reagents => {
                 let mut lines =
@@ -1077,9 +1096,9 @@ impl PlayState {
     }
 
     pub fn start_new_order_prompt(&mut self) -> MoveOutcome {
-        self.active_new_order = Some(NewOrderSession::new());
-        self.message = self.render_active_new_order();
-        MoveOutcome::Observed
+        // `commands.md §6`: two picks through the shared party-member
+        // selector, `Swap ` then `with ` (`cleak/u5-spec#194` capture).
+        self.start_party_selector(PartySelectorTarget::NewOrder { first: None })
     }
 
     pub fn render_active_new_order(&self) -> String {

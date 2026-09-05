@@ -478,6 +478,7 @@
         state.party[0].mana = IN_LOR_COST;
         state.party[0].level = IN_LOR_COST;
         state.spell_charges[IN_LOR_SPELL_INDEX] = 1;
+        state.active_player = Some(0);
 
         assert_eq!(
             handle_play_key_input(&mut state, 'C', "", Path::new("")).unwrap(),
@@ -485,7 +486,8 @@
         );
         assert!(state.active_cast.is_some());
         assert_eq!(state.turn, 0);
-        assert!(state.message.contains("Spell name: _"));
+        // magic.md §5 step 2: `Spell name:` and a colon-prompt.
+        assert_eq!(state.message, "Spell name:\n:");
 
         assert_eq!(
             handle_play_key_input(&mut state, 'I', "L", Path::new("")).unwrap(),
@@ -513,11 +515,14 @@
     fn active_cast_prompt_ignores_j_o_and_supports_backspace_cancel() {
         let mut state = test_state(open_grid(), 5, 5);
 
+        state.active_player = Some(0);
         assert_eq!(state.start_cast_spell_prompt(), MoveOutcome::Observed);
         assert!(state.step_active_cast('J', "OI", Path::new("")).unwrap().is_none());
-        assert!(state.message.contains("Spell name: I"));
+        // The echo behind the colon is the rune word for the selector.
+        assert!(state.message.starts_with("Spell name:\n:"));
+        assert!(state.message.len() > "Spell name:\n:".len());
         assert!(state.step_active_cast('\u{8}', "", Path::new("")).unwrap().is_none());
-        assert!(state.message.contains("Spell name: _"));
+        assert_eq!(state.message, "Spell name:\n:");
         assert!(state.step_active_cast('\u{1b}', "", Path::new("")).unwrap().is_none());
         assert!(state.active_cast.is_none());
         assert_eq!(state.message, "None!");
@@ -531,6 +536,7 @@
         state.party[0].mana = VANISH_COST;
         state.party[0].level = VANISH_COST;
 
+        state.active_player = Some(0);
         assert_eq!(state.start_cast_spell_prompt(), MoveOutcome::Observed);
         assert!(state
             .step_active_cast('A', "Y", Path::new(""))
@@ -570,6 +576,7 @@
         state.party[0].mana = BLINK_COST;
         state.party[0].level = BLINK_COST;
 
+        state.active_player = Some(0);
         assert_eq!(state.start_cast_spell_prompt(), MoveOutcome::Observed);
         assert!(state.step_active_cast('I', "P", Path::new("")).unwrap().is_none());
         assert!(state.step_active_cast(' ', "", Path::new("")).unwrap().is_none());
@@ -630,6 +637,7 @@
         ];
         state.spell_charges[HEAL_SPELL_INDEX] = 1;
 
+        state.active_player = Some(0);
         assert_eq!(state.start_cast_spell_prompt(), MoveOutcome::Observed);
         assert!(state.step_active_cast('M', "", Path::new("")).unwrap().is_none());
         assert!(state.step_active_cast(' ', "", Path::new("")).unwrap().is_none());
@@ -666,6 +674,7 @@
         state.party[0].mana = GATE_TRAVEL_COST;
         state.party[0].level = GATE_TRAVEL_COST;
 
+        state.active_player = Some(0);
         assert_eq!(state.start_cast_spell_prompt(), MoveOutcome::Observed);
         assert!(state.step_active_cast('P', "RV", Path::new("")).unwrap().is_none());
         assert!(state.step_active_cast(' ', "", Path::new("")).unwrap().is_none());
@@ -780,19 +789,29 @@ Mixed 1 IL charge; stock is 1.");
         });
         state.party_names = vec![*b"AVATAR\0\0\0", *b"IOLO\0\0\0\0\0", *b"MARIA\0\0\0\0"];
 
+        // commands.md §6 through the shared selector; prompts `Swap ` and
+        // `with ` per the cleak/u5-spec#194 capture.
         assert_eq!(
             handle_play_key_input(&mut state, 'N', "", Path::new("")).unwrap(),
             PlayInputDisposition::Continue
         );
-        assert!(state.active_new_order.is_some());
-        assert!(state.message.contains("choose first member"));
+        assert!(state.active_party_selector.is_some());
+        assert_eq!(state.message, NEW_ORDER_FIRST_PROMPT);
+        for key in ['2', '\r'] {
+            assert_eq!(
+                handle_play_key_input(&mut state, key, "", Path::new("")).unwrap(),
+                PlayInputDisposition::Continue
+            );
+        }
+        assert_eq!(state.message, NEW_ORDER_SECOND_PROMPT);
+        for key in ['3', '\r'] {
+            assert_eq!(
+                handle_play_key_input(&mut state, key, "", Path::new("")).unwrap(),
+                PlayInputDisposition::Continue
+            );
+        }
 
-        assert_eq!(
-            handle_play_key_input(&mut state, '2', "3", Path::new("")).unwrap(),
-            PlayInputDisposition::Continue
-        );
-
-        assert!(state.active_new_order.is_none());
+        assert!(state.active_party_selector.is_none());
         assert_eq!(state.party[1].slot, 2);
         assert_eq!(state.party[2].slot, 1);
         assert_eq!(&state.party_names[1], b"MARIA\0\0\0\0");
@@ -4372,6 +4391,7 @@ Mixed 1 IL charge; stock is 1.");
         passed.spell_charges[BLINK_SPELL_INDEX] = 1;
         passed.party[0].mana = BLINK_COST;
         passed.party[0].level = BLINK_COST;
+        passed.active_player = Some(0);
         assert_eq!(passed.start_cast_spell_prompt(), MoveOutcome::Observed);
         assert!(passed
             .step_active_cast('I', "P", Path::new(""))

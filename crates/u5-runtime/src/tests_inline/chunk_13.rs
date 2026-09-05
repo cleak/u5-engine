@@ -25452,10 +25452,10 @@ fn top_down_uppercase_command_letters_preempt_vi_movement() {
     // here only raises a prompt.
     for (key, expected, expected_turn) in [
         ('A', "Attack-", 0),
-        ('C', "Spell name:", 0),
+        ('C', PARTY_SELECTION_PROMPT, 0),
         ('D', "What?", 0),
         ('M', MMIX_SPELL_PROMPT_MESSAGE, 0),
-        ('N', "New order:", 0),
+        ('N', NEW_ORDER_FIRST_PROMPT, 0),
         ('Q', "Save game?", 0),
         ('U', ITEM_SELECTION_PROMPT, 0),
         ('W', "What?", 0),
@@ -25517,8 +25517,8 @@ fn top_down_lowercase_vi_and_wasd_movement_still_routes_before_commands() {
         ('y', "Yell what?"),
         ('u', ITEM_SELECTION_PROMPT),
         ('b', "What?"),
-        ('n', "New order:"),
-        ('c', "Spell name:"),
+        ('n', NEW_ORDER_FIRST_PROMPT),
+        ('c', PARTY_SELECTION_PROMPT),
         ('z', PARTY_SELECTION_PROMPT),
     ] {
         let mut state = test_state(open_grid(), 5, 5);
@@ -25876,10 +25876,10 @@ fn dungeon_command_letters_do_not_fall_through_to_diagonal_movement_refusal() {
     // the default 'acted'". The other letters here only open a prompt and
     // stay free.
     for (key, expected, expected_turn) in [
-        ('C', "Spell name:", 0),
+        ('C', PARTY_SELECTION_PROMPT, 0),
         ('D', "What?", 0),
         ('M', MMIX_SPELL_PROMPT_MESSAGE, 0),
-        ('N', "New order:", 0),
+        ('N', NEW_ORDER_FIRST_PROMPT, 0),
         ('R', PARTY_SELECTION_PROMPT, 1),
         ('U', "No usable items.", 1),
         ('W', "What?", 0),
