@@ -746,8 +746,12 @@ pub fn paint_z_stats_page_text_window(system: &mut TextWindowSystem, state: &Pla
     // whole content is one placeholder line centres that line on interior
     // row 4 at column 1 - `(None owned!)` is thirteen characters and
     // fills the content width exactly.
-    let single_placeholder =
-        framed && rows.iter().filter(|line| !line.trim_end().is_empty()).count() == 1;
+    let single_placeholder = framed
+        && rows
+            .iter()
+            .filter(|line| !line.trim_end().is_empty())
+            .count()
+            == 1;
     if framed {
         paint_panel_picker_frame(system);
     }
@@ -760,7 +764,11 @@ pub fn paint_z_stats_page_text_window(system: &mut TextWindowSystem, state: &Pla
         if line.trim_end_matches(' ').is_empty() {
             continue;
         }
-        let row = if single_placeholder { first_row } else { row + first_row };
+        let row = if single_placeholder {
+            first_row
+        } else {
+            row + first_row
+        };
         if framed && row > PANEL_PICKER_ROWS {
             break;
         }
@@ -774,10 +782,7 @@ pub fn paint_z_stats_page_text_window(system: &mut TextWindowSystem, state: &Pla
         // treats as whitespace and would silently eat.
         let text = line.trim_end_matches(' ');
         let lead = (text.len() - text.trim_start_matches(' ').len()) as u8;
-        system.set_active_cursor(
-            indent.saturating_add(lead),
-            row.min(u8::MAX as usize) as u8,
-        );
+        system.set_active_cursor(indent.saturating_add(lead), row.min(u8::MAX as usize) as u8);
         if underline_row == Some(row) {
             system.emit_byte(TEXT_CTRL_UNDERLINE_TOGGLE);
         }
