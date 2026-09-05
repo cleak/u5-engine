@@ -180,8 +180,15 @@ impl PlayState {
     /// then `:`) as well as for the mixer's reagent selection; the
     /// engine was drawing an end cap below all three.
     pub fn message_window_live_row_suppressed(&self) -> bool {
+        // Only prompts that read a *key*. A live conversation looks like
+        // the same shape but is not: its `:` row is where free text is
+        // typed, and suppressing the live row there hides the player's
+        // own keystrokes (caught by the `route-key-talk-keyword-buffer`
+        // visual route). The conversation prompt still draws an end cap
+        // the original does not - it wants `open_prompt_line`'s inline
+        // treatment extended to carry a typed buffer, which is more than
+        // a flag. Tracked, not bodged.
         self.mix_reagent_selection_active()
-            || self.active_conversation.is_some()
             || self.active_blackthorn_guard_demand.is_some()
             || self.pending_town_arrest.is_some()
     }
