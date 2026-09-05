@@ -949,6 +949,9 @@ pub const Z_STATS_EXPERIENCE_LABEL: &str = "  Ex:";
 pub const Z_STATS_MAGIC_LABEL: &str = "    Magic:";
 /// `inventory.md §4.7` equipment-page heading literal `Arms\n\n`.
 pub const Z_STATS_ARMS_HEADING: &str = "Arms";
+/// `inventory.md §4.5` moonstone row sentinel: "The word `Moonstone_`,
+/// then a single runic letter naming the stone."
+pub const Z_STATS_MOONSTONE_LABEL: &str = "Moonstone";
 /// `inventory.md §4.7` literal table: the `Equipment` heading, which the
 /// stock game uses as the counters screen's border label.
 pub const Z_STATS_EQUIPMENT_HEADING: &str = "Equipment";

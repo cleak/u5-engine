@@ -108,10 +108,26 @@ fn empty_z_stats_pages_print_the_published_placeholders() {
         state.active_z_stats.as_ref().map(|session| session.page),
         Some(ZStatsPage::SpecialUse)
     );
+    // The items page always lists the eight Moonstones
+    // (`inventory.md §4.5`, `cleak/u5-spec#202`), so it is the one
+    // inventory page that never reaches the placeholder. Step once more
+    // to the armaments page, which does.
+    let panel = z_stats_panel_text(&state);
+    assert!(
+        panel.contains(u5_runtime::Z_STATS_MOONSTONE_LABEL),
+        "items page panel was {panel:?}"
+    );
+    assert!(!panel.contains(Z_STATS_NONE_OWNED_PLACEHOLDER));
+
+    assert!(state.step_active_z_stats('>', ""));
+    assert_eq!(
+        state.active_z_stats.as_ref().map(|session| session.page),
+        Some(ZStatsPage::EquipmentStock)
+    );
     let panel = z_stats_panel_text(&state);
     assert!(
         panel.contains(Z_STATS_NONE_OWNED_PLACEHOLDER),
-        "items page panel was {panel:?}"
+        "armaments page panel was {panel:?}"
     );
     assert!(!panel.contains("None."));
 }

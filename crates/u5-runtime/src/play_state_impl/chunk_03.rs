@@ -2538,6 +2538,27 @@ impl PlayState {
         };
     }
 
+    /// Page badge for a framed Z-stats inventory page, drawn in the
+    /// lower divider band exactly as the item picker's is. A capture of
+    /// the stock game shows the `↓` under the items page, whose eight
+    /// Moonstones overflow the frame's seven rows.
+    pub fn z_stats_page_indicator(&self) -> Option<crate::shop_runtime::ArmsSellPageIndicator> {
+        use crate::shop_runtime::ArmsSellPageIndicator;
+        let session = self.active_z_stats.as_ref()?;
+        if !crate::stats_panel::z_stats_page_is_framed(session.page) {
+            return None;
+        }
+        let total = self.z_stats_inventory_row_count(session)?;
+        let visible = crate::stats_panel::PANEL_PICKER_ROWS;
+        let start = (session.inventory_cursor / visible) * visible;
+        Some(match (start > 0, total > start + visible) {
+            (false, false) => ArmsSellPageIndicator::None,
+            (false, true) => ArmsSellPageIndicator::Down,
+            (true, false) => ArmsSellPageIndicator::Up,
+            (true, true) => ArmsSellPageIndicator::Both,
+        })
+    }
+
     fn z_stats_inventory_row_count(&self, session: &ZStatsSession) -> Option<usize> {
         match session.page {
             // The counters screen is a fixed layout, not a scrolling band.
@@ -2577,10 +2598,10 @@ impl PlayState {
     }
 
     fn z_stats_special_use_row_count(&self) -> usize {
-        let fixed = usize::from(self.keys > 0)
-            + usize::from(self.gems > 0)
-            + usize::from(self.torches > 0)
-            + usize::from(self.climbing_gear > 0);
+        // The eight Moonstones always head the page, and keys, gems and
+        // torches moved to the counters screen, so the fixed part is the
+        // stones plus the grapple.
+        let fixed = MOONSTONE_SLOT_COUNT + usize::from(self.climbing_gear > 0);
         fixed
             + self
                 .special_items
@@ -2710,15 +2731,27 @@ impl PlayState {
 
     fn render_z_stats_special_use_page(&self, session: &ZStatsSession, lines: &mut Vec<String>) {
         let mut rows = Vec::new();
-        if self.keys > 0 {
-            rows.push(format!("Keys: {}", self.keys));
+        // The eight Moonstones head this page. `inventory.md §4.5` gives
+        // the row form - "the word `Moonstone_`, then a single runic
+        // letter naming the stone" - and a capture of the stock game
+        // confirms it exactly: `Moonstone` in the text font at window
+        // columns 1..9, a space, then the phase glyph at column 11, drawn
+        // from `RUNES.CH` at `SKY_STRIP_MOON_PHASE_RUNE_BASE + phase`.
+        // All eight are listed, so seven fill the frame and the page
+        // badge points at the eighth.
+        //
+        // The phase cell is left blank for now: the panel's text window
+        // renders from one fixed-cell font, and drawing this cell needs
+        // the §4.5 per-cell font switch that the runic selector cell also
+        // wants (`cleak/u5-spec#195`). Emitting the rune byte through the
+        // text font would print a digit, which is worse than a gap.
+        for phase in 0..MOONSTONE_SLOT_COUNT {
+            let _ = phase;
+            rows.push(format!("{Z_STATS_MOONSTONE_LABEL} "));
         }
-        if self.gems > 0 {
-            rows.push(format!("Gems: {}", self.gems));
-        }
-        if self.torches > 0 {
-            rows.push(format!("Torches: {}", self.torches));
-        }
+        // Keys, gems, torches and the grapple belong to the counters
+        // screen (`§4.7`'s `Equipment` literals), not here; the stock
+        // game's items page does not list them.
         if self.climbing_gear > 0 {
             rows.push(format!("Grapple: {}", self.climbing_gear));
         }

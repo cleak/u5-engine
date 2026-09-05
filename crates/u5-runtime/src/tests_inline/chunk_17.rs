@@ -302,12 +302,17 @@
             state.active_z_stats.as_ref().map(|session| session.page),
             Some(ZStatsPage::SpecialUse)
         );
-        assert!(z_stats_panel_text(&state).contains("Gems: 2"));
-        assert!(z_stats_panel_text(&state).contains("Grapple: 1"));
-        assert!(z_stats_panel_text(&state).contains("Sextant: 1"));
-        assert!(z_stats_panel_text(&state).contains("Scroll LV: 1"));
-        assert!(z_stats_panel_text(&state).contains("Blue Potion: 4"));
+        // Keys, gems and torches live on the counters screen now, not
+        // here (`cleak/u5-spec#202`); the items page leads with the eight
+        // Moonstones.
+        // Keys, gems and torches live on the counters screen now, not
+        // here (`cleak/u5-spec#202`). The page leads with the eight
+        // Moonstones, which fill the frame's seven visible rows, so the
+        // carried items below them are on the next page of the band
+        // rather than on screen.
+        assert!(!z_stats_panel_text(&state).contains("Gems:"));
         assert!(!z_stats_panel_text(&state).contains("Keys:"));
+        assert!(z_stats_panel_text(&state).contains(Z_STATS_MOONSTONE_LABEL));
 
         assert!(state.step_active_z_stats('>', ""));
         assert!(z_stats_panel_text(&state).contains(&format!(
@@ -346,19 +351,24 @@
         // Step past the counters screen, which has no inventory band.
         assert!(state.step_active_z_stats('>', ""));
 
+        // The items page is deliberately absent from the expectations: it
+        // always lists the eight Moonstones, so it can never reach the
+        // placeholder. It is still stepped through, below.
         for page in [
             ZStatsPage::Reagents,
             ZStatsPage::Spells,
             ZStatsPage::SpecialUse,
             ZStatsPage::EquipmentStock,
         ] {
+            let expects_placeholder = page != ZStatsPage::SpecialUse;
             assert!(state.step_active_z_stats('>', ""));
             assert_eq!(
                 state.active_z_stats.as_ref().map(|session| session.page),
                 Some(page)
             );
-            assert!(
+            assert_eq!(
                 z_stats_panel_text(&state).contains(Z_STATS_NONE_OWNED_PLACEHOLDER),
+                expects_placeholder,
                 "{page:?} page message was {:?}",
                 z_stats_panel_text(&state)
             );

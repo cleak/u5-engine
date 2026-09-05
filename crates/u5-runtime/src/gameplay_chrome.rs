@@ -1260,9 +1260,12 @@ pub fn gameplay_chrome_content(state: &crate::PlayState) -> GameplayChromeConten
         Some(indicator) => page_badge_glyph(indicator),
         None => state.active_effect_tag.filter(|tag| *tag != 0),
     };
+    // The item picker and the framed Z-stats inventory pages share this
+    // badge; only one of the two can own the panel at a time.
     let picker_page_glyph = picker
         .as_ref()
         .map(crate::stats_panel::PanelPickerView::page_indicator)
+        .or_else(|| state.z_stats_page_indicator())
         .and_then(page_badge_glyph);
     // `inventory.md §4.4`: the picker frame is nine rows tall and "the
     // clear covers the whole panel", so the divider band that separated
