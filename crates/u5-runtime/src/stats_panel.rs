@@ -471,6 +471,156 @@ pub fn active_shop_side_panel_border_rows(state: &PlayState) -> Option<(u8, u8)>
 /// then appends value after value", so while a page is open the roster
 /// rows, the food/gold line and the date line are all gone. §4.1 puts
 /// every one of those surfaces in window 1.
+/// One row of the shared item picker (`inventory.md §4.5`): a two-cell
+/// quantity (`--` for zero, absent for the "no quantity" marker), a
+/// one-cell selector, and the name in window columns 4..=13.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct PanelPickerRow {
+    pub quantity: Option<u8>,
+    /// Selector cell byte. `cleak/u5-spec#195` asks for the per-family
+    /// runic codes; until they are published the cell is blank.
+    pub selector: u8,
+    pub name: String,
+}
+
+impl PanelPickerRow {
+    /// `inventory.md §4.5` rendering of the 13 interior columns.
+    pub fn text(&self) -> String {
+        let content = match self.quantity {
+            None => self.name.clone(),
+            Some(0) => format!("--{}{}", self.selector as char, self.name),
+            Some(count) => format!("{count:>2}{}{}", self.selector as char, self.name),
+        };
+        format!(
+            "{:<13}",
+            truncate_ascii_chars(&content, PANEL_PICKER_CONTENT_COLUMNS)
+        )
+    }
+}
+
+/// The eight-row item picker of `inventory.md §4.4` as the panel painters
+/// consume it: the framed border label, the rows, the selected row, and
+/// the first visible row.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct PanelPickerView {
+    pub label: String,
+    pub rows: Vec<PanelPickerRow>,
+    pub selected: usize,
+}
+
+/// `inventory.md §4.4`: seven interior item rows, thirteen content columns.
+pub const PANEL_PICKER_ROWS: usize = 7;
+pub const PANEL_PICKER_CONTENT_COLUMNS: usize = 13;
+/// Selector cell placeholder while `cleak/u5-spec#195` is open.
+pub const PANEL_PICKER_SELECTOR_BLANK: u8 = b' ';
+
+impl PanelPickerView {
+    pub fn page_start(&self) -> usize {
+        (self.selected / PANEL_PICKER_ROWS) * PANEL_PICKER_ROWS
+    }
+
+    pub fn visible_rows(&self) -> &[PanelPickerRow] {
+        let start = self.page_start().min(self.rows.len());
+        let end = (start + PANEL_PICKER_ROWS).min(self.rows.len());
+        &self.rows[start..end]
+    }
+
+    /// Divider-band page badge, using the arms browser's published glyphs
+    /// (`inventory.md §4.4` places the same `↓`/`↑` badge under the picker).
+    pub fn page_indicator(&self) -> crate::shop_runtime::ArmsSellPageIndicator {
+        use crate::shop_runtime::ArmsSellPageIndicator;
+        let start = self.page_start();
+        let more_below = self.rows.len() > start + PANEL_PICKER_ROWS;
+        let more_above = start > 0;
+        match (more_above, more_below) {
+            (false, false) => ArmsSellPageIndicator::None,
+            (false, true) => ArmsSellPageIndicator::Down,
+            (true, false) => ArmsSellPageIndicator::Up,
+            (true, true) => ArmsSellPageIndicator::Both,
+        }
+    }
+}
+
+/// The live U-Use or R-Ready picker, if one owns the panel.
+pub fn active_panel_picker(state: &PlayState) -> Option<PanelPickerView> {
+    if let Some(session) = state.active_use.as_ref() {
+        if session.pending.is_some() {
+            return None;
+        }
+        let rows: Vec<PanelPickerRow> = state
+            .use_item_picker_rows()
+            .into_iter()
+            .map(|row| PanelPickerRow {
+                quantity: row.quantity,
+                selector: PANEL_PICKER_SELECTOR_BLANK,
+                name: row.label,
+            })
+            .collect();
+        if rows.is_empty() {
+            return None;
+        }
+        return Some(PanelPickerView {
+            label: state.roster_box_label().unwrap_or_default(),
+            selected: state.use_picker_cursor(session),
+            rows,
+        });
+    }
+    if let Some(session) = state.active_ready.as_ref() {
+        let party_index = session.selected_party_index?;
+        let visible = state.ready_picker_items(party_index);
+        if visible.is_empty() {
+            return None;
+        }
+        let selected = state.ready_picker_cursor(session);
+        let rows = visible
+            .into_iter()
+            .map(|item_id| PanelPickerRow {
+                quantity: Some(state.equipment_stock[item_id]),
+                selector: PANEL_PICKER_SELECTOR_BLANK,
+                name: crate::EQUIPMENT_SHORT_LABELS
+                    .get(item_id)
+                    .copied()
+                    .unwrap_or("")
+                    .to_string(),
+            })
+            .collect();
+        return Some(PanelPickerView {
+            label: state.party_member_display_name(party_index),
+            selected,
+            rows,
+        });
+    }
+    None
+}
+
+/// Paint the live item picker over the roster panel (`inventory.md §4.4`):
+/// the panel is cleared and the visible rows land in window rows 1..=7,
+/// columns 1..=13, with the selected row in inverse video.
+pub fn paint_panel_picker_text_window(system: &mut TextWindowSystem, state: &PlayState) -> bool {
+    let Some(picker) = active_panel_picker(state) else {
+        return false;
+    };
+    system.set_active_window(STATS_PANEL_TEXT_WINDOW_INDEX);
+    system.emit_byte(TEXT_CTRL_CLEAR_WINDOW);
+    system.clear_active_flags();
+    let start = picker.page_start();
+    for (offset, row) in picker.visible_rows().iter().enumerate() {
+        let selected = start + offset == picker.selected;
+        system.set_active_cursor(1, (offset + 1) as u8);
+        if selected {
+            system.emit_byte(TEXT_CTRL_INVERSE_TOGGLE);
+        }
+        for byte in row.text().bytes().take(PANEL_PICKER_CONTENT_COLUMNS) {
+            system.emit_byte(byte);
+        }
+        if selected {
+            system.emit_byte(TEXT_CTRL_INVERSE_TOGGLE);
+        }
+    }
+    system.set_active_window(MESSAGE_TEXT_WINDOW_INDEX);
+    true
+}
+
 pub fn z_stats_page_panel_rows(state: &PlayState) -> Option<Vec<String>> {
     let session = state.active_z_stats.as_ref()?;
     Some(state.z_stats_panel_rows(session))
@@ -518,7 +668,9 @@ pub fn paint_stats_panel_text_window(
     state: &PlayState,
     active_cursor: Option<usize>,
 ) {
-    if paint_z_stats_page_text_window(system, state) {
+    if paint_panel_picker_text_window(system, state)
+        || paint_z_stats_page_text_window(system, state)
+    {
         return;
     }
     system.set_active_window(STATS_PANEL_TEXT_WINDOW_INDEX);

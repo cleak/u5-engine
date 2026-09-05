@@ -1182,13 +1182,22 @@ fn fill_rect(
 /// `weather.md §2.1` - so it is left as it was.
 pub fn gameplay_chrome_content(state: &crate::PlayState) -> GameplayChromeContent {
     let browser = crate::stats_panel::active_arms_sell_browser(state);
+    let picker = crate::stats_panel::active_panel_picker(state);
     let stats_label = browser
         .map(|_| crate::stats_panel::ARMS_SELL_BROWSER_STATS_LABEL.to_string())
+        .or_else(|| picker.as_ref().map(|picker| picker.label.clone()))
         .or_else(|| state.roster_box_label());
-    let timing_glyph = if let Some(browser) = browser {
+    let page_indicator = browser
+        .map(|browser| browser.page_indicator(&state.equipment_stock))
+        .or_else(|| {
+            picker
+                .as_ref()
+                .map(crate::stats_panel::PanelPickerView::page_indicator)
+        });
+    let timing_glyph = if let Some(indicator) = page_indicator {
         use crate::shop_runtime::ArmsSellPageIndicator;
 
-        match browser.page_indicator(&state.equipment_stock) {
+        match indicator {
             ArmsSellPageIndicator::None => None,
             ArmsSellPageIndicator::Down => {
                 Some(crate::stats_panel::ARMS_SELL_BROWSER_PAGE_GLYPH_DOWN)

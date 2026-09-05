@@ -25880,7 +25880,7 @@ fn dungeon_command_letters_do_not_fall_through_to_diagonal_movement_refusal() {
         ('D', "What?", 0),
         ('M', MMIX_SPELL_PROMPT_MESSAGE, 0),
         ('N', "New order:", 0),
-        ('R', "Ready:", 1),
+        ('R', PARTY_SELECTION_PROMPT, 1),
         ('U', "No usable items.", 1),
         ('W', "What?", 0),
         ('Y', "Yell what?", 0),

@@ -7,9 +7,12 @@ use crate::*;
 const SURFACE_LOOK_VISIBILITY_RADIUS: usize = 5;
 
 #[derive(Clone, Debug)]
-struct UseItemPickerRow {
-    label: String,
-    request: UseItemRequest,
+pub(crate) struct UseItemPickerRow {
+    pub(crate) label: String,
+    /// `inventory.md §4.5`: the two-cell quantity; `None` is the
+    /// "no quantity" marker that prints only the name.
+    pub(crate) quantity: Option<u8>,
+    pub(crate) request: UseItemRequest,
 }
 
 /// `commands.md §5` + observation: the U-Use handler's message-window
@@ -393,33 +396,19 @@ impl PlayState {
         if let Some(pending) = session.pending {
             return self.render_pending_use_action(pending);
         }
-        let rows = self.use_item_picker_rows();
-        if rows.is_empty() {
+        if self.use_item_picker_rows().is_empty() {
             return "No usable items.".to_string();
         }
+        // `inventory.md §4.4`: U-Use prints `Item:_` into the message
+        // window and runs the picker in the panel; the rows are read from
+        // `crate::active_panel_picker` by the panel painter.
+        USE_ITEM_PROMPT_MESSAGE.to_string()
+    }
 
-        let cursor = session.cursor.min(rows.len() - 1);
-        let panel_start = (cursor / USE_PICKER_PANEL_ROWS) * USE_PICKER_PANEL_ROWS;
-        // commands.md §5 + observation: U-Use echoes `Use item`, then the
-        // handler prompts `Item:` on the next line. The invented keybinding
-        // help line is removed (cleak/u5-spec#81 owns the exact literal).
-        let mut lines = vec![USE_ITEM_PROMPT_MESSAGE.to_string()];
-        for (index, row) in rows
-            .iter()
-            .enumerate()
-            .skip(panel_start)
-            .take(USE_PICKER_PANEL_ROWS)
-        {
-            let marker = if index == cursor { ">" } else { " " };
-            lines.push(format!("{marker} {:02}: {}", index + 1, row.label));
-        }
-        if rows.len() > panel_start + USE_PICKER_PANEL_ROWS {
-            lines.push(format!(
-                "... {} more",
-                rows.len() - panel_start - USE_PICKER_PANEL_ROWS
-            ));
-        }
-        lines.join("\n")
+    pub(crate) fn use_picker_cursor(&self, session: &UseSession) -> usize {
+        session
+            .cursor
+            .min(self.use_item_picker_rows().len().saturating_sub(1))
     }
 
     pub fn step_active_use(
@@ -635,7 +624,7 @@ impl PlayState {
         session.cursor = next.clamp(0, row_count as isize - 1) as usize;
     }
 
-    fn use_item_picker_rows(&self) -> Vec<UseItemPickerRow> {
+    pub(crate) fn use_item_picker_rows(&self) -> Vec<UseItemPickerRow> {
         let mut rows = Vec::new();
 
         self.push_counted_use_row(
@@ -727,6 +716,7 @@ impl PlayState {
             if count > 0 {
                 rows.push(UseItemPickerRow {
                     label: format!("Scroll {}", scroll_label(index)),
+                    quantity: Some(count),
                     request: UseItemRequest::Scroll {
                         index,
                         direction: None,
@@ -739,6 +729,7 @@ impl PlayState {
             if count > 0 {
                 rows.push(UseItemPickerRow {
                     label: potion_inventory_name(index).to_string(),
+                    quantity: Some(count),
                     request: UseItemRequest::Potion {
                         index,
                         target: None,
@@ -750,6 +741,7 @@ impl PlayState {
             for index in 0..MOONSTONE_SLOT_COUNT {
                 rows.push(UseItemPickerRow {
                     label: format!("Moonstone phase {}", index + 1),
+                    quantity: None,
                     request: UseItemRequest::Moonstone(index),
                 });
             }
@@ -769,6 +761,7 @@ impl PlayState {
         if count > 0 {
             rows.push(UseItemPickerRow {
                 label: label.to_string(),
+                quantity: Some(count),
                 request,
             });
         }
@@ -785,6 +778,7 @@ impl PlayState {
         if value > 0 {
             rows.push(UseItemPickerRow {
                 label: label.to_string(),
+                quantity: None,
                 request,
             });
         }

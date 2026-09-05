@@ -1148,6 +1148,12 @@ Mixed 1 IL charge; stock is 1.");
         assert_eq!(state.turn, 1);
     }
 
+    fn picker_row_names(state: &PlayState) -> Vec<String> {
+        active_panel_picker(state)
+            .map(|picker| picker.rows.into_iter().map(|row| row.name).collect())
+            .unwrap_or_default()
+    }
+
     #[test]
     fn active_use_picker_uses_pocket_watch_and_closes() {
         let mut state = test_state(open_grid(), 5, 5);
@@ -1159,7 +1165,7 @@ Mixed 1 IL charge; stock is 1.");
             PlayInputDisposition::Continue
         );
         assert!(state.active_use.is_some());
-        assert!(state.message.contains("Pocket Watch"));
+        assert!(picker_row_names(&state).iter().any(|name| name.contains("Pocket Watch")));
 
         assert_eq!(
             handle_play_key_input(&mut state, ' ', "", Path::new("")).unwrap(),
@@ -1193,7 +1199,7 @@ Mixed 1 IL charge; stock is 1.");
             handle_play_key_input(&mut state, 'U', "", Path::new("")).unwrap(),
             PlayInputDisposition::Continue
         );
-        assert!(state.message.contains("Scroll LV"));
+        assert!(picker_row_names(&state).iter().any(|name| name.contains("Scroll LV")));
 
         assert_eq!(
             handle_play_key_input(&mut state, '\r', "", Path::new("")).unwrap(),
@@ -1217,7 +1223,7 @@ Mixed 1 IL charge; stock is 1.");
             handle_play_key_input(&mut state, 'U', "", Path::new("")).unwrap(),
             PlayInputDisposition::Continue
         );
-        assert!(state.message.contains("Yellow Potion"));
+        assert!(picker_row_names(&state).iter().any(|name| name.contains("Yellow Potion")));
 
         assert_eq!(
             handle_play_key_input(&mut state, '\r', "", Path::new("")).unwrap(),
@@ -1248,7 +1254,7 @@ Mixed 1 IL charge; stock is 1.");
             handle_play_key_input(&mut state, 'U', "", Path::new("")).unwrap(),
             PlayInputDisposition::Continue
         );
-        assert!(state.message.contains("Scroll HR"));
+        assert!(picker_row_names(&state).iter().any(|name| name.contains("Scroll HR")));
 
         assert_eq!(
             handle_play_key_input(&mut state, '\r', "", Path::new("")).unwrap(),
@@ -1280,7 +1286,7 @@ Mixed 1 IL charge; stock is 1.");
             handle_play_key_input(&mut state, 'U', "", Path::new("")).unwrap(),
             PlayInputDisposition::Continue
         );
-        assert!(state.message.contains("Scroll CIM"));
+        assert!(picker_row_names(&state).iter().any(|name| name.contains("Scroll CIM")));
 
         assert_eq!(
             handle_play_key_input(&mut state, '\r', "", Path::new("")).unwrap(),
@@ -1312,7 +1318,7 @@ Mixed 1 IL charge; stock is 1.");
             PlayInputDisposition::Continue
         );
         assert!(state.active_use.is_some());
-        assert!(state.message.contains("Shard of Falsehood"));
+        assert!(picker_row_names(&state).iter().any(|name| name.contains("Shard of Falsehood")));
 
         assert_eq!(
             handle_play_key_input(&mut state, '\r', "", Path::new("")).unwrap(),
@@ -2485,14 +2491,16 @@ Mixed 1 IL charge; stock is 1.");
             PlayInputDisposition::Continue
         );
         assert!(state.active_ready.is_some());
-        assert!(state.message.contains("choose party member"));
+        assert_eq!(state.message, PARTY_SELECTION_PROMPT);
         // Opening the picker is the invocation, and it is what costs the
         // turn: `inventory.md §8` charges even for opening it and
         // immediately backing out.
         assert_eq!(state.turn, 1);
 
         handle_play_key_input(&mut state, '1', "", Path::new("")).unwrap();
-        assert!(state.message.contains("26: Bow"));
+        handle_play_key_input(&mut state, '\r', "", Path::new("")).unwrap();
+        assert_eq!(state.message, ITEM_SELECTION_PROMPT);
+        assert!(picker_row_names(&state).iter().any(|name| name.contains("Bow")));
 
         // inventory.md §5: Space and Enter are separate accepted confirm
         // bytes. Use Space for the first attempt and Enter for the second.
@@ -2505,7 +2513,7 @@ Mixed 1 IL charge; stock is 1.");
         assert_eq!(state.turn, 1);
         assert!(state.active_ready.is_some());
         assert!(state.message.contains("Readied Bow"));
-        assert!(state.message.contains("26: Bow"));
+        assert!(picker_row_names(&state).iter().any(|name| name.contains("Bow")));
 
         handle_play_key_input(&mut state, '\n', "", Path::new("")).unwrap();
         assert_eq!(state.party_equipment[0][EQUIP_SLOT_WEAPON], EQUIPMENT_EMPTY);
@@ -2605,6 +2613,7 @@ Mixed 1 IL charge; stock is 1.");
         picker_exit.equipment_stock[EQUIPMENT_ID_BOW] = 1;
         handle_play_key_input(&mut picker_exit, 'R', "", Path::new("")).unwrap();
         handle_play_key_input(&mut picker_exit, '1', "", Path::new("")).unwrap();
+        handle_play_key_input(&mut picker_exit, '\r', "", Path::new("")).unwrap();
         handle_play_key_input(&mut picker_exit, '\u{1b}', "", Path::new("")).unwrap();
         assert!(picker_exit.active_ready.is_none());
         assert_eq!(picker_exit.message, READY_PICKER_ESCAPE_MESSAGE);
@@ -2649,7 +2658,7 @@ Mixed 1 IL charge; stock is 1.");
             state.active_ready.as_ref().unwrap().selected_party_index,
             Some(1)
         );
-        assert!(state.message.contains("party member 2"));
+        assert_eq!(state.message, ITEM_SELECTION_PROMPT);
     }
 
     #[test]
@@ -2707,6 +2716,7 @@ Mixed 1 IL charge; stock is 1.");
         handle_play_key_input(&mut state, 'R', "", Path::new("")).unwrap();
         handle_play_key_input(&mut state, '1', "", Path::new("")).unwrap();
         handle_play_key_input(&mut state, ' ', "", Path::new("")).unwrap();
+        handle_play_key_input(&mut state, ' ', "", Path::new("")).unwrap();
 
         assert!(state.active_ready.is_none());
         assert_eq!(state.equipment_stock[EQUIPMENT_ID_RING_INVISIBILITY], 0);
@@ -2726,11 +2736,15 @@ Mixed 1 IL charge; stock is 1.");
         handle_play_key_input(&mut state, 'R', "", Path::new("")).unwrap();
         handle_play_key_input(&mut state, '2', "", Path::new("")).unwrap();
 
+        // inventory.md §4: a digit beyond the party size is rejected and the
+        // `Player: ` poll stays open.
         assert!(state.active_ready.is_some());
-        assert!(state.message.contains("Party has 1 member"));
+        assert_eq!(state.message, PARTY_SELECTION_PROMPT);
 
         handle_play_key_input(&mut state, '1', "", Path::new("")).unwrap();
-        assert!(state.message.contains("16: Dagger"));
+        handle_play_key_input(&mut state, '\r', "", Path::new("")).unwrap();
+        assert_eq!(state.message, ITEM_SELECTION_PROMPT);
+        assert!(picker_row_names(&state).iter().any(|name| name.contains("Dagger")));
     }
 
     #[test]

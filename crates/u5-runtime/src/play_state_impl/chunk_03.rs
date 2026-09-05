@@ -71,9 +71,15 @@ impl PlayState {
     /// The stats-panel renderer reads this instead of tracking selector
     /// state of its own.
     pub fn selector_highlight(&self) -> Option<usize> {
-        self.active_party_selector
+        if let Some(session) = self.active_party_selector.as_ref() {
+            return Some(session.highlight);
+        }
+        // `inventory.md §5` step 1: R-Ready "selects a party member with
+        // the same party-member selection surface used by Z-stats".
+        self.active_ready
             .as_ref()
-            .map(|session| session.highlight)
+            .filter(|session| session.selected_party_index.is_none())
+            .map(|session| session.cursor.min(self.party.len().saturating_sub(1)))
     }
 
     /// The party-roster box's border label for the current modal, if any.
@@ -102,6 +108,14 @@ impl PlayState {
         }
         if self.active_use.is_some() {
             return Some(USE_PICKER_ROSTER_BOX_LABEL.to_string());
+        }
+        if let Some(session) = self.active_ready.as_ref() {
+            return Some(match session.selected_party_index {
+                None => PARTY_SELECTOR_ROSTER_BOX_LABEL.to_string(),
+                // `cleak/u5-spec#194` capture: the equipment picker sits
+                // under the selected member's name label.
+                Some(index) => self.party_member_display_name(index),
+            });
         }
         if let Some(session) = &self.active_z_stats {
             return session
@@ -2114,20 +2128,32 @@ impl PlayState {
             .unwrap_or_else(ready_prompt_message)
     }
 
+    /// `inventory.md §5`: the member stage is the shared `Player: `
+    /// selection surface and the item stage prints `Item: ` while the
+    /// picker rows live in the panel (`§4.4`); the message window carries
+    /// nothing else.
     pub fn render_ready_session(&self, session: &ReadySession) -> String {
         let Some(party_index) = session.selected_party_index else {
-            return format!(
-                "Ready: choose party member (1-{}) or Space/Esc to exit.",
-                self.party.len().min(6)
-            );
+            return PARTY_SELECTION_PROMPT.to_string();
         };
         if party_index >= self.party.len() {
-            return format!(
-                "Ready: party has {} member{}. Choose 1-{} or Space/Esc to exit.",
-                self.party.len(),
-                if self.party.len() == 1 { "" } else { "s" },
-                self.party.len().min(6)
-            );
+            return PARTY_SELECTION_PROMPT.to_string();
+        }
+        if self.ready_visible_items_for_party(party_index).is_empty() {
+            return "Nothing to ready.".to_string();
+        }
+        ITEM_SELECTION_PROMPT.to_string()
+    }
+
+    /// The legacy terminal rendering of the equipment picker, kept for the
+    /// `--play` harness transcript; the graphical shell reads the rows
+    /// from [`crate::active_panel_picker`].
+    pub fn render_ready_session_rows(&self, session: &ReadySession) -> String {
+        let Some(party_index) = session.selected_party_index else {
+            return PARTY_SELECTION_PROMPT.to_string();
+        };
+        if party_index >= self.party.len() {
+            return PARTY_SELECTION_PROMPT.to_string();
         }
 
         // cleak/u5-spec#81: inventory.md §5 gives the R-Ready picker's
@@ -2181,10 +2207,13 @@ impl PlayState {
             let selector_action = party_target_selector_action(key as u8);
             match selector_action {
                 PartyTargetSelectorAction::SelectSlot(index) => {
+                    // `cleak/u5-spec#192`: a digit moves the bar; Return or
+                    // Space commit.
                     let index = usize::from(index);
-                    if self.ready_select_party_for_session(&mut session, index) {
-                        self.message = self.render_ready_session(&session);
+                    if index < self.party.len() {
+                        session.cursor = index;
                     }
+                    self.message = self.render_ready_session(&session);
                     self.active_ready = Some(session);
                 }
                 PartyTargetSelectorAction::Confirm if key == '0' => {
@@ -2196,6 +2225,10 @@ impl PlayState {
                 PartyTargetSelectorAction::Confirm => {
                     let index = session.cursor.min(self.party.len().saturating_sub(1));
                     if self.ready_select_party_for_session(&mut session, index) {
+                        // `commands.md §5.6`: the chosen name completes the
+                        // `Player: ` line; `Item: ` opens on the next.
+                        let chosen = self.party_member_display_name(index);
+                        let _ = self.complete_open_direction_echo(PARTY_SELECTION_PROMPT, &chosen);
                         self.message = self.render_ready_session(&session);
                     }
                     self.active_ready = Some(session);
@@ -2331,6 +2364,27 @@ impl PlayState {
                     .into_iter()
                     .next()
             })
+    }
+
+    /// Rows of the R-Ready picker for `party_index` (`inventory.md §4`
+    /// browsing rule plus the §5 step-2 readied-row exception).
+    pub(crate) fn ready_picker_items(&self, party_index: usize) -> Vec<usize> {
+        self.ready_visible_items_for_party(party_index)
+    }
+
+    /// Position of the session cursor within [`Self::ready_picker_items`].
+    pub(crate) fn ready_picker_cursor(&self, session: &ReadySession) -> usize {
+        let Some(party_index) = session.selected_party_index else {
+            return 0;
+        };
+        let visible = self.ready_visible_items_for_party(party_index);
+        let cursor = visible
+            .iter()
+            .copied()
+            .find(|item| *item >= session.cursor)
+            .or_else(|| visible.first().copied())
+            .unwrap_or(0);
+        visible.iter().position(|item| *item == cursor).unwrap_or(0)
     }
 
     fn normalize_ready_cursor(&self, session: &mut ReadySession) {

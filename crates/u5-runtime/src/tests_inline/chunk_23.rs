@@ -12412,7 +12412,11 @@ fn combat_input_dispatch_use_opens_shared_picker_and_ends_action_on_completion()
 
     assert!(state.active_use.is_some());
     assert_eq!(state.pending_combat_actor_slot, Some(0));
-    assert!(state.message.contains("Pocket Watch"));
+    assert!(
+        active_panel_picker(&state)
+            .map(|picker| picker.rows.iter().any(|row| row.name.contains("Pocket Watch")))
+            .unwrap_or(false)
+    );
     assert_eq!((state.combat_actors[8].x, state.combat_actors[8].y), (8, 5));
 
     assert_eq!(
@@ -12813,7 +12817,7 @@ fn combat_input_dispatch_ready_ends_actor_action_when_picker_closes() {
         state.active_ready.as_ref().unwrap().selected_party_index,
         Some(0)
     );
-    assert!(state.message.starts_with("Ready: party member 1."));
+    assert!(state.message.starts_with(ITEM_SELECTION_PROMPT));
 
     assert_eq!(
         handle_play_key_input(&mut state, '\u{1b}', "", game_dir).unwrap(),
