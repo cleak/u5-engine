@@ -794,7 +794,7 @@ pub const PARTY_SELECTION_PROMPT: &str = "Player: ";
 /// `view.md §3` entry-dispatch row 3: "the shared \"thou dost see\" preamble
 /// is printed here" for the object, sign and terrain arms; the description
 /// follows on the next row (`cleak/u5-spec#194` capture).
-pub const LOOK_RESULT_PREFIX: &str = "Thou dost see";
+pub const LOOK_RESULT_PREFIX: &str = "\nThou dost see";
 /// `cleak/u5-spec#194` (black-box): X-it on foot completes its own
 /// `X-it ` echo line with `what?`.
 pub const XIT_ON_FOOT_REFUSAL: &str = "what?";
@@ -805,7 +805,7 @@ pub const YELL_NO_EFFECT_MESSAGE: &str = "No effect!";
 /// the `Yell ` echo.
 pub const YELL_QUESTION: &str = "what?";
 /// `cleak/u5-spec#194` (black-box): `Get-<dir>` with nothing to pick up.
-pub const GET_NOTHING_REFUSAL: &str = "Nothing to get!";
+pub const GET_NOTHING_REFUSAL: &str = "\nNothing to get!";
 /// `cleak/u5-spec#194` (black-box): `Hole up- ` off an inn bed completes
 /// its echo line with this refusal.
 pub const HOLE_UP_NOT_IN_BED_REFUSAL: &str = "Only in bed!";
@@ -813,7 +813,7 @@ pub const HOLE_UP_NOT_IN_BED_REFUSAL: &str = "Only in bed!";
 pub const ENTER_NOTHING_REFUSAL: &str = "what?";
 /// `cleak/u5-spec#194` capture (town) and `dungeon-mode.md` (dungeon):
 /// the Search result when nothing is found.
-pub const SEARCH_NOTHING_FOUND: &str = "Thou dost find nothing of note.";
+pub const SEARCH_NOTHING_FOUND: &str = "\nThou dost find nothing of note.";
 pub const ITEM_SELECTION_PROMPT: &str = "Item: ";
 /// The cancel result appended to an open selection prompt line.
 pub const SELECTION_CANCELLED_LITERAL: &str = "None!";

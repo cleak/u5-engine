@@ -132,6 +132,7 @@ fn z_stats_panel_text(state: &PlayState) -> String {
 #[test]
 fn cast_prompt_echoes_rune_words_but_still_parses_selectors() {
     let mut state = test_state(open_grid(), 5, 5);
+    state.active_player = Some(0);
     assert_eq!(state.start_cast_spell_prompt(), MoveOutcome::Observed);
 
     // `PRV` for *Vas Rel Por* (Gate Travel) is one of the spec's own examples,
@@ -144,7 +145,7 @@ fn cast_prompt_echoes_rune_words_but_still_parses_selectors() {
             .is_none()
     );
     assert!(
-        state.message.contains("Spell name: Por Rel Vas "),
+        state.message.contains("Spell name:\n:Por Rel Vas "),
         "cast echo was {:?}",
         state.message
     );
