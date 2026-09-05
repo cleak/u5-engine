@@ -426,6 +426,12 @@ fn layout_message_window_inner(
             .last()
             .is_some_and(|line| line.text == prompt.trim_end())
     });
+    // A prompt that has opened its own line keeps the typed text on that
+    // same line rather than starting a fresh one: `text-output.md §10.6`
+    // models the window as "a log whose final line is being edited - for
+    // example `Player: ` followed by the input cursor". So the buffer is
+    // not discarded here, it is appended to the prompt row below.
+    let open_prompt_typed = open_prompt.and(live_input).unwrap_or("");
     let live_input = if open_prompt.is_some() {
         None
     } else {
@@ -512,11 +518,21 @@ fn layout_message_window_inner(
     // `Player: ` starts in column 24 and puts the cursor in 32;
     // `Open-` starts in column 25 - one past its end cap - and puts it
     // in 30, which is where the direction word then lands.
+    if !open_prompt_typed.is_empty() {
+        if let Some(row) = rows.last_mut() {
+            let room = (MESSAGE_WINDOW_RIGHT as usize + 1)
+                .saturating_sub(row.column as usize + row.glyphs.len());
+            for byte in open_prompt_typed.bytes().take(room) {
+                row.text.push(byte as char);
+                row.glyphs.push(crate::TlkRenderedGlyph::ordinary(byte));
+            }
+        }
+    }
     let inline_cursor = open_prompt.and_then(|prompt| {
         rows.last().map(|row| {
             (
-                (row.column as usize + prompt.chars().count()).min(MESSAGE_WINDOW_RIGHT as usize)
-                    as u8,
+                (row.column as usize + prompt.chars().count() + open_prompt_typed.chars().count())
+                    .min(MESSAGE_WINDOW_RIGHT as usize) as u8,
                 row.row,
             )
         })

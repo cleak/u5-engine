@@ -606,6 +606,13 @@ pub const TLK_CODE_END_OF_RESPONSE: u8 = 0xFF;
 /// handling may strip the embedded newline.
 pub const TLK_KEYWORD_PROMPT: &str = "Your interest?\n:";
 
+/// The row of [`TLK_KEYWORD_PROMPT`] that stays open for input.
+///
+/// The prompt logs two rows; the second is the one being edited, so it
+/// is what [`crate::PlayState::open_prompt_line`] reports and what the
+/// typed keyword continues.
+pub const TLK_KEYWORD_PROMPT_OPEN_LINE: &str = ":";
+
 /// `conversation.md §9` opening preamble emitted before the NPC
 /// Description entry.
 ///

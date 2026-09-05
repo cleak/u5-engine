@@ -194,6 +194,16 @@ impl PlayState {
     }
 
     pub fn open_prompt_line(&self) -> Option<String> {
+        // `conversation.md §6`/`§9`: the keyword prompt is
+        // `Your interest?`, a line feed, then `:` - and the `:` row is
+        // the one being edited, so the typed keyword continues it and no
+        // end cap is drawn below. The layout appends the shell's buffer
+        // to this row (`LiveRowKind`/`open_prompt`), which is why the
+        // conversation is an open prompt here rather than a suppressed
+        // live row: suppressing it hid the player's own keystrokes.
+        if self.active_conversation.is_some() {
+            return Some(TLK_KEYWORD_PROMPT_OPEN_LINE.to_string());
+        }
         if self.active_party_selector.is_some() {
             return Some(PARTY_SELECTOR_PROMPT_MESSAGE.to_string());
         }
