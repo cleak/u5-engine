@@ -29,9 +29,12 @@ fn z_stats_pages_paint_their_published_border_labels() {
     let expected = [
         (ZStatsPage::Stats, Some(member.as_str())),
         (ZStatsPage::Equipment, Some(member.as_str())),
+        // The counters screen and its `Equipment` label, and a bare
+        // `Items` on the items page (`cleak/u5-spec#202`).
+        (ZStatsPage::Counters, Some("Equipment")),
         (ZStatsPage::Reagents, Some("Reagents")),
         (ZStatsPage::Spells, Some("Spells")),
-        (ZStatsPage::SpecialUse, Some("Items:")),
+        (ZStatsPage::SpecialUse, Some("Items")),
         (ZStatsPage::EquipmentStock, Some("Armaments")),
     ];
 
@@ -97,7 +100,8 @@ fn empty_z_stats_pages_print_the_published_placeholders() {
 
     // The Items page is the only zero-filtered inventory page whose scanner
     // can run out of displayable rows in this fixture.
-    for _ in 0..3 {
+    // Arms -> counters -> reagents -> spells -> items.
+    for _ in 0..4 {
         assert!(state.step_active_z_stats('>', ""));
     }
     assert_eq!(

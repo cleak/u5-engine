@@ -415,12 +415,24 @@ fn z_stats_border_labels_and_placeholders_match_published_literals() {
     assert_eq!(ZStatsPage::EquipmentStock.border_label(), Some("Armaments"));
     assert_eq!(ZStatsPage::Spells.border_label(), Some("Spells"));
     assert_eq!(ZStatsPage::Reagents.border_label(), Some("Reagents"));
-    assert_eq!(ZStatsPage::SpecialUse.border_label(), Some("Items:"));
+    // The U-Use picker's border literal carries a colon; the Z-stats
+    // Items page's does not (`cleak/u5-spec#202`).
+    assert_eq!(ZStatsPage::SpecialUse.border_label(), Some("Items"));
+    assert_eq!(ZStatsPage::Counters.border_label(), Some("Equipment"));
 
-    // §4.6: exactly these five stored literals exist, so no page may invent
-    // one outside the published roster.
-    const PUBLISHED_BORDER_LITERALS: [&str; 5] =
-        ["Select:", "Items:", "Reagents", "Spells", "Armaments"];
+    // §4.6 lists five stored literals. A capture of the stock game shows
+    // two more reaching this slot: `Equipment` on the counters screen, and
+    // a bare `Items` on the Z-stats items page - §4.6's `Items:` with its
+    // colon belongs to the U-Use picker. Reported as `cleak/u5-spec#202`.
+    const PUBLISHED_BORDER_LITERALS: [&str; 7] = [
+        "Select:",
+        "Items:",
+        "Items",
+        "Equipment",
+        "Reagents",
+        "Spells",
+        "Armaments",
+    ];
     for page in ZStatsPage::ORDERED {
         if let Some(label) = page.border_label() {
             assert!(
@@ -471,23 +483,27 @@ fn z_stats_border_labels_and_placeholders_match_published_literals() {
 /// `§4`: "The Z-stats page loop preserves a single page index. ... Direction-style
 /// navigation moves backward or forward through the visible page sequence".
 #[test]
-fn z_stats_direction_navigation_cycles_exactly_the_six_published_pages() {
-    // "There are **six** pages in all".
-    assert_eq!(ZStatsPage::ORDERED.len(), 6);
+fn z_stats_direction_navigation_cycles_exactly_the_observed_pages() {
+    // §4.7 says "There are **six** pages in all", but a capture of the
+    // stock game pages through **seven** screens: the counters half of
+    // §4.7's "equipment page" is a screen of its own, labelled
+    // `Equipment`, between the `Arms` screen and Reagents. The order also
+    // differs - reagents precede spells and items precede armaments.
+    // Reported as `cleak/u5-spec#202`.
+    assert_eq!(ZStatsPage::ORDERED.len(), 7);
 
-    // Page 1 the stat page, page 2 the equipment page, then reagents, spell
-    // charges, special/use items, and the weapons/armour stash.
     assert_eq!(
         ZStatsPage::ORDERED,
         [
             ZStatsPage::Stats,
             ZStatsPage::Equipment,
+            ZStatsPage::Counters,
             ZStatsPage::Reagents,
             ZStatsPage::Spells,
             ZStatsPage::SpecialUse,
             ZStatsPage::EquipmentStock,
         ],
-        "the published page sequence of §4 / §4.7"
+        "the page sequence a capture of the stock game walks"
     );
 
     let mut session = ZStatsSession::new(0);

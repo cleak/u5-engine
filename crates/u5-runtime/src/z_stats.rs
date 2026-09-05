@@ -34,6 +34,15 @@ pub enum ZStatsPage {
     Spells,
     SpecialUse,
     EquipmentStock,
+    /// The party-counters screen: `Food`, `Gold`, and the dotted-leader
+    /// `Keys`/`Gems`/`Torches` rows of `inventory.md §4.7`'s literal
+    /// table.
+    ///
+    /// §4.7 folds this into "the equipment page", but a capture of the
+    /// stock game pages through it as a screen of its own, with its own
+    /// `Equipment` border label, immediately after the `Arms` screen.
+    /// The engine had the literals and no page to draw them on.
+    Counters,
 }
 
 impl ZStatsPage {
@@ -44,9 +53,19 @@ impl ZStatsPage {
     /// visible page sequence (`inventory.md §4`), so the cycle is six
     /// long. The engine-invented spell-book page is not among them
     /// and is deliberately absent here.
-    pub const ORDERED: [Self; 6] = [
+    /// The page cycle, in the order a capture of the stock game walks it.
+    ///
+    /// `inventory.md §4.7` tabulates **six** pages - attributes,
+    /// equipment, armaments, spells, reagents, items - but paging through
+    /// the original with the direction keys visits **seven** screens in a
+    /// different order: attributes, Arms, Equipment, Reagents, Spells,
+    /// Items, Armaments. The extra screen is the counters half of §4.7's
+    /// "equipment page", which the original pages separately and labels
+    /// `Equipment`. Reported as `cleak/u5-spec#202`.
+    pub const ORDERED: [Self; 7] = [
         Self::Stats,
         Self::Equipment,
+        Self::Counters,
         Self::Reagents,
         Self::Spells,
         Self::SpecialUse,
@@ -64,11 +83,14 @@ impl ZStatsPage {
     pub const fn border_label(self) -> Option<&'static str> {
         match self {
             Self::Stats | Self::Equipment | Self::SpellBook => None,
+            Self::Counters => Some(Z_STATS_EQUIPMENT_HEADING),
             Self::Reagents => Some("Reagents"),
             Self::Spells => Some("Spells"),
-            // Same stored literal as the U-Use item browser's
-            // `USE_PICKER_ROSTER_BOX_LABEL`.
-            Self::SpecialUse => Some("Items:"),
+            // The U-Use item browser's label carries a colon
+            // (`inventory.md §4.4` writes `Items:` over the picker); the
+            // Z-stats page's does not. A capture shows the border reading
+            // `Items` here.
+            Self::SpecialUse => Some("Items"),
             Self::EquipmentStock => Some("Armaments"),
         }
     }
@@ -84,6 +106,7 @@ impl ZStatsPage {
             Self::Spells => "Spell Charges",
             Self::SpecialUse => "Special/Use Items",
             Self::EquipmentStock => "Weapons/Armour Stock",
+            Self::Counters => "Equipment Counters",
         }
     }
 
@@ -926,6 +949,9 @@ pub const Z_STATS_EXPERIENCE_LABEL: &str = "  Ex:";
 pub const Z_STATS_MAGIC_LABEL: &str = "    Magic:";
 /// `inventory.md §4.7` equipment-page heading literal `Arms\n\n`.
 pub const Z_STATS_ARMS_HEADING: &str = "Arms";
+/// `inventory.md §4.7` literal table: the `Equipment` heading, which the
+/// stock game uses as the counters screen's border label.
+pub const Z_STATS_EQUIPMENT_HEADING: &str = "Equipment";
 
 /// Width of the attribute page's right-hand numeric column.
 ///

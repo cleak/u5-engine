@@ -205,6 +205,9 @@
         // page. The engine's spell-book page is not one of the six published
         // pages (`§4.7`), so it does not sit between them.
         assert_eq!(state.z_stats(), MoveOutcome::Observed);
+        // Stats -> Arms -> Equipment counters -> Reagents. The counters
+        // screen sits between them in the stock game (`cleak/u5-spec#202`).
+        assert!(state.step_active_z_stats('>', ""));
         assert!(state.step_active_z_stats('>', ""));
         assert!(state.step_active_z_stats('>', ""));
 
@@ -337,6 +340,8 @@
         state.equipment_stock = [0; EQUIPMENT_COUNT];
 
         assert_eq!(state.z_stats(), MoveOutcome::Observed);
+        assert!(state.step_active_z_stats('>', ""));
+        // Step past the counters screen, which has no inventory band.
         assert!(state.step_active_z_stats('>', ""));
 
         for page in [

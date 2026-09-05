@@ -1953,6 +1953,7 @@ impl PlayState {
                 }
                 z_stats_place_panel_rows(&mut rows, 2, &lines);
             }
+            ZStatsPage::Counters => self.z_stats_counters_page_rows(&mut rows),
             page => {
                 let mut lines = Vec::new();
                 match page {
@@ -1970,6 +1971,31 @@ impl PlayState {
             }
         }
         rows
+    }
+
+    /// `inventory.md §4.7`'s counters screen, built from its published
+    /// label literals: `_Food:_`, `_Gold:_`, then a blank row and the
+    /// three dotted-leader rows `_Keys.......`, `_Gems.......` and
+    /// `_Torches....`.
+    ///
+    /// The leaders are literal runs of periods inside the labels - seven
+    /// for keys and gems, four for torches - "which is why the three
+    /// counts land in the same column with no padding logic anywhere".
+    /// All three labels are twelve characters, so the count is
+    /// right-aligned in the panel's remaining width.
+    fn z_stats_counters_page_rows(&self, rows: &mut [String]) {
+        let right = |label: &str, value: u32| {
+            let value = value.to_string();
+            let pad = STATS_PANEL_WIDTH
+                .saturating_sub(label.chars().count())
+                .saturating_sub(value.chars().count());
+            format!("{label}{}{value}", " ".repeat(pad))
+        };
+        rows[0] = right(" Food:", u32::from(self.food));
+        rows[1] = right(" Gold:", u32::from(self.gold));
+        rows[3] = right(" Keys.......", u32::from(self.keys));
+        rows[4] = right(" Gems.......", u32::from(self.gems));
+        rows[5] = right(" Torches....", u32::from(self.torches));
     }
 
     /// `inventory.md §4.7` attribute page, built from its published
@@ -2500,7 +2526,8 @@ impl PlayState {
 
     fn z_stats_inventory_row_count(&self, session: &ZStatsSession) -> Option<usize> {
         match session.page {
-            ZStatsPage::Stats | ZStatsPage::Equipment => None,
+            // The counters screen is a fixed layout, not a scrolling band.
+            ZStatsPage::Stats | ZStatsPage::Equipment | ZStatsPage::Counters => None,
             ZStatsPage::SpellBook => {
                 let member = self.party.get(session.selected_party_index).copied()?;
                 let max_circle = z_stats_spell_book_max_circle(member.class_byte);
