@@ -16677,7 +16677,7 @@ fn render_integrated_status_framebuffer(
         // The spell-name colon line is a live row whose text comes from
         // the cast/mix session rather than the shell's own input buffer.
         let spell_echo = display_state.spell_prompt_echo();
-        let live_row = if display_state.mix_reagent_selection_active() {
+        let live_row = if display_state.message_window_live_row_suppressed() {
             None
         } else {
             Some(spell_echo.as_deref().or(input_echo).unwrap_or(""))

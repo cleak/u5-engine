@@ -17,6 +17,28 @@ impl PlayState {
     /// `is_command_echo` set are the lines the original draws with the
     /// leading `>` command glyph; the rest are handler continuation
     /// lines drawn without it.
+    /// Record a harness diagnostic. See [`PlayState::diagnostics`].
+    ///
+    /// Bounded, because some of these fire once per turn and a long
+    /// route would otherwise grow the vector without limit.
+    pub fn push_diagnostic(&mut self, text: String) {
+        const DIAGNOSTIC_CAPACITY: usize = 64;
+        if self.diagnostics.len() >= DIAGNOSTIC_CAPACITY {
+            self.diagnostics.remove(0);
+        }
+        self.diagnostics.push(text);
+    }
+
+    /// The most recent harness diagnostic, if any.
+    pub fn last_diagnostic(&self) -> Option<&str> {
+        self.diagnostics.last().map(String::as_str)
+    }
+
+    /// Whether any recorded diagnostic contains `needle`.
+    pub fn diagnostics_contain(&self, needle: &str) -> bool {
+        self.diagnostics.iter().any(|entry| entry.contains(needle))
+    }
+
     pub fn message_entries(&self) -> &[MessageEntry] {
         &self.message_transcript
     }

@@ -888,6 +888,7 @@ impl PlayState {
             // gets it too. A scene that loads without the file is not an
             // error; every caller treats `None` as "no description".
             look_table: crate::load_look_table(game_dir).ok(),
+            diagnostics: Vec::new(),
             active_blackthorn: None,
             blackthorn_audience_map: None,
             active_shop: None,
@@ -1245,6 +1246,7 @@ impl PlayState {
             // gets it too. A scene that loads without the file is not an
             // error; every caller treats `None` as "no description".
             look_table: crate::load_look_table(game_dir).ok(),
+            diagnostics: Vec::new(),
             active_blackthorn: None,
             blackthorn_audience_map: None,
             active_shop: None,
@@ -1614,6 +1616,7 @@ impl PlayState {
             // gets it too. A scene that loads without the file is not an
             // error; every caller treats `None` as "no description".
             look_table: crate::load_look_table(game_dir).ok(),
+            diagnostics: Vec::new(),
             active_blackthorn: None,
             blackthorn_audience_map: None,
             active_shop: None,

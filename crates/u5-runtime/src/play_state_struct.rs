@@ -534,6 +534,17 @@ pub struct PlayState {
     /// through every Talk signature. `None` when the scene was built
     /// without assets, as most unit-test fixtures are.
     pub look_table: Option<crate::LookTable>,
+    /// Harness-only diagnostics: NPC slot indices, sprite type bytes,
+    /// cell coordinates, alarm-sweep counts.
+    ///
+    /// These used to be written straight into [`Self::message`], which
+    /// put internal identifiers in front of the player and, worse, hid
+    /// whatever the original prints on those rows - a paired capture
+    /// could not measure the real narration because ours had already
+    /// overwritten it (`cleak/u5-engine#8`). They live here instead, so
+    /// the acceptance suites can still assert on them while the message
+    /// window carries only published text.
+    pub diagnostics: Vec<String>,
     pub active_blackthorn: Option<crate::blackthorn_session::BlackthornChallenge>,
     pub blackthorn_audience_map: Option<MiscmapsCutsceneMap>,
     pub active_shop: Option<crate::shop_session::ActiveShopSession>,

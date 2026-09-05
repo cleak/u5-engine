@@ -795,6 +795,18 @@ pub const PARTY_SELECTION_PROMPT: &str = "Player: ";
 /// is printed here" for the object, sign and terrain arms; the description
 /// follows on the next row (`cleak/u5-spec#194` capture).
 pub const LOOK_RESULT_PREFIX: &str = "\nThou dost see";
+
+/// The town arrest sequence's surrender question.
+///
+/// `town-mode.md §1123` says the sequence "prints the arrest challenge
+/// and asks whether the party will come quietly" but publishes no
+/// literal. An interaction that reads Y/N has to show *something*, so
+/// this is the engine's own wording, marked as such: it is the one
+/// place on this path where printing nothing is not an option. The
+/// arrest challenge, the knockout and awakening lines, and the guards'
+/// refusal challenge are all equally unpublished and the engine prints
+/// none of them. cleak/u5-spec#198 tracks the measurements.
+pub const TOWN_ARREST_SURRENDER_PROMPT: &str = "Surrender? (Y/N).";
 /// `cleak/u5-spec#194` (black-box): X-it on foot completes its own
 /// `X-it ` echo line with `what?`.
 pub const XIT_ON_FOOT_REFUSAL: &str = "what?";

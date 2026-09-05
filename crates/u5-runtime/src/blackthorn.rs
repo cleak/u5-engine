@@ -55,7 +55,11 @@ impl BlackthornGuardDemandPrompt {
             // from the NPC's Look description, which matters for the
             // sibling non-speaker line - see the same issue.
             Self::Tribute { amount } => {
-                format!("A guard demands a {amount} gp tribute to Blackthorn!\n\nDost thou pay?")
+                // The `\n:` tail is the same envelope
+                // [`crate::TLK_KEYWORD_PROMPT`] carries: the question,
+                // then a fresh row holding the colon with the input
+                // cursor after it. Measured on the same capture.
+                format!("A guard demands a {amount} gp tribute to Blackthorn!\n\nDost thou pay?\n:")
             }
         }
     }

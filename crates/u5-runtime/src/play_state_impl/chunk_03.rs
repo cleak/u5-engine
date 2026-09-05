@@ -169,6 +169,23 @@ impl PlayState {
             .is_some_and(|session| session.phase == MixPhase::Reagents)
     }
 
+    /// Whether a prompt already owns the window's last row, so the shell
+    /// must not open a fresh command row under it.
+    ///
+    /// `text-output.md §10.6`: "a prompt that is waiting for a key keeps
+    /// its own line open and carries the cursor inline", so no live row
+    /// and no end-cap triangle is drawn for it. Captures of the original
+    /// show this for the conversation keyword prompt (`Your interest?`
+    /// then `:`) and for the regime guard's demand (`Dost thou pay?`
+    /// then `:`) as well as for the mixer's reagent selection; the
+    /// engine was drawing an end cap below all three.
+    pub fn message_window_live_row_suppressed(&self) -> bool {
+        self.mix_reagent_selection_active()
+            || self.active_conversation.is_some()
+            || self.active_blackthorn_guard_demand.is_some()
+            || self.pending_town_arrest.is_some()
+    }
+
     pub fn open_prompt_line(&self) -> Option<String> {
         if self.active_party_selector.is_some() {
             return Some(PARTY_SELECTOR_PROMPT_MESSAGE.to_string());

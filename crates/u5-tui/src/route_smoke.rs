@@ -6890,8 +6890,8 @@ fn validate_route_smoke_case_state(
         }
         "castle-town-hostile-adjacent-alarm" => {
             if state.combat_active
-                || !state.message.contains("Hostile NPC slot 1")
-                || !state.message.contains("alarm raised")
+                || !state.diagnostics_contain("Hostile NPC slot 1")
+                || !state.diagnostics_contain("alarm raised")
             {
                 return Err(io::Error::other(format!(
                     "route smoke `{case_name}` did not handle the adjacent hostile NPC through alarm cleanup"
@@ -6905,7 +6905,7 @@ fn validate_route_smoke_case_state(
                     .iter()
                     .find(|npc| npc.slot == 2)
                     .is_none_or(|npc| npc.schedule[..3] != [7, 7, 7])
-                || !state.message.contains("Refused surrender")
+                || !state.diagnostics_contain("Refused surrender")
             {
                 return Err(io::Error::other(format!(
                     "route smoke `{case_name}` did not refuse the guard arrest prompt into alarm cleanup"

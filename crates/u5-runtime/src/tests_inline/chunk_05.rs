@@ -1632,11 +1632,11 @@ fn a_attack_adjacent_non_npc_object_reports_no_town_target() {
 
     assert_eq!((state.player.x, state.player.y), (5, 5));
     assert_eq!(state.turn, 1);
-    assert!(state.message.contains("Attacked object tile 42"));
-    assert!(state.message.contains("to the East"));
-    assert!(state.message.contains("no attackable town NPC"));
-    assert!(!state.message.contains("pending"));
-    assert!(!state.message.contains("out of scope"));
+    assert!(state.diagnostics_contain("Attacked object tile 42"));
+    assert!(state.diagnostics_contain("to the East"));
+    assert!(state.diagnostics_contain("no attackable town NPC"));
+    assert!(!state.diagnostics_contain("pending"));
+    assert!(!state.diagnostics_contain("out of scope"));
 }
 
 #[test]
@@ -1673,15 +1673,15 @@ fn a_attack_adjacent_activation_mask_npc_removes_linked_runtime_actor() {
     assert!(state.active_objects[object_slot].is_empty());
     assert_eq!(state.removed_town_npc_flags.get(&17), Some(&0b10));
     assert!(state.visibility_dirty);
-    assert!(state.message.contains("Attacked NPC slot 1"));
-    assert!(state.message.contains("type 0x0E"));
-    assert!(state.message.contains("target removed"));
+    assert!(state.diagnostics_contain("Attacked NPC slot 1"));
+    assert!(state.diagnostics_contain("type 0x0E"));
+    assert!(state.diagnostics_contain("target removed"));
     // town-mode.md §14's NPC-conflict chain covers the location's
     // actors - the ordinary townsperson band and the guard group. Tag
     // 0x0E is the §4 story-object slot, not a combatant, so A-Attack on
     // it stays inside town mode and never frames an arena.
-    assert!(!state.message.contains("combat"));
-    assert!(!state.message.contains("pending"));
+    assert!(!state.diagnostics_contain("combat"));
+    assert!(!state.diagnostics_contain("pending"));
 
     state.load_scheduled_npcs(&slots);
     assert!(

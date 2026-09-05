@@ -1335,7 +1335,7 @@
         );
 
         assert!(!state.combat_active);
-        assert!(state.message.contains("Hostile NPC slot 1"));
+        assert!(state.diagnostics_contain("Hostile NPC slot 1"));
         let _ = fs::remove_dir_all(dir);
     }
 
@@ -1461,7 +1461,7 @@
         );
 
         assert!(state.pending_town_arrest.is_none());
-        assert!(state.message.contains("Refused surrender"));
+        assert!(state.diagnostics_contain("Refused surrender"));
         let guard = state.npcs.iter().find(|npc| npc.slot == 2).unwrap();
         assert_eq!(&guard.schedule[..3], &[7, 7, 7]);
         assert_eq!(&guard.schedule[12..16], &[0, 0, 0, 0]);

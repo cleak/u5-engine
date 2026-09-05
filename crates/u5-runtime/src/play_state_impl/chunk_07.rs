@@ -2046,36 +2046,36 @@ impl PlayState {
                             let (pursued, fled) =
                                 self.town_alarm_sweep(scene, floor, Some(npc_slot));
                             self.mark_visibility_dirty();
-                            self.message = format!(
+                            self.push_diagnostic(format!(
                                 "Attacked NPC slot {npc_slot} type 0x{type_byte:02X} at ({x}, {y}) to the {}; target removed from {} floor {floor}; alarm raised ({pursued} pursuing, {fled} fleeing).",
                                 direction.name(),
                                 scene.key()
-                            );
+                            ));
                             return Ok(MoveOutcome::Used);
                         }
                         TownNpcAttackResolution::AlarmOnly => {
                             let (pursued, fled) =
                                 self.town_alarm_sweep(scene, floor, Some(npc_slot));
-                            self.message = format!(
+                            self.push_diagnostic(format!(
                                 "Attacked NPC slot {npc_slot} type 0x{type_byte:02X} at ({x}, {y}) to the {}; alarm raised ({pursued} pursuing, {fled} fleeing).",
                                 direction.name()
-                            );
+                            ));
                             return Ok(MoveOutcome::Used);
                         }
                         TownNpcAttackResolution::Refused => {
-                            self.message = format!(
+                            self.push_diagnostic(format!(
                                 "Attacked NPC slot {npc_slot} type 0x{type_byte:02X} at ({x}, {y}) to the {}; no attackable town NPC.",
                                 direction.name()
-                            );
+                            ));
                             return Ok(MoveOutcome::Blocked);
                         }
                     }
                 }
-                self.message = format!(
+                self.push_diagnostic(format!(
                     "Attacked object tile {} at ({x}, {y}) to the {}; no attackable town NPC.",
                     object.tile,
                     direction.name()
-                );
+                ));
                 return Ok(MoveOutcome::Blocked);
             }
             self.message = format!(
@@ -3707,27 +3707,20 @@ impl PlayState {
                 npc_slot,
             });
             self.message = if self.message.is_empty() {
-                format!("Guard NPC slot {npc_slot} catches the party. Surrender? (Y/N).")
+                TOWN_ARREST_SURRENDER_PROMPT.to_string()
             } else {
-                format!(
-                    "{} Guard NPC slot {npc_slot} catches the party. Surrender? (Y/N).",
-                    self.message
-                )
+                format!("{} {TOWN_ARREST_SURRENDER_PROMPT}", self.message)
             };
+            self.push_diagnostic(format!(
+                "Guard NPC slot {npc_slot} catches the party; arrest prompt opened."
+            ));
             return Ok(Some(MoveOutcome::Used));
         }
         if behavior.raises_attack_event() {
             let (pursued, fled) = self.town_alarm_sweep(scene, floor, Some(npc_slot));
-            self.message = if self.message.is_empty() {
-                format!(
-                    "Hostile NPC slot {npc_slot} (type {type_byte}) attacks; alarm raised ({pursued} pursuing, {fled} fleeing)."
-                )
-            } else {
-                format!(
-                    "{} Hostile NPC slot {npc_slot} (type {type_byte}) attacks; alarm raised ({pursued} pursuing, {fled} fleeing).",
-                    self.message
-                )
-            };
+            self.push_diagnostic(format!(
+                "Hostile NPC slot {npc_slot} (type {type_byte}) attacks; alarm raised ({pursued} pursuing, {fled} fleeing)."
+            ));
             return Ok(Some(MoveOutcome::Used));
         }
         Ok(None)
@@ -3790,13 +3783,19 @@ impl PlayState {
                 let scene = Scene::new(prompt.scene_byte)?;
                 let (pursued, fled) =
                     self.town_alarm_sweep(scene, prompt.floor, Some(prompt.npc_slot));
-                self.message = format!(
+                self.push_diagnostic(format!(
                     "Refused surrender; alarm raised ({pursued} pursuing, {fled} fleeing)."
-                );
+                ));
+                // `town-mode.md §1123`: "Refusing prints the guards'
+                // challenge". That literal is unpublished and unmeasured,
+                // so the engine prints nothing rather than inventing it;
+                // the alarm sweep still runs. cleak/u5-spec#198 tracks
+                // the measurement.
+                self.message = String::new();
                 Ok(Some(MoveOutcome::Used))
             }
             _ => {
-                self.message = "Surrender? (Y/N).".to_string();
+                self.message = TOWN_ARREST_SURRENDER_PROMPT.to_string();
                 Ok(Some(MoveOutcome::PromptDeclined))
             }
         }

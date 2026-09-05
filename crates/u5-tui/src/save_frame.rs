@@ -888,7 +888,7 @@ pub fn compose_gameplay_screen(
     // the same way the shell does. There is no typed-input buffer here,
     // which is the one live-row source this path cannot mirror.
     let spell_echo = state.spell_prompt_echo();
-    let live_row = if state.mix_reagent_selection_active() {
+    let live_row = if state.message_window_live_row_suppressed() {
         None
     } else {
         Some(spell_echo.as_deref().unwrap_or(""))
