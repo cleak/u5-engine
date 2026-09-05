@@ -268,7 +268,7 @@ pub use commands::{
     TOWN_EXIT_DECLINED_NARRATION, TOWN_EXIT_PROMPT, TOWN_EXIT_TO_BRITANNIA_NARRATION,
     TOWN_EXIT_TO_UNDERWORLD_NARRATION, VIEW_NO_GEM_REFUSAL, ViewCommandOutcome,
     WISHING_WELL_WISH_KEYWORDS, WISHING_WELL_WISH_MAX_CHARS, WishingWellWish, XIT_ON_FOOT_REFUSAL,
-    YELL_INPUT_MAX_LEN, YELL_NO_EFFECT_MESSAGE, YELL_NOTHING_SAID_MESSAGE,
+    YELL_INPUT_MAX_LEN, YELL_NO_EFFECT_MESSAGE, YELL_NOTHING_SAID_MESSAGE, YELL_QUESTION,
     YELL_SAILS_FURLED_MESSAGE, YELL_SAILS_HOISTED_MESSAGE, YellInputContext, command_echo,
     command_for_letter, death_vision_look_tile, dungeon_display_level, local_view_class_for_tile,
     movement_echo, new_order_outcome, new_order_swap_accepted, pushable_facing_index,

@@ -1156,6 +1156,13 @@ impl PlayState {
             return self.yell_command(None);
         }
         self.active_yell = Some(YellSession::new());
+        // `commands.md §5.3`: `Yell ` is an operand-follows echo and the
+        // question completes that line; the typed word echoes behind a
+        // colon on the next row (`cleak/u5-spec#194` capture).
+        if !self.complete_open_direction_echo("Yell ", YELL_QUESTION) {
+            self.message = format!("Yell {YELL_QUESTION}\n:");
+            return MoveOutcome::Observed;
+        }
         self.message = self.render_active_yell();
         MoveOutcome::Observed
     }
@@ -1171,7 +1178,7 @@ impl PlayState {
     /// word echoes on the next row behind a colon, folded to upper case
     /// (`cleak/u5-spec#194` capture: `Yell what?` / `:HELLO`).
     pub fn render_yell_session(&self, session: &YellSession) -> String {
-        format!("Yell what?\n:{}", session.buffer.to_ascii_uppercase())
+        format!(":{}", session.buffer.to_ascii_uppercase())
     }
 
     pub fn step_active_yell(&mut self, key: char, suffix: &str) -> Option<MoveOutcome> {

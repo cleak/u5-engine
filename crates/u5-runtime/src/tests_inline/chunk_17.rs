@@ -496,7 +496,7 @@
         assert!(state.active_cast.is_some());
         // `magic.md §5` Step 2: "each letter prints its associated rune
         // word followed by a space" - `IL` echoes as `In Lor `.
-        assert!(state.message.contains("Spell name: In Lor "));
+        assert!(state.message.contains("Spell name:\n:In Lor "));
         assert_eq!(state.spell_charges[IN_LOR_SPELL_INDEX], 1);
 
         assert_eq!(
@@ -817,7 +817,10 @@ Mixed 1 IL charge; stock is 1.");
         assert_eq!(&state.party_names[1], b"MARIA\0\0\0\0");
         assert_eq!(&state.party_names[2], b"IOLO\0\0\0\0\0");
         assert_eq!(state.turn, 1);
-        assert_eq!(state.message, "New order: party slots 2 and 3 swapped.");
+        // The result completes the `with <name>` line with `!`.
+        assert_eq!(state.message, "");
+        let last = transcript_texts(&state).last().cloned().unwrap_or_default();
+        assert!(last.starts_with(NEW_ORDER_SECOND_PROMPT) && last.ends_with('!'), "{last}");
     }
 
     #[test]
@@ -829,7 +832,8 @@ Mixed 1 IL charge; stock is 1.");
             PlayInputDisposition::Continue
         );
         assert!(state.active_yell.is_some());
-        assert!(state.message.contains("Yell what?"));
+        // The question completes the `Yell ` echo; the prompt row is the colon.
+        assert!(state.message.ends_with(':'), "{}", state.message);
 
         assert_eq!(
             handle_play_key_input(&mut state, 'f', "allax", Path::new("")).unwrap(),
@@ -838,7 +842,7 @@ Mixed 1 IL charge; stock is 1.");
 
         assert!(state.active_yell.is_none());
         assert_eq!(state.turn, 1);
-        assert_eq!(state.message, YELL_NO_EFFECT_MESSAGE);
+        assert!(state.message.ends_with(YELL_NO_EFFECT_MESSAGE));
     }
 
     #[test]

@@ -24189,6 +24189,7 @@ mod tests {
         let mut state = test_state(open_grid(), 1, 1);
         assert!(escape_is_inert_in_gameplay(&state));
 
+        state.active_player = Some(0);
         state.start_cast_spell_prompt();
         assert!(state.active_cast.is_some());
         assert!(!escape_is_inert_in_gameplay(&state));
@@ -24348,6 +24349,7 @@ mod tests {
     #[test]
     fn visual_cast_prompt_receives_backspace_from_key_map() {
         let mut state = test_state(open_grid(), 1, 1);
+        state.active_player = Some(0);
         state.start_cast_spell_prompt();
 
         for key in [KeyCode::KeyI, KeyCode::KeyN, KeyCode::Backspace] {
@@ -24356,7 +24358,8 @@ mod tests {
         }
 
         assert_eq!(state.active_cast.as_ref().unwrap().buffer, "I");
-        assert!(state.message.contains("Spell name: I"));
+        // magic.md §5 step 2: `Spell name:` then the colon-prompt echo.
+        assert!(state.message.starts_with("Spell name:\n:"));
     }
 
     #[test]

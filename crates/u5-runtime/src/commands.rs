@@ -801,6 +801,9 @@ pub const XIT_ON_FOOT_REFUSAL: &str = "what?";
 /// `cleak/u5-spec#194` (black-box): a plain Yell that matches neither a
 /// Shadowlord name nor a Word of Power prints `No effect!`.
 pub const YELL_NO_EFFECT_MESSAGE: &str = "No effect!";
+/// `commands.md §11`: "the ordinary `Yell what?` question", completing
+/// the `Yell ` echo.
+pub const YELL_QUESTION: &str = "what?";
 /// `cleak/u5-spec#194` (black-box): `Get-<dir>` with nothing to pick up.
 pub const GET_NOTHING_REFUSAL: &str = "Nothing to get!";
 /// `cleak/u5-spec#194` (black-box): `Hole up- ` off an inn bed completes

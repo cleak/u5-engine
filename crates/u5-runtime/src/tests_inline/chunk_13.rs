@@ -25883,7 +25883,7 @@ fn dungeon_command_letters_do_not_fall_through_to_diagonal_movement_refusal() {
         ('R', PARTY_SELECTION_PROMPT, 1),
         ('U', "No usable items.", 1),
         ('W', "What?", 0),
-        ('Y', "Yell what?", 0),
+        ('Y', ":", 0),
         ('Z', PARTY_SELECTION_PROMPT, 1),
     ] {
         let mut state = dungeon_state(open_dungeon_record(), 0, 1, 1);
