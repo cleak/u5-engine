@@ -1,0 +1,57 @@
+# Create a character, Journey Onward, walk to the hut's resident and run a conversation.
+both	wait	9000
+both	key	space
+both	wait	4000
+both	key	c
+both	wait	2500
+both	type	Avatar
+both	key	Return
+both	wait	1500
+both	key	m
+both	wait	3000
+both	key	space
+both	wait	3000
+both	key	a
+both	wait	3000
+both	key	a
+both	wait	3000
+both	key	a
+both	wait	3000
+both	key	a
+both	wait	3000
+both	key	a
+both	wait	3000
+both	key	a
+both	wait	3000
+both	key	a
+both	wait	3000
+both	key	space
+both	wait	4000
+both	key	j
+both	wait	7000
+both	shot	start	Starting hut after Journey Onward
+both	key	Down
+both	wait	1500
+both	key	Left
+both	wait	1500
+both	key	Left
+both	wait	1500
+both	shot	beside-resident	Beside the hut's resident
+both	key	t
+both	wait	1500
+both	shot	talk-prompt	Talk direction prompt
+both	key	Left
+both	wait	3000
+both	shot	talk-greeting	Greeting
+both	type	name
+both	key	Return
+both	wait	3000
+both	shot	talk-name	Name reply
+both	type	job
+both	key	Return
+both	wait	3000
+both	shot	talk-job	Job reply
+both	type	bye
+both	key	Return
+both	wait	3000
+both	shot	talk-bye	After bye
