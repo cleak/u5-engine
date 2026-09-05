@@ -1,0 +1,32 @@
+# Ultima V clean engine QA scenario registry.
+# Machine-readable system of record for stable reproduction inputs, expected
+# sanitized results, required lanes, and the public specification revision.
+# Validated by crates/u5-tui/tests/scenario_registry.rs; consumed by the
+# RemoteGameDev u5-clean adapter nightly gate. See docs/qa-scenarios.md.
+#
+# Columns (tab separated):
+#   id                 stable dotted identifier
+#   subsystem          engine area under test
+#   frontend           runtime | tui | bevy | dosbox | host
+#   lanes              '|' separated: source asset bevy dosbox
+#   platforms          '|' separated: windows linux steamos
+#   verification       automated | human
+#   spec_path          public spec path, or '*' when the scenario spans many documents
+#   spec_commit        public spec commit the expectation was reviewed against
+#   setup              deterministic command with {profile} and {out} placeholders, or a human procedure id
+#   expected_kind      manifest-sha256 | exit-zero | human-checklist
+#   expected_value     64-hex sanitized manifest hash, '0', or checklist id
+#   baseline_engine_commit  engine commit that produced expected_value
+#   notes              free text without asset content
+id	subsystem	frontend	lanes	platforms	verification	spec_path	spec_commit	setup	expected_kind	expected_value	baseline_engine_commit	notes
+source.gate	workspace	host	source	windows|linux	automated	*	9057c0d9014bd1fbaca211a1440d569d7ec4bd10	cargo fmt --all -- --check && cargo check --workspace --all-targets --locked && cargo test --workspace --locked && cargo test -p u5-tui --features visual --locked && cargo clippy --workspace --all-targets --all-features --locked && git diff --check	exit-zero	0	40741561a4c3205ed29f11afbca09bcd4d607d4b	Runs with U5_TEST_ASSET_DIR unset; no original assets.
+asset.workspace-tests	workspace	runtime	asset	windows|linux	automated	*	9057c0d9014bd1fbaca211a1440d569d7ec4bd10	cargo test --workspace --locked	exit-zero	0	40741561a4c3205ed29f11afbca09bcd4d607d4b	U5_TEST_ASSET_DIR points at a complete writable asset copy.
+asset.bevy-original-asset-tests	bevy	bevy	asset|bevy	windows|linux	automated	*	9057c0d9014bd1fbaca211a1440d569d7ec4bd10	cargo test -p u5-bevy --features original-asset-tests --locked	exit-zero	0	40741561a4c3205ed29f11afbca09bcd4d607d4b	231 Bevy tests at the baseline commit.
+suite.route-smoke	gameplay	tui	asset	windows|linux	automated	*	9057c0d9014bd1fbaca211a1440d569d7ec4bd10	u5-engine --route-smoke --route-smoke-manifest {out}/route/manifest.txt {profile}	manifest-sha256	53c526b5a7ddaafc079ca03a0ec12225f237d614d40a8f6e5a0e0ed6f169d9d0	40741561a4c3205ed29f11afbca09bcd4d607d4b	521 route cases and 2448 route frames at the baseline commit.
+suite.save-frame	rendering	tui	asset	windows|linux	automated	*	9057c0d9014bd1fbaca211a1440d569d7ec4bd10	u5-engine --save-frame-suite {out}/save-frame {profile}	manifest-sha256	0d121360a211f23408fa3c1e69b3874085b6b9d589dd54e0f775784d9adc2557	40741561a4c3205ed29f11afbca09bcd4d607d4b	16 headless saved frames.
+suite.visual-frame	rendering	bevy	asset|bevy	windows|linux	automated	*	9057c0d9014bd1fbaca211a1440d569d7ec4bd10	u5-engine --visual-frame-suite {out}/visual-frame {profile}	manifest-sha256	1675c22f21baf95e7b8d25583bcfd6fb99b82ee46c2b7e375a9cc3059761ec77	40741561a4c3205ed29f11afbca09bcd4d607d4b	193 Bevy visual frames; requires the visual feature and a display.
+suite.visual-route	gameplay	bevy	asset|bevy	windows|linux	automated	*	9057c0d9014bd1fbaca211a1440d569d7ec4bd10	u5-engine --visual-route-suite {out}/visual-route {profile}	manifest-sha256	3609f69db365fb453afcf41c3c4d7d3158466ff079b6164d3098218d900bd4b6	40741561a4c3205ed29f11afbca09bcd4d607d4b	1953 Bevy visual-route frames; requires the visual feature and a display.
+interactive.engine.keyboard-save-relaunch	play-loop	bevy	bevy	windows|linux	human	*	9057c0d9014bd1fbaca211a1440d569d7ec4bd10	procedure:engine-interactive	human-checklist	engine-keyboard-save-quit-relaunch	40741561a4c3205ed29f11afbca09bcd4d607d4b	Launch --visual-playable from a writable profile; create or load a save, move, save, quit, relaunch, confirm the saved position.
+interactive.engine.debugger-attach	host	bevy	bevy	linux	human	*	9057c0d9014bd1fbaca211a1440d569d7ec4bd10	procedure:lldb-tmux-attach	human-checklist	lldb-stop-backtrace-resume	40741561a4c3205ed29f11afbca09bcd4d607d4b	Attach rust-lldb in tmux to the graphical process, stop, backtrace, and shut down cleanly.
+reference.dosbox.stock-launch	reference	dosbox	dosbox	windows|linux	human	*	9057c0d9014bd1fbaca211a1440d569d7ec4bd10	procedure:dosbox-reference	human-checklist	dosbox-stock-input-save-relaunch	40741561a4c3205ed29f11afbca09bcd4d607d4b	Pinned DOSBox Staging 0.82.2, generated config, stock ULTIMA.EXE, no music-upgrade files, isolated writable profile.
+reference.dosbox.pc-speaker	audio	dosbox	dosbox	linux	human	*	9057c0d9014bd1fbaca211a1440d569d7ec4bd10	procedure:dosbox-pc-speaker	human-checklist	dosbox-blocked-movement-audible	40741561a4c3205ed29f11afbca09bcd4d607d4b	A blocked-movement speaker event must be non-silent on the streaming audio sink.
