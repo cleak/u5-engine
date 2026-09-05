@@ -27,5 +27,7 @@ are PRNG-selected and legitimately differ between the two sides.
 | `hut-commands` | Look, Z-stats for two members, X-it refusal, Search, Yell cancel, Quit/save |
 | `hut-exit-overworld` | walking to the hut door (superseded by `hut-door-overworld`) |
 | `hut-door-overworld` | open the hut door, step onto the overworld, Look, walk, save |
+| `hut-to-ararat` | exploratory walk from the hut toward Ararat and an Enter attempt |
+| `hut-audio` | PC-speaker blocked-step cue and a silent pass, captured per side |
 | `hut-talk` | Talk with the hut's resident: greeting, name, job, bye |
 | `hut-prompts` | New Order, Ready, Use, Cast, Mix, Yell, Search, Look, X-it, Get, Enter, Hole up, Ignite, Klimb prompt and result literals |

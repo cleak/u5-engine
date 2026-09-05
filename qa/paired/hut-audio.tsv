@@ -1,0 +1,55 @@
+# Create a character, Journey Onward, then exercise stateless commands inside the starting hut.
+both	wait	9000
+both	key	space
+both	wait	4000
+both	key	c
+both	wait	2500
+both	type	Avatar
+both	key	Return
+both	wait	1500
+both	key	m
+both	wait	3000
+both	key	space
+both	wait	3000
+both	key	a
+both	wait	3000
+both	key	a
+both	wait	3000
+both	key	a
+both	wait	3000
+both	key	a
+both	wait	3000
+both	key	a
+both	wait	3000
+both	key	a
+both	wait	3000
+both	key	a
+both	wait	3000
+both	key	space
+both	wait	4000
+both	key	j
+both	wait	7000
+both	shot	start	Starting hut after Journey Onward
+both	audio-start	engine-blocked	Engine: west then blocked west
+engine	key	Left
+both	wait	1500
+engine	key	Left
+both	wait	1500
+both	audio-stop		Engine blocked-step capture
+both	shot	engine-blocked	Engine after the blocked step
+both	audio-start	dosbox-blocked	DOSBox: west then blocked west
+dosbox	key	Left
+both	wait	1500
+dosbox	key	Left
+both	wait	1500
+both	audio-stop		DOSBox blocked-step capture
+both	shot	dosbox-blocked	DOSBox after the blocked step
+both	audio-start	engine-silence	Engine: pass a turn (silent by contract)
+engine	key	space
+both	wait	1500
+both	audio-stop		Engine pass capture
+both	audio-start	dosbox-silence	DOSBox: pass a turn
+dosbox	key	space
+both	wait	1500
+both	audio-stop		DOSBox pass capture
+both	shot	end	End
