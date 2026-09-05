@@ -1020,9 +1020,26 @@ impl PlayState {
                 }
             }
 
-            // A point-blank door suppresses the band-0 side cells so the
-            // frame is not boxed in.
-            if !(band == 0 && point_blank) {
+            // `dungeon-mode.md §6.5`: the sweep "runs the forward test,
+            // then - if the band is not skipped - paints the two side
+            // cells", and "stops at the first band whose forward test
+            // reports blocked". A blocked band is skipped for side-cell
+            // purposes: its forward image already fills the whole
+            // aperture at that depth, so there is nothing of its side
+            // cells left to see.
+            //
+            // The engine used to paint them anyway, and because the
+            // forward sweep runs near-to-far they landed *on top of* the
+            // forward wall - a band-1 side image is 32 wide at x=40, and
+            // the band-1 forward wall spans 40..152 - which narrowed the
+            // wall and added a band of perspective the original does not
+            // draw. A paired capture of Deceit level 1 shows the stock
+            // game's forward wall filling 40..152 with only the band-0
+            // side images beside it (u5-engine#6).
+            //
+            // A point-blank door additionally suppresses the band-0 side
+            // cells so the frame is not boxed in.
+            if outcome.see_through && !(band == 0 && point_blank) {
                 let left_cell =
                     self.dungeon_renderer_offset_cell(level, ahead_dx + ldx, ahead_dy + ldy);
                 let right_cell =
