@@ -22925,7 +22925,7 @@ mod tests {
         .unwrap();
 
         assert_eq!(input_line, "jo");
-        assert!(!state.message.contains("mend"));
+        assert!(!transcript_contains(&state, "mend"));
 
         apply_visual_key_route_step(
             &mut state,
@@ -22943,7 +22943,7 @@ mod tests {
         .unwrap();
 
         assert!(input_line.is_empty());
-        assert!(state.message.contains("mend"));
+        assert!(transcript_contains(&state, "mend"));
     }
 
     #[test]
@@ -24448,7 +24448,7 @@ mod tests {
 
         assert_eq!(input_line, "job");
         assert!(state.active_conversation.is_some());
-        assert!(!state.message.contains("mend"));
+        assert!(!transcript_contains(&state, "mend"));
 
         handle_visual_line_key(
             &mut state,
@@ -24461,7 +24461,19 @@ mod tests {
         .unwrap();
 
         assert!(input_line.is_empty());
-        assert!(state.message.contains("mend"));
+        assert!(transcript_contains(&state, "mend"));
+    }
+
+    /// The reply to a conversation keyword lands on the message
+    /// transcript, not in the one-line slot - the slot carries the prompt
+    /// that follows the reply. Both are on screen; the transcript is where
+    /// the answer itself is recorded.
+    #[cfg(test)]
+    fn transcript_contains(state: &PlayState, needle: &str) -> bool {
+        state
+            .message_entries()
+            .iter()
+            .any(|entry| entry.text.contains(needle))
     }
 
     #[test]

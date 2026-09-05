@@ -1,0 +1,24 @@
+# Talk to a Britain resident. Seeded with a save standing south of the NPC.
+both	wait	9000
+both	key	space
+both	wait	4000
+both	key	j
+both	wait	8000
+both	shot	arrival	Journey Onward beside the resident
+both	key	t
+both	wait	1200
+both	key	Up
+both	wait	3000
+both	shot	greeting	Talk north: greeting and keyword prompt
+both	type	name
+both	key	Return
+both	wait	3000
+both	shot	name	Name reply
+both	type	job
+both	key	Return
+both	wait	3000
+both	shot	job	Job reply
+both	type	bye
+both	key	Return
+both	wait	3000
+both	shot	bye	After bye

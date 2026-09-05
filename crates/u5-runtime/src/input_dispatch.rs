@@ -2547,19 +2547,21 @@ fn handle_active_conversation_key_input(
     }
     line.push_str(suffix);
     let line = line.trim().to_string();
-    let (text, ended) = state.submit_active_conversation_keyword(&line);
+    let (_text, ended) = state.submit_active_conversation_keyword(&line);
     if !ended {
         if let Some(session) = state.active_conversation.as_ref() {
             let prompt = session.prompt_message();
-            state.message = if prompt.is_empty() {
-                text
-            } else if text.is_empty() {
-                prompt.to_string()
-            } else if text.ends_with('\n') {
-                format!("{text}{prompt}")
-            } else {
-                format!("{text}\n{prompt}")
-            };
+            if !prompt.is_empty() {
+                // The reply is already on the transcript: the submit path
+                // ends in `emit_tlk_message`, which pushes the rendered
+                // lines *and* marks the slot flushed. Re-assigning the
+                // reply text here left the slot differing from the flushed
+                // value, so the safety-net flush appended it a second time
+                // and every answer printed twice - `Greyson` / `Greyson`,
+                // `I am an adventurer!` / `I am an adventurer!`. The slot
+                // only owes the prompt that follows the reply.
+                state.message = prompt;
+            }
         }
     }
     PlayInputDisposition::Continue

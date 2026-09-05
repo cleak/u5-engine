@@ -1,3 +1,12 @@
+/// A conversation reply is recorded on the message transcript; the
+/// one-line slot carries the prompt that follows it.
+fn transcript_has(state: &PlayState, needle: &str) -> bool {
+    state
+        .message_entries()
+        .iter()
+        .any(|entry| entry.text.contains(needle))
+}
+
 #[test]
 fn dungeon_get_refuses_chest_room_trigger_or_unrelated_cell_without_turn() {
     let scene = DungeonScene::new(33).unwrap();
@@ -2435,7 +2444,8 @@ fn play_input_talk_without_suffix_opens_keyword_session() {
         handle_play_key_input(&mut state, 'J', "OB", &dir).unwrap(),
         PlayInputDisposition::Continue
     );
-    assert_eq!(state.message, "I mend gear\nYour interest?\n:");
+    assert!(transcript_has(&state, "I mend gear"));
+    assert_eq!(state.message, TLK_KEYWORD_PROMPT);
     assert!(state.active_conversation.is_some());
     assert_eq!(state.turn, 1);
 
@@ -2443,10 +2453,8 @@ fn play_input_talk_without_suffix_opens_keyword_session() {
         handle_play_key_input(&mut state, 'X', "YZZY", &dir).unwrap(),
         PlayInputDisposition::Continue
     );
-    assert_eq!(
-        state.message,
-        format!("{TLK_NO_KEYWORD_MATCH_MESSAGE}{TLK_KEYWORD_PROMPT}")
-    );
+    assert!(transcript_has(&state, TLK_NO_KEYWORD_MATCH_MESSAGE.trim()));
+    assert_eq!(state.message, TLK_KEYWORD_PROMPT);
     assert!(state.active_conversation.is_some());
     assert_eq!(state.turn, 1);
     let _ = fs::remove_dir_all(dir);
@@ -3252,7 +3260,8 @@ fn active_conversation_recruit_speaker_runs_inline_without_a_name_prompt() {
     // input read", so the whole response emits in one turn and the
     // loop returns straight to the keyword prompt.
     handle_play_key_input(&mut state, 'J', "OIN", Path::new("")).unwrap();
-    assert_eq!(state.message, "I shall come. Accepted.\nYour interest?\n:");
+    assert!(transcript_has(&state, "I shall come. Accepted."));
+    assert_eq!(state.message, TLK_KEYWORD_PROMPT);
     assert!(state.active_conversation.is_some());
 }
 
@@ -3326,9 +3335,13 @@ fn active_conversation_ask_who_consumes_next_line_as_answer() {
     );
 
     handle_play_key_input(&mut state, 'W', "HO", Path::new("")).unwrap();
-    assert_eq!(state.message, "Name the keeper.\nWho?");
+    assert!(transcript_has(&state, "Name the keeper."));
+    assert_eq!(state.message, "Who?");
     handle_play_key_input(&mut state, 'i', "olo", Path::new("")).unwrap();
-    assert_eq!(state.message, " Accepted.\nYour interest?\n:");
+    // The reply is on the transcript; the slot carries the prompt that
+    // follows it.
+    assert!(transcript_has(&state, "Accepted."));
+    assert_eq!(state.message, TLK_KEYWORD_PROMPT);
     assert!(state.active_conversation.is_some());
     assert_eq!(state.active_conversation_join_candidate, None);
 }
