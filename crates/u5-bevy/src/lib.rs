@@ -13010,6 +13010,12 @@ fn render_story_intro_frame(intro: &mut VisualIntroState) -> Vec<u8> {
 }
 
 /// `chargen.md §4` name prompt text, printed at the `§5.1` step-1 cell.
+/// `chargen.md §4` menu-window interior cleared to colour 0 before the
+/// name prompt: pixels `(8, 128)..(311, 191)`.
+const CHARGEN_INTERIOR_X0: usize = 8;
+const CHARGEN_INTERIOR_Y0: usize = 128;
+const CHARGEN_INTERIOR_X1: usize = 311;
+const CHARGEN_INTERIOR_Y1: usize = 191;
 const CHARGEN_NAME_PROMPT_TEXT: &str = "By what name shalt thou be known?";
 const CHARGEN_NAME_PROMPT_COLUMN: usize = 3;
 const CHARGEN_NAME_PROMPT_ROW: usize = 17;
@@ -13093,6 +13099,25 @@ fn redraw_chargen_prompt_backdrop(intro: &mut VisualIntroState) {
     }
 }
 
+/// `chargen.md §4`: the one fixed-cell reset before the name prompt is a
+/// single opaque fill of the menu window's interior `(8, 128)..(311, 191)`
+/// in colour 0, plus two small fills that draw the prompt area's divider:
+/// `(120, 120)..(200, 126)` in user-interface colour slot 2 and the
+/// one-pixel rule at `y = 127` in slot 1. Those divider cells are exactly
+/// the intro menu's top-border `Select:` caption, so the published fills
+/// erase the caption and restore the border and rule - the same paint-out
+/// the `#54` Return-to-View preview performs.
+fn paint_chargen_prompt_reset(buffer: &mut IntroDisplayBuffer) {
+    buffer.clear_rect_inclusive(
+        CHARGEN_INTERIOR_X0,
+        CHARGEN_INTERIOR_Y0,
+        CHARGEN_INTERIOR_X1,
+        CHARGEN_INTERIOR_Y1,
+        0,
+    );
+    paint_out_intro_menu_select_caption(buffer);
+}
+
 /// `chargen.md §5.1` steps 1, 2 and 4 painted together, because they
 /// coexist on one screen until the first CREATE panel is drawn.
 fn paint_chargen_prompt_screen(
@@ -13101,6 +13126,7 @@ fn paint_chargen_prompt_screen(
     session: &ChargenSession,
     input_line: &str,
 ) {
+    paint_chargen_prompt_reset(buffer);
     overlay_fixed_cell_text_intro_buffer(
         buffer,
         font,
@@ -26161,6 +26187,58 @@ mod tests {
         assert_eq!(
             surface.pixels[rule_y * surface.width + x],
             RTV_UI_COLOUR_SLOT_1
+        );
+        let _ = fs::remove_dir_all(dir);
+    }
+
+    #[test]
+    #[cfg(feature = "original-asset-tests")]
+    fn chargen_prompt_screen_paints_out_the_menu_select_caption() {
+        // `chargen.md §4`: the divider fills issued before the name prompt
+        // erase the intro menu's top-border `Select:` caption and restore
+        // the rule; the interior is cleared to colour 0.
+        let dir = debug_game_dir();
+        let font_slots = u5_runtime::load_intro_font_slots(&dir, DisplayDriverFamily::Ega).unwrap();
+        let mut buffer = new_intro_display_buffer();
+        draw_visual_intro_menu_text_window_frame(
+            &mut buffer,
+            font_slots.active_font(),
+            intro_menu_select_caption_cursor_glyph(0),
+        );
+        let x = usize::from(INTRO_MENU_SELECT_CAPTION_COLUMN) * CH_CELL_SIDE + 8;
+        let y = usize::from(INTRO_MENU_SELECT_CAPTION_ROW) * CH_CELL_SIDE + 3;
+        let caption_before: Vec<u8> = (0..8 * CH_CELL_SIDE)
+            .map(|dx| buffer.pixels[y * buffer.width + x + dx])
+            .collect();
+        assert!(
+            caption_before.iter().any(|&p| p != RTV_UI_COLOUR_SLOT_2),
+            "menu frame should carry the Select: caption before chargen"
+        );
+
+        let font = load_ibm_ch_font(&dir).unwrap();
+        let records = vec![String::new(); u5_runtime::QUESTION_DAT_RECORDS];
+        let session = ChargenSession::new(records, Vec::new()).unwrap();
+        paint_chargen_prompt_screen(&mut buffer, &font, &session, "");
+
+        for row in CHARGEN_INTERIOR_Y0 - 8..CHARGEN_INTERIOR_Y0 - 1 {
+            for column in 120..200 {
+                assert_eq!(
+                    buffer.pixels[row * buffer.width + column],
+                    RTV_UI_COLOUR_SLOT_2,
+                    "divider fill at ({column}, {row})"
+                );
+            }
+        }
+        let rule_y = usize::from(INTRO_MENU_FRAME_RULE_Y);
+        for column in 120..200 {
+            assert_eq!(
+                buffer.pixels[rule_y * buffer.width + column],
+                RTV_UI_COLOUR_SLOT_1
+            );
+        }
+        assert_eq!(
+            buffer.pixels[CHARGEN_INTERIOR_Y0 * buffer.width + CHARGEN_INTERIOR_X0],
+            0
         );
         let _ = fs::remove_dir_all(dir);
     }
