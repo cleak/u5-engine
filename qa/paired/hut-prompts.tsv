@@ -1,0 +1,115 @@
+# Create a character, Journey Onward, then exercise stateless commands inside the starting hut.
+both	wait	9000
+both	key	space
+both	wait	4000
+both	key	c
+both	wait	2500
+both	type	Avatar
+both	key	Return
+both	wait	1500
+both	key	m
+both	wait	3000
+both	key	space
+both	wait	3000
+both	key	a
+both	wait	3000
+both	key	a
+both	wait	3000
+both	key	a
+both	wait	3000
+both	key	a
+both	wait	3000
+both	key	a
+both	wait	3000
+both	key	a
+both	wait	3000
+both	key	a
+both	wait	3000
+both	key	space
+both	wait	4000
+both	key	j
+both	wait	7000
+both	shot	start	Starting hut after Journey Onward
+both	key	n
+both	wait	2000
+both	shot	neworder-swap	New Order first prompt
+both	key	2
+both	wait	1500
+both	key	Return
+both	wait	2000
+both	shot	neworder-with	New Order second prompt
+both	key	3
+both	wait	1500
+both	key	Return
+both	wait	2500
+both	shot	neworder-done	After swapping 2 and 3
+both	key	r
+both	wait	2000
+both	shot	ready-player	Ready member prompt
+both	key	Return
+both	wait	2500
+both	shot	ready-picker	Ready equipment picker
+both	key	Escape
+both	wait	1500
+both	key	u
+both	wait	2500
+both	shot	use-picker	Use item picker
+both	key	Escape
+both	wait	1500
+both	key	c
+both	wait	2000
+both	shot	cast-player	Cast member prompt
+both	key	Return
+both	wait	2000
+both	shot	cast-spell	Spell name prompt
+both	key	Escape
+both	wait	1500
+both	key	m
+both	wait	2000
+both	shot	mix-spell	Mix spell prompt
+both	key	Escape
+both	wait	1500
+both	key	y
+both	wait	2000
+both	shot	yell-prompt	Yell prompt
+both	type	hello
+both	key	Return
+both	wait	2500
+both	shot	yell-done	After yelling
+both	key	s
+both	wait	1500
+both	key	Up
+both	wait	2000
+both	shot	search-player	Search acting-member prompt
+both	key	Return
+both	wait	2500
+both	shot	search-done	Search result
+both	key	l
+both	wait	1500
+both	key	Up
+both	wait	2500
+both	shot	look	Look north
+both	key	x
+both	wait	2000
+both	shot	xit	X-it on foot
+both	key	g
+both	wait	1500
+both	key	Up
+both	wait	2000
+both	shot	get	Get north
+both	key	e
+both	wait	2000
+both	shot	enter	Enter
+both	key	h
+both	wait	2000
+both	shot	hole	Hole up off a bed
+both	key	i
+both	wait	2000
+both	shot	ignite	Ignite torch
+both	key	k
+both	wait	1500
+both	key	a
+both	wait	1500
+both	key	Up
+both	wait	2000
+both	shot	klimb	Klimb with a stray letter then north

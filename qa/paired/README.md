@@ -27,3 +27,4 @@ are PRNG-selected and legitimately differ between the two sides.
 | `hut-commands` | Look, Z-stats for two members, X-it refusal, Search, Yell cancel, Quit/save |
 | `hut-exit-overworld` | walking out of the starting hut onto the overworld |
 | `hut-talk` | Talk with the hut's resident: greeting, name, job, bye |
+| `hut-prompts` | New Order, Ready, Use, Cast, Mix, Yell, Search, Look, X-it, Get, Enter, Hole up, Ignite, Klimb prompt and result literals |
