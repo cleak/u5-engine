@@ -1,0 +1,14 @@
+# Step onto a dungeon room trigger from a seeded save: arena entry and combat.
+both	wait	9000
+both	key	space
+both	wait	4000
+both	key	j
+both	wait	9000
+both	key	i
+both	wait	2500
+both	shot	lit	Dungeon corridor, torch lit
+both	key	Up
+both	wait	5000
+both	shot	entering	Entering the room
+both	wait	3000
+both	shot	arena	The combat arena
