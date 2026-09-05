@@ -1,21 +1,29 @@
-# `conversation.md §2` step 5 reserves dialog index 0 for non-speakers, and the
-# engine prints the funny-look stub for it. Seeded at Britain (9,8) with a
-# dialog-id 0 NPC directly west at (8,8) on ordinary floor - so neither the
-# step-4 mirror arm nor the step-3 lookup is in play. Filed against
-# cleak/u5-spec#198.
+# `conversation.md §2` step 5 reserves dialog index 0 for non-speakers and
+# publishes no literal for that arm. Measure it. Moonglow, entered through the
+# door - a save restored inside a location cannot talk to anyone (see
+# `dwelling-talk-after-restore`), so this has to walk in - then two steps west
+# to a dialog-id 0 NPC on ordinary floor `0x05`, with no mirror and no bed in
+# play, so neither §2 step 4 arm can be what answers. Route from the engine's
+# own `talk_gate_probe`. Filed against cleak/u5-spec#198.
 both	wait	9000
 both	key	space
 both	wait	4000
 both	key	j
 both	wait	8000
-both	shot	arrival	Journey Onward beside the non-speaker
-both	key	l
-both	wait	1200
+both	key	e
+both	wait	4000
+both	shot	entered	Entered Moonglow through the door
+both	key	Left
+both	wait	700
 both	key	Left
 both	wait	2500
-both	shot	look	Look west at the dialog-id 0 NPC
+both	key	l
+both	wait	1200
+both	key	Up
+both	wait	2500
+both	shot	look	Look north at the dialog-id 0 NPC
 both	key	t
 both	wait	1200
-both	key	Left
-both	wait	3000
-both	shot	talk	Talk west at the dialog-id 0 NPC
+both	key	Up
+both	wait	3500
+both	shot	talk	Talk north at the dialog-id 0 NPC

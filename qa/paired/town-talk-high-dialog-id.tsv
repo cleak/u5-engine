@@ -1,0 +1,24 @@
+# `catalogs/npc-roster.md §4` classes dialog ids `129..=136` and `255` as high
+# special values that are not `.TLK` blob ids. What does Talk print for one?
+# Moonglow, entered through the door, one step north to a dialog-id 255 NPC.
+# Route from the engine's own `talk_gate_probe`. Filed against
+# cleak/u5-spec#198.
+both	wait	9000
+both	key	space
+both	wait	4000
+both	key	j
+both	wait	8000
+both	key	e
+both	wait	4000
+both	key	Up
+both	wait	2500
+both	key	l
+both	wait	1200
+both	key	Up
+both	wait	2500
+both	shot	look	Look north at the dialog-id 255 NPC
+both	key	t
+both	wait	1200
+both	key	Up
+both	wait	3500
+both	shot	talk	Talk north at the dialog-id 255 NPC

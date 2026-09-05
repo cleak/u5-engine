@@ -150,15 +150,13 @@ fn main() {
         keys.reverse();
         Some(keys.into_iter().collect())
     };
-    println!("shortest routes to a cell adjacent to each speaker:");
+    println!("shortest routes to a cell adjacent to each NPC (dialog-id 0 is a non-speaker):");
     for y in 0..32usize {
         for x in 0..32usize {
             let Some(npc) = state.npc_at_current_floor(x, y) else {
                 continue;
             };
-            if npc.dialog_id == 0 {
-                continue;
-            }
+
             let mut best: Option<(usize, String, char)> = None;
             for (dx, dy, face) in [
                 (0isize, -1isize, 'N'),

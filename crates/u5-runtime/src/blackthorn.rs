@@ -40,8 +40,22 @@ impl BlackthornGuardDemandPrompt {
         match self {
             Self::PalacePassword => "Black Badge bearer, give the password:".to_string(),
             Self::MinocCharity => "Give half thy gold to charity? (Y/N).".to_string(),
+            // Measured against the original (`cleak/u5-spec#198`): a
+            // Moonglow tribute guard prints
+            // `A guard demands a 10 gp tribute to Blackthorn!`, a blank
+            // row, then `Dost thou pay?` with the input cursor on the
+            // next line - the same envelope shape as
+            // [`crate::TLK_KEYWORD_PROMPT`]. `blackthorn.md §7a` says the
+            // amount "is printed in the line" but publishes none of the
+            // wording, and the engine had invented
+            // `Pay {amount} gold tribute to Blackthorn? (Y/N).`
+            //
+            // §7a calls the demander "the guard" on all three branches,
+            // so the fixed subject is safe here. The original composes it
+            // from the NPC's Look description, which matters for the
+            // sibling non-speaker line - see the same issue.
             Self::Tribute { amount } => {
-                format!("Pay {amount} gold tribute to Blackthorn? (Y/N).")
+                format!("A guard demands a {amount} gp tribute to Blackthorn!\n\nDost thou pay?")
             }
         }
     }
