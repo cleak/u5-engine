@@ -1138,8 +1138,14 @@ mod panel_picker_frame_tests {
             }
             out
         };
+        // Search the sub-`0x20` graphics band, where the font keeps its
+        // non-text cells - the ribbon caps `0x01`/`0x02` and the page
+        // badges `0x12`/`0x18`/`0x19` all live there. The printable band
+        // is deliberately excluded: `_` and `=` draw the same pixels as a
+        // single and a double rule but are text characters, not frame
+        // pieces, and including them would make the shapes ambiguous.
         let codes_where = |shape: &dyn Fn([u8; 8]) -> bool| -> Vec<u8> {
-            (0u8..=0x7f).filter(|code| shape(rows(*code))).collect()
+            (0u8..0x20).filter(|code| shape(rows(*code))).collect()
         };
 
         // A single horizontal rule: exactly one full-width row, the rest
