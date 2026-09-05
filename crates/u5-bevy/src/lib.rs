@@ -9355,9 +9355,6 @@ fn add_visual_intro_update_systems(app: &mut App) {
             // correctly but every key after the transition was ignored.
             drive_visual,
             drive_visual_intro,
-            // Letterbox the intro frame too, so both shells present the
-            // same window and Journey Onward needs no resize.
-            fit_display_to_window,
             animate_visual_intro_title_effects,
             // Inert while the intro owns the framebuffer; after Journey
             // Onward this is the resident idle wait-loop redraw tick.
@@ -13086,7 +13083,12 @@ fn render_chargen_intro_frame(intro: &mut VisualIntroState) -> Vec<u8> {
         unreachable!("character creation intro panel match must either produce data or panic");
     };
 
-    let cursor_glyph = visual_intro_menu_cursor_glyph(intro);
+    // `input.md §3`: the chargen prompts poll through the shared wait loop,
+    // whose blink counter keeps cycling while the prompt is open - it is not
+    // the menu's blanked-on-key cursor, so drive the phase from the shared
+    // pass counter directly.
+    intro.menu_cursor_pass = intro.menu_cursor_pass.wrapping_add(1);
+    let cursor_glyph = intro_menu_select_caption_cursor_glyph(intro.menu_cursor_pass);
     render_chargen_intro_graphics(
         &mut intro.surface,
         &intro.game_dir,
