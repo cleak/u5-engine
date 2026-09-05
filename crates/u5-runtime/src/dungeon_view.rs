@@ -856,6 +856,26 @@ pub fn blit_dungeon_sprite(
     screen_y: i32,
     mirrored: bool,
 ) {
+    blit_dungeon_sprite_oriented(viewport, sprite, screen_x, screen_y, mirrored, false)
+}
+
+/// [`blit_dungeon_sprite`] with an optional vertical flip.
+///
+/// The ladder family's art is stored in its descending orientation - the
+/// flared head at the foot of the image - and the *rising* ladder of
+/// `dungeon-mode.md §6.6` draws it upside down, so its flare meets the
+/// ceiling. Measured: extracting each side's ladder footprint from a
+/// capture and comparing, the engine's unflipped sprite differs from the
+/// original by 24.4% of its pixels and the flipped one by 8.4%, with no
+/// offset improving either (`u5-engine#6`).
+pub fn blit_dungeon_sprite_oriented(
+    viewport: &mut crate::graphics::TileViewport,
+    sprite: &GraphicSprite,
+    screen_x: i32,
+    screen_y: i32,
+    mirrored: bool,
+    flip_vertical: bool,
+) {
     let base_x = screen_x - crate::gameplay_chrome::VIEWPORT_ORIGIN_X as i32;
     let base_y = screen_y - crate::gameplay_chrome::VIEWPORT_ORIGIN_Y as i32;
     let width = sprite.image.width as i32;
@@ -865,9 +885,10 @@ pub fn blit_dungeon_sprite(
         if y < 0 || y >= viewport.height as i32 {
             continue;
         }
+        let source_row = if flip_vertical { height - 1 - row } else { row };
         for column in 0..width {
             let source_column = if mirrored { width - 1 - column } else { column };
-            let source = (row * width + source_column) as usize;
+            let source = (source_row * width + source_column) as usize;
             if sprite.transparent_mask[source] != 0 {
                 continue;
             }

@@ -1356,20 +1356,29 @@ impl PlayState {
         let Some(Some(sprite)) = sheet.sprites.get(slot) else {
             return;
         };
+        // `dungeon-mode.md §6.6`: a rising sprite's "bottom edge sits on
+        // the horizon at y = 95". That row is part of the sprite, so the
+        // top row is `96 - height` and the last row is 95 - the mirror of
+        // the descending rule, which *starts* at 96. Anchoring at
+        // `95 - height` drew the whole sprite one row high, which is
+        // exactly what a capture showed: identical footprint, shifted up
+        // one (u5-engine#6).
         let y = if rising {
-            95 - sprite.image.height as i32
+            96 - sprite.image.height as i32
         } else if slot / DUNGEON_BANDS == 0 || slot / DUNGEON_BANDS == 1 {
             96
         } else {
             DUNGEON_OBJECT_FLOOR_Y[band] - sprite.image.height as i32
         };
         let left_x = DUNGEON_OBJECT_LEFT_X[band];
-        blit_dungeon_sprite(viewport, sprite, left_x, y, false);
+        // A rising sprite is the stored art turned upside down; see
+        // `blit_dungeon_sprite_oriented`.
+        blit_dungeon_sprite_oriented(viewport, sprite, left_x, y, false, rising);
         // Same reflection as the corridor images (`dungeon-mode.md §6.6`:
         // "a mirrored right half beginning at the centre line"), taken
         // through the shared helper so the two families cannot drift.
         let right_x = dungeon_billboard_right_x(left_x, sprite.image.width as i32);
-        blit_dungeon_sprite(viewport, sprite, right_x, y, true);
+        blit_dungeon_sprite_oriented(viewport, sprite, right_x, y, true, rising);
     }
 
     fn plot_dungeon_screen_pixel(
