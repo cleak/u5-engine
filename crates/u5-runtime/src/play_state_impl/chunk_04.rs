@@ -624,93 +624,32 @@ impl PlayState {
         session.cursor = next.clamp(0, row_count as isize - 1) as usize;
     }
 
+    /// Rows of the U-Use item picker, in the order the original lists
+    /// them.
+    ///
+    /// `inventory.md §7` says only that "a selected row dispatches by the
+    /// handler's use-item enumeration"; the enumeration's order is not
+    /// published. Two independent clean sources agree on it, so it is
+    /// reproduced here rather than invented:
+    ///
+    /// - the order of §7's own "Confirmed U-Use families" table - spell
+    ///   scrolls, potions, Magic Carpet, Skull Key, regalia, shards,
+    ///   Moonstones, Spyglass, HMS Cape plans, Sextant, Pocket Watch,
+    ///   Sandalwood Box; and
+    /// - the published special-item indices, which run in that same
+    ///   sequence (carpet `0x00`, skull key `0x01`, amulet `0x03`, crown
+    ///   `0x04`, sceptre `0x05`, shards `0x06..=0x08`, spyglass `0x0A`,
+    ///   plans `0x0B`, sextant `0x0C`, watch `0x0D`, badge `0x0E`, box
+    ///   `0x0F`).
+    ///
+    /// A paired capture of the original's picker confirms the one point
+    /// both sources constrain and the engine used to get wrong: a carried
+    /// scroll and potion are listed *above* the Pocket Watch, not below
+    /// it. The engine previously emitted every special item first.
+    /// `cleak/u5-spec#196` asks for the enumeration to be published
+    /// outright.
     pub(crate) fn use_item_picker_rows(&self) -> Vec<UseItemPickerRow> {
         let mut rows = Vec::new();
-
-        self.push_counted_use_row(
-            &mut rows,
-            SPECIAL_ITEM_MAGIC_CARPET_INDEX,
-            "Magic Carpet",
-            UseItemRequest::MagicCarpet,
-        );
-        self.push_counted_use_row(
-            &mut rows,
-            SPECIAL_ITEM_SKULL_KEY_INDEX,
-            "Skull Keys",
-            UseItemRequest::SkullKey,
-        );
-        self.push_owned_use_row(
-            &mut rows,
-            SPECIAL_ITEM_AMULET_LB_INDEX,
-            "Amulet of Lord British",
-            UseItemRequest::AmuletOfLordBritish,
-        );
-        self.push_owned_use_row(
-            &mut rows,
-            SPECIAL_ITEM_CROWN_LB_INDEX,
-            "Crown of Lord British",
-            UseItemRequest::CrownOfLordBritish,
-        );
-        self.push_owned_use_row(
-            &mut rows,
-            SPECIAL_ITEM_SCEPTRE_LB_INDEX,
-            "Sceptre of Lord British",
-            UseItemRequest::Sceptre,
-        );
-        self.push_owned_use_row(
-            &mut rows,
-            SPECIAL_ITEM_SPYGLASS_INDEX,
-            "Spyglass",
-            UseItemRequest::Spyglass,
-        );
-        self.push_owned_use_row(
-            &mut rows,
-            SPECIAL_ITEM_HMS_CAPE_PLANS_INDEX,
-            "HMS Cape Plans",
-            UseItemRequest::HmsCapePlans,
-        );
-        self.push_owned_use_row(
-            &mut rows,
-            SPECIAL_ITEM_SEXTANT_INDEX,
-            "Sextant",
-            UseItemRequest::Sextant,
-        );
-        self.push_owned_use_row(
-            &mut rows,
-            SPECIAL_ITEM_POCKET_WATCH_INDEX,
-            "Pocket Watch",
-            UseItemRequest::PocketWatch,
-        );
-        self.push_owned_use_row(
-            &mut rows,
-            SPECIAL_ITEM_BLACK_BADGE_INDEX,
-            "Black Badge",
-            UseItemRequest::BlackBadge,
-        );
-        self.push_owned_use_row(
-            &mut rows,
-            SPECIAL_ITEM_SHARD_FALSEHOOD_INDEX,
-            "Shard of Falsehood",
-            UseItemRequest::ShadowlordShard(SHADOWLORD_FALSEHOOD_INDEX),
-        );
-        self.push_owned_use_row(
-            &mut rows,
-            SPECIAL_ITEM_SHARD_HATRED_INDEX,
-            "Shard of Hatred",
-            UseItemRequest::ShadowlordShard(SHADOWLORD_HATRED_INDEX),
-        );
-        self.push_owned_use_row(
-            &mut rows,
-            SPECIAL_ITEM_SHARD_COWARDICE_INDEX,
-            "Shard of Cowardice",
-            UseItemRequest::ShadowlordShard(SHADOWLORD_COWARDICE_INDEX),
-        );
-        self.push_owned_use_row(
-            &mut rows,
-            SPECIAL_ITEM_WOODEN_BOX_INDEX,
-            "Wooden Box",
-            UseItemRequest::WoodenBox,
-        );
 
         for (index, count) in self.scroll_stock.iter().copied().enumerate() {
             if count > 0 {
@@ -725,6 +664,7 @@ impl PlayState {
                 });
             }
         }
+
         for (index, count) in self.potion_stock.iter().copied().enumerate() {
             if count > 0 {
                 rows.push(UseItemPickerRow {
@@ -737,8 +677,79 @@ impl PlayState {
                 });
             }
         }
+
+        self.push_counted_use_row(
+            &mut rows,
+            SPECIAL_ITEM_MAGIC_CARPET_INDEX,
+            "Magic Carpet",
+            UseItemRequest::MagicCarpet,
+        );
+
+        self.push_counted_use_row(
+            &mut rows,
+            SPECIAL_ITEM_SKULL_KEY_INDEX,
+            "Skull Keys",
+            UseItemRequest::SkullKey,
+        );
+
+        self.push_owned_use_row(
+            &mut rows,
+            SPECIAL_ITEM_AMULET_LB_INDEX,
+            "Amulet of Lord British",
+            UseItemRequest::AmuletOfLordBritish,
+        );
+
+        self.push_owned_use_row(
+            &mut rows,
+            SPECIAL_ITEM_CROWN_LB_INDEX,
+            "Crown of Lord British",
+            UseItemRequest::CrownOfLordBritish,
+        );
+
+        self.push_owned_use_row(
+            &mut rows,
+            SPECIAL_ITEM_SCEPTRE_LB_INDEX,
+            "Sceptre of Lord British",
+            UseItemRequest::Sceptre,
+        );
+
+        self.push_owned_use_row(
+            &mut rows,
+            SPECIAL_ITEM_SHARD_FALSEHOOD_INDEX,
+            "Shard of Falsehood",
+            UseItemRequest::ShadowlordShard(SHADOWLORD_FALSEHOOD_INDEX),
+        );
+
+        self.push_owned_use_row(
+            &mut rows,
+            SPECIAL_ITEM_SHARD_HATRED_INDEX,
+            "Shard of Hatred",
+            UseItemRequest::ShadowlordShard(SHADOWLORD_HATRED_INDEX),
+        );
+
+        self.push_owned_use_row(
+            &mut rows,
+            SPECIAL_ITEM_SHARD_COWARDICE_INDEX,
+            "Shard of Cowardice",
+            UseItemRequest::ShadowlordShard(SHADOWLORD_COWARDICE_INDEX),
+        );
+
         if self.current_moonstone_bury_context().is_some() {
             for index in 0..MOONSTONE_SLOT_COUNT {
+                // `inventory.md §7`: the handler "opens an item picker
+                // over usable carried stock", and the Moonstone row
+                // "records the current valid location into the matching
+                // saved Moonstone slot", while "Search/Get recovery later
+                // invalidates the slot". A slot that still holds a valid
+                // location is therefore a stone lying buried in the world,
+                // not one in the pack, so only an invalidated slot has a
+                // stone to bury. A capture of the original's U-Use picker
+                // at game start - every stone still buried - shows no
+                // Moonstone row at all, which is what this gate
+                // reproduces; the engine used to offer all eight.
+                if self.moonstone_slots[index].is_valid() {
+                    continue;
+                }
                 rows.push(UseItemPickerRow {
                     label: format!("Moonstone phase {}", index + 1),
                     quantity: None,
@@ -746,6 +757,48 @@ impl PlayState {
                 });
             }
         }
+
+        self.push_owned_use_row(
+            &mut rows,
+            SPECIAL_ITEM_SPYGLASS_INDEX,
+            "Spyglass",
+            UseItemRequest::Spyglass,
+        );
+
+        self.push_owned_use_row(
+            &mut rows,
+            SPECIAL_ITEM_HMS_CAPE_PLANS_INDEX,
+            "HMS Cape Plans",
+            UseItemRequest::HmsCapePlans,
+        );
+
+        self.push_owned_use_row(
+            &mut rows,
+            SPECIAL_ITEM_SEXTANT_INDEX,
+            "Sextant",
+            UseItemRequest::Sextant,
+        );
+
+        self.push_owned_use_row(
+            &mut rows,
+            SPECIAL_ITEM_POCKET_WATCH_INDEX,
+            "Pocket Watch",
+            UseItemRequest::PocketWatch,
+        );
+
+        self.push_owned_use_row(
+            &mut rows,
+            SPECIAL_ITEM_BLACK_BADGE_INDEX,
+            "Black Badge",
+            UseItemRequest::BlackBadge,
+        );
+
+        self.push_owned_use_row(
+            &mut rows,
+            SPECIAL_ITEM_WOODEN_BOX_INDEX,
+            "Wooden Box",
+            UseItemRequest::WoodenBox,
+        );
 
         rows
     }

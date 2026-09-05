@@ -342,8 +342,18 @@ impl PlayState {
                 }
             }
             PartySelectorTarget::Cast => {
-                self.active_player = Some(index);
-                self.start_cast_spell_prompt();
+                // `stats-panel.md §4.1` and §11: the active-player
+                // selector is persistent and is cleared or changed only
+                // by "an explicit selection change" - the `0`
+                // Set Active Plr command of `commands.md §5.2` - or by
+                // the dead/sleeping rule. Resolving who casts *this one
+                // spell* is not such a change: a capture of the
+                // original's `Cast...` / `Player: Avatar` sequence draws
+                // no roster marker in column 33 afterwards, while the
+                // engine used to set the selector here and paint the
+                // arrow. The caster rides on the cast session instead.
+                self.active_cast = Some(CastSession::new(index));
+                self.message = self.render_active_cast();
             }
         }
         true

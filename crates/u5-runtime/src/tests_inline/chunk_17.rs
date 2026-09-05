@@ -1182,6 +1182,17 @@ Mixed 1 IL charge; stock is 1.");
         let mut state = test_state(open_grid(), 5, 5);
         state.clock = GameClock::with_date(139, 1, 1, 13, 0).unwrap();
         state.special_items[SPECIAL_ITEM_POCKET_WATCH_INDEX] = 1;
+        // A fresh game has all eight Moonstones buried at valid
+        // locations, so none is carried and none appears in the picker
+        // (`inventory.md §7`). The shared fixture starts them all
+        // invalidated - i.e. all eight in the pack - which would put
+        // Moonstone rows above the Pocket Watch.
+        state.moonstone_slots = [MoonstoneGateSlot {
+            scene: 0,
+            x: 1,
+            y: 1,
+            z: 0,
+        }; MOONSTONE_SLOT_COUNT];
 
         assert_eq!(
             handle_play_key_input(&mut state, 'U', "", Path::new("")).unwrap(),
@@ -1198,6 +1209,45 @@ Mixed 1 IL charge; stock is 1.");
         assert!(state.active_use.is_none());
         assert_eq!(state.message, "Pocket Watch: 1:00 P.M.");
         assert_eq!(state.turn, 1);
+    }
+
+    /// `inventory.md §7`'s family table and the published special-item
+    /// indices both order the U-Use picker with spell scrolls and potions
+    /// ahead of the late utility rows, and a paired capture of the
+    /// original confirms a carried scroll and potion list above the
+    /// Pocket Watch. The engine used to emit every special item first.
+    #[test]
+    fn the_use_picker_lists_scrolls_and_potions_above_the_late_utilities() {
+        let mut state = test_state(open_grid(), 5, 5);
+        state.moonstone_slots = [MoonstoneGateSlot {
+            scene: 0,
+            x: 1,
+            y: 1,
+            z: 0,
+        }; MOONSTONE_SLOT_COUNT];
+        state.special_items[SPECIAL_ITEM_POCKET_WATCH_INDEX] = 1;
+        state.special_items[SPECIAL_ITEM_MAGIC_CARPET_INDEX] = 1;
+        state.scroll_stock[0] = 2;
+        state.potion_stock[1] = 3;
+
+        handle_play_key_input(&mut state, 'U', "", Path::new("")).unwrap();
+        let names = picker_row_names(&state);
+        let at = |needle: &str| {
+            names
+                .iter()
+                .position(|name| name.contains(needle))
+                .unwrap_or_else(|| panic!("{needle} missing from {names:?}"))
+        };
+
+        assert!(at("Scroll") < at("Yellow"), "scrolls lead the picker: {names:?}");
+        assert!(
+            at("Yellow") < at("Magic Carpet"),
+            "potions precede the special items: {names:?}"
+        );
+        assert!(
+            at("Magic Carpet") < at("Pocket Watch"),
+            "the carpet precedes the Pocket Watch: {names:?}"
+        );
     }
 
     #[test]

@@ -514,6 +514,46 @@ pub const PANEL_PICKER_CONTENT_COLUMNS: usize = 13;
 /// Selector cell placeholder while `cleak/u5-spec#195` is open.
 pub const PANEL_PICKER_SELECTOR_BLANK: u8 = b' ';
 
+/// The seven `IBM.CH` frame glyphs `inventory.md §4.4` builds the picker
+/// border from: "a top-left ornament, thirteen top-edge glyphs, a
+/// top-right ornament; then, on each interior row, a vertical rule in
+/// window column 0 and another in window column 14; then a newline, a
+/// bottom-left ornament, thirteen bottom-edge glyphs, and a bottom-right
+/// ornament. The top edge is a single rule and the bottom edge is a
+/// double rule; the four corners are curved ornaments."
+///
+/// The section names the shapes but not their codes. Reading the local
+/// `IBM.CH` at runtime resolves all seven uniquely, because exactly one
+/// glyph in the font carries each named shape: `0x11` is a lone
+/// horizontal rule, `0x15` is a pair of them, `0x17` is a full-height
+/// vertical rule, and `0x7B`/`0x7C`/`0x7D`/`0x7E` are the four curved
+/// corner ornaments - the family `display-driver.md §7` phase 2 draws
+/// the screen's own three rounded corners from, whose fourth member that
+/// section notes the font contains but the game-screen frame does not
+/// use. Clean runtime observation of a shipped asset, not a private
+/// constant; [`panel_picker_frame_glyphs_match_the_published_shapes`]
+/// re-derives it from the font on every test run.
+pub const PANEL_PICKER_FRAME_TOP_LEFT: u8 = 0x7B;
+/// See [`PANEL_PICKER_FRAME_TOP_LEFT`].
+pub const PANEL_PICKER_FRAME_TOP_RIGHT: u8 = 0x7C;
+/// See [`PANEL_PICKER_FRAME_TOP_LEFT`].
+pub const PANEL_PICKER_FRAME_BOTTOM_LEFT: u8 = 0x7D;
+/// See [`PANEL_PICKER_FRAME_TOP_LEFT`].
+pub const PANEL_PICKER_FRAME_BOTTOM_RIGHT: u8 = 0x7E;
+/// See [`PANEL_PICKER_FRAME_TOP_LEFT`]: the single-rule top edge.
+pub const PANEL_PICKER_FRAME_TOP_EDGE: u8 = 0x11;
+/// See [`PANEL_PICKER_FRAME_TOP_LEFT`]: the double-rule bottom edge.
+pub const PANEL_PICKER_FRAME_BOTTOM_EDGE: u8 = 0x15;
+/// See [`PANEL_PICKER_FRAME_TOP_LEFT`]: the two vertical side rules.
+pub const PANEL_PICKER_FRAME_VERTICAL_RULE: u8 = 0x17;
+
+/// `inventory.md §4.4`: "Frame width | 15 cells, screen columns 24 to
+/// 38", so the right rule stands in window column 14.
+pub const PANEL_PICKER_FRAME_RIGHT_COLUMN: u8 = 14;
+/// `inventory.md §4.4`: "Frame height | 9 rows, screen text rows 1 to
+/// 9", so the bottom edge lands on window row 8.
+pub const PANEL_PICKER_FRAME_BOTTOM_ROW: u8 = 8;
+
 impl PanelPickerView {
     pub fn page_start(&self) -> usize {
         (self.selected / PANEL_PICKER_ROWS) * PANEL_PICKER_ROWS
@@ -593,9 +633,41 @@ pub fn active_panel_picker(state: &PlayState) -> Option<PanelPickerView> {
     None
 }
 
+/// Draw the picker's ornamental border (`inventory.md §4.4`).
+///
+/// The frame occupies the whole panel: window row 0 carries the top
+/// ornaments and single rule, rows 1 through 7 carry a vertical rule at
+/// each edge, and row 8 carries the bottom ornaments and double rule.
+/// Because the frame reaches window row 8 - the counters and date rows -
+/// the caller has already cleared the panel, which is what erases the
+/// food/gold and date lines "for the duration of the picker".
+fn paint_panel_picker_frame(system: &mut TextWindowSystem) {
+    system.set_active_cursor(0, 0);
+    system.emit_byte(PANEL_PICKER_FRAME_TOP_LEFT);
+    for _ in 0..PANEL_PICKER_CONTENT_COLUMNS {
+        system.emit_byte(PANEL_PICKER_FRAME_TOP_EDGE);
+    }
+    system.emit_byte(PANEL_PICKER_FRAME_TOP_RIGHT);
+
+    for row in 1..PANEL_PICKER_FRAME_BOTTOM_ROW {
+        for column in [0, PANEL_PICKER_FRAME_RIGHT_COLUMN] {
+            system.set_active_cursor(column, row);
+            system.emit_byte(PANEL_PICKER_FRAME_VERTICAL_RULE);
+        }
+    }
+
+    system.set_active_cursor(0, PANEL_PICKER_FRAME_BOTTOM_ROW);
+    system.emit_byte(PANEL_PICKER_FRAME_BOTTOM_LEFT);
+    for _ in 0..PANEL_PICKER_CONTENT_COLUMNS {
+        system.emit_byte(PANEL_PICKER_FRAME_BOTTOM_EDGE);
+    }
+    system.emit_byte(PANEL_PICKER_FRAME_BOTTOM_RIGHT);
+}
+
 /// Paint the live item picker over the roster panel (`inventory.md §4.4`):
-/// the panel is cleared and the visible rows land in window rows 1..=7,
-/// columns 1..=13, with the selected row in inverse video.
+/// the panel is cleared, the ornamental frame is drawn around it, and the
+/// visible rows land in window rows 1..=7, columns 1..=13, with the
+/// selected row in inverse video.
 pub fn paint_panel_picker_text_window(system: &mut TextWindowSystem, state: &PlayState) -> bool {
     let Some(picker) = active_panel_picker(state) else {
         return false;
@@ -603,6 +675,7 @@ pub fn paint_panel_picker_text_window(system: &mut TextWindowSystem, state: &Pla
     system.set_active_window(STATS_PANEL_TEXT_WINDOW_INDEX);
     system.emit_byte(TEXT_CTRL_CLEAR_WINDOW);
     system.clear_active_flags();
+    paint_panel_picker_frame(system);
     let start = picker.page_start();
     for (offset, row) in picker.visible_rows().iter().enumerate() {
         let selected = start + offset == picker.selected;
@@ -1032,4 +1105,100 @@ fn fixed_panel_line(value: &str) -> String {
         line.push(' ');
     }
     line
+}
+
+#[cfg(test)]
+mod panel_picker_frame_tests {
+    use super::*;
+    use crate::graphics::load_ibm_ch_font;
+
+    /// Re-derive the seven frame glyph codes of `inventory.md §4.4` from
+    /// the shipped font rather than trusting the constants.
+    ///
+    /// The section names each shape - a single-rule top edge, a
+    /// double-rule bottom edge, a full-height vertical rule and four
+    /// curved corner ornaments - but publishes no codes. This scans
+    /// `IBM.CH` for glyphs matching each described shape and asserts the
+    /// match is unique, so the constants stay honest if the font ever
+    /// changes and so the derivation is auditable without re-running the
+    /// original.
+    #[test]
+    fn panel_picker_frame_glyphs_match_the_published_shapes() {
+        let Some(game_dir) = crate::test_fixtures::configured_original_asset_dir() else {
+            return;
+        };
+        if !game_dir.join(crate::IBM_CH_FILE).exists() {
+            return;
+        }
+        let font = load_ibm_ch_font(game_dir.as_path()).expect("IBM.CH must parse");
+        let rows = |code: u8| -> [u8; 8] {
+            let mut out = [0u8; 8];
+            for (row, cell) in out.iter_mut().enumerate() {
+                *cell = font.glyph_row(code, row).expect("glyph row");
+            }
+            out
+        };
+        let codes_where = |shape: &dyn Fn([u8; 8]) -> bool| -> Vec<u8> {
+            (0u8..=0x7f).filter(|code| shape(rows(*code))).collect()
+        };
+
+        // A single horizontal rule: exactly one full-width row, the rest
+        // blank.
+        let single_rule = |g: [u8; 8]| {
+            g.iter().filter(|byte| **byte == 0xff).count() == 1
+                && g.iter().filter(|byte| **byte == 0x00).count() == 7
+        };
+        // A double rule: two full-width rows, the rest blank.
+        let double_rule = |g: [u8; 8]| {
+            g.iter().filter(|byte| **byte == 0xff).count() == 2
+                && g.iter().filter(|byte| **byte == 0x00).count() == 6
+        };
+        // A vertical rule: the same narrow central column on every row.
+        let vertical_rule = |g: [u8; 8]| g.iter().all(|byte| *byte == g[0]) && g[0] == 0x18;
+
+        assert_eq!(
+            codes_where(&single_rule),
+            vec![PANEL_PICKER_FRAME_TOP_EDGE],
+            "exactly one IBM.CH glyph is a lone horizontal rule"
+        );
+        assert_eq!(
+            codes_where(&double_rule),
+            vec![PANEL_PICKER_FRAME_BOTTOM_EDGE],
+            "exactly one IBM.CH glyph is a pair of horizontal rules"
+        );
+        assert_eq!(
+            codes_where(&vertical_rule),
+            vec![PANEL_PICKER_FRAME_VERTICAL_RULE],
+            "exactly one IBM.CH glyph is a full-height vertical rule"
+        );
+
+        // The four curved corners are the solid quarter-bevels: each row
+        // is a run of set bits anchored to one side, growing to a full
+        // row, and the vertical mirror distinguishes top from bottom.
+        assert_eq!(rows(PANEL_PICKER_FRAME_TOP_LEFT)[7], 0xff);
+        assert_eq!(rows(PANEL_PICKER_FRAME_TOP_RIGHT)[7], 0xff);
+        assert_eq!(rows(PANEL_PICKER_FRAME_BOTTOM_LEFT)[0], 0xff);
+        assert_eq!(rows(PANEL_PICKER_FRAME_BOTTOM_RIGHT)[0], 0xff);
+        // Top-left and bottom-left are vertical mirrors of each other, as
+        // are top-right and bottom-right; left and right forms are
+        // horizontal mirrors. That fixes all four assignments uniquely.
+        let mirror_v = |g: [u8; 8]| {
+            let mut out = g;
+            out.reverse();
+            out
+        };
+        let mirror_h = |g: [u8; 8]| g.map(|byte| byte.reverse_bits());
+        assert_eq!(
+            mirror_v(rows(PANEL_PICKER_FRAME_TOP_LEFT)),
+            rows(PANEL_PICKER_FRAME_BOTTOM_LEFT)
+        );
+        assert_eq!(
+            mirror_v(rows(PANEL_PICKER_FRAME_TOP_RIGHT)),
+            rows(PANEL_PICKER_FRAME_BOTTOM_RIGHT)
+        );
+        assert_eq!(
+            mirror_h(rows(PANEL_PICKER_FRAME_TOP_LEFT)),
+            rows(PANEL_PICKER_FRAME_TOP_RIGHT)
+        );
+    }
 }

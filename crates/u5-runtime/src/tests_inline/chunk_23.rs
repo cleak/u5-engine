@@ -12404,6 +12404,17 @@ fn combat_input_dispatch_use_opens_shared_picker_and_ends_action_on_completion()
     let game_dir = std::path::Path::new(".");
     let mut state = combat_player_command_state(8, 5);
     state.special_items[SPECIAL_ITEM_POCKET_WATCH_INDEX] = 1;
+    // A fresh game has all eight Moonstones buried at valid
+    // locations, so none is carried and none appears in the picker
+    // (`inventory.md §7`). The shared fixture starts them all
+    // invalidated - i.e. all eight in the pack - which would put
+    // Moonstone rows above the Pocket Watch.
+    state.moonstone_slots = [MoonstoneGateSlot {
+        scene: 0,
+        x: 1,
+        y: 1,
+        z: 0,
+    }; MOONSTONE_SLOT_COUNT];
 
     assert_eq!(
         handle_play_key_input(&mut state, 'U', "", game_dir).unwrap(),

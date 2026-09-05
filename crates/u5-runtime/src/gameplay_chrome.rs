@@ -355,6 +355,10 @@ pub struct GameplayChromeContent {
     /// plain ribbon band with no caps and no placeholder. While the arms
     /// sell browser is open, its page-status glyph owns this slot instead.
     pub timing_glyph: Option<u8>,
+    /// Page badge for a live U-Use / R-Ready item picker, drawn in the
+    /// lower divider band at row 10. `None` (or zero) leaves that band
+    /// plain. See [`PICKER_PAGE_GAP`].
+    pub picker_page_glyph: Option<u8>,
     /// Draw the stats panel as one tall box, rows 1..=9, instead of the
     /// standing roster box + divider band + counters box.
     ///
@@ -592,6 +596,23 @@ const TIMING_GAP: GapSpan = GapSpan {
     band_row: TIMING_GLYPH_ROW,
 };
 
+/// The item picker's page badge sits in the *lower* divider band.
+///
+/// `shops.md §"Selection, refusal and continuation"` places the arms
+/// browser's three-cell badge in "the ordinary timed-effect slot at
+/// absolute columns `30..32`, row `7`" - the band immediately below that
+/// browser's panel. The U-Use/R-Ready picker of `inventory.md §4.4` is
+/// nine rows tall and covers screen text rows 1 through 9, so row 7 is
+/// inside the frame and the band immediately below the picker is the
+/// lower divider at row 10. A capture of the original's R-Ready picker
+/// shows the badge there, under the frame's bottom edge, in the same
+/// three-cell cap/glyph/cap form.
+const PICKER_PAGE_GAP: GapSpan = GapSpan {
+    content_first_column: TIMING_GLYPH_COLUMN,
+    content_cells: 1,
+    band_row: LOWER_DIVIDER_ROW,
+};
+
 /// A resolved gap: the cap columns and where content starts.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub struct ResolvedGap {
@@ -650,6 +671,14 @@ pub fn timing_glyph_gap(timing_glyph: Option<u8>) -> Option<ResolvedGap> {
         .map(|_| resolve_gap(TIMING_GAP, 1))
 }
 
+/// Resolve the lower divider band's item-picker page badge, if the
+/// picker has a page to point at. See [`PICKER_PAGE_GAP`].
+pub fn picker_page_glyph_gap(picker_page_glyph: Option<u8>) -> Option<ResolvedGap> {
+    picker_page_glyph
+        .filter(|byte| *byte != 0)
+        .map(|_| resolve_gap(PICKER_PAGE_GAP, 1))
+}
+
 /// Resolve the modal label punched through the stats/roster box's top
 /// ribbon. Unlike the viewport labels, this uses the published cap-anchor
 /// formula rather than centring within a nominal fixed-width field.
@@ -697,6 +726,7 @@ pub fn paint_gameplay_frame_chrome(
     let bottom = bottom_gap(&content.bottom);
     let stats_label = stats_label_gap(content.stats_label.as_deref());
     let timing = timing_glyph_gap(content.timing_glyph);
+    let picker_page = picker_page_glyph_gap(content.picker_page_glyph);
 
     for (x0, y0, x1, y1) in RIBBON_BANDS {
         if content.stats_panel_single_box && (x0, y0, x1, y1) == STATS_DIVIDER_BAND {
@@ -711,6 +741,7 @@ pub fn paint_gameplay_frame_chrome(
         (bottom, WIND_BANNER_ROW),
         (stats_label, STATS_LABEL_STRIP_ROW),
         (timing, TIMING_GLYPH_ROW),
+        (picker_page, LOWER_DIVIDER_ROW),
     ] {
         let Some(gap) = gap else { continue };
         let y0 = band_row as usize * CH_CELL_SIDE;
@@ -743,7 +774,7 @@ pub fn paint_gameplay_frame_chrome(
         if band_rule && content.stats_panel_single_box {
             continue;
         }
-        let gap = if band_rule { timing } else { None };
+        let gap = if band_rule { timing } else { picker_page };
         paint_interrupted_rule(rgba, width, height, row_y, 191, 312, gap, palette);
     }
 
@@ -809,6 +840,27 @@ pub fn paint_gameplay_frame_chrome(
             byte & 0x7f,
             gap.content_first_column,
             TIMING_GLYPH_ROW,
+            CHROME_RULE_INDEX,
+        );
+    }
+    if let (Some(gap), Some(byte)) = (picker_page, content.picker_page_glyph) {
+        paint_gap_caps(
+            rgba,
+            width,
+            height,
+            fonts.ibm,
+            gap,
+            LOWER_DIVIDER_ROW,
+            palette,
+        );
+        draw_glyph(
+            rgba,
+            width,
+            height,
+            fonts.ibm,
+            byte & 0x7f,
+            gap.content_first_column,
+            LOWER_DIVIDER_ROW,
             CHROME_RULE_INDEX,
         );
     }
@@ -1187,14 +1239,7 @@ pub fn gameplay_chrome_content(state: &crate::PlayState) -> GameplayChromeConten
         .map(|_| crate::stats_panel::ARMS_SELL_BROWSER_STATS_LABEL.to_string())
         .or_else(|| picker.as_ref().map(|picker| picker.label.clone()))
         .or_else(|| state.roster_box_label());
-    let page_indicator = browser
-        .map(|browser| browser.page_indicator(&state.equipment_stock))
-        .or_else(|| {
-            picker
-                .as_ref()
-                .map(crate::stats_panel::PanelPickerView::page_indicator)
-        });
-    let timing_glyph = if let Some(indicator) = page_indicator {
+    let page_badge_glyph = |indicator| {
         use crate::shop_runtime::ArmsSellPageIndicator;
 
         match indicator {
@@ -1207,10 +1252,23 @@ pub fn gameplay_chrome_content(state: &crate::PlayState) -> GameplayChromeConten
                 Some(crate::stats_panel::ARMS_SELL_BROWSER_PAGE_GLYPH_BOTH)
             }
         }
-    } else {
-        state.active_effect_tag.filter(|tag| *tag != 0)
     };
-    let stats_panel_single_box = state.active_z_stats.is_some();
+    // The arms browser's badge is published at row 7 (`shops.md`); the
+    // taller item picker's goes in the lower divider band instead, because
+    // its frame covers row 7. See [`PICKER_PAGE_GAP`].
+    let timing_glyph = match browser.map(|browser| browser.page_indicator(&state.equipment_stock)) {
+        Some(indicator) => page_badge_glyph(indicator),
+        None => state.active_effect_tag.filter(|tag| *tag != 0),
+    };
+    let picker_page_glyph = picker
+        .as_ref()
+        .map(crate::stats_panel::PanelPickerView::page_indicator)
+        .and_then(page_badge_glyph);
+    // `inventory.md §4.4`: the picker frame is nine rows tall and "the
+    // clear covers the whole panel", so the divider band that separated
+    // the roster rows from the counters has nothing left to divide -
+    // exactly the Z-stats page case.
+    let stats_panel_single_box = state.active_z_stats.is_some() || picker.is_some();
     match state.area {
         crate::Area::Dungeon { level, .. } => GameplayChromeContent {
             top: ChromeGap::Label(dungeon_level_label(level)),
@@ -1218,6 +1276,7 @@ pub fn gameplay_chrome_content(state: &crate::PlayState) -> GameplayChromeConten
             stats_label,
             timing_glyph,
             stats_panel_single_box,
+            picker_page_glyph,
         },
         crate::Area::World { plane } if plane == crate::WorldPlane::Underworld => {
             GameplayChromeContent {
@@ -1226,6 +1285,7 @@ pub fn gameplay_chrome_content(state: &crate::PlayState) -> GameplayChromeConten
                 stats_label,
                 timing_glyph,
                 stats_panel_single_box,
+                picker_page_glyph,
             }
         }
         // `moons.md §2.2`, the erase arm inside the surface/town family:
@@ -1239,6 +1299,7 @@ pub fn gameplay_chrome_content(state: &crate::PlayState) -> GameplayChromeConten
                 stats_label,
                 timing_glyph,
                 stats_panel_single_box,
+                picker_page_glyph,
             }
         }
         crate::Area::World { .. } | crate::Area::Town { .. } => GameplayChromeContent {
@@ -1250,6 +1311,7 @@ pub fn gameplay_chrome_content(state: &crate::PlayState) -> GameplayChromeConten
             stats_label,
             timing_glyph,
             stats_panel_single_box,
+            picker_page_glyph,
         },
     }
 }
