@@ -3849,13 +3849,18 @@ impl PlayState {
         // cross a day rollover, and the pair the pass caches is the one for
         // the day the party wakes on.
         self.refresh_cached_moon_glyphs_at_scene_entry();
-        self.message = format!(
+        self.push_diagnostic(format!(
             "Surrendered to the guards; jailed in {} at ({}, {}) until {:02}:00.",
             scene.key(),
             self.player.x,
             self.player.y,
             self.clock.hour
-        );
+        ));
+        // `town-mode.md §1123`: "surrendering prints the knockout and
+        // awakening lines". Both are unpublished and unmeasured, so the
+        // engine prints nothing rather than inventing them; the jail
+        // transition and the wait-to-morning burst still run.
+        self.message = String::new();
         Ok(Some(MoveOutcome::Transition(
             AreaTransition::EnteredLocation(scene),
         )))

@@ -6835,7 +6835,7 @@ fn validate_route_smoke_case_state(
         "castle-town-attack-death-mask-npc" => {
             if state.removed_town_npc_flags.get(&17).copied().unwrap_or(0) & 0b10 == 0
                 || state.combat_active
-                || !state.message.contains("target removed")
+                || !state.diagnostics_contain("target removed")
                 || !state.npcs.is_empty()
             {
                 return Err(io::Error::other(format!(
@@ -6921,7 +6921,7 @@ fn validate_route_smoke_case_state(
                 || state.player.y != TOWN_ARREST_JAIL_Y as usize
                 || !matches!(state.player.transport, TransportState::Foot)
                 || state.clock.hour != 8
-                || !state.message.contains("Surrendered to the guards")
+                || !state.diagnostics_contain("Surrendered to the guards")
             {
                 return Err(io::Error::other(format!(
                     "route smoke `{case_name}` did not surrender into the public Yew jail wakeup path"
