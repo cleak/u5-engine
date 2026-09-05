@@ -51,6 +51,19 @@ Current local paths:
 - Clean asset files: `C:\Games\U5-Clean`
 - Current public/specification repository: `C:\Projects\Rust\u5-clean\u5-spec`
 
+On the Linux remote-development host the same roles map to:
+
+- Clean workspace: `/home/gamedev/src/u5-clean`
+- Engine repository: `/home/gamedev/src/u5-clean/u5-engine` (task worktrees
+  under `/home/gamedev/worktrees/u5-engine/<task>`)
+- Clean asset files: read-only `/srv/u5-clean/assets/gog-1.0-cs-28045`; never
+  write there. Stateful runs use a complete writable copy prepared by the
+  RemoteGameDev `game-dev-u5` adapter (`prepare-profile` / `test-assets`).
+- Current public/specification repository (read-only):
+  `/home/gamedev/src/u5-clean/u5-spec`
+
+The QA scenario registry is `qa/scenarios.tsv`; see `docs/qa-scenarios.md`.
+
 The specification repository is read-only from this clean workspace. Agents may
 read `C:\Projects\Rust\u5-clean\u5-spec` as clean input, but must not create,
 edit, delete, stage, commit, or pull changes there unless the user explicitly
