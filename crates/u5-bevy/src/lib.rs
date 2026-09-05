@@ -3680,19 +3680,22 @@ const VISUAL_KEY_ESCAPE_STEPS: &[VisualKeyStep] = &[
     VisualKeyStep::key("key_h", KeyCode::KeyH),
     VisualKeyStep::key("escape", KeyCode::Escape),
 ];
+// `commands.md §5.4`: the direction prompt accepts only the translated
+// direction codes, so each verb is answered with the right arrow, not the
+// terminal harness's `D` alias.
 const VISUAL_KEY_DIRECTION_PROMPT_STEPS: &[VisualKeyStep] = &[
     VisualKeyStep::shifted("key_l", KeyCode::KeyL),
-    VisualKeyStep::key("key_d", KeyCode::KeyD),
+    VisualKeyStep::key("arrow_right", KeyCode::ArrowRight),
     VisualKeyStep::shifted("key_a", KeyCode::KeyA),
-    VisualKeyStep::key("key_d", KeyCode::KeyD),
+    VisualKeyStep::key("arrow_right", KeyCode::ArrowRight),
     VisualKeyStep::shifted("key_g", KeyCode::KeyG),
-    VisualKeyStep::key("key_d", KeyCode::KeyD),
+    VisualKeyStep::key("arrow_right", KeyCode::ArrowRight),
     VisualKeyStep::shifted("key_o", KeyCode::KeyO),
-    VisualKeyStep::key("key_d", KeyCode::KeyD),
+    VisualKeyStep::key("arrow_right", KeyCode::ArrowRight),
     VisualKeyStep::shifted("key_p", KeyCode::KeyP),
-    VisualKeyStep::key("key_d", KeyCode::KeyD),
+    VisualKeyStep::key("arrow_right", KeyCode::ArrowRight),
     VisualKeyStep::shifted("key_s", KeyCode::KeyS),
-    VisualKeyStep::key("key_d", KeyCode::KeyD),
+    VisualKeyStep::key("arrow_right", KeyCode::ArrowRight),
 ];
 const VISUAL_KEY_YELL_STEPS: &[VisualKeyStep] = &[
     VisualKeyStep::shifted("key_y", KeyCode::KeyY),
@@ -22991,7 +22994,7 @@ mod tests {
         assert!(manifest.contains("route-key-shrine-mantra-buffer-05-enter"));
         assert!(manifest.contains("route-key-shop-quantity-buffer-06-enter"));
         assert!(manifest.contains("route-key-prompt-escape-cancel-04-escape"));
-        assert!(manifest.contains("route-key-world-direction-prompts-12-key_d"));
+        assert!(manifest.contains("route-key-world-direction-prompts-12-arrow_right"));
         assert!(manifest.contains("route-key-yell-buffer-09-enter"));
         assert!(manifest.contains("route-key-ready-picker-04-escape"));
         assert!(manifest.contains("route-key-z-stats-picker-02-space"));
