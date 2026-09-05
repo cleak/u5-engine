@@ -6710,11 +6710,12 @@ fn visual_route_suite_cases() -> Vec<VisualRouteSuiteCase> {
                 start: Some((62, 124)),
                 ..PlayOptions::default()
             },
-            // inventory.md 4: Z now opens the party-member selector first,
-            // so the step after it picks a member instead of pressing Enter
-            // at a prompt that ignores it.
+            // inventory.md 4: Z opens the party-member selector first;
+            // cleak/u5-spec#192 makes a digit move the bar without
+            // committing, so the step after it is the Return that commits
+            // the indicated member.
             script: &[
-                "d", "d", "s", "s", "a", "a", "w", "w", "l6", "empty", "Z", "1",
+                "d", "d", "s", "s", "a", "a", "w", "w", "l6", "empty", "Z", "empty",
             ],
             configure: None,
         },
@@ -23263,7 +23264,7 @@ mod tests {
         assert!(manifest.contains("route-doom-combat-xit-refusal-02-x"));
         assert!(manifest.contains("route-doom-combat-quit-refusal-02-q"));
         assert!(manifest.contains("route-endgame-class-tableau-restoration-01-y"));
-        assert!(manifest.contains("route-britannia-extended-exploration-12-1"));
+        assert!(manifest.contains("route-britannia-extended-exploration-12-empty"));
         assert!(manifest.contains("route-castle-extended-walk-and-save-09-z"));
         assert!(manifest.contains("route-castle-canonical-ool-exit-03-y"));
         assert!(manifest.contains("route-castle-extended-walk-and-rest-01-s"));
