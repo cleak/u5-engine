@@ -1363,3 +1363,22 @@ fn dungeon_fall_landing_on_room_trigger_enters_the_room_without_a_further_turn()
     assert_eq!(state.grid[dungeon_cell_index(1, 2, 1)], 0xa3);
     assert_eq!(state.message, DUNGEON_ROOM_ENTRY_NARRATION);
 }
+
+#[test]
+fn endgame_elapsed_report_skips_every_zero_component() {
+    // `endgame.md §9.4`: each component is "formatted as a decimal number
+    // followed by ` year`, ` month` or ` day`, with a trailing `s` when the
+    // value is greater than one. **A zero component is skipped entirely**,
+    // and the `, ` separator is emitted only when a later component will
+    // also be printed".
+    assert_eq!(elapsed_time_label(1, 0, 0), "1 year");
+    assert_eq!(elapsed_time_label(0, 1, 0), "1 month");
+    assert_eq!(elapsed_time_label(0, 0, 1), "1 day");
+    assert_eq!(elapsed_time_label(2, 0, 3), "2 years, 3 days");
+    assert_eq!(
+        elapsed_time_label(2, 3, 4),
+        "2 years, 3 months, 4 days"
+    );
+    // All three zero is the rule applied three times, not a special case.
+    assert_eq!(elapsed_time_label(0, 0, 0), "");
+}

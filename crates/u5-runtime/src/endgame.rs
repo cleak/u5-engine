@@ -953,11 +953,12 @@ pub fn elapsed_time_label(years: u16, months: u8, days: u8) -> String {
     if days != 0 {
         parts.push(format!("{days} {}", plural("day", u16::from(days))));
     }
-    if parts.is_empty() {
-        "0 days".to_string()
-    } else {
-        parts.join(", ")
-    }
+    // `endgame.md §9.4`: "A zero component is skipped entirely". With all
+    // three components zero the rule leaves the row empty, and this returns
+    // that rather than substituting a `0 days` the spec does not publish.
+    // Only a same-day victory can reach it, so no ordinary playthrough
+    // shows the blank row; cleak/u5-spec#205 asks what the original prints.
+    parts.join(", ")
 }
 
 fn plural(label: &'static str, amount: u16) -> &'static str {
