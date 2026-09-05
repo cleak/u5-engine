@@ -255,8 +255,17 @@ impl PlayState {
         if matches!(key, '\u{1b}' | '0') {
             self.active_party_selector = None;
             let prompt = session.target.prompt();
-            if !self.complete_open_direction_echo(prompt, PARTY_SELECTOR_CANCEL_REPLY) {
-                self.message = format!("{prompt}{PARTY_SELECTOR_CANCEL_REPLY}");
+            // `commands.md §5.3`: a prompt ending in a trailing space
+            // "continues the same line", which is why the cancel word
+            // lands on the `Player: ` row. A prompt that ends in its own
+            // punctuation does not continue - a capture of the fountain's
+            // `Who will drink?` shows `None!` opening the next line.
+            if prompt.ends_with(' ') {
+                if !self.complete_open_direction_echo(prompt, PARTY_SELECTOR_CANCEL_REPLY) {
+                    self.message = format!("{prompt}{PARTY_SELECTOR_CANCEL_REPLY}");
+                }
+            } else {
+                self.message = PARTY_SELECTOR_CANCEL_REPLY.to_string();
             }
             return true;
         }
@@ -306,7 +315,13 @@ impl PlayState {
         // trailing space", so the chosen name lands on that same line -
         // the original shows `Player: Avatar`.
         let chosen = self.party_member_display_name(index);
-        let _ = self.complete_open_direction_echo(session.target.prompt(), &chosen);
+        // Same trailing-space rule as the cancel arm above: `Player: `
+        // takes the chosen name onto its own row, while a
+        // self-punctuating prompt takes no name at all and lets its
+        // result open the next line.
+        if session.target.prompt().ends_with(' ') {
+            let _ = self.complete_open_direction_echo(session.target.prompt(), &chosen);
+        }
         match session.target {
             PartySelectorTarget::ZStats => {
                 self.z_stats_for_party(index);
@@ -354,6 +369,9 @@ impl PlayState {
                 // arrow. The caster rides on the cast session instead.
                 self.active_cast = Some(CastSession::new(index));
                 self.message = self.render_active_cast();
+            }
+            PartySelectorTarget::FountainDrink { direction } => {
+                self.look_surface_fountain_with_drinker(direction, index);
             }
         }
         true
@@ -1248,12 +1266,21 @@ impl PlayState {
         MoveOutcome::Observed
     }
 
+    /// `view.md §3` surface/town fountain look.
+    ///
+    /// A capture of the stock game gives the whole sequence: the shared
+    /// look preamble and the fountain's description, a blank row, and then
+    /// the drink prompt on the shared party-member selector - the
+    /// `Select:` border label with the chosen row inverted. The engine
+    /// used to run this on a second direction-prompt stage carrying an
+    /// invented `Look: choose fountain drinker (1-N).` line, which has no
+    /// counterpart in the original.
     pub fn start_surface_fountain_drink_prompt(&mut self, direction: Direction) -> MoveOutcome {
-        self.active_direction_prompt = Some(DirectionPromptSession::new(
-            DirectionPromptKind::SurfaceFountainDrink { direction },
-        ));
-        self.message = self.render_active_direction_prompt();
-        MoveOutcome::Observed
+        let opening =
+            format!("{LOOK_RESULT_PREFIX}\n{FOUNTAIN_LOOK_DESCRIPTION}\n\n{FOUNTAIN_DRINK_PROMPT}");
+        let outcome = self.start_party_selector(PartySelectorTarget::FountainDrink { direction });
+        self.message = opening;
+        outcome
     }
 
     pub fn start_surface_death_vision_prompt(&mut self, x: usize, y: usize) -> MoveOutcome {

@@ -1,0 +1,23 @@
+# Look at Britain's fountain and answer the drink prompt, then look again and
+# cancel it. Seeded with a save placed beside the fountain (--seed-save).
+both	wait	9000
+both	key	space
+both	wait	4000
+both	key	j
+both	wait	8000
+both	shot	arrival	Journey Onward beside the fountain
+both	key	l
+both	wait	1200
+both	key	Up
+both	wait	2500
+both	shot	look-prompt	Look north at the fountain
+both	key	Return
+both	wait	2500
+both	shot	drank	After choosing the drinker
+both	key	l
+both	wait	1200
+both	key	Up
+both	wait	2500
+both	key	Escape
+both	wait	2500
+both	shot	cancelled	After cancelling the drink prompt

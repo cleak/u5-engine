@@ -818,6 +818,25 @@ pub const ITEM_SELECTION_PROMPT: &str = "Item: ";
 /// The cancel result appended to an open selection prompt line.
 pub const SELECTION_CANCELLED_LITERAL: &str = "None!";
 
+/// `view.md §3`: the surface/town fountain look "prompt[s] for the
+/// drinking party member". The section publishes the flow but none of its
+/// three literals; a paired capture of the stock game supplies them.
+///
+/// The full sequence for a fountain one cell north reads
+/// `Look-North`, the shared [`LOOK_RESULT_PREFIX`] preamble, this
+/// description, a blank row, the prompt, and then the reply on its own
+/// line - `Refreshing...` for an accepted member, and the universal
+/// [`SELECTION_CANCELLED_LITERAL`] when the selector is cancelled.
+/// `cleak/u5-spec#197` asks for all of them to be published, along with
+/// the one literal a healthy party cannot reach: the refusal for the
+/// dead or asleep member the section does describe.
+pub const FOUNTAIN_LOOK_DESCRIPTION: &str = "a gurgling fountain!";
+/// See [`FOUNTAIN_LOOK_DESCRIPTION`]. No trailing space: the reply lands
+/// on the next line rather than continuing this one.
+pub const FOUNTAIN_DRINK_PROMPT: &str = "Who will drink?";
+/// See [`FOUNTAIN_LOOK_DESCRIPTION`].
+pub const FOUNTAIN_DRINK_REFRESHED: &str = "Refreshing...";
+
 /// `commands.md §5.7`: the rest/hole-up input sequence uses these exact
 /// message-window literals in both outdoor and town contexts.
 pub const REST_HOURS_PROMPT: &str = "For how many hours? (1-9) ";

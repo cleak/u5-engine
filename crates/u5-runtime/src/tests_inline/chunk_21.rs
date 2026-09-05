@@ -503,16 +503,26 @@ fn town_look_at_surface_fountain_prompts_for_drinker_without_spending_turn() {
 
     assert_eq!(state.look_facing(), MoveOutcome::Observed);
 
+    // A capture of the stock game runs this on the shared party-member
+    // selector - the `Select:` border label with the chosen row inverted -
+    // not on a second direction-prompt stage.
     assert_eq!(
         state
-            .active_direction_prompt
+            .active_party_selector
             .as_ref()
-            .map(|session| session.kind),
-        Some(DirectionPromptKind::SurfaceFountainDrink {
+            .map(|session| session.target),
+        Some(PartySelectorTarget::FountainDrink {
             direction: Direction::East
         })
     );
-    assert!(state.message.contains("choose fountain drinker"));
+    assert!(state.active_direction_prompt.is_none());
+    assert_eq!(
+        state.message,
+        format!(
+            "{LOOK_RESULT_PREFIX}\n{FOUNTAIN_LOOK_DESCRIPTION}\n\n{FOUNTAIN_DRINK_PROMPT}"
+        )
+    );
+    assert_eq!(state.roster_box_label().as_deref(), Some("Select:"));
     assert_eq!(state.turn, 0);
     assert_eq!(state.clock, GameClock::default());
 }
@@ -745,7 +755,7 @@ fn town_surface_fountain_drink_refreshes_living_member_without_mutating() {
         MoveOutcome::Observed
     );
 
-    assert!(state.message.contains("feels refreshed"));
+    assert_eq!(state.message, FOUNTAIN_DRINK_REFRESHED);
     assert_eq!(state.party[0], before);
     assert_eq!(state.turn, 0);
     assert_eq!(state.clock, GameClock::default());
@@ -765,7 +775,11 @@ fn town_surface_fountain_drink_refuses_incapacitated_member_without_mutating() {
         MoveOutcome::Observed
     );
 
-    assert!(state.message.contains("incapacitated"));
+    // `view.md §3` has the refusal but not its wording, and a healthy
+    // party cannot reach it, so nothing is printed rather than inventing a
+    // line (`cleak/u5-spec#197`). What matters here is that it is still a
+    // refusal: no refresh line, and no party state written.
+    assert_ne!(state.message, FOUNTAIN_DRINK_REFRESHED);
     assert_eq!(state.party[0], before);
     assert_eq!(state.turn, 0);
     assert_eq!(state.clock, GameClock::default());
@@ -779,13 +793,14 @@ fn town_surface_fountain_prompt_digit_routes_refresh_result() {
     state.player.facing = Direction::East;
     assert_eq!(state.look_facing(), MoveOutcome::Observed);
 
-    let outcome = state
-        .step_active_direction_prompt('1', "", Path::new(""))
-        .unwrap();
+    // `cleak/u5-spec#192`: a digit moves the bar without committing, so
+    // the drinker is taken on Return.
+    assert!(state.step_active_party_selector('1', ""));
+    assert!(state.active_party_selector.is_some());
+    assert!(state.step_active_party_selector('\r', ""));
 
-    assert_eq!(outcome, Some(MoveOutcome::Observed));
-    assert!(state.active_direction_prompt.is_none());
-    assert!(state.message.contains("feels refreshed"));
+    assert!(state.active_party_selector.is_none());
+    assert_eq!(state.message, FOUNTAIN_DRINK_REFRESHED);
     assert_eq!(state.turn, 0);
     assert_eq!(state.clock, GameClock::default());
 }
@@ -798,13 +813,12 @@ fn town_surface_fountain_prompt_cancel_prints_no_one_result() {
     state.player.facing = Direction::East;
     assert_eq!(state.look_facing(), MoveOutcome::Observed);
 
-    let outcome = state
-        .step_active_direction_prompt(' ', "", Path::new(""))
-        .unwrap();
+    assert!(state.step_active_party_selector('\u{1b}', ""));
 
-    assert_eq!(outcome, Some(MoveOutcome::Observed));
-    assert!(state.active_direction_prompt.is_none());
-    assert_eq!(state.message, "You see: a fountain. No one drinks.");
+    assert!(state.active_party_selector.is_none());
+    // The prompt punctuates itself, so the universal cancel word opens the
+    // next line instead of continuing it.
+    assert_eq!(state.message, SELECTION_CANCELLED_LITERAL);
     assert_eq!(state.turn, 0);
 }
 

@@ -2967,15 +2967,19 @@ impl PlayState {
             return MoveOutcome::Observed;
         };
         if town_fountain_drink_accepts(status) {
-            self.message = format!(
-                "You see: a fountain. Party member {} feels refreshed.",
-                member_index + 1
-            );
+            // The prompt carries no trailing space, so the reply opens its
+            // own line rather than completing the prompt's.
+            self.message = FOUNTAIN_DRINK_REFRESHED.to_string();
         } else {
-            self.message = format!(
-                "You see: a fountain. Party member {} is incapacitated.",
-                member_index + 1
-            );
+            // `view.md §3`: "Dead or asleep members refuse as
+            // incapacitated." The section publishes the refusal's
+            // existence but not its text, and a healthy party cannot reach
+            // it, so no capture settles it either; `cleak/u5-spec#197`
+            // asks for the literal. Until it is published this prints
+            // nothing rather than inventing a line the original does not
+            // have - the refusal is still a refusal, and it still spends
+            // no party state.
+            self.message = String::new();
         }
         MoveOutcome::Observed
     }

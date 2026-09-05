@@ -16844,6 +16844,13 @@ fn visual_line_prompt_active(state: &PlayState) -> bool {
 
 fn visual_modal_prompt_active(state: &PlayState) -> bool {
     visual_line_prompt_active(state)
+        // `inventory.md §4.3`: the shared party-member selector is a modal
+        // surface of its own - it owns the panel and waits on a key. It is
+        // not always accompanied by one of the session flags below: the
+        // fountain drink prompt, N-New Order and the C-Cast caster prompt
+        // all run on the bare selector, and without this the shell treated
+        // Escape as inert and the selector could not be cancelled at all.
+        || state.active_party_selector.is_some()
         || state.active_z_stats.is_some()
         || state.active_ready.is_some()
         || state.active_use.is_some()
@@ -24189,6 +24196,32 @@ mod tests {
             key_code_to_char(KeyCode::NumpadSubtract, true, false),
             Some('-')
         );
+    }
+
+    /// The shared party-member selector of `inventory.md §4.3` waits on a
+    /// key and owns the panel, so Escape has to reach it. It is reachable
+    /// without any of the session flags the predicate also tests - the
+    /// fountain drink prompt is the case a paired capture caught, where
+    /// the selector stayed open forever because the shell swallowed the
+    /// key.
+    #[test]
+    fn visual_escape_reaches_a_bare_party_member_selector() {
+        let mut grid = open_grid();
+        // `view.md §3` fountain tile, one cell east.
+        grid[32 + 2] = 0xd8;
+        let mut state = test_state(grid, 1, 1);
+        state.start_surface_fountain_drink_prompt(u5_runtime::Direction::East);
+
+        assert!(state.active_party_selector.is_some());
+        assert!(state.active_direction_prompt.is_none());
+        assert!(
+            !escape_is_inert_in_gameplay(&state),
+            "Escape must reach an open selector"
+        );
+
+        state.step_active_party_selector('\u{1b}', "");
+        assert!(state.active_party_selector.is_none());
+        assert!(escape_is_inert_in_gameplay(&state));
     }
 
     #[test]

@@ -871,6 +871,13 @@ pub enum PartySelectorTarget {
     /// `magic.md §5` step 1 / `text-output.md §10.6`: with no active player
     /// set, C-Cast runs the `Player: ` active-player prompt first.
     Cast,
+    /// `view.md §3`: a surface or town fountain "prompt[s] for the drinking
+    /// party member". A capture of the stock game shows that prompt using
+    /// this same shared surface - the `Select:` border label and the
+    /// inverted roster row - rather than a bespoke one.
+    FountainDrink {
+        direction: crate::Direction,
+    },
 }
 
 impl PartySelectorTarget {
@@ -879,6 +886,7 @@ impl PartySelectorTarget {
         match self {
             Self::NewOrder { first: None } => NEW_ORDER_FIRST_PROMPT,
             Self::NewOrder { first: Some(_) } => NEW_ORDER_SECOND_PROMPT,
+            Self::FountainDrink { .. } => crate::FOUNTAIN_DRINK_PROMPT,
             _ => crate::PARTY_SELECTION_PROMPT,
         }
     }

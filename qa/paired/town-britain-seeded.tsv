@@ -1,0 +1,17 @@
+# Both sides Journey Onward from one engine-written save placed inside Britain.
+# The save is seeded with `--seed-save`; the stock game accepting it through its
+# own Journey Onward is itself the save-compatibility check.
+both	wait	9000
+both	key	space
+both	wait	4000
+both	key	j
+both	wait	8000
+both	shot	arrival	Journey Onward from the seeded Britain save
+both	key	Up
+both	wait	1500
+both	shot	step-north	One step north
+both	key	l
+both	wait	1200
+both	key	Up
+both	wait	2500
+both	shot	look-north	Look north
