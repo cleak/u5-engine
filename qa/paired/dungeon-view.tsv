@@ -1,0 +1,16 @@
+# Deceit level 1 from a seeded save: light a torch and compare the corridor view.
+both	wait	9000
+both	key	space
+both	wait	4000
+both	key	j
+both	wait	9000
+both	shot	arrival	Dungeon level 1, unlit
+both	key	i
+both	wait	3000
+both	shot	torch	After Ignite torch
+both	key	Up
+both	wait	2500
+both	shot	forward	One step forward
+both	key	Right
+both	wait	2500
+both	shot	turned	Turned right

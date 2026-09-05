@@ -1,0 +1,12 @@
+# Britain at 02:00 from a seeded save: compare night NPC placement and lighting.
+both	wait	9000
+both	key	space
+both	wait	4000
+both	key	j
+both	wait	9000
+both	shot	night-arrival	Britain at 02:00
+both	key	Up
+both	wait	1500
+both	key	Up
+both	wait	1500
+both	shot	night-north	Two steps north at night
