@@ -30,18 +30,30 @@ both	wait	4000
 both	key	j
 both	wait	7000
 both	shot	start	Starting hut after Journey Onward
-both	audio-start	engine-blocked	Engine: west then blocked west
+both	audio-start	engine-blocked	Engine: walk west until the hut wall refuses the step
 engine	key	Left
-both	wait	1500
+both	wait	1200
 engine	key	Left
-both	wait	1500
+both	wait	1200
+engine	key	Left
+both	wait	1200
+engine	key	Left
+both	wait	1200
+engine	key	Left
+both	wait	1200
 both	audio-stop		Engine blocked-step capture
 both	shot	engine-blocked	Engine after the blocked step
-both	audio-start	dosbox-blocked	DOSBox: west then blocked west
+both	audio-start	dosbox-blocked	DOSBox: walk west until the hut wall refuses the step
 dosbox	key	Left
-both	wait	1500
+both	wait	1200
 dosbox	key	Left
-both	wait	1500
+both	wait	1200
+dosbox	key	Left
+both	wait	1200
+dosbox	key	Left
+both	wait	1200
+dosbox	key	Left
+both	wait	1200
 both	audio-stop		DOSBox blocked-step capture
 both	shot	dosbox-blocked	DOSBox after the blocked step
 both	audio-start	engine-silence	Engine: pass a turn (silent by contract)
