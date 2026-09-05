@@ -26,6 +26,23 @@ impl Direction {
         }
     }
 
+    /// `commands.md §5.4`: the shared direction prompt "accepts only the
+    /// four directions and Space" - the translated direction codes of
+    /// `input.md §5` (arrows, numpad, shifted top-row digits). The
+    /// terminal harness's letter aliases in [`Self::from_play_key`] are
+    /// not directions to the original and are discarded here.
+    pub fn from_prompt_key(key: char) -> Option<Self> {
+        if let Some(byte) = input_byte_from_char(key) {
+            if crate::input_code_direction(byte).is_some() {
+                return Self::from_play_key(key);
+            }
+        }
+        match key {
+            '7' | '8' | '9' | '4' | '6' | '1' | '2' | '3' => Self::from_play_key(key),
+            _ => None,
+        }
+    }
+
     pub fn from_play_key(key: char) -> Option<Self> {
         if let Some(byte) = input_byte_from_char(key) {
             if let Some(direction) = crate::input_code_direction(byte) {

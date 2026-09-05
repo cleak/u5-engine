@@ -1431,7 +1431,7 @@ fn town_search_secret_door_tile_guard_mismatch_is_not_a_turn() {
     assert_eq!(state.grid[32 + 2], 24);
     assert_eq!(state.turn, 0);
     assert!(!state.visibility_dirty);
-    assert_eq!(state.message, "No secret door found.");
+    assert_eq!(state.message, SEARCH_NOTHING_FOUND);
     let _ = fs::remove_dir_all(dir);
 }
 
@@ -1576,7 +1576,7 @@ fn town_search_without_matching_sidecar_entry_is_not_a_turn() {
 
     assert_eq!(state.grid[32 + 2], 24);
     assert_eq!(state.turn, 0);
-    assert_eq!(state.message, "No secret door found.");
+    assert_eq!(state.message, SEARCH_NOTHING_FOUND);
     let _ = fs::remove_dir_all(dir);
 }
 

@@ -552,7 +552,7 @@
         assert!(state.message.contains("Got 1 keys"));
         assert!(state.sound_effects_after(serial).is_empty());
 
-        // "Nothing to get here." — no table entry matched, no tile rewrite.
+        // GET_NOTHING_REFUSAL — no table entry matched, no tile rewrite.
         let mut grid = open_grid();
         grid[32 + 2] = 55;
         let mut refused = test_state(grid, 1, 1);
@@ -564,7 +564,7 @@
             MoveOutcome::Blocked
         );
 
-        assert_eq!(refused.message, "Nothing to get here.");
+        assert_eq!(refused.message, GET_NOTHING_REFUSAL);
         assert!(refused.sound_effects_after(serial).is_empty());
         let _ = fs::remove_dir_all(dir);
     }

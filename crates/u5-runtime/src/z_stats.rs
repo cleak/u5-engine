@@ -857,6 +857,11 @@ impl PartySelectorSession {
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum PartySelectorTarget {
     ZStats,
+    /// `cleak/u5-spec#194` capture: the direction-form Search asks
+    /// `Player: ` for the acting member before it searches.
+    Search {
+        direction: crate::Direction,
+    },
 }
 
 /// `inventory.md §4.7` page-loop sub-prompt literal `\nStatus:_` — the

@@ -145,7 +145,7 @@ fn handle_play_key_input_inner(
         return handle_active_use_key_input(state, key, suffix, game_dir);
     }
     if state.active_party_selector.is_some() {
-        state.step_active_party_selector(key, suffix);
+        state.step_active_party_selector_with_game_dir(key, suffix, game_dir);
         return Ok(PlayInputDisposition::Continue);
     }
     if state.active_z_stats.is_some() {

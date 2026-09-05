@@ -1041,6 +1041,15 @@ Mixed 1 IL charge; stock is 1.");
             PlayInputDisposition::Continue
         );
         assert!(search.active_direction_prompt.is_none());
+        // cleak/u5-spec#194 capture: the direction form asks `Player: ` for
+        // the acting member before searching; Return commits the leader.
+        assert!(search.active_party_selector.is_some());
+        assert_eq!(search.message, PARTY_SELECTION_PROMPT);
+        assert_eq!(
+            handle_play_key_input(&mut search, '\r', "", &dir).unwrap(),
+            PlayInputDisposition::Continue
+        );
+        assert!(search.active_party_selector.is_none());
         assert_eq!(search.grid[32 + 2], TOWN_DOOR_PLAIN_UNLOCKED_TILE);
         assert_eq!(search.turn, 1);
         assert_eq!(search.player.facing, Direction::South);

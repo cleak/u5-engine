@@ -801,6 +801,16 @@ pub const XIT_ON_FOOT_REFUSAL: &str = "what?";
 /// `cleak/u5-spec#194` (black-box): a plain Yell that matches neither a
 /// Shadowlord name nor a Word of Power prints `No effect!`.
 pub const YELL_NO_EFFECT_MESSAGE: &str = "No effect!";
+/// `cleak/u5-spec#194` (black-box): `Get-<dir>` with nothing to pick up.
+pub const GET_NOTHING_REFUSAL: &str = "Nothing to get!";
+/// `cleak/u5-spec#194` (black-box): `Hole up- ` off an inn bed completes
+/// its echo line with this refusal.
+pub const HOLE_UP_NOT_IN_BED_REFUSAL: &str = "Only in bed!";
+/// `cleak/u5-spec#194` (black-box): `Enter ` with no entrance underfoot.
+pub const ENTER_NOTHING_REFUSAL: &str = "what?";
+/// `cleak/u5-spec#194` capture (town) and `dungeon-mode.md` (dungeon):
+/// the Search result when nothing is found.
+pub const SEARCH_NOTHING_FOUND: &str = "Thou dost find nothing of note.";
 pub const ITEM_SELECTION_PROMPT: &str = "Item: ";
 /// The cancel result appended to an open selection prompt line.
 pub const SELECTION_CANCELLED_LITERAL: &str = "None!";

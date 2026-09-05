@@ -61,7 +61,7 @@ impl PlayState {
         let Some((object_slot, object)) =
             self.combat_loose_object_slot_at(x, y, actor.active_object_slot as usize)
         else {
-            self.message = "Nothing to get here.".to_string();
+            self.message = GET_NOTHING_REFUSAL.to_string();
             return MoveOutcome::Blocked;
         };
 
@@ -4892,16 +4892,22 @@ impl PlayState {
         scene: Scene,
         floor: i8,
     ) -> io::Result<MoveOutcome> {
+        // `commands.md §10`: "The dispatcher first requires the party to be
+        // on a bed/inn-style tile. If the tile gate fails, the command is
+        // refused" - before any hours prompt. The refusal completes the
+        // `Hole up- ` echo line (`cleak/u5-spec#194` capture).
+        let entries = load_town_rest_bed_entries(game_dir)?;
+        if !self.town_rest_bed_still_accepts(entries.as_deref(), scene, floor) {
+            if !self.complete_open_direction_echo("Hole up- ", HOLE_UP_NOT_IN_BED_REFUSAL) {
+                self.message = format!("Hole up- {HOLE_UP_NOT_IN_BED_REFUSAL}");
+            }
+            return Ok(MoveOutcome::Blocked);
+        }
         let Some(hours) = hours else {
             return Ok(self.start_rest_prompt());
         };
         if !(1..=9).contains(&hours) {
             self.message = "Rest hours must be in 1..9.".to_string();
-            return Ok(MoveOutcome::Blocked);
-        }
-        let entries = load_town_rest_bed_entries(game_dir)?;
-        if !self.town_rest_bed_still_accepts(entries.as_deref(), scene, floor) {
-            self.message = "Not here!".to_string();
             return Ok(MoveOutcome::Blocked);
         }
 

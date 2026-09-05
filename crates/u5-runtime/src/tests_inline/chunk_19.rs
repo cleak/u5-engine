@@ -424,6 +424,22 @@
         grid[32 + 1] = 55;
         let mut state = test_state(grid, 1, 1);
 
+        // commands.md §10: the bed gate runs before any hours prompt, so a
+        // clean bed with no matching entry is refused outright
+        // (cleak/u5-spec#194 capture: `Hole up- Only in bed!`).
+        let _ = fs::remove_file(dir.join(TOWN_REST_BED_TABLE_FILE));
+        assert_eq!(
+            state.hole_up_command(&dir, None).unwrap(),
+            MoveOutcome::Blocked
+        );
+        assert_eq!(
+            state.message,
+            format!("Hole up- {HOLE_UP_NOT_IN_BED_REFUSAL}")
+        );
+        assert!(state.active_rest.is_none());
+        assert_eq!(state.turn, 0);
+
+        fs::write(dir.join(TOWN_REST_BED_TABLE_FILE), "CASTLE:0 0 1 1 55\n").unwrap();
         assert_eq!(
             state.hole_up_command(&dir, None).unwrap(),
             MoveOutcome::Observed
@@ -438,7 +454,10 @@
             state.hole_up_command(&dir, Some(1)).unwrap(),
             MoveOutcome::Blocked
         );
-        assert_eq!(state.message, "Not here!");
+        assert_eq!(
+            state.message,
+            format!("Hole up- {HOLE_UP_NOT_IN_BED_REFUSAL}")
+        );
         assert_eq!(state.turn, 0);
         assert_eq!(state.clock, GameClock::default());
         let _ = fs::remove_dir_all(dir);
@@ -485,7 +504,11 @@
             MoveOutcome::Blocked
         );
 
-        assert_eq!(state.message, "Not here!");
+        // cleak/u5-spec#194 capture: `Hole up- Only in bed!`
+        assert_eq!(
+            state.message,
+            format!("Hole up- {HOLE_UP_NOT_IN_BED_REFUSAL}")
+        );
         assert_eq!(state.turn, 0);
         assert_eq!(state.clock, GameClock::default());
         let _ = fs::remove_dir_all(dir);

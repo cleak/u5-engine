@@ -211,6 +211,15 @@ impl PlayState {
     /// "bounded by the current party size", and that "the four direction
     /// keys move the indicator".
     pub fn step_active_party_selector(&mut self, key: char, suffix: &str) -> bool {
+        self.step_active_party_selector_with_game_dir(key, suffix, Path::new(""))
+    }
+
+    pub fn step_active_party_selector_with_game_dir(
+        &mut self,
+        key: char,
+        suffix: &str,
+        game_dir: &Path,
+    ) -> bool {
         let Some(session) = self.active_party_selector else {
             return false;
         };
@@ -288,6 +297,11 @@ impl PlayState {
         match session.target {
             PartySelectorTarget::ZStats => {
                 self.z_stats_for_party(index);
+            }
+            PartySelectorTarget::Search { direction } => {
+                if let Err(error) = self.search_direction_with_game_dir(direction, game_dir) {
+                    self.message = error.to_string();
+                }
             }
         }
         true
@@ -545,7 +559,7 @@ impl PlayState {
                         return Ok(None);
                     }
                     let Some(direction) =
-                        Direction::from_play_key(ch).filter(|direction| direction.is_cardinal())
+                        Direction::from_prompt_key(ch).filter(|direction| direction.is_cardinal())
                     else {
                         continue;
                     };
@@ -642,7 +656,7 @@ impl PlayState {
                         return self.finish_active_cast_followup(session, &tail, game_dir);
                     }
                     let Some(direction) =
-                        Direction::from_play_key(ch).filter(|direction| direction.is_cardinal())
+                        Direction::from_prompt_key(ch).filter(|direction| direction.is_cardinal())
                     else {
                         continue;
                     };
@@ -1562,7 +1576,7 @@ impl PlayState {
                 }
             }
             let Some(direction) =
-                Direction::from_play_key(ch).filter(|direction| direction.is_cardinal())
+                Direction::from_prompt_key(ch).filter(|direction| direction.is_cardinal())
             else {
                 continue;
             };
@@ -1618,7 +1632,9 @@ impl PlayState {
                     self.push_direction_after_cleanup_with_game_dir(direction, game_dir)?
                 }
                 DirectionPromptKind::Search => {
-                    self.search_direction_with_game_dir(direction, game_dir)?
+                    // `cleak/u5-spec#194` capture: `Search-<dir>` then
+                    // `Player: ` picks the acting member before the search.
+                    self.start_party_selector(PartySelectorTarget::Search { direction })
                 }
                 DirectionPromptKind::Talk => {
                     self.talk_direction_with_game_dir(direction, game_dir)?

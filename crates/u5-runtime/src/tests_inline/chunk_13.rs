@@ -25582,7 +25582,11 @@ fn town_enter_uses_stock_refusal_without_turn() {
 
     assert_eq!((state.player.x, state.player.y), (5, 5));
     assert_eq!(state.turn, 0);
-    assert_eq!(state.message, "Not here!");
+    // cleak/u5-spec#194 capture: the refusal completes the `Enter ` echo.
+    assert_eq!(
+        transcript_texts(&state).last().map(String::as_str),
+        Some("Enter what?")
+    );
 }
 
 #[test]

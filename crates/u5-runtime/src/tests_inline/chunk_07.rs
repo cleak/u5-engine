@@ -1092,11 +1092,17 @@ fn hole_up_command_clears_the_shared_effect_before_prompting() {
             },
         )
         .unwrap(),
-        MoveOutcome::Observed
+        // commands.md §10: off a bed the town gate refuses before prompting;
+        // the shared effect slot is still cleared first.
+        MoveOutcome::Blocked
     );
     assert_eq!(town.active_effect_tag, None);
     assert_eq!(town.active_effect_counter, 0);
-    assert!(town.active_rest.is_some());
+    assert!(town.active_rest.is_none());
+    assert_eq!(
+        town.message,
+        format!("Hole up- {HOLE_UP_NOT_IN_BED_REFUSAL}")
+    );
 }
 
 #[test]

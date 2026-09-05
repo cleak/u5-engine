@@ -872,18 +872,14 @@ impl PlayState {
                 let added = self.dungeon_torch_duration_roll();
                 self.torch_counter = self.torch_counter.saturating_add(added);
                 self.recompute_daylight();
-                self.message = format!(
-                    "Ignited a torch; dungeon light counter is {} and {} torch(es) remain.",
-                    self.torch_counter, self.torches
-                );
+                // `cleak/u5-spec#194` capture: `Ignite torch!` is the whole
+                // screen result; the counters are not narrated.
+                self.message = String::new();
             }
             _ => {
                 self.torch_counter = SURFACE_TORCH_DURATION;
                 self.recompute_daylight();
-                self.message = format!(
-                    "Ignited a torch; light counter is {} and {} torch(es) remain.",
-                    self.torch_counter, self.torches
-                );
+                self.message = String::new();
             }
         }
         MoveOutcome::Ignited
@@ -1237,7 +1233,12 @@ impl PlayState {
 
     pub fn enter_current_location(&mut self, game_dir: &Path) -> io::Result<MoveOutcome> {
         let Area::World { plane } = self.area else {
-            self.message = "Not here!".to_string();
+            // `commands.md §5.3`: `Enter ` is an operand-follows echo; with
+            // nothing to enter the line completes with `what?`
+            // (`cleak/u5-spec#194` capture).
+            if !self.complete_open_direction_echo("Enter ", ENTER_NOTHING_REFUSAL) {
+                self.message = format!("Enter {ENTER_NOTHING_REFUSAL}");
+            }
             return Ok(MoveOutcome::Blocked);
         };
 

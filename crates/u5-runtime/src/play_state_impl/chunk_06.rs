@@ -1414,7 +1414,7 @@ impl PlayState {
                 "Got",
             ),
             _ => {
-                self.message = "Nothing to get here.".to_string();
+                self.message = GET_NOTHING_REFUSAL.to_string();
                 MoveOutcome::Blocked
             }
         }
@@ -1564,7 +1564,7 @@ impl PlayState {
         let Some(grant) = native_object_pickup_grant(object) else {
             self.message = match inventory_add_class(object.type_byte) {
                 InventoryAddClass::MustOpenFirst => "Must open it first.".to_string(),
-                _ => "Nothing to get here.".to_string(),
+                _ => GET_NOTHING_REFUSAL.to_string(),
             };
             return Some(MoveOutcome::Blocked);
         };
@@ -1749,7 +1749,7 @@ impl PlayState {
         let idx = world_cell_index(tx, ty);
         let tile = self.grid[idx];
         let Some(entries) = load_world_get_tile_entries(game_dir)? else {
-            self.message = "Nothing to get here.".to_string();
+            self.message = GET_NOTHING_REFUSAL.to_string();
             return Ok(MoveOutcome::Blocked);
         };
         let Some(entry) = entries
@@ -1757,7 +1757,7 @@ impl PlayState {
             .find(|entry| world_get_tile_matches(**entry, plane, tx, ty, tile))
             .copied()
         else {
-            self.message = "Nothing to get here.".to_string();
+            self.message = GET_NOTHING_REFUSAL.to_string();
             return Ok(MoveOutcome::Blocked);
         };
 
@@ -1882,7 +1882,7 @@ impl PlayState {
             return Ok(outcome);
         }
         let Some(entries) = load_town_get_tile_entries(game_dir)? else {
-            self.message = "Nothing to get here.".to_string();
+            self.message = GET_NOTHING_REFUSAL.to_string();
             return Ok(MoveOutcome::Blocked);
         };
         let Some(entry) = entries
@@ -1890,7 +1890,7 @@ impl PlayState {
             .find(|entry| town_get_tile_matches(**entry, scene, floor, tx, ty, tile))
             .copied()
         else {
-            self.message = "Nothing to get here.".to_string();
+            self.message = GET_NOTHING_REFUSAL.to_string();
             return Ok(MoveOutcome::Blocked);
         };
 
@@ -2176,7 +2176,7 @@ impl PlayState {
                 return MoveOutcome::Blocked;
             }
             let miss_message =
-                town_search_live_tile_miss_message(tile).unwrap_or("No secret door found.");
+                town_search_live_tile_miss_message(tile).unwrap_or(SEARCH_NOTHING_FOUND);
             if let Some(outcome) = self.search_moonstone_pickup_at(tx, ty, |slot| {
                 moonstone_slot_matches_town(slot, scene, floor, tx, ty)
             }) {
@@ -2208,7 +2208,7 @@ impl PlayState {
                 return MoveOutcome::Blocked;
             }
             let miss_message =
-                town_search_live_tile_miss_message(tile).unwrap_or("No secret door found.");
+                town_search_live_tile_miss_message(tile).unwrap_or(SEARCH_NOTHING_FOUND);
             if let Some(outcome) = self.search_moonstone_pickup_at(tx, ty, |slot| {
                 moonstone_slot_matches_town(slot, scene, floor, tx, ty)
             }) {

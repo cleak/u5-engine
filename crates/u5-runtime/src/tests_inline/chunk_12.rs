@@ -887,7 +887,7 @@ fn consumed_dungeon_action_on_fall_trap_applies_underfoot_fall_after_turn() {
     assert_eq!(state.active_objects[0].z, 1);
     assert_eq!(state.grid[dungeon_cell_index(1, 1, 1)], 0x08);
     assert_eq!(state.turn, 1);
-    assert!(state.message.contains("Ignited a torch"));
+    assert!(state.torch_counter > 0, "torch ignited");
     // `dungeon-mode.md §8.1`: the three-line pit group, once per descent
     // step, ending on the six-space splat.
     let lines: Vec<&str> = state
@@ -1244,7 +1244,7 @@ fn consumed_dungeon_action_on_field_applies_underfoot_field_after_turn() {
         .iter()
         .map(|entry| entry.text.as_str())
         .collect();
-    assert!(lines.iter().any(|line| line.contains("Ignited a torch")));
+    assert!(lines.iter().any(|line| line.contains("Ignite torch")));
     assert!(lines.contains(&"Poison!"));
 }
 
@@ -1269,7 +1269,7 @@ fn consumed_dungeon_action_on_sleep_field_clears_underfoot_field_after_turn() {
         .iter()
         .map(|entry| entry.text.as_str())
         .collect();
-    assert!(lines.iter().any(|line| line.contains("Ignited a torch")));
+    assert!(lines.iter().any(|line| line.contains("Ignite torch")));
     assert!(lines.contains(&"Sleep spell!"));
 }
 

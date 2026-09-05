@@ -216,7 +216,7 @@
         assert_eq!(state.area, Area::Town { scene, floor: -1 });
         assert_eq!(state.turn, 1);
         assert_eq!(state.active_objects[0].z, -1);
-        assert!(state.message.contains("Ignited a torch"));
+        assert!(state.torch_counter > 0, "torch ignited");
         assert!(state.message.contains("A TRAPDOOR!"));
         let _ = fs::remove_dir_all(dir);
     }

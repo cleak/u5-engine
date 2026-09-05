@@ -16,14 +16,14 @@ fn dungeon_get_refuses_chest_room_trigger_or_unrelated_cell_without_turn() {
 
     assert_eq!(state.grid[dungeon_cell_index(0, 1, 1)], 0xf2);
     assert_eq!(state.turn, 0);
-    assert_eq!(state.message, "Nothing to get here.");
+    assert_eq!(state.message, GET_NOTHING_REFUSAL);
 
     state.grid[dungeon_cell_index(0, 1, 1)] = 0x00;
     assert_eq!(state.get_dungeon_underfoot(scene, 0), MoveOutcome::Blocked);
 
     assert_eq!(state.grid[dungeon_cell_index(0, 1, 1)], 0x00);
     assert_eq!(state.turn, 0);
-    assert_eq!(state.message, "Nothing to get here.");
+    assert_eq!(state.message, GET_NOTHING_REFUSAL);
 }
 
 #[test]

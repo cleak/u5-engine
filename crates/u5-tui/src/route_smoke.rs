@@ -7564,7 +7564,7 @@ fn validate_route_smoke_case_state(
             }
         }
         "dungeon-ignite-torch-route" => {
-            if state.torch_counter == 0 || !state.message.contains("Ignited a torch") {
+            if state.torch_counter == 0 {
                 return Err(io::Error::other(format!(
                     "route smoke `{case_name}` did not light a dungeon torch"
                 )));

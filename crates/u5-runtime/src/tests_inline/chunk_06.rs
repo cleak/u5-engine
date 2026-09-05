@@ -706,7 +706,7 @@
 
         assert!(!state.active_objects[1].is_empty());
         assert_eq!(state.turn, 0);
-        assert_eq!(state.message, "Nothing to get here.");
+        assert_eq!(state.message, GET_NOTHING_REFUSAL);
         let _ = fs::remove_dir_all(dir);
     }
 
@@ -1038,7 +1038,7 @@
         );
         assert_eq!(state.grid[world_cell_index(0, 0)], 55);
         assert_eq!(state.turn, 0);
-        assert_eq!(state.message, "Nothing to get here.");
+        assert_eq!(state.message, GET_NOTHING_REFUSAL);
         let _ = fs::remove_dir_all(dir);
     }
 
@@ -1208,7 +1208,7 @@
         );
         assert_eq!(state.grid[32 + 2], 55);
         assert_eq!(state.turn, 0);
-        assert_eq!(state.message, "Nothing to get here.");
+        assert_eq!(state.message, GET_NOTHING_REFUSAL);
         let _ = fs::remove_dir_all(dir);
     }
 
@@ -1579,7 +1579,7 @@
             MoveOutcome::Blocked
         );
         assert_eq!(state.turn, 2);
-        assert_eq!(state.message, "No secret door found.");
+        assert_eq!(state.message, SEARCH_NOTHING_FOUND);
         let _ = fs::remove_dir_all(dir);
     }
 
@@ -1886,7 +1886,7 @@
             MoveOutcome::Blocked
         );
         assert!(!state.fixed_hidden_treasure_found(13));
-        assert_eq!(state.message, "No secret door found.");
+        assert_eq!(state.message, SEARCH_NOTHING_FOUND);
         let _ = fs::remove_dir_all(dir);
     }
 
