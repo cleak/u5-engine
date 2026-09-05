@@ -1321,7 +1321,9 @@
             NpcSlot {
                 slot: 1,
                 type_byte: 0x50,
-                dialog_id: 0,
+                // `npc-schedules.md §9` value `4`: only an NPC with a
+                // dialogue entry raises the attack event.
+                dialog_id: 2,
                 schedule: [4, 4, 4, 6, 6, 6, 5, 5, 5, 0, 0, 0, 0, 8, 16, 20],
                 name: None,
             },
@@ -1367,6 +1369,51 @@
         assert_eq!(
             state.town_adjacent_event_npc(scene, 0),
             Some((1, 0x0E, NpcAiBehavior::ReservedEngage))
+        );
+    }
+
+    #[test]
+    fn mode_four_adjacent_attack_requires_a_dialogue_entry() {
+        // `npc-schedules.md §9` value `4` (spec `b6558f0`): the engagement
+        // path raises the attack event "only for an NPC whose dialogue-index
+        // field is non-zero; an NPC with no dialogue entry pursues without
+        // ever raising it".
+        let mut state = test_state(open_grid(), 5, 5);
+        let scene = match state.area {
+            Area::Town { scene, .. } => scene,
+            _ => unreachable!(),
+        };
+        state.load_scheduled_npcs(&[
+            NpcSlot {
+                slot: 0,
+                type_byte: 0,
+                dialog_id: 0,
+                schedule: [0; 16],
+                name: None,
+            },
+            NpcSlot {
+                slot: 1,
+                type_byte: 0x0E,
+                dialog_id: NPC_DIALOG_ID_NONE,
+                schedule: [4, 4, 4, 6, 6, 6, 5, 5, 5, 0, 0, 0, 0, 8, 16, 20],
+                name: None,
+            },
+        ]);
+
+        assert_eq!(state.town_adjacent_event_npc(scene, 0), None);
+
+        state.npcs[0].dialog_id = 2;
+        assert_eq!(
+            state.town_adjacent_event_npc(scene, 0),
+            Some((1, 0x0E, NpcAiBehavior::ApproachAndAttack))
+        );
+
+        // Value `7` keeps raising the event without a dialogue entry.
+        state.npcs[0].dialog_id = NPC_DIALOG_ID_NONE;
+        state.npcs[0].schedule[..3].copy_from_slice(&[7, 7, 7]);
+        assert_eq!(
+            state.town_adjacent_event_npc(scene, 0),
+            Some((1, 0x0E, NpcAiBehavior::RandomChase))
         );
     }
 

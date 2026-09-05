@@ -3742,13 +3742,20 @@ impl PlayState {
             }
             let wp = waypoint_for_hour(&npc.schedule, self.clock.hour);
             let behavior = npc_ai_behavior(npc.schedule[NPC_SCHEDULE_AI_OFFSET + wp])?;
-            // `doors-and-z-transitions.md §3.1`: released prisoners retain
-            // mode 5 pursuit for the current visit, but clearing their live
-            // dialogue/awareness byte suppresses mode 5's adjacent attack
-            // event. Other attacking AI families are not dialogue-gated.
+            // `npc-schedules.md §9` value `4` (spec `b6558f0`): the
+            // approach-and-attack arm "can raise the town-mode attack event
+            // - but only for an NPC whose dialogue-index field is non-zero;
+            // an NPC with no dialogue entry pursues without ever raising it
+            // (the same field J-Jimmy clears for value `5`)". Value `5`
+            // shares the gate through `doors-and-z-transitions.md §3.1`:
+            // released prisoners keep mode 5 pursuit for the visit, but the
+            // cleared awareness byte suppresses the adjacent attack event.
+            // Value `7` is not dialogue-gated.
             let raises_attack = behavior.raises_attack_event()
-                && !(behavior == NpcAiBehavior::ReservedEngage
-                    && npc.dialog_id == NPC_DIALOG_ID_NONE);
+                && !(matches!(
+                    behavior,
+                    NpcAiBehavior::ApproachAndAttack | NpcAiBehavior::ReservedEngage
+                ) && npc.dialog_id == NPC_DIALOG_ID_NONE);
             (raises_attack || behavior.raises_guard_event()).then_some((
                 npc.slot,
                 npc.type_byte,
