@@ -136,12 +136,6 @@ const HARPSICHORD_ROUTE_PASSAGE_Y: usize = HARPSICHORD_ROUTE_Y - HARPSICHORD_PAS
 const HARPSICHORD_ROUTE_WALL_TILE: u8 = 0x4F;
 /// Cobble two cells north of the chair, used by the away-from-the-chair route.
 const HARPSICHORD_ROUTE_OFF_CHAIR_Y: usize = 15;
-/// The floor `+2` ascend link, four cardinal steps from the chair. Klimbing up
-/// and straight back down is the round trip that proves the passage rewrite
-/// never reached the on-disk floor.
-const HARPSICHORD_ROUTE_KLIMB_X: usize = 15;
-const HARPSICHORD_ROUTE_KLIMB_Y: usize = 15;
-
 /// The reload checkpoint sits one command past the whole tune.
 const HARPSICHORD_RELOAD_CHECKPOINTS: &[usize] = &[HARPSICHORD_TUNE_SCRIPT.len()];
 

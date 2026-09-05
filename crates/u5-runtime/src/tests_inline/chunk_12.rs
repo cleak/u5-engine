@@ -1336,3 +1336,30 @@ fn consumed_dungeon_turn_on_gust_art_does_not_extinguish_underfoot_torch() {
     assert!(!state.message.contains("breeze blows out the torch"));
     let _ = fs::remove_dir_all(dir);
 }
+
+#[test]
+fn dungeon_fall_landing_on_room_trigger_enters_the_room_without_a_further_turn() {
+    // `dungeon-mode.md §8.1`: "If the chain lands within the dungeon on a
+    // room-helper or room-trigger cell, dungeon mode immediately runs the
+    // same room-entry helper as ordinary underfoot room triggers." This is
+    // the only route into Doom's final room, whose level-seven neighbours
+    // are all wall cells, so deferring it to the next loop head leaves the
+    // endgame handoff behind an extra keypress.
+    let scene = DungeonScene::new(33).unwrap();
+    let mut grid = open_dungeon_record();
+    grid[dungeon_cell_index(0, 2, 1)] = 0x61;
+    grid[dungeon_cell_index(1, 2, 1)] = 0xf3;
+    let mut state = dungeon_state(grid, 0, 1, 1);
+
+    assert_eq!(
+        state.step(Direction::East),
+        MoveOutcome::Transition(AreaTransition::ChangedDungeonLevel { scene, level: 1 })
+    );
+
+    assert_eq!(state.area, Area::Dungeon { scene, level: 1 });
+    assert_eq!((state.player.x, state.player.y), (2, 1));
+    // The room helper promotes the resolved trigger to `0xA?` state and keeps
+    // the low nibble as the arena slot (§5).
+    assert_eq!(state.grid[dungeon_cell_index(1, 2, 1)], 0xa3);
+    assert_eq!(state.message, DUNGEON_ROOM_ENTRY_NARRATION);
+}

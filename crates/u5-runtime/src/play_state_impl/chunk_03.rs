@@ -48,9 +48,6 @@ fn directed_utility_success_variant(spell_index: usize) -> Option<u8> {
 /// one observed in the original's message window (`Player:` followed by
 /// the selection, `Player: None!` on cancel).
 pub const PARTY_SELECTOR_PROMPT_MESSAGE: &str = PARTY_SELECTION_PROMPT;
-/// The cancel result printed on Escape, and on the `0` explicit-none
-/// key of `text-output.md §10.6`.
-pub const PARTY_SELECTOR_CANCELLED_MESSAGE: &str = "Player: None!";
 /// `commands.md §5.6`: `None!` is "the universal cancel response". It
 /// continues the still-open `Player:_` line rather than starting a new
 /// one - `text-output.md §11` models the window as a stream continuing

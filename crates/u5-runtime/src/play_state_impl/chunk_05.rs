@@ -655,6 +655,15 @@ impl PlayState {
         // print has no counterpart in the original.
         let _ = drops;
         self.message = DUNGEON_SPLAT_LINE.to_string();
+        // `dungeon-mode.md §8.1`: "If the chain lands within the dungeon on a
+        // room-helper or room-trigger cell, dungeon mode immediately runs the
+        // same room-entry helper as ordinary underfoot room triggers, then
+        // reinitialises the first-person view." Without this the landing only
+        // resolves at the next dungeon-loop head, so the player sees the splat
+        // and has to press a key before the room opens. The transition outcome
+        // is still what this returns, because the level change is what the
+        // caller reinitialises the view from.
+        let _ = self.resolve_current_dungeon_room_trigger(game_dir)?;
         Ok(MoveOutcome::Transition(
             AreaTransition::ChangedDungeonLevel { scene, level },
         ))

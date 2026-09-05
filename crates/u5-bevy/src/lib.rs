@@ -13420,8 +13420,13 @@ const RTV_CAPTION_BACKGROUND: u8 = RTV_CHROME_PALETTE.background;
 /// `#54` follow-up: the caption's flanking chrome is a filled repaint in
 /// slot 2 over `y = 193..199` plus a one-pixel rule in slot 1 at
 /// `y = 192`.
+/// Only the `original-asset-tests` caption-chrome conformance test reads
+/// these back, so they compile away with it.
+#[cfg(all(test, feature = "original-asset-tests"))]
 const RTV_CAPTION_RULE_Y: usize = 192;
+#[cfg(all(test, feature = "original-asset-tests"))]
 const RTV_CAPTION_BAND_TOP_Y: usize = 193;
+#[cfg(all(test, feature = "original-asset-tests"))]
 const RTV_CAPTION_BAND_BOTTOM_Y: usize = 199;
 
 fn visual_return_to_view_summary(
@@ -17353,41 +17358,6 @@ mod tests {
             .unwrap()
             .as_nanos();
         std::env::temp_dir().join(format!("u5-bevy-frame-suite-{name}-{nonce}"))
-    }
-
-    fn assert_title_tick_gap_panic(result: std::thread::Result<()>) {
-        let payload = result.expect_err("generated title-tick helper must fail");
-        let message = panic_message(payload);
-        assert!(
-            message.contains("authored title-tick frames")
-                || message.contains("published authored frame pixels")
-                || message.contains("requires injected authored frame pixels")
-                || message.contains("generated title-tick animation fallback"),
-            "{message}"
-        );
-    }
-
-    fn assert_menu_text_window_gap_panic(result: std::thread::Result<()>) {
-        let payload = result.expect_err("unpublished intro menu text-window contract must fail");
-        let message = panic_message(payload);
-        assert!(
-            message.contains("plain black band")
-                && message.contains("forbidden fallback")
-                && message.contains("cleak/u5-spec#63"),
-            "{message}"
-        );
-    }
-
-    fn panic_message(payload: Box<dyn std::any::Any + Send>) -> String {
-        payload
-            .downcast_ref::<String>()
-            .cloned()
-            .or_else(|| {
-                payload
-                    .downcast_ref::<&str>()
-                    .map(|message| message.to_string())
-            })
-            .expect("panic payload must be a string")
     }
 
     fn original_asset_dir() -> &'static Path {
