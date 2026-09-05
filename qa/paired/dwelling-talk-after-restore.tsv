@@ -1,0 +1,20 @@
+# Control for `dwelling-talk-after-entry`: the same hut, the same NPC, the same
+# Talk keystroke - but reached by Journey Onward from a save written *inside*
+# the hut instead of by walking in through the door. If the stock game refuses
+# here and converses there, the location's dialogue table is loaded on scene
+# entry and is not restored by a saved game. Filed against cleak/u5-spec#198.
+both	wait	9000
+both	key	space
+both	wait	4000
+both	key	j
+both	wait	8000
+both	key	l
+both	wait	1200
+both	key	Right
+both	wait	2500
+both	shot	look	Look east at the hut's NPC
+both	key	t
+both	wait	1200
+both	key	Right
+both	wait	3500
+both	shot	talk	Talk east after a save restore

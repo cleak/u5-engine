@@ -1,0 +1,70 @@
+# A second conversation reached by walking in through the door: Cove, a
+# dialog-id 31 human NPC, using `CASTLE.TLK`. Companion to
+# `dwelling-talk-after-entry`, whose NPC is a creature - together they test
+# whether `conversation.md §9`'s opening lead-in is one fixed literal.
+# Route from the engine's own `talk_gate_probe`. Filed against
+# cleak/u5-spec#198.
+both	wait	9000
+both	key	space
+both	wait	4000
+both	key	j
+both	wait	8000
+both	key	e
+both	wait	4000
+both	key	Up
+both	wait	450
+both	key	Up
+both	wait	450
+both	key	Up
+both	wait	450
+both	key	Up
+both	wait	450
+both	key	Up
+both	wait	450
+both	key	Up
+both	wait	450
+both	key	Up
+both	wait	450
+both	key	Up
+both	wait	450
+both	key	Up
+both	wait	450
+both	key	Up
+both	wait	450
+both	key	Up
+both	wait	450
+both	key	Up
+both	wait	450
+both	key	Up
+both	wait	450
+both	key	Up
+both	wait	450
+both	key	Up
+both	wait	450
+both	key	Up
+both	wait	450
+both	key	Up
+both	wait	450
+both	key	Up
+both	wait	450
+both	key	Up
+both	wait	450
+both	key	Up
+both	wait	450
+both	key	Up
+both	wait	450
+both	key	Up
+both	wait	450
+both	key	Left
+both	wait	450
+both	wait	2500
+both	key	l
+both	wait	1200
+both	key	Up
+both	wait	2500
+both	shot	look	Look north at the NPC
+both	key	t
+both	wait	1200
+both	key	Up
+both	wait	3500
+both	shot	talk	Talk north after entering through the door

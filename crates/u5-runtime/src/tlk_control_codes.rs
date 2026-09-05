@@ -571,7 +571,17 @@ pub const TLK_KEYWORD_PROMPT: &str = "Your interest?\n:";
 
 /// `conversation.md §9` opening preamble emitted before the NPC
 /// Description entry.
-pub const TLK_OPENING_DESCRIPTION_PREFIX: &str = "Thou seest ";
+///
+/// §9 step 2 calls this the fixed "Thou seest" lead-in. Two paired
+/// captures of the original disagree: it prints `You see `. Measured on
+/// a `DWELLING.TLK` creature ("You see a giant rat!") and a
+/// `CASTLE.TLK` human ("You see a pretty young girl."), so it is not a
+/// per-class variant. Reported on cleak/u5-spec#198.
+///
+/// The engine's own Look narration does use "Thou dost see", and both
+/// captures agree with it there, so only the conversation preamble
+/// moves.
+pub const TLK_OPENING_DESCRIPTION_PREFIX: &str = "You see ";
 
 /// `conversation.md §6` empty-input shortcut. Pressing Enter on an
 /// empty line prints this line and runs the NPC's `Bye` entry; it

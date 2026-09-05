@@ -1,0 +1,63 @@
+# Does a location's dialogue table load on scene *entry* rather than on save
+# restore? Every earlier Talk capture reached its NPC by Journey Onward from a
+# save written inside the location, and the stock game refused every one. This
+# seeds the party on the Britannia overworld at the hut at (153,91) and walks
+# in through the door, so the entry path runs, then walks seventeen steps to
+# the hut's only NPC - dialog-id 12, an ordinary `DWELLING.TLK` speaker - and
+# talks. One NPC on the floor, so no schedule ambiguity about the target.
+# Route from the engine's own `talk_gate_probe` breadth-first search. Pair with
+# `dwelling-talk-after-restore`, which reaches the same NPC from a seeded save.
+# Filed against cleak/u5-spec#198.
+both	wait	9000
+both	key	space
+both	wait	4000
+both	key	j
+both	wait	8000
+both	key	e
+both	wait	4000
+both	shot	entered	Entered the hut through the door
+both	key	Up
+both	wait	450
+both	key	Up
+both	wait	450
+both	key	Up
+both	wait	450
+both	key	Up
+both	wait	450
+both	key	Up
+both	wait	450
+both	key	Up
+both	wait	450
+both	key	Up
+both	wait	450
+both	key	Up
+both	wait	450
+both	key	Up
+both	wait	450
+both	key	Up
+both	wait	450
+both	key	Up
+both	wait	450
+both	key	Up
+both	wait	450
+both	key	Up
+both	wait	450
+both	key	Up
+both	wait	450
+both	key	Left
+both	wait	450
+both	key	Up
+both	wait	450
+both	key	Up
+both	wait	450
+both	wait	2500
+both	key	l
+both	wait	1200
+both	key	Right
+both	wait	2500
+both	shot	look	Look east at the hut's NPC
+both	key	t
+both	wait	1200
+both	key	Right
+both	wait	3500
+both	shot	talk	Talk east after entering through the door

@@ -3110,7 +3110,7 @@ fn town_raw_tlk_no_keyword_opens_runner_backed_conversation_session() {
         MoveOutcome::Talked
     );
 
-    assert!(state.message.contains("Thou seest a quiet sage"));
+    assert!(state.message.contains("You see a quiet sage"));
     assert!(state.message.contains("Greetings"));
     assert!(state.message.ends_with(TLK_KEYWORD_PROMPT));
     assert!(state.active_conversation.is_some());
@@ -3183,7 +3183,7 @@ fn town_raw_tlk_opening_runs_description_stream_before_greeting() {
         MoveOutcome::Talked
     );
 
-    assert!(state.message.contains("Thou seest a sage watching AVATAR"));
+    assert!(state.message.contains("You see a sage watching AVATAR"));
     assert!(state.message.contains("Greetings\nYour interest?\n:"));
     assert_eq!(state.conversation_signal_flags[6], 1);
     assert!(state.active_conversation.is_some());

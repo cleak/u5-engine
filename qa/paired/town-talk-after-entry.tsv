@@ -1,0 +1,108 @@
+# Does a town's dialogue table load on scene *entry* rather than on save
+# restore? Every earlier Talk capture reached its NPC by Journey Onward from a
+# save written inside the town, and the stock game refused all of them. This
+# one seeds the party on the Britannia overworld at Britain's entrance (81,106)
+# and walks in through the door, so the entry path runs, then walks to an NPC
+# and talks. The target carries dialog-id 129 (0x81), a shop trigger, so this
+# covers the shop-dispatch arm too. Route from the engine's own
+# `talk_gate_probe` breadth-first search, re-derived after simulating the walk
+# so schedule drift is accounted for. Filed against cleak/u5-spec#198.
+both	wait	9000
+both	key	space
+both	wait	4000
+both	key	j
+both	wait	8000
+both	shot	overworld	Journey Onward on the overworld at Britain
+both	key	e
+both	wait	4000
+both	shot	entered	Entered Britain through the door
+both	key	Up
+both	wait	450
+both	key	Up
+both	wait	450
+both	key	Up
+both	wait	450
+both	key	Up
+both	wait	450
+both	key	Up
+both	wait	450
+both	key	Up
+both	wait	450
+both	key	Up
+both	wait	450
+both	key	Up
+both	wait	450
+both	key	Up
+both	wait	450
+both	key	Up
+both	wait	450
+both	key	Up
+both	wait	450
+both	key	Up
+both	wait	450
+both	key	Up
+both	wait	450
+both	key	Up
+both	wait	450
+both	key	Left
+both	wait	450
+both	key	Up
+both	wait	450
+both	key	Up
+both	wait	450
+both	key	Up
+both	wait	450
+both	key	Up
+both	wait	450
+both	key	Up
+both	wait	450
+both	key	Up
+both	wait	450
+both	key	Up
+both	wait	450
+both	key	Up
+both	wait	450
+both	key	Right
+both	wait	450
+both	key	Up
+both	wait	450
+both	key	Up
+both	wait	450
+both	key	Left
+both	wait	450
+both	key	Left
+both	wait	450
+both	key	Left
+both	wait	450
+both	key	Left
+both	wait	450
+both	key	Left
+both	wait	450
+both	key	Left
+both	wait	450
+both	key	Left
+both	wait	450
+both	key	Left
+both	wait	450
+both	key	Left
+both	wait	450
+both	key	Left
+both	wait	450
+both	key	Left
+both	wait	450
+both	key	Left
+both	wait	450
+both	key	Left
+both	wait	450
+both	wait	2500
+both	shot	arrived	Arrived beside the NPC
+both	key	l
+both	wait	1200
+both	key	Up
+both	wait	2500
+both	shot	look	Look north at the NPC
+both	key	t
+both	wait	1200
+both	key	Up
+both	wait	3500
+both	shot	talk	Talk north after entering through the door
