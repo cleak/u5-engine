@@ -59,6 +59,15 @@ impl TlkPrintMaskState {
 ///   praying/meditating/unavailable form.
 pub const TALK_NOBODY_HERE_MESSAGE: &str = "Nobody's here!";
 pub const TALK_SLEEPING_MESSAGE: &str = "Zzzzzz...";
+/// `conversation.md §2` step 4 publishes this as the mirror-tile
+/// refusal. A paired capture of the original shows it is also what a
+/// **non-speaker** answers: Talk at a Britain guard whose dialog index
+/// is 0 - §2 step 5's own example of index 0, "a guard" - prints this
+/// same line, on ordinary floor with no mirror in play. §2 step 5 does
+/// not publish a literal for index 0 at all, and this engine had been
+/// filling the hole with Ultima IV's "They give thee a funny look.",
+/// which appears nowhere in the specification. Reported on
+/// cleak/u5-spec#198.
 pub const TALK_NO_RESPONSE_MESSAGE: &str = "No response!";
 
 /// `conversation.md §2` Talk status-tile filter — sleeping NPC tile.

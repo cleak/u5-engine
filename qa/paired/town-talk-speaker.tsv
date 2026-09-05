@@ -1,0 +1,32 @@
+# Does the stock game enter a conversation at all? Seeded at Britain (4,10)
+# with a dialog-id 12 NPC directly west at (3,10). Paired with
+# `town-talk-nonspeaker`, which puts a dialog-id 0 NPC under the same
+# keystrokes. Filed against cleak/u5-spec#198.
+both	wait	9000
+both	key	space
+both	wait	4000
+both	key	j
+both	wait	8000
+both	shot	arrival	Journey Onward beside the speaker
+both	key	l
+both	wait	1200
+both	key	Left
+both	wait	2500
+both	shot	look	Look west at the dialog-id 12 NPC
+both	key	t
+both	wait	1200
+both	key	Left
+both	wait	3000
+both	shot	talk	Talk west at the dialog-id 12 NPC
+both	type	name
+both	key	Return
+both	wait	3000
+both	shot	name	Name reply
+both	type	job
+both	key	Return
+both	wait	3000
+both	shot	job	Job reply
+both	type	bye
+both	key	Return
+both	wait	3000
+both	shot	bye	After bye

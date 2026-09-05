@@ -3529,7 +3529,7 @@ impl PlayState {
             npc_dialog_id_kind(dialog_id),
             NpcDialogIdKind::NoDialogue | NpcDialogIdKind::HighSpecial
         ) {
-            self.message = "They give thee a funny look.".to_string();
+            self.message = TALK_NO_RESPONSE_MESSAGE.to_string();
             return self.consume_ordinary_town_talk();
         }
 
@@ -3686,7 +3686,7 @@ impl PlayState {
             npc_dialog_id_kind(dialog_id),
             NpcDialogIdKind::NoDialogue | NpcDialogIdKind::HighSpecial
         ) {
-            self.message = "They give thee a funny look.".to_string();
+            self.message = TALK_NO_RESPONSE_MESSAGE.to_string();
             return self.consume_ordinary_town_talk();
         }
 

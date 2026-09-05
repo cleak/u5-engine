@@ -6983,7 +6983,7 @@ fn validate_route_smoke_case_state(
                 || state.message.is_empty()
                 || state.message.contains("[w")
                 || state.message.contains("Dialogue id")
-                || state.message.contains("funny look")
+                || state.message.contains(u5_runtime::TALK_NO_RESPONSE_MESSAGE)
             {
                 return Err(io::Error::other(format!(
                     "route smoke `{case_name}` did not keep an ordinary asset-backed Talk session active"
@@ -6998,7 +6998,7 @@ fn validate_route_smoke_case_state(
                 || state.message.is_empty()
                 || state.message.contains("[w")
                 || state.message.contains("Dialogue id")
-                || state.message.contains("funny look")
+                || state.message.contains(u5_runtime::TALK_NO_RESPONSE_MESSAGE)
             {
                 return Err(io::Error::other(format!(
                     "route smoke `{case_name}` did not complete the asset-backed TLK conversation path"

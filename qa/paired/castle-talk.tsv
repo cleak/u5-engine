@@ -1,0 +1,24 @@
+# Talk to a castle NPC (`CASTLE.TLK`), seeded at Lord British's castle (15,25)
+# with a dialog-id 9 NPC directly north at (15,24) on ordinary floor. Companion
+# to `town-talk-speaker`, which does the same in a TOWNE scene. Filed against
+# cleak/u5-spec#198.
+both	wait	9000
+both	key	space
+both	wait	4000
+both	key	j
+both	wait	8000
+both	shot	arrival	Journey Onward beside the castle NPC
+both	key	l
+both	wait	1200
+both	key	Up
+both	wait	2500
+both	shot	look	Look north
+both	key	t
+both	wait	1200
+both	key	Up
+both	wait	3000
+both	shot	talk	Talk north
+both	type	name
+both	key	Return
+both	wait	3000
+both	shot	name	Name reply

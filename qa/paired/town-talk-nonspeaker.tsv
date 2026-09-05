@@ -1,0 +1,21 @@
+# `conversation.md §2` step 5 reserves dialog index 0 for non-speakers, and the
+# engine prints the funny-look stub for it. Seeded at Britain (9,8) with a
+# dialog-id 0 NPC directly west at (8,8) on ordinary floor - so neither the
+# step-4 mirror arm nor the step-3 lookup is in play. Filed against
+# cleak/u5-spec#198.
+both	wait	9000
+both	key	space
+both	wait	4000
+both	key	j
+both	wait	8000
+both	shot	arrival	Journey Onward beside the non-speaker
+both	key	l
+both	wait	1200
+both	key	Left
+both	wait	2500
+both	shot	look	Look west at the dialog-id 0 NPC
+both	key	t
+both	wait	1200
+both	key	Left
+both	wait	3000
+both	shot	talk	Talk west at the dialog-id 0 NPC

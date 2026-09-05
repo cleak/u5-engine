@@ -1382,3 +1382,24 @@ fn endgame_elapsed_report_skips_every_zero_component() {
     // All three zero is the rule applied three times, not a special case.
     assert_eq!(elapsed_time_label(0, 0, 0), "");
 }
+
+#[test]
+fn talk_at_a_non_speaker_prints_the_no_response_line() {
+    // `conversation.md §2` step 5: dialog index 0 means "no dialogue at
+    // all (the NPC is a non-speaker - a guard, a child too young to talk
+    // to, an animal)". §2 publishes no literal for that arm, and this
+    // engine had been filling the hole with Ultima IV's "They give thee
+    // a funny look.", which appears nowhere in the specification.
+    //
+    // A paired capture of the original settles it: Talk at a Britain
+    // guard whose dialog index is 0 - §2 step 5's own example - prints
+    // `No response!`, on ordinary floor with no mirror in play, so the
+    // §2 step 4 arm is not what produced it. Reported on
+    // cleak/u5-spec#198.
+    assert_eq!(TALK_NO_RESPONSE_MESSAGE, "No response!");
+    assert_eq!(
+        npc_dialog_id_kind(0),
+        crate::NpcDialogIdKind::NoDialogue,
+        "index 0 is the non-speaker class"
+    );
+}
