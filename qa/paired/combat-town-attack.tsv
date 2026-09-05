@@ -1,0 +1,14 @@
+# Attack the weaponsmith from a seeded save: town combat entry and the arena.
+both	wait	9000
+both	key	space
+both	wait	4000
+both	key	j
+both	wait	9000
+both	shot	arrival	Standing south of the weaponsmith
+both	key	a
+both	wait	1500
+both	key	Up
+both	wait	4000
+both	shot	conflict	Combat entry
+both	wait	2500
+both	shot	arena	The arena after entry
