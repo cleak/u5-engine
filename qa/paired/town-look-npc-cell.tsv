@@ -1,0 +1,11 @@
+# Look north at the cell Talk resolves to, to compare what each side has there.
+both	wait	9000
+both	key	space
+both	wait	4000
+both	key	j
+both	wait	8000
+both	key	l
+both	wait	1200
+both	key	Up
+both	wait	3000
+both	shot	look-north	Look north at the Talk target cell

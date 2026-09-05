@@ -1,0 +1,22 @@
+# Talk to a different Britain resident: east, north, north, then Talk west.
+both	wait	9000
+both	key	space
+both	wait	4000
+both	key	j
+both	wait	8000
+both	key	Right
+both	wait	1200
+both	key	Up
+both	wait	1200
+both	key	Up
+both	wait	1500
+both	shot	beside	Beside the second resident
+both	key	t
+both	wait	1200
+both	key	Left
+both	wait	3000
+both	shot	greeting	Talk west
+both	type	name
+both	key	Return
+both	wait	3000
+both	shot	name	Name reply
