@@ -1510,7 +1510,12 @@ pub fn route_smoke_cases() -> Vec<RouteSmokeCase> {
         RouteSmokeCase {
             name: "castle-surface-fountain-look",
             options: surface_fountain,
-            script: &["l6", "1"],
+            // `view.md §3`: the look opens the shared party-member
+            // selector. Committing the drinker needs Return or Space,
+            // neither of which survives this harness's command trim, so
+            // the route covers the opening and the drink result is
+            // covered by the unit tests over the same flow.
+            script: &["l6"],
             expected: RouteSmokeExpectation::Town(castle),
             min_turn: 0,
             expected_frame_kind: "tile viewport",
@@ -6811,9 +6816,18 @@ fn validate_route_smoke_case_state(
             }
         }
         "castle-surface-fountain-look" => {
-            if !state.message.contains("fountain") || !state.message.contains("feels refreshed") {
+            let opened_selector = matches!(
+                state.active_party_selector.as_ref().map(|s| s.target),
+                Some(u5_runtime::PartySelectorTarget::FountainDrink { .. })
+            );
+            if !opened_selector
+                || !state
+                    .message
+                    .contains(u5_runtime::FOUNTAIN_LOOK_DESCRIPTION)
+                || !state.message.contains(u5_runtime::FOUNTAIN_DRINK_PROMPT)
+            {
                 return Err(io::Error::other(format!(
-                    "route smoke `{case_name}` did not complete the fountain Look flow"
+                    "route smoke `{case_name}` did not open the fountain drink prompt"
                 )));
             }
         }
