@@ -1,0 +1,18 @@
+# M-Mix Reagents: open the mixer for In Lor and compare the reagent surface.
+both	wait	9000
+both	key	space
+both	wait	4000
+both	key	j
+both	wait	9000
+both	key	m
+both	wait	2500
+both	shot	spell-prompt	Mix: For what spell?
+both	type	IL
+both	wait	1500
+both	shot	spell-typed	Spell code typed
+both	key	Return
+both	wait	3000
+both	shot	reagents	The reagent selection surface
+both	key	Escape
+both	wait	2000
+both	shot	cancelled	After cancelling

@@ -16670,9 +16670,13 @@ fn render_integrated_status_framebuffer(
         // keeps its own line open and carries the cursor inline, so no
         // fresh live row (and no end-cap triangle) is drawn for it.
         let open_prompt = display_state.open_prompt_line();
+        // The spell-name colon line is a live row whose text comes from
+        // the cast/mix session rather than the shell's own input buffer.
+        let spell_echo = display_state.spell_prompt_echo();
+        let live_row = spell_echo.as_deref().or(input_echo).unwrap_or("");
         let layout = layout_message_window_with_prompt(
             &log,
-            Some(input_echo.unwrap_or("")),
+            Some(live_row),
             open_prompt.as_deref(),
             u5_runtime::combat_prompt_row_follows_history(&display_state),
         );
@@ -24398,8 +24402,12 @@ mod tests {
         }
 
         assert_eq!(state.active_cast.as_ref().unwrap().buffer, "I");
-        // magic.md §5 step 2: `Spell name:` then the colon-prompt echo.
-        assert!(state.message.starts_with("Spell name:\n:"));
+        // magic.md §5 step 2 / text-output.md §10.6: `Spell name:` is
+        // logged once and the colon-prompt echo is the open line being
+        // edited, so it comes from `open_prompt_line` rather than from
+        // the message slot (`cleak/u5-spec#203`).
+        assert_eq!(state.message, "Spell name:");
+        assert_eq!(state.spell_prompt_echo().as_deref(), Some(":IN "));
     }
 
     #[test]

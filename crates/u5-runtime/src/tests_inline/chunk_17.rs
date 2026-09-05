@@ -503,8 +503,10 @@
         );
         assert!(state.active_cast.is_some());
         assert_eq!(state.turn, 0);
-        // magic.md §5 step 2: `Spell name:` and a colon-prompt.
-        assert_eq!(state.message, "Spell name:\n:");
+        // magic.md §5 step 2 / text-output.md §10.6: `Spell name:` is
+        // logged once; the colon-prompt is the open line being edited.
+        assert_eq!(state.message, "Spell name:");
+        assert_eq!(state.spell_prompt_echo().as_deref(), Some(":"));
 
         assert_eq!(
             handle_play_key_input(&mut state, 'I', "L", Path::new("")).unwrap(),
@@ -513,7 +515,9 @@
         assert!(state.active_cast.is_some());
         // `magic.md §5` Step 2: "each letter prints its associated rune
         // word followed by a space" - `IL` echoes as `In Lor `.
-        assert!(state.message.contains("Spell name:\n:In Lor "));
+        // A capture of the stock game echoes the syllables in capitals
+        // (`cleak/u5-spec#203`).
+        assert_eq!(state.spell_prompt_echo().as_deref(), Some(":IN LOR "));
         assert_eq!(state.spell_charges[IN_LOR_SPELL_INDEX], 1);
 
         assert_eq!(
@@ -535,11 +539,11 @@
         state.active_player = Some(0);
         assert_eq!(state.start_cast_spell_prompt(), MoveOutcome::Observed);
         assert!(state.step_active_cast('J', "OI", Path::new("")).unwrap().is_none());
-        // The echo behind the colon is the rune word for the selector.
-        assert!(state.message.starts_with("Spell name:\n:"));
-        assert!(state.message.len() > "Spell name:\n:".len());
+        // The echo behind the colon is the rune word for the selector,
+        // and it lives on the open prompt line.
+        assert_eq!(state.spell_prompt_echo().as_deref(), Some(":IN "));
         assert!(state.step_active_cast('\u{8}', "", Path::new("")).unwrap().is_none());
-        assert_eq!(state.message, "Spell name:\n:");
+        assert_eq!(state.spell_prompt_echo().as_deref(), Some(":"));
         assert!(state.step_active_cast('\u{1b}', "", Path::new("")).unwrap().is_none());
         assert!(state.active_cast.is_none());
         assert_eq!(state.message, "None!");

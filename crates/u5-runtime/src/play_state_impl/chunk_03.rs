@@ -140,6 +140,24 @@ impl PlayState {
     /// §5.4` has the shared direction prompt wait on the hyphen its verb
     /// echo ended with. None of them opens a fresh prompt row: the
     /// cursor sits on the prompt's own line.
+    /// The spell-name colon line of `magic.md §5` step 2, shared by
+    /// C-Cast and M-Mix.
+    ///
+    /// `text-output.md §10.6`: "the visible layout is a log whose final
+    /// line is being edited". This line is that edited row - its content
+    /// changes with every keystroke - so it is a *live* row rather than a
+    /// logged one. Re-logging it printed `For what spell?` once per typed
+    /// letter.
+    pub fn spell_prompt_echo(&self) -> Option<String> {
+        if let Some(session) = self.active_cast.as_ref() {
+            return Some(format!(":{}", rune_echo_for_buffer(&session.buffer)));
+        }
+        self.active_mix
+            .as_ref()
+            .filter(|session| session.phase == MixPhase::Spell)
+            .map(|session| format!(":{}", rune_echo_for_buffer(&session.spell_buffer)))
+    }
+
     pub fn open_prompt_line(&self) -> Option<String> {
         if self.active_party_selector.is_some() {
             return Some(PARTY_SELECTOR_PROMPT_MESSAGE.to_string());
@@ -147,6 +165,7 @@ impl PlayState {
         if self.active_z_stats.is_some() {
             return Some(Z_STATS_STATUS_PROMPT.to_string());
         }
+
         if self
             .active_yes_no_prompt
             .is_some_and(|session| matches!(session.kind, YesNoPromptKind::SaveGame))
@@ -488,7 +507,10 @@ impl PlayState {
     pub fn render_cast_session(&self, session: &CastSession) -> String {
         // `magic.md §5` step 2: "prints `Spell name:` and a colon-prompt";
         // the compact selector echo follows the colon.
-        format!("Spell name:\n:{}", rune_echo_for_buffer(&session.buffer))
+        // Same open-prompt split as M-Mix: the colon line is edited in
+        // place, not re-logged per keystroke.
+        let _ = session;
+        "Spell name:".to_string()
     }
 
     pub fn step_active_cast(
@@ -909,7 +931,16 @@ impl PlayState {
             MixPhase::Spell => {
                 // `magic.md §6` step 2: `For what spell?` then the same
                 // colon-prompt as C-Cast (`cleak/u5-spec#194` capture).
-                format!("{MMIX_SPELL_PROMPT_MESSAGE}\n:{}", session.spell_buffer)
+                // The same selector echo C-Cast uses: `magic.md §6` sends
+                // M-Mix through the shared spell-name input helper, so
+                // its prompt echoes rune words too, not raw letters.
+                // `text-output.md §10.6`: "the visible layout is a log
+                // whose final line is being edited". The colon line is
+                // that edited line, so it is served by
+                // [`Self::open_prompt_line`] rather than re-emitted into
+                // the log on every keystroke - which is what printed
+                // `For what spell?` once per typed letter.
+                MMIX_SPELL_PROMPT_MESSAGE.to_string()
             }
             MixPhase::Reagents => {
                 let mut lines =
@@ -4578,7 +4609,11 @@ fn rune_echo_for_buffer(buffer: &str) -> String {
             .and_then(rune_syllable_for_selector)
         {
             Some(syllable) => {
-                echo.push_str(syllable);
+                // A capture of the stock game's `M`-Mix prompt echoes
+                // `IN LOR` for the selector pair `IL` - the syllables in
+                // capitals, one space after each. `magic.md §5` step 2
+                // gives the rule but not the casing.
+                echo.push_str(&syllable.to_ascii_uppercase());
                 echo.push(' ');
             }
             None => echo.push(ch),

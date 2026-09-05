@@ -164,10 +164,12 @@ fn cast_prompt_echoes_rune_words_but_still_parses_selectors() {
             .unwrap()
             .is_none()
     );
-    assert!(
-        state.message.contains("Spell name:\n:Por Rel Vas "),
+    assert_eq!(state.message, "Spell name:");
+    assert_eq!(
+        state.spell_prompt_echo().as_deref(),
+        Some(":POR REL VAS "),
         "cast echo was {:?}",
-        state.message
+        state.spell_prompt_echo()
     );
 
     // The echo is presentation only: the parse path still holds the compact
