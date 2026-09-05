@@ -70,6 +70,43 @@ pub const TALK_SLEEPING_MESSAGE: &str = "Zzzzzz...";
 /// cleak/u5-spec#198.
 pub const TALK_NO_RESPONSE_MESSAGE: &str = "No response!";
 
+/// `conversation.md §2` step 5's non-speaker refusal, which the section
+/// describes but does not publish.
+///
+/// Measured against the original (`cleak/u5-spec#198`): a Moonglow guard
+/// whose dialog index is 0, reached by walking into the town, answers
+/// `The guard offers no response!` where Look says `Thou dost see /
+/// a guard`. The line is composed from that same description with its
+/// article replaced by `The`.
+///
+/// Only one data point exists for the article rule - `a guard` - so
+/// `an` and article-less descriptions are handled the way English
+/// requires rather than the way the original is known to. §2's own
+/// examples for index 0 are "a guard, a child too young to talk to, an
+/// animal", so the `an` case is reachable and would settle it; the
+/// issue asks for it.
+pub const TALK_NO_RESPONSE_SUFFIX: &str = " offers no response!";
+
+/// Compose [`TALK_NO_RESPONSE_SUFFIX`] onto a Look description.
+///
+/// Falls back to the bare [`TALK_NO_RESPONSE_MESSAGE`] when no
+/// description is available, which is what a scene built without assets
+/// gets.
+pub fn talk_non_speaker_refusal(description: Option<&str>) -> String {
+    let Some(description) = description.map(str::trim).filter(|text| !text.is_empty()) else {
+        return TALK_NO_RESPONSE_MESSAGE.to_string();
+    };
+    let noun = description
+        .strip_prefix("a ")
+        .or_else(|| description.strip_prefix("an "))
+        .or_else(|| description.strip_prefix("the "))
+        .or_else(|| description.strip_prefix("A "))
+        .or_else(|| description.strip_prefix("An "))
+        .or_else(|| description.strip_prefix("The "))
+        .unwrap_or(description);
+    format!("The {noun}{TALK_NO_RESPONSE_SUFFIX}")
+}
+
 /// `conversation.md §2` Talk status-tile filter — sleeping NPC tile.
 /// The Talk command compares the candidate NPC's renderer active-object
 /// frame byte against this constant; on match it emits

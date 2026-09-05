@@ -883,6 +883,11 @@ impl PlayState {
             active_blackthorn_guard_demand: None,
             pending_town_arrest: None,
             endgame: None,
+            // Cache `LOOK2.DAT` here rather than in `load_scene`, so a
+            // runtime area transition - walking through a town door -
+            // gets it too. A scene that loads without the file is not an
+            // error; every caller treats `None` as "no description".
+            look_table: crate::load_look_table(game_dir).ok(),
             active_blackthorn: None,
             blackthorn_audience_map: None,
             active_shop: None,
@@ -1235,6 +1240,11 @@ impl PlayState {
             active_blackthorn_guard_demand: None,
             pending_town_arrest: None,
             endgame: None,
+            // Cache `LOOK2.DAT` here rather than in `load_scene`, so a
+            // runtime area transition - walking through a town door -
+            // gets it too. A scene that loads without the file is not an
+            // error; every caller treats `None` as "no description".
+            look_table: crate::load_look_table(game_dir).ok(),
             active_blackthorn: None,
             blackthorn_audience_map: None,
             active_shop: None,
@@ -1599,6 +1609,11 @@ impl PlayState {
             active_blackthorn_guard_demand: None,
             pending_town_arrest: None,
             endgame: None,
+            // Cache `LOOK2.DAT` here rather than in `load_scene`, so a
+            // runtime area transition - walking through a town door -
+            // gets it too. A scene that loads without the file is not an
+            // error; every caller treats `None` as "no description".
+            look_table: crate::load_look_table(game_dir).ok(),
             active_blackthorn: None,
             blackthorn_audience_map: None,
             active_shop: None,

@@ -523,6 +523,17 @@ pub struct PlayState {
     pub active_blackthorn_guard_demand: Option<ActiveBlackthornGuardDemand>,
     pub pending_town_arrest: Option<TownArrestPrompt>,
     pub endgame: Option<EndgameState>,
+    /// `LOOK2.DAT` descriptions, cached at scene load.
+    ///
+    /// Look loads this per call from its own `game_dir`. Talk needs the
+    /// same descriptions - `conversation.md §2` step 5's non-speaker
+    /// refusal is composed from the NPC's Look description, measured as
+    /// `The guard offers no response!` against `Thou dost see / a guard`
+    /// (`cleak/u5-spec#198`) - but the Talk path carries no `game_dir`,
+    /// so the table is cached here at scene load instead of threaded
+    /// through every Talk signature. `None` when the scene was built
+    /// without assets, as most unit-test fixtures are.
+    pub look_table: Option<crate::LookTable>,
     pub active_blackthorn: Option<crate::blackthorn_session::BlackthornChallenge>,
     pub blackthorn_audience_map: Option<MiscmapsCutsceneMap>,
     pub active_shop: Option<crate::shop_session::ActiveShopSession>,

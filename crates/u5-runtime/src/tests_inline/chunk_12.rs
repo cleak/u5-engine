@@ -1402,4 +1402,32 @@ fn talk_at_a_non_speaker_prints_the_no_response_line() {
         crate::NpcDialogIdKind::NoDialogue,
         "index 0 is the non-speaker class"
     );
+    // The measured line, composed from the NPC's own Look description:
+    // Look says `a guard`, Talk says `The guard offers no response!`.
+    assert_eq!(
+        crate::talk_non_speaker_refusal(Some("a guard")),
+        "The guard offers no response!"
+    );
+    // The article rule has one data point. `an` and article-less
+    // descriptions follow English rather than a measurement; §2's own
+    // examples for index 0 include "an animal", so the case is
+    // reachable and cleak/u5-spec#198 asks for it.
+    assert_eq!(
+        crate::talk_non_speaker_refusal(Some("an animal")),
+        "The animal offers no response!"
+    );
+    assert_eq!(
+        crate::talk_non_speaker_refusal(Some("guard")),
+        "The guard offers no response!"
+    );
+    // A scene built without assets has no description to compose from
+    // and falls back to the bare literal rather than inventing one.
+    assert_eq!(
+        crate::talk_non_speaker_refusal(None),
+        TALK_NO_RESPONSE_MESSAGE
+    );
+    assert_eq!(
+        crate::talk_non_speaker_refusal(Some("   ")),
+        TALK_NO_RESPONSE_MESSAGE
+    );
 }

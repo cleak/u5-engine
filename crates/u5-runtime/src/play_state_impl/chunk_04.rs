@@ -3409,6 +3409,16 @@ impl PlayState {
         self.grid[y * 32 + x]
     }
 
+    /// The Look description of whatever Talk resolved onto, if the
+    /// cached `LOOK2.DAT` table is present. Shares
+    /// [`Self::look_object_description`] with the Look command so the two
+    /// cannot drift.
+    pub fn talk_target_description(&self, x: usize, y: usize) -> Option<String> {
+        let table = self.look_table.as_ref()?;
+        let object = self.blocking_object_at(x, y)?;
+        Some(self.look_object_description(object.tile, Some(table)))
+    }
+
     pub fn talk_target_in_direction(&self, direction: Direction) -> Option<(u8, usize, usize)> {
         let (dx, dy) = direction.delta();
         let x = self.player.x as isize + dx;
@@ -3529,7 +3539,12 @@ impl PlayState {
             npc_dialog_id_kind(dialog_id),
             NpcDialogIdKind::NoDialogue | NpcDialogIdKind::HighSpecial
         ) {
-            self.message = TALK_NO_RESPONSE_MESSAGE.to_string();
+            // `conversation.md §2` step 5's non-speaker line is composed
+            // from the NPC's own Look description - measured as
+            // `The guard offers no response!` (`cleak/u5-spec#198`).
+            self.message = crate::talk_non_speaker_refusal(
+                self.talk_target_description(target_x, target_y).as_deref(),
+            );
             return self.consume_ordinary_town_talk();
         }
 
@@ -3686,7 +3701,12 @@ impl PlayState {
             npc_dialog_id_kind(dialog_id),
             NpcDialogIdKind::NoDialogue | NpcDialogIdKind::HighSpecial
         ) {
-            self.message = TALK_NO_RESPONSE_MESSAGE.to_string();
+            // `conversation.md §2` step 5's non-speaker line is composed
+            // from the NPC's own Look description - measured as
+            // `The guard offers no response!` (`cleak/u5-spec#198`).
+            self.message = crate::talk_non_speaker_refusal(
+                self.talk_target_description(target_x, target_y).as_deref(),
+            );
             return self.consume_ordinary_town_talk();
         }
 
