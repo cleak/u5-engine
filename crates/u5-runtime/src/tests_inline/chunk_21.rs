@@ -2679,9 +2679,11 @@ fn town_raw_tlk_shop_trigger_opens_active_shop_session() {
         MoveOutcome::Talked
     );
 
-    assert!(state.message.contains("Shipwright"));
     assert!(state.message.contains("now open"));
-    assert!(state.active_shop.is_some());
+    assert!(matches!(
+        state.active_shop,
+        Some(crate::shop_session::ActiveShopSession::ShipBroker(_))
+    ));
     assert_eq!(state.turn, 1);
 }
 
@@ -5310,7 +5312,10 @@ fn talk_display_marker_tile_does_not_preempt_real_shop() {
         MoveOutcome::Talked
     );
 
-    assert!(state.message.contains("Ship"));
+    // The session variant is what identifies the shop. The message used
+    // to be asserted on the word "Ship", which only appeared because the
+    // opening line carried an engine-internal `Dispatch family:` suffix.
+    assert!(state.message.contains("now open"));
     assert_eq!(state.turn, 1);
     assert!(matches!(
         state.active_shop,

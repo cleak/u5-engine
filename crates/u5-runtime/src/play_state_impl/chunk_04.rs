@@ -3912,12 +3912,18 @@ impl PlayState {
             }
         }
 
+        // `shops.md §8` gives every shop kind a `SHOPPE.DAT` entry
+        // greeting; this is the fallback for when that record cannot be
+        // rendered. It used to append `Dispatch family: {family}.`, which
+        // is engine-internal routing vocabulary with no counterpart in the
+        // original - a paired capture of the Iolo's Bows counter showed it
+        // on screen. The routing family is still taken as an argument
+        // because callers pass it for other purposes; it is simply never
+        // printed.
+        let _ = family;
         let label = session.shop_label();
         let prompt = session.opening_prompt();
-        match family {
-            Some(family) => format!("{label} is now open. {prompt} Dispatch family: {family}."),
-            None => format!("{label} is now open. {prompt}"),
-        }
+        format!("{label} is now open. {prompt}")
     }
 
     /// Apply the byte-runner's recorded [`TlkActionDispatchVerb`] grants

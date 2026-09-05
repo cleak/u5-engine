@@ -1,0 +1,15 @@
+# Talk to the weaponsmith from a seeded save standing south of the counter.
+both	wait	9000
+both	key	space
+both	wait	4000
+both	key	j
+both	wait	9000
+both	shot	arrival	Standing south of the weaponsmith
+both	key	t
+both	wait	1200
+both	key	Up
+both	wait	3500
+both	shot	greeting	Talk north: the arms shop greeting
+both	key	Return
+both	wait	3000
+both	shot	after-enter	After the first keypress
