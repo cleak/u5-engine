@@ -449,6 +449,14 @@ impl Decodable for VisualSoundWave {
 #[derive(Component)]
 struct SpeakerVoice;
 
+/// Effects waiting for the channel.
+///
+/// The original's effects are blocking calls, so a turn that produces
+/// several - the Stonegate trapdoor's descent and its per-member rumbles
+/// are the clearest case - plays them in order rather than only the last.
+#[derive(Resource, Default)]
+struct SpeakerQueue(std::collections::VecDeque<(SpeakerProgram, bool)>);
+
 /// Marks a voice that actually queued samples, so the expiry system can
 /// tell "the device has not opened yet" from "this program was silent".
 #[derive(Component)]
@@ -9424,28 +9432,41 @@ fn fit_display_to_window(windows: Query<&Window>, mut sprites: Query<&mut Sprite
 fn add_speaker_audio(app: &mut App) {
     app.add_audio_source::<VisualSoundWave>()
         .add_event::<SpeakerEffect>()
-        .init_resource::<SpeakerJitter>();
+        .init_resource::<SpeakerJitter>()
+        .init_resource::<SpeakerQueue>();
 }
 
-/// Play queued effects on the one speaker voice.
+/// Play queued effects on the one speaker voice, **in order**.
 ///
-/// `audio.md §2`: "The speaker is a single mono, one-bit channel. There is no
-/// mixing. Starting a new tone replaces the previous timer divisor." So this
-/// system despawns any live voice before spawning the next one, and never lets
-/// two rendered effects overlap.
+/// `audio.md §2` describes the hardware: "The speaker is a single mono, one-bit
+/// channel. There is no mixing. Starting a new tone replaces the previous timer
+/// divisor." That is a statement about the divisor, not a licence to drop a
+/// queued sound - in the original every effect is a *blocking* call, so a
+/// second trigger cannot fire until the first has finished sounding. Two
+/// effects reaching this system in one frame are therefore two effects the
+/// original would have played one after the other.
 ///
-/// Every queued effect is lowered through [`SoundEffect::program`], which is
-/// what advances the `§5.3` jitter stream - so a superseded or muted effect
-/// still performs its state advance. Only the surviving effect is rendered,
-/// because only it reaches the speaker.
+/// This system used to keep only the last event of the frame, and the Stonegate
+/// trapdoor is where that shows: `audio.md §8.2` has it play the 750-tone
+/// descent from 1000 down through 251 Hz and *then* one rumble per party member
+/// as that member is killed, and `apply_stonegate_trapdoor_script` emits them in
+/// exactly that order within one turn. Keeping the last event dropped the
+/// twenty-six-second descent entirely. Measured on
+/// `qa/paired/stonegate-trapdoor-audio.tsv`: the stock game sweeps 1000 Hz down
+/// past 331 Hz over about 26.5 s, and this engine played 1.66 s of the tail.
+///
+/// So the events queue and play serially, one voice at a time. Every queued
+/// effect is still lowered through [`SoundEffect::program`] as it arrives,
+/// which is what advances the `§5.3` jitter stream, so a muted effect still
+/// performs its state advance.
 fn play_speaker_effects(
     mut commands: Commands,
     mut jitter: ResMut<SpeakerJitter>,
     mut waves: ResMut<Assets<VisualSoundWave>>,
     mut queued: EventReader<SpeakerEffect>,
+    mut pending: ResMut<SpeakerQueue>,
     voices: Query<Entity, With<SpeakerVoice>>,
 ) {
-    let mut current: Option<(SpeakerProgram, bool)> = None;
     for queued_effect in queued.read() {
         // `audio.md §3`: muting "changes output, not command or animation
         // cadence", so the program is built - and the jitter stream advanced -
@@ -9461,16 +9482,15 @@ fn play_speaker_effects(
             }
             SpeakerSource::Program(program) => program.clone(),
         };
-        current = Some((program, queued_effect.audible));
+        pending.0.push_back((program, queued_effect.audible));
     }
-    let Some((program, audible)) = current else {
+    // One channel: nothing starts while something is still sounding.
+    if !voices.is_empty() {
+        return;
+    }
+    let Some((program, audible)) = pending.0.pop_front() else {
         return;
     };
-
-    // One channel: whatever was sounding stops here.
-    for entity in &voices {
-        commands.entity(entity).despawn();
-    }
 
     // `audio.md §2` stops the speaker at the specified end, so the voice lives
     // for exactly the program's own duration with no padding. The duration is a
@@ -23585,6 +23605,7 @@ mod tests {
         app.insert_resource(Time::<()>::default())
             .init_resource::<Assets<VisualSoundWave>>()
             .init_resource::<SpeakerJitter>()
+            .init_resource::<SpeakerQueue>()
             .add_event::<SpeakerEffect>()
             .add_systems(Update, play_speaker_effects);
         app
@@ -23924,9 +23945,18 @@ mod tests {
     }
 
     #[test]
-    fn a_new_speaker_effect_replaces_the_previous_voice() {
-        // audio.md §2: "The speaker is a single mono, one-bit channel. There is
-        // no mixing. Starting a new tone replaces the previous timer divisor."
+    fn a_second_speaker_effect_waits_for_the_channel() {
+        // `audio.md §2` says the hardware has one divisor and no mixing; it
+        // does not say a queued effect is dropped. In the original every
+        // effect is a blocking call, so a second trigger cannot fire until
+        // the first has finished sounding, and two effects arriving in one
+        // frame are two the original played in order.
+        //
+        // The Stonegate trapdoor is the case that proves it: `§8.2` has the
+        // 750-tone descent play and *then* one rumble per party member, both
+        // emitted inside one turn. Keeping only the last event dropped the
+        // whole twenty-six-second descent - measured against the stock game
+        // in `qa/paired/stonegate-trapdoor-audio.tsv`.
         let mut app = speaker_test_app();
         queue_speaker_effect(&mut app, SoundEffect::StonegateDescent, true);
         let first = speaker_voices(&mut app);
@@ -23939,9 +23969,9 @@ mod tests {
             1,
             "a second effect must not overlap the first"
         );
-        assert_ne!(
+        assert_eq!(
             second[0], first[0],
-            "the previous voice must be despawned, not left sounding"
+            "the sounding voice keeps the channel; the new effect waits"
         );
         assert_eq!(audible_voices(&mut app), 1);
     }

@@ -1,0 +1,35 @@
+# The longest sound in the game, heard on both sides.
+#
+# `audio.md §8.2`: the Stonegate trapdoor's scripted death plays "every integer
+# frequency from 1000 down through 251 Hz, 750 tones total, holding each for 40
+# calibrated units", then one 75-update rumble per party member as that member
+# is killed. Section 10 marks the sweep's ~26.5 s duration as **derived and
+# unverified** - "far longer than the effect intuitively sounds" - so this is
+# the capture that settles it.
+#
+# The trapdoor is a ring of eight cells around Stonegate's centre; the seed
+# stands in the middle, so one step in any direction lands on it. Each side is
+# driven separately, and each recording is preceded by a silence control.
+# requires-seed: the party inside Stonegate, standing in the trapdoor ring's centre cell
+both	wait	9000
+both	key	space
+both	wait	4000
+both	key	j
+both	wait	9000
+both	shot	arrival	Inside Stonegate, in the middle of the trapdoor ring
+both	audio-start	dosbox-control	DOSBox: four seconds of nothing
+both	wait	4000
+both	audio-stop		DOSBox control
+both	audio-start	engine-control	Engine: four seconds of nothing
+both	wait	4000
+both	audio-stop		Engine control
+both	audio-start	engine-trapdoor	Engine: one step north, onto the trapdoor
+engine	key	Up
+both	wait	40000
+both	audio-stop		Engine trapdoor capture
+both	shot	engine-fallen	Engine after the trapdoor
+both	audio-start	dosbox-trapdoor	DOSBox: one step north, onto the trapdoor
+dosbox	key	Up
+both	wait	40000
+both	audio-stop		DOSBox trapdoor capture
+both	shot	dosbox-fallen	DOSBox after the trapdoor
