@@ -34,9 +34,5 @@ both	wait	1200
 both	key	Up
 both	wait	1200
 both	key	Up
-both	wait	1200
-both	key	Up
-both	wait	1200
-both	key	Up
 both	wait	4000
-both	shot	walked	Walking north across the arena
+both	shot	walked	Walking north across the arena, to the absorption
