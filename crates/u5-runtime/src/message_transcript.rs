@@ -408,6 +408,32 @@ impl PlayState {
     }
 
     /// Emit one font-preserving TLK response immediately.
+    /// Commit a typed line onto the open prompt row it was typed into.
+    ///
+    /// `conversation.md §6`: the keyword prompt's `:` row is the one
+    /// being edited, and the original keeps what was typed there once
+    /// the line is submitted - a capture reads `:JOB`, uppercased and
+    /// with no separating space. Without this the row reverts to a bare
+    /// `:` as soon as the shell clears its buffer, and the transcript
+    /// loses the question the answer belongs to.
+    pub fn commit_typed_prompt_line(&mut self, prompt: &str, typed: &str) {
+        let typed = typed.trim();
+        if typed.is_empty() {
+            return;
+        }
+        let Some(entry) = self.message_transcript.last_mut() else {
+            return;
+        };
+        if entry.text != prompt {
+            return;
+        }
+        let typed = typed.to_ascii_uppercase();
+        entry.text.push_str(&typed);
+        entry
+            .glyphs
+            .extend(ordinary_glyphs_from_engine_text(&typed));
+    }
+
     pub fn emit_tlk_message(&mut self, rendered: TlkRenderedText) {
         self.push_tlk_message_transcript_lines(&rendered);
         self.message = rendered.text.clone();

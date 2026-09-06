@@ -4323,6 +4323,13 @@ impl PlayState {
         let mut ended = false;
         let mut asked_party_name = None;
         let mut ask_party_name_prompted = false;
+        // The line was typed onto the prompt's own `:` row, and the
+        // original keeps it there. Commit it before the response is
+        // emitted, so the transcript reads `:JOB` and then the answer.
+        let open_prompt = self.open_prompt_line();
+        if let Some(prompt) = open_prompt.as_deref() {
+            self.commit_typed_prompt_line(prompt, line);
+        }
         if let Some(session) = self.active_conversation.as_mut() {
             let output = session.submit_keyword(line, &ctx);
             text = output.text.clone();
