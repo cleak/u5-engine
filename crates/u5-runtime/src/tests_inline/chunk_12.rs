@@ -1332,7 +1332,9 @@ fn consumed_dungeon_turn_on_gust_art_does_not_extinguish_underfoot_torch() {
     assert_eq!(state.torch_counter, 4);
     assert_eq!(state.light_spell_counter, 4);
     assert!(state.visibility_dirty);
-    assert!(state.message.contains("Turned to face"));
+    // `dungeon-mode.md §14`: a turn prints its verb and nothing else, so
+    // the handler leaves the slot empty (`cleak/u5-engine#5`). What this
+    // test pins is that the gust art did not put its own line there.
     assert!(!state.message.contains("breeze blows out the torch"));
     let _ = fs::remove_dir_all(dir);
 }

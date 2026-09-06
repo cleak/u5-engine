@@ -1396,7 +1396,11 @@ impl PlayState {
             pen % viewport.depth.pixel_limit();
     }
 
-    fn dungeon_renderer_offset_cell(&self, level: u8, dx: isize, dy: isize) -> u8 {
+    /// The renderer's own cell read for a band offset, wrapped in the
+    /// eight-by-eight plane (`dungeon-mode.md §6.5`). Public so a
+    /// diagnostic can report what the sweep saw without duplicating the
+    /// wrap and the class normalisation.
+    pub fn dungeon_renderer_offset_cell(&self, level: u8, dx: isize, dy: isize) -> u8 {
         let x = dungeon_floor_wrap_coord(self.player.x as i16 + dx as i16) as usize;
         let y = dungeon_floor_wrap_coord(self.player.y as i16 + dy as i16) as usize;
         dungeon_renderer_cell_byte(self.dungeon_cell(level, x, y))

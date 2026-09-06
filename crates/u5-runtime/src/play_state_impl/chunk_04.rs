@@ -2191,12 +2191,17 @@ impl PlayState {
         };
         self.player.facing = next;
         self.advance_turn();
-        self.message = format!(
-            "Turned to face {} on {} ({}) level {level}.",
-            next.name(),
-            scene.key(),
-            scene.name()
-        );
+        // `dungeon-mode.md §14`: a turn prints its verb and nothing else -
+        // "`Turn left\n` / `Turn right\n`" - and the handler itself only
+        // "decrement[s] the facing byte ... Status row updates; the
+        // first-person view is repainted on the next loop iteration". The
+        // verb echo is emitted by the input path, so this handler adds no
+        // line of its own; it used to compose a `Turned to face East on
+        // DEC (Deceit) level 0.` sentence that the original never prints,
+        // and which a paired capture showed landing twice.
+        // `cleak/u5-engine#5`.
+        let _ = (scene, level);
+        self.message.clear();
         MoveOutcome::Moved
     }
 

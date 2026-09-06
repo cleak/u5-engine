@@ -18247,7 +18247,8 @@ fn consumed_dungeon_turn_on_teleport_sidecar_changes_level_after_turn() {
     assert_eq!((state.player.x, state.player.y), (4, 5));
     assert_eq!(state.active_objects[0].z, 3);
     assert_eq!(state.turn, 1);
-    assert!(state.message.contains("Turned to face"));
+    // The turn itself prints only its verb echo (`dungeon-mode.md §14`);
+    // the sidecar's own line is what lands in the slot.
     assert!(state.message.contains("scripted dungeon teleport"));
     let _ = fs::remove_dir_all(dir);
 }
