@@ -1032,7 +1032,7 @@ impl PlayState {
 
             if let Some(role) = outcome.blocker {
                 if let Some(bank) = bank {
-                    self.draw_dungeon_billboard(viewport, bank, role, band);
+                    self.draw_dungeon_billboard(viewport, bank, role, band, None);
                 }
                 if role == DungeonBillboardRole::ForwardFlavourWall
                     && scene.presentation_flavour() == DungeonPresentationFlavour::Normal
@@ -1072,8 +1072,8 @@ impl PlayState {
                 let left_role = dungeon_side_role(left_cell);
                 let right_role = dungeon_side_role(right_cell);
                 if let Some(bank) = bank {
-                    self.draw_dungeon_billboard(viewport, bank, left_role, band);
-                    self.draw_dungeon_billboard(viewport, bank, right_role, band);
+                    self.draw_dungeon_billboard(viewport, bank, left_role, band, Some(false));
+                    self.draw_dungeon_billboard(viewport, bank, right_role, band, Some(true));
                 }
                 if scene.presentation_flavour() == DungeonPresentationFlavour::Normal {
                     if left_role == DungeonBillboardRole::SideFlavourWall {
@@ -1130,6 +1130,7 @@ impl PlayState {
         bank: &DungeonBillboardBank,
         role: DungeonBillboardRole,
         band: usize,
+        side: Option<bool>,
     ) {
         let Some(slot) = role.slot(band) else {
             return;
@@ -1140,8 +1141,30 @@ impl PlayState {
         let left_x = dungeon_billboard_left_x(band);
         let width = image.width as i32;
         let right_x = dungeon_billboard_right_x(left_x, width);
-        blit_dungeon_billboard(viewport, image, left_x, false);
-        blit_dungeon_billboard(viewport, image, right_x, true);
+        // `dungeon-mode.md §6.4`: only the *forward* blocker is painted
+        // twice - it "paints a blocker twice - left copy then mirrored
+        // copy". A side cell is painted once, on its own side: "for each
+        // band the renderer paints the cell to the left and the cell to
+        // the right, using the perpendicular of the facing direction",
+        // one image per cell.
+        //
+        // This engine used to blit every billboard on both sides, side
+        // cells included, so the right cell's image - drawn second -
+        // landed mirrored over the left cell's. It was invisible
+        // wherever the two side cells shared a family, which is most
+        // frames, and produced a flat wall face where the original draws
+        // an angled perspective slab wherever they did not. Deceit level
+        // 1 facing east has a plain wall on the left and an opening on
+        // the right, and that frame differed by 1,884 pixels;
+        // painting each side once takes it to zero (`cleak/u5-engine#13`).
+        match side {
+            Some(false) => blit_dungeon_billboard(viewport, image, left_x, false),
+            Some(true) => blit_dungeon_billboard(viewport, image, right_x, true),
+            None => {
+                blit_dungeon_billboard(viewport, image, left_x, false);
+                blit_dungeon_billboard(viewport, image, right_x, true);
+            }
+        }
     }
 
     /// `dungeon-mode.md §§6.6-6.9`: the far-to-near object/field pass.
