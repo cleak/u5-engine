@@ -4332,8 +4332,23 @@ impl PlayState {
         }
         let mut opening = description;
         if !rendered.text.trim().is_empty() {
+            // `conversation.md §9` step 3: both arms speak inside the quote
+            // wrapper - the known-NPC arm "opens the quote wrapper and runs
+            // the Greeting entry", and the stranger arm "prints the `I am
+            // called` lead-in and runs the **Name** entry ... then closes
+            // the quote". The description ahead of it is narration and
+            // stays bare. A paired capture of a walked-in castle
+            // conversation reads `You see a pretty young girl.`, a blank
+            // row, then `"I am called Ava"`. `cleak/u5-engine#5`.
+            let trimmed = rendered.trimmed();
             opening.push_plain("\n\n");
-            opening.push_rendered(&rendered.trimmed());
+            if trimmed.text.trim_start().starts_with('"') {
+                opening.push_rendered(&trimmed);
+            } else {
+                opening.push_plain("\"");
+                opening.push_rendered(&trimmed);
+                opening.push_plain("\"");
+            }
         }
         (opening, false)
     }
@@ -5751,7 +5766,14 @@ fn conversation_opening_rendered(
     opening: &crate::tlk_runner::TlkRenderedText,
     prompt: &str,
 ) -> crate::tlk_runner::TlkRenderedText {
-    let mut rendered = crate::tlk_runner::TlkRenderedText::plain(TLK_OPENING_DESCRIPTION_PREFIX);
+    // `text-output.md §10.4`: the opening prints under the
+    // `Talk-<direction>` echo, which completed its own row, so its leading
+    // line feed leaves one blank row between them - the shape the Look
+    // result and the Talk refusals already carry. A paired capture of a
+    // walked-in castle conversation reads `>Talk-North`, a blank row,
+    // then `You see a pretty young girl.` (`cleak/u5-engine#5`).
+    let mut rendered = crate::tlk_runner::TlkRenderedText::plain("\n");
+    rendered.push_plain(TLK_OPENING_DESCRIPTION_PREFIX);
     rendered.push_rendered(&opening.trimmed());
     // A blank row separates the opening from the prompt that closes it,
     // the same shape §6's response framing carries. Two line feeds,

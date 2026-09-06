@@ -3187,7 +3187,7 @@ fn town_raw_tlk_opening_runs_description_stream_before_greeting() {
     );
 
     assert!(state.message.contains("You see a sage watching AVATAR"));
-    assert!(state.message.contains("Greetings\n\nYour interest?\n:"));
+    assert!(state.message.contains("\"Greetings\"\n\nYour interest?\n:"));
     assert_eq!(state.conversation_signal_flags[6], 1);
     assert!(state.active_conversation.is_some());
 }
@@ -4553,7 +4553,7 @@ fn conversation_opening_reseeds_only_for_strangers_and_uses_name_coin_flip() {
     let known = state.active_conversation_greeting_rendered_with_host_seed(0x0123);
     // The Description entry runs first now (`cleak/u5-spec#198`), so the
     // opening carries it ahead of the greeting.
-    assert_eq!(known.text, "a quiet sage\n\nGreetings");
+    assert_eq!(known.text, "a quiet sage\n\n\"Greetings\"");
     assert_eq!(state.prng_state, 0x0aaa);
 
     state.talk_branch_flags.clear();
@@ -4566,7 +4566,7 @@ fn conversation_opening_reseeds_only_for_strangers_and_uses_name_coin_flip() {
     assert_eq!(
         stranger.text,
         if introduces {
-            "a quiet sage\n\nI am called Maris"
+            "a quiet sage\n\n\"I am called Maris\""
         } else {
             "a quiet sage"
         }
@@ -4781,7 +4781,9 @@ fn active_conversation_preserves_protected_run_font_in_message_transcript() {
     // lead-in, the Description and Greeting entries, and §6's prompt.
     assert_eq!(
         state.advance_active_conversation_greeting(),
-        format!("{TLK_OPENING_DESCRIPTION_PREFIX}INOP\n\n{TLK_KEYWORD_PROMPT}")
+        // §9 step 3 speaks inside the quote wrapper; the description
+        // ahead of it is narration and stays bare (`cleak/u5-engine#5`).
+        format!("\n{TLK_OPENING_DESCRIPTION_PREFIX}\"INOP\"\n\n{TLK_KEYWORD_PROMPT}")
     );
     let entry = state
         .message_entries()
