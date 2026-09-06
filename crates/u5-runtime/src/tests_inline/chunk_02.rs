@@ -1181,3 +1181,38 @@ fn a_female_chargen_avatar_loads_back_as_a_female_roster_record() {
 
     let _ = fs::remove_dir_all(dir);
 }
+
+#[test]
+fn look2_sentinels_cover_both_domains() {
+    // `formats/look2-dat.md`: "There are two sentinel strings, one per
+    // domain. The terrain domain's is a single `*` and the object
+    // domain's is a single `x`" - twenty-three terrain rows and sixteen
+    // object rows in the shipped table.
+    //
+    // `is_sentinel` used to compare against entry 0 alone, so every
+    // object-domain sentinel escaped as a literal `x`.
+    let Some(game_dir) = crate::test_fixtures::configured_original_asset_dir() else {
+        return;
+    };
+    if !game_dir.join(crate::LOOK2_DAT_FILE).exists() {
+        return;
+    }
+    let table = crate::load_look_table(game_dir.as_path()).expect("LOOK2.DAT must parse");
+    let terrain = table.description(0).expect("terrain sentinel row");
+    let object = table
+        .description(crate::LOOK2_DAT_TERRAIN_ENTRIES)
+        .expect("object sentinel row");
+    assert_ne!(terrain, object, "the two domains use different glyphs");
+    assert!(table.is_sentinel(terrain));
+    assert!(table.is_sentinel(object));
+
+    let count = |needle: &str| {
+        table
+            .descriptions
+            .iter()
+            .filter(|description| description.as_str() == needle)
+            .count()
+    };
+    assert_eq!(count(terrain), 23, "published terrain-domain sentinel rows");
+    assert_eq!(count(object), 16, "published object-domain sentinel rows");
+}

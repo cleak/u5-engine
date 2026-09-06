@@ -22,10 +22,30 @@ impl LookTable {
         self.descriptions.get(tile).map(String::as_str)
     }
 
+    /// Whether a description is one of the table's "no meaningful look
+    /// description" sentinels.
+    ///
+    /// `formats/look2-dat.md`: "**There are two sentinel strings, one
+    /// per domain.** The terrain domain's is a single `*` and the object
+    /// domain's is a single `x`; neither appears in the other domain."
+    /// Both domains put their sentinel at their own entry `0`, and the
+    /// section is explicit that "a reader must compare the *string*, not
+    /// the offset", so the two glyphs are read out of the table rather
+    /// than hardcoded.
+    ///
+    /// This used to compare against entry `0` alone, which is the
+    /// terrain sentinel. Every object-domain sentinel row therefore
+    /// escaped as a literal `x` - visible as `Thou dost see / x` for the
+    /// sixteen object ids the section lists, and composed into
+    /// `The x offers no response!` by the Talk refusal that reads the
+    /// same description. Found by census (`cleak/u5-spec#198`): the
+    /// shipped table has twenty-three `*` rows and sixteen `x` rows,
+    /// exactly the counts the section publishes.
     pub fn is_sentinel(&self, description: &str) -> bool {
-        self.description(0)
-            .map(|sentinel| description == sentinel)
-            .unwrap_or(false)
+        [0, crate::LOOK2_DAT_TERRAIN_ENTRIES]
+            .into_iter()
+            .filter_map(|index| self.description(index))
+            .any(|sentinel| description == sentinel)
     }
 }
 
