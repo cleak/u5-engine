@@ -235,14 +235,20 @@ pub const ENVELOPE_MUTED_ITERATION_NANOS: u64 = 33_300;
 /// synthesises a pin toggle at the loop rate lands about four octaves wrong.
 pub const ENVELOPE_CARRIER_DIVISOR: u16 = 60;
 
-/// `audio.md §4`, "drawing work": the shared full-viewport flash has no
-/// explicit audio delay and is spaced only by raster work between retunes.
+/// `audio.md §8.4`, the shared full-viewport flash: "There is no explicit
+/// audio delay; raster work spaces the retunes."
 ///
-/// One band repaints a horizontal slice of the gameplay viewport. This engine
-/// charges each band one outer calibrated unit, which puts the published
-/// 1,856-band effect at about 1.6 s. Raster cost is not a calibration quantity
-/// and `#146` does not derive it, so this remains the module's approximation.
-pub const FLASH_BAND_NANOS: u64 = OUTER_CALIBRATED_UNIT_NANOS;
+/// So this figure cannot be derived from the calibration anchor - raster cost
+/// is not a calibration quantity, and `§10` publishes no duration for the
+/// effect at all. It can be *measured*, and now has been:
+/// `qa/paired/word-of-power-audio.tsv` yells a Word of Power on the overworld,
+/// where `commands.md §8`'s Yell context table puts the Word-of-Power arm, and
+/// records both sides' speaker. The stock game's flash runs **0.859 s** on two
+/// runs, which over the published 1,856 bands is **463 microseconds per band**.
+///
+/// This engine charged each band one outer calibrated unit, 880 us, and played
+/// the effect for 1.633 s - very nearly twice as long as the original.
+pub const FLASH_BAND_NANOS: u64 = 463_000;
 
 /// Convert an inner-unit count to nanoseconds.
 pub const fn inner_units_to_nanos(inner_units: u64) -> u64 {

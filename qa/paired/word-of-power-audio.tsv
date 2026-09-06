@@ -1,0 +1,44 @@
+# The major flash, heard and counted.
+#
+# `audio.md §8.4` gives a recognised Word of Power the shared full-viewport
+# flash, and `§3`/`§8.4` make its most testable claim: the flash draws **1,856
+# gameplay-PRNG bands and retunes on every one of them, even while muted**. The
+# engine implements that and unit-tests the draw count; nothing had heard it.
+#
+# The Word is spoken on the open overworld rather than at a seal.
+# `commands.md §8`'s Yell context table makes the overworld the Word-of-Power
+# context, and the engine's own comment on the arm records the published order:
+# "the recognised-Word effect occurs before the location-specific success test,
+# so a known Word spoken at the wrong place is still audible and visible". So
+# the cue is reachable from any overworld seed, with no quest state at all.
+#
+# `FALLAX` is Deceit's word (`catalogs/quest-graph.md` Section 3).
+# requires-seed: the party standing on the Britannia overworld
+both	wait	9000
+both	key	space
+both	wait	4000
+both	key	j
+both	wait	9000
+both	shot	lit	On the overworld
+both	audio-start	dosbox-control	DOSBox: four seconds of nothing
+both	wait	4000
+both	audio-stop		DOSBox control
+both	audio-start	engine-control	Engine: four seconds of nothing
+both	wait	4000
+both	audio-stop		Engine control
+both	audio-start	engine-word	Engine: yell FALLAX
+engine	key	y
+both	wait	1200
+engine	type	FALLAX
+engine	key	Return
+both	wait	8000
+both	audio-stop		Engine Word capture
+both	shot	engine-word	Engine after the Word
+both	audio-start	dosbox-word	DOSBox: yell FALLAX
+dosbox	key	y
+both	wait	1200
+dosbox	type	FALLAX
+dosbox	key	Return
+both	wait	8000
+both	audio-stop		DOSBox Word capture
+both	shot	dosbox-word	DOSBox after the Word
