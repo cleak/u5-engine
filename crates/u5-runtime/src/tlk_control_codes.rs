@@ -563,11 +563,19 @@ pub const TLK_CODE_ASK_WHO: u8 = 0x88;
 /// The section says the code "prompt[s] the player for a name and read[s]
 /// a typed line" and publishes no literal, so the engine had been using
 /// an invented `Who?`. Measured against the original
-/// (`cleak/u5-spec#198`): a `DWELLING.TLK` NPC's ASK-WHO prints
-/// `You respond-` and then a fresh row carrying `:` with the input
-/// cursor - the same envelope [`TLK_KEYWORD_PROMPT`] uses for the
-/// keyword prompt.
-pub const TLK_ASK_WHO_PROMPT: &str = "You respond-\n:";
+/// (`cleak/u5-spec#198`): a `DWELLING.TLK` NPC's ASK-WHO prints the
+/// quoted question, a blank row, `You respond-`, and then a fresh row
+/// carrying `:` with the input cursor - the last two being the same
+/// envelope [`TLK_KEYWORD_PROMPT`] uses for the keyword prompt.
+///
+/// The question is the engine's, not the blob's. The bytes immediately
+/// after the code in the shipped stream are `0xA2 0x8D 0x8D 0xA2` - a
+/// quote, two line feeds and a quote, with **no text between them** - so
+/// there is nothing there for the code to consume as an argument, and
+/// the question the original speaks has to come from the engine. That
+/// also explains the stray-looking quote pair: it closes the question
+/// the engine opened and opens the line that follows the answer.
+pub const TLK_ASK_WHO_PROMPT: &str = "\"What is thy name?\"\n\nYou respond-\n:";
 /// The row of [`TLK_ASK_WHO_PROMPT`] that stays open for input.
 pub const TLK_ASK_WHO_PROMPT_OPEN_LINE: &str = ":";
 pub const TLK_CODE_IF_ELSE: u8 = 0x8C;

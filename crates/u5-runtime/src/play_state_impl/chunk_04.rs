@@ -5741,7 +5741,10 @@ fn conversation_opening_rendered(
 ) -> crate::tlk_runner::TlkRenderedText {
     let mut rendered = crate::tlk_runner::TlkRenderedText::plain(TLK_OPENING_DESCRIPTION_PREFIX);
     rendered.push_rendered(&opening.trimmed());
-    if !rendered.text.ends_with('\n') {
+    // A blank row separates the opening from the prompt that closes it,
+    // the same shape §6's response framing carries. Two line feeds,
+    // because `text-output.md §5`'s feed is a combined CR+LF.
+    while !rendered.text.ends_with("\n\n") {
         rendered.push_plain("\n");
     }
     rendered.push_plain(prompt);

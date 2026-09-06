@@ -3184,7 +3184,7 @@ fn town_raw_tlk_opening_runs_description_stream_before_greeting() {
     );
 
     assert!(state.message.contains("You see a sage watching AVATAR"));
-    assert!(state.message.contains("Greetings\nYour interest?\n:"));
+    assert!(state.message.contains("Greetings\n\nYour interest?\n:"));
     assert_eq!(state.conversation_signal_flags[6], 1);
     assert!(state.active_conversation.is_some());
 }
@@ -4778,7 +4778,7 @@ fn active_conversation_preserves_protected_run_font_in_message_transcript() {
     // lead-in, the Description and Greeting entries, and §6's prompt.
     assert_eq!(
         state.advance_active_conversation_greeting(),
-        format!("{TLK_OPENING_DESCRIPTION_PREFIX}INOP\n{TLK_KEYWORD_PROMPT}")
+        format!("{TLK_OPENING_DESCRIPTION_PREFIX}INOP\n\n{TLK_KEYWORD_PROMPT}")
     );
     let entry = state
         .message_entries()
