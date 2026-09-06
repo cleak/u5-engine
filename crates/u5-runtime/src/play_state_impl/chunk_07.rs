@@ -3710,10 +3710,13 @@ impl PlayState {
                 floor,
                 npc_slot,
             });
+            // The challenge opens on its own row: it is a fresh two-line
+            // exchange, not a tail appended to whatever the contact
+            // already printed.
             self.message = if self.message.is_empty() {
                 TOWN_ARREST_SURRENDER_PROMPT.to_string()
             } else {
-                format!("{} {TOWN_ARREST_SURRENDER_PROMPT}", self.message)
+                format!("{}\n{TOWN_ARREST_SURRENDER_PROMPT}", self.message)
             };
             self.push_diagnostic(format!(
                 "Guard NPC slot {npc_slot} catches the party; arrest prompt opened."
@@ -3776,6 +3779,10 @@ impl PlayState {
         };
         match key.to_ascii_lowercase() {
             'y' => {
+                // `town-mode.md §1123`: the `:` answer row "echoes `Yes`
+                // or `No!`", so the accepted key completes the open row
+                // before the outcome prints on the next one.
+                self.commit_prompt_reply(":", TOWN_ARREST_YES_REPLY);
                 self.pending_town_arrest = None;
                 if prompt.scene_byte == BLACKTHORN_CAPTIVE_CELL_SCENE {
                     return self.begin_blackthorn_audience_capture(game_dir);
@@ -3783,6 +3790,7 @@ impl PlayState {
                 self.apply_town_arrest_surrender(game_dir)
             }
             'n' => {
+                self.commit_prompt_reply(":", TOWN_ARREST_NO_REPLY);
                 self.pending_town_arrest = None;
                 let scene = Scene::new(prompt.scene_byte)?;
                 let (pursued, fled) =
@@ -3861,10 +3869,11 @@ impl PlayState {
             self.clock.hour
         ));
         // `town-mode.md §1123`: "surrendering prints the knockout and
-        // awakening lines". Both are unpublished and unmeasured, so the
-        // engine prints nothing rather than inventing them; the jail
-        // transition and the wait-to-morning burst still run.
-        self.message = String::new();
+        // awakening lines"; the knockout line is now published as `The
+        // guard strikes thee unconscious!` (spec issue #206). The
+        // awakening line still is not, so the engine prints the one it
+        // has and stops rather than inventing the other.
+        self.message = TOWN_ARREST_KNOCKOUT_MESSAGE.to_string();
         Ok(Some(MoveOutcome::Transition(
             AreaTransition::EnteredLocation(scene),
         )))

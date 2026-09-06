@@ -3012,7 +3012,7 @@ fn blackthorn_palace_guard_requires_active_badge_code_and_accepts_four_letter_pr
         state.resolve_blackthorn_guard_demand_input('i', "mpeachment"),
         Some(MoveOutcome::Talked)
     );
-    assert_eq!(state.message, "Pass, friend.");
+    assert_eq!(state.message, "\"Pass, friend!\"");
     assert!(state.pending_town_arrest.is_none());
 }
 

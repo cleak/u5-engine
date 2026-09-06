@@ -28,7 +28,7 @@
         assert_eq!(prompted.turn, 0);
         assert_eq!((prompted.player.x, prompted.player.y), (4, 5));
         assert_eq!(prompted.pending_town_arrest, Some(prompt));
-        assert_eq!(prompted.message, "Surrender? (Y/N).");
+        assert_eq!(prompted.message, TOWN_ARREST_SURRENDER_PROMPT);
 
         let mut unprompted = world_state(open_world_grid(), 4, 5);
 
@@ -254,7 +254,7 @@
         assert_eq!(prompted.animation.frame, 0);
         assert_eq!(prompted.active_objects[1].phase, 0x22);
         assert_eq!(prompted.active_objects[1].tile, 168);
-        assert_eq!(prompted.message, "Surrender? (Y/N).");
+        assert_eq!(prompted.message, TOWN_ARREST_SURRENDER_PROMPT);
 
         let mut unprompted = world_state(open_world_grid(), 4, 5);
         unprompted.active_objects.push(ActiveObject {

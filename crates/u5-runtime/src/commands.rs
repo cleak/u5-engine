@@ -798,15 +798,25 @@ pub const LOOK_RESULT_PREFIX: &str = "\nThou dost see";
 
 /// The town arrest sequence's surrender question.
 ///
-/// `town-mode.md §1123` says the sequence "prints the arrest challenge
-/// and asks whether the party will come quietly" but publishes no
-/// literal. An interaction that reads Y/N has to show *something*, so
-/// this is the engine's own wording, marked as such: it is the one
-/// place on this path where printing nothing is not an option. The
-/// arrest challenge, the knockout and awakening lines, and the guards'
-/// refusal challenge are all equally unpublished and the engine prints
-/// none of them. cleak/u5-spec#198 tracks the measurements.
-pub const TOWN_ARREST_SURRENDER_PROMPT: &str = "Surrender? (Y/N).";
+/// `town-mode.md §1123` (literals added 2026-09-06, spec issue #206):
+/// the sequence "prints the arrest challenge (`"Thou art under
+/// arrest!"`, a blank row) and asks whether the party will come quietly
+/// (`"Wilt thou come quietly?"`, a blank row, a `:` answer row that
+/// echoes `Yes` or `No!`)". The `\n\n` pairs are those blank rows and
+/// the `\n:` tail is the answer row, the same envelope
+/// [`crate::TLK_KEYWORD_PROMPT`] carries.
+///
+/// This replaces the engine's own `Surrender? (Y/N).`, which was
+/// invented because §1123 published no literal at the time.
+pub const TOWN_ARREST_SURRENDER_PROMPT: &str =
+    "\"Thou art under arrest!\"\n\n\"Wilt thou come quietly?\"\n\n:";
+/// `town-mode.md §1123`: "the surrender line is `The guard strikes thee
+/// unconscious!`". The awakening line the same sentence mentions is
+/// still unpublished, so the engine prints this one and stops.
+pub const TOWN_ARREST_KNOCKOUT_MESSAGE: &str = "The guard strikes thee unconscious!";
+/// `town-mode.md §1123`: the `:` answer row echoes `Yes` or `No!`.
+pub const TOWN_ARREST_YES_REPLY: &str = "Yes";
+pub const TOWN_ARREST_NO_REPLY: &str = "No!";
 /// `cleak/u5-spec#194` (black-box): X-it on foot completes its own
 /// `X-it ` echo line with `what?`.
 pub const XIT_ON_FOOT_REFUSAL: &str = "what?";

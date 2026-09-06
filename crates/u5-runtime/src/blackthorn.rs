@@ -38,8 +38,21 @@ pub struct ActiveBlackthornGuardDemand {
 impl BlackthornGuardDemandPrompt {
     pub fn message(self) -> String {
         match self {
-            Self::PalacePassword => "Black Badge bearer, give the password:".to_string(),
-            Self::MinocCharity => "Give half thy gold to charity? (Y/N).".to_string(),
+            // `blackthorn.md §7a` branch 1 (literals added 2026-09-06,
+            // spec issue #206): the guard asks `"Give now the` /
+            // `password, bearer` / `of the Badge!"`, then a blank row and
+            // `Your response?` above the `:` input row. Those three rows
+            // are the sixteen-column wrap of one sentence, so the engine
+            // stores the sentence and lets the message window wrap it.
+            Self::PalacePassword => {
+                "\"Give now the password, bearer of the Badge!\"\n\nYour response?\n:".to_string()
+            }
+            // §7a branch 2, same publication: `"Thou wilt give` / `half
+            // thy gold to` / `charity!"`, a blank row, the shared
+            // `Dost thou pay?` question, and the `:` answer row.
+            Self::MinocCharity => {
+                "\"Thou wilt give half thy gold to charity!\"\n\nDost thou pay?\n:".to_string()
+            }
             // Measured against the original (`cleak/u5-spec#198`): a
             // Moonglow tribute guard prints
             // `A guard demands a 10 gp tribute to Blackthorn!`, a blank

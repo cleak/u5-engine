@@ -4911,6 +4911,16 @@ impl PlayState {
         let mut input = String::new();
         input.push(key);
         input.push_str(suffix);
+        // `blackthorn.md §7a` branch 2: the `:` answer row "echoes `Yes`
+        // or `No!`". The password branch echoes the typed word instead
+        // and is handled by the free-text path.
+        if !matches!(active.prompt, BlackthornGuardDemandPrompt::PalacePassword) {
+            match key.to_ascii_lowercase() {
+                'y' => self.commit_prompt_reply(":", TOWN_ARREST_YES_REPLY),
+                'n' => self.commit_prompt_reply(":", TOWN_ARREST_NO_REPLY),
+                _ => {}
+            }
+        }
         match resolve_blackthorn_guard_demand(active.prompt, &input, self.gold) {
             BlackthornGuardDemandResolution::AwaitingInput => {
                 self.message = active.prompt.message();
@@ -4919,14 +4929,18 @@ impl PlayState {
             BlackthornGuardDemandResolution::PaidOrPassed { gold } => {
                 self.gold = gold;
                 self.active_blackthorn_guard_demand = None;
+                // `blackthorn.md §7a`: branch 1's match "answers `"Pass,
+                // friend!"`" - that one is published. Branches 2 and 3
+                // publish no acknowledgement at all; §7a says only that
+                // "paid/passed is the ordinary outcome", so the engine
+                // prints nothing rather than inventing one, the same way
+                // it does for the unpublished arrest and guards'
+                // challenges. It previously invented `Thy charitable gift
+                // is accepted.` and `Thy tribute is accepted.`
                 self.message = match active.prompt {
-                    BlackthornGuardDemandPrompt::PalacePassword => "Pass, friend.".to_string(),
-                    BlackthornGuardDemandPrompt::MinocCharity => {
-                        "Thy charitable gift is accepted.".to_string()
-                    }
-                    BlackthornGuardDemandPrompt::Tribute { .. } => {
-                        "Thy tribute is accepted.".to_string()
-                    }
+                    BlackthornGuardDemandPrompt::PalacePassword => "\"Pass, friend!\"".to_string(),
+                    BlackthornGuardDemandPrompt::MinocCharity
+                    | BlackthornGuardDemandPrompt::Tribute { .. } => String::new(),
                 };
                 Some(MoveOutcome::Talked)
             }

@@ -339,7 +339,7 @@ fn typeahead_buffer_pauses_during_modal_prompts() {
     assert_eq!(state.turn, 0);
     assert_eq!((state.player.x, state.player.y), (4, 5));
     assert!(state.pending_town_arrest.is_some());
-    assert_eq!(state.message, "Surrender? (Y/N).");
+    assert_eq!(state.message, TOWN_ARREST_SURRENDER_PROMPT);
 }
 
 #[test]
@@ -503,7 +503,7 @@ fn pending_prompt_consumes_typeahead_toggle_without_changing_buffer_state() {
     assert_eq!(prompted.turn, 0);
     assert_eq!(prompted.animation.frame, 0);
     assert!(prompted.pending_town_arrest.is_some());
-    assert_eq!(prompted.message, "Surrender? (Y/N).");
+    assert_eq!(prompted.message, TOWN_ARREST_SURRENDER_PROMPT);
 }
 
 // from chunk_19
@@ -521,7 +521,7 @@ fn empty_play_input_repeats_pending_prompt_without_turn() {
     assert_eq!(prompted.turn, 0);
     assert_eq!((prompted.player.x, prompted.player.y), (4, 5));
     assert!(prompted.pending_town_arrest.is_some());
-    assert_eq!(prompted.message, "Surrender? (Y/N).");
+    assert_eq!(prompted.message, TOWN_ARREST_SURRENDER_PROMPT);
 
     let mut unprompted = test_state(open_grid(), 1, 1);
 
@@ -690,7 +690,7 @@ fn play_script_idle_count_respects_pending_prompt_freeze() {
     assert_eq!(prompted.turn, 0);
     assert_eq!(prompted.animation.frame, 0);
     assert!(prompted.pending_town_arrest.is_some());
-    assert_eq!(prompted.message, "Surrender? (Y/N).");
+    assert_eq!(prompted.message, TOWN_ARREST_SURRENDER_PROMPT);
 }
 
 // from chunk_19
