@@ -1,0 +1,45 @@
+# `audio.md §8.8`: twelve verbs reach the arena's shared refusal responder and
+# sound "the descending two-tone pair" - 220 Hz for 150 units, then 150 Hz for
+# 150 units - and the section is explicit that the neighbouring keys are
+# *silent*: "`D` and `W` print their own short `What?` line with no sound".
+#
+# One run therefore carries both a positive and a negative, which is what makes
+# it worth recording: a capture that hears the pair on `L` and nothing on `D`
+# has tested the boundary, not just the cue. Each side is driven separately so
+# the recordings carry one speaker, and each is preceded by a silence control
+# in the same scene - see the README on why.
+# requires-seed: the party one step from a dungeon room trigger, with a torch to hand
+both	wait	9000
+both	key	space
+both	wait	4000
+both	key	j
+both	wait	9000
+both	key	i
+both	wait	2500
+both	key	Up
+both	wait	6000
+both	shot	arena	The arena, awaiting a command
+both	audio-start	dosbox-control	DOSBox: four seconds of nothing
+both	wait	4000
+both	audio-stop		DOSBox control
+both	audio-start	engine-control	Engine: four seconds of nothing
+both	wait	4000
+both	audio-stop		Engine control
+both	audio-start	engine-refused	Engine: L in the arena, a refused verb
+engine	key	l
+both	wait	3000
+both	audio-stop		Engine refusal capture
+both	audio-start	dosbox-refused	DOSBox: L in the arena
+dosbox	key	l
+both	wait	3000
+both	audio-stop		DOSBox refusal capture
+both	shot	refused	After the refused verb
+both	audio-start	engine-silent	Engine: D in the arena, published as silent
+engine	key	d
+both	wait	3000
+both	audio-stop		Engine silent-key capture
+both	audio-start	dosbox-silent	DOSBox: D in the arena
+dosbox	key	d
+both	wait	3000
+both	audio-stop		DOSBox silent-key capture
+both	shot	silent	After the silent key
