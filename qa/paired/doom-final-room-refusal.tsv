@@ -1,0 +1,54 @@
+# Variant of `doom-final-room` that answers **No** to the first box question,
+# to see whether the original still asks `endgame.md §5` step 4's explicit
+# sandalwood question. `endgame.md §2` steps 4-6: Doom's final room, the handoff that reaches the
+# terminal sequence. The room trigger sits at level seven `(5,7)` with three
+# wall neighbours, so a fall from the level above is the only way onto it -
+# the seed stands the party on that fall trap. Ignite a torch, take a turn,
+# and the fall lands on the trigger.
+#
+# `endgame.md 5.1` blocks on a key read between pages. Holding the window
+# still for 5, 15 and 30 seconds showed an identical frame each time, so the
+# greeting is a page of its own and the first box question follows the next
+# key rather than a delay. The two `y` steps below are that page advance and
+# then the answer.
+both	wait	9000
+both	key	space
+both	wait	7000
+both	key	j
+both	wait	9000
+both	shot	arrival	Journey Onward on the fall trap above the final room
+both	key	i
+both	wait	2500
+both	shot	lit	Torch lit
+both	key	space
+both	wait	5000
+both	shot	fallen	After the fall onto the room trigger
+both	wait	7000
+both	shot	room	The final room
+both	key	space
+both	wait	2500
+both	key	space
+both	wait	2500
+both	key	space
+both	wait	5000
+both	shot	passes	Three more passes in the arena
+both	key	Up
+both	wait	1200
+both	key	Up
+both	wait	1200
+both	key	Up
+both	wait	1200
+both	key	Up
+both	wait	7000
+both	shot	walked	Walking north across the arena, to the absorption
+both	wait	15000
+both	shot	settled	Fifteen seconds on the confirmation
+both	key	y
+both	wait	4000
+both	shot	greeting-page	After one key: the first box question follows the greeting
+both	key	n
+both	wait	8000
+both	shot	answered-no	After answering No to the first box question
+both	key	space
+both	wait	4000
+both	shot	after-key	One more key past that answer
