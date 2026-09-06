@@ -436,11 +436,11 @@ impl EndgameState {
     pub fn second_prompt_text(&self, first_answer: bool) -> String {
         if let Some(messages) = &self.messages {
             if let Some(prompt) = messages.second_box_prompt() {
-                // §5 step 3: "The game echoes the answer into the
-                // dialogue stream." The echo's wording is still the
-                // engine's; the record supplies its own `You reply: `
-                // tail, so no `(Y/N)` is appended.
-                return format!("{}\n{prompt}", yes_no_word(first_answer));
+                // §5.1: the answer is echoed as `Yes` or `No` "followed
+                // by a blank line, and only then does the next record
+                // print". The record supplies its own `You reply: `
+                // tail, so nothing is appended after it.
+                return format!("{}\n\n{prompt}", yes_no_word(first_answer));
             }
         }
         "Endgame: Lord British asks again for the sandalwood box. (Y/N)".to_string()
@@ -777,8 +777,16 @@ pub fn endgame_outcome(final_confirmation: bool, has_sandalwood_box: bool) -> En
     }
 }
 
+/// `endgame.md §5.1`: "The accepted answer is echoed into the message
+/// window as the literal `Yes` or `No` followed by a blank line, and only
+/// then does the next record print."
+///
+/// The engine echoed a lowercase `yes`/`no` and I reported the wording as
+/// unpublished on `cleak/u5-spec#207`. It is published, in the same
+/// subsection that publishes the record roles; I had read §5's flow and
+/// not §5.1's detail.
 fn yes_no_word(answer: bool) -> &'static str {
-    if answer { "yes" } else { "no" }
+    if answer { "Yes" } else { "No" }
 }
 
 /// `endgame.md §9` certificate elapsed-time baseline. The certificate
