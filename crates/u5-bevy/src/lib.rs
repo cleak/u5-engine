@@ -16059,10 +16059,19 @@ fn render_endgame_tableau_viewport(
                         rows,
                         |composed| blit_tile_pixels_to_viewport(&mut viewport, composed, x, y),
                     )??;
+                    // Both halves of the composition - floor `0x44` and gate
+                    // `0xDC` - are in the remapped set.
+                    remap_endgame_tableau_cell(
+                        &mut viewport,
+                        usize::from(NATURAL_MOONGATE_TERRAIN_TILE),
+                        x,
+                        y,
+                    );
                     continue;
                 }
             }
             blit_tile_id_to_viewport(&mut viewport, atlas, usize::from(tile), x, y)?;
+            remap_endgame_tableau_cell(&mut viewport, usize::from(tile), x, y);
         }
     }
 
@@ -16085,14 +16094,34 @@ fn render_endgame_tableau_viewport(
         };
         blit_tile_id_to_viewport(&mut viewport, atlas, tile, object.x, object.y)?;
     }
-    // `display-driver-abi.md §11`: the endgame is the caller that selects
-    // the loaded-tile mutator's whole-tileset remap, so every tile the
-    // tableau draws - terrain and cinematic actor alike - is recoloured
-    // through its fixed sixteen-entry nibble map. It is one-shot at the
-    // endgame, which is why this is applied to the composed tableau
-    // rather than to the shared atlas. `cleak/u5-engine#7`.
-    u5_runtime::remap_endgame_tileset_pixels(&mut viewport.pixels);
     Ok(viewport)
+}
+
+/// `display-driver-abi.md §10`'s endgame remap, applied to one drawn cell.
+///
+/// The mode rewrites twenty-two tiles of the loaded tileset in place, so a
+/// renderer that keeps its atlas pristine applies the same map to the
+/// pixels those tiles just wrote. "Walls, ground outside that set, and
+/// actor sprites are untouched, which is why a captured final room shows
+/// green floor and furniture inside an unchanged stone border."
+/// `cleak/u5-engine#7`.
+fn remap_endgame_tableau_cell(
+    viewport: &mut TileViewport,
+    tile: usize,
+    cell_x: usize,
+    cell_y: usize,
+) {
+    if !u5_runtime::endgame_tileset_remap_applies(tile) {
+        return;
+    }
+    let dst_x = cell_x * TILE_ATLAS_SIDE;
+    let dst_y = cell_y * TILE_ATLAS_SIDE;
+    for row in 0..TILE_ATLAS_SIDE {
+        let start = (dst_y + row) * viewport.width + dst_x;
+        u5_runtime::remap_endgame_tileset_pixels(
+            &mut viewport.pixels[start..start + TILE_ATLAS_SIDE],
+        );
+    }
 }
 
 /// `blackthorn.md §6.1`: the audience owns the same eleven-by-eleven
@@ -21330,13 +21359,13 @@ mod tests {
 
         let viewport = render_endgame_tableau_viewport(&state, &atlas).unwrap();
 
-        // The composed tableau carries the endgame's whole-tileset remap
-        // (`cleak/u5-engine#7`), so the synthetic atlas's indices arrive
-        // mapped.
-        let remap = |index: u8| u5_runtime::ENDGAME_TILESET_NIBBLE_MAP[usize::from(index)];
-        assert_eq!(viewport.pixels[0], remap(0x21 % 16));
+        // `display-driver-abi.md §10`'s endgame remap covers twenty-two
+        // tiles; `0x21` is not one of them, and actor sprites are
+        // untouched, so both of these arrive unmapped
+        // (`cleak/u5-engine#7`).
+        assert_eq!(viewport.pixels[0], 0x21 % 16);
         let overlap_pixel = 5 * TILE_ATLAS_SIDE * viewport.width + 5 * TILE_ATLAS_SIDE;
-        assert_eq!(viewport.pixels[overlap_pixel], remap(0x44 % 16));
+        assert_eq!(viewport.pixels[overlap_pixel], 0x44 % 16);
     }
 
     #[test]
@@ -21397,7 +21426,7 @@ mod tests {
             + ENDGAME_GATE_CELL.0 * TILE_ATLAS_SIDE;
         assert_eq!(
             with_actor.pixels[top_left],
-            remap(ENDGAME_TABLEAU_LORD_BRITISH_ACTOR_BYTE % 16),
+            ENDGAME_TABLEAU_LORD_BRITISH_ACTOR_BYTE % 16,
             "active-object sprites composite after the gate cell"
         );
     }

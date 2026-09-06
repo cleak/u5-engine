@@ -275,26 +275,33 @@ const ENDGAME_ENTRY_COMPLETE_SLOT: u8 = u8::MAX;
 /// record 3 as the authored 11x11 terminal tableau scene.
 pub const ENDGAME_TABLEAU_CUTSCENE_MAP_RECORD: usize = 3;
 
-/// `display-driver-abi.md §11`: of the five callers of the loaded-tile
-/// mutator, "the endgame sequence ... selects the whole-tileset remap",
-/// which recolours the loaded tile graphics "through a fixed sixteen-entry
-/// nibble map"; it is one-shot at the endgame and is not an animation.
-/// `formats/tiles.md §7` fixes the palette those nibbles index, so the
-/// remap is a pure index-to-index table.
+/// `endgame.md §3` step 4 and `display-driver-abi.md §10`: at the moment
+/// the absorption line prints, the endgame issues the display driver's
+/// whole-tileset colour remap. It "packs the whole prepared tileset from
+/// planar rows to packed four-bit pixels, then rewrites twenty-two tiles
+/// pixel by pixel through one sixteen-entry map, then unpacks". It is
+/// one-shot and is never undone in the terminal state.
 ///
-/// The ABI publishes the mechanism but not the table. These entries are
-/// measured, not derived from any private source: for every unoccupied
-/// tableau cell of three paired captures, the shipped tile's pixels were
-/// compared index by index against the stock game's frame. Fourteen of
-/// the sixteen entries agree across all three captures at 96% or better,
-/// and eight of them exactly. Indices 5 and 13 do not occur in any tile
-/// the tableau draws, so they are left as identity and are the two
-/// entries this table cannot claim. `cleak/u5-engine#7`.
-pub const ENDGAME_TILESET_NIBBLE_MAP: [u8; 16] = [
-    0, // black
-    5, 4, 4, 2, 5, 2, 7, // 1..7: blue->magenta, green<->red, cyan->red, dark yellow->green
-    8, 12, 12, 12, 10, 13, 14, 15, // 8..15: the bright half, bright red<->bright green
+/// The map, by colour index: `0`, `7`, `8`, `14` and `15` stay; `1` and
+/// `5` swap; `2` and `4` swap; `3` becomes `4`; `6` becomes `2`; `9`,
+/// `10` and `11` become `12`; `12` becomes `10`; `13` becomes `9`.
+pub const ENDGAME_TILESET_NIBBLE_MAP: [u8; 16] =
+    [0, 5, 4, 4, 2, 1, 2, 7, 8, 12, 12, 12, 10, 9, 14, 15];
+
+/// The twenty-two tiles `display-driver-abi.md §10` lists for the remap:
+/// "floor, chairs, tables, beds, the fire fixtures, the sandalwood box and
+/// the occupied-chair frames". Walls, ground outside the set, and actor
+/// sprites are untouched, "which is why a captured final room shows green
+/// floor and furniture inside an unchanged stone border".
+pub const ENDGAME_TILESET_REMAP_TILES: [u8; 22] = [
+    0x08, 0x0e, 0x1a, 0x38, 0x39, 0x3a, 0x3b, 0x44, 0x5c, 0x5d, 0x90, 0x92, 0x94, 0x96, 0x9b, 0xab,
+    0xac, 0xaf, 0xb0, 0xb1, 0xbf, 0xdc,
 ];
+
+/// Whether a tile id is one of the twenty-two the endgame remap rewrites.
+pub fn endgame_tileset_remap_applies(tile: usize) -> bool {
+    u8::try_from(tile).is_ok_and(|tile| ENDGAME_TILESET_REMAP_TILES.contains(&tile))
+}
 
 /// Apply [`ENDGAME_TILESET_NIBBLE_MAP`] to a buffer of palette indices.
 pub fn remap_endgame_tileset_pixels(pixels: &mut [u8]) {
@@ -304,6 +311,7 @@ pub fn remap_endgame_tileset_pixels(pixels: &mut [u8]) {
         }
     }
 }
+
 pub const ENDGAME_TABLEAU_WALKABLE_TILE: u8 = 0x44;
 
 const ENDGAME_TABLEAU_PARTY_TARGETS: [(usize, usize); SAVE_PARTY_SIZE_MAX as usize] =
