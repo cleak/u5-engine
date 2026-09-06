@@ -51,7 +51,7 @@ impl BlackthornGuardDemandPrompt {
             // thy gold to` / `charity!"`, a blank row, the shared
             // `Dost thou pay?` question, and the `:` answer row.
             Self::MinocCharity => {
-                "\"Thou wilt give half thy gold to charity!\"\n\nDost thou pay?\n:".to_string()
+                "\"Thou wilt give half thy gold to charity!\"\n\nDost thou pay?\n\n:".to_string()
             }
             // Measured against the original (`cleak/u5-spec#198`): a
             // Moonglow tribute guard prints
@@ -68,11 +68,20 @@ impl BlackthornGuardDemandPrompt {
             // from the NPC's Look description, which matters for the
             // sibling non-speaker line - see the same issue.
             Self::Tribute { amount } => {
-                // The `\n:` tail is the same envelope
-                // [`crate::TLK_KEYWORD_PROMPT`] carries: the question,
-                // then a fresh row holding the colon with the input
-                // cursor after it. Measured on the same capture.
-                format!("A guard demands a {amount} gp tribute to Blackthorn!\n\nDost thou pay?\n:")
+                // The tail is the shared yes/no envelope: a blank row,
+                // the question, **another blank row**, then the colon row
+                // with the input cursor after it. The second blank is
+                // measured, not assumed - the stock side of
+                // `qa/paired/town-talk-high-dialog-id.tsv` decodes as
+                // `A guard demands` / `a 10 gp tribute` / `to
+                // Blackthorn!` on rows 17-19, a blank 20, `Dost thou
+                // pay?` on 21, a blank 22 and `:` on 23. It is the same
+                // shape `town-mode.md §1123` publishes for the arrest
+                // challenge, whose question is likewise followed by "a
+                // blank row, a `:` answer row".
+                format!(
+                    "A guard demands a {amount} gp tribute to Blackthorn!\n\nDost thou pay?\n\n:"
+                )
             }
         }
     }
