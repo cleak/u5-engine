@@ -455,7 +455,10 @@ impl EndgameState {
         self.messages
             .as_ref()
             .and_then(|messages| messages.first_box_prompt())
-            .map(|prompt| format!("\n{prompt}"))
+            // One line feed closes the greeting's row and the second
+            // leaves the blank row the stock window keeps between the
+            // two records (`text-output.md §10.4`).
+            .map(|prompt| format!("\n\n{prompt}"))
     }
 
     pub fn second_prompt_text(&self, first_answer: bool) -> String {
@@ -1335,7 +1338,11 @@ impl PlayState {
         // the contact would print the two the wrong way round.
         if self.endgame_entry_redraw_pending {
             self.endgame_entry_redraw_pending = false;
-            self.emit_message_line(crate::COMBAT_ABSORBED_MESSAGE);
+            // `text-output.md §10.4`: the step that walked onto the field
+            // completed its own command row, so this print's leading line
+            // feed lands on a fresh row and leaves one blank row between
+            // the echo and the absorption. `cleak/u5-engine#11`.
+            self.emit_message_line(format!("\n{}", crate::COMBAT_ABSORBED_MESSAGE));
         }
         let Some(endgame) = self.endgame.as_ref() else {
             return false;
