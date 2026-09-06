@@ -93,9 +93,10 @@ fn main() {
                 continue;
             };
             println!(
-                "  npc slot {:>2} at ({x:>2},{y:>2}) dialog-id {:>3} floor tile 0x{:02x}",
+                "  npc slot {:>2} at ({x:>2},{y:>2}) dialog-id {:>3} type 0x{:02x} floor tile 0x{:02x}",
                 npc.slot,
                 npc.dialog_id,
+                npc.type_byte,
                 state.talk_status_tile_at(x, y),
             );
         }
