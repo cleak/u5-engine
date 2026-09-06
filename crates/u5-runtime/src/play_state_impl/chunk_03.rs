@@ -450,14 +450,24 @@ impl PlayState {
                 // the command refuses because the leader must remain
                 // first" - without consuming a turn.
                 if index == 0 {
-                    self.message = NEW_ORDER_LEADER_REFUSAL.to_string();
+                    // `text-output.md §10.4`: the refusal prints under the
+                    // prompt row the pick completed, so it opens with a
+                    // feed and one blank row stands between them. A
+                    // capture reads `Swap Avatar`, a blank row, then
+                    // `Avatar must lead!` (`cleak/u5-engine#5`).
+                    self.message = format!("\n{NEW_ORDER_LEADER_REFUSAL}");
                 } else {
                     self.start_party_selector(PartySelectorTarget::NewOrder { first: Some(index) });
                 }
             }
             PartySelectorTarget::NewOrder { first: Some(first) } => {
                 if index == 0 {
-                    self.message = NEW_ORDER_LEADER_REFUSAL.to_string();
+                    // `text-output.md §10.4`: the refusal prints under the
+                    // prompt row the pick completed, so it opens with a
+                    // feed and one blank row stands between them. A
+                    // capture reads `Swap Avatar`, a blank row, then
+                    // `Avatar must lead!` (`cleak/u5-engine#5`).
+                    self.message = format!("\n{NEW_ORDER_LEADER_REFUSAL}");
                 } else {
                     // The result completes the `with ` line with `!`; the
                     // shared swap routine moves the whole records and

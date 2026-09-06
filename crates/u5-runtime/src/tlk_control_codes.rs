@@ -58,6 +58,16 @@ impl TlkPrintMaskState {
 /// - [`TALK_NO_RESPONSE_MESSAGE`] — located NPC's live tile is the
 ///   praying/meditating/unavailable form.
 pub const TALK_NOBODY_HERE_MESSAGE: &str = "Nobody's here!";
+
+/// The same refusal with `text-output.md §10.4`'s leading line feed, for
+/// the sites that print it under a `Talk-<direction>` echo.
+///
+/// The echo completes its own row, so the handler's print opens with a
+/// feed and one blank row stands between them - the shape `Look` already
+/// has through [`crate::LOOK_RESULT_PREFIX`]. Measured on a paired
+/// capture of `T` West in the starting hut: `>Talk-West`, a blank row,
+/// then `Nobody's here!`. `cleak/u5-engine#5`.
+pub const TALK_NOBODY_HERE_LINE: &str = "\nNobody's here!";
 pub const TALK_SLEEPING_MESSAGE: &str = "Zzzzzz...";
 /// `conversation.md §2` step 4 publishes this as the mirror-tile
 /// refusal. A paired capture of the original shows it is also what a

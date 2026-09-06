@@ -6964,14 +6964,17 @@ fn validate_route_smoke_case_state(
             }
         }
         "castle-talk-status-sleeping-refusal" => {
-            if state.message != TALK_SLEEPING_MESSAGE || state.active_shop.is_some() {
+            if state.message != format!("\n{TALK_SLEEPING_MESSAGE}") || state.active_shop.is_some()
+            {
                 return Err(io::Error::other(format!(
                     "route smoke `{case_name}` did not apply the sleeping Talk refusal"
                 )));
             }
         }
         "castle-talk-status-praying-refusal" => {
-            if state.message != TALK_NO_RESPONSE_MESSAGE || state.active_shop.is_some() {
+            if state.message != format!("\n{TALK_NO_RESPONSE_MESSAGE}")
+                || state.active_shop.is_some()
+            {
                 return Err(io::Error::other(format!(
                     "route smoke `{case_name}` did not apply the praying Talk refusal"
                 )));

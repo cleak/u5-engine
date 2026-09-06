@@ -2567,7 +2567,7 @@ fn town_talk_reports_nobody_and_still_spends_the_ordinary_turn() {
         MoveOutcome::Blocked
     );
 
-    assert_eq!(state.message, "Nobody's here!");
+    assert_eq!(state.message, TALK_NOBODY_HERE_LINE);
     assert_eq!(state.turn, 1);
     assert_eq!(state.clock, GameClock::new(12, 1).unwrap());
 }
@@ -2785,7 +2785,10 @@ fn town_raw_tlk_status_tile_filter_runs_before_shop_dispatch() {
             state.talk_facing_with_dialogue_and_keyword_raw(&dialogue, &raw, None),
             MoveOutcome::Blocked
         );
-        assert_eq!(state.message, expected);
+        // `text-output.md §10.4`: the refusal prints under the
+        // `Talk-<direction>` echo, so it opens with the feed that leaves a
+        // blank row between them (`cleak/u5-engine#5`).
+        assert_eq!(state.message, format!("\n{expected}"));
         assert!(state.active_shop.is_none());
         assert_eq!(state.turn, 1);
     }

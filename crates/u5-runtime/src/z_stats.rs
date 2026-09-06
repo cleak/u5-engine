@@ -901,11 +901,18 @@ pub enum PartySelectorTarget {
 impl PartySelectorTarget {
     /// Whether this prompt opens a new block in the message window - and
     /// so spends `text-output.md §10.4`'s leading line feed on a blank row
-    /// - or continues the one already open. Only N-New Order's second
-    /// prompt continues: a capture reads `Swap Shamino` / `with Iolo!` on
-    /// consecutive rows.
+    /// - or continues the one the command echo already opened.
+    ///
+    /// The captures disagree per command, so this follows them rather than
+    /// a rule: `>New Order` has a blank row under it before `Swap `, and
+    /// so does `>Ready...` before its `Player: ` (that one is opened by
+    /// [`crate::PlayState::start_ready_equipment`]). `>Z-stats...`,
+    /// `>Cast...` and `>Search-<direction>` do not - their `Player: `
+    /// sits directly under the echo. N-New Order's second prompt
+    /// continues its first: `Swap Shamino` / `with Iolo!` are consecutive
+    /// rows. `cleak/u5-engine#5`.
     pub const fn prompt_opens_a_block(self) -> bool {
-        !matches!(self, Self::NewOrder { first: Some(_) })
+        matches!(self, Self::NewOrder { first: None })
     }
 
     /// The message-window prompt the selector opens with.

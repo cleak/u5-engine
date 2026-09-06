@@ -3371,7 +3371,7 @@ impl PlayState {
             if let Some(refusal) =
                 talk_status_tile_refusal(self.talk_status_tile_at(target_x, target_y))
             {
-                self.message = refusal.to_string();
+                self.message = format!("\n{refusal}");
                 return Ok(self.consume_ordinary_town_talk());
             }
             return Ok(self
@@ -3493,7 +3493,7 @@ impl PlayState {
         }
 
         let Some((dialog_id, target_x, target_y)) = self.talk_target_in_direction(direction) else {
-            self.message = TALK_NOBODY_HERE_MESSAGE.to_string();
+            self.message = crate::TALK_NOBODY_HERE_LINE.to_string();
             return self.consume_ordinary_town_talk();
         };
         // `conversation.md §2` step 4 status-tile filter: the mirror
@@ -3502,7 +3502,7 @@ impl PlayState {
         if let Some(refusal) =
             talk_status_tile_refusal(self.talk_status_tile_at(target_x, target_y))
         {
-            self.message = refusal.to_string();
+            self.message = format!("\n{refusal}");
             return self.consume_ordinary_town_talk();
         }
         if let Some(outcome) = self.talk_alarm_sentinel_at(dialog_id, target_x, target_y) {
@@ -3648,7 +3648,7 @@ impl PlayState {
         }
 
         let Some((dialog_id, target_x, target_y)) = self.talk_target_in_direction(direction) else {
-            self.message = TALK_NOBODY_HERE_MESSAGE.to_string();
+            self.message = crate::TALK_NOBODY_HERE_LINE.to_string();
             return self.consume_ordinary_town_talk();
         };
         let conversation_npc_slot = self
@@ -3660,7 +3660,7 @@ impl PlayState {
         if let Some(refusal) =
             talk_status_tile_refusal(self.talk_status_tile_at(target_x, target_y))
         {
-            self.message = refusal.to_string();
+            self.message = format!("\n{refusal}");
             return self.consume_ordinary_town_talk();
         }
         if let Some(outcome) = self.talk_alarm_sentinel_at(dialog_id, target_x, target_y) {

@@ -25200,16 +25200,16 @@ fn z_stats_selector_cancels_with_the_published_none_result() {
         );
         assert!(state.active_party_selector.is_some());
         assert_eq!(state.roster_box_label().as_deref(), Some("Select:"));
-        // `text-output.md §10.4`: the prompt's leading line feed lands on
-        // the row the echo left the cursor on, so a blank row separates
-        // them. Measured on a paired capture of `R` Ready and `N` New
-        // Order (`cleak/u5-engine#5`).
+        // A capture of `Z` Z-stats puts `Player: ` directly under the
+        // echo, with no blank row between them - unlike `R` Ready and
+        // `N` New Order, which do take `text-output.md §10.4`'s blank.
+        // `cleak/u5-engine#5`.
         assert_eq!(
             transcript_texts(&state),
-            vec!["Z-stats...", "", PARTY_SELECTION_PROMPT]
+            vec!["Z-stats...", PARTY_SELECTION_PROMPT]
         );
         assert!(state.message_entries()[0].is_command_echo);
-        assert!(!state.message_entries()[2].is_command_echo);
+        assert!(!state.message_entries()[1].is_command_echo);
 
         assert!(state.step_active_party_selector(cancel, ""));
         assert!(state.active_party_selector.is_none());
