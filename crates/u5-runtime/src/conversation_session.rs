@@ -345,7 +345,9 @@ impl ConversationSession {
             ConversationSessionPhase::AwaitingScopedKeyword { .. } => {
                 TLK_KEYWORD_PROMPT.to_string()
             }
-            ConversationSessionPhase::AwaitingAskWho { .. } => "Who?".to_string(),
+            ConversationSessionPhase::AwaitingAskWho { .. } => {
+                crate::TLK_ASK_WHO_PROMPT.to_string()
+            }
             ConversationSessionPhase::AwaitingGoldRefusalKeyword => TLK_KEYWORD_PROMPT.to_string(),
             ConversationSessionPhase::Opened => TLK_KEYWORD_PROMPT.to_string(),
             ConversationSessionPhase::PresentingBye | ConversationSessionPhase::Closed => {
@@ -972,7 +974,7 @@ mod tests {
             s.phase,
             ConversationSessionPhase::AwaitingAskWho { .. }
         ));
-        assert_eq!(s.prompt_message(), "Who?");
+        assert_eq!(s.prompt_message(), crate::TLK_ASK_WHO_PROMPT);
 
         let second = s.submit_keyword("my friend Iolo", &context);
         assert_eq!(second.asked_who, Some(2));

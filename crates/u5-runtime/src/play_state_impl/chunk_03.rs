@@ -201,8 +201,16 @@ impl PlayState {
         // to this row (`LiveRowKind`/`open_prompt`), which is why the
         // conversation is an open prompt here rather than a suppressed
         // live row: suppressing it hid the player's own keystrokes.
-        if self.active_conversation.is_some() {
-            return Some(TLK_KEYWORD_PROMPT_OPEN_LINE.to_string());
+        if let Some(session) = self.active_conversation.as_ref() {
+            // Both the keyword prompt and `§7`'s ASK-WHO name prompt end
+            // on a `:` row that stays open for free text (`§7.6`: "the
+            // keyword prompt and the ASK-WHO name prompt use the
+            // free-text input variant").
+            return Some(if session.awaiting_ask_party_name() {
+                TLK_ASK_WHO_PROMPT_OPEN_LINE.to_string()
+            } else {
+                TLK_KEYWORD_PROMPT_OPEN_LINE.to_string()
+            });
         }
         if self.active_party_selector.is_some() {
             return Some(PARTY_SELECTOR_PROMPT_MESSAGE.to_string());

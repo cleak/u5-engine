@@ -3338,7 +3338,7 @@ fn active_conversation_ask_who_consumes_next_line_as_answer() {
 
     handle_play_key_input(&mut state, 'W', "HO", Path::new("")).unwrap();
     assert!(transcript_has(&state, "Name the keeper."));
-    assert_eq!(state.message, "Who?");
+    assert_eq!(state.message, TLK_ASK_WHO_PROMPT);
     handle_play_key_input(&mut state, 'i', "olo", Path::new("")).unwrap();
     // The reply is on the transcript; the slot carries the prompt that
     // follows it.

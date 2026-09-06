@@ -557,6 +557,19 @@ pub const TLK_CODE_KEYWORD_ALIAS: u8 = 0x87;
 /// gives for all six hundred forty-one shipped occurrences.
 pub const TLK_KEYWORD_ALIAS_RECORD_SKIP: usize = 2;
 pub const TLK_CODE_ASK_WHO: u8 = 0x88;
+
+/// `conversation.md §7`'s `0x88` ASK-WHO prompt.
+///
+/// The section says the code "prompt[s] the player for a name and read[s]
+/// a typed line" and publishes no literal, so the engine had been using
+/// an invented `Who?`. Measured against the original
+/// (`cleak/u5-spec#198`): a `DWELLING.TLK` NPC's ASK-WHO prints
+/// `You respond-` and then a fresh row carrying `:` with the input
+/// cursor - the same envelope [`TLK_KEYWORD_PROMPT`] uses for the
+/// keyword prompt.
+pub const TLK_ASK_WHO_PROMPT: &str = "You respond-\n:";
+/// The row of [`TLK_ASK_WHO_PROMPT`] that stays open for input.
+pub const TLK_ASK_WHO_PROMPT_OPEN_LINE: &str = ":";
 pub const TLK_CODE_IF_ELSE: u8 = 0x8C;
 /// `conversation.md §7.6`: the reserved `0x8C` argument. Every other
 /// argument value names a branch target label; this one, on the set arm,
