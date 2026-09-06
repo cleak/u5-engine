@@ -2222,15 +2222,30 @@ impl PlayState {
             return None;
         }
         self.active_player = None;
-        let armed_endgame_result = self.combat_frame_snapshot.as_mut().is_some_and(|snapshot| {
-            let armed = snapshot.endgame_messages.is_some();
-            if armed {
-                snapshot.enter_endgame_after_successful_combat = true;
-            }
-            armed
-        });
-        self.message = "Absorbed!".to_string();
+        // `endgame.md §2` step 6 reads as post-combat cleanup, and this
+        // engine deferred on that: it recorded an intention and waited
+        // for the round loop to end the fight. A paired capture shows
+        // the original entering on the **contact itself** - `Avatar is
+        // absorbed!` and straight into Lord British - so the deferral is
+        // several turns late, and it only completes at all because
+        // Doom's final arena happens to ship with no combatants for the
+        // victory census to find. An arena carrying both a field and a
+        // combatant would absorb in the original and not here.
+        // cleak/u5-engine#10.
+        let armed_endgame_result = self
+            .combat_frame_snapshot
+            .as_ref()
+            .is_some_and(|snapshot| snapshot.endgame_messages.is_some());
+        self.message = COMBAT_ABSORBED_MESSAGE.to_string();
         self.mark_visibility_dirty();
+        if armed_endgame_result {
+            let (messages, tableau_map) = self
+                .combat_frame_snapshot
+                .take()
+                .map(|snapshot| (snapshot.endgame_messages, snapshot.endgame_tableau_map))
+                .unwrap_or_default();
+            self.enter_endgame_with_resources(messages, tableau_map);
+        }
         Some(CombatAbsorbableFieldApplication {
             actor_slot,
             companion_band_index,

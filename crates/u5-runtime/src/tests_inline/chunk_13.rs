@@ -18968,21 +18968,13 @@ fn doom_final_room_successful_dungeon_cbt_combat_enters_endgame_from_absorbable_
         .absorbable_contact
         .expect("committed action beneath Doom marker should set absorption result");
     assert!(absorption.armed_endgame_result);
-    assert_eq!(
-        state
-            .combat_frame_snapshot
-            .as_ref()
-            .map(|snapshot| snapshot.enter_endgame_after_successful_combat),
-        Some(true)
-    );
-
-    state.combat_actors = [CombatActorDescriptor::empty(); COMBAT_ACTOR_SLOTS];
-    let application = state.apply_combat_round_loop_exit(CombatRoundLoopExit::Victory);
-
-    assert_eq!(application.result_code, COMBAT_ROUND_RESULT_SUCCESS);
-    assert!(application.restored_snapshot);
+    // `cleak/u5-engine#10`: the contact itself enters the endgame, so
+    // there is no combat frame left to win. The original does the same -
+    // `Avatar is absorbed!` runs straight into Lord British - and Doom's
+    // final arena ships with no combatants for a victory census to find.
+    assert!(state.combat_frame_snapshot.is_none());
     assert!(!state.combat_active);
-    let endgame = state.endgame.as_ref().unwrap();
+    let endgame = state.endgame.as_ref().expect("contact entered the endgame");
     assert_eq!(endgame.first_confirmation, None);
     assert!(endgame.messages.is_some());
     assert_eq!(state.grid.len(), TOWN_GRID_BYTES);
@@ -18990,11 +18982,6 @@ fn doom_final_room_successful_dungeon_cbt_combat_enters_endgame_from_absorbable_
         state.grid[6 * TOWN_GRID_SIDE + 4],
         ENDGAME_TABLEAU_WALKABLE_TILE
     );
-    assert!(!dungeon_room_clear_bit_is_set(
-        &state.dungeon_room_clear_bitmap,
-        scene,
-        DOOM_FINAL_ROOM_SLOT
-    ));
     state.finish_endgame_entry_presentation();
     assert!(state.message.contains("Welcome back"));
     assert!(state.message.contains("Hast thou brought my box?"));

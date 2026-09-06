@@ -49,6 +49,19 @@ pub const DUNGEON_ROOM_SOURCE_Y_ROW: usize = 7;
 /// table. Anchored through to that shared slot count.
 pub const DUNGEON_ROOM_SOURCE_COUNT: usize = crate::DUNGEON_ROOM_SLOTS_PER_BANK;
 pub const DUNGEON_ROOM_ABSORBABLE_FIELD_SOURCE: u8 = 0x3c;
+
+/// The line the original prints when a party member walks onto an
+/// absorbable field.
+///
+/// Measured against the stock game in Doom's final room
+/// (`cleak/u5-engine#10`), where it is immediately followed by the
+/// endgame's Lord British greeting. The engine's own `Absorbed!` was an
+/// invention; `combat.md` describes the absorption effect and publishes
+/// no literal for it.
+///
+/// Whether `Avatar` here is the fixed word or the party leader's name is
+/// not yet settled - the character in the capture is named Avatar.
+pub const COMBAT_ABSORBED_MESSAGE: &str = "Avatar is absorbed!";
 pub const DUNGEON_ROOM_ABSORBABLE_FIELD_CLASS_MASK: u8 = 0xfc;
 pub const DUNGEON_ROOM_ORDINARY_SOURCE_FIRST: u8 = 0x40;
 pub const DUNGEON_ROOM_SPECIAL_SOURCE_MASK: u8 = 0xfc;

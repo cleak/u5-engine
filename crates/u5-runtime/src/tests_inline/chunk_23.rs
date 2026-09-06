@@ -5602,15 +5602,13 @@ fn combat_post_dispatch_absorbable_field_contact_sets_armed_result_marker() {
     ));
     assert_eq!(application.post_dispatch_contact, None);
     assert_eq!(state.active_player, None);
-    assert_eq!(state.message, "Absorbed!");
+    // The armed contact enters the endgame on the spot now
+    // (`cleak/u5-engine#10`), so the combat frame is gone and its
+    // message has been replaced by the endgame's own opening.
     assert!(state.visibility_dirty);
-    assert_eq!(
-        state
-            .combat_frame_snapshot
-            .as_ref()
-            .map(|snapshot| snapshot.enter_endgame_after_successful_combat),
-        Some(true)
-    );
+    assert!(state.endgame.is_some(), "contact entered the endgame");
+    assert!(state.combat_frame_snapshot.is_none());
+    assert!(!state.combat_active);
 }
 
 #[test]
