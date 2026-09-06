@@ -48,10 +48,26 @@ impl PlayState {
     /// absorption line at the top with nothing above it - the arena's
     /// combat prompts are gone.
     pub fn clear_message_window(&mut self) {
+        // `text-output.md §3`: clearing a window blanks its rectangle
+        // without moving the cursor, and §10.4's leading line feed then
+        // costs the row the cursor is on. Every clear this engine
+        // performs comes with a redraw that re-establishes the window,
+        // which homes the cursor, so the first row after a clear stays
+        // empty and output resumes on the second. Measured on paired
+        // captures of the dungeon-room entry and of `endgame.md §3` step
+        // 2's redraw: both put their first line on row 12.
+        // `cleak/u5-engine#11`.
+        self.message_window_top_offset = 1;
         self.message_transcript.clear();
         self.message_transcript_revision = self.message_transcript_revision.wrapping_add(1);
         self.message.clear();
         self.message_flushed.clear();
+    }
+
+    /// Where the first logged row lands, as an offset from the window's
+    /// top row. See [`Self::clear_message_window`].
+    pub fn message_window_top_offset(&self) -> u8 {
+        self.message_window_top_offset
     }
 
     pub fn message_entries(&self) -> &[MessageEntry] {

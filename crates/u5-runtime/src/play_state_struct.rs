@@ -489,6 +489,11 @@ pub struct PlayState {
     /// `message` above remains the newest handler text for the many
     /// call sites and tests that assert on it directly.
     pub(crate) message_transcript: Vec<MessageEntry>,
+    /// `text-output.md §3`: clearing a text window blanks its rectangle
+    /// without moving the cursor, so output after a clear resumes on the
+    /// row it had reached. This is that row, as an offset from the
+    /// window's top. `cleak/u5-engine#11`.
+    pub(crate) message_window_top_offset: u8,
     /// Bumped on every transcript push so callers can tell whether a
     /// dispatch already recorded its own output.
     pub(crate) message_transcript_revision: u64,

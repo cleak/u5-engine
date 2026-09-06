@@ -867,6 +867,7 @@ impl PlayState {
             // position from `play_script_state_line`, not from this slot.
             message: String::new(),
             message_transcript: Vec::new(),
+            message_window_top_offset: 0,
             message_transcript_revision: 0,
             message_flushed: String::new(),
             pending_command_echo: None,
@@ -1226,6 +1227,7 @@ impl PlayState {
             // level for diagnostics.
             message: String::new(),
             message_transcript: Vec::new(),
+            message_window_top_offset: 0,
             message_transcript_revision: 0,
             message_flushed: String::new(),
             pending_command_echo: None,
@@ -1597,6 +1599,7 @@ impl PlayState {
             // player the banner twice.
             message: String::new(),
             message_transcript: Vec::new(),
+            message_window_top_offset: 0,
             message_transcript_revision: 0,
             message_flushed: String::new(),
             pending_command_echo: None,

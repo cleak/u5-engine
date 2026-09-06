@@ -88,6 +88,7 @@ pub struct MessageLogLine {
 #[derive(Clone, Debug, Default, PartialEq, Eq)]
 pub struct GameplayMessageLog {
     lines: Vec<MessageLogLine>,
+    top_offset: usize,
 }
 
 impl GameplayMessageLog {
@@ -99,6 +100,24 @@ impl GameplayMessageLog {
     /// Rows currently held, oldest first.
     pub fn lines(&self) -> &[MessageLogLine] {
         &self.lines
+    }
+
+    /// Rows of the window standing above the first logged row.
+    ///
+    /// `text-output.md §3`: the clear-window control byte "clears the
+    /// active window's inclusive pixel rectangle" and, unlike a scroll,
+    /// does not move the cursor - the confirmed controls "do not emit
+    /// glyph pixels and do not advance the cursor". So output after a
+    /// clear resumes on the row the cursor was already on, leaving the
+    /// rows above it blank. `cleak/u5-engine#11`.
+    pub fn top_offset(&self) -> usize {
+        self.top_offset
+    }
+
+    /// Set where the first logged row lands, as an offset from the
+    /// window's top row.
+    pub fn set_top_offset(&mut self, offset: usize) {
+        self.top_offset = offset.min(MESSAGE_WINDOW_ROWS - 1);
     }
 
     /// Whether anything has been logged.
@@ -456,23 +475,37 @@ fn layout_message_window_inner(
         .lines()
         .last()
         .is_some_and(|line| matches!(line.kind, MessageLineKind::Blank));
-    let history_rows = match live_input {
-        // `combat.md §8.1`: the arena prompt's line feed was the banner's
-        // own, so its marker row follows the history with no blank between.
-        // A continuation row needs no separating blank either: the block
-        // it continues is still open.
-        Some(_) if history_ends_blank || live_row_follows_history || !live_row_prefixed => {
-            MESSAGE_WINDOW_HISTORY_ROWS
-        }
-        Some(_) => MESSAGE_WINDOW_HISTORY_ROWS - 1,
-        // An open prompt keeps its *own* line (§10.6), so no line feed
-        // has been emitted yet and every row can carry text.
-        None => MESSAGE_WINDOW_ROWS,
+    // `combat.md §8.1`: the arena prompt's line feed was the banner's
+    // own, so its marker row follows the history with no blank between.
+    // A continuation row needs no separating blank either: the block it
+    // continues is still open. An open prompt keeps its *own* line
+    // (§10.6), so no line feed has been emitted yet.
+    let live_rows = match live_input {
+        Some(_) if history_ends_blank || live_row_follows_history || !live_row_prefixed => 1,
+        Some(_) => 2,
+        None => 0,
     };
+    let live_blank_row = live_rows == 2;
+    let history_rows = MESSAGE_WINDOW_ROWS - live_rows;
     let lines = log.lines();
-    let start = lines.len().saturating_sub(history_rows);
+    // The window scrolls only once output would pass its bottom row, and
+    // it scrolls by one row at a time: the rows above the cursor go
+    // first, and only then do the oldest logged rows leave the top.
+    let mut offset = log.top_offset().min(history_rows.saturating_sub(1));
+    let overflow = (offset + lines.len()).saturating_sub(history_rows);
+    let shrink = overflow.min(offset);
+    offset -= shrink;
+    let start = overflow - shrink;
     let placed = &lines[start..];
-    let first_row = MESSAGE_WINDOW_TOP as usize + (history_rows - placed.len());
+    // `text-output.md §3`/§10: the window has a cursor, and it only moves
+    // up when output "would carry the cursor below the message window's
+    // bottom row", at which point the window "scrolls up by exactly one
+    // cell row". Nothing lifts the text before that, so a window that has
+    // been cleared fills from its own top row and leaves the rows under
+    // the last line empty. `cleak/u5-engine#11`.
+    let first_row = MESSAGE_WINDOW_TOP as usize + offset;
+    let live_row_index = (first_row + placed.len() + usize::from(live_blank_row))
+        .min(MESSAGE_WINDOW_BOTTOM as usize) as u8;
     for (offset, line) in placed.iter().enumerate() {
         if matches!(line.kind, MessageLineKind::Blank) {
             continue;
@@ -505,7 +538,7 @@ fn layout_message_window_inner(
             .map(crate::TlkRenderedGlyph::ordinary)
             .collect();
         rows.push(MessageWindowRow {
-            row: MESSAGE_WINDOW_BOTTOM,
+            row: live_row_index,
             column: MESSAGE_WINDOW_LEFT + u8::from(live_row_prefixed),
             text,
             glyphs,

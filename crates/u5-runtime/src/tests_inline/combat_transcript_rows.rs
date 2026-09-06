@@ -19,9 +19,10 @@
 /// including its "drop empty output lines" filter, so a blank row that
 /// survives here is one a producer asked for.
 fn combat_message_window_rows(state: &PlayState) -> Vec<String> {
-    let log = message_log_from_entries(state.message_entries(), |text| {
+    let mut log = message_log_from_entries(state.message_entries(), |text| {
         (!text.trim().is_empty()).then(|| text.to_string())
     });
+    log.set_top_offset(usize::from(state.message_window_top_offset()));
     let layout = layout_message_window_with_prompt(
         &log,
         Some(""),
@@ -46,9 +47,11 @@ fn combat_message_window_rows(state: &PlayState) -> Vec<String> {
 /// the banner."
 fn combat_state_after_the_conflict_banner(monster_x: u8, monster_y: u8) -> PlayState {
     let mut state = combat_player_command_state(monster_x, monster_y);
-    state.message_transcript.clear();
-    state.message.clear();
-    state.message_flushed.clear();
+    // The measured capture has the banner on row 12, not 11: the redraw
+    // that precedes it homes the cursor and the banner's own leading feed
+    // spends the top row. `PlayState::clear_message_window` is where that
+    // rule lives. `cleak/u5-engine#11`.
+    state.clear_message_window();
     state.pending_combat_actor_slot = None;
     state.emit_centered_message_line(combat_banner_line());
     state.combat_transcript_row_open = false;
@@ -76,8 +79,11 @@ fn opening_a_turn_after_the_conflict_banner_prints_the_banner_once() {
     );
     // §8.1's leading newline lands on the row the full-width banner left the
     // cursor on, so exactly one blank row separates the two.
+    // The banner is the window's first output after the redraw, so it
+    // lands on row 12 - the row under the one the redraw's leading feed
+    // spent (`cleak/u5-engine#11`).
     assert_eq!(
-        rows[8..],
+        rows[1..6],
         [
             combat_banner_line(),
             String::new(),
@@ -99,11 +105,11 @@ fn the_marker_row_follows_the_turn_banner_with_no_blank_between_them() {
     state.ensure_pending_combat_player_turn();
 
     let rows = combat_message_window_rows(&state);
-    assert_eq!(rows[usize::from(MESSAGE_WINDOW_BOTTOM - MESSAGE_WINDOW_TOP)], ">");
-    assert_eq!(
-        rows[usize::from(MESSAGE_WINDOW_BOTTOM - MESSAGE_WINDOW_TOP) - 1],
-        "with bare hands:"
-    );
+    let marker = rows
+        .iter()
+        .position(|row| row == ">")
+        .expect("the marker row is drawn");
+    assert_eq!(rows[marker - 1], "with bare hands:");
 }
 
 #[test]
@@ -191,9 +197,10 @@ fn the_aim_prompt_keeps_the_marker_row_and_carries_the_cursor_inline() {
         Some(concat!("Attack-", "Aim! "))
     );
 
-    let log = message_log_from_entries(state.message_entries(), |text| {
+    let mut log = message_log_from_entries(state.message_entries(), |text| {
         (!text.trim().is_empty()).then(|| text.to_string())
     });
+    log.set_top_offset(usize::from(state.message_window_top_offset()));
     let layout = layout_message_window_with_prompt(
         &log,
         Some(""),
@@ -204,8 +211,15 @@ fn the_aim_prompt_keeps_the_marker_row_and_carries_the_cursor_inline() {
     assert_eq!(prompt.text, "Attack-Aim!");
     assert!(prompt.prefixed);
     assert_eq!(prompt.column, MESSAGE_WINDOW_LEFT + 1);
-    assert_eq!(prompt.row, MESSAGE_WINDOW_BOTTOM);
-    assert_eq!(layout.inline_cursor, Some((MESSAGE_WINDOW_LEFT + 13, MESSAGE_WINDOW_BOTTOM)));
+    // The measurement this pins is the row's *columns*; the row itself is
+    // wherever the window's cursor has reached, which for this fixture is
+    // the banner's marker row (`cleak/u5-engine#11`).
+    let banner_row = layout.rows[layout.rows.len() - 2].row;
+    assert_eq!(prompt.row, banner_row + 1);
+    assert_eq!(
+        layout.inline_cursor,
+        Some((MESSAGE_WINDOW_LEFT + 13, prompt.row))
+    );
 }
 
 #[test]

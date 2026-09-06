@@ -872,6 +872,7 @@ pub fn compose_gameplay_screen(
         (!text.trim().is_empty()).then(|| text.to_string())
     }
     let mut log = message_log_from_entries(state.message_entries(), keep);
+    log.set_top_offset(usize::from(state.message_window_top_offset()));
     if let Some(text) = state
         .message_slot_needs_flush()
         .then(|| keep(&state.message))

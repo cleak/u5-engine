@@ -387,18 +387,21 @@ fn message_window_prefixes_command_echoes_and_spaces_turns() {
         .map(|row| (row.row, row.column, row.text.as_str(), row.prefixed))
         .collect();
 
-    // Blank rows are not emitted; the live input line is the window's
-    // bottom row and carries the end-cap prefix like any command echo.
+    // Blank rows are not emitted; the live input line follows the history
+    // and carries the end-cap prefix like any command echo. A log that has
+    // never filled the window sits at its top row: `text-output.md §3`/§10
+    // only move text up when output would pass the bottom row
+    // (`cleak/u5-engine#11`).
     assert_eq!(
         rows,
         vec![
-            (18, MESSAGE_WINDOW_LEFT + 1, "Pass", true),
-            (20, MESSAGE_WINDOW_LEFT + 1, "Z-stats", true),
-            (21, MESSAGE_WINDOW_LEFT, "Player! None!", false),
-            (23, MESSAGE_WINDOW_LEFT + 1, "Look-", true),
+            (11, MESSAGE_WINDOW_LEFT + 1, "Pass", true),
+            (13, MESSAGE_WINDOW_LEFT + 1, "Z-stats", true),
+            (14, MESSAGE_WINDOW_LEFT, "Player! None!", false),
+            (16, MESSAGE_WINDOW_LEFT + 1, "Look-", true),
         ]
     );
-    assert_eq!(layout.prefixed_rows(), vec![18, 20, 23]);
+    assert_eq!(layout.prefixed_rows(), vec![11, 13, 16]);
     assert_eq!(MESSAGE_WINDOW_BOTTOM, 23);
 }
 

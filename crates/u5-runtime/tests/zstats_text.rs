@@ -566,10 +566,14 @@ fn the_status_sub_prompt_keeps_one_blank_row_under_the_player_line() {
         .collect::<Vec<_>>();
     let prompt = layout.rows.last().expect("the open Status: row");
     assert_eq!(prompt.text, Z_STATS_STATUS_PROMPT.trim_end());
-    assert_eq!(prompt.row, 23);
+    // A log this short has not filled the window, so it still sits at the
+    // top row: `text-output.md §3`/§10 only move text up once output would
+    // pass the bottom row (`cleak/u5-engine#11`). What this pins is the
+    // blank row, not the absolute position.
+    assert_eq!(prompt.row, 14);
     let above = layout.rows[layout.rows.len() - 2].row;
     assert_eq!(
-        above, 21,
+        above, 12,
         "one blank row must sit between the Player: line and the prompt: {placed:?}"
     );
 }
@@ -585,7 +589,10 @@ fn the_status_sub_prompt_keeps_one_blank_row_under_the_player_line() {
 /// row above it. Measured on `playtest/orig/qsave2/00_Y.png`,
 /// `playtest/orig/walk/07_DOWN.png` and `playtest/orig/exit/06_DOWN.png`:
 /// the marker-and-cursor row 23 sits under a blank row 22 in all three,
-/// where the engine packed its last output line into row 22.
+/// where the engine packed its last output line into row 22. Those
+/// captures show a window that has already filled and scrolled; a log
+/// that has not filled it keeps the same shape at the top of the window
+/// (`cleak/u5-engine#11`).
 #[test]
 fn the_live_prompt_row_keeps_one_blank_row_above_the_last_output() {
     let mut log = GameplayMessageLog::new();
@@ -603,13 +610,13 @@ fn the_live_prompt_row_keeps_one_blank_row_above_the_last_output() {
     assert_eq!(
         placed,
         vec![
-            (18, "Quit:".to_string()),
-            (19, "Save game? Yes".to_string()),
-            (20, "Saving...".to_string()),
-            (21, "Done.".to_string()),
-            (23, String::new()),
+            (11, "Quit:".to_string()),
+            (12, "Save game? Yes".to_string()),
+            (13, "Saving...".to_string()),
+            (14, "Done.".to_string()),
+            (16, String::new()),
         ],
-        "row 22 must stay blank"
+        "the row above the prompt must stay blank"
     );
 
     // Exactly one blank, though: a log that already ends in the blank an
@@ -617,5 +624,5 @@ fn the_live_prompt_row_keeps_one_blank_row_above_the_last_output() {
     log.end_turn();
     let layout = layout_message_window(&log, Some(""));
     let rows = layout.rows.iter().map(|row| row.row).collect::<Vec<_>>();
-    assert_eq!(rows, vec![18, 19, 20, 21, 23]);
+    assert_eq!(rows, vec![11, 12, 13, 14, 16]);
 }
