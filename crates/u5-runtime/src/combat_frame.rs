@@ -2239,12 +2239,23 @@ impl PlayState {
         self.message = COMBAT_ABSORBED_MESSAGE.to_string();
         self.mark_visibility_dirty();
         if armed_endgame_result {
-            let (messages, tableau_map) = self
-                .combat_frame_snapshot
-                .take()
-                .map(|snapshot| (snapshot.endgame_messages, snapshot.endgame_tableau_map))
-                .unwrap_or_default();
-            self.enter_endgame_with_resources(messages, tableau_map);
+            // Restore the suspended frame first. `endgame.md §3` has the
+            // sequence take over the *world* screen and rebuild the
+            // active-object table as a tableau; entering straight out of
+            // the arena leaves the combat terrain underneath it, so the
+            // tableau's own floor never appears. The original's room
+            // changes colour at this moment, which is that floor.
+            if let Some(snapshot) = self.combat_frame_snapshot.take() {
+                let messages = snapshot.endgame_messages.clone();
+                let tableau_map = snapshot.endgame_tableau_map.clone();
+                self.restore_combat_frame_with_trigger_reconcile(snapshot, true);
+                self.enter_endgame_with_resources(messages, tableau_map);
+                // `endgame.md §3` step 1: the sequence marks the scene as
+                // having no active combatant, so the arena renderer
+                // suppresses its target cursor. The frame restore above
+                // puts one back.
+                self.active_player = None;
+            }
         }
         Some(CombatAbsorbableFieldApplication {
             actor_slot,
