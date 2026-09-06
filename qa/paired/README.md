@@ -43,6 +43,7 @@ are PRNG-selected and legitimately differ between the two sides.
 | `minoc-entry-walk`, `minoc-tribute` | Minoc entry and the tribute exchange |
 | `blackthorn-palace-password` | the palace password audience |
 | `combat-town-attack`, `combat-dungeon-room` | combat entry from a town attack and from a dungeon room |
+| `combat-town-attack-after-entry` | the same Attack, reached by walking in at an hour when the resident is at its shop |
 | `dungeon-view` | the first-person corridor |
 | `magic-mix` | the M-Mix reagent list and its prompts |
 | `shop-arms` | the arms shop's browser and its prompts |
@@ -64,7 +65,7 @@ number of keystrokes:
 | `town-britain-seeded`, `town-fountain`, `town-look-npc-cell` | the party inside Britain, beside the fountain for the fountain scenario |
 | `minoc-tribute`, `blackthorn-palace-password` | the party at the location named, with the quest state the exchange needs |
 | `town-talk-after-entry` | the party outside Britain on the overworld, so the scenario can walk in through the door |
-| `shop-arms-after-entry` | the same, seeded at 10:00 rather than 12:00 |
+| `shop-arms-after-entry`, `combat-town-attack-after-entry` | the same, seeded at 10:00 rather than 12:00 |
 
 **A town seed the stock game did not write breaks Talk on the stock side.**
 `formats/saved-gam.md` section 12 makes `0x07B4..0x105F` durable state - it
@@ -115,3 +116,23 @@ at the next one - `town-talk-after-entry` shows East/North, South/South,
 South/North, East/East, East/North across its five shots with nothing wrong on
 either side. Never read that row as a divergence, and never let a whole-frame
 pixel diff include it.
+
+**An NPC is not guaranteed to still be there.** Both sides seed the game's
+generator from the host clock at scene load, which is what the original does,
+and the per-turn wander gate of `npc-schedules.md` Section 9.1 is a coin flip
+per NPC per turn. A route planned from the seed therefore describes where a
+resident *was*, not where it will be after a twenty-five step walk, and two
+runs of the same scenario on the same side legitimately end with the resident
+in different cells - one run of `shop-arms-after-entry` reached `Thou dost see
+a merchant`, another reached `Thou dost see cobble`. Two consequences: aim
+scenarios with `talk_gate_probe --chase`, which re-plans after every step, and
+expect to run a positional scenario more than once before it compares
+anything. A single run that finds empty floor has measured nothing; it has not
+found a defect.
+
+**The shop opens itself.** `npc-schedules.md` Section 9's adjacency event
+dispatches the shop for a resident carrying a shop-trigger dialogue byte, with
+no Talk key involved - the stock side of `shop-arms-after-entry` already shows
+the arms greeting at its `look` beat. A scenario that means to test the `T`
+command against a shopkeeper has to account for the shop having opened on its
+own first. See cleak/u5-spec#215.

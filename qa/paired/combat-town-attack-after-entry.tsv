@@ -1,0 +1,82 @@
+# Town combat entry, reached by walking in rather than from a seeded save.
+# `combat-town-attack` seeds the party at the counter from an engine-written
+# save at 12:00, when the weaponsmith is seated: the stock game answers that
+# Attack with nothing at all - no message, no arena - while the engine opens a
+# MERCHANT conflict. That is the same seated/at-the-shop split u5-spec#214 is
+# about, on the Attack command instead of Talk, and an engine-written seed
+# cannot tell the two apart. This walks into Britain at 10:00, when the
+# resident is at the shop, and attacks the same cell the shop scenario talks
+# into. Route from `talk_gate_probe --script e --chase 129`.
+# requires-seed: the party outside Britain on the overworld at 10:00, so the scenario can walk in through the door
+both	wait	9000
+both	key	space
+both	wait	4000
+both	key	j
+both	wait	8000
+both	key	e
+both	wait	4000
+both	shot	entered	Entered Britain through the door
+both	key	Up
+both	wait	450
+both	key	Up
+both	wait	450
+both	key	Up
+both	wait	450
+both	key	Up
+both	wait	450
+both	key	Up
+both	wait	450
+both	key	Up
+both	wait	450
+both	key	Up
+both	wait	450
+both	key	Up
+both	wait	450
+both	key	Up
+both	wait	450
+both	key	Left
+both	wait	450
+both	key	Left
+both	wait	450
+both	key	Left
+both	wait	450
+both	key	Left
+both	wait	450
+both	key	Left
+both	wait	450
+both	key	Left
+both	wait	450
+both	key	Left
+both	wait	450
+both	key	Left
+both	wait	450
+both	key	Left
+both	wait	450
+both	key	Left
+both	wait	450
+both	key	Left
+both	wait	450
+both	key	Left
+both	wait	450
+both	key	Left
+both	wait	450
+both	key	Left
+both	wait	450
+both	key	Up
+both	wait	450
+both	key	Up
+both	wait	450
+both	wait	2500
+both	shot	arrived	Arrived beside the weaponsmith
+both	key	l
+both	wait	1200
+both	key	Right
+both	wait	2500
+both	shot	look	Look east at the weaponsmith
+both	key	a
+both	wait	1500
+both	key	Right
+both	wait	4000
+both	shot	conflict	Attack east: does town combat open?
+both	wait	2500
+both	shot	arena	The arena after entry
