@@ -41,6 +41,10 @@ pub const MESSAGE_WINDOW_ROWS: usize = (MESSAGE_WINDOW_BOTTOM - MESSAGE_WINDOW_T
 /// live input line.
 pub const MESSAGE_WINDOW_HISTORY_ROWS: usize = MESSAGE_WINDOW_ROWS - 1;
 
+/// Rows the message window's cursor stands below its top row when a load
+/// hands the screen to the world loop. See [`crate::PlayState::load_scene`].
+pub const MESSAGE_WINDOW_LOAD_CURSOR_ROWS: u8 = 3;
+
 /// How one logged line is drawn.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum MessageLineKind {

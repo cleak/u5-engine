@@ -85,11 +85,20 @@ impl PlayState {
     }
 
     pub fn load_scene(game_dir: &Path, options: PlayOptions) -> io::Result<Self> {
-        match options.target {
+        let mut state = match options.target {
             PlayTarget::Town(scene) => Self::load_town_scene(game_dir, scene, options),
             PlayTarget::Dungeon(scene) => Self::load_dungeon_scene(game_dir, scene, options),
             PlayTarget::World(plane) => Self::load_world_scene(game_dir, plane, options),
-        }
+        }?;
+        // The message window a load hands to the world loop is empty but
+        // its cursor is not at the top: measured on a paired capture of
+        // Journey Onward followed immediately by one command, the stock
+        // game's first echo lands on row 14, so three rows stand above
+        // it - and `text-output.md §10.4`'s leading feed is spent inside
+        // that count.
+        // `cleak/u5-engine#11`; asked on the spec side as well.
+        state.message_window_top_offset = MESSAGE_WINDOW_LOAD_CURSOR_ROWS;
+        Ok(state)
     }
 
     pub fn mark_visibility_dirty(&mut self) {

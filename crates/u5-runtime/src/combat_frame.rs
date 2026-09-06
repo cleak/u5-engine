@@ -7068,9 +7068,33 @@ impl PlayState {
     /// `§14` Escape handler keeps its own raw party-side test; it looks for
     /// "any party-side descriptor whose marked-dead bit is clear", which is
     /// a flag test and not a side count.
+    /// Whether the arena still carries an unspent absorbable-field
+    /// marker.
+    ///
+    /// `combat.md §7`: the census that decides `VICTORY!` "counts every
+    /// descriptor that is non-empty and not dead-marked, with **no
+    /// terrain filter**", which is why a restrained hostile that never
+    /// takes a turn still suppresses the announcement. Doom's final room
+    /// ships one absorbable field and no combatants, and the stock game
+    /// prints no `VICTORY!` there - the party keeps passing until someone
+    /// walks onto the field. This engine holds the field in the
+    /// active-object table rather than in a descriptor slot, so this is
+    /// where the same count lives. `cleak/u5-engine#9`.
+    pub fn combat_absorbable_field_marker_present(&self) -> bool {
+        self.active_objects
+            .iter()
+            .take(OOL_SLOTS)
+            .any(|object| {
+                object.tile != 0 && dungeon_room_absorbable_field_family(object.type_byte)
+            })
+    }
+
     pub fn announce_combat_victory_if_needed(&mut self) -> bool {
         let census = combat_side_census(&self.combat_actors);
         if census.foes_remain() || !census.friends_remain() {
+            return false;
+        }
+        if self.combat_absorbable_field_marker_present() {
             return false;
         }
         let Some(snapshot) = &mut self.combat_frame_snapshot else {
