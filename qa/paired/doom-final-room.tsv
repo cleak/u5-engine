@@ -8,7 +8,7 @@
 # the combat won and the sandalwood box owned; neither is scripted yet.
 both	wait	9000
 both	key	space
-both	wait	4000
+both	wait	7000
 both	key	j
 both	wait	9000
 both	shot	arrival	Journey Onward on the fall trap above the final room
@@ -18,7 +18,7 @@ both	shot	lit	Torch lit
 both	key	space
 both	wait	5000
 both	shot	fallen	After the fall onto the room trigger
-both	wait	4000
+both	wait	7000
 both	shot	room	The final room
 both	key	space
 both	wait	2500
@@ -34,5 +34,8 @@ both	wait	1200
 both	key	Up
 both	wait	1200
 both	key	Up
-both	wait	4000
+both	wait	7000
 both	shot	walked	Walking north across the arena, to the absorption
+both	type	Y
+both	wait	7000
+both	shot	answered	The first confirmation answered yes
