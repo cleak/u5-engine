@@ -148,3 +148,15 @@ no Talk key involved - the stock side of `shop-arms-after-entry` already shows
 the arms greeting at its `look` beat. A scenario that means to test the `T`
 command against a shopkeeper has to account for the shop having opened on its
 own first. See cleak/u5-spec#215.
+
+**The native oracle cannot draw the combat cursor box.** `combat.md` Section 7
+has the shared tile pass toggle a blink flag each pass and, on the lit pass,
+draw the two-pixel white frame around the active player's arena cell. The
+engine draws it - the Bevy capture of `combat-dungeon-room` carries it in the
+same cell and the same shape as the stock game - but
+`u5-engine --save-screen` renders once without pumping the visual idle tick
+that `apply_combat_cursor_blink_tick` hangs off, so the box is never lit
+there. A native pixel diff of any arena frame therefore reports one 16x16
+cell's worth of difference (221 pixels in that scenario) that is not a defect.
+Compare arena frames from the paired capture, or exclude the active player's
+cell.
