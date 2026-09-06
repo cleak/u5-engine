@@ -2236,7 +2236,11 @@ impl PlayState {
             .combat_frame_snapshot
             .as_ref()
             .is_some_and(|snapshot| snapshot.endgame_messages.is_some());
-        self.message = COMBAT_ABSORBED_MESSAGE.to_string();
+        // Emit rather than assign: the endgame's own greeting follows
+        // immediately, and the original keeps both on screen with a
+        // blank row between. Writing the slot would let the greeting
+        // replace this line.
+        self.emit_message_line(COMBAT_ABSORBED_MESSAGE);
         self.mark_visibility_dirty();
         if armed_endgame_result {
             // Restore the suspended frame first. `endgame.md §3` has the
