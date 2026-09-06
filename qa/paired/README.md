@@ -36,6 +36,7 @@ are PRNG-selected and legitimately differ between the two sides.
 | `overworld-night-walk` | that the overworld is *alive* while the party walks: encounters spawn and creatures act |
 | `drowning-audio` | the stock side alone, sailed until something sinks the ship, for a cue that cannot be scheduled |
 | `dungeon-exit-klimb` | a Z transition: climbing out of a dungeon, and the overworld Look that follows |
+| `overworld-camp` | H-Hole up carried through to a result, which no scenario had done |
 | `hut-talk` | Talk with the hut's resident: greeting, name, job, bye |
 | `hut-prompts` | New Order, Ready, Use, Cast, Mix, Yell, Search, Look, X-it, Get, Enter, Hole up, Ignite, Klimb prompt and result literals |
 | `town-britain-seeded` | Britain from a seeded save: entry, walking, Look at an NPC cell |
@@ -75,6 +76,7 @@ number of keystrokes:
 | `overworld-night-walk` | the party on the Britannia overworld at 02:00, when the encounter threshold can fire |
 | `drowning-audio` | the party aboard a frigate with no skiffs, on deep water at night |
 | `dungeon-exit-klimb` | the party on Deceit's entrance level, with a torch to hand |
+| `overworld-camp` | the party standing on the Britannia overworld |
 | `town-night-schedule` | Britain at 02:00 |
 | `town-britain-seeded`, `town-fountain`, `town-look-npc-cell` | the party inside Britain, beside the fountain for the fountain scenario |
 | `minoc-tribute`, `blackthorn-palace-password` | the party at the location named, with the quest state the exchange needs |

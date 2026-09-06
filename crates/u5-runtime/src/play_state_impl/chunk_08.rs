@@ -262,8 +262,23 @@ impl PlayState {
         // cooldown gate is read only after the camp's time has elapsed,
         // so rollovers during this attempt can make recovery eligible.
         let long_camp = hours >= COMPLETED_LONG_CAMP_MIN_HOURS;
-        let cooldown_blocked =
-            !interrupted && long_camp && camp_cooldown_blocks_recovery(self.camp_cooldown);
+        // `rest-and-camp.md §5`: "A refused camp prints its own message. It
+        // is a distinct, shorter no-effect line, not the rest-success line
+        // ... Reporting a refused camp through the success message is a
+        // visible error: the player is told the party rested when nothing
+        // happened."
+        //
+        // Two refusals reach it, and the section gives them the same late
+        // bypass: the cooldown, and a duration of five hours or fewer, which
+        // "does not recover the party, does not evaluate the apparition-
+        // context gate, consumes no apparition random draw, and does not arm
+        // a new cooldown". This engine tested only the first, so a short camp
+        // printed the success line. Measured against the stock game on
+        // `qa/paired/overworld-camp.tsv`: a three-hour camp answers
+        // `Zzzzzz...` and then the no-effect line, where this engine said
+        // the party rested.
+        let refused =
+            !interrupted && (!long_camp || camp_cooldown_blocks_recovery(self.camp_cooldown));
         if !interrupted {
             let _ = self.apply_completed_long_camp_recovery(
                 hours,
@@ -271,7 +286,7 @@ impl PlayState {
                 &rest_entry_statuses,
             );
         }
-        self.message = if cooldown_blocked {
+        self.message = if refused {
             camp_messages.no_effect
         } else {
             camp_messages.success
@@ -283,7 +298,7 @@ impl PlayState {
         }
         self.append_pending_hourly_status_message();
         if !interrupted
-            && !cooldown_blocked
+            && !refused
             && long_camp
             && matches!(self.area, Area::World { .. })
             && lord_british_camp_event_triggered(self.lord_british_camp_event_roll())

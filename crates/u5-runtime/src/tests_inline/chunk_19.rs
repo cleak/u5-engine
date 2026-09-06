@@ -805,7 +805,11 @@
 
         assert!(state.active_rest.is_none());
         assert_eq!(state.turn, 12);
-        assert!(state.message.starts_with("RESTED!"));
+        // `rest-and-camp.md §5`: five hours or fewer takes the same late
+        // bypass as the cooldown refusal, so it prints the no-effect line
+        // rather than the success line - "the player is told the party
+        // rested when nothing happened" is the error the section names.
+        assert!(state.message.starts_with("NO EFFECT!"));
         let _ = fs::remove_dir_all(dir);
     }
 
@@ -850,7 +854,11 @@
 
         assert!(state.active_rest.is_none());
         assert_eq!(state.turn, 12);
-        assert!(state.message.starts_with("RESTED!"));
+        // `rest-and-camp.md §5`: five hours or fewer takes the same late
+        // bypass as the cooldown refusal, so it prints the no-effect line
+        // rather than the success line - "the player is told the party
+        // rested when nothing happened" is the error the section names.
+        assert!(state.message.starts_with("NO EFFECT!"));
         let _ = fs::remove_dir_all(dir);
     }
 
@@ -879,7 +887,11 @@
         assert!(state.active_rest.is_none());
         assert_eq!(state.party[1].status, b'P');
         assert_eq!(state.turn, 12);
-        assert!(state.message.starts_with("RESTED!"));
+        // `rest-and-camp.md §5`: five hours or fewer takes the same late
+        // bypass as the cooldown refusal, so it prints the no-effect line
+        // rather than the success line - "the player is told the party
+        // rested when nothing happened" is the error the section names.
+        assert!(state.message.starts_with("NO EFFECT!"));
         let _ = fs::remove_dir_all(dir);
     }
 
@@ -945,7 +957,11 @@
             MoveOutcome::Rested
         );
 
-        assert!(state.message.starts_with("RESTED!"));
+        // `rest-and-camp.md §5`: five hours or fewer takes the same late
+        // bypass as the cooldown refusal, so it prints the no-effect line
+        // rather than the success line - "the player is told the party
+        // rested when nothing happened" is the error the section names.
+        assert!(state.message.starts_with("NO EFFECT!"));
         assert_eq!(state.turn, 12);
         assert!(!state.combat_active);
         let _ = fs::remove_dir_all(dir);
@@ -981,7 +997,11 @@
             MoveOutcome::Rested
         );
 
-        assert!(state.message.starts_with("RESTED!"));
+        // `rest-and-camp.md §5`: five hours or fewer takes the same late
+        // bypass as the cooldown refusal, so it prints the no-effect line
+        // rather than the success line - "the player is told the party
+        // rested when nothing happened" is the error the section names.
+        assert!(state.message.starts_with("NO EFFECT!"));
         assert_eq!(state.party[1].status, b'P');
         assert_eq!(state.turn, 12);
         let _ = fs::remove_dir_all(dir);
@@ -1010,7 +1030,11 @@
         assert_eq!(state.animation.frame, 0);
         assert_eq!(state.ambient_light, FULL_DAYLIGHT);
         assert!(state.visibility_dirty);
-        assert!(state.message.starts_with("RESTED!"));
+        // `rest-and-camp.md §5`: five hours or fewer takes the same late
+        // bypass as the cooldown refusal, so it prints the no-effect line
+        // rather than the success line - "the player is told the party
+        // rested when nothing happened" is the error the section names.
+        assert!(state.message.starts_with("NO EFFECT!"));
         let _ = fs::remove_dir_all(dir);
     }
 
@@ -1152,7 +1176,11 @@
         assert_eq!(state.party[4].status, b'P');
         assert_eq!(state.party[4].hp, 7);
         assert_eq!(state.party[4].mana, 98);
-        assert!(state.message.starts_with("RESTED!"));
+        // `rest-and-camp.md §5`: five hours or fewer takes the same late
+        // bypass as the cooldown refusal, so it prints the no-effect line
+        // rather than the success line - "the player is told the party
+        // rested when nothing happened" is the error the section names.
+        assert!(state.message.starts_with("NO EFFECT!"));
         let _ = fs::remove_dir_all(dir);
     }
 
@@ -1181,7 +1209,11 @@
         assert_eq!(state.party[0].status, b'P');
         assert_eq!(state.party[0].hp, 3);
         assert_eq!(state.party[0].mana, 98);
-        assert!(state.message.starts_with("RESTED!"));
+        // `rest-and-camp.md §5`: five hours or fewer takes the same late
+        // bypass as the cooldown refusal, so it prints the no-effect line
+        // rather than the success line - "the player is told the party
+        // rested when nothing happened" is the error the section names.
+        assert!(state.message.starts_with("NO EFFECT!"));
         let _ = fs::remove_dir_all(dir);
     }
 
@@ -1376,6 +1408,7 @@
         assert_eq!(state.clock, GameClock::new(14, 0).unwrap());
         assert!(state.party[0].hp > 1);
         assert_eq!(state.camp_cooldown, COMPLETED_LONG_CAMP_COOLDOWN_HOURS);
+        // Six hours with the cooldown expired: this one really did rest.
         assert!(state.message.starts_with("RESTED!"));
         let _ = fs::remove_dir_all(dir);
     }
@@ -1666,7 +1699,11 @@
         // counters age by the same sixty-one minutes the clock did.
         assert_eq!(state.torch_counter, 9);
         assert_eq!(state.light_spell_counter, 0);
-        assert!(state.message.starts_with("RESTED!"));
+        // `rest-and-camp.md §5`: five hours or fewer takes the same late
+        // bypass as the cooldown refusal, so it prints the no-effect line
+        // rather than the success line - "the player is told the party
+        // rested when nothing happened" is the error the section names.
+        assert!(state.message.starts_with("NO EFFECT!"));
         let _ = fs::remove_dir_all(dir);
     }
 

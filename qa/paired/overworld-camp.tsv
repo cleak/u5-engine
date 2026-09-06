@@ -1,0 +1,24 @@
+# Camp on the overworld, which nothing in the suite had done.
+#
+# `rest-and-camp.md` owns the H-Hole up pipeline and `commands.md §5` its
+# prompt. The hut scenarios reach the prompt and cancel; none has ever
+# completed a camp, so neither the hour prompt's wording nor the rest result
+# has been compared against the original.
+# requires-seed: the party standing on the Britannia overworld
+both	wait	9000
+both	key	space
+both	wait	4000
+both	key	j
+both	wait	8000
+both	shot	start	On the overworld
+both	key	h
+both	wait	2000
+both	shot	prompt	The hole-up prompt
+both	key	3
+both	wait	6000
+both	shot	camped	After camping three hours
+both	key	l
+both	wait	1200
+both	key	Up
+both	wait	2500
+both	shot	look	Look north after the camp
