@@ -218,6 +218,13 @@ pub struct EndgameState {
     /// before advancing to the next. [`ENDGAME_ENTRY_COMPLETE_SLOT`] means
     /// the greeting/prompt has been published and no entry work remains.
     pub entry_party_slot: u8,
+    /// `endgame.md §5.1` publishes a blocking key read between rite
+    /// pages. A capture shows the dialogue paged the same way: the stock
+    /// game prints Lord British's greeting and stops, and the first box
+    /// question does not appear until a key is pressed. Sampling one run
+    /// at five, fifteen and thirty seconds gives an identical window all
+    /// three times (`cleak/u5-engine#10`). True while that page is owed.
+    pub greeting_page_pending: bool,
     /// `endgame.md §7`: display-owned state for the victory tableau's
     /// Orb hold, shared-moongate rise/hold/sink sequence, and actor exits.
     pub victory_tableau_phase: EndgameVictoryTableauPhase,
@@ -324,6 +331,7 @@ impl EndgameState {
             entry_lord_british_pending: false,
             entry_party_slot: ENDGAME_ENTRY_COMPLETE_SLOT,
             victory_tableau_phase: EndgameVictoryTableauPhase::Inactive,
+            greeting_page_pending: false,
         }
     }
 
@@ -348,6 +356,7 @@ impl EndgameState {
             entry_lord_british_pending: false,
             entry_party_slot: ENDGAME_ENTRY_COMPLETE_SLOT,
             victory_tableau_phase: EndgameVictoryTableauPhase::Inactive,
+            greeting_page_pending: false,
         }
     }
 
@@ -385,6 +394,7 @@ impl EndgameState {
             entry_lord_british_pending: false,
             entry_party_slot: ENDGAME_ENTRY_COMPLETE_SLOT,
             victory_tableau_phase: EndgameVictoryTableauPhase::Inactive,
+            greeting_page_pending: false,
         }
     }
 
@@ -427,10 +437,25 @@ impl EndgameState {
             if let (Some(greeting), Some(prompt)) =
                 (messages.initial_greeting(), messages.first_box_prompt())
             {
+                // The greeting is its own page: the original stops here
+                // and waits for a key before the question
+                // (`greeting_page_pending`).
+                if self.greeting_page_pending {
+                    return format!("{greeting}{leader_name}!\"");
+                }
                 return format!("{greeting}{leader_name}!\"\n\n{prompt}");
             }
         }
         "Endgame: Lord British asks whether thou hast brought his box. (Y/N)".to_string()
+    }
+
+    /// The first box question, printed once the greeting page has been
+    /// advanced.
+    pub fn first_box_question_text(&self) -> Option<String> {
+        self.messages
+            .as_ref()
+            .and_then(|messages| messages.first_box_prompt())
+            .map(|prompt| format!("\n{prompt}"))
     }
 
     pub fn second_prompt_text(&self, first_answer: bool) -> String {
@@ -1471,12 +1496,39 @@ impl PlayState {
     }
 
     fn append_endgame_first_prompt(&mut self) {
+        if let Some(endgame) = self.endgame.as_mut() {
+            endgame.greeting_page_pending = true;
+        }
         let prompt = self
             .endgame
             .as_ref()
             .expect("endgame entry prompt requires endgame state")
             .first_prompt_text(&self.party_leader_name());
         self.message.push_str(&prompt);
+    }
+
+    /// Advance `endgame.md §5`'s greeting page. Returns `true` when a
+    /// key was owed and has now been spent printing the first box
+    /// question.
+    pub fn advance_endgame_greeting_page(&mut self) -> bool {
+        let pending = self
+            .endgame
+            .as_ref()
+            .is_some_and(|endgame| endgame.greeting_page_pending);
+        if !pending {
+            return false;
+        }
+        if let Some(endgame) = self.endgame.as_mut() {
+            endgame.greeting_page_pending = false;
+        }
+        if let Some(question) = self
+            .endgame
+            .as_ref()
+            .and_then(EndgameState::first_box_question_text)
+        {
+            self.message.push_str(&question);
+        }
+        true
     }
 
     /// Drain any owed entry-presentation frames at once. Used when

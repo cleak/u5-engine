@@ -2589,6 +2589,12 @@ fn handle_endgame_key_input(
     game_dir: &Path,
 ) -> io::Result<PlayInputDisposition> {
     state.ensure_endgame_messages_loaded(game_dir)?;
+    // `endgame.md §5.1`'s blocking key read between pages. The greeting
+    // is one page; the question that follows it is the next, and the
+    // confirmation only reads once both are on screen.
+    if state.advance_endgame_greeting_page() {
+        return Ok(PlayInputDisposition::Continue);
+    }
     let answer = parse_inline_yes_no(suffix).or_else(|| match key {
         'Y' | 'y' => Some(true),
         'N' | 'n' => Some(false),

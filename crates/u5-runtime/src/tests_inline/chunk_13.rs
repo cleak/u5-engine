@@ -18984,6 +18984,9 @@ fn doom_final_room_successful_dungeon_cbt_combat_enters_endgame_from_absorbable_
     );
     state.finish_endgame_entry_presentation();
     assert!(state.message.contains("Welcome back"));
+    // §5.1's blocking key read: the greeting is its own page and the
+    // question follows on the next one.
+    assert!(state.advance_endgame_greeting_page());
     assert!(state.message.contains("Hast thou brought my box?"));
     let _ = fs::remove_dir_all(dir);
 }
@@ -19114,6 +19117,7 @@ fn endgame_flow_uses_loaded_endmsg_records_for_prompts_rite_and_refusal() {
         .expect("synthetic ENDMSG.DAT should load");
     loaded.finish_endgame_entry_presentation();
     assert!(loaded.message.contains("Welcome back"));
+    assert!(loaded.advance_endgame_greeting_page());
     assert!(loaded.message.contains("Hast thou brought my box?"));
     let _ = fs::remove_dir_all(dir);
 
@@ -19123,6 +19127,7 @@ fn endgame_flow_uses_loaded_endmsg_records_for_prompts_rite_and_refusal() {
     refusal.finish_endgame_entry_presentation();
     assert!(refusal.message.contains("AVATAR"));
     assert!(refusal.message.contains("Welcome back"));
+    assert!(refusal.advance_endgame_greeting_page());
     assert!(refusal.message.contains("Hast thou brought my box?"));
 
     refusal.resolve_endgame_confirmation(true);
