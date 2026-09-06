@@ -61,6 +61,21 @@ fn main() {
             }
         }
         println!("direct encounter probe: {fired}/300 spawned");
+        let mut types = std::collections::BTreeMap::new();
+        for _ in 0..2000 {
+            if let Some(kind) = state.native_world_encounter_type(WorldPlane::Britannia, 0x01, 0) {
+                *types.entry(kind).or_insert(0usize) += 1;
+            }
+        }
+        let mut spawned_types = std::collections::BTreeMap::new();
+        for object in state.active_objects.iter().filter(|o| !o.is_empty()) {
+            *spawned_types.entry(object.type_byte).or_insert(0usize) += 1;
+        }
+        println!("object table after the direct probes: {spawned_types:02x?}");
+        println!("2000 type draws on tile 0x01:");
+        for (kind, count) in &types {
+            println!("  0x{kind:02x}: {count}");
+        }
         println!(
             "walkers ran this turn: {}",
             state.world_walkers_ran_this_turn

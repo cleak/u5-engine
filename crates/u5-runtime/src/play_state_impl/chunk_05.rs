@@ -923,6 +923,25 @@ impl PlayState {
         self.append_world_damage_tile_message(game_dir, plane)?;
         self.append_world_status_tile_message(plane);
         self.append_pending_hourly_status_message();
+        // `active-objects.md §8`: the walker that just ran inside
+        // `advance_turn` *queues* its adjacency reactions - whirlpool
+        // engagement, sea-serpent breath, the pirate broadside, a creature
+        // reaching the party - and leaves the I/O-bearing half to the
+        // post-turn handler. That handler is the shared epilogue the movement
+        // branch skips, so on a step the queue was filled and then dropped by
+        // the next walker pass: outdoor creatures never acted on the party
+        // while it walked or sailed. They acted only if the *party* stepped
+        // into them, which `step_world` handles above.
+        //
+        // A reaction that changes mode owns the outcome, exactly as the
+        // epilogue's own arm does.
+        if let Some(game_dir) = game_dir
+            && self.world_object_epilogue_runs_for_turn(self.turn)
+            && let Some(outcome) = self.apply_pending_outdoor_reactions(game_dir, plane)?
+            && (outcome.is_transition() || self.combat_active)
+        {
+            return Ok(outcome);
+        }
         // `encounters.md §2.1`: "**Every turn** the overworld mode loop runs
         // its per-turn block ... and that block contains an *encounter
         // probe*." An accepted step is such a turn.
