@@ -23307,7 +23307,7 @@ mod tests {
         assert!(manifest.contains("route-underworld-doom-word-of-power-seal-opens-01-yveramocor"));
         assert!(manifest.contains("route-britannia-ruined-honesty-shrine-restoration-05-ahm"));
         assert!(manifest.contains("route-britannia-empty-yell-is-acted-02-empty"));
-        assert!(manifest.contains("route-endgame-missing-box-terminal-jitter-03-y"));
+        assert!(manifest.contains("route-endgame-missing-box-terminal-jitter-03-endgame_frame"));
         assert!(manifest.contains("route-endgame-missing-box-confirmation-02-y"));
         assert!(manifest.contains("route-endgame-box-victory-confirmation-02-y"));
         assert!(manifest.contains(ENDGAME_FADE_TO_BLACK_FRAME_LABEL));
