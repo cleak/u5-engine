@@ -177,6 +177,21 @@ fn main() {
                 replay_play_script_commands(&mut state, dir, &commands, |_, _, _| Ok(()))
                     .expect("script must replay");
                 println!("replayed {} command(s) from --script", commands.len());
+                for line in &state.diagnostics {
+                    println!("  diagnostic: {line}");
+                }
+                let hour = state.clock.hour;
+                for npc in &state.npcs {
+                    let ai = &npc.schedule[NPC_SCHEDULE_AI_OFFSET
+                        ..NPC_SCHEDULE_AI_OFFSET + NPC_SCHEDULE_WAYPOINT_COUNT];
+                    println!(
+                        "  slot {:>2} dialog {:>3} ai {ai:?} hour-wp {} cached-wp {}",
+                        npc.slot,
+                        npc.dialog_id,
+                        waypoint_for_hour(&npc.schedule, hour),
+                        npc.cached_wp,
+                    );
+                }
             }
             other => panic!("unknown option {other}"),
         }

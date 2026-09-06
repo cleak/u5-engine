@@ -46,6 +46,7 @@ are PRNG-selected and legitimately differ between the two sides.
 | `dungeon-view` | the first-person corridor |
 | `magic-mix` | the M-Mix reagent list and its prompts |
 | `shop-arms` | the arms shop's browser and its prompts |
+| `shop-arms-after-entry` | the arms shop reached by walking in through the door at 10:00, when the resident is at the shop |
 | `doom-final-room` | Doom's final room: the fall onto the room trigger, the arena, the absorption, and Lord British's dialogue |
 | `doom-final-room-refusal` | the same room answering `No` to the first box question |
 
@@ -62,6 +63,8 @@ number of keystrokes:
 | `town-night-schedule` | Britain at 02:00 |
 | `town-britain-seeded`, `town-fountain`, `town-look-npc-cell` | the party inside Britain, beside the fountain for the fountain scenario |
 | `minoc-tribute`, `blackthorn-palace-password` | the party at the location named, with the quest state the exchange needs |
+| `town-talk-after-entry` | the party outside Britain on the overworld, so the scenario can walk in through the door |
+| `shop-arms-after-entry` | the same, seeded at 10:00 rather than 12:00 |
 
 **A town seed the stock game did not write breaks Talk on the stock side.**
 `formats/saved-gam.md` section 12 makes `0x07B4..0x105F` durable state - it

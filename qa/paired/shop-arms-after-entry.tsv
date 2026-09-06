@@ -1,0 +1,88 @@
+# Does the stock game enter the arms shop when the shopkeeper is *not* seated?
+# `shop-arms` seeds the party at the counter from an engine-written save, so the
+# stock side's NPC band is zero and every Talk answers `No response!`
+# (see the README) - it compares nothing. `town-talk-after-entry` walks in and
+# reaches the same weaponsmith at 12:39, when it is sitting on a chair, and the
+# stock refuses the trigger with a fixed merchant line while the engine opens
+# the overlay (u5-engine#15, u5-spec#214). This scenario is the control for
+# that one: same town, same resident (`.NPC` dialog byte 0x81), same walk-in
+# entry path, but seeded at 10:00, when the resident stands on cobbles rather
+# than at a table. If the stock enters the shop here the refusal is a state
+# gate; if it refuses here too, the gate is something else. Route from
+# `talk_gate_probe --script e --chase 129`, which re-plans after every step so
+# schedule drift during the walk is accounted for.
+# requires-seed: the party outside Britain on the overworld at 10:00, so the scenario can walk in through the door
+both	wait	9000
+both	key	space
+both	wait	4000
+both	key	j
+both	wait	8000
+both	shot	overworld	Journey Onward on the overworld at Britain
+both	key	e
+both	wait	4000
+both	shot	entered	Entered Britain through the door
+both	key	Up
+both	wait	450
+both	key	Up
+both	wait	450
+both	key	Up
+both	wait	450
+both	key	Up
+both	wait	450
+both	key	Up
+both	wait	450
+both	key	Up
+both	wait	450
+both	key	Up
+both	wait	450
+both	key	Up
+both	wait	450
+both	key	Up
+both	wait	450
+both	key	Left
+both	wait	450
+both	key	Left
+both	wait	450
+both	key	Left
+both	wait	450
+both	key	Left
+both	wait	450
+both	key	Left
+both	wait	450
+both	key	Left
+both	wait	450
+both	key	Left
+both	wait	450
+both	key	Left
+both	wait	450
+both	key	Left
+both	wait	450
+both	key	Left
+both	wait	450
+both	key	Left
+both	wait	450
+both	key	Left
+both	wait	450
+both	key	Left
+both	wait	450
+both	key	Left
+both	wait	450
+both	key	Up
+both	wait	450
+both	key	Up
+both	wait	450
+both	wait	2500
+both	shot	arrived	Arrived beside the weaponsmith
+both	key	l
+both	wait	1200
+both	key	Right
+both	wait	2500
+both	shot	look	Look east at the weaponsmith
+both	key	t
+both	wait	1200
+both	key	Right
+both	wait	3500
+both	shot	talk	Talk east: does the arms shop open at 10:00?
+both	key	space
+both	wait	2500
+both	shot	after-space	After one Space at the shop prompt
