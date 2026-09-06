@@ -100,3 +100,15 @@ which `game-dev-u5-paired` refuses to run without `--seed-save`, and which
 `crates/u5-tui/tests/paired_scenarios.rs` requires of every scenario that does
 not create its own character. The table above stays as prose for the reader;
 the header is what the tools check.
+
+**The wind banner is not a comparable cell.** The bottom chrome ribbon's
+`<North Winds>` banner drifts on its own: `systems/weather.md` Section 2.2
+gives the idle world tick a one-in-sixty-four roll that re-selects the wind,
+silently and without consuming a turn, so "two runs of the original that load
+the same save and press Q shortly afterwards can legitimately record different
+wind values". Every `wait` step in a scenario is idle ticks, and the two sides
+do not share a random stream, so the banner can differ at any beat and re-agree
+at the next one - `town-talk-after-entry` shows East/North, South/South,
+South/North, East/East, East/North across its five shots with nothing wrong on
+either side. Never read that row as a divergence, and never let a whole-frame
+pixel diff include it.

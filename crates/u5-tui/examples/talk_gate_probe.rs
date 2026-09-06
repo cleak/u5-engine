@@ -15,6 +15,7 @@
 use std::collections::{HashMap, VecDeque};
 use std::path::Path;
 use u5_runtime::*;
+use u5_tui::{replay_play_script_commands, split_play_script};
 
 /// One breadth-first step search from the party's current cell.
 ///
@@ -148,16 +149,39 @@ fn main() {
     let mut args = std::env::args().skip(1);
     let dir = args
         .next()
-        .expect("usage: talk_gate_probe <PROFILE_DIR> [--chase <ID>]");
+        .expect("usage: talk_gate_probe <PROFILE_DIR> [--script <SCRIPT>] [--chase <ID>]");
     let dir = Path::new(&dir);
     let options = load_play_options_from_save(dir).expect("profile must hold a save");
     let mut state = PlayState::load_scene(dir, options).expect("scene must load");
-    if args.next().as_deref() == Some("--chase") {
-        let dialog_id: u8 = args
-            .next()
-            .expect("--chase needs a dialog id")
-            .parse()
-            .expect("dialog id must be a byte");
+    let mut chase_id: Option<u8> = None;
+    // A roster read from the seed save answers "who stands here *now*",
+    // which is the wrong question whenever the divergence is positional:
+    // the party has to reach the cell first, and NPC schedules advance a
+    // turn per step on the way. `--script` replays the same semicolon
+    // separated command list the engine's `--play-script` takes, against
+    // the same handler, so the report below describes the cell the
+    // paired scenario actually talks into rather than the seed's.
+    while let Some(flag) = args.next() {
+        match flag.as_str() {
+            "--chase" => {
+                chase_id = Some(
+                    args.next()
+                        .expect("--chase needs a dialog id")
+                        .parse()
+                        .expect("dialog id must be a byte"),
+                );
+            }
+            "--script" => {
+                let script = args.next().expect("--script needs a command list");
+                let commands = split_play_script(&script);
+                replay_play_script_commands(&mut state, dir, &commands, |_, _, _| Ok(()))
+                    .expect("script must replay");
+                println!("replayed {} command(s) from --script", commands.len());
+            }
+            other => panic!("unknown option {other}"),
+        }
+    }
+    if let Some(dialog_id) = chase_id {
         chase(&mut state, dialog_id, 64);
         return;
     }
