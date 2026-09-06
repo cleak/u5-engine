@@ -899,6 +899,15 @@ pub enum PartySelectorTarget {
 }
 
 impl PartySelectorTarget {
+    /// Whether this prompt opens a new block in the message window - and
+    /// so spends `text-output.md §10.4`'s leading line feed on a blank row
+    /// - or continues the one already open. Only N-New Order's second
+    /// prompt continues: a capture reads `Swap Shamino` / `with Iolo!` on
+    /// consecutive rows.
+    pub const fn prompt_opens_a_block(self) -> bool {
+        !matches!(self, Self::NewOrder { first: Some(_) })
+    }
+
     /// The message-window prompt the selector opens with.
     pub fn prompt(self) -> &'static str {
         match self {

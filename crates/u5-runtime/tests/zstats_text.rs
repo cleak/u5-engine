@@ -570,10 +570,10 @@ fn the_status_sub_prompt_keeps_one_blank_row_under_the_player_line() {
     // top row: `text-output.md §3`/§10 only move text up once output would
     // pass the bottom row (`cleak/u5-engine#11`). What this pins is the
     // blank row, not the absolute position.
-    assert_eq!(prompt.row, 14);
+    assert_eq!(prompt.row, 15);
     let above = layout.rows[layout.rows.len() - 2].row;
     assert_eq!(
-        above, 12,
+        above, 13,
         "one blank row must sit between the Player: line and the prompt: {placed:?}"
     );
 }

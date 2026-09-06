@@ -25200,12 +25200,16 @@ fn z_stats_selector_cancels_with_the_published_none_result() {
         );
         assert!(state.active_party_selector.is_some());
         assert_eq!(state.roster_box_label().as_deref(), Some("Select:"));
+        // `text-output.md §10.4`: the prompt's leading line feed lands on
+        // the row the echo left the cursor on, so a blank row separates
+        // them. Measured on a paired capture of `R` Ready and `N` New
+        // Order (`cleak/u5-engine#5`).
         assert_eq!(
             transcript_texts(&state),
-            vec!["Z-stats...", PARTY_SELECTION_PROMPT]
+            vec!["Z-stats...", "", PARTY_SELECTION_PROMPT]
         );
         assert!(state.message_entries()[0].is_command_echo);
-        assert!(!state.message_entries()[1].is_command_echo);
+        assert!(!state.message_entries()[2].is_command_echo);
 
         assert!(state.step_active_party_selector(cancel, ""));
         assert!(state.active_party_selector.is_none());
@@ -25411,11 +25415,15 @@ fn use_item_echo_puts_the_item_prompt_on_the_next_line() {
             .handle_top_down_key_with_inline('U', Path::new(""), None, None, None, None)
             .unwrap()
     );
+    // `text-output.md §10.4`: the prompt's leading feed buys a blank row
+    // between the echo and it. Measured on a paired capture of `U` Use
+    // (`cleak/u5-engine#5`).
     let entries = state.message_entries();
     assert_eq!(entries[0].text, "Use item");
     assert!(entries[0].is_command_echo);
-    assert_eq!(entries[1].text, ITEM_SELECTION_PROMPT);
-    assert!(!entries[1].is_command_echo);
+    assert!(entries[1].explicit_blank);
+    assert_eq!(entries[2].text, ITEM_SELECTION_PROMPT);
+    assert!(!entries[2].is_command_echo);
 }
 
 #[test]

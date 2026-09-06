@@ -13220,7 +13220,7 @@ fn combat_input_dispatch_blank_or_escape_cast_prompt_commits_actor_action() {
             COMBAT_INTERFERENCE_NO_SOURCE
         );
         assert_eq!((state.combat_actors[8].x, state.combat_actors[8].y), (7, 5));
-        assert_eq!(state.message, "None!\nAvatar, armed with bare hands:\n");
+        assert_eq!(state.message, ":None!\nAvatar, armed with bare hands:\n");
     }
 }
 

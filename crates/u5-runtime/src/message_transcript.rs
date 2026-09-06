@@ -461,6 +461,15 @@ impl PlayState {
     /// uppercases, and `endgame.md §5.1`'s `Yes`/`No` echo does not. Without this the row reverts to a bare
     /// `:` as soon as the shell clears its buffer, and the transcript
     /// loses the question the answer belongs to.
+    /// Commit a reply onto the open prompt row and leave the slot holding
+    /// the completed row, so the next flush does not log the reply again.
+    pub fn commit_prompt_reply(&mut self, prompt: &str, reply: &str) {
+        self.commit_typed_prompt_line(prompt, reply);
+        let line = format!("{prompt}{reply}");
+        self.message = line.clone();
+        self.message_flushed = line;
+    }
+
     pub fn commit_typed_prompt_line(&mut self, prompt: &str, typed: &str) {
         let typed = typed.trim();
         if typed.is_empty() {

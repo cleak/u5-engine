@@ -381,6 +381,11 @@ impl PlayState {
             return MoveOutcome::Blocked;
         }
         self.active_use = Some(UseSession::new());
+        // `text-output.md §10.4`: the prompt follows the `Use item` echo,
+        // so its leading feed buys a blank row. A capture reads
+        // `>Use item`, a blank row, then `Item: None!` on one row.
+        // `cleak/u5-engine#5`.
+        self.open_prompt_block();
         self.message = self.render_active_use();
         MoveOutcome::Observed
     }
@@ -427,6 +432,8 @@ impl PlayState {
         match use_input_action(key) {
             UseInputAction::Exit => {
                 let turn_before = self.turn;
+                // The reply lands on the prompt's own row: `Item: None!`.
+                self.commit_typed_prompt_line(ITEM_SELECTION_PROMPT, ITEM_PICKER_ESCAPE_MESSAGE);
                 self.message = ITEM_PICKER_ESCAPE_MESSAGE.to_string();
                 self.ensure_use_action_turn(turn_before);
                 self.apply_post_turn_effects_after_outcome(

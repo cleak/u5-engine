@@ -146,6 +146,9 @@ impl PlayState {
     /// logged one. Re-logging it printed `For what spell?` once per typed
     /// letter.
     pub fn spell_prompt_echo(&self) -> Option<String> {
+        if let Some(session) = self.active_yell.as_ref() {
+            return Some(self.render_yell_session(session));
+        }
         if let Some(session) = self.active_cast.as_ref() {
             return Some(format!(":{}", rune_echo_for_buffer(&session.buffer)));
         }
@@ -220,8 +223,29 @@ impl PlayState {
         if let Some(line) = self.endgame_open_prompt_line() {
             return Some(line);
         }
-        if self.active_party_selector.is_some() {
-            return Some(PARTY_SELECTOR_PROMPT_MESSAGE.to_string());
+        // The item stage of R-Ready and U-Use keeps `Item: ` open with the
+        // picker's cursor on it, and its reply continues that row: a
+        // capture reads `Item: Done` and `Item: None!` on single rows.
+        // `cleak/u5-engine#5`.
+        if self
+            .active_use
+            .as_ref()
+            .is_some_and(|session| session.pending.is_none())
+            || self
+                .active_ready
+                .as_ref()
+                .is_some_and(|session| session.selected_party_index.is_some())
+        {
+            return Some(ITEM_SELECTION_PROMPT.to_string());
+        }
+        // Each selector target keeps its own prompt literal: `Player: `
+        // for most, `Swap ` / `with ` for N-New Order, the fountain's own
+        // for V-View. All of them end in a space, so the picker's cursor
+        // waits on that row rather than opening a fresh end-cap row under
+        // it - which is what a capture of New Order shows.
+        // `cleak/u5-engine#5`.
+        if let Some(session) = self.active_party_selector.as_ref() {
+            return Some(session.target.prompt().to_string());
         }
         if self.active_z_stats.is_some() {
             return Some(Z_STATS_STATUS_PROMPT.to_string());
@@ -289,6 +313,16 @@ impl PlayState {
         }
         let highlight = self.z_stats_initial_party_index().min(self.party.len() - 1);
         self.active_party_selector = Some(PartySelectorSession::new(target, highlight));
+        // `text-output.md §10.4`: the prompt's own leading line feed lands
+        // on the fresh row the verb echo left the cursor on, so one blank
+        // row separates the echo from the prompt. A capture of `R` Ready
+        // and `N` New Order shows `>Ready...`, a blank row, then `Player: `
+        // with the picker's cursor on it. The second New Order prompt is
+        // the exception: `with ` continues the block `Swap ` opened, with
+        // no blank between the two. `cleak/u5-engine#5`.
+        if target.prompt_opens_a_block() {
+            self.open_prompt_block();
+        }
         self.message = target.prompt().to_string();
         MoveOutcome::Observed
     }
@@ -586,12 +620,12 @@ impl PlayState {
         for ch in std::iter::once(key).chain(suffix.chars()) {
             match cast_input_action(ch) {
                 CastInputAction::Cancel => {
-                    self.message = "None!".to_string();
+                    self.message = format!(":{PARTY_SELECTOR_CANCEL_REPLY}");
                     return Ok(None);
                 }
                 CastInputAction::Complete => {
                     if session.buffer.is_empty() {
-                        self.message = "None!".to_string();
+                        self.message = format!(":{PARTY_SELECTOR_CANCEL_REPLY}");
                         return Ok(None);
                     }
                     let spell_code = inline_spell_code(&session.buffer);
@@ -1068,13 +1102,16 @@ impl PlayState {
     fn step_mix_session_char(&mut self, session: &mut MixSession, ch: char) -> Option<MoveOutcome> {
         match session.phase {
             MixPhase::Spell => match cast_input_action(ch) {
+                // M-Mix's cancel opens its own row - a capture reads
+                // `For what spell?`, the colon row, then `None!` - where
+                // C-Cast's continues the colon row. `cleak/u5-engine#5`.
                 CastInputAction::Cancel => {
-                    self.message = "None!".to_string();
+                    self.message = PARTY_SELECTOR_CANCEL_REPLY.to_string();
                     Some(MoveOutcome::PromptDeclined)
                 }
                 CastInputAction::Complete => {
                     if session.spell_buffer.is_empty() {
-                        self.message = "None!".to_string();
+                        self.message = PARTY_SELECTOR_CANCEL_REPLY.to_string();
                         Some(MoveOutcome::PromptDeclined)
                     } else {
                         self.accept_mix_spell(session);
@@ -1316,8 +1353,13 @@ impl PlayState {
         // `commands.md §5.3`: `Yell ` is an operand-follows echo and the
         // question completes that line; the typed word echoes behind a
         // colon on the next row (`cleak/u5-spec#194` capture).
+        // The colon row is the free-text input line and is *edited*, not
+        // logged: a capture reads `>Yell what?` and then a single `:HELLO`
+        // row, where this engine logged an empty `:` row first and the
+        // typed one under it. It is supplied live by
+        // [`Self::spell_prompt_echo`] (`cleak/u5-engine#5`).
         if !self.complete_open_direction_echo("Yell ", YELL_QUESTION) {
-            self.message = format!("Yell {YELL_QUESTION}\n:");
+            self.message = format!("Yell {YELL_QUESTION}");
             return MoveOutcome::Observed;
         }
         self.message = self.render_active_yell();
@@ -2302,6 +2344,16 @@ impl PlayState {
         }
     }
 
+    /// `text-output.md §10.4`: a prompt that opens its own block spends a
+    /// leading line feed on the fresh row the verb echo left the cursor
+    /// on, so one blank row stands between the echo and the prompt. A
+    /// paired capture of `R` Ready and `N` New Order shows it under both.
+    /// `cleak/u5-engine#5`.
+    pub fn open_prompt_block(&mut self) {
+        self.flush_message_slot();
+        self.push_explicit_blank_message_entry();
+    }
+
     pub fn start_ready_equipment(&mut self) -> MoveOutcome {
         if self.party.is_empty() {
             self.message = "No party members are available.".to_string();
@@ -2312,6 +2364,7 @@ impl PlayState {
         // on a completed equip.
         self.charge_ready_equipment_turn();
         self.active_ready = Some(ReadySession::new());
+        self.open_prompt_block();
         self.message = self.render_active_ready();
         MoveOutcome::Observed
     }
@@ -2478,7 +2531,7 @@ impl PlayState {
                     self.active_ready = Some(session);
                 }
                 PartyTargetSelectorAction::Cancel => {
-                    self.message = ITEM_PICKER_ESCAPE_MESSAGE.to_string();
+                    self.commit_prompt_reply(ITEM_SELECTION_PROMPT, ITEM_PICKER_ESCAPE_MESSAGE);
                 }
                 PartyTargetSelectorAction::Discard => {
                     self.message = self.render_ready_session(&session);
@@ -2490,7 +2543,9 @@ impl PlayState {
 
         let action = ready_input_action(key);
         if matches!(action, ReadyInputAction::Exit) {
-            self.message = READY_PICKER_ESCAPE_MESSAGE.to_string();
+            // A capture reads `Item: Done` on one row: the reply lands on
+            // the prompt's own row (`cleak/u5-engine#5`).
+            self.commit_prompt_reply(ITEM_SELECTION_PROMPT, READY_PICKER_ESCAPE_MESSAGE);
             return true;
         }
 

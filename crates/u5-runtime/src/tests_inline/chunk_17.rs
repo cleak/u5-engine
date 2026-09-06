@@ -546,7 +546,9 @@
         assert_eq!(state.spell_prompt_echo().as_deref(), Some(":"));
         assert!(state.step_active_cast('\u{1b}', "", Path::new("")).unwrap().is_none());
         assert!(state.active_cast.is_none());
-        assert_eq!(state.message, "None!");
+        // The cancel reply continues the colon row the prompt opened
+        // (`cleak/u5-engine#5`).
+        assert_eq!(state.message, ":None!");
         assert_eq!(state.turn, 0);
     }
 
@@ -2628,7 +2630,7 @@ Mixed 1 IL charge; stock is 1.");
 
         handle_play_key_input(&mut state, '\u{1b}', "", Path::new("")).unwrap();
         assert!(state.active_ready.is_none());
-        assert_eq!(state.message, READY_PICKER_ESCAPE_MESSAGE);
+        assert_eq!(state.message, format!("{ITEM_SELECTION_PROMPT}{READY_PICKER_ESCAPE_MESSAGE}"));
         assert_eq!(state.turn, 1);
     }
 
@@ -2712,7 +2714,7 @@ Mixed 1 IL charge; stock is 1.");
         handle_play_key_input(&mut member_cancel, 'R', "", Path::new("")).unwrap();
         handle_play_key_input(&mut member_cancel, '\u{1b}', "", Path::new("")).unwrap();
         assert!(member_cancel.active_ready.is_none());
-        assert_eq!(member_cancel.message, ITEM_PICKER_ESCAPE_MESSAGE);
+        assert_eq!(member_cancel.message, format!("{ITEM_SELECTION_PROMPT}{ITEM_PICKER_ESCAPE_MESSAGE}"));
 
         let mut picker_exit = test_state(open_grid(), 1, 1);
         picker_exit.equipment_stock[EQUIPMENT_ID_BOW] = 1;
@@ -2721,7 +2723,7 @@ Mixed 1 IL charge; stock is 1.");
         handle_play_key_input(&mut picker_exit, '\r', "", Path::new("")).unwrap();
         handle_play_key_input(&mut picker_exit, '\u{1b}', "", Path::new("")).unwrap();
         assert!(picker_exit.active_ready.is_none());
-        assert_eq!(picker_exit.message, READY_PICKER_ESCAPE_MESSAGE);
+        assert_eq!(picker_exit.message, format!("{ITEM_SELECTION_PROMPT}{READY_PICKER_ESCAPE_MESSAGE}"));
     }
 
     #[test]
