@@ -2942,8 +2942,16 @@ impl PlayState {
                 }
                 let description =
                     self.look_description_for_world_tile(tile, look_table, game_dir, plane, x, y)?;
-                self.message =
-                    format!("You see: {} at ({x}, {y}) on {}.", description, plane.key());
+                // `view.md §3`: "the shared \"thou dost see\" preamble is
+                // printed here" with the description on the next row, and
+                // `commands.md §8.1` has the look family never print "tile
+                // ids, coordinates, active-object slot numbers, terrain-class
+                // names". The town and dungeon arms above already do this; the
+                // overworld arm was still emitting the terminal harness's
+                // inline form, `You see: mountains at (240, 72) on
+                // BRITANNIA.`, where a paired capture of Deceit's exit reads
+                // `Thou dost see` / `mountains` (`cleak/u5-engine#5`).
+                self.message = format!("{LOOK_RESULT_PREFIX}\n{description}");
                 Ok(MoveOutcome::Observed)
             }
         }

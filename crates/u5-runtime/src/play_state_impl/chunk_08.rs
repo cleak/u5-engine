@@ -1110,10 +1110,19 @@ impl PlayState {
         // and (1, 7), where klimbing descends to level one.
         // `dungeon-mode.md` Section 8.1: "Applying a climb prints `Up!` or
         // `Down!` **first**, before any test."
-        self.emit_message_line(match intent {
+        //
+        // `commands.md §5.4`: the direction prompt "prints **nothing** before
+        // waiting. The hyphen at the end of the verb echo *is* the prompt", so
+        // the word completes the `Klimb-` row rather than opening one under
+        // it. A paired capture of Deceit's exit reads `>Klimb-Up!` on one row
+        // where this engine wrapped after the hyphen.
+        let word = match intent {
             ClimbIntent::Up => DUNGEON_KLIMB_UP,
             ClimbIntent::Down => DUNGEON_KLIMB_DOWN,
-        });
+        };
+        if !self.complete_open_direction_echo(DUNGEON_KLIMB_PROMPT_ONE, word.trim_end()) {
+            self.emit_message_line(word);
+        }
         let Some(delta) = dungeon_ladder_delta(tile, intent) else {
             // "an impassable destination then adds `Failed!` with the short
             // **rising** sweep ... the same recipe the spell-failure tail
@@ -1167,7 +1176,9 @@ impl PlayState {
         self.mark_visibility_dirty();
         self.advance_turn();
         // Section 8.1: the direction word above is the whole of an accepted
-        // climb's narration; there is no level or coordinate line.
+        // climb's narration; there is no level or coordinate line. It has
+        // already completed the `Klimb-` row above, so this only refreshes the
+        // compatibility slot.
         self.message = match intent {
             ClimbIntent::Up => DUNGEON_KLIMB_UP,
             ClimbIntent::Down => DUNGEON_KLIMB_DOWN,

@@ -1,0 +1,31 @@
+# Leave a dungeon by climbing, and land where the original lands.
+#
+# `dungeon-mode.md §13` owns the Z transitions, and the ascent from the
+# entrance level is the one that leaves the dungeon entirely: it exits to the
+# dungeon's own overworld cell and re-enters top-down mode. Nothing in the
+# paired suite covered a Z transition of any kind, and this one is fully
+# deterministic - no roll anywhere in it - so the two sides should agree cell
+# for cell rather than only in shape.
+# requires-seed: the party on Deceit's entrance level, with a torch to hand
+both	wait	9000
+both	key	space
+both	wait	4000
+both	key	j
+both	wait	9000
+both	shot	arrival	Deceit, level one
+both	key	i
+both	wait	2500
+both	shot	lit	Torch lit
+both	key	k
+both	wait	5000
+both	shot	climbed	After Klimb: out of the dungeon
+both	key	l
+both	wait	1200
+both	key	Up
+both	wait	2500
+both	shot	look	Look north from the dungeon entrance
+both	key	Up
+both	wait	2000
+both	key	Up
+both	wait	2500
+both	shot	walked	Two steps north on the overworld
