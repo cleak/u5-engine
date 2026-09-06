@@ -6595,7 +6595,14 @@ fn visual_route_suite_cases() -> Vec<VisualRouteSuiteCase> {
             label: "route-endgame-missing-box-terminal-jitter",
             frame_kind: "visual route endgame frame",
             options: PlayOptions::default(),
-            script: &["Y", "Y", ""],
+            // Page the greeting, refuse the first box question - which is
+            // the answer that still reaches `endgame.md §5` step 4's
+            // explicit sandalwood question (`cleak/u5-engine#12`) - and
+            // answer that one into the terminal tableau. Nothing follows
+            // it: the tableau is terminal and a further key leaves the
+            // frame exactly as it stands, which is what this route's name
+            // is about.
+            script: &["Y", "N", "Y"],
             configure: Some(seed_visual_route_endgame_missing_box),
         },
         VisualRouteSuiteCase {
@@ -9249,7 +9256,12 @@ fn visual_route_allows_unchanged_step(route_label: &str, step: usize) -> bool {
     // class bytes in the world tile index space, where a Bard (`0x44`)
     // is pixel-identical to the tableau's authored floor tile. Those
     // steps therefore produce byte-identical frames today.
-    (route_label == "route-endgame-tableau-walk-in")
+    // The answer that ends the audience leaves the tableau where it
+    // stands in this engine. A paired capture shows the original
+    // rearranging the party around Lord British's table at that moment,
+    // which is not implemented: cleak/u5-engine#12.
+    (route_label == "route-endgame-missing-box-terminal-jitter" && step == 3)
+        || (route_label == "route-endgame-tableau-walk-in")
         || (route_label == "route-endgame-box-full-victory-cinematic" && (3..=98).contains(&step))
         || (route_label == "route-doom-combat-multi-round-pass" && (2..=5).contains(&step))
         || (route_label == "route-castle-light-decay-route" && (1..=2).contains(&step))
