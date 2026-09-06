@@ -61,3 +61,22 @@ both	wait	1200
 both	key	Right
 both	wait	3500
 both	shot	talk	Talk east after entering through the door
+both	type	name
+both	key	Return
+both	wait	3000
+both	shot	name	NAME reply
+both	type	job
+both	key	Return
+both	wait	3000
+both	shot	job	JOB reply
+both	type	health
+both	key	Return
+both	wait	3000
+both	shot	health	HEALTH reply
+both	type	zork
+both	key	Return
+both	wait	3000
+both	shot	nomatch	An unmatched keyword
+both	key	Return
+both	wait	3000
+both	shot	bye	Empty line ends the conversation
