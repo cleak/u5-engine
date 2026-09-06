@@ -31,6 +31,41 @@ fn main() {
         let commands = split_play_script(&script);
         replay_play_script_commands(&mut state, dir, &commands, |_, _, _| Ok(())).expect("replay");
     }
+    let objects = state
+        .active_objects
+        .iter()
+        .filter(|object| !object.is_empty())
+        .count();
+    println!(
+        "turn {} at ({}, {}); {objects} live active object(s)",
+        state.turn, state.player.x, state.player.y
+    );
+    for object in state.active_objects.iter().filter(|o| !o.is_empty()) {
+        println!(
+            "  object type 0x{:02x} tile 0x{:02x} at ({}, {})",
+            object.type_byte, object.tile, object.x, object.y
+        );
+    }
+    // `U5_PROBE_ENCOUNTERS=1` additionally calls the wandering-encounter
+    // probe directly, which separates "the spawner cannot fire here" from
+    // "the turn never reached the spawner" - the two explanations for a
+    // scripted run that meets no encounters.
+    if std::env::var("U5_PROBE_ENCOUNTERS").is_ok() {
+        let mut fired = 0;
+        for _ in 0..300 {
+            if state
+                .apply_native_world_encounter_probe(WorldPlane::Britannia)
+                .is_some()
+            {
+                fired += 1;
+            }
+        }
+        println!("direct encounter probe: {fired}/300 spawned");
+        println!(
+            "walkers ran this turn: {}",
+            state.world_walkers_ran_this_turn
+        );
+    }
     let effects = state.sound_effects_after(0);
     println!("{} effect(s):", effects.len());
     let mut jitter = audio::RumbleJitter::new();
