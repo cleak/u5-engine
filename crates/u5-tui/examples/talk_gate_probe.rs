@@ -111,6 +111,15 @@ fn main() {
     // on each frontier cell and asks the ordinary movement handler
     // whether a step lands. NPC schedules still drift during the real
     // walk, so prefer the shortest route offered.
+    //
+    // Caveat, learned the hard way: the movement handler refuses cells
+    // occupied by vehicles, furniture and other NPCs as well as by
+    // walls, and those move. A snapshot search therefore reports
+    // *fewer* reachable cells than the player has, and can call a town
+    // sealed when it is merely congested - which is what it did for
+    // Minoc, whose entrance plaza is fenced by carts at every hour this
+    // search samples. Treat "unreachable on foot" as "no route in this
+    // snapshot", never as geometry.
     let start = (state.player.x, state.player.y);
     let mut came: HashMap<(usize, usize), ((usize, usize), char)> = HashMap::new();
     let mut queue = VecDeque::from([start]);

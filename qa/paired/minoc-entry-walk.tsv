@@ -1,8 +1,11 @@
-# The engine walks the party into Minoc and finds a sealed four-cell pocket:
-# from the entry cell (15,30) only (15,29), (14,29) and (16,29) are reachable,
-# and the town's eleven NPCs are all unreachable on foot. Either Minoc's
-# entrance really is enclosed or the engine's passability for this town is
-# wrong. Same keystrokes both sides; the echoes say which.
+# The engine finds Minoc's entrance sealed: from the entry cell (15,30) only
+# (14,29), (15,29), (16,29) and (15,31) are reachable, at every hour of the
+# day, and all eleven of the town's NPCs are unreachable on foot. The blockers
+# are vehicle, furniture and npc-sprite objects rather than walls.
+#
+# An earlier revision of this scenario probed north and west only, found the
+# stock game blocked in the same places, and concluded the enclosure was shipped
+# geometry. That was two directions out of four. This walks all of them.
 both	wait	9000
 both	key	space
 both	wait	4000
@@ -16,14 +19,21 @@ both	wait	700
 both	key	Up
 both	wait	700
 both	key	Up
-both	wait	700
-both	key	Up
 both	wait	2000
-both	shot	north	Four steps north from the entry cell
-both	key	Left
-both	wait	700
+both	shot	north	Three steps north from the entry cell
 both	key	Left
 both	wait	700
 both	key	Left
 both	wait	2000
-both	shot	west	Three steps west
+both	shot	west	Two steps west
+both	key	Down
+both	wait	700
+both	key	Down
+both	wait	700
+both	key	Right
+both	wait	700
+both	key	Right
+both	wait	700
+both	key	Right
+both	wait	2000
+both	shot	south-east	Back south, then three steps east along the bottom row
