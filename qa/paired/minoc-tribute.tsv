@@ -1,0 +1,50 @@
+# `blackthorn.md §7a` branch 2, the Minoc charity demand, whose wording the
+# engine still invents. Minoc carries a dialog-id 255 guard at 08:00, 16:00 and
+# 20:00 but not at noon, which is why every earlier scenario missed it. Seeded
+# on the overworld at 16:00; walk in through the door and north to the gate,
+# then Talk across the counter-height tile at (15,28) - `conversation.md §2`
+# step 3's talk-through rule is what reaches the guard behind it.
+both	wait	9000
+both	key	space
+both	wait	4000
+both	key	j
+both	wait	8000
+both	key	e
+both	wait	4000
+both	key	Up
+both	wait	600
+both	key	Up
+both	wait	600
+both	key	Up
+both	wait	600
+both	key	Up
+both	wait	600
+both	key	Up
+both	wait	600
+both	key	Up
+both	wait	2000
+both	shot	at-gate	At the gate counter
+both	key	l
+both	wait	1200
+both	key	Up
+both	wait	2500
+both	shot	look	Look north at the gate door
+both	key	o
+both	wait	1200
+both	key	Up
+both	wait	2500
+both	shot	opened	Open the gate door
+both	key	Up
+both	wait	700
+both	key	Up
+both	wait	700
+both	key	Up
+both	wait	700
+both	key	Up
+both	wait	2000
+both	shot	inside	Through the gate
+both	key	t
+both	wait	1200
+both	key	Up
+both	wait	3500
+both	shot	talk	Talk north at the guard
