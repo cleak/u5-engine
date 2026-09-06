@@ -7081,12 +7081,9 @@ impl PlayState {
     /// active-object table rather than in a descriptor slot, so this is
     /// where the same count lives. `cleak/u5-engine#9`.
     pub fn combat_absorbable_field_marker_present(&self) -> bool {
-        self.active_objects
-            .iter()
-            .take(OOL_SLOTS)
-            .any(|object| {
-                object.tile != 0 && dungeon_room_absorbable_field_family(object.type_byte)
-            })
+        self.active_objects.iter().take(OOL_SLOTS).any(|object| {
+            object.tile != 0 && dungeon_room_absorbable_field_family(object.type_byte)
+        })
     }
 
     pub fn announce_combat_victory_if_needed(&mut self) -> bool {
