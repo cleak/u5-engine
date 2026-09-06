@@ -19126,7 +19126,16 @@ fn endgame_flow_uses_loaded_endmsg_records_for_prompts_rite_and_refusal() {
     assert!(refusal.message.contains("Hast thou brought my box?"));
 
     refusal.resolve_endgame_confirmation(true);
-    assert!(refusal.message.contains("Yes\n\n"));
+    // §5.1's echo continues the record's own reply row rather than
+    // starting a new one; the fixture's record 1 has no `You reply: `
+    // tail, so the echo lands on its last row.
+    assert!(
+        refusal
+            .message_entries()
+            .iter()
+            .any(|entry| entry.text.ends_with("Yes")),
+        "the echo continues the prompt's own row"
+    );
     assert!(refusal.message.contains("The sandalwood box itself?"));
     refusal.resolve_endgame_confirmation(false);
     assert_eq!(refusal.message, "Wait here without the box");

@@ -436,11 +436,11 @@ impl EndgameState {
     pub fn second_prompt_text(&self, first_answer: bool) -> String {
         if let Some(messages) = &self.messages {
             if let Some(prompt) = messages.second_box_prompt() {
-                // §5.1: the answer is echoed as `Yes` or `No` "followed
-                // by a blank line, and only then does the next record
-                // print". The record supplies its own `You reply: `
-                // tail, so nothing is appended after it.
-                return format!("{}\n\n{prompt}", yes_no_word(first_answer));
+                // The echo is committed onto the record's own row by the
+                // caller; this is the blank line and the next record that
+                // §5.1 says follow it.
+                let _ = first_answer;
+                return format!("\n{prompt}");
             }
         }
         "Endgame: Lord British asks again for the sandalwood box. (Y/N)".to_string()
@@ -2132,6 +2132,17 @@ impl PlayState {
                 answer,
                 current.messages,
             ));
+            // §5.1: the answer is echoed "as the literal `Yes` or `No`
+            // followed by a blank line". Records 1 and 2 end
+            // `You reply: ` **with a trailing space**, so
+            // `commands.md §5.3` keeps the echo on that row - measured:
+            // the original reads `You reply: Yes`.
+            if let Some(prompt) = self.endgame_open_prompt_line() {
+                // The prompt may still be in the message slot; the shell
+                // flushes per turn but a direct caller does not.
+                self.flush_message_slot();
+                self.commit_typed_prompt_line(&prompt, yes_no_word(answer));
+            }
             self.message = self
                 .endgame
                 .as_ref()

@@ -440,8 +440,9 @@ impl PlayState {
     ///
     /// `conversation.md §6`: the keyword prompt's `:` row is the one
     /// being edited, and the original keeps what was typed there once
-    /// the line is submitted - a capture reads `:JOB`, uppercased and
-    /// with no separating space. Without this the row reverts to a bare
+    /// the line is submitted - a capture reads `:JOB`, with no
+    /// separating space. Casing is the caller's: the keyword loop
+    /// uppercases, and `endgame.md §5.1`'s `Yes`/`No` echo does not. Without this the row reverts to a bare
     /// `:` as soon as the shell clears its buffer, and the transcript
     /// loses the question the answer belongs to.
     pub fn commit_typed_prompt_line(&mut self, prompt: &str, typed: &str) {
@@ -455,11 +456,8 @@ impl PlayState {
         if entry.text != prompt {
             return;
         }
-        let typed = typed.to_ascii_uppercase();
-        entry.text.push_str(&typed);
-        entry
-            .glyphs
-            .extend(ordinary_glyphs_from_engine_text(&typed));
+        entry.text.push_str(typed);
+        entry.glyphs.extend(ordinary_glyphs_from_engine_text(typed));
     }
 
     pub fn emit_tlk_message(&mut self, rendered: TlkRenderedText) {
