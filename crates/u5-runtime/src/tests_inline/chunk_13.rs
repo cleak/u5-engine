@@ -19126,7 +19126,7 @@ fn endgame_flow_uses_loaded_endmsg_records_for_prompts_rite_and_refusal() {
     assert!(refusal.message.contains("Hast thou brought my box?"));
 
     refusal.resolve_endgame_confirmation(true);
-    assert!(refusal.message.contains("Thou answered yes."));
+    assert!(refusal.message.contains("yes"));
     assert!(refusal.message.contains("The sandalwood box itself?"));
     refusal.resolve_endgame_confirmation(false);
     assert_eq!(refusal.message, "Wait here without the box");

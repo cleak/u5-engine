@@ -411,18 +411,23 @@ impl EndgameState {
         self.outcome.is_some()
     }
 
+    /// `endgame.md §5` steps 1-2, composed from the `ENDMSG.DAT` records
+    /// rather than around them.
+    ///
+    /// Record 0 ends mid-sentence, on `"Well met,` and a line feed: the
+    /// party leader's name belongs on the row after it, and the capture
+    /// behind `cleak/u5-engine#10` shows the original closing that
+    /// sentence with `!"` before the blank row and record 1. Record 1
+    /// already ends `You reply: `, so the prompt needs no suffix - the
+    /// engine's `(Y/N)` was an invention, and the leading
+    /// `{leader_name}: ` was the name being prefixed to the greeting
+    /// instead of substituted into it.
     pub fn first_prompt_text(&self, leader_name: &str) -> String {
         if let Some(messages) = &self.messages {
-            let mut lines = Vec::new();
-            if let Some(greeting) = messages.initial_greeting() {
-                lines.push(format!("{leader_name}: {greeting}"));
-            }
-            if let Some(prompt) = messages.first_box_prompt() {
-                lines.push(prompt.to_string());
-            }
-            if !lines.is_empty() {
-                lines.push("(Y/N)".to_string());
-                return lines.join("\n");
+            if let (Some(greeting), Some(prompt)) =
+                (messages.initial_greeting(), messages.first_box_prompt())
+            {
+                return format!("{greeting}{leader_name}!\"\n\n{prompt}");
             }
         }
         "Endgame: Lord British asks whether thou hast brought his box. (Y/N)".to_string()
@@ -431,10 +436,11 @@ impl EndgameState {
     pub fn second_prompt_text(&self, first_answer: bool) -> String {
         if let Some(messages) = &self.messages {
             if let Some(prompt) = messages.second_box_prompt() {
-                return format!(
-                    "Thou answered {}.\n{prompt}\n(Y/N)",
-                    yes_no_word(first_answer)
-                );
+                // §5 step 3: "The game echoes the answer into the
+                // dialogue stream." The echo's wording is still the
+                // engine's; the record supplies its own `You reply: `
+                // tail, so no `(Y/N)` is appended.
+                return format!("{}\n{prompt}", yes_no_word(first_answer));
             }
         }
         "Endgame: Lord British asks again for the sandalwood box. (Y/N)".to_string()
