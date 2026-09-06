@@ -42,9 +42,8 @@ both	wait	20000
 both	wait	20000
 both	shot	prompted	Nearly a minute on the confirmation
 both	key	y
-both	wait	3000
+both	wait	4000
+both	shot	first-answer	After the first confirmation
 both	key	y
-both	wait	3000
-both	key	Y
-both	wait	6000
-both	shot	answered	Three answer attempts
+both	wait	8000
+both	shot	answered	After the second confirmation, into the rite
