@@ -77,12 +77,14 @@ game inside the location, or the scenario must walk in through the door.
 
 **Reading the rows.** The DOSBox side is captured at 640x400, an exact 2:1
 downscale of the 320x200 screen, so its message window can be decoded glyph by
-glyph against `IBM.CH` and compared as text. The engine side is captured at
-1280x720 - four times the width but 3.6 times the height - so its glyphs do not
-survive resampling and only coarse row-occupancy comparisons are reliable on
-it. For text-level comparison, render the engine's side natively with
+glyph against `IBM.CH` and compared as text. The engine side cannot be, at any
+window size: the Bevy shell presents its 320x200 frame at the 4:3 display
+aspect (`DISPLAY_PIXEL_ASPECT`, 1.20), stretching the 200 rows and letterboxing
+the remainder, which is the CRT geometry the original had and not a bug to fix.
+Its capture is for side-by-side comparison and for coarse row-occupancy checks.
+For text-level comparison render the engine's side natively with
 `u5-engine --from-save --play-script ... --save-screen <PNG>`, which goes
-through the same message-window layout as the shell.
+through the same message-window layout.
 
 **A missing seed does not fail the run.** Without one the profile's shipped
 `SAVED.GAM` has no active Avatar, both sides sit on the title menu answering
