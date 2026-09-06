@@ -250,6 +250,21 @@ impl PlayState {
         if self.active_z_stats.is_some() {
             return Some(Z_STATS_STATUS_PROMPT.to_string());
         }
+        // Y-Yell's colon row is a free-text input line, the same shape
+        // `conversation.md §7.6` gives the keyword and ASK-WHO prompts:
+        // `>Yell what?` closes the question and the typed word continues
+        // the `:` row under it (`cleak/u5-spec#194` capture reads a single
+        // `:HELLO` row). Without this the layout reserved a fresh live row
+        // *plus* its separating blank under the logged colon, and paid for
+        // the two rows by scrolling two rows of history off the top: at
+        // the `yell-prompt` beat of `qa/paired/hut-prompts.tsv` the stock
+        // window still showed `>Cast...` and `Player: Avatar` on rows 11
+        // and 12 while the engine had dropped both and left rows 22 and 23
+        // empty. [`Self::spell_prompt_echo`] deliberately returns nothing
+        // for Yell so the shell's own buffer lands on this row.
+        if self.active_yell.is_some() {
+            return Some(YELL_FREE_TEXT_OPEN_LINE.to_string());
+        }
 
         if self
             .active_yes_no_prompt

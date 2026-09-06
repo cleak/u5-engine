@@ -823,6 +823,13 @@ pub const XIT_ON_FOOT_REFUSAL: &str = "what?";
 /// `cleak/u5-spec#194` (black-box): a plain Yell that matches neither a
 /// Shadowlord name nor a Word of Power prints `No effect!`.
 pub const YELL_NO_EFFECT_MESSAGE: &str = "No effect!";
+/// The row Y-Yell's typed word is edited on. `commands.md §5.3` puts
+/// the echo behind a colon on the row under the question, and
+/// `text-output.md §10.6` keeps a prompt that is waiting for input on
+/// its own row with the cursor inline - so this is an open prompt line,
+/// not a fresh live row. Same literal as the conversation prompts'
+/// [`crate::TLK_KEYWORD_PROMPT_OPEN_LINE`], different producer.
+pub const YELL_FREE_TEXT_OPEN_LINE: &str = ":";
 /// `commands.md §11`: "the ordinary `Yell what?` question", completing
 /// the `Yell ` echo.
 pub const YELL_QUESTION: &str = "what?";
