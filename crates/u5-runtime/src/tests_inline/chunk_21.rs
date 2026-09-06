@@ -4548,7 +4548,9 @@ fn conversation_opening_reseeds_only_for_strangers_and_uses_name_coin_flip() {
     state.prng_state = 0x0aaa;
 
     let known = state.active_conversation_greeting_rendered_with_host_seed(0x0123);
-    assert_eq!(known.text, "Greetings");
+    // The Description entry runs first now (`cleak/u5-spec#198`), so the
+    // opening carries it ahead of the greeting.
+    assert_eq!(known.text, "a quiet sage\n\nGreetings");
     assert_eq!(state.prng_state, 0x0aaa);
 
     state.talk_branch_flags.clear();
@@ -4560,7 +4562,11 @@ fn conversation_opening_reseeds_only_for_strangers_and_uses_name_coin_flip() {
     let stranger = state.active_conversation_greeting_rendered_with_host_seed(0x0456);
     assert_eq!(
         stranger.text,
-        if introduces { "I am called Maris" } else { "" }
+        if introduces {
+            "a quiet sage\n\nI am called Maris"
+        } else {
+            "a quiet sage"
+        }
     );
     assert_eq!(state.prng_state, expected_stream);
 }
@@ -4768,12 +4774,23 @@ fn active_conversation_preserves_protected_run_font_in_message_transcript() {
         crate::conversation_session::ConversationSession::new(fields, vec![String::new(); 5]),
     ));
 
-    assert_eq!(state.advance_active_conversation_greeting(), "INOP");
-    let entry = state.message_entries().last().unwrap();
-    assert_eq!(entry.text, "INOP");
+    // The opening is the composed §9 envelope now: the `You see `
+    // lead-in, the Description and Greeting entries, and §6's prompt.
+    assert_eq!(
+        state.advance_active_conversation_greeting(),
+        format!("{TLK_OPENING_DESCRIPTION_PREFIX}INOP\n{TLK_KEYWORD_PROMPT}")
+    );
+    let entry = state
+        .message_entries()
+        .iter()
+        .rev()
+        .find(|entry| entry.text.contains("INOP"))
+        .unwrap();
+    // The row also carries the `You see ` lead-in, which is ordinary
+    // text; the protected run is the `INOP` span, which must stay runic.
+    let start = entry.text.find("INOP").expect("protected run is on the row");
     assert!(
-        entry
-            .glyphs
+        entry.glyphs[start..start + "INOP".len()]
             .iter()
             .all(|glyph| glyph.font == TlkGlyphFont::Runic)
     );

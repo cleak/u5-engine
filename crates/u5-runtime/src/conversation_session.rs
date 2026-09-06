@@ -264,6 +264,29 @@ impl ConversationSession {
 
     /// Run the greeting through the byte runner. Caller should display
     /// the rendered text and then transition to keyword input.
+    /// `conversation.md §9` step 2's Description entry.
+    ///
+    /// The section describes it as text printed before the greeting, and
+    /// for most NPCs that is all it is. It is an ordinary byte stream
+    /// though, and at least one shipped NPC puts the *whole* opening in
+    /// it - the description, the quoted greeting, a pause, and a `0x88`
+    /// ASK-WHO - with an empty Greeting entry
+    /// (`cleak/u5-spec#198`). Running it through the session is what
+    /// lets that stop suspend the conversation, the way the greeting
+    /// path's already does.
+    pub fn present_description(
+        &mut self,
+        ctx: &ConversationContext<'_>,
+    ) -> ConversationSessionOutput {
+        self.run_field_from(1, 0, ctx, 0)
+    }
+
+    /// Whether the opening has already suspended for input, so the
+    /// caller must not run the greeting on top of it.
+    pub fn opening_suspended(&self) -> bool {
+        matches!(self.phase, ConversationSessionPhase::AwaitingAskWho { .. })
+    }
+
     pub fn present_greeting(&mut self, ctx: &ConversationContext<'_>) -> ConversationSessionOutput {
         self.phase = ConversationSessionPhase::AwaitingKeyword;
         self.recruit_speaker_pending = false;

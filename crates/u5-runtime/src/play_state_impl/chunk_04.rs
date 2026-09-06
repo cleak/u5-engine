@@ -3741,7 +3741,6 @@ impl PlayState {
 
         if keyword.is_none() {
             if let Some(raw_fields) = raw_fields {
-                let description_text = self.render_raw_conversation_description(raw_fields, fields);
                 let session = crate::conversation_session::ConversationSession::new(
                     raw_fields.clone(),
                     fields.clone(),
@@ -3755,8 +3754,11 @@ impl PlayState {
                 if let Some(session) = self.active_conversation.as_mut() {
                     session.set_npc_slot(npc_slot);
                 }
-                let greeting = self.active_conversation_greeting_rendered();
-                let opening = conversation_opening_rendered(&description_text, &greeting);
+                let (rendered, suspended) = self.active_conversation_opening_rendered();
+                let opening = conversation_opening_rendered(
+                    &rendered,
+                    self.open_conversation_prompt(suspended),
+                );
                 self.emit_tlk_message(opening);
                 return MoveOutcome::Talked;
             }
@@ -4175,7 +4177,6 @@ impl PlayState {
         }
         let fields = dialogue.get(&(dialog_id as u16))?;
         let raw = raw_blob.get(&(dialog_id as u16))?;
-        let description_text = self.render_raw_conversation_description(raw, fields);
         let session =
             crate::conversation_session::ConversationSession::new(raw.clone(), fields.clone());
         self.active_conversation = Some(Box::new(session));
@@ -4189,8 +4190,9 @@ impl PlayState {
         if let Some(session) = self.active_conversation.as_mut() {
             session.set_npc_slot(npc_slot);
         }
-        let greeting = self.active_conversation_greeting_rendered();
-        let opening = conversation_opening_rendered(&description_text, &greeting);
+        let (rendered, suspended) = self.active_conversation_opening_rendered();
+        let opening =
+            conversation_opening_rendered(&rendered, self.open_conversation_prompt(suspended));
         let text = opening.text.clone();
         self.emit_tlk_message(opening);
         Some(text)
@@ -4199,14 +4201,29 @@ impl PlayState {
     /// Render the active conversation's greeting and put it in
     /// `state.message`. Returns the rendered text.
     pub fn advance_active_conversation_greeting(&mut self) -> String {
-        let rendered = self.active_conversation_greeting_rendered();
-        let text = rendered.text.clone();
-        self.emit_tlk_message(rendered);
+        let (rendered, suspended) = self.active_conversation_opening_rendered();
+        let opening =
+            conversation_opening_rendered(&rendered, self.open_conversation_prompt(suspended));
+        let text = opening.text.clone();
+        self.emit_tlk_message(opening);
         text
     }
 
-    fn active_conversation_greeting_rendered(&mut self) -> crate::tlk_runner::TlkRenderedText {
-        self.active_conversation_greeting_rendered_with_seed(None)
+    /// Which prompt closes the opening: `§7`'s ASK-WHO name prompt when
+    /// the Description entry suspended on its `0x88`, `§6`'s keyword
+    /// prompt otherwise.
+    fn open_conversation_prompt(&self, suspended: bool) -> &'static str {
+        if suspended {
+            crate::TLK_ASK_WHO_PROMPT
+        } else {
+            TLK_KEYWORD_PROMPT
+        }
+    }
+
+    fn active_conversation_opening_rendered(
+        &mut self,
+    ) -> (crate::tlk_runner::TlkRenderedText, bool) {
+        self.active_conversation_opening_rendered_with_seed(None)
     }
 
     /// Testable form of the conversation opener. A supplied seed is installed
@@ -4215,13 +4232,17 @@ impl PlayState {
         &mut self,
         host_seed: u16,
     ) -> crate::tlk_runner::TlkRenderedText {
-        self.active_conversation_greeting_rendered_with_seed(Some(host_seed))
+        self.active_conversation_opening_rendered_with_seed(Some(host_seed))
+            .0
     }
 
-    fn active_conversation_greeting_rendered_with_seed(
+    /// Run `§9`'s opening: the Description entry, then - unless that
+    /// suspended on its own `0x88` - the greeting or stranger branch.
+    /// Returns the rendered opening and whether it suspended.
+    fn active_conversation_opening_rendered_with_seed(
         &mut self,
         stranger_host_seed: Option<u16>,
-    ) -> crate::tlk_runner::TlkRenderedText {
+    ) -> (crate::tlk_runner::TlkRenderedText, bool) {
         let avatar_name = self
             .party_names
             .first()
@@ -4252,6 +4273,27 @@ impl PlayState {
             party_member_names: &party_member_names,
         };
         let mut rendered = crate::tlk_runner::TlkRenderedText::default();
+        // §9 step 2 first: the Description entry is a byte stream, and a
+        // shipped NPC can put the whole opening in it and leave the
+        // Greeting entry empty (`cleak/u5-spec#198`). If it suspends on
+        // its own `0x88` the greeting must not run on top of it.
+        let mut description = crate::tlk_runner::TlkRenderedText::default();
+        let mut suspended = false;
+        if let Some(session) = self.active_conversation.as_mut() {
+            let output = session.present_description(&ctx);
+            description = output.rendered_text();
+            suspended = session.opening_suspended();
+            self.apply_tlk_action_grants(&output.action_grants);
+            self.apply_tlk_gold_payments(&output.gold_payments);
+            self.apply_tlk_moral_standing(output.moral_standing);
+            self.record_tlk_signal_flags(&output.signal_flags);
+            if let Area::Town { scene, .. } = self.area {
+                self.merge_talk_branch_flags(scene, output.branch_flags_set);
+            }
+        }
+        if suspended {
+            return (description, true);
+        }
         let knows_party = self
             .active_conversation_npc_slot
             .and_then(|slot| u8::try_from(slot).ok())
@@ -4277,7 +4319,12 @@ impl PlayState {
                 self.merge_talk_branch_flags(scene, output.branch_flags_set);
             }
         }
-        rendered
+        let mut opening = description;
+        if !rendered.text.trim().is_empty() {
+            opening.push_plain("\n\n");
+            opening.push_rendered(&rendered.trimmed());
+        }
+        (opening, false)
     }
 
     /// Submit one typed keyword line to the active conversation.
@@ -5689,17 +5736,15 @@ fn set_view_overlay_pixel(
 }
 
 fn conversation_opening_rendered(
-    description: &str,
-    greeting: &crate::tlk_runner::TlkRenderedText,
+    opening: &crate::tlk_runner::TlkRenderedText,
+    prompt: &str,
 ) -> crate::tlk_runner::TlkRenderedText {
     let mut rendered = crate::tlk_runner::TlkRenderedText::plain(TLK_OPENING_DESCRIPTION_PREFIX);
-    rendered.push_plain(description.trim());
-    rendered.push_plain("\n\n");
-    rendered.push_rendered(&greeting.trimmed());
+    rendered.push_rendered(&opening.trimmed());
     if !rendered.text.ends_with('\n') {
         rendered.push_plain("\n");
     }
-    rendered.push_plain(TLK_KEYWORD_PROMPT);
+    rendered.push_plain(prompt);
     rendered
 }
 
