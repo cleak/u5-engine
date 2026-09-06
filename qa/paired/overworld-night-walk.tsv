@@ -1,0 +1,144 @@
+# Do outdoor creatures act on a party that is walking?
+#
+# `encounters.md §2.1` runs the encounter probe every overworld turn, and
+# `active-objects.md §8` has the walker's queued adjacency reactions completed
+# by the same per-turn block. Neither ran on an accepted step before
+# u5-engine#17, so the overworld was inert while the party moved: no wandering
+# encounter spawned, and no creature ever initiated anything.
+#
+# The two sides do not share a random stream, so this scenario compares
+# *behaviour*, not content: over sixty night steps each side should show
+# encounter activity - a creature appearing in the viewport, an attack line, a
+# conflict - rather than an empty world. Read the viewports as much as the
+# message window.
+# requires-seed: the party on the Britannia overworld at 02:00, when the encounter threshold can fire
+both	wait	9000
+both	key	space
+both	wait	4000
+both	key	j
+both	wait	8000
+both	shot	start	On the overworld at 02:00
+both	key	Up
+both	wait	500
+both	key	Down
+both	wait	500
+both	key	Up
+both	wait	500
+both	key	Down
+both	wait	500
+both	key	Up
+both	wait	500
+both	key	Down
+both	wait	500
+both	key	Up
+both	wait	500
+both	key	Down
+both	wait	500
+both	key	Up
+both	wait	500
+both	key	Down
+both	wait	500
+both	key	Up
+both	wait	500
+both	key	Down
+both	wait	500
+both	key	Up
+both	wait	500
+both	key	Down
+both	wait	500
+both	key	Up
+both	wait	500
+both	key	Down
+both	wait	500
+both	key	Up
+both	wait	500
+both	key	Down
+both	wait	500
+both	key	Up
+both	wait	500
+both	key	Down
+both	wait	500
+both	key	Up
+both	wait	500
+both	key	Down
+both	wait	500
+both	key	Up
+both	wait	500
+both	key	Down
+both	wait	500
+both	key	Up
+both	wait	500
+both	key	Down
+both	wait	500
+both	key	Up
+both	wait	500
+both	key	Down
+both	wait	500
+both	key	Up
+both	wait	500
+both	key	Down
+both	wait	500
+both	wait	2000
+both	shot	halfway	Thirty steps in
+both	key	Up
+both	wait	500
+both	key	Down
+both	wait	500
+both	key	Up
+both	wait	500
+both	key	Down
+both	wait	500
+both	key	Up
+both	wait	500
+both	key	Down
+both	wait	500
+both	key	Up
+both	wait	500
+both	key	Down
+both	wait	500
+both	key	Up
+both	wait	500
+both	key	Down
+both	wait	500
+both	key	Up
+both	wait	500
+both	key	Down
+both	wait	500
+both	key	Up
+both	wait	500
+both	key	Down
+both	wait	500
+both	key	Up
+both	wait	500
+both	key	Down
+both	wait	500
+both	key	Up
+both	wait	500
+both	key	Down
+both	wait	500
+both	key	Up
+both	wait	500
+both	key	Down
+both	wait	500
+both	key	Up
+both	wait	500
+both	key	Down
+both	wait	500
+both	key	Up
+both	wait	500
+both	key	Down
+both	wait	500
+both	key	Up
+both	wait	500
+both	key	Down
+both	wait	500
+both	key	Up
+both	wait	500
+both	key	Down
+both	wait	500
+both	key	Up
+both	wait	500
+both	key	Down
+both	wait	500
+both	wait	3000
+both	shot	end	Sixty steps in

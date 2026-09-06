@@ -33,6 +33,7 @@ are PRNG-selected and legitimately differ between the two sides.
 | `combat-refusal-audio` | the arena's two-tone refusal pair on `L`, and its published silence on `D` |
 | `stonegate-trapdoor-audio` | the 750-tone descent, the longest sound in the game, per side |
 | `word-of-power-audio` | the shared full-viewport flash, whose spacing the spec cannot derive |
+| `overworld-night-walk` | that the overworld is *alive* while the party walks: encounters spawn and creatures act |
 | `hut-talk` | Talk with the hut's resident: greeting, name, job, bye |
 | `hut-prompts` | New Order, Ready, Use, Cast, Mix, Yell, Search, Look, X-it, Get, Enter, Hole up, Ignite, Klimb prompt and result literals |
 | `town-britain-seeded` | Britain from a seeded save: entry, walking, Look at an NPC cell |
@@ -69,6 +70,7 @@ number of keystrokes:
 | `combat-dungeon-room`, `combat-refusal-audio` | the party one step from a dungeon room trigger, with a torch to hand |
 | `stonegate-trapdoor-audio` | the party inside Stonegate, standing in the trapdoor ring's centre cell |
 | `word-of-power-audio` | the party standing on the Britannia overworld |
+| `overworld-night-walk` | the party on the Britannia overworld at 02:00, when the encounter threshold can fire |
 | `town-night-schedule` | Britain at 02:00 |
 | `town-britain-seeded`, `town-fountain`, `town-look-npc-cell` | the party inside Britain, beside the fountain for the fountain scenario |
 | `minoc-tribute`, `blackthorn-palace-password` | the party at the location named, with the quest state the exchange needs |
