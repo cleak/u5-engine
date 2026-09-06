@@ -1,0 +1,29 @@
+# The engine walks the party into Minoc and finds a sealed four-cell pocket:
+# from the entry cell (15,30) only (15,29), (14,29) and (16,29) are reachable,
+# and the town's eleven NPCs are all unreachable on foot. Either Minoc's
+# entrance really is enclosed or the engine's passability for this town is
+# wrong. Same keystrokes both sides; the echoes say which.
+both	wait	9000
+both	key	space
+both	wait	4000
+both	key	j
+both	wait	8000
+both	key	e
+both	wait	4000
+both	shot	entered	Entered Minoc through the door
+both	key	Up
+both	wait	700
+both	key	Up
+both	wait	700
+both	key	Up
+both	wait	700
+both	key	Up
+both	wait	2000
+both	shot	north	Four steps north from the entry cell
+both	key	Left
+both	wait	700
+both	key	Left
+both	wait	700
+both	key	Left
+both	wait	2000
+both	shot	west	Three steps west
