@@ -16086,6 +16086,13 @@ fn render_endgame_tableau_viewport(
         };
         blit_tile_id_to_viewport(&mut viewport, atlas, tile, object.x, object.y)?;
     }
+    // `display-driver-abi.md §11`: the endgame is the caller that selects
+    // the loaded-tile mutator's whole-tileset remap, so every tile the
+    // tableau draws - terrain and cinematic actor alike - is recoloured
+    // through its fixed sixteen-entry nibble map. It is one-shot at the
+    // endgame, which is why this is applied to the composed tableau
+    // rather than to the shared atlas. `cleak/u5-engine#7`.
+    u5_runtime::remap_endgame_tileset_pixels(&mut viewport.pixels);
     Ok(viewport)
 }
 
@@ -21324,9 +21331,13 @@ mod tests {
 
         let viewport = render_endgame_tableau_viewport(&state, &atlas).unwrap();
 
-        assert_eq!(viewport.pixels[0], 0x21 % 16);
+        // The composed tableau carries the endgame's whole-tileset remap
+        // (`cleak/u5-engine#7`), so the synthetic atlas's indices arrive
+        // mapped.
+        let remap = |index: u8| u5_runtime::ENDGAME_TILESET_NIBBLE_MAP[usize::from(index)];
+        assert_eq!(viewport.pixels[0], remap(0x21 % 16));
         let overlap_pixel = 5 * TILE_ATLAS_SIDE * viewport.width + 5 * TILE_ATLAS_SIDE;
-        assert_eq!(viewport.pixels[overlap_pixel], 0x44 % 16);
+        assert_eq!(viewport.pixels[overlap_pixel], remap(0x44 % 16));
     }
 
     #[test]
@@ -21361,9 +21372,10 @@ mod tests {
             viewport.pixels[(ENDGAME_GATE_CELL.1 * TILE_ATLAS_SIDE + row) * viewport.width
                 + ENDGAME_GATE_CELL.0 * TILE_ATLAS_SIDE]
         };
-        assert_eq!(gate_pixel(0), 1, "phase 15 retains floor row zero");
+        let remap = |index: u8| u5_runtime::ENDGAME_TILESET_NIBBLE_MAP[usize::from(index)];
+        assert_eq!(gate_pixel(0), remap(1), "phase 15 retains floor row zero");
         for row in 1..TILE_ATLAS_SIDE {
-            assert_eq!(gate_pixel(row), ((row - 1) as u8 + 2) % 16);
+            assert_eq!(gate_pixel(row), remap(((row - 1) as u8 + 2) % 16));
         }
         assert_eq!(
             atlas.tile_pixels(MOONGATE_PHASE_SCRATCH_TILE).unwrap(),
@@ -21386,7 +21398,7 @@ mod tests {
             + ENDGAME_GATE_CELL.0 * TILE_ATLAS_SIDE;
         assert_eq!(
             with_actor.pixels[top_left],
-            ENDGAME_TABLEAU_LORD_BRITISH_ACTOR_BYTE % 16,
+            remap(ENDGAME_TABLEAU_LORD_BRITISH_ACTOR_BYTE % 16),
             "active-object sprites composite after the gate cell"
         );
     }

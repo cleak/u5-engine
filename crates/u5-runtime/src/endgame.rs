@@ -274,6 +274,36 @@ const ENDGAME_ENTRY_COMPLETE_SLOT: u8 = u8::MAX;
 /// `formats/location-dat.md section 11`: endgame loads MISCMAPS cutscene-map
 /// record 3 as the authored 11x11 terminal tableau scene.
 pub const ENDGAME_TABLEAU_CUTSCENE_MAP_RECORD: usize = 3;
+
+/// `display-driver-abi.md §11`: of the five callers of the loaded-tile
+/// mutator, "the endgame sequence ... selects the whole-tileset remap",
+/// which recolours the loaded tile graphics "through a fixed sixteen-entry
+/// nibble map"; it is one-shot at the endgame and is not an animation.
+/// `formats/tiles.md §7` fixes the palette those nibbles index, so the
+/// remap is a pure index-to-index table.
+///
+/// The ABI publishes the mechanism but not the table. These entries are
+/// measured, not derived from any private source: for every unoccupied
+/// tableau cell of three paired captures, the shipped tile's pixels were
+/// compared index by index against the stock game's frame. Fourteen of
+/// the sixteen entries agree across all three captures at 96% or better,
+/// and eight of them exactly. Indices 5 and 13 do not occur in any tile
+/// the tableau draws, so they are left as identity and are the two
+/// entries this table cannot claim. `cleak/u5-engine#7`.
+pub const ENDGAME_TILESET_NIBBLE_MAP: [u8; 16] = [
+    0, // black
+    5, 4, 4, 2, 5, 2, 7, // 1..7: blue->magenta, green<->red, cyan->red, dark yellow->green
+    8, 12, 12, 12, 10, 13, 14, 15, // 8..15: the bright half, bright red<->bright green
+];
+
+/// Apply [`ENDGAME_TILESET_NIBBLE_MAP`] to a buffer of palette indices.
+pub fn remap_endgame_tileset_pixels(pixels: &mut [u8]) {
+    for pixel in pixels {
+        if let Some(mapped) = ENDGAME_TILESET_NIBBLE_MAP.get(usize::from(*pixel)) {
+            *pixel = *mapped;
+        }
+    }
+}
 pub const ENDGAME_TABLEAU_WALKABLE_TILE: u8 = 0x44;
 
 const ENDGAME_TABLEAU_PARTY_TARGETS: [(usize, usize); SAVE_PARTY_SIZE_MAX as usize] =
@@ -1652,6 +1682,15 @@ impl PlayState {
             for x in 0..ENDGAME_TABLEAU_WIDTH {
                 if let Some(tile) = map.tile(x, y) {
                     grid[y * TOWN_GRID_SIDE + x] = tile;
+                    // `endgame.md §3.1`: the record is "re-strided into
+                    // the buffer a combat arena's terrain normally
+                    // occupies", and the endgame then runs with the scene
+                    // selector in its combat range - which is what makes
+                    // tableau actor coordinates viewport cells directly.
+                    // Without this copy the chamber never appears: the
+                    // renderer keeps drawing whatever terrain the arena
+                    // held. `cleak/u5-engine#7`.
+                    self.combat_terrain[y][x] = tile;
                 }
             }
         }
