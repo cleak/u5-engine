@@ -20,3 +20,10 @@ both	wait	5000
 both	shot	fallen	After the fall onto the room trigger
 both	wait	4000
 both	shot	room	The final room
+both	key	space
+both	wait	2500
+both	key	space
+both	wait	2500
+both	key	space
+both	wait	5000
+both	shot	passes	Three more passes in the arena
