@@ -1431,3 +1431,49 @@ fn talk_at_a_non_speaker_prints_the_no_response_line() {
         TALK_NO_RESPONSE_MESSAGE
     );
 }
+
+#[test]
+fn a_shipped_opening_can_carry_its_ask_who_in_the_description_field() {
+    // `cleak/u5-spec#198`: the stock game's opening for the hut NPC of
+    // `dwelling-talk-after-entry` stops to ask the party's name, and
+    // this engine runs on and prints the bytes that belong *after* the
+    // answer - visible as a doubled greeting line.
+    //
+    // The cause is here. For this NPC the Greeting entry is **empty**
+    // and the whole opening - description text, the quoted greeting, a
+    // pause, and the `0x88` ASK-WHO - lives in the Description entry.
+    // `conversation.md §9` step 2 treats the description as plain text
+    // to print before the greeting, so the engine runs it with
+    // `yield_on_ask: false` and never sees the stop.
+    //
+    // Pinned as data because the fix - running the description through
+    // the session so its ASK-WHO stop sets the phase - has to preserve
+    // it, and because a reader of §9 would not expect the opening's
+    // control flow to be in entry 2 of the five mandatory leading
+    // entries.
+    let Some(game_dir) = crate::test_fixtures::configured_original_asset_dir() else {
+        return;
+    };
+    let path = game_dir.join("DWELLING.TLK");
+    if !path.exists() {
+        return;
+    }
+    let raw = crate::parse_tlk_raw(&path).expect("DWELLING.TLK must parse");
+    let Some(fields) = raw.get(&12u16) else {
+        return;
+    };
+    let carries_ask_who = |index: usize| {
+        fields
+            .get(index)
+            .is_some_and(|field| field.contains(&crate::TLK_CODE_ASK_WHO))
+    };
+    assert!(
+        fields.get(2).is_some_and(|greeting| greeting.is_empty()),
+        "this NPC's Greeting entry is empty"
+    );
+    assert!(
+        carries_ask_who(1),
+        "its Description entry carries the ASK-WHO"
+    );
+    assert!(!carries_ask_who(2), "the Greeting entry carries none");
+}
