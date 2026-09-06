@@ -1135,10 +1135,15 @@ impl PlayState {
                 CastInputAction::Discard => None,
             },
             MixPhase::Reagents => match ch {
-                '\u{1b}' => {
-                    self.message = "None!".to_string();
-                    Some(MoveOutcome::PromptDeclined)
-                }
+                // `magic.md §6` step 3: "Escape cancels before any
+                // inventory change" - and prints nothing. A paired capture
+                // shows the stock window keeping the help block and its
+                // open `Type M to mix:` row exactly as they stood, where
+                // this engine added an invented `None!` row. The universal
+                // cancel reply of `commands.md §5.6` belongs to the
+                // prompts that publish it, not to this one.
+                // `cleak/u5-engine#5`.
+                '\u{1b}' => Some(MoveOutcome::PromptDeclined),
                 '\r' | '\n' | ' ' => {
                     self.toggle_mix_reagent(session);
                     None

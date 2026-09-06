@@ -63,6 +63,18 @@ number of keystrokes:
 | `town-britain-seeded`, `town-fountain`, `town-look-npc-cell` | the party inside Britain, beside the fountain for the fountain scenario |
 | `minoc-tribute`, `blackthorn-palace-password` | the party at the location named, with the quest state the exchange needs |
 
+**A town seed the stock game did not write breaks Talk on the stock side.**
+`formats/saved-gam.md` section 12 makes `0x07B4..0x105F` durable state - it
+carries a town-family location's whole live cast, including each NPC's dialog
+index - and `conversation.md` section 2 spells out the consequence: "A save
+written by another program that leaves that region zero makes every NPC in the
+location answer `No response!` until the location is re-entered from outside -
+that is a property of the save, not of the game." A scenario seeded that way
+will show the stock game refusing every Talk while the engine, which pairs
+restored records against the `.NPC` roster, answers normally. That difference
+is the seed's. Seeds for Talk and shop scenarios must be saved by the stock
+game inside the location, or the scenario must walk in through the door.
+
 **A missing seed does not fail the run.** Without one the profile's shipped
 `SAVED.GAM` has no active Avatar, both sides sit on the title menu answering
 `No active game`, every `shot` captures that menu, and the harness still
