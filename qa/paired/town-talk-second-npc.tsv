@@ -1,23 +1,103 @@
-# Talk to a different Britain resident: east, north, north, then Talk west.
-# requires-seed: the party inside Britain, a few steps from a second resident
+# Talk to an *ordinary* town resident - one whose dialogue byte is a
+# `.TLK` blob id rather than a shop trigger or the reserved guard index - so the
+# comparison is of the plain conversation path with none of the adjacency
+# dispatch u5-spec#215 and u5-spec#216 are about.
+#
+# This replaces a seeded version that could never compare anything twice over:
+# its recorded seed directory had never been written to, so both sides sat on
+# the title menu, and even with a real seed a town Talk cannot be compared from
+# an engine-written save (`saved-gam.md` Section 12's NPC band, see the README).
+# Walking in through the door rebuilds the roster from the `.NPC` file on both
+# sides, which is what makes the stock side answer at all.
+#
+# Britain at 10:00, target dialog-id 9. Route from
+# `talk_gate_probe --script e --chase 9`, which re-plans after every step. NPC
+# schedules drift, so expect to run this more than once before it lands - a run
+# that reaches empty floor has measured nothing.
+# requires-seed: the party outside Britain on the overworld at 10:00, so the scenario can walk in through the door
 both	wait	9000
 both	key	space
 both	wait	4000
 both	key	j
 both	wait	8000
+both	key	e
+both	wait	4000
+both	shot	entered	Entered Britain through the door
+both	key	Up
+both	wait	450
+both	key	Up
+both	wait	450
+both	key	Up
+both	wait	450
+both	key	Up
+both	wait	450
+both	key	Up
+both	wait	450
+both	key	Up
+both	wait	450
+both	key	Up
+both	wait	450
+both	key	Up
+both	wait	450
+both	key	Up
+both	wait	450
+both	key	Up
+both	wait	450
 both	key	Right
+both	wait	450
+both	key	Right
+both	wait	450
+both	key	Right
+both	wait	450
+both	key	Right
+both	wait	450
+both	key	Right
+both	wait	450
+both	key	Right
+both	wait	450
+both	key	Right
+both	wait	450
+both	key	Right
+both	wait	450
+both	key	Right
+both	wait	450
+both	key	Down
+both	wait	450
+both	key	Down
+both	wait	450
+both	key	Down
+both	wait	450
+both	key	Down
+both	wait	450
+both	key	Down
+both	wait	450
+both	key	Down
+both	wait	450
+both	key	Right
+both	wait	450
+both	key	Right
+both	wait	450
+both	key	Right
+both	wait	450
+both	key	Right
+both	wait	450
+both	wait	2500
+both	shot	arrived	Arrived beside the resident
+both	key	l
 both	wait	1200
 both	key	Up
-both	wait	1200
-both	key	Up
-both	wait	1500
-both	shot	beside	Beside the second resident
+both	wait	2500
+both	shot	look	Look north at the resident
 both	key	t
 both	wait	1200
-both	key	Left
-both	wait	3000
-both	shot	greeting	Talk west
+both	key	Up
+both	wait	3500
+both	shot	greeting	Talk north: the greeting
 both	type	name
 both	key	Return
 both	wait	3000
-both	shot	name	Name reply
+both	shot	name	The NAME keyword
+both	type	bye
+both	key	Return
+both	wait	2500
+both	shot	bye	BYE

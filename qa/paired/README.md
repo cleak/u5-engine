@@ -37,6 +37,7 @@ are PRNG-selected and legitimately differ between the two sides.
 | `town-night-schedule` | Britain at 02:00: night NPC placement and lighting |
 | `town-talk-after-entry` | Talk in a town entered through its door, which is what loads the dialogue table |
 | `town-talk-nonspeaker` | Talk aimed at a non-speaking participant |
+| `town-talk-second-npc` | Talk with an *ordinary* resident - a `.TLK` blob id, not a shop trigger or the reserved guard index |
 | `town-talk-high-dialog-id` | Talk with a roster slot carrying a high/special dialogue id |
 | `castle-talk`, `castle-talk-after-entry` | the same two shapes inside a castle |
 | `dwelling-talk-after-entry`, `dwelling-talk-after-restore` | Talk in a dwelling entered by door, and the same save restored inside it |
@@ -64,8 +65,16 @@ number of keystrokes:
 | `town-night-schedule` | Britain at 02:00 |
 | `town-britain-seeded`, `town-fountain`, `town-look-npc-cell` | the party inside Britain, beside the fountain for the fountain scenario |
 | `minoc-tribute`, `blackthorn-palace-password` | the party at the location named, with the quest state the exchange needs |
-| `town-talk-after-entry` | the party outside Britain on the overworld, so the scenario can walk in through the door |
+| `town-talk-after-entry`, `town-talk-second-npc` | the party outside Britain on the overworld, so the scenario can walk in through the door |
 | `shop-arms-after-entry`, `combat-town-attack-after-entry` | the same, seeded at 10:00 rather than 12:00 |
+
+**A seed equal to the shipped save is refused.** `game-dev-u5-paired` now
+compares the `--seed-save` directory's `SAVED.GAM` against the freshly prepared
+profile's own copy and refuses when they match: the shipped file has no active
+Avatar, so both sides would sit on the title menu and the run would agree with
+itself while measuring nothing. Two scenarios had been "seeded" from a paired
+profile directory that was never written to, and passed that way -
+`town-britain-seeded` and `town-talk-second-npc`.
 
 **A town seed the stock game did not write breaks Talk on the stock side.**
 `formats/saved-gam.md` section 12 makes `0x07B4..0x105F` durable state - it
@@ -77,7 +86,10 @@ that is a property of the save, not of the game." A scenario seeded that way
 will show the stock game refusing every Talk while the engine, which pairs
 restored records against the `.NPC` roster, answers normally. That difference
 is the seed's. Seeds for Talk and shop scenarios must be saved by the stock
-game inside the location, or the scenario must walk in through the door.
+game inside the location, or the scenario must walk in through the door. The
+band's internal layout is unpublished, so the engine cannot write it either -
+cleak/u5-spec#217 asks for it; until it is answered, walking in is the only
+route that gives both sides a live cast.
 
 **Reading the rows.** The DOSBox side is captured at 640x400, an exact 2:1
 downscale of the 320x200 screen, so its message window can be decoded glyph by
