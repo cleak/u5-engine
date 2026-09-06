@@ -29,6 +29,7 @@ are PRNG-selected and legitimately differ between the two sides.
 | `hut-door-overworld` | open the hut door, step onto the overworld, Look, walk, save |
 | `hut-to-ararat` | exploratory walk from the hut toward Ararat and an Enter attempt |
 | `hut-audio` | PC-speaker blocked-step cue and a silent pass, captured per side |
+| `doom-endgame-audio` | the absorption beat's speaker output, per side, with silence controls |
 | `hut-talk` | Talk with the hut's resident: greeting, name, job, bye |
 | `hut-prompts` | New Order, Ready, Use, Cast, Mix, Yell, Search, Look, X-it, Get, Enter, Hole up, Ignite, Klimb prompt and result literals |
 | `town-britain-seeded` | Britain from a seeded save: entry, walking, Look at an NPC cell |
@@ -160,3 +161,12 @@ there. A native pixel diff of any arena frame therefore reports one 16x16
 cell's worth of difference (221 pixels in that scenario) that is not a defect.
 Compare arena frames from the paired capture, or exclude the active player's
 cell.
+
+**Record a silence control beside every audio capture.** A capture that
+carries short broadband bursts is ambiguous on its own - DOSBox, PipeWire and
+the recorder can all click - and the cheap way to settle it is a few seconds of
+the same scene with no keys sent. `doom-endgame-audio` records one per side
+before the beat it is aimed at, and that control is the whole reason its
+eleven-burst finding could be filed as game output (cleak/u5-spec#218) rather
+than guessed at. Without it I had already dismissed a similar train in
+`hut-audio` as an artefact, which now looks wrong.

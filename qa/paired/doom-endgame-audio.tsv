@@ -1,0 +1,53 @@
+# Hear the endgame, one side at a time.
+#
+# `audio.md §8.7` gives the tableau presentation software envelope
+# `(1, 10000, 50000, 1, 5200)` - fifty thousand iterations, so a buzz of about
+# two seconds, by a wide margin the longest thing the ending plays. The engine
+# implements it and unit-tests its parameters, but until now nothing had
+# *heard* it beside the original: `hut-audio` is the only two-sided recording
+# and it covers one blocked step. u5-engine#1's remaining acceptance evidence
+# is exactly this.
+#
+# The two sides are driven separately, as in `hut-audio`, so each recording
+# carries one speaker and the captures can be compared without cross-talk.
+# requires-seed: the party on the fall trap on Doom's level seven, above the final room's trigger, with a torch
+both	wait	9000
+both	key	space
+both	wait	7000
+both	key	j
+both	wait	9000
+both	key	i
+both	wait	2500
+both	key	space
+both	wait	5000
+both	wait	7000
+both	shot	room	The final room
+both	key	space
+both	wait	2500
+both	key	space
+both	wait	2500
+both	key	space
+both	wait	5000
+both	key	Up
+both	wait	1200
+both	key	Up
+both	wait	1200
+both	key	Up
+both	wait	1200
+both	audio-start	dosbox-control	DOSBox: five seconds of nothing, as a control for capture artefacts
+both	wait	5000
+both	audio-stop		DOSBox control capture
+both	audio-start	engine-control	Engine: the same control
+both	wait	5000
+both	audio-stop		Engine control capture
+both	audio-start	engine-absorption	Engine: the last step onto the absorbable field
+engine	key	Up
+both	wait	9000
+both	audio-stop		Engine absorption capture
+both	shot	engine-absorbed	Engine after the absorption
+both	audio-start	dosbox-absorption	DOSBox: the last step onto the absorbable field
+dosbox	key	Up
+both	wait	9000
+both	audio-stop		DOSBox absorption capture
+both	shot	dosbox-absorbed	DOSBox after the absorption
+both	shot	end	End
