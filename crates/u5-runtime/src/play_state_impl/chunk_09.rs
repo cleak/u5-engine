@@ -732,6 +732,26 @@ impl PlayState {
         Ok(true)
     }
 
+    /// Whether the driver's red/green plane swap is standing over this
+    /// arena's terrain.
+    ///
+    /// `display-driver-abi.md §10`: "The dungeon-room arena's red grass
+    /// is ... the batch plane swap the dungeon view's teardown applies
+    /// on the way into a room fight." So the swap is on for a fight the
+    /// party walked into from a dungeon, and nowhere else - a town
+    /// attack's arena keeps its own colours. The ABI does not say when
+    /// the swap is undone (the post-combat restore path restores a
+    /// different mode's eight bytes), so this engine scopes it to the
+    /// arena that is on screen rather than persisting it; asked as
+    /// `cleak/u5-spec#212`.
+    pub fn dungeon_room_arena_plane_swap_active(&self) -> bool {
+        self.combat_active
+            && self
+                .combat_frame_snapshot
+                .as_ref()
+                .is_some_and(|snapshot| matches!(snapshot.area, Area::Dungeon { .. }))
+    }
+
     pub fn render_combat_viewport(
         &self,
         viewport: &mut TileViewport,
@@ -762,6 +782,11 @@ impl PlayState {
                     self.water_scroll,
                     &self.fire_flicker,
                 )?;
+                if self.dungeon_room_arena_plane_swap_active()
+                    && dungeon_room_plane_swap_applies(terrain)
+                {
+                    swap_viewport_cell_red_green(viewport, cell_x, cell_y);
+                }
                 if let Some(sprite) = self.combat_render_sprite_at(arena_x, arena_y) {
                     // `animation.md §12.4`: a combat field-effect tile is one
                     // of the four the driver re-randomises every step, so the

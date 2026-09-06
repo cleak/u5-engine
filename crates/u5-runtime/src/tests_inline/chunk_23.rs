@@ -20788,3 +20788,52 @@ fn a_glass_sword_swing_consumes_the_readied_sword() {
     // readied is left alone.
     assert!(!state.consume_shattered_glass_sword(0));
 }
+
+#[test]
+fn a_dungeon_room_arena_draws_its_terrain_through_the_red_green_plane_swap() {
+    // `display-driver-abi.md §10`: "The dungeon-room arena's red grass is
+    // ... the batch plane swap the dungeon view's teardown applies on the
+    // way into a room fight", over the tiles the same section lists.
+    // Measured on a paired capture of the arena: the grass tile's green
+    // reads red in the stock game (`cleak/u5-engine#14`).
+    assert!(dungeon_room_plane_swap_applies(0x05));
+    assert!(dungeon_room_plane_swap_applies(0x64));
+    assert!(!dungeon_room_plane_swap_applies(0x44));
+
+    // The swap exchanges the red and green planes and leaves intensity
+    // and blue alone.
+    assert_eq!(swap_red_green_plane_index(2), 4);
+    assert_eq!(swap_red_green_plane_index(4), 2);
+    assert_eq!(swap_red_green_plane_index(10), 12);
+    assert_eq!(swap_red_green_plane_index(12), 10);
+    for index in [0, 1, 6, 7, 8, 9, 14, 15] {
+        assert_eq!(swap_red_green_plane_index(index), index);
+    }
+
+    // It is on for an arena the party walked into from a dungeon, and off
+    // for one entered from a town or with no suspended frame at all.
+    let mut state = combat_player_command_state(6, 5);
+    assert!(state.combat_active);
+    assert!(!state.dungeon_room_arena_plane_swap_active());
+    state.combat_frame_snapshot = Some(CombatFrameSnapshot {
+        area: Area::Dungeon {
+            scene: DungeonScene::new(40).unwrap(),
+            level: 0,
+        },
+        player: state.player,
+        active_objects: state.active_objects.clone(),
+        active_player: state.active_player,
+        combat_terrain: state.combat_terrain,
+        dungeon_room_clear_on_success: None,
+        enter_endgame_after_successful_combat: false,
+        endgame_messages: None,
+        endgame_tableau_map: None,
+        encounter_mode_high_bit: false,
+        suppress_controlled_faint_sleep_tick: false,
+        exit_announced: false,
+        established_exit_direction_code: None,
+    });
+    assert!(state.dungeon_room_arena_plane_swap_active());
+    state.combat_active = false;
+    assert!(!state.dungeon_room_arena_plane_swap_active());
+}

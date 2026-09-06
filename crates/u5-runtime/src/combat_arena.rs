@@ -62,6 +62,57 @@ pub const DUNGEON_ROOM_ABSORBABLE_FIELD_SOURCE: u8 = 0x3c;
 /// Whether `Avatar` here is the fixed word or the party leader's name is
 /// not yet settled - the character in the capture is named Avatar.
 pub const COMBAT_ABSORBED_MESSAGE: &str = "Avatar is absorbed!";
+
+/// `display-driver-abi.md §10`: the tiles the driver's **red/green
+/// plane-swap** mode covers - "`0x05`, `0x1E`, `0x1F`, `0x4C`, `0xCA`,
+/// `0x20..0x26`, `0x30..0x37` and `0x60..0x6F`".
+///
+/// §10 also names the caller and the moment: "The dungeon-room arena's
+/// red grass is ... the batch plane swap the dungeon view's teardown
+/// applies on the way into a room fight."
+pub const fn dungeon_room_plane_swap_applies(tile: u8) -> bool {
+    matches!(
+        tile,
+        0x05 | 0x1e | 0x1f | 0x4c | 0xca | 0x20..=0x26 | 0x30..=0x37 | 0x60..=0x6f
+    )
+}
+
+/// Swap the red and green planes of one EGA colour index.
+///
+/// The mode's name is the whole of its definition: bit 2 is the red
+/// plane and bit 1 the green, so the two exchange and the intensity and
+/// blue planes are untouched. Measured on a paired capture of a Shame
+/// dungeon-room arena, the grass tile's green (`2`) reads red (`4`) in
+/// the stock game over 1,474 pixels at 99%; the other swapped pairs do
+/// not occur in that scene. `cleak/u5-engine#14`.
+pub const fn swap_red_green_plane_index(index: u8) -> u8 {
+    (index & 0b1001) | ((index & 0b0100) >> 1) | ((index & 0b0010) << 1)
+}
+
+/// Apply [`swap_red_green_plane_index`] across a buffer of colour indices.
+pub fn swap_red_green_plane_pixels(pixels: &mut [u8]) {
+    for pixel in pixels {
+        *pixel = swap_red_green_plane_index(*pixel);
+    }
+}
+
+/// Apply the swap to one already-drawn viewport cell.
+pub fn swap_viewport_cell_red_green(
+    viewport: &mut crate::TileViewport,
+    cell_x: usize,
+    cell_y: usize,
+) {
+    let side = crate::TILE_ATLAS_SIDE;
+    let x0 = cell_x * side;
+    let y0 = cell_y * side;
+    for row in 0..side {
+        let start = (y0 + row) * viewport.width + x0;
+        let Some(slice) = viewport.pixels.get_mut(start..start + side) else {
+            continue;
+        };
+        swap_red_green_plane_pixels(slice);
+    }
+}
 pub const DUNGEON_ROOM_ABSORBABLE_FIELD_CLASS_MASK: u8 = 0xfc;
 pub const DUNGEON_ROOM_ORDINARY_SOURCE_FIRST: u8 = 0x40;
 pub const DUNGEON_ROOM_SPECIAL_SOURCE_MASK: u8 = 0xfc;
