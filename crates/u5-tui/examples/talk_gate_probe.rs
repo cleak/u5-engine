@@ -177,8 +177,12 @@ fn main() {
             }
             match best {
                 Some((len, route, face)) => println!(
-                    "  slot {:>2} dialog-id {:>3} at ({x:>2},{y:>2}): {len} step(s) `{route}` then Talk-{face}",
-                    npc.slot, npc.dialog_id
+                    "  slot {:>2} dialog-id {:>3} at ({x:>2},{y:>2}) [{}]: {len} step(s) `{route}` then Talk-{face}",
+                    npc.slot,
+                    npc.dialog_id,
+                    state
+                        .talk_target_description(x, y)
+                        .unwrap_or_else(|| "?".to_string()),
                 ),
                 None => println!(
                     "  slot {:>2} dialog-id {:>3} at ({x:>2},{y:>2}): unreachable on foot",
