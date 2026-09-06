@@ -18983,6 +18983,13 @@ fn doom_final_room_successful_dungeon_cbt_combat_enters_endgame_from_absorbable_
         ENDGAME_TABLEAU_WALKABLE_TILE
     );
     state.finish_endgame_entry_presentation();
+    // The absorption line belongs to the transcript, not the live slot:
+    // §4's announcements and §5's greeting compose onto that slot.
+    assert!(state
+        .message_transcript
+        .iter()
+        .any(|entry| entry.text.contains("Avatar is absorbed!")));
+    assert!(!state.message.contains("Avatar is absorbed!"));
     assert!(state.message.contains("Welcome back"));
     // §5.1's blocking key read: the greeting is its own page and the
     // question follows on the next one.

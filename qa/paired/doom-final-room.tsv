@@ -4,8 +4,11 @@
 # the seed stands the party on that fall trap. Ignite a torch, take a turn,
 # and the fall lands on the trigger.
 #
-# This is the first paired capture of that room. The endgame beyond it needs
-# the combat won and the sandalwood box owned; neither is scripted yet.
+# `endgame.md 5.1` blocks on a key read between pages. Holding the window
+# still for 5, 15 and 30 seconds showed an identical frame each time, so the
+# greeting is a page of its own and the first box question follows the next
+# key rather than a delay. The two `y` steps below are that page advance and
+# then the answer.
 both	wait	9000
 both	key	space
 both	wait	7000
@@ -38,15 +41,9 @@ both	wait	7000
 both	shot	walked	Walking north across the arena, to the absorption
 both	wait	15000
 both	shot	settled	Fifteen seconds on the confirmation
-both	wait	5000
-both	shot	pace-5s	Five seconds after the absorption
-both	wait	10000
-both	shot	pace-15s	Fifteen seconds
-both	wait	15000
-both	shot	pace-30s	Thirty seconds
 both	key	y
 both	wait	4000
-both	shot	first-answer	After the first confirmation
+both	shot	greeting-page	After one key: the first box question follows the greeting
 both	key	y
 both	wait	8000
-both	shot	answered	After the second confirmation, into the rite
+both	shot	answered	After answering the box question, into the rite

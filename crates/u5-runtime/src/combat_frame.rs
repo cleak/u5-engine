@@ -2209,6 +2209,14 @@ impl PlayState {
         &mut self,
         actor_slot: usize,
     ) -> Option<CombatAbsorbableFieldApplication> {
+        // One absorption per contact. `endgame.md §3` hands the screen to
+        // the sequence, so once the endgame is live there is no arena
+        // actor left to absorb; a walked-in contact otherwise resolves
+        // twice - once where the step lands and once from the same
+        // turn's committed-action tail - and prints its line twice.
+        if self.endgame.is_some() {
+            return None;
+        }
         let actor = self.combat_actors.get(actor_slot).copied()?;
         if !combat_actor_is_present_not_dead(actor) || actor.y != 2 {
             return None;
@@ -2252,6 +2260,14 @@ impl PlayState {
             // tableau's own floor never appears. The original's room
             // changes colour at this moment, which is that floor.
             if let Some(snapshot) = self.combat_frame_snapshot.take() {
+                // `endgame.md §3` step 2's redraw takes the message
+                // window with it. It runs here, at the contact, because
+                // the step that walked onto the field commits its own
+                // echo afterwards: the stock window shows that echo at
+                // the top of an otherwise empty window, with the
+                // absorption line under it and nothing of the arena turn
+                // that preceded it.
+                self.clear_message_window();
                 let messages = snapshot.endgame_messages.clone();
                 let tableau_map = snapshot.endgame_tableau_map.clone();
                 self.restore_combat_frame_with_trigger_reconcile(snapshot, true);

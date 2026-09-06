@@ -1326,15 +1326,15 @@ impl PlayState {
     /// that member is placed and walked to the target one cell per frame
     /// before the next slot starts. The caller renders after each `true`.
     pub fn advance_endgame_entry_presentation(&mut self) -> bool {
-        // `endgame.md §3` step 2's full redraw. It runs on the first
-        // pumped frame rather than at the absorption, because the step
-        // that walked onto the field commits its own movement echo
-        // *after* the contact handler returns - clearing any earlier
-        // leaves `>North` at the top of the window. It runs before §4's
-        // restoration announcements, which must survive it.
+        // `endgame.md §3` step 2's redraw rebuilds the *screen*, not the
+        // message window: a paired capture of a walked-in absorption
+        // keeps the step's own `>North` echo above `Avatar is absorbed!`
+        // and runs on into Lord British from there. The line is still
+        // deferred to this first pumped frame, because the step commits
+        // that echo after the contact handler returns and emitting at
+        // the contact would print the two the wrong way round.
         if self.endgame_entry_redraw_pending {
             self.endgame_entry_redraw_pending = false;
-            self.clear_message_window();
             self.emit_message_line(crate::COMBAT_ABSORBED_MESSAGE);
         }
         let Some(endgame) = self.endgame.as_ref() else {
@@ -1496,6 +1496,15 @@ impl PlayState {
     }
 
     fn append_endgame_first_prompt(&mut self) {
+        // §5's greeting opens its own emission. A slot still holding a
+        // line that is already in the transcript - the absorption line,
+        // on the route that walks into the field - would otherwise be
+        // composed onto and printed a second time beneath the committed
+        // copy.
+        if !self.message.is_empty() && self.message == self.message_flushed {
+            self.message.clear();
+            self.message_flushed.clear();
+        }
         if let Some(endgame) = self.endgame.as_mut() {
             endgame.greeting_page_pending = true;
         }
