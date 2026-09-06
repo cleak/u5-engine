@@ -86,8 +86,17 @@ For text-level comparison render the engine's side natively with
 `u5-engine --from-save --play-script ... --save-screen <PNG>`, which goes
 through the same message-window layout.
 
-**A missing seed does not fail the run.** Without one the profile's shipped
+**A missing seed used to pass silently.** Without one the profile's shipped
 `SAVED.GAM` has no active Avatar, both sides sit on the title menu answering
-`No active game`, every `shot` captures that menu, and the harness still
-reports `"result": "pass"` - the two sides agree, after all. Check the first
-capture of any seeded scenario before reading its later ones.
+`No active game`, every `shot` captures that menu, and the run still agreed
+with itself. Scenarios that need a seed now say so in a machine-readable
+header,
+
+```
+# requires-seed: the party on the fall trap on Doom's level seven, ...
+```
+
+which `game-dev-u5-paired` refuses to run without `--seed-save`, and which
+`crates/u5-tui/tests/paired_scenarios.rs` requires of every scenario that does
+not create its own character. The table above stays as prose for the reader;
+the header is what the tools check.

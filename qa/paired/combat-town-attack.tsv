@@ -1,4 +1,5 @@
 # Attack the weaponsmith from a seeded save: town combat entry and the arena.
+# requires-seed: the party beside the weaponsmith in a town
 both	wait	9000
 both	key	space
 both	wait	4000

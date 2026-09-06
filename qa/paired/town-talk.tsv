@@ -1,4 +1,5 @@
 # Talk to a Britain resident. Seeded with a save standing south of the NPC.
+# requires-seed: the party beside a Britain resident
 both	wait	9000
 both	key	space
 both	wait	4000

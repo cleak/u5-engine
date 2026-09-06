@@ -1,4 +1,5 @@
 # Britain at 02:00 from a seeded save: compare night NPC placement and lighting.
+# requires-seed: Britain at 02:00
 both	wait	9000
 both	key	space
 both	wait	4000

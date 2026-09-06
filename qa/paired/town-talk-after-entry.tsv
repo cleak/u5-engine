@@ -7,6 +7,7 @@
 # covers the shop-dispatch arm too. Route from the engine's own
 # `talk_gate_probe` breadth-first search, re-derived after simulating the walk
 # so schedule drift is accounted for. Filed against cleak/u5-spec#198.
+# requires-seed: the party outside the town, so the scenario can walk in through the door
 both	wait	9000
 both	key	space
 both	wait	4000

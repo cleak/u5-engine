@@ -3,6 +3,7 @@
 # the hut instead of by walking in through the door. If the stock game refuses
 # here and converses there, the location's dialogue table is loaded on scene
 # entry and is not restored by a saved game. Filed against cleak/u5-spec#198.
+# requires-seed: a save written inside the hut, beside its resident
 both	wait	9000
 both	key	space
 both	wait	4000

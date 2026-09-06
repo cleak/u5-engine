@@ -6,6 +6,7 @@
 # An earlier revision of this scenario probed north and west only, found the
 # stock game blocked in the same places, and concluded the enclosure was shipped
 # geometry. That was two directions out of four. This walks all of them.
+# requires-seed: the party on Minoc's entry cell (15,30)
 both	wait	9000
 both	key	space
 both	wait	4000

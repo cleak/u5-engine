@@ -1,4 +1,5 @@
 # Z-stats: page through the whole sequence and record every screen.
+# requires-seed: a party with equipment, reagents, spells and items to page through
 both	wait	9000
 both	key	space
 both	wait	4000

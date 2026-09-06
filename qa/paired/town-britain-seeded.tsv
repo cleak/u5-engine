@@ -1,6 +1,7 @@
 # Both sides Journey Onward from one engine-written save placed inside Britain.
 # The save is seeded with `--seed-save`; the stock game accepting it through its
 # own Journey Onward is itself the save-compatibility check.
+# requires-seed: a save placed inside Britain
 both	wait	9000
 both	key	space
 both	wait	4000

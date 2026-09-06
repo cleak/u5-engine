@@ -1,4 +1,5 @@
 # Deceit level 1 from a seeded save: light a torch and compare the corridor view.
+# requires-seed: the party inside Deceit level 1 with a torch to hand
 both	wait	9000
 both	key	space
 both	wait	4000

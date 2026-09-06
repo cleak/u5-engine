@@ -1,4 +1,5 @@
 # Talk to a different Britain resident: east, north, north, then Talk west.
+# requires-seed: the party inside Britain, a few steps from a second resident
 both	wait	9000
 both	key	space
 both	wait	4000

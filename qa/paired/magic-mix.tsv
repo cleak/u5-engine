@@ -1,4 +1,5 @@
 # M-Mix Reagents: open the mixer for In Lor and compare the reagent surface.
+# requires-seed: a party with reagents and the mixer's spell available
 both	wait	9000
 both	key	space
 both	wait	4000

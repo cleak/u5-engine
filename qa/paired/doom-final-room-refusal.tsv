@@ -8,6 +8,7 @@
 # wall neighbours, so a fall from the level above is the only way onto it -
 # the seed stands the party on that fall trap. Ignite a torch, take a turn,
 # and the fall lands on the trigger.
+# requires-seed: the party on the fall trap on Doom's level seven, above the final room's trigger, with a torch
 both	wait	9000
 both	key	space
 both	wait	7000

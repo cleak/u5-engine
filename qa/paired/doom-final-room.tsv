@@ -9,6 +9,7 @@
 # greeting is a page of its own and the first box question follows the next
 # key rather than a delay. The two `y` steps below are that page advance and
 # then the answer.
+# requires-seed: the party on the fall trap on Doom's level seven, above the final room's trigger, with a torch
 both	wait	9000
 both	key	space
 both	wait	7000

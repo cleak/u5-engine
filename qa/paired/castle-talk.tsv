@@ -2,6 +2,7 @@
 # with a dialog-id 9 NPC directly north at (15,24) on ordinary floor. Companion
 # to `town-talk-speaker`, which does the same in a TOWNE scene. Filed against
 # cleak/u5-spec#198.
+# requires-seed: the party at Lord British's castle (15,25) with the dialog-id 9 NPC north
 both	wait	9000
 both	key	space
 both	wait	4000

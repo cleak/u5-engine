@@ -5,6 +5,7 @@
 # to a dialog-id 0 NPC on ordinary floor `0x05`, with no mirror and no bed in
 # play, so neither §2 step 4 arm can be what answers. Route from the engine's
 # own `talk_gate_probe`. Filed against cleak/u5-spec#198.
+# requires-seed: the party outside Moonglow, so the scenario can walk in through the door
 both	wait	9000
 both	key	space
 both	wait	4000

@@ -1,4 +1,5 @@
 # Look north at the cell Talk resolves to, to compare what each side has there.
+# requires-seed: the party facing the cell Talk resolves to, inside a town
 both	wait	9000
 both	key	space
 both	wait	4000

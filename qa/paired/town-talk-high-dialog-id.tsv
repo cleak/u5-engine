@@ -3,6 +3,7 @@
 # Moonglow, entered through the door, one step north to a dialog-id 255 NPC.
 # Route from the engine's own `talk_gate_probe`. Filed against
 # cleak/u5-spec#198.
+# requires-seed: the party beside an NPC whose dialog id is in the high/special band
 both	wait	9000
 both	key	space
 both	wait	4000

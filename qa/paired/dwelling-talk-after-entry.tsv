@@ -8,6 +8,7 @@
 # Route from the engine's own `talk_gate_probe` breadth-first search. Pair with
 # `dwelling-talk-after-restore`, which reaches the same NPC from a seeded save.
 # Filed against cleak/u5-spec#198.
+# requires-seed: the party outside the hut, so the scenario can walk in through the door
 both	wait	9000
 both	key	space
 both	wait	4000

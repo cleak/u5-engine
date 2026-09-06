@@ -1,5 +1,6 @@
 # Look at Britain's fountain and answer the drink prompt, then look again and
 # cancel it. Seeded with a save placed beside the fountain (--seed-save).
+# requires-seed: a save placed beside Britain's fountain
 both	wait	9000
 both	key	space
 both	wait	4000

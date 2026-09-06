@@ -2,6 +2,7 @@
 # with a dialog-id 12 NPC directly west at (3,10). Paired with
 # `town-talk-nonspeaker`, which puts a dialog-id 0 NPC under the same
 # keystrokes. Filed against cleak/u5-spec#198.
+# requires-seed: the party at Britain (4,10) beside a speaking resident
 both	wait	9000
 both	key	space
 both	wait	4000
