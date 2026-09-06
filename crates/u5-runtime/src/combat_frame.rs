@@ -2253,6 +2253,12 @@ impl PlayState {
                 let messages = snapshot.endgame_messages.clone();
                 let tableau_map = snapshot.endgame_tableau_map.clone();
                 self.restore_combat_frame_with_trigger_reconcile(snapshot, true);
+                // §3 step 2's full redraw: the arena's combat prompts do
+                // not survive into the dialogue phase. The original's
+                // frame shows the absorption line at the top of an
+                // otherwise empty window.
+                self.clear_message_window();
+                self.emit_message_line(COMBAT_ABSORBED_MESSAGE);
                 self.enter_endgame_with_resources(messages, tableau_map);
                 // `endgame.md §3` step 1: the sequence marks the scene as
                 // having no active combatant, so the arena renderer

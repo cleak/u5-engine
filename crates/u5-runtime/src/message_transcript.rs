@@ -39,6 +39,21 @@ impl PlayState {
         self.diagnostics.iter().any(|entry| entry.contains(needle))
     }
 
+    /// Empty the message window.
+    ///
+    /// `endgame.md §3` step 2: the sequence runs "a full status-panel
+    /// redraw", whose side effect is that the message window becomes the
+    /// active text window for the whole dialogue phase. A redraw starts
+    /// from an empty window, and the original's endgame frame shows the
+    /// absorption line at the top with nothing above it - the arena's
+    /// combat prompts are gone.
+    pub fn clear_message_window(&mut self) {
+        self.message_transcript.clear();
+        self.message_transcript_revision = self.message_transcript_revision.wrapping_add(1);
+        self.message.clear();
+        self.message_flushed.clear();
+    }
+
     pub fn message_entries(&self) -> &[MessageEntry] {
         &self.message_transcript
     }
