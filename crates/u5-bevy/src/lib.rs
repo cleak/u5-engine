@@ -449,6 +449,11 @@ impl Decodable for VisualSoundWave {
 #[derive(Component)]
 struct SpeakerVoice;
 
+/// Marks a voice that actually queued samples, so the expiry system can
+/// tell "the device has not opened yet" from "this program was silent".
+#[derive(Component)]
+struct SpeakerVoiceAudible;
+
 /// How long the voice owns the channel: exactly [`SpeakerProgram::duration`].
 ///
 /// `audio.md §2` requires the speaker to stop "at every specified effect end",
@@ -9486,21 +9491,49 @@ fn play_speaker_effects(
         return;
     }
     voice.insert((
+        SpeakerVoiceAudible,
         AudioPlayer(waves.add(speaker_wave(&rendered))),
         PlaybackSettings::ONCE.with_volume(Volume::Linear(SPEAKER_VOLUME)),
     ));
 }
 
-/// Retire the voice when its program's duration has elapsed.
+/// Retire the voice when its program's duration has elapsed *and* the
+/// device has finished playing it.
+///
+/// The lifetime timer starts on the frame the voice spawns, but the audio
+/// device does not start sounding until a buffer later, so despawning on
+/// the timer alone cut the tail off every cue. Measured on the paired
+/// `hut-audio` capture: the blocked-step beep is published at 176 ms
+/// (`audio.md §7.4`, band 166..183), the stock game's capture measures
+/// 182 ms, and this engine's measured **150 ms** - the missing 26 ms
+/// being exactly the device's start latency. The program's own duration
+/// was right the whole time; only the voice's lifetime was wrong.
+///
+/// The timer still bounds the silent case, where there is no sink to ask,
+/// and the one-channel rule is unaffected: a new effect despawns whatever
+/// is sounding before this ever runs.
 fn expire_speaker_voice(
     time: Res<Time>,
     mut commands: Commands,
-    mut voices: Query<(Entity, &mut SpeakerVoiceLifetime)>,
+    mut voices: Query<(
+        Entity,
+        &mut SpeakerVoiceLifetime,
+        Option<&SpeakerVoiceAudible>,
+        Option<&AudioSink>,
+    )>,
 ) {
-    for (entity, mut lifetime) in &mut voices {
-        if lifetime.0.tick(time.delta()).finished() {
-            commands.entity(entity).despawn();
+    for (entity, mut lifetime, audible, sink) in &mut voices {
+        if !lifetime.0.tick(time.delta()).finished() {
+            continue;
         }
+        // A sink that is still sounding has not reached the program's
+        // end. Without a sink - a silent program, or a headless run with
+        // no audio device - the timer is the whole contract.
+        let _ = audible;
+        if sink.is_some_and(|sink| !sink.empty()) {
+            continue;
+        }
+        commands.entity(entity).despawn();
     }
 }
 
