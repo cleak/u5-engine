@@ -2608,9 +2608,11 @@ fn handle_endgame_key_input(
         .is_some_and(EndgameState::is_terminal)
     {
         state.resolve_endgame_confirmation(false);
-    } else {
-        state.message = "Endgame confirmation requires Y or N.".to_string();
     }
+    // Anything else is simply re-read. `endgame.md §5.1`: each prompt is a
+    // "blocking single-key read that accepts only `Y` or `N` and re-reads
+    // on anything else" - it prints nothing, and a paired capture of a
+    // stray key at the prompt leaves the stock window untouched.
     Ok(PlayInputDisposition::Continue)
 }
 

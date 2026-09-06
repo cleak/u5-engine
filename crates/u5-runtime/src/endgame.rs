@@ -2211,6 +2211,16 @@ impl PlayState {
                 self.flush_message_slot();
                 self.commit_typed_prompt_line(&prompt, yes_no_word(answer));
             }
+            // `endgame.md §5` step 4 does not run when the claim is
+            // false. A paired capture of the Doom final room shows the
+            // original going straight to record 10's "pull up a chair"
+            // exchange when the player answers Yes without the
+            // sandalwood box, while a No answer still gets the explicit
+            // sandalwood question, row for row as this engine draws it.
+            // `cleak/u5-engine#12`.
+            if answer && self.special_items[SPECIAL_ITEM_WOODEN_BOX_INDEX] == 0 {
+                return self.resolve_endgame_confirmation_with_narrative(answer, None);
+            }
             self.message = self
                 .endgame
                 .as_ref()

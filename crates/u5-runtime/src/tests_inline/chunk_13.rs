@@ -19046,15 +19046,9 @@ fn endgame_confirmation_gates_victory_on_final_answer_and_box_flag() {
     let mut missing_box = dungeon_state(open_dungeon_record(), 0, 1, 1);
     missing_box.enter_endgame();
 
-    assert_eq!(
-        handle_play_key_input(&mut missing_box, 'Y', "", &dir).unwrap(),
-        PlayInputDisposition::Continue
-    );
-    assert_eq!(
-        missing_box.endgame,
-        Some(EndgameState::awaiting_final_confirmation(true))
-    );
-
+    // A Yes claimed without the box ends the audience on that answer:
+    // `endgame.md §5` step 4's explicit sandalwood question is not asked
+    // (`cleak/u5-engine#12`).
     assert_eq!(
         handle_play_key_input(&mut missing_box, 'Y', "", &dir).unwrap(),
         PlayInputDisposition::Continue
@@ -19064,6 +19058,26 @@ fn endgame_confirmation_gates_victory_on_final_answer_and_box_flag() {
         Some(EndgameOutcome::MissingBoxOrRefused)
     );
     assert_eq!(missing_box.turn, 0);
+
+    // A No answer still gets the second question, box or no box.
+    let mut refused = dungeon_state(open_dungeon_record(), 0, 1, 1);
+    refused.enter_endgame();
+    assert_eq!(
+        handle_play_key_input(&mut refused, 'N', "", &dir).unwrap(),
+        PlayInputDisposition::Continue
+    );
+    assert_eq!(
+        refused.endgame,
+        Some(EndgameState::awaiting_final_confirmation(false))
+    );
+    assert_eq!(
+        handle_play_key_input(&mut refused, 'Y', "", &dir).unwrap(),
+        PlayInputDisposition::Continue
+    );
+    assert_eq!(
+        refused.endgame.as_ref().and_then(|state| state.outcome),
+        Some(EndgameOutcome::MissingBoxOrRefused)
+    );
 
     let mut victory = dungeon_state(open_dungeon_record(), 0, 1, 1);
     victory.special_items[SPECIAL_ITEM_WOODEN_BOX_INDEX] = 1;
@@ -19148,8 +19162,8 @@ fn endgame_flow_uses_loaded_endmsg_records_for_prompts_rite_and_refusal() {
             .any(|entry| entry.text.ends_with("Yes")),
         "the echo continues the prompt's own row"
     );
-    assert!(refusal.message.contains("The sandalwood box itself?"));
-    refusal.resolve_endgame_confirmation(false);
+    // Without the box that Yes is a false claim, so record 10's exchange
+    // follows immediately instead of record 2 (`cleak/u5-engine#12`).
     assert_eq!(refusal.message, "Wait here without the box");
 
     let mut victory = dungeon_state(open_dungeon_record(), 0, 1, 1);
