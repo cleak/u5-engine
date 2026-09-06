@@ -91,12 +91,11 @@ impl PlayState {
             PlayTarget::World(plane) => Self::load_world_scene(game_dir, plane, options),
         }?;
         // The message window a load hands to the world loop is empty but
-        // its cursor is not at the top: measured on a paired capture of
-        // Journey Onward followed immediately by one command, the stock
-        // game's first echo lands on row 14, so three rows stand above
-        // it - and `text-output.md §10.4`'s leading feed is spent inside
-        // that count.
-        // `cleak/u5-engine#11`; asked on the spec side as well.
+        // its cursor is at the bottom row, so the first output lands
+        // there and everything after it scrolls. `text-output.md §3`:
+        // clearing a window does not move its cursor, and the intro
+        // screens leave it at the bottom. `cleak/u5-engine#11`; asked on
+        // the spec side as `cleak/u5-spec#210`.
         state.message_window_top_offset = MESSAGE_WINDOW_LOAD_CURSOR_ROWS;
         Ok(state)
     }

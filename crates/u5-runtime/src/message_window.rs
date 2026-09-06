@@ -42,8 +42,14 @@ pub const MESSAGE_WINDOW_ROWS: usize = (MESSAGE_WINDOW_BOTTOM - MESSAGE_WINDOW_T
 pub const MESSAGE_WINDOW_HISTORY_ROWS: usize = MESSAGE_WINDOW_ROWS - 1;
 
 /// Rows the message window's cursor stands below its top row when a load
-/// hands the screen to the world loop. See [`crate::PlayState::load_scene`].
-pub const MESSAGE_WINDOW_LOAD_CURSOR_ROWS: u8 = 3;
+/// hands the screen to the world loop: the bottom row, so the first output
+/// lands there and every one after it scrolls.
+///
+/// Measured on paired captures of two different starts - Journey Onward
+/// from a save, and character creation followed by Journey Onward - both
+/// of which put the stock game's waiting prompt marker on row 23 with an
+/// otherwise empty window. See [`crate::PlayState::load_scene`].
+pub const MESSAGE_WINDOW_LOAD_CURSOR_ROWS: u8 = (MESSAGE_WINDOW_ROWS - 1) as u8;
 
 /// How one logged line is drawn.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -495,8 +501,8 @@ fn layout_message_window_inner(
     // The window scrolls only once output would pass its bottom row, and
     // it scrolls by one row at a time: the rows above the cursor go
     // first, and only then do the oldest logged rows leave the top.
-    let mut offset = log.top_offset().min(history_rows.saturating_sub(1));
-    let overflow = (offset + lines.len()).saturating_sub(history_rows);
+    let mut offset = log.top_offset().min(MESSAGE_WINDOW_ROWS - 1);
+    let overflow = (offset + lines.len() + live_rows).saturating_sub(MESSAGE_WINDOW_ROWS);
     let shrink = overflow.min(offset);
     offset -= shrink;
     let start = overflow - shrink;

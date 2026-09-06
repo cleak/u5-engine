@@ -46,22 +46,17 @@ pub enum ZStatsPage {
 }
 
 impl ZStatsPage {
-    /// `inventory.md §4.7`: there are **six** pages in all - the
-    /// attribute page, the equipment page, and four inventory pages
-    /// (Armaments, Spells, Reagents, Items). Direction-style
-    /// navigation moves backward or forward through exactly this
-    /// visible page sequence (`inventory.md §4`), so the cycle is six
-    /// long. The engine-invented spell-book page is not among them
-    /// and is deliberately absent here.
-    /// The page cycle, in the order a capture of the stock game walks it.
+    /// The page cycle, in the order the direction keys walk it.
     ///
-    /// `inventory.md §4.7` tabulates **six** pages - attributes,
-    /// equipment, armaments, spells, reagents, items - but paging through
-    /// the original with the direction keys visits **seven** screens in a
-    /// different order: attributes, Arms, Equipment, Reagents, Spells,
-    /// Items, Armaments. The extra screen is the counters half of §4.7's
-    /// "equipment page", which the original pages separately and labels
-    /// `Equipment`. Reported as `cleak/u5-spec#202`.
+    /// `inventory.md §4.7`: "There are **seven** screens in the cycle,
+    /// walked in this order by the direction keys and wrapping from the
+    /// last back to the first" - attributes, Arms, Equipment, Reagents,
+    /// Spells, Items, Armaments. The engine reached that order from a
+    /// capture and reported it as `cleak/u5-spec#202`; the spec's
+    /// earlier six-page table, which folded the Arms and counters halves
+    /// into one page, is withdrawn by `RETRACTIONS.md` R392. The
+    /// engine-invented spell-book page is not among them and is
+    /// deliberately absent here.
     pub const ORDERED: [Self; 7] = [
         Self::Stats,
         Self::Equipment,

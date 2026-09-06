@@ -463,7 +463,8 @@ pub const fn dungeon_billboard_left_x(band: usize) -> i32 {
     DUNGEON_VANISHING_X - DUNGEON_HALF_APERTURE[band]
 }
 
-/// Mirrored destination x: `x_right = 192 - x_left - width`.
+/// Mirrored destination x: `x_right = 191 - x_left - width`
+/// (`dungeon-mode.md §6.3`, corrected by `RETRACTIONS.md` R394).
 pub const fn dungeon_billboard_right_x(left_x: i32, width: i32) -> i32 {
     DUNGEON_MIRROR_SPAN - left_x - width
 }
