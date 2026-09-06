@@ -20758,3 +20758,33 @@ fn the_round_loop_entry_prologue_runs_once_per_encounter() {
     state.enter_combat_frame(active_objects, actors).unwrap();
     assert!(!state.combat_round_loop_prologue_ran);
 }
+
+#[test]
+fn a_glass_sword_swing_consumes_the_readied_sword() {
+    // `combat.md §12` / `RETRACTIONS.md` R390: "The Glass Sword arm,
+    // before it substitutes the instant-kill sentinel, calls the shared
+    // readied-item remover with the attacker's character index and the
+    // Glass Sword's item id; that routine walks the character's six
+    // equipment bytes and writes the not-equipped sentinel into the first
+    // one holding that id ... while no inventory count changes in that
+    // routine."
+    let mut state = combat_player_command_state(6, 5);
+    let character = usize::from(state.combat_actors[0].owner_target_class);
+    state.party_equipment[character][EQUIP_SLOT_WEAPON] = EQUIPMENT_GLASS_SWORD as u8;
+    let stock_before = state.equipment_stock[EQUIPMENT_GLASS_SWORD];
+
+    assert!(state.consume_shattered_glass_sword(0));
+
+    assert_eq!(
+        state.party_equipment[character][EQUIP_SLOT_WEAPON],
+        EQUIPMENT_EMPTY,
+        "the readied slot clears"
+    );
+    assert_eq!(
+        state.equipment_stock[EQUIPMENT_GLASS_SWORD], stock_before,
+        "no inventory count changes"
+    );
+    // Only the first matching byte is cleared, and a character with none
+    // readied is left alone.
+    assert!(!state.consume_shattered_glass_sword(0));
+}

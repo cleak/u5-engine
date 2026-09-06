@@ -5682,13 +5682,20 @@ impl PlayState {
             // roller "short-circuits the whole roller and returns
             // immediately - **before the defender's defence byte is
             // read**", so the sentinel reaches the damage endpoint whole.
-            CombatWeaponAttackResolution::Special { .. } => self
-                .apply_combat_weapon_damage_to_target(
+            CombatWeaponAttackResolution::Special { shattered, .. } => {
+                // `RETRACTIONS.md` R390: the Glass Sword arm calls the
+                // shared readied-item remover *before* it substitutes the
+                // sentinel, so the swing consumes the sword.
+                if shattered {
+                    self.consume_shattered_glass_sword(attacker_slot);
+                }
+                self.apply_combat_weapon_damage_to_target(
                     Some(attacker_slot),
                     target_slot,
                     COMBAT_INSTANT_KILL_DAMAGE,
                     magical,
-                ),
+                )
+            }
             CombatWeaponAttackResolution::OutOfRange { .. }
             | CombatWeaponAttackResolution::NoOrdinaryDamage { .. }
             | CombatWeaponAttackResolution::Miss { .. } => None,
@@ -6795,6 +6802,41 @@ impl PlayState {
             reprompt,
             control_after,
         })
+    }
+
+    /// `combat.md §12` (`RETRACTIONS.md` R390): "The Glass Sword arm,
+    /// before it substitutes the instant-kill sentinel, calls the shared
+    /// readied-item remover with the attacker's character index and the
+    /// Glass Sword's item id; that routine walks the character's six
+    /// equipment bytes and writes the not-equipped sentinel into the
+    /// first one holding that id. A Glass Sword swing therefore
+    /// **consumes the readied sword** - its equipment slot clears in the
+    /// same attack - while no inventory count changes in that routine."
+    ///
+    /// The published negative that the attack stack never clears a
+    /// readied slot still stands for thrown attacks; this is the one
+    /// attack-time breakage path.
+    pub fn consume_shattered_glass_sword(&mut self, attacker_slot: usize) -> bool {
+        let Some(actor) = self.combat_actors.get(attacker_slot).copied() else {
+            return false;
+        };
+        if !actor.is_party_side() {
+            return false;
+        }
+        let character = usize::from(actor.owner_target_class);
+        if self.party_equipment.len() < self.party.len() {
+            self.party_equipment
+                .resize(self.party.len(), [EQUIPMENT_EMPTY; EQUIPMENT_SLOT_COUNT]);
+        }
+        let Some(block) = self.party_equipment.get_mut(character) else {
+            return false;
+        };
+        let sword = EQUIPMENT_GLASS_SWORD as u8;
+        let Some(slot) = block.iter().position(|&id| id == sword) else {
+            return false;
+        };
+        block[slot] = EQUIPMENT_EMPTY;
+        true
     }
 
     pub fn apply_combat_player_weapon_attack_for_action(
