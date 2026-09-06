@@ -38,9 +38,12 @@ both	wait	7000
 both	shot	walked	Walking north across the arena, to the absorption
 both	wait	15000
 both	shot	settled	Fifteen seconds on the confirmation
-both	wait	20000
-both	wait	20000
-both	shot	prompted	Nearly a minute on the confirmation
+both	wait	5000
+both	shot	pace-5s	Five seconds after the absorption
+both	wait	10000
+both	shot	pace-15s	Fifteen seconds
+both	wait	15000
+both	shot	pace-30s	Thirty seconds
 both	key	y
 both	wait	4000
 both	shot	first-answer	After the first confirmation
