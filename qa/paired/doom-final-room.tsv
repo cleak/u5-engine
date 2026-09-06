@@ -38,8 +38,13 @@ both	wait	7000
 both	shot	walked	Walking north across the arena, to the absorption
 both	wait	15000
 both	shot	settled	Fifteen seconds on the confirmation
-both	wait	15000
-both	shot	prompted	Thirty seconds in, the prompt is up
-both	type	Y
-both	wait	8000
-both	shot	answered	The first confirmation answered yes
+both	wait	20000
+both	wait	20000
+both	shot	prompted	Nearly a minute on the confirmation
+both	key	y
+both	wait	3000
+both	key	y
+both	wait	3000
+both	key	Y
+both	wait	6000
+both	shot	answered	Three answer attempts
