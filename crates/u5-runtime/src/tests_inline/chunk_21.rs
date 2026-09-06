@@ -2507,7 +2507,7 @@ fn play_input_conversation_empty_line_emits_bye_envelope_and_closes() {
 
     assert_eq!(
         state.message,
-        format!("{TLK_EMPTY_INPUT_BYE_MESSAGE}Farewell")
+        format!("{TLK_EMPTY_INPUT_BYE_MESSAGE}\"Farewell\"\n\n")
     );
     assert!(state.active_conversation.is_none());
     assert_eq!(state.turn, 1);
@@ -3117,7 +3117,7 @@ fn town_raw_tlk_no_keyword_opens_runner_backed_conversation_session() {
     assert_eq!(state.turn, 1);
 
     let (text, ended) = state.submit_active_conversation_keyword("gift");
-    assert_eq!(text, "Take this gift");
+    assert_eq!(text, conversation_framed_response("Take this gift"));
     assert!(!ended);
     assert_eq!(
         state.special_items[SPECIAL_ITEM_SEXTANT_INDEX],
@@ -3581,7 +3581,7 @@ fn conversation_recruit_speaker_for_non_roster_npc_recruits_nobody() {
     // engine ... recruits nobody."
     let (text, ended) = state.submit_active_conversation_keyword("help");
 
-    assert_eq!(text, "I shall come. Accepted.");
+    assert_eq!(text, conversation_framed_response("I shall come. Accepted."));
     assert!(!ended);
     assert_eq!(state.party.len(), 1);
     assert_eq!(state.active_conversation_join_candidate, None);
@@ -3701,7 +3701,7 @@ fn town_raw_tlk_unaffordable_payment_skips_success_tail_and_unwinds() {
     state.talk_facing_with_dialogue_and_keyword_raw(&dialogue, &raw, None);
     let (text, ended) = state.submit_active_conversation_keyword("pay");
     assert!(!ended);
-    assert_eq!(text, TLK_GOLD_PAYMENT_REFUSAL_MESSAGE);
+    assert_eq!(text, conversation_framed_response(TLK_GOLD_PAYMENT_REFUSAL_MESSAGE));
     assert_eq!(state.gold, 30);
     assert_eq!(state.moral_standing, 40);
     assert!(matches!(
@@ -3777,7 +3777,7 @@ fn town_raw_tlk_gold_payment_debits_only_affordable_accepted_payment() {
     ]);
     state.talk_facing_with_dialogue_and_keyword_raw(&dialogue, &raw, None);
     let (text, ended) = state.submit_active_conversation_keyword("pay");
-    assert_eq!(text, "Paid");
+    assert_eq!(text, conversation_framed_response("Paid"));
     assert!(!ended);
     assert_eq!(state.gold, 5);
     // This fixture does not pre-seed a toll-progress milestone boundary,
@@ -3789,7 +3789,7 @@ fn town_raw_tlk_gold_payment_debits_only_affordable_accepted_payment() {
     poor_state.moral_standing = 40;
     poor_state.open_conversation_session(&dialogue, &raw);
     let (text, ended) = poor_state.submit_active_conversation_keyword("pay");
-    assert_eq!(text, TLK_GOLD_PAYMENT_REFUSAL_MESSAGE);
+    assert_eq!(text, conversation_framed_response(TLK_GOLD_PAYMENT_REFUSAL_MESSAGE));
     assert!(!ended);
     assert_eq!(poor_state.gold, 10);
     assert!(matches!(
@@ -3877,6 +3877,22 @@ fn tlk_numeric_action_dispatch_increments_signal_slots_to_cap() {
     assert_eq!(state.conversation_signal_flags[6], TLK_GENERIC_SIGNAL_CAP);
 }
 
+/// `conversation.md §6`'s response framing, as these tests expect to see
+/// it: a leading line feed, the response in double quotes, and trailing
+/// line feeds left outside the closing quote.
+fn conversation_framed_response(text: &str) -> String {
+    let mut out = if text.trim_start().starts_with('"') {
+        format!("\n{text}")
+    } else {
+        let body = text.trim_end_matches('\n');
+        format!("\n\"{body}\"{}", &text[body.len()..])
+    };
+    while !out.ends_with("\n\n") {
+        out.push('\n');
+    }
+    out
+}
+
 #[test]
 fn active_conversation_keeps_numeric_signal_separate_from_falsehood_theft() {
     let mut dialogue: HashMap<u16, Vec<String>> = HashMap::new();
@@ -3941,7 +3957,7 @@ fn active_conversation_keeps_numeric_signal_separate_from_falsehood_theft() {
     state.talk_facing_with_dialogue_and_keyword_raw(&dialogue, &raw, None);
 
     let (text, ended) = state.submit_active_conversation_keyword("mark");
-    assert_eq!(text, "Marked");
+    assert_eq!(text, conversation_framed_response("Marked"));
     assert!(!ended);
     assert_eq!(state.conversation_signal_flags[5], 1);
 
@@ -3949,7 +3965,7 @@ fn active_conversation_keeps_numeric_signal_separate_from_falsehood_theft() {
     assert!(ended);
     assert!(state.active_conversation.is_none());
     assert_eq!(state.conversation_signal_flags[5], 1);
-    assert_eq!(text, "BYE\n\nFarewell Stolen goods.");
+    assert_eq!(text, "BYE\n\n\"Farewell\"\n\n Stolen goods.");
 }
 
 #[test]

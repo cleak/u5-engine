@@ -169,6 +169,19 @@ impl PlayState {
             let glyphs = glyph_lines.next();
             match (text, glyphs) {
                 (Some(text), Some(glyphs)) => {
+                    // Same rule as `push_message_transcript_lines`: an
+                    // empty segment is a blank row the producer asked
+                    // for, unless it is the trailing one a final line
+                    // feed leaves behind. Pushed as an *explicit* blank
+                    // so a renderer that drops empty lines cannot erase
+                    // it - which is what was flattening the blank rows
+                    // either side of a framed conversation response.
+                    if text.is_empty() {
+                        if text_lines.clone().next().is_some() {
+                            self.push_explicit_blank_message_entry();
+                        }
+                        continue;
+                    }
                     self.push_tlk_message_entry(text.to_string(), glyphs.to_vec(), false);
                 }
                 (None, None) => break,

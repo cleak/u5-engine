@@ -148,6 +148,65 @@ impl ConversationSessionOutput {
         self.rendered_glyphs
             .extend(crate::ordinary_glyphs_from_engine_text(text));
     }
+
+    /// `conversation.md §6`: a per-NPC response "finish[es] its ordinary
+    /// quote/newline framing, then reprompt[s]", and the empty-input exit
+    /// runs the Bye response "in quotes". Measured on a decoded capture
+    /// (`cleak/u5-spec#198`): a blank row, the response in double quotes,
+    /// a blank row, then the reprompt.
+    ///
+    /// The framing wraps the *response*, not the envelope around it -
+    /// the `BYE` header the empty-input exit prints first stays outside
+    /// the quotes, which is why this sits here rather than around the
+    /// finished output.
+    ///
+    /// A response whose own stream already opened a quote
+    /// (`tlk.md §9.2`'s `0xA2`) is left alone; the runner's
+    /// adjacent-quote dedup does not reach this layer.
+    fn push_framed_response(&mut self, rendered: &TlkRenderedText) {
+        let already_quoted = rendered.text.trim_start().starts_with('"');
+        // The closing quote hugs the text: a response whose own stream
+        // ends in line feeds keeps them *outside* the quotes, where the
+        // original puts them.
+        let body_len = rendered.text.trim_end_matches('\n').len();
+        // §6's framing opens with a line feed, but the `BYE` header of
+        // the empty-input exit has already printed its own two - "Print
+        // `BYE` followed by two line feeds, run the NPC's mandatory Bye
+        // response in quotes" - so do not add a third.
+        if !self.text.is_empty() && !self.text.ends_with('\n') {
+            self.push_plain_text("\n");
+        } else if self.text.is_empty() {
+            self.push_plain_text("\n");
+        }
+        if !already_quoted {
+            self.push_plain_text("\"");
+        }
+        self.text.push_str(&rendered.text[..body_len]);
+        self.rendered_glyphs
+            .extend(rendered.glyphs.iter().take(body_len).copied());
+        if !already_quoted {
+            self.push_plain_text("\"");
+        }
+        if body_len < rendered.text.len() {
+            self.text.push_str(&rendered.text[body_len..]);
+            self.rendered_glyphs
+                .extend(rendered.glyphs.iter().skip(body_len).copied());
+        }
+        // §6's framing closes with a blank row before the reprompt, the
+        // same shape the no-match literal already carries. Two line
+        // feeds, because `text-output.md §5`'s feed is a combined
+        // CR+LF, so a run of *k* leaves *k - 1* blank rows.
+        while !self.text.ends_with("\n\n") {
+            self.push_plain_text("\n");
+        }
+    }
+
+    /// [`Self::push_framed_response`] for a fixed engine literal.
+    fn set_framed_text(&mut self, text: &str) {
+        self.text.clear();
+        self.rendered_glyphs.clear();
+        self.push_framed_response(&TlkRenderedText::plain(text));
+    }
 }
 
 /// Holder for a conversation in progress.
@@ -303,7 +362,7 @@ impl ConversationSession {
                 .unwrap_or(usize::MAX),
         };
         if field_idx == usize::MAX {
-            out.set_plain_text(TLK_NO_KEYWORD_MATCH_MESSAGE);
+            out.set_framed_text(TLK_NO_KEYWORD_MATCH_MESSAGE);
             return out;
         }
         if matches!(
@@ -314,8 +373,7 @@ impl ConversationSession {
             out.push_plain_text(TLK_EMPTY_INPUT_BYE_MESSAGE);
         }
         let response = self.run_field_from(field_idx, 0, ctx, 0);
-        out.text.push_str(&response.text);
-        out.rendered_glyphs.extend(response.rendered_glyphs);
+        out.push_framed_response(&response.rendered_text());
         out.branch_flags_set |= response.branch_flags_set;
         out.action_grants.extend(response.action_grants);
         out.gold_payments.extend(response.gold_payments);
@@ -761,6 +819,36 @@ pub fn fields_for_npc(
 mod tests {
     use super::*;
 
+    /// `conversation.md §6`'s response framing, as the tests expect to
+    /// see it: a line feed, the response in double quotes, and any
+    /// trailing line feeds the response's own stream carried left
+    /// outside the closing quote.
+    fn framed_response(text: &str) -> String {
+        framed_response_after("", text)
+    }
+
+    /// [`framed_response`] appended to text a handler has already
+    /// emitted - the `BYE` header, for instance, which supplies its own
+    /// line feeds.
+    fn framed_response_after(prefix: &str, text: &str) -> String {
+        let lead = if prefix.is_empty() || !prefix.ends_with('\n') {
+            "\n"
+        } else {
+            ""
+        };
+        let mut out = if text.trim_start().starts_with('"') {
+            format!("{prefix}{lead}{text}")
+        } else {
+            let body = text.trim_end_matches('\n');
+            let tail = &text[body.len()..];
+            format!("{prefix}{lead}\"{body}\"{tail}")
+        };
+        while !out.ends_with("\n\n") {
+            out.push('\n');
+        }
+        out
+    }
+
     fn enc(text: &str) -> Vec<u8> {
         text.bytes().map(|b| b ^ TLK_TEXT_XOR_MASK).collect()
     }
@@ -876,7 +964,7 @@ mod tests {
         s.present_greeting(&context);
 
         let out = s.submit_keyword("join", &context);
-        assert_eq!(out.text, "I shall come. Lead on.");
+        assert_eq!(out.text, framed_response("I shall come. Lead on."));
         assert!(out.recruit_speaker);
         assert!(s.recruit_speaker_pending());
         assert_eq!(s.phase, ConversationSessionPhase::AwaitingKeyword);
@@ -907,7 +995,13 @@ mod tests {
         assert!(!out.recruit_speaker);
         assert_eq!(out.asked_party_name, None);
         assert!(!s.recruit_speaker_pending());
-        assert!(out.text.contains(TLK_RECRUIT_SPEAKER_FULL_PARTY_REFUSAL));
+        // §6's framing closes its quote against the text, so a refusal
+        // whose own literal carries trailing line feeds is split by the
+        // closing quote. Match the body.
+        assert!(
+            out.text
+                .contains(TLK_RECRUIT_SPEAKER_FULL_PARTY_REFUSAL.trim_end_matches('\n'))
+        );
     }
 
     #[test]
@@ -969,7 +1063,7 @@ mod tests {
         s.present_greeting(&context);
 
         let first = s.submit_keyword("names", &context);
-        assert_eq!(first.text, "Who art thou?");
+        assert_eq!(first.text, framed_response("Who art thou?"));
         assert!(matches!(
             s.phase,
             ConversationSessionPhase::AwaitingAskWho { .. }
@@ -1072,7 +1166,7 @@ mod tests {
         s.present_greeting(&context);
 
         let paid = s.submit_keyword("pay", &context);
-        assert_eq!(paid.text, "A toll. Paid.");
+        assert_eq!(paid.text, framed_response("A toll. Paid."));
         assert_eq!(
             paid.gold_payments,
             vec![ConversationGoldPayment {
@@ -1120,7 +1214,10 @@ mod tests {
         let mut s = ConversationSession::new(raw.clone(), decoded.clone());
         s.present_greeting(&context);
         let refused = s.submit_keyword("pay", &context);
-        assert_eq!(refused.text, TLK_GOLD_PAYMENT_REFUSAL_MESSAGE);
+        assert_eq!(
+            refused.text,
+            framed_response(TLK_GOLD_PAYMENT_REFUSAL_MESSAGE)
+        );
         assert_eq!(
             refused.gold_payments,
             vec![ConversationGoldPayment {
@@ -1135,7 +1232,7 @@ mod tests {
         assert_eq!(s.prompt_message(), TLK_KEYWORD_PROMPT);
 
         let name = s.submit_keyword("name", &context);
-        assert_eq!(name.text, "Ada");
+        assert_eq!(name.text, framed_response("Ada"));
         assert!(!name.ended);
         assert_eq!(
             s.phase,
@@ -1143,7 +1240,10 @@ mod tests {
         );
 
         let nested = s.submit_keyword("", &context);
-        assert_eq!(nested.text, "BYE\n\nFarewell.");
+        assert_eq!(
+            nested.text,
+            framed_response_after(TLK_EMPTY_INPUT_BYE_MESSAGE, "Farewell.")
+        );
         assert!(nested.ended);
         assert_eq!(s.phase, ConversationSessionPhase::PresentingBye);
 
@@ -1153,7 +1253,7 @@ mod tests {
         stopped.present_greeting(&context);
         stopped.submit_keyword("pay", &context);
         let response = stopped.submit_keyword("help", &context);
-        assert_eq!(response.text, "Nested response.");
+        assert_eq!(response.text, framed_response("Nested response."));
         assert!(response.ended);
         assert!(!response.text.contains("Farewell"));
     }
@@ -1201,13 +1301,13 @@ mod tests {
         let mut declined = ConversationSession::new(raw.clone(), decoded.clone());
         declined.present_greeting(&unaffordable);
         let out = declined.submit_keyword("pay", &unaffordable);
-        assert_eq!(out.text, TLK_GOLD_PAYMENT_REFUSAL_MESSAGE);
+        assert_eq!(out.text, framed_response(TLK_GOLD_PAYMENT_REFUSAL_MESSAGE));
         assert_eq!(out.moral_standing, None);
 
         let mut paid = ConversationSession::new(raw, decoded);
         paid.present_greeting(&affordable);
         let out = paid.submit_keyword("pay", &affordable);
-        assert_eq!(out.text, "Paid.");
+        assert_eq!(out.text, framed_response("Paid."));
         assert_eq!(out.moral_standing, Some(39));
     }
 
@@ -1337,7 +1437,7 @@ mod tests {
         let out = s.submit_keyword("gran", &ctx());
         // The nested record ends with `0xFF`, which signals stop, so the
         // outer stream stops too and " after." never runs.
-        assert_eq!(out.text, "Base Nested");
+        assert_eq!(out.text, framed_response("Base Nested"));
         assert_eq!(s.phase, ConversationSessionPhase::AwaitingKeyword);
     }
 
@@ -1376,7 +1476,7 @@ mod tests {
         s.present_greeting(&ctx());
 
         let out = s.submit_keyword("gran", &ctx());
-        assert_eq!(out.text, "Base Nested after.");
+        assert_eq!(out.text, framed_response("Base Nested after."));
         assert_eq!(s.phase, ConversationSessionPhase::AwaitingKeyword);
     }
 
@@ -1416,7 +1516,7 @@ mod tests {
         s.present_greeting(&ctx());
 
         let out = s.submit_keyword("gran", &ctx());
-        assert_eq!(out.text, "He is well.");
+        assert_eq!(out.text, framed_response("He is well."));
     }
 
     #[test]
@@ -1447,7 +1547,7 @@ mod tests {
         s.present_greeting(&ctx());
 
         let out = s.submit_keyword("ABCDEFGHIJKLMNOP", &ctx());
-        assert_eq!(out.text, "Fifteen.");
+        assert_eq!(out.text, framed_response("Fifteen."));
     }
 
     #[test]
@@ -1455,7 +1555,7 @@ mod tests {
         let mut s = baseline_session();
         s.present_greeting(&ctx());
         let out = s.submit_keyword("xyzzy", &ctx());
-        assert_eq!(out.text, TLK_NO_KEYWORD_MATCH_MESSAGE);
+        assert_eq!(out.text, framed_response(TLK_NO_KEYWORD_MATCH_MESSAGE));
         assert!(out.text.ends_with("\n\n"));
     }
 
@@ -1504,7 +1604,7 @@ mod tests {
         s.present_greeting(&ctx());
 
         let first = s.submit_keyword("ask", &ctx());
-        assert_eq!(first.text, "Topic?");
+        assert_eq!(first.text, framed_response("Topic?"));
         assert_eq!(
             s.phase,
             ConversationSessionPhase::AwaitingScopedKeyword { label: 0x91 }
