@@ -146,9 +146,10 @@ impl PlayState {
     /// logged one. Re-logging it printed `For what spell?` once per typed
     /// letter.
     pub fn spell_prompt_echo(&self) -> Option<String> {
-        if let Some(session) = self.active_yell.as_ref() {
-            return Some(self.render_yell_session(session));
-        }
+        // Y-Yell is deliberately not here: its typed text lives in the
+        // shell's own input line, and the layout appends that to the open
+        // colon row. Returning an echo from the session would shadow it
+        // and freeze the row while the player types.
         if let Some(session) = self.active_cast.as_ref() {
             return Some(format!(":{}", rune_echo_for_buffer(&session.buffer)));
         }
@@ -1359,7 +1360,7 @@ impl PlayState {
         // typed one under it. It is supplied live by
         // [`Self::spell_prompt_echo`] (`cleak/u5-engine#5`).
         if !self.complete_open_direction_echo("Yell ", YELL_QUESTION) {
-            self.message = format!("Yell {YELL_QUESTION}");
+            self.message = format!("Yell {YELL_QUESTION}\n:");
             return MoveOutcome::Observed;
         }
         self.message = self.render_active_yell();

@@ -1151,6 +1151,10 @@ impl PlayState {
             return MoveOutcome::PromptDeclined;
         };
         let word = Self::normalize_yell_word(word);
+        // The typed word belongs on the colon row the prompt opened, not
+        // on a row under it: a capture reads `>Yell what?` and then a
+        // single `:HELLO`. `cleak/u5-engine#5`.
+        self.commit_typed_prompt_line(":", &word);
         if word.is_empty() {
             self.message = YELL_NOTHING_SAID_MESSAGE.to_string();
             self.advance_turn();
