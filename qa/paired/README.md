@@ -34,6 +34,7 @@ are PRNG-selected and legitimately differ between the two sides.
 | `stonegate-trapdoor-audio` | the 750-tone descent, the longest sound in the game, per side |
 | `word-of-power-audio` | the shared full-viewport flash, whose spacing the spec cannot derive |
 | `overworld-night-walk` | that the overworld is *alive* while the party walks: encounters spawn and creatures act |
+| `drowning-audio` | the stock side alone, sailed until something sinks the ship, for a cue that cannot be scheduled |
 | `hut-talk` | Talk with the hut's resident: greeting, name, job, bye |
 | `hut-prompts` | New Order, Ready, Use, Cast, Mix, Yell, Search, Look, X-it, Get, Enter, Hole up, Ignite, Klimb prompt and result literals |
 | `town-britain-seeded` | Britain from a seeded save: entry, walking, Look at an NPC cell |
@@ -71,6 +72,7 @@ number of keystrokes:
 | `stonegate-trapdoor-audio` | the party inside Stonegate, standing in the trapdoor ring's centre cell |
 | `word-of-power-audio` | the party standing on the Britannia overworld |
 | `overworld-night-walk` | the party on the Britannia overworld at 02:00, when the encounter threshold can fire |
+| `drowning-audio` | the party aboard a frigate with no skiffs, on deep water at night |
 | `town-night-schedule` | Britain at 02:00 |
 | `town-britain-seeded`, `town-fountain`, `town-look-npc-cell` | the party inside Britain, beside the fountain for the fountain scenario |
 | `minoc-tribute`, `blackthorn-palace-password` | the party at the location named, with the quest state the exchange needs |
@@ -193,3 +195,18 @@ It is stochastic, which is what makes it awkward to capture: the descent fires
 in about one sail of ten at 200 turns, and three of six at 1200. Grinding the
 hull down first does not help - over short passes the ship either takes no
 impact at all or is destroyed outright, so there is no reliable low-hull seed.
+
+**A cue that cannot be scheduled can still be compared.** The long descent of
+`audio.md §8.9` fires only when an encounter sinks the ship, about one sail in
+ten, so waiting for both sides to hit one inside the same paired run is
+impractical. `drowning-audio` therefore drives the DOSBox side alone and
+records it, and the engine's own cue is rendered from the same program the
+shell plays through:
+
+```
+cargo run --release --example render_cue -- long-descent /tmp/ours.wav
+```
+
+The two waveforms are then compared directly. That is a weaker claim than a
+simultaneous capture - it does not prove the two fired at the same point in the
+same situation - so say which one you have when you report a result.
