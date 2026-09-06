@@ -523,6 +523,9 @@ pub struct PlayState {
     pub active_blackthorn_guard_demand: Option<ActiveBlackthornGuardDemand>,
     pub pending_town_arrest: Option<TownArrestPrompt>,
     pub endgame: Option<EndgameState>,
+    /// `endgame.md §3` step 2's full redraw, owed until the first entry
+    /// frame is pumped. See `advance_endgame_entry_presentation`.
+    pub endgame_entry_redraw_pending: bool,
     /// `LOOK2.DAT` descriptions, cached at scene load.
     ///
     /// Look loads this per call from its own `game_dir`. Talk needs the

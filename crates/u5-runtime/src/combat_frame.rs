@@ -2236,11 +2236,13 @@ impl PlayState {
             .combat_frame_snapshot
             .as_ref()
             .is_some_and(|snapshot| snapshot.endgame_messages.is_some());
-        // Emit rather than assign: the endgame's own greeting follows
-        // immediately, and the original keeps both on screen with a
-        // blank row between. Writing the slot would let the greeting
-        // replace this line.
-        self.emit_message_line(COMBAT_ABSORBED_MESSAGE);
+        // An armed contact re-emits this after §3 step 2's redraw, which
+        // is the only way it survives into the dialogue phase; emitting
+        // it twice would print it twice. An unarmed absorption keeps it
+        // here, where it is the whole of the effect's narration.
+        if !armed_endgame_result {
+            self.emit_message_line(COMBAT_ABSORBED_MESSAGE);
+        }
         self.mark_visibility_dirty();
         if armed_endgame_result {
             // Restore the suspended frame first. `endgame.md §3` has the
@@ -2253,13 +2255,12 @@ impl PlayState {
                 let messages = snapshot.endgame_messages.clone();
                 let tableau_map = snapshot.endgame_tableau_map.clone();
                 self.restore_combat_frame_with_trigger_reconcile(snapshot, true);
-                // §3 step 2's full redraw: the arena's combat prompts do
-                // not survive into the dialogue phase. The original's
-                // frame shows the absorption line at the top of an
-                // otherwise empty window.
-                self.clear_message_window();
-                self.emit_message_line(COMBAT_ABSORBED_MESSAGE);
                 self.enter_endgame_with_resources(messages, tableau_map);
+                // Owe §3 step 2's redraw to the first pumped entry
+                // frame. Only this route has an absorption line to put
+                // at the top of it; the direct entries the suites use
+                // have none.
+                self.endgame_entry_redraw_pending = true;
                 // `endgame.md §3` step 1: the sequence marks the scene as
                 // having no active combatant, so the arena renderer
                 // suppresses its target cursor. The frame restore above

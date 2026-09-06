@@ -883,6 +883,7 @@ impl PlayState {
             active_blackthorn_guard_demand: None,
             pending_town_arrest: None,
             endgame: None,
+            endgame_entry_redraw_pending: false,
             // Cache `LOOK2.DAT` here rather than in `load_scene`, so a
             // runtime area transition - walking through a town door -
             // gets it too. A scene that loads without the file is not an
@@ -1241,6 +1242,7 @@ impl PlayState {
             active_blackthorn_guard_demand: None,
             pending_town_arrest: None,
             endgame: None,
+            endgame_entry_redraw_pending: false,
             // Cache `LOOK2.DAT` here rather than in `load_scene`, so a
             // runtime area transition - walking through a town door -
             // gets it too. A scene that loads without the file is not an
@@ -1611,6 +1613,7 @@ impl PlayState {
             active_blackthorn_guard_demand: None,
             pending_town_arrest: None,
             endgame: None,
+            endgame_entry_redraw_pending: false,
             // Cache `LOOK2.DAT` here rather than in `load_scene`, so a
             // runtime area transition - walking through a town door -
             // gets it too. A scene that loads without the file is not an

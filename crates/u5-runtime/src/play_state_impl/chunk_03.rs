@@ -212,6 +212,14 @@ impl PlayState {
                 TLK_KEYWORD_PROMPT_OPEN_LINE.to_string()
             });
         }
+        // `endgame.md §5`: the confirmation is a blocking prompt, and its
+        // `ENDMSG.DAT` record ends `You reply: ` - a trailing space, so
+        // `commands.md §5.3` keeps the answer on that same row. Without
+        // this the shell opens a fresh command row under it, which costs
+        // the window a line and scrolls the absorption line off the top.
+        if let Some(line) = self.endgame_open_prompt_line() {
+            return Some(line);
+        }
         if self.active_party_selector.is_some() {
             return Some(PARTY_SELECTOR_PROMPT_MESSAGE.to_string());
         }

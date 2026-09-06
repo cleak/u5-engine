@@ -1293,6 +1293,17 @@ impl PlayState {
     /// that member is placed and walked to the target one cell per frame
     /// before the next slot starts. The caller renders after each `true`.
     pub fn advance_endgame_entry_presentation(&mut self) -> bool {
+        // `endgame.md §3` step 2's full redraw. It runs on the first
+        // pumped frame rather than at the absorption, because the step
+        // that walked onto the field commits its own movement echo
+        // *after* the contact handler returns - clearing any earlier
+        // leaves `>North` at the top of the window. It runs before §4's
+        // restoration announcements, which must survive it.
+        if self.endgame_entry_redraw_pending {
+            self.endgame_entry_redraw_pending = false;
+            self.clear_message_window();
+            self.emit_message_line(crate::COMBAT_ABSORBED_MESSAGE);
+        }
         let Some(endgame) = self.endgame.as_ref() else {
             return false;
         };
@@ -1432,6 +1443,23 @@ impl PlayState {
             endgame.entry_party_slot = ENDGAME_ENTRY_COMPLETE_SLOT;
         }
         self.append_endgame_first_prompt();
+    }
+
+    /// The row of a live endgame confirmation that stays open for the
+    /// player's answer: the last line of whatever prompt is on screen.
+    ///
+    /// `endgame.md §5`'s prompts come from `ENDMSG.DAT` and end
+    /// `You reply: `, so the answer continues that row rather than
+    /// opening a new one.
+    pub fn endgame_open_prompt_line(&self) -> Option<String> {
+        let endgame = self.endgame.as_ref()?;
+        if endgame.is_terminal() {
+            return None;
+        }
+        self.message
+            .rsplit('\n')
+            .find(|line| !line.trim().is_empty())
+            .map(str::to_string)
     }
 
     fn append_endgame_first_prompt(&mut self) {
