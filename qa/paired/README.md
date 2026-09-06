@@ -178,3 +178,18 @@ before the beat it is aimed at, and that control is the whole reason its
 eleven-burst finding could be filed as game output (cleak/u5-spec#218) rather
 than guessed at. Without it I had already dismissed a similar train in
 `hut-audio` as an artefact, which now looks wrong.
+
+**Reaching the drowning cue, since it took a while to find.** `audio.md §8.9`'s
+long descent needs a frigate destroyed with no skiff aboard and no carpet in
+stock. The precondition is reachable without editing a save: `X;B;X;B` aboard
+the frigate leaves the party aboard with `skiffs=0`, because each `X`
+disembarks into a skiff and each `B` re-boards and leaves that skiff behind.
+Sailing that ship at night then takes ranged impacts from the creatures the
+per-turn walker sets on the party, and an impact roll that meets the hull sinks
+it. The whole chain runs: ship sunk, drowning, party death, rescue to
+`CASTLE:0` at (10, 10).
+
+It is stochastic, which is what makes it awkward to capture: the descent fires
+in about one sail of ten at 200 turns, and three of six at 1200. Grinding the
+hull down first does not help - over short passes the ship either takes no
+impact at all or is destroyed outright, so there is no reliable low-hull seed.
