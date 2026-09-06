@@ -593,6 +593,63 @@ fn save_load_preserves_inactive_pending_vehicle_bytes_verbatim() {
 }
 
 #[test]
+fn a_damaged_frigate_hull_survives_the_save_round_trip() {
+    // Chasing `audio.md §8.9`'s drowning cue I twice read a partially
+    // damaged hull at the end of a sail and a full one on the pass that
+    // followed, which would mean the hull does not persist - it cannot
+    // rise on its own. The field observation could not be reproduced
+    // deliberately (over sixteen sails the ship either took no impact at
+    // all or was destroyed outright), so this pins the question where it
+    // is cheap to answer instead of where it is rare.
+    //
+    // `formats/saved-gam.md §8`'s record table: the active-object record's
+    // `+0x05` is "for frigates ... the hull's hit-point count", and `+0x07`
+    // its skiff count. `sync_player_object` writes both into slot zero's
+    // `aux1`/`aux3`, and `write_active_object_record` puts those at `+5`
+    // and `+7`, so the round trip is by construction - but only while all
+    // three agree, which is what this test holds still.
+    let dir = debug_game_dir();
+    let mut template = saved_game_seed_bytes(0, 0, 3, 4);
+    template[SAVE_AVATAR_NAME_OFFSET] = b'A';
+    fs::write(dir.join(SAVED_GAM_FILENAME), template).unwrap();
+    fs::write(dir.join(SAVED_OOL_FILENAME), vec![0; SAVED_OOL_LEN]).unwrap();
+    fs::write(dir.join(BRIT_OOL_FILENAME), vec![0; OOL_PLANE_LEN]).unwrap();
+    fs::write(dir.join(UNDER_OOL_FILENAME), vec![0; OOL_PLANE_LEN]).unwrap();
+
+    let mut state = test_state(open_grid(), 3, 4);
+    state.player.transport = TransportState::Ship {
+        type_byte: SHIP_TRANSPORT_FURLED_FIRST,
+        tile: SHIP_TRANSPORT_FURLED_FIRST,
+        sails_hoisted: false,
+        hull: 42,
+        skiffs: 1,
+    };
+    state.write_save_files(&dir).unwrap();
+
+    let saved = fs::read(dir.join(SAVED_GAM_FILENAME)).unwrap();
+    assert_eq!(
+        saved[SAVE_ACTIVE_OBJECTS_OFFSET + 5],
+        42,
+        "the hull belongs at the record's +5 byte"
+    );
+    assert_eq!(
+        saved[SAVE_ACTIVE_OBJECTS_OFFSET + 7],
+        1,
+        "the skiff count belongs at the record's +7 byte"
+    );
+
+    let options = play_options_from_save_bytes(&saved).unwrap();
+    match options.transport {
+        TransportState::Ship { hull, skiffs, .. } => {
+            assert_eq!(hull, 42, "a damaged hull must reload damaged");
+            assert_eq!(skiffs, 1);
+        }
+        other => panic!("expected a frigate, got {other:?}"),
+    }
+    let _ = fs::remove_dir_all(dir);
+}
+
+#[test]
 fn from_save_decodes_all_four_door_tracker_bytes() {
     let mut bytes = saved_game_seed_bytes(17, 0, 3, 4);
     bytes[SAVE_AVATAR_NAME_OFFSET] = b'A';
