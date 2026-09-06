@@ -1293,7 +1293,13 @@ Mixed 1 IL charge; stock is 1.");
         handle_play_key_input(&mut state, '\u{1b}', "", Path::new("")).unwrap();
 
         assert!(state.active_use.is_none());
-        assert_eq!(state.message, ITEM_PICKER_ESCAPE_MESSAGE);
+        // The reply continues the prompt's own row, so the slot holds the
+        // completed line and the next flush does not log it again: a
+        // capture reads `Item: None!` on one row (`cleak/u5-engine#5`).
+        assert_eq!(
+            state.message,
+            format!("{ITEM_SELECTION_PROMPT}{ITEM_PICKER_ESCAPE_MESSAGE}")
+        );
         assert_eq!(state.turn, 1);
     }
 

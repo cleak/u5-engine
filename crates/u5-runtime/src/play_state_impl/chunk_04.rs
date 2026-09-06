@@ -433,8 +433,7 @@ impl PlayState {
             UseInputAction::Exit => {
                 let turn_before = self.turn;
                 // The reply lands on the prompt's own row: `Item: None!`.
-                self.commit_typed_prompt_line(ITEM_SELECTION_PROMPT, ITEM_PICKER_ESCAPE_MESSAGE);
-                self.message = ITEM_PICKER_ESCAPE_MESSAGE.to_string();
+                self.commit_prompt_reply(ITEM_SELECTION_PROMPT, ITEM_PICKER_ESCAPE_MESSAGE);
                 self.ensure_use_action_turn(turn_before);
                 self.apply_post_turn_effects_after_outcome(
                     turn_before,

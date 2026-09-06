@@ -232,6 +232,12 @@ impl PlayState {
         {
             return Some(ITEM_SELECTION_PROMPT.to_string());
         }
+        // R-Ready's member stage keeps its own session rather than the
+        // shared selector, and it is the same open `Player: ` row: a
+        // capture shows the cursor on it, with no end-cap row underneath.
+        if self.active_ready.is_some() {
+            return Some(PARTY_SELECTION_PROMPT.to_string());
+        }
         // Each selector target keeps its own prompt literal: `Player: `
         // for most, `Swap ` / `with ` for N-New Order, the fountain's own
         // for V-View. All of them end in a space, so the picker's cursor
