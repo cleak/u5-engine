@@ -41,13 +41,6 @@ fn directed_utility_success_variant(spell_index: usize) -> Option<u8> {
     }
 }
 
-/// `inventory.md §4` + observation: the party-member selector's
-/// message-window prompt.
-///
-/// cleak/u5-spec#81 asks for the published literal; the form below is the
-/// one observed in the original's message window (`Player:` followed by
-/// the selection, `Player: None!` on cancel).
-pub const PARTY_SELECTOR_PROMPT_MESSAGE: &str = PARTY_SELECTION_PROMPT;
 /// `commands.md §5.6`: `None!` is "the universal cancel response". It
 /// continues the still-open `Player:_` line rather than starting a new
 /// one - `text-output.md §11` models the window as a stream continuing

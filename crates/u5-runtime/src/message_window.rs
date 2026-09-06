@@ -496,7 +496,6 @@ fn layout_message_window_inner(
         None => 0,
     };
     let live_blank_row = live_rows == 2;
-    let history_rows = MESSAGE_WINDOW_ROWS - live_rows;
     let lines = log.lines();
     // The window scrolls only once output would pass its bottom row, and
     // it scrolls by one row at a time: the rows above the cursor go
@@ -505,7 +504,7 @@ fn layout_message_window_inner(
     let overflow = (offset + lines.len() + live_rows).saturating_sub(MESSAGE_WINDOW_ROWS);
     let shrink = overflow.min(offset);
     offset -= shrink;
-    let start = overflow - shrink;
+    let start = (overflow - shrink).min(lines.len());
     let placed = &lines[start..];
     // `text-output.md §3`/§10: the window has a cursor, and it only moves
     // up when output "would carry the cursor below the message window's
