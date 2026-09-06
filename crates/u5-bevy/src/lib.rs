@@ -6598,11 +6598,11 @@ fn visual_route_suite_cases() -> Vec<VisualRouteSuiteCase> {
             // Page the greeting, refuse the first box question - which is
             // the answer that still reaches `endgame.md §5` step 4's
             // explicit sandalwood question (`cleak/u5-engine#12`) - and
-            // answer that one into the terminal tableau. Nothing follows
-            // it: the tableau is terminal and a further key leaves the
-            // frame exactly as it stands, which is what this route's name
-            // is about.
-            script: &["Y", "N", "Y"],
+            // answer that one into the terminal tableau, then pump one
+            // display frame: `endgame.md §6` step 3's terminal loop
+            // jitters slots 1, 3, 4 and 5 for as long as the player
+            // watches, which is what this route's name is about.
+            script: &["Y", "N", "endgame:frame"],
             configure: Some(seed_visual_route_endgame_missing_box),
         },
         VisualRouteSuiteCase {
@@ -9256,10 +9256,9 @@ fn visual_route_allows_unchanged_step(route_label: &str, step: usize) -> bool {
     // class bytes in the world tile index space, where a Bard (`0x44`)
     // is pixel-identical to the tableau's authored floor tile. Those
     // steps therefore produce byte-identical frames today.
-    // The answer that ends the audience leaves the tableau where it
-    // stands in this engine. A paired capture shows the original
-    // rearranging the party around Lord British's table at that moment,
-    // which is not implemented: cleak/u5-engine#12.
+    // `endgame.md §6`'s terminal wander throttles each slot behind a
+    // random yes/no gate before it tries a direction, so a single pumped
+    // frame is allowed to move nobody and repeat the frame exactly.
     (route_label == "route-endgame-missing-box-terminal-jitter" && step == 3)
         || (route_label == "route-endgame-tableau-walk-in")
         || (route_label == "route-endgame-box-full-victory-cinematic" && (3..=98).contains(&step))

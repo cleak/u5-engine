@@ -1326,6 +1326,16 @@ impl PlayState {
                 .unwrap_or_default();
             return true;
         }
+        // `endgame.md §6` step 3: the refusal branch's terminal loop keeps
+        // jittering slots 1, 3, 4 and 5 for as long as the player watches.
+        // It is a loop, not a per-keystroke step, so it is pumped here
+        // with the rest of the display-driven beats. `cleak/u5-engine#12`.
+        if self.endgame.as_ref().is_some_and(|endgame| {
+            matches!(endgame.outcome, Some(EndgameOutcome::MissingBoxOrRefused))
+        }) {
+            self.advance_endgame_terminal_tableau_jitter();
+            return true;
+        }
         let advanced_rite_pause = self
             .endgame
             .as_mut()
