@@ -16,12 +16,152 @@ use std::collections::{HashMap, VecDeque};
 use std::path::Path;
 use u5_runtime::*;
 
+/// One breadth-first step search from the party's current cell.
+///
+/// Returns the first key of a shortest route to a cell adjacent to the
+/// NPC carrying `dialog_id`, or `None` when no route exists in this
+/// snapshot. Callers step, re-search, and repeat - see [`chase`].
+fn next_step_toward(state: &PlayState, dialog_id: u8) -> Option<char> {
+    let start = (state.player.x, state.player.y);
+    let mut came: HashMap<(usize, usize), ((usize, usize), char)> = HashMap::new();
+    let mut queue = VecDeque::from([start]);
+    came.insert(start, (start, ' '));
+    let mut goal = None;
+    while let Some((x, y)) = queue.pop_front() {
+        for (dx, dy) in [(0isize, -1isize), (0, 1), (-1, 0), (1, 0)] {
+            let (nx, ny) = (x as isize + dx, y as isize + dy);
+            if !(0..32).contains(&nx) || !(0..32).contains(&ny) {
+                continue;
+            }
+            if state
+                .npc_at_current_floor(nx as usize, ny as usize)
+                .is_some_and(|npc| npc.dialog_id == dialog_id)
+            {
+                goal = Some((x, y));
+            }
+        }
+        if goal == Some((x, y)) {
+            break;
+        }
+        for (direction, key) in [
+            (Direction::North, 'w'),
+            (Direction::South, 's'),
+            (Direction::West, 'a'),
+            (Direction::East, 'd'),
+        ] {
+            let mut probe = state.clone();
+            probe.player.x = x;
+            probe.player.y = y;
+            probe.sync_player_object();
+            if probe
+                .step_with_game_dir(direction, None)
+                .unwrap_or(MoveOutcome::Blocked)
+                != MoveOutcome::Moved
+            {
+                continue;
+            }
+            let next = (probe.player.x, probe.player.y);
+            if came.contains_key(&next) {
+                continue;
+            }
+            came.insert(next, ((x, y), key));
+            queue.push_back(next);
+        }
+    }
+    let mut cell = goal?;
+    if cell == start {
+        return None;
+    }
+    let mut first = ' ';
+    while cell != start {
+        let (previous, key) = *came.get(&cell)?;
+        first = key;
+        cell = previous;
+    }
+    Some(first)
+}
+
+/// Walk to an NPC that is *moving*.
+///
+/// A route planned from a snapshot does not survive the walk: NPC
+/// schedules advance a turn per step, so by the time the party arrives
+/// the target has moved and the scripted Talk finds empty floor. Three
+/// paired scenarios died that way before this existed.
+///
+/// This re-plans after every step against the state the step produced,
+/// which is a pursuit rather than a route, and prints the keystrokes it
+/// actually took. The engine is deterministic and the stock game matches
+/// it turn for turn, so replaying those keys reproduces the arrival.
+fn chase(state: &mut PlayState, dialog_id: u8, budget: usize) {
+    let mut keys = String::new();
+    for _ in 0..budget {
+        let adjacent = [
+            (Direction::North, 'N'),
+            (Direction::South, 'S'),
+            (Direction::West, 'W'),
+            (Direction::East, 'E'),
+        ]
+        .into_iter()
+        .find(|(direction, _)| {
+            let (dx, dy) = direction.delta();
+            let (x, y) = (state.player.x as isize + dx, state.player.y as isize + dy);
+            (0..32).contains(&x)
+                && (0..32).contains(&y)
+                && state
+                    .npc_at_current_floor(x as usize, y as usize)
+                    .is_some_and(|npc| npc.dialog_id == dialog_id)
+        });
+        if let Some((_, face)) = adjacent {
+            println!(
+                "chase: {} step(s) `{keys}` then Talk-{face}  (party at ({}, {}), turn {})",
+                keys.len(),
+                state.player.x,
+                state.player.y,
+                state.turn
+            );
+            return;
+        }
+        let Some(key) = next_step_toward(state, dialog_id) else {
+            println!("chase: no route to dialog-id {dialog_id} after `{keys}`");
+            return;
+        };
+        let direction = match key {
+            'w' => Direction::North,
+            's' => Direction::South,
+            'a' => Direction::West,
+            _ => Direction::East,
+        };
+        if state
+            .step_with_game_dir(direction, None)
+            .unwrap_or(MoveOutcome::Blocked)
+            != MoveOutcome::Moved
+        {
+            println!("chase: blocked mid-pursuit after `{keys}`");
+            return;
+        }
+        keys.push(key);
+    }
+    println!("chase: gave up after {budget} steps (`{keys}`)");
+}
+
 fn main() {
     let mut args = std::env::args().skip(1);
-    let dir = args.next().expect("usage: talk_gate_probe <PROFILE_DIR>");
+    let dir = args
+        .next()
+        .expect("usage: talk_gate_probe <PROFILE_DIR> [--chase <ID>]");
     let dir = Path::new(&dir);
     let options = load_play_options_from_save(dir).expect("profile must hold a save");
-    let state = PlayState::load_scene(dir, options).expect("scene must load");
+    let mut state = PlayState::load_scene(dir, options).expect("scene must load");
+    if args.next().as_deref() == Some("--chase") {
+        let dialog_id: u8 = args
+            .next()
+            .expect("--chase needs a dialog id")
+            .parse()
+            .expect("dialog id must be a byte");
+        chase(&mut state, dialog_id, 64);
+        return;
+    }
+    let state = state;
 
     println!(
         "scene {:?} floor/level {:?} party at ({}, {}) facing {}",
