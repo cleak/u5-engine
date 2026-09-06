@@ -1205,7 +1205,7 @@ impl PlayState {
                             "Yelled {word}, the name of {shadowlord}. {shadowlord} appears in active-object slot {slot}."
                         )
                     } else {
-                        format!(":{word}\n\n{YELL_NO_EFFECT_MESSAGE}")
+                        format!("\n{YELL_NO_EFFECT_MESSAGE}")
                     };
                     return MoveOutcome::Used;
                 }
@@ -1214,7 +1214,7 @@ impl PlayState {
         }
 
         // The word's colon echo stays on screen above the result.
-        self.message = format!(":{word}\n\n{YELL_NO_EFFECT_MESSAGE}");
+        self.message = format!("\n{YELL_NO_EFFECT_MESSAGE}");
         MoveOutcome::Used
     }
 

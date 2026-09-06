@@ -1112,16 +1112,20 @@ impl PlayState {
     fn step_mix_session_char(&mut self, session: &mut MixSession, ch: char) -> Option<MoveOutcome> {
         match session.phase {
             MixPhase::Spell => match cast_input_action(ch) {
-                // M-Mix's cancel opens its own row - a capture reads
-                // `For what spell?`, the colon row, then `None!` - where
-                // C-Cast's continues the colon row. `cleak/u5-engine#5`.
+                // M-Mix's colon row survives the cancel and the reply
+                // opens the row under it - a capture reads `For what
+                // spell?`, `:`, then `None!` - where C-Cast's reply
+                // continues the colon row itself. The colon row is live
+                // while the prompt is open ([`Self::spell_prompt_echo`]),
+                // so ending the session drops it unless it is logged
+                // here. `cleak/u5-engine#5`.
                 CastInputAction::Cancel => {
-                    self.message = PARTY_SELECTOR_CANCEL_REPLY.to_string();
+                    self.message = format!(":\n{PARTY_SELECTOR_CANCEL_REPLY}");
                     Some(MoveOutcome::PromptDeclined)
                 }
                 CastInputAction::Complete => {
                     if session.spell_buffer.is_empty() {
-                        self.message = PARTY_SELECTOR_CANCEL_REPLY.to_string();
+                        self.message = format!(":\n{PARTY_SELECTOR_CANCEL_REPLY}");
                         Some(MoveOutcome::PromptDeclined)
                     } else {
                         self.accept_mix_spell(session);

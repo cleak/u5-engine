@@ -303,6 +303,9 @@ pub fn play_input_key_and_suffix(input: &str) -> Option<(char, String)> {
     if is_music_toggle_token(input) {
         return Some((PLAY_MUSIC_TOGGLE_KEY, String::new()));
     }
+    if is_return_token(input) {
+        return Some(('\r', String::new()));
+    }
     if is_program_exit_token(input) {
         return Some((PLAY_EXIT_TO_DOS_KEY, String::new()));
     }
@@ -359,6 +362,20 @@ pub fn is_music_toggle_token(input: &str) -> bool {
 /// `commands.md` Section 9's Control + `E` row. A real terminal delivers the
 /// chord as the raw control byte, which already dispatches, so this token only
 /// gives scripts and the keyless harness the same reach.
+/// A scripted Return.
+///
+/// The reader trims a trailing carriage return from every token, so a bare
+/// `\r` in a `--play-script` reaches the dispatcher as the empty token and
+/// is taken for a pass. Prompt flows - the party-member picker, the
+/// equipment picker, a free-text line - are driven by Return, so scripting
+/// them needs a name for it.
+pub fn is_return_token(input: &str) -> bool {
+    matches!(
+        input.trim().to_ascii_lowercase().as_str(),
+        "return" | "enter"
+    )
+}
+
 pub fn is_program_exit_token(input: &str) -> bool {
     matches!(
         input.trim().to_ascii_lowercase().as_str(),
@@ -436,6 +453,9 @@ pub fn handle_play_script_command(
     }
     if is_music_toggle_token(command) {
         return handle_play_key_input(state, PLAY_MUSIC_TOGGLE_KEY, "", game_dir);
+    }
+    if is_return_token(command) {
+        return handle_play_key_input(state, '\r', "", game_dir);
     }
     if is_program_exit_token(command) {
         return handle_play_key_input(state, PLAY_EXIT_TO_DOS_KEY, "", game_dir);
