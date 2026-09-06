@@ -923,6 +923,32 @@ impl PlayState {
         self.append_world_damage_tile_message(game_dir, plane)?;
         self.append_world_status_tile_message(plane);
         self.append_pending_hourly_status_message();
+        // `encounters.md §2.1`: "**Every turn** the overworld mode loop runs
+        // its per-turn block ... and that block contains an *encounter
+        // probe*." An accepted step is such a turn.
+        //
+        // The probe used to run only from the shared post-turn epilogue,
+        // which the movement branch deliberately skips for world moves - the
+        // comment there reads "World movement already owns its landing
+        // effects inside `step_world`" - so no wandering encounter could
+        // spawn while the party walked or sailed. Measured before the fix:
+        // 120 scripted night steps produced none, where the Section 3
+        // threshold of four against a `1..=30` draw predicts about one turn
+        // in ten, while calling the probe directly from the same state
+        // spawned 23 times in 300 calls (`cleak/u5-engine#17`).
+        //
+        // The walkers themselves are not affected: they run inside
+        // `advance_turn`, which this function has already called, and the
+        // same flag that gates them gates this.
+        if let Some(game_dir) = game_dir
+            && self.world_object_epilogue_runs_for_turn(self.turn)
+            && let Some(slot) = self.apply_world_encounter_probe(game_dir, plane)?
+        {
+            // `commands.md §8.1`: the movement family "never prints tile ids,
+            // coordinates, active-object slot numbers"; the spawn is silent to
+            // the player and visible only to the harness.
+            self.push_diagnostic(format!("Wandering encounter spawned in slot {slot}."));
+        }
         Ok(MoveOutcome::Moved)
     }
 }

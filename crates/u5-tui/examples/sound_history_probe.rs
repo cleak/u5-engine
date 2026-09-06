@@ -37,8 +37,8 @@ fn main() {
         .filter(|object| !object.is_empty())
         .count();
     println!(
-        "turn {} at ({}, {}); {objects} live active object(s)",
-        state.turn, state.player.x, state.player.y
+        "{:?}: turn {} at ({}, {}); {objects} live active object(s)",
+        state.area, state.turn, state.player.x, state.player.y
     );
     for object in state.active_objects.iter().filter(|o| !o.is_empty()) {
         println!(
