@@ -296,7 +296,6 @@
         assert_eq!(state.turn, 1);
         assert_eq!(state.spell_charges[IN_LOR_SPELL_INDEX], 0);
         assert_eq!(state.party[0].mana, 0);
-        assert!(state.message.contains("Light!"));
         assert!(state.message.contains("A TRAPDOOR!"));
         let _ = fs::remove_dir_all(dir);
     }

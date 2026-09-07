@@ -470,6 +470,41 @@ impl PlayState {
         self.message_flushed = line;
     }
 
+    /// Redraw an open prompt row the player is still typing into.
+    ///
+    /// `text-output.md §10.6`: "a prompt that is waiting for a key keeps
+    /// its own line open", so digits typed into the mixer's `How much? `
+    /// land on that row rather than opening a new one. Without this the
+    /// slot's own change-detection logged the empty prompt and then the
+    /// filled one as two rows, which is what a paired capture caught:
+    /// the original shows a single `How much? 1` row where the engine
+    /// showed `How much?` above it.
+    ///
+    /// The rewrite only happens when the row is already on the
+    /// transcript. When it is not, the slot is left to log the finished
+    /// line once, which reaches the same single row.
+    /// Returns whether the transcript row was rewritten.
+    pub fn rewrite_open_prompt_row(&mut self, prompt: &str, line: &str) -> bool {
+        let rewritten = match self.message_transcript.last_mut() {
+            Some(entry)
+                if !entry.explicit_blank
+                    && !entry.is_command_echo
+                    && entry.text.starts_with(prompt) =>
+            {
+                entry.text = line.to_string();
+                entry.glyphs = ordinary_glyphs_from_engine_text(line);
+                self.message_transcript_revision = self.message_transcript_revision.wrapping_add(1);
+                true
+            }
+            _ => false,
+        };
+        self.message = line.to_string();
+        if rewritten {
+            self.message_flushed = self.message.clone();
+        }
+        rewritten
+    }
+
     pub fn commit_typed_prompt_line(&mut self, prompt: &str, typed: &str) {
         let typed = typed.trim();
         if typed.is_empty() {

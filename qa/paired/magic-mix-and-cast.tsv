@@ -34,11 +34,14 @@ both	key	Return
 both	wait	3000
 both	shot	mixed	After mixing
 both	key	c
-both	wait	1500
+both	wait	2000
+both	shot	cast-open	The caster prompt
 both	key	Return
-both	wait	1500
+both	wait	2000
+both	shot	cast-spell	The spell-name prompt, after the caster is committed
 both	type	IL
-both	wait	1200
+both	wait	1500
+both	shot	cast-typed	The spell code typed
 both	key	Return
-both	wait	3000
+both	wait	3500
 both	shot	cast	After casting In Lor

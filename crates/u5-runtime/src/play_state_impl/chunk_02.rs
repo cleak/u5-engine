@@ -1394,7 +1394,10 @@ impl PlayState {
                 // `Mixed 1 IL charge; stock is 1.` - was the engine's own
                 // composition, and it reported the charge counter the original
                 // keeps to itself.
-                self.message = format!("{MMIX_MIXING_MESSAGE}\n{MMIX_COMPLETION_MESSAGE}");
+                // The capture also fixes the spacing: `Mixing...` follows
+                // the `How much? 1` row immediately, and `Done!` opens its
+                // own block one blank row below it.
+                self.message = format!("{MMIX_MIXING_MESSAGE}\n\n{MMIX_COMPLETION_MESSAGE}");
                 MoveOutcome::Cast
             }
             Some(spell_index) => {
@@ -2190,12 +2193,12 @@ mod movement_magic_karma_traps_spec_tests {
             MoveOutcome::Cast
         );
 
-        let (beat, body) = state
-            .message
-            .split_once('\n')
-            .expect("the mixing beat is its own line");
-        assert_eq!(beat, MMIX_MIXING_MESSAGE);
-        assert_eq!(body, MMIX_COMPLETION_MESSAGE, "body was {body:?}");
+        // The capture spaces the two: `Mixing...`, a blank row, `Done!`.
+        let mut lines = state.message.lines();
+        assert_eq!(lines.next(), Some(MMIX_MIXING_MESSAGE));
+        assert_eq!(lines.next(), Some(""), "the completion line opens a block");
+        assert_eq!(lines.next(), Some(MMIX_COMPLETION_MESSAGE));
+        assert_eq!(lines.next(), None);
         assert_eq!(state.turn, 0, "magic.md §6: mixing costs no game time");
     }
 

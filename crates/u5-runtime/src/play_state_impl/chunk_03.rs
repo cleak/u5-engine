@@ -319,6 +319,24 @@ impl PlayState {
         self.start_party_selector(PartySelectorTarget::ZStats)
     }
 
+    /// Resolve the shared acting-member prompt before it draws.
+    ///
+    /// `dungeon-mode.md` ("Who acts"): the prompt "is silent when zero
+    /// or one member is eligible and prints `Player: ` otherwise", and
+    /// "a party with no eligible member at all[] answers `None!` and
+    /// the command aborts" - the same three-way scan `traps.md §2.1`
+    /// publishes for the trap-bearing commands, so it runs through
+    /// [`crate::acting_member_scan`]. Measured for the world commands
+    /// that share the prompt: on a one-member party the original
+    /// prints no `Player: ` row for `C`-Cast or `S`+direction, while
+    /// `R`-Ready, the roster picker rather than this prompt, still
+    /// prints one. `cleak/u5-spec#223` asks for `commands.md` §5.8's
+    /// world-mode rows to carry the same qualification.
+    pub fn acting_member_selection(&self) -> ActingMemberSelection {
+        let statuses: Vec<u8> = self.party.iter().map(|member| member.status).collect();
+        acting_member_scan(&statuses)
+    }
+
     /// Open the shared party-member selector. The caller has already
     /// emitted its verb echo, so this only prints the prompt.
     pub fn start_party_selector(&mut self, target: PartySelectorTarget) -> MoveOutcome {
@@ -581,7 +599,26 @@ impl PlayState {
         // the stock game runs the `text-output.md §10.6` active-player
         // prompt first (`cleak/u5-spec#194` capture: `Cast...` / `Player: `).
         let Some(caster_index) = self.active_player.filter(|slot| *slot < self.party.len()) else {
-            return self.start_party_selector(PartySelectorTarget::Cast);
+            // ... and that prompt is the shared acting-member one, so
+            // it is silent unless two or more members are eligible: a
+            // capture of the original casting with a one-member party
+            // shows `>Cast...` and `Spell name:` on consecutive rows
+            // with no `Player: ` between them, while the same capture
+            // on a three-member party shows `Player: `.
+            match self.acting_member_selection() {
+                ActingMemberSelection::NoneAble => {
+                    self.message = PARTY_SELECTOR_CANCEL_REPLY.to_string();
+                    return MoveOutcome::Blocked;
+                }
+                ActingMemberSelection::Selected(index) => {
+                    self.active_cast = Some(CastSession::new(index));
+                    self.message = self.render_active_cast();
+                    return MoveOutcome::Observed;
+                }
+                ActingMemberSelection::Prompt => {
+                    return self.start_party_selector(PartySelectorTarget::Cast);
+                }
+            }
         };
         self.active_cast = Some(CastSession::new(caster_index));
         self.message = self.render_active_cast();
@@ -633,6 +670,17 @@ impl PlayState {
         "Spell name:".to_string()
     }
 
+    /// Commit the `:` row the spell code was typed into.
+    ///
+    /// [`Self::spell_prompt_echo`] serves that row live while the cast
+    /// prompt is open; the session closes on submission, so the row has
+    /// to be logged or it vanishes under the handler's result. A
+    /// capture of the original casting an out-of-scene spell shows
+    /// `:GRAV POR` and `Not here!` on consecutive rows.
+    fn commit_cast_spell_echo(&mut self, buffer: &str) {
+        self.emit_message_line(format!(":{}", rune_echo_for_buffer(buffer)));
+    }
+
     pub fn step_active_cast(
         &mut self,
         key: char,
@@ -658,6 +706,12 @@ impl PlayState {
                     let combat = session
                         .combat_actor_slot
                         .map(|slot| (slot, session.combat_had_foe));
+                    // Submitting retires the live `:` row, so commit what
+                    // was typed into the log before the handler prints:
+                    // the original keeps `:GRAV POR` on screen with
+                    // `Not here!` on the row *under* it, where the engine
+                    // used to overwrite the echo with the result.
+                    self.commit_cast_spell_echo(&session.buffer);
                     let outcome = self.cast_spell_from_suffix(&suffix, game_dir)?;
                     if self.start_cast_followup_from_prompt(
                         session.caster_index,
@@ -682,6 +736,7 @@ impl PlayState {
                         let combat = session
                             .combat_actor_slot
                             .map(|slot| (slot, session.combat_had_foe));
+                        self.commit_cast_spell_echo(&session.buffer);
                         let outcome = self.cast_spell_from_suffix(&suffix, game_dir)?;
                         if self.start_cast_followup_from_prompt(
                             session.caster_index,
@@ -1096,7 +1151,13 @@ impl PlayState {
                 // Backspace erases; Esc cancels.`, is the terminal harness's
                 // inline-parser text and belongs to `cleak/u5-engine#5`'s
                 // family, not to the message window.
-                format!("{MMIX_QUANTITY_PROMPT_MESSAGE} {}", session.quantity_buffer)
+                // The prompt opens its own block: the capture shows one
+                // blank row between the reagent help's `Type M to mix:`
+                // and `How much?`.
+                format!(
+                    "\n{MMIX_QUANTITY_PROMPT_MESSAGE} {}",
+                    session.quantity_buffer
+                )
             }
         }
     }
@@ -1222,12 +1283,16 @@ impl PlayState {
                 '\r' | '\n' | ' ' => self.complete_mix_session(session),
                 '\u{8}' | '\u{7f}' => {
                     session.quantity_buffer.pop();
+                    self.redraw_mix_quantity_row(session);
                     None
                 }
                 ch if ch.is_ascii_digit()
                     && session.quantity_buffer.len() < MMIX_QUANTITY_PROMPT_DIGITS =>
                 {
                     session.quantity_buffer.push(ch);
+                    // The digits are typed into the row `How much? `
+                    // already occupies, not under it.
+                    self.redraw_mix_quantity_row(session);
                     if session.quantity_buffer.len() >= MMIX_QUANTITY_PROMPT_DIGITS {
                         return self.complete_mix_session(session);
                     }
@@ -1244,6 +1309,24 @@ impl PlayState {
         session.spell_index = spell_index_from_code(&code);
         session.phase = MixPhase::Reagents;
         session.reagent_cursor = 0;
+    }
+
+    /// Keep the mixer's quantity digits on the `How much? ` row.
+    ///
+    /// See [`Self::rewrite_open_prompt_row`]: the original shows one
+    /// row for the prompt and its digits, and the message slot's
+    /// change-detection would otherwise log one row per keystroke.
+    fn redraw_mix_quantity_row(&mut self, session: &MixSession) {
+        let prompt = format!("{MMIX_QUANTITY_PROMPT_MESSAGE} ");
+        let row = format!("{prompt}{}", session.quantity_buffer);
+        if self.rewrite_open_prompt_row(&prompt, &row) {
+            // The key step ends by putting the renderer's own form of this
+            // row back in the slot, block feed and all. Hold that exact
+            // string so the row is not logged a second time under a second
+            // blank.
+            self.message = self.render_mix_session(session);
+            self.message_flushed = self.message.clone();
+        }
     }
 
     fn complete_mix_session(&mut self, session: &mut MixSession) -> Option<MoveOutcome> {
@@ -1917,7 +2000,22 @@ impl PlayState {
                 DirectionPromptKind::Search => {
                     // `cleak/u5-spec#194` capture: `Search-<dir>` then
                     // `Player: ` picks the acting member before the search.
-                    self.start_party_selector(PartySelectorTarget::Search { direction })
+                    // That prompt is the shared acting-member one, so it is
+                    // silent for a one-member party: a capture of the
+                    // original searching with such a party shows
+                    // `>Search-North` and its result with no `Player: ` row.
+                    match self.acting_member_selection() {
+                        ActingMemberSelection::NoneAble => {
+                            self.message = PARTY_SELECTOR_CANCEL_REPLY.to_string();
+                            MoveOutcome::Observed
+                        }
+                        ActingMemberSelection::Selected(_) => {
+                            self.search_direction_with_game_dir(direction, game_dir)?
+                        }
+                        ActingMemberSelection::Prompt => {
+                            self.start_party_selector(PartySelectorTarget::Search { direction })
+                        }
+                    }
                 }
                 DirectionPromptKind::Talk => {
                     self.talk_direction_with_game_dir(direction, game_dir)?
@@ -3462,7 +3560,17 @@ impl PlayState {
         self.advance_turn();
         self.light_spell_counter = duration;
         self.recompute_daylight();
-        self.message = "Light!".to_string();
+        // `magic.md §5` step 8 lists `Light!` among the handlers' success
+        // messages, but that banner belongs to the Great Light *scroll*
+        // (`catalogs/item-list.md` scroll id 0, `audio.md §6.1`'s scroll
+        // table), which this engine still prints from its own U-Use arm.
+        // **Measured**: casting In Lor on the overworld prints no result
+        // line at all - the window keeps the typed `:IN LOR` row and adds
+        // nothing under it - by day and at night alike, while the same
+        // capture route shows `Not here!` for an out-of-scene spell, so
+        // the cast is dispatching. `cleak/u5-spec#222` asks for the step-8
+        // list to separate the spell from the scroll.
+        self.message = String::new();
         MoveOutcome::Cast
     }
 

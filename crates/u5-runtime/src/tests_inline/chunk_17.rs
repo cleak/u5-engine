@@ -529,7 +529,9 @@
         assert_eq!(state.party[0].mana, 0);
         assert_eq!(state.light_spell_counter, IN_LOR_LIGHT_DURATION);
         assert_eq!(state.turn, 1);
-        assert_eq!(state.message, "Light!");
+        // Measured: the light *spell* prints no result line; `Light!`
+        // is the Great Light scroll's banner.
+        assert_eq!(state.message, "");
     }
 
     #[test]
@@ -794,7 +796,7 @@
         assert_eq!(state.reagents[REAGENT_SULFUR_ASH], 1);
         assert_eq!(state.spell_charges[IN_LOR_SPELL_INDEX], 1);
         assert_eq!(state.turn, 0);
-        assert_eq!(state.message, "Mixing...\nDone!");
+        assert_eq!(state.message, "Mixing...\n\nDone!");
     }
 
     #[test]
@@ -1097,8 +1099,49 @@
             PlayInputDisposition::Continue
         );
         assert!(search.active_direction_prompt.is_none());
-        // cleak/u5-spec#194 capture: the direction form asks `Player: ` for
-        // the acting member before searching; Return commits the leader.
+        // cleak/u5-spec#194 capture: the direction form asks `Player: `
+        // for the acting member before searching - but that prompt is
+        // the shared acting-member one, which `dungeon-mode.md` makes
+        // "silent when zero or one member is eligible". The fixture
+        // party is one Good member, so the search runs straight away
+        // and no selector opens; the two-member case is covered by
+        // `a_second_eligible_member_opens_the_search_acting_member_prompt`.
+        assert!(search.active_party_selector.is_none());
+        assert_eq!(search.grid[32 + 2], TOWN_DOOR_PLAIN_UNLOCKED_TILE);
+        assert_eq!(search.turn, 1);
+        assert_eq!(search.player.facing, Direction::South);
+        assert_eq!(search.message, "Revealed secret door at (2, 1).");
+
+        let _ = fs::remove_dir_all(dir);
+    }
+
+    /// `dungeon-mode.md` ("Who acts"): the acting-member prompt prints
+    /// `Player: ` once two or more members are eligible. Measured on the
+    /// original with a three-member party, where `S`+direction and
+    /// `C`-Cast both show the row a one-member party never sees.
+    #[test]
+    fn a_second_eligible_member_opens_the_search_acting_member_prompt() {
+        let dir = debug_game_dir();
+        fs::write(
+            dir.join(SECRET_DOOR_TABLE_FILE),
+            "TOWN CASTLE:0 0 2 1 184\n",
+        )
+        .unwrap();
+        let mut grid = open_grid();
+        grid[32 + 2] = 24;
+        let mut search = test_state(grid, 1, 1);
+        let mut second = search.party[0];
+        second.slot = 1;
+        search.party.push(second);
+        search.player.facing = Direction::South;
+        assert_eq!(
+            handle_play_key_input(&mut search, 'S', "", &dir).unwrap(),
+            PlayInputDisposition::Continue
+        );
+        assert_eq!(
+            handle_play_key_input(&mut search, '6', "", &dir).unwrap(),
+            PlayInputDisposition::Continue
+        );
         assert!(search.active_party_selector.is_some());
         assert_eq!(search.message, PARTY_SELECTION_PROMPT);
         assert_eq!(
@@ -1107,9 +1150,6 @@
         );
         assert!(search.active_party_selector.is_none());
         assert_eq!(search.grid[32 + 2], TOWN_DOOR_PLAIN_UNLOCKED_TILE);
-        assert_eq!(search.turn, 1);
-        assert_eq!(search.player.facing, Direction::South);
-        assert_eq!(search.message, "Revealed secret door at (2, 1).");
 
         let _ = fs::remove_dir_all(dir);
     }
@@ -2333,7 +2373,10 @@
         assert_eq!(state.party[2].mana, 0);
         assert_eq!(state.spell_charges[IN_LOR_SPELL_INDEX], 0);
         assert_eq!(state.turn, 2);
-        assert_eq!(state.message, "Light!");
+        // Measured: the light *spell* prints no result line - `Light!` is
+        // the Great Light scroll's banner - so the slot still holds the
+        // New Order line this test's first half put there.
+        assert!(!state.message.contains("Light!"));
     }
 
     #[test]
@@ -3947,7 +3990,9 @@
         assert_eq!(VAS_LOR_LIGHT_DURATION, 255);
         assert_eq!(state.ambient_light, LIGHT_SPELL_FLOOR);
         assert_eq!(state.turn, 1);
-        assert_eq!(state.message, "Light!");
+        // Measured: the light *spell* prints no result line; `Light!`
+        // is the Great Light scroll's banner.
+        assert_eq!(state.message, "");
     }
 
     #[test]

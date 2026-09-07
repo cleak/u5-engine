@@ -405,7 +405,9 @@ BRITANNIA 11 21
         assert_eq!(state.ambient_light, LIGHT_SPELL_FLOOR);
         assert_eq!(state.turn, 1);
         assert_eq!(state.clock, GameClock::new(22, 1).unwrap());
-        assert_eq!(state.message, "Light!");
+        // Measured: the light *spell* prints no result line; `Light!`
+        // is the Great Light scroll's banner.
+        assert_eq!(state.message, "");
     }
 
     #[test]
@@ -641,7 +643,9 @@ BRITANNIA 11 21
         assert_eq!(state.party[0].mana, 0);
         assert_eq!(state.light_spell_counter, IN_LOR_LIGHT_DURATION);
         assert_eq!(state.turn, 1);
-        assert_eq!(state.message, "Light!");
+        // Measured: the light *spell* prints no result line; `Light!`
+        // is the Great Light scroll's banner.
+        assert_eq!(state.message, "");
     }
 
     #[test]
@@ -1157,7 +1161,7 @@ BRITANNIA 11 21
         assert_eq!(state.turn, 0);
         assert_eq!(
             state.message,
-            "Mixing...\nDone!"
+            "Mixing...\n\nDone!"
         );
     }
 
@@ -1428,7 +1432,7 @@ BRITANNIA 11 21
         assert_eq!(state.reagents[REAGENT_SULFUR_ASH], 0);
         assert_eq!(state.spell_charges[IN_LOR_SPELL_INDEX], 1);
         assert_eq!(state.turn, 0);
-        assert_eq!(state.message, "Mixing...\nDone!");
+        assert_eq!(state.message, "Mixing...\n\nDone!");
     }
 
     #[test]

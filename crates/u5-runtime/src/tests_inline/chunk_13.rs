@@ -25495,7 +25495,9 @@ fn top_down_uppercase_command_letters_preempt_vi_movement() {
     // here only raises a prompt.
     for (key, expected, expected_turn) in [
         ('A', "Attack-", 0),
-        ('C', PARTY_SELECTION_PROMPT, 0),
+        // The acting-member prompt is silent for the fixture's
+        // one-member party, so `C` reaches the spell prompt directly.
+        ('C', "Spell name:", 0),
         ('D', "What?", 0),
         ('M', MMIX_SPELL_PROMPT_MESSAGE, 0),
         ('N', NEW_ORDER_FIRST_PROMPT, 0),
@@ -25561,7 +25563,7 @@ fn top_down_lowercase_vi_and_wasd_movement_still_routes_before_commands() {
         ('u', ITEM_SELECTION_PROMPT),
         ('b', "What?"),
         ('n', NEW_ORDER_FIRST_PROMPT),
-        ('c', PARTY_SELECTION_PROMPT),
+        ('c', "Spell name:"),
         ('z', PARTY_SELECTION_PROMPT),
     ] {
         let mut state = test_state(open_grid(), 5, 5);
@@ -25919,7 +25921,9 @@ fn dungeon_command_letters_do_not_fall_through_to_diagonal_movement_refusal() {
     // the default 'acted'". The other letters here only open a prompt and
     // stay free.
     for (key, expected, expected_turn) in [
-        ('C', PARTY_SELECTION_PROMPT, 0),
+        // The acting-member prompt is silent for the fixture's
+        // one-member party, so `C` reaches the spell prompt directly.
+        ('C', "Spell name:", 0),
         ('D', "What?", 0),
         ('M', MMIX_SPELL_PROMPT_MESSAGE, 0),
         ('N', NEW_ORDER_FIRST_PROMPT, 0),

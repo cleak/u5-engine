@@ -963,7 +963,8 @@ fn inline_cast_on_dungeon_bomb_trap_marks_underfoot_without_extra_turn() {
         .iter()
         .map(|entry| entry.text.as_str())
         .collect();
-    assert!(lines.iter().any(|line| line.contains("Light!")));
+    // The light spell prints nothing of its own; the trap lines are all
+    // the cast produces.
     assert!(lines.contains(&"Bomb Trap!"));
     assert!(lines.contains(&"KABOOM!!"));
 }
