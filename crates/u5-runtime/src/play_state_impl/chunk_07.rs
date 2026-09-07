@@ -4719,6 +4719,10 @@ impl PlayState {
             // rather than being folded into the compatibility slot.
             self.emit_message_line(DUNGEON_BOMB_TRAP_LINE);
             self.emit_message_line(DUNGEON_KABOOM_LINE);
+            // Section 8.1's bomb row also carries "the damage helper's flash
+            // and rumble"; see
+            // [`PlayState::apply_dungeon_floor_trap_damage`].
+            self.apply_dungeon_floor_trap_damage();
             return Ok(None);
         }
         if let Some(field) = dungeon_field_effect(tile) {

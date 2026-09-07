@@ -642,6 +642,57 @@ fn dungeon_fall_trap_drops_one_level_and_marks_destination() {
     assert_eq!(state.turn, 1);
 }
 
+/// `dungeon-mode.md §8.1`: the pit row's `      ...splat!` and the bomb
+/// row's `KABOOM!!` are each followed by "the damage helper's flash and
+/// rumble". The engine printed both groups and hurt nobody; measured
+/// against the original, a solo party's single fall in Doom costs HP.
+#[test]
+fn the_dungeon_floor_traps_damage_every_living_member() {
+    let scene = DungeonScene::new(33).unwrap();
+    let mut grid = vec![0x90; DUNGEON_RECORD_LEN];
+    grid[dungeon_cell_index(0, 2, 1)] = 0x61;
+    let mut state = dungeon_state(grid, 0, 1, 1);
+    state.party.push(PartyMember {
+        slot: 1,
+        class_byte: b'F',
+        status: b'D',
+        climb_stat: 10,
+        mana: 0,
+        hp: 20,
+        max_hp: 20,
+        level: 1,
+    });
+    let living_before = state.party[0].hp;
+    let dead_before = state.party[1].hp;
+
+    assert_eq!(
+        state.step(Direction::East),
+        MoveOutcome::Transition(AreaTransition::ChangedDungeonLevel { scene, level: 1 })
+    );
+
+    let taken = living_before - state.party[0].hp;
+    assert!(
+        (1..=8).contains(&taken),
+        "the fall took {taken} HP, outside the published 1..8 band"
+    );
+    assert_eq!(
+        state.party[1].hp, dead_before,
+        "a Dead slot is skipped by the sweep"
+    );
+
+    // The bomb cell is the same helper on its own row.
+    let mut grid = vec![0x90; DUNGEON_RECORD_LEN];
+    grid[dungeon_cell_index(0, 2, 1)] = 0x62;
+    let mut bomb = dungeon_state(grid, 0, 1, 1);
+    let before = bomb.party[0].hp;
+    assert_eq!(bomb.step(Direction::East), MoveOutcome::Moved);
+    let taken = before - bomb.party[0].hp;
+    assert!(
+        (1..=8).contains(&taken),
+        "the bomb took {taken} HP, outside the published 1..8 band"
+    );
+}
+
 #[test]
 fn dungeon_fall_trap_chain_freshens_the_monster_on_every_accepted_level() {
     let scene = DungeonScene::new(33).unwrap();
@@ -652,12 +703,17 @@ fn dungeon_fall_trap_chain_freshens_the_monster_on_every_accepted_level() {
     let mut state = dungeon_state(grid.clone(), 0, 2, 1);
     let mut expected = dungeon_state(grid, 0, 2, 1);
 
+    // Each accepted level freshens the monster and then runs
+    // `dungeon-mode.md §8.1`'s damage helper for that descent step, so the
+    // expectation draws in the same order the chain does.
     expected.area = Area::Dungeon { scene, level: 1 };
     expected.sync_player_object();
     assert!(!expected.setup_dungeon_active_monster_fresh());
+    expected.apply_dungeon_floor_trap_damage();
     expected.area = Area::Dungeon { scene, level: 2 };
     expected.sync_player_object();
     assert!(!expected.setup_dungeon_active_monster_fresh());
+    expected.apply_dungeon_floor_trap_damage();
 
     assert_eq!(
         state

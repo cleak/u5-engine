@@ -129,6 +129,9 @@ impl PlayState {
             // `dungeon-mode.md` Section 8.1, bomb trap `0x62`/`0x6A`.
             self.emit_message_line(DUNGEON_BOMB_TRAP_LINE);
             self.message = DUNGEON_KABOOM_LINE.to_string();
+            // Section 8.1's bomb row carries the same damage helper as the
+            // pit row.
+            self.apply_dungeon_floor_trap_damage();
             return Ok(MoveOutcome::Moved);
         }
         if let Some(field) = dungeon_field_effect(tile) {
@@ -325,6 +328,32 @@ impl PlayState {
 
     pub fn dungeon_field_damage_roll(&mut self) -> u8 {
         self.random_range_u8(1, 8)
+    }
+
+    /// `dungeon-mode.md §8.1`, the two dungeon floor traps: the pit group's
+    /// `      ...splat!` and the bomb trap's `KABOOM!!` are each followed by
+    /// "the damage helper's flash and rumble", which is
+    /// [`Self::apply_shared_party_damage`] - the engine printed both lines
+    /// and hurt nobody.
+    ///
+    /// The roll is the same shape every other published dungeon party-damage
+    /// sweep uses: `§8`'s electric contact has "each non-Dead member among
+    /// the active party's first six slots take[] an independently rolled
+    /// inclusive `1..8` HP loss through the ordinary party-damage rule", and
+    /// `traps.md §3`'s Bomb family rolls "an inclusive `1..8` damage
+    /// separately for each in-party member of the six-slot band that is not
+    /// marked Dead". Neither section states the *floor trap* roll outright;
+    /// **measured**, a solo party's single fall in Doom took 5 HP, which is
+    /// inside that band. `cleak/u5-spec#226` asks for the two cells' own
+    /// rolls to be published.
+    pub fn apply_dungeon_floor_trap_damage(&mut self) {
+        for index in 0..self.party.len().min(SAVE_PARTY_SIZE_MAX as usize) {
+            if self.party[index].status == b'D' {
+                continue;
+            }
+            let damage = self.dungeon_field_damage_roll();
+            let _ = self.apply_shared_party_damage(index, damage);
+        }
     }
 
     pub fn dungeon_fountain_damage_roll(&mut self) -> u8 {
@@ -639,8 +668,10 @@ impl PlayState {
                 self.grid[destination] |= 0x08;
             }
             // "then the level change and view repaint, then
-            // `      ...splat!` - **six leading spaces**".
+            // `      ...splat!` - **six leading spaces**", and then "the
+            // damage helper's flash and rumble, after `...splat!`".
             self.emit_message_line(DUNGEON_SPLAT_LINE);
+            self.apply_dungeon_floor_trap_damage();
         }
 
         self.area = Area::Dungeon { scene, level };
