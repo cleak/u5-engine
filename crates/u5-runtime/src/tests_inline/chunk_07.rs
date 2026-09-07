@@ -1188,7 +1188,7 @@ fn magic_carpet_use_requires_stock_footing_and_accepted_tile() {
     boarded.sync_player_object();
     assert_eq!(boarded.use_magic_carpet(), MoveOutcome::Blocked);
     assert_eq!(boarded.special_items[SPECIAL_ITEM_MAGIC_CARPET_INDEX], 1);
-    assert_eq!(boarded.message, "On foot.");
+    assert_eq!(boarded.message, USE_MAGIC_CARPET_XIT_FIRST);
 
     let mut blocked_grid = open_world_grid();
     blocked_grid[world_cell_index(1, 1)] = 0x0c;

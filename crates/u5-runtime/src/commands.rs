@@ -595,6 +595,11 @@ pub const USE_ITEM_ECHO_SEXTANT: &str = "Sextant";
 pub const USE_ITEM_ECHO_WATCH: &str = "Watch";
 pub const USE_ITEM_ECHO_BADGE: &str = "Badge";
 pub const USE_ITEM_ECHO_BOX: &str = "Box";
+pub const USE_ITEM_ECHO_MOONSTONE: &str = "Moonstone";
+/// **Measured** 2026-09-07 from a ship at sea: the moonstone's refusal
+/// *continues* its `Item: ` row - `Item: Moonstone cannot be buried here!`
+/// is one wrapped sentence. The engine named the tile byte instead.
+pub const MOONSTONE_BURY_REFUSAL: &str = " cannot be buried here!";
 
 /// **Measured** 2026-09-07 with each item alone in the picker: the spyglass
 /// answers `No stars!` when there are none to read, the sextant answers
@@ -651,6 +656,10 @@ pub const SHIP_XIT_UNDER_SAIL_REFUSAL: &str = "Under sail!";
 pub const SHIP_SAIL_STALLED_LINE: &str = "Sheets in irons!";
 
 pub const USE_MAGIC_CARPET_BOARDED: &str = "Boarded!";
+/// **Measured** 2026-09-07 aboard a frigate: unrolling the carpet while
+/// mounted or aboard answers `X-it ship first!`, where the engine had the
+/// two-word `On foot.`.
+pub const USE_MAGIC_CARPET_XIT_FIRST: &str = "X-it ship first!";
 /// The HMS Cape plans read off a ship. Measured: `Only usable on shipboard!`,
 /// where the engine had `Not aboard ship!`.
 pub const USE_PLANS_SHIPBOARD_ONLY_REFUSAL: &str = "Only usable on shipboard!";

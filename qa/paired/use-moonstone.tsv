@@ -1,0 +1,13 @@
+# Bury a moonstone from a ship at sea: the tile refusal.
+# requires-seed: the party aboard a frigate with moonstone slots set
+both	wait	9000
+both	key	space
+both	wait	4000
+both	key	j
+both	wait	8000
+both	key	u
+both	wait	2000
+both	shot	picker	The Use picker aboard ship
+both	key	Return
+both	wait	3000
+both	shot	used	The moonstone result

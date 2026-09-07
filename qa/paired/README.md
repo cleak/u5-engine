@@ -77,6 +77,7 @@ are PRNG-selected and legitimately differ between the two sides.
 | `use-skull-key` | the skull key's `Item: Skull Key` row and `Direction-` prompt |
 | `use-single-item` | one special item alone in the picker; re-seed between runs to measure another |
 | `ready-slots` | R-Ready's occupied-slot and two-handed refusals |
+| `use-moonstone` | the moonstone bury refusal, and the carpet aboard ship |
 | `dungeon-search` | dungeon Search: the `Search...` echo, the shared `Dir-` relative-direction prompt, and the hidden-door reveal |
 | `dungeon-look` | dungeon Look through the same helper, including the Space cancel that writes `Dir-Pass` |
 | `magic-mix` | the M-Mix reagent list and its prompts |

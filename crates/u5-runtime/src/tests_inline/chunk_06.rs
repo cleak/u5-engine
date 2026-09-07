@@ -2477,7 +2477,7 @@
         );
         assert_eq!(state.turn, 1);
         assert_eq!(state.moonstone_slots[0], MoonstoneGateSlot::invalid());
-        assert_eq!(state.message, "Cannot bury Moonstone on tile 16.");
+        assert_eq!(state.message, MOONSTONE_BURY_REFUSAL);
 
         let mut dungeon = dungeon_state(open_dungeon_record(), 0, 1, 1);
         assert!(dungeon.handle_dungeon_key('U', &dir).unwrap());

@@ -503,7 +503,21 @@ impl PlayState {
                 // under a completed row, so its leading feed buys a blank
                 // row. Measured: `>Use item`, blank, `Item: Scroll`,
                 // blank, `Protection!`.
-                if echoed.is_some() && !self.message.is_empty() && !self.message.starts_with('\n') {
+                // Measured: a line that opens with a space *continues* the
+                // completed `Item: ` row instead of opening a new one -
+                // `Item: Moonstone cannot be buried here!` is one wrapped
+                // sentence, where the pocket watch's line starts its own row
+                // under a blank one.
+                if echoed.is_some() && self.message.starts_with(' ') {
+                    // The continuation joins the completed `Item: ` row, so
+                    // the window wraps the whole sentence together:
+                    // `Item: Moonstone` / `cannot be buried` / `here!`.
+                    let continuation = std::mem::take(&mut self.message);
+                    self.emit_message_line_continuing_row(continuation);
+                } else if echoed.is_some()
+                    && !self.message.is_empty()
+                    && !self.message.starts_with('\n')
+                {
                     self.message.insert(0, '\n');
                 }
                 self.ensure_use_action_turn(turn_before);
@@ -631,6 +645,7 @@ impl PlayState {
             UseItemRequest::PocketWatch => Some(USE_ITEM_ECHO_WATCH),
             UseItemRequest::BlackBadge => Some(USE_ITEM_ECHO_BADGE),
             UseItemRequest::WoodenBox => Some(USE_ITEM_ECHO_BOX),
+            UseItemRequest::Moonstone(_) => Some(USE_ITEM_ECHO_MOONSTONE),
             _ => None,
         }
     }
@@ -1298,7 +1313,7 @@ impl PlayState {
             return MoveOutcome::Blocked;
         }
         if !self.player.transport.is_foot() {
-            self.message = "On foot.".to_string();
+            self.message = USE_MAGIC_CARPET_XIT_FIRST.to_string();
             return MoveOutcome::Blocked;
         }
 
@@ -2033,7 +2048,8 @@ impl PlayState {
             return MoveOutcome::Blocked;
         };
         if !moonstone_bury_tile_allowed(tile) {
-            self.message = format!("Cannot bury Moonstone on tile {tile}.");
+            let _ = tile;
+            self.message = MOONSTONE_BURY_REFUSAL.to_string();
             return MoveOutcome::Blocked;
         }
 
