@@ -795,7 +795,9 @@
             PlayInputDisposition::Continue
         );
         assert!(state.active_rest.is_some());
-        assert_eq!(state.message, REST_HOURS_PROMPT);
+        // `commands.md §5.5`: on land the echo is `Hole up & camp!` with
+        // two line feeds, so the prompt opens after a blank row.
+        assert_eq!(state.message, format!("\n{REST_HOURS_PROMPT}"));
         assert_eq!(state.turn, 0);
 
         assert_eq!(
@@ -909,6 +911,8 @@
             PlayInputDisposition::Continue
         );
         assert!(state.active_rest.is_some());
+        // The bed path keeps the `Hole up- ` argument form, so its prompt
+        // opens on the next row with no extra feed.
         assert_eq!(state.message, REST_HOURS_PROMPT);
         assert_eq!(state.turn, 0);
 

@@ -869,6 +869,19 @@ pub const FOUNTAIN_DRINK_REFRESHED: &str = "Refreshing...";
 /// `commands.md §5.7`: the rest/hole-up input sequence uses these exact
 /// message-window literals in both outdoor and town contexts.
 pub const REST_HOURS_PROMPT: &str = "For how many hours? (1-9) ";
+/// `commands.md §5.5`: the H-Hole-up family's land form, "`Hole_up_&_`
+/// plus ... `camp!\n\n` on land" - a complete echo on its own row with a
+/// blank row after it, not the `Hole up- ` argument form the bed path
+/// completes with `Only in bed!`.
+/// `dungeon-mode.md §11`: the camp body's sleep line, "`Zzzzzz...\n\n`,
+/// with **two** trailing line feeds", which the same sentence warns "is a
+/// different literal from the turn loop's `Zzzzzz...\n`" and "must not be
+/// shared with it".
+pub const CAMP_BODY_SLEEP_LINE: &str = "Zzzzzz...\n\n";
+pub const HOLE_UP_CAMP_ECHO: CommandEcho = CommandEcho {
+    text: "Hole up & camp!",
+    join: CommandEchoJoin::Complete,
+};
 pub const REST_WATCH_PROMPT: &str = "\nWilt thou set a watch? ";
 pub const REST_WATCH_MEMBER_PROMPT: &str = "Who will stand guard? ";
 pub const REST_WATCH_YES_LITERAL: &str = "Yes\n\n";

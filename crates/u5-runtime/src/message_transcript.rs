@@ -533,6 +533,18 @@ impl PlayState {
         self.message_flushed.clear();
     }
 
+    /// Swap the verb echo the dispatcher opened for the one the mode
+    /// actually uses.
+    ///
+    /// `commands.md §5.5`: the H-Hole-up family has "`Hole_up_&_` plus ...
+    /// `camp!\n\n` on land" where the bed form is `Hole_up-_`, and the
+    /// dispatcher's echo table cannot tell the two apart because it keys on
+    /// the letter alone. The land handler calls this before it prompts.
+    pub fn replace_command_echo(&mut self, echo: CommandEcho) {
+        self.abort_command_echo();
+        self.begin_command_echo(echo);
+    }
+
     /// Drop an echo that was opened for a key the active mode turned out
     /// not to handle, restoring the message the caller saw before.
     pub fn abort_command_echo(&mut self) {

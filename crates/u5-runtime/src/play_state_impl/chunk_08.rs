@@ -9,8 +9,24 @@ use crate::*;
 
 impl PlayState {
     pub fn start_rest_prompt(&mut self) -> MoveOutcome {
+        // `commands.md §5.5`: on land the verb echo is `Hole up & camp!`,
+        // not the bed path's `Hole up- `. The dispatcher opened the latter
+        // because its echo table keys on the letter alone; the town/bed
+        // handler keeps it and completes it with `Only in bed!`.
+        let land_camp = !matches!(self.area, Area::Town { .. });
+        if land_camp {
+            self.replace_command_echo(HOLE_UP_CAMP_ECHO);
+        }
         self.active_rest = Some(RestSession::new());
-        self.message = self.render_active_rest();
+        // `commands.md §5.5` writes the land echo as `camp!\n\n` - two line
+        // feeds, so a blank row separates it from the hours prompt, which a
+        // paired capture confirms. The bed path's `Hole up- ` is an argument
+        // form and keeps the prompt on its own row without the extra feed.
+        self.message = if land_camp {
+            format!("\n{}", self.render_active_rest())
+        } else {
+            self.render_active_rest()
+        };
         MoveOutcome::Observed
     }
 
@@ -52,6 +68,12 @@ impl PlayState {
                     };
                     match duration_input {
                         RestDurationInput::Hours(hours) => {
+                            // `dungeon-mode.md §11`: the hours prompt "loops
+                            // until a digit or Space and echoes the key plus a
+                            // line feed", so the digit completes the prompt's
+                            // own row. A paired capture reads
+                            // `hours? (1-9) 3`.
+                            self.commit_prompt_reply(REST_HOURS_PROMPT, &ch.to_string());
                             if !matches!(self.area, Area::Town { .. })
                                 && self.rest_watch_prompt_needed()
                             {
@@ -170,6 +192,14 @@ impl PlayState {
             .filter(|member| member.status == b'S')
             .map(|member| member.slot)
             .collect::<Vec<_>>();
+        // `dungeon-mode.md §11`: "The camp body's sleep line is
+        // `Zzzzzz...\n\n`, with **two** trailing line feeds. It is a
+        // different literal from the turn loop's `Zzzzzz...\n` (Section 4)
+        // and must not be shared with it." It prints as the body begins,
+        // before the hours are credited - a paired capture of a three-hour
+        // overworld camp reads `hours? (1-9) 3`, `Zzzzzz...`, a blank row,
+        // then the result line.
+        self.emit_message_line(CAMP_BODY_SLEEP_LINE);
         let mut world_damage_ticks = 0;
         let mut last_world_damage = None;
         let mut interrupted = false;
