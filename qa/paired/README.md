@@ -81,6 +81,7 @@ are PRNG-selected and legitimately differ between the two sides.
 | `use-moonstone` | the moonstone bury refusal, and the carpet aboard ship |
 | `stray-keys` | a function key, an unmapped letter, and Space at a scroll's `Direction-` |
 | `night-sextant` | the sextant's reading from a ship at night |
+| `use-target-cancel` | Escape and Space at a potion's `On who: ` prompt |
 | `dungeon-search` | dungeon Search: the `Search...` echo, the shared `Dir-` relative-direction prompt, and the hidden-door reveal |
 | `dungeon-look` | dungeon Look through the same helper, including the Space cancel that writes `Dir-Pass` |
 | `magic-mix` | the M-Mix reagent list and its prompts |

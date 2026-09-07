@@ -1,0 +1,58 @@
+# Escape at a potion's `On who: ` prompt.
+# requires-seed: a party carrying potions
+both	wait	9000
+both	key	space
+both	wait	4000
+both	key	j
+both	wait	7000
+both	key	u
+both	wait	2000
+both	key	Down
+both	wait	420
+both	key	Down
+both	wait	420
+both	key	Down
+both	wait	420
+both	key	Down
+both	wait	420
+both	key	Down
+both	wait	420
+both	key	Down
+both	wait	420
+both	key	Down
+both	wait	420
+both	key	Down
+both	wait	420
+both	key	Down
+both	wait	420
+both	key	Return
+both	wait	2000
+both	shot	prompt	The target prompt
+both	key	Escape
+both	wait	2500
+both	shot	escape	Escape at the target prompt
+both	key	u
+both	wait	1800
+both	key	Down
+both	wait	420
+both	key	Down
+both	wait	420
+both	key	Down
+both	wait	420
+both	key	Down
+both	wait	420
+both	key	Down
+both	wait	420
+both	key	Down
+both	wait	420
+both	key	Down
+both	wait	420
+both	key	Down
+both	wait	420
+both	key	Down
+both	wait	420
+both	key	Return
+both	wait	2000
+both	key	space
+both	wait	2500
+both	shot	space	Space at the target prompt

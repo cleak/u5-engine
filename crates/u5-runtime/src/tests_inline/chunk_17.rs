@@ -1408,6 +1408,39 @@
         );
     }
 
+    /// **Measured** 2026-09-07: Escape at the potion's target prompt
+    /// completes the row as `On who: None!`, and Space *accepts* the
+    /// highlighted member rather than closing the command.
+    #[test]
+    fn active_use_target_prompt_cancels_with_none_and_accepts_on_space() {
+        for (key, expected) in [
+            ('\u{1b}', format!("{USE_POTION_TARGET_PROMPT}{SELECTION_CANCELLED_LITERAL}")),
+            (' ', POTION_RESULT_HEALED.to_string()),
+        ] {
+            let mut state = test_state(open_grid(), 5, 5);
+            state.party[0].hp = 4;
+            state.party[0].max_hp = 25;
+            state.potion_stock[POTION_YELLOW_INDEX] = 1;
+
+            assert_eq!(
+                handle_play_key_input(&mut state, 'U', "", Path::new("")).unwrap(),
+                PlayInputDisposition::Continue
+            );
+            assert_eq!(
+                handle_play_key_input(&mut state, '\r', "", Path::new("")).unwrap(),
+                PlayInputDisposition::Continue
+            );
+            assert_eq!(state.message, USE_POTION_TARGET_PROMPT);
+
+            assert_eq!(
+                handle_play_key_input(&mut state, key, "", Path::new("")).unwrap(),
+                PlayInputDisposition::Continue
+            );
+            assert!(state.active_use.is_none());
+            assert_eq!(state.message, expected);
+        }
+    }
+
     #[test]
     fn active_use_picker_potion_prompts_for_target_after_consuming_stock() {
         let mut state = test_state(open_grid(), 5, 5);

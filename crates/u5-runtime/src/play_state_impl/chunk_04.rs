@@ -547,9 +547,27 @@ impl PlayState {
         suffix: &str,
         game_dir: &Path,
     ) -> io::Result<bool> {
-        if matches!(key, ' ' | '\u{1b}') {
+        // Measured 2026-09-07: Escape completes the open prompt row with the
+        // universal `None!` - `On who: None!` - and Space *accepts* the
+        // highlighted member rather than closing, exactly as it does in the
+        // item picker itself. A direction prompt takes the shared `Pass`
+        // word instead (the wind scroll reads `Direction-Pass`).
+        if key == '\u{1b}' {
             let turn_before = self.turn;
-            self.message = "Use closed.".to_string();
+            let prompt = self.render_pending_use_action(pending);
+            self.commit_prompt_reply(&prompt, SELECTION_CANCELLED_LITERAL);
+            self.ensure_use_action_turn(turn_before);
+            self.apply_post_turn_effects_after_outcome(turn_before, game_dir, MoveOutcome::Used)?;
+            return Ok(true);
+        }
+        if key == ' '
+            && matches!(
+                pending,
+                UsePendingAction::SkullKeyDirection | UsePendingAction::ScrollWindDirection { .. }
+            )
+        {
+            let turn_before = self.turn;
+            self.commit_prompt_reply(SPELL_DIRECTION_PROMPT_PREFIX, DIRECTION_PROMPT_LABEL_PASS);
             self.ensure_use_action_turn(turn_before);
             self.apply_post_turn_effects_after_outcome(turn_before, game_dir, MoveOutcome::Used)?;
             return Ok(true);
@@ -571,6 +589,7 @@ impl PlayState {
                 }
             }
             UsePendingAction::PotionTarget { index } => {
+                let key = if key == ' ' { '1' } else { key };
                 if let Some(target) = pending_use_party_target(key, suffix) {
                     if target < self.party.len() {
                         // The answer completes the prompt's own row.
@@ -604,6 +623,7 @@ impl PlayState {
                 }
             }
             UsePendingAction::ScrollResurrectionTarget { index } => {
+                let key = if key == ' ' { '1' } else { key };
                 if let Some(target) = pending_use_party_target(key, suffix) {
                     if target < self.party.len() {
                         let name = self.party_member_display_name(target);
