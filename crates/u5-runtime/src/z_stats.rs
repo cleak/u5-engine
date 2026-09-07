@@ -416,9 +416,19 @@ pub enum YesNoPromptKind {
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum UsePendingAction {
-    PotionTarget { index: usize },
-    ScrollWindDirection { index: usize },
-    ScrollResurrectionTarget { index: usize },
+    PotionTarget {
+        index: usize,
+    },
+    ScrollWindDirection {
+        index: usize,
+    },
+    ScrollResurrectionTarget {
+        index: usize,
+    },
+    /// **Measured** 2026-09-07: the skull key completes its row as
+    /// `Item: Skull Key` and then opens the shared `Direction-` prompt
+    /// rather than acting on the party's facing.
+    SkullKeyDirection,
 }
 
 impl ReadySession {

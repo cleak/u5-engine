@@ -7,11 +7,11 @@ use crate::*;
 const SURFACE_LOOK_VISIBILITY_RADIUS: usize = 5;
 
 #[derive(Clone, Debug)]
-pub(crate) struct UseItemPickerRow {
-    pub(crate) label: String,
+pub struct UseItemPickerRow {
+    pub label: String,
     /// `inventory.md §4.5`: the two-cell quantity; `None` is the
     /// "no quantity" marker that prints only the name.
-    pub(crate) quantity: Option<u8>,
+    pub quantity: Option<u8>,
     pub(crate) request: UseItemRequest,
 }
 
@@ -479,7 +479,12 @@ impl PlayState {
                     self.commit_prompt_reply(ITEM_SELECTION_PROMPT, family);
                 });
                 if let Some(pending) = pending_action_for_use_request(row.request) {
-                    let _ = self.use_item_command(Some(row.request), Some(game_dir))?;
+                    // The potion and scroll rows debit their stock when the
+                    // row is accepted, before the argument is asked for; the
+                    // skull key does its whole job once the direction is in.
+                    if !matches!(pending, UsePendingAction::SkullKeyDirection) {
+                        let _ = self.use_item_command(Some(row.request), Some(game_dir))?;
+                    }
                     session.pending = Some(pending);
                     // Measured: a scroll announces its effect on a row of
                     // its own, under a blank one, and *then* asks for its
@@ -531,6 +536,19 @@ impl PlayState {
 
         let turn_before = self.turn;
         let outcome = match pending {
+            UsePendingAction::SkullKeyDirection => {
+                if let Some(direction) = pending_use_cardinal_direction(key, suffix) {
+                    // Measured: the chosen cardinal completes the open
+                    // `Direction-` row, then the key is tried on that cell.
+                    self.commit_prompt_reply(SPELL_DIRECTION_PROMPT_PREFIX, direction.name());
+                    self.use_skull_key_direction(Some(game_dir), direction)?
+                } else {
+                    session.pending = Some(pending);
+                    self.message = self.render_use_session(&session);
+                    self.active_use = Some(session);
+                    return Ok(true);
+                }
+            }
             UsePendingAction::PotionTarget { index } => {
                 if let Some(target) = pending_use_party_target(key, suffix) {
                     if target < self.party.len() {
@@ -598,6 +616,7 @@ impl PlayState {
         match request {
             UseItemRequest::Scroll { .. } => Some(USE_ITEM_ECHO_SCROLL),
             UseItemRequest::Potion { .. } => Some(USE_ITEM_ECHO_POTION),
+            UseItemRequest::SkullKey => Some(USE_ITEM_ECHO_SKULL_KEY),
             _ => None,
         }
     }
@@ -610,6 +629,7 @@ impl PlayState {
             UsePendingAction::PotionTarget { .. } => None,
             UsePendingAction::ScrollWindDirection { .. } => Some(SCROLL_WIND_CHANGE_RESULT),
             UsePendingAction::ScrollResurrectionTarget { .. } => Some(SCROLL_RESURRECTION_RESULT),
+            UsePendingAction::SkullKeyDirection => None,
         }
     }
 
@@ -632,6 +652,7 @@ impl PlayState {
                 let _ = index;
                 USE_POTION_TARGET_PROMPT.to_string()
             }
+            UsePendingAction::SkullKeyDirection => SPELL_DIRECTION_PROMPT_PREFIX.to_string(),
         }
     }
 
@@ -708,7 +729,10 @@ impl PlayState {
     /// it. The engine previously emitted every special item first.
     /// `cleak/u5-spec#196` asks for the enumeration to be published
     /// outright.
-    pub(crate) fn use_item_picker_rows(&self) -> Vec<UseItemPickerRow> {
+    /// The rows the U-Use picker offers, in order. `pub` so the
+    /// `use_rows` probe can print the row indexes a paired scenario has to
+    /// count keypresses to reach.
+    pub fn use_item_picker_rows(&self) -> Vec<UseItemPickerRow> {
         let mut rows = Vec::new();
 
         for (index, count) in self.scroll_stock.iter().copied().enumerate() {
@@ -5195,6 +5219,8 @@ fn pending_action_for_use_request(request: UseItemRequest) -> Option<UsePendingA
         } => Some(UsePendingAction::ScrollResurrectionTarget {
             index: SCROLL_RESURRECTION_INDEX,
         }),
+        // Measured: the skull key asks `Direction-` before it acts.
+        UseItemRequest::SkullKey => Some(UsePendingAction::SkullKeyDirection),
         _ => None,
     }
 }

@@ -572,6 +572,11 @@ pub const READY_NOT_STRONG_ENOUGH_REFUSAL: &str = "Thou art not strong enough!";
 pub const USE_ITEM_ECHO_SCROLL: &str = "Scroll";
 /// See [`USE_ITEM_ECHO_SCROLL`].
 pub const USE_ITEM_ECHO_POTION: &str = "Potion";
+/// **Measured** 2026-09-07: the skull key row completes as `Item: Skull Key`.
+pub const USE_ITEM_ECHO_SKULL_KEY: &str = "Skull Key";
+/// **Measured** 2026-09-07: a skull key tried on a cell with no lock answers
+/// `Failed!`, not the Jimmy family's `No lock!`.
+pub const USE_SKULL_KEY_FAILED: &str = "Failed!";
 
 /// **Measured** (`qa/paired/hut-use-watch.tsv`): the pocket watch reads
 /// its time as a sentence, `The pocket watch reads 8:35 AM.`, with the

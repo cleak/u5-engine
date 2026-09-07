@@ -542,6 +542,20 @@ impl PlayState {
         self.jimmy_facing_with_game_dir_and_member(game_dir, Some(0))
     }
 
+    /// Measured 2026-09-07: the skull key acts on a *prompted* direction,
+    /// not on the party's facing.
+    pub fn use_skull_key_direction(
+        &mut self,
+        game_dir: Option<&Path>,
+        direction: Direction,
+    ) -> io::Result<MoveOutcome> {
+        let facing = self.player.facing;
+        self.player.facing = direction;
+        let outcome = self.use_skull_key(game_dir);
+        self.player.facing = facing;
+        outcome
+    }
+
     pub fn use_skull_key(&mut self, game_dir: Option<&Path>) -> io::Result<MoveOutcome> {
         if self.special_items[SPECIAL_ITEM_SKULL_KEY_INDEX] == 0 {
             self.message = "No Skull Keys!".to_string();
@@ -554,7 +568,7 @@ impl PlayState {
                 Ok(MoveOutcome::Blocked)
             }
             Area::World { .. } => {
-                self.message = "No lock!".to_string();
+                self.message = USE_SKULL_KEY_FAILED.to_string();
                 Ok(MoveOutcome::Blocked)
             }
         }
@@ -570,7 +584,7 @@ impl PlayState {
         let tx = self.player.x as isize + dx;
         let ty = self.player.y as isize + dy;
         if !(0..32).contains(&tx) || !(0..32).contains(&ty) {
-            self.message = "No lock!".to_string();
+            self.message = USE_SKULL_KEY_FAILED.to_string();
             return Ok(MoveOutcome::Blocked);
         }
 
@@ -580,7 +594,7 @@ impl PlayState {
         let ty = ty as usize;
         if self.blocking_object_at(tx, ty).is_some() {
             self.advance_turn();
-            self.message = "No lock!".to_string();
+            self.message = USE_SKULL_KEY_FAILED.to_string();
             return Ok(MoveOutcome::LockTried);
         }
 
@@ -588,7 +602,7 @@ impl PlayState {
         let tile = self.grid[idx];
         if openable_town_door(tile) && self.is_revealed_town_secret_door(scene, floor, tx, ty) {
             self.advance_turn();
-            self.message = "No lock!".to_string();
+            self.message = USE_SKULL_KEY_FAILED.to_string();
             return Ok(MoveOutcome::LockTried);
         }
         if let Some(entry) = self.town_lock_at(game_dir, scene, floor, tx, ty, tile)? {
@@ -612,7 +626,7 @@ impl PlayState {
         }
 
         self.advance_turn();
-        self.message = "No lock!".to_string();
+        self.message = USE_SKULL_KEY_FAILED.to_string();
         Ok(MoveOutcome::LockTried)
     }
 

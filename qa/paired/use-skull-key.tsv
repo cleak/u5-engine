@@ -1,0 +1,51 @@
+# The skull key row of the U-Use picker: its `Item: Skull Key` completion and
+# the `Direction-` prompt it opens. The row index comes from the `use_rows`
+# example, which reads the same save the harness seeds DOSBox with.
+# requires-seed: a party carrying every special item
+both	wait	9000
+both	key	space
+both	wait	4000
+both	key	j
+both	wait	7000
+both	key	u
+both	wait	1800
+both	key	Down
+both	wait	170
+both	key	Down
+both	wait	170
+both	key	Down
+both	wait	170
+both	key	Down
+both	wait	170
+both	key	Down
+both	wait	170
+both	key	Down
+both	wait	170
+both	key	Down
+both	wait	170
+both	key	Down
+both	wait	170
+both	key	Down
+both	wait	170
+both	key	Down
+both	wait	170
+both	key	Down
+both	wait	170
+both	key	Down
+both	wait	170
+both	key	Down
+both	wait	170
+both	key	Down
+both	wait	170
+both	key	Down
+both	wait	170
+both	key	Down
+both	wait	170
+both	key	Down
+both	wait	170
+both	key	Return
+both	wait	2500
+both	shot	prompt	The skull key's direction prompt
+both	key	Up
+both	wait	3000
+both	shot	used	The key tried to the north
