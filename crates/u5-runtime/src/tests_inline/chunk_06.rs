@@ -858,7 +858,7 @@
         assert!(!state.active_objects[1].is_empty());
         assert_eq!(state.gems, DEFAULT_GEM_STOCK);
         assert_eq!(state.turn, 0);
-        assert_eq!(state.message, "Nothing to get there.");
+        assert_eq!(state.message, GET_NOTHING_REFUSAL);
         let _ = fs::remove_dir_all(dir);
     }
 
@@ -1510,7 +1510,7 @@
 
         assert_eq!(state.turn, 1);
         assert_eq!(state.reagents[REAGENT_MANDRAKE], 99);
-        assert_eq!(state.message, "Nothing to search here.");
+        assert_eq!(state.message, SEARCH_NOTHING_FOUND);
 
         state.clock = GameClock::with_date(139, 4, 6, 1, 0).unwrap();
         assert_eq!(

@@ -46,7 +46,7 @@ impl PlayState {
         direction: Direction,
     ) -> MoveOutcome {
         let Some((actor, x, y)) =
-            self.combat_sjog_target_coordinate(actor_slot, direction, "Nothing to get there.")
+            self.combat_sjog_target_coordinate(actor_slot, direction, GET_NOTHING_REFUSAL)
         else {
             return MoveOutcome::Blocked;
         };
@@ -55,7 +55,7 @@ impl PlayState {
             .combat_actor_slot_at(x as u8, y as u8, actor_slot)
             .is_some()
         {
-            self.message = "Nothing to get there.".to_string();
+            self.message = GET_NOTHING_REFUSAL.to_string();
             return MoveOutcome::Blocked;
         }
         let Some((object_slot, object)) =
@@ -77,7 +77,7 @@ impl PlayState {
         direction: Direction,
     ) -> MoveOutcome {
         let Some((actor, x, y)) =
-            self.combat_sjog_target_coordinate(actor_slot, direction, "Nothing to search there.")
+            self.combat_sjog_target_coordinate(actor_slot, direction, SEARCH_NOTHING_FOUND)
         else {
             return MoveOutcome::Blocked;
         };

@@ -477,7 +477,9 @@ impl PlayState {
             } else if session.verb == SurfaceChestVerb::Search {
                 self.finish_moldy_corpse_search_at(session.x, session.y, member_index)
                     .unwrap_or_else(|| {
-                        self.message = "Nothing to search!".to_string();
+                        // `commands.md §5.8`: the Search command's own
+                        // empty result, not a second wording for it.
+                        self.message = SEARCH_NOTHING_FOUND.to_string();
                         MoveOutcome::Blocked
                     })
             } else {
@@ -1400,7 +1402,9 @@ impl PlayState {
         let tile = self.grid[idx];
         match tile >> 4 {
             0x4 => {
-                self.message = "Must open it first.".to_string();
+                // `dungeon-mode.md §13`: the published dungeon-chest
+                // Get refusal, not a paraphrase of it.
+                self.message = DUNGEON_CHEST_GET_MUST_OPEN_FIRST.to_string();
                 MoveOutcome::Blocked
             }
             0x7 => self.consume_dungeon_chest(
@@ -1742,7 +1746,7 @@ impl PlayState {
             return Ok(self.begin_surface_object_chest_interaction(tx, ty, SurfaceChestVerb::Get));
         }
         if self.world_object_at(tx, ty).is_some() {
-            self.message = "Nothing to get there.".to_string();
+            self.message = GET_NOTHING_REFUSAL.to_string();
             return Ok(MoveOutcome::Blocked);
         }
 
@@ -1849,7 +1853,7 @@ impl PlayState {
         let tx = self.player.x as isize + dx;
         let ty = self.player.y as isize + dy;
         if !(0..32).contains(&tx) || !(0..32).contains(&ty) {
-            self.message = "Nothing to get there.".to_string();
+            self.message = GET_NOTHING_REFUSAL.to_string();
             return Ok(MoveOutcome::Blocked);
         }
         let tx = tx as usize;
@@ -1872,7 +1876,7 @@ impl PlayState {
             return Ok(self.begin_surface_object_chest_interaction(tx, ty, SurfaceChestVerb::Get));
         }
         if self.blocking_object_at(tx, ty).is_some() {
-            self.message = "Nothing to get there.".to_string();
+            self.message = GET_NOTHING_REFUSAL.to_string();
             return Ok(MoveOutcome::Blocked);
         }
 
@@ -2084,7 +2088,7 @@ impl PlayState {
                 "Searched a generic find marker; no Moonstone scan was attempted.".to_string();
             return MoveOutcome::Blocked;
         }
-        self.message = "Nothing to search here.".to_string();
+        self.message = SEARCH_NOTHING_FOUND.to_string();
         MoveOutcome::Blocked
     }
 
@@ -2121,7 +2125,7 @@ impl PlayState {
         let tx = self.player.x as isize + dx;
         let ty = self.player.y as isize + dy;
         if !(0..32).contains(&tx) || !(0..32).contains(&ty) {
-            self.message = "Nothing to search there.".to_string();
+            self.message = SEARCH_NOTHING_FOUND.to_string();
             return MoveOutcome::Blocked;
         }
         let tx = tx as usize;
