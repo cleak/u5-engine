@@ -472,7 +472,7 @@ fn play_script_typeahead_replays_simple_movement_queue() {
     assert_eq!((state.player.x, state.player.y), (3, 1));
     assert_eq!(state.turn, 2);
     assert!(state.typeahead_buffer_enabled);
-    assert_eq!(state.message, "Idle animation tick.");
+    assert!(state.message.is_empty());
 }
 
 // from chunk_19
@@ -591,7 +591,7 @@ fn play_script_command_routes_movement_pass_idle_and_quit() {
         PlayInputDisposition::Continue
     );
     assert_eq!(state.turn, 3);
-    assert_eq!(state.message, "Idle animation tick.");
+    assert!(state.message.is_empty());
 
     assert_eq!(
         handle_play_script_command(&mut state, "q", Path::new("")).unwrap(),
@@ -659,7 +659,7 @@ fn play_script_idle_count_replays_no_turn_visual_ticks() {
     assert_eq!(state.turn, 0);
     assert_eq!(state.clock, GameClock::default());
     assert_eq!(state.animation.frame, 3);
-    assert_eq!(state.message, "Idle animation tick.");
+    assert!(state.message.is_empty());
 
     assert_eq!(
         handle_play_script_command(&mut state, "tick", Path::new("")).unwrap(),

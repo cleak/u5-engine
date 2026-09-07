@@ -177,7 +177,7 @@ impl PlayState {
             return Ok(self.start_rest_prompt());
         };
         if !(1..=9).contains(&hours) {
-            self.message = "Rest hours must be in 1..9.".to_string();
+            self.message.clear();
             return Ok(MoveOutcome::Blocked);
         }
         let camp_messages = load_camp_result_messages(game_dir)?;
@@ -819,13 +819,14 @@ impl PlayState {
                 Area::Town { floor, .. } => floor >= 0,
                 Area::Dungeon { .. } => false,
             } && !self.combat_active;
-            self.message = if on_surface {
-                format!("Idle animation tick. {}", wind.status_message())
-            } else {
-                "Idle animation tick. The air shifts.".to_string()
-            };
+            // The tick itself narrates nothing: the world's idle
+            // animation is presentation, and the original prints no line
+            // for it. The wind result is still applied above; only the
+            // engine's own commentary is gone. `u5-engine#19`.
+            let _ = (on_surface, wind);
+            self.message.clear();
         } else {
-            self.message = "Idle animation tick.".to_string();
+            self.message.clear();
         }
         MoveOutcome::IdleTick
     }
@@ -1078,7 +1079,7 @@ impl PlayState {
         match self.reload_town_floor(game_dir, scene, next_floor) {
             Ok(()) => {}
             Err(err) if err.kind() == io::ErrorKind::InvalidInput => {
-                self.message = "No connected floor in this slice.".to_string();
+                self.message.clear();
                 return Ok(MoveOutcome::Blocked);
             }
             Err(err) => return Err(err),
@@ -1688,7 +1689,7 @@ impl PlayState {
             if let Some(outcome) = self.start_shrine_prompt_at_current_position(game_dir)? {
                 return Ok(Some(outcome));
             }
-            self.message = "Natural moongate opened the shrine meditation path.".to_string();
+            self.message.clear();
             return Ok(Some(MoveOutcome::Observed));
         }
 
@@ -1713,11 +1714,11 @@ impl PlayState {
                 )))
             }
             GateTravelDestination::Empty => {
-                self.message = format!("Natural moongate phase {phase} is not set.");
+                self.message.clear();
                 Ok(Some(MoveOutcome::Blocked))
             }
-            GateTravelDestination::Invalid(reason) => {
-                self.message = format!("Natural moongate phase {phase} is invalid: {reason}.");
+            GateTravelDestination::Invalid(_reason) => {
+                self.message.clear();
                 Ok(Some(MoveOutcome::Blocked))
             }
         }
@@ -1954,7 +1955,7 @@ impl PlayState {
                 dungeon
             }
             PlayTarget::World(_) => {
-                self.message = "World enter target must be a town or dungeon scene.".to_string();
+                self.message.clear();
                 return Ok(MoveOutcome::Blocked);
             }
         };

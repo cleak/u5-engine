@@ -100,10 +100,9 @@ fn idle_tick_can_apply_public_random_wind_drift_without_turn() {
     // "Setting a new state also clears the cached wind-cadence byte used by
     // sailing and by wind-driven actors."
     assert_eq!(state.sail_cadence, 0);
-    assert_eq!(
-        state.message,
-        format!("Idle animation tick. {}", state.wind.status_message())
-    );
+    // The tick itself narrates nothing (`u5-engine#19`); the wind result
+    // above is the whole of what it produces.
+    assert!(state.message.is_empty());
 }
 
 #[test]
@@ -124,9 +123,9 @@ fn idle_tick_underworld_drift_uses_non_surface_presentation_branch() {
 
     // Wind state did update.
     assert_ne!(state.wind, WindState::Calm);
-    // Message must NOT contain the cardinal wind label.
-    assert!(!state.message.contains(state.wind.status_message()));
-    assert!(state.message.contains("Idle animation tick"));
+    // The banner is not drawn on this plane, and the tick prints no line
+    // of its own either, so nothing reaches the window.
+    assert!(state.message.is_empty());
 }
 
 /// `animation.md §13.1`: "**Negate Time freezes all of it.** ... For the

@@ -284,7 +284,7 @@
         assert_eq!(unprompted.animation.frame, 1);
         assert_eq!(unprompted.active_objects[1].phase, 0x21);
         assert_eq!(unprompted.active_objects[1].tile, 169);
-        assert_eq!(unprompted.message, "Idle animation tick.");
+        assert!(unprompted.message.is_empty());
     }
 
     #[test]
@@ -553,7 +553,7 @@
             MoveOutcome::Blocked
         );
 
-        assert_eq!(state.message, "Rest hours must be in 1..9.");
+        assert!(state.message.is_empty());
         assert_eq!(state.turn, 0);
         assert_eq!(state.clock, GameClock::default());
         let _ = fs::remove_dir_all(dir);
@@ -780,14 +780,14 @@
             state.hole_up_command(Path::new(""), Some(0)).unwrap(),
             MoveOutcome::Blocked
         );
-        assert_eq!(state.message, "Rest hours must be in 1..9.");
+        assert!(state.message.is_empty());
         assert_eq!(state.turn, 0);
 
         assert_eq!(
             state.hole_up_command(Path::new(""), Some(10)).unwrap(),
             MoveOutcome::Blocked
         );
-        assert_eq!(state.message, "Rest hours must be in 1..9.");
+        assert!(state.message.is_empty());
         assert_eq!(state.turn, 0);
     }
 

@@ -56,7 +56,13 @@ def main() -> None:
         for path, number, literal in literals(pathlib.Path(source)):
             # Compare on the longest run of fixed text in the template, so a
             # composed line is judged on the words it always prints.
-            runs = [run.strip() for run in PLACEHOLDER.split(literal)]
+            # Judge on the longest run of fixed text: a template's
+            # placeholders and its line breaks both split it.
+            runs = [
+                run.strip()
+                for part in PLACEHOLDER.split(literal)
+                for run in part.split("\\n")
+            ]
             longest = max(runs, key=len, default="")
             longest = longest.replace("\\n", " ").strip()
             if len(longest) < 5:

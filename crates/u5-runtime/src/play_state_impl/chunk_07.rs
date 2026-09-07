@@ -1044,7 +1044,7 @@ impl PlayState {
                         aux3: skiffs,
                     };
                     if self.allocate_active_object_slot(parked_ship).is_none() {
-                        self.message = "No active-object slot for vehicle.".to_string();
+                        self.message.clear();
                         return Ok(MoveOutcome::Blocked);
                     }
                     self.special_items[SPECIAL_ITEM_MAGIC_CARPET_INDEX] =
@@ -1079,7 +1079,7 @@ impl PlayState {
             return Ok(MoveOutcome::Blocked);
         };
         if self.allocate_active_object_slot(parked).is_none() {
-            self.message = "No active-object slot for vehicle.".to_string();
+            self.message.clear();
             return Ok(MoveOutcome::Blocked);
         }
 
@@ -2605,7 +2605,7 @@ impl PlayState {
             return MoveOutcome::Blocked;
         }
         if !direction.is_cardinal() {
-            self.message = "Push requires a cardinal facing direction.".to_string();
+            self.message.clear();
             return MoveOutcome::Blocked;
         }
         let Some(actor) = self.combat_actors.get(actor_slot).copied() else {
@@ -2854,7 +2854,7 @@ impl PlayState {
         direction: Direction,
     ) -> io::Result<MoveOutcome> {
         if !direction.is_cardinal() {
-            self.message = "Push requires a cardinal facing direction.".to_string();
+            self.message.clear();
             return Ok(MoveOutcome::Blocked);
         }
         let (dx, dy) = direction.delta();
@@ -4123,7 +4123,7 @@ impl PlayState {
         }
 
         let Some(mut challenge) = self.active_blackthorn.take() else {
-            self.message = "No Blackthorn audience is active.".to_string();
+            self.message.clear();
             return Ok(MoveOutcome::Blocked);
         };
 
@@ -4937,7 +4937,7 @@ impl PlayState {
             return Ok(self.start_rest_prompt());
         };
         if !(1..=9).contains(&hours) {
-            self.message = "Rest hours must be in 1..9.".to_string();
+            self.message.clear();
             return Ok(MoveOutcome::Blocked);
         }
 

@@ -825,7 +825,7 @@
         assert_eq!(state.moral_standing, 3);
         assert_eq!(state.turn, 0);
         assert!(!state.visibility_dirty);
-        assert_eq!(state.message, "The plate cannot be reached.");
+        assert!(state.message.is_empty());
         let _ = fs::remove_dir_all(dir);
     }
 
@@ -2250,7 +2250,7 @@
         assert_eq!(state.grid[origin_idx], NATURAL_MOONGATE_RESTORED_TERRAIN_TILE);
         assert!(state.natural_moongate_live_cells.is_empty());
         assert!(state.visibility_dirty);
-        assert_eq!(state.message, "Natural moongate phase 4 is not set.");
+        assert!(state.message.is_empty());
     }
 
     #[test]
@@ -2284,7 +2284,7 @@
         // by the hour. The fixture clock starts on day 5, whose Trammel
         // row is `'2'` — the spec's own worked example ("Trammel's
         // **glyph** comes from day 5, not hour 8 ... gives `'2'`").
-        assert_eq!(state.message, "Natural moongate phase 3 is not set.");
+        assert!(state.message.is_empty());
     }
 
     #[test]
@@ -2304,7 +2304,7 @@
             PlayInputDisposition::Continue
         );
 
-        assert_eq!(state.message, "Natural moongate phase 2 is not set.");
+        assert!(state.message.is_empty());
     }
 
     #[test]
@@ -2415,10 +2415,7 @@
         );
 
         assert_eq!(state.grid[origin_idx], NATURAL_MOONGATE_RESTORED_TERRAIN_TILE);
-        assert_eq!(
-            state.message,
-            "Natural moongate opened the shrine meditation path."
-        );
+        assert!(state.message.is_empty());
     }
 
     #[test]

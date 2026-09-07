@@ -882,7 +882,7 @@ impl PlayState {
             .position(|npc| npc.active_object == Some(object_slot))
         else {
             self.advance_turn();
-            self.message = "Unable to find NPC!".to_string();
+            self.message.clear();
             return MoveOutcome::LockTried;
         };
 
@@ -1947,7 +1947,7 @@ impl PlayState {
             (0x9c, 0, -1) => 0x9a,
             (0x9c, 0, 1) => 0x9b,
             (0x9b | 0x9c, _, _) => {
-                self.message = "The plate cannot be reached.".to_string();
+                self.message.clear();
                 return Some(MoveOutcome::Blocked);
             }
             _ => return None,
