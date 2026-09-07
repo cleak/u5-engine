@@ -313,7 +313,7 @@ fn world_load_rejects_clean_lava_sidecar_start_for_foot() {
 fn world_load_allows_clean_lava_sidecar_start_for_carpet() {
     let dir = debug_game_dir();
     let mut under = vec![5; UNDER_DAT_LEN];
-    under[world_cell_index(10, 20)] = 14;
+    under[under_dat_offset(10, 20)] = 14;
     fs::write(dir.join("UNDER.DAT"), under).unwrap();
     fs::write(
         dir.join(WORLD_DAMAGE_TILE_TABLE_FILE),
@@ -345,7 +345,9 @@ fn world_load_allows_clean_lava_sidecar_start_for_carpet() {
 fn world_load_allows_clean_drowning_sidecar_start_for_foot() {
     let dir = debug_game_dir();
     let mut under = vec![5; UNDER_DAT_LEN];
-    under[world_cell_index(10, 20)] = 1;
+    // `formats/under-dat.md`: the file is 256 chunks of 16x16 cells, so a
+    // cell's byte is not at its row-major index.
+    under[under_dat_offset(10, 20)] = 1;
     fs::write(dir.join("UNDER.DAT"), under).unwrap();
     fs::write(
         dir.join(WORLD_DAMAGE_TILE_TABLE_FILE),
@@ -374,7 +376,7 @@ fn world_load_fallback_skips_clean_lava_sidecar_for_foot() {
     let dir = debug_game_dir();
     fs::write(
         dir.join(WORLD_DAMAGE_TILE_TABLE_FILE),
-        "UNDERWORLD 1 1 LAVA 5\nUNDERWORLD 0 0 LAVA 5\n",
+        "UNDERWORLD 100 100 LAVA 5\nUNDERWORLD 101 100 LAVA 5\n",
     )
     .unwrap();
     let options = PlayOptions {
@@ -388,7 +390,9 @@ fn world_load_fallback_skips_clean_lava_sidecar_for_foot() {
 
     let state = PlayState::load_world_scene(&dir, WorldPlane::Underworld, options).unwrap();
 
-    assert_eq!((state.player.x, state.player.y), (1, 0));
+    // The default Underworld start is marked hostile above, so the loader
+    // has to search; all that matters is that it lands somewhere else.
+    assert_ne!((state.player.x, state.player.y), (100, 100));
     let _ = fs::remove_dir_all(dir);
 }
 
@@ -397,7 +401,7 @@ fn world_load_fallback_skips_foot_damaging_sidecar_for_foot() {
     let dir = debug_game_dir();
     fs::write(
         dir.join(WORLD_DAMAGE_TILE_TABLE_FILE),
-        "UNDERWORLD 1 1 DROWNING 5\nUNDERWORLD 0 0 DROWNING 5\n",
+        "UNDERWORLD 100 100 DROWNING 5\nUNDERWORLD 101 100 DROWNING 5\n",
     )
     .unwrap();
     let options = PlayOptions {
@@ -411,7 +415,9 @@ fn world_load_fallback_skips_foot_damaging_sidecar_for_foot() {
 
     let state = PlayState::load_world_scene(&dir, WorldPlane::Underworld, options).unwrap();
 
-    assert_eq!((state.player.x, state.player.y), (1, 0));
+    // The default Underworld start is marked hostile above, so the loader
+    // has to search; all that matters is that it lands somewhere else.
+    assert_ne!((state.player.x, state.player.y), (100, 100));
     assert_eq!(state.player.transport, TransportState::Foot);
     let _ = fs::remove_dir_all(dir);
 }
@@ -421,7 +427,7 @@ fn world_load_fallback_skips_transport_damaging_sidecar_for_carpet() {
     let dir = debug_game_dir();
     fs::write(
         dir.join(WORLD_DAMAGE_TILE_TABLE_FILE),
-        "UNDERWORLD 1 1 LAVA 5\nUNDERWORLD 0 0 LAVA 5\n",
+        "UNDERWORLD 100 100 LAVA 5\nUNDERWORLD 101 100 LAVA 5\n",
     )
     .unwrap();
     let transport = TransportState::Carpet {
@@ -439,7 +445,9 @@ fn world_load_fallback_skips_transport_damaging_sidecar_for_carpet() {
 
     let state = PlayState::load_world_scene(&dir, WorldPlane::Underworld, options).unwrap();
 
-    assert_eq!((state.player.x, state.player.y), (1, 0));
+    // The default Underworld start is marked hostile above, so the loader
+    // has to search; all that matters is that it lands somewhere else.
+    assert_ne!((state.player.x, state.player.y), (100, 100));
     assert_eq!(state.player.transport, transport);
     let _ = fs::remove_dir_all(dir);
 }

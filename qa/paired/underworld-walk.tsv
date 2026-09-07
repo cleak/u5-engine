@@ -1,0 +1,19 @@
+# A short walk on the Underworld plane: the view, a step, and a Look.
+# requires-seed: the party standing on the Underworld plane
+both	wait	9000
+both	key	space
+both	wait	4000
+both	key	j
+both	wait	8000
+both	shot	arrival	Journey Onward in the Underworld
+both	key	Up
+both	wait	2500
+both	shot	north	One step north
+both	key	l
+both	wait	1200
+both	key	Up
+both	wait	2500
+both	shot	look	Look north
+both	key	i
+both	wait	2500
+both	shot	torch	Ignite a torch

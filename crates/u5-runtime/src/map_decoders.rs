@@ -16,6 +16,24 @@ pub fn decode_world_map_bytes(plane: WorldPlane, bytes: &[u8]) -> io::Result<Vec
     }
 }
 
+/// The `UNDER.DAT` file offset of a cell. `formats/under-dat.md`: "logical
+/// chunk slot `n` is stored block `n`", each block a 16-by-16 chunk, so a
+/// cell's byte is not at its row-major index.
+pub const fn under_dat_offset(x: usize, y: usize) -> usize {
+    let chunk_slot = (y / CHUNK_SIDE) * WORLD_CHUNKS_PER_SIDE + (x / CHUNK_SIDE);
+    chunk_slot * CHUNK_BYTES + (y % CHUNK_SIDE) * CHUNK_SIDE + (x % CHUNK_SIDE)
+}
+
+/// `formats/under-dat.md`: the Underworld "uses the same logical surface-map
+/// geometry as `BRIT.DAT`: a 256-by-256 grid of one-byte tile indices,
+/// divided into 256 chunks arranged as a 16-by-16 chunk grid", and it is
+/// dense - "logical chunk slot `n` is stored block `n`". Dense means no index
+/// table; it does **not** mean the file is already row-major, and this
+/// returned the file unchanged, which scrambles the plane into 16x16 blocks.
+///
+/// Measured 2026-09-07: a save written at Underworld (100, 100) put the
+/// original among mountains and this engine in swamp, because the two were
+/// reading different cells of the same file.
 pub fn decode_underworld_map_bytes(bytes: &[u8]) -> io::Result<Vec<u8>> {
     if bytes.len() != UNDER_DAT_LEN {
         return Err(io::Error::new(
@@ -26,7 +44,19 @@ pub fn decode_underworld_map_bytes(bytes: &[u8]) -> io::Result<Vec<u8>> {
             ),
         ));
     }
-    Ok(bytes.to_vec())
+    let mut out = vec![0u8; WORLD_CELLS];
+    for chunk_slot in 0..WORLD_CHUNK_COUNT {
+        let chunk_x = chunk_slot % WORLD_CHUNKS_PER_SIDE;
+        let chunk_y = chunk_slot / WORLD_CHUNKS_PER_SIDE;
+        for local_y in 0..CHUNK_SIDE {
+            let dst_y = chunk_y * CHUNK_SIDE + local_y;
+            let dst_start = dst_y * WORLD_SIDE + chunk_x * CHUNK_SIDE;
+            let src_start = chunk_slot * CHUNK_BYTES + local_y * CHUNK_SIDE;
+            out[dst_start..dst_start + CHUNK_SIDE]
+                .copy_from_slice(&bytes[src_start..src_start + CHUNK_SIDE]);
+        }
+    }
+    Ok(out)
 }
 
 pub fn find_britannia_chunk_index(data: &[u8]) -> io::Result<[u8; WORLD_CHUNK_COUNT]> {

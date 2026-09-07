@@ -610,10 +610,13 @@ pub fn route_smoke_cases() -> Vec<RouteSmokeCase> {
         ..PlayOptions::default()
     };
     seed_gate_travel_resources(&mut gate_travel_to_underworld);
+    // (134, 2) is an open cell of the correctly de-chunked Underworld map;
+    // the old (231, 5) only looked open while `UNDER.DAT` was read as though
+    // it were already row-major.
     gate_travel_to_underworld.moonstone_slots[0] = MoonstoneGateSlot {
         scene: 0,
-        x: 231,
-        y: 5,
+        x: 134,
+        y: 2,
         z: WorldPlane::Underworld.save_floor() as u8,
     };
 
@@ -6653,8 +6656,8 @@ fn validate_route_smoke_case_state(
                 Area::World {
                     plane: WorldPlane::Underworld
                 }
-            ) || state.player.x != 231
-                || state.player.y != 5
+            ) || state.player.x != 134
+                || state.player.y != 2
                 || state.active_objects.first().is_none_or(|object| {
                     object.x != state.player.x
                         || object.y != state.player.y
@@ -6673,8 +6676,8 @@ fn validate_route_smoke_case_state(
                 Area::World {
                     plane: WorldPlane::Underworld
                 }
-            ) || state.player.x != 231
-                || state.player.y != 5
+            ) || state.player.x != 134
+                || state.player.y != 2
                 || state.turn != 0
                 || !state.message.contains("Gate Travel phase 1")
             {

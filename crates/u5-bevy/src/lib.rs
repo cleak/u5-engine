@@ -4039,10 +4039,12 @@ fn visual_route_suite_cases() -> Vec<VisualRouteSuiteCase> {
         ..PlayOptions::default()
     };
     seed_visual_route_gate_travel_resources(&mut gate_travel_to_underworld);
+    // (134, 2) is an open cell of the correctly de-chunked Underworld map;
+    // (231, 5) only looked open while `UNDER.DAT` was read as row-major.
     gate_travel_to_underworld.moonstone_slots[0] = MoonstoneGateSlot {
         scene: 0,
-        x: 231,
-        y: 5,
+        x: 134,
+        y: 2,
         z: WorldPlane::Underworld.save_floor() as u8,
     };
     let mut gate_travel_to_castle = PlayOptions {

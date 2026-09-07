@@ -1315,11 +1315,13 @@ impl PlayState {
         let damage_tiles = load_world_damage_tile_entries(game_dir)?.unwrap_or_default();
         // Canonical Ultima V starting position: Iolo's Hut on the surface
         // (Britannia), at the cell south of the dwelling entrance. For the
-        // Underworld there is no canonical fresh-start spawn, so we keep
-        // the safer (1,1) seed and fall back to a search if that is blocked.
+        // Underworld there is no canonical fresh-start spawn; (134, 2) is an
+        // open grass cell of the correctly de-chunked map, which neither the
+        // old (1, 1) seed nor (100, 100) is - they only looked open while
+        // `UNDER.DAT` was being read as though it were already row-major.
         let default_start = match plane {
             WorldPlane::Britannia => (62, 124),
-            WorldPlane::Underworld => (1, 1),
+            WorldPlane::Underworld => (134, 2),
         };
         let saved_game_reload = options.save_template_source == SaveTemplateSource::SavedGame;
         let (x, y) = match options.start {
