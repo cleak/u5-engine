@@ -17202,12 +17202,14 @@ fn key_code_to_input_byte(key: KeyCode, shift_pressed: bool, control_pressed: bo
     use KeyCode::*;
     if control_pressed {
         // `commands.md` Section 9: the shared pre-dispatch control-code table.
-        // Control + `E` prompts "Exit to DOS?" and Control + `S` toggles sound;
-        // neither consumes a turn. Control + `K` and Control + `V` are the two
-        // rows this shell does not yet carry.
+        // Control + `E` prompts "Exit to DOS?", Control + `S` toggles sound,
+        // Control + `K` prints the moral standing and Control + `V` the
+        // version banner; none of the four consumes a turn.
         return match key {
             KeyE => Some(PLAY_EXIT_TO_DOS_KEY as u8),
             KeyS => Some(PLAY_MUSIC_TOGGLE_KEY as u8),
+            KeyK => Some(u5_runtime::PLAY_MORAL_STANDING_KEY as u8),
+            KeyV => Some(u5_runtime::PLAY_VERSION_BANNER_KEY as u8),
             // `combat.md §8`: "`Ctrl-B` - combat's own copy of the
             // typeahead-buffer toggle, writing the same engine-wide setting as
             // the resident one (`commands.md`). Re-prompts." The runtime owns

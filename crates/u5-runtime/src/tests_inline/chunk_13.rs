@@ -25889,7 +25889,7 @@ fn dungeon_q_is_the_ordinary_save_route() {
     );
     assert!(state.active_yes_no_prompt.is_some());
     assert_eq!(state.message, SAVE_PROMPT_MESSAGE);
-    assert_ne!(state.message, "Exit to DOS?");
+    assert_ne!(state.message, EXIT_TO_DOS_PROMPT);
     assert_eq!(state.turn, 0);
     assert!(!dir.join("SAVED.OOL").exists());
 

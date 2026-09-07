@@ -293,6 +293,12 @@ pub const PLAY_MUSIC_TOGGLE_KEY: char = '\u{13}';
 /// ordinary save-game route; the "Exit to DOS?" prompt is a Control binding in
 /// the mode-local table, not a letter."
 pub const PLAY_EXIT_TO_DOS_KEY: char = '\u{05}';
+/// `commands.md` Section 9: Control + `K` "Prints the party's scalar
+/// moral-standing value as a number", and consumes no turn.
+pub const PLAY_MORAL_STANDING_KEY: char = '\u{0b}';
+/// `commands.md` Section 9: Control + `V` "Prints the version banner", and
+/// consumes no turn.
+pub const PLAY_VERSION_BANNER_KEY: char = '\u{16}';
 pub const TRAP_NON_COMBAT_EFFECT_TABLE: [u8; 8] = [0, 0, 0, 1, 1, 2, 2, 3];
 pub const TRAP_ACID_DAMAGE_MAX: u8 = 30;
 pub const TRAP_BOMB_DAMAGE_MAX: u8 = 8;

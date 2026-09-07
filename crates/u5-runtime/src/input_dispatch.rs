@@ -215,6 +215,16 @@ fn handle_play_key_input_inner(
         state.toggle_music();
         return Ok(PlayInputDisposition::Continue);
     }
+    // `commands.md §9`: the other two shared Control bindings. Neither
+    // consumes a turn, and both print one command-echo row.
+    if key == PLAY_MORAL_STANDING_KEY {
+        state.print_moral_standing();
+        return Ok(PlayInputDisposition::Continue);
+    }
+    if key == PLAY_VERSION_BANNER_KEY {
+        state.print_version_banner();
+        return Ok(PlayInputDisposition::Continue);
+    }
     // `commands.md` Section 9: Control + `E` "Prompts "Exit to DOS?"; a yes
     // answer leaves the game, anything else prints the refusal and continues",
     // and "None of the four consumes a turn in any mode". The prompt itself is

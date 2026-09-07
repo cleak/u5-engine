@@ -331,13 +331,13 @@
             PlayInputDisposition::Continue
         );
         assert!(state.typeahead_buffer_enabled);
-        assert_eq!(state.message, "Buffer On.");
+        assert_eq!(state.message, TYPEAHEAD_BUFFER_ON_MESSAGE);
         assert_eq!(state.combat_round_counter, round_before);
         assert_eq!(state.combat_actors[0].x, actor_x);
 
         handle_play_key_input(&mut state, PLAY_TYPEAHEAD_TOGGLE_KEY, "", game_dir).unwrap();
         assert!(!state.typeahead_buffer_enabled);
-        assert_eq!(state.message, "Buffer Off.");
+        assert_eq!(state.message, TYPEAHEAD_BUFFER_OFF_MESSAGE);
     }
 
     #[test]

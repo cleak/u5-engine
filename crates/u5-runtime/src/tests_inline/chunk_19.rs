@@ -108,7 +108,7 @@
             let disposition =
                 handle_play_key_input(state, PLAY_EXIT_TO_DOS_KEY, "", Path::new("")).unwrap();
             assert_eq!(disposition, PlayInputDisposition::Continue);
-            assert_eq!(state.message, "Exit to DOS?");
+            assert_eq!(state.message, EXIT_TO_DOS_PROMPT);
             assert!(state.active_yes_no_prompt.is_some());
             assert_eq!(state.turn, 0, "the binding consumes no turn");
         };
@@ -120,7 +120,10 @@
             handle_play_key_input(&mut confirmed, 'Y', "", Path::new("")).unwrap(),
             PlayInputDisposition::Quit
         );
-        assert_eq!(confirmed.message, "Yes. Exiting to DOS.");
+        assert_eq!(
+            confirmed.message,
+            format!("{EXIT_TO_DOS_PROMPT}{EXIT_TO_DOS_YES_REPLY}")
+        );
         assert_eq!(confirmed.turn, 0);
 
         // Anything else prints the refusal and continues, in one read: the
@@ -133,7 +136,11 @@
                 PlayInputDisposition::Continue,
                 "`{answer:?}` must not leave the game"
             );
-            assert_eq!(declined.message, "No.", "`{answer:?}` prints the refusal");
+            assert_eq!(
+                declined.message,
+                format!("{EXIT_TO_DOS_PROMPT}{EXIT_TO_DOS_NO_REPLY}"),
+                "`{answer:?}` prints the refusal"
+            );
             assert!(
                 declined.active_yes_no_prompt.is_none(),
                 "`{answer:?}` runs the loop exactly once, it does not re-ask"

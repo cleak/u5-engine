@@ -255,7 +255,7 @@ fn typeahead_buffer_toggle_is_no_turn_and_visible_in_status() {
     );
     assert!(state.typeahead_buffer_enabled);
     assert_eq!(state.turn, 0);
-    assert_eq!(state.message, "Buffer On.");
+    assert_eq!(state.message, u5_runtime::TYPEAHEAD_BUFFER_ON_MESSAGE);
     assert!(play_script_state_line(&state).contains("typeahead on"));
     assert!(state.z_stats_message().contains("typeahead on"));
 
@@ -265,7 +265,7 @@ fn typeahead_buffer_toggle_is_no_turn_and_visible_in_status() {
     );
     assert!(!state.typeahead_buffer_enabled);
     assert_eq!(state.turn, 0);
-    assert_eq!(state.message, "Buffer Off.");
+    assert_eq!(state.message, u5_runtime::TYPEAHEAD_BUFFER_OFF_MESSAGE);
 }
 
 // from chunk_18

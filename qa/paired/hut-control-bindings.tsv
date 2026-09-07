@@ -1,0 +1,58 @@
+# Create a character, Journey Onward, then send the shared Control bindings
+# of `commands.md` section 9: the typeahead toggle and the four pre-dispatch
+# codes (Exit to DOS, moral standing, sound, version banner).
+both	wait	9000
+both	key	space
+both	wait	4000
+both	key	c
+both	wait	2500
+both	type	Avatar
+both	key	Return
+both	wait	1500
+both	key	m
+both	wait	3000
+both	key	space
+both	wait	3000
+both	key	a
+both	wait	3000
+both	key	a
+both	wait	3000
+both	key	a
+both	wait	3000
+both	key	a
+both	wait	3000
+both	key	a
+both	wait	3000
+both	key	a
+both	wait	3000
+both	key	a
+both	wait	3000
+both	key	space
+both	wait	4000
+both	key	j
+both	wait	7000
+both	shot	start	The hut after Journey Onward
+both	key	ctrl+b
+both	wait	2500
+both	shot	buffer-1	Typeahead toggle, first press
+both	key	ctrl+b
+both	wait	2500
+both	shot	buffer-2	Typeahead toggle, second press
+both	key	ctrl+k
+both	wait	2500
+both	shot	karma	Moral-standing readout
+both	key	ctrl+s
+both	wait	2500
+both	shot	sound-off	Sound toggle, first press
+both	key	ctrl+s
+both	wait	2500
+both	shot	sound-on	Sound toggle, second press
+both	key	ctrl+v
+both	wait	2500
+both	shot	version	Version banner
+both	key	ctrl+e
+both	wait	2500
+both	shot	exit-prompt	Exit to DOS prompt
+both	key	n
+both	wait	4000
+both	shot	exit-declined	After declining the exit

@@ -543,6 +543,30 @@ pub const fn new_order_outcome(slot_a: Option<usize>, slot_b: Option<usize>) -> 
 /// are case-folded before dispatch (see `input.md §6`). Returns `None`
 /// for any byte outside the `A..=Z` range and the literal `Space` pass
 /// input.
+/// `commands.md §9`, Control + `E`: the program-exit prompt.
+///
+/// The spec had two renderings - §9's bare `Exit to DOS?` and
+/// `dungeon-mode.md §8`'s `Exit to DOS? ` with a trailing space - and the
+/// engine could not tell which was the literal. **Measured**: the answer
+/// lands on the prompt's own row (`Exit to DOS? N`), which is
+/// `commands.md §5.3`'s trailing-space contract, so the space is real.
+pub const EXIT_TO_DOS_PROMPT: &str = "Exit to DOS? ";
+/// The declined answer, measured as the bare upper-case letter on the
+/// prompt row. The accepted answer has the same shape.
+pub const EXIT_TO_DOS_NO_REPLY: &str = "N";
+/// See [`EXIT_TO_DOS_NO_REPLY`].
+pub const EXIT_TO_DOS_YES_REPLY: &str = "Y";
+
+/// `commands.md §9`: the typeahead toggle's two states. Measured: no
+/// terminating full stop.
+pub const TYPEAHEAD_BUFFER_ON_MESSAGE: &str = "Buffer On";
+/// See [`TYPEAHEAD_BUFFER_ON_MESSAGE`].
+pub const TYPEAHEAD_BUFFER_OFF_MESSAGE: &str = "Buffer Off";
+/// `commands.md §9`, Control + `V`: the version banner. **Measured** -
+/// the section names the binding but publishes no literal, and the
+/// original prints this. `cleak/u5-spec#224`.
+pub const VERSION_BANNER_MESSAGE: &str = "1.16";
+
 /// `combat.md §8.2`: the Attack family's fixed refusal. The same
 /// section states that "there is no `<attacker> attacks <target>` line,
 /// in any wording, anywhere in the shipped game", which is the shape

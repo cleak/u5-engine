@@ -272,6 +272,14 @@ impl PlayState {
         {
             return Some(SAVE_PROMPT_LINE.to_string());
         }
+        // Same shape for the program-exit prompt: its trailing space keeps
+        // the cursor on the row the answer letter completes.
+        if self
+            .active_yes_no_prompt
+            .is_some_and(|session| matches!(session.kind, YesNoPromptKind::ExitToDos))
+        {
+            return Some(EXIT_TO_DOS_PROMPT.to_string());
+        }
         // `commands.md §5.4`: the shared direction prompt "prints
         // **nothing** before waiting. The hyphen at the end of the verb
         // echo *is* the prompt", so the cursor waits in the cell the
@@ -2066,7 +2074,10 @@ impl PlayState {
 
     pub fn start_exit_to_dos_prompt(&mut self) -> MoveOutcome {
         self.active_yes_no_prompt = Some(YesNoPromptSession::new(YesNoPromptKind::ExitToDos));
-        self.message = self.render_active_yes_no_prompt();
+        // Measured: the prompt is a command echo like the other three
+        // Control bindings - marker, and the blank row above it - and the
+        // answer letter then completes its row.
+        self.emit_command_echo_line(EXIT_TO_DOS_PROMPT);
         MoveOutcome::Observed
     }
 
@@ -2106,15 +2117,10 @@ impl PlayState {
                     TOWN_EXIT_PROMPT.to_string()
                 }
                 YesNoPromptKind::SaveGame => SAVE_PROMPT_MESSAGE.to_string(),
-                // `commands.md` Section 9 quotes this prompt as "Exit to
-                // DOS?". Spec note, unresolved: `dungeon-mode.md` Section 8
-                // renders the same prompt inside backticks as `Exit to DOS? `,
-                // with a trailing space. Neither section uses that document's
-                // underscore-for-space echo convention here, so it is not
-                // decidable which of the two is the literal. This keeps the
-                // Section 9 form; a spec clarification should settle it before
-                // anyone pins the byte.
-                YesNoPromptKind::ExitToDos => "Exit to DOS?".to_string(),
+                // Measured: the answer lands on this row, so the literal
+                // is `dungeon-mode.md §8`'s trailing-space form rather
+                // than §9's bare one. See [`EXIT_TO_DOS_PROMPT`].
+                YesNoPromptKind::ExitToDos => EXIT_TO_DOS_PROMPT.to_string(),
             })
             .unwrap_or_else(|| "Yes or no?".to_string())
     }
@@ -2146,7 +2152,7 @@ impl PlayState {
                             Ok(Some(PlayInputDisposition::Continue))
                         }
                         YesNoPromptKind::ExitToDos => {
-                            self.message = "Yes. Exiting to DOS.".to_string();
+                            self.commit_prompt_reply(EXIT_TO_DOS_PROMPT, EXIT_TO_DOS_YES_REPLY);
                             Ok(Some(PlayInputDisposition::Quit))
                         }
                     };
@@ -2164,6 +2170,13 @@ impl PlayState {
                         self.advance_turn();
                         let _ = self
                             .apply_top_down_post_turn_effects_after_turn(turn_before, game_dir)?;
+                    } else if matches!(session.kind, YesNoPromptKind::ExitToDos) {
+                        // Measured: the answer letter completes the
+                        // prompt row - `Exit to DOS? N` - rather than
+                        // opening a row of its own. The save prompt's
+                        // own decline is not measured and keeps the line
+                        // it had.
+                        self.commit_prompt_reply(EXIT_TO_DOS_PROMPT, EXIT_TO_DOS_NO_REPLY);
                     } else {
                         self.message = "No.".to_string();
                     }
@@ -2184,7 +2197,7 @@ impl PlayState {
         // this reuses the decline line this same prompt already prints for a
         // typed `N` instead of inventing a second string.
         if matches!(session.kind, YesNoPromptKind::ExitToDos) {
-            self.message = "No.".to_string();
+            self.commit_prompt_reply(EXIT_TO_DOS_PROMPT, EXIT_TO_DOS_NO_REPLY);
             return Ok(Some(PlayInputDisposition::Continue));
         }
         self.active_yes_no_prompt = Some(session);
@@ -3197,14 +3210,39 @@ impl PlayState {
         }
     }
 
+    /// `commands.md §9`: the typeahead-buffer toggle "prints the
+    /// corresponding Buffer On / Buffer Off message, and reports 'no
+    /// action', so the toggle never consumes a game turn".
+    ///
+    /// Measured: the words carry no terminating full stop, and the line
+    /// is a command echo - it opens with the marker and the blank row
+    /// every other command turn gets.
     pub fn toggle_typeahead_buffer(&mut self) {
         self.typeahead_buffer_enabled = !self.typeahead_buffer_enabled;
-        self.message = if self.typeahead_buffer_enabled {
-            "Buffer On."
+        let line = if self.typeahead_buffer_enabled {
+            TYPEAHEAD_BUFFER_ON_MESSAGE
         } else {
-            "Buffer Off."
-        }
-        .to_string();
+            TYPEAHEAD_BUFFER_OFF_MESSAGE
+        };
+        self.emit_command_echo_line(line);
+    }
+
+    /// `commands.md §9`, the Control + `K` row: "Prints the party's
+    /// scalar moral-standing value as a number." Measured on the
+    /// original: the number alone on a command-echo row, `75` for the
+    /// shipped save, with no label and no turn.
+    pub fn print_moral_standing(&mut self) {
+        let line = self.moral_standing.to_string();
+        self.emit_command_echo_line(&line);
+    }
+
+    /// `commands.md §9`, the Control + `V` row: "Prints the version
+    /// banner." The section does not publish the literal;
+    /// **measured** on the original, the banner is
+    /// [`VERSION_BANNER_MESSAGE`] alone on a command-echo row, with no
+    /// turn. `cleak/u5-spec#224`.
+    pub fn print_version_banner(&mut self) {
+        self.emit_command_echo_line(VERSION_BANNER_MESSAGE);
     }
 
     /// `audio.md §3`: "Ctrl-S in overworld, town, combat, and dungeon command
@@ -3217,12 +3255,14 @@ impl PlayState {
     /// calls it the sound setting, and it is the boolean this toggle flips.
     pub fn toggle_music(&mut self) {
         self.music_enabled = !self.music_enabled;
-        self.message = if self.music_enabled {
+        let line = if self.music_enabled {
             SOUND_TOGGLE_ON_MESSAGE
         } else {
             SOUND_TOGGLE_OFF_MESSAGE
-        }
-        .to_string();
+        };
+        // Measured: like the other three Control bindings, the state line
+        // is a command echo - it opens with the marker and the blank row.
+        self.emit_command_echo_line(line);
     }
 
     pub fn typeahead_status_label(&self) -> &'static str {
