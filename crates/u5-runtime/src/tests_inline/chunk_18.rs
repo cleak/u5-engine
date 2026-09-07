@@ -651,7 +651,7 @@
         assert_eq!(state.party[0].mana, 1);
         assert_eq!(state.turn, 1);
         assert_eq!(state.clock, GameClock::new(12, 2).unwrap());
-        assert_eq!(state.message, "Wind change! Pass.");
+        assert_eq!(state.message, "");
     }
 
     #[test]

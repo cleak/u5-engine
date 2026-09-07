@@ -1,0 +1,24 @@
+# Cancels and stray keys: the wind scroll's Space, a cancelled target prompt,
+# a function key and an unmapped letter.
+# requires-seed: a party carrying scrolls and potions
+both	wait	9000
+both	key	space
+both	wait	4000
+both	key	j
+both	wait	7000
+both	key	u
+both	wait	2000
+both	key	Down
+both	wait	600
+both	key	Return
+both	wait	2000
+both	shot	wind-prompt	The wind-change prompt
+both	key	space
+both	wait	2500
+both	shot	wind-pass	Space at the wind prompt
+both	key	F1
+both	wait	2000
+both	shot	fkey	A function key
+both	key	percent
+both	wait	2000
+both	shot	stray	An unmapped key

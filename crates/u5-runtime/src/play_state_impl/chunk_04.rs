@@ -176,7 +176,14 @@ impl PlayState {
 
         if pass {
             self.advance_turn();
-            self.message = "Wind change! Pass.".to_string();
+            // Measured 2026-09-07: Space completes the scroll's own
+            // `Direction-` row with the shared `Pass` word and prints
+            // nothing else.
+            let _ = self.complete_open_direction_echo(
+                SPELL_DIRECTION_PROMPT_PREFIX,
+                DIRECTION_PROMPT_LABEL_PASS,
+            );
+            self.message.clear();
             return MoveOutcome::Cast;
         }
 

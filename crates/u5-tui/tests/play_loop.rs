@@ -408,7 +408,7 @@ fn function_key_input_is_no_turn_and_no_idle_tick() {
     assert_eq!((town.player.x, town.player.y), (5, 5));
     assert_eq!(town.turn, 0);
     assert_eq!(town.animation.frame, 0);
-    assert_eq!(town.message, "Function key ignored.");
+    assert_eq!(town.message, u5_runtime::unassigned_refusal_echo(0));
 
     let (key, suffix) = play_input_key_and_suffix("\x1b[21~\n").unwrap();
     let mut dungeon = dungeon_state(open_dungeon_record(), 0, 1, 1);
@@ -421,7 +421,7 @@ fn function_key_input_is_no_turn_and_no_idle_tick() {
     assert_eq!((dungeon.player.x, dungeon.player.y), (1, 1));
     assert_eq!(dungeon.turn, 0);
     assert_eq!(dungeon.animation.frame, 0);
-    assert_eq!(dungeon.message, "Function key ignored.");
+    assert_eq!(dungeon.message, u5_runtime::unassigned_refusal_echo(0));
 }
 
 // from chunk_18

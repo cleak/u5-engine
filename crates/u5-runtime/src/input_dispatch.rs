@@ -85,7 +85,9 @@ fn handle_play_key_input_inner(
 ) -> io::Result<PlayInputDisposition> {
     if let Some(byte) = input_byte_from_char(key) {
         if matches!(input_byte_class(byte), InputByteClass::FunctionKey) {
-            state.message = "Function key ignored.".to_string();
+            // Measured 2026-09-07: a function key is just an unassigned
+            // key, and answers the resident `What?` like any other.
+            state.message = unassigned_refusal_echo(0).to_string();
             return Ok(PlayInputDisposition::Continue);
         }
     }
@@ -825,7 +827,9 @@ fn handle_active_shop_key_input(
                 let Some(member) = state.party.get(target_index).copied() else {
                     return {
                         state.active_shop = Some(session);
-                        state.message = "I do not understand.".to_string();
+                        // An out-of-range healer target: the shop's own
+                        // picker bounds it, so this is an invariant guard.
+                        state.message.clear();
                         PlayInputDisposition::Continue
                     };
                 };
