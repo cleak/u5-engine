@@ -2128,7 +2128,7 @@ impl PlayState {
         let Some((target_x, target_y)) =
             self.resolve_combat_arena_field_impact(caster_index, target)
         else {
-            self.message = "Target? Use C1FGI4,3/C1GIN4,3/C1GIZ4,3/C1GIS4,3.".to_string();
+            self.request_cast_argument(CastArgumentRequest::Target);
             return MoveOutcome::Blocked;
         };
         let target_slot = find_combat_actor_at_field_coordinate(
@@ -2324,7 +2324,7 @@ impl PlayState {
             return MoveOutcome::Blocked;
         }
         let Some(direction) = direction else {
-            self.message = "Direction? Use C1AG6.".to_string();
+            self.request_cast_argument(CastArgumentRequest::Direction);
             return MoveOutcome::Blocked;
         };
         if !direction.is_cardinal() {
@@ -5233,7 +5233,7 @@ impl PlayState {
             return MoveOutcome::Blocked;
         }
         let Some(direction) = direction else {
-            self.message = "Direction? Use C1IZ6/C1HIN6/C1CGIV6/C1FHI6.".to_string();
+            self.request_cast_argument(CastArgumentRequest::Direction);
             return MoveOutcome::Blocked;
         };
         if !direction.is_cardinal() {

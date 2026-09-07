@@ -14,8 +14,8 @@
         assert_eq!(missing_direction.party[0].mana, FIELD_SPELL_COST);
         assert_eq!(missing_direction.turn, 0);
         assert_eq!(
-            missing_direction.message,
-            "Direction? Use C1FGI6/C1GIN6/C1GIZ6/C1GIS6."
+            missing_direction.pending_cast_argument,
+            Some(CastArgumentRequest::Direction)
         );
 
         let mut wrong_scene = test_state(open_grid(), 1, 1);
@@ -95,7 +95,10 @@
         assert_eq!(missing_direction.spell_charges[DISPEL_FIELD_SPELL_INDEX], 1);
         assert_eq!(missing_direction.party[0].mana, DISPEL_FIELD_COST);
         assert_eq!(missing_direction.turn, 0);
-        assert_eq!(missing_direction.message, "Direction? Use C1AG6.");
+        assert_eq!(
+            missing_direction.pending_cast_argument,
+            Some(CastArgumentRequest::Direction)
+        );
 
         let mut wrong_scene = test_state(open_grid(), 1, 1);
         wrong_scene.spell_charges[DISPEL_FIELD_SPELL_INDEX] = 1;
@@ -336,8 +339,8 @@
         assert_eq!(town_magic_lock.party[0].mana, 0);
         assert_eq!(town_magic_lock.turn, 0);
         assert_eq!(
-            town_magic_lock.message,
-            "Direction? Use C1AEP8/C1AEP6/C1AEP2/C1AEP4."
+            town_magic_lock.pending_cast_argument,
+            Some(CastArgumentRequest::Direction)
         );
 
         let mut town_unlock_magic = test_state(open_grid(), 5, 5);
@@ -359,8 +362,8 @@
         assert_eq!(town_unlock_magic.party[0].mana, 0);
         assert_eq!(town_unlock_magic.turn, 0);
         assert_eq!(
-            town_unlock_magic.message,
-            "Direction? Use C1EIP8/C1EIP6/C1EIP2/C1EIP4."
+            town_unlock_magic.pending_cast_argument,
+            Some(CastArgumentRequest::Direction)
         );
 
     }
@@ -477,7 +480,10 @@
         assert_eq!(state.party[0].mana, VANISH_COST);
         assert_eq!(state.turn, 0);
         assert_eq!(state.clock, GameClock::new(12, 0).unwrap());
-        assert_eq!(state.message, "Who casts?");
+        assert_eq!(
+            state.pending_cast_argument,
+            Some(CastArgumentRequest::Caster)
+        );
     }
 
     #[test]
@@ -620,8 +626,8 @@
         assert_eq!(state.party[0].mana, 3);
         assert_eq!(state.turn, 0);
         assert_eq!(
-            state.message,
-            "Direction? Use C1HR8/C1HR6/C1HR2/C1HR4, or C1HR<space>."
+            state.pending_cast_argument,
+            Some(CastArgumentRequest::Direction)
         );
     }
 

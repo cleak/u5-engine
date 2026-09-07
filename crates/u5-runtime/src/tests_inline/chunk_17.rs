@@ -3858,8 +3858,8 @@
         assert_eq!(missing_target.party[0].mana, CURE_COST);
         assert_eq!(missing_target.turn, 0);
         assert_eq!(
-            missing_target.message,
-            "Whom? Use C1AN2 to cure party member 2."
+            missing_target.pending_cast_argument,
+            Some(CastArgumentRequest::PartyTarget)
         );
 
         let mut invalid_target = dungeon_state(open_dungeon_record(), 0, 1, 1);
@@ -4505,7 +4505,10 @@
         assert_eq!(missing_direction.spell_charges[BLINK_SPELL_INDEX], 1);
         assert_eq!(missing_direction.party[0].mana, BLINK_COST);
         assert_eq!(missing_direction.turn, 0);
-        assert_eq!(missing_direction.message, "Direction? Use C1IP6.");
+        assert_eq!(
+            missing_direction.pending_cast_argument,
+            Some(CastArgumentRequest::Direction)
+        );
 
         // `magic.md §5` step 3: the context gate runs before the handler's
         // direction prompt, so an indoor Blink reports `Not here!` rather

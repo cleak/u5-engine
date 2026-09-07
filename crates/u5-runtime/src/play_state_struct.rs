@@ -327,6 +327,9 @@ pub struct PlayState {
     /// it is not a one-shot direction key but an **interactive targeting
     /// cursor**", entered "once per readied weapon, not once per Attack
     /// command". Never serialized: combat cannot be saved mid-fight.
+    /// See [`crate::CastArgumentRequest`]: what the last spell dispatch
+    /// still needs, for the cast prompt's follow-up to open.
+    pub pending_cast_argument: Option<CastArgumentRequest>,
     pub active_combat_targeting: Option<CombatTargetingCursorSession>,
     /// `combat.md §8.2`: the targeting cursor "starts on **the attacker's**
     /// remembered previous target when that target is still a valid, live,

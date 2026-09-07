@@ -165,7 +165,7 @@ impl PlayState {
             return MoveOutcome::Blocked;
         }
         if direction.is_none() && !pass {
-            self.message = "Direction? Use C1HR8/C1HR6/C1HR2/C1HR4, or C1HR<space>.".to_string();
+            self.request_cast_argument(CastArgumentRequest::Direction);
             return MoveOutcome::Blocked;
         }
         if let Some(outcome) =
@@ -1471,7 +1471,7 @@ impl PlayState {
 
     pub fn use_wind_change_scroll(&mut self, direction: Option<Direction>) -> MoveOutcome {
         let Some(direction) = direction else {
-            self.message = "Direction? Use UHR8/UHR6/UHR2/UHR4.".to_string();
+            self.request_cast_argument(CastArgumentRequest::Direction);
             return MoveOutcome::Blocked;
         };
         if matches!(self.area, Area::Dungeon { .. }) {
@@ -1500,7 +1500,7 @@ impl PlayState {
             return MoveOutcome::Blocked;
         }
         let Some(target_index) = target else {
-            self.message = "Whom? Use UCIM2 to resurrect party member 2.".to_string();
+            self.request_cast_argument(CastArgumentRequest::PartyTarget);
             return MoveOutcome::Blocked;
         };
         if target_index >= self.party.len() {

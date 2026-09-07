@@ -160,6 +160,31 @@ pub struct CastFollowupSession {
     pub combat_had_foe: bool,
 }
 
+/// What a spell handler still needs before it can resolve.
+///
+/// The inline suffix form (`C1BRX7`) supplies every argument at once; the
+/// interactive `C`-Cast prompt supplies only the caster, so a handler that
+/// needs a direction, a party member, a moon phase or an arena target
+/// records the request here and the cast prompt opens the matching
+/// follow-up ([`CastFollowupKind`]).
+///
+/// This used to be carried in the message slot as a sentence naming the
+/// engine's own inline syntax (`Direction? Use C1AG6.`), which the
+/// follow-up then string-matched. Nothing published looks like that, and a
+/// request the matcher failed to recognise printed it to the player - see
+/// `cleak/u5-engine#19`.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum CastArgumentRequest {
+    /// Inline callers only: the suffix named no caster. The interactive
+    /// prompt always supplies one.
+    Caster,
+    Direction,
+    PartyTarget,
+    GatePhase,
+    Creature,
+    Target,
+}
+
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum CastFollowupKind {
     Direction {

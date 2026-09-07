@@ -1102,6 +1102,16 @@ impl PlayState {
         Ok(Some((outcome, combat)))
     }
 
+    /// Record what the dispatched spell still needs. See
+    /// [`CastArgumentRequest`]: the interactive cast prompt reads this to
+    /// choose its follow-up, and nothing is printed - the engine used to
+    /// leave a sentence naming its own inline syntax in the message slot.
+    pub fn request_cast_argument(&mut self, request: CastArgumentRequest) -> MoveOutcome {
+        self.pending_cast_argument = Some(request);
+        self.message.clear();
+        MoveOutcome::Blocked
+    }
+
     fn start_cast_followup_from_prompt(
         &mut self,
         caster_index: usize,
@@ -1109,60 +1119,57 @@ impl PlayState {
         combat_actor_slot: Option<usize>,
         combat_had_foe: bool,
     ) -> bool {
-        let kind = if self.message.starts_with("Direction? Use C") {
-            Some(CastFollowupKind::Direction {
+        // What the handler asked for, not what it left in the message
+        // slot. See [`CastArgumentRequest`].
+        let kind = match self.pending_cast_argument.take() {
+            Some(CastArgumentRequest::Direction) => Some(CastFollowupKind::Direction {
                 pass_allowed: matches!(
                     spell_code.as_str(),
                     "HR" | "IP" | "AY" | "AS" | "AEP" | "EIP"
                 ),
-            })
-        } else if self.message.starts_with("Whom? Use C") {
-            Some(CastFollowupKind::PartyTarget)
-        } else if self.message.starts_with("To phase? Use C") {
-            Some(CastFollowupKind::GatePhase)
-        } else if self.message.starts_with("Creature? Use C") {
-            // `magic.md §8`: the creature-prompt targeters "print
-            // `Creature: ` and open the arena cursor", so the target is a
-            // confirmed *cell*, not a slot number. The cursor's seed cell
-            // is unpublished; it opens on the caster's own cell, which is
-            // the one cell the player can always see.
-            match self
-                .combat_active
-                .then(|| self.combat_actors.get(caster_index).copied())
-                .flatten()
-                .filter(|actor| combat_actor_is_active_not_dead(*actor))
-            {
-                Some(actor) => {
-                    // The seed is `combat.md §8.2`'s published cursor start -
-                    // "the attacker's remembered previous target when that
-                    // target is still a valid, live, visible actor within the
-                    // maximum range, and on the attacker's own cell
-                    // otherwise" - rather than a second seeding rule invented
-                    // for this prompt. The creature cursor's own range is
-                    // unpublished, so it is the arena.
-                    let remembered = self
-                        .combat_remembered_targets
-                        .get(caster_index)
-                        .copied()
-                        .flatten()
-                        .and_then(|slot| self.combat_actors.get(usize::from(slot)).copied());
-                    let displayed = remembered
-                        .is_some_and(|target| self.combat_actor_presentation_displayed(target));
-                    let (x, y) = combat_targeting_cursor_start(
-                        (actor.x, actor.y),
-                        remembered,
-                        displayed,
-                        COMBAT_ARENA_SIDE as u8,
-                    );
-                    Some(CastFollowupKind::CombatCreatureCursor { x, y })
+            }),
+            Some(CastArgumentRequest::PartyTarget) => Some(CastFollowupKind::PartyTarget),
+            Some(CastArgumentRequest::GatePhase) => Some(CastFollowupKind::GatePhase),
+            Some(CastArgumentRequest::Creature) => {
+                // `magic.md §8`: the creature-prompt targeters "print
+                // `Creature: ` and open the arena cursor", so the target is
+                // a confirmed *cell*, not a slot number.
+                match self
+                    .combat_active
+                    .then(|| self.combat_actors.get(caster_index).copied())
+                    .flatten()
+                    .filter(|actor| combat_actor_is_active_not_dead(*actor))
+                {
+                    Some(actor) => {
+                        // The seed is `combat.md §8.2`'s published cursor
+                        // start - "the attacker's remembered previous target
+                        // when that target is still a valid, live, visible
+                        // actor within the maximum range, and on the
+                        // attacker's own cell otherwise" - rather than a
+                        // second seeding rule invented for this prompt. The
+                        // creature cursor's own range is unpublished, so it
+                        // is the arena.
+                        let remembered = self
+                            .combat_remembered_targets
+                            .get(caster_index)
+                            .copied()
+                            .flatten()
+                            .and_then(|slot| self.combat_actors.get(usize::from(slot)).copied());
+                        let displayed = remembered
+                            .is_some_and(|target| self.combat_actor_presentation_displayed(target));
+                        let (x, y) = combat_targeting_cursor_start(
+                            (actor.x, actor.y),
+                            remembered,
+                            displayed,
+                            COMBAT_ARENA_SIDE as u8,
+                        );
+                        Some(CastFollowupKind::CombatCreatureCursor { x, y })
+                    }
+                    None => Some(CastFollowupKind::CombatTarget { creature: true }),
                 }
-                None => Some(CastFollowupKind::CombatTarget { creature: true }),
             }
-        } else if spell_code == "IP"
-            && self.combat_active
-            && self.message.starts_with("Target? Use C")
-        {
-            self.combat_actors
+            Some(CastArgumentRequest::Target) if spell_code == "IP" && self.combat_active => self
+                .combat_actors
                 .get(caster_index)
                 .copied()
                 .filter(|actor| combat_actor_is_active_not_dead(*actor))
@@ -1171,24 +1178,27 @@ impl PlayState {
                     y: actor.y,
                     range_origin: None,
                     max_range: None,
+                }),
+            Some(CastArgumentRequest::Target)
+                if matches!(spell_code.as_str(), "FGI" | "GIN" | "GIZ" | "GIS")
+                    && self.combat_active =>
+            {
+                self.combat_field_cursor_start(caster_index).map(|(x, y)| {
+                    let caster = self.combat_actors[caster_index];
+                    CastFollowupKind::CombatCoordinate {
+                        x,
+                        y,
+                        range_origin: Some((caster.x, caster.y)),
+                        max_range: Some(COMBAT_FIELD_CURSOR_RANGE),
+                    }
                 })
-        } else if matches!(spell_code.as_str(), "FGI" | "GIN" | "GIZ" | "GIS")
-            && self.combat_active
-            && self.message.starts_with("Target? Use C")
-        {
-            self.combat_field_cursor_start(caster_index).map(|(x, y)| {
-                let caster = self.combat_actors[caster_index];
-                CastFollowupKind::CombatCoordinate {
-                    x,
-                    y,
-                    range_origin: Some((caster.x, caster.y)),
-                    max_range: Some(COMBAT_FIELD_CURSOR_RANGE),
-                }
-            })
-        } else if self.message.starts_with("Target? Use C") {
-            Some(CastFollowupKind::CombatTarget { creature: false })
-        } else {
-            None
+            }
+            Some(CastArgumentRequest::Target) => {
+                Some(CastFollowupKind::CombatTarget { creature: false })
+            }
+            // The interactive prompt always names its caster, so a caster
+            // request means an inline caller supplied no party slot.
+            Some(CastArgumentRequest::Caster) | None => None,
         };
         let Some(kind) = kind else {
             return false;
@@ -3759,7 +3769,7 @@ impl PlayState {
                 .copied()
                 .is_some_and(combat_actor_is_active_not_dead)
         {
-            self.message = "Who casts?".to_string();
+            self.request_cast_argument(CastArgumentRequest::Caster);
             return MoveOutcome::Blocked;
         }
         if let Some(outcome) = self.cast_spell_resource_gate(caster_index, spell_index, mana_cost) {
@@ -3767,7 +3777,7 @@ impl PlayState {
         }
 
         if direction.is_none() && !explicit_pass {
-            self.message = directed_utility_direction_prompt(spell_index).to_string();
+            self.request_cast_argument(CastArgumentRequest::Direction);
             return MoveOutcome::Observed;
         }
         self.confirm_spent_directed_utility_spell(
@@ -3793,7 +3803,7 @@ impl PlayState {
             return MoveOutcome::Cast;
         }
         let Some(direction) = direction.filter(|direction| direction.is_cardinal()) else {
-            self.message = directed_utility_direction_prompt(spell_index).to_string();
+            self.request_cast_argument(CastArgumentRequest::Direction);
             return MoveOutcome::Observed;
         };
 
@@ -3809,7 +3819,7 @@ impl PlayState {
                 .copied()
                 .filter(|actor| combat_actor_is_active_not_dead(*actor))
             else {
-                self.message = "Who casts?".to_string();
+                self.request_cast_argument(CastArgumentRequest::Caster);
                 return MoveOutcome::Blocked;
             };
             Some(actor)
@@ -4620,7 +4630,7 @@ impl PlayState {
             return MoveOutcome::Blocked;
         };
         let Some(direction) = direction else {
-            self.message = "Direction? Use C1FGI6/C1GIN6/C1GIZ6/C1GIS6.".to_string();
+            self.request_cast_argument(CastArgumentRequest::Direction);
             return MoveOutcome::Blocked;
         };
         if !direction.is_cardinal() {
@@ -4685,7 +4695,7 @@ impl PlayState {
             return MoveOutcome::Blocked;
         };
         let Some(direction) = direction else {
-            self.message = "Direction? Use C1AG6.".to_string();
+            self.request_cast_argument(CastArgumentRequest::Direction);
             return MoveOutcome::Blocked;
         };
         if !direction.is_cardinal() {
@@ -4770,7 +4780,7 @@ impl PlayState {
             if explicit_pass {
                 return Ok(self.cast_blink_pass(caster_index));
             }
-            self.message = "Direction? Use C1IP6.".to_string();
+            self.request_cast_argument(CastArgumentRequest::Direction);
             return Ok(MoveOutcome::Blocked);
         };
         if !direction.is_cardinal() {
@@ -4862,15 +4872,15 @@ impl PlayState {
             return MoveOutcome::Blocked;
         }
         let Some((tx, ty)) = target else {
-            self.message = "Target? Use C1IP5,5 to select a combat cell.".to_string();
+            self.request_cast_argument(CastArgumentRequest::Target);
             return MoveOutcome::Blocked;
         };
         let Some(caster_actor) = self.combat_actors.get(caster_index).copied() else {
-            self.message = "Who casts?".to_string();
+            self.request_cast_argument(CastArgumentRequest::Caster);
             return MoveOutcome::Blocked;
         };
         if !combat_actor_is_active_not_dead(caster_actor) {
-            self.message = "Who casts?".to_string();
+            self.request_cast_argument(CastArgumentRequest::Caster);
             return MoveOutcome::Blocked;
         }
         if let Some(outcome) =
@@ -4915,7 +4925,7 @@ impl PlayState {
             tx,
             ty,
         ) else {
-            self.message = "Who casts?".to_string();
+            self.request_cast_argument(CastArgumentRequest::Caster);
             return MoveOutcome::Blocked;
         };
         self.mark_visibility_dirty();
@@ -4994,16 +5004,6 @@ impl PlayState {
             direction,
             explicit_pass,
         ))
-    }
-}
-
-fn directed_utility_direction_prompt(spell_index: usize) -> &'static str {
-    match spell_index {
-        VANISH_SPELL_INDEX => "Direction? Use C1AY8/C1AY6/C1AY2/C1AY4.",
-        OPEN_SPELL_INDEX => "Direction? Use C1AS8/C1AS6/C1AS2/C1AS4.",
-        MAGIC_LOCK_SPELL_INDEX => "Direction? Use C1AEP8/C1AEP6/C1AEP2/C1AEP4.",
-        UNLOCK_MAGIC_SPELL_INDEX => "Direction? Use C1EIP8/C1EIP6/C1EIP2/C1EIP4.",
-        _ => "Direction?",
     }
 }
 

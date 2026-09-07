@@ -703,14 +703,14 @@ impl PlayState {
         match spell_code.as_str() {
             "AG" => {
                 let Some(caster_index) = parse_inline_party_index(suffix) else {
-                    self.message = "Who casts? Use C1AG6 for party slot 1.".to_string();
+                    self.request_cast_argument(CastArgumentRequest::Caster);
                     return Ok(MoveOutcome::Blocked);
                 };
                 Ok(self.cast_dispel_field(caster_index, parse_inline_cardinal_direction(suffix)))
             }
             "AEP" => {
                 let Some(caster_index) = parse_inline_party_index(suffix) else {
-                    self.message = "Who casts? Use C1AEP for party slot 1.".to_string();
+                    self.request_cast_argument(CastArgumentRequest::Caster);
                     return Ok(MoveOutcome::Blocked);
                 };
                 self.cast_magic_lock(
@@ -722,18 +722,18 @@ impl PlayState {
             }
             "AN" => {
                 let Some(caster_index) = parse_inline_party_index(suffix) else {
-                    self.message = "Who casts? Use C1AN2 for party slot 1.".to_string();
+                    self.request_cast_argument(CastArgumentRequest::Caster);
                     return Ok(MoveOutcome::Blocked);
                 };
                 let Some(target_index) = parse_inline_target_party_index(suffix) else {
-                    self.message = "Whom? Use C1AN2 to cure party member 2.".to_string();
+                    self.request_cast_argument(CastArgumentRequest::PartyTarget);
                     return Ok(MoveOutcome::Blocked);
                 };
                 Ok(self.cast_cure(caster_index, target_index))
             }
             "AS" => {
                 let Some(caster_index) = parse_inline_party_index(suffix) else {
-                    self.message = "Who casts? Use C1AS6 for party slot 1.".to_string();
+                    self.request_cast_argument(CastArgumentRequest::Caster);
                     return Ok(MoveOutcome::Blocked);
                 };
                 self.cast_open_spell(
@@ -745,21 +745,21 @@ impl PlayState {
             }
             "ACX" => {
                 let Some(caster_index) = parse_inline_party_index(suffix) else {
-                    self.message = "Who casts? Use C1ACX for party slot 1.".to_string();
+                    self.request_cast_argument(CastArgumentRequest::Caster);
                     return Ok(MoveOutcome::Blocked);
                 };
                 Ok(self.cast_repel_undead(caster_index))
             }
             "AT" => {
                 let Some(caster_index) = parse_inline_party_index(suffix) else {
-                    self.message = "Who casts? Use C1AT for party slot 1.".to_string();
+                    self.request_cast_argument(CastArgumentRequest::Caster);
                     return Ok(MoveOutcome::Blocked);
                 };
                 Ok(self.cast_time_stop(caster_index))
             }
             "AY" => {
                 let Some(caster_index) = parse_inline_party_index(suffix) else {
-                    self.message = "Who casts? Use C1AY6 for party slot 1.".to_string();
+                    self.request_cast_argument(CastArgumentRequest::Caster);
                     return Ok(MoveOutcome::Blocked);
                 };
                 Ok(self.cast_vanish(
@@ -770,28 +770,28 @@ impl PlayState {
             }
             "AWY" => {
                 let Some(caster_index) = parse_inline_party_index(suffix) else {
-                    self.message = "Who casts? Use C1AWY for party slot 1.".to_string();
+                    self.request_cast_argument(CastArgumentRequest::Caster);
                     return Ok(MoveOutcome::Blocked);
                 };
                 Ok(self.cast_x_ray(caster_index))
             }
             "AZ" => {
                 let Some(caster_index) = parse_inline_party_index(suffix) else {
-                    self.message = "Who casts? Use C1AZ for party slot 1.".to_string();
+                    self.request_cast_argument(CastArgumentRequest::Caster);
                     return Ok(MoveOutcome::Blocked);
                 };
                 Ok(self.cast_awaken(caster_index))
             }
             "KX" => {
                 let Some(caster_index) = parse_inline_party_index(suffix) else {
-                    self.message = "Who casts? Use C1KX for party slot 1.".to_string();
+                    self.request_cast_argument(CastArgumentRequest::Caster);
                     return Ok(MoveOutcome::Blocked);
                 };
                 Ok(self.cast_combat_conjure_spell(caster_index, spell_index.unwrap()))
             }
             "AEX" => {
                 let Some(caster_index) = parse_inline_party_index(suffix) else {
-                    self.message = "Who casts? Use C1AEX7 for party slot 1.".to_string();
+                    self.request_cast_argument(CastArgumentRequest::Caster);
                     return Ok(MoveOutcome::Blocked);
                 };
                 if !self.combat_active {
@@ -799,14 +799,14 @@ impl PlayState {
                     return Ok(MoveOutcome::Blocked);
                 }
                 let Some(target_slot) = parse_inline_combat_actor_slot(suffix) else {
-                    self.message = "Creature? Use C1AEX7 to target combat slot 7.".to_string();
+                    self.request_cast_argument(CastArgumentRequest::Creature);
                     return Ok(MoveOutcome::Blocked);
                 };
                 Ok(self.cast_combat_charm_spell(caster_index, spell_index.unwrap(), target_slot))
             }
             "BRX" => {
                 let Some(caster_index) = parse_inline_party_index(suffix) else {
-                    self.message = "Who casts? Use C1BRX7 for party slot 1.".to_string();
+                    self.request_cast_argument(CastArgumentRequest::Caster);
                     return Ok(MoveOutcome::Blocked);
                 };
                 if !self.combat_active {
@@ -814,7 +814,7 @@ impl PlayState {
                     return Ok(MoveOutcome::Blocked);
                 }
                 let Some(target_slot) = parse_inline_combat_actor_slot(suffix) else {
-                    self.message = "Creature? Use C1BRX7 to target combat slot 7.".to_string();
+                    self.request_cast_argument(CastArgumentRequest::Creature);
                     return Ok(MoveOutcome::Blocked);
                 };
                 Ok(self.cast_combat_polymorph_spell(
@@ -825,14 +825,14 @@ impl PlayState {
             }
             "BIX" => {
                 let Some(caster_index) = parse_inline_party_index(suffix) else {
-                    self.message = "Who casts? Use C1BIX for party slot 1.".to_string();
+                    self.request_cast_argument(CastArgumentRequest::Caster);
                     return Ok(MoveOutcome::Blocked);
                 };
                 Ok(self.cast_combat_swarm_spell(caster_index, spell_index.unwrap()))
             }
             "IQX" => {
                 let Some(caster_index) = parse_inline_party_index(suffix) else {
-                    self.message = "Who casts? Use C1IQX7 for party slot 1.".to_string();
+                    self.request_cast_argument(CastArgumentRequest::Caster);
                     return Ok(MoveOutcome::Blocked);
                 };
                 if !self.combat_active {
@@ -840,14 +840,14 @@ impl PlayState {
                     return Ok(MoveOutcome::Blocked);
                 }
                 let Some(target_slot) = parse_inline_combat_actor_slot(suffix) else {
-                    self.message = "Creature? Use C1IQX7 to target combat slot 7.".to_string();
+                    self.request_cast_argument(CastArgumentRequest::Creature);
                     return Ok(MoveOutcome::Blocked);
                 };
                 Ok(self.cast_combat_clone_spell(caster_index, spell_index.unwrap(), target_slot))
             }
             "CX" => {
                 let Some(caster_index) = parse_inline_party_index(suffix) else {
-                    self.message = "Who casts? Use C1CX7 for party slot 1.".to_string();
+                    self.request_cast_argument(CastArgumentRequest::Caster);
                     return Ok(MoveOutcome::Blocked);
                 };
                 if !self.combat_active {
@@ -855,7 +855,7 @@ impl PlayState {
                     return Ok(MoveOutcome::Blocked);
                 }
                 let Some(target_slot) = parse_inline_combat_actor_slot(suffix) else {
-                    self.message = "Target? Use C1CX7 to target combat slot 7.".to_string();
+                    self.request_cast_argument(CastArgumentRequest::Target);
                     return Ok(MoveOutcome::Blocked);
                 };
                 Ok(self.cast_active_target_combat_spell(
@@ -867,7 +867,7 @@ impl PlayState {
             }
             "DP" => {
                 let Some(caster_index) = parse_inline_party_index(suffix) else {
-                    self.message = "Who casts? Use C1DP for party slot 1.".to_string();
+                    self.request_cast_argument(CastArgumentRequest::Caster);
                     return Ok(MoveOutcome::Blocked);
                 };
                 self.cast_dungeon_level_spell(
@@ -880,7 +880,7 @@ impl PlayState {
             }
             "FV" => {
                 let Some(caster_index) = parse_inline_party_index(suffix) else {
-                    self.message = "Who casts? Use C1FV7 for party slot 1.".to_string();
+                    self.request_cast_argument(CastArgumentRequest::Caster);
                     return Ok(MoveOutcome::Blocked);
                 };
                 if !self.combat_active {
@@ -888,7 +888,7 @@ impl PlayState {
                     return Ok(MoveOutcome::Blocked);
                 }
                 let Some(target_slot) = parse_inline_combat_actor_slot(suffix) else {
-                    self.message = "Target? Use C1FV7 to target combat slot 7.".to_string();
+                    self.request_cast_argument(CastArgumentRequest::Target);
                     return Ok(MoveOutcome::Blocked);
                 };
                 Ok(self.cast_active_target_combat_spell(
@@ -900,7 +900,7 @@ impl PlayState {
             }
             "FGI" => {
                 let Some(caster_index) = parse_inline_party_index(suffix) else {
-                    self.message = "Who casts? Use C1FGI6 for party slot 1.".to_string();
+                    self.request_cast_argument(CastArgumentRequest::Caster);
                     return Ok(MoveOutcome::Blocked);
                 };
                 if self.combat_active {
@@ -924,7 +924,7 @@ impl PlayState {
             }
             "GIN" => {
                 let Some(caster_index) = parse_inline_party_index(suffix) else {
-                    self.message = "Who casts? Use C1GIN6 for party slot 1.".to_string();
+                    self.request_cast_argument(CastArgumentRequest::Caster);
                     return Ok(MoveOutcome::Blocked);
                 };
                 if self.combat_active {
@@ -948,7 +948,7 @@ impl PlayState {
             }
             "GIZ" => {
                 let Some(caster_index) = parse_inline_party_index(suffix) else {
-                    self.message = "Who casts? Use C1GIZ6 for party slot 1.".to_string();
+                    self.request_cast_argument(CastArgumentRequest::Caster);
                     return Ok(MoveOutcome::Blocked);
                 };
                 if self.combat_active {
@@ -972,7 +972,7 @@ impl PlayState {
             }
             "GP" => {
                 let Some(caster_index) = parse_inline_party_index(suffix) else {
-                    self.message = "Who casts? Use C1GP7 for party slot 1.".to_string();
+                    self.request_cast_argument(CastArgumentRequest::Caster);
                     return Ok(MoveOutcome::Blocked);
                 };
                 if !self.combat_active {
@@ -980,7 +980,7 @@ impl PlayState {
                     return Ok(MoveOutcome::Blocked);
                 }
                 let Some(target_slot) = parse_inline_combat_actor_slot(suffix) else {
-                    self.message = "Target? Use C1GP7 to target combat slot 7.".to_string();
+                    self.request_cast_argument(CastArgumentRequest::Target);
                     return Ok(MoveOutcome::Blocked);
                 };
                 Ok(self.cast_active_target_combat_spell(
@@ -992,7 +992,7 @@ impl PlayState {
             }
             "GIS" => {
                 let Some(caster_index) = parse_inline_party_index(suffix) else {
-                    self.message = "Who casts? Use C1GIS6 for party slot 1.".to_string();
+                    self.request_cast_argument(CastArgumentRequest::Caster);
                     return Ok(MoveOutcome::Blocked);
                 };
                 if self.combat_active {
@@ -1016,7 +1016,7 @@ impl PlayState {
             }
             "IL" => {
                 let Some(caster_index) = parse_inline_party_index(suffix) else {
-                    self.message = "Who casts? Use C1IL for party slot 1.".to_string();
+                    self.request_cast_argument(CastArgumentRequest::Caster);
                     return Ok(MoveOutcome::Blocked);
                 };
                 Ok(self.cast_light_spell(
@@ -1028,7 +1028,7 @@ impl PlayState {
             }
             "IS" => {
                 let Some(caster_index) = parse_inline_party_index(suffix) else {
-                    self.message = "Who casts? Use C1IS for party slot 1.".to_string();
+                    self.request_cast_argument(CastArgumentRequest::Caster);
                     return Ok(MoveOutcome::Blocked);
                 };
                 Ok(self.cast_active_effect_spell(
@@ -1042,14 +1042,14 @@ impl PlayState {
             }
             "IMX" => {
                 let Some(caster_index) = parse_inline_party_index(suffix) else {
-                    self.message = "Who casts? Use C1IMX for party slot 1.".to_string();
+                    self.request_cast_argument(CastArgumentRequest::Caster);
                     return Ok(MoveOutcome::Blocked);
                 };
                 Ok(self.cast_create_food(caster_index))
             }
             "IP" => {
                 let Some(caster_index) = parse_inline_party_index(suffix) else {
-                    self.message = "Who casts? Use C1IP6 for party slot 1.".to_string();
+                    self.request_cast_argument(CastArgumentRequest::Caster);
                     return Ok(MoveOutcome::Blocked);
                 };
                 if self.combat_active {
@@ -1068,14 +1068,14 @@ impl PlayState {
             }
             "IPVY" => {
                 let Some(caster_index) = parse_inline_party_index(suffix) else {
-                    self.message = "Who casts? Use C1IPVY for party slot 1.".to_string();
+                    self.request_cast_argument(CastArgumentRequest::Caster);
                     return Ok(MoveOutcome::Blocked);
                 };
                 Ok(self.cast_tremor_combat_spell(caster_index, spell_index.unwrap()))
             }
             "IZ" => {
                 let Some(caster_index) = parse_inline_party_index(suffix) else {
-                    self.message = "Who casts? Use C1IZ7 for party slot 1.".to_string();
+                    self.request_cast_argument(CastArgumentRequest::Caster);
                     return Ok(MoveOutcome::Blocked);
                 };
                 if !self.combat_active {
@@ -1083,7 +1083,7 @@ impl PlayState {
                     return Ok(MoveOutcome::Blocked);
                 }
                 let Some(direction) = parse_inline_cardinal_direction(suffix) else {
-                    self.message = "Direction? Use C1IZ6 for east.".to_string();
+                    self.request_cast_argument(CastArgumentRequest::Direction);
                     return Ok(MoveOutcome::Blocked);
                 };
                 Ok(self.cast_directed_combat_spell(
@@ -1095,28 +1095,28 @@ impl PlayState {
             }
             "IQW" => {
                 let Some(caster_index) = parse_inline_party_index(suffix) else {
-                    self.message = "Who casts? Use C1IQW for party slot 1.".to_string();
+                    self.request_cast_argument(CastArgumentRequest::Caster);
                     return Ok(MoveOutcome::Blocked);
                 };
                 Ok(self.cast_peer(caster_index))
             }
             "IW" => {
                 let Some(caster_index) = parse_inline_party_index(suffix) else {
-                    self.message = "Who casts? Use C1IW for party slot 1.".to_string();
+                    self.request_cast_argument(CastArgumentRequest::Caster);
                     return Ok(MoveOutcome::Blocked);
                 };
                 Ok(self.cast_locate(caster_index))
             }
             "LS" => {
                 let Some(caster_index) = parse_inline_party_index(suffix) else {
-                    self.message = "Who casts? Use C1LS for party slot 1.".to_string();
+                    self.request_cast_argument(CastArgumentRequest::Caster);
                     return Ok(MoveOutcome::Blocked);
                 };
                 Ok(self.cast_invisibility(caster_index))
             }
             "HIN" => {
                 let Some(caster_index) = parse_inline_party_index(suffix) else {
-                    self.message = "Who casts? Use C1HIN7 for party slot 1.".to_string();
+                    self.request_cast_argument(CastArgumentRequest::Caster);
                     return Ok(MoveOutcome::Blocked);
                 };
                 if !self.combat_active {
@@ -1124,7 +1124,7 @@ impl PlayState {
                     return Ok(MoveOutcome::Blocked);
                 }
                 let Some(direction) = parse_inline_cardinal_direction(suffix) else {
-                    self.message = "Direction? Use C1HIN6 for east.".to_string();
+                    self.request_cast_argument(CastArgumentRequest::Direction);
                     return Ok(MoveOutcome::Blocked);
                 };
                 Ok(self.cast_directed_combat_spell(
@@ -1136,7 +1136,7 @@ impl PlayState {
             }
             "HR" => {
                 let Some(caster_index) = parse_inline_party_index(suffix) else {
-                    self.message = "Who casts? Use C1HR for party slot 1.".to_string();
+                    self.request_cast_argument(CastArgumentRequest::Caster);
                     return Ok(MoveOutcome::Blocked);
                 };
                 let direction = parse_inline_cardinal_direction(suffix);
@@ -1148,7 +1148,7 @@ impl PlayState {
             }
             "LV" => {
                 let Some(caster_index) = parse_inline_party_index(suffix) else {
-                    self.message = "Who casts? Use C1LV for party slot 1.".to_string();
+                    self.request_cast_argument(CastArgumentRequest::Caster);
                     return Ok(MoveOutcome::Blocked);
                 };
                 Ok(self.cast_light_spell(
@@ -1160,29 +1160,29 @@ impl PlayState {
             }
             "M" => {
                 let Some(caster_index) = parse_inline_party_index(suffix) else {
-                    self.message = "Who casts? Use C1M2 for party slot 1.".to_string();
+                    self.request_cast_argument(CastArgumentRequest::Caster);
                     return Ok(MoveOutcome::Blocked);
                 };
                 let Some(target_index) = parse_inline_target_party_index(suffix) else {
-                    self.message = "Whom? Use C1M2 to heal party member 2.".to_string();
+                    self.request_cast_argument(CastArgumentRequest::PartyTarget);
                     return Ok(MoveOutcome::Blocked);
                 };
                 Ok(self.cast_heal(caster_index, target_index))
             }
             "MV" => {
                 let Some(caster_index) = parse_inline_party_index(suffix) else {
-                    self.message = "Who casts? Use C1MV2 for party slot 1.".to_string();
+                    self.request_cast_argument(CastArgumentRequest::Caster);
                     return Ok(MoveOutcome::Blocked);
                 };
                 let Some(target_index) = parse_inline_target_party_index(suffix) else {
-                    self.message = "Whom? Use C1MV2 to great-heal party member 2.".to_string();
+                    self.request_cast_argument(CastArgumentRequest::PartyTarget);
                     return Ok(MoveOutcome::Blocked);
                 };
                 Ok(self.cast_great_heal(caster_index, target_index))
             }
             "EIP" => {
                 let Some(caster_index) = parse_inline_party_index(suffix) else {
-                    self.message = "Who casts? Use C1EIP for party slot 1.".to_string();
+                    self.request_cast_argument(CastArgumentRequest::Caster);
                     return Ok(MoveOutcome::Blocked);
                 };
                 self.cast_unlock_magic(
@@ -1194,25 +1194,25 @@ impl PlayState {
             }
             "CIM" => {
                 let Some(caster_index) = parse_inline_party_index(suffix) else {
-                    self.message = "Who casts? Use C1CIM2 for party slot 1.".to_string();
+                    self.request_cast_argument(CastArgumentRequest::Caster);
                     return Ok(MoveOutcome::Blocked);
                 };
                 let Some(target_index) = parse_inline_target_party_index(suffix) else {
-                    self.message = "Whom? Use C1CIM2 to resurrect party member 2.".to_string();
+                    self.request_cast_argument(CastArgumentRequest::PartyTarget);
                     return Ok(MoveOutcome::Blocked);
                 };
                 Ok(self.cast_resurrect(caster_index, target_index))
             }
             "CKX" => {
                 let Some(caster_index) = parse_inline_party_index(suffix) else {
-                    self.message = "Who casts? Use C1CKX for party slot 1.".to_string();
+                    self.request_cast_argument(CastArgumentRequest::Caster);
                     return Ok(MoveOutcome::Blocked);
                 };
                 Ok(self.cast_combat_summon_daemon_spell(caster_index, spell_index.unwrap()))
             }
             "CGIV" => {
                 let Some(caster_index) = parse_inline_party_index(suffix) else {
-                    self.message = "Who casts? Use C1CGIV7 for party slot 1.".to_string();
+                    self.request_cast_argument(CastArgumentRequest::Caster);
                     return Ok(MoveOutcome::Blocked);
                 };
                 if !self.combat_active {
@@ -1220,7 +1220,7 @@ impl PlayState {
                     return Ok(MoveOutcome::Blocked);
                 }
                 let Some(direction) = parse_inline_cardinal_direction(suffix) else {
-                    self.message = "Direction? Use C1CGIV6 for east.".to_string();
+                    self.request_cast_argument(CastArgumentRequest::Direction);
                     return Ok(MoveOutcome::Blocked);
                 };
                 Ok(self.cast_directed_combat_spell(
@@ -1232,14 +1232,14 @@ impl PlayState {
             }
             "CIQ" => {
                 let Some(caster_index) = parse_inline_party_index(suffix) else {
-                    self.message = "Who casts? Use C1CIQ for party slot 1.".to_string();
+                    self.request_cast_argument(CastArgumentRequest::Caster);
                     return Ok(MoveOutcome::Blocked);
                 };
                 Ok(self.cast_cause_fear(caster_index))
             }
             "FHI" => {
                 let Some(caster_index) = parse_inline_party_index(suffix) else {
-                    self.message = "Who casts? Use C1FHI7 for party slot 1.".to_string();
+                    self.request_cast_argument(CastArgumentRequest::Caster);
                     return Ok(MoveOutcome::Blocked);
                 };
                 if !self.combat_active {
@@ -1247,7 +1247,7 @@ impl PlayState {
                     return Ok(MoveOutcome::Blocked);
                 }
                 let Some(direction) = parse_inline_cardinal_direction(suffix) else {
-                    self.message = "Direction? Use C1FHI6 for east.".to_string();
+                    self.request_cast_argument(CastArgumentRequest::Direction);
                     return Ok(MoveOutcome::Blocked);
                 };
                 Ok(self.cast_directed_combat_spell(
@@ -1259,32 +1259,32 @@ impl PlayState {
             }
             "PU" => {
                 let Some(caster_index) = parse_inline_party_index(suffix) else {
-                    self.message = "Who casts? Use C1PU for party slot 1.".to_string();
+                    self.request_cast_argument(CastArgumentRequest::Caster);
                     return Ok(MoveOutcome::Blocked);
                 };
                 self.cast_dungeon_level_spell(caster_index, UUS_POR_SPELL_INDEX, -1, "Up", game_dir)
             }
             "PRV" => {
                 let Some(caster_index) = parse_inline_party_index(suffix) else {
-                    self.message = "Who casts? Use C1PRV2 for party slot 1 to phase 2.".to_string();
+                    self.request_cast_argument(CastArgumentRequest::Caster);
                     return Ok(MoveOutcome::Blocked);
                 };
                 let Some(slot_index) = parse_inline_gate_phase_index(suffix) else {
-                    self.message = "To phase? Use C1PRV1 through C1PRV8.".to_string();
+                    self.request_cast_argument(CastArgumentRequest::GatePhase);
                     return Ok(MoveOutcome::Blocked);
                 };
                 self.cast_gate_travel(caster_index, slot_index, game_dir)
             }
             "QW" => {
                 let Some(caster_index) = parse_inline_party_index(suffix) else {
-                    self.message = "Who casts? Use C1QW for party slot 1.".to_string();
+                    self.request_cast_argument(CastArgumentRequest::Caster);
                     return Ok(MoveOutcome::Blocked);
                 };
                 Ok(self.cast_reveal(caster_index))
             }
             "RT" => {
                 let Some(caster_index) = parse_inline_party_index(suffix) else {
-                    self.message = "Who casts? Use C1RT for party slot 1.".to_string();
+                    self.request_cast_argument(CastArgumentRequest::Caster);
                     return Ok(MoveOutcome::Blocked);
                 };
                 Ok(self.cast_active_effect_spell(
@@ -1298,7 +1298,7 @@ impl PlayState {
             }
             "AQW" => {
                 let Some(caster_index) = parse_inline_party_index(suffix) else {
-                    self.message = "Who casts? Use C1AQW for party slot 1.".to_string();
+                    self.request_cast_argument(CastArgumentRequest::Caster);
                     return Ok(MoveOutcome::Blocked);
                 };
                 Ok(self.cast_active_effect_spell(
@@ -1312,7 +1312,7 @@ impl PlayState {
             }
             "AI" => {
                 let Some(caster_index) = parse_inline_party_index(suffix) else {
-                    self.message = "Who casts? Use C1AI for party slot 1.".to_string();
+                    self.request_cast_argument(CastArgumentRequest::Caster);
                     return Ok(MoveOutcome::Blocked);
                 };
                 Ok(self.cast_active_effect_spell(

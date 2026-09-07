@@ -664,8 +664,8 @@ BRITANNIA 11 21
 
         assert_eq!(missing_caster.spell_charges[IN_LOR_SPELL_INDEX], 1);
         assert_eq!(
-            missing_caster.message,
-            "Who casts? Use C1IL for party slot 1."
+            missing_caster.pending_cast_argument,
+            Some(CastArgumentRequest::Caster)
         );
 
         let mut unknown = test_state(open_grid(), 5, 5);
@@ -823,8 +823,8 @@ BRITANNIA 11 21
         assert_eq!(missing_direction.party[0].mana, 0);
         assert_eq!(missing_direction.turn, 0);
         assert_eq!(
-            missing_direction.message,
-            "Direction? Use C1AY8/C1AY6/C1AY2/C1AY4."
+            missing_direction.pending_cast_argument,
+            Some(CastArgumentRequest::Direction)
         );
 
         let mut no_object = test_state(open_grid(), 1, 1);

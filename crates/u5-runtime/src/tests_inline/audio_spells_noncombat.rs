@@ -585,7 +585,10 @@ fn combat_blink_cursor_and_caster_refusals_stay_silent() {
         prompt.cast_combat_blink_to_coordinate(0, None),
         MoveOutcome::Blocked
     );
-    assert!(prompt.message.starts_with("Target?"));
+    assert_eq!(
+        prompt.pending_cast_argument,
+        Some(CastArgumentRequest::Target)
+    );
     assert!(prompt.sound_effects_after(serial).is_empty());
     assert_eq!(
         prompt.spell_charges[BLINK_SPELL_INDEX], 1,
@@ -609,7 +612,10 @@ fn combat_blink_cursor_and_caster_refusals_stay_silent() {
         no_caster.cast_combat_blink_to_coordinate(0, Some((5, 6))),
         MoveOutcome::Blocked
     );
-    assert_eq!(no_caster.message, "Who casts?");
+    assert_eq!(
+            no_caster.pending_cast_argument,
+            Some(CastArgumentRequest::Caster)
+        );
     assert!(no_caster.sound_effects_after(serial).is_empty());
 }
 
@@ -739,7 +745,10 @@ fn directed_utility_confirmation_dead_caster_refusal_stays_silent() {
             MoveOutcome::Blocked,
             "spell {spell_index}"
         );
-        assert_eq!(state.message, "Who casts?");
+        assert_eq!(
+            state.pending_cast_argument,
+            Some(CastArgumentRequest::Caster)
+        );
         assert!(
             state.sound_effects_after(serial).is_empty(),
             "spell {spell_index} must not sound on a pure refusal"
