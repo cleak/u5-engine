@@ -1734,6 +1734,12 @@ impl PlayState {
 
     fn render_shrine_session(&self, session: &ShrineSession) -> String {
         match session.phase {
+            // Measured: the question, then the typed answer on its own row.
+            ShrinePhase::Virtue => {
+                // Measured: a blank row stands between the question and the
+                // answer row.
+                format!("\n{SHRINE_VIRTUE_PROMPT}\n\n:{}", session.virtue_buffer)
+            }
             ShrinePhase::Mantra => {
                 let mantra = if session.mantra_buffer.is_empty() {
                     "_".to_string()
@@ -1767,6 +1773,29 @@ impl PlayState {
         };
         for ch in std::iter::once(key).chain(suffix.chars()) {
             match session.phase {
+                ShrinePhase::Virtue => match ch {
+                    '\u{1b}' => {
+                        self.message = SELECTION_CANCELLED_LITERAL.to_string();
+                        return Ok(Some(MoveOutcome::PromptDeclined));
+                    }
+                    '\r' | '\n' => {
+                        if let Some(virtue) = ShrineVirtue::from_key(session.virtue_buffer.trim()) {
+                            session.virtue = virtue;
+                            session.phase = ShrinePhase::Mantra;
+                        } else {
+                            // An unknown virtue simply re-opens the question;
+                            // the answer row clears.
+                            session.virtue_buffer.clear();
+                        }
+                    }
+                    '\u{8}' | '\u{7f}' => {
+                        session.virtue_buffer.pop();
+                    }
+                    ch if !ch.is_control() && session.virtue_buffer.len() < 12 => {
+                        session.virtue_buffer.push(ch);
+                    }
+                    _ => {}
+                },
                 ShrinePhase::Mantra => {
                     if ch == '\u{1b}' {
                         self.message = "None!".to_string();

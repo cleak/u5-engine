@@ -278,7 +278,8 @@ pub use commands::{
     SEARCH_NOTHING_FOUND, SELECTION_CANCELLED_LITERAL, SET_ACTIVE_PLAYER_INVALID_REPLY,
     SET_ACTIVE_PLAYER_NONE_REPLY, SHIP_HULL_REPAIR_CAP, SHIP_HULL_REPAIR_ROLL_HIGH,
     SHIP_HULL_REPAIR_ROLL_LOW, SHIP_SAIL_STALLED_LINE, SHIP_XIT_UNDER_SAIL_REFUSAL,
-    SPELL_SUCCESS_LINE, TOWN_ARREST_KNOCKOUT_MESSAGE, TOWN_ARREST_NO_REPLY,
+    SHRINE_APPROACH_NARRATION, SHRINE_ENTER_ECHO_PREFIX, SHRINE_KNEEL_NARRATION,
+    SHRINE_VIRTUE_PROMPT, SPELL_SUCCESS_LINE, TOWN_ARREST_KNOCKOUT_MESSAGE, TOWN_ARREST_NO_REPLY,
     TOWN_ARREST_SURRENDER_PROMPT, TOWN_ARREST_YES_REPLY, TOWN_CANNON_TILE_FIRST,
     TOWN_CANNON_TILE_LAST, TOWN_EXIT_ACCEPTED_NARRATION, TOWN_EXIT_DECLINED_NARRATION,
     TOWN_EXIT_PROMPT, TOWN_EXIT_TO_BRITANNIA_NARRATION, TOWN_EXIT_TO_UNDERWORLD_NARRATION,
@@ -748,8 +749,8 @@ pub use ship_broadside::{
 pub use shops::*;
 pub use shrine_virtue::{
     CodexUrnReadOutcome, ETERNAL_FLAME_LOOK_TILE, SHRINE_ALTAR_TILE_FIRST, SHRINE_ALTAR_TILE_LAST,
-    ShrineMeditationOutcome, ShrineQuestState, ShrineVirtue, all_virtues_complete,
-    eternal_flame_word_for_scene, read_codex_urn, shrine_meditation_outcome,
+    SHRINE_MARKER_TILE, ShrineMeditationOutcome, ShrineQuestState, ShrineVirtue,
+    all_virtues_complete, eternal_flame_word_for_scene, read_codex_urn, shrine_meditation_outcome,
     shrine_virtue_for_altar_tile,
 };
 pub use signs_io::{

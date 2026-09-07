@@ -1328,6 +1328,27 @@ impl PlayState {
         let (entries, _has_sidecar) =
             effective_world_location_entries_with_sidecar_status(game_dir)?;
         let tile = self.grid[world_cell_index(self.player.x, self.player.y)];
+        // Measured 2026-09-07: a shrine is *entered*. The shrine marker tile
+        // sits at each of `catalogs/gazetteer.md` §7's published coordinates,
+        // and `E` there opens the virtue question rather than a scene
+        // transition - so the shrine arm runs before the location lookup.
+        if tile == SHRINE_MARKER_TILE && plane == WorldPlane::Britannia {
+            let virtue = self
+                .current_shrine_entry(game_dir)?
+                .map(|entry| entry.virtue)
+                .unwrap_or(ShrineVirtue::Spirituality);
+            // Measured: the echo names the shrine, then two narration lines
+            // print, each under a blank row, and only then the question.
+            let _ = self.complete_open_direction_echo(
+                "Enter ",
+                &format!("{SHRINE_ENTER_ECHO_PREFIX}{}", virtue.name()),
+            );
+            self.emit_message_line(format!("\n{SHRINE_APPROACH_NARRATION}"));
+            self.emit_message_line(format!("\n{SHRINE_KNEEL_NARRATION}"));
+            self.active_shrine = Some(ShrineSession::entering(virtue));
+            self.message = self.render_active_shrine();
+            return Ok(MoveOutcome::Observed);
+        }
         let Some(live_class) = WorldEntryNarrationClass::from_live_tile(tile) else {
             self.message = "What?".to_string();
             return Ok(MoveOutcome::Blocked);

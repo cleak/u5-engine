@@ -199,6 +199,7 @@
                 virtue: crate::shrine_virtue::ShrineVirtue::Honesty,
                 phase: crate::z_stats::ShrinePhase::Mantra,
                 mantra_buffer: String::new(),
+                virtue_buffer: String::new(),
             });
         };
         let wishing_well = |state: &mut PlayState| {

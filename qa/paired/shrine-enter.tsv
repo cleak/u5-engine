@@ -1,0 +1,14 @@
+# The shrine entry narration, captured while it is still printing.
+# requires-seed: the party on the published Honesty shrine coordinate
+both	wait	9000
+both	key	space
+both	wait	4000
+both	key	j
+both	wait	8000
+both	key	e
+both	wait	900
+both	shot	early	The first narration beat
+both	wait	1100
+both	shot	mid	The second beat
+both	wait	2500
+both	shot	full	The question

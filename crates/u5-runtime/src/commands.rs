@@ -622,6 +622,20 @@ pub const USE_SEXTANT_ONLY_OUTDOORS: &str = "Only outdoors!";
 /// reading `Position:`, not the `Sextant:` `magic.md` §8 names. The shared
 /// coordinate printer below it is unchanged (`cleak/u5-spec#237`).
 pub const USE_SEXTANT_READING_LABEL: &str = "Position:";
+
+/// **Measured** 2026-09-07 (`qa/paired/shrine-enter.tsv`): a shrine is
+/// *entered*. Standing on the shrine marker tile and pressing `E` opens this
+/// question with an input row beneath it; the engine had `M` open a
+/// `Shrine of <virtue> mantra?` prompt on the overworld tile, which the
+/// original answers with Mix Reagents.
+pub const SHRINE_VIRTUE_PROMPT: &str = "Upon what virtue dost thou meditate?";
+/// The rest of the measured entry: the `Enter ` echo completes by naming the
+/// shrine - which is what `gazetteer.md` §7 means when it says the one
+/// coordinate table also supplies "the shrine of *virtue*" name - and two
+/// narration lines print before the question, each followed by a blank row.
+pub const SHRINE_ENTER_ECHO_PREFIX: &str = "the shrine of ";
+pub const SHRINE_APPROACH_NARRATION: &str = "Thou dost approach the tranquil Shrine.";
+pub const SHRINE_KNEEL_NARRATION: &str = "...and thou dost kneel before the Altar.";
 /// The daylight refusal, measured aboard a ship at noon.
 pub const USE_SEXTANT_DAYTIME_REFUSAL: &str = "Only at night!";
 pub const USE_WOODEN_BOX_PROMPT: &str = "How?";

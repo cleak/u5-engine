@@ -181,6 +181,11 @@ impl ShrineVirtue {
 
 /// `tile-catalog.md`: shrine altar tiles 136..=143 map to the eight virtues in
 /// the standard virtue order.
+/// `catalogs/tile-catalog.md` row 25: the overworld "shrine marker". Found
+/// at all seven of `gazetteer.md` §7's Britannia coordinates and nowhere else
+/// (`find_world_tile 0x19`), which is what confirms that table.
+pub const SHRINE_MARKER_TILE: u8 = 0x19;
+
 pub const SHRINE_ALTAR_TILE_FIRST: u8 = 136;
 pub const SHRINE_ALTAR_TILE_LAST: u8 = 143;
 

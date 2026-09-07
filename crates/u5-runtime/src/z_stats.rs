@@ -265,10 +265,16 @@ pub struct ShrineSession {
     pub virtue: ShrineVirtue,
     pub phase: ShrinePhase,
     pub mantra_buffer: String,
+    /// The typed answer to the virtue question the shrine opens with.
+    pub virtue_buffer: String,
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum ShrinePhase {
+    /// **Measured** 2026-09-07: `E` on a shrine marker opens with
+    /// `Upon what virtue dost thou meditate?` and a `:` input row - the
+    /// virtue is *typed*, not derived from which shrine the party is on.
+    Virtue,
     Mantra,
     Offering,
 }
@@ -633,6 +639,19 @@ impl ShrineSession {
             virtue,
             phase: ShrinePhase::Mantra,
             mantra_buffer: String::new(),
+            virtue_buffer: String::new(),
+        }
+    }
+
+    /// The session an `E` on a shrine marker opens: the virtue question
+    /// first, with the coordinate's own virtue only as the fallback the
+    /// mantra phase starts from.
+    pub fn entering(virtue: ShrineVirtue) -> Self {
+        Self {
+            virtue,
+            phase: ShrinePhase::Virtue,
+            mantra_buffer: String::new(),
+            virtue_buffer: String::new(),
         }
     }
 }
