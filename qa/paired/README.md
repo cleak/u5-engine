@@ -88,6 +88,32 @@ number of keystrokes:
 | `shop-arms-after-entry`, `combat-town-attack-after-entry` | the same, seeded at 10:00 rather than 12:00 |
 | `shop-inn-after-entry` | the same 10:00 seed as `shop-arms-after-entry` |
 
+## Pixel-exact comparison with `qa/tools/frame_diff.py`
+
+The harness captures the Bevy window, which is aspect-corrected and scaled,
+so its frames can only be compared by eye - and a montage crop taken at the
+wrong fraction can invent a difference that is not there. For any state a
+`--play-script` can reproduce from the same seed, the engine can write its
+**native** 320x200 composed screen instead:
+
+```
+u5-engine --play --from-save --play-script 'i;\x1b[C' --save-screen /tmp/frame.png <profile>
+python3 qa/tools/frame_diff.py /tmp/frame.png <artifact>/dosbox-<beat>.png
+```
+
+The differ reports the differing-pixel count per published screen region -
+the gameplay viewport, the panel, the message window - so a real divergence
+is separated from the two that are expected:
+
+- the **viewport** in a town or on the overworld carries NPC positions and
+  the wind banner, both host-clock seeded on each side (see above), so a
+  few hundred differing pixels there are not a defect;
+- the **message window** carries the cursor's blink phase.
+
+Measured with it so far: `dungeon-view`'s first-person corridor is
+pixel-identical (viewport 0, panel 0), and `zstats-pages`' panel is
+pixel-identical on every page.
+
 **A seed equal to the shipped save is refused.** `game-dev-u5-paired` now
 compares the `--seed-save` directory's `SAVED.GAM` against the freshly prepared
 profile's own copy and refuses when they match: the shipped file has no active
