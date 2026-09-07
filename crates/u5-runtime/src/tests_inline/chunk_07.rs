@@ -1126,7 +1126,7 @@ fn hms_cape_plans_use_rigs_ship_for_double_speed() {
     assert_eq!(ship.special_items[SPECIAL_ITEM_HMS_CAPE_PLANS_INDEX], 2);
     assert!(ship.ship_rigging_active());
     assert_eq!(ship.turn, 1);
-    assert_eq!(ship.message, "Ship rigged for double speed.");
+    assert_eq!(ship.message, USE_PLANS_RIGGED_LINE);
 }
 
 #[test]

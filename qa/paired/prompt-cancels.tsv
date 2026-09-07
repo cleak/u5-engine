@@ -1,0 +1,37 @@
+# What the pickers print when they are cancelled, and the New Order refusals.
+# requires-seed: a party carrying items
+both	wait	9000
+both	key	space
+both	wait	4000
+both	key	j
+both	wait	7000
+both	key	u
+both	wait	2000
+both	key	space
+both	wait	2500
+both	shot	use-cancel	Space at the Use picker
+both	key	u
+both	wait	2000
+both	key	Escape
+both	wait	2500
+both	shot	use-escape	Escape at the Use picker
+both	key	n
+both	wait	2000
+both	shot	order-prompt	The New Order prompt
+both	key	1
+both	wait	2500
+both	shot	order-leader	New Order on the leader
+both	key	Escape
+both	wait	1500
+both	key	n
+both	wait	1500
+both	key	2
+both	wait	1200
+both	key	2
+both	wait	2500
+both	shot	order-same	New Order swapping a slot with itself
+both	key	r
+both	wait	2000
+both	key	space
+both	wait	2500
+both	shot	ready-cancel	Space at the Ready picker

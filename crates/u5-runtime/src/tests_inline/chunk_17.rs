@@ -2271,12 +2271,12 @@
         let original = state.party.clone();
 
         assert_eq!(state.new_order_from_suffix("12"), MoveOutcome::Blocked);
-        assert_eq!(state.message, "The leader must remain first.");
+        assert_eq!(state.message, NEW_ORDER_LEADER_REFUSAL);
         assert_eq!(state.party, original);
         assert_eq!(state.turn, 0);
 
         assert_eq!(state.new_order_from_suffix("31"), MoveOutcome::Blocked);
-        assert_eq!(state.message, "The leader must remain first.");
+        assert_eq!(state.message, NEW_ORDER_LEADER_REFUSAL);
         assert_eq!(state.party, original);
         assert_eq!(state.turn, 0);
     }
@@ -2352,7 +2352,7 @@
         assert_eq!(state.turn, 0);
 
         assert_eq!(state.new_order_from_suffix("11"), MoveOutcome::Blocked);
-        assert_eq!(state.message, "The leader must remain first.");
+        assert_eq!(state.message, NEW_ORDER_LEADER_REFUSAL);
         assert_eq!(state.party, original);
         assert_eq!(state.turn, 0);
 

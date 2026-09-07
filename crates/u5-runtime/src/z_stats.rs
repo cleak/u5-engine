@@ -963,6 +963,16 @@ impl PartySelectorTarget {
     }
 
     /// The message-window prompt the selector opens with.
+    /// The word a cancel writes onto the open prompt row. **Measured**
+    /// 2026-09-07: cancelling New Order reads `Swap nobody!`, not the
+    /// `None!` every other selector answers with.
+    pub fn cancel_reply(self) -> &'static str {
+        match self {
+            Self::NewOrder { .. } => NEW_ORDER_CANCEL_REPLY,
+            _ => crate::SELECTION_CANCELLED_LITERAL,
+        }
+    }
+
     pub fn prompt(self) -> &'static str {
         match self {
             Self::NewOrder { first: None } => NEW_ORDER_FIRST_PROMPT,
@@ -978,6 +988,8 @@ pub const NEW_ORDER_FIRST_PROMPT: &str = "Swap ";
 pub const NEW_ORDER_SECOND_PROMPT: &str = "with ";
 /// `cleak/u5-spec#194` capture: picking the leader in either prompt.
 pub const NEW_ORDER_LEADER_REFUSAL: &str = "Avatar must lead!";
+/// **Measured** 2026-09-07: the New Order selector's own cancel word.
+pub const NEW_ORDER_CANCEL_REPLY: &str = "nobody!";
 
 /// `inventory.md §4.7` page-loop sub-prompt literal `\nStatus:_` — the
 /// line the Z-stats page loop leaves open in the message window while it

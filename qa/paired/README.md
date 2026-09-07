@@ -73,6 +73,7 @@ are PRNG-selected and legitimately differ between the two sides.
 | `use-specials` | the special-item rows: the carpet, the regalia, the sceptre and a shard |
 | `cast-results` | the C-Cast spell-name prompt and four spell results |
 | `combat-commands` | the arena's Get, Search, Klimb and X-it answers |
+| `prompt-cancels` | what the Use and New Order pickers print when cancelled |
 | `dungeon-search` | dungeon Search: the `Search...` echo, the shared `Dir-` relative-direction prompt, and the hidden-door reveal |
 | `dungeon-look` | dungeon Look through the same helper, including the Space cancel that writes `Dir-Pass` |
 | `magic-mix` | the M-Mix reagent list and its prompts |

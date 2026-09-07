@@ -617,6 +617,8 @@ pub const USE_MAGIC_CARPET_BOARDED: &str = "Boarded!";
 /// The HMS Cape plans read off a ship. Measured: `Only usable on shipboard!`,
 /// where the engine had `Not aboard ship!`.
 pub const USE_PLANS_SHIPBOARD_ONLY_REFUSAL: &str = "Only usable on shipboard!";
+/// And the accepted form, measured aboard the ship.
+pub const USE_PLANS_RIGGED_LINE: &str = "Ship rigged for double speed!";
 pub const USE_AMULET_WORN: &str = "Wearing the Amulet of Lord British";
 pub const USE_CROWN_WORN: &str = "Thou dost don the Crown of Lord British";
 pub const USE_SCEPTRE_WIELDED: &str = "Wielding the Sceptre of Lord British";

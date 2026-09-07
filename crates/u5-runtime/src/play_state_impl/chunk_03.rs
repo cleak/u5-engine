@@ -450,12 +450,13 @@ impl PlayState {
             // lands on the `Player: ` row. A prompt that ends in its own
             // punctuation does not continue - a capture of the fountain's
             // `Who will drink?` shows `None!` opening the next line.
+            let cancel_reply = session.target.cancel_reply();
             if prompt.ends_with(' ') {
-                if !self.complete_open_direction_echo(prompt, PARTY_SELECTOR_CANCEL_REPLY) {
-                    self.message = format!("{prompt}{PARTY_SELECTOR_CANCEL_REPLY}");
+                if !self.complete_open_direction_echo(prompt, cancel_reply) {
+                    self.message = format!("{prompt}{cancel_reply}");
                 }
             } else {
-                self.message = PARTY_SELECTOR_CANCEL_REPLY.to_string();
+                self.message = cancel_reply.to_string();
             }
             return true;
         }
@@ -3552,7 +3553,7 @@ impl PlayState {
         // refuses because the leader must remain first, and it returns
         // without consuming a turn.
         if first == 0 || second == 0 {
-            self.message = "The leader must remain first.".to_string();
+            self.message = NEW_ORDER_LEADER_REFUSAL.to_string();
             return MoveOutcome::Blocked;
         }
         // commands.md §6: picking the same nonzero slot twice is accepted as

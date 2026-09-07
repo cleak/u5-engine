@@ -1210,7 +1210,9 @@ impl PlayState {
         self.special_items[SPECIAL_ITEM_HMS_CAPE_PLANS_INDEX] =
             self.special_items[SPECIAL_ITEM_HMS_CAPE_PLANS_INDEX].max(2);
         self.advance_turn();
-        self.message = "Ship rigged for double speed.".to_string();
+        // Measured 2026-09-07 aboard a frigate: the line ends in an
+        // exclamation mark, like the rest of the U-Use results.
+        self.message = USE_PLANS_RIGGED_LINE.to_string();
         MoveOutcome::Used
     }
 
