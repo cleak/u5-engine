@@ -574,6 +574,30 @@ pub const USE_ITEM_ECHO_SCROLL: &str = "Scroll";
 pub const USE_ITEM_ECHO_POTION: &str = "Potion";
 /// **Measured** 2026-09-07: the skull key row completes as `Item: Skull Key`.
 pub const USE_ITEM_ECHO_SKULL_KEY: &str = "Skull Key";
+/// The rest of the family words, all **measured** 2026-09-07 by standing each
+/// item alone in the picker (`seed_inventory ... specials=0 special<N>=1`).
+pub const USE_ITEM_ECHO_CARPET: &str = "Carpet";
+pub const USE_ITEM_ECHO_AMULET: &str = "Amulet";
+pub const USE_ITEM_ECHO_CROWN: &str = "Crown";
+pub const USE_ITEM_ECHO_SCEPTRE: &str = "Sceptre";
+pub const USE_ITEM_ECHO_GEM_SHARD: &str = "Gem Shard";
+pub const USE_ITEM_ECHO_SPYGLASS: &str = "Spyglass";
+pub const USE_ITEM_ECHO_PLANS: &str = "Plans";
+pub const USE_ITEM_ECHO_SEXTANT: &str = "Sextant";
+pub const USE_ITEM_ECHO_WATCH: &str = "Watch";
+pub const USE_ITEM_ECHO_BADGE: &str = "Badge";
+pub const USE_ITEM_ECHO_BOX: &str = "Box";
+
+/// **Measured** 2026-09-07 with each item alone in the picker: the spyglass
+/// answers `No stars!` when there are none to read, the sextant answers
+/// `Only outdoors!` indoors, and the wooden box asks `How?`. The engine had
+/// `Cannot see the stars!`, `Sextant:\nCannot see the stars!` and
+/// `Wooden Box: How use it?`.
+pub const USE_SPYGLASS_NO_STARS: &str = "No stars!";
+pub const USE_SEXTANT_ONLY_OUTDOORS: &str = "Only outdoors!";
+/// The daylight refusal, measured aboard a ship at noon.
+pub const USE_SEXTANT_DAYTIME_REFUSAL: &str = "Only at night!";
+pub const USE_WOODEN_BOX_PROMPT: &str = "How?";
 /// **Measured** 2026-09-07: a skull key tried on a cell with no lock answers
 /// `Failed!`, not the Jimmy family's `No lock!`.
 pub const USE_SKULL_KEY_FAILED: &str = "Failed!";

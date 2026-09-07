@@ -1280,7 +1280,8 @@
         );
 
         assert!(state.active_use.is_none());
-        assert_eq!(state.message, "The pocket watch reads 1:00 PM.");
+        // The completed `Item: Watch` row buys the blank one under it.
+        assert_eq!(state.message, "\nThe pocket watch reads 1:00 PM.");
         assert_eq!(state.turn, 1);
     }
 
@@ -1537,7 +1538,7 @@
         // §5 names explicitly.
         assert_eq!(
             state.message,
-            "Thou dost hold above thee the evil Shard of Falsehood\nNo effect!"
+            "\nThou dost hold above thee the evil Shard of Falsehood\nNo effect!"
         );
     }
 

@@ -48,6 +48,16 @@ fn main() {
             // `status<slot>=<byte>` sets one member's status letter, so a
             // scenario can measure a path that needs a dead or poisoned
             // member without playing one into that state.
+            // `special<index>=<count>` sets one special-item counter, so a
+            // scenario can stand a single row in the U-Use picker and reach
+            // it with no keypress counting at all.
+            _ if what.starts_with("special") && what.len() > "special".len() => {
+                let index: usize = what
+                    .trim_start_matches("special")
+                    .parse()
+                    .expect("special<index>");
+                state.special_items[index] = count;
+            }
             _ if what.starts_with("status") => {
                 let slot: usize = what
                     .trim_start_matches("status")

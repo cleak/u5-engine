@@ -71,7 +71,7 @@ fn sextant_refuses_in_the_underworld_with_the_indoor_refusal() {
     under.special_items[SPECIAL_ITEM_SEXTANT_INDEX] = 1;
 
     assert_eq!(under.use_sextant(), MoveOutcome::Blocked);
-    assert_eq!(under.message, "Sextant:\nNot here!");
+    assert_eq!(under.message, USE_SEXTANT_ONLY_OUTDOORS);
     assert_eq!(under.turn, 0);
 
     // The same square on the surface plane does read.
@@ -98,7 +98,7 @@ fn sextant_night_window_includes_hours_five_and_nineteen() {
             assert_eq!(outcome, MoveOutcome::Blocked, "hour {hour}");
             assert_eq!(
                 world.message,
-                "Sextant:\nCannot see the stars!",
+                USE_SEXTANT_DAYTIME_REFUSAL,
                 "hour {hour}"
             );
         }
@@ -114,13 +114,13 @@ fn sextant_requires_item_world_scene_and_night() {
     world.special_items[SPECIAL_ITEM_SEXTANT_INDEX] = 1;
     world.clock = GameClock::new(12, 0).unwrap();
     assert_eq!(world.use_sextant(), MoveOutcome::Blocked);
-    assert_eq!(world.message, "Sextant:\nCannot see the stars!");
+    assert_eq!(world.message, USE_SEXTANT_DAYTIME_REFUSAL);
 
     let mut town = test_state(open_grid(), 1, 1);
     town.special_items[SPECIAL_ITEM_SEXTANT_INDEX] = 1;
     town.clock = GameClock::new(20, 0).unwrap();
     assert_eq!(town.use_sextant(), MoveOutcome::Blocked);
-    assert_eq!(town.message, "Sextant:\nNot here!");
+    assert_eq!(town.message, USE_SEXTANT_ONLY_OUTDOORS);
 }
 
 #[test]
@@ -128,13 +128,13 @@ fn use_command_charges_a_normal_turn_for_every_sextant_result() {
     let cases = [
         (
             surface_world_state(open_world_grid(), 1, 1),
-            "Sextant:\nCannot see the stars!",
+            USE_SEXTANT_DAYTIME_REFUSAL,
         ),
         (
             world_state(open_world_grid(), 1, 1),
-            "Sextant:\nNot here!",
+            USE_SEXTANT_ONLY_OUTDOORS,
         ),
-        (test_state(open_grid(), 1, 1), "Sextant:\nNot here!"),
+        (test_state(open_grid(), 1, 1), USE_SEXTANT_ONLY_OUTDOORS),
     ];
 
     for (mut state, expected_message) in cases {
@@ -246,7 +246,7 @@ fn spyglass_requires_item_surface_plane_and_night() {
     day.clock = GameClock::new(12, 0).unwrap();
     assert_eq!(day.use_spyglass(), MoveOutcome::Blocked);
     assert_eq!(day.turn, 0);
-    assert_eq!(day.message, "Cannot see the stars!");
+    assert_eq!(day.message, USE_SPYGLASS_NO_STARS);
 
     // The Underworld is excluded by the plane condition, exactly as it is
     // for the Sextant, and takes the same "not here" refusal.
@@ -292,7 +292,7 @@ fn spyglass_admits_a_town_scene_and_the_published_night_window() {
     noon.special_items[SPECIAL_ITEM_SPYGLASS_INDEX] = SPECIAL_ITEM_OWNED_VALUE;
     noon.clock = GameClock::new(12, 0).unwrap();
     assert_eq!(noon.use_spyglass(), MoveOutcome::Blocked);
-    assert_eq!(noon.message, "Cannot see the stars!");
+    assert_eq!(noon.message, USE_SPYGLASS_NO_STARS);
 }
 
 #[test]
@@ -922,7 +922,7 @@ fn wooden_box_use_prompts_without_endgame_handoff() {
 
     assert_eq!(town.turn, 1);
     assert_eq!(town.special_items[SPECIAL_ITEM_WOODEN_BOX_INDEX], 1);
-    assert_eq!(town.message, "Wooden Box: How use it?");
+    assert_eq!(town.message, USE_WOODEN_BOX_PROMPT);
 
     let mut missing = test_state(open_grid(), 1, 1);
     assert_eq!(missing.use_wooden_box(), MoveOutcome::Blocked);

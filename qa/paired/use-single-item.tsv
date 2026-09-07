@@ -1,0 +1,19 @@
+# Each of the three navigation-family items standing alone in the picker, so
+# the row is reached with a fixed two Downs and no counting can drift. The
+# seed is built with `seed_inventory ... specials=0 special<N>=1`.
+# requires-seed: a party carrying a scroll, a potion and one special item
+both	wait	9000
+both	key	space
+both	wait	4000
+both	key	j
+both	wait	7000
+both	key	u
+both	wait	2000
+both	key	Down
+both	wait	600
+both	key	Down
+both	wait	600
+both	shot	row	The item's row
+both	key	Return
+both	wait	3500
+both	shot	used	Its result

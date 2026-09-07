@@ -617,6 +617,17 @@ impl PlayState {
             UseItemRequest::Scroll { .. } => Some(USE_ITEM_ECHO_SCROLL),
             UseItemRequest::Potion { .. } => Some(USE_ITEM_ECHO_POTION),
             UseItemRequest::SkullKey => Some(USE_ITEM_ECHO_SKULL_KEY),
+            UseItemRequest::MagicCarpet => Some(USE_ITEM_ECHO_CARPET),
+            UseItemRequest::AmuletOfLordBritish => Some(USE_ITEM_ECHO_AMULET),
+            UseItemRequest::CrownOfLordBritish => Some(USE_ITEM_ECHO_CROWN),
+            UseItemRequest::Sceptre => Some(USE_ITEM_ECHO_SCEPTRE),
+            UseItemRequest::ShadowlordShard(_) => Some(USE_ITEM_ECHO_GEM_SHARD),
+            UseItemRequest::Spyglass => Some(USE_ITEM_ECHO_SPYGLASS),
+            UseItemRequest::HmsCapePlans => Some(USE_ITEM_ECHO_PLANS),
+            UseItemRequest::Sextant => Some(USE_ITEM_ECHO_SEXTANT),
+            UseItemRequest::PocketWatch => Some(USE_ITEM_ECHO_WATCH),
+            UseItemRequest::BlackBadge => Some(USE_ITEM_ECHO_BADGE),
+            UseItemRequest::WoodenBox => Some(USE_ITEM_ECHO_BOX),
             _ => None,
         }
     }
@@ -926,7 +937,7 @@ impl PlayState {
             self.message = "No Wooden Box!".to_string();
             return MoveOutcome::Blocked;
         }
-        self.message = "Wooden Box: How use it?".to_string();
+        self.message = USE_WOODEN_BOX_PROMPT.to_string();
         MoveOutcome::PromptDeclined
     }
 
@@ -1305,13 +1316,14 @@ impl PlayState {
             Area::Town { .. } | Area::Dungeon { .. } => false,
         };
         if !outdoors {
-            self.message = "Sextant:\nNot here!".to_string();
+            // Measured 2026-09-07 indoors: `Only outdoors!`.
+            self.message = USE_SEXTANT_ONLY_OUTDOORS.to_string();
             return MoveOutcome::Blocked;
         }
         // The Sextant's night window is `19..=23` / `0..=5`, which is not
         // the town-lighting window `is_town_night_hour` carries.
         if !sextant_night_hour(self.clock.hour) {
-            self.message = "Sextant:\nCannot see the stars!".to_string();
+            self.message = USE_SEXTANT_DAYTIME_REFUSAL.to_string();
             return MoveOutcome::Blocked;
         }
 
@@ -1376,7 +1388,7 @@ impl PlayState {
             return MoveOutcome::Blocked;
         }
         if !sextant_night_hour(self.clock.hour) {
-            self.message = "Cannot see the stars!".to_string();
+            self.message = USE_SPYGLASS_NO_STARS.to_string();
             return MoveOutcome::Blocked;
         }
 

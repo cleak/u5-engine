@@ -75,6 +75,7 @@ are PRNG-selected and legitimately differ between the two sides.
 | `combat-commands` | the arena's Get, Search, Klimb and X-it answers |
 | `prompt-cancels` | what the Use and New Order pickers print when cancelled |
 | `use-skull-key` | the skull key's `Item: Skull Key` row and `Direction-` prompt |
+| `use-single-item` | one special item alone in the picker; re-seed between runs to measure another |
 | `dungeon-search` | dungeon Search: the `Search...` echo, the shared `Dir-` relative-direction prompt, and the hidden-door reveal |
 | `dungeon-look` | dungeon Look through the same helper, including the Space cancel that writes `Dir-Pass` |
 | `magic-mix` | the M-Mix reagent list and its prompts |
