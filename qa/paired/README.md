@@ -70,6 +70,7 @@ are PRNG-selected and legitimately differ between the two sides.
 | `town-death-vision` | the crystal-sphere Look and its two roll outcomes |
 | `use-potions` | the potion result lines, one colour at a time |
 | `use-scrolls` | the two scrolls that ask for an argument |
+| `use-specials` | the special-item rows: the carpet, the regalia, the sceptre and a shard |
 | `dungeon-search` | dungeon Search: the `Search...` echo, the shared `Dir-` relative-direction prompt, and the hidden-door reveal |
 | `dungeon-look` | dungeon Look through the same helper, including the Space cancel that writes `Dir-Pass` |
 | `magic-mix` | the M-Mix reagent list and its prompts |
@@ -101,7 +102,7 @@ number of keystrokes:
 | `overworld-camp`, `magic-mix-and-cast` | the party standing on the Britannia overworld |
 | `town-night-schedule` | Britain at 02:00 |
 | `town-death-vision` | the party one cell east of a crystal-sphere tile. An engine-written town seed is safe here: the sphere is a Look target |
-| `use-potions`, `use-scrolls` | a party carrying potions and scrolls, built with the `seed_inventory` example (`cargo run --release --example seed_inventory -- <profile> potions=3 scrolls=3 status1=D`). The shipped starting party carries three items, which is not enough to reach these families |
+| `use-potions`, `use-scrolls`, `use-specials` | a party carrying potions and scrolls, built with the `seed_inventory` example (`cargo run --release --example seed_inventory -- <profile> potions=3 scrolls=3 specials=1 status1=D`). The shipped starting party carries three items, which is not enough to reach these families |
 | `town-britain-seeded`, `town-fountain`, `town-look-npc-cell` | the party inside Britain, beside the fountain for the fountain scenario |
 | `town-wishing-well` | the party standing south of the wishing well in Paws (scene 22). An engine-written town seed is safe here: the well is a Look target, and only Talk needs the save's NPC band |
 | `town-wishing-well-refusals` | the same |

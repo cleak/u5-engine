@@ -329,23 +329,23 @@ impl PlayState {
                 SPECIAL_ITEM_CROWN_LB_INDEX,
                 CROWN_LB_ACTIVE_EFFECT_TAG,
                 "Crown",
-                "Wearing Crown.",
-                "Removed Crown.",
+                USE_CROWN_WORN,
+                USE_REGALIA_REMOVED,
             ),
             Some(UseItemRequest::AmuletOfLordBritish) => self.use_worn_regalia(
                 SPECIAL_ITEM_AMULET_LB_INDEX,
                 AMULET_LB_ACTIVE_EFFECT_TAG,
                 "Amulet",
-                "Wearing Amulet.",
-                "Removed Amulet.",
+                USE_AMULET_WORN,
+                USE_REGALIA_REMOVED,
             ),
             Some(UseItemRequest::Sceptre) => self.use_sceptre_of_lord_british(),
             Some(UseItemRequest::BlackBadge) => self.use_worn_regalia(
                 SPECIAL_ITEM_BLACK_BADGE_INDEX,
                 BLACK_BADGE_ACTIVE_EFFECT_TAG,
                 "Black Badge",
-                "Wearing Black Badge.",
-                "Removed Black Badge.",
+                USE_BLACK_BADGE_WORN,
+                USE_REGALIA_REMOVED,
             ),
             Some(UseItemRequest::Spyglass) => self.use_spyglass(),
             Some(UseItemRequest::Scroll {
@@ -956,7 +956,8 @@ impl PlayState {
         // Phase 1: unconditional heading plus the aloft line, completed by the
         // shard's own virtue word.
         let virtue = Self::shadowlord_title_for_index(index).unwrap_or("Shadowlord");
-        self.message = format!("{name}!\nThou dost hold the evil shard aloft: {virtue}!");
+        let _ = virtue;
+        self.message = format!("{USE_SHARD_ALOFT_PREFIX}{name}");
 
         // Phase 3: the position gate is the only one that speaks. The
         // published destruction rows (Lycaeum floor 2 (15,9); Empath Abbey
@@ -1140,7 +1141,7 @@ impl PlayState {
 
         let dissolved = self.dissolve_sceptre_barriers_near_party();
         if dissolved == 0 {
-            self.message = "Wielded Sceptre: No effect.".to_string();
+            self.message = format!("{USE_SCEPTRE_WIELDED}\nNo effect!");
             return MoveOutcome::Blocked;
         }
 
@@ -1256,7 +1257,7 @@ impl PlayState {
         self.sync_player_object();
         self.mark_visibility_dirty();
         self.advance_turn();
-        self.message = "Boarded carpet.".to_string();
+        self.message = USE_MAGIC_CARPET_BOARDED.to_string();
         MoveOutcome::Boarded
     }
 

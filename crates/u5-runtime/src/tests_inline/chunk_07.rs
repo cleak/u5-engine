@@ -980,7 +980,7 @@ fn sceptre_requires_item_non_dungeon_and_matching_nearby_barriers() {
     );
     assert_eq!(no_barrier.turn, 0);
     assert!(!no_barrier.visibility_dirty);
-    assert_eq!(no_barrier.message, "Wielded Sceptre: No effect.");
+    assert_eq!(no_barrier.message, "Wielding the Sceptre of Lord British\nNo effect!");
 }
 
 #[test]
@@ -1009,7 +1009,7 @@ fn use_command_routes_worn_regalia_and_badge_toggles() {
     assert_eq!(town.active_effect_tag, Some(CROWN_LB_ACTIVE_EFFECT_TAG));
     assert_eq!(town.active_effect_counter, PERMANENT_ACTIVE_EFFECT_DURATION);
     assert!(town.visibility_dirty);
-    assert_eq!(town.message, "Wearing Crown.");
+    assert_eq!(town.message, "Thou dost don the Crown of Lord British");
 
     town.visibility_dirty = false;
     assert_eq!(
@@ -1030,7 +1030,7 @@ fn use_command_routes_worn_regalia_and_badge_toggles() {
     assert_eq!(town.active_effect_tag, Some(AMULET_LB_ACTIVE_EFFECT_TAG));
     assert_eq!(town.active_effect_counter, PERMANENT_ACTIVE_EFFECT_DURATION);
     assert!(town.visibility_dirty);
-    assert_eq!(town.message, "Wearing Amulet.");
+    assert_eq!(town.message, "Wearing the Amulet of Lord British");
 
     assert_eq!(
         handle_play_key_input(&mut town, 'U', "AM", Path::new("")).unwrap(),
@@ -1043,7 +1043,7 @@ fn use_command_routes_worn_regalia_and_badge_toggles() {
     assert_eq!(town.turn, 3);
     assert_eq!(town.active_effect_tag, None);
     assert_eq!(town.active_effect_counter, 0);
-    assert_eq!(town.message, "Removed Amulet.");
+    assert_eq!(town.message, "Removed!");
 
     assert_eq!(
         handle_play_key_input(&mut town, 'U', "BB", Path::new("")).unwrap(),
@@ -1053,7 +1053,7 @@ fn use_command_routes_worn_regalia_and_badge_toggles() {
     assert_eq!(town.turn, 4);
     assert_eq!(town.active_effect_tag, Some(BLACK_BADGE_ACTIVE_EFFECT_TAG));
     assert_eq!(town.active_effect_counter, PERMANENT_ACTIVE_EFFECT_DURATION);
-    assert_eq!(town.message, "Wearing Black Badge.");
+    assert_eq!(town.message, "Badge worn!");
 }
 
 #[test]
@@ -1066,8 +1066,8 @@ fn worn_regalia_requires_owned_item_without_turn() {
             SPECIAL_ITEM_CROWN_LB_INDEX,
             CROWN_LB_ACTIVE_EFFECT_TAG,
             "Crown",
-            "Wearing Crown.",
-            "Removed Crown.",
+            "Thou dost don the Crown of Lord British",
+            "Removed!",
         ),
         MoveOutcome::Blocked
     );
@@ -1169,7 +1169,7 @@ fn use_command_routes_inline_magic_carpet_request() {
     assert_eq!(world.special_items[SPECIAL_ITEM_MAGIC_CARPET_INDEX], 1);
     assert_eq!(world.turn, 1);
     assert!(world.visibility_dirty);
-    assert_eq!(world.message, "Boarded carpet.");
+    assert_eq!(world.message, "Boarded!");
 }
 
 #[test]

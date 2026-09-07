@@ -591,6 +591,19 @@ pub const USE_POTION_TARGET_PROMPT: &str = "On who: ";
 /// argument prints its effect word first and then the argument prompt -
 /// `Wind change!` over `Direction-`, and `Resurrection!` over `On who: `.
 /// Neither prints anything more once the argument is accepted.
+/// **Measured** (`qa/paired/use-specials.tsv`): the special-item rows answer
+/// with their own sentences. `inventory.md §7` describes each item's effect
+/// but quotes none of these.
+pub const USE_MAGIC_CARPET_BOARDED: &str = "Boarded!";
+pub const USE_AMULET_WORN: &str = "Wearing the Amulet of Lord British";
+pub const USE_CROWN_WORN: &str = "Thou dost don the Crown of Lord British";
+pub const USE_SCEPTRE_WIELDED: &str = "Wielding the Sceptre of Lord British";
+pub const USE_BLACK_BADGE_WORN: &str = "Badge worn!";
+pub const USE_REGALIA_REMOVED: &str = "Removed!";
+/// The shard line names the shard on its own row run: `Thou dost hold above
+/// thee the evil Shard of Falsehood`.
+pub const USE_SHARD_ALOFT_PREFIX: &str = "Thou dost hold above thee the evil ";
+
 pub const SCROLL_WIND_CHANGE_RESULT: &str = "Wind change!";
 pub const SCROLL_RESURRECTION_RESULT: &str = "Resurrection!";
 
