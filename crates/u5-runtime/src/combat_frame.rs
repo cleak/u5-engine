@@ -2102,11 +2102,15 @@ impl PlayState {
             return MoveOutcome::Blocked;
         }
         let Some(caster_actor) = self.combat_actors.get(caster_index).copied() else {
-            self.message = "Who casts?".to_string();
+            // No live caster in the slot: the arena only offers live
+            // actors, so this is an invariant guard.
+            self.message.clear();
             return MoveOutcome::Blocked;
         };
         if caster_actor.is_empty() || caster_actor.is_marked_dead() {
-            self.message = "Who casts?".to_string();
+            // No live caster in the slot: the arena only offers live
+            // actors, so this is an invariant guard.
+            self.message.clear();
             return MoveOutcome::Blocked;
         }
 
@@ -2129,11 +2133,15 @@ impl PlayState {
             return MoveOutcome::Blocked;
         }
         let Some(caster_actor) = self.combat_actors.get(caster_index).copied() else {
-            self.message = "Who casts?".to_string();
+            // No live caster in the slot: the arena only offers live
+            // actors, so this is an invariant guard.
+            self.message.clear();
             return MoveOutcome::Blocked;
         };
         if caster_actor.is_empty() || caster_actor.is_marked_dead() {
-            self.message = "Who casts?".to_string();
+            // No live caster in the slot: the arena only offers live
+            // actors, so this is an invariant guard.
+            self.message.clear();
             return MoveOutcome::Blocked;
         }
 
@@ -2346,11 +2354,15 @@ impl PlayState {
             return MoveOutcome::Blocked;
         }
         let Some(caster_actor) = self.combat_actors.get(caster_index).copied() else {
-            self.message = "Who casts?".to_string();
+            // No live caster in the slot: the arena only offers live
+            // actors, so this is an invariant guard.
+            self.message.clear();
             return MoveOutcome::Blocked;
         };
         if caster_actor.is_empty() || caster_actor.is_marked_dead() {
-            self.message = "Who casts?".to_string();
+            // No live caster in the slot: the arena only offers live
+            // actors, so this is an invariant guard.
+            self.message.clear();
             return MoveOutcome::Blocked;
         }
         if let Some(outcome) =
@@ -2435,7 +2447,9 @@ impl PlayState {
         let caster_group = self.combat_target_group_for_slot(caster_index);
         let target_group = self.combat_target_group_for_slot(target_slot);
         if !creature_prompt_target_is_eligible(target_actor, target_group, caster_group, false) {
-            self.message = "Target? Use C1BRX7 to target a hostile creature.".to_string();
+            // An ineligible pick: `magic.md §8` has the arena cursor
+            // show the selection, and the original prints no syntax hint.
+            self.message.clear();
             return MoveOutcome::Blocked;
         }
 
@@ -2551,7 +2565,9 @@ impl PlayState {
 
         let caster_group = self.combat_target_group_for_slot(caster_index);
         if !self.charm_prompt_target_is_eligible(target_slot, caster_group) {
-            self.message = "Target? Use C1AEX7 to target a hostile creature.".to_string();
+            // An ineligible pick: `magic.md §8` has the arena cursor
+            // show the selection, and the original prints no syntax hint.
+            self.message.clear();
             return MoveOutcome::Blocked;
         }
 
@@ -3841,11 +3857,15 @@ impl PlayState {
             return MoveOutcome::Blocked;
         }
         let Some(caster) = self.combat_actors.get(caster_index).copied() else {
-            self.message = "Who casts?".to_string();
+            // No live caster in the slot: the arena only offers live
+            // actors, so this is an invariant guard.
+            self.message.clear();
             return MoveOutcome::Blocked;
         };
         if !combat_actor_is_active_not_dead(caster) {
-            self.message = "Who casts?".to_string();
+            // No live caster in the slot: the arena only offers live
+            // actors, so this is an invariant guard.
+            self.message.clear();
             return MoveOutcome::Blocked;
         }
 
@@ -3934,7 +3954,9 @@ impl PlayState {
         let caster_group = self.combat_target_group_for_slot(caster_index);
         let target_group = self.combat_target_group_for_slot(target_slot);
         if !creature_prompt_target_is_eligible(target_actor, target_group, caster_group, false) {
-            self.message = "Target? Use C1IQX7 to target a hostile creature.".to_string();
+            // An ineligible pick: `magic.md §8` has the arena cursor
+            // show the selection, and the original prints no syntax hint.
+            self.message.clear();
             return MoveOutcome::Blocked;
         }
 
@@ -4842,7 +4864,9 @@ impl PlayState {
         if target_slot >= COMBAT_ACTOR_SLOTS
             || !target_actor.is_some_and(combat_actor_is_active_not_dead)
         {
-            self.message = "Target? Use C1GP7 to target a live combat slot.".to_string();
+            // An ineligible pick: `magic.md §8` has the arena cursor
+            // show the selection, and the original prints no syntax hint.
+            self.message.clear();
             return MoveOutcome::Blocked;
         }
 
@@ -5260,7 +5284,9 @@ impl PlayState {
         let Some(target_cells) =
             self.directed_combat_spell_target_cells(caster_index, direction, effect)
         else {
-            self.message = "Who casts?".to_string();
+            // No live caster in the slot: the arena only offers live
+            // actors, so this is an invariant guard.
+            self.message.clear();
             return MoveOutcome::Blocked;
         };
 

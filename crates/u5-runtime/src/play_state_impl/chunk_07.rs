@@ -213,7 +213,10 @@ impl PlayState {
             return None;
         };
         if !direction.is_cardinal() {
-            self.message = "Direction?".to_string();
+            // The arena's prompts only accept cardinals, so a diagonal never
+            // reaches a handler in play; this is the inline harness form's
+            // guard and the original has no line for it.
+            self.message.clear();
             return None;
         }
         let (dx, dy) = direction.delta();
@@ -237,7 +240,7 @@ impl PlayState {
         };
         let tile = self.combat_terrain[actor.y as usize][actor.x as usize];
         if !combat_klimb_tile_accepts_vertical(tile, intent) {
-            self.message = "Klimb-What?".to_string();
+            self.message = DUNGEON_KLIMB_WHAT_REFUSAL.trim_end().to_string();
             return MoveOutcome::Blocked;
         }
 
@@ -273,7 +276,7 @@ impl PlayState {
             return MoveOutcome::Blocked;
         };
         if !direction.is_cardinal() {
-            self.message = "Klimb-What?".to_string();
+            self.message = DUNGEON_KLIMB_WHAT_REFUSAL.trim_end().to_string();
             return MoveOutcome::Blocked;
         }
 
@@ -281,7 +284,7 @@ impl PlayState {
         let x = actor.x as isize + dx;
         let y = actor.y as isize + dy;
         if !combat_arena_coordinate_in_bounds(x as i16, y as i16) {
-            self.message = "Klimb-What?".to_string();
+            self.message = DUNGEON_KLIMB_WHAT_REFUSAL.trim_end().to_string();
             return MoveOutcome::Blocked;
         }
         let x = x as usize;
@@ -291,7 +294,7 @@ impl PlayState {
             .is_some()
             || !is_probe_walkable(self.combat_terrain[y][x])
         {
-            self.message = "Klimb-What?".to_string();
+            self.message = DUNGEON_KLIMB_WHAT_REFUSAL.trim_end().to_string();
             return MoveOutcome::Blocked;
         }
 
@@ -1941,7 +1944,9 @@ impl PlayState {
             return Ok(MoveOutcome::Used);
         }
         let Some(direction) = direction else {
-            self.message = "Attack where? Use A<direction>.".to_string();
+            // The interactive `A` opens the `Attack-` prompt, so a missing
+            // direction can only come from the inline harness form.
+            self.message.clear();
             return Ok(MoveOutcome::PromptDeclined);
         };
         let Some((x, y)) = self.adjacent_target(direction) else {

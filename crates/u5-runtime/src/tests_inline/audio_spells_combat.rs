@@ -311,7 +311,8 @@
             ),
             MoveOutcome::Blocked
         );
-        assert!(state.message.starts_with("Target?"));
+        // Measured contract: an ineligible pick prints nothing.
+        assert_eq!(state.message, "");
         assert!(state.sound_effects_after(serial).is_empty());
 
         // Resource-gate rejection: no charge left to spend.

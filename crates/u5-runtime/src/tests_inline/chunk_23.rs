@@ -8433,7 +8433,7 @@ fn combat_cast_clone_rejects_same_faction_target_before_resources() {
     assert_eq!(state.turn, 0);
     assert_eq!(
         state.message,
-        "Target? Use C1IQX7 to target a hostile creature."
+        ""
     );
 }
 
@@ -8550,7 +8550,7 @@ fn combat_cast_charm_rejects_an_unmarked_same_group_target_before_resources() {
     assert_eq!(state.turn, 0);
     assert_eq!(
         state.message,
-        "Target? Use C1AEX7 to target a hostile creature."
+        ""
     );
 }
 
@@ -10993,7 +10993,7 @@ fn combat_klimb_prompt_cancel_commits_but_blocked_direction_reprompts() {
         handle_play_key_input(&mut blocked, 'K', "8", game_dir).unwrap(),
         PlayInputDisposition::Continue
     );
-    assert_eq!(blocked.message, "Klimb-What?");
+    assert_eq!(blocked.message, DUNGEON_KLIMB_WHAT_REFUSAL.trim_end());
     assert_eq!(blocked.pending_combat_actor_slot, Some(0));
     assert_eq!(
         (blocked.combat_actors[8].x, blocked.combat_actors[8].y),
@@ -16101,7 +16101,7 @@ fn combat_cast_active_target_spell_gates_target_and_negate_magic_before_resource
     assert_eq!(missing_target.turn, 0);
     assert_eq!(
         missing_target.message,
-        "Target? Use C1GP7 to target a live combat slot."
+        ""
     );
 
     let mut absorbed = world_state(open_world_grid(), 10, 20);
@@ -16136,7 +16136,7 @@ fn combat_cast_active_target_spell_gates_target_and_negate_magic_before_resource
     assert_eq!(absorbed.turn, 0);
     assert_eq!(
         absorbed.message,
-        "Target? Use C1GP7 to target a live combat slot."
+        ""
     );
 }
 
@@ -17032,7 +17032,7 @@ fn combat_cast_polymorph_rejects_same_faction_target_before_resources() {
     assert_eq!(state.turn, 0);
     assert_eq!(
         state.message,
-        "Target? Use C1BRX7 to target a hostile creature."
+        ""
     );
 }
 
