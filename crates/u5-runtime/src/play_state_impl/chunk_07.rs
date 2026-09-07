@@ -100,7 +100,7 @@ impl PlayState {
         direction: Direction,
     ) -> MoveOutcome {
         let Some((_, x, y)) =
-            self.combat_sjog_target_coordinate(actor_slot, direction, "Nothing to open there.")
+            self.combat_sjog_target_coordinate(actor_slot, direction, "Nothing to open!")
         else {
             return MoveOutcome::Blocked;
         };
@@ -121,11 +121,11 @@ impl PlayState {
             .combat_actor_slot_at(x as u8, y as u8, actor_slot)
             .is_some()
         {
-            self.message = "Nothing to open there.".to_string();
+            self.message = "Nothing to open!".to_string();
             return MoveOutcome::Blocked;
         }
         if !openable_town_door(tile) {
-            self.message = "Nothing to open here.".to_string();
+            self.message = "Nothing to open!".to_string();
             return MoveOutcome::Blocked;
         }
 

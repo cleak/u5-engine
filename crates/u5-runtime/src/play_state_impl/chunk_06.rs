@@ -242,7 +242,7 @@ impl PlayState {
                         SurfaceChestVerb::Open,
                     ));
                 }
-                self.message = "Nothing to open here.".to_string();
+                self.message = "Nothing to open!".to_string();
                 return Ok(MoveOutcome::Blocked);
             }
         };
@@ -251,7 +251,7 @@ impl PlayState {
         let tx = self.player.x as isize + dx;
         let ty = self.player.y as isize + dy;
         if !(0..32).contains(&tx) || !(0..32).contains(&ty) {
-            self.message = "Nothing to open there.".to_string();
+            self.message = "Nothing to open!".to_string();
             return Ok(MoveOutcome::Blocked);
         }
         let tx = tx as usize;
