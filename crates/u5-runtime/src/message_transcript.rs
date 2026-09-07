@@ -152,6 +152,15 @@ impl PlayState {
         self.message_transcript_revision = self.message_transcript_revision.wrapping_add(1);
     }
 
+    /// Point the message slot at text the caller has already pushed as
+    /// transcript entries, so the next flush does not append a second,
+    /// font-flattened copy of it.
+    pub fn adopt_flushed_message(&mut self, text: impl Into<String>) {
+        let text = text.into();
+        self.message = text.clone();
+        self.message_flushed = text;
+    }
+
     fn push_tlk_message_entry(
         &mut self,
         text: String,

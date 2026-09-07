@@ -515,7 +515,11 @@ impl PlayState {
                 // `Item: Moonstone cannot be buried here!` is one wrapped
                 // sentence, where the pocket watch's line starts its own row
                 // under a blank one.
-                if echoed.is_some() && self.message.starts_with(' ') {
+                // A handler that recorded its own rows - the sextant writes a
+                // runic one - has nothing left in the slot to place, and
+                // touching it here would flush a second, font-flattened copy.
+                if !self.message_slot_needs_flush() {
+                } else if echoed.is_some() && self.message.starts_with(' ') {
                     // The continuation joins the completed `Item: ` row, so
                     // the window wraps the whole sentence together:
                     // `Item: Moonstone` / `cannot be buried` / `here!`.
@@ -1412,7 +1416,7 @@ impl PlayState {
         for row in pair.split('\n').filter(|row| !row.is_empty()) {
             self.push_runic_message_entry(row);
         }
-        self.message = format!("{USE_SEXTANT_READING_LABEL}{pair}");
+        self.adopt_flushed_message(format!("{USE_SEXTANT_READING_LABEL}{pair}"));
         MoveOutcome::Used
     }
 
