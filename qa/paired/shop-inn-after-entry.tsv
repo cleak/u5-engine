@@ -1,0 +1,115 @@
+# Walk in to Britain at 10:00 and talk to the innkeeper (`.NPC` dialog byte
+# 0x88), the shop family `shops.md` calls the inn. Every other shop scenario in
+# the suite is the arms shop; this is the first paired look at a second shop
+# type, and at the innkeeper's own greeting and menu.
+#
+# The route is `talk_gate_probe --script e --chase 136`, which re-plans after
+# every step, so schedule drift during the walk is accounted for.
+#
+# **This scenario diverges today, and the divergence is the engine's**:
+# `u5-engine#16`/`cleak/u5-spec#215`. The walk raises the town alarm on the
+# engine side, the swept roster steps into the party's path, and the last step
+# east answers `Blocked!`, so the engine finishes one cell short reading
+# `Look-East: cobble` / `Talk-East: Nobody's here!` while the stock stands
+# beside Donya with her greeting open. It is kept in the suite as the second
+# resident's evidence for that pair of issues.
+# requires-seed: the party outside Britain on the overworld at 10:00, so the scenario can walk in through the door
+both	wait	9000
+both	key	space
+both	wait	4000
+both	key	j
+both	wait	8000
+both	key	e
+both	wait	4000
+both	shot	entered	Entered Britain through the door
+both	key	Up
+both	wait	450
+both	key	Up
+both	wait	450
+both	key	Up
+both	wait	450
+both	key	Up
+both	wait	450
+both	key	Up
+both	wait	450
+both	key	Up
+both	wait	450
+both	key	Up
+both	wait	450
+both	key	Up
+both	wait	450
+both	key	Up
+both	wait	450
+both	key	Up
+both	wait	450
+both	key	Up
+both	wait	450
+both	key	Up
+both	wait	450
+both	key	Up
+both	wait	450
+both	key	Up
+both	wait	450
+both	key	Right
+both	wait	450
+both	key	Left
+both	wait	450
+both	key	Left
+both	wait	450
+both	key	Up
+both	wait	450
+both	key	Up
+both	wait	450
+both	key	Up
+both	wait	450
+both	key	Up
+both	wait	450
+both	key	Up
+both	wait	450
+both	key	Up
+both	wait	450
+both	key	Up
+both	wait	450
+both	key	Up
+both	wait	450
+both	key	Right
+both	wait	450
+both	key	Up
+both	wait	450
+both	key	Up
+both	wait	450
+both	key	Up
+both	wait	450
+both	key	Up
+both	wait	450
+both	key	Left
+both	wait	450
+both	key	Left
+both	wait	450
+both	key	Left
+both	wait	450
+both	key	Left
+both	wait	450
+both	key	Up
+both	wait	450
+both	key	Up
+both	wait	450
+both	key	Right
+both	wait	450
+both	key	Right
+both	wait	450
+both	wait	2500
+both	shot	arrived	Arrived beside the innkeeper
+both	key	l
+both	wait	1200
+both	key	Right
+both	wait	2500
+both	shot	look	Look east at the innkeeper
+both	key	t
+both	wait	1200
+both	key	Right
+both	wait	3500
+both	shot	talk	Talk east: the innkeeper's greeting
+both	key	space
+both	wait	2500
+both	shot	after-space	After one Space at the innkeeper prompt

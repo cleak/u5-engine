@@ -40,6 +40,7 @@ are PRNG-selected and legitimately differ between the two sides.
 | `magic-mix-and-cast` | the mixer carried through to a completed mix, which `magic-mix` cancels before |
 | `hut-resident-commands` | the resident commands no other scenario sends: `I`, `V`, a plain digit (Set Active Player), `P`, `K`, `E`, `B`, `F` and `A` |
 | `hut-control-bindings` | `commands.md` §9's five Control chords: the typeahead toggle, the moral-standing readout, the sound toggle, the version banner and the Exit-to-DOS prompt |
+| `shop-inn-after-entry` | the second shop family the suite reaches - Britain's innkeeper - and the town alarm that stops the engine getting there (`u5-engine#16`) |
 | `hut-talk` | Talk with the hut's resident: greeting, name, job, bye |
 | `hut-prompts` | New Order, Ready, Use, Cast, Mix, Yell, Search, Look, X-it, Get, Enter, Hole up, Ignite, Klimb prompt and result literals |
 | `town-britain-seeded` | Britain from a seeded save: entry, walking, Look at an NPC cell |
@@ -85,6 +86,7 @@ number of keystrokes:
 | `minoc-tribute`, `blackthorn-palace-password` | the party at the location named, with the quest state the exchange needs |
 | `town-talk-after-entry`, `town-talk-second-npc` | the party outside Britain on the overworld, so the scenario can walk in through the door |
 | `shop-arms-after-entry`, `combat-town-attack-after-entry` | the same, seeded at 10:00 rather than 12:00 |
+| `shop-inn-after-entry` | the same 10:00 seed as `shop-arms-after-entry` |
 
 **A seed equal to the shipped save is refused.** `game-dev-u5-paired` now
 compares the `--seed-save` directory's `SAVED.GAM` against the freshly prepared
