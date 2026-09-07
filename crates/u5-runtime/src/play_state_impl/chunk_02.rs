@@ -522,6 +522,19 @@ impl PlayState {
             }
         }
 
+        // `commands.md §5.2`, the `0` row, and `input.md §5`: a plain
+        // unshifted digit is the Set Active Player command, not a
+        // direction - the numpad promotion that turns `4` into west
+        // needs the Shift/NumLock flag
+        // ([`crate::input_typed_digit_direction_code`]), and the codes it
+        // produces are the high pseudo-codes below, not ASCII digits.
+        // Measured on the original: `1` answers `Avatar`, `0` answers
+        // `None!` and `9` answers `Invalid!`, each on the row under the
+        // `Set Active Plr:` echo.
+        if key.is_ascii_digit() {
+            handled!(self.set_active_player_command(key));
+        }
+
         // `movement.md §2`: "World and town movement consume the four
         // cardinal directions only. Diagonal codes exist in the input
         // vocabulary, but the only consumer that treats one as a movement is

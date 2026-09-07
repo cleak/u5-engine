@@ -1,0 +1,72 @@
+# Create a character, Journey Onward, then exercise the resident commands the
+# other hut scenarios never send: Ignite, View, Set Active Player, Push, Klimb,
+# Enter, Board, Fire and Attack.
+both	wait	9000
+both	key	space
+both	wait	4000
+both	key	c
+both	wait	2500
+both	type	Avatar
+both	key	Return
+both	wait	1500
+both	key	m
+both	wait	3000
+both	key	space
+both	wait	3000
+both	key	a
+both	wait	3000
+both	key	a
+both	wait	3000
+both	key	a
+both	wait	3000
+both	key	a
+both	wait	3000
+both	key	a
+both	wait	3000
+both	key	a
+both	wait	3000
+both	key	a
+both	wait	3000
+both	key	space
+both	wait	4000
+both	key	j
+both	wait	7000
+both	shot	start	The hut after Journey Onward
+both	key	i
+both	wait	2500
+both	shot	ignite	I-Ignite torch
+both	key	v
+both	wait	2500
+both	shot	view	V-View with no gem
+both	key	Escape
+both	wait	1500
+both	key	0
+both	wait	2500
+both	shot	active-player	0-Set Active Player
+both	key	Return
+both	wait	2000
+both	shot	active-chosen	The active player committed
+both	key	p
+both	wait	1500
+both	key	Up
+both	wait	2500
+both	shot	push	P-Push north
+both	key	k
+both	wait	1500
+both	key	Up
+both	wait	2500
+both	shot	klimb	K-Klimb north with nothing to climb
+both	key	e
+both	wait	2500
+both	shot	enter	E-Enter off an entrance
+both	key	b
+both	wait	2500
+both	shot	board	B-Board on foot
+both	key	f
+both	wait	2500
+both	shot	fire	F-Fire on foot
+both	key	a
+both	wait	1500
+both	key	Up
+both	wait	2500
+both	shot	attack	A-Attack north with nothing there

@@ -39,6 +39,12 @@ pub enum Command {
     Xit,
     Yell,
     ZStats,
+    /// `commands.md §5.2`, the `0` row: a plain digit is the Set Active
+    /// Player command, not a movement key. `input.md §5` keeps the
+    /// numpad promotion behind the Shift/NumLock flag, so an unshifted
+    /// top-row digit "remains available as ordinary text input" and
+    /// reaches this command instead.
+    SetActivePlayer,
     /// Letters `D` and `W` fall through to the stock "What?" refusal.
     UnassignedRefusal,
 }
@@ -73,6 +79,7 @@ impl Command {
             Command::Xit => "X-it",
             Command::Yell => "Yell",
             Command::ZStats => "Z-stats",
+            Command::SetActivePlayer => "Set Active Plr",
             Command::UnassignedRefusal => "What?",
         }
     }
@@ -536,6 +543,20 @@ pub const fn new_order_outcome(slot_a: Option<usize>, slot_b: Option<usize>) -> 
 /// are case-folded before dispatch (see `input.md §6`). Returns `None`
 /// for any byte outside the `A..=Z` range and the literal `Space` pass
 /// input.
+/// `combat.md §8.2`: the Attack family's fixed refusal. The same
+/// section states that "there is no `<attacker> attacks <target>` line,
+/// in any wording, anywhere in the shipped game", which is the shape
+/// this engine's composed diagnostics had. Measured on the original:
+/// `A` north with nothing there prints `Attack-North` and then this on
+/// the row under it.
+pub const ATTACK_NOTHING_TO_ATTACK_REFUSAL: &str = "Nothing to attack!";
+
+/// `commands.md §5.2`, the `0` row: "Cancelled: `None!\n`".
+pub const SET_ACTIVE_PLAYER_NONE_REPLY: &str = "None!";
+/// `commands.md §5.2`, the `0` row: "rejected: `Invalid!\n`". Measured
+/// on the original: `9` on a party that has no ninth slot answers this.
+pub const SET_ACTIVE_PLAYER_INVALID_REPLY: &str = "Invalid!";
+
 pub fn command_for_letter(byte: u8) -> Option<Command> {
     let folded = input_case_fold(byte);
     Some(match folded {
@@ -697,6 +718,9 @@ pub const fn command_echo(command: Command, mode: CommandEchoMode) -> Option<Com
         Command::View => ("View a gem!", Complete),
         Command::Enter => ("Enter ", AwaitsArgument),
         Command::Quit => ("Quit:", Complete),
+        // §5.2: `Set_Active_Plr:\n` - the answer (`None!`, the chosen
+        // name, or `Invalid!`) lands on the row under it.
+        Command::SetActivePlayer => ("Set Active Plr:", Complete),
         // §5.2: the two sibling refusals reach the screen with a
         // disambiguating prefix.
         Command::UnassignedRefusal => ("What?", Complete),

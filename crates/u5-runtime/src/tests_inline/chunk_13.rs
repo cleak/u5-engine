@@ -25429,8 +25429,11 @@ fn use_item_echo_puts_the_item_prompt_on_the_next_line() {
 
 #[test]
 fn movement_keys_echo_their_cardinal_name() {
-    // Observed: movement echoes `North`/`South`/`East`/`West`.
-    for (key, expected) in [('8', "North"), ('2', "South"), ('6', "East"), ('4', "West")] {
+    // Observed: movement echoes `North`/`South`/`East`/`West`. The keys
+    // are the letter aliases, not the digits: `commands.md §5.2` gives a
+    // plain digit to Set Active Player, and `input.md §5` promotes a
+    // top-row digit to a direction only behind the Shift/NumLock flag.
+    for (key, expected) in [('w', "North"), ('s', "South"), ('d', "East"), ('a', "West")] {
         let mut state = test_state(open_grid(), 5, 5);
         assert!(
             state

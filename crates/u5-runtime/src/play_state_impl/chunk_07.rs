@@ -1935,7 +1935,7 @@ impl PlayState {
         };
         let Some((x, y)) = self.adjacent_target(direction) else {
             self.advance_turn();
-            self.message = format!("Attacked {}; no target.", direction.name());
+            self.message = ATTACK_NOTHING_TO_ATTACK_REFUSAL.to_string();
             return Ok(MoveOutcome::Blocked);
         };
         if let Some((object_slot, object)) = self
@@ -2091,7 +2091,9 @@ impl PlayState {
         }
 
         self.advance_turn();
-        self.message = format!("Attacked {} at ({x}, {y}); no target.", direction.name());
+        // Measured: `A` into an empty adjacent cell prints `Attack-North`
+        // and then this refusal - not a composed line naming the cell.
+        self.message = ATTACK_NOTHING_TO_ATTACK_REFUSAL.to_string();
         Ok(MoveOutcome::Blocked)
     }
 

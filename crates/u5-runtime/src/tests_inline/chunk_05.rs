@@ -1608,7 +1608,7 @@ fn a_attack_inline_direction_consumes_turn_without_moving() {
 
     assert_eq!((state.player.x, state.player.y), (5, 5));
     assert_eq!(state.turn, 1);
-    assert_eq!(state.message, "Attacked East at (6, 5); no target.");
+    assert_eq!(state.message, ATTACK_NOTHING_TO_ATTACK_REFUSAL);
 }
 
 #[test]

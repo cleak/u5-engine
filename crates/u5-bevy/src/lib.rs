@@ -2188,11 +2188,8 @@ fn apply_visual_key_route_step(
             Some(PlayInputDisposition::Continue) | None => return Ok(()),
         }
     }
-    if step.key == KeyCode::Escape && escape_is_inert_in_gameplay(state) {
-        // The shell swallows Escape outside a prompt; the route replays the
-        // same nothing rather than dispatching a byte the shell never sends.
-        return Ok(());
-    }
+    // Escape outside a prompt is dispatched like any other unmapped key
+    // and answers `What?`; see [`escape_is_inert_in_gameplay`].
     let Some(ch) = key_code_to_char(step.key, step.shift, step.control) else {
         return Ok(());
     };
@@ -12232,7 +12229,6 @@ fn drive_visual(
         // ready party slot.
         return;
     }
-    let escape_inert = escape_is_inert_in_gameplay(&visual.state);
     let mut handled = false;
     let shift_pressed =
         keyboard.pressed(KeyCode::ShiftLeft) || keyboard.pressed(KeyCode::ShiftRight);
@@ -12250,10 +12246,6 @@ fn drive_visual(
         modal_prompt_active,
     );
     for key in keyboard.get_just_pressed() {
-        if *key == KeyCode::Escape && escape_inert {
-            // Inert, not fatal: see `escape_is_inert_in_gameplay`.
-            continue;
-        }
         if visual_line_prompt_active(&visual.state) {
             let game_dir = visual.game_dir.clone();
             let v: &mut VisualState = visual.as_mut();
@@ -17048,12 +17040,17 @@ fn advance_visual_endgame_frame_operation(state: &mut PlayState) -> bool {
     state.advance_endgame_display_frame()
 }
 
+/// Whether Escape carries no *prompt* meaning in the current state.
+///
 /// `systems/commands.md §9` gives the program exit its own prompt
-/// (`Control + E`, "Exit to DOS?"), and no published input contract gives
-/// Escape a gameplay meaning outside a prompt: `input.md §10` has the
-/// adjacent-tile direction prompt treat it as "another read like any other
-/// rejected key", and `text-output.md §10.6` gives it an erase/cancel role
-/// only inside the typed readers. Outside a prompt it is therefore inert.
+/// (`Control + E`, "Exit to DOS?"), so Escape never quits. Inside a
+/// prompt it cancels; outside one it is simply an unmapped key, and
+/// `commands.md §5.2`'s last row gives every unmapped key the `What?`
+/// refusal - **measured** on the original, where Escape in a town prints
+/// `>What?` like any other unrecognised byte. The shell used to swallow
+/// it here, which lost that line; the keypress is now dispatched and
+/// this predicate is what the routes and tests use to say which of the
+/// two roles it is playing.
 ///
 /// This used to be `should_escape_quit_visual`, and the shell wrote
 /// `AppExit` on it: one keypress ended the session with no prompt and no

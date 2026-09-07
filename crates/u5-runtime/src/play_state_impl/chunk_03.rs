@@ -319,6 +319,33 @@ impl PlayState {
         self.start_party_selector(PartySelectorTarget::ZStats)
     }
 
+    /// `commands.md §5.2`, the `0` row: the Set Active Player command.
+    ///
+    /// The echo is `Set Active Plr:` and the answer opens the row under
+    /// it. Measured against the original with a two-member party: `0`
+    /// answers `None!` and clears the selection, `1` answers `Avatar`
+    /// and sets it, and `9` answers `Invalid!` and changes nothing. The
+    /// command takes no world time - `commands.md` §4's return table
+    /// gives the digit row "No action. The loop skips its epilogue, so
+    /// no world time passes."
+    pub fn set_active_player_command(&mut self, digit: char) -> MoveOutcome {
+        self.begin_command_echo_for(Command::SetActivePlayer);
+        let slot = digit.to_digit(10).map(|digit| digit as usize);
+        self.message = match slot {
+            Some(0) => {
+                self.active_player = None;
+                SET_ACTIVE_PLAYER_NONE_REPLY.to_string()
+            }
+            Some(slot) if slot <= self.party.len() && slot <= SAVE_PARTY_SIZE_MAX as usize => {
+                let index = slot - 1;
+                self.active_player = Some(index);
+                self.party_member_display_name(index)
+            }
+            _ => SET_ACTIVE_PLAYER_INVALID_REPLY.to_string(),
+        };
+        MoveOutcome::Observed
+    }
+
     /// Resolve the shared acting-member prompt before it draws.
     ///
     /// `dungeon-mode.md` ("Who acts"): the prompt "is silent when zero

@@ -907,7 +907,7 @@
         );
         assert!(state.active_direction_prompt.is_none());
         assert_eq!(state.turn, 1);
-        assert!(state.message.contains("Attacked East"));
+        assert_eq!(state.message, ATTACK_NOTHING_TO_ATTACK_REFUSAL);
 
         assert_eq!(
             handle_play_key_input(&mut state, 'A', "", Path::new("")).unwrap(),

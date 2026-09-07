@@ -729,6 +729,9 @@ pub fn top_down_command_echo(key: char) -> Option<CommandEcho> {
     if key.is_ascii_alphabetic() {
         return command_for_letter(key as u8).and_then(unassigned_or(key, surface));
     }
+    if key.is_ascii_digit() {
+        return surface(Command::SetActivePlayer);
+    }
     match key {
         '<' | '>' => surface(Command::Klimb),
         _ => None,

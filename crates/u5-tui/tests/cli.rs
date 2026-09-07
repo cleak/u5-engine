@@ -1112,7 +1112,8 @@ fn cli_binary_play_script_confirmed_save_round_trips_to_temp_save() {
     fs::write(dir.join(SAVED_OOL_FILENAME), vec![0; SAVED_OOL_LEN]).unwrap();
 
     let output = Command::new(env!("CARGO_BIN_EXE_u5-engine"))
-        .args(["--play", "--from-save", "--play-script", "6;QY;q"])
+        // `d`, not `6`: a plain digit is Set Active Player.
+        .args(["--play", "--from-save", "--play-script", "d;QY;q"])
         .arg(dir.to_str().unwrap())
         .output()
         .unwrap();

@@ -774,7 +774,8 @@
     #[test]
     fn town_boundary_exit_uses_southeast_corner_terrain_for_every_edge() {
         let dir = debug_game_dir();
-        for ((x, y), key) in [((5, 0), '8'), ((31, 5), '6'), ((5, 31), '2'), ((0, 5), '4')]
+        // Letter aliases, not digits: a plain digit is Set Active Player.
+        for ((x, y), key) in [((5, 0), 'w'), ((31, 5), 'd'), ((5, 31), 's'), ((0, 5), 'a')]
         {
             let mut grid = open_grid();
             grid[31 * 32 + 31] = BRIT_DEEP_WATER_TILE;
@@ -1369,7 +1370,7 @@
         });
 
         assert_eq!(
-            handle_play_key_input(&mut state, '6', "", &dir).unwrap(),
+            handle_play_key_input(&mut state, 'd', "", &dir).unwrap(),
             PlayInputDisposition::Continue
         );
 

@@ -38,6 +38,7 @@ are PRNG-selected and legitimately differ between the two sides.
 | `dungeon-exit-klimb` | a Z transition: climbing out of a dungeon, and the overworld Look that follows |
 | `overworld-camp` | H-Hole up carried through to a result, which no scenario had done |
 | `magic-mix-and-cast` | the mixer carried through to a completed mix, which `magic-mix` cancels before |
+| `hut-resident-commands` | the resident commands no other scenario sends: `I`, `V`, a plain digit (Set Active Player), `P`, `K`, `E`, `B`, `F` and `A` |
 | `hut-talk` | Talk with the hut's resident: greeting, name, job, bye |
 | `hut-prompts` | New Order, Ready, Use, Cast, Mix, Yell, Search, Look, X-it, Get, Enter, Hole up, Ignite, Klimb prompt and result literals |
 | `town-britain-seeded` | Britain from a seeded save: entry, walking, Look at an NPC cell |

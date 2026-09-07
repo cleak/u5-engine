@@ -41,18 +41,17 @@ fn town_digit_falls_through_to_the_ordinary_dispatcher_when_not_seated() {
     let mut state = harpsichord_state();
     state.grid[11 * 32 + 10] = 16;
 
-    // `6` already carries an ordinary meaning in this harness — the numeric
-    // step east — and an un-seated digit must produce exactly that, turn
-    // included.
+    // Away from the chair the digit is forwarded to the resident
+    // dispatcher, which answers Set Active Player: `6` and `5` both name
+    // slots this one-member party does not have, so both are `Invalid!`
+    // and neither costs a turn or moves the party.
     play_digits(&mut state, &[6]);
-    assert_eq!(state.message, "");
-    assert_eq!((state.player.x, state.player.y), (11, 10));
-    assert_eq!(state.turn, 1);
+    assert_eq!(state.message, SET_ACTIVE_PLAYER_INVALID_REPLY);
+    assert_eq!((state.player.x, state.player.y), (10, 10));
+    assert_eq!(state.turn, 0);
 
-    // `5` has no ordinary binding, so the forwarded result is the
-    // dispatcher's own refusal rather than anything the instrument printed.
     play_digits(&mut state, &[5]);
-    assert_eq!(state.message, "What?");
+    assert_eq!(state.message, SET_ACTIVE_PLAYER_INVALID_REPLY);
 
     assert_eq!(state.harpsichord_progress(), 0);
     assert!(state.sound_effects_after(0).is_empty());
@@ -66,7 +65,7 @@ fn town_digit_reaches_the_instrument_only_from_the_cell_north_of_it() {
     state.grid[9 * 32 + 10] = HARPSICHORD_TILE;
 
     play_digits(&mut state, &[5]);
-    assert_eq!(state.message, "What?");
+    assert_eq!(state.message, SET_ACTIVE_PLAYER_INVALID_REPLY);
     assert!(state.sound_effects_after(0).is_empty());
 
     state.grid[9 * 32 + 10] = 16;
@@ -163,11 +162,13 @@ fn harpsichord_progress_is_not_cleared_by_leaving_the_chair() {
     assert_eq!(state.harpsichord_progress(), 6);
 
     // Step off the chair, key a digit the instrument never sees, then sit
-    // back down.
+    // back down. Off the chair the digit reaches the resident dispatcher,
+    // where `commands.md §5.2` gives it to Set Active Player - `5` names
+    // no slot in this one-member party, so the answer is `Invalid!`.
     state.player.x = 4;
     state.player.y = 4;
     play_digits(&mut state, &[5]);
-    assert_eq!(state.message, "What?");
+    assert_eq!(state.message, SET_ACTIVE_PLAYER_INVALID_REPLY);
     assert_eq!(state.harpsichord_progress(), 6);
 
     state.player.x = 10;
