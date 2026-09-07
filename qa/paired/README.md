@@ -73,6 +73,7 @@ are PRNG-selected and legitimately differ between the two sides.
 | `use-specials` | the special-item rows: the carpet, the regalia, the sceptre and a shard |
 | `cast-results` | the C-Cast spell-name prompt and four spell results |
 | `combat-commands` | the arena's Get, Search, Klimb and X-it answers |
+| `combat-ready-armour` | Lor Sanct in the arena, and R-Ready on a body-armour row |
 | `prompt-cancels` | what the Use and New Order pickers print when cancelled |
 | `use-skull-key` | the skull key's `Item: Skull Key` row and `Direction-` prompt |
 | `use-single-item` | one special item alone in the picker; re-seed between runs to measure another |

@@ -5537,9 +5537,9 @@ fn validate_combat_spell_route_state(state: &PlayState, case_name: &str) -> io::
             }
         }
         "combat-invisibility-caster" => {
-            if !state.message.starts_with("Invisibility!")
-                || !state.combat_actors[0].is_phase_suppressed()
-            {
+            // Measured: the cast prints no line of its own, so the hidden
+            // caster is the whole of the observable result.
+            if !state.combat_actors[0].is_phase_suppressed() {
                 return Err(io::Error::other(format!(
                     "route smoke `{case_name}` did not hide the active caster; message `{}`",
                     state.message

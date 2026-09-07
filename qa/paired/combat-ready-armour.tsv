@@ -1,0 +1,49 @@
+# In the arena: Sanct Lor, and R-Ready on a body-armour row.
+# requires-seed: the party one step from a dungeon room trigger, with
+# spells, reagents, mana and equipment
+both	wait	9000
+both	key	space
+both	wait	4000
+both	key	j
+both	wait	9000
+both	key	i
+both	wait	2500
+both	key	Up
+both	wait	6000
+both	key	c
+both	wait	1800
+both	key	l
+both	wait	900
+both	key	s
+both	wait	900
+both	shot	spell-typed	The Sanct Lor selector
+both	key	Return
+both	wait	3000
+both	shot	invisibility	The Sanct Lor result
+both	key	space
+both	wait	2000
+both	key	r
+both	wait	2000
+both	shot	ready-open	The arena's Ready picker
+both	key	Down
+both	wait	420
+both	key	Down
+both	wait	420
+both	key	Down
+both	wait	420
+both	key	Down
+both	wait	420
+both	key	Down
+both	wait	420
+both	key	Down
+both	wait	420
+both	key	Down
+both	wait	420
+both	key	Down
+both	wait	420
+both	key	Down
+both	wait	420
+both	shot	ready-row	A body-armour row
+both	key	Return
+both	wait	2500
+both	shot	ready-result	Readying armour in the arena

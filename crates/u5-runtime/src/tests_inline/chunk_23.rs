@@ -13097,7 +13097,7 @@ fn combat_input_dispatch_cast_uses_pending_actor_as_caster() {
     assert_eq!(state.party[1].mana, 0);
     assert!(!state.combat_actors[0].is_phase_suppressed());
     assert!(state.combat_actors[1].is_phase_suppressed());
-    assert_eq!(state.message, "Invisibility!\nAvatar, armed with bare hands:\n");
+    assert_eq!(state.message, "\nAvatar, armed with bare hands:\n");
 }
 
 #[test]
@@ -13279,7 +13279,7 @@ fn combat_input_dispatch_quickness_does_not_consume_a_player_cast() {
         PlayInputDisposition::Continue
     );
 
-    assert_eq!(state.message, "Invisibility!\nAvatar, armed with bare hands:\n");
+    assert_eq!(state.message, "\nAvatar, armed with bare hands:\n");
     assert_eq!(state.spell_charges[INVISIBILITY_SPELL_INDEX], 0);
     assert_eq!(state.party[0].mana, 0);
     assert!(state.combat_actors[0].is_phase_suppressed());

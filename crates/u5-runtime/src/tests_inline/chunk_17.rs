@@ -3306,7 +3306,7 @@
         );
         assert_eq!(state.party_equipment[0][EQUIP_SLOT_ARMOUR], 9);
         assert_eq!(state.equipment_stock[9], 0);
-        assert_eq!(state.message, "Cannot change armour in combat.");
+        assert_eq!(state.message, "");
 
         assert_eq!(
             state.ready_equipment_from_suffix("1/10"),
@@ -3314,7 +3314,7 @@
         );
         assert_eq!(state.party_equipment[0][EQUIP_SLOT_ARMOUR], 9);
         assert_eq!(state.equipment_stock[10], 1);
-        assert_eq!(state.message, "Cannot change armour in combat.");
+        assert_eq!(state.message, "");
 
         assert_eq!(
             state.ready_equipment_from_suffix("1/16"),
@@ -3407,7 +3407,7 @@
         assert!(state.combat_actors[0].is_phase_suppressed());
         assert_eq!(state.active_objects[0].tile, COMBAT_HIDDEN_ACTIVE_OBJECT_TILE);
         assert!(state.visibility_dirty);
-        assert_eq!(state.message, "Invisibility!");
+        assert_eq!(state.message, "");
     }
 
     #[test]

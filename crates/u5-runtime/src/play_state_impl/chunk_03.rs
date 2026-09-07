@@ -3681,7 +3681,10 @@ impl PlayState {
             return MoveOutcome::Blocked;
         }
         if self.combat_active && EQUIPMENT_CLASS_TAGS[item_id] == EQUIPMENT_TAG_ARMOUR {
-            self.message = "Cannot change armour in combat.".to_string();
+            // Measured 2026-09-07 (`qa/paired/combat-ready-armour.tsv`): the
+            // arena lists the armour rows and answers a pick of one with no
+            // line at all. The refusal stands; the sentence does not.
+            self.message.clear();
             return MoveOutcome::Blocked;
         }
         if let Some(slot) = self.party_equipment[request.party_index]
@@ -4189,7 +4192,9 @@ impl PlayState {
             .is_some_and(CombatLinkedVisibilityOutcome::changed);
         if applied {
             self.mark_visibility_dirty();
-            self.message = "Invisibility!".to_string();
+            // Measured 2026-09-07: Lor Sanct in the arena prints nothing
+            // beyond its own `Spell name:` rows.
+            self.message.clear();
             MoveOutcome::Cast
         } else {
             self.fail_committed_spell_cast();
