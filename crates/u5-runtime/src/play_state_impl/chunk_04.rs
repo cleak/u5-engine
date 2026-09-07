@@ -3683,6 +3683,10 @@ impl PlayState {
         self.talk_direction_with_dialogue_and_keyword(self.player.facing, dialogue, keyword)
     }
 
+    /// The legacy dialogue-map entry point. Production talk goes through the
+    /// conversation runner (`talk_facing_with_game_dir`); nothing outside the
+    /// tests reaches this chain, so the lines it composes are harness output
+    /// rather than text the game prints.
     pub fn talk_direction_with_dialogue_and_keyword(
         &mut self,
         direction: Direction,
@@ -3769,11 +3773,11 @@ impl PlayState {
         }
 
         let Some(fields) = dialogue.get(&(dialog_id as u16)) else {
-            self.message = format!("Dialogue id {dialog_id} is unresolved for this scene.");
+            self.message = format!("Dialogue id {dialog_id} is unresolved for this scene."); // audit: not a player-facing line
             return MoveOutcome::Blocked;
         };
         if fields.len() < 3 {
-            self.message = format!("Dialogue id {dialog_id} has no complete talk envelope.");
+            self.message = format!("Dialogue id {dialog_id} has no complete talk envelope."); // audit: not a player-facing line
             return MoveOutcome::Blocked;
         }
 
@@ -3796,7 +3800,7 @@ impl PlayState {
         self.advance_turn();
         if let Some(keyword) = keyword.and_then(non_empty_talk_keyword) {
             if fields.len() < 5 {
-                self.message = format!("Dialogue id {dialog_id} has no complete talk envelope.");
+                self.message = format!("Dialogue id {dialog_id} has no complete talk envelope."); // audit: not a player-facing line
                 return MoveOutcome::Talked;
             }
             let response = talk_keyword_response(fields, keyword)
@@ -3804,11 +3808,13 @@ impl PlayState {
                 .unwrap_or(TLK_NO_KEYWORD_MATCH_MESSAGE);
             let (response, actions) = talk_response_text_and_actions(response);
             self.apply_talk_action_grants(&actions);
-            self.message = format!("Talked to {name}: {response}");
+            // The same shape the production path prints: the reply alone.
+            let _ = name;
+            self.message = response.to_string();
         } else {
             let (greeting, actions) = talk_response_text_and_actions(greeting);
             self.apply_talk_action_grants(&actions);
-            self.message = format!("Talked to {name}: {description}. {greeting} Your interest?");
+            self.message = format!("{description}\n\n{greeting}\n\nYour interest?");
         }
         MoveOutcome::Talked
     }
@@ -3931,11 +3937,11 @@ impl PlayState {
         }
 
         let Some(fields) = dialogue.get(&(dialog_id as u16)) else {
-            self.message = format!("Dialogue id {dialog_id} is unresolved for this scene.");
+            self.message = format!("Dialogue id {dialog_id} is unresolved for this scene."); // audit: not a player-facing line
             return MoveOutcome::Blocked;
         };
         if fields.len() < 3 {
-            self.message = format!("Dialogue id {dialog_id} has no complete talk envelope.");
+            self.message = format!("Dialogue id {dialog_id} has no complete talk envelope."); // audit: not a player-facing line
             return MoveOutcome::Blocked;
         }
         let raw_fields = raw_blob.get(&(dialog_id as u16));
@@ -4029,7 +4035,7 @@ impl PlayState {
 
         if let Some(keyword) = keyword {
             if fields.len() < 5 {
-                self.message = format!("Dialogue id {dialog_id} has no complete talk envelope.");
+                self.message = format!("Dialogue id {dialog_id} has no complete talk envelope."); // audit: not a player-facing line
                 return MoveOutcome::Talked;
             }
             let response_field_index = resolve_keyword_response_field_index(fields, keyword);
@@ -4071,7 +4077,12 @@ impl PlayState {
             if let Some(scene) = scene_for_flags {
                 self.merge_talk_branch_flags(scene, applied_flags);
             }
-            self.message = format!("Talked to {name}: {legacy_text}");
+            // Measured (`qa/paired/castle-talk.tsv`): a reply is the NPC's
+            // own text and nothing else - the sibling branch below already
+            // prints it that way, and the original never names the speaker
+            // on the reply row.
+            let _ = name;
+            self.message = legacy_text;
         } else {
             let greeting_text = if let Some(output) = run_field(2) {
                 applied_grants.extend(output.action_grants.iter().copied());

@@ -1286,8 +1286,10 @@ fn town_talk_reports_facing_npc_envelope_and_consumes_turn() {
         MoveOutcome::Talked
     );
 
-    assert!(state.message.contains("Ada"));
+    // The greeting is the envelope's own text: description, greeting and
+    // the `Your interest?` prompt, with no engine-composed speaker prefix.
     assert!(state.message.contains("Greetings"));
+    assert!(state.message.contains("Your interest?"));
     assert_eq!(state.turn, 1);
     assert_eq!(state.clock, GameClock::new(12, 1).unwrap());
 }
@@ -1765,7 +1767,7 @@ fn town_talk_dialog_id_one_reads_its_own_blob() {
         MoveOutcome::Talked
     );
 
-    assert!(state.message.contains("Talked to Ada"));
+    assert!(state.message.contains("Your interest?"));
     assert_eq!(state.turn, 1);
 }
 
@@ -2052,7 +2054,7 @@ fn town_talk_inline_keyword_uses_decoded_tlk_response() {
         MoveOutcome::Talked
     );
 
-    assert_eq!(state.message, "Talked to Ada: Bring iron");
+    assert_eq!(state.message, "Bring iron");
     assert_eq!(state.turn, 1);
     assert_eq!(state.clock, GameClock::new(12, 1).unwrap());
 }
@@ -2134,7 +2136,7 @@ fn town_talk_action_dispatch_grants_confirmed_special_item_flags() {
         state.special_items[SPECIAL_ITEM_BLACK_BADGE_INDEX],
         SPECIAL_ITEM_TLK_CARRIED_FLAG_VALUE
     );
-    assert_eq!(state.message, "Talked to Ada: Take this");
+    assert_eq!(state.message, "Take this");
 }
 
 #[test]
@@ -2306,7 +2308,7 @@ fn play_input_talk_suffix_routes_to_one_shot_keyword_lookup() {
         PlayInputDisposition::Continue
     );
 
-    assert_eq!(state.message, "Talked to Ada: I mend gear");
+    assert_eq!(state.message, "I mend gear");
     assert_eq!(state.turn, 1);
     let _ = fs::remove_dir_all(dir);
 }
@@ -2351,13 +2353,13 @@ fn play_input_talk_suffix_routes_reserved_aliases() {
         handle_play_key_input(&mut state, 'T', "WORK", &dir).unwrap(),
         PlayInputDisposition::Continue
     );
-    assert_eq!(state.message, "Talked to Ada: I mend gear");
+    assert_eq!(state.message, "I mend gear");
 
     assert_eq!(
         handle_play_key_input(&mut state, 'T', "THANK", &dir).unwrap(),
         PlayInputDisposition::Continue
     );
-    assert_eq!(state.message, "Talked to Ada: Farewell");
+    assert_eq!(state.message, "Farewell");
     assert_eq!(state.turn, 2);
     let _ = fs::remove_dir_all(dir);
 }
@@ -2543,8 +2545,10 @@ fn town_talk_can_reach_npc_behind_counter_tile() {
         MoveOutcome::Talked
     );
 
-    assert!(state.message.contains("Ada"));
+    // The greeting is the envelope's own text: description, greeting and
+    // the `Your interest?` prompt, with no engine-composed speaker prefix.
     assert!(state.message.contains("Greetings"));
+    assert!(state.message.contains("Your interest?"));
     assert_eq!(state.turn, 1);
     assert_eq!(state.clock, GameClock::new(12, 1).unwrap());
 }
@@ -3856,7 +3860,7 @@ fn town_raw_tlk_one_shot_keyword_records_numeric_signal_flag() {
         MoveOutcome::Talked
     );
 
-    assert_eq!(state.message, "Talked to Maris: Marked");
+    assert_eq!(state.message, "Marked");
     assert_eq!(state.conversation_signal_flags[5], 1);
     assert!(state.active_conversation.is_none());
 }
