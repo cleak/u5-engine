@@ -1,0 +1,34 @@
+# Inside a dungeon room arena: the Get, Search, Klimb and X-it answers.
+# requires-seed: the party one step from a dungeon room trigger, with a torch
+both	wait	9000
+both	key	space
+both	wait	4000
+both	key	j
+both	wait	9000
+both	key	i
+both	wait	2500
+both	key	Up
+both	wait	6000
+both	key	g
+both	wait	1500
+both	key	Up
+both	wait	2500
+both	shot	get	G-Get north in the arena
+both	key	s
+both	wait	1500
+both	key	Up
+both	wait	2500
+both	shot	search	S-Search north in the arena
+both	key	k
+both	wait	2500
+both	shot	klimb	K-Klimb in the arena
+both	key	space
+both	wait	1500
+both	key	x
+both	wait	2500
+both	shot	xit	X-it in the arena
+both	key	space
+both	wait	1500
+both	key	c
+both	wait	2500
+both	shot	cast	C-Cast in the arena

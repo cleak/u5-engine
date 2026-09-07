@@ -72,6 +72,7 @@ are PRNG-selected and legitimately differ between the two sides.
 | `use-scrolls` | the two scrolls that ask for an argument |
 | `use-specials` | the special-item rows: the carpet, the regalia, the sceptre and a shard |
 | `cast-results` | the C-Cast spell-name prompt and four spell results |
+| `combat-commands` | the arena's Get, Search, Klimb and X-it answers |
 | `dungeon-search` | dungeon Search: the `Search...` echo, the shared `Dir-` relative-direction prompt, and the hidden-door reveal |
 | `dungeon-look` | dungeon Look through the same helper, including the Space cancel that writes `Dir-Pass` |
 | `magic-mix` | the M-Mix reagent list and its prompts |
@@ -90,7 +91,7 @@ number of keystrokes:
 | Scenario | The seed must hold |
 |---|---|
 | `doom-final-room`, `doom-final-room-refusal`, `doom-endgame-audio` | the party standing on the fall trap on Doom's level seven, directly above the final room's trigger, with a torch to hand |
-| `combat-dungeon-room`, `combat-refusal-audio` | the party one step from a dungeon room trigger, with a torch to hand |
+| `combat-dungeon-room`, `combat-refusal-audio`, `combat-commands` | the party one step from a dungeon room trigger, with a torch to hand |
 | `combat-rounds` | the same |
 | `stonegate-trapdoor-audio` | the party inside Stonegate, standing in the trapdoor ring's centre cell |
 | `word-of-power-audio` | the party standing on the Britannia overworld |

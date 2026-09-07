@@ -11023,11 +11023,9 @@ fn combat_sjog_get_removes_loose_combat_object() {
 
     assert!(state.active_objects[1].is_empty());
     assert!(state.visibility_dirty);
-    assert!(
-        state
-            .message
-            .starts_with("Got combat object tile 80 at (6, 5).")
-    );
+    // Measured: the arena Get and Search print no line of their own -
+    // the next round banner is all that lands in the window.
+    assert!(state.message.contains("armed with"));
     assert!(!state.message.contains("Giant Rat"));
 }
 
@@ -11138,11 +11136,9 @@ fn combat_sjog_search_observes_without_removing_object() {
     );
 
     assert!(!state.active_objects[1].is_empty());
-    assert!(
-        state
-            .message
-            .starts_with("Found combat object tile 81 at (6, 5).")
-    );
+    // Measured: the arena Get and Search print no line of their own -
+    // the next round banner is all that lands in the window.
+    assert!(state.message.contains("armed with"));
 }
 
 #[test]

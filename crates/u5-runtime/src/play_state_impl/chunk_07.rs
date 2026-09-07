@@ -67,7 +67,11 @@ impl PlayState {
 
         self.free_active_object_slot(object_slot);
         self.mark_visibility_dirty();
-        self.message = format!("Got combat object tile {} at ({x}, {y}).", object.tile);
+        // Measured 2026-09-07 (`qa/paired/combat-commands.tsv`): the arena's
+        // Get, Search and X-it print no line of their own; the round banner
+        // is all that stays in the window.
+        let _ = object;
+        self.message.clear();
         MoveOutcome::Got
     }
 
@@ -85,12 +89,12 @@ impl PlayState {
         if let Some((_, object)) =
             self.combat_loose_object_slot_at(x, y, actor.active_object_slot as usize)
         {
-            self.message = format!("Found combat object tile {} at ({x}, {y}).", object.tile);
+            let _ = object;
+            self.message.clear();
             return MoveOutcome::Searched;
         }
 
-        let tile = self.combat_terrain[y][x];
-        self.message = format!("Searched combat tile {tile} at ({x}, {y}).");
+        self.message.clear();
         MoveOutcome::Searched
     }
 
@@ -1077,7 +1081,8 @@ impl PlayState {
 
         let (x, y) = exit_position.expect("vehicle exit acceptance checked above");
         let Some(parked) = transport.parked_object(old_x, old_y, z) else {
-            self.message = "Nothing to exit.".to_string();
+            // An internal invariant, not a player-facing path.
+            self.message.clear();
             return Ok(MoveOutcome::Blocked);
         };
         if self.allocate_active_object_slot(parked).is_none() {
