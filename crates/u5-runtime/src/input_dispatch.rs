@@ -3354,8 +3354,9 @@ fn combat_command_branch_message(branch: CombatCommandBranch) -> String {
                 )
             }
         },
-        CombatCommandBranch::Klimb => "Klimb-What?".to_string(),
-        CombatCommandBranch::ToggleMusic => "Music toggled.".to_string(),
+        CombatCommandBranch::Klimb => DUNGEON_KLIMB_WHAT_REFUSAL.trim_end().to_string(),
+        // The music toggle is a harness control, not a game command.
+        CombatCommandBranch::ToggleMusic => String::new(),
         CombatCommandBranch::Invalid => "What?".to_string(),
         CombatCommandBranch::Attack
         | CombatCommandBranch::CastSpell
