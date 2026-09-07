@@ -2670,7 +2670,7 @@
             state.ready_equipment_from_suffix(&format!("1/{EQUIPMENT_ID_BOW}")),
             MoveOutcome::Blocked
         );
-        assert_eq!(state.message, format!("No carried {} to ready.", equipment_name(EQUIPMENT_ID_BOW)));
+        assert_eq!(state.message, "");
         assert_eq!(state.turn, 2);
 
         // Missing-ammunition refusal for a carried ranged weapon.
@@ -3012,7 +3012,7 @@
             state.ready_equipment_from_suffix("1/16"),
             MoveOutcome::Blocked
         );
-        assert_eq!(state.message, "No carried Dagger to ready.");
+        assert_eq!(state.message, "");
 
         state.equipment_stock[EQUIPMENT_ID_BOW] = 1;
         assert_eq!(
@@ -3247,7 +3247,7 @@
             state.ready_equipment_from_suffix("1/4"),
             MoveOutcome::Blocked
         );
-        assert_eq!(state.message, "Weapon hand holds a two-handed item.");
+        assert_eq!(state.message, READY_FREE_A_HAND_REFUSAL);
 
         assert_eq!(
             state.ready_equipment_from_suffix("1/16"),

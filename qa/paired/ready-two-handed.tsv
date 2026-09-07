@@ -1,0 +1,23 @@
+# Ready a shield while a two-handed sword is wielded.
+# requires-seed: a strong party carrying equipment, with 2H Sword wielded
+both	wait	9000
+both	key	space
+both	wait	4000
+both	key	j
+both	wait	7000
+both	key	r
+both	wait	1800
+both	key	Return
+both	wait	1500
+both	key	Down
+both	wait	400
+both	key	Down
+both	wait	400
+both	key	Down
+both	wait	400
+both	key	Down
+both	wait	400
+both	shot	row	The small shield row
+both	key	Return
+both	wait	2500
+both	shot	result	Readying a shield with a two-hander wielded

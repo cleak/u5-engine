@@ -77,6 +77,7 @@ are PRNG-selected and legitimately differ between the two sides.
 | `use-skull-key` | the skull key's `Item: Skull Key` row and `Direction-` prompt |
 | `use-single-item` | one special item alone in the picker; re-seed between runs to measure another |
 | `ready-slots` | R-Ready's occupied-slot and two-handed refusals |
+| `ready-two-handed` | readying an off-hand item with a two-hander already wielded |
 | `use-moonstone` | the moonstone bury refusal, and the carpet aboard ship |
 | `stray-keys` | a function key, an unmapped letter, and Space at a scroll's `Direction-` |
 | `night-sextant` | the sextant's reading from a ship at night |
@@ -112,7 +113,7 @@ number of keystrokes:
 | `town-night-schedule` | Britain at 02:00 |
 | `cast-results` | a caster with charges, reagents and mana, built with the `seed_inventory` example (`potions=3 spells=9 reagents=20 mana=99`) |
 | `town-death-vision` | the party one cell east of a crystal-sphere tile. An engine-written town seed is safe here: the sphere is a Look target |
-| `use-potions`, `use-scrolls`, `use-specials`, `ready-slots` | a party carrying potions and scrolls, built with the `seed_inventory` example (`cargo run --release --example seed_inventory -- <profile> potions=3 scrolls=3 specials=1 status1=D`, or `equipment=2 strength=99` for `ready-slots`). The shipped starting party carries three items, which is not enough to reach these families |
+| `use-potions`, `use-scrolls`, `use-specials`, `ready-slots` | a party carrying potions and scrolls, built with the `seed_inventory` example (`cargo run --release --example seed_inventory -- <profile> potions=3 scrolls=3 specials=1 status1=D`, or `equipment=2 strength=99` for `ready-slots`, plus `equip2=33` for `ready-two-handed`). The shipped starting party carries three items, which is not enough to reach these families |
 | `town-britain-seeded`, `town-fountain`, `town-look-npc-cell` | the party inside Britain, beside the fountain for the fountain scenario |
 | `town-wishing-well` | the party standing south of the wishing well in Paws (scene 22). An engine-written town seed is safe here: the well is a Look target, and only Talk needs the save's NPC band |
 | `town-wishing-well-refusals` | the same |

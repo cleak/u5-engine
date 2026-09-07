@@ -40,6 +40,16 @@ fn main() {
             "torches" => state.torches = count,
             "spells" => state.spell_charges = [count; SPELL_COUNT],
             "equipment" => state.equipment_stock = [count; EQUIPMENT_COUNT],
+            // `equip<slot>=<item id>` writes one readied slot of the first
+            // party member, so a scenario can start from a state R-Ready
+            // itself refuses to reach.
+            _ if what.starts_with("equip") && what.len() > "equip".len() => {
+                let slot: usize = what
+                    .trim_start_matches("equip")
+                    .parse()
+                    .expect("equip<slot>");
+                state.party_equipment[0][slot] = count;
+            }
             "strength" => {
                 for strength in &mut state.party_strengths {
                     *strength = count;

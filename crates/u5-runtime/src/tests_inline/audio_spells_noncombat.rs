@@ -78,7 +78,7 @@ fn ordinary_ready_and_its_refusals_stay_silent() {
         }),
         MoveOutcome::Blocked
     );
-    assert!(refused.message.starts_with("No carried"));
+    assert_eq!(refused.message, "");
     assert!(refused.sound_effects_after(serial).is_empty());
 }
 

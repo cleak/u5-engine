@@ -3703,7 +3703,9 @@ impl PlayState {
             return MoveOutcome::Used;
         }
         if self.equipment_stock[item_id] == 0 {
-            self.message = format!("No carried {name} to ready.");
+            // The picker lists only carried, readyable items, so this and
+            // the class guard below only fire on the inline harness form.
+            self.message.clear();
             return MoveOutcome::Blocked;
         }
         // `inventory.md §6`: Bow and Magic Bow readiness requires at least
@@ -3723,7 +3725,7 @@ impl PlayState {
         }
 
         let Some(slot) = self.ready_target_slot(item_id) else {
-            self.message = format!("{name} cannot be readied.");
+            self.message.clear();
             return MoveOutcome::Blocked;
         };
         // `inventory.md §2.1`: "Before an item is written into a readied
@@ -3770,7 +3772,7 @@ impl PlayState {
             if weapon != EQUIPMENT_EMPTY
                 && EQUIPMENT_CLASS_TAGS[weapon as usize] == EQUIPMENT_TAG_TWO_HAND
             {
-                self.message = "Weapon hand holds a two-handed item.".to_string();
+                self.message = READY_FREE_A_HAND_REFUSAL.to_string();
                 return MoveOutcome::Blocked;
             }
         }

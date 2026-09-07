@@ -563,6 +563,11 @@ pub const fn new_order_outcome(slot_a: Option<usize>, slot_b: Option<usize>) -> 
 /// describes both branches without quoting either; the engine had
 /// `Remove current helm first.` and `Both hands must be free.`.
 pub const READY_REMOVE_PRESENT_PREFIX: &str = "Remove first thy present ";
+/// **Measured** 2026-09-07 with a two-handed sword already wielded: readying
+/// an off-hand item answers this, where the engine had `Weapon hand holds a
+/// two-handed item.`
+pub const READY_FREE_A_HAND_REFUSAL: &str = "Thou must free one of thy hands first!";
+
 pub const READY_BOTH_HANDS_REFUSAL: &str = "Both hands must be free before thou canst wield that!";
 
 pub const READY_NOT_STRONG_ENOUGH_REFUSAL: &str = "Thou art not strong enough!";
