@@ -589,8 +589,10 @@ fn handle_active_yell_key_input(
         state.message = if key == '\u{1b}' || session.buffer.trim().is_empty() {
             YELL_NOTHING_SAID_MESSAGE.to_string()
         } else {
-            let word = PlayState::normalize_yell_word(&session.buffer);
-            format!("Yelled {word}. Nothing happens.")
+            // `combat.md §8`, the `Y` row: nonempty combat Yell "reaches the
+            // handler's no-effect path", whose literal is the shared one.
+            let _ = PlayState::normalize_yell_word(&session.buffer);
+            YELL_NO_EFFECT_MESSAGE.to_string()
         };
         state.pending_combat_actor_slot = None;
         let _ = apply_combat_committed_action_maintenance(state, actor_slot);

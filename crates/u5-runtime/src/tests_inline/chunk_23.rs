@@ -12851,7 +12851,10 @@ fn combat_input_dispatch_yell_word_uses_combat_no_effect_route() {
         PlayInputDisposition::Continue
     );
 
-    assert_eq!(state.message, &format!("{YELL_NO_EFFECT_MESSAGE}\nAvatar, armed with bare hands:\n"));
+    assert_eq!(
+        state.message,
+        format!("{YELL_NO_EFFECT_MESSAGE}\nAvatar, armed with bare hands:\n")
+    );
     assert!(!state.message.contains("Word of Power"));
     assert!(state.active_ready.is_none());
     assert!(state.active_z_stats.is_none());
@@ -12882,7 +12885,10 @@ fn combat_input_dispatch_yell_prompt_keeps_same_actor_pending() {
     );
 
     assert!(state.active_yell.is_none());
-    assert_eq!(state.message, &format!("{YELL_NO_EFFECT_MESSAGE}\nAvatar, armed with bare hands:\n"));
+    assert_eq!(
+        state.message,
+        format!("{YELL_NO_EFFECT_MESSAGE}\nAvatar, armed with bare hands:\n")
+    );
     assert_eq!(state.active_effect_counter, 2);
     assert_eq!(state.pending_combat_actor_slot, Some(0));
 }
