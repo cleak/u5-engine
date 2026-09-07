@@ -995,6 +995,14 @@ pub const WISHING_WELL_COIN_YES_REPLY: &str = "Yes";
 pub const WISHING_WELL_WISH_PROMPT: &str = "Thy wish?";
 /// See [`WISHING_WELL_COIN_PROMPT`].
 pub const WISHING_WELL_GRANT_LINE: &str = "Poof!";
+/// See [`WISHING_WELL_COIN_PROMPT`]: the declined coin completes the
+/// prompt row and prints nothing else. Measured.
+pub const WISHING_WELL_COIN_NO_REPLY: &str = "No";
+/// See [`WISHING_WELL_COIN_PROMPT`]: a wish the well does not accept
+/// answers this under the upper-cased echo. **Measured** for the
+/// mismatched-word arm in a granting scene; `view.md §3`'s coinless and
+/// ungated arms are not measured and take the same line here.
+pub const WISHING_WELL_NO_EFFECT_LINE: &str = "No effect...";
 
 /// `view.md §3`: the surface/town fountain look "prompt[s] for the
 /// drinking party member". The section publishes the flow but none of its

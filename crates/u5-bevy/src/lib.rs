@@ -24413,7 +24413,8 @@ mod tests {
     #[test]
     fn visual_idle_tick_suppresses_world_tick_during_modal_prompt() {
         let mut state = world_state(open_world_grid(), 10, 20);
-        let _ = state.start_wishing_well_prompt(Direction::East);
+        let _ = state
+            .start_wishing_well_prompt(Direction::East, u5_runtime::WISHING_WELL_LOOK_DESCRIPTION);
         let clock_before = state.clock;
 
         assert!(!visual_idle_tick(&mut state, Path::new(".")));
@@ -24421,7 +24422,11 @@ mod tests {
         assert_eq!(state.turn, 0);
         assert_eq!(state.clock, clock_before);
         assert_eq!(state.animation.frame, 0);
-        assert_eq!(state.message, "Wishing well: toss a coin? (Y/N)");
+        assert!(
+            state
+                .message
+                .ends_with(u5_runtime::WISHING_WELL_COIN_PROMPT)
+        );
     }
 
     #[test]

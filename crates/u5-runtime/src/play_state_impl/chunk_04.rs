@@ -3049,16 +3049,25 @@ impl PlayState {
         typed_wish: &str,
     ) -> MoveOutcome {
         let Some((x, y)) = self.surface_look_target_position(direction) else {
-            self.message = "Wishing well: no effect.".to_string();
+            self.message = format!(
+                "{}\n{WISHING_WELL_NO_EFFECT_LINE}",
+                typed_wish.to_ascii_uppercase()
+            );
             return MoveOutcome::Observed;
         };
         let tile = self.surface_tile_at(x, y);
         if !surface_wishing_well_look_tile(tile) {
-            self.message = "Wishing well: no effect.".to_string();
+            self.message = format!(
+                "{}\n{WISHING_WELL_NO_EFFECT_LINE}",
+                typed_wish.to_ascii_uppercase()
+            );
             return MoveOutcome::Observed;
         }
         let Some(wish) = wishing_well_wish(typed_wish) else {
-            self.message = "Wishing well: no effect.".to_string();
+            self.message = format!(
+                "{}\n{WISHING_WELL_NO_EFFECT_LINE}",
+                typed_wish.to_ascii_uppercase()
+            );
             return MoveOutcome::Observed;
         };
         let grant_scene = match self.area {
@@ -3066,25 +3075,37 @@ impl PlayState {
             _ => false,
         };
         if !grant_scene {
-            self.message = "Wishing well: no effect.".to_string();
+            self.message = format!(
+                "{}\n{WISHING_WELL_NO_EFFECT_LINE}",
+                typed_wish.to_ascii_uppercase()
+            );
             return MoveOutcome::Observed;
         }
         let _ = wish;
         let grant_x = self.player.x.saturating_add(1);
         let grant_y = self.player.y;
         if grant_x >= 32 || self.object_at_current_floor(grant_x, grant_y).is_some() {
-            self.message = "Wishing well: no effect.".to_string();
+            self.message = format!(
+                "{}\n{WISHING_WELL_NO_EFFECT_LINE}",
+                typed_wish.to_ascii_uppercase()
+            );
             return MoveOutcome::Observed;
         }
         let Some(z) = self.current_floor() else {
-            self.message = "Wishing well: no effect.".to_string();
+            self.message = format!(
+                "{}\n{WISHING_WELL_NO_EFFECT_LINE}",
+                typed_wish.to_ascii_uppercase()
+            );
             return MoveOutcome::Observed;
         };
         if self
             .allocate_active_object_slot(horse_purchase_active_object(grant_x, grant_y, z))
             .is_none()
         {
-            self.message = "Wishing well: no effect.".to_string();
+            self.message = format!(
+                "{}\n{WISHING_WELL_NO_EFFECT_LINE}",
+                typed_wish.to_ascii_uppercase()
+            );
             return MoveOutcome::Observed;
         }
 

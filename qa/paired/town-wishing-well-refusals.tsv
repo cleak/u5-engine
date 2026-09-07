@@ -1,0 +1,25 @@
+# A wish the well does not accept, and a declined coin.
+# requires-seed: the party standing south of the wishing well in Paws
+both	wait	9000
+both	key	space
+both	wait	4000
+both	key	j
+both	wait	9000
+both	key	l
+both	wait	1200
+both	key	Up
+both	wait	2500
+both	key	n
+both	wait	2500
+both	shot	declined	After declining the coin
+both	key	l
+both	wait	1200
+both	key	Up
+both	wait	2500
+both	key	y
+both	wait	2000
+both	type	banana
+both	wait	1200
+both	key	Return
+both	wait	3000
+both	shot	mismatch	After an unaccepted wish

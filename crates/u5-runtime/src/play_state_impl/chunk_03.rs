@@ -1761,9 +1761,12 @@ impl PlayState {
                         return None;
                     }
                     'N' | '\u{1b}' | ' ' => {
-                        // The declined arm's own wording is not measured;
-                        // it prints nothing rather than inventing one.
-                        self.message.clear();
+                        // Measured: the declined answer completes the
+                        // prompt's own row and nothing else prints.
+                        self.commit_prompt_reply(
+                            WISHING_WELL_COIN_PROMPT,
+                            WISHING_WELL_COIN_NO_REPLY,
+                        );
                         return Some(MoveOutcome::Observed);
                     }
                     _ => {}

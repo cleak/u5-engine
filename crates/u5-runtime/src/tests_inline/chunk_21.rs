@@ -552,7 +552,7 @@ fn town_look_at_surface_wishing_well_prompts_for_coin_without_spending_turn() {
             .map(|session| (session.direction, session.coin_accepted)),
         Some((Direction::East, false))
     );
-    assert_eq!(state.message, "Wishing well: toss a coin? (Y/N)");
+    assert!(state.message.ends_with(WISHING_WELL_COIN_PROMPT));
     assert_eq!(state.turn, 0);
     assert_eq!(state.clock, GameClock::default());
 }
@@ -605,7 +605,8 @@ fn town_surface_wishing_well_decline_or_empty_purse_has_no_effect() {
     );
     assert!(decline.active_wishing_well.is_none());
     assert_eq!(decline.gold, 7);
-    assert_eq!(decline.message, "Wishing well: no effect.");
+    // Measured: the declined coin completes the prompt row.
+    assert!(decline.message.ends_with(WISHING_WELL_COIN_NO_REPLY));
     assert_eq!(decline.turn, 0);
 
     let mut empty = test_state(grid, 1, 1);
@@ -619,7 +620,9 @@ fn town_surface_wishing_well_decline_or_empty_purse_has_no_effect() {
     );
     assert!(empty.active_wishing_well.is_none());
     assert_eq!(empty.gold, 0);
-    assert_eq!(empty.message, "Wishing well: no effect.");
+    // An empty purse cannot pay the coin; its own line is
+    // unmeasured, so nothing prints.
+    assert!(empty.message.is_empty());
     assert_eq!(empty.turn, 0);
 }
 
@@ -645,7 +648,7 @@ fn town_surface_wishing_well_coin_then_wish_consumes_coin_without_turn() {
             .map(|session| (session.direction, session.coin_accepted)),
         Some((Direction::East, true))
     );
-    assert_eq!(state.message, "Wishing well: make a wish.");
+    assert!(state.message.ends_with(WISHING_WELL_WISH_PROMPT));
 
     assert_eq!(
         state.step_active_wishing_well('H', "orse"),
@@ -653,7 +656,7 @@ fn town_surface_wishing_well_coin_then_wish_consumes_coin_without_turn() {
     );
     assert!(state.active_wishing_well.is_none());
     assert_eq!(state.gold, 1);
-    assert_eq!(state.message, "Wishing well: a horse appears.");
+    assert!(state.message.ends_with(WISHING_WELL_GRANT_LINE));
     let horse = state
         .active_objects
         .iter()
@@ -693,7 +696,9 @@ fn town_surface_wishing_well_rejects_unknown_wish_after_coin() {
 
     assert!(state.active_wishing_well.is_none());
     assert_eq!(state.gold, 1);
-    assert_eq!(state.message, "Wishing well: no effect.");
+    // Measured: an unaccepted wish answers `No effect...` under the
+    // upper-cased echo.
+    assert!(state.message.ends_with(WISHING_WELL_NO_EFFECT_LINE));
     assert!(
         state
             .active_objects
@@ -721,7 +726,9 @@ fn town_surface_wishing_well_rejects_accepted_wish_outside_grant_scenes() {
     );
 
     assert_eq!(state.gold, 1);
-    assert_eq!(state.message, "Wishing well: no effect.");
+    // Measured: an accepted word outside a granting scene answers the
+    // same `No effect...` line.
+    assert!(state.message.ends_with(WISHING_WELL_NO_EFFECT_LINE));
     assert!(state.boardable_vehicle_slot_at(2, 1).is_none());
     assert_eq!(state.turn, 0);
 }
@@ -745,7 +752,7 @@ fn town_surface_wishing_well_car_wish_grants_horse_family_object() {
         Some(MoveOutcome::Observed)
     );
 
-    assert_eq!(state.message, "Wishing well: a horse appears.");
+    assert!(state.message.ends_with(WISHING_WELL_GRANT_LINE));
     assert!(state.boardable_vehicle_slot_at(2, 1).is_some());
 }
 
