@@ -2200,7 +2200,9 @@ impl PlayState {
             return MoveOutcome::Observed;
         }
         let Some(current) = self.endgame.clone() else {
-            self.message = "No endgame confirmation is pending.".to_string();
+            // An internal invariant, not a player-facing path: the original
+            // prints nothing here, so neither does this. `u5-engine#19`.
+            self.message.clear();
             return MoveOutcome::Blocked;
         };
         if current.is_terminal() {

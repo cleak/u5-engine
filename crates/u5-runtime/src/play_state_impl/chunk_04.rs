@@ -2177,7 +2177,9 @@ impl PlayState {
 
     pub fn turn_dungeon(&mut self, clockwise: bool) -> MoveOutcome {
         let Area::Dungeon { scene, level } = self.area else {
-            self.message = "Turn is only meaningful in dungeon mode.".to_string();
+            // An internal invariant, not a player-facing path: the original
+            // prints nothing here, so neither does this. `u5-engine#19`.
+            self.message.clear();
             return MoveOutcome::Blocked;
         };
         let next = if clockwise {
@@ -2186,7 +2188,9 @@ impl PlayState {
             self.player.facing.turn_left_cardinal()
         };
         let Some(next) = next else {
-            self.message = "Dungeon turn requires a cardinal facing direction.".to_string();
+            // An internal invariant, not a player-facing path: the original
+            // prints nothing here, so neither does this. `u5-engine#19`.
+            self.message.clear();
             return MoveOutcome::Blocked;
         };
         self.player.facing = next;
@@ -2224,7 +2228,9 @@ impl PlayState {
         focus: DungeonLookFocus,
     ) -> MoveOutcome {
         let Area::Dungeon { level, .. } = self.area else {
-            self.message = "Look is only implemented for dungeon mode in this slice.".to_string();
+            // An internal invariant, not a player-facing path: the original
+            // prints nothing here, so neither does this. `u5-engine#19`.
+            self.message.clear();
             return MoveOutcome::Blocked;
         };
         if !self.has_personal_light() {

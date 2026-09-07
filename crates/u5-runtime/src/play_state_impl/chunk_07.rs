@@ -1014,7 +1014,9 @@ impl PlayState {
                         .allocate_active_object_slot(parked_with_one_less_skiff)
                         .is_none()
                     {
-                        self.message = "No active-object slot for vehicle.".to_string();
+                        // An internal invariant, not a player-facing path: the original
+                        // prints nothing here, so neither does this. `u5-engine#19`.
+                        self.message.clear();
                         return Ok(MoveOutcome::Blocked);
                     }
                     self.player.transport = TransportState::Skiff {
@@ -1900,7 +1902,9 @@ impl PlayState {
     ) -> io::Result<MoveOutcome> {
         if let Area::Dungeon { scene, level } = self.area {
             let Some((x, y)) = self.dungeon_forward_target() else {
-                self.message = "Dungeon attack requires a cardinal facing direction.".to_string();
+                // An internal invariant, not a player-facing path: the original
+                // prints nothing here, so neither does this. `u5-engine#19`.
+                self.message.clear();
                 return Ok(MoveOutcome::Blocked);
             };
             let Some((slot, object)) = self.dungeon_active_monster_at(x, y) else {
@@ -2551,7 +2555,9 @@ impl PlayState {
 
     pub fn push_world_direction(&mut self, direction: Direction) -> MoveOutcome {
         if !direction.is_cardinal() {
-            self.message = "Push requires a cardinal facing direction.".to_string();
+            // An internal invariant, not a player-facing path: the original
+            // prints nothing here, so neither does this. `u5-engine#19`.
+            self.message.clear();
             return MoveOutcome::Blocked;
         }
         let (tx, ty) = self.world_push_coordinate(self.player.x, self.player.y, direction, 1);

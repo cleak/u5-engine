@@ -2292,7 +2292,9 @@ impl PlayState {
         };
         let pickup = ActiveObject::moonstone_pickup(slot_index, x, y, z);
         if self.allocate_active_object_slot(pickup).is_none() {
-            self.message = "No active-object slot for Moonstone pickup.".to_string();
+            // An internal invariant, not a player-facing path: the original
+            // prints nothing here, so neither does this. `u5-engine#19`.
+            self.message.clear();
             return Some(MoveOutcome::Blocked);
         }
 
@@ -2363,7 +2365,9 @@ impl PlayState {
         }
         let pickup = ActiveObject::fixed_hidden_treasure_pickup(entry.record, x, y, floor);
         if self.allocate_active_object_slot(pickup).is_none() {
-            self.message = "No active-object slot for hidden treasure pickup.".to_string();
+            // An internal invariant, not a player-facing path: the original
+            // prints nothing here, so neither does this. `u5-engine#19`.
+            self.message.clear();
             return Some(MoveOutcome::Blocked);
         }
         self.mark_fixed_hidden_treasure_found(entry);
@@ -2611,7 +2615,9 @@ impl PlayState {
             .find(|entry| entry.record == record)
             .copied()
         else {
-            self.message = "Unknown active-object treasure marker.".to_string();
+            // An internal invariant, not a player-facing path: the original
+            // prints nothing here, so neither does this. `u5-engine#19`.
+            self.message.clear();
             return Some(MoveOutcome::Blocked);
         };
 
@@ -2652,7 +2658,9 @@ impl PlayState {
             .find(|entry| entry.record == record)
             .copied()
         else {
-            self.message = "Unknown hidden treasure pickup.".to_string();
+            // An internal invariant, not a player-facing path: the original
+            // prints nothing here, so neither does this. `u5-engine#19`.
+            self.message.clear();
             return Some(MoveOutcome::Blocked);
         };
         // `containers.md §9`: Get never enters the moldy-corpse Search
@@ -2835,7 +2843,9 @@ impl PlayState {
         game_dir: &Path,
     ) -> io::Result<MoveOutcome> {
         let Area::Dungeon { scene, level } = self.area else {
-            self.message = "Search is only implemented for dungeon mode in this slice.".to_string();
+            // An internal invariant, not a player-facing path: the original
+            // prints nothing here, so neither does this. `u5-engine#19`.
+            self.message.clear();
             return Ok(MoveOutcome::Blocked);
         };
         let entries = load_secret_door_entries(game_dir)?.unwrap_or_default();

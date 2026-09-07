@@ -1693,7 +1693,9 @@ impl PlayState {
         }
 
         let Some(slot_index) = self.cached_natural_moongate_slot_index() else {
-            self.message = "Natural moongate moon-glyph cache is unavailable.".to_string();
+            // An internal invariant, not a player-facing path: the original
+            // prints nothing here, so neither does this. `u5-engine#19`.
+            self.message.clear();
             return Ok(Some(MoveOutcome::Blocked));
         };
 
