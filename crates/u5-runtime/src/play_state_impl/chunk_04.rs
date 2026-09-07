@@ -2911,7 +2911,13 @@ impl PlayState {
                     return Ok(MoveOutcome::Observed);
                 }
                 if surface_wishing_well_look_tile(tile) {
-                    return Ok(self.start_wishing_well_prompt(direction));
+                    // Measured: the well takes the ordinary `Thou dost see`
+                    // preamble and then its **own** description, not the
+                    // `LOOK2.DAT` record for the tile. See
+                    // [`WISHING_WELL_LOOK_DESCRIPTION`].
+                    return Ok(
+                        self.start_wishing_well_prompt(direction, WISHING_WELL_LOOK_DESCRIPTION)
+                    );
                 }
                 if surface_town_fountain_look_tile(tile) {
                     return Ok(self.start_surface_fountain_drink_prompt(direction));
@@ -2971,7 +2977,9 @@ impl PlayState {
                     return Ok(MoveOutcome::Observed);
                 }
                 if surface_wishing_well_look_tile(tile) {
-                    return Ok(self.start_wishing_well_prompt(direction));
+                    return Ok(
+                        self.start_wishing_well_prompt(direction, WISHING_WELL_LOOK_DESCRIPTION)
+                    );
                 }
                 if surface_town_fountain_look_tile(tile) {
                     return Ok(self.start_surface_fountain_drink_prompt(direction));
@@ -3081,7 +3089,12 @@ impl PlayState {
         }
 
         self.mark_visibility_dirty();
-        self.message = "Wishing well: a horse appears.".to_string();
+        // Measured: the typed wish echoes upper-cased on its own row and
+        // the grant prints [`WISHING_WELL_GRANT_LINE`] under it.
+        self.message = format!(
+            "{}\n{WISHING_WELL_GRANT_LINE}",
+            typed_wish.to_ascii_uppercase()
+        );
         MoveOutcome::Observed
     }
 

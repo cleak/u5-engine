@@ -1710,9 +1710,15 @@ impl PlayState {
         MoveOutcome::Observed
     }
 
-    pub fn start_wishing_well_prompt(&mut self, direction: Direction) -> MoveOutcome {
+    pub fn start_wishing_well_prompt(
+        &mut self,
+        direction: Direction,
+        description: &str,
+    ) -> MoveOutcome {
         self.active_wishing_well = Some(WishingWellSession::new(direction));
-        self.message = self.render_active_wishing_well();
+        // Measured: `Thou dost see` / the description, a blank row, then
+        // the coin prompt on its own row.
+        self.message = format!("{LOOK_RESULT_PREFIX}\n{description}\n\n{WISHING_WELL_COIN_PROMPT}");
         MoveOutcome::Observed
     }
 
@@ -1721,12 +1727,12 @@ impl PlayState {
             .as_ref()
             .map(|session| {
                 if session.coin_accepted {
-                    "Wishing well: make a wish.".to_string()
+                    WISHING_WELL_WISH_PROMPT.to_string()
                 } else {
-                    "Wishing well: toss a coin? (Y/N)".to_string()
+                    WISHING_WELL_COIN_PROMPT.to_string()
                 }
             })
-            .unwrap_or_else(|| "Wishing well.".to_string())
+            .unwrap_or_else(|| WISHING_WELL_COIN_PROMPT.to_string())
     }
 
     pub fn step_active_wishing_well(&mut self, key: char, suffix: &str) -> Option<MoveOutcome> {
@@ -1738,17 +1744,26 @@ impl PlayState {
                 match ch.to_ascii_uppercase() {
                     'Y' => {
                         if self.gold == 0 {
-                            self.message = "Wishing well: no effect.".to_string();
+                            self.message.clear();
                             return Some(MoveOutcome::Observed);
                         }
                         self.gold = self.gold.saturating_sub(1);
                         session.coin_accepted = true;
                         self.active_wishing_well = Some(session);
-                        self.message = self.render_active_wishing_well();
+                        // Measured: the answer completes the prompt's own
+                        // row with no separating space, and the wish
+                        // prompt opens a block under it.
+                        self.commit_prompt_reply(
+                            WISHING_WELL_COIN_PROMPT,
+                            WISHING_WELL_COIN_YES_REPLY,
+                        );
+                        self.message = format!("\n{WISHING_WELL_WISH_PROMPT}");
                         return None;
                     }
                     'N' | '\u{1b}' | ' ' => {
-                        self.message = "Wishing well: no effect.".to_string();
+                        // The declined arm's own wording is not measured;
+                        // it prints nothing rather than inventing one.
+                        self.message.clear();
                         return Some(MoveOutcome::Observed);
                     }
                     _ => {}

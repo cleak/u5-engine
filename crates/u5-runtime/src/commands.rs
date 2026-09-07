@@ -960,6 +960,42 @@ pub const ITEM_SELECTION_PROMPT: &str = "Item: ";
 /// The cancel result appended to an open selection prompt line.
 pub const SELECTION_CANCELLED_LITERAL: &str = "None!";
 
+/// `view.md §3` wishing well (live tile `0xA1`): "Prompt for a coin and a
+/// wish". The section publishes the flow and the six accepted words but
+/// none of its lines; these are **measured** against the original
+/// (`qa/paired/town-wishing-well.tsv`, Paws):
+///
+/// ```text
+/// >Look-North
+///
+/// Thou dost see
+/// a well.
+///
+/// Drop a coin?Yes
+///
+/// Thy wish?
+/// HORSE
+/// Poof!
+/// ```
+///
+/// The Look preamble and description are the shared terrain-description
+/// path, the coin answer completes the prompt's own row with no
+/// separating space, the typed wish echoes upper-cased on its own row,
+/// and the grant prints [`WISHING_WELL_GRANT_LINE`].
+/// `cleak/u5-spec#225`.
+pub const WISHING_WELL_COIN_PROMPT: &str = "Drop a coin?";
+/// See [`WISHING_WELL_COIN_PROMPT`]. `view.md §3`'s row 3 gives the well
+/// "its own handler and **its own description**", which is this - not the
+/// `LOOK2.DAT` record for tile `0xA1`, which reads differently and is
+/// what this engine had been printing.
+pub const WISHING_WELL_LOOK_DESCRIPTION: &str = "a well.";
+/// See [`WISHING_WELL_COIN_PROMPT`].
+pub const WISHING_WELL_COIN_YES_REPLY: &str = "Yes";
+/// See [`WISHING_WELL_COIN_PROMPT`].
+pub const WISHING_WELL_WISH_PROMPT: &str = "Thy wish?";
+/// See [`WISHING_WELL_COIN_PROMPT`].
+pub const WISHING_WELL_GRANT_LINE: &str = "Poof!";
+
 /// `view.md §3`: the surface/town fountain look "prompt[s] for the
 /// drinking party member". The section publishes the flow but none of its
 /// three literals; a paired capture of the stock game supplies them.
