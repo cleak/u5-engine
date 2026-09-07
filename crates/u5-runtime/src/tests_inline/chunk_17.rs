@@ -3249,7 +3249,7 @@
             state.ready_equipment_from_suffix("1/16"),
             MoveOutcome::Blocked
         );
-        assert_eq!(state.message, "Remove current weapon first.");
+        assert_eq!(state.message, format!("{READY_REMOVE_PRESENT_PREFIX}weapon!"));
     }
 
     #[test]

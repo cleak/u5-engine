@@ -1,0 +1,124 @@
+# R-Ready's slot rules: a second helm on a filled head, a two-handed
+# weapon with a shield in hand, and a shield with a two-hander in hand.
+# requires-seed: a strong party carrying two of every equipment item
+both	wait	9000
+both	key	space
+both	wait	4000
+both	key	j
+both	wait	7000
+both	key	r
+both	wait	1800
+both	key	Return
+both	wait	1500
+both	shot	helmrow	The helm row
+both	key	Return
+both	wait	2500
+both	shot	helm	The helm result
+both	key	Escape
+both	wait	1200
+both	key	r
+both	wait	1800
+both	key	Return
+both	wait	1500
+both	key	Down
+both	wait	320
+both	shot	coifrow	The coif row
+both	key	Return
+both	wait	2500
+both	shot	coif	The coif result
+both	key	Escape
+both	wait	1200
+both	key	r
+both	wait	1800
+both	key	Return
+both	wait	1500
+both	key	Down
+both	wait	320
+both	key	Down
+both	wait	320
+both	key	Down
+both	wait	320
+both	key	Down
+both	wait	320
+both	shot	shieldrow	The shield row
+both	key	Return
+both	wait	2500
+both	shot	shield	The shield result
+both	key	Escape
+both	wait	1200
+both	key	r
+both	wait	1800
+both	key	Return
+both	wait	1500
+both	key	Down
+both	wait	320
+both	key	Down
+both	wait	320
+both	key	Down
+both	wait	320
+both	key	Down
+both	wait	320
+both	key	Down
+both	wait	320
+both	key	Down
+both	wait	320
+both	key	Down
+both	wait	320
+both	key	Down
+both	wait	320
+both	key	Down
+both	wait	320
+both	key	Down
+both	wait	320
+both	key	Down
+both	wait	320
+both	key	Down
+both	wait	320
+both	key	Down
+both	wait	320
+both	key	Down
+both	wait	320
+both	key	Down
+both	wait	320
+both	key	Down
+both	wait	320
+both	key	Down
+both	wait	320
+both	key	Down
+both	wait	320
+both	key	Down
+both	wait	320
+both	key	Down
+both	wait	320
+both	key	Down
+both	wait	320
+both	key	Down
+both	wait	320
+both	key	Down
+both	wait	320
+both	key	Down
+both	wait	320
+both	key	Down
+both	wait	320
+both	key	Down
+both	wait	320
+both	key	Down
+both	wait	320
+both	key	Down
+both	wait	320
+both	key	Down
+both	wait	320
+both	key	Down
+both	wait	320
+both	key	Down
+both	wait	320
+both	key	Down
+both	wait	320
+both	key	Down
+both	wait	320
+both	shot	twohanderrow	The twohander row
+both	key	Return
+both	wait	2500
+both	shot	twohander	The twohander result
+both	key	Escape
+both	wait	1200

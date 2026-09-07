@@ -557,6 +557,14 @@ pub const fn new_order_outcome(slot_a: Option<usize>, slot_b: Option<usize>) -> 
 /// **measured** against the original (`qa/paired/hut-ready-refusals.tsv`)
 /// it is this line, and the item picker stays open under it.
 /// `cleak/u5-spec#225`.
+/// **Measured** (`qa/paired/ready-slots.tsv`, 2026-09-07): R-Ready's two slot
+/// refusals. The occupied-slot line names the slot - `Remove first thy present
+/// helm!` - and the two-handed refusal is one long sentence. `inventory.md §5`
+/// describes both branches without quoting either; the engine had
+/// `Remove current helm first.` and `Both hands must be free.`.
+pub const READY_REMOVE_PRESENT_PREFIX: &str = "Remove first thy present ";
+pub const READY_BOTH_HANDS_REFUSAL: &str = "Both hands must be free before thou canst wield that!";
+
 pub const READY_NOT_STRONG_ENOUGH_REFUSAL: &str = "Thou art not strong enough!";
 
 /// `inventory.md §4.4`: the U-Use flow "print[s] `Item:_` into the message

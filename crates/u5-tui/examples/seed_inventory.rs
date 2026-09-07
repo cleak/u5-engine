@@ -39,6 +39,12 @@ fn main() {
             "gems" => state.gems = count,
             "torches" => state.torches = count,
             "spells" => state.spell_charges = [count; SPELL_COUNT],
+            "equipment" => state.equipment_stock = [count; EQUIPMENT_COUNT],
+            "strength" => {
+                for strength in &mut state.party_strengths {
+                    *strength = count;
+                }
+            }
             "reagents" => state.reagents = [count; REAGENT_COUNT],
             "mana" => {
                 for member in &mut state.party {

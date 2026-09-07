@@ -3023,8 +3023,10 @@ impl PlayState {
     }
 
     /// Rows of the R-Ready picker for `party_index` (`inventory.md §4`
-    /// browsing rule plus the §5 step-2 readied-row exception).
-    pub(crate) fn ready_picker_items(&self, party_index: usize) -> Vec<usize> {
+    /// browsing rule plus the §5 step-2 readied-row exception). `pub` so
+    /// the `ready_rows` probe can print the indexes a paired scenario has
+    /// to count keypresses to reach.
+    pub fn ready_picker_items(&self, party_index: usize) -> Vec<usize> {
         self.ready_visible_items_for_party(party_index)
     }
 
@@ -3737,13 +3739,13 @@ impl PlayState {
             return MoveOutcome::Blocked;
         }
         if self.party_equipment[request.party_index][slot] != EQUIPMENT_EMPTY {
-            self.message = format!("Remove current {} first.", slot_name(slot));
+            self.message = format!("{READY_REMOVE_PRESENT_PREFIX}{}!", slot_name(slot));
             return MoveOutcome::Blocked;
         }
         if EQUIPMENT_CLASS_TAGS[item_id] == EQUIPMENT_TAG_TWO_HAND
             && self.party_equipment[request.party_index][EQUIP_SLOT_OFFHAND] != EQUIPMENT_EMPTY
         {
-            self.message = "Both hands must be free.".to_string();
+            self.message = READY_BOTH_HANDS_REFUSAL.to_string();
             return MoveOutcome::Blocked;
         }
         if slot == EQUIP_SLOT_OFFHAND {
