@@ -7198,10 +7198,12 @@ fn validate_route_smoke_case_state(
                 ))
             })?;
             let item = shop.stock_table().item_ids[0] as usize;
+            // The closing flourish is a rendered `SHOPPE.DAT` record now, so
+            // the exit is observed by the closed session and the debited
+            // gold rather than by a resident goodbye word.
             if state.gold >= 9999
                 || state.active_shop.is_some()
                 || state.equipment_stock.get(item).copied() != Some(1)
-                || !state.message.contains("Farewell")
             {
                 return Err(io::Error::other(format!(
                     "route smoke `{case_name}` did not buy the first published arms-shop stock item and exit"
@@ -7209,10 +7211,11 @@ fn validate_route_smoke_case_state(
             }
         }
         _ if is_arms_terminator_refusal_route(case_name) => {
+            // See above: the exit is observed by the closed session and the
+            // untouched gold, not by a resident goodbye word.
             if state.gold != 9999
                 || state.active_shop.is_some()
                 || state.equipment_stock.iter().any(|count| *count != 0)
-                || !state.message.contains("Farewell")
             {
                 return Err(io::Error::other(format!(
                     "route smoke `{case_name}` did not reject the arms-shop terminator letter without mutation"

@@ -5831,7 +5831,9 @@ fn end_to_end_arms_shop_exit_clears_session() {
     // Space exits the arms shop greeting.
     handle_play_key_input(&mut state, ' ', "", Path::new("")).unwrap();
     assert!(state.active_shop.is_none());
-    assert!(state.message.contains("Farewell"));
+    // The closing flourish is a `SHOPPE.DAT` record, so a test with no game
+    // directory has nothing to render and the window stays empty.
+    assert_eq!(state.message, "");
 }
 
 #[test]
@@ -5914,7 +5916,8 @@ fn end_to_end_stocked_arms_shop_escape_exits_buy_and_sell_submenus() {
     assert!(buy_state.active_shop.is_none());
     assert_eq!(buy_state.gold, 1000);
     assert!(buy_state.equipment_stock.iter().all(|count| *count == 0));
-    assert!(buy_state.message.contains("Farewell"));
+    // See above: the flourish needs the data file this test does not load.
+    assert_eq!(buy_state.message, "");
 
     let mut sell_state = test_state(open_grid(), 1, 1);
     sell_state.gold = 1000;

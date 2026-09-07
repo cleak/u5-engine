@@ -1904,6 +1904,18 @@ fn handle_arms_shop_key_input(
         (ArmsShopOutcome::Exited, _) if matches!(prior_state, ArmsShopState::SellPickItem(_)) => {
             arms_sell_goodbye(state.random_range_u8(0, 3))
         }
+        // Measured 2026-09-07 (`qa/paired/shop-arms-buy.tsv`): a visit that
+        // ends without a sale closes on a *rendered* shared-band record, not
+        // a resident goodbye - `"Thanks for nothing!" says Gwenneth` and
+        // `"Harrumph!" says Gwenneth` are records 0 and 2, found with the
+        // `shoppe_find` probe. `shops.md` §8.A's uniform `0..3` draw picks
+        // between them, so the draw is the record id for this shop's row.
+        (ArmsShopOutcome::Exited | ArmsShopOutcome::Declined, _) => {
+            let roll = state.random_range_u8(0, 3);
+            render_shared_shoppe_flourish(game_dir, usize::from(roll))
+                .map(|flourish| speech.attribute(&flourish, "says"))
+                .unwrap_or_default()
+        }
         (outcome, _) => format_arms_outcome_with_rolls(
             outcome,
             game_dir,
@@ -2087,9 +2099,13 @@ fn format_arms_outcome_with_rolls(
     match outcome {
         EnteredBuy => "Buy: pick an item number.".to_string(),
         EnteredSell => "Sell: pick an item number.".to_string(),
-        SellRefusedEmpty => "Thou hast nothing to sell.".to_string(),
+        // Measured: quoted, and attributed with `growls` rather than the
+        // `says` the carry-cap refusal takes.
+        SellRefusedEmpty => speech.attribute("\"Thou hast nothing to sell!\"", "growls"),
         SellBrowserMoved => String::new(),
-        Exited => "Farewell.".to_string(),
+        // The stateful site above owns the closing flourish, because the
+        // record id is a per-render draw.
+        Exited => String::new(),
         QuotedBuyPrice {
             item,
             price,
@@ -2119,7 +2135,7 @@ fn format_arms_outcome_with_rolls(
             arms_post_item_prompt(speech.speaker_is_female, true)
         ),
         Sold { item, received, .. } => format!("Sold item {item} for {received} gold."),
-        Declined => "As you wish.".to_string(),
+        Declined => String::new(),
         // `systems/shops.md §8.1` / `§8.A`: the drawn no-credit bark is
         // "wrapped in the shopkeeper-attribution tail `yells <shopkeeper>.`".
         BuyRefusedShortFunds { item, .. } => {
@@ -2141,6 +2157,21 @@ fn format_arms_outcome_with_rolls(
         BuyRefusedCapHit { .. } => speech.attribute("Thou canst not carry any more!", "says"),
         InvalidInput => "I do not understand.".to_string(),
     }
+}
+
+/// **Measured** 2026-09-07 (`qa/paired/shop-arms-buy.tsv`, plus the
+/// `shoppe_find` probe for the ids): a shop's closing flourish is a rendered
+/// record from the shared 0-7 band, wrapped in the same attribution tail the
+/// carry-cap refusal uses. Two of that band's records were seen this way -
+/// 0 and 2 - which is what makes §8.A's uniform `0..3` draw read as the
+/// record id itself for this shop's row. Whether another shop kind's row
+/// starts elsewhere in the band is not measured (`cleak/u5-spec#238`).
+fn render_shared_shoppe_flourish(game_dir: &Path, record_id: usize) -> Option<String> {
+    let placeholders = crate::shoppe_bark::ShoppeBarkContext::default();
+    crate::shoppe_bark::ShoppeTextRenderer::load_from_game_dir(game_dir)
+        .ok()
+        .and_then(|renderer| renderer.render_record(record_id, &placeholders).ok())
+        .map(|text| format!("\"{}\"", text.trim()))
 }
 
 fn render_shoppe_record_for_arms_quote(
