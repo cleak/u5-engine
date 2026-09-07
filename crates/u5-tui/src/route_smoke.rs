@@ -7478,7 +7478,11 @@ fn validate_route_smoke_case_state(
                     .party
                     .get(2)
                     .is_none_or(|member| member.status != b'D' || member.hp != 0)
-                || state.message != camp_messages.success
+                // `rest-and-camp.md §5`: a one-hour camp is refused - five
+                // hours or fewer takes the same late bypass as the cooldown -
+                // so it prints the no-effect line. This case is named for
+                // that bypass and had been asserting the success line.
+                || state.message != camp_messages.no_effect
             {
                 return Err(io::Error::other(format!(
                     "route smoke `{case_name}` did not preserve no-direct-recovery rest behavior:                      hour={} p0={:?}/{}/{} p1={:?}/{}/{} p2={:?}/{} msg={:?}",
