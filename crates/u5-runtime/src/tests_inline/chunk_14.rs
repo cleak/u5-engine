@@ -1733,7 +1733,7 @@
 
         assert_eq!(state.ignite_torch(), MoveOutcome::Blocked);
 
-        assert_eq!(state.message, "No torches!");
+        assert_eq!(state.message, IGNITE_NO_TORCHES_REFUSAL);
         assert_eq!(state.turn, 0);
         assert_eq!(state.torch_counter, 0);
     }

@@ -907,7 +907,7 @@ impl PlayState {
 
     pub fn ignite_torch(&mut self) -> MoveOutcome {
         if self.torches == 0 {
-            self.message = "No torches!".to_string();
+            self.message = IGNITE_NO_TORCHES_REFUSAL.to_string();
             return MoveOutcome::Blocked;
         }
 

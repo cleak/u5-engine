@@ -2482,7 +2482,7 @@
         let mut dungeon = dungeon_state(open_dungeon_record(), 0, 1, 1);
         assert!(dungeon.handle_dungeon_key('U', &dir).unwrap());
         assert_eq!(dungeon.turn, 1);
-        assert_eq!(dungeon.message, "No usable items.");
+        assert_eq!(dungeon.message, USE_NO_USABLE_ITEMS_REFUSAL);
         assert_eq!(
             handle_play_key_input(&mut dungeon, 'U', "1", &dir).unwrap(),
             PlayInputDisposition::Continue

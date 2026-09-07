@@ -1,0 +1,55 @@
+# Ignite the shipped four torches and then one more, to measure the refusal
+# `lighting.md` section 8 describes but does not quote: "with no torches
+# available it refuses and leaves the light state unchanged".
+both	wait	9000
+both	key	space
+both	wait	4000
+both	key	c
+both	wait	2500
+both	type	Avatar
+both	key	Return
+both	wait	1500
+both	key	m
+both	wait	3000
+both	key	space
+both	wait	3000
+both	key	a
+both	wait	3000
+both	key	a
+both	wait	3000
+both	key	a
+both	wait	3000
+both	key	a
+both	wait	3000
+both	key	a
+both	wait	3000
+both	key	a
+both	wait	3000
+both	key	a
+both	wait	3000
+both	key	space
+both	wait	4000
+both	key	j
+both	wait	7000
+both	key	i
+both	wait	2000
+both	key	i
+both	wait	2000
+both	key	i
+both	wait	2000
+both	shot	three	Three torches lit
+both	key	i
+both	wait	2500
+both	shot	four	The fourth and last torch
+both	key	i
+both	wait	3000
+both	shot	none	Ignite with no torches left
+both	key	z
+both	wait	2000
+both	key	Return
+both	wait	1500
+both	key	Right
+both	wait	1500
+both	key	Right
+both	wait	2500
+both	shot	stock	The equipment page's torch count

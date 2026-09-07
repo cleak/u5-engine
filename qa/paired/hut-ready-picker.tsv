@@ -1,0 +1,72 @@
+# Ready a weapon and a shield, then reopen the equipment picker, to measure
+# what `inventory.md` section 4.5 calls "a runic glyph for a readied one" in
+# the selector cell - the engine leaves that cell blank for every row.
+both	wait	9000
+both	key	space
+both	wait	4000
+both	key	c
+both	wait	2500
+both	type	Avatar
+both	key	Return
+both	wait	1500
+both	key	m
+both	wait	3000
+both	key	space
+both	wait	3000
+both	key	a
+both	wait	3000
+both	key	a
+both	wait	3000
+both	key	a
+both	wait	3000
+both	key	a
+both	wait	3000
+both	key	a
+both	wait	3000
+both	key	a
+both	wait	3000
+both	key	a
+both	wait	3000
+both	key	space
+both	wait	4000
+both	key	j
+both	wait	7000
+both	key	r
+both	wait	1500
+both	key	Return
+both	wait	2000
+both	shot	picker	The equipment picker as it opens
+both	key	Down
+both	wait	600
+both	key	Down
+both	wait	600
+both	key	Down
+both	wait	600
+both	key	Down
+both	wait	600
+both	key	Return
+both	wait	2500
+both	shot	dagger	After readying the fifth row
+both	key	r
+both	wait	1500
+both	key	Return
+both	wait	1500
+both	key	Down
+both	wait	800
+both	key	Return
+both	wait	2500
+both	shot	shield	After readying the second row
+both	key	r
+both	wait	1500
+both	key	Return
+both	wait	2500
+both	shot	reopened	The picker with two more items readied
+both	key	Escape
+both	wait	1500
+both	key	z
+both	wait	1500
+both	key	Return
+both	wait	1500
+both	key	Right
+both	wait	2000
+both	shot	arms	The Arms page after readying

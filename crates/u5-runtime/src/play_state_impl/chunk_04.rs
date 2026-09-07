@@ -374,7 +374,7 @@ impl PlayState {
     pub fn start_use_item(&mut self) -> MoveOutcome {
         let rows = self.use_item_picker_rows();
         if rows.is_empty() {
-            self.message = "No usable items.".to_string();
+            self.message = USE_NO_USABLE_ITEMS_REFUSAL.to_string();
             // inventory.md §7: U-Use returns the normal action result even
             // when item-specific dispatch is never reached.
             self.advance_turn();
@@ -402,7 +402,7 @@ impl PlayState {
             return self.render_pending_use_action(pending);
         }
         if self.use_item_picker_rows().is_empty() {
-            return "No usable items.".to_string();
+            return USE_NO_USABLE_ITEMS_REFUSAL.to_string();
         }
         // `inventory.md §4.4`: U-Use prints `Item:_` into the message
         // window and runs the picker in the panel; the rows are read from
@@ -464,7 +464,7 @@ impl PlayState {
             UseInputAction::Confirm => {
                 let turn_before = self.turn;
                 let Some(row) = self.use_selected_item(&session) else {
-                    self.message = "No usable items.".to_string();
+                    self.message = USE_NO_USABLE_ITEMS_REFUSAL.to_string();
                     self.ensure_use_action_turn(turn_before);
                     self.apply_post_turn_effects_after_outcome(
                         turn_before,

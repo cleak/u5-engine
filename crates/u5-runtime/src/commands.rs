@@ -543,6 +543,19 @@ pub const fn new_order_outcome(slot_a: Option<usize>, slot_b: Option<usize>) -> 
 /// are case-folded before dispatch (see `input.md §6`). Returns `None`
 /// for any byte outside the `A..=Z` range and the literal `Space` pass
 /// input.
+/// `inventory.md §4.4`, the U-Use reference sequence: "refuse with
+/// `No_usable_items!\n` if nothing is usable". The engine had
+/// `No usable items.` - the same words with the wrong punctuation.
+pub const USE_NO_USABLE_ITEMS_REFUSAL: &str = "No usable items!";
+
+/// `lighting.md §8`: I-Ignite "consumes one torch from inventory; with no
+/// torches available it refuses and leaves the light state unchanged". The
+/// section does not quote the refusal; **measured** against the original
+/// (`qa/paired/hut-ignite-torches.tsv`: the shipped four torches lit, then
+/// a fifth attempt) it is this line, printed under the verb echo like
+/// every other §5.2 refusal. `cleak/u5-spec#225`.
+pub const IGNITE_NO_TORCHES_REFUSAL: &str = "None owned!";
+
 /// `magic.md §8`: the creature-prompt targeters' prompt. The dispatcher
 /// "prints `Creature: ` and opens the arena cursor", and `§8`'s combat
 /// flow lists "`Creature: ` and the confirmed-target newline" between the

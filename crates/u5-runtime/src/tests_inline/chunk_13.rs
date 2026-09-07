@@ -25931,7 +25931,7 @@ fn dungeon_command_letters_do_not_fall_through_to_diagonal_movement_refusal() {
         ('M', MMIX_SPELL_PROMPT_MESSAGE, 0),
         ('N', NEW_ORDER_FIRST_PROMPT, 0),
         ('R', PARTY_SELECTION_PROMPT, 1),
-        ('U', "No usable items.", 1),
+        ('U', USE_NO_USABLE_ITEMS_REFUSAL, 1),
         ('W', "What?", 0),
         ('Y', ":", 0),
         ('Z', PARTY_SELECTION_PROMPT, 1),

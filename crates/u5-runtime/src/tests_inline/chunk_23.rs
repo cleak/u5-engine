@@ -12460,7 +12460,7 @@ fn combat_input_dispatch_use_without_items_ends_action_after_refusal() {
     );
 
     assert!(state.active_use.is_none());
-    assert!(state.message.starts_with("No usable items."));
+    assert!(state.message.starts_with(USE_NO_USABLE_ITEMS_REFUSAL));
     assert!(!state.message.contains("Giant Rat moved"));
     assert_eq!((state.combat_actors[8].x, state.combat_actors[8].y), (7, 5));
     assert_eq!(state.pending_combat_actor_slot, Some(0));
