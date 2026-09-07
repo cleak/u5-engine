@@ -121,6 +121,38 @@ pub struct ShrineEntry {
     pub expected_tile: Option<u8>,
 }
 
+/// `catalogs/gazetteer.md` §7: the one resident shrine coordinate table, in
+/// the standard virtue order. "It serves both roles at once: the 'is the
+/// party standing at a shrine' test and the 'the shrine of *virtue*' name the
+/// Enter command prints." The engine had only a sidecar file for this, so a
+/// shipped game directory - which has no sidecar - fell back to deriving the
+/// virtue from the altar tile the party stood on.
+pub const PUBLISHED_SHRINE_COORDINATES: [(ShrineVirtue, usize, usize); 8] = [
+    (ShrineVirtue::Honesty, 233, 66),
+    (ShrineVirtue::Compassion, 128, 92),
+    (ShrineVirtue::Valor, 36, 229),
+    (ShrineVirtue::Justice, 73, 11),
+    (ShrineVirtue::Sacrifice, 205, 45),
+    (ShrineVirtue::Honor, 81, 207),
+    (ShrineVirtue::Spirituality, 0, 0),
+    (ShrineVirtue::Humility, 231, 216),
+];
+
+/// The published table as [`ShrineEntry`] rows, for the scan that runs when
+/// the game directory publishes no sidecar of its own.
+pub fn published_shrine_entries() -> Vec<ShrineEntry> {
+    PUBLISHED_SHRINE_COORDINATES
+        .iter()
+        .map(|(virtue, x, y)| ShrineEntry {
+            plane: WorldPlane::Britannia,
+            x: *x,
+            y: *y,
+            virtue: *virtue,
+            expected_tile: None,
+        })
+        .collect()
+}
+
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub struct CodexUrnEntry {
     pub plane: WorldPlane,

@@ -2053,18 +2053,29 @@ impl PlayState {
             }
             return Ok(None);
         }
-        // No shrine coordinate table is published in this game directory, so
-        // there is no eight-row scan to fall through from; keep deriving the
-        // virtue from the altar tile the party is standing on.
-        Ok(
-            shrine_virtue_for_altar_tile(tile).map(|virtue| ShrineEntry {
+        // With no sidecar the altar tile decides *whether* this is a shrine,
+        // and `catalogs/gazetteer.md` §7's published coordinate table decides
+        // *which* virtue when the party's cell is one of its rows.
+        //
+        // The table is not trusted on its own: measured 2026-09-07, two of
+        // its eight rows are not shrines in the shipped map at all - the
+        // party stands in forest at Honesty's (233, 66) and in mountains at
+        // Humility's (231, 216), and the original answers `M` there with Mix
+        // Reagents. Raised as `cleak/u5-spec#239`; until it is settled, a
+        // coordinate alone must not open meditation.
+        Ok(shrine_virtue_for_altar_tile(tile).map(|tile_virtue| {
+            let virtue = published_shrine_entries()
+                .into_iter()
+                .find(|entry| entry.x == self.player.x && entry.y == self.player.y)
+                .map_or(tile_virtue, |entry| entry.virtue);
+            ShrineEntry {
                 plane,
                 x: self.player.x,
                 y: self.player.y,
                 virtue,
                 expected_tile: Some(tile),
-            }),
-        )
+            }
+        }))
     }
 
     pub fn apply_shrine_stat_reward(&mut self, virtue: ShrineVirtue) -> Vec<String> {
