@@ -1573,24 +1573,33 @@ BRITANNIA 11 21
         grid[world_cell_index(10, 20)] = SHRINE_ALTAR_TILE_LAST;
         let mut state = britannia_state(grid, 10, 20);
 
+        // `M` is Mix Reagents even here (measured); the altar tile's virtue
+        // derivation is reached through the internal dispatch `magic.md §9.2`
+        // gives the natural moongate.
         assert_eq!(
             handle_play_key_input(&mut state, 'M', "", &dir).unwrap(),
             PlayInputDisposition::Continue
         );
+        assert!(state.active_shrine.is_none());
+        assert!(state.active_mix.is_some());
+        state.active_mix = None;
+
+        state
+            .start_shrine_prompt_at_current_position(&dir)
+            .unwrap()
+            .expect("the altar tile names its own shrine");
         assert!(state.active_shrine.is_some());
-        assert!(state.active_mix.is_none());
-        assert!(state.message.contains("Shrine of Humility mantra?"));
+        assert_eq!(state.message, SHRINE_MANTRA_PROMPT);
 
         assert_eq!(
             handle_play_key_input(&mut state, 'L', "um\r", &dir).unwrap(),
             PlayInputDisposition::Continue
         );
 
-        assert!(state.active_shrine.is_none());
+        assert!(state.active_shrine.is_some());
         assert_eq!(state.shrine_ordained_mask, ShrineVirtue::Humility.bit());
         assert_eq!(state.shrine_codex_mask, 0);
-        assert!(state.message.contains("Shrine of Humility"));
-        assert!(state.message.contains("ordained"));
+        assert_eq!(state.message, SHRINE_MANTRA_PROMPT);
         let _ = fs::remove_dir_all(dir);
     }
 
@@ -1641,50 +1650,60 @@ BRITANNIA 11 21
     #[test]
     fn active_shrine_prompt_collects_mantra_and_ordains() {
         let dir = debug_game_dir();
-        fs::write(dir.join(SHRINE_TABLE_FILE), "BRITANNIA 10 20 HONESTY 136\n").unwrap();
+        fs::write(dir.join(SHRINE_TABLE_FILE), "BRITANNIA 10 20 HONESTY 25\n").unwrap();
         let mut grid = open_world_grid();
-        grid[world_cell_index(10, 20)] = 136;
+        grid[world_cell_index(10, 20)] = SHRINE_MARKER_TILE;
         let mut state = britannia_state(grid, 10, 20);
 
         assert_eq!(
-            handle_play_key_input(&mut state, 'M', "", &dir).unwrap(),
+            handle_play_key_input(&mut state, 'E', "", &dir).unwrap(),
             PlayInputDisposition::Continue
         );
         assert!(state.active_shrine.is_some());
         assert!(state.active_mix.is_none());
-        assert!(state.message.contains("Shrine of Honesty mantra?"));
+        assert!(state.message.contains(SHRINE_VIRTUE_PROMPT) || state.message == ":");
+
+        assert_eq!(
+            handle_play_key_input(&mut state, 'H', "ONESTY\r", &dir).unwrap(),
+            PlayInputDisposition::Continue
+        );
+        assert_eq!(state.message, SHRINE_MANTRA_PROMPT);
 
         assert_eq!(
             handle_play_key_input(&mut state, 'A', "hm\r", &dir).unwrap(),
             PlayInputDisposition::Continue
         );
 
-        assert!(state.active_shrine.is_none());
+        // Measured: the ordination is silent and the prompt re-opens.
+        assert!(state.active_shrine.is_some());
         assert_eq!(state.shrine_ordained_mask, ShrineVirtue::Honesty.bit());
         assert_eq!(state.shrine_codex_mask, 0);
         assert_eq!(state.turn, 0);
-        assert!(state.message.contains("ordained"));
+        assert_eq!(state.message, SHRINE_MANTRA_PROMPT);
         let _ = fs::remove_dir_all(dir);
     }
 
     #[test]
     fn active_shrine_prompt_blank_mantra_has_no_effect() {
         let dir = debug_game_dir();
-        fs::write(dir.join(SHRINE_TABLE_FILE), "BRITANNIA 10 20 HONESTY 136\n").unwrap();
+        fs::write(dir.join(SHRINE_TABLE_FILE), "BRITANNIA 10 20 HONESTY 25\n").unwrap();
         let mut grid = open_world_grid();
-        grid[world_cell_index(10, 20)] = 136;
+        grid[world_cell_index(10, 20)] = SHRINE_MARKER_TILE;
         let mut state = britannia_state(grid, 10, 20);
 
-        handle_play_key_input(&mut state, 'M', "", &dir).unwrap();
+        handle_play_key_input(&mut state, 'E', "", &dir).unwrap();
+        handle_play_key_input(&mut state, 'H', "ONESTY\r", &dir).unwrap();
         assert_eq!(
             handle_play_key_input(&mut state, '\r', "", &dir).unwrap(),
             PlayInputDisposition::Continue
         );
 
+        // Measured: Return on an empty mantra row closes the prompt and
+        // prints nothing of its own.
         assert!(state.active_shrine.is_none());
         assert_eq!(state.shrine_ordained_mask, 0);
         assert_eq!(state.shrine_codex_mask, 0);
-        assert_eq!(state.message, "No effect!");
+        assert_eq!(state.message, SHRINE_MANTRA_PROMPT);
         let _ = fs::remove_dir_all(dir);
     }
 
@@ -1793,17 +1812,20 @@ BRITANNIA 11 21
         let dir = debug_game_dir();
         fs::write(
             dir.join(SHRINE_TABLE_FILE),
-            "BRITANNIA 10 20 COMPASSION 136\n",
+            "BRITANNIA 10 20 COMPASSION 25\n",
         )
         .unwrap();
         let mut grid = open_world_grid();
-        grid[world_cell_index(10, 20)] = 136;
+        grid[world_cell_index(10, 20)] = SHRINE_MARKER_TILE;
         let mut state = britannia_state(grid, 10, 20);
         let virtue = ShrineVirtue::Compassion;
         state.shrine_codex_mask = virtue.bit();
         state.gold = 350;
 
-        handle_play_key_input(&mut state, 'M', "", &dir).unwrap();
+        // Measured: the shrine is entered with `E` and answers a virtue
+        // question before the mantra row (`qa/paired/shrine-flow.tsv`).
+        handle_play_key_input(&mut state, 'E', "", &dir).unwrap();
+        handle_play_key_input(&mut state, 'C', "OMPASSION\r", &dir).unwrap();
         assert_eq!(
             handle_play_key_input(&mut state, 'M', "u\r", &dir).unwrap(),
             PlayInputDisposition::Continue
@@ -1831,17 +1853,18 @@ BRITANNIA 11 21
         let dir = debug_game_dir();
         fs::write(
             dir.join(SHRINE_TABLE_FILE),
-            "BRITANNIA 10 20 COMPASSION 136\n",
+            "BRITANNIA 10 20 COMPASSION 25\n",
         )
         .unwrap();
         let mut grid = open_world_grid();
-        grid[world_cell_index(10, 20)] = 136;
+        grid[world_cell_index(10, 20)] = SHRINE_MARKER_TILE;
         let mut state = britannia_state(grid, 10, 20);
         let virtue = ShrineVirtue::Compassion;
         state.shrine_codex_mask = virtue.bit();
         state.gold = 100;
 
-        handle_play_key_input(&mut state, 'M', "", &dir).unwrap();
+        handle_play_key_input(&mut state, 'E', "", &dir).unwrap();
+        handle_play_key_input(&mut state, 'C', "OMPASSION\r", &dir).unwrap();
         handle_play_key_input(&mut state, 'M', "u\r", &dir).unwrap();
         assert_eq!(
             handle_play_key_input(&mut state, '9', "", &dir).unwrap(),

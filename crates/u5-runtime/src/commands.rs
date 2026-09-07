@@ -634,8 +634,18 @@ pub const SHRINE_VIRTUE_PROMPT: &str = "Upon what virtue dost thou meditate?";
 /// coordinate table also supplies "the shrine of *virtue*" name - and two
 /// narration lines print before the question, each followed by a blank row.
 pub const SHRINE_ENTER_ECHO_PREFIX: &str = "the shrine of ";
-pub const SHRINE_APPROACH_NARRATION: &str = "Thou dost approach the tranquil Shrine.";
+/// The line ends in an ellipsis, which is why the capture wraps `tranquil`
+/// and `Shrine...` onto separate rows: glyph-index decoding of the paired
+/// capture reads `0x2e 0x2e 0x2e` after `Shrine`, and the kneel line below
+/// ends in a single period.
+pub const SHRINE_APPROACH_NARRATION: &str = "Thou dost approach the tranquil Shrine...";
 pub const SHRINE_KNEEL_NARRATION: &str = "...and thou dost kneel before the Altar.";
+/// **Measured** 2026-09-07 (`qa/paired/shrine-flow.tsv`): accepting the virtue
+/// leaves the question and the typed answer on screen, then opens this prompt
+/// a blank row below it. The typed mantra echoes on the same row as the label
+/// (`Mantra:AHM`). The engine previously invented
+/// `Shrine of <virtue> mantra? _` plus an instructional line.
+pub const SHRINE_MANTRA_PROMPT: &str = "Mantra:";
 /// The daylight refusal, measured aboard a ship at noon.
 pub const USE_SEXTANT_DAYTIME_REFUSAL: &str = "Only at night!";
 pub const USE_WOODEN_BOX_PROMPT: &str = "How?";

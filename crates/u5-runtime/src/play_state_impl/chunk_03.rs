@@ -152,6 +152,14 @@ impl PlayState {
             .map(|session| format!(":{}", rune_echo_for_buffer(&session.spell_buffer)))
     }
 
+    /// Every live typed row, whatever session owns it: the spell-name
+    /// colon row and the shrine's virtue/mantra rows. Renderers ask for
+    /// this one rather than for each session in turn.
+    pub fn typed_prompt_echo(&self) -> Option<String> {
+        self.spell_prompt_echo()
+            .or_else(|| self.shrine_prompt_echo())
+    }
+
     /// Whether the M-Mix reagent selection owns the keyboard.
     ///
     /// `text-output.md §10.6`: "a prompt that is waiting for a key keeps

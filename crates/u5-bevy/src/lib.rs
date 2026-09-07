@@ -16787,7 +16787,7 @@ fn render_integrated_status_framebuffer(
         let open_prompt = display_state.open_prompt_line();
         // The spell-name colon line is a live row whose text comes from
         // the cast/mix session rather than the shell's own input buffer.
-        let spell_echo = display_state.spell_prompt_echo();
+        let spell_echo = display_state.typed_prompt_echo();
         let live_row = if display_state.message_window_live_row_suppressed() {
             None
         } else {
@@ -24938,16 +24938,20 @@ mod tests {
     #[test]
     fn visual_line_input_buffers_shrine_mantra_until_enter() {
         let dir = debug_game_dir();
-        fs::write(dir.join(SHRINE_TABLE_FILE), "BRITANNIA 10 20 HONESTY 136\n").unwrap();
+        fs::write(dir.join(SHRINE_TABLE_FILE), "BRITANNIA 10 20 HONESTY 25\n").unwrap();
         let mut grid = open_world_grid();
-        grid[world_cell_index(10, 20)] = 136;
+        grid[world_cell_index(10, 20)] = u5_runtime::SHRINE_MARKER_TILE;
         let mut state = world_state(grid, 10, 20);
         state.area = Area::World {
             plane: WorldPlane::Britannia,
         };
 
-        handle_play_key_input(&mut state, 'M', "", &dir).unwrap();
+        // Measured: the shrine is *entered*, and the virtue question comes
+        // before the mantra row (`qa/paired/shrine-flow.tsv`).
+        handle_play_key_input(&mut state, 'E', "", &dir).unwrap();
         assert!(visual_line_prompt_active(&state));
+        handle_play_key_input(&mut state, 'H', "ONESTY\r", &dir).unwrap();
+        assert_eq!(state.message, u5_runtime::SHRINE_MANTRA_PROMPT);
 
         let mut input_line = String::new();
         for key in [KeyCode::KeyA, KeyCode::KeyH, KeyCode::KeyM] {
@@ -24968,21 +24972,25 @@ mod tests {
 
         assert!(input_line.is_empty());
         assert_eq!(state.shrine_ordained_mask, ShrineVirtue::Honesty.bit());
-        assert!(state.message.contains("ordained"));
+        // Measured: the ordination prints nothing - the prompt just re-opens
+        // with an empty mantra row.
+        assert!(state.active_shrine.is_some());
+        assert_eq!(state.message, u5_runtime::SHRINE_MANTRA_PROMPT);
         let _ = fs::remove_dir_all(dir);
     }
 
     #[test]
-    fn visual_line_input_escape_cancels_shrine_prompt() {
+    fn visual_line_input_escape_is_ignored_at_the_shrine_mantra_row() {
         let dir = debug_game_dir();
-        fs::write(dir.join(SHRINE_TABLE_FILE), "BRITANNIA 10 20 HONESTY 136\n").unwrap();
+        fs::write(dir.join(SHRINE_TABLE_FILE), "BRITANNIA 10 20 HONESTY 25\n").unwrap();
         let mut grid = open_world_grid();
-        grid[world_cell_index(10, 20)] = 136;
+        grid[world_cell_index(10, 20)] = u5_runtime::SHRINE_MARKER_TILE;
         let mut state = world_state(grid, 10, 20);
         state.area = Area::World {
             plane: WorldPlane::Britannia,
         };
-        handle_play_key_input(&mut state, 'M', "", &dir).unwrap();
+        handle_play_key_input(&mut state, 'E', "", &dir).unwrap();
+        handle_play_key_input(&mut state, 'H', "ONESTY\r", &dir).unwrap();
         let mut input_line = "ahm".to_string();
 
         handle_visual_line_key(
@@ -24995,9 +25003,11 @@ mod tests {
         )
         .unwrap();
 
+        // Measured: Escape at the mantra row leaves the window byte-identical
+        // and the prompt open (`qa/paired/shrine-mantra-close.tsv`); only an
+        // empty Return closes it.
         assert!(input_line.is_empty());
-        assert!(state.active_shrine.is_none());
-        assert!(state.message.contains("None"));
+        assert!(state.active_shrine.is_some());
         let _ = fs::remove_dir_all(dir);
     }
 

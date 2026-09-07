@@ -1,0 +1,23 @@
+# The whole shrine flow: enter, answer the virtue, give the mantra.
+# requires-seed: the party on the published Honesty shrine coordinate
+both	wait	9000
+both	key	space
+both	wait	4000
+both	key	j
+both	wait	8000
+both	key	e
+both	wait	4000
+both	type	HONESTY
+both	wait	1200
+both	shot	typed	The virtue typed
+both	key	Return
+both	wait	3000
+both	shot	virtue	After the virtue
+both	type	AHM
+both	wait	1200
+both	key	Return
+both	wait	3500
+both	shot	mantra	After the mantra
+both	key	space
+both	wait	2500
+both	shot	after	After a keypress

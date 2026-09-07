@@ -445,11 +445,13 @@ impl PlayState {
                     }
                 }
                 'M' => {
+                    // Measured 2026-09-07 (`qa/paired/shrine-flow.tsv` seed):
+                    // `M` on a shrine marker tile answers `Mix Reagents` and
+                    // `For what spell?`, not a mantra prompt. Meditation is
+                    // reached by *entering* the shrine with `E`; the shrine
+                    // handler is still dispatched internally by the natural
+                    // moongate of `magic.md §9.2`.
                     if let Some(outcome) = self.read_codex_urn_at_current_position(game_dir)? {
-                        handled!(outcome);
-                    } else if let Some(outcome) =
-                        self.start_shrine_prompt_at_current_position(game_dir)?
-                    {
                         handled!(outcome);
                     } else {
                         handled!(self.start_mix_reagents_prompt());
@@ -622,11 +624,8 @@ impl PlayState {
             'k' => self.klimb_command(game_dir)?,
             'x' => self.exit_vehicle_with_game_dir(Some(game_dir))?,
             'm' => {
+                // See the `M` arm above: the shrine is entered, not mixed.
                 if let Some(outcome) = self.read_codex_urn_at_current_position(game_dir)? {
-                    outcome
-                } else if let Some(outcome) =
-                    self.start_shrine_prompt_at_current_position(game_dir)?
-                {
                     outcome
                 } else {
                     self.start_mix_reagents_prompt()
@@ -1734,23 +1733,13 @@ impl PlayState {
 
     fn render_shrine_session(&self, session: &ShrineSession) -> String {
         match session.phase {
-            // Measured: the question, then the typed answer on its own row.
-            ShrinePhase::Virtue => {
-                // Measured: a blank row stands between the question and the
-                // answer row.
-                format!("\n{SHRINE_VIRTUE_PROMPT}\n\n:{}", session.virtue_buffer)
-            }
-            ShrinePhase::Mantra => {
-                let mantra = if session.mantra_buffer.is_empty() {
-                    "_".to_string()
-                } else {
-                    session.mantra_buffer.clone()
-                };
-                format!(
-                    "Shrine of {} mantra? {mantra}\nType up to {SHRINE_MANTRA_INPUT_LIMIT} characters; Enter accepts; Esc cancels.",
-                    session.virtue.name()
-                )
-            }
+            // Measured: the question and the mantra label are logged rows;
+            // what the player types edits the row beneath (Virtue) or the
+            // label's own row (Mantra). Both are served live by
+            // [`Self::shrine_prompt_echo`], so the slot only mirrors them.
+            ShrinePhase::Virtue | ShrinePhase::Mantra => self
+                .shrine_prompt_echo_for(session)
+                .unwrap_or_else(String::new),
             ShrinePhase::Offering => {
                 format!(
                     // cleak/u5-spec#81: offering prompt literal unpublished; the
@@ -1760,6 +1749,32 @@ impl PlayState {
                 )
             }
         }
+    }
+
+    /// The shrine prompt's live row: the row the player is typing into.
+    ///
+    /// `text-output.md §10.6`: "the visible layout is a log whose final line
+    /// is being edited". Measured 2026-09-07: the virtue answer is typed on a
+    /// `:` row below the question, and the mantra is typed onto the
+    /// `Mantra:` label's own row.
+    pub fn shrine_prompt_echo(&self) -> Option<String> {
+        self.active_shrine
+            .as_ref()
+            .and_then(|session| self.shrine_prompt_echo_for(session))
+    }
+
+    fn shrine_prompt_echo_for(&self, session: &ShrineSession) -> Option<String> {
+        match session.phase {
+            ShrinePhase::Virtue => Some(format!(":{}", session.virtue_buffer)),
+            ShrinePhase::Mantra => Some(format!("{SHRINE_MANTRA_PROMPT}{}", session.mantra_buffer)),
+            ShrinePhase::Offering => None,
+        }
+    }
+
+    /// Mirror the live row into the compatibility slot without logging it.
+    pub(crate) fn adopt_shrine_prompt_row(&mut self) {
+        let row = self.render_active_shrine();
+        self.adopt_flushed_message(row);
     }
 
     pub fn step_active_shrine(
@@ -1782,6 +1797,10 @@ impl PlayState {
                         if let Some(virtue) = ShrineVirtue::from_key(session.virtue_buffer.trim()) {
                             session.virtue = virtue;
                             session.phase = ShrinePhase::Mantra;
+                            // Measured: the answered `:` row stays on screen
+                            // with a blank row under it, and the mantra label
+                            // opens below as the next row to type into.
+                            self.emit_message_line(format!(":{}\n\n", session.virtue_buffer));
                         } else {
                             // An unknown virtue simply re-opens the question;
                             // the answer row clears.
@@ -1797,10 +1816,11 @@ impl PlayState {
                     _ => {}
                 },
                 ShrinePhase::Mantra => {
-                    if ch == '\u{1b}' {
-                        self.message = "None!".to_string();
-                        return Ok(Some(MoveOutcome::PromptDeclined));
-                    }
+                    // Measured 2026-09-07 (`qa/paired/shrine-flow.tsv`):
+                    // Escape at the mantra row changes nothing at all - the
+                    // window is byte-identical before and after it - so the
+                    // key is simply not read here. An empty Return is what
+                    // closes the prompt.
                     match ch {
                         '\r' | '\n' => {
                             return self.complete_active_shrine_mantra(session, game_dir);
@@ -1843,8 +1863,8 @@ impl PlayState {
                 }
             }
         }
-        self.message = self.render_shrine_session(&session);
         self.active_shrine = Some(session);
+        self.adopt_shrine_prompt_row();
         Ok(None)
     }
 
@@ -1853,9 +1873,14 @@ impl PlayState {
         mut session: ShrineSession,
         game_dir: &Path,
     ) -> io::Result<Option<MoveOutcome>> {
+        // Submitting retires the live row, so log what was typed before the
+        // outcome runs - the same rule the cast prompt follows.
+        self.emit_message_line(format!("{SHRINE_MANTRA_PROMPT}{}", session.mantra_buffer));
         if session.mantra_buffer.is_empty() {
-            self.message = "No effect!".to_string();
-            return Ok(Some(MoveOutcome::Blocked));
+            // Measured: Return on an empty mantra row closes the prompt and
+            // hands the keyboard back to the world loop, printing nothing of
+            // its own - the next command's echo follows on the next row.
+            return Ok(Some(MoveOutcome::PromptDeclined));
         }
         let mantra_matches = session
             .mantra_buffer
@@ -1870,8 +1895,28 @@ impl PlayState {
                 self.active_shrine = Some(session);
                 return Ok(None);
             }
+            if !codex {
+                // Measured 2026-09-07 (`qa/paired/shrine-flow.tsv`): the
+                // correct mantra at a shrine whose Codex phase has not begun
+                // prints nothing at all - a fresh `Mantra:` row simply opens
+                // beneath the answered one. `karma.md §12`'s ordination is
+                // recorded silently; the engine used to invent a
+                // `Meditated at the Shrine of ...` line here.
+                self.shrine_ordained_mask |= bit;
+                session.mantra_buffer.clear();
+                self.active_shrine = Some(session);
+                self.adopt_shrine_prompt_row();
+                return Ok(None);
+            }
+            return self.meditate_shrine_from_suffix(&session.mantra_buffer, game_dir);
         }
-        self.meditate_shrine_from_suffix(&session.mantra_buffer, game_dir)
+        // Measured: a *wrong* mantra is answered the same way as a right one -
+        // the typed row stays and a fresh `Mantra:` row opens under it. No
+        // refusal prints, so the engine's `No effect!` was invented.
+        session.mantra_buffer.clear();
+        self.active_shrine = Some(session);
+        self.adopt_shrine_prompt_row();
+        Ok(None)
     }
 
     pub fn meditate_shrine_from_suffix(

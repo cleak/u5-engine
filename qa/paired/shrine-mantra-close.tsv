@@ -1,0 +1,28 @@
+# The mantra prompt's other answers: a wrong mantra, the empty Return that
+# closes the prompt, and the command that follows it.
+# requires-seed: the party on the published Honesty shrine coordinate
+both	wait	9000
+both	key	space
+both	wait	4000
+both	key	j
+both	wait	8000
+both	key	e
+both	wait	4000
+both	type	HONESTY
+both	wait	1200
+both	key	Return
+both	wait	3000
+both	type	MUL
+both	wait	1200
+both	key	Return
+both	wait	3500
+both	shot	wrong	A wrong mantra
+both	key	Escape
+both	wait	2500
+both	shot	escaped	Escape at the mantra row
+both	key	Return
+both	wait	3000
+both	shot	closed	Return on an empty mantra row
+both	key	Up
+both	wait	3000
+both	shot	moved	A movement key after the prompt

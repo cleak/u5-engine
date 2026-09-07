@@ -40,7 +40,7 @@ fn main() {
         log.push_output(&text);
     }
     let open_prompt = state.open_prompt_line();
-    let spell_echo = state.spell_prompt_echo();
+    let spell_echo = state.typed_prompt_echo();
     let live_row = if state.message_window_live_row_suppressed() {
         None
     } else {

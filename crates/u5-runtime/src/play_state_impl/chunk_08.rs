@@ -1345,8 +1345,13 @@ impl PlayState {
             );
             self.emit_message_line(format!("\n{SHRINE_APPROACH_NARRATION}"));
             self.emit_message_line(format!("\n{SHRINE_KNEEL_NARRATION}"));
+            // The question is logged once, with the blank row the capture
+            // shows beneath it; the answer row is the *live* row the shrine
+            // session serves (`text-output.md` §10.6), so typing into it
+            // edits one row instead of re-logging the question per letter.
+            self.emit_message_line(format!("\n{SHRINE_VIRTUE_PROMPT}\n\n"));
             self.active_shrine = Some(ShrineSession::entering(virtue));
-            self.message = self.render_active_shrine();
+            self.adopt_shrine_prompt_row();
             return Ok(MoveOutcome::Observed);
         }
         let Some(live_class) = WorldEntryNarrationClass::from_live_tile(tile) else {

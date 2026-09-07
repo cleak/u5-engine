@@ -889,7 +889,7 @@ pub fn compose_gameplay_screen(
     // session rather than from the log, so the oracle has to ask for it
     // the same way the shell does. There is no typed-input buffer here,
     // which is the one live-row source this path cannot mirror.
-    let spell_echo = state.spell_prompt_echo();
+    let spell_echo = state.typed_prompt_echo();
     let live_row = if state.message_window_live_row_suppressed() {
         None
     } else {

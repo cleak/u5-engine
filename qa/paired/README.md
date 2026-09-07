@@ -69,6 +69,8 @@ are PRNG-selected and legitimately differ between the two sides.
 | `dungeon-view` | the first-person corridor |
 | `underworld-walk` | the Underworld plane's terrain, a step and a Look |
 | `shrine-enter` | `E` on a shrine marker: the echo, the two narration lines and the virtue question |
+| `shrine-flow` | the whole shrine prompt: the virtue answer, the `Mantra:` row and the re-ask a correct mantra leaves |
+| `shrine-mantra-close` | the mantra prompt's other answers: a wrong mantra, an ignored Escape, and the empty Return that closes it |
 | `town-death-vision` | the crystal-sphere Look and its two roll outcomes |
 | `use-potions` | the potion result lines, one colour at a time |
 | `use-scrolls` | the two scrolls that ask for an argument |
@@ -118,6 +120,8 @@ number of keystrokes:
 | `town-night-schedule` | Britain at 02:00 |
 | `underworld-walk` | the party standing on the Underworld plane (`--scene UNDERWORLD --at 100,100`) |
 | `shrine-enter` | the party standing on a published shrine coordinate (`--scene BRITANNIA --at 233,66` for Honesty) |
+| `shrine-flow` | the same seed as `shrine-enter` |
+| `shrine-mantra-close` | the same seed as `shrine-enter` |
 | `cast-results` | a caster with charges, reagents and mana, built with the `seed_inventory` example (`potions=3 spells=9 reagents=20 mana=99`) |
 | `town-death-vision` | the party one cell east of a crystal-sphere tile. An engine-written town seed is safe here: the sphere is a Look target |
 | `use-potions`, `use-scrolls`, `use-specials`, `ready-slots` | a party carrying potions and scrolls, built with the `seed_inventory` example (`cargo run --release --example seed_inventory -- <profile> potions=3 scrolls=3 specials=1 status1=D`, or `equipment=2 strength=99` for `ready-slots`, plus `equip2=33` for `ready-two-handed`). The shipped starting party carries three items, which is not enough to reach these families |

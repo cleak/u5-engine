@@ -2371,7 +2371,7 @@
 
         assert_eq!(state.grid[origin_idx], NATURAL_MOONGATE_RESTORED_TERRAIN_TILE);
         assert!(state.active_shrine.is_some());
-        assert!(state.message.contains("Shrine of Honesty mantra?"));
+        assert_eq!(state.message, SHRINE_MANTRA_PROMPT);
         assert_eq!(state.turn, 0);
         let _ = fs::remove_dir_all(dir);
     }
