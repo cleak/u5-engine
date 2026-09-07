@@ -1599,7 +1599,8 @@ impl PlayState {
                     return MoveOutcome::Blocked;
                 }
                 let Some(caster) = self.combat_actors.first().copied() else {
-                    self.message = "Who uses?".to_string();
+                    // An arena with no actors cannot take a command.
+                    self.message.clear();
                     return MoveOutcome::Blocked;
                 };
                 if !combat_actor_is_active_not_dead(caster) {
@@ -2150,7 +2151,8 @@ impl PlayState {
         mana_cost: u8,
     ) -> Option<MoveOutcome> {
         let Some(caster) = self.party.get(caster_index).copied() else {
-            self.message = "Nobody can cast!".to_string();
+            // Out-of-range caster: the `Player: ` prompt bounds the index.
+            self.message.clear();
             return Some(MoveOutcome::Blocked);
         };
         if !caster.conscious() {
@@ -2985,7 +2987,9 @@ impl PlayState {
                 let x = self.player.x as isize + dx;
                 let y = self.player.y as isize + dy;
                 if !(0..32).contains(&x) || !(0..32).contains(&y) {
-                    self.message = format!("{LOOK_RESULT_PREFIX}\nthe location boundary");
+                    // The border ring is the location's exit trigger, so a
+                    // look cannot be aimed off the grid from inside it.
+                    self.message.clear();
                     return Ok(MoveOutcome::Observed);
                 }
                 if !self.surface_look_target_visible(x, y) {

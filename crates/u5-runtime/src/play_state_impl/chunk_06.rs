@@ -406,7 +406,9 @@ impl PlayState {
                 }),
             ActingMemberSelection::Prompt => self.start_surface_object_chest_prompt(x, y, verb),
             ActingMemberSelection::NoneAble => {
-                self.message = "No party members are available.".to_string();
+                // The shared acting-member answer when nobody is eligible
+                // (`dungeon-mode.md §11`).
+                self.message = DUNGEON_ACTING_MEMBER_NONE.to_string();
                 MoveOutcome::Blocked
             }
         }

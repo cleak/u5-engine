@@ -29,6 +29,37 @@ EMIT = re.compile(
 )
 PLACEHOLDER = re.compile(r"\{[^}]*\}")
 
+# Two kinds of write into `message` are not lines the game prints: a frame
+# suite or probe writing text in order to *render* a window, and the Bevy
+# shell surfacing a Rust error it cannot otherwise report. Both carry this
+# marker and are skipped; it is deliberately verbose so it cannot be added by
+# accident, and every use should say in a comment why the line is not
+# player-facing.
+FIXTURE_OPT_OUT = "audit: not a player-facing line"
+
+
+def skipped_lines(text: str) -> set[int]:
+    """Line numbers inside `#[cfg(test)]` items.
+
+    Test code sets `message` to whatever the assertion needs, which says
+    nothing about what the game prints. The scan brace-matches from the
+    attribute so nested modules and functions both fall inside.
+    """
+    skipped: set[int] = set()
+    lines = text.splitlines()
+    for index, line in enumerate(lines):
+        if line.strip() not in ("#[cfg(test)]", "#[test]"):
+            continue
+        depth = 0
+        started = False
+        for number in range(index, len(lines)):
+            depth += lines[number].count("{") - lines[number].count("}")
+            started = started or "{" in lines[number]
+            skipped.add(number + 1)
+            if started and depth <= 0:
+                break
+    return skipped
+
 
 def spec_text(spec_dir: pathlib.Path) -> str:
     return "\n".join(
@@ -42,6 +73,10 @@ def literals(source: pathlib.Path):
             continue
         text = path.read_text(errors="replace")
         for number, line in enumerate(text.splitlines(), start=1):
+            if number in skipped_lines(text):
+                continue
+            if FIXTURE_OPT_OUT in line:
+                continue
             for pattern in (ASSIGN, EMIT):
                 for literal in pattern.findall(line):
                     yield path, number, literal

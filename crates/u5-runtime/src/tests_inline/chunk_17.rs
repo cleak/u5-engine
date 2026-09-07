@@ -2351,7 +2351,7 @@
         assert_eq!(state.new_order_from_suffix("22"), MoveOutcome::Used);
         assert_eq!(state.party, original);
         assert_eq!(state.turn, 1);
-        assert_eq!(state.message, "New order: party slot 2 unchanged.");
+        assert_eq!(state.message, "");
     }
 
     #[test]

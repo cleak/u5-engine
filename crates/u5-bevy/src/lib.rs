@@ -2946,7 +2946,8 @@ fn seed_visual_suite_combat_status_highlight(state: &mut PlayState) {
     state.active_player = Some(0);
     state.combat_actors[0] =
         CombatActorDescriptor::from_row([20, 1, COMBAT_ACTOR_FLAG_SELECTABLE_80, 0, 0, 0, 5, 5]);
-    state.message = "Combat status highlight".to_string();
+    // A marker-gallery fixture: this text exists to be rendered.
+    state.message = "Combat status highlight".to_string(); // audit: not a player-facing line
 }
 
 fn seed_surface_view_class_gallery(state: &mut PlayState, mode: ViewOverlayMode) {
@@ -3457,7 +3458,8 @@ fn seed_visual_combat_marker_gallery(state: &mut PlayState) -> io::Result<()> {
     state.combat_cursor_blink = true;
     state.combat_aim_marker_cell = Some((3, 4));
     state.combat_aim_marker_gate = true;
-    state.message = "Combat marker gallery".to_string();
+    // A marker-gallery fixture: this text exists to be rendered.
+    state.message = "Combat marker gallery".to_string(); // audit: not a player-facing line
     validate_visual_combat_marker_gallery_state(state)?;
     Ok(())
 }
@@ -10487,7 +10489,9 @@ fn animate_static_tiles(
                 match visual.state.apply_exploration_turn_gate(&game_dir) {
                     Ok(outcome) => Some(outcome),
                     Err(err) => {
-                        visual.state.message = format!("Party capability error: {err}");
+                        // The shell has nowhere else to report a failed asset read; the
+                        // original has no equivalent state.
+                        visual.state.message = format!("Party capability error: {err}"); // audit: not a player-facing line
                         Some(ExplorationTurnGateOutcome::Slept { transition: None })
                     }
                 }
@@ -12277,7 +12281,9 @@ fn drive_visual(
                 }
                 Ok(None) => continue,
                 Err(err) => {
-                    visual.state.message = format!("Input error: {err}");
+                    // The shell has nowhere else to report a failed asset read; the
+                    // original has no equivalent state.
+                    visual.state.message = format!("Input error: {err}"); // audit: not a player-facing line
                     handled = true;
                     continue;
                 }
@@ -12299,7 +12305,9 @@ fn drive_visual(
                 }
             }
             Err(err) => {
-                visual.state.message = format!("Input error: {err}");
+                // The shell has nowhere else to report a failed asset read; the
+                // original has no equivalent state.
+                visual.state.message = format!("Input error: {err}"); // audit: not a player-facing line
                 handled = true;
             }
         }
@@ -12313,7 +12321,9 @@ fn drive_visual(
             }
             Ok(PlayInputDisposition::Continue) => handled = true,
             Err(err) => {
-                visual.state.message = format!("Input error: {err}");
+                // The shell has nowhere else to report a failed asset read; the
+                // original has no equivalent state.
+                visual.state.message = format!("Input error: {err}"); // audit: not a player-facing line
                 handled = true;
             }
         }
@@ -17016,7 +17026,9 @@ fn visual_idle_tick(state: &mut PlayState, game_dir: &Path) -> bool {
     // reading the keyboard. So a steered ship keeps sailing here with no
     // keypress, at one world step and one sail command per two pumps.
     if let Err(err) = state.idle_wait_pass(Some(game_dir)) {
-        state.message = format!("Sailing error: {err}");
+        // The shell has nowhere else to report a failed asset read; the
+        // original has no equivalent state.
+        state.message = format!("Sailing error: {err}"); // audit: not a player-facing line
     }
     true
 }

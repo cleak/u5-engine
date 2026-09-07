@@ -2752,7 +2752,9 @@ impl PlayState {
             return MoveOutcome::Blocked;
         }
         if !self.party[party_index].living() {
-            self.message = format!("Party member {} is unavailable.", party_index + 1);
+            // `dungeon-mode.md §11` publishes the shared acting-member
+            // answer for a pick whose status disqualifies it.
+            self.message = DUNGEON_ACTING_MEMBER_DISABLED.to_string();
             return MoveOutcome::Blocked;
         }
 
@@ -3576,7 +3578,10 @@ impl PlayState {
         // a behavioural no-op, but the turn is still consumed.
         if first == second {
             self.advance_turn();
-            self.message = format!("New order: party slot {} unchanged.", first + 1);
+            // Swapping a slot with itself is a no-op the interactive
+            // selector reaches by picking the same row twice; the original
+            // prints nothing for it.
+            self.message.clear();
             return MoveOutcome::Used;
         }
 

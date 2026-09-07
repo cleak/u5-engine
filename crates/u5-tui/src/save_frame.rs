@@ -535,7 +535,8 @@ fn save_frame_suite_intro_menu(out: &Path) -> io::Result<SavedFrameReport> {
 
 fn save_frame_suite_status_window(game_dir: &Path, out: &Path) -> io::Result<SavedFrameReport> {
     let mut state = PlayState::load_scene(game_dir, PlayOptions::default())?;
-    state.message = "Status frame suite checkpoint.".to_string();
+    // A frame-suite fixture: this text exists to be rendered.
+    state.message = "Status frame suite checkpoint.".to_string(); // audit: not a player-facing line
     let text = state.render_text_window_frame(None);
     save_text_window_report(out, "text window", &text, Some(&state))
 }
