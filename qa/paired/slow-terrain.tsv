@@ -1,0 +1,22 @@
+# Probe: which terrain classes print the slow-movement lines.
+# requires-seed: the party on the published Honesty shrine coordinate
+both	wait	9000
+both	key	space
+both	wait	4000
+both	key	j
+both	wait	8000
+both	key	Up
+both	wait	2500
+both	key	Left
+both	wait	2500
+both	key	Left
+both	wait	2500
+both	key	Left
+both	wait	2500
+both	shot	west	After three brush steps west
+both	key	Down
+both	wait	2500
+both	shot	foothills	Onto foothills 0x0f
+both	key	Down
+both	wait	2500
+both	shot	foothills2	Onto foothills 0x0b

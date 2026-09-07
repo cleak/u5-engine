@@ -1032,6 +1032,16 @@ impl DungeonMovementEcho {
 /// It was named `DUNGEON_MOVEMENT_BLOCKED_REFUSAL` and had no production
 /// caller; the name claimed a mode scope the census contradicts.
 pub const MOVEMENT_BLOCKED_REFUSAL: &str = "Blocked!";
+
+/// **Measured** 2026-09-07 (`qa/paired/slow-terrain.tsv`): a step onto brush
+/// prints this under the direction echo. The step still succeeds - eight
+/// scripted steps north from the Honesty shrine crossed three brush cells and
+/// then five tree/foothill cells, and the line changed exactly where the
+/// terrain did.
+pub const MOVEMENT_SLOW_PROGRESS_LINE: &str = "Slow progress!";
+/// **Measured** the same way, for trees and foothills.
+pub const MOVEMENT_VERY_SLOW_LINE: &str = "Very slow!";
+
 /// `doors-and-z-transitions.md §9`: the one line the outdoor climb prints,
 /// once per living member whose Dexterity roll fails. The successful climb
 /// prints nothing at all.

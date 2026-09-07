@@ -1699,3 +1699,19 @@ pub fn world_start_safe_for_transport(
     }
     is_tile_walkable_for_transport(tile, passability, transport)
 }
+
+/// The two measured slow-movement lines of `movement.md` (unpublished; see
+/// `cleak/u5-spec#241`).
+///
+/// **Measured** 2026-09-07 (`qa/paired/slow-terrain.tsv`): walking on foot
+/// onto brush (`0x08`) prints `Slow progress!`, and onto trees (`0x09`) or
+/// foothills (`0x0b`/`0x0e`/`0x0f`) prints `Very slow!`. The step itself is
+/// accepted either way. Tropical forest (`0x0a`) is grouped with the trees it
+/// shares a class with; that one cell was not reachable from the probe seed.
+pub const fn world_slow_movement_line(tile: u8) -> Option<&'static str> {
+    match tile {
+        0x08 => Some(crate::commands::MOVEMENT_SLOW_PROGRESS_LINE),
+        0x09 | 0x0a | 0x0b | 0x0e | 0x0f => Some(crate::commands::MOVEMENT_VERY_SLOW_LINE),
+        _ => None,
+    }
+}

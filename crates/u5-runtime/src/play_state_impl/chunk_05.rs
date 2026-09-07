@@ -948,8 +948,18 @@ impl PlayState {
         // active-object slot numbers, terrain-class names". Only the
         // consequences below (damage, status, hourly report) produce a
         // result line.
-        let _ = (final_tile, direction);
+        let _ = direction;
         self.message = String::new();
+        // Measured 2026-09-07 (`qa/paired/slow-terrain.tsv`): brush answers a
+        // step with `Slow progress!` and trees/foothills with `Very slow!`,
+        // under the direction echo and without refusing the step. Only on
+        // foot: no other transport can reach those cells except the horse,
+        // which was not measured, so the line is kept to the measured case.
+        if self.player.transport == TransportState::Foot
+            && let Some(line) = world_slow_movement_line(final_tile)
+        {
+            self.emit_message_line(line);
+        }
         self.apply_fixed_narrative_gate_branch(plane);
         self.append_world_damage_tile_message(game_dir, plane)?;
         self.append_world_status_tile_message(plane);
