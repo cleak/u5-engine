@@ -6505,15 +6505,17 @@ fn validate_route_smoke_case_state(
         }
         "castle-harpsichord-digit-is-an-ordinary-command-off-the-chair" => {
             validate_harpsichord_route_map(state, case_name)?;
-            // `8` stepped north and `5` reached the ordinary dispatcher's
-            // refusal, exactly as both did before the instrument existed.
+            // Both digits reached the ordinary dispatcher, where
+            // `commands.md §5.2` gives them to Set Active Player: neither
+            // names a slot this party has, so both answer `Invalid!`, the
+            // party has not moved and no turn was spent.
             let passage = harpsichord_route_passage_tile(state);
-            if state.turn != 1
+            if state.turn != 0
                 || state.player.x != HARPSICHORD_ROUTE_X
-                || state.player.y != HARPSICHORD_ROUTE_OFF_CHAIR_Y - 1
+                || state.player.y != HARPSICHORD_ROUTE_OFF_CHAIR_Y
                 || state.harpsichord_progress() != 0
                 || passage != HARPSICHORD_ROUTE_WALL_TILE
-                || state.message != "What?"
+                || state.message != u5_runtime::SET_ACTIVE_PLAYER_INVALID_REPLY
             {
                 return Err(io::Error::other(format!(
                     "route smoke `{case_name}` did not forward its digits to the ordinary dispatcher:                      turn={}, party at ({}, {}), progress={}, passage tile {passage:#04x}, message {:?}",
