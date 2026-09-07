@@ -1,0 +1,55 @@
+# Use each of the three items the shipped party carries, to measure the
+# result lines `inventory.md` sections 6 and 7 describe but do not quote
+# (cleak/u5-spec#225).
+both	wait	9000
+both	key	space
+both	wait	4000
+both	key	c
+both	wait	2500
+both	type	Avatar
+both	key	Return
+both	wait	1500
+both	key	m
+both	wait	3000
+both	key	space
+both	wait	3000
+both	key	a
+both	wait	3000
+both	key	a
+both	wait	3000
+both	key	a
+both	wait	3000
+both	key	a
+both	wait	3000
+both	key	a
+both	wait	3000
+both	key	a
+both	wait	3000
+both	key	a
+both	wait	3000
+both	key	space
+both	wait	4000
+both	key	j
+both	wait	7000
+both	key	u
+both	wait	2500
+both	shot	picker	The Use picker
+both	key	Return
+both	wait	3000
+both	shot	first	Using the first row
+both	key	u
+both	wait	2000
+both	key	Down
+both	wait	800
+both	key	Return
+both	wait	3000
+both	shot	second	Using the second row
+both	key	u
+both	wait	2000
+both	key	Down
+both	wait	800
+both	key	Down
+both	wait	800
+both	key	Return
+both	wait	3000
+both	shot	third	Using the third row

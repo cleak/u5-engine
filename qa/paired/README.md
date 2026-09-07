@@ -42,6 +42,7 @@ are PRNG-selected and legitimately differ between the two sides.
 | `hut-control-bindings` | `commands.md` §9's five Control chords: the typeahead toggle, the moral-standing readout, the sound toggle, the version banner and the Exit-to-DOS prompt |
 | `hut-ignite-torches` | the shipped four torches lit and a fifth attempt, which measures `lighting.md` §8's unquoted no-torch refusal |
 | `hut-ready-picker` | the R-Ready equipment picker with items readied, which measures `inventory.md` §4.5's "runic glyph for a readied one" |
+| `hut-use-items` | the three items the shipped party carries, which measure the `Item: ` echo, the potion's `On who: ` prompt and their result lines |
 | `shop-inn-after-entry` | the second shop family the suite reaches - Britain's innkeeper - and the town alarm that stops the engine getting there (`u5-engine#16`) |
 | `hut-talk` | Talk with the hut's resident: greeting, name, job, bye |
 | `hut-prompts` | New Order, Ready, Use, Cast, Mix, Yell, Search, Look, X-it, Get, Enter, Hole up, Ignite, Klimb prompt and result literals |

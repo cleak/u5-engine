@@ -543,6 +543,26 @@ pub const fn new_order_outcome(slot_a: Option<usize>, slot_b: Option<usize>) -> 
 /// are case-folded before dispatch (see `input.md §6`). Returns `None`
 /// for any byte outside the `A..=Z` range and the literal `Space` pass
 /// input.
+/// `inventory.md §4.4`: the U-Use flow "print[s] `Item:_` into the message
+/// window" and the picker's accepted row completes that line, the same way
+/// `Player:_` takes the chosen member's name.
+///
+/// **Measured** (`qa/paired/hut-use-items.tsv`): the completion is the
+/// item's *family* word, not the picker's own label - a scroll row labelled
+/// `Scroll IS` completes the line as `Item: Scroll`, and a potion row
+/// labelled `Yellow Pot` completes it as `Item: Potion`. The families of
+/// the remaining U-Use items are not measured, so they complete nothing
+/// rather than guessing. `cleak/u5-spec#225`.
+pub const USE_ITEM_ECHO_SCROLL: &str = "Scroll";
+/// See [`USE_ITEM_ECHO_SCROLL`].
+pub const USE_ITEM_ECHO_POTION: &str = "Potion";
+
+/// **Measured** (`qa/paired/hut-use-items.tsv`): using a potion asks which
+/// member drinks it with this prompt, and the chosen name completes the row
+/// - `On who: Iolo`. `inventory.md §6` describes the target without
+/// quoting the prompt. `cleak/u5-spec#225`.
+pub const USE_POTION_TARGET_PROMPT: &str = "On who: ";
+
 /// `inventory.md §4.4`, the U-Use reference sequence: "refuse with
 /// `No_usable_items!\n` if nothing is usable". The engine had
 /// `No usable items.` - the same words with the wrong punctuation.

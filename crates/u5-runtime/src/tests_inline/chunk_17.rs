@@ -1384,7 +1384,9 @@
         assert_eq!(state.potion_stock[POTION_YELLOW_INDEX], 0);
         assert_eq!(state.turn, 0);
         assert!(state.active_use.is_some());
-        assert!(state.message.contains("choose party member"));
+        // Measured: the potion asks `On who: ` and takes the chosen
+        // name onto that row.
+        assert_eq!(state.message, USE_POTION_TARGET_PROMPT);
 
         assert_eq!(
             handle_play_key_input(&mut state, '1', "", Path::new("")).unwrap(),
@@ -1447,6 +1449,8 @@
         assert_eq!(state.scroll_stock[SCROLL_RESURRECTION_INDEX], 0);
         assert_eq!(state.turn, 0);
         assert!(state.active_use.is_some());
+        // The resurrection scroll's own prompt is not measured, so it
+        // keeps the harness text until `cleak/u5-spec#225` answers.
         assert!(state.message.contains("choose party member"));
 
         assert_eq!(

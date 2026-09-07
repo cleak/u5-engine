@@ -473,6 +473,11 @@ impl PlayState {
                     )?;
                     return Ok(true);
                 };
+                // The accepted row completes the open `Item: ` line before
+                // the handler runs; see [`Self::use_item_echo_family`].
+                let echoed = Self::use_item_echo_family(row.request).inspect(|family| {
+                    self.commit_prompt_reply(ITEM_SELECTION_PROMPT, family);
+                });
                 if let Some(pending) = pending_action_for_use_request(row.request) {
                     let _ = self.use_item_command(Some(row.request), Some(game_dir))?;
                     session.pending = Some(pending);
@@ -481,6 +486,13 @@ impl PlayState {
                     return Ok(true);
                 }
                 let outcome = self.use_item_command(Some(row.request), Some(game_dir))?;
+                // `text-output.md §10.4`: the handler's own line prints
+                // under a completed row, so its leading feed buys a blank
+                // row. Measured: `>Use item`, blank, `Item: Scroll`,
+                // blank, `Protection!`.
+                if echoed.is_some() && !self.message.is_empty() && !self.message.starts_with('\n') {
+                    self.message.insert(0, '\n');
+                }
                 self.ensure_use_action_turn(turn_before);
                 self.apply_post_turn_effects_after_outcome(turn_before, game_dir, outcome)?;
             }
@@ -514,6 +526,9 @@ impl PlayState {
             UsePendingAction::PotionTarget { index } => {
                 if let Some(target) = pending_use_party_target(key, suffix) {
                     if target < self.party.len() {
+                        // The answer completes the prompt's own row.
+                        let name = self.party_member_display_name(target);
+                        self.commit_prompt_reply(USE_POTION_TARGET_PROMPT, &name);
                         self.use_potion_consumed_target(index, target)
                     } else {
                         self.message = party_member_unavailable_message(self.party.len());
@@ -562,13 +577,28 @@ impl PlayState {
         }
     }
 
+    /// The family word an accepted U-Use row writes onto the `Item: `
+    /// line. See [`USE_ITEM_ECHO_SCROLL`]: measured for scrolls and
+    /// potions only, so every other item completes nothing.
+    fn use_item_echo_family(request: UseItemRequest) -> Option<&'static str> {
+        match request {
+            UseItemRequest::Scroll { .. } => Some(USE_ITEM_ECHO_SCROLL),
+            UseItemRequest::Potion { .. } => Some(USE_ITEM_ECHO_POTION),
+            _ => None,
+        }
+    }
+
     fn render_pending_use_action(&self, pending: UsePendingAction) -> String {
         match pending {
-            UsePendingAction::PotionTarget { index } => format!(
-                "Use {}: choose party member (1-{}) or Space/Esc to exit.",
-                potion_inventory_name(index),
-                self.party.len().min(6)
-            ),
+            // Measured: the potion's target prompt is
+            // [`USE_POTION_TARGET_PROMPT`], and the chosen member's name
+            // completes its row. The two scroll prompts below are not
+            // measured and keep the harness text for now
+            // (`cleak/u5-spec#225`).
+            UsePendingAction::PotionTarget { index } => {
+                let _ = index;
+                USE_POTION_TARGET_PROMPT.to_string()
+            }
             UsePendingAction::ScrollWindDirection { index } => format!(
                 "Use Scroll {}: choose direction (8/6/2/4) or Space/Esc to exit.",
                 scroll_label(index)
