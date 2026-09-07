@@ -1,0 +1,26 @@
+# A few rounds inside a dungeon room arena: the turn banners, Pass, and an
+# Attack that finds nothing, all of which `combat.md` sections 8 and 11
+# publish.
+# requires-seed: the party one step from a dungeon room trigger, with a torch
+both	wait	9000
+both	key	space
+both	wait	4000
+both	key	j
+both	wait	9000
+both	key	i
+both	wait	2500
+both	key	Up
+both	wait	6000
+both	shot	arena	The arena on entry
+both	key	space
+both	wait	3000
+both	shot	pass1	After one Pass
+both	key	space
+both	wait	3000
+both	shot	pass2	After a second Pass
+both	key	a
+both	wait	1500
+both	shot	attack	The attack cursor
+both	key	Return
+both	wait	3000
+both	shot	attacked	After confirming the cursor

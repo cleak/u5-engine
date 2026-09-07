@@ -46,6 +46,7 @@ are PRNG-selected and legitimately differ between the two sides.
 | `hut-ready-refusals` | R-Ready against `inventory.md` §2.1's strength gate, which the engine had implemented as an uncalled helper |
 | `ship-commands` | X-it aboard a frigate, which measures the completed `X-it ship!` echo and the silence of the skiff launch |
 | `ship-repair` | three hole-ups aboard a frigate, which measure the sea `repair...` branch and its `1..3` hull roll |
+| `combat-rounds` | a few rounds inside a dungeon-room arena; it caught `VICTORY!` firing in an arena that never had a foe (`cleak/u5-spec#227`) |
 | `shop-inn-after-entry` | the second shop family the suite reaches - Britain's innkeeper - and the town alarm that stops the engine getting there (`u5-engine#16`) |
 | `hut-talk` | Talk with the hut's resident: greeting, name, job, bye |
 | `hut-prompts` | New Order, Ready, Use, Cast, Mix, Yell, Search, Look, X-it, Get, Enter, Hole up, Ignite, Klimb prompt and result literals |
@@ -81,6 +82,7 @@ number of keystrokes:
 |---|---|
 | `doom-final-room`, `doom-final-room-refusal`, `doom-endgame-audio` | the party standing on the fall trap on Doom's level seven, directly above the final room's trigger, with a torch to hand |
 | `combat-dungeon-room`, `combat-refusal-audio` | the party one step from a dungeon room trigger, with a torch to hand |
+| `combat-rounds` | the same |
 | `stonegate-trapdoor-audio` | the party inside Stonegate, standing in the trapdoor ring's centre cell |
 | `word-of-power-audio` | the party standing on the Britannia overworld |
 | `overworld-night-walk` | the party on the Britannia overworld at 02:00, when the encounter threshold can fire |
