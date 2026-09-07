@@ -459,10 +459,8 @@ impl PlayState {
                 // `traps.md §2.1`: a confirmed pick that is not
                 // Good-or-Poisoned is rejected with the short "disabled"
                 // notice and **the prompt repeats** - it does not abort.
-                // The original's literal is unpublished, so this reuses
-                // the engine's existing unavailable-member line rather
-                // than inventing one (cleak/u5-spec#81).
-                self.message = format!("Party member {} is unavailable.", member_index + 1);
+                // `dungeon-mode.md §11` publishes that notice.
+                self.message = DUNGEON_ACTING_MEMBER_DISABLED.to_string();
                 self.active_surface_chest = Some(session);
                 return Ok(None);
             }
@@ -2630,7 +2628,8 @@ impl PlayState {
                     self.start_surface_object_chest_prompt(x, y, SurfaceChestVerb::Search)
                 }
                 ActingMemberSelection::NoneAble => {
-                    self.message = "No party members are available.".to_string();
+                    // Not a state a keystroke can produce; see the other guards.
+                    self.message.clear();
                     MoveOutcome::Blocked
                 }
             });

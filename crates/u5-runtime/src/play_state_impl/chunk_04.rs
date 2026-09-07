@@ -1604,7 +1604,8 @@ impl PlayState {
                     return MoveOutcome::Blocked;
                 };
                 if !combat_actor_is_active_not_dead(caster) {
-                    self.message = "Who uses?".to_string();
+                    // Not a state a keystroke can produce; see the other guards.
+                    self.message.clear();
                     return MoveOutcome::Blocked;
                 }
                 // `audio.md §6.1`: "Through the placement helper", which
@@ -2156,7 +2157,8 @@ impl PlayState {
             return Some(MoveOutcome::Blocked);
         };
         if !caster.conscious() {
-            self.message = "Nobody can cast!".to_string();
+            // Not a state a keystroke can produce; see the other guards.
+            self.message.clear();
             return Some(MoveOutcome::Blocked);
         }
         let Some(circle) = spell_circle_for(spell_index as u8) else {

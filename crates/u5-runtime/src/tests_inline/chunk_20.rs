@@ -2090,7 +2090,7 @@ fn dungeon_chest_picker_reprompts_disabled_and_cancel_leaves_chest_closed() {
     assert_eq!(state.open_facing(), MoveOutcome::Observed);
     assert_eq!(state.step_active_surface_chest('3', "").unwrap(), None);
     assert!(state.active_surface_chest.is_some());
-    assert!(state.message.contains("unavailable"));
+    assert!(state.message.contains(DUNGEON_ACTING_MEMBER_DISABLED.trim()));
     assert_eq!(state.grid[index], 0x4b);
     assert_eq!(state.turn, 0);
 

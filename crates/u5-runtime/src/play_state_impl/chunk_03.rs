@@ -3010,7 +3010,9 @@ impl PlayState {
             return false;
         }
         if !self.party[index].living() {
-            self.message = format!("Party member {} is unavailable.", index + 1);
+            // `dungeon-mode.md §11`: a pick whose status disqualifies it
+            // answers `Disabled!` and the prompt re-opens.
+            self.message = DUNGEON_ACTING_MEMBER_DISABLED.to_string();
             return false;
         }
         session.select_party_index(index);
@@ -3649,7 +3651,8 @@ impl PlayState {
             return MoveOutcome::Blocked;
         }
         if !self.party[request.party_index].living() {
-            self.message = format!("Party member {} is unavailable.", request.party_index + 1);
+            // Not a state a keystroke can produce; see the other guards.
+            self.message.clear();
             return MoveOutcome::Blocked;
         }
         if self.party_equipment.len() < party_len {
