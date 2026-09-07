@@ -1,0 +1,44 @@
+# Mix a spell and then cast it - the magic pipeline end to end.
+#
+# `magic-mix` reaches the reagent surface and cancels, so nothing in the suite
+# has ever completed a mix, and casting is unreachable without one: a cast with
+# no charge answers `None mixed!`. This carries In Lor through mixing to a cast,
+# which is the first end-to-end exercise of `magic.md`'s pipeline against the
+# original.
+#
+# In Lor takes sulfur ash alone, which the shipped party carries, and needs no
+# target - so the cast completes without a direction or member prompt and the
+# comparison stays on the pipeline rather than on a targeting surface.
+# requires-seed: the party standing on the Britannia overworld
+both	wait	9000
+both	key	space
+both	wait	4000
+both	key	j
+both	wait	8000
+both	key	m
+both	wait	2500
+both	type	IL
+both	wait	1200
+both	key	Return
+both	wait	2500
+both	shot	reagents	The reagent surface, In Lor selected
+both	key	Return
+both	wait	1500
+both	shot	toggled	Sulfur Ash toggled in
+both	key	m
+both	wait	2500
+both	shot	quantity	The quantity prompt
+both	key	1
+both	wait	1200
+both	key	Return
+both	wait	3000
+both	shot	mixed	After mixing
+both	key	c
+both	wait	1500
+both	key	Return
+both	wait	1500
+both	type	IL
+both	wait	1200
+both	key	Return
+both	wait	3000
+both	shot	cast	After casting In Lor

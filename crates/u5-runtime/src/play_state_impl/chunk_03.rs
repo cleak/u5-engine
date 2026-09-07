@@ -1088,14 +1088,15 @@ impl PlayState {
                 }
             }
             MixPhase::Quantity => {
-                let quantity = if session.quantity_buffer.is_empty() {
-                    "_".to_string()
-                } else {
-                    session.quantity_buffer.clone()
-                };
-                format!(
-                    "{MMIX_QUANTITY_PROMPT_MESSAGE} {quantity}\nEnter accepts; Backspace erases; Esc cancels."
-                )
+                // `magic.md §6` step 4: "The handler prints `How much?` and
+                // reads a two-digit unsigned quantity." That is the whole of
+                // the prompt - a paired capture of the mixer shows `How much?`
+                // alone on its row with the typed digits after it. The
+                // keyboard-help tail this used to carry, `Enter accepts;
+                // Backspace erases; Esc cancels.`, is the terminal harness's
+                // inline-parser text and belongs to `cleak/u5-engine#5`'s
+                // family, not to the message window.
+                format!("{MMIX_QUANTITY_PROMPT_MESSAGE} {}", session.quantity_buffer)
             }
         }
     }

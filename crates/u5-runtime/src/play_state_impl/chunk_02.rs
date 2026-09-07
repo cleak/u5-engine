@@ -1384,14 +1384,17 @@ impl PlayState {
                 self.spell_charges[spell_index] = self.spell_charges[spell_index]
                     .saturating_add(request.amount)
                     .min(99);
-                let gained = self.spell_charges[spell_index].saturating_sub(before);
-                self.message = format!(
-                    "{MMIX_MIXING_MESSAGE}\nMixed {} {} charge{}; stock is {}.",
-                    gained,
-                    SPELL_CODES[spell_index],
-                    if gained == 1 { "" } else { "s" },
-                    self.spell_charges[spell_index]
-                );
+                let _gained = self.spell_charges[spell_index].saturating_sub(before);
+                // `magic.md §6` step 7 says only that the handler "prints the
+                // completion message" and does not publish the literal.
+                // **Measured**, not transcribed from an asset: the stock game's
+                // mixer answers `Done!` on its own row after `Mixing...`
+                // (`qa/paired/magic-mix-and-cast.tsv`, and `cleak/u5-spec#221`
+                // asks for it to be published). What was here before -
+                // `Mixed 1 IL charge; stock is 1.` - was the engine's own
+                // composition, and it reported the charge counter the original
+                // keeps to itself.
+                self.message = format!("{MMIX_MIXING_MESSAGE}\n{MMIX_COMPLETION_MESSAGE}");
                 MoveOutcome::Cast
             }
             Some(spell_index) => {
@@ -2192,7 +2195,7 @@ mod movement_magic_karma_traps_spec_tests {
             .split_once('\n')
             .expect("the mixing beat is its own line");
         assert_eq!(beat, MMIX_MIXING_MESSAGE);
-        assert!(body.starts_with("Mixed 1 IL charge"), "body was {body:?}");
+        assert_eq!(body, MMIX_COMPLETION_MESSAGE, "body was {body:?}");
         assert_eq!(state.turn, 0, "magic.md §6: mixing costs no game time");
     }
 

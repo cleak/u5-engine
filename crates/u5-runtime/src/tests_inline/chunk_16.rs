@@ -1157,7 +1157,7 @@ BRITANNIA 11 21
         assert_eq!(state.turn, 0);
         assert_eq!(
             state.message,
-            "Mixing...\nMixed 1 IL charge; stock is 99."
+            "Mixing...\nDone!"
         );
     }
 
@@ -1428,8 +1428,7 @@ BRITANNIA 11 21
         assert_eq!(state.reagents[REAGENT_SULFUR_ASH], 0);
         assert_eq!(state.spell_charges[IN_LOR_SPELL_INDEX], 1);
         assert_eq!(state.turn, 0);
-        assert_eq!(state.message, "Mixing...
-Mixed 1 IL charge; stock is 1.");
+        assert_eq!(state.message, "Mixing...\nDone!");
     }
 
     #[test]

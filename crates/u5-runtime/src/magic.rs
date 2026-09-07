@@ -721,6 +721,11 @@ pub const MMIX_EMPTY_SELECTION_MESSAGE: &str = "Nothing to mix!";
 pub const MMIX_INSUFFICIENT_REAGENTS_MESSAGE: &str = "Insufficient reagents!";
 pub const MMIX_SPELL_PROMPT_MESSAGE: &str = "For what spell?";
 pub const MMIX_QUANTITY_PROMPT_MESSAGE: &str = "How much?";
+/// The mixer's completion line. `magic.md §6` step 7 has the handler
+/// "print the completion message" without giving it, so this is a
+/// **measurement** rather than a published literal: the stock game answers
+/// `Done!` after `Mixing...`. `cleak/u5-spec#221` asks for publication.
+pub const MMIX_COMPLETION_MESSAGE: &str = "Done!";
 pub const MMIX_MIXING_MESSAGE: &str = "Mixing...";
 pub const MMIX_COMBAT_REFUSAL_MESSAGE: &str = "Mix-Not here";
 
