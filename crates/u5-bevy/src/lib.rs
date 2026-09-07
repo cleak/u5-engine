@@ -1700,7 +1700,12 @@ pub fn visual_route_suite(
                 &atlas,
                 ctx,
             )?;
+            // An `idle:` step pumps the world's animation and narrates
+            // nothing (`u5-engine#19`), so it legitimately repeats the frame
+            // whenever nothing on screen is animating.
+            let idle_step = command.starts_with("idle");
             if report.byte_hash == previous_hash
+                && !idle_step
                 && !visual_route_allows_unchanged_step(case.label, index + 1)
             {
                 return Err(io::Error::other(format!(

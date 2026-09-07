@@ -6693,9 +6693,9 @@ fn validate_route_smoke_case_state(
                 || state.turn != 0
                 || state.grid.get(idx).copied() != Some(NATURAL_MOONGATE_RESTORED_TERRAIN_TILE)
                 || !state.natural_moongate_live_cells.is_empty()
-                || !state
-                    .message
-                    .contains("Natural moongate phase 1 is not set")
+                // The empty-slot path narrates nothing: its diagnostic was
+                // engine text the original never prints (`u5-engine#19`).
+                || !state.message.is_empty()
             {
                 return Err(io::Error::other(format!(
                     "route smoke `{case_name}` did not clear the empty natural moongate slot"
