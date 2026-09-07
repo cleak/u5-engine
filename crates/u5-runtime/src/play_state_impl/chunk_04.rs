@@ -2990,15 +2990,11 @@ impl PlayState {
             // own line rather than completing the prompt's.
             self.message = FOUNTAIN_DRINK_REFRESHED.to_string();
         } else {
-            // `view.md §3`: "Dead or asleep members refuse as
-            // incapacitated." The section publishes the refusal's
-            // existence but not its text, and a healthy party cannot reach
-            // it, so no capture settles it either; `cleak/u5-spec#197`
-            // asks for the literal. Until it is published this prints
-            // nothing rather than inventing a line the original does not
-            // have - the refusal is still a refusal, and it still spends
-            // no party state.
-            self.message = String::new();
+            // `view.md §3`, since `cleak/u5-spec#197` published the
+            // literals: "A Dead or Asleep member prints
+            // `Incapacitated!` and a blank row". The engine printed
+            // nothing here while the line was unpublished.
+            self.message = FOUNTAIN_DRINK_INCAPACITATED.to_string();
         }
         MoveOutcome::Observed
     }

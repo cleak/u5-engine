@@ -176,6 +176,16 @@ pub enum CastFollowupKind {
         range_origin: Option<(u8, u8)>,
         max_range: Option<u8>,
     },
+    /// `magic.md §8` "Creature-prompt targeters" and
+    /// `catalogs/spell-list.md`: `AEX`/`BRX`/`IQX` "use the `Creature:`
+    /// target prompt", and `CX` is "a separate `Creature: ` cursor
+    /// handler". The dispatcher "prints `Creature: ` and opens the arena
+    /// cursor", so the target is a cell the player moves to, not a slot
+    /// number typed at a harness prompt.
+    CombatCreatureCursor {
+        x: u8,
+        y: u8,
+    },
 }
 
 #[derive(Clone, Debug, PartialEq, Eq)]

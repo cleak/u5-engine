@@ -784,10 +784,10 @@ fn town_surface_fountain_drink_refuses_incapacitated_member_without_mutating() {
         MoveOutcome::Observed
     );
 
-    // `view.md §3` has the refusal but not its wording, and a healthy
-    // party cannot reach it, so nothing is printed rather than inventing a
-    // line (`cleak/u5-spec#197`). What matters here is that it is still a
-    // refusal: no refresh line, and no party state written.
+    // `view.md §3`, since `cleak/u5-spec#197` published the literals: "A
+    // Dead or Asleep member prints `Incapacitated!` and a blank row".
+    // It is still a refusal: no refresh line, and no party state written.
+    assert_eq!(state.message, FOUNTAIN_DRINK_INCAPACITATED);
     assert_ne!(state.message, FOUNTAIN_DRINK_REFRESHED);
     assert_eq!(state.party[0], before);
     assert_eq!(state.turn, 0);

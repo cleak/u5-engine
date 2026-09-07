@@ -2921,6 +2921,26 @@ pub const COMBAT_CAST_COMMAND_LABEL: &str = "Cast...";
 /// for release in place of a command."
 pub const COMBAT_DRAGGED_UNDER_TURN_LINE: &str = "ARGH!";
 
+/// `combat.md §8.1`, the dragged-under release (established 2026-09-04):
+/// the surfacing actor's "name is printed followed by ` regurgitated!`".
+/// The leading space belongs to the literal, exactly as the other
+/// name-prefixed combat lines carry theirs.
+pub const COMBAT_REGURGITATED_SUFFIX: &str = " regurgitated!";
+
+/// `combat.md §8.1`: the release roll is "one uniform `1..30`" compared
+/// with the actor's base step - "for a party member, the raw Dexterity
+/// copied at seating" - and the actor surfaces when the draw is
+/// **below** it, so a party victim is released with probability
+/// `(Dexterity - 1) / 30`.
+pub const COMBAT_DRAGGED_UNDER_RELEASE_ROLL_LOW: u8 = 1;
+/// See [`COMBAT_DRAGGED_UNDER_RELEASE_ROLL_LOW`].
+pub const COMBAT_DRAGGED_UNDER_RELEASE_ROLL_HIGH: u8 = 30;
+
+/// See [`COMBAT_DRAGGED_UNDER_RELEASE_ROLL_LOW`].
+pub const fn combat_dragged_under_release_succeeds(roll: u8, base_step: u8) -> bool {
+    roll < base_step
+}
+
 /// `combat.md §8.1`: "the asleep arm that prints `Zzzzz...`".
 pub const COMBAT_ASLEEP_TURN_LINE: &str = "Zzzzz...";
 

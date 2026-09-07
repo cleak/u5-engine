@@ -287,6 +287,14 @@ impl PlayState {
         if let Some(session) = self.active_direction_prompt {
             return Self::direction_prompt_open_verb_echo(session.kind);
         }
+        // `magic.md §8`: the creature prompt is `Creature: ` with a
+        // trailing space, and the arena cursor - not a message-window
+        // line - shows the selected cell, so the row stays open under it.
+        if self.active_cast_followup.as_ref().is_some_and(|session| {
+            matches!(session.kind, CastFollowupKind::CombatCreatureCursor { .. })
+        }) {
+            return Some(COMBAT_CREATURE_TARGET_PROMPT.to_string());
+        }
         // `combat.md §8.2`: each Attack attempt prints `Attack-` and then,
         // "immediately before the cursor opens", `Aim! ` - which carries a
         // trailing space and no newline, so the arena's targeting cursor
@@ -822,6 +830,12 @@ impl PlayState {
                 CastFollowupKind::CombatCoordinate { x, y, .. } => {
                     format!("Target? ({x}, {y})\nMove cursor with cardinal keys; Space/Enter confirms; Esc cancels.")
                 }
+                // `magic.md §8`: the whole of the prompt is `Creature: `,
+                // with the arena cursor - not a message-window line - showing
+                // which cell is selected.
+                CastFollowupKind::CombatCreatureCursor { .. } => {
+                    COMBAT_CREATURE_TARGET_PROMPT.to_string()
+                }
             })
             .unwrap_or_else(|| "Cast target?".to_string())
     }
@@ -938,6 +952,41 @@ impl PlayState {
                             game_dir,
                         );
                     }
+                }
+                CastFollowupKind::CombatCreatureCursor { x, y } => {
+                    if ch == '\u{1b}' {
+                        self.message = format!("{COMBAT_CREATURE_TARGET_PROMPT}None!");
+                        return Ok(None);
+                    }
+                    if matches!(ch, ' ' | '\r' | '\n') {
+                        // The confirmed cell's occupant is the target. An
+                        // empty-cell confirm is unpublished for this prompt
+                        // (`magic.md §8` only follows the confirmed-target
+                        // path), so the cursor keeps polling rather than
+                        // spending the cast on nothing.
+                        let Some(slot) = self.combat_targeting_occupant_at((x, y)) else {
+                            continue;
+                        };
+                        let tail = (slot + 1).to_string();
+                        return self.finish_active_cast_followup(session, &tail, game_dir);
+                    }
+                    let Some(direction) =
+                        Direction::from_prompt_key(ch).filter(|direction| direction.is_cardinal())
+                    else {
+                        continue;
+                    };
+                    let (dx, dy) = direction.delta();
+                    let nx = i16::from(x) + dx as i16;
+                    let ny = i16::from(y) + dy as i16;
+                    if !combat_arena_coordinate_in_bounds(nx, ny) {
+                        continue;
+                    }
+                    session.kind = CastFollowupKind::CombatCreatureCursor {
+                        x: nx as u8,
+                        y: ny as u8,
+                    };
+                    self.combat_aim_marker_cell = Some((nx as u8, ny as u8));
+                    self.mark_visibility_dirty();
                 }
                 CastFollowupKind::CombatCoordinate {
                     x,
@@ -1072,7 +1121,43 @@ impl PlayState {
         } else if self.message.starts_with("To phase? Use C") {
             Some(CastFollowupKind::GatePhase)
         } else if self.message.starts_with("Creature? Use C") {
-            Some(CastFollowupKind::CombatTarget { creature: true })
+            // `magic.md §8`: the creature-prompt targeters "print
+            // `Creature: ` and open the arena cursor", so the target is a
+            // confirmed *cell*, not a slot number. The cursor's seed cell
+            // is unpublished; it opens on the caster's own cell, which is
+            // the one cell the player can always see.
+            match self
+                .combat_active
+                .then(|| self.combat_actors.get(caster_index).copied())
+                .flatten()
+                .filter(|actor| combat_actor_is_active_not_dead(*actor))
+            {
+                Some(actor) => {
+                    // The seed is `combat.md §8.2`'s published cursor start -
+                    // "the attacker's remembered previous target when that
+                    // target is still a valid, live, visible actor within the
+                    // maximum range, and on the attacker's own cell
+                    // otherwise" - rather than a second seeding rule invented
+                    // for this prompt. The creature cursor's own range is
+                    // unpublished, so it is the arena.
+                    let remembered = self
+                        .combat_remembered_targets
+                        .get(caster_index)
+                        .copied()
+                        .flatten()
+                        .and_then(|slot| self.combat_actors.get(usize::from(slot)).copied());
+                    let displayed = remembered
+                        .is_some_and(|target| self.combat_actor_presentation_displayed(target));
+                    let (x, y) = combat_targeting_cursor_start(
+                        (actor.x, actor.y),
+                        remembered,
+                        displayed,
+                        COMBAT_ARENA_SIDE as u8,
+                    );
+                    Some(CastFollowupKind::CombatCreatureCursor { x, y })
+                }
+                None => Some(CastFollowupKind::CombatTarget { creature: true }),
+            }
         } else if spell_code == "IP"
             && self.combat_active
             && self.message.starts_with("Target? Use C")

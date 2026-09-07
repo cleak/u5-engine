@@ -543,6 +543,14 @@ pub const fn new_order_outcome(slot_a: Option<usize>, slot_b: Option<usize>) -> 
 /// are case-folded before dispatch (see `input.md §6`). Returns `None`
 /// for any byte outside the `A..=Z` range and the literal `Space` pass
 /// input.
+/// `magic.md §8`: the creature-prompt targeters' prompt. The dispatcher
+/// "prints `Creature: ` and opens the arena cursor", and `§8`'s combat
+/// flow lists "`Creature: ` and the confirmed-target newline" between the
+/// spell-name echo and the pre-effect. The trailing space keeps the
+/// cursor on the row, the same shape `commands.md §5.3` gives every other
+/// prompt that ends in one.
+pub const COMBAT_CREATURE_TARGET_PROMPT: &str = "Creature: ";
+
 /// `commands.md §9`, Control + `E`: the program-exit prompt.
 ///
 /// The spec had two renderings - §9's bare `Exit to DOS?` and
@@ -913,6 +921,11 @@ pub const FOUNTAIN_LOOK_DESCRIPTION: &str = "a gurgling fountain!";
 pub const FOUNTAIN_DRINK_PROMPT: &str = "Who will drink?";
 /// See [`FOUNTAIN_LOOK_DESCRIPTION`].
 pub const FOUNTAIN_DRINK_REFRESHED: &str = "Refreshing...";
+/// `view.md §3` (literals added 2026-09-06, `cleak/u5-spec#197`): "A Dead
+/// or Asleep member prints `Incapacitated!` and a blank row; any other
+/// member prints `Refreshing...`." The trailing feed pair is that blank
+/// row, the same shape [`CAMP_BODY_SLEEP_LINE`] carries.
+pub const FOUNTAIN_DRINK_INCAPACITATED: &str = "Incapacitated!\n\n";
 
 /// `commands.md §5.7`: the rest/hole-up input sequence uses these exact
 /// message-window literals in both outdoor and town contexts.

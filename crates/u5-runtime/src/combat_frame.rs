@@ -1119,7 +1119,8 @@ pub enum CombatActorDispatchAction {
     /// full banner and then that line in place of a command"
     /// (`RETRACTIONS.md` R380). This is the dragged-under (`0x04`) arm, which
     /// `§6.1` says "prints `ARGH!` and rolls for release in place of a
-    /// command"; the release roll itself is unpublished.
+    /// command"; `§8.1` publishes that roll, and
+    /// [`PlayState::apply_combat_dragged_under_release`] runs it.
     DraggedUnderTurn,
 }
 
@@ -4685,6 +4686,62 @@ impl PlayState {
         }
     }
 
+    /// `combat.md §11.1`, the Corpser row: an ordinary landed hit on a
+    /// party target by a Corpser "sets that bit on the target and zeroes
+    /// the sprite byte of the target's linked active-object record", and
+    /// "the release restores exactly this blanked sprite" (`§6.1`,
+    /// `§8.1`). The line itself is the narrator's; this is the state
+    /// behind it, which the engine did not carry: the bit was never set,
+    /// so the victim never took the `ARGH!` arm and the drag was
+    /// narration only.
+    fn apply_combat_corpser_drag(&mut self, target_slot: usize) {
+        let Some(actor) = self.combat_actors.get_mut(target_slot) else {
+            return;
+        };
+        actor.flags |= COMBAT_ACTOR_FLAG_DRAGGED_UNDER;
+        let active_object_slot = usize::from(actor.active_object_slot);
+        if let Some(object) = self.active_objects.get_mut(active_object_slot) {
+            object.tile = 0;
+        }
+        self.mark_visibility_dirty();
+    }
+
+    /// `combat.md §8.1`, the dragged-under arm: after `ARGH!` "it draws
+    /// one uniform `1..30` and compares it with the actor's **base
+    /// step** ...; if the draw is **below** the base step the actor
+    /// surfaces - its name is printed followed by ` regurgitated!`, ...
+    /// the dragged-under bit clears and the blanked sprite byte is
+    /// restored from the record's primary tile byte - otherwise it stays
+    /// held."
+    ///
+    /// The two rumbles the same sentence names - "a short rumble" before
+    /// the roll and "a longer rumble" on the release - carry no published
+    /// parameters in `audio.md`, so neither is emitted here rather than
+    /// inventing a program (`cleak/u5-engine#1`).
+    pub(crate) fn apply_combat_dragged_under_release(&mut self, slot: usize) -> bool {
+        let Some(actor) = self.combat_actors.get(slot).copied() else {
+            return false;
+        };
+        let roll = self.random_range_u8(
+            COMBAT_DRAGGED_UNDER_RELEASE_ROLL_LOW,
+            COMBAT_DRAGGED_UNDER_RELEASE_ROLL_HIGH,
+        );
+        if !combat_dragged_under_release_succeeds(roll, actor.base_step) {
+            return false;
+        }
+        let name = crate::input_dispatch::combat_actor_display_name(self, slot);
+        self.emit_combat_print(&format!("{name}{COMBAT_REGURGITATED_SUFFIX}"));
+        if let Some(actor) = self.combat_actors.get_mut(slot) {
+            actor.flags &= !COMBAT_ACTOR_FLAG_DRAGGED_UNDER;
+        }
+        let active_object_slot = usize::from(actor.active_object_slot);
+        if let Some(object) = self.active_objects.get_mut(active_object_slot) {
+            object.tile = object.type_byte;
+        }
+        self.mark_visibility_dirty();
+        true
+    }
+
     pub fn apply_combat_weapon_damage_to_target(
         &mut self,
         attacker_slot: Option<usize>,
@@ -4695,6 +4752,16 @@ impl PlayState {
         if self.combat_damage_target_takes_party_branch(target_slot) {
             let damage = self.apply_combat_party_damage_to_slot(target_slot, raw_damage)?;
             self.emit_combat_graze_cue(raw_damage);
+            // `§11.1`: the drag rides on the *ordinary landed hit* row, so
+            // a graze or a kill is not a drag.
+            let corpser = attacker_slot.is_some_and(|slot| {
+                self.combat_actors
+                    .get(slot)
+                    .is_some_and(|actor| actor.owner_target_class == COMBAT_CLASS_CORPSER)
+            });
+            if corpser && !damage.grazed && !damage.killed {
+                self.apply_combat_corpser_drag(target_slot);
+            }
             return Some(CombatWeaponDamageApplication::Party {
                 target_slot,
                 damage,
@@ -7607,6 +7674,7 @@ impl PlayState {
             // in place of a command." (`RETRACTIONS.md` R380.)
             self.emit_combat_turn_banner_before_status_early_out(slot);
             self.emit_combat_print(COMBAT_DRAGGED_UNDER_TURN_LINE);
+            self.apply_combat_dragged_under_release(slot);
             CombatActorDispatchAction::DraggedUnderTurn
         } else if actor.is_status_disabled() {
             // `combat.md §6.2`: the wake check is owned by the acting slot's

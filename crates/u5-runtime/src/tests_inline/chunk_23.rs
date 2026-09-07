@@ -16786,6 +16786,105 @@ fn combat_cast_tremor_routes_resources_table_damage_and_xp() {
     assert!(state.party_experience[0] > 10);
 }
 
+/// `magic.md §8` "Creature-prompt targeters" and `catalogs/spell-list.md`:
+/// `AEX`/`BRX`/`IQX` "use the `Creature:` target prompt", and the
+/// dispatcher "prints `Creature: ` and opens the arena cursor". The engine
+/// used to ask for a combat *slot number* at a harness prompt
+/// (`Creature? Use C1BRX7 ...`), which no published surface has.
+#[test]
+fn the_creature_prompt_opens_the_arena_cursor_and_casts_on_the_confirmed_cell() {
+    let mut state = world_state(open_world_grid(), 10, 20);
+    state.combat_active = true;
+    state
+        .active_objects
+        .resize(OOL_SLOTS, ActiveObject::empty());
+    state.party = vec![PartyMember {
+        slot: 0,
+        class_byte: 1,
+        status: b'G',
+        climb_stat: 0,
+        mana: 6,
+        hp: 30,
+        max_hp: 30,
+        level: 6,
+    }];
+    let spell_index = spell_index_from_code("BRX").unwrap();
+    state.spell_charges[spell_index] = 1;
+    state.combat_actors[0] =
+        CombatActorDescriptor::from_row([30, 1, COMBAT_ACTOR_FLAG_SELECTABLE_80, 0, 0, 0, 3, 3]);
+    let target_slot = COMBAT_PARTY_ACTOR_SLOTS;
+    let dragon_stats = combat_class_stats(39).unwrap();
+    state.combat_actors[target_slot] = CombatActorDescriptor::for_monster_placement(
+        dragon_stats,
+        target_slot as u8,
+        5,
+        3,
+        COMBAT_ACTOR_FLAG_SELECTABLE_40,
+        2,
+    );
+    state.active_objects[target_slot] = ActiveObject {
+        type_byte: 0xdc,
+        tile: 0xdc,
+        x: 5,
+        y: 3,
+        z: 0,
+        phase: STEADY_PHASE,
+        aux1: 0,
+        aux3: 0,
+    };
+
+    // Cast through the interactive prompt rather than the inline suffix.
+    state.active_cast = Some(CastSession::new(0));
+    for ch in "BRX".chars() {
+        state
+            .step_active_cast(ch, "", std::path::Path::new(""))
+            .unwrap();
+    }
+    let outcome = state
+        .step_active_cast('\r', "", std::path::Path::new(""))
+        .unwrap();
+    assert!(outcome.is_none(), "the prompt opens instead of resolving");
+    assert!(matches!(
+        state.active_cast_followup.as_ref().map(|session| session.kind),
+        Some(CastFollowupKind::CombatCreatureCursor { x: 3, y: 3 })
+    ));
+    assert_eq!(state.message, COMBAT_CREATURE_TARGET_PROMPT);
+    assert_eq!(
+        state.open_prompt_line().as_deref(),
+        Some(COMBAT_CREATURE_TARGET_PROMPT)
+    );
+
+    // One cell east is empty, and a confirm there keeps the cursor open
+    // rather than spending the cast.
+    state
+        .step_active_cast_followup(char::from(INPUT_CODE_EAST), "", std::path::Path::new(""))
+        .unwrap();
+    assert!(matches!(
+        state.active_cast_followup.as_ref().map(|session| session.kind),
+        Some(CastFollowupKind::CombatCreatureCursor { x: 4, y: 3 })
+    ));
+    state
+        .step_active_cast_followup(' ', "", std::path::Path::new(""))
+        .unwrap();
+    assert!(state.active_cast_followup.is_some());
+    assert_eq!(state.spell_charges[spell_index], 1);
+
+    // One more east lands on the dragon; that confirm resolves the cast.
+    state
+        .step_active_cast_followup(char::from(INPUT_CODE_EAST), "", std::path::Path::new(""))
+        .unwrap();
+    let result = state
+        .step_active_cast_followup(' ', "", std::path::Path::new(""))
+        .unwrap();
+    assert!(result.is_some(), "the confirmed cell resolves the cast");
+    assert!(state.active_cast_followup.is_none());
+    assert_eq!(state.spell_charges[spell_index], 0);
+    assert_eq!(
+        state.combat_actors[target_slot].owner_target_class,
+        COMBAT_CLASS_GIANT_RAT
+    );
+}
+
 #[test]
 fn combat_cast_polymorph_routes_resources_and_replaces_hostile_creature() {
     let mut state = world_state(open_world_grid(), 10, 20);

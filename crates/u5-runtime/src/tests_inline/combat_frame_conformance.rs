@@ -1650,6 +1650,94 @@
         state
     }
 
+    /// `combat.md §11.1`, the Corpser row: an ordinary landed hit on a
+    /// party target "sets that bit on the target and zeroes the sprite
+    /// byte of the target's linked active-object record"; `§8.1`'s
+    /// release "restores exactly this blanked sprite".
+    #[test]
+    fn a_corpser_hit_sets_the_dragged_under_bit_and_blanks_the_sprite() {
+        let mut state = worked_bat_arena(&[(6, 5)], 0);
+        let attacker_slot = COMBAT_PARTY_ACTOR_SLOTS;
+        state.combat_actors[attacker_slot].owner_target_class = COMBAT_CLASS_CORPSER;
+        assert_eq!(state.active_objects[0].tile, 0x80);
+        assert!(!state.combat_actors[0].is_dragged_under());
+
+        let application = state
+            .apply_combat_weapon_damage_to_target(Some(attacker_slot), 0, 4, false)
+            .expect("a landed hit on the party slot applies");
+        assert!(matches!(
+            application,
+            CombatWeaponDamageApplication::Party { .. }
+        ));
+        assert!(state.combat_actors[0].is_dragged_under());
+        assert_eq!(state.active_objects[0].tile, 0);
+
+        // The graze arm is not the landed-hit row, so it does not drag.
+        let mut grazed = worked_bat_arena(&[(6, 5)], 0);
+        grazed.combat_actors[attacker_slot].owner_target_class = COMBAT_CLASS_CORPSER;
+        let _ = grazed.apply_combat_weapon_damage_to_target(Some(attacker_slot), 0, -1, false);
+        assert!(!grazed.combat_actors[0].is_dragged_under());
+        assert_eq!(grazed.active_objects[0].tile, 0x80);
+
+        // And neither does an ordinary attacker's landed hit.
+        let mut bat = worked_bat_arena(&[(6, 5)], 0);
+        let _ = bat.apply_combat_weapon_damage_to_target(Some(attacker_slot), 0, 4, false);
+        assert!(!bat.combat_actors[0].is_dragged_under());
+        assert_eq!(bat.active_objects[0].tile, 0x80);
+    }
+
+    /// `combat.md §8.1`: the release "draws one uniform `1..30` and
+    /// compares it with the actor's **base step**"; below it the actor
+    /// surfaces with ` regurgitated!`, the bit clears and the sprite is
+    /// restored from the record's primary tile byte, and at or above it
+    /// the actor stays held. `(Dexterity - 1) / 30` is the published
+    /// release probability, so the boundary is what this pins.
+    #[test]
+    fn the_dragged_under_release_roll_is_the_published_boundary() {
+        assert!(combat_dragged_under_release_succeeds(
+            WORKED_AVATAR_DEXTERITY - 1,
+            WORKED_AVATAR_DEXTERITY
+        ));
+        assert!(!combat_dragged_under_release_succeeds(
+            WORKED_AVATAR_DEXTERITY,
+            WORKED_AVATAR_DEXTERITY
+        ));
+        assert!(!combat_dragged_under_release_succeeds(
+            COMBAT_DRAGGED_UNDER_RELEASE_ROLL_HIGH,
+            WORKED_AVATAR_DEXTERITY
+        ));
+
+        // Over many draws the released fraction tracks `(Dex - 1) / 30`.
+        let mut released = 0usize;
+        let rounds = 600usize;
+        for seed in 0..rounds {
+            let mut state = worked_bat_arena(&[(6, 5)], 0);
+            state.prng_state = (seed as u16).wrapping_mul(2_654).wrapping_add(1);
+            state.combat_actors[0].flags |= COMBAT_ACTOR_FLAG_DRAGGED_UNDER;
+            state.active_objects[0].tile = 0;
+            if state.apply_combat_dragged_under_release(0) {
+                released += 1;
+                assert!(!state.combat_actors[0].is_dragged_under());
+                assert_eq!(state.active_objects[0].tile, state.active_objects[0].type_byte);
+                assert!(
+                    state
+                        .message_entries()
+                        .iter()
+                        .any(|entry| entry.text.ends_with(COMBAT_REGURGITATED_SUFFIX))
+                );
+            } else {
+                assert!(state.combat_actors[0].is_dragged_under());
+                assert_eq!(state.active_objects[0].tile, 0);
+            }
+        }
+        let expected = f64::from(WORKED_AVATAR_DEXTERITY - 1) / 30.0;
+        let observed = released as f64 / rounds as f64;
+        assert!(
+            (observed - expected).abs() < 0.08,
+            "released {observed:.3}, published {expected:.3}"
+        );
+    }
+
     #[test]
     fn three_adjacent_bats_cost_the_hp_per_turn_section_11_publishes() {
         // End-to-end through the production round walker and player command
