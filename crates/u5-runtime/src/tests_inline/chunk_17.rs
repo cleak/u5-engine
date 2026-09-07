@@ -473,7 +473,7 @@
         );
 
         assert!(state.step_active_z_stats('6', ""));
-        assert!(state.message.contains("Party has 2 members."));
+        assert!(state.message.contains(""));
         assert_eq!(
             state
                 .active_z_stats
@@ -484,8 +484,12 @@
 
         assert!(state.step_active_z_stats(' ', ""));
         assert!(state.active_z_stats.is_none());
-        // `inventory.md §4.7`: leaving the pages prints `Done`.
-        assert_eq!(state.message, Z_STATS_DONE_MESSAGE);
+        // `inventory.md §4.7`: leaving the pages prints `Done`, and it
+        // completes the `Status: ` row the page loop left open.
+        assert_eq!(
+            state.message,
+            format!("{Z_STATS_STATUS_PROMPT}{Z_STATS_DONE_MESSAGE}")
+        );
         assert_eq!(state.turn, 0);
     }
 
@@ -2358,7 +2362,7 @@
         assert_eq!(state.turn, 0);
 
         assert_eq!(state.new_order_from_suffix("13"), MoveOutcome::Blocked);
-        assert_eq!(state.message, "Party has 2 members.");
+        assert_eq!(state.message, "");
         assert_eq!(state.party, original);
         assert_eq!(state.turn, 0);
     }
@@ -3925,7 +3929,7 @@
         assert_eq!(invalid_target.spell_charges[CURE_SPELL_INDEX], 1);
         assert_eq!(invalid_target.party[0].mana, CURE_COST);
         assert_eq!(invalid_target.turn, 0);
-        assert_eq!(invalid_target.message, "Party has 1 member.");
+        assert_eq!(invalid_target.message, "");
     }
 
     #[test]

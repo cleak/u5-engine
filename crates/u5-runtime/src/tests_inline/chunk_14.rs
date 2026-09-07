@@ -218,7 +218,7 @@
         assert_eq!(state.keys, 2);
         assert_eq!(state.prng_state, 0x1234);
         assert_eq!(state.grid[dungeon_cell_index(0, 1, 1)], 0x4b);
-        assert_eq!(state.message, party_member_unavailable_message(0));
+        assert_eq!(state.message, "");
     }
 
     #[test]

@@ -557,7 +557,10 @@ impl PlayState {
                         self.commit_prompt_reply(USE_POTION_TARGET_PROMPT, &name);
                         self.use_potion_consumed_target(index, target)
                     } else {
-                        self.message = party_member_unavailable_message(self.party.len());
+                        // Out-of-range member: the interactive pickers bound the
+                        // index, so only the inline harness form reaches this. The
+                        // original has no line for a state it cannot enter.
+                        self.message.clear();
                         MoveOutcome::Blocked
                     }
                 } else {
@@ -669,7 +672,10 @@ impl PlayState {
 
     fn use_potion_consumed_target(&mut self, index: usize, target_index: usize) -> MoveOutcome {
         if target_index >= self.party.len() {
-            self.message = party_member_unavailable_message(self.party.len());
+            // Out-of-range member: the interactive pickers bound the
+            // index, so only the inline harness form reaches this. The
+            // original has no line for a state it cannot enter.
+            self.message.clear();
             return MoveOutcome::Blocked;
         }
 
@@ -1625,7 +1631,10 @@ impl PlayState {
             return MoveOutcome::Blocked;
         };
         if target_index >= self.party.len() {
-            self.message = party_member_unavailable_message(self.party.len());
+            // Out-of-range member: the interactive pickers bound the
+            // index, so only the inline harness form reaches this. The
+            // original has no line for a state it cannot enter.
+            self.message.clear();
             return MoveOutcome::Blocked;
         }
         if self.party[target_index].status != b'D' {
@@ -1692,7 +1701,10 @@ impl PlayState {
             return MoveOutcome::Blocked;
         };
         if target_index >= self.party.len() {
-            self.message = party_member_unavailable_message(self.party.len());
+            // Out-of-range member: the interactive pickers bound the
+            // index, so only the inline harness form reaches this. The
+            // original has no line for a state it cannot enter.
+            self.message.clear();
             return MoveOutcome::Blocked;
         }
 
@@ -3086,26 +3098,24 @@ impl PlayState {
         member_index: usize,
     ) -> MoveOutcome {
         let Some(tile) = self.surface_look_target_tile(direction) else {
-            self.message = format!("{LOOK_RESULT_PREFIX}\nthe location boundary");
+            // An internal invariant: the drink prompt only opens on a
+            // fountain the look already matched, and the picker bounds the
+            // member index, so no shipped path reaches this. The original
+            // prints nothing here, so neither does this.
+            self.message.clear();
             return MoveOutcome::Observed;
         };
         if !surface_town_fountain_look_tile(tile) {
-            self.message = "You see: no fountain there.".to_string();
+            self.message.clear();
             return MoveOutcome::Observed;
         }
 
         let Some(member) = self.party.get(member_index).copied() else {
-            self.message = format!(
-                "You see: a fountain. Party member {} is unavailable.",
-                member_index + 1
-            );
+            self.message.clear();
             return MoveOutcome::Observed;
         };
         let Some(status) = character_status_for_byte(member.status) else {
-            self.message = format!(
-                "You see: a fountain. Party member {} is unavailable.",
-                member_index + 1
-            );
+            self.message.clear();
             return MoveOutcome::Observed;
         };
         if town_fountain_drink_accepts(status) {

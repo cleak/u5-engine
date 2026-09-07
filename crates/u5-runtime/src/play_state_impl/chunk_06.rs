@@ -772,7 +772,10 @@ impl PlayState {
             .get(member_index)
             .is_some_and(|member| member.conscious())
         {
-            self.message = party_member_unavailable_message(member_index);
+            // Out-of-range member: the interactive pickers bound the
+            // index, so only the inline harness form reaches this. The
+            // original has no line for a state it cannot enter.
+            self.message.clear();
             return None;
         }
         Some(member_index)

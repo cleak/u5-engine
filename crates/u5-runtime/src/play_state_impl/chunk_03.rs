@@ -315,7 +315,9 @@ impl PlayState {
     /// selector first.
     pub fn z_stats_command(&mut self) -> MoveOutcome {
         if self.party.is_empty() {
-            self.message = "No party members are available.".to_string();
+            // An empty party cannot reach a selector; the original prints
+            // nothing on a path it cannot take.
+            self.message.clear();
             return MoveOutcome::Blocked;
         }
         if self.combat_active {
@@ -384,7 +386,9 @@ impl PlayState {
     /// emitted its verb echo, so this only prints the prompt.
     pub fn start_party_selector(&mut self, target: PartySelectorTarget) -> MoveOutcome {
         if self.party.is_empty() {
-            self.message = "No party members are available.".to_string();
+            // An empty party cannot reach a selector; the original prints
+            // nothing on a path it cannot take.
+            self.message.clear();
             return MoveOutcome::Blocked;
         }
         let highlight = self.z_stats_initial_party_index().min(self.party.len() - 1);
@@ -585,7 +589,9 @@ impl PlayState {
 
     pub fn z_stats_for_party(&mut self, selected: usize) -> MoveOutcome {
         if self.party.is_empty() {
-            self.message = "No party members are available.".to_string();
+            // An empty party cannot reach a selector; the original prints
+            // nothing on a path it cannot take.
+            self.message.clear();
             return MoveOutcome::Blocked;
         }
         let selected = selected.min(self.party.len() - 1);
@@ -636,7 +642,9 @@ impl PlayState {
 
     pub fn start_cast_spell_prompt(&mut self) -> MoveOutcome {
         if self.party.is_empty() {
-            self.message = "No party members are available.".to_string();
+            // An empty party cannot reach a selector; the original prints
+            // nothing on a path it cannot take.
+            self.message.clear();
             return MoveOutcome::Blocked;
         }
         // `magic.md §5` step 1 reads the active-player slot; with none set
@@ -2044,7 +2052,10 @@ impl PlayState {
                     session.kind,
                     DirectionPromptKind::SurfaceFountainDrink { .. }
                 ) {
-                    self.message = "You see: a fountain. No one drinks.".to_string();
+                    // `view.md §3` (`cleak/u5-spec#197`): the drink
+                    // question's cancel is the universal `None!`, on its own
+                    // line because the prompt carries no trailing space.
+                    self.message = SELECTION_CANCELLED_LITERAL.to_string();
                     return Ok(Some(MoveOutcome::Observed));
                 }
                 if matches!(session.kind, DirectionPromptKind::Klimb) {
@@ -2661,12 +2672,9 @@ impl PlayState {
                     session.select_party_index(index);
                     self.message = self.render_z_stats_session(&session);
                 } else {
-                    self.message = format!(
-                        "Party has {} member{}.\n{}",
-                        self.party.len(),
-                        if self.party.len() == 1 { "" } else { "s" },
-                        self.render_z_stats_session(&session)
-                    );
+                    // `inventory.md §4.3`: "Jumps beyond the active party
+                    // size are rejected" - the page simply redraws.
+                    self.message = self.render_z_stats_session(&session);
                 }
                 self.active_z_stats = Some(session);
             }
@@ -2720,7 +2728,9 @@ impl PlayState {
 
     pub fn start_ready_equipment(&mut self) -> MoveOutcome {
         if self.party.is_empty() {
-            self.message = "No party members are available.".to_string();
+            // An empty party cannot reach a selector; the original prints
+            // nothing on a path it cannot take.
+            self.message.clear();
             return MoveOutcome::Blocked;
         }
         // `inventory.md §8`: opening the picker and immediately backing
@@ -2735,7 +2745,10 @@ impl PlayState {
 
     pub fn start_ready_equipment_for_party(&mut self, party_index: usize) -> MoveOutcome {
         if party_index >= self.party.len() {
-            self.message = party_member_unavailable_message(self.party.len());
+            // Out-of-range member: the interactive pickers bound the
+            // index, so only the inline harness form reaches this. The
+            // original has no line for a state it cannot enter.
+            self.message.clear();
             return MoveOutcome::Blocked;
         }
         if !self.party[party_index].living() {
@@ -2988,7 +3001,10 @@ impl PlayState {
 
     fn ready_select_party_for_session(&mut self, session: &mut ReadySession, index: usize) -> bool {
         if index >= self.party.len() {
-            self.message = party_member_unavailable_message(self.party.len());
+            // Out-of-range member: the interactive pickers bound the
+            // index, so only the inline harness form reaches this. The
+            // original has no line for a state it cannot enter.
+            self.message.clear();
             return false;
         }
         if !self.party[index].living() {
@@ -3544,11 +3560,9 @@ impl PlayState {
         };
         let party_len = self.party.len();
         if first >= party_len || second >= party_len {
-            self.message = format!(
-                "Party has {} member{}.",
-                party_len,
-                if party_len == 1 { "" } else { "s" }
-            );
+            // The interactive selector bounds both slots, so this is the
+            // inline harness form's guard; the original has no line for it.
+            self.message.clear();
             return MoveOutcome::Blocked;
         }
         // commands.md §6: if either selected slot is slot zero, the command
@@ -3623,7 +3637,10 @@ impl PlayState {
     pub fn ready_equipment(&mut self, request: InlineReadyRequest) -> MoveOutcome {
         let party_len = self.party.len();
         if request.party_index >= party_len {
-            self.message = party_member_unavailable_message(party_len);
+            // Out-of-range member: the interactive pickers bound the
+            // index, so only the inline harness form reaches this. The
+            // original has no line for a state it cannot enter.
+            self.message.clear();
             return MoveOutcome::Blocked;
         }
         if !self.party[request.party_index].living() {
@@ -4216,7 +4233,10 @@ impl PlayState {
 
     pub fn cast_awaken(&mut self, caster_index: usize, target_index: usize) -> MoveOutcome {
         if target_index >= self.party.len() {
-            self.message = party_member_unavailable_message(self.party.len());
+            // Out-of-range member: the interactive pickers bound the
+            // index, so only the inline harness form reaches this. The
+            // original has no line for a state it cannot enter.
+            self.message.clear();
             return MoveOutcome::Blocked;
         }
         if let Some(outcome) =
@@ -4246,7 +4266,10 @@ impl PlayState {
 
     pub fn cast_cure(&mut self, caster_index: usize, target_index: usize) -> MoveOutcome {
         if target_index >= self.party.len() {
-            self.message = party_member_unavailable_message(self.party.len());
+            // Out-of-range member: the interactive pickers bound the
+            // index, so only the inline harness form reaches this. The
+            // original has no line for a state it cannot enter.
+            self.message.clear();
             return MoveOutcome::Blocked;
         }
         if let Some(outcome) =
@@ -4275,7 +4298,10 @@ impl PlayState {
 
     pub fn cast_heal(&mut self, caster_index: usize, target_index: usize) -> MoveOutcome {
         if target_index >= self.party.len() {
-            self.message = party_member_unavailable_message(self.party.len());
+            // Out-of-range member: the interactive pickers bound the
+            // index, so only the inline harness form reaches this. The
+            // original has no line for a state it cannot enter.
+            self.message.clear();
             return MoveOutcome::Blocked;
         }
         if let Some(outcome) =
@@ -4348,7 +4374,10 @@ impl PlayState {
 
     pub fn cast_great_heal(&mut self, caster_index: usize, target_index: usize) -> MoveOutcome {
         if target_index >= self.party.len() {
-            self.message = party_member_unavailable_message(self.party.len());
+            // Out-of-range member: the interactive pickers bound the
+            // index, so only the inline harness form reaches this. The
+            // original has no line for a state it cannot enter.
+            self.message.clear();
             return MoveOutcome::Blocked;
         }
         if let Some(outcome) =
@@ -4392,7 +4421,10 @@ impl PlayState {
 
     pub fn cast_resurrect(&mut self, caster_index: usize, target_index: usize) -> MoveOutcome {
         if target_index >= self.party.len() {
-            self.message = party_member_unavailable_message(self.party.len());
+            // Out-of-range member: the interactive pickers bound the
+            // index, so only the inline harness form reaches this. The
+            // original has no line for a state it cannot enter.
+            self.message.clear();
             return MoveOutcome::Blocked;
         }
         if let Some(outcome) =
