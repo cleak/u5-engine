@@ -949,7 +949,8 @@ pub fn route_smoke_cases() -> Vec<RouteSmokeCase> {
         RouteSmokeCase {
             name: "castle-restore-spell-suite",
             options: restore_spells,
-            script: &["C1AZ", "C1AN3", "C1M3", "C1MV3", "C1CIM4"],
+            // An Zu takes a target (measured 2026-09-07).
+            script: &["C1AZ2", "C1AN3", "C1M3", "C1MV3", "C1CIM4"],
             expected: RouteSmokeExpectation::Town(castle),
             min_turn: 5,
             expected_frame_kind: "tile viewport",
@@ -5987,7 +5988,7 @@ fn validate_route_smoke_case_state(
             let max_expected = DEFAULT_FOOD_STOCK.saturating_add(CREATE_FOOD_MAX_GRANT);
             if !(DEFAULT_FOOD_STOCK..=max_expected).contains(&state.food)
                 || state.spell_charges[CREATE_FOOD_SPELL_INDEX] != 0
-                || !state.message.contains("Created")
+                || state.message != u5_runtime::SPELL_SUCCESS_LINE
             {
                 return Err(io::Error::other(format!(
                     "route smoke `{case_name}` did not apply bounded Create Food result"

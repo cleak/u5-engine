@@ -602,6 +602,14 @@ pub const USE_POTION_TARGET_PROMPT: &str = "On who: ";
 /// Pass that follows a stalled heading answers `Sheets in irons!` (the engine
 /// had `Ship remains stalled by the wind.`). The stalled sail attempt itself
 /// prints nothing at all - the line lands on the following turn.
+/// **Measured** (`qa/paired/cast-results.tsv`, 2026-09-07): a spell whose
+/// effect lands answers `Success!` where it answers at all, and the two
+/// party-target spells share the potions' `On who: ` prompt. An Zu cast on a
+/// sleeping member wakes them and prints **nothing** - exactly like the blue
+/// potion - and both spells answer `Failed!` when the target is not in the
+/// state they treat. `magic.md` describes the effects without quoting a line.
+pub const SPELL_SUCCESS_LINE: &str = "Success!";
+
 pub const SHIP_XIT_UNDER_SAIL_REFUSAL: &str = "Under sail!";
 pub const SHIP_SAIL_STALLED_LINE: &str = "Sheets in irons!";
 

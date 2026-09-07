@@ -8,7 +8,7 @@
 //! not from any asset - and the harness then seeds DOSBox and the engine from
 //! the same file.
 //!
-//! Usage: seed_inventory <PROFILE_DIR> [potions|scrolls|specials|keys]=<N>...
+//! Usage: seed_inventory <PROFILE_DIR> [potions|scrolls|specials|spells|reagents|mana|keys|gems|torches|status<slot>]=<N>...
 
 use std::path::Path;
 use u5_runtime::*;
@@ -38,6 +38,13 @@ fn main() {
             "keys" => state.keys = count,
             "gems" => state.gems = count,
             "torches" => state.torches = count,
+            "spells" => state.spell_charges = [count; SPELL_COUNT],
+            "reagents" => state.reagents = [count; REAGENT_COUNT],
+            "mana" => {
+                for member in &mut state.party {
+                    member.mana = count;
+                }
+            }
             // `status<slot>=<byte>` sets one member's status letter, so a
             // scenario can measure a path that needs a dead or poisoned
             // member without playing one into that state.

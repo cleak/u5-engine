@@ -811,10 +811,10 @@ impl PlayState {
                         SPELL_DIRECTION_PROMPT_PREFIX.to_string()
                     }
                 }
-                CastFollowupKind::PartyTarget => {
-                    let last = self.party.len().min(6);
-                    format!("Whom? _\nChoose party member 1-{last}; Esc cancels.")
-                }
+                // Measured 2026-09-07: a party-target spell asks with the
+                // same `On who: ` prompt a potion does, and the chosen
+                // member's name completes that row.
+                CastFollowupKind::PartyTarget => USE_POTION_TARGET_PROMPT.to_string(),
                 CastFollowupKind::GatePhase => {
                     "To phase? _\nChoose moon phase 1-8; Esc cancels.".to_string()
                 }
@@ -897,6 +897,8 @@ impl PlayState {
                     if !(1..=max_party_slot).contains(&digit) {
                         continue;
                     }
+                    let name = self.party_member_display_name(digit - 1);
+                    self.commit_prompt_reply(USE_POTION_TARGET_PROMPT, &name);
                     return self.finish_active_cast_followup(session, &digit.to_string(), game_dir);
                 }
                 CastFollowupKind::GatePhase => {
@@ -4209,7 +4211,11 @@ impl PlayState {
         MoveOutcome::Cast
     }
 
-    pub fn cast_awaken(&mut self, caster_index: usize) -> MoveOutcome {
+    pub fn cast_awaken(&mut self, caster_index: usize, target_index: usize) -> MoveOutcome {
+        if target_index >= self.party.len() {
+            self.message = party_member_unavailable_message(self.party.len());
+            return MoveOutcome::Blocked;
+        }
         if let Some(outcome) =
             self.cast_spell_resource_gate(caster_index, AWAKEN_SPELL_INDEX, AWAKEN_COST)
         {
@@ -4221,15 +4227,17 @@ impl PlayState {
         // no-sleeper Awaken still sounds before the failure tail.
         self.emit_sound_effect(SoundEffect::SharedVariant { variant: 1 });
 
-        let Some(target_index) = self.party.iter().position(|member| member.status == b'S') else {
+        if self.party[target_index].status != b'S' {
             self.advance_turn();
             self.fail_committed_spell_cast();
             return MoveOutcome::Blocked;
-        };
+        }
 
         self.party[target_index].status = b'G';
         self.advance_turn();
-        self.message = format!("Awakened party member {}.", target_index + 1);
+        // Measured: waking a sleeping member prints nothing, the same
+        // way the blue potion's wake does.
+        self.message.clear();
         MoveOutcome::Cast
     }
 
@@ -4256,7 +4264,9 @@ impl PlayState {
 
         self.party[target_index].status = b'G';
         self.advance_turn();
-        self.message = format!("Cured party member {}.", target_index + 1);
+        // The cure's success line is not measured; its sibling An Zu is
+        // silent, so this stays silent rather than invent one.
+        self.message.clear();
         MoveOutcome::Cast
     }
 
@@ -4516,7 +4526,8 @@ impl PlayState {
         self.food = self.food.saturating_add(grant).min(PARTY_FOOD_CAP);
         let created = self.food.saturating_sub(before);
         self.advance_turn();
-        self.message = format!("Created {created} food; stock is {}.", self.food);
+        let _ = created;
+        self.message = SPELL_SUCCESS_LINE.to_string();
         MoveOutcome::Cast
     }
 

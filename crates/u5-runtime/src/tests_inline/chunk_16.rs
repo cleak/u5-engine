@@ -914,10 +914,7 @@ BRITANNIA 11 21
         assert_eq!(state.party[0].mana, 1);
         assert_eq!(state.turn, 1);
         assert_eq!(state.clock, GameClock::new(12, 2).unwrap());
-        assert_eq!(
-            state.message,
-            format!("Created {created} food; stock is {}.", food_before + created)
-        );
+        assert_eq!(state.message, SPELL_SUCCESS_LINE);
     }
 
     #[test]
@@ -950,14 +947,7 @@ BRITANNIA 11 21
         assert_eq!(state.spell_charges[CREATE_FOOD_SPELL_INDEX], 0);
         assert_eq!(state.party[0].mana, 0);
         assert_eq!(state.turn, 1);
-        assert_eq!(
-            state.message,
-            format!(
-                "Created {} food; stock is {}.",
-                CREATE_FOOD_MIN_GRANT,
-                77 + CREATE_FOOD_MIN_GRANT
-            )
-        );
+        assert_eq!(state.message, SPELL_SUCCESS_LINE);
     }
 
     #[test]

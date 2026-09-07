@@ -1,0 +1,79 @@
+# Cast the spells whose result lines the engine had invented: the locate
+# refusal indoors, create food, and the two party-target restores.
+# requires-seed: a caster with charges, reagents, mana and potions, built with
+# the `seed_inventory` example (`potions=3 spells=9 reagents=20 mana=99`)
+both	wait	9000
+both	key	space
+both	wait	4000
+both	key	j
+both	wait	7000
+both	key	c
+both	wait	1500
+both	key	Return
+both	wait	1200
+both	key	i
+both	wait	900
+both	key	w
+both	wait	900
+both	shot	locate-typed	The locate selector
+both	key	Return
+both	wait	2500
+both	wait	1500
+both	shot	locate	The locate result
+both	key	space
+both	wait	1200
+both	key	c
+both	wait	1500
+both	key	Return
+both	wait	1200
+both	key	i
+both	wait	900
+both	key	m
+both	wait	900
+both	key	x
+both	wait	900
+both	shot	food-typed	The food selector
+both	key	Return
+both	wait	2500
+both	wait	1500
+both	shot	food	The food result
+both	key	space
+both	wait	1200
+both	key	c
+both	wait	1500
+both	key	Return
+both	wait	1200
+both	key	a
+both	wait	900
+both	key	z
+both	wait	900
+both	shot	wake-typed	The wake selector
+both	key	Return
+both	wait	2500
+both	key	1
+both	wait	1100
+both	key	Return
+both	wait	1100
+both	wait	1500
+both	shot	wake	The wake result
+both	key	space
+both	wait	1200
+both	key	c
+both	wait	1500
+both	key	Return
+both	wait	1200
+both	key	a
+both	wait	900
+both	key	n
+both	wait	900
+both	shot	cure-typed	The cure selector
+both	key	Return
+both	wait	2500
+both	key	1
+both	wait	1100
+both	key	Return
+both	wait	1100
+both	wait	1500
+both	shot	cure	The cure result
+both	key	space
+both	wait	1200

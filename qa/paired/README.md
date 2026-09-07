@@ -71,6 +71,7 @@ are PRNG-selected and legitimately differ between the two sides.
 | `use-potions` | the potion result lines, one colour at a time |
 | `use-scrolls` | the two scrolls that ask for an argument |
 | `use-specials` | the special-item rows: the carpet, the regalia, the sceptre and a shard |
+| `cast-results` | the C-Cast spell-name prompt and four spell results |
 | `dungeon-search` | dungeon Search: the `Search...` echo, the shared `Dir-` relative-direction prompt, and the hidden-door reveal |
 | `dungeon-look` | dungeon Look through the same helper, including the Space cancel that writes `Dir-Pass` |
 | `magic-mix` | the M-Mix reagent list and its prompts |
@@ -101,6 +102,7 @@ number of keystrokes:
 | `dungeon-search`, `dungeon-look`, `dungeon-view` | the party on Deceit's entrance level facing a wall-class cell, with a torch to hand |
 | `overworld-camp`, `magic-mix-and-cast` | the party standing on the Britannia overworld |
 | `town-night-schedule` | Britain at 02:00 |
+| `cast-results` | a caster with charges, reagents and mana, built with the `seed_inventory` example (`potions=3 spells=9 reagents=20 mana=99`) |
 | `town-death-vision` | the party one cell east of a crystal-sphere tile. An engine-written town seed is safe here: the sphere is a Look target |
 | `use-potions`, `use-scrolls`, `use-specials` | a party carrying potions and scrolls, built with the `seed_inventory` example (`cargo run --release --example seed_inventory -- <profile> potions=3 scrolls=3 specials=1 status1=D`). The shipped starting party carries three items, which is not enough to reach these families |
 | `town-britain-seeded`, `town-fountain`, `town-look-npc-cell` | the party inside Britain, beside the fountain for the fountain scenario |

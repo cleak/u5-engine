@@ -785,7 +785,13 @@ impl PlayState {
                     self.request_cast_argument(CastArgumentRequest::Caster);
                     return Ok(MoveOutcome::Blocked);
                 };
-                Ok(self.cast_awaken(caster_index))
+                // Measured 2026-09-07: An Zu asks `On who: ` like its
+                // sibling An Nox; it does not pick the first sleeper.
+                let Some(target_index) = parse_inline_target_party_index(suffix) else {
+                    self.request_cast_argument(CastArgumentRequest::PartyTarget);
+                    return Ok(MoveOutcome::Blocked);
+                };
+                Ok(self.cast_awaken(caster_index, target_index))
             }
             "KX" => {
                 let Some(caster_index) = parse_inline_party_index(suffix) else {

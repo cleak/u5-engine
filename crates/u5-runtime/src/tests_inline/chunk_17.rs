@@ -667,7 +667,7 @@
         assert!(state.step_active_cast('M', "", Path::new("")).unwrap().is_none());
         assert!(state.step_active_cast(' ', "", Path::new("")).unwrap().is_none());
         assert!(state.active_cast_followup.is_some());
-        assert!(state.message.contains("Whom?"));
+        assert_eq!(state.message, USE_POTION_TARGET_PROMPT);
         assert_eq!(state.spell_charges[HEAL_SPELL_INDEX], 1);
         assert_eq!(state.party[0].mana, HEAL_COST);
         assert_eq!(state.turn, 0);
@@ -3581,7 +3581,7 @@
         assert_eq!(cure.party[0].mana, 2);
         assert_eq!(cure.turn, 1);
         assert_eq!(cure.clock, GameClock::new(12, 1).unwrap());
-        assert_eq!(cure.message, "Cured party member 2.");
+        assert_eq!(cure.message, "");
 
         let mut awaken = dungeon_state(open_dungeon_record(), 0, 1, 1);
         awaken.party = vec![
@@ -3611,7 +3611,8 @@
         awaken.spell_charges[AWAKEN_SPELL_INDEX] = 1;
 
         assert_eq!(
-            handle_play_key_input(&mut awaken, 'C', "1AZ", Path::new("")).unwrap(),
+            // Measured: An Zu takes a target like An Nox does.
+            handle_play_key_input(&mut awaken, 'C', "1AZ2", Path::new("")).unwrap(),
             PlayInputDisposition::Continue
         );
 
@@ -3620,7 +3621,7 @@
         assert_eq!(awaken.spell_charges[AWAKEN_SPELL_INDEX], 0);
         assert_eq!(awaken.party[0].mana, 2);
         assert_eq!(awaken.turn, 1);
-        assert_eq!(awaken.message, "Awakened party member 2.");
+        assert_eq!(awaken.message, "");
 
         let mut heal = dungeon_state(open_dungeon_record(), 0, 1, 1);
         heal.party = cure.party;

@@ -233,7 +233,7 @@ fn committed_party_spells_play_their_published_variant_before_the_effect() {
     let mut awaken = test_state(open_grid(), 1, 1);
     arm_spell(&mut awaken, AWAKEN_SPELL_INDEX);
     let serial = awaken.sound_effect_serial;
-    assert_eq!(awaken.cast_awaken(0), MoveOutcome::Blocked);
+    assert_eq!(awaken.cast_awaken(0, 0), MoveOutcome::Blocked);
     assert_eq!(awaken.message, "Failed!");
     assert_eq!(
         awaken.sound_effects_after(serial),
@@ -452,7 +452,7 @@ fn refusals_before_the_committed_cast_stay_silent() {
     let mut no_charge = test_state(open_grid(), 1, 1);
     no_charge.spell_charges[AWAKEN_SPELL_INDEX] = 0;
     let serial = no_charge.sound_effect_serial;
-    assert_eq!(no_charge.cast_awaken(0), MoveOutcome::Blocked);
+    assert_eq!(no_charge.cast_awaken(0, 0), MoveOutcome::Blocked);
     assert!(
         no_charge.sound_effects_after(serial).is_empty(),
         "a rejected resource gate never commits the cast"
