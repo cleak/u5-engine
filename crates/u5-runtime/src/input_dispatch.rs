@@ -3087,8 +3087,12 @@ fn handle_combat_multistage_command(
                     advance_combat_round_after_actor_and_append_message(state, actor_slot);
                 }
                 CombatInlineYell::Word(word) => {
-                    let word = PlayState::normalize_yell_word(word);
-                    state.message = format!("Yelled {word}. Nothing happens.");
+                    // `combat.md §8`, the `Y` row: "In combat, nonempty Yell
+                    // input reaches the handler's no-effect path", which is
+                    // the shared handler's own literal - not a second
+                    // wording that echoes the word back.
+                    let _ = PlayState::normalize_yell_word(word);
+                    state.message = YELL_NO_EFFECT_MESSAGE.to_string();
                     let _ = apply_combat_committed_action_maintenance(state, actor_slot);
                     advance_combat_round_after_actor_and_append_message(state, actor_slot);
                 }

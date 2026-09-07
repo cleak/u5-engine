@@ -1135,7 +1135,7 @@ fn save_game_command_prompts_or_cancels_without_writing() {
         state.save_game_command(&dir, None).unwrap(),
         MoveOutcome::PromptDeclined
     );
-    assert_eq!(state.message, "Save game? Use QY to save or QN to cancel.");
+    assert_eq!(state.message, SAVE_PROMPT_MESSAGE);
     assert!(!dir.join("SAVED.OOL").exists());
 
     assert_eq!(

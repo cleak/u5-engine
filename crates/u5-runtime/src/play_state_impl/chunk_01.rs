@@ -156,7 +156,9 @@ impl PlayState {
     ) -> io::Result<MoveOutcome> {
         match confirm {
             None => {
-                self.message = "Save game? Use QY to save or QN to cancel.".to_string();
+                // `save-load.md §5.2`: the prompt is its own published
+                // literal; the inline syntax hint was the engine's.
+                self.message = SAVE_PROMPT_MESSAGE.to_string();
                 Ok(MoveOutcome::PromptDeclined)
             }
             Some(false) => {

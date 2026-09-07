@@ -4634,7 +4634,10 @@ impl PlayState {
             return MoveOutcome::Blocked;
         };
         if !direction.is_cardinal() {
-            self.message = "Field placement requires a cardinal direction.".to_string();
+            // `input.md §10`: a non-cardinal key at the shared direction
+            // prompt is "ignored and cause[s] the prompt to read again", so a
+            // non-cardinal supplied inline lands on the same request.
+            self.request_cast_argument(CastArgumentRequest::Direction);
             return MoveOutcome::Blocked;
         }
         if let Some(outcome) = self.cast_spell_resource_gate(caster_index, spell_index, mana_cost) {
@@ -4784,7 +4787,8 @@ impl PlayState {
             return Ok(MoveOutcome::Blocked);
         };
         if !direction.is_cardinal() {
-            self.message = "Blink requires a cardinal direction.".to_string();
+            // See the field-placement arm: a non-cardinal re-prompts.
+            self.request_cast_argument(CastArgumentRequest::Direction);
             return Ok(MoveOutcome::Blocked);
         }
         if !self.spell_allowed_in_current_cast_context(BLINK_SPELL_INDEX) {

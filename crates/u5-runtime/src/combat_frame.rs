@@ -2328,7 +2328,9 @@ impl PlayState {
             return MoveOutcome::Blocked;
         };
         if !direction.is_cardinal() {
-            self.message = "Dispel Field requires a cardinal direction.".to_string();
+            // `input.md §10`: a non-cardinal re-prompts rather than
+            // printing a refusal of the engine's own.
+            self.request_cast_argument(CastArgumentRequest::Direction);
             return MoveOutcome::Blocked;
         }
         let Some(caster_actor) = self.combat_actors.get(caster_index).copied() else {
@@ -5237,7 +5239,8 @@ impl PlayState {
             return MoveOutcome::Blocked;
         };
         if !direction.is_cardinal() {
-            self.message = "Directed spell requires a cardinal direction.".to_string();
+            // See the Dispel Field arm: a non-cardinal re-prompts.
+            self.request_cast_argument(CastArgumentRequest::Direction);
             return MoveOutcome::Blocked;
         }
 
