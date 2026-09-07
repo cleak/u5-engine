@@ -5575,6 +5575,7 @@ fn combat_post_dispatch_absorbable_field_contact_sets_armed_result_marker() {
         suppress_controlled_faint_sleep_tick: false,
         exit_announced: false,
         established_exit_direction_code: None,
+        any_foe_seated: true,
     });
 
     let application = state
@@ -5644,6 +5645,7 @@ fn combat_absorbable_field_contact_without_armed_snapshot_does_not_set_result_ma
         suppress_controlled_faint_sleep_tick: false,
         exit_announced: false,
         established_exit_direction_code: None,
+        any_foe_seated: true,
     });
 
     let application = state
@@ -9834,6 +9836,7 @@ fn combat_ai_turn_doom_context_bypasses_suppressed_phase_targets() {
         suppress_controlled_faint_sleep_tick: false,
         exit_announced: false,
         established_exit_direction_code: None,
+        any_foe_seated: true,
     });
 
     let application = state
@@ -12099,6 +12102,7 @@ fn combat_player_command_handles_digits_pass_branches_and_escape_cleanup() {
         suppress_controlled_faint_sleep_tick: false,
         exit_announced: true,
         established_exit_direction_code: None,
+        any_foe_seated: true,
     });
     let allowed_escape = state
         .apply_combat_player_command_with_inputs(0, CombatPlayerCommandInput::Key('\u{1b}'))
@@ -15419,6 +15423,7 @@ fn combat_monster_vanish_faint_tail_disarms_and_sleeps_first_controlled_party_ac
         suppress_controlled_faint_sleep_tick: true,
         exit_announced: false,
         established_exit_direction_code: None,
+        any_foe_seated: true,
     });
     let suppressed_animation_before = suppressed.animation.frame;
     suppressed
@@ -20937,6 +20942,7 @@ fn a_dungeon_room_arena_draws_its_terrain_through_the_red_green_plane_swap() {
         suppress_controlled_faint_sleep_tick: false,
         exit_announced: false,
         established_exit_direction_code: None,
+        any_foe_seated: true,
     });
     assert!(state.dungeon_room_arena_plane_swap_active());
     state.combat_active = false;

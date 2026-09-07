@@ -26,6 +26,18 @@ pub struct CombatFrameSnapshot {
     pub exit_announced: bool,
     /// First party-side cardinal edge direction accepted in this combat.
     pub established_exit_direction_code: Option<u8>,
+    /// Whether a hostile actor has ever been seated in this combat.
+    ///
+    /// `combat.md §7` gates `VICTORY!` on "party actors remain and foes do
+    /// not", which by itself fires in an arena that never seated a foe -
+    /// the state a **cleared** dungeon room re-entered in the same visit
+    /// loads in (`dungeon-mode.md §5`). **Measured**: the shipped game
+    /// stays silent there (`qa/paired/combat-rounds.tsv`). The narrower
+    /// alternative - the recount runs only in a round a monster acted in -
+    /// is indistinguishable from this one except when the party kills the
+    /// last foe before any monster acts; `cleak/u5-spec#227` asks which it
+    /// is.
+    pub any_foe_seated: bool,
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -4026,6 +4038,7 @@ impl PlayState {
             suppress_controlled_faint_sleep_tick: false,
             exit_announced: false,
             established_exit_direction_code: None,
+            any_foe_seated: combat_side_census(&actors).foes_remain(),
         };
         self.active_objects = active_objects;
         // `combat.md §16.1`: the player-command handler's "one gate is the
@@ -7201,6 +7214,16 @@ impl PlayState {
     pub fn announce_combat_victory_if_needed(&mut self) -> bool {
         let census = combat_side_census(&self.combat_actors);
         if census.foes_remain() || !census.friends_remain() {
+            return false;
+        }
+        // See [`CombatFrameSnapshot::any_foe_seated`]: an arena that never
+        // seated a hostile announces nothing, measured against the
+        // original.
+        if self
+            .combat_frame_snapshot
+            .as_ref()
+            .is_some_and(|snapshot| !snapshot.any_foe_seated)
+        {
             return false;
         }
         if self.combat_absorbable_field_marker_present() {
