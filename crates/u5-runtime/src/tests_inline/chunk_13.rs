@@ -23096,14 +23096,14 @@ fn game_clock_display_hour_and_am_pm_suffix_match_spec() {
     // otherwise.
     let clock_at = |hour: u8| GameClock::new(hour, 0).unwrap();
     assert_eq!(clock_at(0).display_hour(), 12);
-    assert_eq!(clock_at(0).am_pm_suffix(), "A.M.");
+    assert_eq!(clock_at(0).am_pm_suffix(), "AM");
     assert_eq!(clock_at(1).display_hour(), 1);
-    assert_eq!(clock_at(11).am_pm_suffix(), "A.M.");
+    assert_eq!(clock_at(11).am_pm_suffix(), "AM");
     assert_eq!(clock_at(12).display_hour(), 12);
-    assert_eq!(clock_at(12).am_pm_suffix(), "P.M.");
+    assert_eq!(clock_at(12).am_pm_suffix(), "PM");
     assert_eq!(clock_at(13).display_hour(), 1);
     assert_eq!(clock_at(23).display_hour(), 11);
-    assert_eq!(clock_at(23).am_pm_suffix(), "P.M.");
+    assert_eq!(clock_at(23).am_pm_suffix(), "PM");
 }
 
 #[test]

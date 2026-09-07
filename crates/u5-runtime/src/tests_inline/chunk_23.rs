@@ -12435,7 +12435,7 @@ fn combat_input_dispatch_use_opens_shared_picker_and_ends_action_on_completion()
 
     assert!(state.active_use.is_none());
     assert_eq!(state.special_items[SPECIAL_ITEM_POCKET_WATCH_INDEX], 1);
-    assert!(state.message.starts_with("Pocket Watch:"));
+    assert!(state.message.starts_with(USE_POCKET_WATCH_PREFIX));
     assert!(!state.message.contains("Giant Rat moved"));
     assert_eq!((state.combat_actors[8].x, state.combat_actors[8].y), (7, 5));
     assert_eq!(state.pending_combat_actor_slot, Some(0));

@@ -163,11 +163,11 @@ fn use_command_routes_inline_pocket_watch_request() {
     );
 
     assert_eq!(town.turn, 1);
-    assert_eq!(town.message, "Pocket Watch: 12:45 A.M.");
+    assert_eq!(town.message, "The pocket watch reads 12:45 AM.");
 
     town.clock = GameClock::new(13, 20).unwrap();
     assert_eq!(town.use_pocket_watch(), MoveOutcome::Used);
-    assert_eq!(town.message, "Pocket Watch: 1:20 P.M.");
+    assert_eq!(town.message, "The pocket watch reads 1:20 PM.");
 }
 
 #[test]

@@ -1,0 +1,42 @@
+# Use the third item the shipped party carries - the pocket watch - to measure
+# its `Item: ` completion and its result line (cleak/u5-spec#225).
+both	wait	9000
+both	key	space
+both	wait	4000
+both	key	c
+both	wait	2500
+both	type	Avatar
+both	key	Return
+both	wait	1500
+both	key	m
+both	wait	3000
+both	key	space
+both	wait	3000
+both	key	a
+both	wait	3000
+both	key	a
+both	wait	3000
+both	key	a
+both	wait	3000
+both	key	a
+both	wait	3000
+both	key	a
+both	wait	3000
+both	key	a
+both	wait	3000
+both	key	a
+both	wait	3000
+both	key	space
+both	wait	4000
+both	key	j
+both	wait	7000
+both	key	u
+both	wait	2000
+both	key	Down
+both	wait	700
+both	key	Down
+both	wait	700
+both	shot	cursor	The picker with the third row selected
+both	key	Return
+both	wait	3000
+both	shot	watch	After using the third row

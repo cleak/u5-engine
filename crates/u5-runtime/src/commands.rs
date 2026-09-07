@@ -565,6 +565,14 @@ pub const USE_ITEM_ECHO_SCROLL: &str = "Scroll";
 /// See [`USE_ITEM_ECHO_SCROLL`].
 pub const USE_ITEM_ECHO_POTION: &str = "Potion";
 
+/// **Measured** (`qa/paired/hut-use-watch.tsv`): the pocket watch reads
+/// its time as a sentence, `The pocket watch reads 8:35 AM.`, with the
+/// hour unpadded, the minute two digits, the meridiem in capitals and a
+/// closing full stop. The engine had `Pocket Watch: 8:35 AM`.
+/// `inventory.md §7` describes the item without quoting the line.
+/// `cleak/u5-spec#225`.
+pub const USE_POCKET_WATCH_PREFIX: &str = "The pocket watch reads ";
+
 /// **Measured** (`qa/paired/hut-use-items.tsv`): using a potion asks which
 /// member drinks it with this prompt, and the chosen name completes the row
 /// - `On who: Iolo`. `inventory.md §6` describes the target without

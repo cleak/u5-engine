@@ -321,8 +321,13 @@ impl GameClock {
         }
     }
 
+    /// `catalogs/item-list.md` Pocket Watch row and `view.md §3`'s clock
+    /// tile both end their reading with "the AM/PM suffix" without
+    /// spelling it. **Measured** (`qa/paired/hut-use-watch.tsv`): the
+    /// original writes `AM`, unpunctuated - this engine had `A.M.`.
+    /// `cleak/u5-spec#225`.
     pub fn am_pm_suffix(self) -> &'static str {
-        if self.hour < 12 { "A.M." } else { "P.M." }
+        if self.hour < 12 { "AM" } else { "PM" }
     }
 
     pub fn advance_hour(&mut self) {

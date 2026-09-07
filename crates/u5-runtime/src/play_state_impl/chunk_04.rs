@@ -1286,7 +1286,7 @@ impl PlayState {
         let minute = self.clock.minute;
         let suffix = self.clock.am_pm_suffix();
         self.advance_turn();
-        self.message = format!("Pocket Watch: {display_hour}:{minute:02} {suffix}");
+        self.message = format!("{USE_POCKET_WATCH_PREFIX}{display_hour}:{minute:02} {suffix}.");
         MoveOutcome::Used
     }
 

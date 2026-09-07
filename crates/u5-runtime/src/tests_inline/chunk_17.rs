@@ -1280,7 +1280,7 @@
         );
 
         assert!(state.active_use.is_none());
-        assert_eq!(state.message, "Pocket Watch: 1:00 P.M.");
+        assert_eq!(state.message, "The pocket watch reads 1:00 PM.");
         assert_eq!(state.turn, 1);
     }
 

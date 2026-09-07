@@ -1026,19 +1026,19 @@ fn look_clock_tiles_append_twelve_hour_time_context() {
     state.clock = GameClock::new(0, 7).unwrap();
     assert_eq!(
         state.look_description(0xfa, Some(&table)),
-        "a clock (12:07 A.M.)"
+        "a clock (12:07 AM)"
     );
 
     state.clock = GameClock::new(12, 0).unwrap();
     assert_eq!(
         state.look_description(0xfa, Some(&table)),
-        "a clock (12:00 P.M.)"
+        "a clock (12:00 PM)"
     );
 
     state.clock = GameClock::new(23, 59).unwrap();
     assert_eq!(
         state.look_description(0xfa, Some(&table)),
-        "a clock (11:59 P.M.)"
+        "a clock (11:59 PM)"
     );
 }
 
