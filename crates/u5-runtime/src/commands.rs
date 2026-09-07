@@ -543,6 +543,14 @@ pub const fn new_order_outcome(slot_a: Option<usize>, slot_b: Option<usize>) -> 
 /// are case-folded before dispatch (see `input.md §6`). Returns `None`
 /// for any byte outside the `A..=Z` range and the literal `Space` pass
 /// input.
+/// `inventory.md §2.1`: "If the total is greater than Strength, R-Ready
+/// prints the \"not strong enough\" refusal and makes no inventory or
+/// equipment change." The section names the refusal without quoting it;
+/// **measured** against the original (`qa/paired/hut-ready-refusals.tsv`)
+/// it is this line, and the item picker stays open under it.
+/// `cleak/u5-spec#225`.
+pub const READY_NOT_STRONG_ENOUGH_REFUSAL: &str = "Thou art not strong enough!";
+
 /// `inventory.md §4.4`: the U-Use flow "print[s] `Item:_` into the message
 /// window" and the picker's accepted row completes that line, the same way
 /// `Player:_` takes the chosen member's name.

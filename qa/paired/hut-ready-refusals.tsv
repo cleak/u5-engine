@@ -1,0 +1,72 @@
+# Ready a weapon and then a second one, to measure the R-Ready refusal for a
+# slot that is already filled - `inventory.md` section 5 describes the
+# hand-occupancy branch but publishes none of its lines (cleak/u5-spec#225).
+both	wait	9000
+both	key	space
+both	wait	4000
+both	key	c
+both	wait	2500
+both	type	Avatar
+both	key	Return
+both	wait	1500
+both	key	m
+both	wait	3000
+both	key	space
+both	wait	3000
+both	key	a
+both	wait	3000
+both	key	a
+both	wait	3000
+both	key	a
+both	wait	3000
+both	key	a
+both	wait	3000
+both	key	a
+both	wait	3000
+both	key	a
+both	wait	3000
+both	key	a
+both	wait	3000
+both	key	space
+both	wait	4000
+both	key	j
+both	wait	7000
+both	key	r
+both	wait	1500
+both	key	Return
+both	wait	1500
+both	key	Down
+both	wait	500
+both	key	Down
+both	wait	500
+both	key	Down
+both	wait	500
+both	key	Down
+both	wait	500
+both	key	Return
+both	wait	2500
+both	shot	first-weapon	After readying the fifth row
+both	key	r
+both	wait	1500
+both	key	Return
+both	wait	1500
+both	key	Down
+both	wait	500
+both	key	Down
+both	wait	500
+both	key	Down
+both	wait	500
+both	key	Down
+both	wait	500
+both	key	Down
+both	wait	500
+both	key	Return
+both	wait	2500
+both	shot	second-weapon	Readying a second weapon
+both	key	z
+both	wait	1500
+both	key	Return
+both	wait	1500
+both	key	Right
+both	wait	2000
+both	shot	arms	The Arms page

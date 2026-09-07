@@ -2872,8 +2872,13 @@ impl PlayState {
                 }
                 let outcome_message = self.message.clone();
                 self.normalize_ready_cursor(&mut session);
-                self.message =
-                    format!("{outcome_message}\n{}", self.render_ready_session(&session));
+                // Measured: the reopened `Item: ` prompt opens its own
+                // block under the handler's line, so a blank row stands
+                // between them.
+                self.message = format!(
+                    "{outcome_message}\n\n{}",
+                    self.render_ready_session(&session)
+                );
                 self.active_ready = Some(session);
             }
             ReadyInputAction::Redraw | ReadyInputAction::Discard => {
@@ -3606,6 +3611,35 @@ impl PlayState {
             self.message = format!("{name} cannot be readied.");
             return MoveOutcome::Blocked;
         };
+        // `inventory.md §2.1`: "Before an item is written into a readied
+        // slot, the command sums the selected character's current
+        // readied-equipment burden, adds the candidate item's R-Ready
+        // burden, and compares the result to that character's Strength
+        // byte." The helper had been written and never wired in, so this
+        // engine readied whatever the slot rules allowed however heavy it
+        // was - measured against the original, which refuses.
+        //
+        // Where the gate sits relative to the hand rules below is not
+        // published; it is placed here, before the first of them.
+        let strength = self
+            .party_strengths
+            .get(request.party_index)
+            .copied()
+            .unwrap_or(0);
+        let candidate_burden = EQUIPMENT_READY_BURDENS
+            .get(item_id)
+            .copied()
+            .unwrap_or_default();
+        if !r_ready_burden_gate_accepts(
+            ready_burden(&self.party_equipment[request.party_index]),
+            candidate_burden,
+            strength,
+        ) {
+            // Measured: the refusal opens a block under the `Item: ` row
+            // the pick completed, and the reopened prompt opens another.
+            self.message = format!("\n{READY_NOT_STRONG_ENOUGH_REFUSAL}");
+            return MoveOutcome::Blocked;
+        }
         if self.party_equipment[request.party_index][slot] != EQUIPMENT_EMPTY {
             self.message = format!("Remove current {} first.", slot_name(slot));
             return MoveOutcome::Blocked;

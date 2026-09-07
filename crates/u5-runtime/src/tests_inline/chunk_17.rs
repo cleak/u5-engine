@@ -1364,6 +1364,45 @@
         assert_eq!(state.turn, 1);
     }
 
+    /// `inventory.md §2.1`: R-Ready "sums the selected character's current
+    /// readied-equipment burden, adds the candidate item's R-Ready burden,
+    /// and compares the result to that character's Strength byte. If the
+    /// total is greater than Strength, R-Ready prints the 'not strong
+    /// enough' refusal and makes no inventory or equipment change." The
+    /// helper existed and no caller ran it.
+    #[test]
+    fn r_ready_refuses_an_item_the_member_cannot_carry() {
+        let mut state = test_state(open_grid(), 1, 1);
+        let heavy = EQUIPMENT_READY_BURDENS
+            .iter()
+            .copied()
+            .enumerate()
+            .max_by_key(|(_, burden)| *burden)
+            .map(|(item, _)| item)
+            .expect("a burden table row");
+        state.equipment_stock[heavy] = 1;
+        state.party_strengths = vec![1];
+        state.party_equipment = default_party_equipment(state.party.len());
+
+        let outcome = state.ready_equipment(InlineReadyRequest {
+            party_index: 0,
+            item_id: heavy,
+        });
+
+        assert_eq!(outcome, MoveOutcome::Blocked);
+        assert_eq!(
+            state.message,
+            format!("\n{READY_NOT_STRONG_ENOUGH_REFUSAL}")
+        );
+        assert_eq!(state.equipment_stock[heavy], 1, "no inventory change");
+        assert!(
+            state.party_equipment[0]
+                .iter()
+                .all(|slot| *slot == EQUIPMENT_EMPTY),
+            "no equipment change"
+        );
+    }
+
     #[test]
     fn active_use_picker_potion_prompts_for_target_after_consuming_stock() {
         let mut state = test_state(open_grid(), 5, 5);
