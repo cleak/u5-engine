@@ -1383,7 +1383,7 @@ impl PlayState {
         // and X each carry their own closing quote separated by
         // comma-space, then a further line break.
         self.message = format!(
-            "Sextant:{}",
+            "{USE_SEXTANT_READING_LABEL}{}",
             sextant_coordinate_pair_line(self.player.y as u8, self.player.x as u8)
         );
         MoveOutcome::Used

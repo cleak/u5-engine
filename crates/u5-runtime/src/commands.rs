@@ -608,6 +608,10 @@ pub const MOONSTONE_BURY_REFUSAL: &str = " cannot be buried here!";
 /// `Wooden Box: How use it?`.
 pub const USE_SPYGLASS_NO_STARS: &str = "No stars!";
 pub const USE_SEXTANT_ONLY_OUTDOORS: &str = "Only outdoors!";
+/// **Measured** 2026-09-07 from a ship at night: the U-Use sextant labels its
+/// reading `Position:`, not the `Sextant:` `magic.md` §8 names. The shared
+/// coordinate printer below it is unchanged (`cleak/u5-spec#237`).
+pub const USE_SEXTANT_READING_LABEL: &str = "Position:";
 /// The daylight refusal, measured aboard a ship at noon.
 pub const USE_SEXTANT_DAYTIME_REFUSAL: &str = "Only at night!";
 pub const USE_WOODEN_BOX_PROMPT: &str = "How?";

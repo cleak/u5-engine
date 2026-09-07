@@ -1,0 +1,29 @@
+# The sextant at night from a ship: the reading it prints.
+# requires-seed: the party aboard a frigate at night, carrying the sextant
+both	wait	9000
+both	key	space
+both	wait	4000
+both	key	j
+both	wait	8000
+both	key	u
+both	wait	2000
+both	key	Down
+both	wait	420
+both	key	Down
+both	wait	420
+both	key	Down
+both	wait	420
+both	key	Down
+both	wait	420
+both	key	Down
+both	wait	420
+both	key	Down
+both	wait	420
+both	key	Down
+both	wait	420
+both	key	Down
+both	wait	420
+both	shot	row	The sextant row
+both	key	Return
+both	wait	3500
+both	shot	used	The sextant reading
