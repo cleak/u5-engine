@@ -109,7 +109,7 @@ fn sextant_night_window_includes_hours_five_and_nineteen() {
 fn sextant_requires_item_world_scene_and_night() {
     let mut world = surface_world_state(open_world_grid(), 1, 1);
     assert_eq!(world.use_sextant(), MoveOutcome::Blocked);
-    assert_eq!(world.message, "No Sextant!");
+    assert_eq!(world.message, "");
 
     world.special_items[SPECIAL_ITEM_SEXTANT_INDEX] = 1;
     world.clock = GameClock::new(12, 0).unwrap();
@@ -148,7 +148,7 @@ fn use_command_charges_a_normal_turn_for_every_sextant_result() {
     let mut missing = surface_world_state(open_world_grid(), 1, 1);
     handle_play_key_input(&mut missing, 'U', "S", Path::new("")).unwrap();
     assert_eq!(missing.turn, 1);
-    assert_eq!(missing.message, "No Sextant!");
+    assert_eq!(missing.message, "");
 }
 
 #[test]
@@ -177,7 +177,7 @@ fn pocket_watch_requires_item_without_turn() {
     assert_eq!(town.use_pocket_watch(), MoveOutcome::Blocked);
 
     assert_eq!(town.turn, 0);
-    assert_eq!(town.message, "No Pocket Watch!");
+    assert_eq!(town.message, "");
 }
 
 #[test]
@@ -239,7 +239,7 @@ fn spyglass_requires_item_surface_plane_and_night() {
     missing.clock = GameClock::new(20, 0).unwrap();
     assert_eq!(missing.use_spyglass(), MoveOutcome::Blocked);
     assert_eq!(missing.turn, 0);
-    assert_eq!(missing.message, "No Spyglass!");
+    assert_eq!(missing.message, "");
 
     let mut day = britannia_state(open_world_grid(), 1, 1);
     day.special_items[SPECIAL_ITEM_SPYGLASS_INDEX] = SPECIAL_ITEM_OWNED_VALUE;
@@ -485,7 +485,7 @@ fn scrolls_require_stock_and_negate_time_has_no_effect_in_stonegate() {
         missing.use_scroll(SCROLL_LIGHT_INDEX, None, None),
         MoveOutcome::Blocked
     );
-    assert_eq!(missing.message, "No LV scroll!");
+    assert_eq!(missing.message, "");
     assert_eq!(missing.turn, 0);
 
     let mut stonegate = test_state(open_grid(), 1, 1);
@@ -592,7 +592,7 @@ fn potions_debit_before_target_and_effect_variation_gates() {
         missing_stock.use_potion(POTION_BLUE_INDEX, Some(0)),
         MoveOutcome::Blocked
     );
-    assert_eq!(missing_stock.message, "No blue potion!");
+    assert_eq!(missing_stock.message, "");
     assert_eq!(missing_stock.turn, 0);
 
     assert_eq!(
@@ -927,7 +927,7 @@ fn wooden_box_use_prompts_without_endgame_handoff() {
     let mut missing = test_state(open_grid(), 1, 1);
     assert_eq!(missing.use_wooden_box(), MoveOutcome::Blocked);
     assert_eq!(missing.turn, 0);
-    assert_eq!(missing.message, "No Wooden Box!");
+    assert_eq!(missing.message, "");
 }
 
 #[test]
@@ -963,7 +963,7 @@ fn sceptre_requires_item_non_dungeon_and_matching_nearby_barriers() {
     let mut missing = test_state(open_grid(), 1, 1);
     assert_eq!(missing.use_sceptre_of_lord_british(), MoveOutcome::Blocked);
     assert_eq!(missing.turn, 0);
-    assert_eq!(missing.message, "No Sceptre!");
+    assert_eq!(missing.message, "");
 
     let mut dungeon = dungeon_state(open_dungeon_record(), 0, 1, 1);
     dungeon.special_items[SPECIAL_ITEM_SCEPTRE_LB_INDEX] = 1;
@@ -1134,7 +1134,7 @@ fn hms_cape_plans_require_item_and_shipboard_context() {
     let mut missing = world_state(open_world_grid(), 1, 1);
     assert_eq!(missing.use_hms_cape_plans(), MoveOutcome::Blocked);
     assert_eq!(missing.turn, 0);
-    assert_eq!(missing.message, "No HMS Cape Plans!");
+    assert_eq!(missing.message, "");
 
     let mut on_foot = world_state(open_world_grid(), 1, 1);
     on_foot.special_items[SPECIAL_ITEM_HMS_CAPE_PLANS_INDEX] = 1;
@@ -1176,7 +1176,7 @@ fn use_command_routes_inline_magic_carpet_request() {
 fn magic_carpet_use_requires_stock_footing_and_accepted_tile() {
     let mut no_stock = world_state(open_world_grid(), 1, 1);
     assert_eq!(no_stock.use_magic_carpet(), MoveOutcome::Blocked);
-    assert_eq!(no_stock.message, "No Magic Carpet!");
+    assert_eq!(no_stock.message, "");
     assert_eq!(no_stock.turn, 0);
 
     let mut boarded = world_state(open_world_grid(), 1, 1);
@@ -1263,7 +1263,7 @@ fn skull_key_requires_special_key_stock() {
 
     assert_eq!(town.turn, 0);
     assert_eq!(town.keys, DEFAULT_KEY_STOCK);
-    assert_eq!(town.message, "No Skull Keys!");
+    assert_eq!(town.message, "");
 }
 
 #[test]

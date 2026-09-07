@@ -934,7 +934,10 @@ impl PlayState {
 
     pub fn use_wooden_box(&mut self) -> MoveOutcome {
         if self.special_items[SPECIAL_ITEM_WOODEN_BOX_INDEX] == 0 {
-            self.message = "No Wooden Box!".to_string();
+            // The U-Use picker lists only what the party carries, so no
+            // shipped path reaches this branch: it is the inline harness
+            // form's guard, and the original has no line for it.
+            self.message.clear();
             return MoveOutcome::Blocked;
         }
         self.message = USE_WOODEN_BOX_PROMPT.to_string();
@@ -977,14 +980,20 @@ impl PlayState {
         game_dir: Option<&Path>,
     ) -> io::Result<MoveOutcome> {
         let Some(item_index) = shadowlord_shard_special_item_index(index) else {
-            self.message = "No such Shard.".to_string();
+            // The U-Use picker lists only what the party carries, so no
+            // shipped path reaches this branch: it is the inline harness
+            // form's guard, and the original has no line for it.
+            self.message.clear();
             return Ok(MoveOutcome::Blocked);
         };
         let name = special_item_name(item_index);
         // Not a gate: the U-Use picker only offers a carried shard, so this is
         // the picker precondition and it keeps its own refusal.
         if self.special_items[item_index] == 0 {
-            self.message = format!("No {name}!");
+            // The U-Use picker lists only what the party carries, so no
+            // shipped path reaches this branch: it is the inline harness
+            // form's guard, and the original has no line for it.
+            self.message.clear();
             return Ok(MoveOutcome::Blocked);
         }
 
@@ -1166,7 +1175,10 @@ impl PlayState {
 
     pub fn use_sceptre_of_lord_british(&mut self) -> MoveOutcome {
         if self.special_items[SPECIAL_ITEM_SCEPTRE_LB_INDEX] == 0 {
-            self.message = "No Sceptre!".to_string();
+            // The U-Use picker lists only what the party carries, so no
+            // shipped path reaches this branch: it is the inline harness
+            // form's guard, and the original has no line for it.
+            self.message.clear();
             return MoveOutcome::Blocked;
         }
         if matches!(self.area, Area::Dungeon { .. }) {
@@ -1234,7 +1246,10 @@ impl PlayState {
 
     pub fn use_hms_cape_plans(&mut self) -> MoveOutcome {
         if self.special_items[SPECIAL_ITEM_HMS_CAPE_PLANS_INDEX] == 0 {
-            self.message = "No HMS Cape Plans!".to_string();
+            // The U-Use picker lists only what the party carries, so no
+            // shipped path reaches this branch: it is the inline harness
+            // form's guard, and the original has no line for it.
+            self.message.clear();
             return MoveOutcome::Blocked;
         }
         if !matches!(self.player.transport, TransportState::Ship { .. }) {
@@ -1266,7 +1281,10 @@ impl PlayState {
 
     pub fn use_magic_carpet(&mut self) -> MoveOutcome {
         if self.special_items[SPECIAL_ITEM_MAGIC_CARPET_INDEX] == 0 {
-            self.message = "No Magic Carpet!".to_string();
+            // The U-Use picker lists only what the party carries, so no
+            // shipped path reaches this branch: it is the inline harness
+            // form's guard, and the original has no line for it.
+            self.message.clear();
             return MoveOutcome::Blocked;
         }
         if matches!(self.area, Area::Dungeon { .. }) {
@@ -1300,7 +1318,10 @@ impl PlayState {
 
     pub fn use_sextant(&mut self) -> MoveOutcome {
         if self.special_items[SPECIAL_ITEM_SEXTANT_INDEX] == 0 {
-            self.message = "No Sextant!".to_string();
+            // The U-Use picker lists only what the party carries, so no
+            // shipped path reaches this branch: it is the inline harness
+            // form's guard, and the original has no line for it.
+            self.message.clear();
             return MoveOutcome::Blocked;
         }
         // `catalogs/item-list.md` Sextant row / `inventory.md §7`: three
@@ -1342,7 +1363,10 @@ impl PlayState {
 
     pub fn use_pocket_watch(&mut self) -> MoveOutcome {
         if self.special_items[SPECIAL_ITEM_POCKET_WATCH_INDEX] == 0 {
-            self.message = "No Pocket Watch!".to_string();
+            // The U-Use picker lists only what the party carries, so no
+            // shipped path reaches this branch: it is the inline harness
+            // form's guard, and the original has no line for it.
+            self.message.clear();
             return MoveOutcome::Blocked;
         }
         let display_hour = self.clock.display_hour();
@@ -1373,7 +1397,10 @@ impl PlayState {
 
     pub fn use_spyglass(&mut self) -> MoveOutcome {
         if self.special_items[SPECIAL_ITEM_SPYGLASS_INDEX] == 0 {
-            self.message = "No Spyglass!".to_string();
+            // The U-Use picker lists only what the party carries, so no
+            // shipped path reaches this branch: it is the inline harness
+            // form's guard, and the original has no line for it.
+            self.message.clear();
             return MoveOutcome::Blocked;
         }
         // `catalogs/item-list.md` Spyglass row: three conditions, of
@@ -1456,9 +1483,11 @@ impl PlayState {
         direction: Option<Direction>,
         target: Option<usize>,
     ) -> MoveOutcome {
-        let label = scroll_label(index);
         if index >= SCROLL_COUNT || self.scroll_stock[index] == 0 {
-            self.message = format!("No {label} scroll!");
+            // The U-Use picker lists only what the party carries, so no
+            // shipped path reaches this branch: it is the inline harness
+            // form's guard, and the original has no line for it.
+            self.message.clear();
             return MoveOutcome::Blocked;
         }
         self.scroll_stock[index] = self.scroll_stock[index].saturating_sub(1);
@@ -1646,9 +1675,11 @@ impl PlayState {
     }
 
     pub fn use_potion(&mut self, index: usize, target: Option<usize>) -> MoveOutcome {
-        let label = potion_label(index);
         if index >= POTION_COUNT || self.potion_stock[index] == 0 {
-            self.message = format!("No {label} potion!");
+            // The U-Use picker lists only what the party carries, so no
+            // shipped path reaches this branch: it is the inline harness
+            // form's guard, and the original has no line for it.
+            self.message.clear();
             return MoveOutcome::Blocked;
         }
         self.potion_stock[index] = self.potion_stock[index].saturating_sub(1);

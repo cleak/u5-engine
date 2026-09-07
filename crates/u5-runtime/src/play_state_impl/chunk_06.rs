@@ -558,7 +558,10 @@ impl PlayState {
 
     pub fn use_skull_key(&mut self, game_dir: Option<&Path>) -> io::Result<MoveOutcome> {
         if self.special_items[SPECIAL_ITEM_SKULL_KEY_INDEX] == 0 {
-            self.message = "No Skull Keys!".to_string();
+            // The U-Use picker lists only what the party carries, so no
+            // shipped path reaches this branch: it is the inline harness
+            // form's guard, and the original has no line for it.
+            self.message.clear();
             return Ok(MoveOutcome::Blocked);
         }
         match self.area {

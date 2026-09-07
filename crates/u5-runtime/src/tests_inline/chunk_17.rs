@@ -1612,7 +1612,7 @@
                 .unwrap(),
             MoveOutcome::Blocked
         );
-        assert_eq!(missing.message, "No Shard of Hatred!");
+        assert_eq!(missing.message, "");
         assert_eq!(missing.turn, 0);
 
         // The vanquished case is only actually exercised **on** the shard's
