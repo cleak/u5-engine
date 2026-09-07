@@ -570,6 +570,11 @@ pub const READY_FREE_A_HAND_REFUSAL: &str = "Thou must free one of thy hands fir
 
 pub const READY_BOTH_HANDS_REFUSAL: &str = "Both hands must be free before thou canst wield that!";
 
+/// **Measured** 2026-09-07 (a party carrying nothing): opening R-Ready with
+/// an empty pack answers `Thou art empty-handed!`, where the engine had
+/// `Nothing to ready.`
+pub const READY_EMPTY_HANDED_REFUSAL: &str = "Thou art empty-handed!";
+
 pub const READY_NOT_STRONG_ENOUGH_REFUSAL: &str = "Thou art not strong enough!";
 
 /// `inventory.md §4.4`: the U-Use flow "print[s] `Item:_` into the message

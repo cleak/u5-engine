@@ -12874,7 +12874,7 @@ fn combat_input_dispatch_yell_prompt_keeps_same_actor_pending() {
         PlayInputDisposition::Continue
     );
 
-    assert_eq!(state.message, "Yell what? Use Y<word>.");
+    assert_eq!(state.message, "");
     assert_eq!(state.pending_combat_actor_slot, Some(0));
     assert!(state.active_yell.is_some());
     assert_eq!(state.active_effect_counter, 3);

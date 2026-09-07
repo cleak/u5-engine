@@ -2804,7 +2804,7 @@ impl PlayState {
             return PARTY_SELECTION_PROMPT.to_string();
         }
         if self.ready_visible_items_for_party(party_index).is_empty() {
-            return "Nothing to ready.".to_string();
+            return READY_EMPTY_HANDED_REFUSAL.to_string();
         }
         ITEM_SELECTION_PROMPT.to_string()
     }
@@ -2826,7 +2826,7 @@ impl PlayState {
         let mut lines = vec![format!("Ready: party member {}.", party_index + 1)];
         let visible = self.ready_visible_items_for_party(party_index);
         if visible.is_empty() {
-            lines.push("Nothing to ready.".to_string());
+            lines.push(READY_EMPTY_HANDED_REFUSAL.to_string());
             return lines.join("\n");
         }
 
@@ -2962,7 +2962,7 @@ impl PlayState {
                     return true;
                 };
                 let Some(item_id) = self.ready_selected_item(&session) else {
-                    self.message = "Nothing to ready.".to_string();
+                    self.message = READY_EMPTY_HANDED_REFUSAL.to_string();
                     self.active_ready = Some(session);
                     return true;
                 };

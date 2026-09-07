@@ -555,12 +555,15 @@ pub fn new_order_prompt_message() -> String {
     "New order? Use N12 to swap party slots 1 and 2.".to_string()
 }
 
+/// The inline harness form's prompt. `R` from a keystroke opens the picker,
+/// so nothing a player types reaches this.
 pub fn ready_prompt_message() -> String {
-    "Ready what? Use R<party-slot>/<equipment-id>, for example R1/16.".to_string()
+    String::new()
 }
 
+/// See [`ready_prompt_message`]: `Y` from a keystroke opens the word prompt.
 pub fn yell_prompt_message() -> String {
-    "Yell what? Use Y<word>.".to_string()
+    String::new()
 }
 
 pub fn non_empty_yell_word(value: &str) -> Option<&str> {

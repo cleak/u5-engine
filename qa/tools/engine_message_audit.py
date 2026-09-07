@@ -27,6 +27,14 @@ EMIT = re.compile(
     r"""emit_centered_message_line|emit_message_line_continuing_row)"""
     r"""\(\s*(?:&?format!\()?"((?:[^"\\]|\\.){4,120})\""""
 )
+# A message helper can also *return* its line rather than assign it. The
+# R-Ready picker's empty-pack answer hid here for a whole sweep, so the scan
+# reads returned literals too: `return "...".to_string()`, a match arm's
+# `=> "...".to_string()`, and the `unwrap_or_else` tail of a render helper.
+RETURNED = re.compile(
+    r"""(?:return|=>)\s*(?:&?format!\()?"((?:[^"\\]|\\.){4,120})"\s*(?:\)\s*)?\.to_string\(\)"""
+)
+
 PLACEHOLDER = re.compile(r"\{[^}]*\}")
 
 # Two kinds of write into `message` are not lines the game prints: a frame
@@ -77,7 +85,7 @@ def literals(source: pathlib.Path):
                 continue
             if FIXTURE_OPT_OUT in line:
                 continue
-            for pattern in (ASSIGN, EMIT):
+            for pattern in (ASSIGN, EMIT, RETURNED):
                 for literal in pattern.findall(line):
                     yield path, number, literal
 
