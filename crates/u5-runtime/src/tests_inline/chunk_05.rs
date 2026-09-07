@@ -246,7 +246,8 @@ fn exit_vehicle_furled_ship_without_landing_launches_carried_skiff() {
         .expect("ship hull should be parked at original cell");
     assert_eq!(parked.aux1, 77);
     assert_eq!(parked.aux3, 1);
-    assert_eq!(state.message, "Launched a skiff from the ship.");
+    // Measured: the completed echo is the whole of the line.
+    assert_eq!(state.message, format!("X-it {XIT_SHIP_ARGUMENT}"));
     assert_eq!(state.turn, 1);
 }
 
@@ -424,7 +425,7 @@ fn exit_vehicle_furled_ship_without_support_redeploys_stowed_carpet() {
     assert_eq!(parked.aux3, 0);
     assert_eq!(
         state.message,
-        "Redeployed stowed magic carpet from the ship."
+        format!("X-it {XIT_SHIP_ARGUMENT}")
     );
     assert_eq!(state.turn, 1);
 }

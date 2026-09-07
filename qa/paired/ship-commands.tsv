@@ -1,0 +1,22 @@
+# Aboard a frigate: the X-it arms and the Yell sail lines, which
+# `vehicles.md` and `commands.md` describe without quoting
+# (cleak/u5-spec#225).
+# requires-seed: the party aboard a frigate on deep water
+both	wait	9000
+both	key	space
+both	wait	4000
+both	key	j
+both	wait	8000
+both	shot	aboard	Journey Onward aboard the ship
+both	key	x
+both	wait	2500
+both	shot	xit	X-it aboard the ship
+both	key	y
+both	wait	2500
+both	shot	yell	Yell aboard the ship
+both	key	Up
+both	wait	2500
+both	shot	sailed	One step under sail
+both	key	x
+both	wait	2500
+both	shot	xit-sails	X-it with the sails set

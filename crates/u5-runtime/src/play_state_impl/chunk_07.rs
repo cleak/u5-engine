@@ -1029,7 +1029,9 @@ impl PlayState {
                     self.sync_player_object();
                     self.mark_visibility_dirty();
                     self.advance_turn();
-                    self.message = "Launched a skiff from the ship.".to_string();
+                    // Measured: the whole of the line is the completed
+                    // echo `X-it ship!`; the launch itself is silent.
+                    self.commit_prompt_reply("X-it ", XIT_SHIP_ARGUMENT);
                     return Ok(MoveOutcome::ExitedVehicle);
                 }
                 if self.special_items[SPECIAL_ITEM_MAGIC_CARPET_INDEX] > 0 {
@@ -1058,7 +1060,7 @@ impl PlayState {
                     self.sync_player_object();
                     self.mark_visibility_dirty();
                     self.advance_turn();
-                    self.message = "Redeployed stowed magic carpet from the ship.".to_string();
+                    self.commit_prompt_reply("X-it ", XIT_SHIP_ARGUMENT);
                     return Ok(MoveOutcome::ExitedVehicle);
                 }
                 // `vehicles.md §5` / `doors-and-z-transitions.md §11`: once

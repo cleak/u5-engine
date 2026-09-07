@@ -917,6 +917,14 @@ pub const TOWN_ARREST_NO_REPLY: &str = "No!";
 /// `cleak/u5-spec#194` (black-box): X-it on foot completes its own
 /// `X-it ` echo line with `what?`.
 pub const XIT_ON_FOOT_REFUSAL: &str = "what?";
+
+/// The same argument slot, completed by the vehicle the party leaves.
+/// **Measured** (`qa/paired/ship-commands.tsv`): leaving a frigate reads
+/// `X-it ship!` on one row, and the handler prints no line of its own -
+/// where this engine wrote a composed sentence naming the skiff it
+/// launched. The words for the horse and the carpet are not measured.
+/// `cleak/u5-spec#225`.
+pub const XIT_SHIP_ARGUMENT: &str = "ship!";
 /// `cleak/u5-spec#194` (black-box): a plain Yell that matches neither a
 /// Shadowlord name nor a Word of Power prints `No effect!`.
 pub const YELL_NO_EFFECT_MESSAGE: &str = "No effect!";
