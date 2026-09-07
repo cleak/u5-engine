@@ -1141,7 +1141,7 @@ fn hms_cape_plans_require_item_and_shipboard_context() {
     assert_eq!(on_foot.use_hms_cape_plans(), MoveOutcome::Blocked);
     assert_eq!(on_foot.special_items[SPECIAL_ITEM_HMS_CAPE_PLANS_INDEX], 1);
     assert_eq!(on_foot.turn, 0);
-    assert_eq!(on_foot.message, "Not aboard ship!");
+    assert_eq!(on_foot.message, USE_PLANS_SHIPBOARD_ONLY_REFUSAL);
 }
 
 #[test]
@@ -1798,7 +1798,8 @@ fn hoisted_ship_stalls_in_calm_wind_and_consumes_turn() {
     assert_eq!((state.player.x, state.player.y), (10, 10));
     assert_eq!(state.turn, 2);
     assert_eq!(state.clock, GameClock::new(12, 4).unwrap());
-    assert!(state.message.contains("calm wind"));
+    // Measured: the stalled attempt prints nothing.
+    assert_eq!(state.message, "");
 }
 
 #[test]
@@ -1841,7 +1842,8 @@ fn rigged_hoisted_ship_wait_uses_one_minute_cleanup() {
     assert_eq!(state.turn, 2);
     assert_eq!(state.clock, GameClock::new(12, 2).unwrap());
     assert_eq!(state.active_objects[1].phase, 0x21);
-    assert!(state.message.contains("calm wind"));
+    // Measured: the stalled attempt prints nothing.
+    assert_eq!(state.message, "");
 
     assert_eq!(state.step(Direction::East), MoveOutcome::SailStalled);
 
@@ -1874,7 +1876,7 @@ fn pass_reports_and_clears_sail_stall_feedback() {
     assert_eq!(state.pass_turn(), MoveOutcome::Passed);
     assert_eq!(state.turn, 2);
     assert_eq!(state.clock, GameClock::new(12, 4).unwrap());
-    assert!(state.message.contains("stalled by the wind"));
+    assert_eq!(state.message, SHIP_SAIL_STALLED_LINE);
     assert!(state.sail_cached_direction.is_none());
 
     assert_eq!(state.pass_turn(), MoveOutcome::Passed);

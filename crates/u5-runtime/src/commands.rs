@@ -594,7 +594,21 @@ pub const USE_POTION_TARGET_PROMPT: &str = "On who: ";
 /// **Measured** (`qa/paired/use-specials.tsv`): the special-item rows answer
 /// with their own sentences. `inventory.md §7` describes each item's effect
 /// but quotes none of these.
+/// **Measured** (`qa/paired/ship-commands.tsv`, 2026-09-07): the three lines a
+/// ship under sail answers with. `vehicles.md` describes each case without
+/// quoting it. X-it under sail answers `Under sail!` (the engine had `Cannot
+/// exit while sails are hoisted.`); a diagonal heading answers the resident
+/// `What?` refusal (the engine had `Sails need a cardinal heading.`); and the
+/// Pass that follows a stalled heading answers `Sheets in irons!` (the engine
+/// had `Ship remains stalled by the wind.`). The stalled sail attempt itself
+/// prints nothing at all - the line lands on the following turn.
+pub const SHIP_XIT_UNDER_SAIL_REFUSAL: &str = "Under sail!";
+pub const SHIP_SAIL_STALLED_LINE: &str = "Sheets in irons!";
+
 pub const USE_MAGIC_CARPET_BOARDED: &str = "Boarded!";
+/// The HMS Cape plans read off a ship. Measured: `Only usable on shipboard!`,
+/// where the engine had `Not aboard ship!`.
+pub const USE_PLANS_SHIPBOARD_ONLY_REFUSAL: &str = "Only usable on shipboard!";
 pub const USE_AMULET_WORN: &str = "Wearing the Amulet of Lord British";
 pub const USE_CROWN_WORN: &str = "Thou dost don the Crown of Lord British";
 pub const USE_SCEPTRE_WIELDED: &str = "Wielding the Sceptre of Lord British";

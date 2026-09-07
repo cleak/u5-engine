@@ -971,7 +971,7 @@ impl PlayState {
                 ..
             }
         ) {
-            self.message = "Cannot exit while sails are hoisted.".to_string();
+            self.message = SHIP_XIT_UNDER_SAIL_REFUSAL.to_string();
             return Ok(MoveOutcome::Blocked);
         }
         let Some(z) = self.current_floor() else {
@@ -3020,7 +3020,7 @@ impl PlayState {
         // pass still had a heading cached and still clears it.
         if matches!(self.area, Area::World { .. }) && self.sail_cached_direction.is_some() {
             self.sail_cached_direction = None;
-            self.message = "Ship remains stalled by the wind.".to_string();
+            self.message = SHIP_SAIL_STALLED_LINE.to_string();
         } else {
             // `commands.md §8.1` row B: `Pass` completes its own echo and
             // "no result line follows"; `text-output.md §10.3` lists the

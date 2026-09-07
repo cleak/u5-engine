@@ -1203,7 +1203,7 @@ impl PlayState {
             return MoveOutcome::Blocked;
         }
         if !matches!(self.player.transport, TransportState::Ship { .. }) {
-            self.message = "Not aboard ship!".to_string();
+            self.message = USE_PLANS_SHIPBOARD_ONLY_REFUSAL.to_string();
             return MoveOutcome::Blocked;
         }
 

@@ -122,7 +122,9 @@ impl PlayState {
             return None;
         }
         if !direction.is_cardinal() {
-            self.message = "Sails need a cardinal heading.".to_string();
+            // Measured: a diagonal under sail is the resident `What?`
+            // refusal, not a line of its own.
+            self.message = unassigned_refusal_echo(0).to_string();
             return Some(MoveOutcome::Blocked);
         }
         // `weather.md §5.1`, "**The one setter.**": "A movement command taken
@@ -182,7 +184,9 @@ impl PlayState {
         let Some(wait_ticks) = self.wind.player_sail_wait_ticks(direction) else {
             self.sail_cadence = 0;
             self.advance_sailing_wait_turn();
-            self.message = "Sails hang slack in calm wind.".to_string();
+            // Measured: the stalled attempt itself is silent; the line
+            // lands on the Pass that follows.
+            self.message.clear();
             return Some(MoveOutcome::SailStalled);
         };
 

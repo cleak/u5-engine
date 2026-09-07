@@ -20,3 +20,13 @@ both	shot	sailed	One step under sail
 both	key	x
 both	wait	2500
 both	shot	xit-sails	X-it with the sails set
+both	key	Home
+both	wait	2500
+both	shot	diagonal	A diagonal heading under sail
+both	key	space
+both	wait	2500
+both	key	Up
+both	wait	2500
+both	key	space
+both	wait	2500
+both	shot	stalled	The stalled-sailing line a Pass clears
