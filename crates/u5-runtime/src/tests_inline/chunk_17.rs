@@ -1434,8 +1434,8 @@
         assert!(state.active_use.is_none());
         assert_eq!(state.turn, 1);
         assert!(state.party[0].hp > 4);
-        assert!(state.message.contains("potion"));
-        assert!(state.message.contains("party member 1"));
+        // Measured: the heal answers with one word.
+        assert_eq!(state.message, POTION_RESULT_HEALED);
     }
 
     #[test]
@@ -1456,7 +1456,9 @@
         assert_eq!(state.scroll_stock[SCROLL_WIND_CHANGE_INDEX], 0);
         assert_eq!(state.turn, 0);
         assert!(state.active_use.is_some());
-        assert!(state.message.contains("choose direction"));
+        // Measured: `Wind change!` over the published `Direction-` prompt.
+        assert!(state.message.contains(SCROLL_WIND_CHANGE_RESULT));
+        assert!(state.message.ends_with(SPELL_DIRECTION_PROMPT_PREFIX));
 
         assert_eq!(
             handle_play_key_input(&mut state, '6', "", Path::new("")).unwrap(),
@@ -1465,7 +1467,9 @@
         assert!(state.active_use.is_none());
         assert_eq!(state.wind, WindState::East);
         assert_eq!(state.turn, 1);
-        assert!(state.message.contains("Wind change!"));
+        // The accepted cardinal completes the `Direction-` row and the
+        // exchange prints nothing further.
+        assert_eq!(state.message, "");
     }
 
     #[test]
@@ -1488,9 +1492,9 @@
         assert_eq!(state.scroll_stock[SCROLL_RESURRECTION_INDEX], 0);
         assert_eq!(state.turn, 0);
         assert!(state.active_use.is_some());
-        // The resurrection scroll's own prompt is not measured, so it
-        // keeps the harness text until `cleak/u5-spec#225` answers.
-        assert!(state.message.contains("choose party member"));
+        // Measured: `Resurrection!` over the shared `On who: ` prompt.
+        assert!(state.message.contains(SCROLL_RESURRECTION_RESULT));
+        assert!(state.message.ends_with(USE_POTION_TARGET_PROMPT));
 
         assert_eq!(
             handle_play_key_input(&mut state, '1', "", Path::new("")).unwrap(),
@@ -1500,7 +1504,8 @@
         assert_eq!(state.turn, 1);
         assert_eq!(state.party[0].status, b'G');
         assert_eq!(state.party[0].hp, 1);
-        assert!(state.message.contains("Resurrection! party member 1"));
+        // Measured: raising the target prints nothing more.
+        assert_eq!(state.message, "");
     }
 
     #[test]

@@ -481,7 +481,15 @@ impl PlayState {
                 if let Some(pending) = pending_action_for_use_request(row.request) {
                     let _ = self.use_item_command(Some(row.request), Some(game_dir))?;
                     session.pending = Some(pending);
-                    self.message = self.render_use_session(&session);
+                    // Measured: a scroll announces its effect on a row of
+                    // its own, under a blank one, and *then* asks for its
+                    // argument. A potion asks straight away.
+                    self.message = match Self::use_pending_action_lead_line(pending) {
+                        Some(lead) => {
+                            format!("\n{lead}\n{}", self.render_pending_use_action(pending))
+                        }
+                        None => self.render_use_session(&session),
+                    };
                     self.active_use = Some(session);
                     return Ok(true);
                 }
@@ -543,6 +551,8 @@ impl PlayState {
             }
             UsePendingAction::ScrollWindDirection { .. } => {
                 if let Some(direction) = pending_use_cardinal_direction(key, suffix) {
+                    // The cardinal completes the open `Direction-` row.
+                    self.commit_prompt_reply(SPELL_DIRECTION_PROMPT_PREFIX, direction.name());
                     self.use_wind_change_scroll(Some(direction))
                 } else {
                     session.pending = Some(pending);
@@ -553,6 +563,10 @@ impl PlayState {
             }
             UsePendingAction::ScrollResurrectionTarget { index } => {
                 if let Some(target) = pending_use_party_target(key, suffix) {
+                    if target < self.party.len() {
+                        let name = self.party_member_display_name(target);
+                        self.commit_prompt_reply(USE_POTION_TARGET_PROMPT, &name);
+                    }
                     self.use_resurrection_scroll_consumed_target(index, target)
                 } else {
                     session.pending = Some(pending);
@@ -588,6 +602,17 @@ impl PlayState {
         }
     }
 
+    /// Measured: the two scroll prompts announce the scroll's effect before
+    /// they ask for their argument - `Wind change!` then `Direction-`, and
+    /// `Resurrection!` then `On who: `. The potion prompt has no such line.
+    fn use_pending_action_lead_line(pending: UsePendingAction) -> Option<&'static str> {
+        match pending {
+            UsePendingAction::PotionTarget { .. } => None,
+            UsePendingAction::ScrollWindDirection { .. } => Some(SCROLL_WIND_CHANGE_RESULT),
+            UsePendingAction::ScrollResurrectionTarget { .. } => Some(SCROLL_RESURRECTION_RESULT),
+        }
+    }
+
     fn render_pending_use_action(&self, pending: UsePendingAction) -> String {
         match pending {
             // Measured: the potion's target prompt is
@@ -599,15 +624,14 @@ impl PlayState {
                 let _ = index;
                 USE_POTION_TARGET_PROMPT.to_string()
             }
-            UsePendingAction::ScrollWindDirection { index } => format!(
-                "Use Scroll {}: choose direction (8/6/2/4) or Space/Esc to exit.",
-                scroll_label(index)
-            ),
-            UsePendingAction::ScrollResurrectionTarget { index } => format!(
-                "Use Scroll {}: choose party member (1-{}) or Space/Esc to exit.",
-                scroll_label(index),
-                self.party.len().min(6)
-            ),
+            UsePendingAction::ScrollWindDirection { index } => {
+                let _ = index;
+                SPELL_DIRECTION_PROMPT_PREFIX.to_string()
+            }
+            UsePendingAction::ScrollResurrectionTarget { index } => {
+                let _ = index;
+                USE_POTION_TARGET_PROMPT.to_string()
+            }
         }
     }
 
@@ -1516,11 +1540,10 @@ impl PlayState {
         // variant 1, not the spell's variant 2.
         self.apply_wind_state_from_scroll(next);
         self.advance_turn();
-        self.message = format!(
-            "Wind change! {} -> {}.",
-            previous,
-            self.wind_status_message()
-        );
+        // Measured: the effect line is printed when the prompt opens, and
+        // the accepted direction closes the exchange with nothing further.
+        let _ = previous;
+        self.message.clear();
         MoveOutcome::Used
     }
 
@@ -1548,14 +1571,13 @@ impl PlayState {
         // index; the Resurrect spell is variant 8.
         self.emit_scroll_shared_variant(SCROLL_RESURRECTION_INDEX);
 
-        let max_hp = self
+        let _ = self
             .resurrect_party_member_to_hp(target_index, 1)
             .expect("target status checked before scroll resurrection");
         self.advance_turn();
-        self.message = format!(
-            "Resurrection! party member {} (1/{max_hp}).",
-            target_index + 1
-        );
+        // Measured: the raising itself prints nothing; `Resurrection!` was
+        // printed when the target prompt opened.
+        self.message.clear();
         MoveOutcome::Used
     }
 
@@ -1593,10 +1615,10 @@ impl PlayState {
         self.potion_stock[index] = self.potion_stock[index].saturating_sub(1);
 
         let Some(target_index) = target else {
-            self.message = format!(
-                "Who? Use U{}1 for party member 1.",
-                label.to_ascii_uppercase()
-            );
+            // Measured: the potion asks `On who: ` and completes the row
+            // with the chosen member's name.
+            self.request_cast_argument(CastArgumentRequest::PartyTarget);
+            self.message = USE_POTION_TARGET_PROMPT.to_string();
             return MoveOutcome::Blocked;
         };
         if target_index >= self.party.len() {
@@ -1636,14 +1658,6 @@ impl PlayState {
                 variant: playback.selected_index as u8,
             });
         }
-        let selected_label = potion_label(selected_index);
-        let effect_label = potion_label(effect_index);
-        let prefix = if selected_index == effect_index {
-            format!("{selected_label} potion")
-        } else {
-            format!("{selected_label} potion ({effect_label} effect)")
-        };
-
         match effect_index {
             POTION_BLUE_INDEX => {
                 if self.party[target_index].status == b'S' && self.party[target_index].hp > 0 {
@@ -1652,40 +1666,37 @@ impl PlayState {
                         self.mark_visibility_dirty();
                     }
                     self.advance_turn();
-                    self.message = format!("{prefix}: Awakened party member {}.", target_index + 1);
+                    // Measured: waking a sleeping member prints no line at
+                    // all - only the status letter changes.
+                    self.message.clear();
                     MoveOutcome::Used
                 } else {
                     self.advance_turn();
-                    self.message = format!("{prefix}: No effect.");
+                    self.message = POTION_RESULT_FAILED.to_string();
                     MoveOutcome::Blocked
                 }
             }
             POTION_YELLOW_INDEX => {
                 if !self.party[target_index].living() {
                     self.advance_turn();
-                    self.message = format!("{prefix}: No effect.");
+                    self.message = POTION_RESULT_FAILED.to_string();
                     return MoveOutcome::Blocked;
                 }
                 let amount = self.potion_heal_amount(selected_index, target_index);
-                let healed = self.party[target_index].heal_by(amount);
-                let hp = self.party[target_index].hp;
-                let max_hp = self.party[target_index].max_hp;
+                let _ = self.party[target_index].heal_by(amount);
                 self.advance_turn();
-                self.message = format!(
-                    "{prefix}: Healed party member {} for {healed} HP ({hp}/{max_hp}).",
-                    target_index + 1
-                );
+                self.message = POTION_RESULT_HEALED.to_string();
                 MoveOutcome::Used
             }
             POTION_RED_INDEX => {
                 if self.party[target_index].status == b'P' {
                     self.party[target_index].status = b'G';
                     self.advance_turn();
-                    self.message = format!("{prefix}: Cured party member {}.", target_index + 1);
+                    self.message = POTION_RESULT_POISON_CURED.to_string();
                     MoveOutcome::Used
                 } else {
                     self.advance_turn();
-                    self.message = format!("{prefix}: No effect.");
+                    self.message = POTION_RESULT_FAILED.to_string();
                     MoveOutcome::Blocked
                 }
             }
@@ -1693,11 +1704,11 @@ impl PlayState {
                 if self.party[target_index].status == b'G' && self.party[target_index].hp > 0 {
                     self.party[target_index].status = b'P';
                     self.advance_turn();
-                    self.message = format!("{prefix}: Poisoned party member {}.", target_index + 1);
+                    self.message = POTION_RESULT_POISONED.to_string();
                     MoveOutcome::Used
                 } else {
                     self.advance_turn();
-                    self.message = format!("{prefix}: No effect.");
+                    self.message = POTION_RESULT_FAILED.to_string();
                     MoveOutcome::Blocked
                 }
             }
@@ -1715,18 +1726,18 @@ impl PlayState {
                         self.party[target_index].status = b'S';
                     }
                     self.advance_turn();
-                    self.message = format!("{prefix}: Slept party member {}.", target_index + 1);
+                    self.message = POTION_RESULT_SLEPT.to_string();
                     MoveOutcome::Used
                 } else {
                     self.advance_turn();
-                    self.message = format!("{prefix}: No effect.");
+                    self.message = POTION_RESULT_FAILED.to_string();
                     MoveOutcome::Blocked
                 }
             }
             POTION_PURPLE_INDEX => {
                 if !self.combat_active {
                     self.advance_turn();
-                    self.message = format!("{prefix}: No noticeable effect.");
+                    self.message = POTION_RESULT_NO_NOTICEABLE_EFFECT.to_string();
                     return MoveOutcome::Blocked;
                 }
                 let applied = self.apply_combat_potion_poof_presentation(target_index);
@@ -1734,11 +1745,9 @@ impl PlayState {
                     self.mark_visibility_dirty();
                 }
                 self.advance_turn();
-                self.message = if applied {
-                    format!("{prefix}: Poof!")
-                } else {
-                    format!("{prefix}: No effect.")
-                };
+                // The combat-only presentations are not measured; the
+                // engine prints nothing rather than inventing a sentence.
+                self.message.clear();
                 if applied {
                     MoveOutcome::Used
                 } else {
@@ -1748,16 +1757,12 @@ impl PlayState {
             POTION_BLACK_INDEX => {
                 if !self.combat_active {
                     self.advance_turn();
-                    self.message = format!("{prefix}: No noticeable effect.");
+                    self.message = POTION_RESULT_NO_NOTICEABLE_EFFECT.to_string();
                     return MoveOutcome::Blocked;
                 }
                 self.advance_turn();
                 let applied = self.apply_combat_party_invisibility_potion(target_index);
-                self.message = if applied {
-                    format!("{prefix}: Invisible party member {}.", target_index + 1)
-                } else {
-                    format!("{prefix}: No effect.")
-                };
+                self.message.clear();
                 if applied {
                     MoveOutcome::Used
                 } else {
@@ -1767,17 +1772,18 @@ impl PlayState {
             POTION_WHITE_INDEX => {
                 if matches!(self.area, Area::Dungeon { .. }) || self.combat_active {
                     self.advance_turn();
-                    self.message = format!("{prefix}: No noticeable effect.");
+                    self.message = POTION_RESULT_NO_NOTICEABLE_EFFECT.to_string();
                     return MoveOutcome::Blocked;
                 }
                 self.start_visibility_sweep();
                 self.advance_turn();
-                self.message = format!("{prefix}: Visibility sweep.");
+                // Measured: the white potion's repaint prints no line.
+                self.message.clear();
                 MoveOutcome::Observed
             }
             _ => {
                 self.advance_turn();
-                self.message = "unknown potion: No effect.".to_string();
+                self.message = POTION_RESULT_FAILED.to_string();
                 MoveOutcome::Blocked
             }
         }

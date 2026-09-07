@@ -451,7 +451,7 @@ fn scroll_wind_and_resurrection_debit_before_branch_gates() {
     assert_eq!(world.scroll_stock[SCROLL_WIND_CHANGE_INDEX], 0);
     assert_eq!(world.wind, WindState::West);
     assert_eq!(world.turn, 1);
-    assert_eq!(world.message, "Wind change! Calm Winds -> West Winds.");
+    assert_eq!(world.message, "");
 
     let mut dungeon = dungeon_state(open_dungeon_record(), 0, 1, 1);
     dungeon.scroll_stock[SCROLL_WIND_CHANGE_INDEX] = 1;
@@ -475,7 +475,7 @@ fn scroll_wind_and_resurrection_debit_before_branch_gates() {
     assert_eq!(town.party[0].status, b'G');
     assert_eq!(town.party[0].hp, 1);
     assert_eq!(town.turn, 1);
-    assert!(town.message.starts_with("Resurrection! party member 1"));
+    assert_eq!(town.message, "");
 }
 
 #[test]
@@ -530,7 +530,8 @@ fn use_command_routes_potion_colors_to_party_effects() {
     assert_eq!(town.potion_stock[POTION_BLUE_INDEX], 0);
     assert_eq!(town.party[0].status, b'G');
     assert_eq!(town.turn, 1);
-    assert_eq!(town.message, "blue potion: Awakened party member 1.");
+    // Measured: waking a sleeping member prints nothing.
+    assert_eq!(town.message, "");
 
     assert_eq!(
         town.use_item_command(
@@ -546,9 +547,7 @@ fn use_command_routes_potion_colors_to_party_effects() {
     assert_eq!(town.potion_stock[POTION_YELLOW_INDEX], 0);
     assert!(town.party[0].hp > 5);
     assert_eq!(town.turn, 2);
-    assert!(town
-        .message
-        .starts_with("yellow potion: Healed party member 1"));
+    assert_eq!(town.message, POTION_RESULT_HEALED);
 
     town.party[0].status = b'P';
     assert_eq!(
@@ -556,7 +555,7 @@ fn use_command_routes_potion_colors_to_party_effects() {
         MoveOutcome::Used
     );
     assert_eq!(town.party[0].status, b'G');
-    assert_eq!(town.message, "red potion: Cured party member 1.");
+    assert_eq!(town.message, POTION_RESULT_POISON_CURED);
 
     town.player.x = 2;
     assert_eq!(
@@ -564,7 +563,7 @@ fn use_command_routes_potion_colors_to_party_effects() {
         MoveOutcome::Used
     );
     assert_eq!(town.party[0].status, b'P');
-    assert_eq!(town.message, "green potion: Poisoned party member 1.");
+    assert_eq!(town.message, POTION_RESULT_POISONED);
 
     town.player.x = 3;
     town.party[0].status = b'G';
@@ -573,7 +572,7 @@ fn use_command_routes_potion_colors_to_party_effects() {
         MoveOutcome::Used
     );
     assert_eq!(town.party[0].status, b'S');
-    assert_eq!(town.message, "orange potion: Slept party member 1.");
+    assert_eq!(town.message, POTION_RESULT_SLEPT);
 }
 
 #[test]
@@ -586,7 +585,7 @@ fn potions_debit_before_target_and_effect_variation_gates() {
     );
     assert_eq!(missing_target.potion_stock[POTION_RED_INDEX], 0);
     assert_eq!(missing_target.turn, 1);
-    assert!(missing_target.message.starts_with("Who?"));
+    assert_eq!(missing_target.message, USE_POTION_TARGET_PROMPT);
 
     let mut missing_stock = test_state(open_grid(), 1, 1);
     assert_eq!(
@@ -630,7 +629,8 @@ fn potion_combat_and_white_visibility_effects_use_scene_gates() {
         potion_flash_playback(POTION_WHITE_INDEX)
     );
     assert_eq!(world.turn, 1);
-    assert_eq!(world.message, "white potion: Visibility sweep.");
+    // Measured: the white repaint prints no line.
+    assert_eq!(world.message, "");
 
     let mut dungeon = dungeon_state(open_dungeon_record(), 0, 1, 1);
     dungeon.potion_stock[POTION_WHITE_INDEX] = 1;
@@ -639,7 +639,7 @@ fn potion_combat_and_white_visibility_effects_use_scene_gates() {
         MoveOutcome::Blocked
     );
     assert_eq!(dungeon.potion_stock[POTION_WHITE_INDEX], 1);
-    assert_eq!(dungeon.message, "white potion: No noticeable effect.");
+    assert_eq!(dungeon.message, POTION_RESULT_NO_NOTICEABLE_EFFECT);
 
     let mut combat = test_state(open_grid(), 1, 1);
     combat.combat_active = true;
@@ -663,7 +663,7 @@ fn potion_combat_and_white_visibility_effects_use_scene_gates() {
         combat.active_objects[1].tile,
         COMBAT_HIDDEN_ACTIVE_OBJECT_TILE
     );
-    assert_eq!(combat.message, "black potion: Invisible party member 1.");
+    assert_eq!(combat.message, "");
 }
 
 #[test]
@@ -717,7 +717,7 @@ fn combat_potions_mark_and_clear_linked_presentation_state() {
         potion_flash_playback(POTION_PURPLE_INDEX)
     );
     assert!(combat.visibility_dirty);
-    assert_eq!(combat.message, "purple potion: Poof!");
+    assert_eq!(combat.message, "");
 }
 
 #[test]

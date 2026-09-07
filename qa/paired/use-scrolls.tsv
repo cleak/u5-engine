@@ -1,0 +1,43 @@
+# The two scrolls that ask for an argument: each announces its effect and then
+# opens the shared prompt, and neither prints anything once the argument is in.
+# requires-seed: a party carrying scrolls with a dead second member, built with
+# the `seed_inventory` example (`scrolls=3 status1=D`)
+both	wait	9000
+both	key	space
+both	wait	4000
+both	key	j
+both	wait	7000
+both	key	u
+both	wait	2000
+both	key	Down
+both	wait	350
+both	key	Down
+both	wait	350
+both	key	Down
+both	wait	350
+both	key	Down
+both	wait	350
+both	key	Down
+both	wait	350
+both	key	Down
+both	wait	350
+both	key	Return
+both	wait	2000
+both	shot	resurrection-prompt	The resurrection prompt
+both	key	2
+both	wait	900
+both	key	Return
+both	wait	3500
+both	shot	resurrection	The resurrection result
+both	key	space
+both	wait	1500
+both	key	u
+both	wait	2000
+both	key	Down
+both	wait	400
+both	key	Return
+both	wait	2000
+both	shot	wind-prompt	The wind-change prompt
+both	key	Up
+both	wait	3000
+both	shot	wind	The wind-change result

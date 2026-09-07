@@ -51,7 +51,7 @@ fn accepted_potion_command_emits_one_variant_before_its_narration() {
     // audio.md §6 brackets the two envelopes with the paired viewport
     // inversions, which is the flash this command also publishes.
     assert!(state.pending_potion_flash.is_some());
-    assert!(state.message.starts_with("yellow potion:"));
+    assert_eq!(state.message, POTION_RESULT_HEALED);
 }
 
 #[test]
@@ -75,7 +75,7 @@ fn potion_refusals_and_cancellations_before_target_acceptance_are_silent() {
         MoveOutcome::Blocked
     );
     assert_eq!(no_target.potion_stock[POTION_RED_INDEX], 0);
-    assert!(no_target.message.starts_with("Who?"));
+    assert_eq!(no_target.message, USE_POTION_TARGET_PROMPT);
     assert!(no_target.sound_effects_after(serial).is_empty());
 
     // Decremented, but the named party slot does not exist, so the target is

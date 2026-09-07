@@ -587,6 +587,37 @@ pub const USE_POCKET_WATCH_PREFIX: &str = "The pocket watch reads ";
 /// quoting the prompt. `cleak/u5-spec#225`.
 pub const USE_POTION_TARGET_PROMPT: &str = "On who: ";
 
+/// **Measured** (`qa/paired/use-scrolls.tsv`): a scroll that needs an
+/// argument prints its effect word first and then the argument prompt -
+/// `Wind change!` over `Direction-`, and `Resurrection!` over `On who: `.
+/// Neither prints anything more once the argument is accepted.
+pub const SCROLL_WIND_CHANGE_RESULT: &str = "Wind change!";
+pub const SCROLL_RESURRECTION_RESULT: &str = "Resurrection!";
+
+/// **Measured** (`qa/paired/use-potions.tsv`, a stocked save built with the
+/// `seed_inventory` probe): each potion answers with one short line under
+/// the completed `On who: <name>` row, and two of them answer with nothing
+/// at all. `inventory.md §7` publishes the colour order and the effects but
+/// none of the lines. `cleak/u5-spec#225`.
+///
+/// - wake on a sleeping member: **no line**, the status letter simply
+///   returns to `G`;
+/// - wake on a member who is already awake: [`POTION_RESULT_FAILED`];
+/// - heal: [`POTION_RESULT_HEALED`];
+/// - cure poison on a poisoned member: [`POTION_RESULT_POISON_CURED`],
+///   otherwise [`POTION_RESULT_FAILED`];
+/// - poison: [`POTION_RESULT_POISONED`], in capitals;
+/// - sleep: [`POTION_RESULT_SLEPT`];
+/// - the two combat-only colours used outside combat:
+///   [`POTION_RESULT_NO_NOTICEABLE_EFFECT`], which opens with a blank row;
+/// - the white visibility repaint: **no line**.
+pub const POTION_RESULT_FAILED: &str = "Failed!\n";
+pub const POTION_RESULT_HEALED: &str = "Healed!\n";
+pub const POTION_RESULT_POISON_CURED: &str = "Poison cured!\n";
+pub const POTION_RESULT_POISONED: &str = "POISONED!\n";
+pub const POTION_RESULT_SLEPT: &str = "Slept!\n";
+pub const POTION_RESULT_NO_NOTICEABLE_EFFECT: &str = "\nNo noticeable effect now!\n";
+
 /// `inventory.md §4.4`, the U-Use reference sequence: "refuse with
 /// `No_usable_items!\n` if nothing is usable". The engine had
 /// `No usable items.` - the same words with the wrong punctuation.
