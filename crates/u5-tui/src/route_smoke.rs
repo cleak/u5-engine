@@ -2991,10 +2991,14 @@ fn append_harpsichord_route_smoke_cases(cases: &mut Vec<RouteSmokeCase>, castle:
             0,
         ),
         (
+            // Off the chair the digits reach the resident dispatcher,
+            // where `commands.md §5.2` gives them to Set Active Player:
+            // neither `8` nor `5` names a slot this party has, so both
+            // answer `Invalid!` and neither costs a turn.
             "castle-harpsichord-digit-is-an-ordinary-command-off-the-chair",
             off_chair,
             &["8", "5"][..],
-            1,
+            0,
         ),
         (
             "castle-harpsichord-passage-lost-on-floor-round-trip",
