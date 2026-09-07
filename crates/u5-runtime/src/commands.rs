@@ -783,7 +783,16 @@ pub const fn command_echo(command: Command, mode: CommandEchoMode) -> Option<Com
                 ("Push-", AwaitsDirection)
             }
         }
-        Command::Search => ("Search-", AwaitsDirection),
+        // §5.2 mirrors Look: the dungeon overlay echoes `Search...` and
+        // hands off to the relative-focus helper instead of prompting for
+        // a cardinal direction (measured 2026-09-07).
+        Command::Search => {
+            if dungeon {
+                ("Search...", AwaitsSelection)
+            } else {
+                ("Search-", AwaitsDirection)
+            }
+        }
         Command::Talk => ("Talk-", AwaitsDirection),
         Command::Cast => ("Cast...", AwaitsSelection),
         Command::Ready => ("Ready...", AwaitsSelection),
@@ -1165,10 +1174,35 @@ pub const DUNGEON_KABOOM_LINE: &str = "KABOOM!!\n";
 pub const DUNGEON_ELECTRIC_OUCH_LINE: &str = "Ouch!\n";
 pub const DUNGEON_ELECTRIC_FIELD_LINE: &str = "Electric field!\n";
 
+/// `dungeon-mode.md §11`: dungeon Look and Search both hand off to the
+/// shared relative-focus helper, whose blocking prompt is the open `Dir-`
+/// line. Measured 2026-09-07 against the stock game: the four movement keys
+/// complete that line with the relative word — up is ahead, left and right
+/// rotate a quarter turn, and down selects the party's own cell — while
+/// Space completes it with the shared `Pass` word and aborts. Letter keys
+/// and Escape are ignored at this prompt.
+/// `dungeon-mode.md §11` ("Who acts"): dungeon Look, Search, Jimmy and Open
+/// run the shared acting-member prompt first. It "is silent when zero or one
+/// member is eligible and prints `Player: ` otherwise, echoing the chosen
+/// member's name. A pick whose status is neither Good nor Poisoned answers
+/// `Disabled!\n\n` and re-prompts from `Player: `; a cancel, or a party with
+/// no eligible member at all, answers `None!\n` and the command aborts."
+pub const DUNGEON_ACTING_MEMBER_DISABLED: &str = "Disabled!\n\n";
+pub const DUNGEON_ACTING_MEMBER_NONE: &str = "None!\n";
+
+pub const DUNGEON_DIRECTION_PROMPT: &str = "Dir-";
+pub const DUNGEON_DIRECTION_LABEL_AHEAD: &str = "Ahead";
+pub const DUNGEON_DIRECTION_LABEL_LEFT: &str = "Left";
+pub const DUNGEON_DIRECTION_LABEL_RIGHT: &str = "Right";
+pub const DUNGEON_DIRECTION_LABEL_HERE: &str = "Here";
+
 /// `dungeon-mode.md §8.1` darkness refusals — both break after the colon
 /// (`RETRACTIONS.md` R323). There is no "too dark" literal anywhere; the
 /// Search form is a *find* line with a leading blank row.
 pub const DUNGEON_LOOK_DARKNESS_REFUSAL: &str = "You see:\ndarkness.\n";
+/// The sighted form breaks after the colon the same way (measured
+/// 2026-09-07: `You see:` then `a wall.` on the next row).
+pub const DUNGEON_LOOK_PREAMBLE: &str = "You see:\n";
 pub const DUNGEON_SEARCH_DARKNESS_REFUSAL: &str = "\nYou find:\ndarkness.\n";
 
 /// `dungeon-mode.md §8.1`: Search prints this preamble **unconditionally**,

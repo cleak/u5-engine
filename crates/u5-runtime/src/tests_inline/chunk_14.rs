@@ -499,7 +499,12 @@
         assert_eq!(state.look_dungeon(), MoveOutcome::Observed);
 
         assert_eq!(state.turn, 0);
-        assert!(state.message.contains("You see: a fountain"));
+        // The look line lands in the transcript and the drink question
+        // takes the slot, so the two are separate rows.
+        assert!(state
+            .message_transcript
+            .iter()
+            .any(|entry| entry.text == "a fountain."));
         assert!(state.message.contains("Will you drink?"));
         assert_eq!(
             state.active_yes_no_prompt.as_ref().map(|session| session.kind),
@@ -608,7 +613,6 @@
         assert_eq!(state.prng_state, expected_prng);
         assert_eq!(state.turn, 0);
         assert!(state.message.contains("Bad taste."));
-        assert!(state.message.contains("slot 1 took"));
     }
 
     #[test]
@@ -634,7 +638,8 @@
 
         assert_eq!(state.party[0].status, b'G');
         assert_eq!(state.turn, 0);
-        assert!(state.message.contains("party member 4 is unavailable"));
+        // An out-of-range member simply has no effect line to print.
+        assert!(state.message.contains(DUNGEON_FOUNTAIN_ACCEPTED));
     }
 
     #[test]

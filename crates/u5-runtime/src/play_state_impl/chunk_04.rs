@@ -2273,23 +2273,28 @@ impl PlayState {
         let tile = self.dungeon_cell(level, x, y);
         let description = dungeon_look_description(tile);
         if (tile >> 4) == 0x5 {
+            // `dungeon-mode.md §12` step 6: the fountain class prints the
+            // ordinary look line and then runs the drink question, whose
+            // literals are the published `Will you drink?` / `No.` /
+            // `Yes.  Gulp!` group rather than a composed sentence.
+            let look_line = format!("{DUNGEON_LOOK_PREAMBLE}{description}.\n");
             self.message = match drink {
                 None => {
                     let member_index = party_index.unwrap_or(0);
+                    self.emit_message_line(look_line);
                     return self.start_dungeon_fountain_drink_prompt(member_index, focus);
                 }
-                Some(false) => "You see: a fountain. Will you drink? No.".to_string(),
+                Some(false) => {
+                    format!("{look_line}{DUNGEON_FOUNTAIN_DRINK_PROMPT}{DUNGEON_FOUNTAIN_DECLINED}")
+                }
                 Some(true) => {
                     let member_index = party_index.unwrap_or(0);
-                    match self.apply_dungeon_fountain_effect(member_index, tile) {
-                        Some(report) => {
-                            format!("You see: a fountain. Will you drink? Yes. {report}")
-                        }
-                        None => format!(
-                            "You see: a fountain. Will you drink? Yes, but party member {} is unavailable.",
-                            member_index + 1
-                        ),
-                    }
+                    let effect = self
+                        .apply_dungeon_fountain_effect(member_index, tile)
+                        .unwrap_or_default();
+                    format!(
+                        "{look_line}{DUNGEON_FOUNTAIN_DRINK_PROMPT}{DUNGEON_FOUNTAIN_ACCEPTED}{effect}"
+                    )
                 }
             };
             return if drink == Some(false) {
@@ -2299,7 +2304,7 @@ impl PlayState {
             };
         }
 
-        self.message = format!("You see: {description}.");
+        self.message = format!("{DUNGEON_LOOK_PREAMBLE}{description}.");
         MoveOutcome::Observed
     }
 
@@ -2329,32 +2334,30 @@ impl PlayState {
                 let slot = member.slot;
                 let before = member.status;
                 member.status = b'G';
-                Some(format!(
-                    "Cured! slot {slot} status {} -> good",
-                    party_status_name(before)
-                ))
+                let _ = (slot, before);
+                Some(DUNGEON_FOUNTAIN_CURED.to_string())
             }
             1 => {
                 let member = self.party.get_mut(member_index)?;
                 let slot = member.slot;
                 let (before, after) = member.heal_to_max();
-                Some(format!("Healed! slot {slot} HP {before}->{after}"))
+                let _ = (slot, before, after);
+                Some(DUNGEON_FOUNTAIN_HEALED.to_string())
             }
             2 => {
                 let member = self.party.get_mut(member_index)?;
                 let slot = member.slot;
                 member.status = b'P';
-                Some(format!("Poisoned! slot {slot} is poisoned"))
+                let _ = slot;
+                Some(DUNGEON_FOUNTAIN_POISONED.to_string())
             }
             _ => {
                 let damage = self.dungeon_fountain_damage_roll();
                 let member = self.party.get_mut(member_index)?;
                 let slot = member.slot;
                 let applied = member.apply_damage(damage);
-                Some(format!(
-                    "Bad taste. slot {slot} took {applied} HP ({} HP left)",
-                    member.hp
-                ))
+                let _ = (slot, applied);
+                Some(DUNGEON_FOUNTAIN_BAD_TASTE.to_string())
             }
         }
     }

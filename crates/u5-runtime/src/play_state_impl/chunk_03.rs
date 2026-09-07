@@ -1806,9 +1806,55 @@ impl PlayState {
         MoveOutcome::Observed
     }
 
+    fn complete_dungeon_direction_echo(&mut self, focus: DungeonLookFocus) {
+        let _ = self.complete_open_direction_echo(
+            DUNGEON_DIRECTION_PROMPT,
+            dungeon_look_focus_label(focus),
+        );
+    }
+
+    /// `dungeon-mode.md §11`: resolve who acts before the overlay prompts.
+    /// `None` means the command aborted on `None!`.
+    fn resolve_dungeon_acting_member(&mut self, supplied: Option<usize>) -> Option<Option<usize>> {
+        if supplied.is_some() {
+            return Some(supplied);
+        }
+        match self.acting_member_selection() {
+            ActingMemberSelection::Selected(slot) => Some(Some(slot)),
+            ActingMemberSelection::Prompt => Some(None),
+            ActingMemberSelection::NoneAble => {
+                self.message = DUNGEON_ACTING_MEMBER_NONE.to_string();
+                None
+            }
+        }
+    }
+
+    /// `dungeon-mode.md §11`: an accepted pick echoes the member's name on
+    /// the open `Player: ` line and the relative-focus prompt opens beneath
+    /// it; an ineligible pick answers `Disabled!` and re-prompts.
+    fn accept_dungeon_acting_member(&mut self, index: usize) -> bool {
+        let eligible = self
+            .party
+            .get(index)
+            .is_some_and(|member| acting_member_status_eligible(member.status));
+        if !eligible {
+            // The prompt itself is re-rendered by the poll loop, so only
+            // the refusal needs emitting here.
+            self.emit_message_line(DUNGEON_ACTING_MEMBER_DISABLED);
+            return false;
+        }
+        let name = self.party_member_display_name(index);
+        let _ = self.complete_open_direction_echo(PARTY_SELECTION_PROMPT, &name);
+        self.emit_message_line(DUNGEON_DIRECTION_PROMPT);
+        true
+    }
+
     pub fn start_dungeon_search_prompt(&mut self) -> MoveOutcome {
+        let Some(party_index) = self.resolve_dungeon_acting_member(None) else {
+            return MoveOutcome::Blocked;
+        };
         self.active_direction_prompt = Some(DirectionPromptSession::new(
-            DirectionPromptKind::DungeonSearch,
+            DirectionPromptKind::DungeonSearch { party_index },
         ));
         self.message = self.render_active_direction_prompt();
         MoveOutcome::Observed
@@ -1832,6 +1878,9 @@ impl PlayState {
         party_index: Option<usize>,
         drink: Option<bool>,
     ) -> MoveOutcome {
+        let Some(party_index) = self.resolve_dungeon_acting_member(party_index) else {
+            return MoveOutcome::Blocked;
+        };
         self.active_direction_prompt = Some(DirectionPromptSession::new(
             DirectionPromptKind::DungeonLook { party_index, drink },
         ));
@@ -1871,7 +1920,7 @@ impl PlayState {
             DirectionPromptKind::DungeonLook { .. }
             | DirectionPromptKind::SurfaceFountainDrink { .. }
             | DirectionPromptKind::SurfaceDeathVision { .. }
-            | DirectionPromptKind::DungeonSearch => return None,
+            | DirectionPromptKind::DungeonSearch { .. } => return None,
         };
         echo.ends_with('-').then_some(echo)
     }
@@ -1887,17 +1936,14 @@ impl PlayState {
                 DirectionPromptKind::Attack => "Attack-".to_string(),
                 DirectionPromptKind::DungeonLook {
                     party_index: None, ..
-                } => {
-                    let last = self.party.len().max(1);
-                    format!("Look: choose party member (1-{last}).")
+                }
+                | DirectionPromptKind::DungeonSearch { party_index: None } => {
+                    PARTY_SELECTION_PROMPT.to_string()
                 }
                 DirectionPromptKind::DungeonLook {
-                    party_index: Some(index),
+                    party_index: Some(_),
                     ..
-                } => format!(
-                    "Look: party member {}. Choose A-head, R-ight, L-eft, or H-ere.",
-                    index + 1
-                ),
+                } => DUNGEON_DIRECTION_PROMPT.to_string(),
                 DirectionPromptKind::SurfaceFountainDrink { .. } => {
                     let last = self.party.len().max(1);
                     format!("Look: choose fountain drinker (1-{last}).")
@@ -1906,9 +1952,7 @@ impl PlayState {
                     let last = self.party.len().max(1);
                     format!("Look: choose death-vision member (1-{last}).")
                 }
-                DirectionPromptKind::DungeonSearch => {
-                    "Search: choose A-head, R-ight, L-eft, or H-ere.".to_string()
-                }
+                DirectionPromptKind::DungeonSearch { .. } => DUNGEON_DIRECTION_PROMPT.to_string(),
                 DirectionPromptKind::Klimb => "Klimb-".to_string(),
                 DirectionPromptKind::CombatKlimb { .. } => "Klimb-".to_string(),
                 DirectionPromptKind::CombatPush { .. } => "Push-".to_string(),
@@ -1978,6 +2022,37 @@ impl PlayState {
             if ch == ' ' || ch == '\u{1b}' {
                 if matches!(
                     session.kind,
+                    DirectionPromptKind::DungeonSearch { .. }
+                        | DirectionPromptKind::DungeonLook { .. }
+                ) {
+                    // `dungeon-mode.md §11`: a cancel at the acting-member
+                    // prompt answers `None!` and the command aborts.
+                    let at_member_prompt = matches!(
+                        session.kind,
+                        DirectionPromptKind::DungeonSearch { party_index: None }
+                            | DirectionPromptKind::DungeonLook {
+                                party_index: None,
+                                ..
+                            }
+                    );
+                    if at_member_prompt {
+                        self.emit_message_line(DUNGEON_ACTING_MEMBER_NONE);
+                        return Ok(Some(MoveOutcome::PromptDeclined));
+                    }
+                    // Measured 2026-09-07: Escape does not close the
+                    // relative-focus prompt; Space writes `Pass` onto the
+                    // open `Dir-` line and aborts before any cell is read.
+                    if ch != ' ' {
+                        continue;
+                    }
+                    let _ = self.complete_open_direction_echo(
+                        DUNGEON_DIRECTION_PROMPT,
+                        DIRECTION_PROMPT_LABEL_PASS,
+                    );
+                    return Ok(Some(MoveOutcome::PromptDeclined));
+                }
+                if matches!(
+                    session.kind,
                     DirectionPromptKind::SurfaceFountainDrink { .. }
                 ) {
                     self.message = "You see: a fountain. No one drinks.".to_string();
@@ -2026,17 +2101,26 @@ impl PlayState {
                 drink,
             } = session.kind
             {
+                let mut selected_member_now = false;
                 if party_index.is_none() {
                     if let Some(digit) = ch.to_digit(10) {
                         let index = digit.saturating_sub(1) as usize;
                         if index < self.party.len() {
-                            party_index = Some(index);
-                            session.kind = DirectionPromptKind::DungeonLook { party_index, drink };
+                            // The member prompt consumed this key; the
+                            // relative-focus prompt reads the next one,
+                            // even though both accept digits.
+                            selected_member_now = true;
+                            if self.accept_dungeon_acting_member(index) {
+                                party_index = Some(index);
+                                session.kind =
+                                    DirectionPromptKind::DungeonLook { party_index, drink };
+                            }
                         }
                     }
                 }
-                if let Some(index) = party_index {
+                if let Some(index) = party_index.filter(|_| !selected_member_now) {
                     if let Some(focus) = dungeon_look_focus_from_key(ch) {
+                        self.complete_dungeon_direction_echo(focus);
                         return Ok(Some(self.look_dungeon_with_focus(
                             drink,
                             Some(index),
@@ -2066,8 +2150,25 @@ impl PlayState {
                 }
                 continue;
             }
-            if matches!(session.kind, DirectionPromptKind::DungeonSearch) {
-                if let Some(focus) = dungeon_look_focus_from_key(ch) {
+            if let DirectionPromptKind::DungeonSearch { mut party_index } = session.kind {
+                let mut selected_member_now = false;
+                if party_index.is_none() {
+                    if let Some(digit) = ch.to_digit(10) {
+                        let index = digit.saturating_sub(1) as usize;
+                        if index < self.party.len() {
+                            selected_member_now = true;
+                            if self.accept_dungeon_acting_member(index) {
+                                party_index = Some(index);
+                                session.kind = DirectionPromptKind::DungeonSearch { party_index };
+                            }
+                        }
+                    }
+                }
+                if !selected_member_now
+                    && party_index.is_some()
+                    && let Some(focus) = dungeon_look_focus_from_key(ch)
+                {
+                    self.complete_dungeon_direction_echo(focus);
                     return self
                         .search_dungeon_focus_with_game_dir(focus, game_dir)
                         .map(Some);
@@ -2116,7 +2217,7 @@ impl PlayState {
                 DirectionPromptKind::SurfaceDeathVision { .. } => unreachable!(
                     "surface death-vision look prompt is handled before cardinal direction dispatch"
                 ),
-                DirectionPromptKind::DungeonSearch => unreachable!(
+                DirectionPromptKind::DungeonSearch { .. } => unreachable!(
                     "dungeon search prompt is handled before cardinal direction dispatch"
                 ),
                 DirectionPromptKind::Klimb => self.klimb_over_town_target(direction),
@@ -2220,7 +2321,7 @@ impl PlayState {
             .as_ref()
             .map(|session| match session.kind {
                 YesNoPromptKind::DungeonFountainDrink { .. } => {
-                    "You see: a fountain. Will you drink?".to_string()
+                    DUNGEON_FOUNTAIN_DRINK_PROMPT.to_string()
                 }
                 YesNoPromptKind::TownExit { .. } => {
                     // `doors-and-z-transitions.md` Section 12.1: the exact

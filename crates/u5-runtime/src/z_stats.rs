@@ -343,7 +343,9 @@ pub enum DirectionPromptKind {
         x: usize,
         y: usize,
     },
-    DungeonSearch,
+    DungeonSearch {
+        party_index: Option<usize>,
+    },
     Klimb,
     CombatKlimb {
         actor_slot: usize,
@@ -373,13 +375,27 @@ pub enum DungeonLookFocus {
     Here,
 }
 
+/// The relative-focus helper reads the four movement keys, not letters:
+/// up is ahead, left and right rotate the facing a quarter turn, and down
+/// selects the party's own cell (measured 2026-09-07 against the stock
+/// game, which ignores `A`/`R`/`L`/`H` and Escape here).
 pub fn dungeon_look_focus_from_key(key: char) -> Option<DungeonLookFocus> {
-    match key.to_ascii_lowercase() {
-        'a' => Some(DungeonLookFocus::Ahead),
-        'r' => Some(DungeonLookFocus::Right),
-        'l' => Some(DungeonLookFocus::Left),
-        'h' => Some(DungeonLookFocus::Here),
+    match crate::Direction::from_prompt_key(key)? {
+        crate::Direction::North => Some(DungeonLookFocus::Ahead),
+        crate::Direction::West => Some(DungeonLookFocus::Left),
+        crate::Direction::East => Some(DungeonLookFocus::Right),
+        crate::Direction::South => Some(DungeonLookFocus::Here),
         _ => None,
+    }
+}
+
+/// The word the chosen focus writes onto the open `Dir-` line.
+pub const fn dungeon_look_focus_label(focus: DungeonLookFocus) -> &'static str {
+    match focus {
+        DungeonLookFocus::Ahead => crate::DUNGEON_DIRECTION_LABEL_AHEAD,
+        DungeonLookFocus::Right => crate::DUNGEON_DIRECTION_LABEL_RIGHT,
+        DungeonLookFocus::Left => crate::DUNGEON_DIRECTION_LABEL_LEFT,
+        DungeonLookFocus::Here => crate::DUNGEON_DIRECTION_LABEL_HERE,
     }
 }
 

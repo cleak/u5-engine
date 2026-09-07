@@ -24907,13 +24907,16 @@ fn dungeon_l_key_looks_instead_of_turning() {
             .active_direction_prompt
             .as_ref()
             .map(|session| session.kind),
+        // `dungeon-mode.md §11`: a single eligible member is selected
+        // silently, so the overlay opens straight on the `Dir-` prompt.
         Some(DirectionPromptKind::DungeonLook {
-            party_index: None,
+            party_index: Some(0),
             drink: None,
         })
     );
+    assert_eq!(state.message, DUNGEON_DIRECTION_PROMPT);
     assert_eq!(
-        handle_play_key_input(&mut state, '1', "A", Path::new("")).unwrap(),
+        handle_play_key_input(&mut state, '8', "", Path::new("")).unwrap(),
         PlayInputDisposition::Continue
     );
     assert!(state.message.contains("passage"));
@@ -24963,10 +24966,10 @@ fn dungeon_l_key_relative_focus_prompt_uses_selected_party_member() {
     );
 
     assert_eq!(
-        handle_play_key_input(&mut state, 'R', "", Path::new("")).unwrap(),
+        handle_play_key_input(&mut state, '6', "", Path::new("")).unwrap(),
         PlayInputDisposition::Continue
     );
-    assert!(state.message.contains("fountain"));
+    assert!(state.message.contains(DUNGEON_FOUNTAIN_DRINK_PROMPT));
     assert_eq!(
         state
             .active_yes_no_prompt
@@ -24995,7 +24998,7 @@ fn dungeon_l_inline_relative_focus_wraps_level_coordinates() {
     state.torch_counter = 5;
 
     assert_eq!(
-        handle_play_key_input(&mut state, 'L', "1A", Path::new("")).unwrap(),
+        handle_play_key_input(&mut state, 'L', "18", Path::new("")).unwrap(),
         PlayInputDisposition::Continue
     );
 

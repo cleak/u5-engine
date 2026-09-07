@@ -1600,12 +1600,12 @@ fn dungeon_uppercase_s_routes_to_sidecar_secret_search() {
             .active_direction_prompt
             .as_ref()
             .map(|session| session.kind),
-        Some(DirectionPromptKind::DungeonSearch)
+        Some(DirectionPromptKind::DungeonSearch { party_index: Some(0) })
     );
     assert_eq!(state.grid[dungeon_cell_index(0, 2, 1)], 0x30);
     assert_eq!(state.turn, 0);
     assert_eq!(
-        handle_play_key_input(&mut state, 'A', "", &dir).unwrap(),
+        handle_play_key_input(&mut state, '8', "", &dir).unwrap(),
         PlayInputDisposition::Continue
     );
     assert_eq!(state.grid[dungeon_cell_index(0, 2, 1)], 0xF0);
@@ -1630,7 +1630,7 @@ fn dungeon_search_prompt_can_target_relative_right() {
     state.torch_counter = 5;
 
     assert_eq!(
-        handle_play_key_input(&mut state, 'S', "R", &dir).unwrap(),
+        handle_play_key_input(&mut state, 'S', "6", &dir).unwrap(),
         PlayInputDisposition::Continue
     );
 
@@ -2279,4 +2279,165 @@ fn dungeon_search_chest_ignores_clean_sidecar_grants_and_guard() {
     assert_eq!(mismatch.grid[dungeon_cell_index(0, 2, 1)], 0x4b);
     assert!(!mismatch.message.contains("generated chest grants"));
     let _ = fs::remove_dir_all(dir);
+}
+
+/// `dungeon-mode.md §11`: the dungeon overlays' relative-direction prompt is
+/// the open `Dir-` line, and the movement keys complete it with the relative
+/// word. Measured 2026-09-07 against the stock game: up is `Ahead`, left and
+/// right rotate a quarter turn, down is `Here`, and Space answers `Pass`.
+#[test]
+fn dungeon_search_relative_prompt_renders_dir_and_completes_with_the_relative_word() {
+    let dir = debug_game_dir();
+    let mut grid = open_dungeon_record();
+    grid[dungeon_cell_index(0, 2, 1)] = 0xd0;
+    let mut state = dungeon_state(grid, 0, 1, 1);
+    state.player.facing = Direction::East;
+    state.torch_counter = 5;
+
+    assert!(state.handle_dungeon_key('S', &dir).unwrap());
+    assert_eq!(state.message, DUNGEON_DIRECTION_PROMPT);
+
+    assert_eq!(
+        handle_play_key_input(&mut state, '8', "", &dir).unwrap(),
+        PlayInputDisposition::Continue
+    );
+    assert!(state
+        .message_transcript
+        .iter()
+        .any(|entry| entry.text == "Dir-Ahead"));
+    assert_eq!(state.message, DUNGEON_SEARCH_HIDDEN_DOOR);
+    assert!(state
+        .message_transcript
+        .iter()
+        .any(|entry| entry.text == "You find:"));
+    let _ = fs::remove_dir_all(dir);
+}
+
+#[test]
+fn dungeon_search_relative_prompt_ignores_letters_and_passes_on_space() {
+    let dir = debug_game_dir();
+    let mut grid = open_dungeon_record();
+    grid[dungeon_cell_index(0, 2, 1)] = 0xd0;
+    let mut state = dungeon_state(grid, 0, 1, 1);
+    state.player.facing = Direction::East;
+    state.torch_counter = 5;
+
+    assert!(state.handle_dungeon_key('S', &dir).unwrap());
+    // Measured: `A`/`R`/`L`/`H` and Escape are not accepted here.
+    for key in ['A', 'R', 'L', 'H', '\u{1b}'] {
+        assert_eq!(
+            handle_play_key_input(&mut state, key, "", &dir).unwrap(),
+            PlayInputDisposition::Continue
+        );
+        assert!(state.active_direction_prompt.is_some());
+        assert_eq!(state.grid[dungeon_cell_index(0, 2, 1)], 0xd0);
+    }
+
+    assert_eq!(
+        handle_play_key_input(&mut state, ' ', "", &dir).unwrap(),
+        PlayInputDisposition::Continue
+    );
+    assert!(state.active_direction_prompt.is_none());
+    assert!(state
+        .message_transcript
+        .iter()
+        .any(|entry| entry.text == "Dir-Pass"));
+    assert_eq!(state.grid[dungeon_cell_index(0, 2, 1)], 0xd0);
+    let _ = fs::remove_dir_all(dir);
+}
+
+/// The "Who acts" contract: silent for one eligible member, `Player: ` for
+/// two or more, `Disabled!` for an ineligible pick, `None!` for none at all.
+#[test]
+fn dungeon_search_runs_the_shared_acting_member_prompt() {
+    let dir = debug_game_dir();
+    let mut grid = open_dungeon_record();
+    grid[dungeon_cell_index(0, 2, 1)] = 0xd0;
+    let mut state = dungeon_state(grid, 0, 1, 1);
+    state.player.facing = Direction::East;
+    state.torch_counter = 5;
+    state.party.push(state.party[0]);
+    state.party[1].status = b'D';
+    state.party_names = vec![*b"Iolo     ", *b"Shamino  "];
+
+    assert!(state.handle_dungeon_key('S', &dir).unwrap());
+    // One eligible member of two: still silent, straight to `Dir-`.
+    assert_eq!(state.message, DUNGEON_DIRECTION_PROMPT);
+    assert_eq!(
+        handle_play_key_input(&mut state, ' ', "", &dir).unwrap(),
+        PlayInputDisposition::Continue
+    );
+
+    state.party[1].status = b'G';
+    assert!(state.handle_dungeon_key('S', &dir).unwrap());
+    assert_eq!(state.message, PARTY_SELECTION_PROMPT);
+    assert_eq!(
+        handle_play_key_input(&mut state, '2', "", &dir).unwrap(),
+        PlayInputDisposition::Continue
+    );
+    assert!(state
+        .message_transcript
+        .iter()
+        .any(|entry| entry.text == "Player: Shamino"));
+    assert_eq!(state.message, DUNGEON_DIRECTION_PROMPT);
+    assert_eq!(
+        handle_play_key_input(&mut state, ' ', "", &dir).unwrap(),
+        PlayInputDisposition::Continue
+    );
+
+    state.party[0].status = b'S';
+    state.party[1].status = b'S';
+    assert!(state.handle_dungeon_key('S', &dir).unwrap());
+    assert_eq!(state.message, DUNGEON_ACTING_MEMBER_NONE);
+    assert!(state.active_direction_prompt.is_none());
+    let _ = fs::remove_dir_all(dir);
+}
+
+#[test]
+fn dungeon_search_acting_member_prompt_refuses_a_disabled_pick() {
+    let dir = debug_game_dir();
+    let mut grid = open_dungeon_record();
+    grid[dungeon_cell_index(0, 2, 1)] = 0xd0;
+    let mut state = dungeon_state(grid, 0, 1, 1);
+    state.player.facing = Direction::East;
+    state.torch_counter = 5;
+    state.party.push(state.party[0]);
+    state.party.push(state.party[0]);
+    state.party[2].status = b'S';
+    state.party_names = vec![*b"Iolo     ", *b"Shamino  ", *b"Dupre    "];
+
+    assert!(state.handle_dungeon_key('S', &dir).unwrap());
+    assert_eq!(state.message, PARTY_SELECTION_PROMPT);
+    assert_eq!(
+        handle_play_key_input(&mut state, '3', "", &dir).unwrap(),
+        PlayInputDisposition::Continue
+    );
+    assert!(state
+        .message_transcript
+        .iter()
+        .any(|entry| entry.text == "Disabled!"));
+    assert_eq!(state.message, PARTY_SELECTION_PROMPT);
+    assert_eq!(
+        state
+            .active_direction_prompt
+            .as_ref()
+            .map(|session| session.kind),
+        Some(DirectionPromptKind::DungeonSearch { party_index: None })
+    );
+    let _ = fs::remove_dir_all(dir);
+}
+
+/// The sighted look line breaks after the colon, like the darkness form.
+#[test]
+fn dungeon_look_prints_the_two_row_you_see_line() {
+    let mut grid = open_dungeon_record();
+    grid[dungeon_cell_index(0, 2, 1)] = 0x00;
+    let mut state = dungeon_state(grid, 0, 1, 1);
+    state.player.facing = Direction::East;
+    state.torch_counter = 5;
+
+    assert_eq!(state.look_dungeon(), MoveOutcome::Observed);
+
+    assert!(state.message.starts_with(DUNGEON_LOOK_PREAMBLE));
+    assert!(!state.message.contains("You see: "));
 }

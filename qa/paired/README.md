@@ -67,6 +67,8 @@ are PRNG-selected and legitimately differ between the two sides.
 | `combat-town-attack`, `combat-dungeon-room` | combat entry from a town attack and from a dungeon room |
 | `combat-town-attack-after-entry` | the same Attack, reached by walking in at an hour when the resident is at its shop |
 | `dungeon-view` | the first-person corridor |
+| `dungeon-search` | dungeon Search: the `Search...` echo, the shared `Dir-` relative-direction prompt, and the hidden-door reveal |
+| `dungeon-look` | dungeon Look through the same helper, including the Space cancel that writes `Dir-Pass` |
 | `magic-mix` | the M-Mix reagent list and its prompts |
 | `shop-arms` | the arms shop's browser and its prompts |
 | `shop-arms-after-entry` | the arms shop reached by walking in through the door at 10:00, when the resident is at the shop |
@@ -92,6 +94,7 @@ number of keystrokes:
 | `ship-commands` | the party aboard a frigate on deep water |
 | `ship-repair` | the same |
 | `dungeon-exit-klimb` | the party on Deceit's entrance level, with a torch to hand |
+| `dungeon-search`, `dungeon-look`, `dungeon-view` | the party on Deceit's entrance level facing a wall-class cell, with a torch to hand |
 | `overworld-camp`, `magic-mix-and-cast` | the party standing on the Britannia overworld |
 | `town-night-schedule` | Britain at 02:00 |
 | `town-britain-seeded`, `town-fountain`, `town-look-npc-cell` | the party inside Britain, beside the fountain for the fountain scenario |

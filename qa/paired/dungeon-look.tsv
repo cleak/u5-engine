@@ -1,0 +1,25 @@
+# Dungeon L-Look through the shared relative-focus helper: ahead, here, and a
+# Space cancel, which writes `Pass` onto the open `Dir-` line.
+# requires-seed: the party inside Deceit facing a wall-class cell, with a torch
+both	wait	9000
+both	key	space
+both	wait	4000
+both	key	j
+both	wait	9000
+both	key	i
+both	wait	2500
+both	key	l
+both	wait	1500
+both	key	Up
+both	wait	3000
+both	shot	ahead	Look ahead
+both	key	l
+both	wait	1500
+both	key	Down
+both	wait	3000
+both	shot	here	Look here
+both	key	l
+both	wait	1500
+both	key	space
+both	wait	3000
+both	shot	pass	Look cancelled with Space
