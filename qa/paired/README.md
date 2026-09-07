@@ -90,8 +90,8 @@ are PRNG-selected and legitimately differ between the two sides.
 | `shop-arms` | the arms shop's browser and its prompts |
 | `shop-arms-after-entry` | the arms shop reached by walking in through the door at 10:00, when the resident is at the shop |
 | `shop-arms-buy` | the same walk-in, driven through the Buy menu, an item pick and the refusals |
-| `doom-final-room` | Doom's final room: the fall onto the room trigger, the arena, the absorption, and Lord British's dialogue |
-| `doom-final-room-refusal` | the same room answering `No` to the first box question |
+| `doom-final-room` | Doom's final room: the fall onto the room trigger, the arena, the absorption, and Lord British's dialogue. **Compared 2026-09-07**: both sides print `Entering room`, the arena banner, `Avatar is absorbed!`, `Lord British says: "Well met, Avatar!"`, the box question, and the seated reply, differing only by one capture's timing |
+| `doom-final-room-refusal` | the same room answering `No` to the first box question. **Compared 2026-09-07**: both sides reach `…secret passage in my chamber!"`, `"Didst thou bring it?"` and `You reply:` |
 
 ## Scenarios that need a seeded save
 
