@@ -1402,10 +1402,17 @@ impl PlayState {
         // The label is followed by the printer's leading newline, then Y
         // and X each carry their own closing quote separated by
         // comma-space, then a further line break.
-        self.message = format!(
-            "{USE_SEXTANT_READING_LABEL}{}",
-            sextant_coordinate_pair_line(self.player.y as u8, self.player.x as u8)
-        );
+        // Measured 2026-09-07: the label prints in the text font and the
+        // coordinate row in the runic one. Under `magic.md` §8's published
+        // rule the runic cells decode to exactly this pair, so the values
+        // were right all along and only the font was wrong
+        // (`cleak/u5-spec#237`).
+        let pair = sextant_coordinate_pair_line(self.player.y as u8, self.player.x as u8);
+        self.emit_message_line(USE_SEXTANT_READING_LABEL);
+        for row in pair.split('\n').filter(|row| !row.is_empty()) {
+            self.push_runic_message_entry(row);
+        }
+        self.message = format!("{USE_SEXTANT_READING_LABEL}{pair}");
         MoveOutcome::Used
     }
 

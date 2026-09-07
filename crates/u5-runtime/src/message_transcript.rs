@@ -139,6 +139,19 @@ impl PlayState {
         self.message_transcript_revision = self.message_transcript_revision.wrapping_add(1);
     }
 
+    /// Append one output line whose cells are all drawn from the runic font.
+    ///
+    /// **Measured** 2026-09-07: the sextant's coordinate row is runic, not
+    /// text - matching each cell against `RUNES.CH` decodes it exactly under
+    /// `magic.md` §8's published rule, while matching against `IBM.CH` gives
+    /// nonsense. The rule was never wrong; the font was.
+    pub fn push_runic_message_entry(&mut self, text: impl Into<String>) {
+        let text = text.into();
+        let glyphs = glyphs_from_engine_text(&text, TlkGlyphFont::Runic);
+        self.append_transcript_entry(text, glyphs, false, false, false);
+        self.message_transcript_revision = self.message_transcript_revision.wrapping_add(1);
+    }
+
     fn push_tlk_message_entry(
         &mut self,
         text: String,
