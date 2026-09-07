@@ -67,6 +67,7 @@ are PRNG-selected and legitimately differ between the two sides.
 | `combat-town-attack`, `combat-dungeon-room` | combat entry from a town attack and from a dungeon room |
 | `combat-town-attack-after-entry` | the same Attack, reached by walking in at an hour when the resident is at its shop |
 | `dungeon-view` | the first-person corridor |
+| `town-death-vision` | the crystal-sphere Look and its two roll outcomes |
 | `dungeon-search` | dungeon Search: the `Search...` echo, the shared `Dir-` relative-direction prompt, and the hidden-door reveal |
 | `dungeon-look` | dungeon Look through the same helper, including the Space cancel that writes `Dir-Pass` |
 | `magic-mix` | the M-Mix reagent list and its prompts |
@@ -97,6 +98,7 @@ number of keystrokes:
 | `dungeon-search`, `dungeon-look`, `dungeon-view` | the party on Deceit's entrance level facing a wall-class cell, with a torch to hand |
 | `overworld-camp`, `magic-mix-and-cast` | the party standing on the Britannia overworld |
 | `town-night-schedule` | Britain at 02:00 |
+| `town-death-vision` | the party one cell east of a crystal-sphere tile. An engine-written town seed is safe here: the sphere is a Look target |
 | `town-britain-seeded`, `town-fountain`, `town-look-npc-cell` | the party inside Britain, beside the fountain for the fountain scenario |
 | `town-wishing-well` | the party standing south of the wishing well in Paws (scene 22). An engine-written town seed is safe here: the well is a Look target, and only Talk needs the save's NPC band |
 | `town-wishing-well-refusals` | the same |

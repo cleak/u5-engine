@@ -2871,7 +2871,7 @@ impl PlayState {
                 // printed". The tested byte is the **live terrain
                 // layer**, never an active-object descriptor.
                 if death_vision_look_tile(self.grid[y * 32 + x]) {
-                    return Ok(self.start_surface_death_vision_prompt(x, y));
+                    return Ok(self.apply_death_vision_look(x, y));
                 }
                 if let Some(object) = self.blocking_object_at(x, y) {
                     if sign_or_wanted_poster_object_class(object.type_byte) {
@@ -2945,7 +2945,7 @@ impl PlayState {
                 // above. The live terrain byte is tested ahead of the
                 // per-map object row.
                 if death_vision_look_tile(self.grid[world_cell_index(x, y)]) {
-                    return Ok(self.start_surface_death_vision_prompt(x, y));
+                    return Ok(self.apply_death_vision_look(x, y));
                 }
                 if let Some(object) = self.world_object_at(x, y) {
                     if sign_or_wanted_poster_object_class(object.type_byte) {
@@ -3122,45 +3122,42 @@ impl PlayState {
         MoveOutcome::Observed
     }
 
+    /// `view.md §3` entry-dispatch row 2. Measured 2026-09-07: the command
+    /// takes no party-member prompt - it rolls for the active player, and
+    /// prints one of two one-line results.
+    pub fn apply_death_vision_look(&mut self, x: usize, y: usize) -> MoveOutcome {
+        let member_index = match self.shared_acting_member_selection(false) {
+            ActingMemberSelection::Selected(slot) => slot,
+            _ => 0,
+        };
+        self.apply_death_vision_look_for_member(x, y, member_index)
+    }
+
     pub fn apply_death_vision_look_for_member(
         &mut self,
         x: usize,
         y: usize,
         member_index: usize,
     ) -> MoveOutcome {
-        let Some(member) = self.party.get(member_index).copied() else {
-            self.message = "Thou seest nothing.".to_string();
-            return MoveOutcome::Observed;
-        };
-        let _ = member;
-        let intelligence = if member_index == 0 {
-            self.party_intelligence
-                .first()
-                .copied()
-                .unwrap_or(self.avatar_stats.intelligence)
-        } else {
-            self.party_intelligence
-                .get(member_index)
-                .copied()
-                .unwrap_or(self.avatar_stats.intelligence)
-        };
+        let intelligence = self
+            .party_intelligence
+            .get(member_index)
+            .copied()
+            .unwrap_or(self.avatar_stats.intelligence);
         let roll = self.random_range_u8(DEATH_VISION_ROLL_LOW, DEATH_VISION_ROLL_HIGH);
         if intelligence > roll {
-            let title = format!("Strange vision at ({x}, {y})");
             let text_map = self.surface_view_map();
             self.active_view_overlay = Some(ViewOverlay {
-                title: title.clone(),
-                text_map: text_map.clone(),
+                title: String::new(),
+                text_map,
                 kind: ViewOverlayKind::Surface,
                 mode: ViewOverlayMode::SurfaceLook,
             });
-            self.message = format!(
-                "Strange vision: party member {} beholds a distant fate at ({x}, {y}).",
-                member_index + 1
-            );
+            self.message = DEATH_VISION_STRANGE_LINE.to_string();
         } else {
+            let _ = (x, y);
             self.active_view_overlay = None;
-            self.message = format!("Death vision: party member {}.", member_index + 1);
+            self.message = DEATH_VISION_DEATH_LINE.to_string();
         }
         MoveOutcome::Observed
     }

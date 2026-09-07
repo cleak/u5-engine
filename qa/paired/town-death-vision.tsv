@@ -1,0 +1,21 @@
+# Look at the crystal-sphere tile (`view.md` section 3 entry-dispatch row 2):
+# the roll's two outcomes, with no party-member prompt on either path.
+# requires-seed: the party standing one cell east of a crystal-sphere tile
+both	wait	9000
+both	key	space
+both	wait	4000
+both	key	j
+both	wait	9000
+both	key	l
+both	wait	1500
+both	shot	prompt	The open Look- prompt
+both	key	Left
+both	wait	3000
+both	shot	first	The vision result and its overlay
+both	key	space
+both	wait	2000
+both	key	l
+both	wait	1500
+both	key	Left
+both	wait	3000
+both	shot	second	The same look again

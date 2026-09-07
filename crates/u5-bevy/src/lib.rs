@@ -6480,7 +6480,8 @@ fn visual_route_suite_cases() -> Vec<VisualRouteSuiteCase> {
                 target: PlayTarget::Town(castle),
                 ..PlayOptions::default()
             },
-            script: &["l6", "1"],
+            // Measured 2026-09-07: the Look resolves without a member prompt.
+            script: &["l6"],
             configure: Some(seed_visual_route_death_vision),
         },
         VisualRouteSuiteCase {
@@ -23075,8 +23076,9 @@ mod tests {
 
         // route-endgame-tableau-walk-in adds 29 (endgame.md §4 walk-in);
         // the full-victory cinematic now runs to the §9.5 terminal hold;
-        // the New Order key route commits each pick with Return (+2).
-        assert_eq!(reports.len(), 1955);
+        // the New Order key route commits each pick with Return (+2);
+        // the death-vision Look lost its invented member prompt (-1).
+        assert_eq!(reports.len(), 1954);
         for report in &reports {
             assert!(report.path.exists());
             assert_eq!(report.width, VISUAL_PLAY_FRAME_WIDTH);
@@ -23091,7 +23093,7 @@ mod tests {
             }
         }
         let manifest = fs::read_to_string(dir.join("manifest.txt")).unwrap();
-        assert!(manifest.contains("coverage\tvisual-route-steps\t1955"));
+        assert!(manifest.contains("coverage\tvisual-route-steps\t1954"));
         assert!(manifest.contains("coverage\tvisual-key-route-steps\t90"));
         assert!(manifest.contains("coverage\tvisual-route-combat-steps\t"));
         assert!(manifest.contains("route-world-movement-01-d\t320x200\t"));
@@ -23377,7 +23379,7 @@ mod tests {
         assert!(
             manifest.contains("route-buccaneers-den-wishing-well-ferrari-grants-horse-03-ferrari")
         );
-        assert!(manifest.contains("route-castle-death-vision-look-02-1"));
+        assert!(manifest.contains("route-castle-death-vision-look-01-l6"));
         assert!(manifest.contains("route-blackthorn-audience-correct-02-ahm"));
         assert!(manifest.contains("route-blackthorn-audience-wrong-02-wrong"));
         assert!(manifest.contains("route-blackthorn-rescue-refuge-02-empty"));

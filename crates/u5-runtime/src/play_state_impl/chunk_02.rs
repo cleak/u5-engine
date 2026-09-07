@@ -435,6 +435,10 @@ impl PlayState {
                 }
                 'L' => {
                     if let Some(direction) = inline_direction {
+                        // The inline form skips the prompt, so the direction
+                        // word has to be written onto the open `Look-` line
+                        // here the way the prompt's own poll does it.
+                        let _ = self.complete_open_direction_echo("Look-", direction.name());
                         handled!(self.look_direction_with_game_dir(direction, game_dir)?);
                     } else {
                         handled!(self.start_look_direction_prompt());
@@ -568,6 +572,7 @@ impl PlayState {
             }
             'l' => {
                 if let Some(direction) = inline_direction {
+                    let _ = self.complete_open_direction_echo("Look-", direction.name());
                     self.look_direction_with_game_dir(direction, game_dir)?
                 } else {
                     self.look_facing_with_game_dir(game_dir)?

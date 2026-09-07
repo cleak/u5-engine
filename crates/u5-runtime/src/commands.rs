@@ -274,6 +274,14 @@ pub const fn wishing_well_grant_scene(scene: u8) -> bool {
 pub const DEATH_VISION_LOOK_TILE: u8 = 0x29;
 pub const DEATH_VISION_ROLL_LOW: u8 = 1;
 pub const DEATH_VISION_ROLL_HIGH: u8 = 30;
+/// Measured 2026-09-07 (paired capture, Britain's crystal sphere): both
+/// outcomes are one word pair and an exclamation mark, printed under the
+/// `Look-<direction>` echo with no `Thou dost see` preamble and no member
+/// number. The successful case then paints the location overlay, which the
+/// next keypress dismisses; the failed case paints nothing. There is no
+/// party-member prompt on either path - the command uses the active player.
+pub const DEATH_VISION_STRANGE_LINE: &str = "Strange vision!\n";
+pub const DEATH_VISION_DEATH_LINE: &str = "Death vision!\n";
 
 /// `view.md §3` entry-dispatch row 2 predicate on the live terrain
 /// tile at the Look target cell.

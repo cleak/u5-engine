@@ -1702,14 +1702,6 @@ impl PlayState {
         outcome
     }
 
-    pub fn start_surface_death_vision_prompt(&mut self, x: usize, y: usize) -> MoveOutcome {
-        self.active_direction_prompt = Some(DirectionPromptSession::new(
-            DirectionPromptKind::SurfaceDeathVision { x, y },
-        ));
-        self.message = self.render_active_direction_prompt();
-        MoveOutcome::Observed
-    }
-
     pub fn start_wishing_well_prompt(
         &mut self,
         direction: Direction,
@@ -1919,7 +1911,6 @@ impl PlayState {
             // shared hyphenated direction prompt.
             DirectionPromptKind::DungeonLook { .. }
             | DirectionPromptKind::SurfaceFountainDrink { .. }
-            | DirectionPromptKind::SurfaceDeathVision { .. }
             | DirectionPromptKind::DungeonSearch { .. } => return None,
         };
         echo.ends_with('-').then_some(echo)
@@ -1947,10 +1938,6 @@ impl PlayState {
                 DirectionPromptKind::SurfaceFountainDrink { .. } => {
                     let last = self.party.len().max(1);
                     format!("Look: choose fountain drinker (1-{last}).")
-                }
-                DirectionPromptKind::SurfaceDeathVision { .. } => {
-                    let last = self.party.len().max(1);
-                    format!("Look: choose death-vision member (1-{last}).")
                 }
                 DirectionPromptKind::DungeonSearch { .. } => DUNGEON_DIRECTION_PROMPT.to_string(),
                 DirectionPromptKind::Klimb => "Klimb-".to_string(),
@@ -2012,7 +1999,6 @@ impl PlayState {
                     party_index: None,
                     ..
                 } | DirectionPromptKind::SurfaceFountainDrink { .. }
-                    | DirectionPromptKind::SurfaceDeathVision { .. }
             );
             if ch == '\u{1b}' && !escape_cancels {
                 // Ignored like any other rejected key: no echo, no result,
@@ -2141,15 +2127,6 @@ impl PlayState {
                 }
                 continue;
             }
-            if let DirectionPromptKind::SurfaceDeathVision { x, y } = session.kind {
-                if let Some(digit) = ch.to_digit(10) {
-                    let index = digit.saturating_sub(1) as usize;
-                    if index < self.party.len() {
-                        return Ok(Some(self.apply_death_vision_look_for_member(x, y, index)));
-                    }
-                }
-                continue;
-            }
             if let DirectionPromptKind::DungeonSearch { mut party_index } = session.kind {
                 let mut selected_member_now = false;
                 if party_index.is_none() {
@@ -2213,9 +2190,6 @@ impl PlayState {
                 ),
                 DirectionPromptKind::SurfaceFountainDrink { .. } => unreachable!(
                     "surface fountain look prompt is handled before cardinal direction dispatch"
-                ),
-                DirectionPromptKind::SurfaceDeathVision { .. } => unreachable!(
-                    "surface death-vision look prompt is handled before cardinal direction dispatch"
                 ),
                 DirectionPromptKind::DungeonSearch { .. } => unreachable!(
                     "dungeon search prompt is handled before cardinal direction dispatch"

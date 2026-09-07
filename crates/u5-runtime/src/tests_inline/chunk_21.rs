@@ -364,24 +364,10 @@ fn town_look_routes_death_vision_terrain_tile_before_object_description() {
 
     assert_eq!(state.look_facing(), MoveOutcome::Observed);
 
-    assert_eq!(
-        state
-            .active_direction_prompt
-            .as_ref()
-            .map(|session| session.kind),
-        Some(DirectionPromptKind::SurfaceDeathVision { x: 2, y: 1 })
-    );
-    assert!(state.message.contains("death-vision member"));
-    assert!(!state.message.contains("actor tile"));
-    assert_eq!(state.turn, 0);
-
-    let outcome = state
-        .step_active_direction_prompt('1', "", Path::new(""))
-        .unwrap();
-
-    assert_eq!(outcome, Some(MoveOutcome::Observed));
+    // Measured 2026-09-07: no party-member prompt - the roll runs for the
+    // active player and the result is one line.
     assert!(state.active_direction_prompt.is_none());
-    assert!(state.message.contains("Strange vision"));
+    assert_eq!(state.message, DEATH_VISION_STRANGE_LINE);
     assert!(state.active_view_overlay.is_some());
     assert!(!state.message.contains("actor tile"));
     assert_eq!(state.turn, 0);
@@ -415,7 +401,7 @@ fn town_look_object_byte_0x29_does_not_trigger_the_death_vision() {
 }
 
 #[test]
-fn death_vision_failure_has_no_overlay_and_names_member_number() {
+fn death_vision_failure_prints_the_measured_line_without_an_overlay() {
     let mut state = test_state(open_grid(), 1, 1);
     state.player.facing = Direction::East;
     state.party_intelligence[0] = 0;
@@ -425,7 +411,7 @@ fn death_vision_failure_has_no_overlay_and_names_member_number() {
         MoveOutcome::Observed
     );
 
-    assert_eq!(state.message, "Death vision: party member 1.");
+    assert_eq!(state.message, DEATH_VISION_DEATH_LINE);
     assert!(state.active_view_overlay.is_none());
     assert_eq!(state.turn, 0);
 }

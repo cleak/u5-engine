@@ -339,10 +339,6 @@ pub enum DirectionPromptKind {
     SurfaceFountainDrink {
         direction: Direction,
     },
-    SurfaceDeathVision {
-        x: usize,
-        y: usize,
-    },
     DungeonSearch {
         party_index: Option<usize>,
     },

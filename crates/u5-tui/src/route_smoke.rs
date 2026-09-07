@@ -1585,7 +1585,8 @@ pub fn route_smoke_cases() -> Vec<RouteSmokeCase> {
         RouteSmokeCase {
             name: "castle-death-vision-look",
             options: death_vision,
-            script: &["l6", "1"],
+            // Measured 2026-09-07: no party-member prompt follows the Look.
+            script: &["l6"],
             expected: RouteSmokeExpectation::Town(castle),
             min_turn: 0,
             expected_frame_kind: "view overlay",
