@@ -988,6 +988,44 @@ pub const REST_HOURS_PROMPT: &str = "For how many hours? (1-9) ";
 /// different literal from the turn loop's `Zzzzzz...\n`" and "must not be
 /// shared with it".
 pub const CAMP_BODY_SLEEP_LINE: &str = "Zzzzzz...\n\n";
+/// `commands.md §5.5`: the H-Hole-up family's sea form, "`Hole_up_&_`
+/// plus `\nrepair...\n\n` ... at sea". Measured aboard a frigate: the
+/// echo occupies two rows, `>Hole up &` and `repair...`, and the result
+/// or refusal opens a block under it.
+pub const HOLE_UP_REPAIR_ECHO: CommandEcho = CommandEcho {
+    text: "Hole up &",
+    join: CommandEchoJoin::Complete,
+};
+
+/// The rest of the same literal - `commands.md §5.5` writes it as
+/// `\nrepair...\n\n`, so it lands on the row under the echo and opens a
+/// block before the result.
+pub const HOLE_UP_REPAIR_BODY: &str = "repair...\n";
+
+/// `commands.md §5.5`: "`Hull_now_` plus `!\n\n` at sea".
+///
+/// **Measured** (`qa/paired/ship-repair.tsv`, eight runs of three
+/// hole-ups from the same 77-hull seed): the hull climbs by an inclusive
+/// `1..3` roll per hole-up and both this line and the stats panel's
+/// `Ship:` counter report the value *after* the repair. Twenty-four
+/// increments came out 1x12, 2x4, 3x8 - never zero, never above three.
+/// `vehicles.md §10` says no repair path was traced; this is it. The
+/// cap is not measured; [`SHIP_HULL_REPAIR_CAP`] takes the published
+/// shipwright purchase hull for it. `cleak/u5-spec#225`.
+pub const HOLE_UP_HULL_NOW_PREFIX: &str = "Hull now ";
+/// See [`HOLE_UP_HULL_NOW_PREFIX`]: the measured `1..3` repair roll.
+pub const SHIP_HULL_REPAIR_ROLL_LOW: u8 = 1;
+/// See [`HOLE_UP_HULL_NOW_PREFIX`].
+pub const SHIP_HULL_REPAIR_ROLL_HIGH: u8 = 3;
+/// See [`HOLE_UP_HULL_NOW_PREFIX`]. `vehicles.md §4` gives the shipwright
+/// frigate "hull condition `99`", so the repair is held there; the
+/// original's own cap is unmeasured.
+pub const SHIP_HULL_REPAIR_CAP: u8 = 99;
+
+/// `commands.md §5.5`: "`Sails_must_be\n` plus `lowered!\n\n`" - the
+/// sea refusal, printed under the repair echo. Measured.
+pub const HOLE_UP_SAILS_MUST_BE_LOWERED: &str = "Sails must be\nlowered!";
+
 pub const HOLE_UP_CAMP_ECHO: CommandEcho = CommandEcho {
     text: "Hole up & camp!",
     join: CommandEchoJoin::Complete,

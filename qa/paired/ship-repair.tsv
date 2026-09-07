@@ -1,0 +1,16 @@
+# Hole up three times aboard the frigate: does `Hull now ` climb?
+# requires-seed: the party aboard a frigate on deep water
+both	wait	9000
+both	key	space
+both	wait	4000
+both	key	j
+both	wait	8000
+both	key	h
+both	wait	2500
+both	shot	r1	First repair
+both	key	h
+both	wait	2500
+both	shot	r2	Second repair
+both	key	h
+both	wait	2500
+both	shot	r3	Third repair

@@ -45,6 +45,7 @@ are PRNG-selected and legitimately differ between the two sides.
 | `hut-use-items` | the three items the shipped party carries, which measure the `Item: ` echo, the potion's `On who: ` prompt and their result lines |
 | `hut-ready-refusals` | R-Ready against `inventory.md` §2.1's strength gate, which the engine had implemented as an uncalled helper |
 | `ship-commands` | X-it aboard a frigate, which measures the completed `X-it ship!` echo and the silence of the skiff launch |
+| `ship-repair` | three hole-ups aboard a frigate, which measure the sea `repair...` branch and its `1..3` hull roll |
 | `shop-inn-after-entry` | the second shop family the suite reaches - Britain's innkeeper - and the town alarm that stops the engine getting there (`u5-engine#16`) |
 | `hut-talk` | Talk with the hut's resident: greeting, name, job, bye |
 | `hut-prompts` | New Order, Ready, Use, Cast, Mix, Yell, Search, Look, X-it, Get, Enter, Hole up, Ignite, Klimb prompt and result literals |
@@ -85,6 +86,7 @@ number of keystrokes:
 | `overworld-night-walk` | the party on the Britannia overworld at 02:00, when the encounter threshold can fire |
 | `drowning-audio` | the party aboard a frigate with no skiffs, on deep water at night |
 | `ship-commands` | the party aboard a frigate on deep water |
+| `ship-repair` | the same |
 | `dungeon-exit-klimb` | the party on Deceit's entrance level, with a torch to hand |
 | `overworld-camp`, `magic-mix-and-cast` | the party standing on the Britannia overworld |
 | `town-night-schedule` | Britain at 02:00 |

@@ -13,6 +13,32 @@ impl PlayState {
         // not the bed path's `Hole up- `. The dispatcher opened the latter
         // because its echo table keys on the letter alone; the town/bed
         // handler keeps it and completes it with `Only in bed!`.
+        // `commands.md §5.5`: aboard a ship the family takes its sea form
+        // instead - the `repair...` echo, and then either the
+        // sails-hoisted refusal or the `Hull now ` result. Measured
+        // aboard a frigate; there is no hours prompt on this branch.
+        if let TransportState::Ship {
+            sails_hoisted,
+            hull,
+            ..
+        } = self.player.transport
+        {
+            self.replace_command_echo(HOLE_UP_REPAIR_ECHO);
+            if sails_hoisted {
+                self.message = format!("{HOLE_UP_REPAIR_BODY}\n{HOLE_UP_SAILS_MUST_BE_LOWERED}");
+                return MoveOutcome::Blocked;
+            }
+            // Measured: an inclusive `1..3` repair roll, reported after
+            // the repair. See [`HOLE_UP_HULL_NOW_PREFIX`].
+            let roll = self.random_range_u8(SHIP_HULL_REPAIR_ROLL_LOW, SHIP_HULL_REPAIR_ROLL_HIGH);
+            let repaired = hull.saturating_add(roll).min(SHIP_HULL_REPAIR_CAP);
+            if let TransportState::Ship { hull, .. } = &mut self.player.transport {
+                *hull = repaired;
+            }
+            self.sync_player_object();
+            self.message = format!("{HOLE_UP_REPAIR_BODY}\n{HOLE_UP_HULL_NOW_PREFIX}{repaired}!");
+            return MoveOutcome::Rested;
+        }
         let land_camp = !matches!(self.area, Area::Town { .. });
         if land_camp {
             self.replace_command_echo(HOLE_UP_CAMP_ECHO);
