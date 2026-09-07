@@ -6936,7 +6936,7 @@ fn validate_route_smoke_case_state(
         }
         "buccaneers-den-wishing-well-horse" => {
             if state.gold != 4
-                || !state.message.contains("horse appears")
+                || !state.message.contains(u5_runtime::WISHING_WELL_GRANT_LINE)
                 || !state
                     .active_objects
                     .iter()
@@ -6949,7 +6949,7 @@ fn validate_route_smoke_case_state(
         }
         "buccaneers-den-wishing-well-ferrari-grants-horse" => {
             if state.gold != 4
-                || !state.message.contains("horse appears")
+                || !state.message.contains(u5_runtime::WISHING_WELL_GRANT_LINE)
                 || !state
                     .active_objects
                     .iter()
