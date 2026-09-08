@@ -95,10 +95,19 @@ fn route_to_cell(state: &mut PlayState, goal: (usize, usize), budget: usize) {
     // terrain-only route is the same every time, and an NPC standing on it
     // only ever delays the walk by a turn.
     let mut terrain = state.clone();
-    terrain.npcs.clear();
-    for object in terrain.active_objects.iter_mut().skip(1) {
-        *object = ActiveObject::empty();
+    // Lift out the *cast* - and only the cast. An earlier revision cleared
+    // every active object, which also removed the furniture and props that
+    // block movement, so the planner walked through tables and the real walk
+    // stopped dead against them: East Britanny's shipwright route planned to
+    // (8,10) and every run of it ended at (3,14).
+    for npc in &terrain.npcs {
+        if let Some(slot) = npc.active_object {
+            if let Some(object) = terrain.active_objects.get_mut(slot) {
+                *object = ActiveObject::empty();
+            }
+        }
     }
+    terrain.npcs.clear();
     terrain.sync_player_object();
     let mut keys = String::new();
     for _ in 0..budget {

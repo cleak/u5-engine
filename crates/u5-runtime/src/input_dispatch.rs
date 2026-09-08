@@ -1535,7 +1535,13 @@ fn handle_active_shop_key_input(
             } else {
                 None
             };
-            append_active_shop_surcharge(format_ship_broker_outcome(outcome), surcharge)
+            let vendor_name = area_scene_byte.and_then(|scene| {
+                crate::play_state_impl::shop_vendor_name_for_scene(SHOP_DIALOG_ID_SHIPWRIGHT, scene)
+            });
+            append_active_shop_surcharge(
+                format_ship_broker_outcome(outcome, vendor_name),
+                surcharge,
+            )
         }
         ActiveShopSession::Guild(s) => {
             let mut gems = state.gems;
@@ -1695,6 +1701,7 @@ fn active_healer_name(state: &PlayState) -> Option<&'static str> {
 
 const SHOP_DIALOG_ID_TAVERN: u8 = 0x82;
 const SHOP_DIALOG_ID_STABLE: u8 = 0x83;
+const SHOP_DIALOG_ID_SHIPWRIGHT: u8 = 0x84;
 
 /// `systems/shops.md §8.0`: "Two resident name tables are indexed by the same
 /// row: the shop's display name ... and the vendor's name, which fills the `$`
@@ -2763,15 +2770,36 @@ fn format_horse_trader_outcome(outcome: crate::shop_runtime::HorseTraderOutcome)
     }
 }
 
-fn format_ship_broker_outcome(outcome: crate::shop_runtime::ShipBrokerOutcome) -> String {
+/// **Measured** 2026-09-08 at The Rusty Bucket in Buccaneer's Den
+/// (`qa/paired/bd-shipwright.tsv`): the shipwright's stock line and the
+/// question under it.
+const SHIPWRIGHT_STOCK_LINE: &str = "\"We sell ocean-going Frigates and small, light Skiffs.";
+const SHIPWRIGHT_STOCK_QUESTION: &str = "Which would ye like to see?\"";
+/// The confirmation prompt a quoted hull ends on, quoted like the arms
+/// browser's `Deal?"`.
+const SHIPWRIGHT_CONFIRM_PROMPT: &str = "Wilt thou take it?\"";
+
+fn format_ship_broker_outcome(
+    outcome: crate::shop_runtime::ShipBrokerOutcome,
+    vendor_name: Option<&'static str>,
+) -> String {
     use crate::shop_runtime::ShipBrokerOutcome::*;
     match outcome {
+        EnteredMenu { .. } => {
+            format!("{SHIPWRIGHT_STOCK_LINE}\n\n{SHIPWRIGHT_STOCK_QUESTION}")
+        }
         QuotedPurchase { quote } => {
+            // The quote body is a `SHOPPE.DAT` record with the price
+            // substituted; until its record id is published this keeps the
+            // engine's own sentence and appends the measured prompt.
             let item = match quote.kind {
                 crate::shops::ShipwrightPurchaseKind::Frigate => "frigate",
                 crate::shops::ShipwrightPurchaseKind::Skiff => "skiff",
             };
-            format!("A {item} costs {} gold. (Y/N)", quote.price)
+            format!(
+                "A {item} costs {} gold.\n\n{SHIPWRIGHT_CONFIRM_PROMPT}",
+                quote.price
+            )
         }
         PurchaseApplied { outcome } => match outcome.status {
             crate::shops::ShipwrightPurchaseStatus::QueuedFrigate => {
@@ -2795,7 +2823,12 @@ fn format_ship_broker_outcome(outcome: crate::shop_runtime::ShipBrokerOutcome) -
             }
         },
         RefusedShortFunds { required, .. } => format!("Thou lackest the {required} gold."),
-        Declined => "As you wish.".to_string(),
+        // Measured: declining the hull ends the visit on the shipwright's own
+        // quoted jeer, attributed like every other shop bark.
+        Declined => match vendor_name {
+            Some(name) => format!("\"Hmph! Landlubber!\"\nsays {name}."),
+            None => "\"Hmph! Landlubber!\"".to_string(),
+        },
         Exited => "Farewell.".to_string(),
         InvalidInput => "I do not understand.".to_string(),
     }

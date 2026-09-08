@@ -1756,9 +1756,22 @@ pub enum ShipBrokerInput {
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum ShipBrokerOutcome {
-    QuotedPurchase { quote: ShipwrightPurchaseQuote },
-    PurchaseApplied { outcome: ShipwrightPurchaseOutcome },
-    RefusedShortFunds { available: u16, required: u16 },
+    /// The greeting was answered, so the shop lists what it sells.
+    ///
+    /// Measured 2026-09-08 at The Rusty Bucket
+    /// (`qa/paired/bd-shipwright.tsv`): `Y` at the greeting prints the stock
+    /// line and its question, and only then does a hull letter quote.
+    EnteredMenu,
+    QuotedPurchase {
+        quote: ShipwrightPurchaseQuote,
+    },
+    PurchaseApplied {
+        outcome: ShipwrightPurchaseOutcome,
+    },
+    RefusedShortFunds {
+        available: u16,
+        required: u16,
+    },
     Declined,
     Exited,
     InvalidInput,
@@ -1787,7 +1800,13 @@ pub fn step_ship_broker(
                     *state = ShipBrokerState::Exited;
                     ShipBrokerOutcome::Exited
                 }
-                ShipwrightMenuAction::Discard => ShipBrokerOutcome::InvalidInput,
+                ShipwrightMenuAction::Discard => {
+                    if matches!(b, b'Y' | b'y') {
+                        ShipBrokerOutcome::EnteredMenu
+                    } else {
+                        ShipBrokerOutcome::InvalidInput
+                    }
+                }
             }
         }
         (
