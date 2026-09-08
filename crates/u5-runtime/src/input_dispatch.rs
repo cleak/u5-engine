@@ -734,6 +734,10 @@ fn handle_active_shop_key_input(
             .min(u8::MAX as usize) as u8,
     };
     let key_byte = key as u8;
+    let area_scene_byte = match state.area {
+        Area::Town { scene, .. } => Some(scene.byte),
+        _ => None,
+    };
     let inline_digit = suffix
         .chars()
         .find(|c| c.is_ascii_digit())
@@ -781,128 +785,138 @@ fn handle_active_shop_key_input(
             no,
             game_dir,
         ),
-        ActiveShopSession::Healer(s, healer) => match (*s, yes, no, inline_digit) {
-            (HealerShopState::Greeting, _, true, _) => {
-                *s = HealerShopState::Exited;
-                "Farewell.".to_string()
-            }
-            (HealerShopState::Greeting, true, _, _) => {
-                *s = HealerShopState::PickService;
-                "Cure (C), Heal (H), or Resurrect (R)?".to_string()
-            }
-            (HealerShopState::Greeting, _, _, _)
-                if matches!(key_byte, b'H' | b'h' | b'Y' | b'y') =>
-            {
-                *s = HealerShopState::PickService;
-                "Cure (C), Heal (H), or Resurrect (R)?".to_string()
-            }
-            (HealerShopState::Greeting, _, _, _) => {
-                *s = HealerShopState::Exited;
-                "Farewell.".to_string()
-            }
-            (HealerShopState::PickService, _, _, _) => match healer_service_action(key_byte) {
-                HealerServiceAction::Treatment(treatment) => {
-                    let service = healer_service_for_treatment(treatment);
-                    let cost = match healer_treatment_fee(*healer, treatment) {
-                        HealerTreatmentFee::Bypass => 0,
-                        HealerTreatmentFee::Price(cost) => cost,
-                    };
-                    *s = HealerShopState::PickPartyMember { service, cost };
-                    format!("Who needs {}? (1-6)", treatment.display_name())
+        ActiveShopSession::Healer(s, healer) => {
+            let healer_name = match area_scene_byte {
+                Some(scene) => {
+                    crate::play_state_impl::shop_vendor_name_for_scene(SHOP_DIALOG_ID_HEALER, scene)
                 }
-                HealerServiceAction::Exit => {
+                None => None,
+            };
+            match (*s, yes, no, inline_digit) {
+                (HealerShopState::Greeting, _, true, _) => {
                     *s = HealerShopState::Exited;
                     "Farewell.".to_string()
                 }
-                HealerServiceAction::Discard => "Cure (C), Heal (H), or Resurrect (R)?".to_string(),
-            },
-            (HealerShopState::PickPartyMember { service, .. }, _, true, _) => {
-                *s = HealerShopState::PickService;
-                let treatment = healer_treatment_for_service(service);
-                format!("Cancelled {}.", treatment.display_name())
-            }
-            (HealerShopState::PickPartyMember { service, .. }, _, _, Some(d)) if d >= 1 => {
-                let target_index = usize::from(d - 1);
-                let treatment = healer_treatment_for_service(service);
-                let Some(member) = state.party.get(target_index).copied() else {
-                    return {
-                        state.active_shop = Some(session);
-                        // An out-of-range healer target: the shop's own
-                        // picker bounds it, so this is an invariant guard.
-                        state.message.clear();
-                        PlayInputDisposition::Continue
-                    };
-                };
-                if !active_healer_target_accepts(treatment, member) {
+                (HealerShopState::Greeting, true, _, _) => {
                     *s = HealerShopState::PickService;
-                    "That treatment is not needed.".to_string()
-                } else {
-                    match healer_treatment_fee(*healer, treatment) {
-                        HealerTreatmentFee::Bypass => {
-                            let message = match state.buy_healer_treatment(
-                                *healer,
-                                treatment,
-                                target_index,
-                            ) {
-                                Ok(outcome) => format_healer_treatment_outcome(outcome),
-                                Err(err) => format_healer_treatment_error(err),
-                            };
-                            *s = HealerShopState::PickService;
-                            message
-                        }
-                        HealerTreatmentFee::Price(cost) => {
-                            *s = HealerShopState::Confirm {
-                                service,
-                                slot: d - 1,
-                                cost,
-                            };
-                            format!("{} costs {cost} gold. (Y/N)", treatment.display_name())
+                    healer_service_menu(healer_name)
+                }
+                (HealerShopState::Greeting, _, _, _)
+                    if matches!(key_byte, b'H' | b'h' | b'Y' | b'y') =>
+                {
+                    *s = HealerShopState::PickService;
+                    healer_service_menu(healer_name)
+                }
+                (HealerShopState::Greeting, _, _, _) => {
+                    *s = HealerShopState::Exited;
+                    "Farewell.".to_string()
+                }
+                (HealerShopState::PickService, _, _, _) => match healer_service_action(key_byte) {
+                    HealerServiceAction::Treatment(treatment) => {
+                        let service = healer_service_for_treatment(treatment);
+                        let cost = match healer_treatment_fee(*healer, treatment) {
+                            HealerTreatmentFee::Bypass => 0,
+                            HealerTreatmentFee::Price(cost) => cost,
+                        };
+                        *s = HealerShopState::PickPartyMember { service, cost };
+                        format!("Who needs {}? (1-6)", treatment.display_name())
+                    }
+                    HealerServiceAction::Exit => {
+                        *s = HealerShopState::Exited;
+                        "Farewell.".to_string()
+                    }
+                    HealerServiceAction::Discard => healer_service_menu(healer_name),
+                },
+                (HealerShopState::PickPartyMember { service, .. }, _, true, _) => {
+                    *s = HealerShopState::PickService;
+                    let treatment = healer_treatment_for_service(service);
+                    format!("Cancelled {}.", treatment.display_name())
+                }
+                (HealerShopState::PickPartyMember { service, .. }, _, _, Some(d)) if d >= 1 => {
+                    let target_index = usize::from(d - 1);
+                    let treatment = healer_treatment_for_service(service);
+                    let Some(member) = state.party.get(target_index).copied() else {
+                        return {
+                            state.active_shop = Some(session);
+                            // An out-of-range healer target: the shop's own
+                            // picker bounds it, so this is an invariant guard.
+                            state.message.clear();
+                            PlayInputDisposition::Continue
+                        };
+                    };
+                    if !active_healer_target_accepts(treatment, member) {
+                        *s = HealerShopState::PickService;
+                        healer_no_need_refusal(healer_name)
+                    } else {
+                        match healer_treatment_fee(*healer, treatment) {
+                            HealerTreatmentFee::Bypass => {
+                                let message = match state.buy_healer_treatment(
+                                    *healer,
+                                    treatment,
+                                    target_index,
+                                ) {
+                                    Ok(outcome) => format_healer_treatment_outcome(outcome),
+                                    Err(err) => format_healer_treatment_error(err, healer_name),
+                                };
+                                *s = HealerShopState::PickService;
+                                message
+                            }
+                            HealerTreatmentFee::Price(cost) => {
+                                *s = HealerShopState::Confirm {
+                                    service,
+                                    slot: d - 1,
+                                    cost,
+                                };
+                                format!("{} costs {cost} gold. (Y/N)", treatment.display_name())
+                            }
                         }
                     }
                 }
+                (
+                    HealerShopState::Confirm {
+                        service,
+                        slot,
+                        cost,
+                        ..
+                    },
+                    true,
+                    _,
+                    _,
+                ) => {
+                    let treatment = healer_treatment_for_service(service);
+                    let message =
+                        match state.buy_healer_treatment(*healer, treatment, usize::from(slot)) {
+                            Ok(outcome) => {
+                                let surcharge =
+                                    if matches!(outcome.quote.fee, HealerTreatmentFee::Price(_)) {
+                                        apply_active_shop_surcharge(state)
+                                    } else {
+                                        None
+                                    };
+                                append_active_shop_surcharge(
+                                    format_healer_treatment_outcome(outcome),
+                                    surcharge,
+                                )
+                            }
+                            Err(crate::shops::HealerTreatmentError::InsufficientGold {
+                                ..
+                            }) => {
+                                format!("Thou lackest the {cost} gold.")
+                            }
+                            Err(err) => format_healer_treatment_error(err, healer_name),
+                        };
+                    *s = HealerShopState::PickService;
+                    message
+                }
+                (HealerShopState::Confirm { service, .. }, _, true, _) => {
+                    *s = HealerShopState::PickService;
+                    let treatment = healer_treatment_for_service(service);
+                    format!("Declined {}.", treatment.display_name())
+                }
+                (HealerShopState::Exited, _, _, _) => "Farewell.".to_string(),
+                _ => "I do not understand.".to_string(),
             }
-            (
-                HealerShopState::Confirm {
-                    service,
-                    slot,
-                    cost,
-                    ..
-                },
-                true,
-                _,
-                _,
-            ) => {
-                let treatment = healer_treatment_for_service(service);
-                let message =
-                    match state.buy_healer_treatment(*healer, treatment, usize::from(slot)) {
-                        Ok(outcome) => {
-                            let surcharge =
-                                if matches!(outcome.quote.fee, HealerTreatmentFee::Price(_)) {
-                                    apply_active_shop_surcharge(state)
-                                } else {
-                                    None
-                                };
-                            append_active_shop_surcharge(
-                                format_healer_treatment_outcome(outcome),
-                                surcharge,
-                            )
-                        }
-                        Err(crate::shops::HealerTreatmentError::InsufficientGold { .. }) => {
-                            format!("Thou lackest the {cost} gold.")
-                        }
-                        Err(err) => format_healer_treatment_error(err),
-                    };
-                *s = HealerShopState::PickService;
-                message
-            }
-            (HealerShopState::Confirm { service, .. }, _, true, _) => {
-                *s = HealerShopState::PickService;
-                let treatment = healer_treatment_for_service(service);
-                format!("Declined {}.", treatment.display_name())
-            }
-            (HealerShopState::Exited, _, _, _) => "Farewell.".to_string(),
-            _ => "I do not understand.".to_string(),
-        },
+        }
         ActiveShopSession::Innkeeper(s) => {
             let scene_marker = active_inn_scene_marker(state);
             match (*s, yes, no, inline_digit) {
@@ -1588,6 +1602,58 @@ fn active_inn_scene_marker(state: &PlayState) -> u8 {
 /// is the "Weaponsmith / armourer" row, and the same byte keys the arms
 /// column of the resident vendor-name table.
 const SHOP_DIALOG_ID_ARMS: u8 = 0x81;
+
+const SHOP_DIALOG_ID_HEALER: u8 = 0x87;
+
+/// **Measured** 2026-09-07 at Cove's Sanctuary (`qa/paired/cove-healer.tsv`):
+/// answering the greeting prints the powers line, attributed to the healer,
+/// then the service question a blank row below.
+///
+/// ```text
+/// "We have powers
+/// to Cure, Heal,
+/// or Resurrect."
+/// says Jessica.
+///
+/// "What is the
+/// nature of thy
+/// need?"
+/// ```
+///
+/// The engine asked `Cure (C), Heal (H), or Resurrect (R)?`, which is not a
+/// line the original prints.
+fn healer_service_menu(name: Option<&'static str>) -> String {
+    let powers = "\"We have powers to Cure, Heal, or Resurrect.\"";
+    match name {
+        Some(name) => format!("{powers}\nsays {name}.\n\n{HEALER_SERVICE_QUESTION}"),
+        None => format!("{powers}\n\n{HEALER_SERVICE_QUESTION}"),
+    }
+}
+
+/// The question the service menu ends on, and the one a completed or refused
+/// treatment returns to.
+const HEALER_SERVICE_QUESTION: &str = "\"What is the nature of thy need?\"";
+
+/// **Measured**: the refusal a service nobody needs draws, attributed, with
+/// the follow-up question the visit continues on.
+fn healer_no_need_refusal(name: Option<&'static str>) -> String {
+    let refusal = "\"Thou hast no need of this art!\"";
+    let follow_up = "\"Is there any other way in which I may aid thee?\"";
+    match name {
+        Some(name) => format!("{refusal}\nsays {name}.\n\n{follow_up}"),
+        None => format!("{refusal}\n\n{follow_up}"),
+    }
+}
+
+fn active_healer_name(state: &PlayState) -> Option<&'static str> {
+    match state.area {
+        Area::Town { scene, .. } => {
+            crate::play_state_impl::shop_vendor_name_for_scene(SHOP_DIALOG_ID_HEALER, scene.byte)
+        }
+        _ => None,
+    }
+}
+
 const SHOP_DIALOG_ID_TAVERN: u8 = 0x82;
 
 /// `systems/shops.md §8.0`: "Two resident name tables are indexed by the same
@@ -2314,7 +2380,10 @@ fn format_healer_treatment_outcome(outcome: HealerTreatmentOutcome) -> String {
     }
 }
 
-fn format_healer_treatment_error(error: crate::shops::HealerTreatmentError) -> String {
+fn format_healer_treatment_error(
+    error: crate::shops::HealerTreatmentError,
+    healer_name: Option<&'static str>,
+) -> String {
     match error {
         crate::shops::HealerTreatmentError::InsufficientGold { required, .. } => {
             format!("Thou lackest the {required} gold.")
@@ -2322,9 +2391,7 @@ fn format_healer_treatment_error(error: crate::shops::HealerTreatmentError) -> S
         crate::shops::HealerTreatmentError::InvalidTarget { .. } => {
             "I do not understand.".to_string()
         }
-        crate::shops::HealerTreatmentError::Untreatable => {
-            "That treatment is not needed.".to_string()
-        }
+        crate::shops::HealerTreatmentError::Untreatable => healer_no_need_refusal(healer_name),
     }
 }
 
