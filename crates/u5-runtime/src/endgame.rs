@@ -512,15 +512,24 @@ impl EndgameState {
         "Endgame: Lord British asks again for the sandalwood box. (Y/N)".to_string()
     }
 
+    /// `endgame.md §5`: the waiting branch prints the fixed `"I see...`
+    /// lead-in, pauses forty world-animation ticks, and only then renders
+    /// `ENDMSG.DAT` record 10. The engine printed record 10 alone, which is
+    /// the missing line `cleak/u5-engine#12` recorded in the stock capture.
     pub fn refusal_text(&self) -> String {
-        self.messages
+        let record = self
+            .messages
             .as_ref()
             .and_then(|messages| messages.refusal_branch())
             .map(str::to_string)
             .unwrap_or_else(|| {
                 "Endgame: the sandalwood box handoff failed; the ending tableau is terminal."
                     .to_string()
-            })
+            });
+        format!(
+            "{}{record}",
+            crate::endgame_cinematic::ENDGAME_WAITING_LEAD_IN
+        )
     }
 
     /// Text the current cinematic beat puts on the endgame surface.

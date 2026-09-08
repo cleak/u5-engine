@@ -18683,7 +18683,7 @@ fn synthetic_endmsg_dat_bytes() -> Vec<u8> {
         "Rite 5",
         "Rite 6",
         "Rite 7",
-        "Wait here without the box",
+        concat!("\"I see...\n", "Wait here without the box"),
     ];
     let mut bytes = Vec::new();
     for label in labels {
@@ -19177,7 +19177,9 @@ fn endgame_flow_uses_loaded_endmsg_records_for_prompts_rite_and_refusal() {
     );
     // Without the box that Yes is a false claim, so record 10's exchange
     // follows immediately instead of record 2 (`cleak/u5-engine#12`).
-    assert_eq!(refusal.message, "Wait here without the box");
+    // `endgame.md §5`: the waiting branch prints the fixed `"I see...`
+    // lead-in first; record 10 supplies its own leading newline.
+    assert_eq!(refusal.message, "\"I see...\nWait here without the box");
 
     let mut victory = dungeon_state(open_dungeon_record(), 0, 1, 1);
     victory.special_items[SPECIAL_ITEM_WOODEN_BOX_INDEX] = 1;

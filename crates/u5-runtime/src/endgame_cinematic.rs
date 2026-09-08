@@ -44,6 +44,19 @@ pub const ENDGAME_NARRATIVE_WINDOW_COUNT: u8 = 6;
 /// page and the fixed `He says:` lead-in for the second page.
 pub const ENDGAME_RITE_LEAD_IN_PAUSE_TICKS: u8 = 40;
 pub const ENDGAME_RITE_LEAD_IN: &str = "He says:";
+
+/// `endgame.md §5`: "Every waiting-branch outcome first prints the fixed
+/// program literal `"I see...` followed by **one newline**: it starts with a
+/// double quote, contains three periods, and has no closing quote. It then
+/// pauses for forty shared world-animation ticks before printing record 10."
+///
+/// Record 10 begins with its own newline, which supplies the blank row between
+/// the two. The literal is common to a final No and to a Yes claimed without
+/// the box, and is **not** printed on a victory outcome.
+pub const ENDGAME_WAITING_LEAD_IN: &str = "\"I see...\n";
+/// The pause between that lead-in and record 10, with "the same animation-gate
+/// behavior as the forty-tick rite pause".
+pub const ENDGAME_WAITING_LEAD_IN_PAUSE_TICKS: u8 = ENDGAME_RITE_LEAD_IN_PAUSE_TICKS;
 /// `endgame.md §7.1` full-screen fade to black, inclusive
 /// `(0, 0)..(319, 199)`.
 ///
