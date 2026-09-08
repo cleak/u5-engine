@@ -288,9 +288,15 @@ pub const fn scene_route(scene_byte: u8) -> SceneRoute {
 /// `catalogs/quest-graph.md §4` Word of Power for one of the eight
 /// stock dungeons indexed by scene byte `33..=40`. The Yell
 /// Word-of-Power handler matches these strings (uppercased) against
-/// the typed input and dispatches by dungeon. Doom's `VERAMOCOR`
-/// opens the chamber seal once the party is already inside Doom;
-/// it does not open Doom's exterior entrance.
+/// the typed input and dispatches by dungeon.
+///
+/// §4 on Doom, correcting what this comment used to say: "`VERAMOCOR`
+/// behaves exactly like the other seven words: it unseals the Doom
+/// **entrance**, which sits at the centre of the Underworld surface rather
+/// than on Britannia. It is not a seal inside the dungeon and it is not
+/// spoken from a dungeon interior - the word path runs only in outdoor
+/// scenes." [`WORD_OF_POWER_SEALS`] already places it at the Underworld's
+/// `(128, 128)`; only this comment was stale.
 pub const fn dungeon_word_of_power(scene_byte: u8) -> Option<&'static str> {
     Some(match scene_byte {
         33 => "FALLAX",

@@ -12,6 +12,17 @@ struct TlkHeaderEntry {
     blob_offset: usize,
 }
 
+/// `formats/tlk.md §7`: "Shipped blobs carry between two and twenty-six
+/// keyword/response pairs", after the five mandatory leading entries - so a
+/// full blob is fifty-seven NUL-terminated fields, and the runtime bound is
+/// the 1,024-byte window rather than any field count.
+///
+/// The parser used to stop at **forty** fields, which truncated every NPC with
+/// more than seventeen pairs: 42 of the 135 shipped records hit that cap, and
+/// their later keywords - the quest vocabulary lives at the end of a long
+/// blob - were unreachable.
+pub const TLK_BLOB_FIELD_CAP: usize = 5 + 26 * 2;
+
 pub fn parse_tlk(path: &Path) -> io::Result<HashMap<u16, Vec<String>>> {
     let bytes = read(path)?;
     parse_tlk_bytes(&bytes)
@@ -37,7 +48,7 @@ pub fn parse_tlk_blob_fields_raw(bytes: &[u8]) -> io::Result<HashMap<u16, Vec<Ve
         let mut fields: Vec<Vec<u8>> = Vec::new();
         let mut pos = entry.blob_offset;
         let mut current: Vec<u8> = Vec::new();
-        while pos < end && fields.len() < 40 {
+        while pos < end && fields.len() < TLK_BLOB_FIELD_CAP {
             let byte = bytes[pos];
             pos += 1;
             if byte == 0 {
@@ -77,7 +88,7 @@ pub fn parse_tlk_bytes(bytes: &[u8]) -> io::Result<HashMap<u16, Vec<String>>> {
         let end = nominal_end.min(entry.blob_offset.saturating_add(1024));
         let mut fields = Vec::new();
         let mut pos = entry.blob_offset;
-        while pos < end && fields.len() < 40 {
+        while pos < end && fields.len() < TLK_BLOB_FIELD_CAP {
             let (field, next) = decode_tlk_field(&bytes, pos, end);
             fields.push(field);
             pos = next;

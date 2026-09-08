@@ -1815,13 +1815,12 @@ mod tests {
         // this whole change is removing.
         //
         // These are dispatch counts, not the raw byte counts: the four
-        // files hold 16/35/2/7 = 60 `0x81` bytes, and 59 are reached.
-        // The missing one is `CASTLE.TLK` npc 18's second, which sits in
-        // field index 41 — past the 40-field cap in
-        // `map_io::parse_tlk_blob_fields_raw`, so the parser never yields
-        // it. Eleven shipped `CASTLE.TLK` blobs hold 41..=54 fields. That
-        // is an upstream truncation, not a dispatcher fault; when it is
-        // fixed this expectation becomes 16 and this test will say so.
+        // files hold 16/35/2/7 = 60 `0x81` bytes, and all sixty are now
+        // reached. The last one to arrive was `CASTLE.TLK` npc 18's second,
+        // at field index 41 - past the parser's old forty-field cap, which
+        // this expectation was pinned at 15 to record. `formats/tlk.md §7`
+        // puts the real bound at twenty-six keyword/response pairs inside a
+        // 1,024-byte window, so the cap is gone and the count is 16.
         let counts: Vec<(&str, usize)> = per_file
             .iter()
             .map(|(file, (dispatched, _))| (*file, *dispatched))
@@ -1829,7 +1828,7 @@ mod tests {
         assert_eq!(
             counts,
             vec![
-                ("CASTLE.TLK", 15),
+                ("CASTLE.TLK", 16),
                 ("DWELLING.TLK", 2),
                 ("KEEP.TLK", 7),
                 ("TOWNE.TLK", 35),
