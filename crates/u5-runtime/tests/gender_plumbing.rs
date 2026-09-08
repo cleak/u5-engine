@@ -58,7 +58,7 @@ fn arms_purchase_message(gender: u8) -> String {
 fn arms_post_item_prompt_reaches_milady_for_a_female_speaker() {
     let message = arms_purchase_message(SAVE_GENDER_FEMALE_BYTE);
     assert!(
-        message.contains("Anything else, milady?"),
+        message.contains("\"Anything else, milady?"),
         "female speaker must reach the feminine tail: {message:?}"
     );
 }
@@ -69,7 +69,7 @@ fn arms_post_item_prompt_reaches_milady_for_a_female_speaker() {
 fn arms_post_item_prompt_stays_sir_for_a_male_speaker() {
     let message = arms_purchase_message(SAVE_GENDER_MALE_BYTE);
     assert!(
-        message.contains("Anything else, sir?"),
+        message.contains("\"Anything else, sir?"),
         "male speaker must take the otherwise branch: {message:?}"
     );
     assert!(!message.contains("milady"));
@@ -84,7 +84,7 @@ fn an_unpublished_gender_byte_takes_the_otherwise_branch() {
     for byte in [0x00u8, b'M', b'F', 0xFF] {
         let message = arms_purchase_message(byte);
         assert!(
-            message.contains("Anything else, sir?"),
+            message.contains("\"Anything else, sir?"),
             "byte {byte:#04x} must take the otherwise branch: {message:?}"
         );
     }

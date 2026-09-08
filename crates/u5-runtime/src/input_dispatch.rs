@@ -1880,6 +1880,23 @@ fn handle_arms_shop_key_input(
                 arms_sell_continuation_prompt(state.random_range_u8(0, 3))
             )
         }
+        // Measured: a completed purchase and a declined quote both leave the
+        // Buy listing on screen with a freshly drawn call line under it, and
+        // the next letter buys again without a second `B`.
+        (ArmsShopOutcome::Bought { .. }, Some(table)) => {
+            let post = arms_post_item_prompt(speech.speaker_is_female, true);
+            let call = arms_stock_call_for_roll(state.random_range_u8(0, 3));
+            format!(
+                "Sold!\n{post}\n\n{}\n{call}",
+                format_arms_stock_buy_menu(table)
+            )
+        }
+        (ArmsShopOutcome::Declined, Some(table))
+            if matches!(prior_state, ArmsShopState::BuyConfirm { .. }) =>
+        {
+            let call = arms_stock_call_for_roll(state.random_range_u8(0, 3));
+            format!("{}\n{call}", format_arms_stock_buy_menu(table))
+        }
         (ArmsShopOutcome::Declined, _) if matches!(shop_state, ArmsShopState::SellPickItem(_)) => {
             format!(
                 "No\n{}",
@@ -1994,7 +2011,10 @@ fn arms_post_item_prompt(speaker_is_female: bool, transaction_completed: bool) -
     } else {
         "sir?"
     };
-    format!("Anything else, {suffix}")
+    // Measured 2026-09-07 (`qa/paired/shop-arms-menus.tsv`): the row reads
+    // `"Anything else,` - the opening quote is part of the line, and there is
+    // no closing one. `shops.md` §8.1 transcribes the literal without it.
+    format!("\"Anything else, {suffix}")
 }
 
 /// `systems/shops.md §8.1`: the arms "anything else" tail is addressed by the
@@ -4428,10 +4448,16 @@ mod arms_shop_resident_literal_tests {
     /// completed in this visit.
     #[test]
     fn arms_post_item_prompt_has_the_three_published_forms() {
-        assert_eq!(arms_post_item_prompt(true, true), "Anything else, milady?");
-        assert_eq!(arms_post_item_prompt(false, true), "Anything else, sir?");
-        assert_eq!(arms_post_item_prompt(false, false), "Anything else, then?");
-        assert_eq!(arms_post_item_prompt(true, false), "Anything else, then?");
+        assert_eq!(
+            arms_post_item_prompt(true, true),
+            "\"Anything else, milady?"
+        );
+        assert_eq!(arms_post_item_prompt(false, true), "\"Anything else, sir?");
+        assert_eq!(
+            arms_post_item_prompt(false, false),
+            "\"Anything else, then?"
+        );
+        assert_eq!(arms_post_item_prompt(true, false), "\"Anything else, then?");
     }
 
     /// `systems/shops.md §8.1`: a successful purchase "prints the fixed
@@ -4445,7 +4471,7 @@ mod arms_shop_resident_literal_tests {
             None,
             ArmsShopSpeech::default(),
         );
-        assert_eq!(rendered, "Sold!\nAnything else, sir?");
+        assert_eq!(rendered, "Sold!\n\"Anything else, sir?");
     }
 
     /// `systems/shops.md §8.0`: the shopkeeper filling the attribution tails
@@ -4488,7 +4514,7 @@ mod arms_shop_resident_literal_tests {
         assert_eq!(
             rendered,
             "Sold!
-Anything else, milady?"
+\"Anything else, milady?"
         );
     }
 
@@ -4515,7 +4541,7 @@ Anything else, milady?"
         assert_eq!(
             rendered,
             "Sold!
-Anything else, sir?"
+\"Anything else, sir?"
         );
     }
 

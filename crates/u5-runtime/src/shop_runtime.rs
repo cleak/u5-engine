@@ -394,14 +394,22 @@ pub fn step_arms_shop(
             }
             *gold -= quoted_price;
             stock[item_idx] = stock[item_idx].saturating_add(1);
-            *state = ArmsShopState::Greeting;
+            // Measured 2026-09-07 (`qa/paired/shop-arms-menus.tsv`): a
+            // completed purchase does not drop back to the Buy-or-Sell
+            // greeting. The stock list is redrawn under the post-item prompt
+            // and the next letter is taken as another purchase - the capture
+            // buys a Dagger with `Y` and then quotes a Sling for `b` with no
+            // `B` in between.
+            *state = ArmsShopState::BuyPickItem;
             ArmsShopOutcome::Bought {
                 item,
                 paid: quoted_price,
             }
         }
         (ArmsShopState::BuyConfirm { .. }, ArmsShopInput::Confirm(false)) => {
-            *state = ArmsShopState::Greeting;
+            // Same for a declined quote: the list comes back, not the
+            // greeting.
+            *state = ArmsShopState::BuyPickItem;
             ArmsShopOutcome::Declined
         }
         (ArmsShopState::SellPickItem(browser), ArmsShopInput::Item(item)) => {
@@ -2383,7 +2391,7 @@ mod tests {
     }
 
     #[test]
-    fn arms_shop_decline_returns_to_greeting() {
+    fn arms_shop_decline_returns_to_the_buy_listing() {
         let mut state = ArmsShopState::Greeting;
         let prices = make_price_table();
         let mut stock = make_stock();
@@ -2416,7 +2424,9 @@ mod tests {
         assert_eq!(outcome, ArmsShopOutcome::Declined);
         assert_eq!(gold, 1000);
         assert_eq!(stock[5], 0);
-        assert_eq!(state, ArmsShopState::Greeting);
+        // Measured: the declined quote returns to the Buy listing, not to the
+        // Buy-or-Sell greeting (`qa/paired/shop-arms-menus.tsv`).
+        assert_eq!(state, ArmsShopState::BuyPickItem);
     }
 
     #[test]

@@ -116,6 +116,8 @@ a paired run at all.
 | `shop-arms` | the arms shop's browser and its prompts |
 | `shop-arms-after-entry` | the arms shop reached by walking in through the door at 10:00, when the resident is at the shop |
 | `shop-arms-buy` | the same walk-in, driven through the Buy menu, an item pick and the refusals |
+| `shop-arms-menus` | both arms menus with waits long enough for the stock to finish drawing: the Buy listing, an item quote, the Sell prompt and the closing flourish |
+| `shop-arms-buy-confirm` | the Buy confirmation: quote, `Y`, `Sold!`, the post-item prompt and the redrawn listing, then a second quote declined with `N` |
 | `shop-arms-sell` | the Sell side of the same shop. **Retry until the `talk` shot shows the greeting**: the walk is thirty steps and the weaponsmith wanders, so a run that ends on `Nobody's here!` proves nothing (three of four attempts on 2026-09-07) |
 | `doom-final-room` | Doom's final room: the fall onto the room trigger, the arena, the absorption, and Lord British's dialogue. **Compared 2026-09-07**: both sides print `Entering room`, the arena banner, `Avatar is absorbed!`, `Lord British says: "Well met, Avatar!"`, the box question, and the seated reply, differing only by one capture's timing |
 | `doom-final-room-refusal` | the same room answering `No` to the first box question. **Compared 2026-09-07**: both sides reach `…secret passage in my chamber!"`, `"Didst thou bring it?"` and `You reply:` |
@@ -161,6 +163,7 @@ number of keystrokes:
 | `town-talk-after-entry`, `town-talk-second-npc` | the party outside Britain on the overworld, so the scenario can walk in through the door |
 | `shop-arms-after-entry`, `combat-town-attack-after-entry` | the same, seeded at 10:00 rather than 12:00 |
 | `shop-inn-after-entry` | the same 10:00 seed as `shop-arms-after-entry` |
+| `shop-arms-menus`, `shop-arms-buy-confirm`, `shop-arms-sell` | the same 10:00 walk-in seed, plus `seed_inventory <profile> equipment=3` so the Sell browser has rows. Press the shop's keys **only after the previous line has finished drawing** - `shops.md` §8.A flushes type-ahead, so a key sent early is discarded, which is what made three runs look like a wandering resident |
 
 ## Pixel-exact comparison with `qa/tools/frame_diff.py`
 
