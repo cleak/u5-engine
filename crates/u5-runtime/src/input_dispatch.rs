@@ -933,6 +933,9 @@ fn handle_active_shop_key_input(
         }
         ActiveShopSession::Innkeeper(s) => {
             let scene_marker = active_inn_scene_marker(state);
+            let innkeeper_name = area_scene_byte.and_then(|scene| {
+                crate::play_state_impl::shop_vendor_name_for_scene(SHOP_DIALOG_ID_INN, scene)
+            });
             match (*s, yes, no, inline_digit) {
                 (InnkeeperState::Greeting { inn }, _, _, _) => match inn_main_action(key_byte) {
                     InnMainAction::Rest => {
@@ -949,8 +952,14 @@ fn handle_active_shop_key_input(
                             base_room_rate,
                             total_price,
                         };
+                        // **Measured** 2026-09-08 at Hotel Brittany
+                        // (`qa/paired/nb-inn-branches.tsv`): the quote ends on
+                        // the shipwright's prompt, quoted and without `(Y/N)`.
+                        // The room's own description is inn text this spec
+                        // does not publish, so the engine's sentence stands
+                        // above it for now.
                         format!(
-                            "{} room and board costs {total_price} gold. (Y/N)",
+                            "{} room and board costs {total_price} gold.\n\n{INN_CONFIRM_PROMPT}",
                             inn.display_name()
                         )
                     }
@@ -1034,8 +1043,12 @@ fn handle_active_shop_key_input(
                     }
                 }
                 (InnkeeperState::ConfirmRest { inn, .. }, _, true, _) => {
-                    *s = InnkeeperState::Greeting { inn };
-                    "As you wish.".to_string()
+                    // Measured: a declined room ends the visit on the
+                    // innkeeper's own attributed line, not a return to the
+                    // branch question.
+                    let _ = inn;
+                    *s = InnkeeperState::Exited;
+                    inn_declined_line(innkeeper_name)
                 }
                 (InnkeeperState::PickLeaveCompanion { inn, deposit: _ }, _, true, _) => {
                     *s = InnkeeperState::Greeting { inn };
@@ -1745,6 +1758,7 @@ fn active_healer_name(state: &PlayState) -> Option<&'static str> {
 const SHOP_DIALOG_ID_TAVERN: u8 = 0x82;
 const SHOP_DIALOG_ID_STABLE: u8 = 0x83;
 const SHOP_DIALOG_ID_SHIPWRIGHT: u8 = 0x84;
+const SHOP_DIALOG_ID_INN: u8 = 0x88;
 
 /// `systems/shops.md §8.0`: "Two resident name tables are indexed by the same
 /// row: the shop's display name ... and the vendor's name, which fills the `$`
@@ -2490,6 +2504,18 @@ const SAGE_RESPOND_PROMPT: &str = "You respond:";
 /// The tavern's own follow-up question, measured with the zero-quantity
 /// dismissal and reused when the sage hands control back.
 const TAVERN_ANYTHING_ELSE_PROMPT: &str = "\"Anything else for thee?\"";
+/// **Measured** 2026-09-08 at Hotel Brittany: the inn's room quote and the
+/// shipwright's hull quote end on the same prompt.
+const INN_CONFIRM_PROMPT: &str = "Wilt thou take it?\"";
+
+/// **Measured**: the line a declined room draws, attributed to the innkeeper.
+fn inn_declined_line(innkeeper_name: Option<&'static str>) -> String {
+    let line = "\"Perhaps another time...\"";
+    match innkeeper_name {
+        Some(name) => format!("{line}\nsays {name}."),
+        None => line.to_string(),
+    }
+}
 
 fn format_tavern_outcome(
     outcome: crate::shop_runtime::TavernOutcome,

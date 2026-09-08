@@ -4945,7 +4945,7 @@ fn end_to_end_innkeeper_session_through_input_dispatcher() {
 }
 
 #[test]
-fn end_to_end_innkeeper_decline_returns_to_greeting_without_charge() {
+fn end_to_end_innkeeper_decline_ends_the_visit_without_charge() {
     use crate::shop_runtime::*;
     use crate::shop_session::ActiveShopSession;
     let mut state = test_state(open_grid(), 1, 1);
@@ -4960,11 +4960,15 @@ fn end_to_end_innkeeper_decline_returns_to_greeting_without_charge() {
     // session sees it.
     handle_play_key_input(&mut state, ' ', "n", Path::new("")).unwrap();
     assert_eq!(state.gold, 100);
+    // Measured 2026-09-08 at Hotel Brittany
+    // (`qa/paired/nb-inn-branches.tsv`): the declined room ends the visit on
+    // the innkeeper's own line, attributed when the scene names one.
     assert!(
-        state.message.contains("As you wish") || state.message.contains("Farewell"),
+        state.message.contains("Perhaps another time..."),
         "decline message was: {}",
         state.message
     );
+    assert!(state.active_shop.is_none());
 }
 
 #[test]
