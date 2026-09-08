@@ -104,7 +104,7 @@ fn route_to_cell(state: &mut PlayState, goal: (usize, usize), budget: usize) {
     for _ in 0..budget {
         if (terrain.player.x, terrain.player.y) == goal {
             println!(
-                "route: {} step(s) `{keys}` to ({}, {})",
+                "route: {} key(s) `{keys}` to ({}, {})",
                 keys.len(),
                 goal.0,
                 goal.1
@@ -112,9 +112,9 @@ fn route_to_cell(state: &mut PlayState, goal: (usize, usize), budget: usize) {
             return;
         }
         let start = (terrain.player.x, terrain.player.y);
-        let mut came: HashMap<(usize, usize), ((usize, usize), char)> = HashMap::new();
+        let mut came: HashMap<(usize, usize), ((usize, usize), char, bool)> = HashMap::new();
         let mut queue = VecDeque::from([start]);
-        came.insert(start, (start, ' '));
+        came.insert(start, (start, ' ', false));
         let mut reached = false;
         while let Some((x, y)) = queue.pop_front() {
             if (x, y) == goal {
@@ -131,18 +131,46 @@ fn route_to_cell(state: &mut PlayState, goal: (usize, usize), budget: usize) {
                 probe.player.x = x;
                 probe.player.y = y;
                 probe.sync_player_object();
+                let mut opened = false;
                 if probe
                     .step_with_game_dir(direction, None)
                     .unwrap_or(MoveOutcome::Blocked)
                     != MoveOutcome::Moved
                 {
-                    continue;
+                    // A closed door is not a wall: the party opens it and
+                    // walks through, which is the only way to reach half of
+                    // a village's residents. The route records the `o` so the
+                    // paired scenario presses it too.
+                    let (dx, dy) = direction.delta();
+                    let (tx, ty) = (x as isize + dx, y as isize + dy);
+                    if !(0..32).contains(&tx) || !(0..32).contains(&ty) {
+                        continue;
+                    }
+                    if !is_town_door_tile(probe.grid[ty as usize * 32 + tx as usize]) {
+                        continue;
+                    }
+                    let mut door = terrain.clone();
+                    door.player.x = x;
+                    door.player.y = y;
+                    door.sync_player_object();
+                    if door.open_direction_with_game_dir(direction, None).is_err() {
+                        continue;
+                    }
+                    if door
+                        .step_with_game_dir(direction, None)
+                        .unwrap_or(MoveOutcome::Blocked)
+                        != MoveOutcome::Moved
+                    {
+                        continue;
+                    }
+                    probe = door;
+                    opened = true;
                 }
                 let next = (probe.player.x, probe.player.y);
                 if came.contains_key(&next) {
                     continue;
                 }
-                came.insert(next, ((x, y), key));
+                came.insert(next, ((x, y), key, opened));
                 queue.push_back(next);
             }
         }
@@ -151,18 +179,30 @@ fn route_to_cell(state: &mut PlayState, goal: (usize, usize), budget: usize) {
             return;
         }
         let mut cell = goal;
-        let mut first = ' ';
+        let mut first = (' ', false);
         while cell != start {
-            let (previous, key) = came[&cell];
-            first = key;
+            let (previous, key, opened) = came[&cell];
+            first = (key, opened);
             cell = previous;
         }
-        let direction = match first {
+        let (key, opened) = first;
+        let direction = match key {
             'w' => Direction::North,
             's' => Direction::South,
             'a' => Direction::West,
             _ => Direction::East,
         };
+        if opened {
+            if terrain
+                .open_direction_with_game_dir(direction, None)
+                .is_err()
+            {
+                println!("route: could not open the door after `{keys}`");
+                return;
+            }
+            keys.push('o');
+            keys.push(key);
+        }
         if terrain
             .step_with_game_dir(direction, None)
             .unwrap_or(MoveOutcome::Blocked)
@@ -171,7 +211,7 @@ fn route_to_cell(state: &mut PlayState, goal: (usize, usize), budget: usize) {
             println!("route: blocked mid-walk after `{keys}`");
             return;
         }
-        keys.push(first);
+        keys.push(key);
     }
     println!("route: gave up after {budget} steps (`{keys}`)");
 }

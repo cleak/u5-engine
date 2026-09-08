@@ -8909,7 +8909,9 @@ fn talk_entry_refusal_strings_match_spec_text() {
     // strings at the named entry-time gates before the
     // conversation engine ever runs.
     assert_eq!(TALK_NOBODY_HERE_MESSAGE, "Nobody's here!");
-    assert_eq!(TALK_SLEEPING_MESSAGE, "Zzzzzz...");
+    // Measured 2026-09-07 at Paws (`qa/paired/paws-sleeper.tsv`): the sleeping
+    // line is quoted, which §2 step 4's transcription omits.
+    assert_eq!(TALK_SLEEPING_MESSAGE, "\"Zzzzzz...\"");
     assert_eq!(TALK_NO_RESPONSE_MESSAGE, "No response!");
 }
 

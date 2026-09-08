@@ -68,7 +68,11 @@ pub const TALK_NOBODY_HERE_MESSAGE: &str = "Nobody's here!";
 /// capture of `T` West in the starting hut: `>Talk-West`, a blank row,
 /// then `Nobody's here!`. `cleak/u5-engine#5`.
 pub const TALK_NOBODY_HERE_LINE: &str = "\nNobody's here!";
-pub const TALK_SLEEPING_MESSAGE: &str = "Zzzzzz...";
+/// **Measured** 2026-09-07 (`qa/paired/paws-sleeper.tsv`): the sleeping-NPC
+/// gate prints the line *in quotes* - `"Zzzzzz..."` - read back by glyph
+/// index at Paws, where the tavern keeper is still on a bed at 10:00.
+/// `conversation.md` §2 step 4 transcribes it without them.
+pub const TALK_SLEEPING_MESSAGE: &str = "\"Zzzzzz...\"";
 /// `conversation.md §2` step 4 publishes this as the mirror-tile
 /// refusal. A paired capture of the original shows it is also what a
 /// **non-speaker** answers: Talk at a Britain guard whose dialog index
