@@ -1878,8 +1878,13 @@ fn handle_arms_shop_key_input(
         (ArmsShopOutcome::SellRefusedZeroPrice { .. }, _)
             if matches!(shop_state, ArmsShopState::SellPickItem(_)) =>
         {
+            // **Measured** 2026-09-07 (`qa/paired/shop-arms-sell-zero-price.tsv`):
+            // quoted and attributed with `says` - unlike the ammunition
+            // refusal's `growls` - and the browser keeps going with its
+            // continuation prompt.
             format!(
-                "I cannot buy that.\n{}",
+                "{}\n{}",
+                speech.attribute("\"That, I cannot buy from thee.\"", "says"),
                 arms_sell_continuation_prompt(state.random_range_u8(0, 3))
             )
         }
@@ -2181,8 +2186,15 @@ fn format_arms_outcome_with_rolls(
         OfferedSellPrice { item, offer } => {
             format!("I will pay {offer} gold for item {item}. (Y/N)")
         }
-        SellRefusedZeroPrice { .. } => "I cannot buy that.".to_string(),
-        SellRefusedAmmunition { .. } => "I buy no used ammunition.".to_string(),
+        SellRefusedZeroPrice { .. } => {
+            speech.attribute("\"That, I cannot buy from thee.\"", "says")
+        }
+        // **Measured** 2026-09-07 (`qa/paired/shop-arms-sell-ammunition.tsv`):
+        // quoted and attributed with `growls`, the same verb the
+        // empty-inventory refusal takes.
+        SellRefusedAmmunition { .. } => {
+            speech.attribute("\"We don't deal in used ammunition!\"", "growls")
+        }
         // `systems/shops.md §8.1`: a successful purchase "prints the fixed
         // success line `Sold!`", and "It then prints the post-item prompt
         // `Anything else,`" with the gendered suffix. The purchase that just

@@ -1,0 +1,84 @@
+# The arms Buy confirmation: quote, Y, the success line and the post-item
+# prompt, then a second item declined with N (cleak/u5-spec#238).
+# requires-seed: outside Britain at 10:00, gold to spend
+both	wait	9000
+both	key	space
+both	wait	4000
+both	key	j
+both	wait	8000
+both	shot	overworld	Journey Onward on the overworld at Britain
+both	key	e
+both	wait	4000
+both	shot	entered	Entered Britain through the door
+both	key	Up
+both	wait	450
+both	key	Up
+both	wait	450
+both	key	Up
+both	wait	450
+both	key	Up
+both	wait	450
+both	key	Up
+both	wait	450
+both	key	Up
+both	wait	450
+both	key	Up
+both	wait	450
+both	key	Up
+both	wait	450
+both	key	Up
+both	wait	450
+both	key	Left
+both	wait	450
+both	key	Left
+both	wait	450
+both	key	Left
+both	wait	450
+both	key	Left
+both	wait	450
+both	key	Left
+both	wait	450
+both	key	Left
+both	wait	450
+both	key	Left
+both	wait	450
+both	key	Left
+both	wait	450
+both	key	Left
+both	wait	450
+both	key	Left
+both	wait	450
+both	key	Left
+both	wait	450
+both	key	Left
+both	wait	450
+both	key	Left
+both	wait	450
+both	key	Left
+both	wait	450
+both	key	Up
+both	wait	450
+both	key	Up
+both	wait	450
+both	wait	2500
+both	shot	arrived	Arrived beside the weaponsmith
+both	key	l
+both	wait	1200
+both	key	Right
+both	wait	2500
+both	shot	look	Look east at the weaponsmith
+both	key	t
+both	wait	1200
+both	key	Right
+both	wait	3500
+both	shot	talk	Talk east: does the arms shop open at 10:00?
+both	wait	14000
+both	key	S
+both	wait	4000
+both	shot	browser	The Sell browser with only a zero-price item in the pack
+both	key	Return
+both	wait	4000
+both	shot	ammo	Return on the ammunition row
+both	key	Escape
+both	wait	4000
+both	shot	after	After the refusal

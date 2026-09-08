@@ -8,7 +8,7 @@
 //! not from any asset - and the harness then seeds DOSBox and the engine from
 //! the same file.
 //!
-//! Usage: seed_inventory <PROFILE_DIR> [potions|scrolls|specials|spells|reagents|mana|keys|gems|torches|status<slot>]=<N>...
+//! Usage: seed_inventory <PROFILE_DIR> [potions|scrolls|specials|spells|reagents|mana|keys|gems|torches|equipment|stock<item id>|equip<slot>|status<slot>]=<N>...
 
 use std::path::Path;
 use u5_runtime::*;
@@ -40,6 +40,17 @@ fn main() {
             "torches" => state.torches = count,
             "spells" => state.spell_charges = [count; SPELL_COUNT],
             "equipment" => state.equipment_stock = [count; EQUIPMENT_COUNT],
+            // `stock<item id>=<count>` writes one *pack* counter, so a
+            // scenario can put exactly one kind of item in front of a shop's
+            // sell browser - the ammunition and zero-price refusals of
+            // `shops.md` §8.1 need a pack that holds nothing else.
+            _ if what.starts_with("stock") && what.len() > "stock".len() => {
+                let item: usize = what
+                    .trim_start_matches("stock")
+                    .parse()
+                    .expect("stock<item id>");
+                state.equipment_stock[item] = count;
+            }
             // `equip<slot>=<item id>` writes one readied slot of the first
             // party member, so a scenario can start from a state R-Ready
             // itself refuses to reach.
