@@ -536,6 +536,9 @@ pub const OUTDOOR_IMPACT_PARTY_PASS_SLOT_BOUND: usize = 6;
 /// `formats/saved-gam.md §3.1` dead status letter, character record
 /// `+0x0B`.
 pub const PARTY_STATUS_DEAD: u8 = b'D';
+/// `movement.md §8.2`'s skip test alongside Dead: an already-Poisoned member
+/// takes no draw.
+pub const PARTY_STATUS_POISONED: u8 = b'P';
 
 /// `overworld.md §6.2.4` roster filter, stated exactly as published: "each
 /// slot index that is **below the party-size byte** and whose **status

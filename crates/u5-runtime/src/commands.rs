@@ -1458,6 +1458,14 @@ pub const DUNGEON_FOUNTAIN_ACCEPTED: &str = "Yes.  Gulp!\n";
 pub const DUNGEON_FOUNTAIN_CURED: &str = "Cured!\n";
 pub const DUNGEON_FOUNTAIN_HEALED: &str = "Healed!\n";
 pub const DUNGEON_FOUNTAIN_POISONED: &str = "Poisoned!\n";
+
+/// `movement.md §8.2`: the outdoor swamp save's own bare status line.
+pub const OUTDOOR_SWAMP_POISONED_LINE: &str = "Poisoned!";
+/// §8.2's inclusive `1..30` draw. The town underfoot save uses `0..29`, so
+/// the two immunity thresholds differ by one and the ranges must not be
+/// shared.
+pub const OUTDOOR_SWAMP_POISON_ROLL_LOW: u8 = 1;
+pub const OUTDOOR_SWAMP_POISON_ROLL_HIGH: u8 = 30;
 pub const DUNGEON_FOUNTAIN_BAD_TASTE: &str = "Bad taste.\n";
 
 /// **PUBLISHED, UNWIRED - and the convention note for that marker.** A

@@ -2373,21 +2373,72 @@ impl PlayState {
         Ok(())
     }
 
-    /// Measured 2026-09-07 (`qa/paired/swamp-step.tsv`,
-    /// `qa/paired/swamp-walk.tsv`, `qa/paired/swamp-long.tsv`): 56 scripted
-    /// steps through the swamp south-west of Britain left every party member
-    /// `G`ood at full hit points, and the message window printed nothing but
-    /// the terrain's own `Slow progress!`. The engine used to poison the whole
-    /// party on the first swamp step and print an English *diagnostic*
-    /// sentence - `swamp poison: set party slot 0 to poisoned` - into the
-    /// player's window, which `commands.md §8.1` forbids the movement family
-    /// outright.
+    /// `movement.md §8.2` "Outdoor swamp poisoning", published in answer to
+    /// `cleak/u5-spec#242`.
     ///
-    /// Deterministic per-step poisoning is excluded by that run. Whatever the
-    /// rarer rule is, it is unpublished (`cleak/u5-spec#242`), so the
-    /// conservative engine does nothing here rather than invent a rate.
+    /// "Swamp terrain `0x04` can poison the outdoor party **while on foot**.
+    /// After a consumed action's normal clock advance, the outdoor turn tail
+    /// checks the tile currently beneath the party and the current transport."
+    /// The save is per member, in party order:
+    ///
+    /// | Member/result | Effect |
+    /// |---|---|
+    /// | Dead or already Poisoned | Skip without a random draw |
+    /// | Any other status, including Sleeping | Draw once, inclusive `1..30` |
+    /// | Roll no greater than Dexterity | Keep the status, print nothing |
+    /// | Roll greater than Dexterity | Poisoned, and print `Poisoned!\n` |
+    ///
+    /// My 2026-09-07 reading - 56 scripted swamp steps leaving the party
+    /// `G`ood, therefore no swamp poisoning - is **withdrawn**. §8.2 answers
+    /// it directly: "Issue #242's healthy swamp traversal is consistent with
+    /// an immune Dexterity, but the reported seed does not give that
+    /// attribute, so it does not establish the absence of swamp poisoning."
+    /// At Dexterity 30 or above the save cannot fail at all.
+    ///
+    /// What that measurement did establish, and what stays: the engine's old
+    /// behaviour - poisoning the whole party on the first step and printing
+    /// the diagnostic `swamp poison: set party slot 0 to poisoned` - was
+    /// wrong twice over. The line here is the published bare one.
     pub fn append_world_status_tile_message(&mut self, plane: WorldPlane) {
+        // "The same rule applies on either outdoor world plane."
         let _ = plane;
+        if !matches!(self.player.transport, TransportState::Foot) {
+            // "Horse and carpet travel do not enter this poisoning check."
+            return;
+        }
+        if self.grid[world_cell_index(self.player.x, self.player.y)] != BRIT_SWAMP_TILE {
+            return;
+        }
+        for index in 0..self.party.len() {
+            let status = self.party[index].status;
+            if status == PARTY_STATUS_DEAD || status == PARTY_STATUS_POISONED {
+                continue;
+            }
+            let roll = self.outdoor_swamp_poison_roll();
+            if roll <= self.party[index].climb_stat {
+                continue;
+            }
+            self.party[index].status = PARTY_STATUS_POISONED;
+            // "Each newly poisoned member produces one bare status line, with
+            // no member name, leading newline, coordinate or diagnostic
+            // sentence. Multiple failures produce multiple lines in party
+            // order."
+            self.emit_message_line(OUTDOOR_SWAMP_POISONED_LINE);
+        }
+        // "The caller then pauses one world tick even if everyone saved or
+        // was skipped."
+        self.animation.tick_static_tiles();
+    }
+
+    /// `movement.md §8.2`: the outdoor save's own draw, "inclusive `1..30`",
+    /// deliberately not shared with the town underfoot save's `0..29` - §8.2:
+    /// "Keep this outdoor save separate from town terrain and combat
+    /// terrain."
+    pub fn outdoor_swamp_poison_roll(&mut self) -> u8 {
+        self.random_range_u8(
+            OUTDOOR_SWAMP_POISON_ROLL_LOW,
+            OUTDOOR_SWAMP_POISON_ROLL_HIGH,
+        )
     }
 
     pub fn apply_world_underfoot_damage(
