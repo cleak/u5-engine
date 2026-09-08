@@ -3806,10 +3806,14 @@ impl PlayState {
                     self.clear_active_effect_slot();
                 }
                 self.advance_turn();
-                let label = session.shop_label().to_string();
-                let prompt = session.opening_prompt().to_string();
+                // Both Talk entries go through one greeting builder now. This
+                // one is the dialogue-map path and carries no game directory,
+                // so it takes the builder's no-assets fallback; the
+                // asset-backed path renders the `SHOPPE.DAT` record.
+                let message =
+                    self.format_talk_shop_opening_message(dialog_id, &session, None, None);
                 self.active_shop = Some(session);
-                self.message = format!("{label} is now open. {prompt}");
+                self.message = message;
                 return MoveOutcome::Talked;
             }
         }
@@ -4223,7 +4227,16 @@ impl PlayState {
                         ..Default::default()
                     };
                     if let Ok(rendered) = renderer.render_record(record_id, &ctx) {
-                        return append_shop_opening_prompt(rendered, session.opening_prompt());
+                        // Measured 2026-09-07/08 at four shops - the Paws
+                        // tavern, the North Britanny inn, Cove's healer and
+                        // Cove's herbalist (`qa/paired/paws-tavern.tsv`,
+                        // `nb-inn.tsv`, `cove-healer.tsv`,
+                        // `cove-herbalist.tsv`): entry prints the greeting
+                        // record and nothing else, and the shop then waits on
+                        // a `:` row where `Y` echoes as `:Yes`. The engine
+                        // used to append an invented key summary
+                        // (`Rest (R), Leave (L), Pick up (P), or Space.`).
+                        return rendered;
                     }
                 }
             }
@@ -4238,9 +4251,10 @@ impl PlayState {
         // because callers pass it for other purposes; it is simply never
         // printed.
         let _ = family;
+        // Only reached when `SHOPPE.DAT` cannot be read at all - unit
+        // fixtures with no assets. The original always has a record here.
         let label = session.shop_label();
-        let prompt = session.opening_prompt();
-        format!("{label} is now open. {prompt}")
+        format!("{label} is now open.")
     }
 
     /// Apply the byte-runner's recorded [`TlkActionDispatchVerb`] grants

@@ -2732,8 +2732,10 @@ fn talk_shop_entry_uses_shared_preamble_record_when_shoppe_dat_is_loaded() {
         MoveOutcome::Talked
     );
 
-    assert!(state.message.starts_with("Guild preamble two."));
-    assert!(state.message.contains("Keys (A), Gems (B), Torches (C)"));
+    // Measured 2026-09-07/08 at four shops: entry prints the greeting record
+    // and nothing else - the invented key summary that used to follow it is
+    // gone (`qa/paired/paws-tavern.tsv` and the three beside it).
+    assert_eq!(state.message.trim(), "Guild preamble two.");
     assert_eq!(state.prng_state, expected_prng);
     assert!(state.active_shop.is_some());
     assert_eq!(state.turn, 1);
