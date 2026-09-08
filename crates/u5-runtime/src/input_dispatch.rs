@@ -2083,12 +2083,23 @@ fn handle_arms_shop_key_input(
         // rendered, and nowhere else — see `arms_stock_call_for_roll`.
         (ArmsShopOutcome::EnteredBuy, Some(table)) => {
             // Measured order: heading, the lettered stock rows, a blank row,
-            // then the call line.
+            // then the call line. `§8.B` fixes the two heading draws and
+            // their order - affirmation first, then stock introduction - and
+            // both precede `§8.1`'s call-line draw, which prints after the
+            // list.
+            let listing = format_arms_stock_buy_menu(
+                table,
+                state.random_range_u8(0, 3),
+                state.random_range_u8(0, 3),
+            );
             let call = arms_stock_call_for_roll(state.random_range_u8(0, 3));
-            format!("{}\n{call}", format_arms_stock_buy_menu(table))
+            format!("{listing}\n{call}")
         }
         (ArmsShopOutcome::InvalidInput, Some(table)) if was_invalid_stock_pick => {
-            format_arms_stock_buy_menu(table)
+            // `§8.1`: an invalid stock letter "leave[s] the stock list visible
+            // and keep[s] waiting; they do not redraw the list or consume a
+            // random draw", so the redraw reuses no fresh heading draw.
+            format_arms_stock_buy_menu(table, 3, 2)
         }
         (ArmsShopOutcome::InvalidInput, _)
             if matches!(
@@ -2145,17 +2156,24 @@ fn handle_arms_shop_key_input(
         // the next letter buys again without a second `B`.
         (ArmsShopOutcome::Bought { .. }, Some(table)) => {
             let post = arms_post_item_prompt(speech.speaker_is_female, true);
+            let listing = format_arms_stock_buy_menu(
+                table,
+                state.random_range_u8(0, 3),
+                state.random_range_u8(0, 3),
+            );
             let call = arms_stock_call_for_roll(state.random_range_u8(0, 3));
-            format!(
-                "Sold!\n{post}\n\n{}\n{call}",
-                format_arms_stock_buy_menu(table)
-            )
+            format!("Sold!\n{post}\n\n{listing}\n{call}")
         }
         (ArmsShopOutcome::Declined, Some(table))
             if matches!(prior_state, ArmsShopState::BuyConfirm { .. }) =>
         {
+            let listing = format_arms_stock_buy_menu(
+                table,
+                state.random_range_u8(0, 3),
+                state.random_range_u8(0, 3),
+            );
             let call = arms_stock_call_for_roll(state.random_range_u8(0, 3));
-            format!("{}\n{call}", format_arms_stock_buy_menu(table))
+            format!("{listing}\n{call}")
         }
         (ArmsShopOutcome::Declined, _) if matches!(shop_state, ArmsShopState::SellPickItem(_)) => {
             format!(
@@ -2334,11 +2352,34 @@ fn active_speaker_is_female(state: &PlayState) -> bool {
 /// row per stock letter, then a blank row, and only then the call line of
 /// `shops.md §8.1`. The engine printed the call line *first* and folded the
 /// list into one `We have: a) Dagger, b) Sling, ...` sentence.
-const ARMS_BUY_MENU_HEADING: &str = "\"But of course!\nThou canst buy:";
+/// `shops.md §8.B`: "On Buy, the echo is followed by one uniformly selected
+/// affirmation from `Very good!\n`, `Excellent!\n`, `Fine, fine!\n`,
+/// `But of course!\n`, then one independently selected stock introduction from
+/// `We have:`, `We stock:`, `Thou canst buy:`, `We've got:`." Two draws, in
+/// that order. The engine printed the one combination
+/// `qa/paired/shop-arms-menus.tsv` happened to capture as a fixed heading.
+const ARMS_BUY_AFFIRMATIONS: [&str; 4] =
+    ["Very good!", "Excellent!", "Fine, fine!", "But of course!"];
+const ARMS_BUY_STOCK_INTRODUCTIONS: [&str; 4] =
+    ["We have:", "We stock:", "Thou canst buy:", "We've got:"];
+
+/// The opening double quote belongs to §8.B's `Buy\n\n"` echo, which this
+/// engine has no separate producer for, so the composed heading carries it.
+fn arms_buy_menu_heading(affirmation_roll: u8, introduction_roll: u8) -> String {
+    format!(
+        "\"{}\n{}",
+        ARMS_BUY_AFFIRMATIONS[usize::from(affirmation_roll & 0x03)],
+        ARMS_BUY_STOCK_INTRODUCTIONS[usize::from(introduction_roll & 0x03)]
+    )
+}
 
 /// The stock rows read `a...Dagger` - the separator is three ASCII full stops,
 /// read back by glyph index rather than guessed from the blank-cell filler.
-fn format_arms_stock_buy_menu(table: crate::shops::ArmsStockTable) -> String {
+fn format_arms_stock_buy_menu(
+    table: crate::shops::ArmsStockTable,
+    affirmation_roll: u8,
+    introduction_roll: u8,
+) -> String {
     if table.is_empty() {
         // Unmeasured: no shipped arms shop ships an empty stock table, so this
         // arm is a guard rather than a transcript, and the original has no
@@ -2352,7 +2393,10 @@ fn format_arms_stock_buy_menu(table: crate::shops::ArmsStockTable) -> String {
         let letter = (b'a' + index as u8) as char;
         rows.push_str(&format!("{letter}...{}\n", equipment_name(item)));
     }
-    format!("{ARMS_BUY_MENU_HEADING}\n\n{rows}")
+    format!(
+        "{}\n\n{rows}",
+        arms_buy_menu_heading(affirmation_roll, introduction_roll)
+    )
 }
 
 /// `shops.md §8.C`'s "Inn result" table, which publishes every one of these
@@ -4899,17 +4943,25 @@ mod arms_shop_resident_literal_tests {
     fn arms_buy_entry_prints_the_stock_list_then_the_drawn_call() {
         let mut state = stocked_arms_state();
 
-        // Take the draw the buy-entry arm is about to make from a clone, so
-        // the assertion knows which of the four lines is the correct one.
-        let expected_call = arms_stock_call_for_roll(state.clone().random_range_u8(0, 3));
+        // Take the three draws the buy-entry arm is about to make from a
+        // clone, so the assertion knows which member of each pool is correct.
+        // `§8.B` orders them: affirmation, stock introduction, then `§8.1`'s
+        // call line.
+        let mut probe = state.clone();
+        let expected_heading =
+            arms_buy_menu_heading(probe.random_range_u8(0, 3), probe.random_range_u8(0, 3));
+        let expected_call = arms_stock_call_for_roll(probe.random_range_u8(0, 3));
 
         handle_play_key_input(&mut state, 'B', "", Path::new("")).unwrap();
 
         // Measured 2026-09-07 at Iolo's Bows (`qa/paired/shop-arms-menus.tsv`):
         // heading, blank row, one row per stock letter, blank row, call line.
         let lines: Vec<&str> = state.message.lines().collect();
-        assert_eq!(lines[0], "\"But of course!");
-        assert_eq!(lines[1], "Thou canst buy:");
+        let mut expected_heading_lines = expected_heading.lines();
+        assert_eq!(Some(lines[0]), expected_heading_lines.next());
+        assert_eq!(Some(lines[1]), expected_heading_lines.next());
+        assert!(ARMS_BUY_AFFIRMATIONS.contains(&&lines[0][1..]));
+        assert!(ARMS_BUY_STOCK_INTRODUCTIONS.contains(&lines[1]));
         assert_eq!(lines[2], "");
         assert_eq!(lines[3], "a...Short Sword");
         assert_eq!(lines.last(), Some(&expected_call));
