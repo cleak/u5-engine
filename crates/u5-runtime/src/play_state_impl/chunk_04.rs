@@ -26,6 +26,14 @@ pub const USE_ITEM_PROMPT_MESSAGE: &str = ITEM_SELECTION_PROMPT;
 /// per-shop-role line.
 pub const SHOP_MOUNTED_REFUSAL: &str = "A merchant says:\n\"GET THAT HORSE OUT OF HERE!\"";
 
+/// `shops.md §2`: the fixed refusal a shop trigger prints when its keeper is
+/// not open for business, "with these line breaks" and "a newline before the
+/// preamble and after the closing quote".
+///
+/// Measured 2026-09-07 (`qa/paired/nb-stable.tsv`).
+pub const SHOP_CLOSED_REFUSAL: &str =
+    "\nA merchant says:\n\"Come see me at\nmy shoppe, when\nit's open!\"\n";
+
 /// `shops.md §8.0`: the **vendor** column of the two resident name tables that
 /// are indexed by the shop-instance row. The row is the index of the active
 /// scene byte inside the shop kind's own scene list, so a scene-byte lookup
@@ -3571,6 +3579,22 @@ impl PlayState {
         self.talk_direction_with_game_dir_and_keyword(self.player.facing, game_dir, keyword)
     }
 
+    /// `shops.md §2` open-for-business gate: both the keeper's **cached
+    /// reached** waypoint and the waypoint its schedule selects for the
+    /// current hour must be waypoint 1.
+    ///
+    /// A slot this engine cannot resolve - no runtime NPC at the cell, which
+    /// the harness fixtures produce - is treated as open, so unit fixtures
+    /// that seat a trigger without a schedule keep working.
+    fn shop_keeper_is_open_for_business(&self, x: usize, y: usize) -> bool {
+        const SHOP_WORKING_WAYPOINT: usize = 1;
+        let Some(npc) = self.npc_at_current_floor(x, y) else {
+            return true;
+        };
+        npc.cached_wp == SHOP_WORKING_WAYPOINT
+            && waypoint_for_hour(&npc.schedule, self.clock.hour) == SHOP_WORKING_WAYPOINT
+    }
+
     pub fn talk_direction_with_game_dir(
         &mut self,
         direction: Direction,
@@ -3744,6 +3768,23 @@ impl PlayState {
         }
 
         if let Some((_role, _family)) = talk_shop_trigger(dialog_id) {
+            // `shops.md §2` open-for-business gate: "Both the NPC's cached
+            // reached waypoint and the waypoint selected by the current world
+            // hour must be **waypoint 1**." The cache records arrival, so a
+            // keeper who has not reached the working waypoint refuses even
+            // after opening time, and one still there after closing refuses
+            // too. It applies to all eight triggers, horse traders included,
+            // and takes precedence over the transport refusal below.
+            //
+            // Measured 2026-09-07 at North Britanny's stable
+            // (`qa/paired/nb-stable.tsv`), which refuses at 13:00 with
+            // exactly the published lines. This engine used to open every
+            // shop whose trigger byte it saw (`cleak/u5-engine#15`,
+            // `cleak/u5-spec#214`).
+            if !self.shop_keeper_is_open_for_business(target_x, target_y) {
+                self.message = SHOP_CLOSED_REFUSAL.to_string();
+                return self.consume_ordinary_town_talk();
+            }
             if self.player.transport.is_horse() && dialog_id != 0x83 {
                 self.message = SHOP_MOUNTED_REFUSAL.to_string();
                 return self.consume_ordinary_town_talk();
@@ -3904,6 +3945,13 @@ impl PlayState {
         }
 
         if let Some((_role, family)) = talk_shop_trigger(dialog_id) {
+            // Same `shops.md §2` gate as the direction path above; this is the
+            // keyword-carrying entry the visual shell uses, and leaving it out
+            // is why the first fix looked like it had not taken.
+            if !self.shop_keeper_is_open_for_business(target_x, target_y) {
+                self.message = SHOP_CLOSED_REFUSAL.to_string();
+                return self.consume_ordinary_town_talk();
+            }
             if self.player.transport.is_horse() && dialog_id != 0x83 {
                 self.message = SHOP_MOUNTED_REFUSAL.to_string();
                 return self.consume_ordinary_town_talk();

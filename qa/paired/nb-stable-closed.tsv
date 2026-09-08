@@ -1,0 +1,81 @@
+# North Britanny's stable (dialog byte 0x83) at 13:00 (cleak/u5-spec#238).
+# requires-seed: the party on the North Britanny village tile (`--scene BRITANNIA --at 86,105 --time 13:00`)
+both	wait	9000
+both	key	space
+both	wait	4000
+both	key	j
+both	wait	8000
+both	key	e
+both	wait	4000
+both	key	Up
+both	wait	480
+both	key	Up
+both	wait	480
+both	key	Up
+both	wait	480
+both	key	Up
+both	wait	480
+both	key	Up
+both	wait	480
+both	key	Up
+both	wait	480
+both	key	Up
+both	wait	480
+both	key	Up
+both	wait	480
+both	key	Up
+both	wait	480
+both	key	Up
+both	wait	480
+both	key	Up
+both	wait	480
+both	key	Left
+both	wait	480
+both	key	Left
+both	wait	480
+both	key	Left
+both	wait	480
+both	key	Left
+both	wait	480
+both	key	Left
+both	wait	480
+both	key	Left
+both	wait	480
+both	key	o
+both	wait	900
+both	key	Left
+both	wait	1500
+both	key	Left
+both	wait	480
+both	key	Left
+both	wait	480
+both	key	Up
+both	wait	480
+both	key	Left
+both	wait	480
+both	key	Left
+both	wait	480
+both	key	Left
+both	wait	480
+both	key	Left
+both	wait	480
+both	wait	2500
+both	key	l
+both	wait	1200
+both	key	Left
+both	wait	3000
+both	shot	look	Look
+both	key	t
+both	wait	1200
+both	key	Left
+both	wait	12000
+both	shot	talk	Talk
+both	key	Y
+both	wait	5000
+both	shot	yes	Yes at the entry prompt
+both	key	N
+both	wait	5000
+both	shot	no	No at the offer
+both	key	Escape
+both	wait	5000
+both	shot	esc	Escape
