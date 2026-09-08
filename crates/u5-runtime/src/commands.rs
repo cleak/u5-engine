@@ -1432,6 +1432,16 @@ pub const DUNGEON_SEARCH_SKELETON_CRUMBLES: &str = "It crumbles away.\n";
 /// `RETRACTIONS.md` R322: `A hidden door!` belongs to the `0xD?` **wall**
 /// branch, and `A pit!` is the exact-`0x61` outcome — the two were swapped.
 pub const DUNGEON_SEARCH_HIDDEN_DOOR: &str = "A hidden door!\n";
+
+/// `doors-and-z-transitions.md §8` (`RETRACTIONS.md` R412): the town and
+/// dwelling hidden-door terrain, revealed by ordinary Search with no object
+/// flag, and the two floor-dependent replacements.
+pub const TOWN_HIDDEN_DOOR_TILE: u8 = 0x4E;
+pub const TOWN_HIDDEN_DOOR_REVEAL_ABOVE_GROUND: u8 = 0xB9;
+pub const TOWN_HIDDEN_DOOR_REVEAL_BELOW_GROUND: u8 = 0xB8;
+/// The line that reveal prints. Distinct from the dungeon's
+/// [`DUNGEON_SEARCH_HIDDEN_DOOR`], which has no `Thou dost find` opening.
+pub const TOWN_SEARCH_HIDDEN_DOOR_LINE: &str = "\nThou dost find\na hidden door!\n";
 pub const DUNGEON_SEARCH_A_PIT: &str = "A pit!\n";
 pub const DUNGEON_SEARCH_A_BOMB_TRAP: &str = "A bomb trap!\n";
 /// The four trap-tier lines, **none of which carries a terminal period**.

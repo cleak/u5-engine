@@ -2173,6 +2173,34 @@ impl PlayState {
         if let Some(outcome) = self.search_surface_object_trap_at(tx, ty) {
             return outcome;
         }
+        // `doors-and-z-transitions.md §8` with `RETRACTIONS.md` R412: "In
+        // towns and dwellings, the authored hidden-door terrain is tile `0x4E`
+        // in the location map itself. The normal direction and acting-member
+        // selection lead to a direct terrain test; no per-map object flag is
+        // required." The engine required a sidecar coordinate row - the
+        // withdrawn object-table model - so no shipped hidden door in any town
+        // could be found at all.
+        if tile == TOWN_HIDDEN_DOOR_TILE {
+            // "changes the target tile to the ordinary unlocked door `0xB9` on
+            // ground/above-ground floors (floor byte below `128`), or `0xB8`
+            // on below-ground floors (floor byte at least `128`)". This
+            // engine's floor is the signed form of that byte.
+            let reveal_tile = if floor >= 0 {
+                TOWN_HIDDEN_DOOR_REVEAL_ABOVE_GROUND
+            } else {
+                TOWN_HIDDEN_DOOR_REVEAL_BELOW_GROUND
+            };
+            self.grid[idx] = reveal_tile;
+            self.forget_open_town_door(scene, floor, tx, ty);
+            self.record_revealed_town_secret_door(scene, floor, tx, ty);
+            self.mark_visibility_dirty();
+            self.advance_turn();
+            // "On reveal, Search prints `\nThou dost find\na hidden door!\n`"
+            // - which also answers `cleak/u5-spec#236`, filed when this arm
+            // printed nothing because the line was unpublished.
+            self.emit_message_line(TOWN_SEARCH_HIDDEN_DOOR_LINE);
+            return MoveOutcome::Searched;
+        }
         let reveal_tile = entries.iter().find_map(|entry| match *entry {
             SecretDoorEntry::Town {
                 scene: entry_scene,
