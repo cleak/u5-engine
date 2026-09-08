@@ -159,12 +159,21 @@ pub const SKY_STRIP_FIRST_COLUMN: u8 = 6;
 ///
 /// `IBM.CH` glyphs `0x05..=0x08` are one cycle of the same two-pixel
 /// diagonal stripe, each frame advanced by one phase step, so playing
-/// them in code order scrolls the stripe smoothly. Observation of the
-/// shipped build confirms the cursor is drawn from this set and that it
-/// animates rather than blinking: three captures of the gameplay input
-/// line show frame `0x06` and a fourth shows `0x07`. The intro menu's
+/// them in code order scrolls the stripe smoothly. The intro menu's
 /// `Select:` caption cursor is the same set (`intro` pins frame index
 /// 3). This is published in `text-output.md §10.6`.
+///
+/// **Measured** 2026-09-08 across ~400 stock captures in
+/// `~/artifacts/u5/paired`: every exact-match cell below ASCII space in a
+/// message window is one of `0x05` (123), `0x06` (83), `0x07` (79) or
+/// `0x08` (97) - 382 samples, four codes, no others. (The remaining low
+/// codes found, `0x18..=0x1B` at seven each, are the panel's own arrows.)
+///
+/// That set is **narrower than `input.md §3` describes**. Its Cursor-Blink
+/// Parameters give a base glyph of `4` and say "a glyph code is computed as
+/// `blink_base + counter`" with the counter wrapping at `4658`, which would
+/// walk the whole font rather than a four-frame cycle. The observation wins
+/// here; the discrepancy is reported upstream.
 pub const PROMPT_CURSOR_FRAME_GLYPHS: [u8; 4] = [0x05, 0x06, 0x07, 0x08];
 
 /// Barber-pole cursor glyph for an animation frame counter.
