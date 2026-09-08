@@ -1385,7 +1385,32 @@ fn handle_active_shop_key_input(
                 SageState::Exited => SageOutcome::Exited,
             };
             let paid = matches!(outcome, SageOutcome::RumourFound { .. });
-            let message = format_sage_outcome_with_shoppe(outcome, game_dir);
+            let mut message = format_sage_outcome_with_shoppe(outcome, game_dir);
+            if paid {
+                // Measured 2026-09-08 at The Cat's Lair
+                // (`qa/paired/paws-sage.tsv`): the rumour is attributed to the
+                // *tavern's* vendor - the sage is reached through the tavern
+                // and never speaks under a name of its own - and the visit
+                // then returns to the tavern's own anything-else question
+                // rather than waiting for another topic.
+                let tavern_vendor = area_scene_byte.and_then(|scene| {
+                    crate::play_state_impl::shop_vendor_name_for_scene(SHOP_DIALOG_ID_TAVERN, scene)
+                });
+                if let Some(name) = tavern_vendor {
+                    message.push_str(&format!("\nsays {name}."));
+                }
+                if let Some(tavern) =
+                    area_scene_byte.and_then(crate::shop_session::tavern_for_scene)
+                {
+                    message.push_str(&format!("\n\n{TAVERN_ANYTHING_ELSE_PROMPT}"));
+                    replacement_session = Some(ActiveShopSession::Tavern(
+                        crate::shop_runtime::TavernState::AnythingElse {
+                            tavern,
+                            continuation_ready: true,
+                        },
+                    ));
+                }
+            }
             let surcharge = if paid {
                 apply_active_shop_surcharge(state)
             } else {
@@ -2462,6 +2487,9 @@ fn format_healer_treatment_error(
 
 /// The typed-input prompt the sage question ends on, measured with it.
 const SAGE_RESPOND_PROMPT: &str = "You respond:";
+/// The tavern's own follow-up question, measured with the zero-quantity
+/// dismissal and reused when the sage hands control back.
+const TAVERN_ANYTHING_ELSE_PROMPT: &str = "\"Anything else for thee?\"";
 
 fn format_tavern_outcome(
     outcome: crate::shop_runtime::TavernOutcome,
