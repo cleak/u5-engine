@@ -2596,10 +2596,12 @@ impl PlayState {
             // Charm prints its own charmed line and suppresses the
             // dispatcher's success/failure epilogue, so the generic `Charm!`
             // never appears.
-            self.message = match target_name {
-                Some(name) => format!("{name} charmed!"),
-                None => "Charmed!".to_string(),
-            };
+            // `catalogs/spell-list.md` id 34 publishes `<name> charmed!` and
+            // nothing else, so a slot whose name cannot be read - an
+            // invariant, since only a live actor is targetable - narrates
+            // nothing rather than a nameless variant.
+            // audit: not a player-facing line
+            self.message = target_name.map_or_else(String::new, |name| format!("{name} charmed!"));
             MoveOutcome::Cast
         } else {
             self.message = "Failed!".to_string();

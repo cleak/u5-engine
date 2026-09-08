@@ -1590,10 +1590,12 @@ impl PlayState {
             })?;
 
         let Some(grant) = native_object_pickup_grant(object) else {
-            self.message = match inventory_add_class(object.type_byte) {
-                InventoryAddClass::MustOpenFirst => "Must open it first.".to_string(),
-                _ => GET_NOTHING_REFUSAL.to_string(),
-            };
+            // `containers.md §3` step 5: surface and town Get has exactly one
+            // refusal - "If no fallback applies, Get prints the standard
+            // nothing-to-get refusal". The must-open-first wording belongs to
+            // *dungeon* Get ("Door cells refuse until opened"), which is a
+            // different handler, and this branch was inventing a line for it.
+            self.message = GET_NOTHING_REFUSAL.to_string();
             return Some(MoveOutcome::Blocked);
         };
 

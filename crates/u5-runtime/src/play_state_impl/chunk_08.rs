@@ -427,10 +427,10 @@ impl PlayState {
             };
         };
         let Some(member) = self.party.get(watcher) else {
-            return "no valid watch set".to_string();
+            return "no valid watch set".to_string(); // audit: not a player-facing line
         };
         if eligible_count <= 1 || member.status != b'G' || !member.living() {
-            return "no valid watch set".to_string();
+            return "no valid watch set".to_string(); // audit: not a player-facing line
         }
         format!("party slot {} keeps watch", watcher + 1)
     }

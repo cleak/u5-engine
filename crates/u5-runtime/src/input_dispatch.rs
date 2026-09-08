@@ -734,6 +734,9 @@ fn handle_active_shop_key_input(
             .min(u8::MAX as usize) as u8,
     };
     let key_byte = key as u8;
+    // `shops.md §8.C`: "The inn honorific below is `milady` for a female
+    // speaking member, `sir` otherwise."
+    let speaker_is_female = active_speaker_is_female(state);
     let area_scene_byte = match state.area {
         Area::Town { scene, .. } => Some(scene.byte),
         _ => None,
@@ -928,7 +931,12 @@ fn handle_active_shop_key_input(
                     format!("Declined {}.", treatment.display_name())
                 }
                 (HealerShopState::Exited, _, _, _) => "Farewell.".to_string(),
-                _ => "I do not understand.".to_string(),
+                // `shops.md §8.B`/`§8.C`: every shop kind ignores a key it does
+                // not recognise - "letters outside the displayed stock count
+                // are ignored without a refusal bark", "unknown menu letters
+                // silently wait; there is no I-do-not-understand line",
+                // "other keys wait". None of them answers.
+                _ => String::new(),
             }
         }
         ActiveShopSession::Innkeeper(s) => {
@@ -1049,7 +1057,7 @@ fn handle_active_shop_key_input(
                                     };
                                     append_active_shop_surcharge(message, surcharge)
                                 }
-                                Err(err) => format_inn_error(err),
+                                Err(err) => format_inn_error(err, speaker_is_female),
                             }
                         } else {
                             let mut guest_indices = [0usize; INN_REGISTRY_CAP];
@@ -1095,7 +1103,7 @@ fn handle_active_shop_key_input(
                             let surcharge = apply_active_shop_surcharge(state);
                             append_active_shop_surcharge(message, surcharge)
                         }
-                        Err(err) => format_inn_error(err),
+                        Err(err) => format_inn_error(err, speaker_is_female),
                     }
                 }
                 (InnkeeperState::ConfirmRest { inn, .. }, _, true, _) => {
@@ -1153,7 +1161,7 @@ fn handle_active_shop_key_input(
                             let surcharge = apply_active_shop_surcharge(state);
                             append_active_shop_surcharge(message, surcharge)
                         }
-                        Err(err) => format_inn_error(err),
+                        Err(err) => format_inn_error(err, speaker_is_female),
                     }
                 }
                 (InnkeeperState::ConfirmLeaveCompanion { inn, .. }, _, true, _) => {
@@ -1241,7 +1249,7 @@ fn handle_active_shop_key_input(
                             let surcharge = apply_active_shop_surcharge(state);
                             append_active_shop_surcharge(message, surcharge)
                         }
-                        Err(err) => format_inn_error(err),
+                        Err(err) => format_inn_error(err, speaker_is_female),
                     }
                 }
                 (InnkeeperState::ConfirmPickUpCompanion { inn, .. }, _, true, _) => {
@@ -1249,7 +1257,12 @@ fn handle_active_shop_key_input(
                     "As you wish.".to_string()
                 }
                 (InnkeeperState::Exited, _, _, _) => "Farewell.".to_string(),
-                _ => "I do not understand.".to_string(),
+                // `shops.md §8.B`/`§8.C`: every shop kind ignores a key it does
+                // not recognise - "letters outside the displayed stock count
+                // are ignored without a refusal bark", "unknown menu letters
+                // silently wait; there is no I-do-not-understand line",
+                // "other keys wait". None of them answers.
+                _ => String::new(),
             }
         }
         ActiveShopSession::Tavern(s) => {
@@ -2328,8 +2341,10 @@ const ARMS_BUY_MENU_HEADING: &str = "\"But of course!\nThou canst buy:";
 fn format_arms_stock_buy_menu(table: crate::shops::ArmsStockTable) -> String {
     if table.is_empty() {
         // Unmeasured: no shipped arms shop ships an empty stock table, so this
-        // arm is a guard rather than a transcript.
-        return "We have nothing for sale.".to_string();
+        // arm is a guard rather than a transcript, and the original has no
+        // line for a case it cannot reach.
+        // audit: not a player-facing line
+        return String::new();
     }
     let mut rows = String::new();
     for index in 0..table.len() {
@@ -2340,22 +2355,49 @@ fn format_arms_stock_buy_menu(table: crate::shops::ArmsStockTable) -> String {
     format!("{ARMS_BUY_MENU_HEADING}\n\n{rows}")
 }
 
-fn format_inn_error(err: InnError) -> String {
+/// `shops.md §8.C`'s "Inn result" table, which publishes every one of these
+/// refusals. The engine's own sentences - `No one is here to lodge.`,
+/// `Thou must keep at least one companion.`, `Thy party is already full.`,
+/// `That companion is not in thy party.`, `The inn has no more room for
+/// guests.` and the two gold lines - were all invented.
+fn format_inn_error(err: InnError, speaker_is_female: bool) -> String {
+    let honorific = tavern_honorific(speaker_is_female);
     match err {
-        InnError::EmptyParty => "No one is here to lodge.".to_string(),
-        InnError::PartyTooSmallToLeave => "Thou must keep at least one companion.".to_string(),
-        InnError::PartyFull => "Thy party is already full.".to_string(),
-        InnError::InvalidPartyIndex { .. } => "That companion is not in thy party.".to_string(),
+        // No published row covers "the party is empty"; it is an invariant
+        // guard, not a transcript, so it says nothing.
+        // audit: not a player-facing line
+        InnError::EmptyParty => String::new(),
+        // "Leave with only Avatar travelling | ... Record `191`; visit ends
+        // without an added attribution or ordinary farewell". The record is
+        // the SHOPPE-backed formatter's; this fallback prints nothing rather
+        // than a sentence the original does not have.
+        InnError::PartyTooSmallToLeave => String::new(),
+        // "Pickup with six travelling members | `\n\nOne must first be left
+        // behind!\n\n`; this check precedes the no-guests check".
+        InnError::PartyFull => "\n\nOne must first be left behind!\n\n".to_string(),
+        // "The register only offers guests at this inn, so it has no separate
+        // arbitrary-member/not-in-party refusal."
+        InnError::InvalidPartyIndex { .. } => String::new(),
+        // "Pickup with no guest at this inn | Token-expanded `\n\n"No one here
+        // is from thy party!"\nsays $.\n\n`". The attribution belongs to the
+        // SHOPPE-backed formatter.
         InnError::InvalidGuestIndex { .. } | InnError::GuestNotAtInn { .. } => {
-            "No one here is from thy party!".to_string()
+            "\n\n\"No one here is from thy party!\"\n\n".to_string()
         }
-        InnError::RegistryFull => "The inn has no more room for guests.".to_string(),
-        InnError::BelowMinimumGold { minimum, .. } => {
-            format!("Thou needest at least {minimum} gold to lodge here.")
+        // "Capacity check before Rest or Leave | First `\n\n`. If full:
+        // `"I am sorry,\n`, honorific, then `, but we\nhave no room\n
+        // available."\n\n`."
+        InnError::RegistryFull => {
+            format!("\n\n\"I am sorry,\n{honorific}, but we\nhave no room\navailable.\"\n\n")
         }
-        InnError::InsufficientGold { required, .. } => {
-            format!("Thou lackest the {required} gold.")
-        }
+        // `shops.md §8.4`: "Only Rest and Pickup test affordability; there is
+        // no separate minimum-gold gate (R420)." The arm is unreachable and
+        // silent until the gate itself is removed.
+        // audit: not a player-facing line
+        InnError::BelowMinimumGold { .. } => String::new(),
+        // "Accepted Rest, short funds | `"Highwaymen!\nCheap, at that!\nOUT!" `,
+        // then token-expanded `screams\n$.\n`".
+        InnError::InsufficientGold { .. } => "\"Highwaymen!\nCheap, at that!\nOUT!\" ".to_string(),
     }
 }
 
@@ -2400,8 +2442,12 @@ fn format_arms_outcome_with_rolls(
 ) -> String {
     use crate::shop_runtime::ArmsShopOutcome::*;
     match outcome {
-        EnteredBuy => "Buy: pick an item number.".to_string(),
-        EnteredSell => "Sell: pick an item number.".to_string(),
+        // `shops.md §8.B`: "Buy echoes `Buy\n\n"`, Sell echoes `Sell\n\n"`" -
+        // and "There is no additional instruction line listing keys." The
+        // listing itself belongs to the stateful site, which draws the stock
+        // rows; these two arms are the echo alone.
+        EnteredBuy => "Buy\n\n\"".to_string(),
+        EnteredSell => "Sell\n\n\"".to_string(),
         // Measured: quoted, and attributed with `growls` rather than the
         // `says` the carry-cap refusal takes.
         SellRefusedEmpty => speech.attribute("\"Thou hast nothing to sell!\"", "growls"),
@@ -2465,7 +2511,9 @@ fn format_arms_outcome_with_rolls(
         // `says <shopkeeper>.`" (`§8.A` row "Arms carry-cap refusal
         // (verbatim)" repeats both halves).
         BuyRefusedCapHit { .. } => speech.attribute("Thou canst not carry any more!", "says"),
-        InvalidInput => "I do not understand.".to_string(),
+        // `shops.md §8.B`/`§8.C`: an unrecognised key waits; there is no
+        // I-do-not-understand line anywhere in the shop family.
+        InvalidInput => String::new(),
     }
 }
 
@@ -2551,9 +2599,9 @@ fn format_healer_treatment_error(
         crate::shops::HealerTreatmentError::InsufficientGold { required, .. } => {
             format!("Thou lackest the {required} gold.")
         }
-        crate::shops::HealerTreatmentError::InvalidTarget { .. } => {
-            "I do not understand.".to_string()
-        }
+        // `shops.md §8.C`, healers: "Other keys silently wait without
+        // reprinting."
+        crate::shops::HealerTreatmentError::InvalidTarget { .. } => String::new(),
         crate::shops::HealerTreatmentError::Untreatable => healer_no_need_refusal(healer_name),
     }
 }
@@ -2768,7 +2816,9 @@ fn format_tavern_outcome(
         // row rather than inventing a name.
         RefusedNoNeed => TAVERN_NO_GOLD_NO_NEED_BARK.to_string(),
         Exited => "Farewell.".to_string(),
-        InvalidInput => "I do not understand.".to_string(),
+        // `shops.md §8.B`/`§8.C`: an unrecognised key waits; there is no
+        // I-do-not-understand line anywhere in the shop family.
+        InvalidInput => String::new(),
     }
 }
 
@@ -2880,7 +2930,9 @@ fn format_sage_outcome(outcome: crate::shop_runtime::SageOutcome) -> String {
         InputTooLong { limit, .. } => format!("Ask in {limit} characters or fewer."),
         NoTopicMatch => "That, I cannot help thee with.".to_string(),
         Exited => "Farewell.".to_string(),
-        InvalidInput => "I do not understand.".to_string(),
+        // `shops.md §8.B`/`§8.C`: an unrecognised key waits; there is no
+        // I-do-not-understand line anywhere in the shop family.
+        InvalidInput => String::new(),
     }
 }
 
@@ -2992,12 +3044,17 @@ fn format_reagent_outcome(
             None => String::new(),
         },
         Exited => "Farewell.".to_string(),
-        InvalidInput => "I do not understand.".to_string(),
+        // `shops.md §8.B`/`§8.C`: an unrecognised key waits; there is no
+        // I-do-not-understand line anywhere in the shop family.
+        InvalidInput => String::new(),
     }
 }
 
 const REAGENT_MENU_HEADING: &str = "\"Fine! We sell:";
 const REAGENT_MENU_QUESTION: &str = "Thy interest?\"";
+
+/// `shops.md §8.6`, the horse trader's one placement refusal.
+const HORSE_TRADER_CLOSED_REFUSAL: &str = "The stables are closed.\n";
 
 fn format_horse_trader_outcome(outcome: crate::shop_runtime::HorseTraderOutcome) -> String {
     use crate::shop_runtime::HorseTraderOutcome::*;
@@ -3005,10 +3062,16 @@ fn format_horse_trader_outcome(outcome: crate::shop_runtime::HorseTraderOutcome)
         QuotedPrice { price } => format!("A fine steed costs {price} gold. (Y/N)"),
         Purchased { price } => format!("Sold for {price} gold. Thy horse awaits outside."),
         RefusedShortFunds { price } => format!("Thou lackest the {price} gold."),
-        RefusedNoMarker { .. } => "There is no room for a horse here.".to_string(),
+        // `shops.md §8.6`: "No free active-object slot and no suitable
+        // adjacent placement cell both print `The stables are closed.\n`
+        // before any greeting, then exit." One line covers both failures;
+        // `There is no room for a horse here.` was invented.
+        RefusedNoMarker { .. } => HORSE_TRADER_CLOSED_REFUSAL.to_string(),
         Declined => "As you wish.".to_string(),
         Exited => "Farewell.".to_string(),
-        InvalidInput => "I do not understand.".to_string(),
+        // `shops.md §8.6`: the purchase loop is "Y/N driven" and other keys
+        // wait; no refusal prints.
+        InvalidInput => String::new(),
     }
 }
 
@@ -3072,7 +3135,9 @@ fn format_ship_broker_outcome(
             None => "\"Hmph! Landlubber!\"".to_string(),
         },
         Exited => "Farewell.".to_string(),
-        InvalidInput => "I do not understand.".to_string(),
+        // `shops.md §8.B`/`§8.C`: an unrecognised key waits; there is no
+        // I-do-not-understand line anywhere in the shop family.
+        InvalidInput => String::new(),
     }
 }
 
@@ -3148,7 +3213,9 @@ fn format_guild_outcome(outcome: crate::shop_runtime::GuildShopOutcome) -> Strin
             guild_menu_rows()
         ),
         Exited => "Farewell.".to_string(),
-        InvalidInput => "I do not understand.".to_string(),
+        // `shops.md §8.B`/`§8.C`: an unrecognised key waits; there is no
+        // I-do-not-understand line anywhere in the shop family.
+        InvalidInput => String::new(),
     }
 }
 

@@ -4282,7 +4282,8 @@ fn horse_trader_purchase_refuses_without_local_marker_and_preserves_gold() {
 
     assert_eq!(state.gold, 143);
     assert!(state.active_shop.is_some());
-    assert!(state.message.contains("no room for a horse"));
+    // `shops.md §8.6`: both placement failures print the same line.
+    assert!(state.message.contains("The stables are closed."));
     assert!(
         !state
             .active_objects

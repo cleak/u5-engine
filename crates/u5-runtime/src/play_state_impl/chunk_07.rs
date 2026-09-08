@@ -380,7 +380,13 @@ impl PlayState {
                 return MoveOutcome::Observed;
             }
             ActingMemberSelection::NoneAble => {
-                self.message = "No party members are available.".to_string();
+                // No published refusal covers "nobody in the party can act"
+                // on the chest path, and the shop and combat families all
+                // answer an impossible selection with silence, so this one
+                // does too rather than inventing a sentence. Reported on
+                // cleak/u5-spec#247.
+                // audit: not a player-facing line
+                self.message.clear();
                 return MoveOutcome::Blocked;
             }
         };
@@ -4516,7 +4522,8 @@ impl PlayState {
         // share one execution routine.
         match self.execute_blackthorn_companion(index) {
             Some(report) => format!("{report} as a merciful death"),
-            None => "no companion remains to take the merciful death".to_string(),
+            // audit: not a player-facing line
+            None => "no companion remains to take the merciful death".to_string(), // audit: not a player-facing line
         }
     }
 
