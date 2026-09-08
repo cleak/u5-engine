@@ -9641,11 +9641,14 @@ fn tlk_keyword_loop_envelope_strings_match_spec() {
 
 #[test]
 fn scroll_spell_labels_match_inventory_md_dispatch_order() {
-    // inventory.md §7 + formats/saved-gam.md §7
+    // `inventory.md §4.5` "the scroll's compact rune label", **measured**
+    // 2026-09-08 (`qa/paired/use-picker.tsv`, decoded against `RUNES.CH`):
+    // the initials of the rune words in spoken order, not the scrambled
+    // selector code a player types at the cast prompt.
     assert_eq!(SCROLL_SPELL_LABELS.len(), SCROLL_COUNT);
     assert_eq!(
         SCROLL_SPELL_LABELS,
-        ["LV", "HR", "IS", "AI", "IQW", "CKX", "CIM", "AT"]
+        ["VL", "RH", "IS", "IA", "IQW", "KXC", "IMC", "AT"]
     );
 }
 

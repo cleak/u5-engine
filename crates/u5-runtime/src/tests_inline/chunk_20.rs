@@ -2186,7 +2186,7 @@ fn dungeon_get_chest_generated_rewards_follow_public_rows() {
     assert!(state.message.contains("generated chest grants 11 food"));
     assert!(state.message.contains("52 gold"));
     assert!(state.message.contains("1 white potion"));
-    assert!(state.message.contains("1 CIM scroll"));
+    assert!(state.message.contains("1 IMC scroll"));
 }
 
 #[test]

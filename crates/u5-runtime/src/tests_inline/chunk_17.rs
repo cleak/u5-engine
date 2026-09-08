@@ -1337,7 +1337,7 @@
                 .unwrap_or_else(|| panic!("{needle} missing from {names:?}"))
         };
 
-        assert!(at("LV") < at("Yellow"), "scrolls lead the picker: {names:?}");
+        assert!(at("VL") < at("Yellow"), "scrolls lead the picker: {names:?}");
         assert!(
             at("Yellow") < at("Magic Carpet"),
             "potions precede the special items: {names:?}"
@@ -1376,7 +1376,7 @@
             handle_play_key_input(&mut state, 'U', "", Path::new("")).unwrap(),
             PlayInputDisposition::Continue
         );
-        assert!(picker_row_plain_names(&state).iter().any(|name| name.contains("LV")));
+        assert!(picker_row_plain_names(&state).iter().any(|name| name.contains("VL")));
 
         assert_eq!(
             handle_play_key_input(&mut state, '\r', "", Path::new("")).unwrap(),
@@ -1509,7 +1509,7 @@
             handle_play_key_input(&mut state, 'U', "", Path::new("")).unwrap(),
             PlayInputDisposition::Continue
         );
-        assert!(picker_row_plain_names(&state).iter().any(|name| name.contains("HR")));
+        assert!(picker_row_plain_names(&state).iter().any(|name| name.contains("RH")));
 
         assert_eq!(
             handle_play_key_input(&mut state, '\r', "", Path::new("")).unwrap(),
@@ -1545,7 +1545,7 @@
             handle_play_key_input(&mut state, 'U', "", Path::new("")).unwrap(),
             PlayInputDisposition::Continue
         );
-        assert!(picker_row_plain_names(&state).iter().any(|name| name.contains("CIM")));
+        assert!(picker_row_plain_names(&state).iter().any(|name| name.contains("IMC")));
 
         assert_eq!(
             handle_play_key_input(&mut state, '\r', "", Path::new("")).unwrap(),

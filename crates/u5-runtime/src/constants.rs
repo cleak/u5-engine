@@ -884,15 +884,24 @@ pub const EQUIPMENT_COUNT: usize = 48;
 /// renaming a scroll only happens in one place.
 pub const SCROLL_COUNT: usize = SCROLL_NEGATE_TIME_INDEX + 1;
 
-/// `inventory.md §7` U-Use scroll display labels in storage order.
-/// `formats/saved-gam.md §7`: the per-scroll counters at
-/// `0x027A..0x0281` are eight bytes, one per scroll row. The label
-/// strings are the compact letter-coded spell selectors a player
-/// would type for the matching C-Cast spell (Vas Lor, Rel Hur,
-/// In Sanct, An In, In Quas Wis, Kal Xen Corp, In Mani Corp, An
-/// Tym), in the U-Use scroll-dispatch order.
+/// `inventory.md §4.5` "the scroll's compact rune label", in the U-Use
+/// scroll-dispatch order. `formats/saved-gam.md §7`: the per-scroll
+/// counters at `0x027A..0x0281` are eight bytes, one per scroll row.
+///
+/// **Measured** 2026-09-08 (`qa/paired/use-picker.tsv`, decoded against
+/// `RUNES.CH`): the label is the **initials of the rune words in spoken
+/// order** - `Vas Lor` is `VL` - and *not* the compact selector code a
+/// player types at the cast prompt, which `catalogs/spell-list.md` gives as
+/// `LV` for the same spell. Five of the eight differ between the two
+/// conventions, because the selector codes are deliberately scrambled
+/// (`magic.md §5` step 2: `IPVY` for `In Vas Por Ylem`).
+///
+/// The eight scroll spells are Vas Lor, Rel Hur, In Sanct, In An,
+/// In Quas Wis, Kal Xen Corp, In Mani Corp, An Tym. (The fourth was
+/// recorded here as `An In`; `spell-list.md` id 32 has it as **In An**,
+/// which is also what the capture shows.)
 pub const SCROLL_SPELL_LABELS: [&str; SCROLL_COUNT] =
-    ["LV", "HR", "IS", "AI", "IQW", "CKX", "CIM", "AT"];
+    ["VL", "RH", "IS", "IA", "IQW", "KXC", "IMC", "AT"];
 /// `inventory.md §7` potion catalog size. The eight potion
 /// indices span BLUE (0) through WHITE (7); anchor the count to
 /// [`POTION_WHITE_INDEX`] + 1 so adding or renaming a potion
