@@ -1,0 +1,156 @@
+#!/usr/bin/env python3
+"""Compare the message window of both sides of a paired run, beat by beat.
+
+`game-dev-u5-paired` records `"result": "pass"` when the *run* completed; it
+does not compare the two sides. `qa/paired/README.md` said comparison had to be
+done by eye because "the engine side cannot be [decoded], at any window size:
+the Bevy shell presents its 320x200 frame at the 4:3 display aspect
+(`DISPLAY_PIXEL_ASPECT`, 1.20), stretching the 200 rows and letterboxing the
+remainder".
+
+That is true of a naive grid, and false of the frame's own geometry. The
+letterbox is deterministic: the frame is `4:3` and centred, so a capture of
+height `h` holds the 320x200 frame in a `4h/3` by `h` rect at
+`x = (w - 4h/3) / 2`. Sampling each glyph cell's own pixels through that map
+recovers the same text `IBM.CH`/`RUNES.CH` matching reads off the DOSBox side.
+
+So this compares them. Only the sixteen-by-thirteen message window: the
+viewport carries host-clock NPC positions and the wind banner drifts on its own
+roll, both of which the README documents as legitimately different.
+
+Reads captures and prints agreement; writes nothing. The decoded text stays in
+the process - it is game text, and only the verdict leaves.
+
+Usage: paired_compare.py <ARTIFACT_DIR>...
+"""
+
+import json
+import pathlib
+import sys
+
+from PIL import Image
+
+ASSETS = pathlib.Path("/srv/u5-clean/assets/gog-1.0-cs-28045")
+FONTS = {"ibm": ASSETS / "IBM.CH", "rune": ASSETS / "RUNES.CH"}
+LEFT, TOP, COLS, ROWS = 24, 11, 16, 13
+# `gameplay_chrome.rs`: the four-frame barber-pole prompt cursor. It animates
+# from a free-running counter on both sides, so a cell holding one is not a
+# difference.
+CURSOR_GLYPHS = {0x05, 0x06, 0x07, 0x08}
+
+
+def glyph_table(path: pathlib.Path) -> dict[int, tuple]:
+    data = path.read_bytes()
+    return {
+        code: tuple(
+            tuple((row >> (7 - bit)) & 1 for bit in range(8))
+            for row in data[code * 8 : (code + 1) * 8]
+        )
+        for code in range(len(data) // 8)
+    }
+
+
+TABLES = {name: glyph_table(path) for name, path in FONTS.items()}
+
+
+def frame_rect(size: tuple[int, int]) -> tuple[int, int, float, float]:
+    """Origin and per-pixel scale of the 320x200 frame inside a capture."""
+    width, height = size
+    if width == 640 and height == 400:
+        # A DOSBox capture is an exact 2:1 downscale with no letterbox.
+        return 0, 0, width / 320.0, height / 200.0
+    frame_w = round(height * 4 / 3)
+    return (width - frame_w) // 2, 0, frame_w / 320.0, height / 200.0
+
+
+def decode(path: pathlib.Path) -> list[list[str]] | None:
+    image = Image.open(path).convert("RGB")
+    width, height = image.size
+    if width < 320 or height < 200:
+        return None
+    origin_x, origin_y, scale_x, scale_y = frame_rect(image.size)
+    pixels = image.load()
+    rows = []
+    for row in range(ROWS):
+        line = []
+        for col in range(COLS):
+            bits = []
+            for j in range(8):
+                for i in range(8):
+                    x = int(origin_x + ((LEFT + col) * 8 + i + 0.5) * scale_x)
+                    y = int(origin_y + ((TOP + row) * 8 + j + 0.5) * scale_y)
+                    r, g, b = pixels[
+                        min(max(x, 0), width - 1), min(max(y, 0), height - 1)
+                    ]
+                    bits.append(1 if r + g + b > 200 else 0)
+            cell = tuple(tuple(bits[j * 8 : (j + 1) * 8]) for j in range(8))
+            best = None
+            for name, table in TABLES.items():
+                for code, glyph in table.items():
+                    score = sum(
+                        1
+                        for j in range(8)
+                        for i in range(8)
+                        if glyph[j][i] == cell[j][i]
+                    )
+                    if best is None or score > best[0]:
+                        best = (score, name, code)
+            score, name, code = best
+            if score < 60:
+                line.append("?")
+            elif name == "ibm" and code in CURSOR_GLYPHS:
+                line.append("~")
+            elif name == "ibm":
+                line.append(chr(code) if 32 <= code < 127 else f"<{code:02x}>")
+            else:
+                line.append(f"[r{code:02x}]")
+        rows.append(line)
+    return rows
+
+
+def compare(artifact: pathlib.Path) -> tuple[int, int, int]:
+    record = json.loads((artifact / "record.json").read_text())
+    scenario = record.get("scenario", artifact.name)
+    same = differ = skipped = 0
+    for capture in record.get("captures", []):
+        label = capture.get("label")
+        stock = artifact / f"dosbox-{label}.png"
+        engine = artifact / f"engine-{label}.png"
+        if not stock.exists() or not engine.exists():
+            skipped += 1
+            continue
+        left, right = decode(stock), decode(engine)
+        if left is None or right is None:
+            skipped += 1
+            continue
+        rows = [
+            index
+            for index, (a, b) in enumerate(zip(left, right))
+            # `?` is an unmatched cell on either side - a mid-resize capture or
+            # a partially drawn row - and is not a claim about the other side.
+            if any(x != y and "?" not in (x, y) for x, y in zip(a, b))
+        ]
+        if rows:
+            differ += 1
+            print(f"  differ {scenario}/{label}: rows {[r + TOP for r in rows]}")
+        else:
+            same += 1
+    return same, differ, skipped
+
+
+def main() -> None:
+    if len(sys.argv) < 2:
+        raise SystemExit(__doc__)
+    total = [0, 0, 0]
+    for arg in sys.argv[1:]:
+        same, differ, skipped = compare(pathlib.Path(arg))
+        status = "match" if differ == 0 else "DIFFER"
+        print(f"{status} {pathlib.Path(arg).name}: {same} beat(s) agree, {differ} differ, {skipped} skipped")
+        for index, value in enumerate((same, differ, skipped)):
+            total[index] += value
+    print(f"\n{total[0]} beat(s) agree, {total[1]} differ, {total[2]} skipped")
+    sys.exit(1 if total[1] else 0)
+
+
+if __name__ == "__main__":
+    main()

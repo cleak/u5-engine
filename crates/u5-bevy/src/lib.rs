@@ -16802,10 +16802,27 @@ fn render_integrated_status_framebuffer(
         // The spell-name colon line is a live row whose text comes from
         // the cast/mix session rather than the shell's own input buffer.
         let spell_echo = display_state.typed_prompt_echo();
+        // The runtime's echo is the row's *stored* text; the shell's
+        // `input_line` is what the player has typed since the last submit.
+        // The two are both live, and preferring one dropped the other: the
+        // shrine's virtue row is served by `shrine_prompt_echo`, whose buffer
+        // stays empty until Enter, so `:HONESTY` rendered as a bare `:` while
+        // the stock game echoed every letter. Caught by
+        // `qa/tools/paired_compare.py` on `shrine-flow`'s `typed` beat.
+        let composed_echo = match (spell_echo.as_deref(), input_echo) {
+            (Some(stored), Some(typed)) if !typed.is_empty() => Some(format!("{stored}{typed}")),
+            _ => None,
+        };
         let live_row = if display_state.message_window_live_row_suppressed() {
             None
         } else {
-            Some(spell_echo.as_deref().or(input_echo).unwrap_or(""))
+            Some(
+                composed_echo
+                    .as_deref()
+                    .or(spell_echo.as_deref())
+                    .or(input_echo)
+                    .unwrap_or(""),
+            )
         };
         // The spell-name colon line continues the block `For what
         // spell?` opened, so it carries no end cap (`LiveRowKind`).

@@ -270,6 +270,25 @@ band's internal layout is unpublished, so the engine cannot write it either -
 cleak/u5-spec#217 asks for it; until it is answered, walking in is the only
 route that gives both sides a live cast.
 
+**Both sides can be decoded, and `qa/tools/paired_compare.py` does it.** Run it
+over an artifact directory and it reports, per beat, whether the two message
+windows agree:
+
+```
+python3 qa/tools/paired_compare.py ~/artifacts/u5/paired/<run>
+```
+
+The paragraph below used to say the engine side could not be decoded at all.
+That is true of a naive cell grid and false of the frame's own geometry: the
+Bevy shell letterboxes a 4:3 frame, so a capture of height `h` holds the
+320x200 frame in a `4h/3` by `h` rect at `x = (w - 4h/3) / 2`, and sampling each
+glyph cell through that map recovers exactly the text the DOSBox decoder reads.
+It found the shrine virtue row echoing as a bare `:` on its first run.
+
+Only the message window is compared. The viewport carries host-clock NPC
+positions and the wind banner drifts on its own roll, both of which are
+legitimately different between the sides.
+
 **Reading the rows.** The DOSBox side is captured at 640x400, an exact 2:1
 downscale of the 320x200 screen, so its message window can be decoded glyph by
 glyph against `IBM.CH` and compared as text. The engine side cannot be, at any
