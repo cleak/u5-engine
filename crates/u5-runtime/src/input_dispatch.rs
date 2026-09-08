@@ -1011,13 +1011,46 @@ fn handle_active_shop_key_input(
                                     )
                                 })
                                 .unwrap_or(0);
-                            *s = InnkeeperState::ConfirmPickUpCompanion {
-                                inn,
+                            // **Measured** 2026-09-08 at Hotel Brittany
+                            // (`qa/paired/nb-inn-pickup.tsv`): collecting the
+                            // only lodged companion charges the bill straight
+                            // away and returns them - there is no `(Y/N)`
+                            // confirmation and no picker. Gold fell 150 -> 117
+                            // on the keypress and the panel grew back to three
+                            // rows.
+                            let _ = base_room_rate;
+                            let result = state.pickup_inn_guest_with_bill(
+                                scene_marker,
                                 registry_index,
-                                base_lodging_charge: base_room_rate,
                                 bill,
-                            };
-                            format!("Pickup bill is {bill} gold. (Y/N)")
+                            );
+                            *s = InnkeeperState::Greeting { inn };
+                            match result {
+                                Ok(outcome) => {
+                                    let surcharge = apply_active_shop_surcharge(state);
+                                    // The poisoned-guest death note is this
+                                    // engine's own: the measured capture
+                                    // collected a living companion, and a
+                                    // player who is told nothing would not
+                                    // learn of the death until the panel is
+                                    // read. Kept, and marked, until measured.
+                                    let death_note = if outcome.returned_dead_from_poison {
+                                        "\nThy friend has died, by the way."
+                                    } else {
+                                        ""
+                                    };
+                                    let message = match innkeeper_name {
+                                        Some(name) => format!(
+                                            "\"That will be {bill} gold, please.\"{death_note}\n\n{INN_STAY_ENJOYABLE_LINE}\nsays {name}.\n\n{INN_ANYTHING_MORE_PROMPT}"
+                                        ),
+                                        None => format!(
+                                            "\"That will be {bill} gold, please.\"{death_note}\n\n{INN_STAY_ENJOYABLE_LINE}\n\n{INN_ANYTHING_MORE_PROMPT}"
+                                        ),
+                                    };
+                                    append_active_shop_surcharge(message, surcharge)
+                                }
+                                Err(err) => format_inn_error(err),
+                            }
                         } else {
                             let mut guest_indices = [0usize; INN_REGISTRY_CAP];
                             for (slot, registry_index) in
@@ -2549,6 +2582,9 @@ const INN_WHO_WILL_STAY_PROMPT: &str = "\"Who will stay?\"";
 /// question the visit continues on.
 const INN_THANKS_LINE: &str = "\"I thank thee.\"";
 const INN_ANYTHING_MORE_PROMPT: &str = "\"Is there anything more I can do for thee?\"";
+/// **Measured**: the line that follows the pick-up bill, attributed. Note the
+/// comma inside the quotes - the attribution completes the sentence.
+const INN_STAY_ENJOYABLE_LINE: &str = "\"I hope thou hast found thy stay enjoyable,\"";
 const INN_NOBODY_TO_LEAVE_REFUSAL: &str =
     "\"Lord British is missing, and all ye plan to do is SLEEP for a month or so? Not in my inn!\"";
 

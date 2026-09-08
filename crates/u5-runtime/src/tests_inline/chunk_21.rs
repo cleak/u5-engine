@@ -5067,9 +5067,12 @@ fn end_to_end_innkeeper_pickup_restores_matching_guest() {
     });
     state.active_shop = Some(ActiveShopSession::Innkeeper(InnkeeperState::default()));
 
+    // Measured 2026-09-08 (`qa/paired/nb-inn-pickup.tsv`): the branch key
+    // itself charges the bill and returns the guest, so the message to check
+    // is the one that keypress produces.
     handle_play_key_input(&mut state, 'P', "", Path::new("")).unwrap();
     assert!(state.message.contains("22 gold"));
-    handle_play_key_input(&mut state, 'Y', "", Path::new("")).unwrap();
+    assert!(state.message.contains("has died"));
 
     assert_eq!(state.gold, 78);
     assert!(state.inn_registry.is_empty());
@@ -5077,7 +5080,6 @@ fn end_to_end_innkeeper_pickup_restores_matching_guest() {
     assert_eq!(state.party[1].status, b'D');
     assert_eq!(state.party[1].hp, 0);
     assert_eq!(state.party_names[1], *b"IOLO\0\0\0\0\0");
-    assert!(state.message.contains("has died"));
 }
 
 #[test]
@@ -5111,13 +5113,14 @@ fn end_to_end_innkeeper_pickup_bill_uses_stay_units_not_leave_deposit() {
     state.active_shop = Some(ActiveShopSession::Innkeeper(InnkeeperState::default()));
 
     handle_play_key_input(&mut state, 'P', "", Path::new("")).unwrap();
-    assert!(state.message.contains("75 gold"));
-    handle_play_key_input(&mut state, 'Y', "", Path::new("")).unwrap();
+    // Measured: the bill is charged on the branch key itself and the
+    // innkeeper wishes the party well; the slot number and a repeat of the
+    // figure are not printed.
+    assert!(state.message.contains("\"That will be 75 gold, please.\""));
 
     assert_eq!(state.gold, 25);
     assert!(state.inn_registry.is_empty());
     assert_eq!(state.party.len(), 2);
-    assert!(state.message.contains("Picked up companion 2 for 75 gold"));
 }
 
 #[test]
