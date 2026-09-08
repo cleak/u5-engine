@@ -1,0 +1,91 @@
+# North Britanny's stable (dialog byte 0x83) at noon, when its keeper's
+# hour-selected waypoint is 1 and the shop opens (cleak/u5-spec#238).
+# requires-seed: the party on the North Britanny village tile (`--scene BRITANNIA --at 86,105 --time 12:00`)
+both	wait	9000
+both	key	space
+both	wait	4000
+both	key	j
+both	wait	8000
+both	key	e
+both	wait	4000
+both	key	Up
+both	wait	480
+both	key	Up
+both	wait	480
+both	key	Up
+both	wait	480
+both	key	Up
+both	wait	480
+both	key	Up
+both	wait	480
+both	key	Up
+both	wait	480
+both	key	Up
+both	wait	480
+both	key	Up
+both	wait	480
+both	key	Up
+both	wait	480
+both	key	Up
+both	wait	480
+both	key	Up
+both	wait	480
+both	key	Up
+both	wait	480
+both	key	Up
+both	wait	480
+both	key	Up
+both	wait	480
+both	key	Up
+both	wait	480
+both	key	Up
+both	wait	480
+both	key	Up
+both	wait	480
+both	key	Up
+both	wait	480
+both	key	Right
+both	wait	480
+both	key	Right
+both	wait	480
+both	key	Right
+both	wait	480
+both	key	Right
+both	wait	480
+both	key	Right
+both	wait	480
+both	key	Right
+both	wait	480
+both	key	Right
+both	wait	480
+both	key	Right
+both	wait	480
+both	key	Up
+both	wait	480
+both	key	Up
+both	wait	480
+both	key	Right
+both	wait	480
+both	wait	2500
+both	key	l
+both	wait	1200
+both	key	Right
+both	wait	3000
+both	shot	look	Look east
+both	key	t
+both	wait	1200
+both	key	Right
+both	wait	12000
+both	shot	talk	Talk east
+both	key	Y
+both	wait	5000
+both	shot	yes	Yes at the entry prompt
+both	key	Y
+both	wait	5000
+both	shot	buy	Yes to the offer
+both	key	N
+both	wait	5000
+both	shot	no	No
+both	key	Escape
+both	wait	5000
+both	shot	esc	Escape

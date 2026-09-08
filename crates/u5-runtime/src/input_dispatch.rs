@@ -1460,7 +1460,37 @@ fn handle_active_shop_key_input(
             } else {
                 None
             };
-            append_active_shop_surcharge(format_horse_trader_outcome(outcome), surcharge)
+            // Measured 2026-09-08 at North Britanny's stable at noon
+            // (`qa/paired/nb-stable-open.tsv`): the accepted purchase debits
+            // the gold and ends the visit on the shop's farewell bark,
+            // attributed - `"Fare thee well!"` over `says Theoan.` - with no
+            // success line of its own. The engine printed
+            // `Sold for 143 gold. Thy horse awaits outside.`
+            let message = match outcome {
+                HorseTraderOutcome::Purchased { .. } => {
+                    let vendor = area_scene_byte.and_then(|scene| {
+                        crate::play_state_impl::shop_vendor_name_for_scene(
+                            SHOP_DIALOG_ID_STABLE,
+                            scene,
+                        )
+                    });
+                    let roll = state.random_range_u8(0, 3);
+                    let record = crate::shoppe_records::shared_shop_bark_record(
+                        SHOP_DIALOG_ID_STABLE,
+                        crate::shoppe_records::SharedShopBarkKind::Farewell,
+                        roll,
+                    );
+                    let flourish = record
+                        .and_then(|record_id| render_shared_shoppe_flourish(game_dir, record_id));
+                    match (flourish, vendor) {
+                        (Some(line), Some(name)) => format!("{line}\nsays {name}."),
+                        (Some(line), None) => line,
+                        (None, _) => format_horse_trader_outcome(outcome),
+                    }
+                }
+                outcome => format_horse_trader_outcome(outcome),
+            };
+            append_active_shop_surcharge(message, surcharge)
         }
         ActiveShopSession::ShipBroker(s) => {
             let outcome = if let Some(return_world) = state.return_world.as_mut() {
@@ -1664,6 +1694,7 @@ fn active_healer_name(state: &PlayState) -> Option<&'static str> {
 }
 
 const SHOP_DIALOG_ID_TAVERN: u8 = 0x82;
+const SHOP_DIALOG_ID_STABLE: u8 = 0x83;
 
 /// `systems/shops.md §8.0`: "Two resident name tables are indexed by the same
 /// row: the shop's display name ... and the vendor's name, which fills the `$`

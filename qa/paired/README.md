@@ -120,6 +120,7 @@ a paired run at all.
 | `shop-arms-buy-confirm` | the Buy confirmation: quote, `Y`, `Sold!`, the post-item prompt and the redrawn listing, then a second quote declined with `N` |
 | `shop-arms-sell-flow` | a whole sale through the browser: cursor move, offer, decline, second offer, `"Done!" says Gwenneth`, and the quoted goodbye on the way out |
 | `nb-inn` | North Britanny's inn: the greeting record naming the hostel and its owner, then `Terbor asks,` and the three-branch question |
+| `nb-stable-open` | the same stable at noon, when its keeper's hour waypoint is 1: the greeting, the price quote and `Deal?"`, and the farewell an accepted purchase ends on |
 | `nb-stable-closed` | North Britanny's stable keeper is away from his working waypoint at 13:00, so Talk answers the `shops.md` §2 open-for-business refusal on both sides |
 | `cove-herbalist` | Cove's herbalist: the greeting, `Yes`, the lettered reagent list, a quote and the list redraw a declined quote leaves |
 | `cove-healer` | Cove's Sanctuary: the greeting, `Yes`, the attributed powers line and service question, and the refusal a service nobody needs draws |
