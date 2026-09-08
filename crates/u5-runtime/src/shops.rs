@@ -1058,7 +1058,6 @@ pub struct TavernDrinkOutcome {
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum TavernDrinkError {
-    NoLivingParty,
     InsufficientGold { available: u16, required: u16 },
 }
 
@@ -2201,9 +2200,11 @@ pub const fn quote_tavern_round_drink(
     tavern: Tavern,
     living_party_members: u8,
 ) -> Result<TavernRoundDrinkQuote, TavernDrinkError> {
-    if living_party_members == 0 {
-        return Err(TavernDrinkError::NoLivingParty);
-    }
+    // `shops.md §8.C`: "There is no separate no-one-can-drink refusal in the
+    // round billing path; it counts nondead members and proceeds through its
+    // ordinary bill." An empty count therefore quotes a zero bill rather than
+    // refusing, and the engine's `No one can drink right now.` is gone with
+    // the error arm that produced it.
     let unit_price = tavern_round_drink_unit_price(tavern);
     Ok(TavernRoundDrinkQuote {
         tavern,

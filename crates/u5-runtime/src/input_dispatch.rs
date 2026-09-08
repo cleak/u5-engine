@@ -2573,7 +2573,24 @@ const BLUE_BOAR_DRINK_ROWS: [(char, &str, crate::shops::BlueBoarDrinkChoice); 6]
 const BLUE_BOAR_CHOICE_PROMPT: &str = "Thy choice?\"";
 /// The tavern's own follow-up question, measured with the zero-quantity
 /// dismissal and reused when the sage hands control back.
-const TAVERN_ANYTHING_ELSE_PROMPT: &str = "\"Anything else for thee?\"";
+///
+/// `shops.md §8.C` publishes it exactly: after a branch returns to
+/// continuation the tavern "refresh[es] the stats panel, retain[s] the message
+/// window's text and cursor, and print[s] `"Anything else\nfor thee?" `" - one
+/// explicit line feed inside it and a trailing space, which is what leaves the
+/// cursor on the answer's row.
+const TAVERN_ANYTHING_ELSE_PROMPT: &str = "\"Anything else\nfor thee?\" ";
+
+/// `shops.md §8.C`: "Tavern and sage honorifics address Avatar: `sir` for
+/// male, otherwise `milady`."
+const fn tavern_honorific(speaker_is_female: bool) -> &'static str {
+    if speaker_is_female { "milady" } else { "sir" }
+}
+
+/// `shops.md §8.C` "No packs affordable, at least three food servings". The
+/// attribution row - `yells `, vendor name, `.\n` - belongs to the
+/// SHOPPE-backed formatter, which knows the name.
+const TAVERN_NO_GOLD_NO_NEED_BARK: &str = "\n\n\"Thou hast\nneither gold nor\nneed! Out!\"";
 /// **Measured** 2026-09-08 at Hotel Brittany: the inn's room quote and the
 /// shipwright's hull quote end on the same prompt.
 const INN_CONFIRM_PROMPT: &str = "Wilt thou take it?\"";
@@ -2684,8 +2701,19 @@ fn format_tavern_outcome(
             }
             format!("{rows}\n{BLUE_BOAR_CHOICE_PROMPT}")
         }
-        ConfirmEnoughDrink => "Had enough? (Y/N)".to_string(),
-        DeclinedEnoughDrink => "Anything else? (Y/N)".to_string(),
+        // `shops.md §8.C`: "Fourth secondary drink attempt, when prior count
+        // is exactly three | `\n\n"I beg thy\npardon, `, honorific, `,"\nsays `,
+        // vendor name, `.\n"But haven't\nye had enough\nto drink?" `". The
+        // vendor name is only available to the SHOPPE-backed formatter, which
+        // overrides this arm; without it the attribution row is dropped rather
+        // than invented.
+        ConfirmEnoughDrink => format!(
+            "\n\n\"I beg thy\npardon, {},\"\n\"But haven't\nye had enough\nto drink?\" ",
+            tavern_honorific(speaker_is_female)
+        ),
+        // `shops.md §8.C` "Enough-drink answer": "Y prints `Yes\n\n` and
+        // returns to continuation."
+        DeclinedEnoughDrink => format!("Yes\n\n{TAVERN_ANYTHING_ELSE_PROMPT}"),
         // Measured: the served drink draws one gendered line, and the price
         // is not repeated back.
         BlueBoarDrinkServed { choice, cost } => {
@@ -2731,10 +2759,14 @@ fn format_tavern_outcome(
         // **Measured** 2026-09-07 at The Cat's Lair in Paws
         // (`qa/paired/paws-tavern.tsv`): both lines are quoted, and they sit
         // on consecutive rows with no blank between them.
-        Declined => "\"Hrumph.\"\n\"Anything else for thee?\"".to_string(),
+        Declined => format!("\n\n\"Hrumph.\"{TAVERN_ANYTHING_ELSE_PROMPT}"),
         RefusedShortFunds { .. } => TAVERN_AFFORDABILITY_REFUSAL_BARK.to_string(),
-        RefusedNoLivingParty => "No one can drink right now.".to_string(),
-        RefusedNoNeed => "Thou needest no provisions.".to_string(),
+        // `shops.md §8.C` "No packs affordable, at least three food servings":
+        // `\n\n"Thou hast\nneither gold nor\nneed! Out!"\nyells `, vendor name,
+        // `.\n`; ends visit. The vendor-named form is the SHOPPE-backed
+        // formatter's; this fallback prints the bark without the attribution
+        // row rather than inventing a name.
+        RefusedNoNeed => TAVERN_NO_GOLD_NO_NEED_BARK.to_string(),
         Exited => "Farewell.".to_string(),
         InvalidInput => "I do not understand.".to_string(),
     }

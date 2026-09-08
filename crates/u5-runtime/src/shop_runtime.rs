@@ -1254,7 +1254,6 @@ pub enum TavernOutcome {
     RefusedShortFunds {
         cost: u16,
     },
-    RefusedNoLivingParty,
     RefusedNoNeed,
     Exited,
     InvalidInput,
@@ -1331,7 +1330,6 @@ pub fn step_tavern(
                             cost: outcome.total_price,
                         }
                     }
-                    Err(TavernDrinkError::NoLivingParty) => TavernOutcome::RefusedNoLivingParty,
                     Err(TavernDrinkError::InsufficientGold { required, .. }) => {
                         TavernOutcome::RefusedShortFunds { cost: required }
                     }
@@ -1454,7 +1452,6 @@ pub fn step_tavern(
                         cost: outcome.total_price,
                     }
                 }
-                Err(TavernDrinkError::NoLivingParty) => TavernOutcome::RefusedNoLivingParty,
                 Err(TavernDrinkError::InsufficientGold { required, .. }) => {
                     *state = TavernState::Menu {
                         tavern,

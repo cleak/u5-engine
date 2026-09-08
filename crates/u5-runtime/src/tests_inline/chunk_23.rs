@@ -2191,10 +2191,11 @@ fn tavern_round_drink_debits_once_per_living_party_member() {
     assert_eq!(state.party[1].status, b'P');
     assert_eq!(state.party[2].status, b'D');
 
-    assert_eq!(
-        quote_tavern_round_drink(Tavern::TheSwordAndKeg, 0),
-        Err(TavernDrinkError::NoLivingParty)
-    );
+    // `shops.md §8.C`: "There is no separate no-one-can-drink refusal in the
+    // round billing path" - an empty count quotes a zero bill.
+    let empty = quote_tavern_round_drink(Tavern::TheSwordAndKeg, 0).unwrap();
+    assert_eq!(empty.living_party_members, 0);
+    assert_eq!(empty.total_price, 0);
 }
 
 #[test]
@@ -20391,7 +20392,7 @@ fn fourth_blue_boar_drink_warning_commits_before_affordability() {
     state.gold = 0;
 
     handle_play_key_input(&mut state, 'W', "", Path::new("")).unwrap();
-    assert_eq!(state.message, "Had enough? (Y/N)");
+    assert_eq!(state.message, "\n\n\"I beg thy\npardon, sir,\"\n\"But haven't\nye had enough\nto drink?\" ");
     assert_eq!(state.town_drunkenness_counter, 0);
     assert_eq!(state.moral_standing, 5);
 
