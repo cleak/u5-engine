@@ -1946,9 +1946,9 @@ impl PlayState {
             DirectionPromptKind::DungeonSearch { .. } | DirectionPromptKind::DungeonLook { .. } => {
                 crate::commands::DUNGEON_DIRECTION_PROMPT.to_string()
             }
-            // The fountain drinker stage is a member picker whose prompt
-            // literal this engine still invents; left alone here rather
-            // than pinned to the wrong row.
+            // `view.md §3`'s `Who will drink?` opens the shared selector,
+            // and that selector's own arm above owns the open row for the
+            // live flow.
             DirectionPromptKind::SurfaceFountainDrink { .. } => return None,
         };
         // Every arm above is a row the prompt keeps open: the hyphenated
@@ -1976,9 +1976,14 @@ impl PlayState {
                     party_index: Some(_),
                     ..
                 } => DUNGEON_DIRECTION_PROMPT.to_string(),
+                // `view.md §3`: the fountain "print[s] `Who will drink?` and
+                // open[s] the shared party-member selector". The live flow
+                // reaches that selector, whose own prompt is this literal;
+                // this arm is the inline harness form of the same prompt and
+                // used to answer with an invented instruction naming the
+                // party size.
                 DirectionPromptKind::SurfaceFountainDrink { .. } => {
-                    let last = self.party.len().max(1);
-                    format!("Look: choose fountain drinker (1-{last}).")
+                    crate::commands::FOUNTAIN_DRINK_PROMPT.to_string()
                 }
                 DirectionPromptKind::DungeonSearch { .. } => DUNGEON_DIRECTION_PROMPT.to_string(),
                 DirectionPromptKind::Klimb => "Klimb-".to_string(),
