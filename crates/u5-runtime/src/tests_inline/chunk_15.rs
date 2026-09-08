@@ -1306,6 +1306,8 @@
         assert_eq!((state.npcs[1].x, state.npcs[1].y), (3, 1));
     }
 
+    /// `npc-schedules.md §9.2`: the arrest/conflict family is AI `6`/`7`, and
+    /// it is the only one that can reach the town alarm.
     #[test]
     fn adjacent_hostile_town_npc_raises_alarm_without_combat() {
         let dir = debug_game_dir();
@@ -1321,10 +1323,8 @@
             NpcSlot {
                 slot: 1,
                 type_byte: 0x50,
-                // `npc-schedules.md §9` value `4`: only an NPC with a
-                // dialogue entry raises the attack event.
                 dialog_id: 2,
-                schedule: [4, 4, 4, 6, 6, 6, 5, 5, 5, 0, 0, 0, 0, 8, 16, 20],
+                schedule: [7, 7, 7, 6, 6, 6, 5, 5, 5, 0, 0, 0, 0, 8, 16, 20],
                 name: None,
             },
         ]);
@@ -1336,6 +1336,46 @@
 
         assert!(!state.combat_active);
         assert!(state.diagnostics_contain("Hostile NPC slot 1"));
+        let _ = fs::remove_dir_all(dir);
+    }
+
+    /// `npc-schedules.md §9.2`, first row, and `RETRACTIONS.md` R399: an AI
+    /// `4` resident with live dialogue opens **conversation**, not an alarm.
+    /// Every shipped shopkeeper carries AI `4` at its working waypoint, so
+    /// the withdrawn reading made all of them hostile (`cleak/u5-engine#16`).
+    #[test]
+    fn adjacent_conversation_family_npc_raises_no_alarm() {
+        let dir = debug_game_dir();
+        let mut state = test_state(open_grid(), 5, 5);
+        state.load_scheduled_npcs(&[
+            NpcSlot {
+                slot: 0,
+                type_byte: 0,
+                dialog_id: 0,
+                schedule: [0; 16],
+                name: None,
+            },
+            NpcSlot {
+                slot: 1,
+                type_byte: 0x54,
+                dialog_id: 2,
+                schedule: [4, 4, 4, 6, 6, 6, 5, 5, 5, 0, 0, 0, 0, 8, 16, 20],
+                name: None,
+            },
+        ]);
+
+        let _ = state.pass_turn_with_game_dir(Some(&dir)).unwrap();
+
+        assert!(!state.combat_active);
+        assert!(!state.diagnostics_contain("Hostile NPC slot 1"));
+        assert!(state.diagnostics_contain("opens conversation contact"));
+        // No sweep ran, so the roster keeps its own dialogue.
+        assert!(
+            state
+                .npcs
+                .iter()
+                .any(|npc| npc.slot == 1 && npc.dialog_id == 2)
+        );
         let _ = fs::remove_dir_all(dir);
     }
 
@@ -1620,7 +1660,7 @@
         ]);
 
         assert_eq!(
-            state.apply_town_npc_contact_event(scene, 0).unwrap(),
+            state.apply_town_npc_contact_event(scene, 0, Path::new("")).unwrap(),
             Some(MoveOutcome::Used)
         );
         assert_eq!(state.message, TOWN_NPC_BRUSHOFF_RESPONSE);

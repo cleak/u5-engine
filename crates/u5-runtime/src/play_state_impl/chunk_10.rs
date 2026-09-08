@@ -879,11 +879,10 @@ impl PlayState {
                                 self.sync_npc_active_object(index, floor);
                                 continue;
                             }
-                        } else if behavior.raises_attack_event() || behavior.raises_guard_event() {
-                            let unconditional_chase = matches!(
-                                behavior,
-                                NpcAiBehavior::ReservedEngage | NpcAiBehavior::RandomChase
-                            );
+                        } else if behavior.raises_contact_event() {
+                            // `npc-schedules.md §9` "The engagement step":
+                            // values 5/7 "engage without that distance gate".
+                            let unconditional_chase = behavior.engages_without_distance_gate();
                             if !self.town_npc_adjacent_to_player(index)
                                 && (unconditional_chase
                                     || self.town_npc_player_distance(index)

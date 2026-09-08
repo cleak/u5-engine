@@ -7566,23 +7566,33 @@ fn npc_ai_behavior_event_predicates_match_published_table() {
     // adjacent. GuardOrBlock raises the non-attack guard event
     // instead. BoundedWander and UnboundedWander are the two
     // random-wander behaviours.
+    // `npc-schedules.md §9.2` (`RETRACTIONS.md` R399): 4/5 are the
+    // conversation-contact family and 6/7 the arrest/conflict one. Value 7
+    // moved between the two when the earlier naming was withdrawn.
     for behavior in [
         NpcAiBehavior::ApproachAndAttack,
         NpcAiBehavior::ReservedEngage,
-        NpcAiBehavior::RandomChase,
     ] {
-        assert!(behavior.raises_attack_event(), "{behavior:?}");
-        assert!(!behavior.raises_guard_event(), "{behavior:?}");
+        assert!(behavior.raises_conversation_contact(), "{behavior:?}");
+        assert!(
+            !behavior.raises_arrest_or_conflict_contact(),
+            "{behavior:?}"
+        );
+        assert!(behavior.raises_contact_event(), "{behavior:?}");
+    }
+    for behavior in [NpcAiBehavior::GuardOrBlock, NpcAiBehavior::RandomChase] {
+        assert!(behavior.raises_arrest_or_conflict_contact(), "{behavior:?}");
+        assert!(!behavior.raises_conversation_contact(), "{behavior:?}");
+        assert!(behavior.raises_contact_event(), "{behavior:?}");
     }
     assert!(NpcAiBehavior::GuardOrBlock.raises_guard_event());
-    assert!(!NpcAiBehavior::GuardOrBlock.raises_attack_event());
     for behavior in [
         NpcAiBehavior::Stationary,
         NpcAiBehavior::Retreating,
         NpcAiBehavior::BoundedWander,
         NpcAiBehavior::UnboundedWander,
     ] {
-        assert!(!behavior.raises_attack_event(), "{behavior:?}");
+        assert!(!behavior.raises_contact_event(), "{behavior:?}");
         assert!(!behavior.raises_guard_event(), "{behavior:?}");
     }
     // Wander predicate covers the two random-wander variants.

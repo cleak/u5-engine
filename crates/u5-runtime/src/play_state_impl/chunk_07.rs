@@ -3512,7 +3512,7 @@ impl PlayState {
         self.append_town_poison_gas_message(game_dir, scene, floor)?;
         self.apply_pending_town_status_provision_pass();
         self.apply_pending_town_object_epilogue();
-        self.apply_town_npc_contact_event(scene, floor)
+        self.apply_town_npc_contact_event(scene, floor, game_dir)
     }
 
     /// Finish the shared pass deliberately deferred by an ordinary town
@@ -3752,10 +3752,27 @@ impl PlayState {
         }
     }
 
+    /// The cardinal direction from the party to an orthogonally adjacent
+    /// cell, for the conversation-contact dispatch. Returns `None` when the
+    /// cell is not orthogonally adjacent, which the producer's own adjacency
+    /// test already excludes.
+    fn contact_direction_to(&self, x: usize, y: usize) -> Option<Direction> {
+        crate::npc_runtime::town_direction_from_party(self.player.x, self.player.y, x, y)
+    }
+
+    /// `npc-schedules.md §9.2`'s contact-event routing table.
+    ///
+    /// The engine used to run the withdrawn reading (`RETRACTIONS.md` R399):
+    /// AI `4`/`5`/`7` raised an *attack* event that swept the town alarm, and
+    /// only AI `6` was a guard. Since every shipped shopkeeper carries AI `4`
+    /// at its working waypoint, walking up to one raised the alarm and left
+    /// half the roster cowering - `cleak/u5-engine#16`, and the same defect
+    /// behind `#15`. The table below is §9.2's.
     pub fn apply_town_npc_contact_event(
         &mut self,
         scene: Scene,
         floor: i8,
+        game_dir: &Path,
     ) -> io::Result<Option<MoveOutcome>> {
         if floor < 0 {
             return Ok(None);
@@ -3764,7 +3781,11 @@ impl PlayState {
         else {
             return Ok(None);
         };
-        if let Some(index) = self.npcs.iter().position(|npc| npc.slot == npc_slot)
+        // §9.2: the brush-off belongs to the **arrest/conflict** family -
+        // "AI 6 or 7 | Dialogue `0xFE` | Shouted brush-off followed by that
+        // NPC's flight rewrite."
+        if behavior.raises_arrest_or_conflict_contact()
+            && let Some(index) = self.npcs.iter().position(|npc| npc.slot == npc_slot)
             && self.npcs[index].dialog_id == TOWN_NPC_BRUSHOFF_DIALOG_ID
         {
             let _ = self.npcs[index].force_town_flight();
@@ -3780,11 +3801,41 @@ impl PlayState {
         // checked before the behaviour split rather than inside the
         // guard-event arm; the engine used to reach the demand only through
         // Talk, and walking into Minoc drew nothing at all.
-        if let Some((x, y)) = self.npcs.iter().find_map(|npc| {
-            (npc.slot == npc_slot && npc.dialog_id == BLACKTHORN_GUARD_DEMAND_DIALOG_ID)
-                .then_some((npc.x, npc.y))
-        }) {
+        if behavior.raises_conversation_contact()
+            && let Some((x, y)) = self.npcs.iter().find_map(|npc| {
+                (npc.slot == npc_slot && npc.dialog_id == BLACKTHORN_GUARD_DEMAND_DIALOG_ID)
+                    .then_some((npc.x, npc.y))
+            })
+        {
             return Ok(Some(self.begin_blackthorn_guard_demand(x, y, false)));
+        }
+        // §9.2, first row: "AI 4 or 5 | Nonzero live dialogue | Enter the
+        // shared conversation dispatcher for that NPC." The zero-dialogue
+        // case never reaches here - `town_adjacent_event_npc` drops it, as
+        // §9.2's second row requires ("No contact event; continue movement
+        // selection. This is not a fallback to combat").
+        //
+        // "Conversation contact uses the **same dispatcher as explicit Talk**,
+        // but does not perform Talk's direction, target lookup or mirror/bed
+        // terrain checks." This engine's dispatcher is direction-keyed, and
+        // the producer is orthogonally adjacent by construction, so the
+        // direction is derived rather than prompted.
+        if behavior.raises_conversation_contact() {
+            let Some((npc_x, npc_y)) = self
+                .npcs
+                .iter()
+                .find_map(|npc| (npc.slot == npc_slot).then_some((npc.x, npc.y)))
+            else {
+                return Ok(None);
+            };
+            let Some(direction) = self.contact_direction_to(npc_x, npc_y) else {
+                return Ok(None);
+            };
+            let outcome = self.talk_direction_with_game_dir(direction, game_dir)?;
+            self.push_diagnostic(format!(
+                "NPC slot {npc_slot} (type {type_byte}) opens conversation contact."
+            ));
+            return Ok(Some(outcome));
         }
         if behavior.raises_guard_event() {
             self.pending_town_arrest = Some(TownArrestPrompt {
@@ -3805,7 +3856,7 @@ impl PlayState {
             ));
             return Ok(Some(MoveOutcome::Used));
         }
-        if behavior.raises_attack_event() {
+        if behavior.raises_arrest_or_conflict_contact() {
             let (pursued, fled) = self.town_alarm_sweep(scene, floor, Some(npc_slot));
             self.push_diagnostic(format!(
                 "Hostile NPC slot {npc_slot} (type {type_byte}) attacks; alarm raised ({pursued} pursuing, {fled} fleeing)."
@@ -3838,16 +3889,15 @@ impl PlayState {
             // released prisoners keep mode 5 pursuit for the visit, but the
             // cleared awareness byte suppresses the adjacent attack event.
             // Value `7` is not dialogue-gated.
-            let raises_attack = behavior.raises_attack_event()
-                && !(matches!(
-                    behavior,
-                    NpcAiBehavior::ApproachAndAttack | NpcAiBehavior::ReservedEngage
-                ) && npc.dialog_id == NPC_DIALOG_ID_NONE);
-            (raises_attack || behavior.raises_guard_event()).then_some((
-                npc.slot,
-                npc.type_byte,
-                behavior,
-            ))
+            // §9.2: "AI 4 or 5 | Zero live dialogue | No contact event;
+            // continue movement selection." 6/7 carry no such requirement -
+            // §9 "values 4/5 require nonzero dialogue, whereas 6/7 do not".
+            let raises_contact = if behavior.raises_conversation_contact() {
+                npc.dialog_id != NPC_DIALOG_ID_NONE
+            } else {
+                behavior.raises_arrest_or_conflict_contact()
+            };
+            raises_contact.then_some((npc.slot, npc.type_byte, behavior))
         })
     }
 

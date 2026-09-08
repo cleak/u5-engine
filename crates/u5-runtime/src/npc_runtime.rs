@@ -440,16 +440,28 @@ pub enum NpcAiBehavior {
 }
 
 impl NpcAiBehavior {
-    /// `npc-schedules.md §9`: returns `true` for AI behaviours that
-    /// can raise the town-mode attack event when the NPC reaches an
-    /// adjacent cell to the player. Only the approach-and-attack and
-    /// the two chase/engage paths use this event; guard/block uses
-    /// its own non-attack event instead.
-    pub const fn raises_attack_event(self) -> bool {
-        matches!(
-            self,
-            Self::ApproachAndAttack | Self::ReservedEngage | Self::RandomChase
-        )
+    /// `npc-schedules.md §9.2`: values `4` and `5` raise the **conversation**
+    /// contact event, which "invokes the same NPC dispatcher as explicit T".
+    ///
+    /// `RETRACTIONS.md` R399 withdraws the earlier grouping this engine
+    /// carried - "The earlier names 'attack event' for values 4/5 and
+    /// 'non-attack guard event' for values 6/7 are withdrawn" - under which
+    /// every shopkeeper in the game (AI `4` at its working waypoint) was a
+    /// hostile who raised the town alarm on approach (`cleak/u5-engine#16`).
+    pub const fn raises_conversation_contact(self) -> bool {
+        matches!(self, Self::ApproachAndAttack | Self::ReservedEngage)
+    }
+
+    /// `npc-schedules.md §9.2`: values `6` and `7` raise the arrest/conflict
+    /// contact event. Value `7` moved here from the withdrawn attack grouping.
+    pub const fn raises_arrest_or_conflict_contact(self) -> bool {
+        matches!(self, Self::GuardOrBlock | Self::RandomChase)
+    }
+
+    /// Either contact family - what the town schedule pass uses to decide
+    /// that an NPC is on the engagement path at all.
+    pub const fn raises_contact_event(self) -> bool {
+        self.raises_conversation_contact() || self.raises_arrest_or_conflict_contact()
     }
 
     /// `npc-schedules.md §9`: returns `true` for AI behaviours that
@@ -457,6 +469,13 @@ impl NpcAiBehavior {
     /// when adjacent. Only the guard/block family takes this path.
     pub const fn raises_guard_event(self) -> bool {
         matches!(self, Self::GuardOrBlock)
+    }
+
+    /// `npc-schedules.md §9` "The engagement step": values `5`/`7` "engage
+    /// without that distance gate", while `3`/`6` use a Manhattan distance
+    /// strictly below four and `4` measures from its selected waypoint.
+    pub const fn engages_without_distance_gate(self) -> bool {
+        matches!(self, Self::ReservedEngage | Self::RandomChase)
     }
 
     /// `npc-schedules.md §9`: returns `true` for the two random-wander
@@ -989,4 +1008,16 @@ pub struct DoorTracker {
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct LocationNpcStartMarkers {
     pub npc_markers: Vec<(usize, usize)>,
+}
+
+/// The cardinal direction from `(px, py)` to an orthogonally adjacent
+/// `(x, y)`, or `None` when the two cells are not orthogonally adjacent.
+pub fn town_direction_from_party(px: usize, py: usize, x: usize, y: usize) -> Option<Direction> {
+    match (x as isize - px as isize, y as isize - py as isize) {
+        (0, -1) => Some(Direction::North),
+        (0, 1) => Some(Direction::South),
+        (1, 0) => Some(Direction::East),
+        (-1, 0) => Some(Direction::West),
+        _ => None,
+    }
 }
