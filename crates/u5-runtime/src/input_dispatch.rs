@@ -979,7 +979,17 @@ fn handle_active_shop_key_input(
                                 ctx.speaker_intelligence,
                             );
                             *s = InnkeeperState::PickLeaveCompanion { inn, deposit };
-                            format!("Leave which companion? Deposit is {deposit} gold. (1-6)")
+                            // **Measured** 2026-09-08 at Hotel Brittany with a
+                            // party of three (`qa/paired/nb-inn-companion.tsv`):
+                            // the innkeeper asks in the message window while
+                            // the *panel* becomes a framed `Select:` picker
+                            // over the party rows. No deposit is quoted here.
+                            match innkeeper_name {
+                                Some(name) => {
+                                    format!("{name} asks,\n{INN_WHO_WILL_STAY_PROMPT}")
+                                }
+                                None => INN_WHO_WILL_STAY_PROMPT.to_string(),
+                            }
                         }
                     }
                     InnMainAction::PickUpCompanion => {
@@ -2521,6 +2531,8 @@ const TAVERN_ANYTHING_ELSE_PROMPT: &str = "\"Anything else for thee?\"";
 /// shipwright's hull quote end on the same prompt.
 const INN_CONFIRM_PROMPT: &str = "Wilt thou take it?\"";
 /// **Measured** 2026-09-08 at Hotel Brittany with a party of one.
+/// **Measured**: the question the leave-companion branch asks.
+const INN_WHO_WILL_STAY_PROMPT: &str = "\"Who will stay?\"";
 const INN_NOBODY_TO_LEAVE_REFUSAL: &str =
     "\"Lord British is missing, and all ye plan to do is SLEEP for a month or so? Not in my inn!\"";
 

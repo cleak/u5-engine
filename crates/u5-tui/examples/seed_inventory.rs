@@ -8,7 +8,7 @@
 //! not from any asset - and the harness then seeds DOSBox and the engine from
 //! the same file.
 //!
-//! Usage: seed_inventory <PROFILE_DIR> [potions|scrolls|specials|spells|reagents|mana|keys|gems|torches|equipment|stock<item id>|equip<slot>|status<slot>]=<N>...
+//! Usage: seed_inventory <PROFILE_DIR> [potions|scrolls|specials|spells|reagents|mana|keys|gems|torches|equipment|stock<item id>|equip<slot>|status<slot>|companions]=<N>...
 
 use std::path::Path;
 use u5_runtime::*;
@@ -93,6 +93,32 @@ fn main() {
                 state.party[slot].status = count;
                 if count == b'D' {
                     state.party[slot].hp = 0;
+                }
+            }
+            // `companions=<N>` grows the party to N members by copying the
+            // Avatar's record and renaming the copies, so a scenario can
+            // reach the flows that need somebody to leave, swap or heal.
+            // The inn's leave/pick-up branches are unreachable with the
+            // solo party every other seed carries.
+            "companions" => {
+                while state.party.len() > 1 {
+                    state.party.pop();
+                    state.party_roster.pop();
+                }
+                let template_member = state.party[0].clone();
+                let template_record = state.party_roster[0].clone();
+                for index in 1..usize::from(count).max(1) {
+                    let mut member = template_member.clone();
+                    member.slot = index as u8;
+                    let mut record = template_record.clone();
+                    record.member = member.clone();
+                    let name = format!("Mate{index}");
+                    record.name = [0; SAVE_CHARACTER_NAME_LEN];
+                    for (slot, byte) in record.name.iter_mut().zip(name.bytes()) {
+                        *slot = byte;
+                    }
+                    state.party.push(member);
+                    state.party_roster.push(record);
                 }
             }
             other => panic!("unknown inventory field `{other}`"),

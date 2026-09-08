@@ -5011,7 +5011,10 @@ fn end_to_end_innkeeper_leave_companion_moves_roster_to_registry() {
     )));
 
     handle_play_key_input(&mut state, 'L', "", Path::new("")).unwrap();
-    assert!(state.message.contains("Deposit is 33 gold"));
+    // Measured 2026-09-08 (`qa/paired/nb-inn-companion.tsv`): the branch asks
+    // `"Who will stay?"` and quotes no deposit; the selection happens in the
+    // panel's framed `Select:` picker.
+    assert!(state.message.contains("\"Who will stay?\""));
     handle_play_key_input(&mut state, '2', "", Path::new("")).unwrap();
     assert!(state.message.contains("party member 2"));
     handle_play_key_input(&mut state, 'Y', "", Path::new("")).unwrap();
