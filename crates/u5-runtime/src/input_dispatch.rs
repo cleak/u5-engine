@@ -1830,8 +1830,10 @@ fn handle_arms_shop_key_input(
         // `0..3` draw." The draw is made here, where the list is first
         // rendered, and nowhere else — see `arms_stock_call_for_roll`.
         (ArmsShopOutcome::EnteredBuy, Some(table)) => {
+            // Measured order: heading, the lettered stock rows, a blank row,
+            // then the call line.
             let call = arms_stock_call_for_roll(state.random_range_u8(0, 3));
-            format!("{call}\n{}", format_arms_stock_buy_menu(table))
+            format!("{}\n{call}", format_arms_stock_buy_menu(table))
         }
         (ArmsShopOutcome::InvalidInput, Some(table)) if was_invalid_stock_pick => {
             format_arms_stock_buy_menu(table)
@@ -2024,17 +2026,28 @@ fn active_speaker_is_female(state: &PlayState) -> bool {
     .is_some_and(PartyRosterRecord::is_female)
 }
 
+/// **Measured** 2026-09-07 (`qa/paired/shop-arms-menus.tsv`, Iolo's Bows):
+/// the Buy listing opens with this two-row heading, then a blank row, then one
+/// row per stock letter, then a blank row, and only then the call line of
+/// `shops.md §8.1`. The engine printed the call line *first* and folded the
+/// list into one `We have: a) Dagger, b) Sling, ...` sentence.
+const ARMS_BUY_MENU_HEADING: &str = "\"But of course!\nThou canst buy:";
+
+/// The stock rows read `a...Dagger` - the separator is three ASCII full stops,
+/// read back by glyph index rather than guessed from the blank-cell filler.
 fn format_arms_stock_buy_menu(table: crate::shops::ArmsStockTable) -> String {
     if table.is_empty() {
+        // Unmeasured: no shipped arms shop ships an empty stock table, so this
+        // arm is a guard rather than a transcript.
         return "We have nothing for sale.".to_string();
     }
-    let mut entries = Vec::new();
+    let mut rows = String::new();
     for index in 0..table.len() {
         let item = table.item_ids[index] as usize;
         let letter = (b'a' + index as u8) as char;
-        entries.push(format!("{letter}) {}", equipment_name(item)));
+        rows.push_str(&format!("{letter}...{}\n", equipment_name(item)));
     }
-    format!("We have: {}.", entries.join(", "))
+    format!("{ARMS_BUY_MENU_HEADING}\n\n{rows}")
 }
 
 fn format_inn_error(err: InnError) -> String {
@@ -2366,6 +2379,29 @@ fn format_tavern_outcome_with_shoppe(
                     .ok()
             })
         }
+        // `shops.md §8.5`: the charitable outcome "adds `1` to the food
+        // counter and renders `SHOPPE.DAT` ordinal `90`, a table-scraps
+        // brush-off". The record id travels on the outcome; the engine used
+        // to drop it and print an invented sentence naming the tavern.
+        CharityProvisions {
+            tavern, record_id, ..
+        } => renderer
+            .render_record(
+                record_id,
+                &crate::shoppe_bark::ShoppeBarkContext {
+                    shop_name: tavern.display_name(),
+                    ..Default::default()
+                },
+            )
+            .ok(),
+        // `shops.md §8.5`, the outcome table: a fully served quantity prints
+        // a "blank-line tail" and then runs the surcharge - no sentence of
+        // its own. The partial line is resident text this spec does not
+        // quote, so that one still falls through to the placeholder below.
+        ProvisionsPurchased {
+            completion: crate::shops::ProvisionPurchaseCompletion::Completed,
+            ..
+        } => Some(String::from("\n")),
         Continued {
             tavern,
             follow_up_record_id,
@@ -4251,7 +4287,7 @@ mod arms_shop_resident_literal_tests {
     /// PRNG: the rendered call must be the one the shop's own next draw
     /// selects, not an arbitrary member of the pool.
     #[test]
-    fn arms_buy_entry_prints_the_drawn_stock_call_above_the_list() {
+    fn arms_buy_entry_prints_the_stock_list_then_the_drawn_call() {
         let mut state = stocked_arms_state();
 
         // Take the draw the buy-entry arm is about to make from a clone, so
@@ -4260,21 +4296,14 @@ mod arms_shop_resident_literal_tests {
 
         handle_play_key_input(&mut state, 'B', "", Path::new("")).unwrap();
 
-        let mut lines = state.message.lines();
-        assert_eq!(
-            lines.next(),
-            Some(expected_call),
-            "the buy list must lead with the drawn call line: {:?}",
-            state.message
-        );
-        assert!(
-            lines
-                .next()
-                .is_some_and(|line| line.starts_with("We have:")),
-            "the stock list must follow the call line: {:?}",
-            state.message
-        );
-        assert!(state.message.contains("a) Short Sword"));
+        // Measured 2026-09-07 at Iolo's Bows (`qa/paired/shop-arms-menus.tsv`):
+        // heading, blank row, one row per stock letter, blank row, call line.
+        let lines: Vec<&str> = state.message.lines().collect();
+        assert_eq!(lines[0], "\"But of course!");
+        assert_eq!(lines[1], "Thou canst buy:");
+        assert_eq!(lines[2], "");
+        assert_eq!(lines[3], "a...Short Sword");
+        assert_eq!(lines.last(), Some(&expected_call));
     }
 
     /// `systems/shops.md §8.1`: "Invalid buy selectors ... do not print a
@@ -4290,7 +4319,7 @@ mod arms_shop_resident_literal_tests {
         handle_play_key_input(&mut state, 'B', "", Path::new("")).unwrap();
 
         let prng_after_entry = state.prng_state;
-        let call_after_entry = state.message.lines().next().unwrap().to_string();
+        let call_after_entry = state.message.lines().last().unwrap().to_string();
 
         // `d` is past the three-entry stock table, so it is an invalid buy
         // selector rather than a purchase.
@@ -4306,7 +4335,7 @@ mod arms_shop_resident_literal_tests {
             state.message
         );
         assert!(
-            state.message.starts_with("We have:"),
+            state.message.starts_with("\"But of course!"),
             "the redraw re-renders the bare stock list: {:?}",
             state.message
         );

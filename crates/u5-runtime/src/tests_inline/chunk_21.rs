@@ -5851,8 +5851,8 @@ fn end_to_end_stocked_arms_shop_buys_by_menu_letter() {
     ));
 
     handle_play_key_input(&mut state, 'B', "", Path::new("")).unwrap();
-    assert!(state.message.contains("a) Short Sword"));
-    assert!(state.message.contains("b) Mace"));
+    assert!(state.message.contains("a...Short Sword"));
+    assert!(state.message.contains("b...Mace"));
 
     handle_play_key_input(&mut state, 'b', "", Path::new("")).unwrap();
     assert!(state.message.contains("Mace costs"));
@@ -5888,7 +5888,7 @@ fn end_to_end_stocked_arms_shop_rejects_empty_stock_letters() {
 
     assert_eq!(state.gold, 1000);
     assert!(state.equipment_stock.iter().all(|count| *count == 0));
-    assert!(state.message.contains("a) Short Sword"));
+    assert!(state.message.contains("a...Short Sword"));
     assert!(matches!(
         state.active_shop,
         Some(ActiveShopSession::ArmsStocked(
