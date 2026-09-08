@@ -1339,6 +1339,7 @@ fn handle_active_shop_key_input(
                         }
                         _ => None,
                     },
+                    active_speaker_is_female(state),
                     game_dir,
                 ),
                 surcharge,
@@ -2459,7 +2460,13 @@ fn format_healer_treatment_error(
     }
 }
 
-fn format_tavern_outcome(outcome: crate::shop_runtime::TavernOutcome) -> String {
+/// The typed-input prompt the sage question ends on, measured with it.
+const SAGE_RESPOND_PROMPT: &str = "You respond:";
+
+fn format_tavern_outcome(
+    outcome: crate::shop_runtime::TavernOutcome,
+    speaker_is_female: bool,
+) -> String {
     use crate::shop_runtime::TavernOutcome::*;
     match outcome {
         EnteredMenu {
@@ -2477,7 +2484,21 @@ fn format_tavern_outcome(outcome: crate::shop_runtime::TavernOutcome) -> String 
                 tavern.display_name()
             )
         }
-        EnteredSagePrompt => "Of what wouldst thou hear my lore?".to_string(),
+        // **Measured** 2026-09-08 at The Cat's Lair in Paws
+        // (`qa/paired/paws-sage.tsv`): the lore letter opens a quoted,
+        // gendered question and a typed-input prompt on its own row.
+        //
+        // ```text
+        // "Of what wouldst
+        // thou hear my
+        // lore, sir?"
+        //
+        // You respond:
+        // ```
+        EnteredSagePrompt => format!(
+            "\"Of what wouldst thou hear my lore, {}?\"\n\n{SAGE_RESPOND_PROMPT}",
+            if speaker_is_female { "milady" } else { "sir" }
+        ),
         RoundDrinkServed { tavern, cost } => {
             format!(
                 "{} served a round for {cost} gold. Anything else? (Y/N)",
@@ -2553,6 +2574,7 @@ fn format_tavern_outcome_with_shoppe(
     provision_quote_record_id: Option<usize>,
     no_sale_record_id: Option<usize>,
     tavern_vendor_name: Option<&'static str>,
+    speaker_is_female: bool,
     game_dir: &Path,
 ) -> String {
     use crate::shop_runtime::TavernOutcome::*;
@@ -2642,7 +2664,7 @@ fn format_tavern_outcome_with_shoppe(
     });
     rendered
         .filter(|text| !text.is_empty())
-        .unwrap_or_else(|| format_tavern_outcome(outcome))
+        .unwrap_or_else(|| format_tavern_outcome(outcome, speaker_is_female))
 }
 
 fn format_sage_outcome(outcome: crate::shop_runtime::SageOutcome) -> String {

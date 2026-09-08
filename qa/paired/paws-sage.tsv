@@ -1,0 +1,98 @@
+# The Paws tavern's lore branch: buy a drink to establish continuation,
+# then follow the advertised letter into the sage flow (cleak/u5-spec#238).
+# requires-seed: the party on the Paws village tile at 13:00
+both	wait	9000
+both	key	space
+both	wait	4000
+both	key	j
+both	wait	8000
+both	key	e
+both	wait	4000
+both	key	Up
+both	wait	480
+both	key	Up
+both	wait	480
+both	key	Up
+both	wait	480
+both	key	Up
+both	wait	480
+both	key	Up
+both	wait	480
+both	key	Up
+both	wait	480
+both	key	Right
+both	wait	480
+both	key	Right
+both	wait	480
+both	key	Right
+both	wait	480
+both	key	Right
+both	wait	480
+both	key	Right
+both	wait	480
+both	key	Right
+both	wait	480
+both	key	o
+both	wait	900
+both	key	Right
+both	wait	1500
+both	key	Right
+both	wait	480
+both	key	Right
+both	wait	480
+both	key	Up
+both	wait	480
+both	key	Right
+both	wait	480
+both	key	Right
+both	wait	480
+both	key	Right
+both	wait	480
+both	key	Right
+both	wait	480
+both	key	Right
+both	wait	480
+both	key	Up
+both	wait	480
+both	key	Up
+both	wait	480
+both	key	Left
+both	wait	480
+both	key	Left
+both	wait	480
+both	key	Left
+both	wait	480
+both	key	Left
+both	wait	480
+both	key	Left
+both	wait	480
+both	wait	2500
+both	key	t
+both	wait	1200
+both	key	Up
+both	wait	12000
+both	shot	talk	Talk north
+both	key	Y
+both	wait	5500
+both	shot	menu	Yes at the entry prompt
+both	key	A
+both	wait	5500
+both	shot	ale	A for ale
+both	key	Y
+both	wait	5500
+both	shot	again	Yes at anything-else
+both	key	C
+both	wait	5500
+both	shot	lore	The lore letter
+both	type	spir
+both	wait	1500
+both	shot	topic	The topic typed
+both	key	Return
+both	wait	5500
+both	shot	fee	The fee quote
+both	key	Y
+both	wait	5500
+both	shot	rumour	Paying for the rumour
+both	key	space
+both	wait	4000
+both	shot	after	After the rumour

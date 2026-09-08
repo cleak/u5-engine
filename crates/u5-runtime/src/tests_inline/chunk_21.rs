@@ -5400,7 +5400,12 @@ fn end_to_end_tavern_menu_lore_letter_reaches_paid_sage_lookup() {
     handle_play_key_input(&mut state, 'Y', "", Path::new("")).unwrap();
     handle_play_key_input(&mut state, 'C', "", Path::new("")).unwrap();
 
-    assert_eq!(state.message, "Of what wouldst thou hear my lore?");
+    // Measured 2026-09-08 at The Cat's Lair (`qa/paired/paws-sage.tsv`): the
+    // question is quoted and gendered, and a typed-input prompt follows it.
+    assert_eq!(
+        state.message,
+        "\"Of what wouldst thou hear my lore, sir?\"\n\nYou respond:"
+    );
     assert!(matches!(
         state.active_shop,
         Some(ActiveShopSession::Sage(SageState::Prompt { .. }))
