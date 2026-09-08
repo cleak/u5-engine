@@ -247,6 +247,23 @@ fn route_to_cell(state: &mut PlayState, goal: (usize, usize), budget: usize) {
 /// merchant where this engine's had wandered off. Use `--talk` below to ask
 /// what a chased NPC answers *inside one process*; a scripted paired walk to
 /// a wandering NPC is a coin flip, not a test.
+/// The diagnostics the walk produced, and the roster's live dialogue ids.
+fn report_town_contact_state(state: &PlayState) {
+    for line in &state.diagnostics {
+        println!("  diagnostic: {line}");
+    }
+    let cowering = state
+        .npcs
+        .iter()
+        .filter(|npc| npc.dialog_id == TOWN_NPC_COWERING_DIALOG_ID)
+        .count();
+    println!(
+        "  after the walk: {} npc(s) on the cowering dialogue id, {} diagnostic line(s)",
+        cowering,
+        state.diagnostics.len()
+    );
+}
+
 fn chase(state: &mut PlayState, dialog_id: u8, budget: usize) -> Option<Direction> {
     let mut keys = String::new();
     for _ in 0..budget {
@@ -375,6 +392,11 @@ fn main() {
     }
     if let Some(dialog_id) = chase_id {
         chase(&mut state, dialog_id, 64);
+        // What the walk itself did to the town is the point of
+        // `cleak/u5-engine#16`: under the withdrawn AI grouping, arriving
+        // beside a shopkeeper raised the alarm and rewrote half the roster
+        // to the cowering dialogue id. Both are visible here.
+        report_town_contact_state(&state);
         return;
     }
     // Chase *and* talk, inside one process, so the answer is not at the mercy
