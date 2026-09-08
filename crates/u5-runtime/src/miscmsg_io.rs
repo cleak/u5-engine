@@ -82,9 +82,14 @@ pub enum MiscMsgFamily {
     /// Records 28..=35 — shrine meditation prompts/altar/ordained
     /// presentation.
     ShrineMeditation,
-    /// Records 36..=46 — urn / Codex prophecy pages, including
+    /// Records 37..=44 — urn / Codex prophecy pages, including
     /// tile-glyph text.
     UrnCodexProphecy,
+    /// Record 45 — the shrine's approach narration, "before the kneeling and
+    /// virtue-input records" (`RETRACTIONS.md` R417).
+    ShrineEntry,
+    /// Record 46 — the Codex presentation's approach narration.
+    CodexEntry,
 }
 
 /// `formats/miscmsg-dat.md §3`: classify a record index `0..=46` into
@@ -96,8 +101,20 @@ pub enum MiscMsgFamily {
 pub const MISCMSG_BLACKTHORN_AUDIENCE_RANGE: std::ops::RangeInclusive<usize> = 0..=11;
 pub const MISCMSG_VIRTUE_FAILING_RANGE: std::ops::RangeInclusive<usize> = 12..=19;
 pub const MISCMSG_VIRTUE_APHORISM_RANGE: std::ops::RangeInclusive<usize> = 20..=27;
-pub const MISCMSG_SHRINE_MEDITATION_RANGE: std::ops::RangeInclusive<usize> = 28..=35;
-pub const MISCMSG_URN_CODEX_RANGE: std::ops::RangeInclusive<usize> = 36..=46;
+/// `formats/miscmsg-dat.md §3`: "28-36 | Shrine meditation | Meditation
+/// prompts, altar text, offering text, and ordained/quest turn-in
+/// presentation". `RETRACTIONS.md` R423 moved record 36 here from the
+/// Codex group - "it is the shrine's Codex-read quest turn-in response".
+pub const MISCMSG_SHRINE_MEDITATION_RANGE: std::ops::RangeInclusive<usize> = 28..=36;
+/// §3: "37-44 | Urn/Codex prophecy". The engine started this group at 36,
+/// so every urn page was read one record early - virtue 0 returned the
+/// shrine's turn-in response and the last virtue fell off the end.
+pub const MISCMSG_URN_CODEX_RANGE: std::ops::RangeInclusive<usize> = 37..=44;
+/// §3: "45 | Shrine entry | Approach narration before the kneeling and
+/// virtue-input records" (`RETRACTIONS.md` R417).
+pub const MISCMSG_SHRINE_ENTRY_NARRATION: usize = 45;
+/// §3: "46 | Codex entry | Approach narration for the Codex presentation".
+pub const MISCMSG_CODEX_ENTRY_NARRATION: usize = 46;
 
 /// `karma.md §12`, the Codex-unread arm: record `31` is "the altar's quest
 /// announcement", record `32` opens the quest sentence that the virtue's own
@@ -132,6 +149,10 @@ pub const fn miscmsg_family(record_index: usize) -> Option<MiscMsgFamily> {
             MiscMsgFamily::ShrineMeditation
         } else if record_index <= *MISCMSG_URN_CODEX_RANGE.end() {
             MiscMsgFamily::UrnCodexProphecy
+        } else if record_index == MISCMSG_SHRINE_ENTRY_NARRATION {
+            MiscMsgFamily::ShrineEntry
+        } else if record_index == MISCMSG_CODEX_ENTRY_NARRATION {
+            MiscMsgFamily::CodexEntry
         } else {
             return None;
         },

@@ -20129,12 +20129,17 @@ fn miscmsg_family_matches_spec_clusters() {
     for r in 20..=27 {
         assert_eq!(miscmsg_family(r), Some(MiscMsgFamily::VirtueAphorisms));
     }
-    for r in 28..=35 {
+    // `formats/miscmsg-dat.md §3` with `RETRACTIONS.md` R423 and R417:
+    // meditation owns 28-36, the prophecy group starts at 37 and ends at 44,
+    // and 45/46 are the two approach narrations.
+    for r in 28..=36 {
         assert_eq!(miscmsg_family(r), Some(MiscMsgFamily::ShrineMeditation));
     }
-    for r in 36..=46 {
+    for r in 37..=44 {
         assert_eq!(miscmsg_family(r), Some(MiscMsgFamily::UrnCodexProphecy));
     }
+    assert_eq!(miscmsg_family(45), Some(MiscMsgFamily::ShrineEntry));
+    assert_eq!(miscmsg_family(46), Some(MiscMsgFamily::CodexEntry));
     assert_eq!(miscmsg_family(47), None);
     assert_eq!(miscmsg_family(255), None);
 }
@@ -23864,8 +23869,10 @@ fn parse_misc_messages_clusters_records_by_consumer() {
     assert_eq!(messages.blackthorn_audience().len(), 12);
     assert_eq!(messages.virtue_failing_text().len(), 8);
     assert_eq!(messages.virtue_aphorism().len(), 8);
-    assert_eq!(messages.shrine_meditation().len(), 8);
-    assert_eq!(messages.urn_codex().len(), 11);
+    assert_eq!(messages.shrine_meditation().len(), 9);
+    // Eight prophecy pages, one per virtue - the engine used to slice eleven
+    // records starting one early, so every urn read was off by one.
+    assert_eq!(messages.urn_codex().len(), 8);
     assert_eq!(messages.record(0), Some("rec0"));
     assert_eq!(messages.record(12), Some("rec12"));
     assert_eq!(messages.record(46), Some("rec46"));
