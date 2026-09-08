@@ -1,0 +1,115 @@
+# Seed profile for every scenario carrying a `# requires-seed:` header.
+#
+# scenario<TAB>seed profile under ~/.local/share/u5/engine<TAB>note
+#
+# The harness refuses a seed directory that *is* the run's own profile, so a
+# scenario's seed cannot be its own `paired-<scenario>` output profile; the
+# `seed-<scenario>` rows below are copies made for that reason.
+
+bd-shipwright	seed-bd-shipwright	copied from the paired-bd-shipwright run profile
+blackthorn-palace-password	seed-blackthorn-palace-password	copied from the paired-blackthorn-palace-password run profile
+bt-audience	seed-bt-audience	copied from the paired-bt-audience run profile
+bt-correct	seed-bt-correct	copied from the paired-bt-correct run profile
+bt-escalate	seed-bt-escalate	copied from the paired-bt-escalate run profile
+bt-password	seed-bt-password	copied from the paired-bt-password run profile
+cast-results	seed-cast-results	copied from the paired-cast-results run profile
+castle-talk	seed-castle-talk	copied from the paired-castle-talk run profile
+castle-talk-after-entry	seed-castle-talk-after-entry	copied from the paired-castle-talk-after-entry run profile
+combat-cast	seed-combat-cast	copied from the paired-combat-cast run profile
+combat-commands	seed-combat-commands	copied from paired-combat-dungeon-room: the dungeon-room seed `combat-dungeon-room` uses
+combat-dungeon-room	seed-combat-dungeon-room	copied from the paired-combat-dungeon-room run profile
+combat-ready-armour	seed-combat-ready-armour	copied from paired-combat-dungeon-room: the same dungeon-room seed
+combat-refusal-audio	seed-combat-refusal-audio	copied from the paired-combat-refusal-audio run profile
+combat-rounds	seed-combat-rounds	copied from the paired-combat-rounds run profile
+combat-town-attack	seed-combat-town-attack	copied from the paired-combat-town-attack run profile
+combat-town-attack-after-entry	seed-combat-town-attack-after-entry	copied from the paired-combat-town-attack-after-entry run profile
+cove-healer	seed-cove-healer	copied from the paired-cove-healer run profile
+cove-herbalist	seed-cove-herbalist	copied from the paired-cove-herbalist run profile
+doom-endgame-audio	seed-doom-endgame-audio	copied from the paired-doom-endgame-audio run profile
+doom-final-room	seed-doom-final-room	copied from the paired-doom-final-room run profile
+doom-final-room-refusal	seed-doom-final-room-refusal	copied from the paired-doom-final-room-refusal run profile
+doom-final-room-waiting	seed-doom-final-room-waiting	copied from the paired-doom-final-room-waiting run profile
+drowning-audio	seed-drowning-audio	copied from the paired-drowning-audio run profile
+dungeon-exit-klimb	seed-dungeon-exit-klimb	copied from the paired-dungeon-exit-klimb run profile
+dungeon-look	seed-dungeon-look	copied from the paired-dungeon-look run profile
+dungeon-search	seed-dungeon-search	copied from the paired-dungeon-search run profile
+dungeon-view	seed-dungeon-view	copied from the paired-dungeon-view run profile
+dwelling-talk-after-entry	seed-dwelling-talk-after-entry	copied from the paired-dwelling-talk-after-entry run profile
+dwelling-talk-after-restore	seed-dwelling-talk-after-restore	copied from the paired-dwelling-talk-after-restore run profile
+magic-mix	seed-magic-mix	copied from the paired-magic-mix run profile
+magic-mix-and-cast	seed-magic-mix-and-cast	copied from the paired-magic-mix-and-cast run profile
+minoc-entry-walk	seed-minoc-entry-walk	copied from the paired-minoc-entry-walk run profile
+minoc-guard	seed-minoc-guard	copied from the paired-minoc-guard run profile
+minoc-refuse	seed-minoc-refuse	copied from the paired-minoc-refuse run profile
+minoc-tribute	seed-minoc-tribute	copied from the paired-minoc-tribute run profile
+nb-inn	seed-nb-inn	copied from the paired-nb-inn run profile
+nb-inn-branches	seed-nb-inn-branches	copied from the paired-nb-inn-branches run profile
+nb-inn-commit	seed-nb-inn-commit	copied from the paired-nb-inn-commit run profile
+nb-inn-companion	seed-nb-inn-companion	copied from the paired-nb-inn-companion run profile
+nb-inn-pickup	seed-nb-inn-pickup	copied from the paired-nb-inn-pickup run profile
+nb-inn-refusals	seed-nb-inn-refusals	copied from the paired-nb-inn-refusals run profile
+nb-stable-closed	seed-nb-stable-closed	copied from paired-nb-stable: the North Britanny stable approach
+nb-stable-open	seed-nb-stable-open	copied from the paired-nb-stable-open run profile
+night-cast	seed-night-cast	copied from the paired-night-cast run profile
+night-sextant	seed-night-sextant	copied from the paired-night-sextant run profile
+overworld-camp	seed-overworld-camp	copied from the paired-overworld-camp run profile
+overworld-night-walk	seed-overworld-night-walk	copied from the paired-overworld-night-walk run profile
+paws-guild	seed-paws-guild	copied from the paired-paws-guild run profile
+paws-sage	seed-paws-sage	copied from the paired-paws-sage run profile
+paws-sleeper	seed-paws-sleeper	copied from the paired-paws-sleeper run profile
+paws-tavern	seed-paws-tavern	copied from the paired-paws-tavern run profile
+prompt-cancels	seed-prompt-cancels	copied from the paired-prompt-cancels run profile
+ready-slots	seed-ready-slots	copied from the paired-ready-slots run profile
+ready-two-handed	seed-ready-two-handed	copied from paired-ready-twohand: the ready-slots party with a two-handed weapon
+ship-commands	seed-ship-commands	copied from the paired-ship-commands run profile
+ship-repair	seed-ship-repair	copied from the paired-ship-repair run profile
+shop-arms	seed-shop-arms	copied from the paired-shop-arms run profile
+shop-arms-after-entry	seed-shop-arms-after-entry	copied from the paired-shop-arms-after-entry run profile
+shop-arms-buy	seed-shop-arms-buy	copied from the paired-shop-arms-buy run profile
+shop-arms-buy-confirm	seed-shop-arms-buy-confirm	copied from paired-arms-buyconfirm: the 10:00 Britain walk-in with stock
+shop-arms-menus	seed-shop-arms-menus	copied from the paired-shop-arms-menus run profile
+shop-arms-navigation	seed-shop-arms-navigation	copied from paired-arms-nav: the 10:00 Britain walk-in with stock
+shop-arms-sell	seed-shop-arms-sell	copied from the paired-shop-arms-sell run profile
+shop-arms-sell-ammunition	seed-shop-arms-sell-ammunition	copied from paired-arms-ammo: the 10:00 walk-in carrying ammunition
+shop-arms-sell-flow	seed-shop-arms-sell-flow	copied from paired-arms-sellflow: the 10:00 walk-in with a sellable pack
+shop-arms-sell-keys	seed-shop-arms-sell-keys	copied from paired-arms-sellkeys: the 10:00 walk-in with a sellable pack
+shop-arms-sell-zero-price	seed-shop-arms-sell-zero-price	copied from paired-arms-zero: the 10:00 walk-in carrying a zero-price item
+shop-inn-after-entry	seed-shop-inn-after-entry	copied from the paired-shop-inn-after-entry run profile
+shrine-enter	seed-shrine-enter	copied from the paired-shrine-enter run profile
+shrine-flow	seed-shrine-flow	copied from the paired-shrine-flow run profile
+shrine-mantra-close	seed-shrine-mantra-close	copied from the paired-shrine-mantra-close run profile
+shrine-three-mantras	seed-shrine-three-mantras	copied from the paired-shrine-three-mantras run profile
+shrine-unfocused	seed-shrine-unfocused	copied from the paired-shrine-unfocused run profile
+slow-progress	seed-slow-progress	copied from the paired-slow-progress run profile
+slow-terrain	seed-slow-terrain	copied from the paired-slow-terrain run profile
+stonegate-trapdoor-audio	seed-stonegate-trapdoor-audio	copied from the paired-stonegate-trapdoor-audio run profile
+stray-keys	seed-stray-keys	copied from useitems: a party carrying scrolls and potions
+swamp-long	seed-swamp-long	copied from the paired-swamp-long run profile
+swamp-step	seed-swamp-step	copied from paired-swamp: the grass cell south of the swamp at (64,14)
+swamp-walk	seed-swamp-walk	copied from the paired-swamp-walk run profile
+town-britain-seeded	seed-town-britain-seeded	copied from the paired-town-britain-seeded run profile
+town-death-vision	seed-town-death-vision	copied from the paired-town-death-vision run profile
+town-fountain	seed-town-fountain	copied from the paired-town-fountain run profile
+town-hidden-door	seed-town-hidden-door	copied from the paired-town-hidden-door run profile
+town-look-npc-cell	seed-town-look-npc-cell	copied from the paired-town-look-npc-cell run profile
+town-night-schedule	seed-town-night-schedule	copied from the paired-town-night-schedule run profile
+town-talk	seed-town-talk	copied from the paired-town-talk run profile
+town-talk-after-entry	seed-town-talk-after-entry	copied from the paired-town-talk-after-entry run profile
+town-talk-high-dialog-id	seed-town-talk-high-dialog-id	copied from the paired-town-talk-high-dialog-id run profile
+town-talk-nonspeaker	seed-town-talk-nonspeaker	copied from the paired-town-talk-nonspeaker run profile
+town-talk-second-npc	seed-town-talk-second-npc	copied from the paired-town-talk-second-npc run profile
+town-talk-speaker	seed-town-talk-speaker	copied from the paired-town-talk-speaker run profile
+town-wishing-well	seed-town-wishing-well	copied from the paired-town-wishing-well run profile
+town-wishing-well-refusals	seed-town-wishing-well-refusals	copied from paired-town-wishing-well: the Paws wishing-well approach
+underworld-walk	seed-underworld-walk	copied from underworld: the Underworld plane at (100,100)
+use-moonstone	seed-use-moonstone	copied from useitems: a party carrying every U-Use family
+use-picker	seed-use-picker	copied from the paired-use-picker run profile
+use-potions	seed-use-potions	copied from the paired-use-potions run profile
+use-scrolls	seed-use-scrolls	copied from the paired-use-scrolls run profile
+use-single-item	seed-use-single-item	copied from useitems: the same
+use-skull-key	seed-use-skull-key	copied from the paired-use-skull-key run profile
+use-specials	seed-use-specials	copied from the paired-use-specials run profile
+use-target-cancel	seed-use-target-cancel	copied from useitems: the same
+wb-blueboar	seed-wb-blueboar	copied from the paired-wb-blueboar run profile
+word-of-power-audio	seed-word-of-power-audio	copied from the paired-word-of-power-audio run profile
+zstats-pages	seed-zstats-pages	copied from the paired-zstats-pages run profile

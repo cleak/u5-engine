@@ -27,6 +27,12 @@ fn every_paired_scenario_creates_a_character_or_declares_its_seed() {
         if path.extension().and_then(|ext| ext.to_str()) != Some("tsv") {
             continue;
         }
+        // `seeds.tsv` is the suite's seed table, not a scenario. It shares the
+        // directory and the extension because `qa/tools/paired_suite.py` reads
+        // it from beside the scenarios it drives.
+        if path.file_name().and_then(|name| name.to_str()) == Some("seeds.tsv") {
+            continue;
+        }
         let text = fs::read_to_string(&path).expect("scenario must be readable");
         let creates_character = text
             .lines()

@@ -156,6 +156,25 @@ a paired run at all.
 | `doom-final-room-waiting` | the same room answering `No` twice, which reaches `endgame.md` §5's waiting branch: the `"I see...` lead-in, record 10, and §6's tableau rearrangement |
 | `doom-final-room-refusal` | the same room answering `No` to the first box question. **Compared 2026-09-07**: both sides reach `…secret passage in my chamber!"`, `"Didst thou bring it?"` and `You reply:` |
 
+## Running the suite
+
+`qa/tools/paired_suite.py` runs scenarios by name, or all of them, resolving
+each seed from `qa/paired/seeds.tsv`:
+
+```
+python3 qa/tools/paired_suite.py --list            # what would run, and with which seed
+python3 qa/tools/paired_suite.py paws-tavern       # one scenario
+python3 qa/tools/paired_suite.py                   # the whole suite
+```
+
+`seeds.tsv` is the machine-readable half of the table below: it names the
+profile that holds each scenario's seed, where the table says what the seed
+must *contain*. Both are needed - the table is what lets a seed be rebuilt, the
+file is what lets the suite run unattended. Pointing the harness at the wrong
+seed does not fail: it runs and compares nothing, which is how eight runs of
+`paws-tavern` compared an in-town save's `Nobody's here!` before anyone
+noticed.
+
 ## Scenarios that need a seeded save
 
 Most scenarios create a character and play from the hut. The ones below start
