@@ -5204,7 +5204,11 @@ fn visual_route_suite_cases() -> Vec<VisualRouteSuiteCase> {
                 target: PlayTarget::Town(castle),
                 ..PlayOptions::default()
             },
-            script: &["B", "A", "N", "S", "1", "N"],
+            // Measured 2026-09-07: a declined quote leaves the Buy listing
+            // open rather than returning to the greeting, so the old
+            // `S`/`1` tail addressed a browser that never opened and drew
+            // nothing. The tail now declines, quotes again and buys.
+            script: &["B", "A", "N", "A", "Y", "A"],
             configure: Some(seed_visual_route_arms_local),
         },
         VisualRouteSuiteCase {
@@ -5214,7 +5218,7 @@ fn visual_route_suite_cases() -> Vec<VisualRouteSuiteCase> {
                 target: PlayTarget::Town(castle),
                 ..PlayOptions::default()
             },
-            script: &["B", "A", "N", "S", "1", "N"],
+            script: &["B", "A", "N", "A", "Y", "A"],
             configure: Some(seed_visual_route_arms_local),
         },
         VisualRouteSuiteCase {
@@ -23274,8 +23278,8 @@ mod tests {
         assert!(manifest.contains("route-dungeon-exit-confirm-02-y"));
         assert!(manifest.contains("route-dungeon-refusal-board-01-b"));
         assert!(manifest.contains("route-dungeon-refusal-fire-01-f"));
-        assert!(manifest.contains("route-shop-arms-local-buy-sell-06-n"));
-        assert!(manifest.contains("route-shop-arms-local-buy-sell-route-06-n"));
+        assert!(manifest.contains("route-shop-arms-local-buy-sell-06-a"));
+        assert!(manifest.contains("route-shop-arms-local-buy-sell-route-06-a"));
         assert!(manifest.contains("route-shop-arms-iolos-bows-terminator-refusal-03-_"));
         assert!(manifest.contains("route-shop-arms-siege-crafters-terminator-refusal-03-_"));
         assert!(manifest.contains("route-shop-healer-heal-decline-04-n"));
