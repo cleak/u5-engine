@@ -7081,7 +7081,9 @@ fn validate_route_smoke_case_state(
             if state.gold != 400
                 || state.shrine_codex_mask & ShrineVirtue::Compassion.bit() == 0
                 || state.moral_standing != 11
-                || !state.message.contains("Offered 100 gold")
+                // `karma.md §12`: an affordable offering prints `ALAKAZAM`
+                // runic and appends `!` in the normal font.
+                || state.message != "ALAKAZAM!"
             {
                 return Err(io::Error::other(format!(
                     "route smoke `{case_name}` did not complete the completed-shrine offering"

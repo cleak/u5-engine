@@ -1795,15 +1795,19 @@ BRITANNIA 11 21
         assert_eq!(state.gold, 150);
         assert_eq!(state.moral_standing, MORAL_STANDING_MAX);
         assert_eq!(state.turn, 0);
-        assert!(state.message.contains("Offered 200 gold"));
-        assert!(state.message.contains("moral +1 to 99"));
+        // `karma.md §12`: the affordable arm prints `ALAKAZAM` in the runic
+        // font and appends `!` in the normal one.
+        assert_eq!(state.message, "ALAKAZAM!");
 
         assert_eq!(
             handle_play_key_input(&mut state, 'M', "Mu/9", &dir).unwrap(),
             PlayInputDisposition::Continue
         );
         assert_eq!(state.gold, 150);
-        assert_eq!(state.message, "Need 900 gold for offering.");
+        // The digit's own echo is the last row: `karma.md §12` checks
+        // affordability *after* it. Record 35 and the repeated record 34 log
+        // nothing in this fixture, which ships no `MISCMSG.DAT`.
+        assert!(state.message.contains("900 gp"));
         let _ = fs::remove_dir_all(dir);
     }
 
@@ -1831,7 +1835,6 @@ BRITANNIA 11 21
             PlayInputDisposition::Continue
         );
         assert!(state.active_shrine.is_some());
-        assert!(state.message.contains("Offering at the Shrine of Compassion?"));
 
         assert_eq!(
             handle_play_key_input(&mut state, '2', "", &dir).unwrap(),
@@ -1841,10 +1844,7 @@ BRITANNIA 11 21
         assert!(state.active_shrine.is_none());
         assert_eq!(state.gold, 150);
         assert_eq!(state.moral_standing, 2);
-        assert_eq!(
-            state.message,
-            "Offered 200 gold at the Shrine of Compassion; moral +2 to 2."
-        );
+        assert_eq!(state.message, "ALAKAZAM!");
         let _ = fs::remove_dir_all(dir);
     }
 
@@ -1874,7 +1874,7 @@ BRITANNIA 11 21
         assert!(state.active_shrine.is_some());
         assert_eq!(state.gold, 100);
         assert_eq!(state.moral_standing, 0);
-        assert!(state.message.contains("Need 900 gold for offering."));
+        assert!(state.message.contains("900 gp"));
 
         assert_eq!(
             handle_play_key_input(&mut state, '1', "", &dir).unwrap(),
@@ -1883,7 +1883,7 @@ BRITANNIA 11 21
         assert!(state.active_shrine.is_none());
         assert_eq!(state.gold, 0);
         assert_eq!(state.moral_standing, 1);
-        assert!(state.message.contains("Offered 100 gold"));
+        assert_eq!(state.message, "ALAKAZAM!");
         let _ = fs::remove_dir_all(dir);
     }
 
@@ -1986,7 +1986,7 @@ BRITANNIA 11 21
 
         assert_eq!(state.gold, 100);
         assert_eq!(state.moral_standing, 27);
-        assert!(state.message.contains("moral +7 to 27"));
+        assert_eq!(state.message, "ALAKAZAM!");
         let _ = fs::remove_dir_all(dir);
     }
 

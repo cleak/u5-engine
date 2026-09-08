@@ -646,6 +646,9 @@ pub const SHRINE_KNEEL_NARRATION: &str = "...and thou dost kneel before the Alta
 /// (`Mantra:AHM`). The engine previously invented
 /// `Shrine of <virtue> mantra? _` plus an instructional line.
 pub const SHRINE_MANTRA_PROMPT: &str = "Mantra:";
+
+/// `karma.md §12`: an affordable offering finishes "with ten world ticks".
+pub const SHRINE_OFFERING_RESULT_WORLD_TICKS: usize = 10;
 /// The daylight refusal, measured aboard a ship at noon.
 pub const USE_SEXTANT_DAYTIME_REFUSAL: &str = "Only at night!";
 pub const USE_WOODEN_BOX_PROMPT: &str = "How?";

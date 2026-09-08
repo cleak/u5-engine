@@ -4898,7 +4898,14 @@ impl PlayState {
             return MoveOutcome::Blocked;
         };
         if !direction.is_cardinal() {
-            self.message = "Dispel Field requires a cardinal direction.".to_string();
+            // `magic.md §8` "Directed utility tile helpers": the shared spell
+            // direction prompt takes "a cardinal choice ... Space echoes
+            // `Pass` ...; any other key re-prompts, and the prompt cannot be
+            // escaped except by a cardinal or Space". A diagonal therefore
+            // re-opens the prompt silently, exactly as the combat arm of this
+            // same spell already does; the engine-voice sentence that used to
+            // stand here was invented.
+            self.request_cast_argument(CastArgumentRequest::Direction);
             return MoveOutcome::Blocked;
         }
         if let Some(outcome) =

@@ -1740,14 +1740,12 @@ impl PlayState {
             ShrinePhase::Virtue | ShrinePhase::Mantra => self
                 .shrine_prompt_echo_for(session)
                 .unwrap_or_else(String::new),
-            ShrinePhase::Offering => {
-                format!(
-                    // cleak/u5-spec#81: offering prompt literal unpublished; the
-                    // invented instructional line is removed.
-                    "Offering at the Shrine of {}? _",
-                    session.virtue.name()
-                )
-            }
+            // `karma.md §12` "Completed-quest offering": the question is
+            // `MISCMSG.DAT` record 34, logged when the phase opens, and what
+            // the player types is a single digit echoed onto the row that
+            // record's trailing space leaves open. Nothing is live-edited
+            // here, so the slot mirrors nothing.
+            ShrinePhase::Offering => String::new(),
         }
     }
 
@@ -1837,29 +1835,40 @@ impl PlayState {
                     }
                 }
                 ShrinePhase::Offering => {
-                    if matches!(ch, '\u{1b}' | ' ' | '0' | '\r' | '\n') {
-                        self.message = "No effect!".to_string();
-                        return Ok(Some(MoveOutcome::PromptDeclined));
-                    }
+                    // `karma.md §12`: "This is a single-digit chooser, not a
+                    // typed amount: accept and echo one digit `0` through
+                    // `9`. Other keys, including Escape and Return, silently
+                    // keep the chooser open without repeating its question."
                     let Some(digit) = ch.to_digit(10).and_then(|digit| u8::try_from(digit).ok())
                     else {
                         continue;
                     };
-                    if !(1..=9).contains(&digit) {
-                        continue;
+                    // "`0` | After echoing the digit, append ` gp\n` and end
+                    // the interaction without payment or the ten-tick result
+                    // pause."
+                    if digit == 0 {
+                        self.emit_message_line_continuing_row("0 gp\n");
+                        return Ok(Some(MoveOutcome::PromptDeclined));
                     }
-                    if let Some(cost) = ShrineVirtue::shrine_offering_cost(digit) {
-                        if self.gold < cost {
-                            self.message = format!(
-                                "Need {cost} gold for offering.\n{}",
-                                self.render_shrine_session(&session)
-                            );
-                            self.active_shrine = Some(session);
-                            return Ok(None);
-                        }
+                    // "`1` through `9` | After echoing the digit, append
+                    // `00 gp\n\n`, so the displayed amount is in gold pieces.
+                    // Check affordability after this echo."
+                    self.emit_message_line_continuing_row(format!("{digit}00 gp\n\n"));
+                    let cost = ShrineVirtue::shrine_offering_cost(digit).unwrap_or(0);
+                    if self.gold < cost {
+                        // "Insufficient gold | Print record `35` ... then
+                        // repeat record `34` and the single-digit chooser. No
+                        // payment or standing increase occurs."
+                        self.emit_shrine_misc_record(
+                            game_dir,
+                            MISCMSG_SHRINE_OFFERING_INSUFFICIENT_GOLD,
+                        )?;
+                        self.emit_shrine_misc_record(game_dir, MISCMSG_SHRINE_OFFERING_PROMPT)?;
+                        self.active_shrine = Some(session);
+                        return Ok(None);
                     }
-                    let suffix = format!("{}/{}", session.mantra_buffer, digit);
-                    return Ok(self.meditate_shrine_from_suffix(&suffix, game_dir)?);
+                    self.apply_shrine_offering_payment(cost, digit);
+                    return Ok(Some(MoveOutcome::Observed));
                 }
             }
         }
@@ -1890,8 +1899,10 @@ impl PlayState {
             let ordained = self.shrine_ordained_mask & bit != 0;
             let codex = self.shrine_codex_mask & bit != 0;
             if !ordained && codex {
+                // `karma.md §12`: the completed-quest arm "Runs the ordinary
+                // offering path", whose question is record 34.
                 session.phase = ShrinePhase::Offering;
-                self.message = self.render_shrine_session(&session);
+                self.emit_shrine_misc_record(game_dir, MISCMSG_SHRINE_OFFERING_PROMPT)?;
                 self.active_shrine = Some(session);
                 return Ok(None);
             }
@@ -1999,24 +2010,22 @@ impl PlayState {
                     return Ok(Some(MoveOutcome::PromptDeclined));
                 };
                 if offering == 0 {
-                    self.message = "No effect!".to_string();
+                    // `karma.md §12`: digit zero "end[s] the interaction
+                    // without payment", and the row it leaves is the echo.
+                    self.emit_message_line_continuing_row("0 gp\n");
                     return Ok(Some(MoveOutcome::PromptDeclined));
                 }
+                self.emit_message_line_continuing_row(format!("{offering}00 gp\n\n"));
                 let cost = offering as u16 * 100;
                 if self.gold < cost {
-                    self.message = format!("Need {cost} gold for offering.");
+                    self.emit_shrine_misc_record(
+                        game_dir,
+                        MISCMSG_SHRINE_OFFERING_INSUFFICIENT_GOLD,
+                    )?;
+                    self.emit_shrine_misc_record(game_dir, MISCMSG_SHRINE_OFFERING_PROMPT)?;
                     return Ok(Some(MoveOutcome::Blocked));
                 }
-                self.gold -= cost;
-                // karma.md §3-4: completed-shrine gold offering adds the
-                // offered digit to the shared moral-standing selector.
-                let moral_gained = self.add_moral_standing(offering);
-                self.message = format!(
-                    "Offered {cost} gold at the Shrine of {}; moral +{} to {}.",
-                    entry.virtue.name(),
-                    moral_gained,
-                    self.moral_standing
-                );
+                self.apply_shrine_offering_payment(cost, offering);
                 MoveOutcome::Observed
             }
         };
@@ -2078,6 +2087,40 @@ impl PlayState {
                     .expected_tile
                     .map_or(true, |expected| expected == tile)
         }))
+    }
+
+    /// Log one `MISCMSG.DAT` record, keeping "their spaces and line breaks"
+    /// exactly as `karma.md §12` requires. A profile without the file logs
+    /// nothing rather than substituting engine prose.
+    fn emit_shrine_misc_record(&mut self, game_dir: &Path, index: usize) -> io::Result<()> {
+        if let Some(text) = load_misc_messages(game_dir)?.and_then(|messages| {
+            messages
+                .record(index)
+                .map(|record| record.replace('\r', "\n"))
+        }) {
+            self.emit_message_line(text);
+        }
+        Ok(())
+    }
+
+    /// `karma.md §12`: "Affordable nonzero offering | Deduct the displayed
+    /// gold amount, refresh the stats display and award the digit's standing
+    /// increase. Print `ALAKAZAM` using the runic font, restore the normal
+    /// font and append `!\n`. Play the local viewport/sound effect and finish
+    /// with ten world ticks."
+    fn apply_shrine_offering_payment(&mut self, cost: u16, digit: u8) {
+        self.gold -= cost;
+        // `karma.md §3-4`: the offered digit is added to the shared
+        // moral-standing selector, clamped at ninety-nine.
+        let _ = self.add_moral_standing(digit);
+        self.push_runic_message_entry("ALAKAZAM");
+        self.emit_message_line_continuing_row("!\n");
+        self.adopt_flushed_message("ALAKAZAM!");
+        // The ten-tick result pause. `animation.md §13.5`: a blocking
+        // presentation pumps the sprite animator while it waits.
+        for _ in 0..SHRINE_OFFERING_RESULT_WORLD_TICKS {
+            self.animation.tick_static_tiles();
+        }
     }
 
     /// `karma.md §7`: meditation matches the party position against the

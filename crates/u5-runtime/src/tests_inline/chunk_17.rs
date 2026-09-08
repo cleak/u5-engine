@@ -730,7 +730,7 @@
         assert_eq!(state.spell_charges[GATE_TRAVEL_SPELL_INDEX], 0);
         assert_eq!(state.party[0].mana, 0);
         assert_eq!(state.turn, 1);
-        assert_eq!(state.message, "Gate Travel phase 1 is not set.");
+        assert_eq!(state.message, "Failed!");
     }
 
     /// `magic.md §6` Step 6: "The handler prints `Mixing...`, pauses

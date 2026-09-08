@@ -292,11 +292,15 @@ impl PlayState {
         // `cast_dungeon_level_spell`. Only the scene gate (inside
         // `cast_spell_resource_gate`) spends nothing.
         //
-        // Boundary: the spec publishes no refusal text for this case, so the
-        // engine-voice line below is unpublished and awaits a spec update.
+        // `magic.md §5` step 8: "ordinary failure appends `Failed!` and a
+        // newline with the failure sound". The shipboard test is *inside* the
+        // handler - §8 "requires the party not to be shipboard" - so it is an
+        // ordinary handler failure and the dispatcher's own epilogue narrates
+        // it. The engine-voice sentence that used to stand here was invented.
         if matches!(self.player.transport, TransportState::Ship { .. }) {
             self.advance_turn();
-            self.message = "Cannot Gate Travel shipboard.".to_string();
+            self.message = "Failed!".to_string();
+            self.emit_sound_effect(SoundEffect::CastFailure);
             return Ok(MoveOutcome::Blocked);
         }
 
@@ -321,12 +325,16 @@ impl PlayState {
                     target,
                 }))
             }
-            GateTravelDestination::Empty => {
-                self.message = format!("Gate Travel phase {phase} is not set.");
-                Ok(MoveOutcome::Blocked)
-            }
-            GateTravelDestination::Invalid(reason) => {
-                self.message = format!("Gate Travel phase {phase} is invalid: {reason}.");
+            // `magic.md §8`: "an invalid scene sentinel makes the helper
+            // return failure and the cast does not teleport" - and §5 step 8
+            // turns a handler failure into `Failed!` with the failure sound.
+            // Neither the empty slot nor the invalid one has a line of its
+            // own; the two sentences that used to stand here named an
+            // internal slot number the original never shows.
+            GateTravelDestination::Empty | GateTravelDestination::Invalid(_) => {
+                let _ = phase;
+                self.message = "Failed!".to_string();
+                self.emit_sound_effect(SoundEffect::CastFailure);
                 Ok(MoveOutcome::Blocked)
             }
         }

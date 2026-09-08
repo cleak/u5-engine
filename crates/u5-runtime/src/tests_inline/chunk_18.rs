@@ -940,7 +940,7 @@
         assert_eq!(state.spell_charges[GATE_TRAVEL_SPELL_INDEX], 0);
         assert_eq!(state.party[0].mana, 1);
         assert_eq!(state.turn, 1);
-        assert_eq!(state.message, "Gate Travel phase 4 is not set.");
+        assert_eq!(state.message, "Failed!");
     }
 
     #[test]
@@ -1048,7 +1048,7 @@
         assert_eq!(state.party[0].mana, 9 - GATE_TRAVEL_COST);
         // "A spell cast costs one turn regardless of the spell's power."
         assert_eq!(state.turn, 1);
-        assert_eq!(state.message, "Cannot Gate Travel shipboard.");
+        assert_eq!(state.message, "Failed!");
         // The party has not moved: the refusal is inside the handler, above
         // the moonstone-slot teleport.
         assert_eq!((state.player.x, state.player.y), (5, 5));

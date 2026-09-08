@@ -99,6 +99,15 @@ pub const MISCMSG_VIRTUE_APHORISM_RANGE: std::ops::RangeInclusive<usize> = 20..=
 pub const MISCMSG_SHRINE_MEDITATION_RANGE: std::ops::RangeInclusive<usize> = 28..=35;
 pub const MISCMSG_URN_CODEX_RANGE: std::ops::RangeInclusive<usize> = 36..=46;
 
+/// `karma.md §12` "Completed-quest offering": "Record `34` asks for a number
+/// of hundreds of gold pieces. Its authored leading blank row and trailing
+/// space belong to the prompt."
+pub const MISCMSG_SHRINE_OFFERING_PROMPT: usize = 34;
+/// `karma.md §12`: "Insufficient gold | Print record `35`, the
+/// insufficient-gold response, then repeat record `34` and the single-digit
+/// chooser."
+pub const MISCMSG_SHRINE_OFFERING_INSUFFICIENT_GOLD: usize = 35;
+
 /// its consumer cluster. Returns `None` for indices outside the file.
 pub const fn miscmsg_family(record_index: usize) -> Option<MiscMsgFamily> {
     Some(
