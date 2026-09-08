@@ -55,6 +55,11 @@ def main() -> None:
     parser = argparse.ArgumentParser()
     parser.add_argument("--engine-dir", default=".")
     parser.add_argument("--list", action="store_true")
+    parser.add_argument(
+        "--no-build",
+        action="store_true",
+        help="skip the visual rebuild; only safe when nothing else has built since",
+    )
     parser.add_argument("scenarios", nargs="*")
     args = parser.parse_args()
 
@@ -89,6 +94,23 @@ def main() -> None:
             print(f"skip  {name}\t{why}")
         print(f"\n{len(runnable)} runnable, {len(blocked)} blocked")
         return
+
+    # The harness runs the `u5-engine` binary, and that binary is only the
+    # windowed shell when it was built with `--features visual`. Any plain
+    # `cargo build --release` in the same tree overwrites it with the headless
+    # one, and the next run then fails with `window matching '^Ultima V' did
+    # not appear within 60s` - which reads like a harness fault. Rebuilding
+    # here makes the suite own that, instead of every caller remembering it.
+    if not args.no_build:
+        build = subprocess.run(
+            ["cargo", "build", "--release", "--features", "visual"],
+            cwd=args.engine_dir,
+            capture_output=True,
+            text=True,
+        )
+        if build.returncode != 0:
+            print(build.stderr.strip()[-2000:])
+            raise SystemExit("visual build failed; not running the suite")
 
     failures = 0
     for name, profile in runnable:

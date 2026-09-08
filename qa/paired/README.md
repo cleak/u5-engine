@@ -167,6 +167,13 @@ python3 qa/tools/paired_suite.py paws-tavern       # one scenario
 python3 qa/tools/paired_suite.py                   # the whole suite
 ```
 
+The runner rebuilds `u5-engine` with `--features visual` before it starts. The
+harness runs that binary, and it is only the windowed shell when it was built
+with that feature - any plain `cargo build --release` in the same tree
+overwrites it with the headless one, and the next run then fails with
+`window matching '^Ultima V' did not appear within 60s`, which reads like a
+harness fault and is not one. Pass `--no-build` to skip it.
+
 `seeds.tsv` is the machine-readable half of the table below: it names the
 profile that holds each scenario's seed, where the table says what the seed
 must *contain*. Both are needed - the table is what lets a seed be rebuilt, the
