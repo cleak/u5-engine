@@ -3,6 +3,14 @@ use std::path::Path;
 
 use crate::*;
 
+/// **Measured** 2026-09-08 (`qa/paired/bt-audience.tsv`): the typed-input
+/// prompt Blackthorn's demand ends on. Note it differs from the sage's
+/// `You respond:`.
+pub const BLACKTHORN_RESPONSE_PROMPT: &str = "Your response?";
+/// **Measured**: what a wrong mantra draws when the interrogation ends.
+pub const BLACKTHORN_DUNGEON_THREAT: &str =
+    "\"A child would catch thee in thy lies, foolish one! To the dungeon with thee!\"";
+
 impl PlayState {
     /// `town-mode.md §10`: the fireplace id of the town burning family.
     pub const TOWN_BURNING_FIREPLACE_TILE: u8 = 0xbc;
@@ -4208,12 +4216,15 @@ impl PlayState {
                     .blackthorn_failure_victim_index()
                     .filter(|index| *index != 0);
                 let Some(victim) = victim else {
+                    // The ordinal and the expected mantra are harness detail,
+                    // not player text.
+                    self.push_diagnostic(format!(
+                        "Failed Blackthorn's prompt {}; expected {expected}.",
+                        ordinal + 1
+                    ));
                     return self.apply_blackthorn_captive_cell_handoff(
                         game_dir,
-                        &format!(
-                            "Failed Blackthorn's prompt {}; expected {expected}; too few companions remain, so the interrogation ends with a threat of the dungeon.",
-                            ordinal + 1,
-                        ),
+                        BLACKTHORN_DUNGEON_THREAT,
                     );
                 };
                 match challenge.wrong_escalation() {
@@ -4316,7 +4327,24 @@ impl PlayState {
             // argument is semantic: it names which companion is at risk"
             // is withdrawn. "The loop asks about ONE shrine, up to four
             // times", so the prompt names only that shrine's virtue.
-            format!("Blackthorn asks for the mantra of {prompt}.")
+            // **Measured** 2026-09-08 in Blackthorn's palace
+            // (`qa/paired/bt-audience.tsv`): the demand is quoted, names the
+            // shrine as "the Mystic Shrine of <virtue>", and ends on its own
+            // typed-input prompt.
+            //
+            // ```text
+            // "What is the
+            // Mantra of the
+            // Mystic Shrine of
+            // Honesty?"
+            //
+            // Your response?
+            // ```
+            //
+            // The engine printed `Blackthorn asks for the mantra of Honesty.`
+            format!(
+                "\"What is the Mantra of the Mystic Shrine of {prompt}?\"\n\n{BLACKTHORN_RESPONSE_PROMPT}"
+            )
         } else {
             "Blackthorn waits.".to_string()
         }

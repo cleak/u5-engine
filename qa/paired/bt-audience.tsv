@@ -1,0 +1,56 @@
+# Blackthorn's audience: the mantra interrogation and its escalation
+# (`blackthorn.md` §4). Walking up the approach is enough to trigger it.
+# requires-seed: the party on the Blackthorn palace tile at 12:00
+both	wait	9000
+both	key	space
+both	wait	4000
+both	key	j
+both	wait	8000
+both	key	e
+both	wait	5000
+both	key	Up
+both	wait	900
+both	key	Up
+both	wait	900
+both	key	Up
+both	wait	900
+both	key	Left
+both	wait	900
+both	key	Up
+both	wait	900
+both	key	Up
+both	wait	900
+both	key	Up
+both	wait	900
+both	key	Up
+both	wait	900
+both	key	Up
+both	wait	900
+both	key	Up
+both	wait	900
+both	key	Up
+both	wait	900
+both	key	Right
+both	wait	900
+both	wait	3000
+both	shot	ask1	The first demand
+both	type	mul
+both	wait	1200
+both	key	Return
+both	wait	5000
+both	shot	ask2	After wrong answer 1
+both	type	mul
+both	wait	1200
+both	key	Return
+both	wait	5000
+both	shot	ask3	After wrong answer 2
+both	type	mul
+both	wait	1200
+both	key	Return
+both	wait	5000
+both	shot	ask4	After wrong answer 3
+both	type	mul
+both	wait	1200
+both	key	Return
+both	wait	5000
+both	shot	ask5	After wrong answer 4
