@@ -2720,106 +2720,14 @@ fn native_world_encounter_type_handles_special_terrain_branches() {
     );
 }
 
-#[test]
-fn world_swamp_status_tick_poisons_living_unpoisoned_members_on_foot() {
-    let mut grid = open_world_grid();
-    grid[world_cell_index(1, 1)] = BRIT_SWAMP_TILE;
-    let mut state = britannia_state(grid, 1, 1);
-    state.party = vec![
-        PartyMember {
-            slot: 0,
-            class_byte: b'A',
-            status: b'G',
-            climb_stat: DEFAULT_CLIMB_STAT,
-            mana: 0,
-            hp: 10,
-            max_hp: 10,
-            level: 1,
-        },
-        PartyMember {
-            slot: 1,
-            class_byte: b'B',
-            status: b'P',
-            climb_stat: DEFAULT_CLIMB_STAT,
-            mana: 0,
-            hp: 10,
-            max_hp: 10,
-            level: 1,
-        },
-        PartyMember {
-            slot: 2,
-            class_byte: b'C',
-            status: b'S',
-            climb_stat: DEFAULT_CLIMB_STAT,
-            mana: 0,
-            hp: 10,
-            max_hp: 10,
-            level: 1,
-        },
-        PartyMember {
-            slot: 3,
-            class_byte: b'D',
-            status: b'D',
-            climb_stat: DEFAULT_CLIMB_STAT,
-            mana: 0,
-            hp: 0,
-            max_hp: 10,
-            level: 1,
-        },
-    ];
 
-    assert_eq!(
-        state.apply_world_underfoot_status_tick(WorldPlane::Britannia),
-        Some("swamp poison: set party slots 0, 2 to poisoned".to_string())
-    );
-    assert_eq!(state.party[0].status, b'P');
-    assert_eq!(state.party[1].status, b'P');
-    assert_eq!(state.party[2].status, b'P');
-    assert_eq!(state.party[3].status, b'D');
 
-    assert_eq!(
-        state.apply_world_underfoot_status_tick(WorldPlane::Britannia),
-        Some("swamp poison skipped for 3 living member(s)".to_string())
-    );
-}
 
 #[test]
-fn world_swamp_status_tick_skips_carpet_overflight() {
-    let mut grid = open_world_grid();
-    grid[world_cell_index(1, 1)] = BRIT_SWAMP_TILE;
-    let mut state = britannia_state(grid, 1, 1);
-    state.player.transport = TransportState::Carpet {
-        type_byte: 184,
-        tile: 184,
-    };
-    state.sync_player_object();
-
-    assert_eq!(
-        state.apply_world_underfoot_status_tick(WorldPlane::Britannia),
-        None
-    );
-    assert_eq!(state.party[0].status, b'G');
-}
-
-#[test]
-fn world_swamp_poison_ticks_after_pass_turn() {
-    let dir = debug_game_dir();
-    let mut grid = open_world_grid();
-    grid[world_cell_index(1, 1)] = BRIT_SWAMP_TILE;
-    let mut state = britannia_state(grid, 1, 1);
-
-    assert_eq!(
-        state.pass_turn_with_game_dir(Some(&dir)).unwrap(),
-        MoveOutcome::Passed
-    );
-
-    assert_eq!(state.party[0].status, b'P');
-    assert!(state.message.contains("swamp poison"));
-    let _ = fs::remove_dir_all(dir);
-}
-
-#[test]
-fn world_swamp_poison_ticks_after_movement_landing() {
+// Measured 2026-09-07 (`qa/paired/swamp-long.tsv`): 56 steps through swamp
+// left the party Good and printed nothing but `Slow progress!`, so a step
+// onto swamp changes no status and adds no line of its own.
+fn world_swamp_step_changes_no_status_and_prints_only_the_terrain_line() {
     let mut grid = open_world_grid();
     grid[world_cell_index(2, 1)] = BRIT_SWAMP_TILE;
     let mut state = britannia_state(grid, 1, 1);
@@ -2830,8 +2738,8 @@ fn world_swamp_poison_ticks_after_movement_landing() {
     );
 
     assert_eq!((state.player.x, state.player.y), (2, 1));
-    assert_eq!(state.party[0].status, b'P');
-    assert!(state.message.contains("swamp poison"));
+    assert_eq!(state.party[0].status, b'G');
+    assert_eq!(state.message, crate::commands::MOVEMENT_SLOW_PROGRESS_LINE);
 }
 
 #[test]

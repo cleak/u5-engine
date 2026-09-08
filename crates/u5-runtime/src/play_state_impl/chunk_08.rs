@@ -2373,50 +2373,21 @@ impl PlayState {
         Ok(())
     }
 
+    /// Measured 2026-09-07 (`qa/paired/swamp-step.tsv`,
+    /// `qa/paired/swamp-walk.tsv`, `qa/paired/swamp-long.tsv`): 56 scripted
+    /// steps through the swamp south-west of Britain left every party member
+    /// `G`ood at full hit points, and the message window printed nothing but
+    /// the terrain's own `Slow progress!`. The engine used to poison the whole
+    /// party on the first swamp step and print an English *diagnostic*
+    /// sentence - `swamp poison: set party slot 0 to poisoned` - into the
+    /// player's window, which `commands.md §8.1` forbids the movement family
+    /// outright.
+    ///
+    /// Deterministic per-step poisoning is excluded by that run. Whatever the
+    /// rarer rule is, it is unpublished (`cleak/u5-spec#242`), so the
+    /// conservative engine does nothing here rather than invent a rate.
     pub fn append_world_status_tile_message(&mut self, plane: WorldPlane) {
-        if let Some(report) = self.apply_world_underfoot_status_tick(plane) {
-            self.append_result_sentence(&format!("{report}."));
-        }
-    }
-
-    pub fn apply_world_underfoot_status_tick(&mut self, _plane: WorldPlane) -> Option<String> {
-        if !self.player.transport.is_foot() {
-            return None;
-        }
-        let tile = self.grid[world_cell_index(self.player.x, self.player.y)];
-        if tile != BRIT_SWAMP_TILE {
-            return None;
-        }
-
-        let mut poisoned = Vec::new();
-        let mut checked = 0;
-        for member in &mut self.party {
-            if !member.living() {
-                continue;
-            }
-            checked += 1;
-            if member.status == b'P' {
-                continue;
-            }
-            member.status = b'P';
-            poisoned.push(member.slot);
-        }
-
-        if poisoned.is_empty() {
-            Some(format!(
-                "swamp poison skipped for {checked} living member(s)"
-            ))
-        } else {
-            Some(format!(
-                "swamp poison: set party slot{} {} to poisoned",
-                if poisoned.len() == 1 { "" } else { "s" },
-                poisoned
-                    .iter()
-                    .map(|slot| slot.to_string())
-                    .collect::<Vec<_>>()
-                    .join(", ")
-            ))
-        }
+        let _ = plane;
     }
 
     pub fn apply_world_underfoot_damage(

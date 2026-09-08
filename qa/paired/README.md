@@ -73,6 +73,9 @@ are PRNG-selected and legitimately differ between the two sides.
 | `shrine-mantra-close` | the mantra prompt's other answers: a wrong mantra, an ignored Escape, and the empty Return that closes it |
 | `slow-progress` | eight steps north from the shrine: `Slow progress!` on brush, `Very slow!` on trees and foothills |
 | `slow-terrain` | the same two lines reached from a second direction, over both foothill tile ids |
+| `swamp-step` | steps into swamp: `Slow progress!` there too, and `Blocked!` at the water beyond |
+| `swamp-walk` | sixteen steps around the swamp, reading the party's status letter from the panel after each |
+| `swamp-long` | forty more swamp steps: the party stays Good, so nothing poisons it |
 | `town-death-vision` | the crystal-sphere Look and its two roll outcomes |
 | `use-potions` | the potion result lines, one colour at a time |
 | `use-scrolls` | the two scrolls that ask for an argument |
@@ -126,6 +129,9 @@ number of keystrokes:
 | `shrine-mantra-close` | the same seed as `shrine-enter` |
 | `slow-progress` | the same seed as `shrine-enter` |
 | `slow-terrain` | the same seed as `shrine-enter` |
+| `swamp-step` | the party on grass at `--scene BRITANNIA --at 64,14`, south of the swamp at (64,12) |
+| `swamp-walk` | the same seed as `swamp-step` |
+| `swamp-long` | the same seed as `swamp-step` |
 | `cast-results` | a caster with charges, reagents and mana, built with the `seed_inventory` example (`potions=3 spells=9 reagents=20 mana=99`) |
 | `town-death-vision` | the party one cell east of a crystal-sphere tile. An engine-written town seed is safe here: the sphere is a Look target |
 | `use-potions`, `use-scrolls`, `use-specials`, `ready-slots` | a party carrying potions and scrolls, built with the `seed_inventory` example (`cargo run --release --example seed_inventory -- <profile> potions=3 scrolls=3 specials=1 status1=D`, or `equipment=2 strength=99` for `ready-slots`, plus `equip2=33` for `ready-two-handed`). The shipped starting party carries three items, which is not enough to reach these families |

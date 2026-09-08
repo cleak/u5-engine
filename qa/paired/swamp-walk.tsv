@@ -1,0 +1,55 @@
+# Probe: does walking in swamp poison the party, and after how many steps?
+# requires-seed: the party on grass at (64,14), south of the swamp at (64,12)
+both	wait	9000
+both	key	space
+both	wait	4000
+both	key	j
+both	wait	8000
+both	key	Up
+both	wait	2200
+both	shot	step01	Step 1
+both	key	Up
+both	wait	2200
+both	shot	step02	Step 2
+both	key	Up
+both	wait	2200
+both	shot	step03	Step 3
+both	key	Right
+both	wait	2200
+both	shot	step04	Step 4
+both	key	Down
+both	wait	2200
+both	shot	step05	Step 5
+both	key	Left
+both	wait	2200
+both	shot	step06	Step 6
+both	key	Left
+both	wait	2200
+both	shot	step07	Step 7
+both	key	Down
+both	wait	2200
+both	shot	step08	Step 8
+both	key	Up
+both	wait	2200
+both	shot	step09	Step 9
+both	key	Right
+both	wait	2200
+both	shot	step10	Step 10
+both	key	Down
+both	wait	2200
+both	shot	step11	Step 11
+both	key	Left
+both	wait	2200
+both	shot	step12	Step 12
+both	key	Left
+both	wait	2200
+both	shot	step13	Step 13
+both	key	Up
+both	wait	2200
+both	shot	step14	Step 14
+both	key	Right
+both	wait	2200
+both	shot	step15	Step 15
+both	key	Right
+both	wait	2200
+both	shot	step16	Step 16
