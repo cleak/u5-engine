@@ -1,0 +1,60 @@
+# Variant of `doom-final-room-refusal` that answers **No** a second time, to
+# the explicit sandalwood question, and so reaches `endgame.md` §5's waiting
+# branch: the fixed `"I see...` lead-in, the forty-tick pause, `ENDMSG.DAT`
+# record 10's "pull up a chair" exchange, and §6's tableau rearrangement.
+#
+# `endgame.md §2` steps 4-6: Doom's final room, the handoff that reaches the
+# terminal sequence. The room trigger sits at level seven `(5,7)` with three
+# wall neighbours, so a fall from the level above is the only way onto it -
+# the seed stands the party on that fall trap. Ignite a torch, take a turn,
+# and the fall lands on the trigger.
+# requires-seed: the party on the fall trap on Doom's level seven, above the final room's trigger, with a torch
+both	wait	9000
+both	key	space
+both	wait	7000
+both	key	j
+both	wait	9000
+both	shot	arrival	Journey Onward on the fall trap above the final room
+both	key	i
+both	wait	2500
+both	shot	lit	Torch lit
+both	key	space
+both	wait	5000
+both	shot	fallen	After the fall onto the room trigger
+both	wait	7000
+both	shot	room	The final room
+both	key	space
+both	wait	2500
+both	key	space
+both	wait	2500
+both	key	space
+both	wait	5000
+both	shot	passes	Three more passes in the arena
+both	key	Up
+both	wait	1200
+both	key	Up
+both	wait	1200
+both	key	Up
+both	wait	1200
+both	key	Up
+both	wait	7000
+both	shot	walked	Walking north across the arena, to the absorption
+both	wait	15000
+both	shot	settled	Fifteen seconds on the confirmation
+both	key	y
+both	wait	4000
+both	shot	greeting-page	After one key: the first box question follows the greeting
+both	key	n
+both	wait	8000
+both	shot	answered-no	After answering No to the first box question
+both	key	space
+both	wait	4000
+both	shot	after-key	One more key past that answer
+both	key	n
+both	wait	12000
+both	shot	waiting	After the second No: the lead-in and record 10
+both	key	space
+both	wait	6000
+both	shot	tableau1	The terminal tableau, one key later
+both	wait	8000
+both	shot	tableau2	Eight seconds of the terminal jitter later

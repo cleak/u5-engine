@@ -152,6 +152,7 @@ a paired run at all.
 | `shop-arms-navigation` | what Space does at the Buy listing: it ends the visit on `"Be off with ye, then..." says Gwenneth`, so it is not a way back to the greeting |
 | `shop-arms-sell` | the Sell side of the same shop. **Retry until the `talk` shot shows the greeting**: the walk is thirty steps and the weaponsmith wanders, so a run that ends on `Nobody's here!` proves nothing (three of four attempts on 2026-09-07) |
 | `doom-final-room` | Doom's final room: the fall onto the room trigger, the arena, the absorption, and Lord British's dialogue. **Compared 2026-09-07**: both sides print `Entering room`, the arena banner, `Avatar is absorbed!`, `Lord British says: "Well met, Avatar!"`, the box question, and the seated reply, differing only by one capture's timing |
+| `doom-final-room-waiting` | the same room answering `No` twice, which reaches `endgame.md` §5's waiting branch: the `"I see...` lead-in, record 10, and §6's tableau rearrangement |
 | `doom-final-room-refusal` | the same room answering `No` to the first box question. **Compared 2026-09-07**: both sides reach `…secret passage in my chamber!"`, `"Didst thou bring it?"` and `You reply:` |
 
 ## Scenarios that need a seeded save
@@ -163,7 +164,7 @@ number of keystrokes:
 
 | Scenario | The seed must hold |
 |---|---|
-| `doom-final-room`, `doom-final-room-refusal`, `doom-endgame-audio` | the party standing on the fall trap on Doom's level seven, directly above the final room's trigger, with a torch to hand |
+| `doom-final-room`, `doom-final-room-refusal`, `doom-final-room-waiting`, `doom-endgame-audio` | the party standing on the fall trap on Doom's level seven, directly above the final room's trigger, with a torch to hand |
 | `combat-dungeon-room`, `combat-refusal-audio`, `combat-commands` | the party one step from a dungeon room trigger, with a torch to hand |
 | `combat-rounds` | the same |
 | `stonegate-trapdoor-audio` | the party inside Stonegate, standing in the trapdoor ring's centre cell |

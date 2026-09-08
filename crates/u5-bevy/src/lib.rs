@@ -9283,7 +9283,14 @@ fn visual_route_allows_unchanged_step(route_label: &str, step: usize) -> bool {
     // `endgame.md §6`'s terminal wander throttles each slot behind a
     // random yes/no gate before it tries a direction, so a single pumped
     // frame is allowed to move nobody and repeat the frame exactly.
-    (route_label == "route-endgame-missing-box-terminal-jitter" && step == 3)
+    // Step 2 is the answer that enters the terminal branch. §6 has that
+    // branch print nothing - the window keeps record 10's exchange - and the
+    // rearrangement it runs can leave the drawn frame identical for the same
+    // tile-index reason as the walk-in steps below. **Measured** 2026-09-08
+    // (`qa/paired/doom-final-room-waiting.tsv`): the stock window is unchanged
+    // eight seconds in.
+    (route_label == "route-endgame-missing-box-terminal-jitter" && (2..=3).contains(&step))
+        || (route_label == "route-endgame-missing-box-confirmation" && step == 2)
         || (route_label == "route-endgame-tableau-walk-in")
         || (route_label == "route-endgame-box-full-victory-cinematic" && (3..=98).contains(&step))
         || (route_label == "route-doom-combat-multi-round-pass" && (2..=5).contains(&step))

@@ -2248,18 +2248,22 @@ impl PlayState {
                     return MoveOutcome::Observed;
                 }
             }
-            if matches!(current.outcome, Some(EndgameOutcome::MissingBoxOrRefused)) {
-                self.advance_endgame_terminal_tableau_jitter();
-            }
-            self.message = match current.outcome {
+            match current.outcome {
                 Some(EndgameOutcome::Victory) => {
                     unreachable!("victory branch returns above")
                 }
                 Some(EndgameOutcome::MissingBoxOrRefused) => {
-                    "Lord British waits with thee in the ending tableau.".to_string()
+                    // `endgame.md §6`: the terminal loop only "jitters slots
+                    // 1, 3, 4, and 5" - it prints nothing. **Measured**
+                    // 2026-09-08 (`qa/paired/doom-final-room-waiting.tsv`):
+                    // the stock window still reads record 10's exchange
+                    // eight seconds into the jitter, where this engine had
+                    // appended `Lord British waits with thee in the ending
+                    // tableau.` under it.
+                    self.advance_endgame_terminal_tableau_jitter();
                 }
                 None => unreachable!("terminal endgame has an outcome"),
-            };
+            }
             return MoveOutcome::Observed;
         }
 
