@@ -1870,7 +1870,10 @@ fn handle_arms_shop_key_input(
             let record_id = crate::shops::SHOPPE_RECORDS_ARMS_SELL_FIRST
                 + usize::from(state.random_range_u8(0, 7));
             let quote = render_shoppe_record_for_arms_quote(game_dir, record_id, item, offer);
-            format!("{quote}\nDeal? (Y/N)")
+            // Measured 2026-09-07 (`qa/paired/shop-arms-sell.tsv`): the offer
+            // record, a blank row, then `Deal?"` - the closing quote of the
+            // shopkeeper's speech, and no `(Y/N)`.
+            format!("{quote}\n\nDeal?\"")
         }
         (ArmsShopOutcome::SellRefusedZeroPrice { .. }, _)
             if matches!(shop_state, ArmsShopState::SellPickItem(_)) =>
@@ -1946,12 +1949,18 @@ fn handle_arms_shop_key_input(
     append_active_shop_surcharge(message, surcharge)
 }
 
+/// **Measured** 2026-09-07 (`qa/paired/shop-arms-menus.tsv`,
+/// `shop-arms-sell.tsv`): the sell-entry prompt is *quoted* -
+/// `"Which item wouldst thou like to sell?"` and
+/// `"What dost thou wish to sell?"` both came back with an opening and a
+/// closing double quote. The other two lines of the pool did not draw in
+/// either capture and take the same shape.
 fn arms_sell_entry_prompt(roll: u8) -> String {
     [
-        "Which item wouldst thou like to sell?",
-        "What dost thou wish to sell?",
-        "Show me what ye got...",
-        "What dost thou have for me to buy?",
+        "\"Which item wouldst thou like to sell?\"",
+        "\"What dost thou wish to sell?\"",
+        "\"Show me what ye got...\"",
+        "\"What dost thou have for me to buy?\"",
     ][usize::from(roll) % 4]
         .to_string()
 }
@@ -1987,12 +1996,16 @@ fn arms_sell_goodbye(roll: u8) -> String {
 /// states that invalid buy selectors print no refusal line — so the draw is
 /// made only where the list is first rendered, never on an invalid stock
 /// letter.
+/// **Measured** 2026-09-07: the call line closes the shopkeeper's speech that
+/// the listing heading opened, so it carries a closing double quote and no
+/// opening one - `Which would ye see?"`, `What is thine interest?"` and
+/// `What may I show thee?"` all drew that way.
 const fn arms_stock_call_for_roll(roll: u8) -> &'static str {
     match roll & 0x03 {
-        0 => "What may I show thee?",
-        1 => "Which wouldst thou like to see?",
-        2 => "What is thine interest?",
-        _ => "Which would ye see?",
+        0 => "What may I show thee?\"",
+        1 => "Which wouldst thou like to see?\"",
+        2 => "What is thine interest?\"",
+        _ => "Which would ye see?\"",
     }
 }
 
@@ -4259,15 +4272,19 @@ mod arms_shop_resident_literal_tests {
     /// heading line and one of four resident 'what we have' call lines chosen
     /// with a uniform `0..3` draw", published verbatim again in the `§8.A`
     /// row "Arms stock-call pool (verbatim)".
+    ///
+    /// Measured 2026-09-07 (`qa/paired/shop-arms-menus.tsv`): each line ends
+    /// with the closing double quote of the speech the listing heading
+    /// opened, which the published transcription omits.
     #[test]
-    fn arms_stock_call_pool_is_the_published_verbatim_four() {
-        assert_eq!(arms_stock_call_for_roll(0), "What may I show thee?");
+    fn arms_stock_call_pool_is_the_published_four_with_their_closing_quote() {
+        assert_eq!(arms_stock_call_for_roll(0), "What may I show thee?\"");
         assert_eq!(
             arms_stock_call_for_roll(1),
-            "Which wouldst thou like to see?"
+            "Which wouldst thou like to see?\""
         );
-        assert_eq!(arms_stock_call_for_roll(2), "What is thine interest?");
-        assert_eq!(arms_stock_call_for_roll(3), "Which would ye see?");
+        assert_eq!(arms_stock_call_for_roll(2), "What is thine interest?\"");
+        assert_eq!(arms_stock_call_for_roll(3), "Which would ye see?\"");
     }
 
     /// The draw is uniform over `0..3`, so the pool wraps rather than
