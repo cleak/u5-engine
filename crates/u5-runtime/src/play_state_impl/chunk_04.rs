@@ -475,12 +475,25 @@ impl PlayState {
                 self.active_use = Some(session);
             }
             UseInputAction::PageNext => {
-                self.move_use_cursor(&mut session, USE_PICKER_PANEL_ROWS as isize);
+                self.move_use_cursor(&mut session, READY_PICKER_PAGE_STEP as isize);
                 self.message = self.render_use_session(&session);
                 self.active_use = Some(session);
             }
             UseInputAction::PagePrevious => {
-                self.move_use_cursor(&mut session, -(USE_PICKER_PANEL_ROWS as isize));
+                self.move_use_cursor(&mut session, -(READY_PICKER_PAGE_STEP as isize));
+                self.message = self.render_use_session(&session);
+                self.active_use = Some(session);
+            }
+            // `inventory.md §4.7`: "Home selects the first item; End selects
+            // the last." The shared picker's rules are §5's, so the U-Use
+            // list takes them too.
+            UseInputAction::FirstItem => {
+                self.select_use_endpoint(&mut session, false);
+                self.message = self.render_use_session(&session);
+                self.active_use = Some(session);
+            }
+            UseInputAction::LastItem => {
+                self.select_use_endpoint(&mut session, true);
                 self.message = self.render_use_session(&session);
                 self.active_use = Some(session);
             }
@@ -782,6 +795,19 @@ impl PlayState {
         }
         let next = session.cursor as isize + delta;
         session.cursor = next.clamp(0, row_count as isize - 1) as usize;
+    }
+
+    /// `inventory.md §4.7`: Home and End select the first and last rows
+    /// rather than paging toward them.
+    fn select_use_endpoint(&self, session: &mut UseSession, last: bool) {
+        let row_count = self.use_item_picker_rows().len();
+        session.cursor = if row_count == 0 {
+            0
+        } else if last {
+            row_count - 1
+        } else {
+            0
+        };
     }
 
     /// Rows of the U-Use item picker, in the order the original lists

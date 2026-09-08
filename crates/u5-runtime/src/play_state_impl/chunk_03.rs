@@ -2954,12 +2954,25 @@ impl PlayState {
                 self.active_ready = Some(session);
             }
             ReadyInputAction::PageNext => {
-                self.move_ready_cursor(&mut session, READY_PICKER_PANEL_ROWS as isize);
+                self.move_ready_cursor(&mut session, READY_PICKER_PAGE_STEP as isize);
                 self.message = self.render_ready_session(&session);
                 self.active_ready = Some(session);
             }
             ReadyInputAction::PagePrevious => {
-                self.move_ready_cursor(&mut session, -(READY_PICKER_PANEL_ROWS as isize));
+                self.move_ready_cursor(&mut session, -(READY_PICKER_PAGE_STEP as isize));
+                self.message = self.render_ready_session(&session);
+                self.active_ready = Some(session);
+            }
+            // `inventory.md §5` step 4: Home and End "select the first and
+            // last displayable items", which a large paging delta only
+            // reaches by accident.
+            ReadyInputAction::FirstItem => {
+                self.select_ready_endpoint(&mut session, false);
+                self.message = self.render_ready_session(&session);
+                self.active_ready = Some(session);
+            }
+            ReadyInputAction::LastItem => {
+                self.select_ready_endpoint(&mut session, true);
                 self.message = self.render_ready_session(&session);
                 self.active_ready = Some(session);
             }
@@ -3095,8 +3108,30 @@ impl PlayState {
             .position(|item| *item == session.cursor)
             .unwrap_or(0);
         let len = visible.len() as isize;
-        let next = (current as isize + delta).rem_euclid(len) as usize;
+        // `inventory.md §4.7`: one-step movement "stops at the first or last
+        // selectable item", and §5's paging likewise stops "at the relevant
+        // endpoint" - neither wraps. A page that would run past an end lands
+        // on that end.
+        let next = (current as isize + delta).clamp(0, len - 1) as usize;
         session.cursor = visible[next];
+    }
+
+    /// `inventory.md §4.7`: "Home selects the first item; End selects the
+    /// last." Not a large paging delta - the endpoint itself.
+    fn select_ready_endpoint(&self, session: &mut ReadySession, last: bool) {
+        let Some(party_index) = session.selected_party_index else {
+            return;
+        };
+        let visible = self.ready_visible_items_for_party(party_index);
+        let Some(item) = (if last {
+            visible.last().copied()
+        } else {
+            visible.first().copied()
+        }) else {
+            session.cursor = 0;
+            return;
+        };
+        session.cursor = item;
     }
 
     /// `inventory.md §4.7`: "Long pages **do not paginate**: the navigator

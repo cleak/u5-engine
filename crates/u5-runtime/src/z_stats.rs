@@ -4,6 +4,10 @@ use crate::*;
 
 pub const Z_STATS_INVENTORY_PANEL_ROWS: usize = 8;
 pub const READY_PICKER_PANEL_ROWS: usize = 8;
+/// `inventory.md §5` step 4 (`RETRACTIONS.md` R444): "PgUp and PgDn move seven
+/// displayable items toward the relevant endpoint; the frame has seven
+/// interior rows." The engine paged by the panel's eight rows.
+pub const READY_PICKER_PAGE_STEP: usize = 7;
 pub const USE_PICKER_PANEL_ROWS: usize = 8;
 pub const READY_PICKER_ESCAPE_MESSAGE: &str = "Done";
 pub const ITEM_PICKER_ESCAPE_MESSAGE: &str = "None!";
@@ -528,6 +532,11 @@ pub enum ReadyInputAction {
     PreviousItem,
     PageNext,
     PagePrevious,
+    /// `inventory.md §5` step 4 (`RETRACTIONS.md` R444): "Home and End select
+    /// the first and last displayable items". The engine used to page all
+    /// four corner keys by a full eight-row window.
+    FirstItem,
+    LastItem,
     SelectParty(usize),
     Redraw,
     Discard,
@@ -541,6 +550,11 @@ pub enum UseInputAction {
     PreviousItem,
     PageNext,
     PagePrevious,
+    /// See [`ReadyInputAction::FirstItem`]; the U-Use picker is the same
+    /// shared picker (`inventory.md §5`, "The picker is shared
+    /// infrastructure").
+    FirstItem,
+    LastItem,
     Redraw,
     Discard,
 }
@@ -757,22 +771,13 @@ pub fn ready_input_action(key: char) -> ReadyInputAction {
         '\r' | '\n' | ' ' => ReadyInputAction::Confirm,
         ch if ch as u32 == u32::from(INPUT_CODE_SOUTH) => ReadyInputAction::NextItem,
         ch if ch as u32 == u32::from(INPUT_CODE_NORTH) => ReadyInputAction::PreviousItem,
-        ch if matches!(
-            ch as u32,
-            value if value == u32::from(INPUT_CODE_SOUTHWEST)
-                || value == u32::from(INPUT_CODE_SOUTHEAST)
-        ) =>
-        {
-            ReadyInputAction::PageNext
-        }
-        ch if matches!(
-            ch as u32,
-            value if value == u32::from(INPUT_CODE_NORTHWEST)
-                || value == u32::from(INPUT_CODE_NORTHEAST)
-        ) =>
-        {
-            ReadyInputAction::PagePrevious
-        }
+        // `input.md §4`: the four corner keys arrive as four *distinct*
+        // diagonal codes - Home northwest, End southwest, PgUp northeast,
+        // PgDn southeast - and `inventory.md §5` gives each its own job.
+        ch if ch as u32 == u32::from(INPUT_CODE_NORTHWEST) => ReadyInputAction::FirstItem,
+        ch if ch as u32 == u32::from(INPUT_CODE_SOUTHWEST) => ReadyInputAction::LastItem,
+        ch if ch as u32 == u32::from(INPUT_CODE_NORTHEAST) => ReadyInputAction::PagePrevious,
+        ch if ch as u32 == u32::from(INPUT_CODE_SOUTHEAST) => ReadyInputAction::PageNext,
         // Retain the terminal harness's printable navigation aliases.
         '>' | '+' => ReadyInputAction::NextItem,
         '<' | '-' => ReadyInputAction::PreviousItem,
@@ -790,22 +795,13 @@ pub fn use_input_action(key: char) -> UseInputAction {
         '\r' | '\n' | ' ' => UseInputAction::Confirm,
         ch if ch as u32 == u32::from(INPUT_CODE_SOUTH) => UseInputAction::NextItem,
         ch if ch as u32 == u32::from(INPUT_CODE_NORTH) => UseInputAction::PreviousItem,
-        ch if matches!(
-            ch as u32,
-            value if value == u32::from(INPUT_CODE_SOUTHWEST)
-                || value == u32::from(INPUT_CODE_SOUTHEAST)
-        ) =>
-        {
-            UseInputAction::PageNext
-        }
-        ch if matches!(
-            ch as u32,
-            value if value == u32::from(INPUT_CODE_NORTHWEST)
-                || value == u32::from(INPUT_CODE_NORTHEAST)
-        ) =>
-        {
-            UseInputAction::PagePrevious
-        }
+        // `input.md §4`: the four corner keys arrive as four *distinct*
+        // diagonal codes - Home northwest, End southwest, PgUp northeast,
+        // PgDn southeast - and `inventory.md §5` gives each its own job.
+        ch if ch as u32 == u32::from(INPUT_CODE_NORTHWEST) => UseInputAction::FirstItem,
+        ch if ch as u32 == u32::from(INPUT_CODE_SOUTHWEST) => UseInputAction::LastItem,
+        ch if ch as u32 == u32::from(INPUT_CODE_NORTHEAST) => UseInputAction::PagePrevious,
+        ch if ch as u32 == u32::from(INPUT_CODE_SOUTHEAST) => UseInputAction::PageNext,
         // Retain the terminal harness's printable navigation aliases.
         '>' | '+' => UseInputAction::NextItem,
         '<' | '-' => UseInputAction::PreviousItem,

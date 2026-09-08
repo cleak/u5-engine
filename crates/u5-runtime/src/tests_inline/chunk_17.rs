@@ -2916,20 +2916,24 @@
                 ReadyInputAction::NextItem,
                 UseInputAction::NextItem,
             ),
+            // `input.md §4` maps Home/End/PgUp/PgDn to northwest / southwest /
+            // northeast / southeast, and `inventory.md §5` step 4 gives each
+            // its own job: Home and End select the first and last displayable
+            // items, PgUp and PgDn page seven (`RETRACTIONS.md` R444).
             (
                 INPUT_CODE_NORTHWEST,
-                ReadyInputAction::PagePrevious,
-                UseInputAction::PagePrevious,
+                ReadyInputAction::FirstItem,
+                UseInputAction::FirstItem,
+            ),
+            (
+                INPUT_CODE_SOUTHWEST,
+                ReadyInputAction::LastItem,
+                UseInputAction::LastItem,
             ),
             (
                 INPUT_CODE_NORTHEAST,
                 ReadyInputAction::PagePrevious,
                 UseInputAction::PagePrevious,
-            ),
-            (
-                INPUT_CODE_SOUTHWEST,
-                ReadyInputAction::PageNext,
-                UseInputAction::PageNext,
             ),
             (
                 INPUT_CODE_SOUTHEAST,
