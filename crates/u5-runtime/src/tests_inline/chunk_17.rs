@@ -1114,7 +1114,8 @@
         assert_eq!(search.grid[32 + 2], TOWN_DOOR_PLAIN_UNLOCKED_TILE);
         assert_eq!(search.turn, 1);
         assert_eq!(search.player.facing, Direction::South);
-        assert_eq!(search.message, "Revealed secret door at (2, 1).");
+        assert!(search.message.is_empty());
+        assert!(search.diagnostics_contain("Revealed secret door at (2, 1)."));
 
         let _ = fs::remove_dir_all(dir);
     }

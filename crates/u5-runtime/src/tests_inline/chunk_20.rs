@@ -1404,7 +1404,10 @@ fn town_search_uses_clean_sidecar_to_reveal_secret_door() {
     assert_eq!(state.grid[32 + 2], TOWN_DOOR_PLAIN_UNLOCKED_TILE);
     assert_eq!(state.turn, 1);
     assert!(state.visibility_dirty);
-    assert_eq!(state.message, "Revealed secret door at (2, 1).");
+    // The coordinates are a harness diagnostic now, not player text
+    // (`commands.md §8.1`).
+    assert!(state.message.is_empty());
+    assert!(state.diagnostics_contain("Revealed secret door at (2, 1)."));
     let _ = fs::remove_dir_all(dir);
 }
 

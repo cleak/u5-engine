@@ -1246,7 +1246,12 @@ impl PlayState {
 
         self.mark_visibility_dirty();
         self.advance_turn();
-        self.message = format!("Wielded Sceptre: dissolved {dissolved} barrier cell(s).");
+        // `commands.md §8.1`: a command "never prints tile ids, coordinates,
+        // active-object slot numbers, terrain-class names" - a count of
+        // dissolved cells is the same kind of leak, so it goes to the harness
+        // and the player sees only the published wielding line.
+        self.push_diagnostic(format!("Sceptre dissolved {dissolved} barrier cell(s)."));
+        self.message = USE_SCEPTRE_WIELDED.to_string();
         MoveOutcome::Used
     }
 

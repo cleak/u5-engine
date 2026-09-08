@@ -82,6 +82,92 @@ fn next_step_toward(state: &PlayState, dialog_id: u8) -> Option<char> {
     Some(first)
 }
 
+/// Walk to a fixed **cell**, ignoring who stands where.
+///
+/// A scenario that has to reach a wandering resident cannot chase it - the
+/// wander draw is not reproducible (`prng.md` §3) - but it *can* walk to the
+/// resident's post and then try Talk in each direction. This prints the keys
+/// for that walk, which depend only on the map.
+fn route_to_cell(state: &mut PlayState, goal: (usize, usize), budget: usize) {
+    let mut keys = String::new();
+    for _ in 0..budget {
+        if (state.player.x, state.player.y) == goal {
+            println!(
+                "route: {} step(s) `{keys}` to ({}, {})",
+                keys.len(),
+                goal.0,
+                goal.1
+            );
+            return;
+        }
+        // Breadth-first over the cells this engine's own step handler will
+        // accept, so walls, counters and closed doors are respected exactly
+        // as the paired scenario will meet them.
+        let start = (state.player.x, state.player.y);
+        let mut came: HashMap<(usize, usize), ((usize, usize), char)> = HashMap::new();
+        let mut queue = VecDeque::from([start]);
+        came.insert(start, (start, ' '));
+        let mut reached = false;
+        while let Some((x, y)) = queue.pop_front() {
+            if (x, y) == goal {
+                reached = true;
+                break;
+            }
+            for (direction, key) in [
+                (Direction::North, 'w'),
+                (Direction::South, 's'),
+                (Direction::West, 'a'),
+                (Direction::East, 'd'),
+            ] {
+                let mut probe = state.clone();
+                probe.player.x = x;
+                probe.player.y = y;
+                probe.sync_player_object();
+                if probe
+                    .step_with_game_dir(direction, None)
+                    .unwrap_or(MoveOutcome::Blocked)
+                    != MoveOutcome::Moved
+                {
+                    continue;
+                }
+                let next = (probe.player.x, probe.player.y);
+                if came.contains_key(&next) {
+                    continue;
+                }
+                came.insert(next, ((x, y), key));
+                queue.push_back(next);
+            }
+        }
+        if !reached {
+            println!("route: no path to ({}, {}) after `{keys}`", goal.0, goal.1);
+            return;
+        }
+        let mut cell = goal;
+        let mut first = ' ';
+        while cell != start {
+            let (previous, key) = came[&cell];
+            first = key;
+            cell = previous;
+        }
+        let direction = match first {
+            'w' => Direction::North,
+            's' => Direction::South,
+            'a' => Direction::West,
+            _ => Direction::East,
+        };
+        if state
+            .step_with_game_dir(direction, None)
+            .unwrap_or(MoveOutcome::Blocked)
+            != MoveOutcome::Moved
+        {
+            println!("route: blocked mid-walk after `{keys}`");
+            return;
+        }
+        keys.push(first);
+    }
+    println!("route: gave up after {budget} steps (`{keys}`)");
+}
+
 /// Walk to an NPC that is *moving*.
 ///
 /// A route planned from a snapshot does not survive the walk: NPC
@@ -167,6 +253,7 @@ fn main() {
     let mut state = PlayState::load_scene(dir, options).expect("scene must load");
     let mut chase_id: Option<u8> = None;
     let mut talk_id: Option<u8> = None;
+    let mut route_goal: Option<(usize, usize)> = None;
     // A roster read from the seed save answers "who stands here *now*",
     // which is the wrong question whenever the divergence is positional:
     // the party has to reach the cell first, and NPC schedules advance a
@@ -183,6 +270,14 @@ fn main() {
                         .parse()
                         .expect("dialog id must be a byte"),
                 );
+            }
+            "--route-to" => {
+                let text = args.next().expect("--route-to needs X,Y");
+                let (x, y) = text.split_once(',').expect("--route-to takes X,Y");
+                route_goal = Some((
+                    x.trim().parse().expect("X must be a number"),
+                    y.trim().parse().expect("Y must be a number"),
+                ));
             }
             "--talk" => {
                 talk_id = Some(
@@ -216,6 +311,10 @@ fn main() {
             }
             other => panic!("unknown option {other}"),
         }
+    }
+    if let Some(goal) = route_goal {
+        route_to_cell(&mut state, goal, 128);
+        return;
     }
     if let Some(dialog_id) = chase_id {
         chase(&mut state, dialog_id, 64);

@@ -958,10 +958,8 @@ fn use_command_routes_sceptre_to_top_down_barrier_dissolve() {
     assert_eq!(town.grid[2 * 32 + 2], 0x80);
     assert_eq!(town.turn, 1);
     assert!(town.visibility_dirty);
-    assert_eq!(
-        town.message,
-        "Wielded Sceptre: dissolved 2 barrier cell(s)."
-    );
+    assert_eq!(town.message, USE_SCEPTRE_WIELDED);
+    assert!(town.diagnostics_contain("Sceptre dissolved 2 barrier cell(s)."));
 }
 
 #[test]

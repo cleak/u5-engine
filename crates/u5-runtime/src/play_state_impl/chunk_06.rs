@@ -2259,7 +2259,16 @@ impl PlayState {
         self.record_revealed_town_secret_door(scene, floor, tx, ty);
         self.mark_visibility_dirty();
         self.advance_turn();
-        self.message = format!("Revealed secret door at ({tx}, {ty}).");
+        // Same rule as the Sceptre above: coordinates never reach the message
+        // window (`commands.md §8.1`). What a town Search *does* print when it
+        // uncovers a secret door is unpublished - `commands.md` §5 gives only
+        // the `Thou dost find` / `nothing of note.` failure shape - so the
+        // player sees nothing here rather than an invented sentence
+        // (cleak/u5-spec#236, which also asks which object-table flag marks
+        // one; until that is answered this arm is unreachable in shipped
+        // content anyway).
+        self.push_diagnostic(format!("Revealed secret door at ({tx}, {ty})."));
+        self.message.clear();
         MoveOutcome::Searched
     }
 
@@ -2384,7 +2393,15 @@ impl PlayState {
             return None;
         };
         if self.fixed_hidden_treasure_pickup_exists(entry.record) {
-            self.message = format!("{} is already surfaced here.", entry.pickup.label());
+            // A second Search of a cell whose pickup is already on the floor.
+            // The refusal literal is unpublished, and naming the pickup would
+            // tell the player what is there without their picking it up, so
+            // the harness gets the note and the window stays as it was.
+            self.push_diagnostic(format!(
+                "{} is already surfaced here.",
+                entry.pickup.label()
+            ));
+            self.message.clear();
             return Some(MoveOutcome::Blocked);
         }
         let pickup = ActiveObject::fixed_hidden_treasure_pickup(entry.record, x, y, floor);
