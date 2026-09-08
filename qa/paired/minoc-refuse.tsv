@@ -1,0 +1,35 @@
+# Minoc's gate guard at 16:00: the regime shakedown of `blackthorn.md` §7a.
+# The gate needs opening first, which the route records as `o`.
+# requires-seed: the party on the Minoc tile (`--scene BRITANNIA --at 159,20 --time 16:00`)
+both	wait	9000
+both	key	space
+both	wait	4000
+both	key	j
+both	wait	8000
+both	key	e
+both	wait	5000
+both	key	Up
+both	wait	1400
+both	key	o
+both	wait	900
+both	key	Up
+both	wait	1500
+both	key	Up
+both	wait	1400
+both	key	Up
+both	wait	1400
+both	key	Up
+both	wait	1400
+both	key	Up
+both	wait	1400
+both	wait	3000
+both	shot	arrived	Beside the gate guard
+both	key	N
+both	wait	5000
+both	shot	refused	Refusing the demand
+both	key	N
+both	wait	5000
+both	shot	arrest	Refusing the arrest
+both	key	space
+both	wait	5000
+both	shot	after	A keypress later

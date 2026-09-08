@@ -5194,7 +5194,14 @@ impl PlayState {
             }
             BlackthornGuardDemandStart::Refused => {
                 self.pending_town_arrest = Some(arrest);
-                self.message = "The guard refuses thee. Surrender? (Y/N).".to_string();
+                // Measured 2026-09-08 at Minoc's gate
+                // (`qa/paired/minoc-refuse.tsv`): a refused demand goes
+                // straight into the published arrest exchange - `"Thou art
+                // under arrest!"`, a blank row, `"Wilt thou come quietly?"`
+                // and a `:` row - with no sentence of the engine's own in
+                // between. `blackthorn.md` §7a says exactly this; the engine
+                // was printing its own summary instead.
+                self.message = TOWN_ARREST_SURRENDER_PROMPT.to_string();
                 MoveOutcome::Used
             }
         }
@@ -5246,7 +5253,7 @@ impl PlayState {
                 self.gold = gold;
                 self.active_blackthorn_guard_demand = None;
                 self.pending_town_arrest = Some(active.arrest);
-                self.message = "The guard's demand is refused. Surrender? (Y/N).".to_string();
+                self.message = TOWN_ARREST_SURRENDER_PROMPT.to_string();
                 Some(MoveOutcome::Used)
             }
         }
