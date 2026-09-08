@@ -166,8 +166,17 @@ fn blackthorn_first_wrong_answer_threatens_and_re_asks_instead_of_ending() {
         3,
         "the first wrong answer threatens; it does not kill",
     );
+    // Measured 2026-09-08 (`qa/paired/bt-escalate.tsv`): the first wrong
+    // answer draws the mocking line and a threat naming the companion.
     assert!(
-        state.message.contains("threatens"),
+        state
+            .message
+            .contains("Make not the mistake of laughing at me"),
+        "the first wrong answer mocks the party: {}",
+        state.message,
+    );
+    assert!(
+        state.message.contains("die!"),
         "the first wrong answer names the companion at risk: {}",
         state.message,
     );

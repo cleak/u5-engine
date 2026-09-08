@@ -8,6 +8,23 @@ use crate::*;
 /// `You respond:`.
 pub const BLACKTHORN_RESPONSE_PROMPT: &str = "Your response?";
 /// **Measured**: what a wrong mantra draws when the interrogation ends.
+/// **Measured** 2026-09-08 (`qa/paired/bt-escalate.tsv`) with a party of
+/// three, driving the loop's four asks with wrong answers. Blackthorn's
+/// wording escalates and the second ask names the companion at risk.
+pub const BLACKTHORN_FIRST_WRONG_LINE: &str =
+    "\"Make not the mistake of laughing at me, simple one!\"";
+/// The threat that follows it. `{}` takes the companion's name.
+pub const BLACKTHORN_SAND_THREAT: &str =
+    "\"I will ask thee until the sand has fallen. And then will {} die!\"";
+/// The second and third asks.
+pub const BLACKTHORN_RESISTANCE_LINE: &str = "\"Resistance is futile! Thou must yield the truth unto me! Tell me, what is the Mantra of {}?\"";
+/// The fourth, shouted.
+pub const BLACKTHORN_FINAL_DEMAND: &str =
+    "\"My patience with thee has worn away! SPEAK UNTO ME THE MANTRA, NOW!\"";
+/// The execution narration, which carries no quotes - it is narration, not
+/// speech.
+pub const BLACKTHORN_PENDULUM_NARRATION: &str =
+    "With a wave of Blackthorn's hand, the pendulum blade falls!";
 pub const BLACKTHORN_DUNGEON_THREAT: &str =
     "\"A child would catch thee in thy lies, foolish one! To the dungeon with thee!\"";
 
@@ -4235,11 +4252,17 @@ impl PlayState {
                             .current_prompt()
                             .map(|(_, prompt)| prompt)
                             .unwrap_or("Virtue");
+                        let _ = prompt;
+                        let victim_name = self.blackthorn_victim_display_name(victim);
                         self.active_blackthorn = Some(challenge);
-                        self.message = format!(
-                            "Failed Blackthorn's prompt {}; expected {expected}; Blackthorn threatens party slot {}. He demands the mantra of {prompt} again.",
+                        self.push_diagnostic(format!(
+                            "Failed Blackthorn's prompt {}; expected {expected}; victim slot {}.",
                             ordinal + 1,
                             victim + 1,
+                        ));
+                        self.message = format!(
+                            "{BLACKTHORN_FIRST_WRONG_LINE}\n\n{}",
+                            BLACKTHORN_SAND_THREAT.replace("{}", &victim_name)
                         );
                         Ok(MoveOutcome::PromptDeclined)
                     }
@@ -4265,12 +4288,22 @@ impl PlayState {
                             .map(|(_, prompt)| prompt)
                             .unwrap_or("Virtue");
                         self.active_blackthorn = Some(challenge);
-                        self.message = format!(
-                            "Failed Blackthorn's prompt {}; expected {expected}; the punishment tableau changes over party slot {}; cutscene advanced {} world tick. He demands the mantra of {prompt} again.",
+                        self.push_diagnostic(format!(
+                            "Failed Blackthorn's prompt {}; expected {expected}; victim slot {}; cutscene advanced {} world tick.",
                             ordinal + 1,
                             victim + 1,
                             vm.world_ticks,
-                        );
+                        ));
+                        // Measured: the second ask re-states the question, the
+                        // third shouts it.
+                        self.message = if ordinal == 1 {
+                            format!(
+                                "{}\n\n{BLACKTHORN_RESPONSE_PROMPT}",
+                                BLACKTHORN_RESISTANCE_LINE.replace("{}", prompt)
+                            )
+                        } else {
+                            format!("{BLACKTHORN_FINAL_DEMAND}\n\n{BLACKTHORN_RESPONSE_PROMPT}")
+                        };
                         Ok(MoveOutcome::PromptDeclined)
                     }
                     // Fourth wrong answer: the §5 execution.
@@ -4281,13 +4314,14 @@ impl PlayState {
                         let report = self
                             .execute_blackthorn_companion(victim)
                             .unwrap_or_else(|| "no companion remains to punish".to_string());
+                        self.push_diagnostic(format!(
+                            "Failed Blackthorn's prompt {}; expected {expected}; {report} by the pendulum blade; cutscene advanced {} world ticks.",
+                            ordinal + 1,
+                            vm.world_ticks
+                        ));
                         self.apply_blackthorn_captive_cell_handoff(
                             game_dir,
-                            &format!(
-                                "Failed Blackthorn's prompt {}; expected {expected}; {report} by the pendulum blade; cutscene advanced {} world ticks.",
-                                ordinal + 1,
-                                vm.world_ticks
-                            ),
+                            BLACKTHORN_PENDULUM_NARRATION,
                         )
                     }
                 }
@@ -4316,6 +4350,21 @@ impl PlayState {
                     "Blackthorn's challenge was aborted.",
                 ),
         }
+    }
+
+    /// The name Blackthorn's threat uses for the companion at risk, read
+    /// from the roster the panel draws from.
+    fn blackthorn_victim_display_name(&self, victim: usize) -> String {
+        self.party_names
+            .get(victim)
+            .map(|name| {
+                String::from_utf8_lossy(name)
+                    .trim_end_matches('\0')
+                    .trim()
+                    .to_string()
+            })
+            .filter(|name| !name.is_empty())
+            .unwrap_or_else(|| "thy companion".to_string())
     }
 
     pub fn blackthorn_current_prompt_message(&self) -> String {
