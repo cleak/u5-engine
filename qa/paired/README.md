@@ -125,6 +125,7 @@ a paired run at all.
 | `nb-inn-refusals` | the inn's companion branches with a party of one: the leave refusal, which ends the visit |
 | `nb-inn-branches` | the inn's branch question, a room quote and the line a declined room draws |
 | `nb-inn` | North Britanny's inn: the greeting record naming the hostel and its owner, then `Terbor asks,` and the three-branch question |
+| `bt-password` | wearing the Black Badge and walking Blackthorn's approach: the gate password demand, `IMPERA`, and `"Pass, friend!"` |
 | `use-picker` | the U-Use `Items:` panel with every special carried: its row labels and its cursor |
 | `minoc-refuse` | refusing that demand: the published arrest exchange, then the guards, the arena and a lost battle |
 | `minoc-guard` | Minoc's gate guard at 16:00: the regime charity demand fires as the party walks up, before any Talk |

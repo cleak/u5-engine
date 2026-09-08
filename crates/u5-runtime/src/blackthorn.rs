@@ -45,7 +45,12 @@ impl BlackthornGuardDemandPrompt {
             // are the sixteen-column wrap of one sentence, so the engine
             // stores the sentence and lets the message window wrap it.
             Self::PalacePassword => {
-                "\"Give now the password, bearer of the Badge!\"\n\nYour response?\n:".to_string()
+                // Measured 2026-09-08 (`qa/paired/bt-password.tsv`): the
+                // typed answer starts at column zero under `Your response?`
+                // with no colon row - unlike the audience's own demand, whose
+                // response row does begin with one. The engine drew a colon
+                // here too.
+                "\"Give now the password, bearer of the Badge!\"\n\nYour response?".to_string()
             }
             // §7a branch 2, same publication: `"Thou wilt give` / `half
             // thy gold to` / `charity!"`, a blank row, the shared
