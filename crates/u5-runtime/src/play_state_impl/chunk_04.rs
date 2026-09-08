@@ -12,6 +12,11 @@ pub struct UseItemPickerRow {
     /// `inventory.md §4.5`: the two-cell quantity; `None` is the
     /// "no quantity" marker that prints only the name.
     pub quantity: Option<u8>,
+    /// `inventory.md §4.5` (`RETRACTIONS.md` R403): which presentation family
+    /// decorates this row's name. "The two markers decorate all eight scrolls
+    /// and all eight potions, respectively"; the Sceptre, Skull Keys and the
+    /// other named artifacts carry none.
+    pub decoration: crate::stats_panel::PanelPickerDecoration,
     pub(crate) request: UseItemRequest,
 }
 
@@ -843,8 +848,12 @@ impl PlayState {
         for (index, count) in self.scroll_stock.iter().copied().enumerate() {
             if count > 0 {
                 rows.push(UseItemPickerRow {
-                    label: format!("Scroll {}", scroll_label(index)),
+                    // §4.5's scroll row is the marker, the plus and "the
+                    // scroll's compact rune label" - not the word `Scroll`,
+                    // which the decoration's own glyph stands for.
+                    label: scroll_label(index).to_string(),
                     quantity: Some(count),
+                    decoration: crate::stats_panel::PanelPickerDecoration::Scroll,
                     request: UseItemRequest::Scroll {
                         index,
                         direction: None,
@@ -857,8 +866,9 @@ impl PlayState {
         for (index, count) in self.potion_stock.iter().copied().enumerate() {
             if count > 0 {
                 rows.push(UseItemPickerRow {
-                    label: potion_inventory_name(index).to_string(),
+                    label: crate::z_stats::potion_short_colour_name(index).to_string(),
                     quantity: Some(count),
+                    decoration: crate::stats_panel::PanelPickerDecoration::Potion,
                     request: UseItemRequest::Potion {
                         index,
                         target: None,
@@ -945,8 +955,14 @@ impl PlayState {
                     continue;
                 }
                 rows.push(UseItemPickerRow {
-                    label: format!("Moonstone phase {}", index + 1),
+                    // §4.5: "`Moonstone` followed by a space in the text
+                    // font, then one runic phase glyph" - the phase is the
+                    // glyph, not a spelled-out number.
+                    label: Z_STATS_MOONSTONE_LABEL.to_string(),
                     quantity: None,
+                    decoration: crate::stats_panel::PanelPickerDecoration::Moonstone {
+                        phase: index as u8,
+                    },
                     request: UseItemRequest::Moonstone(index),
                 });
             }
@@ -1008,6 +1024,7 @@ impl PlayState {
         if count > 0 {
             rows.push(UseItemPickerRow {
                 label: label.to_string(),
+                decoration: crate::stats_panel::PanelPickerDecoration::None,
                 quantity: Some(count),
                 request,
             });
@@ -1025,6 +1042,7 @@ impl PlayState {
         if value > 0 {
             rows.push(UseItemPickerRow {
                 label: label.to_string(),
+                decoration: crate::stats_panel::PanelPickerDecoration::None,
                 quantity: None,
                 request,
             });

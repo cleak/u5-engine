@@ -1255,6 +1255,23 @@
             .unwrap_or_default()
     }
 
+    /// The same rows with `inventory.md §4.5`'s runic decoration cells
+    /// unwrapped back to their `RUNES.CH` codes as ASCII, so an assertion can
+    /// name a scroll by its rune label without embedding private-use text.
+    fn picker_row_plain_names(state: &PlayState) -> Vec<String> {
+        picker_row_names(state)
+            .into_iter()
+            .map(|name| {
+                name.chars()
+                    .map(|ch| match crate::stats_panel::panel_runic_code(ch) {
+                        Some(code) => char::from(code),
+                        None => ch,
+                    })
+                    .collect()
+            })
+            .collect()
+    }
+
     #[test]
     fn active_use_picker_uses_pocket_watch_and_closes() {
         let mut state = test_state(open_grid(), 5, 5);
@@ -1310,7 +1327,9 @@
         state.potion_stock[1] = 3;
 
         handle_play_key_input(&mut state, 'U', "", Path::new("")).unwrap();
-        let names = picker_row_names(&state);
+        // §4.5's decorated rows carry runic cells; compare on the unwrapped
+        // form so the assertion reads as the player's row does.
+        let names = picker_row_plain_names(&state);
         let at = |needle: &str| {
             names
                 .iter()
@@ -1318,7 +1337,7 @@
                 .unwrap_or_else(|| panic!("{needle} missing from {names:?}"))
         };
 
-        assert!(at("Scroll") < at("Yellow"), "scrolls lead the picker: {names:?}");
+        assert!(at("LV") < at("Yellow"), "scrolls lead the picker: {names:?}");
         assert!(
             at("Yellow") < at("Magic Carpet"),
             "potions precede the special items: {names:?}"
@@ -1357,7 +1376,7 @@
             handle_play_key_input(&mut state, 'U', "", Path::new("")).unwrap(),
             PlayInputDisposition::Continue
         );
-        assert!(picker_row_names(&state).iter().any(|name| name.contains("Scroll LV")));
+        assert!(picker_row_plain_names(&state).iter().any(|name| name.contains("LV")));
 
         assert_eq!(
             handle_play_key_input(&mut state, '\r', "", Path::new("")).unwrap(),
@@ -1453,7 +1472,11 @@
             handle_play_key_input(&mut state, 'U', "", Path::new("")).unwrap(),
             PlayInputDisposition::Continue
         );
-        assert!(picker_row_names(&state).iter().any(|name| name.contains("Yellow Potion")));
+        assert!(// §4.5: the decorated potion row prints "the potion's short
+        // colour name", not the Z-stats wording.
+        picker_row_names(&state)
+            .iter()
+            .any(|name| name.ends_with("Yellow")));
 
         assert_eq!(
             handle_play_key_input(&mut state, '\r', "", Path::new("")).unwrap(),
@@ -1486,7 +1509,7 @@
             handle_play_key_input(&mut state, 'U', "", Path::new("")).unwrap(),
             PlayInputDisposition::Continue
         );
-        assert!(picker_row_names(&state).iter().any(|name| name.contains("Scroll HR")));
+        assert!(picker_row_plain_names(&state).iter().any(|name| name.contains("HR")));
 
         assert_eq!(
             handle_play_key_input(&mut state, '\r', "", Path::new("")).unwrap(),
@@ -1522,7 +1545,7 @@
             handle_play_key_input(&mut state, 'U', "", Path::new("")).unwrap(),
             PlayInputDisposition::Continue
         );
-        assert!(picker_row_names(&state).iter().any(|name| name.contains("Scroll CIM")));
+        assert!(picker_row_plain_names(&state).iter().any(|name| name.contains("CIM")));
 
         assert_eq!(
             handle_play_key_input(&mut state, '\r', "", Path::new("")).unwrap(),

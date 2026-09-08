@@ -542,6 +542,76 @@ pub fn panel_runic_char(code: u8) -> char {
     char::from_u32(PANEL_RUNIC_CHAR_BASE + u32::from(code)).expect("private-use range is valid")
 }
 
+/// The `RUNES.CH` code a panel character carries, or `None` for an ordinary
+/// text-font cell.
+pub fn panel_runic_code(ch: char) -> Option<u8> {
+    let code = u32::from(ch).checked_sub(PANEL_RUNIC_CHAR_BASE)?;
+    u8::try_from(code).ok()
+}
+
+/// `inventory.md §4.5`'s decorated-row markers (`RETRACTIONS.md` R403).
+///
+/// "Name strings may carry a leading sentinel that requests a decorated row.
+/// The markers describe presentation families, not quest status or ownership."
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Default)]
+pub enum PanelPickerDecoration {
+    /// "The name verbatim in the text font."
+    #[default]
+    None,
+    /// "Runic-font glyph `0x1C`, space, plus, space, then the scroll's compact
+    /// rune label in the **runic font**; restore the text font afterward."
+    Scroll,
+    /// "Runic-font glyph `0x1D`, space, plus, space; restore the text font,
+    /// then print the potion's short colour name."
+    Potion,
+    /// "`Moonstone` followed by a space in the text font, then one runic phase
+    /// glyph." The glyph is `RUNES.CH` code `0x30` plus the zero-based phase.
+    Moonstone { phase: u8 },
+}
+
+/// §4.5: "The plus uses glyph code `0x2B` in the selected runic font; neither
+/// scroll nor potion prefix switches to the text font for it."
+pub const PANEL_PICKER_DECORATION_PLUS: u8 = 0x2B;
+/// §4.5's scroll prefix glyph.
+pub const PANEL_PICKER_SCROLL_PREFIX_GLYPH: u8 = 0x1C;
+/// §4.5's potion prefix glyph.
+pub const PANEL_PICKER_POTION_PREFIX_GLYPH: u8 = 0x1D;
+
+impl PanelPickerDecoration {
+    /// The decorated name portion, with runic cells wrapped by
+    /// [`panel_runic_char`] so the painter can switch fonts for exactly those
+    /// cells.
+    pub fn decorate(self, name: &str) -> String {
+        match self {
+            Self::None => name.to_string(),
+            Self::Scroll => {
+                let mut out = String::new();
+                out.push(panel_runic_char(PANEL_PICKER_SCROLL_PREFIX_GLYPH));
+                out.push(' ');
+                out.push(panel_runic_char(PANEL_PICKER_DECORATION_PLUS));
+                out.push(' ');
+                for byte in name.bytes() {
+                    out.push(panel_runic_char(byte));
+                }
+                out
+            }
+            Self::Potion => {
+                let mut out = String::new();
+                out.push(panel_runic_char(PANEL_PICKER_POTION_PREFIX_GLYPH));
+                out.push(' ');
+                out.push(panel_runic_char(PANEL_PICKER_DECORATION_PLUS));
+                out.push(' ');
+                out.push_str(name);
+                out
+            }
+            Self::Moonstone { phase } => format!(
+                "{name} {}",
+                panel_runic_char(crate::gameplay_chrome::SKY_STRIP_MOON_PHASE_RUNE_BASE + phase)
+            ),
+        }
+    }
+}
+
 /// Whether a Z-stats page draws inside the `§4.4` ornamental frame.
 ///
 /// The four inventory pages do; the attribute page, the `Arms` page and
@@ -650,7 +720,10 @@ pub fn active_panel_picker(state: &PlayState) -> Option<PanelPickerView> {
             .map(|row| PanelPickerRow {
                 quantity: row.quantity,
                 selector: PANEL_PICKER_SELECTOR_BLANK,
-                name: row.label,
+                // `inventory.md §4.5` (`RETRACTIONS.md` R403): the marker
+                // decorates the *name* portion, "after the independent
+                // quantity/selector cells".
+                name: row.decoration.decorate(&row.label),
                 zero_padded: false,
             })
             .collect();
@@ -781,8 +854,20 @@ pub fn paint_panel_picker_text_window(system: &mut TextWindowSystem, state: &Pla
         if !picker.ornamental_frame {
             system.emit_byte(b' ');
         }
-        for byte in row.text().bytes().take(PANEL_PICKER_CONTENT_COLUMNS) {
-            system.emit_byte(byte);
+        // `inventory.md §4.5`: "Selector characters below the printable range
+        // are drawn from the **runic** font rather than the text font; the
+        // renderer switches fonts for that one cell and switches back." The
+        // same switch serves the decorated-name glyphs, which the row carries
+        // in the private-use range.
+        for ch in row.text().chars().take(PANEL_PICKER_CONTENT_COLUMNS) {
+            match panel_runic_code(ch) {
+                Some(code) => {
+                    system.set_runic_output(true);
+                    system.emit_fixed_glyph(code);
+                    system.set_runic_output(false);
+                }
+                None => system.emit_byte(ch as u8),
+            }
         }
         if !picker.ornamental_frame {
             system.emit_byte(b' ');

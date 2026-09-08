@@ -927,6 +927,24 @@ pub fn special_item_name(index: usize) -> &'static str {
     }
 }
 
+/// `inventory.md §4.5`: the decorated potion row prints "the potion's **short
+/// colour name**" after the marker, and the 38-name family lists the eight
+/// potions as bare colours - `Blue`, `Yellow`, ... The longer
+/// [`potion_inventory_name`] form is the Z-stats/message wording.
+pub fn potion_short_colour_name(index: usize) -> &'static str {
+    match index {
+        POTION_BLUE_INDEX => "Blue",
+        POTION_YELLOW_INDEX => "Yellow",
+        POTION_RED_INDEX => "Red",
+        POTION_GREEN_INDEX => "Green",
+        POTION_ORANGE_INDEX => "Orange",
+        POTION_PURPLE_INDEX => "Purple",
+        POTION_BLACK_INDEX => "Black",
+        POTION_WHITE_INDEX => "White",
+        _ => "Potion",
+    }
+}
+
 pub fn potion_inventory_name(index: usize) -> &'static str {
     match index {
         POTION_BLUE_INDEX => "Blue Potion",
