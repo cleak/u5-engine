@@ -114,6 +114,7 @@ a paired run at all.
 | `stray-keys` | a function key, an unmapped letter, and Space at a scroll's `Direction-` |
 | `night-sextant` | the sextant's reading from a ship at night |
 | `use-target-cancel` | Escape and Space at a potion's `On who: ` prompt |
+| `town-hidden-door` | a town hidden door: Look at the wall, Search it into an unlocked door, then Open it |
 | `dungeon-search` | dungeon Search: the `Search...` echo, the shared `Dir-` relative-direction prompt, and the hidden-door reveal |
 | `dungeon-look` | dungeon Look through the same helper, including the Space cancel that writes `Dir-Pass` |
 | `magic-mix` | the M-Mix reagent list and its prompts |
@@ -192,6 +193,7 @@ number of keystrokes:
 | `town-death-vision` | the party one cell east of a crystal-sphere tile. An engine-written town seed is safe here: the sphere is a Look target |
 | `use-potions`, `use-scrolls`, `use-specials`, `ready-slots` | a party carrying potions and scrolls, built with the `seed_inventory` example (`cargo run --release --example seed_inventory -- <profile> potions=3 scrolls=3 specials=1 status1=D`, or `equipment=2 strength=99` for `ready-slots`, plus `equip2=33` for `ready-two-handed`). The shipped starting party carries three items, which is not enough to reach these families |
 | `town-britain-seeded`, `town-fountain`, `town-look-npc-cell` | the party inside Britain, beside the fountain for the fountain scenario |
+| `town-hidden-door` | the party in a town beside a `0x4E` cell - `find_tile_everywhere <profile> 0x4e` lists them; Britain's is `TOWNE:1 floor 0 (30, 12)`, so seed `--scene TOWNE:1 --at 29,12`. An engine-written town seed is safe here: Search reads terrain, not the NPC band |
 | `town-wishing-well` | the party standing south of the wishing well in Paws (scene 22). An engine-written town seed is safe here: the well is a Look target, and only Talk needs the save's NPC band |
 | `town-wishing-well-refusals` | the same |
 | `minoc-tribute`, `blackthorn-palace-password` | the party at the location named, with the quest state the exchange needs |

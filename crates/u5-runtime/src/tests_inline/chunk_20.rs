@@ -1382,6 +1382,34 @@ fn parse_secret_door_entries_accepts_town_and_dungeon_rows() {
     );
 }
 
+/// `doors-and-z-transitions.md §8` (`RETRACTIONS.md` R412): the town hidden
+/// door is the terrain byte `0x4E` and needs no sidecar row at all.
+///
+/// **Measured** 2026-09-08 (`qa/paired/town-hidden-door.tsv`), against the
+/// `0x4E` cell at Britain `(30, 12)`: Look answers `Thou dost see a wall with
+/// a nick`, Search answers `Thou dost find` / `a hidden door!`, and Open on
+/// what it leaves answers `Locked!` - so the published replacement id `0xB9`
+/// is the *locked* form, whatever §8's adjective says.
+#[test]
+fn town_search_reveals_the_published_hidden_door_terrain_without_a_sidecar() {
+    let dir = debug_game_dir();
+    let mut grid = open_grid();
+    grid[32 + 2] = TOWN_HIDDEN_DOOR_TILE;
+    let mut state = test_state(grid, 1, 1);
+    state.player.facing = Direction::East;
+
+    assert_eq!(
+        state.search_facing_with_game_dir(&dir).unwrap(),
+        MoveOutcome::Searched
+    );
+
+    assert_eq!(state.grid[32 + 2], TOWN_HIDDEN_DOOR_REVEAL_ABOVE_GROUND);
+    assert_eq!(state.grid[32 + 2], TOWN_DOOR_PLAIN_LOCKED_TILE);
+    assert_eq!(state.message, TOWN_SEARCH_HIDDEN_DOOR_LINE);
+    assert_eq!(state.turn, 1);
+    let _ = fs::remove_dir_all(dir);
+}
+
 #[test]
 fn town_search_uses_clean_sidecar_to_reveal_secret_door() {
     let dir = debug_game_dir();

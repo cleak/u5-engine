@@ -1,0 +1,26 @@
+# `doors-and-z-transitions.md` §8 with `RETRACTIONS.md` R412: town hidden doors
+# are the terrain byte `0x4E`, revealed by ordinary Search with no object flag,
+# and the reveal prints `\nThou dost find\na hidden door!\n`. This stands the
+# party west of one in Britain and searches east, then opens what it found.
+# requires-seed: the party in a town beside a `0x4E` hidden-door cell
+both	wait	9000
+both	key	space
+both	wait	4000
+both	key	j
+both	wait	8000
+both	shot	arrival	Standing west of the hidden-door cell
+both	key	l
+both	wait	1200
+both	key	Right
+both	wait	3000
+both	shot	look	Look east: what the wall says before the search
+both	key	s
+both	wait	1500
+both	key	Right
+both	wait	4000
+both	shot	searched	Search east: the reveal
+both	key	o
+both	wait	1500
+both	key	Right
+both	wait	3500
+both	shot	opened	Open east: the revealed door behaves like an ordinary one
