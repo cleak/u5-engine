@@ -6099,16 +6099,6 @@ fn conversation_opening_rendered(
     rendered
 }
 
-fn append_shop_opening_prompt(mut rendered: String, prompt: &str) -> String {
-    if rendered.ends_with('\n') {
-        rendered.push_str(prompt);
-    } else {
-        rendered.push(' ');
-        rendered.push_str(prompt);
-    }
-    rendered
-}
-
 #[cfg(test)]
 mod shop_vendor_name_tests {
     use super::shop_vendor_name_for_scene;

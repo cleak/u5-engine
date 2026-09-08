@@ -94,20 +94,6 @@ impl ActiveShopSession {
         }
     }
 
-    /// Short first prompt shown when Talk opens the overlay.
-    pub fn opening_prompt(&self) -> &'static str {
-        match self {
-            Self::Innkeeper(_) => "Rest (R), Leave (L), Pick up (P), or Space.",
-            Self::ShipBroker(_) => "Choose Frigate (F), Skiff (S), or Space.",
-            Self::Tavern(_) => "Drink? Yes (Y), No (N), or Space.",
-            Self::Sage(_) => "Of what wouldst thou hear my lore?",
-            Self::Reagent(_) => "Choose reagent A-E, or Space.",
-            Self::Guild(_) => "Keys (A), Gems (B), Torches (C), or Space.",
-            Self::ArmsLocal(_, _) | Self::ArmsStocked(_, _) => "Buy (B), Sell (S), or Space.",
-            _ => "Choose Buy / Sell / Yes / No.",
-        }
-    }
-
     /// State-derived presentation for the active shop overlay.
     ///
     /// This remains semantic for states whose live transcript is not
