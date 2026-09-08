@@ -7441,7 +7441,11 @@ fn validate_route_smoke_case_state(
                     .as_ref()
                     .is_none_or(|world| world.pending_vehicle.is_some())
                 || state.active_shop.is_none()
-                || !state.message.contains("As you wish")
+                // Measured 2026-09-08 (`qa/paired/bd-shipwright.tsv`): the
+                // decline draws the shipwright's own jeer, not the engine's
+                // `As you wish.` The observables that matter are the
+                // untouched gold and the absent delivery, both above.
+                || !state.message.contains("Landlubber")
             {
                 return Err(io::Error::other(format!(
                     "route smoke `{case_name}` did not quote and decline shipwright purchase"
