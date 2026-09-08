@@ -31,6 +31,23 @@ impl ShrineVirtue {
         }
     }
 
+    /// `karma.md §12`: the virtue answer "is tested with the shared
+    /// case-insensitive substring matcher against the shrine's four-letter
+    /// key: `hone`, `comp`, `valo`, `just`, `sacr`, `hono`, `spir`, or
+    /// `humi` in the table's virtue order".
+    pub const fn four_letter_key(self) -> &'static str {
+        match self {
+            Self::Honesty => "hone",
+            Self::Compassion => "comp",
+            Self::Valor => "valo",
+            Self::Justice => "just",
+            Self::Sacrifice => "sacr",
+            Self::Honor => "hono",
+            Self::Spirituality => "spir",
+            Self::Humility => "humi",
+        }
+    }
+
     pub const fn from_index(index: usize) -> Option<Self> {
         Some(match index {
             0 => Self::Honesty,
@@ -357,4 +374,17 @@ mod eternal_flame_tests {
         assert!(ETERNAL_FLAME_LOOK_TILE > SHRINE_ALTAR_TILE_LAST);
         assert_eq!(shrine_virtue_for_altar_tile(ETERNAL_FLAME_LOOK_TILE), None);
     }
+}
+
+/// `karma.md §12`'s "shared case-insensitive substring matcher", used for the
+/// shrine's virtue answer and for each of its three mantra answers. The
+/// location has already chosen the virtue, so this only ever tests the typed
+/// answer against *that* shrine's expected text.
+pub fn shrine_answer_matches(answer: &str, expected: &str) -> bool {
+    if expected.is_empty() {
+        return false;
+    }
+    answer
+        .to_ascii_lowercase()
+        .contains(&expected.to_ascii_lowercase())
 }

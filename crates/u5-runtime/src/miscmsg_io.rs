@@ -99,6 +99,10 @@ pub const MISCMSG_VIRTUE_APHORISM_RANGE: std::ops::RangeInclusive<usize> = 20..=
 pub const MISCMSG_SHRINE_MEDITATION_RANGE: std::ops::RangeInclusive<usize> = 28..=35;
 pub const MISCMSG_URN_CODEX_RANGE: std::ops::RangeInclusive<usize> = 36..=46;
 
+/// `karma.md §12` "Unfocused result": "If the virtue answer or any of the
+/// three mantra answers was wrong, render record `30` after the third nonblank
+/// mantra, then return without quest progress."
+pub const MISCMSG_SHRINE_UNFOCUSED_RESULT: usize = 30;
 /// `karma.md §12` "Completed-quest offering": "Record `34` asks for a number
 /// of hundreds of gold pieces. Its authored leading blank row and trailing
 /// space belong to the prompt."

@@ -267,7 +267,17 @@ pub struct ShrineSession {
     pub mantra_buffer: String,
     /// The typed answer to the virtue question the shrine opens with.
     pub virtue_buffer: String,
+    /// `karma.md §12`: the session asks `\nMantra:` **three** times. This
+    /// counts the asks still to come, including the open one.
+    pub mantra_asks_remaining: u8,
+    /// `karma.md §12` "Unfocused result": set false by a wrong virtue answer
+    /// or any wrong mantra. "Only an accepted virtue answer plus all three
+    /// accepted mantras reaches the shrine quest state machine."
+    pub answers_matched: bool,
 }
+
+/// `karma.md §12`: "Ask `\nMantra:` three times".
+pub const SHRINE_MANTRA_ASK_COUNT: u8 = 3;
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum ShrinePhase {
@@ -640,6 +650,8 @@ impl ShrineSession {
             phase: ShrinePhase::Mantra,
             mantra_buffer: String::new(),
             virtue_buffer: String::new(),
+            mantra_asks_remaining: SHRINE_MANTRA_ASK_COUNT,
+            answers_matched: true,
         }
     }
 
@@ -652,6 +664,8 @@ impl ShrineSession {
             phase: ShrinePhase::Virtue,
             mantra_buffer: String::new(),
             virtue_buffer: String::new(),
+            mantra_asks_remaining: SHRINE_MANTRA_ASK_COUNT,
+            answers_matched: true,
         }
     }
 }

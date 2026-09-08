@@ -1792,18 +1792,27 @@ impl PlayState {
                         return Ok(Some(MoveOutcome::PromptDeclined));
                     }
                     '\r' | '\n' => {
-                        if let Some(virtue) = ShrineVirtue::from_key(session.virtue_buffer.trim()) {
-                            session.virtue = virtue;
-                            session.phase = ShrinePhase::Mantra;
-                            // Measured: the answered `:` row stays on screen
-                            // with a blank row under it, and the mantra label
-                            // opens below as the next row to type into.
-                            self.emit_message_line(format!(":{}\n\n", session.virtue_buffer));
-                        } else {
-                            // An unknown virtue simply re-opens the question;
-                            // the answer row clears.
-                            session.virtue_buffer.clear();
+                        // `karma.md §12`: "A blank virtue answer or any blank
+                        // mantra ends the interaction immediately without the
+                        // unfocused-result record."
+                        if session.virtue_buffer.trim().is_empty() {
+                            return Ok(Some(MoveOutcome::PromptDeclined));
                         }
+                        // "The location has already selected the shrine's
+                        // virtue; typing another virtue does not redirect the
+                        // meditation." A wrong answer is not a re-prompt
+                        // either - it carries through to the unfocused result
+                        // after the third mantra, which is what the engine's
+                        // former re-open of the question got wrong.
+                        session.answers_matched &= shrine_answer_matches(
+                            session.virtue_buffer.trim(),
+                            session.virtue.four_letter_key(),
+                        );
+                        session.phase = ShrinePhase::Mantra;
+                        // Measured: the answered `:` row stays on screen
+                        // with a blank row under it, and the mantra label
+                        // opens below as the next row to type into.
+                        self.emit_message_line(format!(":{}\n\n", session.virtue_buffer));
                     }
                     '\u{8}' | '\u{7f}' => {
                         session.virtue_buffer.pop();
@@ -1891,10 +1900,30 @@ impl PlayState {
             // its own - the next command's echo follows on the next row.
             return Ok(Some(MoveOutcome::PromptDeclined));
         }
-        let mantra_matches = session
-            .mantra_buffer
-            .eq_ignore_ascii_case(session.virtue.mantra());
-        if mantra_matches {
+        // `karma.md §12`: "Each mantra answer uses that same matcher against
+        // the shrine's expected mantra. A wrong nonblank answer does not end
+        // the prompts early."
+        session.answers_matched &=
+            shrine_answer_matches(&session.mantra_buffer, session.virtue.mantra());
+        session.mantra_asks_remaining = session.mantra_asks_remaining.saturating_sub(1);
+        if session.mantra_asks_remaining > 0 {
+            // One of the first two asks. §12: "The first two nonblank mantra
+            // submissions likewise have no success/refusal message of their
+            // own: their silence does not indicate that ordination has
+            // occurred." A fresh `Mantra:` row simply opens beneath.
+            session.mantra_buffer.clear();
+            self.active_shrine = Some(session);
+            self.adopt_shrine_prompt_row();
+            return Ok(None);
+        }
+        if !session.answers_matched {
+            // "Unfocused result | If the virtue answer or any of the three
+            // mantra answers was wrong, render record `30` after the third
+            // nonblank mantra, then return without quest progress."
+            self.emit_shrine_misc_record(game_dir, MISCMSG_SHRINE_UNFOCUSED_RESULT)?;
+            return Ok(Some(MoveOutcome::PromptDeclined));
+        }
+        {
             let bit = session.virtue.bit();
             let ordained = self.shrine_ordained_mask & bit != 0;
             let codex = self.shrine_codex_mask & bit != 0;
@@ -1907,27 +1936,25 @@ impl PlayState {
                 return Ok(None);
             }
             if !codex {
-                // Measured 2026-09-07 (`qa/paired/shrine-flow.tsv`): the
-                // correct mantra at a shrine whose Codex phase has not begun
-                // prints nothing at all - a fresh `Mantra:` row simply opens
-                // beneath the answered one. `karma.md §12`'s ordination is
-                // recorded silently; the engine used to invent a
-                // `Meditated at the Shrine of ...` line here.
+                // `karma.md §12`, the first two quest-state rows: with the
+                // Codex unread the meditation "Sets the ordained bit. No gold
+                // prompt, stat increase, or standing increase is applied."
+                //
+                // Measured 2026-09-07 (`qa/paired/shrine-flow.tsv`): nothing
+                // prints - the engine used to invent a `Meditated at the
+                // Shrine of ...` line here. What the capture showed after the
+                // accepted mantra was a *fresh* `Mantra:` row, which is §12's
+                // second ask of three, not a fourth.
+                //
+                // The altar presentation §12 specifies for this arm - records
+                // `31`, `32`, the virtue's own `12..19` record and `33`, each
+                // waiting for a command key - is not modelled yet, so the
+                // session simply closes.
                 self.shrine_ordained_mask |= bit;
-                session.mantra_buffer.clear();
-                self.active_shrine = Some(session);
-                self.adopt_shrine_prompt_row();
-                return Ok(None);
+                return Ok(Some(MoveOutcome::PromptDeclined));
             }
-            return self.meditate_shrine_from_suffix(&session.mantra_buffer, game_dir);
+            self.meditate_shrine_from_suffix(&session.mantra_buffer, game_dir)
         }
-        // Measured: a *wrong* mantra is answered the same way as a right one -
-        // the typed row stays and a fresh `Mantra:` row opens under it. No
-        // refusal prints, so the engine's `No effect!` was invented.
-        session.mantra_buffer.clear();
-        self.active_shrine = Some(session);
-        self.adopt_shrine_prompt_row();
-        Ok(None)
     }
 
     pub fn meditate_shrine_from_suffix(

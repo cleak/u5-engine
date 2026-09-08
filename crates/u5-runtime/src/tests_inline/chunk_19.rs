@@ -200,6 +200,8 @@
                 phase: crate::z_stats::ShrinePhase::Mantra,
                 mantra_buffer: String::new(),
                 virtue_buffer: String::new(),
+                mantra_asks_remaining: crate::z_stats::SHRINE_MANTRA_ASK_COUNT,
+                answers_matched: true,
             });
         };
         let wishing_well = |state: &mut PlayState| {

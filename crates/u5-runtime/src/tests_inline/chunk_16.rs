@@ -1591,15 +1591,17 @@ BRITANNIA 11 21
         assert!(state.active_shrine.is_some());
         assert_eq!(state.message, SHRINE_MANTRA_PROMPT);
 
-        assert_eq!(
-            handle_play_key_input(&mut state, 'L', "um\r", &dir).unwrap(),
-            PlayInputDisposition::Continue
-        );
+        // `karma.md §12`: three `Mantra:` asks before the quest state machine.
+        for _ in 0..3 {
+            assert_eq!(
+                handle_play_key_input(&mut state, 'L', "um\r", &dir).unwrap(),
+                PlayInputDisposition::Continue
+            );
+        }
 
-        assert!(state.active_shrine.is_some());
+        assert!(state.active_shrine.is_none());
         assert_eq!(state.shrine_ordained_mask, ShrineVirtue::Humility.bit());
         assert_eq!(state.shrine_codex_mask, 0);
-        assert_eq!(state.message, SHRINE_MANTRA_PROMPT);
         let _ = fs::remove_dir_all(dir);
     }
 
@@ -1669,17 +1671,28 @@ BRITANNIA 11 21
         );
         assert_eq!(state.message, SHRINE_MANTRA_PROMPT);
 
+        // `karma.md §12`: the session asks `Mantra:` three times, and only
+        // the third submission reaches the quest state machine. Measured: the
+        // first two are silent and re-open the row.
+        for _ in 0..2 {
+            assert_eq!(
+                handle_play_key_input(&mut state, 'A', "hm\r", &dir).unwrap(),
+                PlayInputDisposition::Continue
+            );
+            assert!(state.active_shrine.is_some());
+            assert_eq!(state.shrine_ordained_mask, 0);
+            assert_eq!(state.message, SHRINE_MANTRA_PROMPT);
+        }
         assert_eq!(
             handle_play_key_input(&mut state, 'A', "hm\r", &dir).unwrap(),
             PlayInputDisposition::Continue
         );
 
-        // Measured: the ordination is silent and the prompt re-opens.
-        assert!(state.active_shrine.is_some());
+        // The ordination is silent, and the third answer closes the session.
+        assert!(state.active_shrine.is_none());
         assert_eq!(state.shrine_ordained_mask, ShrineVirtue::Honesty.bit());
         assert_eq!(state.shrine_codex_mask, 0);
         assert_eq!(state.turn, 0);
-        assert_eq!(state.message, SHRINE_MANTRA_PROMPT);
         let _ = fs::remove_dir_all(dir);
     }
 
@@ -1830,10 +1843,12 @@ BRITANNIA 11 21
         // question before the mantra row (`qa/paired/shrine-flow.tsv`).
         handle_play_key_input(&mut state, 'E', "", &dir).unwrap();
         handle_play_key_input(&mut state, 'C', "OMPASSION\r", &dir).unwrap();
-        assert_eq!(
-            handle_play_key_input(&mut state, 'M', "u\r", &dir).unwrap(),
-            PlayInputDisposition::Continue
-        );
+        for _ in 0..3 {
+            assert_eq!(
+                handle_play_key_input(&mut state, 'M', "u\r", &dir).unwrap(),
+                PlayInputDisposition::Continue
+            );
+        }
         assert!(state.active_shrine.is_some());
 
         assert_eq!(
@@ -1865,7 +1880,9 @@ BRITANNIA 11 21
 
         handle_play_key_input(&mut state, 'E', "", &dir).unwrap();
         handle_play_key_input(&mut state, 'C', "OMPASSION\r", &dir).unwrap();
-        handle_play_key_input(&mut state, 'M', "u\r", &dir).unwrap();
+        for _ in 0..3 {
+            handle_play_key_input(&mut state, 'M', "u\r", &dir).unwrap();
+        }
         assert_eq!(
             handle_play_key_input(&mut state, '9', "", &dir).unwrap(),
             PlayInputDisposition::Continue

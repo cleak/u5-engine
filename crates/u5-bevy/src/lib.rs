@@ -24964,22 +24964,32 @@ mod tests {
         assert_eq!(input_line, "ahm");
         assert_eq!(state.shrine_ordained_mask, 0);
 
-        handle_visual_line_key(
-            &mut state,
-            &mut input_line,
-            KeyCode::Enter,
-            false,
-            false,
-            &dir,
-        )
-        .unwrap();
+        // `karma.md §12`: three `Mantra:` asks, and only the third reaches
+        // the quest state machine. The first two re-open the row silently.
+        for ask in 0..3 {
+            handle_visual_line_key(
+                &mut state,
+                &mut input_line,
+                KeyCode::Enter,
+                false,
+                false,
+                &dir,
+            )
+            .unwrap();
+            assert!(input_line.is_empty());
+            if ask < 2 {
+                assert_eq!(state.shrine_ordained_mask, 0);
+                assert_eq!(state.message, u5_runtime::SHRINE_MANTRA_PROMPT);
+                for key in [KeyCode::KeyA, KeyCode::KeyH, KeyCode::KeyM] {
+                    handle_visual_line_key(&mut state, &mut input_line, key, false, false, &dir)
+                        .unwrap();
+                }
+            }
+        }
 
-        assert!(input_line.is_empty());
         assert_eq!(state.shrine_ordained_mask, ShrineVirtue::Honesty.bit());
-        // Measured: the ordination prints nothing - the prompt just re-opens
-        // with an empty mantra row.
-        assert!(state.active_shrine.is_some());
-        assert_eq!(state.message, u5_runtime::SHRINE_MANTRA_PROMPT);
+        // The ordination itself prints nothing.
+        assert!(state.active_shrine.is_none());
         let _ = fs::remove_dir_all(dir);
     }
 

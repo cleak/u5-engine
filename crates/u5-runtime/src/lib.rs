@@ -576,8 +576,9 @@ pub use misc_tables_io::*;
 pub use miscmsg_io::{
     MISCMSG_DAT_FILE, MISCMSG_DAT_LEN, MISCMSG_DAT_RECORDS,
     MISCMSG_SHRINE_OFFERING_INSUFFICIENT_GOLD, MISCMSG_SHRINE_OFFERING_PROMPT,
-    MISCMSG_URN_CODEX_RANGE, MiscMessages, MiscMsgFamily, TileGlyphDigraph, load_misc_messages,
-    miscmsg_family, parse_misc_messages, render_miscmsg_tile_glyph_text, tile_glyph_digraph,
+    MISCMSG_SHRINE_UNFOCUSED_RESULT, MISCMSG_URN_CODEX_RANGE, MiscMessages, MiscMsgFamily,
+    TileGlyphDigraph, load_misc_messages, miscmsg_family, parse_misc_messages,
+    render_miscmsg_tile_glyph_text, tile_glyph_digraph,
 };
 pub use moongate::{
     FELUCCA_GLYPH_BY_DAY, MOON_GLYPH_DAY_ZERO_FELUCCA_BYTE, MOON_GLYPH_DAY_ZERO_TRAMMEL_BYTE,
@@ -752,8 +753,8 @@ pub use shops::*;
 pub use shrine_virtue::{
     CodexUrnReadOutcome, ETERNAL_FLAME_LOOK_TILE, SHRINE_ALTAR_TILE_FIRST, SHRINE_ALTAR_TILE_LAST,
     SHRINE_MARKER_TILE, ShrineMeditationOutcome, ShrineQuestState, ShrineVirtue,
-    all_virtues_complete, eternal_flame_word_for_scene, read_codex_urn, shrine_meditation_outcome,
-    shrine_virtue_for_altar_tile,
+    all_virtues_complete, eternal_flame_word_for_scene, read_codex_urn, shrine_answer_matches,
+    shrine_meditation_outcome, shrine_virtue_for_altar_tile,
 };
 pub use signs_io::{
     SIGN_BODY_CHARACTER_MASK, SIGN_BODY_END_OF_RECORD, SIGN_BODY_MACRO_FIRST, SIGN_BODY_MACRO_LAST,
