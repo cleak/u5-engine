@@ -5137,11 +5137,15 @@ fn end_to_end_tavern_blue_boar_fixed_drink_debits_gold() {
     handle_play_key_input(&mut state, 'Y', "", Path::new("")).unwrap();
     assert!(state.message.contains("Blue Boar"));
     handle_play_key_input(&mut state, 'W', "", Path::new("")).unwrap();
-    assert!(state.message.contains("A-F"));
+    // Measured 2026-09-08 (`qa/paired/wb-blueboar.tsv`): the branch lists six
+    // named drinks with their prices, and the served drink answers with one
+    // gendered line rather than repeating the price.
+    assert!(state.message.contains("a) Rose.......18"));
+    assert!(state.message.contains("f) Chablis....98"));
     handle_play_key_input(&mut state, 'F', "", Path::new("")).unwrap();
 
     assert_eq!(state.gold, 102);
-    assert!(state.message.contains("98 gold"));
+    assert!(state.message.contains("Ah, a fine choice"));
     assert!(state.active_shop.is_some());
 }
 

@@ -125,6 +125,7 @@ a paired run at all.
 | `nb-inn-refusals` | the inn's companion branches with a party of one: the leave refusal, which ends the visit |
 | `nb-inn-branches` | the inn's branch question, a room quote and the line a declined room draws |
 | `nb-inn` | North Britanny's inn: the greeting record naming the hostel and its owner, then `Terbor asks,` and the three-branch question |
+| `wb-blueboar` | the Blue Boar's six-drink list, a purchase and the farewell a `No` draws |
 | `paws-sage` | the tavern's lore branch: buy a drink, take the advertised `Chat` letter, type a topic, and pay for the rumour |
 | `paws-guild` | The Guild in Paws, three doors in: the greeting, the dot-leader list, a keys quote and the redraw a decline leaves |
 | `bd-shipwright` | The Rusty Bucket in Buccaneer's Den: the greeting, the stock line, a frigate quote and the jeer a decline draws |

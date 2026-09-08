@@ -2569,6 +2569,17 @@ fn format_healer_treatment_error(
 
 /// The typed-input prompt the sage question ends on, measured with it.
 const SAGE_RESPOND_PROMPT: &str = "You respond:";
+/// **Measured** 2026-09-08 at the Blue Boar: the six drinks it sells, in the
+/// order its list prints them. The prices come from the published table.
+const BLUE_BOAR_DRINK_ROWS: [(char, &str, crate::shops::BlueBoarDrinkChoice); 6] = [
+    ('a', "Rose", crate::shops::BlueBoarDrinkChoice::A),
+    ('b', "Claret", crate::shops::BlueBoarDrinkChoice::B),
+    ('c', "Sauterne", crate::shops::BlueBoarDrinkChoice::C),
+    ('d', "Muscatel", crate::shops::BlueBoarDrinkChoice::D),
+    ('e', "Moselle", crate::shops::BlueBoarDrinkChoice::E),
+    ('f', "Chablis", crate::shops::BlueBoarDrinkChoice::F),
+];
+const BLUE_BOAR_CHOICE_PROMPT: &str = "Thy choice?\"";
 /// The tavern's own follow-up question, measured with the zero-quantity
 /// dismissal and reused when the sage hands control back.
 const TAVERN_ANYTHING_ELSE_PROMPT: &str = "\"Anything else for thee?\"";
@@ -2655,13 +2666,42 @@ fn format_tavern_outcome(
                 tavern.display_name()
             )
         }
-        PickBlueBoarDrink => "Choose Blue Boar drink A-F.".to_string(),
+        // **Measured** 2026-09-08 at the Blue Boar in West Britanny
+        // (`qa/paired/wb-blueboar.tsv`): a six-row fixed-price list whose
+        // rows are `letter)`, a space, the drink's name, a dot leader and the
+        // price right aligned at column sixteen.
+        //
+        // ```text
+        // a) Rose.......18
+        // b) Claret....192
+        // ...
+        //
+        // Thy choice?"
+        // ```
+        //
+        // The prices are the published ones; the names were not in this
+        // engine at all, since it printed `Choose Blue Boar drink A-F.`
+        PickBlueBoarDrink => {
+            let mut rows = String::new();
+            for (letter, name, choice) in BLUE_BOAR_DRINK_ROWS {
+                let price = crate::shops::blue_boar_drink_price(choice).to_string();
+                let prefix = format!("{letter}) {name}");
+                let dots = crate::message_window::MESSAGE_WINDOW_WIDTH
+                    .saturating_sub(prefix.len() + price.len())
+                    .max(1);
+                rows.push_str(&format!("{prefix}{}{price}\n", ".".repeat(dots)));
+            }
+            format!("{rows}\n{BLUE_BOAR_CHOICE_PROMPT}")
+        }
         ConfirmEnoughDrink => "Had enough? (Y/N)".to_string(),
         DeclinedEnoughDrink => "Anything else? (Y/N)".to_string(),
+        // Measured: the served drink draws one gendered line, and the price
+        // is not repeated back.
         BlueBoarDrinkServed { choice, cost } => {
+            let _ = (choice, cost);
             format!(
-                "Blue Boar drink {:?} served for {cost} gold.\n\n{TAVERN_ANYTHING_ELSE_PROMPT}",
-                choice
+                "\"Ah, a fine choice, {}. Enjoy!\"\n\n{TAVERN_ANYTHING_ELSE_PROMPT}",
+                if speaker_is_female { "milady" } else { "sir" }
             )
         }
         PickProvisionQuantity { tavern, unit_price } => format!(
