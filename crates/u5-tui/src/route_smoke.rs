@@ -7388,8 +7388,12 @@ fn validate_route_smoke_case_state(
             if state.gold != expected_gold
                 || state.active_shop.is_some()
                 || horse.is_none_or(|object| object.x != 15 || object.y != 16)
+                // Measured 2026-09-08 (`qa/paired/nb-stable-open.tsv`): the
+                // sale prints the shop's attributed farewell rather than a
+                // success line, so the observables are the delivered horse,
+                // the debited gold and the closed session - all checked above.
+                // `Thy horse awaits outside` was this engine's own wording.
                 || !boardable
-                || !state.message.contains("Thy horse awaits outside")
             {
                 return Err(io::Error::other(format!(
                     "route smoke `{case_name}` did not complete the public horse-trader sale"
