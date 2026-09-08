@@ -7803,15 +7803,15 @@ fn validate_route_smoke_case_state(
                         && actor.y == DUNGEON_AMBUSH_PARTY_ENTRY_Y[party_row][slot]
                 });
             if !state.combat_active
-                // `dungeon-mode.md §14`: the contact prints `Attacked!` (or
-                // its direction-bearing form); the setup report is a
-                // diagnostic now, not a message-window line.
-                || !state.message.starts_with("Attacked")
-                || !(state.message.contains("entered dungeon combat")
-                    || state
-                        .diagnostics
-                        .iter()
-                        .any(|line| line.contains("entered dungeon combat")))
+                // `dungeon-mode.md §14`: the *contact* path prints `Attacked!`
+                // or its direction-bearing form; §14.1 has the A-Attack path
+                // print nothing beyond its own command transcript. The setup
+                // report is a diagnostic on both.
+                || !(state.message.is_empty() || state.message.starts_with("Attacked"))
+                || !state
+                    .diagnostics
+                    .iter()
+                    .any(|line| line.contains("entered dungeon combat"))
                 || monster_object.tile != expected_tile
                 || !monster_on_published_source
                 || !party_on_entry_row

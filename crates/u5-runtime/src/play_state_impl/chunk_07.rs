@@ -1952,29 +1952,41 @@ impl PlayState {
                 return Ok(MoveOutcome::Blocked);
             };
             let Some((slot, object)) = self.dungeon_active_monster_at(x, y) else {
-                self.message = format!(
-                    "Attacked forward at ({x}, {y}) on {} level {level}; no target.",
+                // `dungeon-mode.md §10`: "If the active monster is not exactly
+                // in that forward cell, the handler prints the stock refusal
+                // `What?\n` on the following row and does not launch combat."
+                // The engine reported the probed cell and level instead.
+                self.push_diagnostic(format!(
+                    "attacked forward at ({x}, {y}) on {} level {level}; no target",
                     scene.key()
-                );
+                ));
+                self.message = crate::commands::DUNGEON_ATTACK_NO_TARGET_REFUSAL.to_string();
                 return Ok(MoveOutcome::Blocked);
             };
             self.free_active_object_slot(slot);
             self.mark_visibility_dirty();
             self.advance_turn();
+            // `dungeon-mode.md §14.1`: "Presentation remains caller-owned. The
+            // A-Attack path keeps its ordinary Attack command transcript before
+            // the matching forward contact", and "Neither caller prints the
+            // outdoor conflict banner, and the framer's ambush arm adds no
+            // replacement banner." So a launched dungeon attack prints nothing
+            // beyond the command echo; the engine printed a sentence naming
+            // the tile id, the cell and the level.
             if combat_class_stats(object.aux1).is_some() {
                 let note = self.enter_dungeon_active_monster_combat(level, object)?;
-                self.message = format!(
-                    "Attacked dungeon monster tile {} at ({x}, {y}) on {} level {level}; {note}.",
+                self.push_diagnostic(format!(
+                    "attacked dungeon monster tile {} at ({x}, {y}) on {} level {level}; {note}",
                     object.tile,
                     scene.key()
-                );
+                ));
                 return Ok(MoveOutcome::Used);
             }
-            self.message = format!(
-                "Attacked dungeon object tile {} at ({x}, {y}) on {} level {level}; no published combat class.",
+            self.push_diagnostic(format!(
+                "attacked dungeon object tile {} at ({x}, {y}) on {} level {level}; no published combat class",
                 object.tile,
                 scene.key()
-            );
+            ));
             return Ok(MoveOutcome::Used);
         }
         let Some(direction) = direction else {
@@ -2010,11 +2022,18 @@ impl PlayState {
                 }
                 self.advance_turn();
                 let note = self.terrain_encounter_note(game_dir, plane, object)?;
-                self.message = format!(
-                    "Attacked object tile {} at ({x}, {y}) to the {} in slot {object_slot}; {note}.",
+                // `combat.md §8.2`: the shipped game's whole attack vocabulary
+                // is `Attack-`, `Nothing to attack!`, `Attacked!` and
+                // `Attacked at entrance!` - there is no line naming a tile,
+                // a cell or a slot. This arm could not reach an arena (no
+                // `BRIT.CBT`, a whirlpool, or no terrain combat class), so it
+                // takes the published refusal (`cleak/u5-engine#18`).
+                self.push_diagnostic(format!(
+                    "attacked object tile {} at ({x}, {y}) to the {} in slot {object_slot}; {note}",
                     object.tile,
                     direction.name()
-                );
+                ));
+                self.message = ATTACK_NOTHING_TO_ATTACK_REFUSAL.to_string();
                 return Ok(MoveOutcome::Used);
             }
             self.advance_turn();
@@ -2132,11 +2151,12 @@ impl PlayState {
                 ));
                 return Ok(MoveOutcome::Blocked);
             }
-            self.message = format!(
-                "Attacked object tile {} at ({x}, {y}) to the {} in slot {object_slot}; no published combat class.",
+            self.push_diagnostic(format!(
+                "attacked object tile {} at ({x}, {y}) to the {} in slot {object_slot}; no published combat class",
                 object.tile,
                 direction.name()
-            );
+            ));
+            self.message = ATTACK_NOTHING_TO_ATTACK_REFUSAL.to_string();
             return Ok(MoveOutcome::Used);
         }
 

@@ -25070,8 +25070,15 @@ fn dungeon_attack_uses_forward_wrapped_probe_without_direction_prompt() {
     assert!(state.handle_dungeon_key('A', Path::new("")).unwrap());
 
     assert_eq!(state.turn, 0);
-    assert!(state.message.contains("Attacked forward at (7, 1)"));
-    assert!(state.message.contains("no target"));
+    // `dungeon-mode.md §10`: a forward probe that finds nothing prints the
+    // stock `What?` refusal; the probed cell is a diagnostic.
+    assert_eq!(state.message, "What?\n");
+    assert!(
+        state
+            .diagnostics
+            .iter()
+            .any(|line| line.contains("attacked forward at (7, 1)") && line.contains("no target"))
+    );
 }
 
 #[test]
@@ -25100,8 +25107,15 @@ fn dungeon_attack_forward_monster_clears_active_object_and_consumes_turn() {
     assert_eq!(state.active_objects[6].tile, combat_class_sprite_byte(20));
     assert_eq!(state.combat_actors[6].owner_target_class, 20);
     assert!(!state.combat_actors[6].is_empty());
-    assert!(state.message.contains("Attacked dungeon monster tile 0"));
-    assert!(state.message.contains("entered dungeon combat"));
+    // §14.1: "Presentation remains caller-owned" and the ambush arm "adds no
+    // replacement banner", so the launch prints nothing of its own.
+    assert!(
+        state
+            .diagnostics
+            .iter()
+            .any(|line| line.contains("attacked dungeon monster tile 0")
+                && line.contains("entered dungeon combat"))
+    );
     assert!(!state.message.contains("pending"));
 }
 
@@ -25125,8 +25139,13 @@ fn dungeon_attack_forward_non_class_object_reports_no_combat_class() {
     assert_eq!(state.turn, 1);
     assert!(!state.combat_active);
     assert!(state.active_objects[1].is_empty());
-    assert!(state.message.contains("Attacked dungeon object tile 66"));
-    assert!(state.message.contains("no published combat class"));
+    assert!(
+        state
+            .diagnostics
+            .iter()
+            .any(|line| line.contains("attacked dungeon object tile 66")
+                && line.contains("no published combat class"))
+    );
     assert!(!state.message.contains("pending"));
 }
 

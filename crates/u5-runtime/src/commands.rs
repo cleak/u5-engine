@@ -824,6 +824,11 @@ pub const VERSION_BANNER_MESSAGE: &str = "1.16";
 /// the row under it.
 pub const ATTACK_NOTHING_TO_ATTACK_REFUSAL: &str = "Nothing to attack!";
 
+/// `dungeon-mode.md §10`: the dungeon A-Attack probe "prints the stock refusal
+/// `What?\n` on the following row and does not launch combat" when the active
+/// monster is not in the forward cell.
+pub const DUNGEON_ATTACK_NO_TARGET_REFUSAL: &str = "What?\n";
+
 /// `commands.md §5.2`, the `0` row: "Cancelled: `None!\n`".
 pub const SET_ACTIVE_PLAYER_NONE_REPLY: &str = "None!";
 /// `commands.md §5.2`, the `0` row: "rejected: `Invalid!\n`". Measured

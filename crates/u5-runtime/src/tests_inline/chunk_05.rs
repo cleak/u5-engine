@@ -1978,8 +1978,15 @@ fn world_attack_reports_published_base_combat_class_from_sprite_run() {
         MoveOutcome::Used
     );
 
-    assert!(state.message.contains("selected BRIT.CBT arena 2"));
-    assert!(state.message.contains("base class Orc (32)"));
+    // `combat.md §8.2`: the arena selection is a diagnostic; the arm that
+    // cannot reach an arena prints the published `Nothing to attack!`.
+    assert!(
+        state
+            .diagnostics
+            .iter()
+            .any(|line| line.contains("selected BRIT.CBT arena 2")
+                && line.contains("base class Orc (32)"))
+    );
 }
 
 #[test]
