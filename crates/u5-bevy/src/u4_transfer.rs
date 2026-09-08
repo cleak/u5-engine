@@ -278,10 +278,10 @@ impl U4TransferScreen {
     /// what is drawn.
     pub(crate) fn summary(&self) -> String {
         let phase = match self.session.phase() {
-            U4PreviewPhase::Rejected => "rejected-source page".to_string(),
+            U4PreviewPhase::Rejected => "rejected-source page".to_string(), // audit: not a player-facing line
             U4PreviewPhase::Found => "\"Found\" summary page".to_string(),
             U4PreviewPhase::Stage(stage) => format!("stage {stage:?} on panel row {}", stage.row()),
-            U4PreviewPhase::Complete => "commit notice".to_string(),
+            U4PreviewPhase::Complete => "commit notice".to_string(), // audit: not a player-facing line
         };
         format!(
             "Ultima IV transfer: {phase}; panels at x=0 and x=168, message line at cells 3..37 row 21."

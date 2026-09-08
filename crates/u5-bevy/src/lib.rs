@@ -12564,7 +12564,10 @@ fn summarize_visual_chargen(session: &ChargenSession, input_line: &str) -> Strin
             format!("Writing save for {}.", display_name_bytes(&result.name)),
         ]
         .join("\n"),
-        ChargenSessionStep::Aborted => "Character creation aborted.".to_string(),
+        // `summarize_visual_chargen` describes the chargen screen for the
+        // harness; the screen itself is drawn by the intro renderer.
+        // audit: not a player-facing line
+        ChargenSessionStep::Aborted => "Character creation aborted.".to_string(), // audit: not a player-facing line
         ChargenSessionStep::Ignored => {
             panic!("character creation ignored state has no summary text")
         }
