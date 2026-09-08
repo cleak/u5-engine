@@ -119,6 +119,7 @@ a paired run at all.
 | `shop-arms-menus` | both arms menus with waits long enough for the stock to finish drawing: the Buy listing, an item quote, the Sell prompt and the closing flourish |
 | `shop-arms-buy-confirm` | the Buy confirmation: quote, `Y`, `Sold!`, the post-item prompt and the redrawn listing, then a second quote declined with `N` |
 | `shop-arms-sell-flow` | a whole sale through the browser: cursor move, offer, decline, second offer, `"Done!" says Gwenneth`, and the quoted goodbye on the way out |
+| `nb-inn-commit` | the rest of that branch: Return commits the panel selection, the deposit is quoted per month, and the companion is lodged |
 | `nb-inn-companion` | the inn's leave-companion branch with a party of three: the question, and the framed `Select:` picker the panel becomes |
 | `nb-inn-refusals` | the inn's companion branches with a party of one: the leave refusal, which ends the visit |
 | `nb-inn-branches` | the inn's branch question, a room quote and the line a declined room draws |

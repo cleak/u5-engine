@@ -1084,7 +1084,14 @@ fn handle_active_shop_key_input(
                         party_index,
                         deposit,
                     };
-                    format!("Leave party member {d} for {deposit} gold? (Y/N)")
+                    // **Measured** 2026-09-08 (`qa/paired/nb-inn-commit.tsv`):
+                    // committing the panel selection quotes the deposit as a
+                    // monthly rate due at check-out, and ends on the same
+                    // prompt the room quote uses.
+                    format!(
+                        "{} comfortable room will be {deposit} gold per month, due at check-out.\n\n{INN_CONFIRM_PROMPT}",
+                        inn.display_name()
+                    )
                 }
                 (
                     InnkeeperState::ConfirmLeaveCompanion {
@@ -1100,11 +1107,16 @@ fn handle_active_shop_key_input(
                     *s = InnkeeperState::Greeting { inn };
                     match result {
                         Ok(outcome) => {
-                            let message = format!(
-                                "Left companion {} at the inn for {} gold.",
-                                outcome.party_index + 1,
-                                outcome.deposit
-                            );
+                            // Measured: the innkeeper thanks the party and
+                            // then asks his own follow-up question; the engine
+                            // reported the slot and the deposit instead.
+                            let _ = outcome;
+                            let message = match innkeeper_name {
+                                Some(name) => format!(
+                                    "{INN_THANKS_LINE}\nsays {name}.\n\n{INN_ANYTHING_MORE_PROMPT}"
+                                ),
+                                None => format!("{INN_THANKS_LINE}\n\n{INN_ANYTHING_MORE_PROMPT}"),
+                            };
                             let surcharge = apply_active_shop_surcharge(state);
                             append_active_shop_surcharge(message, surcharge)
                         }
@@ -2533,6 +2545,10 @@ const INN_CONFIRM_PROMPT: &str = "Wilt thou take it?\"";
 /// **Measured** 2026-09-08 at Hotel Brittany with a party of one.
 /// **Measured**: the question the leave-companion branch asks.
 const INN_WHO_WILL_STAY_PROMPT: &str = "\"Who will stay?\"";
+/// **Measured**: what the innkeeper says once a companion is lodged, and the
+/// question the visit continues on.
+const INN_THANKS_LINE: &str = "\"I thank thee.\"";
+const INN_ANYTHING_MORE_PROMPT: &str = "\"Is there anything more I can do for thee?\"";
 const INN_NOBODY_TO_LEAVE_REFUSAL: &str =
     "\"Lord British is missing, and all ye plan to do is SLEEP for a month or so? Not in my inn!\"";
 

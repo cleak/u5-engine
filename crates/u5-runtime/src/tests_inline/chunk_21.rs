@@ -5016,7 +5016,10 @@ fn end_to_end_innkeeper_leave_companion_moves_roster_to_registry() {
     // panel's framed `Select:` picker.
     assert!(state.message.contains("\"Who will stay?\""));
     handle_play_key_input(&mut state, '2', "", Path::new("")).unwrap();
-    assert!(state.message.contains("party member 2"));
+    // Measured 2026-09-08 (`qa/paired/nb-inn-commit.tsv`): the deposit is
+    // quoted as a monthly rate due at check-out, ending on the shared
+    // `Wilt thou take it?"` prompt.
+    assert!(state.message.contains("per month, due at check-out"));
     handle_play_key_input(&mut state, 'Y', "", Path::new("")).unwrap();
 
     assert_eq!(state.gold, 67);
@@ -5025,7 +5028,14 @@ fn end_to_end_innkeeper_leave_companion_moves_roster_to_registry() {
     assert_eq!(state.inn_registry.len(), 1);
     assert_eq!(state.inn_registry[0].scene_marker, 0x11);
     assert_eq!(state.inn_registry[0].name, *b"IOLO\0\0\0\0\0");
-    assert!(state.message.contains("Left companion 2"));
+    // Measured: the innkeeper thanks the party and asks his follow-up
+    // question; the slot number and the deposit are not reported back.
+    assert!(state.message.contains("\"I thank thee.\""));
+    assert!(
+        state
+            .message
+            .contains("\"Is there anything more I can do for thee?\"")
+    );
 }
 
 #[test]
