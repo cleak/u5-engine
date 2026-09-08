@@ -1700,23 +1700,47 @@ pub fn world_start_safe_for_transport(
     is_tile_walkable_for_transport(tile, passability, transport)
 }
 
-/// The two measured slow-movement lines of `movement.md` (unpublished; see
-/// `cleak/u5-spec#241`).
+/// `movement.md §8.1`'s difficult-terrain table, published in answer to
+/// `cleak/u5-spec#241`.
 ///
-/// **Measured** 2026-09-07 (`qa/paired/slow-terrain.tsv`,
-/// `qa/paired/swamp-step.tsv`): walking on foot onto swamp (`0x04`) or brush
-/// (`0x08`) prints `Slow progress!`, and onto trees (`0x09`) or foothills
-/// (`0x0b`/`0x0e`/`0x0f`) prints `Very slow!`. The step itself is accepted
-/// either way. Tropical forest (`0x0a`) is grouped with the trees it shares a
-/// class with; that one cell was not reachable from the probe seeds.
+/// | destination | extra object-update calls | extra minutes | line |
+/// |---|---:|---:|---|
+/// | `0x04`, `0x06`, `0x07`, `0x08`, `0x1E`, `0x1F` | 1 | 2 | `Slow progress!` |
+/// | `0x09..=0x0F` | 2 | 4 | `Very slow!` |
 ///
-/// The swamp run also showed that two steps through swamp print nothing else
-/// - no poison line and no status change - so whatever swamp does to the
-/// party beyond the delay is not on this path.
-pub const fn world_slow_movement_line(tile: u8) -> Option<&'static str> {
+/// My 2026-09-07 measurement reached four of those ids and generalised from
+/// them; the published table is wider at both ends - the two brush variants
+/// `0x06`/`0x07` and the two desert ids `0x1E`/`0x1F` take the slow charge,
+/// and the whole `0x09..=0x0F` run takes the very-slow one, including the
+/// `0x0c`/`0x0d` cells the probe seeds could not reach.
+pub const fn world_difficult_terrain_step(tile: u8) -> Option<WorldDifficultTerrainStep> {
     match tile {
-        0x04 | 0x08 => Some(crate::commands::MOVEMENT_SLOW_PROGRESS_LINE),
-        0x09 | 0x0a | 0x0b | 0x0e | 0x0f => Some(crate::commands::MOVEMENT_VERY_SLOW_LINE),
+        0x04 | 0x06 | 0x07 | 0x08 | 0x1e | 0x1f => Some(WorldDifficultTerrainStep {
+            extra_object_update_calls: 1,
+            extra_minutes: 2,
+            line: crate::commands::MOVEMENT_SLOW_PROGRESS_LINE,
+        }),
+        0x09..=0x0f => Some(WorldDifficultTerrainStep {
+            extra_object_update_calls: 2,
+            extra_minutes: 4,
+            line: crate::commands::MOVEMENT_VERY_SLOW_LINE,
+        }),
         _ => None,
+    }
+}
+
+/// One row of [`world_difficult_terrain_step`].
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct WorldDifficultTerrainStep {
+    pub extra_object_update_calls: u8,
+    pub extra_minutes: u8,
+    pub line: &'static str,
+}
+
+/// The line alone, for callers that only narrate.
+pub const fn world_slow_movement_line(tile: u8) -> Option<&'static str> {
+    match world_difficult_terrain_step(tile) {
+        Some(step) => Some(step.line),
+        None => None,
     }
 }

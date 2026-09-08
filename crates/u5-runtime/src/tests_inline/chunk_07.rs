@@ -2067,7 +2067,11 @@ fn horse_world_movement_uses_one_cell_on_rough_terrain() {
 
     assert_eq!((state.player.x, state.player.y), (1, 0));
     assert_eq!(state.turn, 1);
-    assert_eq!(state.message, "");
+    // `movement.md §8.1`: brush `0x07` is a difficult-terrain id, and "Horse
+    // and magic-carpet travel use the same terrain-cost table, without an
+    // exemption or a reduced minute charge" - including its feedback line,
+    // whose echo simply carries the `Ride ` prefix.
+    assert_eq!(state.message, crate::commands::MOVEMENT_SLOW_PROGRESS_LINE);
 }
 
 #[test]

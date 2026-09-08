@@ -931,7 +931,31 @@ impl PlayState {
         self.rebuild_world_live_chunks_from_grid(plane)?;
         self.sync_player_object();
         self.mark_visibility_dirty();
-        self.advance_turn();
+        // `movement.md §8.1`: difficult destination terrain "adds time and
+        // outdoor object-update work to that step", **before** the ordinary
+        // turn cost - "The ordinary outdoor turn still adds its two-minute
+        // baseline afterward, so an ordinary foot step costs two, four or six
+        // game minutes in total." §8.1 also says horse and carpet "use the
+        // same terrain-cost table, without an exemption or a reduced minute
+        // charge", so the charge is not gated on transport.
+        //
+        // The surcharge is folded into the same advance rather than run as a
+        // separate one, so an hour boundary the extra minutes cross still
+        // reaches the hourly cascade: §8.1 says "Terrain's extra work does not
+        // repeat the whole party-upkeep tail", not that it can lose an hour.
+        // Quickness and Negate Time scale the sum, which for these even
+        // charges is the same as scaling each part.
+        //
+        // Not modelled, and the reason the line here is unconditional: §8.1's
+        // one or two **extra outdoor object-update calls**, and the
+        // suppression rule that hangs off them - "the message is suppressed if
+        // any of the additional object-update calls reports a hostile
+        // interaction". Suppression "does not remove the terrain's time
+        // charge", so the charge below is right either way.
+        let difficult = world_difficult_terrain_step(final_tile);
+        let extra_minutes = difficult.map_or(0, |step| step.extra_minutes);
+        self.advance_turn_with_minutes(self.turn_minute_increment().saturating_add(extra_minutes));
+
         if let Some(game_dir) = game_dir {
             if let Some(entry) = transition {
                 self.apply_world_plane_transition(game_dir, entry)?;
@@ -952,13 +976,12 @@ impl PlayState {
         self.message = String::new();
         // Measured 2026-09-07 (`qa/paired/slow-terrain.tsv`): brush answers a
         // step with `Slow progress!` and trees/foothills with `Very slow!`,
-        // under the direction echo and without refusing the step. Only on
-        // foot: no other transport can reach those cells except the horse,
-        // which was not measured, so the line is kept to the measured case.
-        if self.player.transport == TransportState::Foot
-            && let Some(line) = world_slow_movement_line(final_tile)
-        {
-            self.emit_message_line(line);
+        // under the direction echo and without refusing the step. `§8.1` adds
+        // the transports the measurement could not reach: "Mounted and carpet
+        // direction echoes can include their normal `Ride ` or `Fly ` prefix
+        // before the compass word", so the line is not foot-only.
+        if let Some(step) = difficult {
+            self.emit_message_line(step.line);
         }
         self.apply_fixed_narrative_gate_branch(plane);
         self.append_world_damage_tile_message(game_dir, plane)?;
