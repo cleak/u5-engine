@@ -2634,8 +2634,14 @@ fn format_tavern_outcome(
             if speaker_is_female { "milady" } else { "sir" }
         ),
         RoundDrinkServed { tavern, cost } => {
+            // **Measured** 2026-09-08 at The Cat's Lair
+            // (`qa/paired/paws-sage.tsv`): a served purchase is followed by
+            // the tavern's own question, `"Anything else for thee?"`, not by
+            // an `Anything else? (Y/N)` of the engine's invention. The
+            // purchase line itself is a `SHOPPE.DAT` record whose id is not
+            // published, so the engine's sentence still stands above it.
             format!(
-                "{} served a round for {cost} gold. Anything else? (Y/N)",
+                "{} served a round for {cost} gold.\n\n{TAVERN_ANYTHING_ELSE_PROMPT}",
                 tavern.display_name()
             )
         }
@@ -2645,7 +2651,7 @@ fn format_tavern_outcome(
             cost,
         } => {
             format!(
-                "{} served {letter} for {cost} gold. Anything else? (Y/N)",
+                "{} served {letter} for {cost} gold.\n\n{TAVERN_ANYTHING_ELSE_PROMPT}",
                 tavern.display_name()
             )
         }
@@ -2654,7 +2660,7 @@ fn format_tavern_outcome(
         DeclinedEnoughDrink => "Anything else? (Y/N)".to_string(),
         BlueBoarDrinkServed { choice, cost } => {
             format!(
-                "Blue Boar drink {:?} served for {cost} gold. Anything else? (Y/N)",
+                "Blue Boar drink {:?} served for {cost} gold.\n\n{TAVERN_ANYTHING_ELSE_PROMPT}",
                 choice
             )
         }
