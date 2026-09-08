@@ -855,7 +855,12 @@ pub fn compose_gameplay_screen(
     let mut system = TextWindowSystem::new();
     configure_play_text_windows(&mut system);
     paint_stats_panel_text_window(&mut system, state, active_cursor);
-    let text = render_text_window_rgba(&system, ibm)?;
+    // `inventory.md §4.5`: a decorated picker row, the Z-stats moonstone row
+    // and `magic.md §8`'s sextant coordinate row all mark individual cells
+    // runic, and this composer was drawing every cell from `IBM.CH` - the
+    // no-runes overload silently falls back to the text font, so the runic
+    // cells rendered as whatever `IBM.CH` holds at that code.
+    let text = u5_runtime::render_text_window_rgba_with_runes(&system, ibm, Some(runes))?;
     for (dst, src) in rgba.chunks_exact_mut(4).zip(text.chunks_exact(4)) {
         if src[0] == 0 && src[1] == 0 && src[2] == 0 {
             continue;
