@@ -23,6 +23,9 @@ pub const BLACKTHORN_FINAL_DEMAND: &str =
     "\"My patience with thee has worn away! SPEAK UNTO ME THE MANTRA, NOW!\"";
 /// The execution narration, which carries no quotes - it is narration, not
 /// speech.
+/// **Measured** 2026-09-08 (`qa/paired/bt-correct.tsv`): what the right
+/// mantra draws. The companion dies either way; only the manner changes.
+pub const BLACKTHORN_MERCIFUL_DEATH_LINE: &str = "\"I thank thee, my friend! As a token of my esteem for thine honesty, I will grant thy companion a merciful death!\"";
 pub const BLACKTHORN_PENDULUM_NARRATION: &str =
     "With a wave of Blackthorn's hand, the pendulum blade falls!";
 pub const BLACKTHORN_DUNGEON_THREAT: &str =
@@ -4184,15 +4187,16 @@ impl PlayState {
                 // withdrawn reading ended it only once the jail scan ran
                 // dry, i.e. once every party slot had been flagged.
                 self.run_blackthorn_cutscene_beat(BlackthornCutsceneBeat::ConditionalThroneCleanup);
-                self.apply_blackthorn_captive_cell_handoff(
-                    game_dir,
-                    &format!(
-                        "Answered Blackthorn's prompt {} correctly; shrine {} is ruined; standing {standing}; {fate}; cutscene advanced {} world ticks.",
-                        ordinal + 1,
-                        shrine_index + 1,
-                        vm.world_ticks
-                    ),
-                )
+                // **Measured** 2026-09-08 (`qa/paired/bt-correct.tsv`): the
+                // right mantra is thanked, and the companion is killed anyway
+                // - the panel drops a row on the same beat.
+                self.push_diagnostic(format!(
+                    "Answered Blackthorn's prompt {} correctly; shrine {} is ruined; standing {standing}; {fate}; cutscene advanced {} world ticks.",
+                    ordinal + 1,
+                    shrine_index + 1,
+                    vm.world_ticks
+                ));
+                self.apply_blackthorn_captive_cell_handoff(game_dir, BLACKTHORN_MERCIFUL_DEATH_LINE)
             }
             crate::blackthorn_session::BlackthornChallengeOutcome::Survived => {
                 // `blackthorn.md §4`: a correct answer resolves the

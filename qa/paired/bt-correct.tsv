@@ -1,0 +1,45 @@
+# Blackthorn's audience answered correctly: the mantra of the shrine the
+# interrogation selected (`blackthorn.md` §4).
+# requires-seed: the Blackthorn palace tile at 12:00 with companions=3
+both	wait	9000
+both	key	space
+both	wait	4000
+both	key	j
+both	wait	8000
+both	key	e
+both	wait	5000
+both	key	Up
+both	wait	900
+both	key	Up
+both	wait	900
+both	key	Up
+both	wait	900
+both	key	Left
+both	wait	900
+both	key	Up
+both	wait	900
+both	key	Up
+both	wait	900
+both	key	Up
+both	wait	900
+both	key	Up
+both	wait	900
+both	key	Up
+both	wait	900
+both	key	Up
+both	wait	900
+both	key	Up
+both	wait	900
+both	key	Right
+both	wait	900
+both	wait	3000
+both	shot	ask	The demand
+both	type	ahm
+both	wait	1200
+both	shot	typed	The mantra typed
+both	key	Return
+both	wait	6000
+both	shot	right	After the right answer
+both	key	space
+both	wait	4000
+both	shot	after	A keypress later

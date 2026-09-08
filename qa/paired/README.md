@@ -125,6 +125,7 @@ a paired run at all.
 | `nb-inn-refusals` | the inn's companion branches with a party of one: the leave refusal, which ends the visit |
 | `nb-inn-branches` | the inn's branch question, a room quote and the line a declined room draws |
 | `nb-inn` | North Britanny's inn: the greeting record naming the hostel and its owner, then `Terbor asks,` and the three-branch question |
+| `bt-correct` | the same audience answered correctly: the companion dies anyway, mercifully |
 | `bt-escalate` | the same audience with a party of three: all four asks and the pendulum blade |
 | `bt-audience` | Blackthorn's audience: walking up the palace approach triggers the arrest, and a wrong mantra ends it in the dungeon |
 | `wb-blueboar` | the Blue Boar's six-drink list, a purchase and the farewell a `No` draws |
