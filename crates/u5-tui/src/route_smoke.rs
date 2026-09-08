@@ -7178,19 +7178,30 @@ fn validate_route_smoke_case_state(
             )?;
         }
         "shop-arms-local-buy-sell-route" => {
+            // Measured 2026-09-07 (`qa/paired/shop-arms-buy-confirm.tsv` and
+            // the navigation probe beside it): a declined quote leaves the
+            // *Buy listing* open rather than returning to the Buy-or-Sell
+            // greeting, so the `S` later in this script is just another
+            // invalid stock letter and the sell browser is no longer
+            // reachable without a fresh Talk. Space at the listing does not
+            // go back either - it ends the visit on
+            // `"Be off with ye, then..." says Gwenneth`.
+            //
+            // What the case still pins is its stated subject: a decline
+            // mutates nothing and the shop keeps taking letters.
             if state.gold != 999
                 || !matches!(
                     state.active_shop,
                     Some(ActiveShopSession::ArmsLocal(
-                        ArmsShopState::SellPickItem(_),
+                        ArmsShopState::BuyPickItem,
                         ArmsShop::IolosBows
                     ))
                 )
                 || state.equipment_stock[EQUIPMENT_ID_BOW] != 1
-                || !state.message.starts_with("No\n")
+                || !state.message.starts_with("\"But of course!")
             {
                 return Err(io::Error::other(format!(
-                    "route smoke `{case_name}` did not exercise arms buy/sell browser declines without mutation"
+                    "route smoke `{case_name}` did not exercise an arms buy decline without mutation"
                 )));
             }
         }

@@ -118,6 +118,7 @@ a paired run at all.
 | `shop-arms-buy` | the same walk-in, driven through the Buy menu, an item pick and the refusals |
 | `shop-arms-menus` | both arms menus with waits long enough for the stock to finish drawing: the Buy listing, an item quote, the Sell prompt and the closing flourish |
 | `shop-arms-buy-confirm` | the Buy confirmation: quote, `Y`, `Sold!`, the post-item prompt and the redrawn listing, then a second quote declined with `N` |
+| `shop-arms-navigation` | what Space does at the Buy listing: it ends the visit on `"Be off with ye, then..." says Gwenneth`, so it is not a way back to the greeting |
 | `shop-arms-sell` | the Sell side of the same shop. **Retry until the `talk` shot shows the greeting**: the walk is thirty steps and the weaponsmith wanders, so a run that ends on `Nobody's here!` proves nothing (three of four attempts on 2026-09-07) |
 | `doom-final-room` | Doom's final room: the fall onto the room trigger, the arena, the absorption, and Lord British's dialogue. **Compared 2026-09-07**: both sides print `Entering room`, the arena banner, `Avatar is absorbed!`, `Lord British says: "Well met, Avatar!"`, the box question, and the seated reply, differing only by one capture's timing |
 | `doom-final-room-refusal` | the same room answering `No` to the first box question. **Compared 2026-09-07**: both sides reach `…secret passage in my chamber!"`, `"Didst thou bring it?"` and `You reply:` |
