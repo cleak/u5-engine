@@ -144,7 +144,7 @@ a paired run at all.
 | `nb-stable-closed` | North Britanny's stable keeper is away from his working waypoint at 13:00, so Talk answers the `shops.md` §2 open-for-business refusal on both sides |
 | `cove-herbalist` | Cove's herbalist: the greeting, `Yes`, the lettered reagent list, a quote and the list redraw a declined quote leaves |
 | `cove-healer` | Cove's Sanctuary: the greeting, `Yes`, the attributed powers line and service question, and the refusal a service nobody needs draws |
-| `paws-tavern` | the Paws tavern at 13:00: greeting, `Yes`, the drink list, `R` for rations, the provision quote, a zero quantity, `"Hrumph."` and the attributed closing bark |
+| `paws-tavern` | the Paws tavern at 13:00: greeting, `Yes`, the drink list, `R` for rations, the provision quote, a zero quantity, `"Hrumph."` and the attributed closing bark. **Compared 2026-09-08** against `shops.md` §8.C: the zero echo, `"Hrumph."`, then `"Anything else` / `for thee?" ` on the next two rows with no blank between, `No` on the question's own row, and the closing bark `"Hmph. Well, later then..."` / `says Dr. Cat.` Seed the run from the **overworld** Paws profile - an in-town seed puts the party beside the keeper and the scenario's walk-in then leads it away |
 | `paws-sleeper` | Paws' tavern keeper is still on a bed at 10:00, so Talk answers the sleeping gate: `"Zzzzzz..."`, quotes included. The route opens a door on the way |
 | `shop-arms-sell-ammunition` | Return on an ammunition row: `"We don't deal in used ammunition!" growls Gwenneth`, and the visit ends |
 | `shop-arms-sell-zero-price` | Return on a zero-price row: `"That, I cannot buy from thee." says Gwenneth`, and the browser continues |
