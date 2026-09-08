@@ -1,0 +1,89 @@
+# Cast Magic Missile at whatever the night finds: the resolved-attack result
+# line `combat.md` §8 leaves unquoted. Entry is the same night walk
+# `overworld-night-walk` uses - `encounters.md` §2.1 rolls every overworld
+# turn - so this scenario is a lottery: a run whose `walk` shot shows no
+# creature has measured nothing and must be re-run.
+# requires-seed: the party on the Britannia overworld at 02:00 with spell
+# charges and mana (`seed_inventory <profile> spells=9 mana=99`)
+both	wait	9000
+both	key	space
+both	wait	4000
+both	key	j
+both	wait	8000
+both	shot	start	On the overworld at 02:00
+both	key	Up
+both	wait	500
+both	key	Down
+both	wait	500
+both	key	Up
+both	wait	500
+both	key	Down
+both	wait	500
+both	key	Up
+both	wait	500
+both	key	Down
+both	wait	500
+both	key	Up
+both	wait	500
+both	key	Down
+both	wait	500
+both	key	Up
+both	wait	500
+both	key	Down
+both	wait	500
+both	key	Up
+both	wait	500
+both	key	Down
+both	wait	500
+both	key	Up
+both	wait	500
+both	key	Down
+both	wait	500
+both	key	Up
+both	wait	500
+both	key	Down
+both	wait	500
+both	key	Up
+both	wait	500
+both	key	Down
+both	wait	500
+both	key	Up
+both	wait	500
+both	key	Down
+both	wait	500
+both	key	Up
+both	wait	500
+both	key	Down
+both	wait	500
+both	key	Up
+both	wait	500
+both	key	Down
+both	wait	500
+both	key	Up
+both	wait	500
+both	key	Down
+both	wait	500
+both	key	Up
+both	wait	500
+both	key	Down
+both	wait	500
+both	key	Up
+both	wait	500
+both	key	Down
+both	wait	500
+both	wait	2500
+both	shot	walk	Thirty night steps in
+both	key	c
+both	wait	2500
+both	shot	cast	The cast prompt
+both	type	gp
+both	wait	1500
+both	key	Return
+both	wait	3500
+both	shot	aim	After Return
+both	key	Up
+both	wait	4000
+both	shot	fired	The result
+both	key	space
+both	wait	3000
+both	shot	after	A keypress later

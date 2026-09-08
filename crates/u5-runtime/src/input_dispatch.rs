@@ -4290,7 +4290,7 @@ fn combat_attack_result_narration(
 /// section's "Order, stated once" list gives them: the graze arm first
 /// (it "suppresses every later result line"), then the death arm, then
 /// the ordinary hit.
-fn combat_landed_damage_result_line(
+pub(crate) fn combat_landed_damage_result_line(
     state: &PlayState,
     target_slot: usize,
     attacker_slot: Option<usize>,

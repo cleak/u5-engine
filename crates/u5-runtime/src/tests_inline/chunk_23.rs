@@ -3855,7 +3855,7 @@ fn combat_ai_blink_special_toggles_linked_visibility_and_marks_dirty() {
         COMBAT_HIDDEN_ACTIVE_OBJECT_TILE
     );
     assert!(state.visibility_dirty);
-    assert_eq!(state.message, "Monster vanishes.");
+    assert_eq!(state.message, "Ghost disappears!");
 }
 
 #[test]
@@ -9003,7 +9003,7 @@ fn combat_ai_summon_daemon_special_places_daemon_without_spell_resources() {
         summoned_active_object_record(COMBAT_CLASS_DAEMON, 6, 4, -1).unwrap()
     );
     assert!(state.visibility_dirty);
-    assert_eq!(state.message, "Monster summons daemon.");
+    assert_eq!(state.message, "Dragon gates in a daemon!");
 }
 
 #[test]
@@ -10345,7 +10345,7 @@ fn combat_ai_possess_special_mutates_control_state_and_daemon_clears_self() {
     assert_eq!(state.active_player, None);
     assert!(state.combat_actors[8].is_empty());
     assert!(state.active_objects[8].is_empty());
-    assert_eq!(state.message, "Monster possessed party member 1.");
+    assert_eq!(state.message, "Avatar possessed!");
 }
 
 #[test]
@@ -10372,7 +10372,7 @@ fn combat_ai_possess_special_resistance_blocks_without_mutation() {
         COMBAT_ACTOR_FLAG_SELECTABLE_80
     );
     assert!(!state.combat_actors[8].is_empty());
-    assert_eq!(state.message, "Possession resisted.");
+    assert_eq!(state.message, "");
 }
 
 #[test]
@@ -10446,7 +10446,7 @@ fn combat_round_production_path_can_drive_possess_special() {
         state.combat_actors[0].flags,
         COMBAT_ACTOR_FLAG_SELECTABLE_80 | COMBAT_ACTOR_FLAG_TEAM_TOGGLE
     );
-    assert_eq!(state.message, "Monster possessed party member 1.");
+    assert_eq!(state.message, "Avatar possessed!");
 }
 
 #[test]
@@ -16069,7 +16069,7 @@ fn combat_cast_active_target_spell_routes_resources_damage_and_xp() {
     assert_eq!(state.party[0].mana, 0);
     assert_eq!(state.turn, 1);
     assert_eq!(state.prng_state, expected_prng);
-    assert_eq!(state.message, "Magic Missile!");
+    assert_eq!(state.message, "Orc critical!");
     assert_eq!(
         i16::from(stats.max_hp) - i16::from(state.combat_actors[target_slot].hp_or_wound),
         expected_damage.max(0)
@@ -16245,7 +16245,7 @@ fn active_combat_cast_target_followup_collects_one_and_two_digit_slots() {
     assert_eq!(single.spell_charges[spell_index], 0);
     assert_eq!(single.party[0].mana, 0);
     assert_eq!(single.turn, 1);
-    assert_eq!(single.message, "Magic Missile!");
+    assert_eq!(single.message, "Orc barely wounded!");
 
     let mut double = world_state(open_world_grid(), 10, 20);
     double.combat_active = true;
@@ -16300,7 +16300,7 @@ fn active_combat_cast_target_followup_collects_one_and_two_digit_slots() {
     assert_eq!(double.spell_charges[spell_index], 0);
     assert_eq!(double.party[0].mana, 0);
     assert_eq!(double.turn, 1);
-    assert_eq!(double.message, "Magic Missile!");
+    assert_eq!(double.message, "Orc barely wounded!");
 }
 
 #[test]
@@ -16415,7 +16415,7 @@ fn combat_cast_directed_sleep_and_poison_wind_mutate_party_targets() {
     assert_eq!(sleep.spell_charges[SLEEP_SPELL_INDEX], 0);
     assert_eq!(sleep.party[0].mana, 0);
     assert_eq!(sleep.party[1].status, b'S');
-    assert_eq!(sleep.message, "Sleep!");
+    assert_eq!(sleep.message, "Party member 2 slept!");
 
     let mut poison = world_state(open_world_grid(), 10, 20);
     poison.combat_active = true;
@@ -16467,7 +16467,7 @@ fn combat_cast_directed_sleep_and_poison_wind_mutate_party_targets() {
     assert_eq!(poison.spell_charges[POISON_WIND_SPELL_INDEX], 0);
     assert_eq!(poison.party[0].mana, 0);
     assert_eq!(poison.party[2].status, b'P');
-    assert_eq!(poison.message, "Poison wind!");
+    assert_eq!(poison.message, "");
 }
 
 #[test]
@@ -16529,7 +16529,7 @@ fn combat_cast_directed_damage_winds_route_damage_and_friendly_fire() {
         death.party_experience[0],
         10 + u16::from(stats.reward_unit())
     );
-    assert_eq!(death.message, "Death wind!");
+    assert_eq!(death.message, "Orc killed!");
 
     let mut flame = world_state(open_world_grid(), 10, 20);
     flame.combat_active = true;
@@ -16557,7 +16557,7 @@ fn combat_cast_directed_damage_winds_route_damage_and_friendly_fire() {
 
     assert_eq!(flame.spell_charges[FLAME_WIND_SPELL_INDEX], 0);
     assert!(flame.combat_actors[COMBAT_PARTY_ACTOR_SLOTS].hp_or_wound < stats.max_hp);
-    assert_eq!(flame.message, "Flame wind!");
+    assert_eq!(flame.message, "Orc killed!");
 }
 
 #[test]

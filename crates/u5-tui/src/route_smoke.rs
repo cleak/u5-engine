@@ -5512,7 +5512,12 @@ fn validate_combat_spell_route_state(state: &PlayState, case_name: &str) -> io::
 
     match case_name {
         "combat-magic-missile-target" => {
-            if !state.message.starts_with("Magic Missile!") {
+            // `combat.md §11.1`: a landed cast narrates through the shared
+            // result narrator, so the line names the target and is graded -
+            // there is no spell-named announcement to match on. What this case
+            // can still assert is that the cast landed rather than reporting
+            // the published `Failed!`.
+            if state.message.is_empty() || state.message == "Failed!" {
                 return Err(io::Error::other(format!(
                     "route smoke `{case_name}` did not complete the targeted Magic Missile spell; message `{}`",
                     state.message
@@ -5520,7 +5525,8 @@ fn validate_combat_spell_route_state(state: &PlayState, case_name: &str) -> io::
             }
         }
         "combat-fireball-target" => {
-            if !state.message.starts_with("Fireball!")
+            if state.message.is_empty()
+                || state.message == "Failed!"
                 || state.combat_actors[COMBAT_PARTY_ACTOR_SLOTS].hp_or_wound
                     >= combat_class_stats(39)
                         .map(|stats| stats.max_hp)
@@ -5676,7 +5682,7 @@ fn validate_combat_spell_route_state(state: &PlayState, case_name: &str) -> io::
             }
         }
         "combat-kill-gazer-eye-burst" => {
-            if !state.message.starts_with("Kill!")
+            if state.message == "Failed!"
                 || !state.combat_actors[COMBAT_PARTY_ACTOR_SLOTS].is_marked_dead()
                 || state.active_objects[COMBAT_PARTY_ACTOR_SLOTS].tile
                     != COMBAT_GAZER_DEATH_MARKER_TILE
@@ -5694,7 +5700,7 @@ fn validate_combat_spell_route_state(state: &PlayState, case_name: &str) -> io::
             // byte, writes **no** tile byte into the active-object record,
             // runs no drop rolls, and releases the slot. The earlier reading
             // that it fell through to the ordinary drop check is withdrawn.
-            if !state.message.starts_with("Kill!")
+            if state.message == "Failed!"
                 || !state.combat_actors[COMBAT_PARTY_ACTOR_SLOTS].is_empty()
                 || state.combat_terrain[5][6] != COMBAT_GARGOYLE_DEATH_TERRAIN_TILE
                 || state.active_objects[COMBAT_PARTY_ACTOR_SLOTS].tile
@@ -6110,7 +6116,10 @@ fn validate_route_smoke_case_state(
                         .party
                         .get(target_slot)
                         .is_none_or(|member| member.status != b'S')
-                        || state.message != "Sleep!"
+                        // `combat.md §11.1` census: "Target slept | both |
+                        // `<target> slept!`" - target-named, one line per
+                        // target the cone lands on.
+                        || !state.message.ends_with(" slept!")
                     {
                         return Err(io::Error::other(format!(
                             "route smoke `{case_name}` did not apply the directed Sleep cone"
@@ -6124,7 +6133,10 @@ fn validate_route_smoke_case_state(
                         .party
                         .get(target_slot)
                         .is_none_or(|member| member.status != b'P')
-                        || state.message != "Poison wind!"
+                        // The accepted party arm is status-only, and `combat.md §11.1`
+                        // publishes no line for it; the invented `Poison wind!`
+                        // is gone and the arm says nothing.
+                        || !state.message.is_empty()
                     {
                         return Err(io::Error::other(format!(
                             "route smoke `{case_name}` did not apply the directed Poison Wind cone"
@@ -6146,7 +6158,14 @@ fn validate_route_smoke_case_state(
                             .party_experience
                             .first()
                             .is_none_or(|xp| *xp != u16::from(stats.reward_unit()))
-                        || !state.message.starts_with("Death wind!")
+                        // The cone narrates one result line per target it
+                        // lands on (`combat.md §11.1`), and which of them is
+                        // last in the slot depends on the cone's target order
+                        // and on whether a death path suppressed its own kill
+                        // line, so this case asserts that the cast landed
+                        // rather than matching one wording.
+                        || state.message.is_empty()
+                        || state.message == "Failed!"
                     {
                         return Err(io::Error::other(format!(
                             "route smoke `{case_name}` did not apply the directed Death Wind cone"
@@ -6154,7 +6173,10 @@ fn validate_route_smoke_case_state(
                     }
                 }
                 FLAME_WIND_SPELL_INDEX => {
-                    if !include_monster_target || !state.message.starts_with("Flame wind!") {
+                    if !include_monster_target
+                        || state.message.is_empty()
+                        || state.message == "Failed!"
+                    {
                         return Err(io::Error::other(format!(
                             "route smoke `{case_name}` did not apply the directed Flame Wind cone"
                         )));

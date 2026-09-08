@@ -65,6 +65,7 @@ a paired run at all.
 | `ship-commands` | X-it aboard a frigate, which measures the completed `X-it ship!` echo and the silence of the skiff launch |
 | `ship-repair` | three hole-ups aboard a frigate, which measure the sea `repair...` branch and its `1..3` hull roll |
 | `combat-cast` | casting Magic Missile in a dungeon-room arena: the `Cast` echo, `Spell name:`, the runic selector row and `Aim!` - and that an empty arena prints nothing after the aim |
+| `night-cast` | casting Magic Missile after a night walk on the overworld: a lottery for a live foe, and the overworld answer `Not here!` when the lottery does not pay |
 | `combat-rounds` | a few rounds inside a dungeon-room arena; it caught `VICTORY!` firing in an arena that never had a foe (`cleak/u5-spec#227`) |
 | `town-wishing-well` | Paws' wishing well end to end - the coin prompt, the wish prompt and the grant - none of whose lines the spec publishes |
 | `town-wishing-well-refusals` | the same well's declined coin and unaccepted wish |
@@ -166,6 +167,7 @@ number of keystrokes:
 | `stonegate-trapdoor-audio` | the party inside Stonegate, standing in the trapdoor ring's centre cell |
 | `word-of-power-audio` | the party standing on the Britannia overworld |
 | `overworld-night-walk` | the party on the Britannia overworld at 02:00, when the encounter threshold can fire |
+| `night-cast` | the same seed, plus `seed_inventory <profile> spells=9 mana=99` |
 | `drowning-audio` | the party aboard a frigate with no skiffs, on deep water at night |
 | `ship-commands` | the party aboard a frigate on deep water |
 | `ship-repair` | the same |

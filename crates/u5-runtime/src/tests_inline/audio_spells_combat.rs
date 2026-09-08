@@ -381,7 +381,7 @@
         let _ = state
             .apply_combat_ai_possess_special_with_inputs(8, 0, false)
             .unwrap();
-        assert_eq!(state.message, "Monster possessed party member 1.");
+        assert_eq!(state.message, "Avatar possessed!");
         assert_eq!(
             state.sound_effects_after(serial),
             vec![SoundEffect::Possession]
@@ -394,7 +394,7 @@
         let _ = state
             .apply_combat_ai_possess_special_with_inputs(8, 0, true)
             .unwrap();
-        assert_eq!(state.message, "Possession resisted.");
+        assert_eq!(state.message, "");
         assert!(state.sound_effects_after(serial).is_empty());
 
         let mut state = world_state(open_world_grid(), 10, 20);
@@ -425,7 +425,7 @@
         let _ = state
             .apply_combat_ai_summon_daemon_special_with_candidates(actor_slot, &[(4, 4), (6, 4)])
             .unwrap();
-        assert_eq!(state.message, "Monster summons daemon.");
+        assert_eq!(state.message, "Dragon gates in a daemon!");
         assert_eq!(
             state.sound_effects_after(serial),
             vec![SoundEffect::MonsterSummon]

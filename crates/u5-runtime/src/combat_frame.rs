@@ -2905,9 +2905,21 @@ impl PlayState {
         if visibility.changed() {
             self.mark_visibility_dirty();
         }
+        // `combat.md §11.1` "Strings this document had not previously
+        // published": the blink ability prints `<monster> disappears!` and
+        // `<monster> reappears!`, named by the acting creature's class, "with
+        // **no trailing newline on either**". The engine's former
+        // `Monster vanishes.` / `Monster reappears.` were invented wordings
+        // with an invented punctuation mark and no name.
+        //
+        // The missing trailing newline is a property of the *next* print, and
+        // this engine has no way to mark a line as leaving the cursor mid-row
+        // for a later, unrelated producer, so it is not modelled here - the
+        // same residue the `vanishes!` line above carries.
+        let name = crate::input_dispatch::combat_actor_display_name(self, actor_slot);
         self.message = match visibility.visibility {
-            CombatLinkedVisibility::Hidden => "Monster vanishes.".to_string(),
-            CombatLinkedVisibility::Visible => "Monster reappears.".to_string(),
+            CombatLinkedVisibility::Hidden => format!("{name} disappears!"),
+            CombatLinkedVisibility::Visible => format!("{name} reappears!"),
         };
         Some(CombatAiSpecialApplication::Blink {
             actor_slot,
@@ -2941,7 +2953,11 @@ impl PlayState {
             &legal_cells,
             candidate_coordinates,
         )?;
-        self.message = "Monster summons daemon.".to_string();
+        // `combat.md §11.1`: the daemon-gate line is `<monster> gates in a
+        // daemon!`, named by the acting creature, "with [its] own software
+        // envelope". `Monster summons daemon.` was invented.
+        let name = crate::input_dispatch::combat_actor_display_name(self, actor_slot);
+        self.message = format!("{name} gates in a daemon!");
         // `audio.md §8.3`: after successful placement and narration, run the
         // monster-summon envelope, "then perform the summon tile flash".
         //
@@ -3032,11 +3048,19 @@ impl PlayState {
                 }
             }
             self.mark_visibility_dirty();
-            self.message = format!("Monster possessed party member {}.", target_slot + 1);
+            // `combat.md §11.1`: the possession line is `<target> possessed!`
+            // - target-named like every other combat result line ("Every
+            // result line names the target, never the attacker"), not an
+            // attacker-and-slot-number sentence.
+            let name = crate::input_dispatch::combat_actor_display_name(self, target_slot);
+            self.message = format!("{name} possessed!");
             // `audio.md §8.3`: after possession narration.
             self.emit_sound_effect(SoundEffect::Possession);
         } else {
-            self.message = "Possession resisted.".to_string();
+            // `combat.md §11.1` publishes the whole combat narration census -
+            // twenty-six strings - and no resisted-possession line is among
+            // them, so the resisted arm says nothing.
+            self.message.clear();
         }
 
         Some(CombatAiSpecialApplication::Possess {
@@ -4942,11 +4966,27 @@ impl PlayState {
 
         self.advance_turn();
         let succeeded = applied.is_some();
-        self.message = match (kind, succeeded) {
-            (CombatSpellDamageKind::MagicMissile, true) => "Magic Missile!".to_string(),
-            (CombatSpellDamageKind::Fireball, true) => "Fireball!".to_string(),
-            (CombatSpellDamageKind::Kill, true) => "Kill!".to_string(),
-            _ => "Failed!".to_string(),
+        // `combat.md §11.1`: "The two sides join below the announcement
+        // layer ... Both then share the to-hit roll, the impact presentation,
+        // the damage roller and the result narrator." A cast that lands
+        // therefore narrates through the same census as a swing - `<target>
+        // grazed!` / `killed!` / `hit!` / a wound grade - and the section's
+        // complete string list holds no spell-named line at all. The former
+        // `Magic Missile!` / `Fireball!` / `Kill!` were invented.
+        //
+        // The failure arm keeps `Failed!`, which §11.1 does publish for this
+        // exact case: "To-hit fails on a cast issued from the combat command
+        // layer | party melee or ranged | `Failed!` - **with no name** -
+        // replacing the miss line entirely".
+        self.message = match applied {
+            Some(application) => crate::input_dispatch::combat_landed_damage_result_line(
+                self,
+                target_slot,
+                Some(caster_index),
+                application.damage_application,
+            )
+            .unwrap_or_default(),
+            None => "Failed!".to_string(),
         };
         if succeeded && audio::spell_shared_variant(spell_index).is_none() {
             // `audio.md §6.1` combat effect template: "On a resolved effect it
@@ -5309,6 +5349,12 @@ impl PlayState {
         });
 
         let target_slots = collect_directed_spell_actor_slots(&self.combat_actors, &target_cells);
+        // `combat.md §11.1`: the mass-target family joins the shared result
+        // narrator like every other landed effect, one line per target it
+        // lands on. The section's complete census of combat narration strings
+        // holds no per-spell announcement, so the former `Sleep!`, `Poison
+        // wind!`, `Death wind!` and `Flame wind!` were invented.
+        let mut narration: Vec<String> = Vec::new();
         let applied = match effect {
             CombatDirectedSpellEffect::Sleep => {
                 let mut affected = false;
@@ -5325,6 +5371,13 @@ impl PlayState {
                         self.set_combat_actor_status_disabled(slot);
                         affected = true;
                     }
+                    // `combat.md §11.1` census: "Target slept | both |
+                    // `<target> slept!`". The line is the shared narrator's,
+                    // one per target the effect lands on.
+                    narration.push(format!(
+                        "{} slept!",
+                        crate::input_dispatch::combat_actor_display_name(self, slot)
+                    ));
                 }
                 Some(affected)
             }
@@ -5348,21 +5401,49 @@ impl PlayState {
                             let outcome = apply_combat_poison_to_party_target(member, damage_roll);
                             if let CombatPartyPoisonOutcome::FallbackDamage { raw_damage } = outcome
                             {
-                                let _ = self.apply_combat_weapon_damage_to_target(
-                                    None,
-                                    slot,
-                                    raw_damage as i16,
-                                    true,
-                                );
+                                if let Some(application) = self
+                                    .apply_combat_weapon_damage_to_target(
+                                        None,
+                                        slot,
+                                        raw_damage as i16,
+                                        true,
+                                    )
+                                {
+                                    narration.extend(
+                                        crate::input_dispatch::combat_landed_damage_result_line(
+                                            self,
+                                            slot,
+                                            None,
+                                            application,
+                                        ),
+                                    );
+                                }
                             }
+                            // The status-only arm is a deliberate silence:
+                            // `combat.md §11.1` publishes `<target> is
+                            // poisoned!` for a *monster attacker's* landed
+                            // swing, "printed **inside** damage resolution",
+                            // and says nothing about Poison Wind's own
+                            // status-only route. Inventing a line here is what
+                            // `Poison wind!` used to be.
                             affected = true;
                         }
                     } else {
                         let raw_damage = combat_field_poison_fallback_damage(
                             self.combat_arena_field_poison_damage_roll(),
                         ) as i16;
-                        let _ =
-                            self.apply_combat_weapon_damage_to_target(None, slot, raw_damage, true);
+                        if let Some(application) =
+                            self.apply_combat_weapon_damage_to_target(None, slot, raw_damage, true)
+                        {
+                            narration.extend(
+                                crate::input_dispatch::combat_landed_damage_result_line(
+                                    self,
+                                    slot,
+                                    None,
+                                    application,
+                                ),
+                            );
+                        }
                         affected = true;
                     }
                 }
@@ -5374,14 +5455,20 @@ impl PlayState {
                     if self.combat_resistance_blocks(caster_index, slot) {
                         continue;
                     }
-                    affected |= self
-                        .apply_combat_weapon_damage_to_target(
-                            Some(caster_index),
+                    if let Some(application) = self.apply_combat_weapon_damage_to_target(
+                        Some(caster_index),
+                        slot,
+                        COMBAT_INSTANT_KILL_DAMAGE,
+                        true,
+                    ) {
+                        affected = true;
+                        narration.extend(crate::input_dispatch::combat_landed_damage_result_line(
+                            self,
                             slot,
-                            COMBAT_INSTANT_KILL_DAMAGE,
-                            true,
-                        )
-                        .is_some();
+                            Some(caster_index),
+                            application,
+                        ));
+                    }
                 }
                 Some(affected)
             }
@@ -5392,24 +5479,41 @@ impl PlayState {
                         self.combat_spell_damage_roll_for_kind(CombatSpellDamageKind::FlameWind)
                     })
                     .collect::<Vec<_>>();
-                self.apply_directed_combat_spell_damage(
+                let application = self.apply_directed_combat_spell_damage(
                     Some(caster_index),
                     effect,
                     &target_cells,
                     &damage_rolls,
-                )
-                .map(|application| !application.applications.is_empty())
+                );
+                if let Some(application) = &application {
+                    for slot_application in &application.applications {
+                        narration.extend(crate::input_dispatch::combat_landed_damage_result_line(
+                            self,
+                            slot_application.target_slot,
+                            Some(caster_index),
+                            slot_application.damage_application,
+                        ));
+                    }
+                }
+                application.map(|application| !application.applications.is_empty())
             }
         };
 
         self.advance_turn();
-        self.message = match (effect, applied.unwrap_or(false)) {
-            (CombatDirectedSpellEffect::Sleep, true) => "Sleep!".to_string(),
-            (CombatDirectedSpellEffect::PoisonWind, true) => "Poison wind!".to_string(),
-            (CombatDirectedSpellEffect::DeathWind, true) => "Death wind!".to_string(),
-            (CombatDirectedSpellEffect::FlameWind, true) => "Flame wind!".to_string(),
-            _ => "Failed!".to_string(),
-        };
+        if applied.unwrap_or(false) {
+            // Each target's own result line, in target order. `text-output.md
+            // §11`: "a second line produced in the same turn prints beneath"
+            // the first, so these stack rather than overwrite.
+            self.message.clear();
+            for line in narration {
+                self.emit_message_line(line);
+            }
+        } else {
+            // `combat.md §11.1`: `Failed!` with no name is the published
+            // outcome of a cast issued from the combat command layer that
+            // does not land.
+            self.message = "Failed!".to_string();
+        }
         if !applied.unwrap_or(false) {
             // `audio.md §8.3`: after `Failed!`, the common spell failure tail.
             self.emit_sound_effect(SoundEffect::CastFailure);
