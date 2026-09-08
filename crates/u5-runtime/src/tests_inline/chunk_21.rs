@@ -5932,14 +5932,17 @@ fn end_to_end_stocked_arms_shop_escape_exits_buy_and_sell_submenus() {
     assert!(sell_state.active_shop.is_none());
     assert_eq!(sell_state.gold, 1000);
     assert_eq!(sell_state.equipment_stock[23], 1);
+    // Measured 2026-09-07: the goodbye is quoted and attributed to the
+    // shopkeeper (`qa/paired/shop-arms-sell-flow.tsv`).
     assert!(
         [
-            "Good-bye...",
-            "Mayhap another time...",
-            "Godspeed...",
-            "Fare thee well...",
+            "\"Good-bye...\"",
+            "\"Mayhap another time...\"",
+            "\"Godspeed...\"",
+            "\"Fare thee well...\"",
         ]
-        .contains(&sell_state.message.as_str())
+        .iter()
+        .any(|line| sell_state.message.starts_with(line))
     );
 }
 

@@ -1906,6 +1906,9 @@ fn handle_arms_shop_key_input(
                 arms_sell_continuation_prompt(state.random_range_u8(0, 3))
             )
         }
+        // Measured 2026-09-07 (`qa/paired/shop-arms-sell-flow.tsv`): a sale
+        // through the browser answers `"Done!"` over `says <shopkeeper>.`,
+        // not the buy path's fixed `Sold!` of `shops.md` §8.1.
         (
             ArmsShopOutcome::Sold {
                 browser_continues: true,
@@ -1913,7 +1916,8 @@ fn handle_arms_shop_key_input(
             },
             _,
         ) => format!(
-            "Sold!\n{}",
+            "{}\n{}",
+            speech.attribute("\"Done!\"", "says"),
             arms_sell_continuation_prompt(state.random_range_u8(0, 3))
         ),
         (
@@ -1922,9 +1926,13 @@ fn handle_arms_shop_key_input(
                 ..
             },
             _,
-        ) => format!("Sold!\n{}", arms_sell_goodbye(state.random_range_u8(0, 3))),
+        ) => format!(
+            "{}\n{}",
+            speech.attribute("\"Done!\"", "says"),
+            speech.attribute(&arms_sell_goodbye(state.random_range_u8(0, 3)), "says")
+        ),
         (ArmsShopOutcome::Exited, _) if matches!(prior_state, ArmsShopState::SellPickItem(_)) => {
-            arms_sell_goodbye(state.random_range_u8(0, 3))
+            speech.attribute(&arms_sell_goodbye(state.random_range_u8(0, 3)), "says")
         }
         // Measured 2026-09-07 (`qa/paired/shop-arms-buy.tsv`): a visit that
         // ends without a sale closes on a *rendered* shared-band record, not
@@ -1965,22 +1973,27 @@ fn arms_sell_entry_prompt(roll: u8) -> String {
         .to_string()
 }
 
+/// **Measured** 2026-09-07 (`qa/paired/shop-arms-sell-flow.tsv`): quoted, like
+/// the entry pool - `"What else hath ye to sell?"` drew twice in one visit.
 fn arms_sell_continuation_prompt(roll: u8) -> String {
     [
-        "What else can ye offer me?",
-        "What else hath ye to sell?",
-        "What else doth thou wish to sell?",
-        "What other arms wilt thou sell?",
+        "\"What else can ye offer me?\"",
+        "\"What else hath ye to sell?\"",
+        "\"What else doth thou wish to sell?\"",
+        "\"What other arms wilt thou sell?\"",
     ][usize::from(roll) % 4]
         .to_string()
 }
 
+/// **Measured** 2026-09-07: quoted, and attributed to the shopkeeper by the
+/// caller - the capture leaving the browser reads `"Godspeed..."` over
+/// `says Gwenneth.`.
 fn arms_sell_goodbye(roll: u8) -> String {
     [
-        "Good-bye...",
-        "Mayhap another time...",
-        "Godspeed...",
-        "Fare thee well...",
+        "\"Good-bye...\"",
+        "\"Mayhap another time...\"",
+        "\"Godspeed...\"",
+        "\"Fare thee well...\"",
     ][usize::from(roll) % 4]
         .to_string()
 }

@@ -118,6 +118,7 @@ a paired run at all.
 | `shop-arms-buy` | the same walk-in, driven through the Buy menu, an item pick and the refusals |
 | `shop-arms-menus` | both arms menus with waits long enough for the stock to finish drawing: the Buy listing, an item quote, the Sell prompt and the closing flourish |
 | `shop-arms-buy-confirm` | the Buy confirmation: quote, `Y`, `Sold!`, the post-item prompt and the redrawn listing, then a second quote declined with `N` |
+| `shop-arms-sell-flow` | a whole sale through the browser: cursor move, offer, decline, second offer, `"Done!" says Gwenneth`, and the quoted goodbye on the way out |
 | `shop-arms-sell-keys` | which key selects a row in the Sell browser: digits, letters and the arrows do nothing, **Return** takes the highlighted row and prints the offer with `Deal?"` |
 | `shop-arms-navigation` | what Space does at the Buy listing: it ends the visit on `"Be off with ye, then..." says Gwenneth`, so it is not a way back to the greeting |
 | `shop-arms-sell` | the Sell side of the same shop. **Retry until the `talk` shot shows the greeting**: the walk is thirty steps and the weaponsmith wanders, so a run that ends on `Nobody's here!` proves nothing (three of four attempts on 2026-09-07) |
