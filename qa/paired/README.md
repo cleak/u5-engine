@@ -119,6 +119,7 @@ a paired run at all.
 | `shop-arms-menus` | both arms menus with waits long enough for the stock to finish drawing: the Buy listing, an item quote, the Sell prompt and the closing flourish |
 | `shop-arms-buy-confirm` | the Buy confirmation: quote, `Y`, `Sold!`, the post-item prompt and the redrawn listing, then a second quote declined with `N` |
 | `shop-arms-sell-flow` | a whole sale through the browser: cursor move, offer, decline, second offer, `"Done!" says Gwenneth`, and the quoted goodbye on the way out |
+| `paws-tavern` | the Paws tavern at 13:00: greeting, `Yes`, the drink list, `R` for rations, the provision quote, a zero quantity, `"Hrumph."` and the attributed closing bark |
 | `paws-sleeper` | Paws' tavern keeper is still on a bed at 10:00, so Talk answers the sleeping gate: `"Zzzzzz..."`, quotes included. The route opens a door on the way |
 | `shop-arms-sell-ammunition` | Return on an ammunition row: `"We don't deal in used ammunition!" growls Gwenneth`, and the visit ends |
 | `shop-arms-sell-zero-price` | Return on a zero-price row: `"That, I cannot buy from thee." says Gwenneth`, and the browser continues |

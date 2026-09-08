@@ -1302,6 +1302,15 @@ fn handle_active_shop_key_input(
                     outcome,
                     provision_quote_record_id,
                     no_sale_record_id,
+                    match state.area {
+                        Area::Town { scene, .. } => {
+                            crate::play_state_impl::shop_vendor_name_for_scene(
+                                SHOP_DIALOG_ID_TAVERN,
+                                scene.byte,
+                            )
+                        }
+                        _ => None,
+                    },
                     game_dir,
                 ),
                 surcharge,
@@ -1579,6 +1588,7 @@ fn active_inn_scene_marker(state: &PlayState) -> u8 {
 /// is the "Weaponsmith / armourer" row, and the same byte keys the arms
 /// column of the resident vendor-name table.
 const SHOP_DIALOG_ID_ARMS: u8 = 0x81;
+const SHOP_DIALOG_ID_TAVERN: u8 = 0x82;
 
 /// `systems/shops.md §8.0`: "Two resident name tables are indexed by the same
 /// row: the shop's display name ... and the vendor's name, which fills the `$`
@@ -2395,7 +2405,10 @@ fn format_tavern_outcome(outcome: crate::shop_runtime::TavernOutcome) -> String 
         DeclinedContinuation => "No\nFarewell.".to_string(),
         NoSaleExit => "Farewell.".to_string(),
         IgnoredInput => String::new(),
-        Declined => "Hrumph.\n\nAnything else for thee?".to_string(),
+        // **Measured** 2026-09-07 at The Cat's Lair in Paws
+        // (`qa/paired/paws-tavern.tsv`): both lines are quoted, and they sit
+        // on consecutive rows with no blank between them.
+        Declined => "\"Hrumph.\"\n\"Anything else for thee?\"".to_string(),
         RefusedShortFunds { .. } => TAVERN_AFFORDABILITY_REFUSAL_BARK.to_string(),
         RefusedNoLivingParty => "No one can drink right now.".to_string(),
         RefusedNoNeed => "Thou needest no provisions.".to_string(),
@@ -2408,6 +2421,7 @@ fn format_tavern_outcome_with_shoppe(
     outcome: crate::shop_runtime::TavernOutcome,
     provision_quote_record_id: Option<usize>,
     no_sale_record_id: Option<usize>,
+    tavern_vendor_name: Option<&'static str>,
     game_dir: &Path,
 ) -> String {
     use crate::shop_runtime::TavernOutcome::*;
@@ -2473,15 +2487,23 @@ fn format_tavern_outcome_with_shoppe(
             )
             .ok()
             .map(|rendered| format!("Yes\n{rendered}")),
+        // Measured: the closing bark is attributed to the tavern's own vendor
+        // - `"What's wrong with ye? Can't hold thy liquor?"` over
+        // `says Dr. Cat.` - using the §8.0 vendor-name row the engine already
+        // keeps for the arms shops.
         DeclinedContinuation | NoSaleExit => no_sale_record_id.and_then(|record_id| {
             renderer
                 .render_record(record_id, &crate::shoppe_bark::ShoppeBarkContext::default())
                 .ok()
                 .map(|rendered| {
+                    let attributed = match tavern_vendor_name {
+                        Some(name) => format!("{rendered}\nsays {name}."),
+                        None => rendered,
+                    };
                     if matches!(outcome, DeclinedContinuation) {
-                        format!("No\n{rendered}")
+                        format!("No\n{attributed}")
                     } else {
-                        rendered
+                        attributed
                     }
                 })
         }),
