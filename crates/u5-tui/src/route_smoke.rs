@@ -1841,7 +1841,10 @@ pub fn route_smoke_cases() -> Vec<RouteSmokeCase> {
         RouteSmokeCase {
             name: "shop-inn-rest-decline-route",
             options: PlayOptions::default(),
-            script: &["R", "N", "P"],
+            // Measured 2026-09-08 (`qa/paired/nb-inn-branches.tsv`): a declined
+            // room ends the visit, so the `P` this case used to press
+            // afterwards would land in the world loop rather than the inn.
+            script: &["R", "N"],
             expected: RouteSmokeExpectation::Town(castle),
             min_turn: 0,
             expected_frame_kind: "tile viewport",
@@ -7252,11 +7255,11 @@ fn validate_route_smoke_case_state(
         }
         "shop-inn-rest-decline-route" => {
             if state.gold != 999
-                || state.active_shop.is_none()
-                || !state.message.contains("No one here is from thy party")
+                || state.active_shop.is_some()
+                || !state.message.contains("Perhaps another time...")
             {
                 return Err(io::Error::other(format!(
-                    "route smoke `{case_name}` did not decline inn rest and stay in the inn menu"
+                    "route smoke `{case_name}` did not decline the inn room and end the visit"
                 )));
             }
         }
