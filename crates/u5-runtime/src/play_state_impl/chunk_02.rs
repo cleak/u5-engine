@@ -2219,9 +2219,9 @@ impl PlayState {
             }
             // §7 fall-through: the scan of the coordinate table found no row,
             // which resolves the meditation to Spirituality rather than
-            // failing. Gated on the altar-tile family so an ordinary surface
-            // tile keeps routing `M` to Mix Reagents.
-            if shrine_virtue_for_altar_tile(tile).is_some() {
+            // failing. Gated on the shrine tiles so an ordinary surface tile
+            // keeps routing `M` to Mix Reagents.
+            if tile == SHRINE_MARKER_TILE || shrine_virtue_for_altar_tile(tile).is_some() {
                 return Ok(Some(ShrineEntry {
                     plane,
                     x: self.player.x,
@@ -2232,28 +2232,37 @@ impl PlayState {
             }
             return Ok(None);
         }
-        // With no sidecar the altar tile decides *whether* this is a shrine,
-        // and `catalogs/gazetteer.md` §7's published coordinate table decides
-        // *which* virtue when the party's cell is one of its rows.
+        // `catalogs/gazetteer.md` §7: "The ordinary entry gate is the live map
+        // tile `0x19`, not the coordinate list alone" - and that one table
+        // "serves both virtue-identification roles". So the tile decides
+        // *whether* this is a shrine and the coordinate row decides *which*
+        // virtue, with §7's sentinel row as the fall-through: "a meditation
+        // attempt whose position matches none of the seven mapped shrines
+        // resolves to **Spirituality**".
         //
-        // The table is not trusted on its own: measured 2026-09-07, two of
-        // its eight rows are not shrines in the shipped map at all - the
-        // party stands in forest at Honesty's (233, 66) and in mountains at
-        // Humility's (231, 216), and the original answers `M` there with Mix
-        // Reagents. Raised as `cleak/u5-spec#239`; until it is settled, a
-        // coordinate alone must not open meditation.
-        Ok(shrine_virtue_for_altar_tile(tile).map(|tile_virtue| {
-            let virtue = published_shrine_entries()
-                .into_iter()
-                .find(|entry| entry.x == self.player.x && entry.y == self.player.y)
-                .map_or(tile_virtue, |entry| entry.virtue);
-            ShrineEntry {
-                plane,
-                x: self.player.x,
-                y: self.player.y,
-                virtue,
-                expected_tile: Some(tile),
-            }
+        // My 2026-09-07 reading - that Honesty's (233, 66) and Humility's
+        // (231, 216) are not shrines in the shipped map - was wrong, and
+        // `cleak/u5-spec#239` is closed with a fresh decode confirming all
+        // seven cells plus "successful E-Enter at Honesty". Measured again
+        // 2026-09-08 (`qa/paired/shrine-three-mantras.tsv`): the stock game
+        // enters the *Honesty* shrine at (233, 66) and ordains its quest.
+        // Gating the lookup on the interior altar-tile family, as this engine
+        // did, left every surface shrine resolving to Spirituality.
+        if tile != SHRINE_MARKER_TILE && shrine_virtue_for_altar_tile(tile).is_none() {
+            return Ok(None);
+        }
+        let virtue = published_shrine_entries()
+            .into_iter()
+            .find(|entry| entry.x == self.player.x && entry.y == self.player.y)
+            .map(|entry| entry.virtue)
+            .or_else(|| shrine_virtue_for_altar_tile(tile))
+            .unwrap_or(ShrineVirtue::Spirituality);
+        Ok(Some(ShrineEntry {
+            plane,
+            x: self.player.x,
+            y: self.player.y,
+            virtue,
+            expected_tile: Some(tile),
         }))
     }
 
