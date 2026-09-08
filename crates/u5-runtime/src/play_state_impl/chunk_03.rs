@@ -1926,13 +1926,35 @@ impl PlayState {
             DirectionPromptKind::CombatSjog { branch, .. } => {
                 combat_command_branch_published_label(branch)?.to_string()
             }
-            // The remaining kinds are member/focus pickers, not the
-            // shared hyphenated direction prompt.
-            DirectionPromptKind::DungeonLook { .. }
-            | DirectionPromptKind::SurfaceFountainDrink { .. }
-            | DirectionPromptKind::DungeonSearch { .. } => return None,
+            // The dungeon pair are not the shared hyphenated prompt, but
+            // they *are* open prompts: `dungeon-mode.md §11`/`§12`'s `Dir-`
+            // relative chooser waits for one of Ahead/Left/Right/Here or
+            // Space, and its acting-member stage waits on `Player: `. Both
+            // keep their own row, so `text-output.md §10.6` gives them the
+            // inline cursor and no fresh live row.
+            //
+            // Returning `None` here cost the window two rows - a live row
+            // and its separating blank - which is the same defect the Yell
+            // arm above records. It is visible on `dungeon-search`'s
+            // `prompt` beat, where the stock window holds its four lines at
+            // rows 20..23 and this engine held them at 18..21
+            // (`cleak/u5-engine#21`).
+            DirectionPromptKind::DungeonSearch { party_index: None }
+            | DirectionPromptKind::DungeonLook {
+                party_index: None, ..
+            } => crate::commands::PARTY_SELECTION_PROMPT.to_string(),
+            DirectionPromptKind::DungeonSearch { .. } | DirectionPromptKind::DungeonLook { .. } => {
+                crate::commands::DUNGEON_DIRECTION_PROMPT.to_string()
+            }
+            // The fountain drinker stage is a member picker whose prompt
+            // literal this engine still invents; left alone here rather
+            // than pinned to the wrong row.
+            DirectionPromptKind::SurfaceFountainDrink { .. } => return None,
         };
-        echo.ends_with('-').then_some(echo)
+        // Every arm above is a row the prompt keeps open: the hyphenated
+        // verb echoes end in `-`, `Dir-` likewise, and `Player: ` ends in
+        // the space its answer lands after.
+        (echo.ends_with('-') || echo.ends_with(' ')).then_some(echo)
     }
 
     pub fn render_active_direction_prompt(&self) -> String {
