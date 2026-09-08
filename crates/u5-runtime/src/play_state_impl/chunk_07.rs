@@ -3746,13 +3746,21 @@ impl PlayState {
             self.message = TOWN_NPC_BRUSHOFF_RESPONSE.to_string();
             return Ok(Some(MoveOutcome::Used));
         }
+        // Measured 2026-09-08 at Minoc's gate at 16:00
+        // (`qa/paired/minoc-guard.tsv`): the regime demand fires when the
+        // party walks up to the guard, and that guard's waypoint behaviour is
+        // the **approach-and-attack** value 4, not the guard/block value 6.
+        // The demand dialog byte is what marks a regime guard, so it is
+        // checked before the behaviour split rather than inside the
+        // guard-event arm; the engine used to reach the demand only through
+        // Talk, and walking into Minoc drew nothing at all.
+        if let Some((x, y)) = self.npcs.iter().find_map(|npc| {
+            (npc.slot == npc_slot && npc.dialog_id == BLACKTHORN_GUARD_DEMAND_DIALOG_ID)
+                .then_some((npc.x, npc.y))
+        }) {
+            return Ok(Some(self.begin_blackthorn_guard_demand(x, y, false)));
+        }
         if behavior.raises_guard_event() {
-            if let Some((x, y)) = self.npcs.iter().find_map(|npc| {
-                (npc.slot == npc_slot && npc.dialog_id == BLACKTHORN_GUARD_DEMAND_DIALOG_ID)
-                    .then_some((npc.x, npc.y))
-            }) {
-                return Ok(Some(self.begin_blackthorn_guard_demand(x, y, false)));
-            }
             self.pending_town_arrest = Some(TownArrestPrompt {
                 scene_byte: scene.byte,
                 floor,
