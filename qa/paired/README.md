@@ -64,6 +64,7 @@ a paired run at all.
 | `hut-ready-refusals` | R-Ready against `inventory.md` §2.1's strength gate, which the engine had implemented as an uncalled helper |
 | `ship-commands` | X-it aboard a frigate, which measures the completed `X-it ship!` echo and the silence of the skiff launch |
 | `ship-repair` | three hole-ups aboard a frigate, which measure the sea `repair...` branch and its `1..3` hull roll |
+| `combat-cast` | casting Magic Missile in a dungeon-room arena: the `Cast` echo, `Spell name:`, the runic selector row and `Aim!` - and that an empty arena prints nothing after the aim |
 | `combat-rounds` | a few rounds inside a dungeon-room arena; it caught `VICTORY!` firing in an arena that never had a foe (`cleak/u5-spec#227`) |
 | `town-wishing-well` | Paws' wishing well end to end - the coin prompt, the wish prompt and the grant - none of whose lines the spec publishes |
 | `town-wishing-well-refusals` | the same well's declined coin and unaccepted wish |

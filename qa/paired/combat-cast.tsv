@@ -1,0 +1,32 @@
+# Casting Magic Missile inside a dungeon-room arena: what the original
+# prints for a resolved combat attack spell (`combat.md` §8).
+# requires-seed: the party one step from a dungeon room trigger, with spell
+# charges and mana (`seed_inventory <profile> spells=9 mana=99`)
+both	wait	9000
+both	key	space
+both	wait	4000
+both	key	j
+both	wait	9000
+both	key	i
+both	wait	2500
+both	key	Up
+both	wait	6000
+both	shot	arena	The arena on entry
+both	key	c
+both	wait	2500
+both	shot	cast	The cast prompt
+both	type	gp
+both	wait	1500
+both	shot	typed	The spell typed
+both	key	Return
+both	wait	3500
+both	shot	target	After Return
+both	key	Up
+both	wait	4000
+both	shot	result	The result
+both	key	Return
+both	wait	4000
+both	shot	fired	After Return at the aim
+both	key	space
+both	wait	3000
+both	shot	next	A keypress later
