@@ -4343,7 +4343,11 @@ impl PlayState {
                 ..
             } => {
                 self.active_blackthorn = Some(challenge);
-                self.message = format!("Blackthorn asks for {prompt}.");
+                // The same measured demand the session renders elsewhere; this
+                // arm used to print `Blackthorn asks for <virtue>.`
+                self.message = format!(
+                    "\"What is the Mantra of the Mystic Shrine of {prompt}?\"\n\n{BLACKTHORN_RESPONSE_PROMPT}"
+                );
                 Ok(MoveOutcome::PromptDeclined)
             }
             crate::blackthorn_session::BlackthornChallengeOutcome::AlreadyPunished => self
@@ -4381,7 +4385,9 @@ impl PlayState {
 
     pub fn blackthorn_current_prompt_message(&self) -> String {
         let Some(challenge) = self.active_blackthorn.as_ref() else {
-            return "Blackthorn audience is not active.".to_string();
+            // The session cannot be absent when this renders; the string is a
+            // harness fallback, never a printed line.
+            return "Blackthorn audience is not active.".to_string(); // audit: not a player-facing line
         };
         if let Some((_, prompt)) = challenge.current_prompt() {
             // `blackthorn.md §4` withdrawal: "the loop's party-slot
@@ -4491,13 +4497,17 @@ impl PlayState {
             .filter(|member| member.living())
             .count();
         if living_companions <= 1 {
-            return "only one companion remains, so Blackthorn spares the player".to_string();
+            // audit: not a player-facing line - the fate string is a harness
+            // diagnostic, and the measured scene says only `merciful death!`.
+            return "only one companion remains, so Blackthorn spares the player".to_string(); // audit: not a player-facing line
         }
         let Some(index) = self.blackthorn_failure_victim_index() else {
-            return "no companion remains to take the merciful death".to_string();
+            // audit: not a player-facing line
+            return "no companion remains to take the merciful death".to_string(); // audit: not a player-facing line
         };
         if index == 0 {
-            return "only the Avatar remains, so Blackthorn spares the player".to_string();
+            // audit: not a player-facing line
+            return "only the Avatar remains, so Blackthorn spares the player".to_string(); // audit: not a player-facing line
         }
         // `blackthorn.md §5`: "The same execution runs on the *correct*-answer
         // branch whenever more than one companion is alive, under a different

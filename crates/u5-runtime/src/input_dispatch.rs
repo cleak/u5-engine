@@ -1814,15 +1814,6 @@ fn healer_no_need_refusal(name: Option<&'static str>) -> String {
     }
 }
 
-fn active_healer_name(state: &PlayState) -> Option<&'static str> {
-    match state.area {
-        Area::Town { scene, .. } => {
-            crate::play_state_impl::shop_vendor_name_for_scene(SHOP_DIALOG_ID_HEALER, scene.byte)
-        }
-        _ => None,
-    }
-}
-
 const SHOP_DIALOG_ID_TAVERN: u8 = 0x82;
 const SHOP_DIALOG_ID_STABLE: u8 = 0x83;
 const SHOP_DIALOG_ID_SHIPWRIGHT: u8 = 0x84;

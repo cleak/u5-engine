@@ -318,7 +318,7 @@ impl PlayState {
                 ));
             }
             if reports.is_empty() {
-                return "damage skipped for 0 living member(s)".to_string();
+                return "damage skipped for 0 living member(s)".to_string(); // audit: not a player-facing line
             }
             return reports.join("; ");
         }
