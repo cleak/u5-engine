@@ -719,6 +719,66 @@ overlays where exact historical pixels are not public.
   strokes, river and road rules, glyphs, vectors, flood order, and bounds.
   Empirical screenshot comparison remains QA rather than a missing contract.
 
+## The 2026-09-08 verification pass
+
+This pass added the checks that were missing rather than only fixing what they
+found, because the recurring failure in this project is not a missing
+implementation - it is a claim with nothing behind it.
+
+**Four standing audits now run from the repository.**
+
+| Tool | Question | Result on 2026-09-08 |
+|---|---|---|
+| `qa/tools/engine_message_audit.py` | which lines does the engine print that the spec never publishes? | 1 of ~2,900 literals, and that one is a measured `SHOPPE.DAT` record body |
+| `qa/tools/spec_literal_coverage.py` | which published lines can the engine not print? | 18 of 376 candidates, all read and accounted for |
+| `qa/tools/audio_trigger_census.py` | which modelled cues never reach a trigger? | 1 of 37, correct at zero by `audio.md` §8.6.1 |
+| `crates/u5-tui/examples/quest_graph_verify.rs` | is every quest-graph term reachable from the shipped conversation data? | 0 of 32 unreachable |
+
+The message audit began the day at 57 unpublished literals. Most of the fall is
+`combat.md` §11.1's narration census, `shops.md` §8.B/§8.C and `karma.md` §12
+arriving upstream; the rest is nine copies of an `I do not understand.` line the
+shop family does not have.
+
+**Two of those tools found defects in the tools themselves**, which is worth
+recording as a pattern:
+
+- the message audit compared Rust-escaped literals against the spec's plain
+  text, so **every** line containing a quotation mark was unmatchable whether
+  published or not;
+- the audio census's first draft skipped `#[cfg(test)]` with a sticky flag and
+  dropped every emit site below the first test module, reporting twelve false
+  "never emitted" cues.
+
+A tool that cannot fail loudly is worse than no tool, because its silence is
+read as evidence.
+
+**The largest single defect this pass found was in the verification path, not
+the game.** `compose_gameplay_screen` - the native composer the paired
+comparisons decode - called the text-window renderer's no-runes overload, which
+silently falls back to `IBM.CH` for a cell marked runic. Every runic cell in the
+panel and message window rendered from the wrong font *in the tool that exists
+to catch exactly that*.
+
+**Reproducibility.** The 122-scenario paired suite had no runner: 107 scenarios
+need a seed and which profile held it was undocumented, so a wrong guess ran and
+compared nothing. `qa/paired/seeds.tsv` and `qa/tools/paired_suite.py` close
+that; `--list` reports 122 runnable, 0 blocked.
+
+**What the pass changed in the game itself**, in rough order of reach: town
+hidden doors were unreachable in nineteen shipped locations; a third of NPC
+conversations were truncated by a forty-field parser cap; every shopkeeper in
+the game raised the town alarm on approach; every surface shrine resolved to
+Spirituality; the Codex urn read one record early; and the whole `combat.md`
+§11.1 narration census, `shops.md`'s inn/tavern/arms text and `karma.md` §12's
+shrine offering were replaced with published text.
+
+**Three retractions of my own measurements** are in that list, and the shape is
+always the same: a negative drawn from one seed. Swamp poisoning was removed
+after 56 healthy steps (the seed's Dexterity was never read); the Honesty shrine
+was reported as not-a-shrine after an `M` press that mixes reagents; a villager
+was reported as `No response!` from an in-town save. A negative needs the seed's
+own attributes stated before it means anything.
+
 ## Conclusion
 
 Across the current public specification tree, including the boot, launcher,

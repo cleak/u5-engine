@@ -24,6 +24,7 @@ Usage: paired_suite.py [--engine-dir DIR] [--list] [scenario...]
 
 import argparse
 import pathlib
+import re
 import subprocess
 import sys
 
@@ -96,8 +97,10 @@ def main() -> None:
             cmd += ["--seed-save", str(profile)]
         cmd.append(str(ROOT / f"{name}.tsv"))
         result = subprocess.run(cmd, capture_output=True, text=True)
-        tail = result.stdout.strip().splitlines()
-        artifact = tail[-1] if tail else ""
+        # The harness prints its artifact directory among a JSON tail; take
+        # the last path under the artifact root rather than the last line.
+        paths = re.findall(r"/[\w./-]*artifacts/u5/paired/[\w.-]+", result.stdout)
+        artifact = paths[-1] if paths else ""
         status = "ok  " if result.returncode == 0 else "FAIL"
         if result.returncode != 0:
             failures += 1
