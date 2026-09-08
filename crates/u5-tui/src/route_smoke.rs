@@ -6292,7 +6292,9 @@ fn validate_route_smoke_case_state(
                 || state.spell_charges[ENERGY_FIELD_SPELL_INDEX] != 0
                 || state.spell_charges[DISPEL_FIELD_SPELL_INDEX] != 0
                 || state.party.first().is_none_or(|member| member.mana != 0)
-                || !state.message.contains("Dispelled electric field")
+                // `magic.md §5.1`: a successful dungeon-cell removal prints
+                // `Field destroyed!` and nothing else.
+                || state.message != u5_runtime::DISPEL_FIELD_DESTROYED_LINE
             {
                 return Err(io::Error::other(format!(
                     "route smoke `{case_name}` did not cycle dungeon field placement and dispel"
@@ -7801,7 +7803,15 @@ fn validate_route_smoke_case_state(
                         && actor.y == DUNGEON_AMBUSH_PARTY_ENTRY_Y[party_row][slot]
                 });
             if !state.combat_active
-                || !state.message.contains("entered dungeon combat")
+                // `dungeon-mode.md §14`: the contact prints `Attacked!` (or
+                // its direction-bearing form); the setup report is a
+                // diagnostic now, not a message-window line.
+                || !state.message.starts_with("Attacked")
+                || !(state.message.contains("entered dungeon combat")
+                    || state
+                        .diagnostics
+                        .iter()
+                        .any(|line| line.contains("entered dungeon combat")))
                 || monster_object.tile != expected_tile
                 || !monster_on_published_source
                 || !party_on_entry_row

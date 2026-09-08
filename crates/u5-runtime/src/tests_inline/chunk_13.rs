@@ -25750,8 +25750,16 @@ fn dungeon_post_turn_active_monster_contact_faces_threat_and_consumes_monster() 
     assert_eq!(state.active_objects[6].tile, combat_class_sprite_byte(20));
     assert_eq!(state.combat_actors[6].owner_target_class, 20);
     assert!(!state.combat_actors[6].is_empty());
-    assert!(state.message.contains("approaches from the East"));
-    assert!(state.message.contains("entered dungeon combat"));
+    // `dungeon-mode.md §14`: the printed line is the fragment-built
+    // `Attacked from the <lower-case compass word>!`; the setup report
+    // is a diagnostic.
+    assert!(state.message.contains("Attacked from the east!"));
+    assert!(
+        state
+            .diagnostics
+            .iter()
+            .any(|line| line.contains("entered dungeon combat"))
+    );
     assert!(!state.message.contains("pending"));
 }
 
@@ -25778,12 +25786,14 @@ fn dungeon_post_turn_non_class_contact_reports_no_combat_class() {
     assert_eq!(state.player.facing, Direction::East);
     assert!(!state.combat_active);
     assert!(state.active_objects[1].is_empty());
+    // §14's line prints for any contact; the class note is a diagnostic.
+    assert!(state.message.contains("Attacked from the east!"));
     assert!(
         state
-            .message
-            .contains("Dungeon object tile 66 approaches from the East")
+            .diagnostics
+            .iter()
+            .any(|line| line.contains("no published combat class"))
     );
-    assert!(state.message.contains("no published combat class"));
     assert!(!state.message.contains("pending"));
 }
 

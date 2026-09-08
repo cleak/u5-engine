@@ -76,7 +76,7 @@
         assert!(state.visibility_dirty);
         assert_eq!(
             state.message,
-            "Dispelled wall of fire at (2, 1) on DUNGEON:0 level 0."
+            DISPEL_FIELD_DESTROYED_LINE
         );
     }
 

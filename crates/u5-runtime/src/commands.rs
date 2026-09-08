@@ -563,6 +563,35 @@ pub const fn new_order_outcome(slot_a: Option<usize>, slot_b: Option<usize>) -> 
 /// describes both branches without quoting either; the engine had
 /// `Remove current helm first.` and `Both hands must be free.`.
 pub const READY_REMOVE_PRESENT_PREFIX: &str = "Remove first thy present ";
+
+/// `inventory.md §5.2`'s refusal table. The occupied-slot message is **not**
+/// one composed sentence with the slot name substituted - each slot has its
+/// own wording, and only the helm's happens to match the composed form.
+pub const READY_REMOVE_HELM_REFUSAL: &str = "Remove first thy present helm!";
+pub const READY_REMOVE_ARMOUR_REFUSAL: &str = "Thou must first remove thine other armour!";
+pub const READY_REMOVE_AMULET_REFUSAL: &str = "Thou must remove thine other amulet!";
+pub const READY_ONE_RING_REFUSAL: &str = "Only one magic ring may be worn at a time!";
+/// `inventory.md §5.2`: "Required arrows or quarrels absent". One line covers
+/// both; the engine had a pair of its own, `No arrows for that weapon.` and
+/// `No quarrels for that weapon.`
+pub const READY_NO_AMMUNITION_REFUSAL: &str = "Thou hast no ammunition for that weapon!";
+/// `inventory.md §5.2`: "Body-armour change during undecided combat". §5.2
+/// also fixes its position - "The combat armour lock applies before the
+/// already-readied unequip test."
+pub const READY_COMBAT_ARMOUR_LOCK_REFUSAL: &str = "Thou canst not change armour in heated battle!";
+
+/// `inventory.md §5.2`'s occupied-slot message for `slot`. The weapon and
+/// off-hand slots have no occupied-slot line of their own: §5.2 covers them
+/// with the two hand-conflict refusals instead.
+pub const fn ready_occupied_slot_refusal(slot: usize) -> Option<&'static str> {
+    Some(match slot {
+        crate::EQUIP_SLOT_HELM => READY_REMOVE_HELM_REFUSAL,
+        crate::EQUIP_SLOT_ARMOUR => READY_REMOVE_ARMOUR_REFUSAL,
+        crate::EQUIP_SLOT_AMULET => READY_REMOVE_AMULET_REFUSAL,
+        crate::EQUIP_SLOT_RING => READY_ONE_RING_REFUSAL,
+        _ => return None,
+    })
+}
 /// **Measured** 2026-09-07 with a two-handed sword already wielded: readying
 /// an off-hand item answers this, where the engine had `Weapon hand holds a
 /// two-handed item.`
@@ -1479,6 +1508,19 @@ pub const DUNGEON_CHEST_OPENED: &str = "\nChest opened\n";
 /// Capital `O` — a **different** literal from Jimmy's, and it carries no
 /// leading line feed, so it renders on the prefix's own row.
 pub const DUNGEON_CHEST_OPEN_ALREADY_OPEN: &str = "Already Open!\n";
+
+/// `dungeon-mode.md §14`: what a dungeon monster's contact prints when the
+/// party already faces it. The direction-bearing form appends ` from the `,
+/// the lower-case compass word and `!\n` to the same prefix. This is
+/// deliberately **not** shared with the Doom cave entrance's
+/// `Attacked at entrance!`.
+/// `magic.md §5.1`, An Grav: "A successful dungeon-cell removal prints
+/// `Field destroyed!` with no generic completion line; successful combat field
+/// removal prints `Success!`."
+pub const DISPEL_FIELD_DESTROYED_LINE: &str = "Field destroyed!";
+
+pub const DUNGEON_MONSTER_CONTACT_PREFIX: &str = "Attacked";
+pub const DUNGEON_MONSTER_CONTACT_LINE: &str = "Attacked!\n";
 pub const DUNGEON_CHEST_OPEN_WHAT: &str = "What?\n";
 pub const DUNGEON_CHEST_GET_ECHO: &str = "Get\n";
 pub const DUNGEON_CHEST_GET_MUST_OPEN_FIRST: &str = "Must open first!\n";

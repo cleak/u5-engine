@@ -3734,11 +3734,10 @@ impl PlayState {
         // published helper cannot drift apart.
         if let Some(ammo_id) = ranged_weapon_required_ammo(item_id as u8) {
             if self.equipment_stock[usize::from(ammo_id)] == 0 {
-                self.message = if ammo_id == ITEM_ID_ARROWS {
-                    "No arrows for that weapon.".to_string()
-                } else {
-                    "No quarrels for that weapon.".to_string()
-                };
+                // `inventory.md §5.2`: one line covers arrows and quarrels
+                // alike - "Required arrows or quarrels absent | `Thou hast no
+                // ammunition for that weapon!`".
+                self.message = READY_NO_AMMUNITION_REFUSAL.to_string();
                 return MoveOutcome::Blocked;
             }
         }
@@ -3747,6 +3746,13 @@ impl PlayState {
             self.message.clear();
             return MoveOutcome::Blocked;
         };
+        // `inventory.md §5.2` publishes `Thou canst not change armour in
+        // heated battle!` for this branch, but the lock above - measured
+        // 2026-09-07 in `qa/paired/combat-ready-armour.tsv` - answers with no
+        // line at all. §5.2 scopes its row to *undecided* combat, which the
+        // capture may not have been in, so the measured silence stands and
+        // the difference is reported rather than papered over
+        // (cleak/u5-spec#247).
         // `inventory.md §2.1`: "Before an item is written into a readied
         // slot, the command sums the selected character's current
         // readied-equipment burden, adds the candidate item's R-Ready
@@ -3757,6 +3763,64 @@ impl PlayState {
         //
         // Where the gate sits relative to the hand rules below is not
         // published; it is placed here, before the first of them.
+        // `inventory.md §5.2`: each occupied slot has its own wording, and
+        // the weapon and off-hand slots have none - the two hand refusals
+        // below cover them. The engine used to compose one sentence with the
+        // slot name substituted, which only ever matched the helm.
+        if self.party_equipment[request.party_index][slot] != EQUIPMENT_EMPTY {
+            if let Some(refusal) = ready_occupied_slot_refusal(slot) {
+                self.message = refusal.to_string();
+                return MoveOutcome::Blocked;
+            }
+        }
+        // The hand slots instead take §5.2's "No hand available for a
+        // one-handed item, including a two-handed weapon already held". A
+        // one-handed pick whose usual hand is taken goes to the other hand;
+        // only a party with neither hand free is refused. The engine used to
+        // report the busy hand as an occupied slot and never used the free
+        // one.
+        let mut slot = slot;
+        if matches!(slot, EQUIP_SLOT_WEAPON | EQUIP_SLOT_OFFHAND)
+            && EQUIPMENT_CLASS_TAGS[item_id] == EQUIPMENT_TAG_ONE_HAND
+        {
+            let equipment = &self.party_equipment[request.party_index];
+            let two_handed_held = equipment[EQUIP_SLOT_WEAPON] != EQUIPMENT_EMPTY
+                && EQUIPMENT_CLASS_TAGS[equipment[EQUIP_SLOT_WEAPON] as usize]
+                    == EQUIPMENT_TAG_TWO_HAND;
+            let other = if slot == EQUIP_SLOT_WEAPON {
+                EQUIP_SLOT_OFFHAND
+            } else {
+                EQUIP_SLOT_WEAPON
+            };
+            if equipment[slot] != EQUIPMENT_EMPTY {
+                if two_handed_held || equipment[other] != EQUIPMENT_EMPTY {
+                    self.message = READY_FREE_A_HAND_REFUSAL.to_string();
+                    return MoveOutcome::Blocked;
+                }
+                slot = other;
+            } else if two_handed_held {
+                self.message = READY_FREE_A_HAND_REFUSAL.to_string();
+                return MoveOutcome::Blocked;
+            }
+        }
+        if EQUIPMENT_CLASS_TAGS[item_id] == EQUIPMENT_TAG_TWO_HAND
+            && self.party_equipment[request.party_index][EQUIP_SLOT_OFFHAND] != EQUIPMENT_EMPTY
+        {
+            self.message = READY_BOTH_HANDS_REFUSAL.to_string();
+            return MoveOutcome::Blocked;
+        }
+        if slot == EQUIP_SLOT_OFFHAND {
+            let weapon = self.party_equipment[request.party_index][EQUIP_SLOT_WEAPON];
+            if weapon != EQUIPMENT_EMPTY
+                && EQUIPMENT_CLASS_TAGS[weapon as usize] == EQUIPMENT_TAG_TWO_HAND
+            {
+                self.message = READY_FREE_A_HAND_REFUSAL.to_string();
+                return MoveOutcome::Blocked;
+            }
+        }
+        // `inventory.md §5.2`: "an occupied-slot or hand-conflict message
+        // precedes the strength refusal when both would apply", so the burden
+        // gate runs last of the four.
         let strength = self
             .party_strengths
             .get(request.party_index)
@@ -3775,25 +3839,6 @@ impl PlayState {
             // the pick completed, and the reopened prompt opens another.
             self.message = format!("\n{READY_NOT_STRONG_ENOUGH_REFUSAL}");
             return MoveOutcome::Blocked;
-        }
-        if self.party_equipment[request.party_index][slot] != EQUIPMENT_EMPTY {
-            self.message = format!("{READY_REMOVE_PRESENT_PREFIX}{}!", slot_name(slot));
-            return MoveOutcome::Blocked;
-        }
-        if EQUIPMENT_CLASS_TAGS[item_id] == EQUIPMENT_TAG_TWO_HAND
-            && self.party_equipment[request.party_index][EQUIP_SLOT_OFFHAND] != EQUIPMENT_EMPTY
-        {
-            self.message = READY_BOTH_HANDS_REFUSAL.to_string();
-            return MoveOutcome::Blocked;
-        }
-        if slot == EQUIP_SLOT_OFFHAND {
-            let weapon = self.party_equipment[request.party_index][EQUIP_SLOT_WEAPON];
-            if weapon != EQUIPMENT_EMPTY
-                && EQUIPMENT_CLASS_TAGS[weapon as usize] == EQUIPMENT_TAG_TWO_HAND
-            {
-                self.message = READY_FREE_A_HAND_REFUSAL.to_string();
-                return MoveOutcome::Blocked;
-            }
         }
 
         let current_burden = ready_burden(&self.party_equipment[request.party_index]);
@@ -4938,13 +4983,18 @@ impl PlayState {
         self.grid[idx] = cell & 0x08;
         self.mark_visibility_dirty();
         self.advance_turn();
-        self.message = format!(
-            "Dispelled {} at ({}, {}) on {} level {level}.",
+        // `magic.md §5.1`: "An Grav | A successful dungeon-cell removal prints
+        // `Field destroyed!` with no generic completion line". The engine's
+        // own sentence named the field, the cell and the level - none of
+        // which the original shows.
+        self.push_diagnostic(format!(
+            "dispelled {} at ({}, {}) on {} level {level}",
             field.label(),
             tx,
             ty,
             scene.key()
-        );
+        ));
+        self.message = DISPEL_FIELD_DESTROYED_LINE.to_string();
         MoveOutcome::Cast
     }
 

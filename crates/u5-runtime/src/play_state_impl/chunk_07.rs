@@ -4878,35 +4878,42 @@ impl PlayState {
             let direction = self
                 .dungeon_direction_from_player_to(object.x, object.y)
                 .unwrap_or(self.player.facing);
+            // `dungeon-mode.md §14`: the feedback "is assembled from fragments
+            // rather than stored whole. The line is `Attacked`, then - only
+            // when the computed direction differs from the party's current
+            // facing - ` from the ` and one of the lower-case compass words
+            // ... and finally `!\n`." It is printed before the new facing is
+            // committed, and it is *not* the Doom cave-entrance refusal.
+            let line = if direction == self.player.facing {
+                DUNGEON_MONSTER_CONTACT_LINE.to_string()
+            } else {
+                format!(
+                    "{DUNGEON_MONSTER_CONTACT_PREFIX} from the {}!\n",
+                    direction.name().to_ascii_lowercase()
+                )
+            };
+            self.emit_message_line(line);
             self.player.facing = direction;
             self.free_active_object_slot(slot);
             self.mark_visibility_dirty();
             if combat_class_stats(object.aux1).is_some() {
                 let note = self.enter_dungeon_active_monster_combat(level, object)?;
-                let contact_message = format!(
+                // The setup report is an engine diagnostic, not a line the
+                // original prints; §14's `Attacked` line above is.
+                self.push_diagnostic(format!(
                     "Dungeon monster tile {} approaches from the {} on {} level {level}; {note}.",
                     object.tile,
                     direction.name(),
                     scene.key()
-                );
-                self.message = if self.message.is_empty() {
-                    contact_message
-                } else {
-                    format!("{} {contact_message}", self.message)
-                };
+                ));
                 return Ok(Some(MoveOutcome::Used));
             }
-            let contact_message = format!(
+            self.push_diagnostic(format!(
                 "Dungeon object tile {} approaches from the {} on {} level {level}; no published combat class.",
                 object.tile,
                 direction.name(),
                 scene.key()
-            );
-            self.message = if self.message.is_empty() {
-                contact_message
-            } else {
-                format!("{} {contact_message}", self.message)
-            };
+            ));
             return Ok(Some(MoveOutcome::Used));
         }
 

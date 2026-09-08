@@ -2713,7 +2713,7 @@
             state.ready_equipment_from_suffix(&format!("1/{EQUIPMENT_ID_BOW}")),
             MoveOutcome::Blocked
         );
-        assert_eq!(state.message, "No arrows for that weapon.");
+        assert_eq!(state.message, READY_NO_AMMUNITION_REFUSAL);
         assert_eq!(state.turn, 3);
     }
 
@@ -3053,7 +3053,7 @@
             state.ready_equipment_from_suffix("1/26"),
             MoveOutcome::Blocked
         );
-        assert_eq!(state.message, "No arrows for that weapon.");
+        assert_eq!(state.message, READY_NO_AMMUNITION_REFUSAL);
 
         state.equipment_stock[EQUIPMENT_ID_ARROWS] = 1;
         assert_eq!(
@@ -3146,7 +3146,7 @@
             state.ready_equipment_from_suffix("1/28"),
             MoveOutcome::Blocked
         );
-        assert_eq!(state.message, "No quarrels for that weapon.");
+        assert_eq!(state.message, READY_NO_AMMUNITION_REFUSAL);
         state.equipment_stock[EQUIPMENT_ID_QUARRELS] = 1;
         assert_eq!(state.ready_equipment_from_suffix("1/28"), MoveOutcome::Used);
         assert_eq!(
@@ -3287,7 +3287,10 @@
             state.ready_equipment_from_suffix("1/16"),
             MoveOutcome::Blocked
         );
-        assert_eq!(state.message, format!("{READY_REMOVE_PRESENT_PREFIX}weapon!"));
+        // `inventory.md §5.2` has no occupied-weapon line: with a
+        // two-handed weapon held, a one-handed pick takes the
+        // no-hand-available refusal instead.
+        assert_eq!(state.message, READY_FREE_A_HAND_REFUSAL);
     }
 
     #[test]

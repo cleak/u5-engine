@@ -3729,6 +3729,16 @@ impl PlayState {
         );
         if movement_commit.is_some() {
             self.mark_visibility_dirty();
+            // `combat.md §9`: "The narration on a committed teleport is the
+            // acting creature's class name followed by `teleports!` and a
+            // newline (Section 11.1)." §11.1 adds that it is "printed straight
+            // after the class name with no newline before it". The engine
+            // committed the move and said nothing.
+            if matches!(movement, CombatAiMovementOutcome::Teleport { .. })
+                && let Some(stats) = combat_class_stats(class)
+            {
+                self.emit_message_line(format!("{} teleports!", stats.name));
+            }
             let _ = self.apply_combat_ambush_reveal_for_actor_position(actor_slot);
         }
         let movement_direction_code = match movement {
