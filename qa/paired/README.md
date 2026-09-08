@@ -21,6 +21,24 @@ shipped `SAVED.GAM` has no active Avatar, so every gameplay scenario first
 creates a character with identical answers; the questionnaire's virtue pairs
 are PRNG-selected and legitimately differ between the two sides.
 
+## Seeds that start inside a town do not work
+
+A save this engine writes inside a town-family location leaves the
+`0x07B4..0x105F` NPC band zero (`formats/saved-gam.md` §12), and
+`conversation.md` §2 step 5 says what the stock then does with it: **every
+NPC in the location answers `No response!`**. Measured 2026-09-07 - a
+`--scene TOWNE:1 --at 14,11` seed draws the right town with the right cast
+on both sides, `Look` names `a merchant`, and `Talk` refuses in the stock at
+both 10:00 and 13:00. Tracked as cleak/u5-spec#243.
+
+So a scenario that has to reach a resident must seed the party **outside**
+and walk in through the door, the way `shop-arms-buy` does. Note also that
+`prng.md` §3 makes NPC wander non-reproducible - "ordinary gameplay events
+re-seed from the host clock" - so a long scripted walk to a *wandering*
+resident is a coin flip: prefer a resident that stands at a post, and use
+`talk_gate_probe --talk <dialog-id>` to ask what this engine answers without
+a paired run at all.
+
 | Scenario | Coverage |
 |---|---|
 | `chargen-journey-basics` | menu, name/gender prompts, gypsy pages, Journey Onward, first steps, Z-stats |

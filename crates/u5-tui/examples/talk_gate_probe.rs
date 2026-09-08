@@ -91,9 +91,20 @@ fn next_step_toward(state: &PlayState, dialog_id: u8) -> Option<char> {
 ///
 /// This re-plans after every step against the state the step produced,
 /// which is a pursuit rather than a route, and prints the keystrokes it
-/// actually took. The engine is deterministic and the stock game matches
-/// it turn for turn, so replaying those keys reproduces the arrival.
-fn chase(state: &mut PlayState, dialog_id: u8, budget: usize) {
+/// actually took.
+///
+/// **Replaying those keys does not reproduce the arrival.** An earlier
+/// revision of this comment claimed it did, on the theory that both sides
+/// are deterministic; `prng.md` §3 says the opposite in as many words -
+/// "ordinary gameplay events re-seed from the host clock", so "the roll
+/// stream is not reproducible from game state alone" - and the wander gate
+/// of `npc-schedules.md` §9.1 draws from it once per NPC per turn. Two runs
+/// of this probe over the same seed and the same script put the same
+/// merchant on different cells, and three paired runs found the stock's
+/// merchant where this engine's had wandered off. Use `--talk` below to ask
+/// what a chased NPC answers *inside one process*; a scripted paired walk to
+/// a wandering NPC is a coin flip, not a test.
+fn chase(state: &mut PlayState, dialog_id: u8, budget: usize) -> Option<Direction> {
     let mut keys = String::new();
     for _ in 0..budget {
         let adjacent = [
@@ -112,7 +123,7 @@ fn chase(state: &mut PlayState, dialog_id: u8, budget: usize) {
                     .npc_at_current_floor(x as usize, y as usize)
                     .is_some_and(|npc| npc.dialog_id == dialog_id)
         });
-        if let Some((_, face)) = adjacent {
+        if let Some((direction, face)) = adjacent {
             println!(
                 "chase: {} step(s) `{keys}` then Talk-{face}  (party at ({}, {}), turn {})",
                 keys.len(),
@@ -120,11 +131,11 @@ fn chase(state: &mut PlayState, dialog_id: u8, budget: usize) {
                 state.player.y,
                 state.turn
             );
-            return;
+            return Some(direction);
         }
         let Some(key) = next_step_toward(state, dialog_id) else {
             println!("chase: no route to dialog-id {dialog_id} after `{keys}`");
-            return;
+            return None;
         };
         let direction = match key {
             'w' => Direction::North,
@@ -138,11 +149,12 @@ fn chase(state: &mut PlayState, dialog_id: u8, budget: usize) {
             != MoveOutcome::Moved
         {
             println!("chase: blocked mid-pursuit after `{keys}`");
-            return;
+            return None;
         }
         keys.push(key);
     }
     println!("chase: gave up after {budget} steps (`{keys}`)");
+    None
 }
 
 fn main() {
@@ -154,6 +166,7 @@ fn main() {
     let options = load_play_options_from_save(dir).expect("profile must hold a save");
     let mut state = PlayState::load_scene(dir, options).expect("scene must load");
     let mut chase_id: Option<u8> = None;
+    let mut talk_id: Option<u8> = None;
     // A roster read from the seed save answers "who stands here *now*",
     // which is the wrong question whenever the divergence is positional:
     // the party has to reach the cell first, and NPC schedules advance a
@@ -167,6 +180,14 @@ fn main() {
                 chase_id = Some(
                     args.next()
                         .expect("--chase needs a dialog id")
+                        .parse()
+                        .expect("dialog id must be a byte"),
+                );
+            }
+            "--talk" => {
+                talk_id = Some(
+                    args.next()
+                        .expect("--talk needs a dialog id")
                         .parse()
                         .expect("dialog id must be a byte"),
                 );
@@ -198,6 +219,24 @@ fn main() {
     }
     if let Some(dialog_id) = chase_id {
         chase(&mut state, dialog_id, 64);
+        return;
+    }
+    // Chase *and* talk, inside one process, so the answer is not at the mercy
+    // of the wander draw between two invocations.
+    if let Some(dialog_id) = talk_id {
+        let Some(direction) = chase(&mut state, dialog_id, 64) else {
+            return;
+        };
+        let outcome = state
+            .talk_direction_with_game_dir(direction, dir)
+            .expect("talk must run");
+        println!(
+            "talk-{}: outcome {outcome:?} message {:?} shop {} conversation {}",
+            Direction::name(direction),
+            state.message,
+            state.active_shop.is_some(),
+            state.active_conversation.is_some(),
+        );
         return;
     }
     let state = state;
