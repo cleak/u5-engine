@@ -66,6 +66,8 @@ a paired run at all.
 | `ship-repair` | three hole-ups aboard a frigate, which measure the sea `repair...` branch and its `1..3` hull roll |
 | `combat-cast` | casting Magic Missile in a dungeon-room arena: the `Cast` echo, `Spell name:`, the runic selector row and `Aim!` - and that an empty arena prints nothing after the aim |
 | `night-cast` | casting Magic Missile after a night walk on the overworld: a lottery for a live foe, and the overworld answer `Not here!` when the lottery does not pay |
+| `shrine-three-mantras` | `karma.md` §12's three `Mantra:` asks, one shot after each |
+| `shrine-unfocused` | a wrong virtue answer carried through to the third mantra and the unfocused-result record |
 | `combat-rounds` | a few rounds inside a dungeon-room arena; it caught `VICTORY!` firing in an arena that never had a foe (`cleak/u5-spec#227`) |
 | `town-wishing-well` | Paws' wishing well end to end - the coin prompt, the wish prompt and the grant - none of whose lines the spec publishes |
 | `town-wishing-well-refusals` | the same well's declined coin and unaccepted wish |
@@ -178,6 +180,7 @@ number of keystrokes:
 | `underworld-walk` | the party standing on the Underworld plane (`--scene UNDERWORLD --at 100,100`) |
 | `shrine-enter` | the party standing on a published shrine coordinate (`--scene BRITANNIA --at 233,66` for Honesty) |
 | `shrine-flow` | the same seed as `shrine-enter` |
+| `shrine-three-mantras`, `shrine-unfocused` | the same seed as `shrine-enter` |
 | `shrine-mantra-close` | the same seed as `shrine-enter` |
 | `slow-progress` | the same seed as `shrine-enter` |
 | `slow-terrain` | the same seed as `shrine-enter` |

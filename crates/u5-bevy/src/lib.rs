@@ -24988,8 +24988,10 @@ mod tests {
         }
 
         assert_eq!(state.shrine_ordained_mask, ShrineVirtue::Honesty.bit());
-        // The ordination itself prints nothing.
-        assert!(state.active_shrine.is_none());
+        // **Measured** 2026-09-08 (`qa/paired/shrine-three-mantras.tsv`): the
+        // third accepted mantra opens the altar's announcement, which waits
+        // for a command key, so the session is still live here.
+        assert!(state.active_shrine.is_some());
         let _ = fs::remove_dir_all(dir);
     }
 

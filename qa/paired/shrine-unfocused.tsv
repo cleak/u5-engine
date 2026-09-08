@@ -1,0 +1,34 @@
+# `karma.md` §12's unfocused result: a wrong virtue answer "does not redirect
+# the meditation" and does not re-open its own question - it carries through to
+# `MISCMSG.DAT` record 30 after the third nonblank mantra. This answers the
+# Honesty shrine with the wrong virtue and then the right mantra three times.
+# requires-seed: the same seed `shrine-flow` uses
+both	wait	9000
+both	key	space
+both	wait	4000
+both	key	j
+both	wait	8000
+both	key	e
+both	wait	4000
+both	type	VALOR
+both	wait	1200
+both	key	Return
+both	wait	3500
+both	shot	virtue	After the wrong virtue: re-ask, or on to the mantra?
+both	type	AHM
+both	wait	1200
+both	key	Return
+both	wait	3500
+both	shot	mantra1	After the first mantra
+both	type	AHM
+both	wait	1200
+both	key	Return
+both	wait	3500
+both	type	AHM
+both	wait	1200
+both	key	Return
+both	wait	4500
+both	shot	mantra3	After the third mantra
+both	key	space
+both	wait	3000
+both	shot	after	After a keypress

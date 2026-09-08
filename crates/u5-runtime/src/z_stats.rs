@@ -287,6 +287,13 @@ pub enum ShrinePhase {
     Virtue,
     Mantra,
     Offering,
+    /// `karma.md §12`, Codex-unread arm: record `31` is on screen and the
+    /// altar is waiting for a command key before the quest sentence.
+    /// **Measured** 2026-09-08 (`qa/paired/shrine-three-mantras.tsv`).
+    AltarAnnouncement,
+    /// The quest sentence is on screen; the next command key brings record
+    /// `33`, the instruction to return when the quest is done.
+    AltarQuest,
 }
 
 #[derive(Clone, Debug, PartialEq, Eq)]

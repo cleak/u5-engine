@@ -1599,7 +1599,9 @@ BRITANNIA 11 21
             );
         }
 
-        assert!(state.active_shrine.is_none());
+        // Measured: the third accepted mantra opens the altar announcement,
+        // which waits for a command key.
+        assert!(state.active_shrine.is_some());
         assert_eq!(state.shrine_ordained_mask, ShrineVirtue::Humility.bit());
         assert_eq!(state.shrine_codex_mask, 0);
         let _ = fs::remove_dir_all(dir);
@@ -1688,8 +1690,9 @@ BRITANNIA 11 21
             PlayInputDisposition::Continue
         );
 
-        // The ordination is silent, and the third answer closes the session.
-        assert!(state.active_shrine.is_none());
+        // The third answer opens the altar's announcement, which waits for a
+        // command key before the quest sentence.
+        assert!(state.active_shrine.is_some());
         assert_eq!(state.shrine_ordained_mask, ShrineVirtue::Honesty.bit());
         assert_eq!(state.shrine_codex_mask, 0);
         assert_eq!(state.turn, 0);

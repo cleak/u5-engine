@@ -1745,7 +1745,9 @@ impl PlayState {
             // the player types is a single digit echoed onto the row that
             // record's trailing space leaves open. Nothing is live-edited
             // here, so the slot mirrors nothing.
-            ShrinePhase::Offering => String::new(),
+            ShrinePhase::Offering | ShrinePhase::AltarAnnouncement | ShrinePhase::AltarQuest => {
+                String::new()
+            }
         }
     }
 
@@ -1765,7 +1767,9 @@ impl PlayState {
         match session.phase {
             ShrinePhase::Virtue => Some(format!(":{}", session.virtue_buffer)),
             ShrinePhase::Mantra => Some(format!("{SHRINE_MANTRA_PROMPT}{}", session.mantra_buffer)),
-            ShrinePhase::Offering => None,
+            ShrinePhase::Offering | ShrinePhase::AltarAnnouncement | ShrinePhase::AltarQuest => {
+                None
+            }
         }
     }
 
@@ -1842,6 +1846,35 @@ impl PlayState {
                         }
                         _ => {}
                     }
+                }
+                // **Measured** 2026-09-08 (`qa/paired/shrine-three-mantras.tsv`)
+                // and `karma.md §12`: the altar announcement waits for "a
+                // command key", then prints the quest sentence, then waits
+                // again before the closing instruction. Any key advances it.
+                ShrinePhase::AltarAnnouncement => {
+                    self.emit_shrine_misc_record(game_dir, MISCMSG_SHRINE_QUEST_SENTENCE)?;
+                    // "then the virtue's record `12` through `19` in the
+                    // virtue order above, then a closing double quote and one
+                    // newline".
+                    self.emit_shrine_misc_record(
+                        game_dir,
+                        *crate::miscmsg_io::MISCMSG_VIRTUE_FAILING_RANGE.start()
+                            + session.virtue.index(),
+                    )?;
+                    self.emit_message_line_continuing_row("\"\n");
+                    session.phase = ShrinePhase::AltarQuest;
+                    self.active_shrine = Some(session);
+                    return Ok(None);
+                }
+                ShrinePhase::AltarQuest => {
+                    self.emit_shrine_misc_record(game_dir, MISCMSG_SHRINE_RETURN_INSTRUCTION)?;
+                    // "Finish with the shrine's sound sequence and ten world
+                    // ticks." The sound sequence is not published as events
+                    // this runtime carries; the pause is.
+                    for _ in 0..SHRINE_OFFERING_RESULT_WORLD_TICKS {
+                        self.animation.tick_static_tiles();
+                    }
+                    return Ok(Some(MoveOutcome::Observed));
                 }
                 ShrinePhase::Offering => {
                     // `karma.md §12`: "This is a single-digit chooser, not a
@@ -1946,12 +1979,14 @@ impl PlayState {
                 // accepted mantra was a *fresh* `Mantra:` row, which is §12's
                 // second ask of three, not a fourth.
                 //
-                // The altar presentation §12 specifies for this arm - records
-                // `31`, `32`, the virtue's own `12..19` record and `33`, each
-                // waiting for a command key - is not modelled yet, so the
-                // session simply closes.
+                // §12: "Set/retain ordination before record `31`, the
+                // altar's quest announcement. Restore the standing Avatar
+                // pose and wait for a command key."
                 self.shrine_ordained_mask |= bit;
-                return Ok(Some(MoveOutcome::PromptDeclined));
+                self.emit_shrine_misc_record(game_dir, MISCMSG_SHRINE_ALTAR_ANNOUNCEMENT)?;
+                session.phase = ShrinePhase::AltarAnnouncement;
+                self.active_shrine = Some(session);
+                return Ok(None);
             }
             self.meditate_shrine_from_suffix(&session.mantra_buffer, game_dir)
         }

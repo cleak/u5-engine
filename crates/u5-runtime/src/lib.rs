@@ -574,8 +574,9 @@ pub use message_window::*;
 pub use misc_tables::*;
 pub use misc_tables_io::*;
 pub use miscmsg_io::{
-    MISCMSG_DAT_FILE, MISCMSG_DAT_LEN, MISCMSG_DAT_RECORDS,
+    MISCMSG_DAT_FILE, MISCMSG_DAT_LEN, MISCMSG_DAT_RECORDS, MISCMSG_SHRINE_ALTAR_ANNOUNCEMENT,
     MISCMSG_SHRINE_OFFERING_INSUFFICIENT_GOLD, MISCMSG_SHRINE_OFFERING_PROMPT,
+    MISCMSG_SHRINE_QUEST_SENTENCE, MISCMSG_SHRINE_RETURN_INSTRUCTION,
     MISCMSG_SHRINE_UNFOCUSED_RESULT, MISCMSG_URN_CODEX_RANGE, MiscMessages, MiscMsgFamily,
     TileGlyphDigraph, load_misc_messages, miscmsg_family, parse_misc_messages,
     render_miscmsg_tile_glyph_text, tile_glyph_digraph,

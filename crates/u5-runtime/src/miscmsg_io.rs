@@ -99,6 +99,13 @@ pub const MISCMSG_VIRTUE_APHORISM_RANGE: std::ops::RangeInclusive<usize> = 20..=
 pub const MISCMSG_SHRINE_MEDITATION_RANGE: std::ops::RangeInclusive<usize> = 28..=35;
 pub const MISCMSG_URN_CODEX_RANGE: std::ops::RangeInclusive<usize> = 36..=46;
 
+/// `karma.md §12`, the Codex-unread arm: record `31` is "the altar's quest
+/// announcement", record `32` opens the quest sentence that the virtue's own
+/// `12..19` record completes, and record `33` is "the instruction to return
+/// after the quest".
+pub const MISCMSG_SHRINE_ALTAR_ANNOUNCEMENT: usize = 31;
+pub const MISCMSG_SHRINE_QUEST_SENTENCE: usize = 32;
+pub const MISCMSG_SHRINE_RETURN_INSTRUCTION: usize = 33;
 /// `karma.md §12` "Unfocused result": "If the virtue answer or any of the
 /// three mantra answers was wrong, render record `30` after the third nonblank
 /// mantra, then return without quest progress."

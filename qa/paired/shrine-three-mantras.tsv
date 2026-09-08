@@ -1,0 +1,39 @@
+# `karma.md` §12 asks `Mantra:` three times. This gives the Honesty shrine its
+# correct mantra three times over and captures the window after each, so the
+# ask count, the silence of the first two and whatever the third prints are all
+# on record.
+# requires-seed: the party on the published Honesty shrine coordinate
+# (`--scene BRITANNIA --at 233,66`), the same seed `shrine-flow` uses
+both	wait	9000
+both	key	space
+both	wait	4000
+both	key	j
+both	wait	8000
+both	key	e
+both	wait	4000
+both	type	HONESTY
+both	wait	1200
+both	key	Return
+both	wait	3000
+both	shot	virtue	After the virtue answer
+both	type	AHM
+both	wait	1200
+both	key	Return
+both	wait	3500
+both	shot	mantra1	After the first mantra
+both	type	AHM
+both	wait	1200
+both	key	Return
+both	wait	3500
+both	shot	mantra2	After the second mantra
+both	type	AHM
+both	wait	1200
+both	key	Return
+both	wait	4500
+both	shot	mantra3	After the third mantra
+both	key	space
+both	wait	3000
+both	shot	after	After a keypress
+both	key	space
+both	wait	3000
+both	shot	after2	After a second keypress
