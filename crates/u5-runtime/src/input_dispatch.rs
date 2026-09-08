@@ -964,10 +964,23 @@ fn handle_active_shop_key_input(
                         )
                     }
                     InnMainAction::LeaveCompanion => {
-                        let deposit =
-                            inn_leave_companion_deposit_for_speaker(inn, ctx.speaker_intelligence);
-                        *s = InnkeeperState::PickLeaveCompanion { inn, deposit };
-                        format!("Leave which companion? Deposit is {deposit} gold. (1-6)")
+                        // **Measured** 2026-09-08 at Hotel Brittany
+                        // (`qa/paired/nb-inn-refusals.tsv`): asking to leave a
+                        // companion with nobody to leave draws a refusal that
+                        // ends the visit, and it carries no attribution tail.
+                        // The engine printed `Thou must keep at least one
+                        // companion.` and stayed in the menu.
+                        if ctx.party_size <= 1 {
+                            *s = InnkeeperState::Exited;
+                            INN_NOBODY_TO_LEAVE_REFUSAL.to_string()
+                        } else {
+                            let deposit = inn_leave_companion_deposit_for_speaker(
+                                inn,
+                                ctx.speaker_intelligence,
+                            );
+                            *s = InnkeeperState::PickLeaveCompanion { inn, deposit };
+                            format!("Leave which companion? Deposit is {deposit} gold. (1-6)")
+                        }
                     }
                     InnMainAction::PickUpCompanion => {
                         let base_room_rate = inn_base_room_rate(inn);
@@ -2507,6 +2520,9 @@ const TAVERN_ANYTHING_ELSE_PROMPT: &str = "\"Anything else for thee?\"";
 /// **Measured** 2026-09-08 at Hotel Brittany: the inn's room quote and the
 /// shipwright's hull quote end on the same prompt.
 const INN_CONFIRM_PROMPT: &str = "Wilt thou take it?\"";
+/// **Measured** 2026-09-08 at Hotel Brittany with a party of one.
+const INN_NOBODY_TO_LEAVE_REFUSAL: &str =
+    "\"Lord British is missing, and all ye plan to do is SLEEP for a month or so? Not in my inn!\"";
 
 /// **Measured**: the line a declined room draws, attributed to the innkeeper.
 fn inn_declined_line(innkeeper_name: Option<&'static str>) -> String {
