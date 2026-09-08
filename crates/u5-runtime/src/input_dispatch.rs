@@ -747,6 +747,20 @@ fn handle_active_shop_key_input(
     let yes = matches!(key_byte, b'Y' | b'y') || suffix.chars().any(|c| matches!(c, 'Y' | 'y'));
     let no = matches!(key_byte, b'N' | b'n') || suffix.chars().any(|c| matches!(c, 'N' | 'n'));
     let mut replacement_session: Option<ActiveShopSession> = None;
+    // Measured 2026-09-07/08 at all eight overlays: the answer to the entry
+    // question echoes as a word - `Yes` or `No` - onto the row the greeting
+    // left the cursor on. A Paws capture shows it appended to the greeting's
+    // own last row (`thee?" Yes`); other captures show it a row lower, which
+    // is the same rule when the greeting happens to fill its last row.
+    let entry_answer_echo = session.awaiting_entry_answer().then(|| {
+        if yes {
+            Some(" Yes")
+        } else if no {
+            Some(" No")
+        } else {
+            None
+        }
+    });
 
     let message = match &mut session {
         ActiveShopSession::Arms(s) => handle_arms_shop_key_input(
@@ -1580,6 +1594,9 @@ fn handle_active_shop_key_input(
             format_guild_outcome(outcome)
         }
     };
+    if let Some(Some(echo)) = entry_answer_echo {
+        state.emit_message_line_continuing_row(echo);
+    }
     state.message = message;
 
     if let Some(next_session) = replacement_session {

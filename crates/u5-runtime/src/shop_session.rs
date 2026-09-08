@@ -28,6 +28,29 @@ pub enum ActiveShopSession {
 }
 
 impl ActiveShopSession {
+    /// Whether the session is still at its entry question, where the
+    /// original waits on a `:` row.
+    ///
+    /// **Measured** 2026-09-07/08 at all eight overlays: the greeting record
+    /// prints and the shop then waits on a colon row, with `Y` echoing as
+    /// `:Yes` and `N` as `:No` before the answer's own text.
+    pub fn awaiting_entry_answer(&self) -> bool {
+        match self {
+            Self::Arms(state) | Self::ArmsLocal(state, _) | Self::ArmsStocked(state, _) => {
+                matches!(state, ArmsShopState::Greeting)
+            }
+            Self::Healer(state, _) => matches!(state, HealerShopState::Greeting),
+            Self::Innkeeper(state) => matches!(state, InnkeeperState::Greeting { .. }),
+            Self::Reagent(state) => matches!(state, ReagentShopState::Greeting { .. }),
+            Self::Tavern(state) => matches!(state, TavernState::Greeting { .. }),
+            Self::HorseTrader(state) => matches!(state, HorseTraderState::Greeting { .. }),
+            Self::ShipBroker(state) => matches!(state, ShipBrokerState::Greeting { .. }),
+            Self::Guild(state) => matches!(state, GuildShopState::Greeting { .. }),
+            // The sage takes typed topics rather than a yes/no answer.
+            Self::Sage(_) => false,
+        }
+    }
+
     /// Returns `true` when the underlying machine has reached its
     /// terminal `Exited` state — the caller should drop the session
     /// and return control to the world loop.
