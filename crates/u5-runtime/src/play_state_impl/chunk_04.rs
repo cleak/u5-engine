@@ -850,21 +850,26 @@ impl PlayState {
         self.push_owned_use_row(
             &mut rows,
             SPECIAL_ITEM_AMULET_LB_INDEX,
-            "Amulet of Lord British",
+            // **Measured** 2026-09-08 (`qa/paired/use-picker.tsv`): the
+            // original's `Items:` panel lists these three by their short
+            // names - ` 1 Amulet`, ` 1 Crown`, ` 1 Sceptre` - in a
+            // thirteen-column field. The engine's long forms would render
+            // truncated, which is not the same text.
+            "Amulet",
             UseItemRequest::AmuletOfLordBritish,
         );
 
         self.push_owned_use_row(
             &mut rows,
             SPECIAL_ITEM_CROWN_LB_INDEX,
-            "Crown of Lord British",
+            "Crown",
             UseItemRequest::CrownOfLordBritish,
         );
 
         self.push_owned_use_row(
             &mut rows,
             SPECIAL_ITEM_SCEPTRE_LB_INDEX,
-            "Sceptre of Lord British",
+            "Sceptre",
             UseItemRequest::Sceptre,
         );
 

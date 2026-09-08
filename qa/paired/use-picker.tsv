@@ -1,0 +1,20 @@
+# The U-Use picker with every special item carried: how the stock lists them
+# and how it is navigated (the Black Badge is the goal, for `blackthorn.md` §7a).
+# requires-seed: the Blackthorn palace tile at 12:00 with `seed_inventory specials=1`
+both	wait	9000
+both	key	space
+both	wait	4000
+both	key	j
+both	wait	8000
+both	key	u
+both	wait	3500
+both	shot	picker	The Use picker
+both	key	Down
+both	wait	700
+both	key	Down
+both	wait	700
+both	key	Down
+both	wait	700
+both	key	Down
+both	wait	700
+both	shot	down4	Four rows down
