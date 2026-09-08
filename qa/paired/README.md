@@ -119,6 +119,7 @@ a paired run at all.
 | `shop-arms-menus` | both arms menus with waits long enough for the stock to finish drawing: the Buy listing, an item quote, the Sell prompt and the closing flourish |
 | `shop-arms-buy-confirm` | the Buy confirmation: quote, `Y`, `Sold!`, the post-item prompt and the redrawn listing, then a second quote declined with `N` |
 | `shop-arms-sell-flow` | a whole sale through the browser: cursor move, offer, decline, second offer, `"Done!" says Gwenneth`, and the quoted goodbye on the way out |
+| `cove-herbalist` | Cove's herbalist: the greeting, `Yes`, the lettered reagent list, a quote and the list redraw a declined quote leaves |
 | `cove-healer` | Cove's Sanctuary: the greeting, `Yes`, the attributed powers line and service question, and the refusal a service nobody needs draws |
 | `paws-tavern` | the Paws tavern at 13:00: greeting, `Yes`, the drink list, `R` for rations, the provision quote, a zero quantity, `"Hrumph."` and the attributed closing bark |
 | `paws-sleeper` | Paws' tavern keeper is still on a bed at 10:00, so Talk answers the sleeping gate: `"Zzzzzz..."`, quotes included. The route opens a door on the way |

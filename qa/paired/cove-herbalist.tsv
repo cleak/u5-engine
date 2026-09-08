@@ -1,0 +1,74 @@
+# Cove's herbalist (dialog byte 0x85) at 13:00: walk in, open a door, and
+# drive the reagent menu (cleak/u5-spec#238).
+# requires-seed: the party on the Cove village tile (`--scene BRITANNIA --at 136,90 --time 13:00`)
+both	wait	9000
+both	key	space
+both	wait	4000
+both	key	j
+both	wait	8000
+both	key	e
+both	wait	4000
+both	key	Up
+both	wait	480
+both	key	Up
+both	wait	480
+both	key	Up
+both	wait	480
+both	key	Up
+both	wait	480
+both	key	Up
+both	wait	480
+both	key	Left
+both	wait	480
+both	key	Left
+both	wait	480
+both	key	Left
+both	wait	480
+both	key	Left
+both	wait	480
+both	key	Left
+both	wait	480
+both	key	Left
+both	wait	480
+both	key	o
+both	wait	900
+both	key	Left
+both	wait	1500
+both	key	Left
+both	wait	480
+both	key	Left
+both	wait	480
+both	key	Left
+both	wait	480
+both	key	Left
+both	wait	480
+both	key	Left
+both	wait	480
+both	key	Down
+both	wait	480
+both	wait	2500
+both	key	l
+both	wait	1200
+both	key	Down
+both	wait	3000
+both	shot	look	Look south
+both	key	t
+both	wait	1200
+both	key	Down
+both	wait	12000
+both	shot	talk	Talk south
+both	key	Y
+both	wait	5000
+both	shot	yes	Yes at the entry prompt
+both	key	A
+both	wait	5000
+both	shot	pick	Picking the first reagent
+both	key	1
+both	wait	5000
+both	shot	one	Quantity one
+both	key	Return
+both	wait	5000
+both	shot	ret	Return
+both	key	N
+both	wait	5000
+both	shot	no	No

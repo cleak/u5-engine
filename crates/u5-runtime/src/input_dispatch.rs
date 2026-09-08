@@ -1379,6 +1379,15 @@ fn handle_active_shop_key_input(
             append_active_shop_surcharge(message, surcharge)
         }
         ActiveShopSession::Reagent(s) => {
+            // The declined-quote arm redraws this herbalist's list, so the
+            // formatter needs to know whose shop it is even when the outcome
+            // does not carry it.
+            let declined_herbalist = match *s {
+                ReagentShopState::Greeting { herbalist }
+                | ReagentShopState::PickReagent { herbalist }
+                | ReagentShopState::PickQuantity { herbalist, .. } => Some(herbalist),
+                ReagentShopState::Exited => None,
+            };
             let mut stock = state.reagents;
             let outcome = match (*s, inline_digit) {
                 (ReagentShopState::Greeting { .. } | ReagentShopState::PickReagent { .. }, _) => {
@@ -1404,7 +1413,7 @@ fn handle_active_shop_key_input(
                 _ => ReagentShopOutcome::InvalidInput,
             };
             state.reagents = stock;
-            format_reagent_outcome(outcome)
+            format_reagent_outcome(outcome, declined_herbalist)
         }
         ActiveShopSession::HorseTrader(s) => {
             let outcome = match (*s, yes, no) {
@@ -2640,14 +2649,40 @@ fn format_sage_outcome_with_shoppe(
     }
 }
 
-fn format_reagent_outcome(outcome: crate::shop_runtime::ReagentShopOutcome) -> String {
+fn format_reagent_outcome(
+    outcome: crate::shop_runtime::ReagentShopOutcome,
+    declined_herbalist: Option<crate::shops::Herbalist>,
+) -> String {
     use crate::shop_runtime::ReagentShopOutcome::*;
     match outcome {
+        // **Measured** 2026-09-07 at Cove (`qa/paired/cove-herbalist.tsv`):
+        // the herbalist's list has the same shape as the arms listing - a
+        // heading, a blank row, one `letter...name` row per stocked reagent,
+        // a blank row, then the question:
+        //
+        // ```text
+        // "Fine! We sell:
+        //
+        // A...Spider Silk
+        // B...Blood Moss
+        // C...Black Pearl
+        // D...Nightshade
+        // E...Mandrake
+        //
+        // Thy interest?"
+        // ```
+        //
+        // The engine printed `<herbalist> offers reagents A-E, or Space.`
         EnteredMenu { herbalist } => {
-            format!(
-                "{} offers reagents A-E, or Space.",
-                herbalist.display_name()
-            )
+            let mut rows = String::new();
+            for entry in crate::shops::herbalist_menu_entries(herbalist) {
+                rows.push_str(&format!(
+                    "{}...{}\n",
+                    entry.letter,
+                    entry.reagent.display_name()
+                ));
+            }
+            format!("{REAGENT_MENU_HEADING}\n\n{rows}\n{REAGENT_MENU_QUESTION}")
         }
         QuotedUnit {
             herbalist,
@@ -2670,11 +2705,19 @@ fn format_reagent_outcome(outcome: crate::shop_runtime::ReagentShopOutcome) -> S
         ),
         RefusedShortFunds { cost } => format!("Thou lackest the {cost} gold."),
         RefusedStockCap { cap, .. } => format!("Thou canst carry only {cap}."),
-        Declined => "As you wish.".to_string(),
+        // Measured: declining a quote redraws the list and its question
+        // rather than printing a dismissal of its own.
+        Declined => match declined_herbalist {
+            Some(herbalist) => format_reagent_outcome(EnteredMenu { herbalist }, None),
+            None => String::new(),
+        },
         Exited => "Farewell.".to_string(),
         InvalidInput => "I do not understand.".to_string(),
     }
 }
+
+const REAGENT_MENU_HEADING: &str = "\"Fine! We sell:";
+const REAGENT_MENU_QUESTION: &str = "Thy interest?\"";
 
 fn format_horse_trader_outcome(outcome: crate::shop_runtime::HorseTraderOutcome) -> String {
     use crate::shop_runtime::HorseTraderOutcome::*;
