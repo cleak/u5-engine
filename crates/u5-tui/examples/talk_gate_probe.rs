@@ -89,9 +89,20 @@ fn next_step_toward(state: &PlayState, dialog_id: u8) -> Option<char> {
 /// resident's post and then try Talk in each direction. This prints the keys
 /// for that walk, which depend only on the map.
 fn route_to_cell(state: &mut PlayState, goal: (usize, usize), budget: usize) {
+    // Plan *and* walk with the cast lifted out. A route that detours around
+    // whoever happens to stand in a doorway is not reproducible (`prng.md`
+    // §3), and the paired run will meet a different arrangement anyway; a
+    // terrain-only route is the same every time, and an NPC standing on it
+    // only ever delays the walk by a turn.
+    let mut terrain = state.clone();
+    terrain.npcs.clear();
+    for object in terrain.active_objects.iter_mut().skip(1) {
+        *object = ActiveObject::empty();
+    }
+    terrain.sync_player_object();
     let mut keys = String::new();
     for _ in 0..budget {
-        if (state.player.x, state.player.y) == goal {
+        if (terrain.player.x, terrain.player.y) == goal {
             println!(
                 "route: {} step(s) `{keys}` to ({}, {})",
                 keys.len(),
@@ -100,10 +111,7 @@ fn route_to_cell(state: &mut PlayState, goal: (usize, usize), budget: usize) {
             );
             return;
         }
-        // Breadth-first over the cells this engine's own step handler will
-        // accept, so walls, counters and closed doors are respected exactly
-        // as the paired scenario will meet them.
-        let start = (state.player.x, state.player.y);
+        let start = (terrain.player.x, terrain.player.y);
         let mut came: HashMap<(usize, usize), ((usize, usize), char)> = HashMap::new();
         let mut queue = VecDeque::from([start]);
         came.insert(start, (start, ' '));
@@ -119,7 +127,7 @@ fn route_to_cell(state: &mut PlayState, goal: (usize, usize), budget: usize) {
                 (Direction::West, 'a'),
                 (Direction::East, 'd'),
             ] {
-                let mut probe = state.clone();
+                let mut probe = terrain.clone();
                 probe.player.x = x;
                 probe.player.y = y;
                 probe.sync_player_object();
@@ -155,7 +163,7 @@ fn route_to_cell(state: &mut PlayState, goal: (usize, usize), budget: usize) {
             'a' => Direction::West,
             _ => Direction::East,
         };
-        if state
+        if terrain
             .step_with_game_dir(direction, None)
             .unwrap_or(MoveOutcome::Blocked)
             != MoveOutcome::Moved

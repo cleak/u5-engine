@@ -116,6 +116,7 @@ a paired run at all.
 | `shop-arms` | the arms shop's browser and its prompts |
 | `shop-arms-after-entry` | the arms shop reached by walking in through the door at 10:00, when the resident is at the shop |
 | `shop-arms-buy` | the same walk-in, driven through the Buy menu, an item pick and the refusals |
+| `shop-arms-sell` | the Sell side of the same shop. **Retry until the `talk` shot shows the greeting**: the walk is thirty steps and the weaponsmith wanders, so a run that ends on `Nobody's here!` proves nothing (three of four attempts on 2026-09-07) |
 | `doom-final-room` | Doom's final room: the fall onto the room trigger, the arena, the absorption, and Lord British's dialogue. **Compared 2026-09-07**: both sides print `Entering room`, the arena banner, `Avatar is absorbed!`, `Lord British says: "Well met, Avatar!"`, the box question, and the seated reply, differing only by one capture's timing |
 | `doom-final-room-refusal` | the same room answering `No` to the first box question. **Compared 2026-09-07**: both sides reach `…secret passage in my chamber!"`, `"Didst thou bring it?"` and `You reply:` |
 

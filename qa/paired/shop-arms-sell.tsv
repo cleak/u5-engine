@@ -1,0 +1,93 @@
+# The arms shop's Sell menu and its refusals, from the same walk-in as
+# `shop-arms-buy`. Measured to replace the engine's invented Buy/Sell picker
+# prompts and sell refusals (cleak/u5-spec#238).
+# requires-seed: the party outside Britain on the overworld at 10:00
+#
+both	wait	9000
+both	key	space
+both	wait	4000
+both	key	j
+both	wait	8000
+both	shot	overworld	Journey Onward on the overworld at Britain
+both	key	e
+both	wait	4000
+both	shot	entered	Entered Britain through the door
+both	key	Up
+both	wait	450
+both	key	Up
+both	wait	450
+both	key	Up
+both	wait	450
+both	key	Up
+both	wait	450
+both	key	Up
+both	wait	450
+both	key	Up
+both	wait	450
+both	key	Up
+both	wait	450
+both	key	Up
+both	wait	450
+both	key	Up
+both	wait	450
+both	key	Left
+both	wait	450
+both	key	Left
+both	wait	450
+both	key	Left
+both	wait	450
+both	key	Left
+both	wait	450
+both	key	Left
+both	wait	450
+both	key	Left
+both	wait	450
+both	key	Left
+both	wait	450
+both	key	Left
+both	wait	450
+both	key	Left
+both	wait	450
+both	key	Left
+both	wait	450
+both	key	Left
+both	wait	450
+both	key	Left
+both	wait	450
+both	key	Left
+both	wait	450
+both	key	Left
+both	wait	450
+both	key	Up
+both	wait	450
+both	key	Up
+both	wait	450
+both	wait	2500
+both	shot	arrived	Arrived beside the weaponsmith
+both	key	l
+both	wait	1200
+both	key	Right
+both	wait	2500
+both	shot	look	Look east at the weaponsmith
+both	key	t
+both	wait	1200
+both	key	Right
+both	wait	3500
+both	shot	talk	Talk east: does the arms shop open at 10:00?
+both	key	S
+both	wait	2800
+both	shot	sell	The Sell menu
+both	key	a
+both	wait	2800
+both	shot	sella	Offering item A
+both	key	N
+both	wait	2800
+both	shot	selldecline	Declining the offer
+both	key	S
+both	wait	2800
+both	key	z
+both	wait	2800
+both	shot	sellbad	An item letter the shop will not take
+both	key	Escape
+both	wait	2500
+both	shot	back	Escape from the menu
