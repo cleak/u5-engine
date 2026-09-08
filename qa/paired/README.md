@@ -120,6 +120,7 @@ a paired run at all.
 | `shop-arms-buy-confirm` | the Buy confirmation: quote, `Y`, `Sold!`, the post-item prompt and the redrawn listing, then a second quote declined with `N` |
 | `shop-arms-sell-flow` | a whole sale through the browser: cursor move, offer, decline, second offer, `"Done!" says Gwenneth`, and the quoted goodbye on the way out |
 | `nb-inn` | North Britanny's inn: the greeting record naming the hostel and its owner, then `Terbor asks,` and the three-branch question |
+| `paws-guild` | The Guild in Paws, three doors in: the greeting, the dot-leader list, a keys quote and the redraw a decline leaves |
 | `bd-shipwright` | The Rusty Bucket in Buccaneer's Den: the greeting, the stock line, a frigate quote and the jeer a decline draws |
 | `nb-stable-open` | the same stable at noon, when its keeper's hour waypoint is 1: the greeting, the price quote and `Deal?"`, and the farewell an accepted purchase ends on |
 | `nb-stable-closed` | North Britanny's stable keeper is away from his working waypoint at 13:00, so Talk answers the `shops.md` §2 open-for-business refusal on both sides |

@@ -2834,19 +2834,57 @@ fn format_ship_broker_outcome(
     }
 }
 
+/// **Measured** 2026-09-08 at The Guild in Paws (`qa/paired/paws-guild.tsv`):
+///
+/// ```text
+/// "We sell:
+///
+/// a.........Keys
+/// b.........Gems
+/// c......Torches
+///
+/// Thy concern?"
+/// ```
+///
+/// The dots are literal full stops, and unlike the arms and herbalist
+/// listings - which use a fixed three-dot separator - the guild pads its
+/// leader so that letter, dots and name occupy fourteen columns, right
+/// aligning the names.
+const GUILD_MENU_HEADING: &str = "\"We sell:";
+const GUILD_MENU_QUESTION: &str = "Thy concern?\"";
+/// The prompt a quoted commodity ends on.
+const GUILD_QUOTE_PROMPT: &str = "Interested?\"";
+/// The heading the list takes when a declined quote redraws it.
+const GUILD_MENU_AGAIN_HEADING: &str = "\"What else, then?";
+const GUILD_MENU_ROW_WIDTH: usize = 14;
+
+fn guild_menu_rows() -> String {
+    let mut rows = String::new();
+    for (letter, commodity) in [
+        ('a', crate::shops::GuildCommodity::Keys),
+        ('b', crate::shops::GuildCommodity::Gems),
+        ('c', crate::shops::GuildCommodity::Torches),
+    ] {
+        let name = commodity.display_name();
+        let dots = GUILD_MENU_ROW_WIDTH.saturating_sub(1 + name.len());
+        rows.push_str(&format!("{letter}{}{name}\n", ".".repeat(dots)));
+    }
+    rows
+}
+
 fn format_guild_outcome(outcome: crate::shop_runtime::GuildShopOutcome) -> String {
     use crate::shop_runtime::GuildShopOutcome::*;
     match outcome {
-        EnteredMenu { shop } => format!(
-            "{}: Keys (A), Gems (B), Torches (C), or Space.",
-            shop.display_name()
+        EnteredMenu { .. } => format!(
+            "{GUILD_MENU_HEADING}\n\n{}\n{GUILD_MENU_QUESTION}",
+            guild_menu_rows()
         ),
         QuotedUnit {
             shop,
             commodity,
             unit_price,
         } => format!(
-            "{} sells {} for {unit_price} gold each. Quantity?",
+            "{} sells {} for {unit_price} gold each.\n\n{GUILD_QUOTE_PROMPT}",
             shop.display_name(),
             commodity.display_name()
         ),
@@ -2862,7 +2900,11 @@ fn format_guild_outcome(outcome: crate::shop_runtime::GuildShopOutcome) -> Strin
         ),
         RefusedShortFunds { cost } => format!("Thou lackest the {cost} gold."),
         RefusedStockCap { cap, .. } => format!("Thou canst carry only {cap}."),
-        Declined => "As you wish.".to_string(),
+        // Measured: a declined quote redraws the list under its own heading.
+        Declined => format!(
+            "{GUILD_MENU_AGAIN_HEADING}\n\n{}\n{GUILD_MENU_QUESTION}",
+            guild_menu_rows()
+        ),
         Exited => "Farewell.".to_string(),
         InvalidInput => "I do not understand.".to_string(),
     }
