@@ -352,6 +352,11 @@ pub const SHOPPE_RECORDS_HORSE_TRADER_LAST: usize = 104;
 pub const SHOPPE_RECORDS_SHIP_BROKER_FIRST: usize = SHOPPE_RECORDS_HORSE_TRADER_LAST + 1;
 pub const SHOPPE_RECORDS_SHIP_BROKER_LAST: usize = 126;
 
+/// `shops.md §8.B`, the shipwright's row: "`Yes`, then record `119` with no
+/// added resident menu question; the record carries its own leading spacing
+/// and prompt."
+pub const SHOPPE_RECORD_SHIPWRIGHT_MENU: usize = 119;
+
 pub const SHOPPE_RECORDS_REAGENT_FIRST: usize = SHOPPE_RECORDS_SHIP_BROKER_LAST + 1;
 pub const SHOPPE_RECORDS_REAGENT_LAST: usize = 146;
 

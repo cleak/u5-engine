@@ -4976,7 +4976,12 @@ fn end_to_end_innkeeper_session_through_input_dispatcher() {
     assert!(state.active_shop.is_some());
     assert_eq!(state.active_effect_tag, None);
     assert_eq!(state.active_effect_counter, 0);
-    // First key 'R' selects inn rest.
+    // `shops.md §8`'s entry table: the greeting takes `Y`, `N` or Space, and
+    // Yes opens the Pick up / Leave / Rest question. The engine used to read
+    // this first key as a service letter.
+    handle_play_key_input(&mut state, 'Y', "", Path::new("")).unwrap();
+    assert!(state.message.contains("Rest for the"), "{}", state.message);
+    // Then 'R' selects inn rest.
     handle_play_key_input(&mut state, 'R', "", Path::new("")).unwrap();
     assert!(state.message.contains("room"));
     // 'Y' again to confirm.
@@ -5051,6 +5056,9 @@ fn end_to_end_innkeeper_leave_companion_moves_roster_to_registry() {
         Inn::HotelBrittany,
     )));
 
+    // `shops.md §8`'s entry answer opens the service question; the service
+    // letter is read there.
+    handle_play_key_input(&mut state, 'Y', "", Path::new("")).unwrap();
     handle_play_key_input(&mut state, 'L', "", Path::new("")).unwrap();
     // Measured 2026-09-08 (`qa/paired/nb-inn-companion.tsv`): the branch asks
     // `"Who will stay?"` and quotes no deposit; the selection happens in the
@@ -5107,6 +5115,8 @@ fn end_to_end_innkeeper_pickup_restores_matching_guest() {
         stay_counter: 0,
     });
     state.active_shop = Some(ActiveShopSession::Innkeeper(InnkeeperState::default()));
+    // `shops.md §8`'s entry answer opens the service question.
+    handle_play_key_input(&mut state, 'Y', "", Path::new("")).unwrap();
 
     // Measured 2026-09-08 (`qa/paired/nb-inn-pickup.tsv`): the branch key
     // itself charges the bill and returns the guest, so the message to check
@@ -5152,6 +5162,8 @@ fn end_to_end_innkeeper_pickup_bill_uses_stay_units_not_leave_deposit() {
         stay_counter: 3,
     });
     state.active_shop = Some(ActiveShopSession::Innkeeper(InnkeeperState::default()));
+    // `shops.md §8`'s entry answer opens the service question.
+    handle_play_key_input(&mut state, 'Y', "", Path::new("")).unwrap();
 
     handle_play_key_input(&mut state, 'P', "", Path::new("")).unwrap();
     // Measured: the bill is charged on the branch key itself and the
@@ -5250,8 +5262,9 @@ fn end_to_end_healer_mission_cure_bypasses_gold_path() {
     ));
 
     handle_play_key_input(&mut state, 'Y', "", Path::new("")).unwrap();
+    // **Measured** at Cove: a one-member party is treated straight off the
+    // service letter, with no member prompt to answer.
     handle_play_key_input(&mut state, 'C', "", Path::new("")).unwrap();
-    handle_play_key_input(&mut state, '1', "", Path::new("")).unwrap();
 
     assert_eq!(state.gold, 0);
     assert_eq!(state.party[0].status, b'G');
@@ -5281,8 +5294,9 @@ fn end_to_end_healer_mission_cure_bypasses_shadowlord_surcharge() {
     ));
 
     handle_play_key_input(&mut state, 'Y', "", Path::new("")).unwrap();
+    // **Measured** at Cove: a one-member party is treated straight off the
+    // service letter, with no member prompt to answer.
     handle_play_key_input(&mut state, 'C', "", Path::new("")).unwrap();
-    handle_play_key_input(&mut state, '1', "", Path::new("")).unwrap();
 
     assert_eq!(state.gold, 50);
     assert_eq!(state.party[0].status, b'G');
@@ -5306,8 +5320,9 @@ fn end_to_end_paid_healer_uses_local_fee_and_play_state_treatment() {
     ));
 
     handle_play_key_input(&mut state, 'Y', "", Path::new("")).unwrap();
+    // A one-member party needs no member prompt; the quote follows the
+    // service letter directly.
     handle_play_key_input(&mut state, 'H', "", Path::new("")).unwrap();
-    handle_play_key_input(&mut state, '1', "", Path::new("")).unwrap();
     assert!(state.message.contains("60 gold"));
     handle_play_key_input(&mut state, 'Y', "", Path::new("")).unwrap();
 

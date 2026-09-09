@@ -720,7 +720,15 @@ pub fn apply_healer_service(service: HealerService, member: &mut HealerPartyMemb
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum InnkeeperState {
+    /// `shops.md §8`'s entry table, row `0x88`: the inn's initial greeting
+    /// takes `Y`, `N` or Space, and only Yes reaches the service question.
+    /// "inn and ship entry do have shared greeting records; neither starts
+    /// directly at its service-letter menu."
     Greeting {
+        inn: Inn,
+    },
+    /// The Pick up / Leave / Rest question that Yes opens.
+    ServiceMenu {
         inn: Inn,
     },
     ConfirmRest {
@@ -777,6 +785,11 @@ pub enum InnkeeperInput {
 
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub enum InnkeeperOutcome {
+    /// `shops.md §8`: Yes at the entry question opens the Pick up / Leave /
+    /// Rest question.
+    EnteredServiceMenu {
+        inn: Inn,
+    },
     QuotedRest {
         inn: Inn,
         base_room_rate: u16,
@@ -818,7 +831,24 @@ pub fn step_innkeeper(
     ctx: ShopTransactionContext,
 ) -> InnkeeperOutcome {
     match (*state, input) {
-        (InnkeeperState::Greeting { inn }, InnkeeperInput::Key(b)) => match inn_main_action(b) {
+        // `shops.md §8`'s entry table: the inn greeting takes `Y`, `N` or
+        // Space, and Yes opens the Pick up / Leave / Rest question. The engine
+        // read the entry key as a service letter, so the published entry
+        // question had no state of its own at all.
+        (InnkeeperState::Greeting { inn }, InnkeeperInput::Key(b)) => {
+            if matches!(b, b'Y' | b'y') {
+                *state = InnkeeperState::ServiceMenu { inn };
+                InnkeeperOutcome::EnteredServiceMenu { inn }
+            } else if matches!(b, b'N' | b'n' | b' ' | b'\r' | b'\n' | 0x1b) {
+                *state = InnkeeperState::Exited;
+                InnkeeperOutcome::Exited
+            } else {
+                // "Other initial keys leave the existing greeting visible and
+                // re-poll."
+                InnkeeperOutcome::InvalidInput
+            }
+        }
+        (InnkeeperState::ServiceMenu { inn }, InnkeeperInput::Key(b)) => match inn_main_action(b) {
             InnMainAction::Rest => {
                 let quote =
                     quote_inn_rest_for_speaker(inn, ctx.party_size, ctx.speaker_intelligence)
@@ -865,7 +895,7 @@ pub fn step_innkeeper(
             },
             InnkeeperInput::Confirm(true),
         ) => {
-            *state = InnkeeperState::Greeting { inn };
+            *state = InnkeeperState::ServiceMenu { inn };
             InnkeeperOutcome::RestConfirmed {
                 inn,
                 base_room_rate,
@@ -873,7 +903,7 @@ pub fn step_innkeeper(
             }
         }
         (InnkeeperState::ConfirmRest { inn, .. }, InnkeeperInput::Confirm(false)) => {
-            *state = InnkeeperState::Greeting { inn };
+            *state = InnkeeperState::ServiceMenu { inn };
             InnkeeperOutcome::Declined
         }
         (
@@ -898,14 +928,14 @@ pub fn step_innkeeper(
             },
             InnkeeperInput::Confirm(true),
         ) => {
-            *state = InnkeeperState::Greeting { inn };
+            *state = InnkeeperState::ServiceMenu { inn };
             InnkeeperOutcome::LeaveConfirmed {
                 party_index,
                 deposit,
             }
         }
         (InnkeeperState::ConfirmLeaveCompanion { inn, .. }, InnkeeperInput::Confirm(false)) => {
-            *state = InnkeeperState::Greeting { inn };
+            *state = InnkeeperState::ServiceMenu { inn };
             InnkeeperOutcome::Declined
         }
         (
@@ -966,14 +996,14 @@ pub fn step_innkeeper(
             },
             InnkeeperInput::Confirm(true),
         ) => {
-            *state = InnkeeperState::Greeting { inn };
+            *state = InnkeeperState::ServiceMenu { inn };
             InnkeeperOutcome::PickUpConfirmed {
                 registry_index,
                 bill,
             }
         }
         (InnkeeperState::ConfirmPickUpCompanion { inn, .. }, InnkeeperInput::Confirm(false)) => {
-            *state = InnkeeperState::Greeting { inn };
+            *state = InnkeeperState::ServiceMenu { inn };
             InnkeeperOutcome::Declined
         }
         (InnkeeperState::Exited, _) => InnkeeperOutcome::Exited,
@@ -2677,6 +2707,14 @@ mod tests {
             party_size: 2,
             living_party_members: 2,
         };
+        // `shops.md §8`'s entry table: Yes at the greeting opens the
+        // service question, which is where a service letter is read.
+        assert_eq!(
+            step_innkeeper(&mut state, InnkeeperInput::Key(b'Y'), ctx),
+            InnkeeperOutcome::EnteredServiceMenu {
+                inn: Inn::TheWayfarerInn
+            }
+        );
 
         let outcome = step_innkeeper(&mut state, InnkeeperInput::Key(b'R'), ctx);
         assert_eq!(
@@ -2709,6 +2747,14 @@ mod tests {
             party_size: 2,
             living_party_members: 2,
         };
+        // `shops.md §8`'s entry table: Yes at the greeting opens the
+        // service question, which is where a service letter is read.
+        assert_eq!(
+            step_innkeeper(&mut state, InnkeeperInput::Key(b'Y'), ctx),
+            InnkeeperOutcome::EnteredServiceMenu {
+                inn: Inn::HotelBrittany
+            }
+        );
 
         let outcome = step_innkeeper(&mut state, InnkeeperInput::Key(b'L'), ctx);
         assert_eq!(
@@ -2736,6 +2782,8 @@ mod tests {
             living_party_members: 4,
         };
         let mut rest = InnkeeperState::for_inn(Inn::HotelBrittany);
+        // `shops.md §8`'s entry answer opens the service question.
+        step_innkeeper(&mut rest, InnkeeperInput::Key(b'Y'), high_int);
         assert_eq!(
             step_innkeeper(&mut rest, InnkeeperInput::Key(b'R'), high_int),
             InnkeeperOutcome::QuotedRest {
@@ -2746,6 +2794,7 @@ mod tests {
         );
 
         let mut leave = InnkeeperState::for_inn(Inn::HotelBrittany);
+        step_innkeeper(&mut leave, InnkeeperInput::Key(b'Y'), high_int);
         assert_eq!(
             step_innkeeper(&mut leave, InnkeeperInput::Key(b'L'), high_int),
             InnkeeperOutcome::PickLeaveCompanion { deposit: 0 }

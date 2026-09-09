@@ -835,8 +835,31 @@ fn handle_active_shop_key_input(
                             HealerTreatmentFee::Bypass => 0,
                             HealerTreatmentFee::Price(cost) => cost,
                         };
+                        // **Measured** 2026-09-09 at Cove's Sanctuary
+                        // (`qa/paired/cove-healer.tsv`, beat `cure`): the
+                        // accepted service letter echoes a word onto the row
+                        // §8.B's question left open - `need?" Curing` - and a
+                        // one-member party is then treated without a prompt
+                        // of any kind: the refusal followed the echo directly.
+                        //
+                        // `shops.md §8` says "Each mode prompts for a party
+                        // member first"; with one member there is nobody to
+                        // choose between, and the engine asked anyway with an
+                        // invented `Who needs Cure? (1-6)`.
+                        state.emit_message_line_continuing_row(healer_service_echo(treatment));
+                        state.push_explicit_blank_message_entry();
+                        if state.party.len() == 1 {
+                            *s = HealerShopState::PickPartyMember { service, cost };
+                            return {
+                                state.active_shop = Some(session);
+                                handle_active_shop_key_input(state, '1', "", game_dir)
+                            };
+                        }
                         *s = HealerShopState::PickPartyMember { service, cost };
-                        format!("Who needs {}? (1-6)", treatment.display_name())
+                        // Unmeasured: no capture yet drives this branch with a
+                        // party of two or more, and §8 publishes no wording
+                        // for the picker it describes.
+                        String::new()
                     }
                     HealerServiceAction::Exit => {
                         *s = HealerShopState::Exited;
@@ -945,7 +968,34 @@ fn handle_active_shop_key_input(
                 crate::play_state_impl::shop_vendor_name_for_scene(SHOP_DIALOG_ID_INN, scene)
             });
             match (*s, yes, no, inline_digit) {
-                (InnkeeperState::Greeting { inn }, _, _, _) => match inn_main_action(key_byte) {
+                // `shops.md §8`'s entry table, row `0x88`: the greeting takes
+                // `Y`, `N` or Space; Yes opens the service question and every
+                // other key leaves the greeting visible. `§8.B` publishes the
+                // question itself, which the engine had no state for - it read
+                // the entry key as a service letter instead.
+                (InnkeeperState::Greeting { inn }, true, _, _) => {
+                    *s = InnkeeperState::ServiceMenu { inn };
+                    match innkeeper_name {
+                        Some(name) => format!("{name} asks,\n{INN_SERVICE_QUESTION}"),
+                        None => INN_SERVICE_QUESTION.to_string(),
+                    }
+                }
+                (InnkeeperState::Greeting { .. }, _, true, _) => {
+                    *s = InnkeeperState::Exited;
+                    String::new()
+                }
+                (InnkeeperState::Greeting { inn }, _, _, _) => {
+                    if matches!(key_byte, b' ' | b'\r' | b'\n' | 0x1b) {
+                        *s = InnkeeperState::Exited;
+                        String::new()
+                    } else {
+                        // "Other initial keys leave the existing greeting
+                        // visible and re-poll", without redrawing it.
+                        *s = InnkeeperState::Greeting { inn };
+                        state.message.clone()
+                    }
+                }
+                (InnkeeperState::ServiceMenu { inn }, _, _, _) => match inn_main_action(key_byte) {
                     InnMainAction::Rest => {
                         let base_room_rate = inn_base_room_rate(inn);
                         let total_price = quote_inn_rest_for_speaker(
@@ -1004,7 +1054,7 @@ fn handle_active_shop_key_input(
                         let base_room_rate = inn_base_room_rate(inn);
                         let guests = inn_guest_indices_for_scene(&state.inn_registry, scene_marker);
                         if guests.is_empty() {
-                            *s = InnkeeperState::Greeting { inn };
+                            *s = InnkeeperState::ServiceMenu { inn };
                             "No one here is from thy party!".to_string()
                         } else if guests.len() == 1 {
                             let registry_index = guests[0];
@@ -1032,7 +1082,7 @@ fn handle_active_shop_key_input(
                                 registry_index,
                                 bill,
                             );
-                            *s = InnkeeperState::Greeting { inn };
+                            *s = InnkeeperState::ServiceMenu { inn };
                             match result {
                                 Ok(outcome) => {
                                     let surcharge = apply_active_shop_surcharge(state);
@@ -1095,7 +1145,7 @@ fn handle_active_shop_key_input(
                     _,
                 ) => {
                     let result = state.pay_inn_rest_total(inn, total_price);
-                    *s = InnkeeperState::Greeting { inn };
+                    *s = InnkeeperState::ServiceMenu { inn };
                     match result {
                         Ok(outcome) => {
                             let message =
@@ -1115,7 +1165,7 @@ fn handle_active_shop_key_input(
                     inn_declined_line(innkeeper_name)
                 }
                 (InnkeeperState::PickLeaveCompanion { inn, deposit: _ }, _, true, _) => {
-                    *s = InnkeeperState::Greeting { inn };
+                    *s = InnkeeperState::ServiceMenu { inn };
                     "As you wish.".to_string()
                 }
                 (InnkeeperState::PickLeaveCompanion { inn, deposit }, _, _, Some(d)) if d >= 1 => {
@@ -1145,7 +1195,7 @@ fn handle_active_shop_key_input(
                     _,
                 ) => {
                     let result = state.leave_inn_companion(scene_marker, party_index, deposit);
-                    *s = InnkeeperState::Greeting { inn };
+                    *s = InnkeeperState::ServiceMenu { inn };
                     match result {
                         Ok(outcome) => {
                             // Measured: the innkeeper thanks the party and
@@ -1165,7 +1215,7 @@ fn handle_active_shop_key_input(
                     }
                 }
                 (InnkeeperState::ConfirmLeaveCompanion { inn, .. }, _, true, _) => {
-                    *s = InnkeeperState::Greeting { inn };
+                    *s = InnkeeperState::ServiceMenu { inn };
                     "As you wish.".to_string()
                 }
                 (
@@ -1180,7 +1230,7 @@ fn handle_active_shop_key_input(
                     _,
                 ) => {
                     let _ = (guest_indices, guest_count, base_lodging_charge);
-                    *s = InnkeeperState::Greeting { inn };
+                    *s = InnkeeperState::ServiceMenu { inn };
                     "As you wish.".to_string()
                 }
                 (
@@ -1229,7 +1279,7 @@ fn handle_active_shop_key_input(
                 ) => {
                     let result =
                         state.pickup_inn_guest_with_bill(scene_marker, registry_index, bill);
-                    *s = InnkeeperState::Greeting { inn };
+                    *s = InnkeeperState::ServiceMenu { inn };
                     match result {
                         Ok(outcome) if outcome.returned_dead_from_poison => {
                             let message = format!(
@@ -1253,7 +1303,7 @@ fn handle_active_shop_key_input(
                     }
                 }
                 (InnkeeperState::ConfirmPickUpCompanion { inn, .. }, _, true, _) => {
-                    *s = InnkeeperState::Greeting { inn };
+                    *s = InnkeeperState::ServiceMenu { inn };
                     "As you wish.".to_string()
                 }
                 (InnkeeperState::Exited, _, _, _) => "Farewell.".to_string(),
@@ -1672,8 +1722,26 @@ fn handle_active_shop_key_input(
             let vendor_name = area_scene_byte.and_then(|scene| {
                 crate::play_state_impl::shop_vendor_name_for_scene(SHOP_DIALOG_ID_SHIPWRIGHT, scene)
             });
+            // `§8.B`: the Frigate/Skiff menu is record `119`, "with no added
+            // resident menu question; the record carries its own leading
+            // spacing and prompt".
+            let menu_record = crate::shoppe_bark::ShoppeTextRenderer::load_from_game_dir(game_dir)
+                .ok()
+                .and_then(|renderer| {
+                    renderer
+                        .render_record(
+                            crate::shops::SHOPPE_RECORD_SHIPWRIGHT_MENU,
+                            &crate::shoppe_bark::ShoppeBarkContext {
+                                vendor_name: vendor_name.unwrap_or_default(),
+                                hour: state.clock.hour,
+                                ..Default::default()
+                            },
+                        )
+                        .ok()
+                })
+                .filter(|text| !text.trim().is_empty());
             append_active_shop_surcharge(
-                format_ship_broker_outcome(outcome, vendor_name),
+                format_ship_broker_outcome(outcome, vendor_name, menu_record),
                 surcharge,
             )
         }
@@ -1837,6 +1905,24 @@ fn healer_no_need_refusal(name: Option<&'static str>) -> String {
     match name {
         Some(name) => format!("{refusal}\nsays {name}.\n\n{follow_up}"),
         None => format!("{refusal}\n\n{follow_up}"),
+    }
+}
+
+/// `shops.md §8.B`, the innkeeper's row: "`Yes`, then token-expanded
+/// `\n\n$ asks,\n"Art thou here\nto Pick up or\n`, then `Leave a\ncompanion,
+/// or\nto Rest for the\nnight?" `". The line breaks are the resident text's
+/// own.
+const INN_SERVICE_QUESTION: &str =
+    "\"Art thou here\nto Pick up or\nLeave a\ncompanion, or\nto Rest for the\nnight?\" ";
+
+/// **Measured** at Cove's Sanctuary: the accepted service letter echoes a
+/// word onto the open question row (`need?" Curing`). Only Cure is measured;
+/// `qa/paired/cove-healer-services.tsv` drives the other two.
+fn healer_service_echo(treatment: crate::shops::HealerTreatment) -> &'static str {
+    match treatment {
+        crate::shops::HealerTreatment::Cure => "Curing",
+        crate::shops::HealerTreatment::Heal => "Healing",
+        crate::shops::HealerTreatment::Resurrect => "Resurrecting",
     }
 }
 
@@ -3130,9 +3216,12 @@ fn format_horse_trader_outcome(outcome: crate::shop_runtime::HorseTraderOutcome)
     }
 }
 
-/// **Measured** 2026-09-08 at The Rusty Bucket in Buccaneer's Den
-/// (`qa/paired/bd-shipwright.tsv`): the shipwright's stock line and the
-/// question under it.
+/// `shops.md §8.B`, the shipwright's row: "`Yes`, then record `119` with no
+/// added resident menu question; the record carries its own leading spacing
+/// and prompt." The asset supplies the wording, so the engine reads it rather
+/// than transcribing it; these two literals were measured at The Rusty Bucket
+/// in Buccaneer's Den (`qa/paired/bd-shipwright.tsv`) and remain only as the
+/// fallback for a run with no `SHOPPE.DAT`.
 const SHIPWRIGHT_STOCK_LINE: &str = "\"We sell ocean-going Frigates and small, light Skiffs.";
 const SHIPWRIGHT_STOCK_QUESTION: &str = "Which would ye like to see?\"";
 /// The confirmation prompt a quoted hull ends on, quoted like the arms
@@ -3142,12 +3231,12 @@ const SHIPWRIGHT_CONFIRM_PROMPT: &str = "Wilt thou take it?\"";
 fn format_ship_broker_outcome(
     outcome: crate::shop_runtime::ShipBrokerOutcome,
     vendor_name: Option<&'static str>,
+    menu_record: Option<String>,
 ) -> String {
     use crate::shop_runtime::ShipBrokerOutcome::*;
     match outcome {
-        EnteredMenu { .. } => {
-            format!("{SHIPWRIGHT_STOCK_LINE}\n\n{SHIPWRIGHT_STOCK_QUESTION}")
-        }
+        EnteredMenu { .. } => menu_record
+            .unwrap_or_else(|| format!("{SHIPWRIGHT_STOCK_LINE}\n\n{SHIPWRIGHT_STOCK_QUESTION}")),
         QuotedPurchase { quote } => {
             // The quote body is a `SHOPPE.DAT` record with the price
             // substituted; until its record id is published this keeps the

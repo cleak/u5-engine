@@ -76,6 +76,7 @@ impl ActiveShopSession {
             Self::ArmsLocal(_, shop) => shop.display_name(),
             Self::Healer(_, healer) => healer.display_name(),
             Self::Innkeeper(InnkeeperState::Greeting { inn })
+            | Self::Innkeeper(InnkeeperState::ServiceMenu { inn })
             | Self::Innkeeper(InnkeeperState::ConfirmRest { inn, .. })
             | Self::Innkeeper(InnkeeperState::PickLeaveCompanion { inn, .. })
             | Self::Innkeeper(InnkeeperState::ConfirmLeaveCompanion { inn, .. })
