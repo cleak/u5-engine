@@ -767,6 +767,26 @@ fn handle_active_shop_key_input(
     // left the cursor on. A Paws capture shows it appended to the greeting's
     // own last row (`thee?" Yes`); other captures show it a row lower, which
     // is the same rule when the greeting happens to fill its last row.
+    // `shops.md §8.B`, the arms entry: its answer keys are not `Y`/`N`.
+    // "Buy echoes `Buy\n\n"`, Sell echoes `Sell\n\n"`, and Space echoes `No`
+    // without a line feed before the ordinary nothing-bought closing bark."
+    // Measured 2026-09-09 (`qa/paired/shop-arms-sell-flow.tsv`, beat
+    // `browser`): the original shows `or Sell?" Sell` before the sell prompt,
+    // where this engine printed no echo at all and so left the two windows
+    // structurally different for the rest of the visit.
+    let arms_entry_echo = matches!(
+        session,
+        ActiveShopSession::Arms(ArmsShopState::Greeting)
+            | ActiveShopSession::ArmsLocal(ArmsShopState::Greeting, _)
+            | ActiveShopSession::ArmsStocked(ArmsShopState::Greeting, _)
+    )
+    .then(|| match key_byte {
+        b'B' | b'b' => Some(("Buy", true)),
+        b'S' | b's' => Some(("Sell", true)),
+        b' ' => Some(("No", false)),
+        _ => None,
+    })
+    .flatten();
     let entry_answer_echo = session.awaiting_entry_answer().then(|| {
         if yes {
             Some("Yes")
@@ -1817,6 +1837,15 @@ fn handle_active_shop_key_input(
             format_guild_outcome(outcome)
         }
     };
+    if let Some((echo, opens_speech)) = arms_entry_echo {
+        state.emit_message_line_continuing_row(echo);
+        if opens_speech {
+            // `Buy\n\n"` / `Sell\n\n"`: the echo closes its row and a blank
+            // follows before the quoted speech the outcome carries. Space's
+            // `No` takes no line feed, so the closing bark continues its row.
+            state.push_explicit_blank_message_entry();
+        }
+    }
     if let Some(Some(echo)) = entry_answer_echo {
         // `shops.md §8.B`: "Where a colon is emitted, the accepted answer
         // appends directly after it, producing `:Yes` or `:No`; do not insert

@@ -36,24 +36,37 @@ impl ActiveShopSession {
     /// space - and §8.1 gives the stock-call question the same one: the line
     /// "is followed immediately by a closing double quote and one space".
     ///
-    /// Measured 2026-09-09 (`qa/paired/shop-arms-menus.tsv`, beat `buy`): the
-    /// original's stock list ends `see?" ` on the window's last row, where
-    /// this engine spent two more rows on a blank and a fresh command row.
+    /// The sell side takes the same shape: its entry and continuation prompts
+    /// are quoted questions and its offer ends `Deal?"`, so the browser and
+    /// the offer confirmation hold their cursor too. Measured 2026-09-09
+    /// (`qa/paired/shop-arms-menus.tsv` beat `buy`,
+    /// `qa/paired/shop-arms-sell-flow.tsv` beat `browser`): the original's
+    /// stock list ends `see?" ` on the window's last row, where this engine
+    /// spent two more rows on a blank and a fresh command row.
     pub fn keeps_cursor_inline(&self) -> bool {
         if self.awaiting_entry_answer() {
             return true;
         }
         matches!(
             self,
-            Self::Arms(ArmsShopState::BuyPickItem | ArmsShopState::BuyConfirm { .. })
-                | Self::ArmsLocal(
-                    ArmsShopState::BuyPickItem | ArmsShopState::BuyConfirm { .. },
-                    _
-                )
-                | Self::ArmsStocked(
-                    ArmsShopState::BuyPickItem | ArmsShopState::BuyConfirm { .. },
-                    _
-                )
+            Self::Arms(
+                ArmsShopState::BuyPickItem
+                    | ArmsShopState::BuyConfirm { .. }
+                    | ArmsShopState::SellPickItem(_)
+                    | ArmsShopState::SellConfirm { .. }
+            ) | Self::ArmsLocal(
+                ArmsShopState::BuyPickItem
+                    | ArmsShopState::BuyConfirm { .. }
+                    | ArmsShopState::SellPickItem(_)
+                    | ArmsShopState::SellConfirm { .. },
+                _
+            ) | Self::ArmsStocked(
+                ArmsShopState::BuyPickItem
+                    | ArmsShopState::BuyConfirm { .. }
+                    | ArmsShopState::SellPickItem(_)
+                    | ArmsShopState::SellConfirm { .. },
+                _
+            )
         )
     }
 

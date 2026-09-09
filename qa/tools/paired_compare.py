@@ -153,6 +153,20 @@ VARIANT_GROUPS: list[tuple[str, ...]] = [
         "Wish ye it",
         "May I get one for thee",
     ),
+    # The arms sell-entry pool, measured 2026-09-07 and carried by the engine.
+    (
+        "Which item wouldst thou like to sell",
+        "What dost thou wish to sell",
+        "Show me what ye got...",
+        "What dost thou have for me to buy",
+    ),
+    # The arms sell-continuation pool, measured the same way.
+    (
+        "What else can ye offer me",
+        "What else hath ye to sell",
+        "What else doth thou wish to sell",
+        "What other arms wilt thou sell",
+    ),
     # §8's arms no-credit bark pool, "one chosen uniformly".
     (
         "Can't pay?! Out with ye, orc-face!",
