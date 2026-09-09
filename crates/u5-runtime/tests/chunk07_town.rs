@@ -180,16 +180,26 @@ fn blackthorn_first_wrong_answer_threatens_and_re_asks_instead_of_ending() {
         "the first wrong answer names the companion at risk: {}",
         state.message,
     );
-    // `blackthorn.md §4.1`: after the threat comes "acknowledgement, then
-    // `\n\n` before the second ask", which is record `1`. The engine stopped
-    // at the threat, so the question the player was answering was not on
-    // screen; §4.1 also requires every demand to be followed by
-    // `\n\nYour response?\n:`.
+    // `blackthorn.md §4.1`: the reaction is followed by "acknowledgement,
+    // then `\n\n` before the second ask", so the loop holds here with the
+    // second ask not yet printed. Measured on `bt-escalate`'s `ask2` beat,
+    // where the stock game shows the rebuke and threat alone with the cursor
+    // inline after them.
+    assert!(
+        !state.message.contains("Now tell me"),
+        "the second ask waits for the acknowledgement: {}",
+        state.message,
+    );
+    assert!(state.blackthorn_prompt_echo().is_none());
+
+    state.submit_blackthorn_audience_answer("", &dir).unwrap();
+    // The acknowledgement prints record `1`, and §4.1 requires every demand
+    // to be followed by `\n\nYour response?` above its colon answer row.
     assert!(
         state
             .message
             .contains("\"Now tell me, what is the Mantra of Honesty?\""),
-        "the threat is followed by the second ask: {}",
+        "the acknowledgement prints the second ask: {}",
         state.message,
     );
     assert!(
@@ -197,6 +207,7 @@ fn blackthorn_first_wrong_answer_threatens_and_re_asks_instead_of_ending() {
         "the second ask carries the audience input prompt: {}",
         state.message,
     );
+    assert_eq!(state.blackthorn_prompt_echo().as_deref(), Some(":"));
     let _ = fs::remove_dir_all(dir);
 }
 
@@ -214,6 +225,8 @@ fn blackthorn_middle_wrong_answers_stamp_props_without_erasing_the_victim() {
     state
         .submit_blackthorn_audience_answer("nonsense", &dir)
         .unwrap();
+    // §4.1's acknowledgement between the first reaction and the second ask.
+    state.submit_blackthorn_audience_answer("", &dir).unwrap();
     state
         .submit_blackthorn_audience_answer("nonsense", &dir)
         .unwrap();
@@ -279,6 +292,11 @@ fn blackthorn_fourth_wrong_answer_executes_the_named_companion() {
         );
         assert!(state.active_blackthorn.is_some());
         assert_eq!(state.party.len(), 3);
+        // §4.1: the first reaction blocks on an acknowledgement before the
+        // second ask; the later asks carry no reaction record and so none.
+        if ordinal == 1 {
+            state.submit_blackthorn_audience_answer("", &dir).unwrap();
+        }
     }
 
     state

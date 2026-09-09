@@ -16,6 +16,13 @@ pub enum BlackthornChallengePhase {
     PresentingPrompt {
         ordinal: u8,
     },
+    /// `blackthorn.md §4.1`: the first wrong answer's rebuke and threat are
+    /// followed by "acknowledgement, then `\n\n` before the second ask", so
+    /// the loop blocks on a key with the reaction on screen and the next
+    /// demand not yet printed.
+    AwaitingAcknowledgement {
+        ordinal: u8,
+    },
     Punished {
         failed_ordinal: u8,
     },
@@ -144,6 +151,13 @@ impl BlackthornChallenge {
             BlackthornChallengePhase::Survived => BlackthornChallengeOutcome::AlreadySurvived,
             BlackthornChallengePhase::Aborted => BlackthornChallengeOutcome::AlreadyAborted,
             BlackthornChallengePhase::AwaitingAudience => self.begin(),
+            BlackthornChallengePhase::AwaitingAcknowledgement { ordinal } => {
+                self.phase = BlackthornChallengePhase::PresentingPrompt { ordinal };
+                BlackthornChallengeOutcome::PromptPresented {
+                    ordinal,
+                    prompt: self.shrine_virtue(),
+                }
+            }
             BlackthornChallengePhase::PresentingPrompt { ordinal } => {
                 let expected = self.expected_mantra();
                 let typed = blackthorn_challenge_limited_input(typed);
@@ -176,6 +190,20 @@ impl BlackthornChallenge {
             return None;
         };
         Some((ordinal, self.shrine_virtue()))
+    }
+
+    /// `blackthorn.md §4.1`: whether the loop is holding on the wrong-answer
+    /// reaction, waiting for the acknowledgement that precedes the next ask.
+    pub fn awaiting_acknowledgement(&self) -> bool {
+        matches!(
+            self.phase,
+            BlackthornChallengePhase::AwaitingAcknowledgement { .. }
+        )
+    }
+
+    /// Hold the reaction on screen until the player acknowledges it.
+    pub fn await_acknowledgement(&mut self, ordinal: u8) {
+        self.phase = BlackthornChallengePhase::AwaitingAcknowledgement { ordinal };
     }
 
     pub fn abort(&mut self) {

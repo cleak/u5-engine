@@ -4392,6 +4392,32 @@ impl PlayState {
         typed: &str,
         game_dir: &Path,
     ) -> io::Result<MoveOutcome> {
+        // `blackthorn.md §4.1`: the wrong-answer reaction is followed by
+        // "acknowledgement, then `\n\n` before the second ask", so while the
+        // loop is holding on that reaction any key advances it and nothing is
+        // read as an answer.
+        if self
+            .active_blackthorn
+            .as_ref()
+            .is_some_and(crate::blackthorn_session::BlackthornChallenge::awaiting_acknowledgement)
+        {
+            let mut challenge = self.active_blackthorn.take().expect("checked above");
+            let outcome = challenge.submit("");
+            let message = match outcome {
+                crate::blackthorn_session::BlackthornChallengeOutcome::PromptPresented {
+                    ordinal,
+                    prompt,
+                } => {
+                    let demand = self.blackthorn_demand_text(game_dir, ordinal, prompt)?;
+                    format!("{demand}\n\n{BLACKTHORN_INPUT_PROMPT}")
+                }
+                _ => String::new(),
+            };
+            self.active_blackthorn = Some(challenge);
+            self.message = message;
+            return Ok(MoveOutcome::PromptDeclined);
+        }
+
         let answer = blackthorn_challenge_limited_input(typed);
         if answer.is_empty() {
             self.message = self.blackthorn_current_prompt_message(game_dir)?;
@@ -4402,6 +4428,15 @@ impl PlayState {
             self.message.clear();
             return Ok(MoveOutcome::Blocked);
         };
+
+        // `blackthorn.md §4.1`: "The bounded text input then accepts the
+        // answer; submission is followed by `\n\n` before the outcome." The
+        // answered row is part of the transcript, so it is committed here -
+        // `qa/tools/paired_compare.py` read `bt-correct`'s `right` beat with
+        // the stock game still showing `:AHM` above the reward speech and
+        // this engine having dropped it.
+        self.commit_prompt_reply(BLACKTHORN_ANSWER_ROW_PREFIX, &answer.to_ascii_uppercase());
+        self.push_explicit_blank_message_entry();
 
         // `blackthorn.md §4`: "The shrine index is fixed before the loop
         // starts and never changes inside it", so the consequence arms read
@@ -4525,7 +4560,8 @@ impl PlayState {
                             .current_prompt()
                             .unwrap_or((ordinal + 1, "Virtue"));
                         let victim_name = self.blackthorn_victim_display_name(victim);
-                        let demand = self.blackthorn_demand_text(game_dir, next_ordinal, prompt)?;
+                        let _ = prompt;
+                        challenge.await_acknowledgement(next_ordinal);
                         self.active_blackthorn = Some(challenge);
                         self.push_diagnostic(format!(
                             "Failed Blackthorn's prompt {}; expected {expected}; victim slot {}.",
@@ -4541,7 +4577,7 @@ impl PlayState {
                         // and the player answered a question that was not on
                         // screen.
                         self.message = format!(
-                            "{BLACKTHORN_FIRST_WRONG_LINE}\n\n{}\n\n{demand}\n\n{BLACKTHORN_INPUT_PROMPT}",
+                            "{BLACKTHORN_FIRST_WRONG_LINE}\n\n{}",
                             BLACKTHORN_SAND_THREAT.replace("{}", &victim_name)
                         );
                         Ok(MoveOutcome::PromptDeclined)
