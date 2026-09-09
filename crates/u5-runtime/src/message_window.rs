@@ -626,6 +626,13 @@ fn wrap_rendered_to_width(
         }
     }
     if !buffer.is_empty() {
+        // A *trailing* space is authored - `MISCMSG.DAT` records end in one
+        // where the caller appends to them, and `blackthorn.md` §4.1 says so
+        // of record `8`'s ` die!" ` - and trimming it puts the inline cursor
+        // one cell left of the stock game's on `bt-escalate`'s `ask2` beat.
+        // Keeping it here regresses the combat aim prompt's own row, which
+        // this wrapper also builds, so the fix belongs at the prompt/row
+        // boundary rather than here. Tracked on `cleak/u5-engine#21`.
         trim_trailing_spaces(&mut buffer);
         rows.push(buffer);
     }

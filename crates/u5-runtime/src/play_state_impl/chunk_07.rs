@@ -4251,6 +4251,12 @@ impl PlayState {
     ) -> io::Result<MoveOutcome> {
         challenge.await_closing_acknowledgement();
         self.active_blackthorn = Some(challenge);
+        // `blackthorn.md §5`: "The execution helper finishes with one line
+        // feed", and the correct-answer branch "also finishes with one line
+        // feed" - a blank row under the outcome, which `bt-correct`'s `right`
+        // beat shows the stock game carrying.
+        self.emit_message_line(line.clone());
+        self.push_explicit_blank_message_entry();
         self.message = line;
         Ok(MoveOutcome::PromptDeclined)
     }
