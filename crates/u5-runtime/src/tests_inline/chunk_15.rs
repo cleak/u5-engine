@@ -2163,8 +2163,11 @@
             "{}",
             state.message
         );
-        assert!(state.message.ends_with("Your response?\n:"), "{}", state.message);
+        assert!(state.message.ends_with("Your response?"), "{}", state.message);
         assert!(!state.message.contains("world ticks"), "{}", state.message);
+        // §4.1: "The colon belongs to this audience prompt." It is the live
+        // row's prefix, so the typed answer echoes after it.
+        assert_eq!(state.blackthorn_prompt_echo().as_deref(), Some(":"));
 
         assert_eq!(
             handle_play_key_input(&mut state, 'A', "hm", &dir).unwrap(),
@@ -2250,7 +2253,7 @@
         assert!(state.active_blackthorn.is_some());
         assert_eq!(
             state.message,
-            "authored capture line\n\nauthored demand for Honesty?\"\n\nYour response?\n:"
+            "authored capture line\n\nauthored demand for Honesty?\"\n\nYour response?"
         );
         let _ = fs::remove_dir_all(dir);
     }

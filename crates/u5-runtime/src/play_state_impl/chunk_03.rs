@@ -158,6 +158,17 @@ impl PlayState {
     pub fn typed_prompt_echo(&self) -> Option<String> {
         self.spell_prompt_echo()
             .or_else(|| self.shrine_prompt_echo())
+            .or_else(|| self.blackthorn_prompt_echo())
+    }
+
+    /// `blackthorn.md §4.1`: "Each demand is followed by `\n\nYour
+    /// response?\n:` ... The colon belongs to this audience prompt." Like the
+    /// shrine's virtue row it is a live row, so the typed answer echoes after
+    /// it rather than on a fresh row below.
+    pub fn blackthorn_prompt_echo(&self) -> Option<String> {
+        self.active_blackthorn
+            .as_ref()
+            .map(|_| super::chunk_07::BLACKTHORN_ANSWER_ROW_PREFIX.to_string())
     }
 
     /// Whether the M-Mix reagent selection owns the keyboard.

@@ -11,7 +11,15 @@ pub const BLACKTHORN_RESPONSE_PROMPT: &str = "Your response?";
 /// ... The colon belongs to this audience prompt. The Badge password in
 /// Section 7a uses the same question words but starts input on a colon-free
 /// row."
-pub const BLACKTHORN_INPUT_PROMPT: &str = "Your response?\n:";
+///
+/// The colon is the *live* row's own prefix rather than a printed message
+/// line, the same way the shrine's virtue prompt carries it: it is the row
+/// the typed answer lands on, and the message window's layout places one
+/// continuation row under the last printed one. Spelling it into the message
+/// instead left the printed block two rows short of the window's bottom, with
+/// the shell's own live row below it.
+pub const BLACKTHORN_ANSWER_ROW_PREFIX: &str = ":";
+pub const BLACKTHORN_INPUT_PROMPT: &str = BLACKTHORN_RESPONSE_PROMPT;
 /// §4.1's second demand, record `1`. The engine had no wording for it at
 /// all: the first wrong answer printed the rebuke and the threat and then
 /// stopped, so the ask the player was answering was never on screen.

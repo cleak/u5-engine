@@ -193,7 +193,7 @@ fn blackthorn_first_wrong_answer_threatens_and_re_asks_instead_of_ending() {
         state.message,
     );
     assert!(
-        state.message.ends_with("Your response?\n:"),
+        state.message.ends_with("Your response?"),
         "the second ask carries the audience input prompt: {}",
         state.message,
     );
