@@ -27,6 +27,30 @@ pub enum ActiveShopSession {
 }
 
 impl ActiveShopSession {
+    /// Whether the session is waiting on a prompt that ends mid-row and so
+    /// keeps its cursor inline rather than opening a live row below.
+    ///
+    /// `text-output.md §10.6`: "a prompt that is waiting for a key keeps its
+    /// own line open and carries the cursor inline". `shops.md §8.B` gives the
+    /// entry greeting that shape - its tail is `" `, a closing quote and one
+    /// space - and §8.1 gives the stock-call question the same one: the line
+    /// "is followed immediately by a closing double quote and one space".
+    ///
+    /// Measured 2026-09-09 (`qa/paired/shop-arms-menus.tsv`, beat `buy`): the
+    /// original's stock list ends `see?" ` on the window's last row, where
+    /// this engine spent two more rows on a blank and a fresh command row.
+    pub fn keeps_cursor_inline(&self) -> bool {
+        if self.awaiting_entry_answer() {
+            return true;
+        }
+        matches!(
+            self,
+            Self::Arms(ArmsShopState::BuyPickItem)
+                | Self::ArmsLocal(ArmsShopState::BuyPickItem, _)
+                | Self::ArmsStocked(ArmsShopState::BuyPickItem, _)
+        )
+    }
+
     /// Whether the session is still at its entry question, where the
     /// original waits on a `:` row.
     ///

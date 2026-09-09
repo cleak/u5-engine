@@ -234,7 +234,7 @@ impl PlayState {
             || self
                 .active_shop
                 .as_ref()
-                .is_some_and(crate::shop_session::ActiveShopSession::awaiting_entry_answer)
+                .is_some_and(crate::shop_session::ActiveShopSession::keeps_cursor_inline)
             // `shops.md §8.C`: the sage's fee quote ends `Fair 'nuff?" ` and
             // accepts "Y/N only", so it is a key wait that keeps its own row
             // rather than a typed prompt with a live row under it.

@@ -1,79 +1,32 @@
 # Both arms-shop menus with waits long enough for the stock to finish
 # drawing: the Buy prompt, an item quote and its decline, then the Sell
 # prompt, an offer, its decline and the closing flourish (cleak/u5-spec#238).
-# requires-seed: the party outside Britain on the overworld at 10:00 carrying
-# equipment to sell (`seed_inventory <profile> equipment=3`)
+#
+# Seeded beside the keeper rather than walked to. The walk-up form of this
+# scenario scripted twenty-six steps in from the town gate, and the keeper
+# walks its own schedule while they run, so the two sides arrived with the
+# merchant in different cells and every later beat compared unrelated windows.
+# `qa/tools/reseed.py` replayed that walk once into this seed
+# (`cleak/u5-engine#22`).
+#
+# `shops.md` §2: a shopkeeper's "conversation-contact event also reaches it
+# automatically during a town schedule pass, even if the player has issued no
+# Talk command", so the first Pass beside the keeper opens the shop and the
+# script drives the overlay from there rather than issuing Talk.
+# requires-seed: the party beside Britain's weaponsmith carrying equipment to
+# sell, built with `reseed.py shop-arms-menus --through arrived --beside 0x81`
 both	wait	9000
 both	key	space
 both	wait	4000
 both	key	j
-both	wait	8000
-both	shot	overworld	Journey Onward on the overworld at Britain
-both	key	e
+both	wait	9000
+both	shot	seeded	Journey Onward beside the weaponsmith
+both	key	space
 both	wait	4000
-both	shot	entered	Entered Britain through the door
-both	key	Up
-both	wait	450
-both	key	Up
-both	wait	450
-both	key	Up
-both	wait	450
-both	key	Up
-both	wait	450
-both	key	Up
-both	wait	450
-both	key	Up
-both	wait	450
-both	key	Up
-both	wait	450
-both	key	Up
-both	wait	450
-both	key	Up
-both	wait	450
-both	key	Left
-both	wait	450
-both	key	Left
-both	wait	450
-both	key	Left
-both	wait	450
-both	key	Left
-both	wait	450
-both	key	Left
-both	wait	450
-both	key	Left
-both	wait	450
-both	key	Left
-both	wait	450
-both	key	Left
-both	wait	450
-both	key	Left
-both	wait	450
-both	key	Left
-both	wait	450
-both	key	Left
-both	wait	450
-both	key	Left
-both	wait	450
-both	key	Left
-both	wait	450
-both	key	Left
-both	wait	450
-both	key	Up
-both	wait	450
-both	key	Up
-both	wait	450
-both	wait	2500
-both	shot	arrived	Arrived beside the weaponsmith
-both	key	l
-both	wait	1200
-both	key	Right
-both	wait	2500
-both	shot	look	Look east at the weaponsmith
-both	key	t
-both	wait	1200
-both	key	Right
-both	wait	3500
-both	shot	talk	Talk east: does the arms shop open at 10:00?
+both	shot	welcome	Contact opens the shop: the welcome
+both	key	space
+both	wait	4000
+both	shot	greeted	The attribution and the Buy/Sell greeting
 both	key	B
 both	wait	4500
 both	shot	buy	The Buy prompt

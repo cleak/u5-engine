@@ -139,6 +139,20 @@ VARIANT_GROUPS: list[tuple[str, ...]] = [
     ("Very good!", "Excellent!", "Fine, fine!", "But of course!"),
     # §8.B, then "one independently selected stock introduction".
     ("We have:", "We stock:", "Thou canst buy:", "We've got:"),
+    # §8.1's stock-call pool, "chosen uniformly", printed after each list.
+    (
+        "What may I show thee",
+        "Which wouldst thou like to see",
+        "What is thine interest",
+        "Which would ye see",
+    ),
+    # §8's arms no-credit bark pool, "one chosen uniformly".
+    (
+        "Can't pay?! Out with ye, orc-face!",
+        "What be ye trying to pull? OUT!",
+        "OUT, SLIME!",
+        "BEAT IT!",
+    ),
 ]
 
 
