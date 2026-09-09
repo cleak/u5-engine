@@ -68,6 +68,9 @@ pub struct CliArgs {
     pub audio_suite: Option<PathBuf>,
     pub create_character: Option<CreateCharacterCommand>,
     pub create_character_interactive: bool,
+    /// Write `SAVED.GAM` for the requested start state into the game
+    /// directory and exit, instead of playing.
+    pub write_seed: bool,
 }
 
 pub fn split_play_script(script: &str) -> Vec<String> {
@@ -113,11 +116,22 @@ where
     let mut create_character_male: Option<bool> = None;
     let mut create_character_winners: Option<Vec<ShrineVirtue>> = None;
     let mut create_character_interactive = false;
+    let mut write_seed = false;
     let mut args = args.into_iter().map(Into::into);
     while let Some(arg) = args.next() {
         match arg.as_str() {
             "--help" | "-h" => help = true,
             "--intro" => intro = true,
+            // `formats/saved-gam.md` publishes the whole image; the engine
+            // already writes it for S-Save. `--write-seed` is that writer with
+            // no game attached: build the state `--scene`/`--at`/`--time`
+            // describe and persist it, so a paired scenario can start both
+            // sides on the thing under test instead of walking to it
+            // (`cleak/u5-engine#22`).
+            "--write-seed" => {
+                write_seed = true;
+                play = true;
+            }
             "--play" => play = true,
             "--visual" => visual = true,
             "--visual-playable" => {
@@ -416,6 +430,7 @@ where
             location_audit: None,
             create_character: None,
             create_character_interactive: false,
+            write_seed: false,
         });
     }
     if from_save && from_init {
@@ -711,6 +726,7 @@ where
         location_audit,
         create_character,
         create_character_interactive,
+        write_seed,
     })
 }
 
@@ -731,6 +747,9 @@ OPTIONS:
                               Implies --play.
         --scene <KEY>         Start scene, e.g. CASTLE:0 or DUNGEON:0.
         --floor <N>           Start floor/level (signed).
+        --write-seed          Write SAVED.GAM for the requested start state
+                              into the game directory and exit. Use with
+                              --scene/--at/--time to seed a paired scenario.
         --at <X,Y>            Start coordinates.
         --time <HH:MM>        Start clock.
         --wind <DIR>          calm|north|south|east|west.

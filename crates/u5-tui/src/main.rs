@@ -3,7 +3,10 @@ use std::fs;
 use std::io;
 use std::path::Path;
 
-use u5_runtime::{audit_location_dat_files, location_audit_report_text, run_report};
+use u5_runtime::{
+    DiskPromptSession, PlayOptions, PlayState, audit_location_dat_files,
+    location_audit_report_text, run_report,
+};
 use u5_tui::{
     CLI_USAGE, CliArgs, compare_manifest_files, parse_cli_args, prepare_writable_game_dir,
     run_audio_suite, run_create_character_command, run_interactive_create_character,
@@ -41,6 +44,9 @@ fn main() -> io::Result<()> {
     if args.create_character_interactive {
         run_interactive_create_character(&args.game_dir)?;
         return Ok(());
+    }
+    if args.write_seed {
+        return run_write_seed(&args.game_dir, args.play_options);
     }
     if let Some(out) = args.audio_suite.as_deref() {
         return run_audio_suite(out);
@@ -114,6 +120,23 @@ fn needs_writable_game_dir(args: &CliArgs) -> bool {
         || args.visual
         || args.create_character.is_some()
         || args.create_character_interactive
+}
+
+/// Persist the start state `--scene`/`--at`/`--time` describe as a save.
+///
+/// `formats/saved-gam.md` publishes the image the original reads, and the
+/// engine already writes it for the S-Save command; this is the same writer
+/// with no game attached. A paired scenario that needs the party somewhere
+/// specific can then seed **both** sides from one file instead of scripting a
+/// walk to it, which is what makes long walk-ups diverge: town residents move
+/// on their own schedules, so sixteen steps of drift put the two sides in
+/// front of different cells (`cleak/u5-engine#22`).
+fn run_write_seed(game_dir: &Path, options: PlayOptions) -> io::Result<()> {
+    let mut state = PlayState::load_scene(game_dir, options)?;
+    let mut disk_session = DiskPromptSession::single_directory();
+    state.write_save_files_with_disk_session(game_dir, &mut disk_session)?;
+    println!("Wrote seed save into {}", game_dir.display());
+    Ok(())
 }
 
 fn run_location_audit(game_dir: &Path, out: &Path) -> io::Result<()> {

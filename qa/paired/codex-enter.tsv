@@ -1,0 +1,24 @@
+# `karma.md` §8 (`cleak/u5-spec#250`): E-Enter on live terrain tile `0x11` at
+# Britannia `(233, 233)` prints `Enter the Shrine of the Codex!` and starts the
+# Codex presentation. `M` there is Mix Reagents, not Codex entry (R451).
+#
+# This scenario is also the first user of the engine's `--write-seed` writer:
+# its profile is seeded straight onto the Codex cell rather than walked to, so
+# there is no walk-up for town schedules to diverge during
+# (`cleak/u5-engine#22`).
+# requires-seed: the party on the Britannia Codex cell (`--scene BRITANNIA --at 233,233 --time 09:15`)
+both	wait	9000
+both	key	space
+both	wait	4000
+both	key	j
+both	wait	9000
+both	shot	seeded	Journey Onward onto the Codex cell
+both	key	e
+both	wait	4000
+both	shot	entered	E-Enter on the Codex tile
+both	key	space
+both	wait	3000
+both	shot	after	One key later
+both	key	m
+both	wait	3000
+both	shot	mix	M is Mix Reagents here, not Codex entry

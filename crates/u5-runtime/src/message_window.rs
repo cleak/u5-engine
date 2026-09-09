@@ -68,6 +68,17 @@ impl MessageLineKind {
         matches!(self, Self::Command)
     }
 
+    /// The kind a wrapped continuation of this line carries.
+    ///
+    /// Only a command row's first line owns the end-cap marker
+    /// (`text-output.md §10.2`), so its continuations are ordinary output.
+    pub const fn continuation(self) -> Self {
+        match self {
+            Self::Command => Self::Output,
+            other => other,
+        }
+    }
+
     /// Text cells available to this line.
     pub const fn width(self) -> usize {
         if self.prefixed() {
@@ -187,12 +198,28 @@ impl GameplayMessageLog {
     }
 
     fn push_wrapped_glyphs(&mut self, glyphs: &[crate::TlkRenderedGlyph], kind: MessageLineKind) {
-        for glyphs in wrap_rendered_to_width(glyphs, kind.width()) {
+        // `text-output.md §10.2`: the end-cap marker is drawn once, by the
+        // turn loop, "before it reads the key" - it belongs to the row the
+        // echo *starts* on, not to every row the echo wraps onto. So only the
+        // first row is a command row: it is one cell narrower and carries the
+        // marker, and the continuations are ordinary full-width output rows.
+        //
+        // Measured 2026-09-09 (`qa/paired/codex-enter.tsv`): the original
+        // wraps `Enter the Shrine of the Codex!` as ` Enter the` /
+        // `Shrine of the` / `Codex!` - fifteen cells on the first row, sixteen
+        // after it, and no marker below the first. Wrapping every row at the
+        // narrow width and prefixing all of them indented the continuations.
+        let rows = wrap_rendered_with_first_row_width(glyphs, kind.width(), MESSAGE_WINDOW_WIDTH);
+        for (index, glyphs) in rows.into_iter().enumerate() {
             let text = glyphs.iter().map(|glyph| char::from(glyph.byte)).collect();
             self.lines.push(MessageLogLine {
                 text,
                 glyphs,
-                kind,
+                kind: if index == 0 {
+                    kind
+                } else {
+                    kind.continuation()
+                },
                 centered: false,
             });
         }
@@ -609,6 +636,36 @@ pub fn wrapped_final_row_columns(text: &str) -> usize {
     wrap_rendered_to_width(&glyphs, MESSAGE_WINDOW_WIDTH)
         .last()
         .map_or(0, |row| row.len())
+}
+
+/// Wrap `glyphs` with a first row of `first_width` cells and `width` after it.
+///
+/// A command echo's first row gives one cell to the end-cap marker; the rows
+/// it wraps onto do not, so they are a cell wider.
+fn wrap_rendered_with_first_row_width(
+    glyphs: &[crate::TlkRenderedGlyph],
+    first_width: usize,
+    width: usize,
+) -> Vec<Vec<crate::TlkRenderedGlyph>> {
+    if first_width == width {
+        return wrap_rendered_to_width(glyphs, width);
+    }
+    let mut rows = wrap_rendered_to_width(glyphs, first_width);
+    if rows.len() < 2 {
+        return rows;
+    }
+    // Re-flow everything after the first row at the wider width, so a word
+    // that only failed to fit the narrow first row can still fill the rest.
+    let mut rest: Vec<crate::TlkRenderedGlyph> = Vec::new();
+    for (index, row) in rows.iter().enumerate().skip(1) {
+        if index > 1 {
+            rest.push(crate::TlkRenderedGlyph::ordinary(b' '));
+        }
+        rest.extend_from_slice(row);
+    }
+    rows.truncate(1);
+    rows.extend(wrap_rendered_to_width(&rest, width));
+    rows
 }
 
 fn wrap_rendered_to_width(
