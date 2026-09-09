@@ -203,6 +203,12 @@ impl ShrineVirtue {
 /// (`find_world_tile 0x19`), which is what confirms that table.
 pub const SHRINE_MARKER_TILE: u8 = 0x19;
 
+/// `karma.md §8` (`cleak/u5-spec#250`): "Use **E-Enter while standing on live
+/// terrain tile `0x11`** to begin the Codex interaction. Its shipped location
+/// is the Britannia surface cell `(233, 233)` ... This tile arm does not
+/// require a separate coordinate-table match."
+pub const CODEX_SHRINE_ENTRY_TILE: u8 = 0x11;
+
 pub const SHRINE_ALTAR_TILE_FIRST: u8 = 136;
 pub const SHRINE_ALTAR_TILE_LAST: u8 = 143;
 

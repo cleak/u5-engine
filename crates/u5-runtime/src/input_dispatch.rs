@@ -261,12 +261,11 @@ fn handle_play_key_input_inner(
     }
     if key == 'M' && !suffix.is_empty() {
         state.begin_command_echo_for(Command::Mix);
+        // `karma.md §8` (`RETRACTIONS.md` R451): the Codex reader is reached
+        // by E-Enter on tile `0x11`, not by `M`.
         if state
-            .read_codex_urn_at_current_position(game_dir)?
+            .meditate_shrine_from_suffix(suffix, game_dir)?
             .is_none()
-            && state
-                .meditate_shrine_from_suffix(suffix, game_dir)?
-                .is_none()
         {
             state.mix_reagents_from_suffix(suffix);
         }

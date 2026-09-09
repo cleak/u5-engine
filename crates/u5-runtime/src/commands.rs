@@ -663,6 +663,10 @@ pub const SHRINE_VIRTUE_PROMPT: &str = "Upon what virtue dost thou meditate?";
 /// coordinate table also supplies "the shrine of *virtue*" name - and two
 /// narration lines print before the question, each followed by a blank row.
 pub const SHRINE_ENTER_ECHO_PREFIX: &str = "the shrine of ";
+/// `karma.md §8`: E on the Codex tile "prints `Enter the Shrine of the
+/// Codex!\n` and immediately starts the shrine/Codex presentation". The
+/// literal completes the open `Enter ` echo, so it carries no verb of its own.
+pub const CODEX_SHRINE_ENTER_ECHO_TAIL: &str = "the Shrine of the Codex!";
 /// The line ends in an ellipsis, which is why the capture wraps `tranquil`
 /// and `Shrine...` onto separate rows: glyph-index decoding of the paired
 /// capture reads `0x2e 0x2e 0x2e` after `Shrine`, and the kneel line below

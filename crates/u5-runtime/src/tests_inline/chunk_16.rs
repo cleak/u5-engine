@@ -1426,34 +1426,19 @@ BRITANNIA 11 21
         assert_eq!(state.message, "Mixing...\n\nDone!");
     }
 
+    /// `karma.md §8` (`cleak/u5-spec#250`): "Use **E-Enter while standing on
+    /// live terrain tile `0x11`** to begin the Codex interaction ... The
+    /// command prints `Enter the Shrine of the Codex!\n` and immediately
+    /// starts the shrine/Codex presentation." The reader then "walks the eight
+    /// virtues in the standard virtue order and considers only virtues whose
+    /// ordained bit is set", stamps the first, and "displays that virtue's
+    /// prophecy/Codex text" from `MISCMSG.DAT`.
     #[test]
-    fn codex_urn_reads_first_ordained_virtue_from_clean_sidecar() {
+    fn codex_entry_stamps_the_first_ordained_virtue_and_prints_its_urn_text() {
         let dir = debug_game_dir();
-        fs::write(dir.join(CODEX_URN_TABLE_FILE), "BRITANNIA 10 20 136\n").unwrap();
-        let mut grid = open_world_grid();
-        grid[world_cell_index(10, 20)] = 136;
-        let mut state = britannia_state(grid, 10, 20);
-        state.shrine_ordained_mask = ShrineVirtue::Honesty.bit() | ShrineVirtue::Justice.bit();
-        state.shrine_codex_mask = 0;
-
-        assert_eq!(
-            handle_play_key_input(&mut state, 'M', "", &dir).unwrap(),
-            PlayInputDisposition::Continue
-        );
-
-        assert_eq!(state.shrine_codex_mask, ShrineVirtue::Honesty.bit());
-        assert_eq!(state.turn, 0);
-        assert!(state.message.contains("Codex page for Honesty"));
-        let _ = fs::remove_dir_all(dir);
-    }
-
-    #[test]
-    fn codex_urn_suffix_routing_precedes_mix_reagents() {
-        let dir = debug_game_dir();
-        fs::write(dir.join(CODEX_URN_TABLE_FILE), "BRITANNIA 10 20 136\n").unwrap();
         let mut miscmsg = Vec::new();
         for index in 0..MISCMSG_DAT_RECORDS {
-            if index == *MISCMSG_URN_CODEX_RANGE.start() + ShrineVirtue::Justice.index() {
+            if index == *MISCMSG_URN_CODEX_RANGE.start() + ShrineVirtue::Honesty.index() {
                 miscmsg.extend_from_slice(b"JUS@[_");
             } else {
                 miscmsg.extend_from_slice(format!("rec{index}").as_bytes());
@@ -1461,8 +1446,38 @@ BRITANNIA 11 21
             miscmsg.push(0);
         }
         fs::write(dir.join(MISCMSG_DAT_FILE), miscmsg).unwrap();
+
         let mut grid = open_world_grid();
-        grid[world_cell_index(10, 20)] = 136;
+        grid[world_cell_index(10, 20)] = CODEX_SHRINE_ENTRY_TILE;
+        let mut state = britannia_state(grid, 10, 20);
+        state.shrine_ordained_mask = ShrineVirtue::Honesty.bit() | ShrineVirtue::Justice.bit();
+        state.shrine_codex_mask = 0;
+
+        assert_eq!(
+            handle_play_key_input(&mut state, 'E', "", &dir).unwrap(),
+            PlayInputDisposition::Continue
+        );
+
+        assert_eq!(state.shrine_codex_mask, ShrineVirtue::Honesty.bit());
+        assert!(
+            transcript_texts(&state)
+                .iter()
+                .any(|row| row.contains("Enter the Shrine of the Codex!")),
+            "the published entry line is missing from {:?}",
+            transcript_texts(&state)
+        );
+        assert!(state.message.contains("JUS THER"));
+        let _ = fs::remove_dir_all(dir);
+    }
+
+    /// `karma.md §8` (`RETRACTIONS.md` R451): "`M` remains Mix Reagents at
+    /// this location. The earlier statement that the M command owns Codex
+    /// entry is retracted." So `M` on the Codex tile mixes and stamps nothing.
+    #[test]
+    fn mix_reagents_still_runs_on_the_codex_tile() {
+        let dir = debug_game_dir();
+        let mut grid = open_world_grid();
+        grid[world_cell_index(10, 20)] = CODEX_SHRINE_ENTRY_TILE;
         let mut state = britannia_state(grid, 10, 20);
         state.reagents = [0; REAGENT_COUNT];
         state.reagents[REAGENT_SULFUR_ASH] = 1;
@@ -1473,38 +1488,38 @@ BRITANNIA 11 21
             PlayInputDisposition::Continue
         );
 
-        assert_eq!(state.shrine_codex_mask, ShrineVirtue::Justice.bit());
-        assert_eq!(state.reagents[REAGENT_SULFUR_ASH], 1);
-        assert_eq!(state.spell_charges[IN_LOR_SPELL_INDEX], 0);
-        assert!(state.message.contains("Codex page for Justice"));
-        assert!(state.message.contains("JUS THER"));
+        assert_eq!(state.shrine_codex_mask, 0);
+        assert_eq!(state.reagents[REAGENT_SULFUR_ASH], 0);
+        assert_eq!(state.spell_charges[IN_LOR_SPELL_INDEX], 1);
         let _ = fs::remove_dir_all(dir);
     }
 
+    /// §8's other two branches stamp nothing: a party with no ordained virtue,
+    /// and one whose eight Codex-read bits are already set - "If all
+    /// Codex-read bits are already set, the reader takes its completed branch
+    /// instead of stamping another virtue." Neither branch's wording is
+    /// published, so neither prints engine prose.
     #[test]
-    fn codex_urn_no_ordained_and_completed_branches_do_not_stamp_new_bits() {
+    fn codex_no_ordained_and_completed_branches_do_not_stamp_new_bits() {
         let dir = debug_game_dir();
-        fs::write(dir.join(CODEX_URN_TABLE_FILE), "BRITANNIA 10 20 136\n").unwrap();
         let mut grid = open_world_grid();
-        grid[world_cell_index(10, 20)] = 136;
+        grid[world_cell_index(10, 20)] = CODEX_SHRINE_ENTRY_TILE;
         let mut state = britannia_state(grid, 10, 20);
         state.shrine_codex_mask = ShrineVirtue::Valor.bit();
 
         assert_eq!(
-            state.read_codex_urn_at_current_position(&dir).unwrap(),
-            Some(MoveOutcome::Observed)
+            handle_play_key_input(&mut state, 'E', "", &dir).unwrap(),
+            PlayInputDisposition::Continue
         );
         assert_eq!(state.shrine_codex_mask, ShrineVirtue::Valor.bit());
-        assert!(state.message.contains("no ordained virtue"));
 
         state.shrine_ordained_mask = 0xFF;
         state.shrine_codex_mask = 0xFF;
         assert_eq!(
-            state.read_codex_urn_at_current_position(&dir).unwrap(),
-            Some(MoveOutcome::Observed)
+            handle_play_key_input(&mut state, 'E', "", &dir).unwrap(),
+            PlayInputDisposition::Continue
         );
         assert_eq!(state.shrine_codex_mask, 0xFF);
-        assert!(state.message.contains("already been read"));
         let _ = fs::remove_dir_all(dir);
     }
 

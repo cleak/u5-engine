@@ -1354,6 +1354,17 @@ impl PlayState {
             self.adopt_shrine_prompt_row();
             return Ok(MoveOutcome::Observed);
         }
+        // `karma.md §8` (`cleak/u5-spec#250`, `RETRACTIONS.md` R451): "Use
+        // **E-Enter while standing on live terrain tile `0x11`** to begin the
+        // Codex interaction ... This tile arm does not require a separate
+        // coordinate-table match. `M` remains Mix Reagents at this location."
+        // Like the shrine above, it runs before the location lookup, and the
+        // party's surface coordinates and plane are left intact - the
+        // presentation is temporary, not a scene the party walks into.
+        if tile == CODEX_SHRINE_ENTRY_TILE && plane == WorldPlane::Britannia {
+            let _ = self.complete_open_direction_echo("Enter ", CODEX_SHRINE_ENTER_ECHO_TAIL);
+            return self.read_codex_urn_after_entry(game_dir);
+        }
         let Some(live_class) = WorldEntryNarrationClass::from_live_tile(tile) else {
             self.message = "What?".to_string();
             return Ok(MoveOutcome::Blocked);
@@ -1735,9 +1746,11 @@ impl PlayState {
         self.mark_visibility_dirty();
 
         if natural_moongate_dispatches_meditate(self.clock.hour, self.clock.minute) {
-            if let Some(outcome) = self.read_codex_urn_at_current_position(game_dir)? {
-                return Ok(Some(outcome));
-            }
+            // The Codex reader used to be tried here as well, back when `M`
+            // was believed to own Codex entry. `karma.md §8` gives that arm to
+            // E-Enter on tile `0x11` (`RETRACTIONS.md` R451), and this cell has
+            // just been rewritten to the restored moongate terrain, so nothing
+            // reaches the reader from here.
             if let Some(outcome) = self.start_shrine_prompt_at_current_position(game_dir)? {
                 return Ok(Some(outcome));
             }

@@ -2376,11 +2376,16 @@
         let _ = fs::remove_dir_all(dir);
     }
 
+    /// `karma.md §8` (`cleak/u5-spec#250`, `RETRACTIONS.md` R451): Codex
+    /// entry is E-Enter on live tile `0x11`. The midnight natural moongate
+    /// dispatches the shrine meditation handler and nothing else - it used to
+    /// try the Codex reader first, back when `M` was believed to own Codex
+    /// entry - and the cell it stands on has just been rewritten to the
+    /// restored moongate terrain, so no Codex tile is under the party.
     #[test]
-    fn natural_moongate_midnight_window_reads_codex_urn_before_shrine_prompt() {
+    fn natural_moongate_midnight_window_opens_the_shrine_prompt_and_not_the_codex() {
         let dir = debug_game_dir();
         let origin_idx = world_cell_index(5, 5);
-        fs::write(dir.join(CODEX_URN_TABLE_FILE), "BRITANNIA 5 5 5\n").unwrap();
         fs::write(dir.join(SHRINE_TABLE_FILE), "BRITANNIA 5 5 HONESTY 5\n").unwrap();
         let mut grid = open_world_grid();
         grid[origin_idx] = NATURAL_MOONGATE_TERRAIN_TILE;
@@ -2394,13 +2399,10 @@
         );
 
         assert_eq!(state.grid[origin_idx], NATURAL_MOONGATE_RESTORED_TERRAIN_TILE);
-        assert!(state.active_shrine.is_none());
-        assert_eq!(state.shrine_codex_mask, ShrineVirtue::Justice.bit());
-        assert!(state.message.contains("Codex page for Justice"));
+        assert_eq!(state.shrine_codex_mask, 0);
         assert_eq!(state.turn, 0);
         let _ = fs::remove_dir_all(dir);
     }
-
     #[test]
     fn natural_moongate_midnight_window_reports_meditation_without_sidecar_match() {
         let origin_idx = world_cell_index(5, 5);

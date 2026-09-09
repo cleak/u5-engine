@@ -451,11 +451,11 @@ impl PlayState {
                     // reached by *entering* the shrine with `E`; the shrine
                     // handler is still dispatched internally by the natural
                     // moongate of `magic.md §9.2`.
-                    if let Some(outcome) = self.read_codex_urn_at_current_position(game_dir)? {
-                        handled!(outcome);
-                    } else {
-                        handled!(self.start_mix_reagents_prompt());
-                    }
+                    // `karma.md §8` (`RETRACTIONS.md` R451): "`M` remains Mix
+                    // Reagents at this location. The earlier statement that
+                    // the M command owns Codex entry is retracted." Codex
+                    // entry is E-Enter on tile `0x11`.
+                    handled!(self.start_mix_reagents_prompt());
                 }
                 'N' => {
                     handled!(self.start_new_order_prompt());
@@ -623,14 +623,8 @@ impl PlayState {
             'j' => self.jimmy_facing_with_game_dir(Some(game_dir))?,
             'k' => self.klimb_command(game_dir)?,
             'x' => self.exit_vehicle_with_game_dir(Some(game_dir))?,
-            'm' => {
-                // See the `M` arm above: the shrine is entered, not mixed.
-                if let Some(outcome) = self.read_codex_urn_at_current_position(game_dir)? {
-                    outcome
-                } else {
-                    self.start_mix_reagents_prompt()
-                }
-            }
+            // See the `M` arm above: `M` is Mix Reagents everywhere.
+            'm' => self.start_mix_reagents_prompt(),
             'z' => self.z_stats_command(),
             'c' => self.start_cast_spell_prompt(),
             // `commands.md §2`: "Lowercase letters should already have been
@@ -2090,30 +2084,29 @@ impl PlayState {
         Ok(Some(outcome))
     }
 
-    pub fn read_codex_urn_at_current_position(
-        &mut self,
-        game_dir: &Path,
-    ) -> io::Result<Option<MoveOutcome>> {
-        let Some(_entry) = self.current_codex_urn_entry(game_dir)? else {
-            return Ok(None);
-        };
-        self.message = match read_codex_urn(self.shrine_ordained_mask, &mut self.shrine_codex_mask)
+    /// `karma.md §8`: run the Codex reader after E-Enter has echoed
+    /// `Enter the Shrine of the Codex!`.
+    ///
+    /// "Urn reading is gated by the ordained mask set at the virtue shrines.
+    /// The reader walks the eight virtues in the standard virtue order and
+    /// considers only virtues whose ordained bit is set. For the selected
+    /// ordained virtue, the reader sets the matching Codex-read bit and
+    /// displays that virtue's prophecy/Codex text." That text is
+    /// `MISCMSG.DAT`'s, so a profile without the file prints nothing rather
+    /// than engine prose.
+    ///
+    /// The completed and no-ordained branches publish no line of their own -
+    /// §8 says only that the reader "takes its completed branch instead of
+    /// stamping another virtue" - so neither invents one.
+    pub fn read_codex_urn_after_entry(&mut self, game_dir: &Path) -> io::Result<MoveOutcome> {
+        if let CodexUrnReadOutcome::Stamped(virtue) =
+            read_codex_urn(self.shrine_ordained_mask, &mut self.shrine_codex_mask)
+            && let Some(text) = self.codex_urn_text_for_virtue(game_dir, virtue)?
+            && !text.is_empty()
         {
-            CodexUrnReadOutcome::Completed => {
-                "Codex urn: all virtue pages have already been read.".to_string()
-            }
-            CodexUrnReadOutcome::NoOrdained => {
-                "Codex urn: no ordained virtue is ready.".to_string()
-            }
-            CodexUrnReadOutcome::Stamped(virtue) => {
-                let status = format!("Read Codex page for {}; Codex-read bit set.", virtue.name());
-                match self.codex_urn_text_for_virtue(game_dir, virtue)? {
-                    Some(text) if !text.is_empty() => format!("{status} {text}"),
-                    _ => status,
-                }
-            }
-        };
-        Ok(Some(MoveOutcome::Observed))
+            self.emit_message_line(format!("\n{text}"));
+        }
+        Ok(MoveOutcome::Observed)
     }
 
     pub fn codex_urn_text_for_virtue(
@@ -2127,30 +2120,6 @@ impl PlayState {
         Ok(messages
             .urn_codex_for_virtue_index(virtue.index())
             .map(render_miscmsg_tile_glyph_text))
-    }
-
-    pub fn current_codex_urn_entry(&self, game_dir: &Path) -> io::Result<Option<CodexUrnEntry>> {
-        let Area::World { plane } = self.area else {
-            return Ok(None);
-        };
-        // The sidecar is an override, not the only source. It used to be the
-        // only source - `else { return Ok(None) }` - and no shipped profile
-        // carries a `codex_urns.tsv`, so the urn was unreachable and with it
-        // every virtue quest, whose middle step is reading the Codex
-        // (`karma.md` §8). Its sibling tables were converted to native rows
-        // and this one was missed; `published_codex_urn_entries` is that
-        // conversion.
-        let entries = load_codex_urn_entries(game_dir)?
-            .unwrap_or_else(crate::world_tables::published_codex_urn_entries);
-        let tile = self.grid[world_cell_index(self.player.x, self.player.y)];
-        Ok(entries.into_iter().find(|entry| {
-            entry.plane == plane
-                && entry.x == self.player.x
-                && entry.y == self.player.y
-                && entry
-                    .expected_tile
-                    .map_or(true, |expected| expected == tile)
-        }))
     }
 
     /// Log one `MISCMSG.DAT` record, keeping "their spaces and line breaks"
