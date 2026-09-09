@@ -16859,11 +16859,12 @@ fn render_integrated_status_framebuffer(
         };
         // The spell-name colon line continues the block `For what
         // spell?` opened, so it carries no end cap (`LiveRowKind`).
-        let live_row_kind = if spell_echo.is_some() {
-            u5_runtime::LiveRowKind::Continuation
-        } else {
-            u5_runtime::LiveRowKind::CommandRow
-        };
+        let live_row_kind =
+            if spell_echo.is_some() || u5_runtime::shop_pause_row_is_continuation(&display_state) {
+                u5_runtime::LiveRowKind::Continuation
+            } else {
+                u5_runtime::LiveRowKind::CommandRow
+            };
         let layout = u5_runtime::layout_message_window_with_continuation(
             &log,
             live_row,
@@ -17533,6 +17534,7 @@ mod tests {
                 TlkRenderedGlyph::runic(b'B'),
             ],
             prefixed: false,
+            trailing_spaces: 0,
         };
         let width = 16usize;
         let height = 8usize;

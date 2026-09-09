@@ -99,6 +99,15 @@ pub struct MessageLogLine {
     /// How the row is drawn.
     pub kind: MessageLineKind,
     pub centered: bool,
+    /// Spaces the wrap trimmed from this row's end.
+    ///
+    /// A *trailing* space is authored - `shops.md §8.B` ends the arms entry
+    /// question with `" `, "a closing quote and one space", and `MISCMSG.DAT`
+    /// records end in one where the caller appends to them. The row must not
+    /// *draw* them, but the cursor waiting on that row sits past them, so the
+    /// count survives the trim. Dropping it put the inline cursor one cell
+    /// left of the original's (`cleak/u5-engine#21`).
+    pub trailing_spaces: u8,
 }
 
 /// A scrolling log of command echoes and handler output.
@@ -188,6 +197,7 @@ impl GameplayMessageLog {
             glyphs: Vec::new(),
             kind: MessageLineKind::Blank,
             centered: false,
+            trailing_spaces: 0,
         });
         self.trim();
     }
@@ -210,6 +220,15 @@ impl GameplayMessageLog {
         // after it, and no marker below the first. Wrapping every row at the
         // narrow width and prefixing all of them indented the continuations.
         let rows = wrap_rendered_with_first_row_width(glyphs, kind.width(), MESSAGE_WINDOW_WIDTH);
+        // Only the final row can own the authored trailing spaces: an interior
+        // wrap point already consumed the space it broke on.
+        let trailing = glyphs
+            .iter()
+            .rev()
+            .take_while(|glyph| glyph.byte == b' ')
+            .count()
+            .min(u8::MAX as usize) as u8;
+        let last = rows.len().saturating_sub(1);
         for (index, glyphs) in rows.into_iter().enumerate() {
             let text = glyphs.iter().map(|glyph| char::from(glyph.byte)).collect();
             self.lines.push(MessageLogLine {
@@ -221,6 +240,7 @@ impl GameplayMessageLog {
                     kind.continuation()
                 },
                 centered: false,
+                trailing_spaces: if index == last { trailing } else { 0 },
             });
         }
         self.trim();
@@ -257,6 +277,9 @@ pub struct MessageWindowRow {
     pub glyphs: Vec<crate::TlkRenderedGlyph>,
     /// Whether the ribbon end-cap sprite is drawn in column 24.
     pub prefixed: bool,
+    /// Authored spaces the wrap trimmed from this row's end, which the cursor
+    /// waiting on the row still sits past.
+    pub trailing_spaces: u8,
 }
 
 /// The window's placed rows for one frame.
@@ -319,6 +342,7 @@ pub fn message_log_from_entries<'a>(
                 glyphs: Vec::new(),
                 kind: MessageLineKind::Blank,
                 centered: false,
+                trailing_spaces: 0,
             });
             log.trim();
             continue;
@@ -342,6 +366,7 @@ pub fn message_log_from_entries<'a>(
                 glyphs,
                 kind: MessageLineKind::Output,
                 centered: true,
+                trailing_spaces: 0,
             });
             log.trim();
         } else if text == entry.text {
@@ -391,6 +416,34 @@ pub fn combat_prompt_row_follows_history(state: &crate::PlayState) -> bool {
     // column 0 of a fresh row when that key is read, and §10.4's blank has
     // been spent; the pause's row follows the welcome's last row immediately.
     // Measured 2026-09-09 (`qa/paired/shop-arms-seeded.tsv`, beat `pass1`).
+    matches!(
+        state.active_shop,
+        Some(
+            crate::shop_session::ActiveShopSession::Arms(
+                crate::shop_runtime::ArmsShopState::Welcome
+            ) | crate::shop_session::ActiveShopSession::ArmsLocal(
+                crate::shop_runtime::ArmsShopState::Welcome,
+                _
+            ) | crate::shop_session::ActiveShopSession::ArmsStocked(
+                crate::shop_runtime::ArmsShopState::Welcome,
+                _
+            )
+        )
+    )
+}
+
+/// Is the row an overlay is pausing on a continuation rather than a command row?
+///
+/// `text-output.md §10.2` gives the end-cap triangle to the *mode turn loop*:
+/// it is drawn "before it reads the key" as part of the cycle that also emits
+/// the leading line feed. A shop overlay's internal pause is not one of those
+/// cycles - `shops.md §8.B` stage 2 is just "Pause | Wait for one key before
+/// the next text" - so it draws no triangle and its cursor sits in column 0.
+///
+/// Measured 2026-09-09 (`qa/paired/shop-arms-menus.tsv`, beat `welcome`): the
+/// original's cursor is at column 0 of the pause row and this engine's was at
+/// column 1, one cell right, which is where an end-cap would have put it.
+pub fn shop_pause_row_is_continuation(state: &crate::PlayState) -> bool {
     matches!(
         state.active_shop,
         Some(
@@ -597,6 +650,7 @@ fn layout_message_window_inner(
             text: line.text.clone(),
             glyphs: line.glyphs.clone(),
             prefixed,
+            trailing_spaces: line.trailing_spaces,
         });
     }
     if let Some(live) = live_input {
@@ -611,6 +665,7 @@ fn layout_message_window_inner(
             text,
             glyphs,
             prefixed: live_row_prefixed,
+            trailing_spaces: 0,
         });
     }
     // The cursor cell is the one the prompt literal leaves the cursor
@@ -629,6 +684,23 @@ fn layout_message_window_inner(
             }
         }
     }
+    // A prompt that ends in an authored space keeps its cursor past it, even
+    // when nothing registered as an `open_prompt`: `shops.md §8.B` ends the
+    // arms entry question with `" `, "a closing quote and one space", and the
+    // wrap trims that space from the drawn row. Measured 2026-09-09
+    // (`qa/paired/shop-arms-menus.tsv`, beat `greeted`): the original's cursor
+    // sits one cell right of `or Sell?"`, where this engine's sat on it.
+    let trailing_space_cursor = (open_prompt.is_none() && live_input.is_none())
+        .then(|| rows.last())
+        .flatten()
+        .filter(|row| row.trailing_spaces > 0)
+        .map(|row| {
+            (
+                (row.column as usize + row.glyphs.len() + row.trailing_spaces as usize)
+                    .min(MESSAGE_WINDOW_RIGHT as usize) as u8,
+                row.row,
+            )
+        });
     let inline_cursor = open_prompt.and_then(|prompt| {
         rows.last().map(|row| {
             (
@@ -640,7 +712,7 @@ fn layout_message_window_inner(
     });
     MessageWindowLayout {
         rows,
-        inline_cursor,
+        inline_cursor: inline_cursor.or(trailing_space_cursor),
     }
 }
 
