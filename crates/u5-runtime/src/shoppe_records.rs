@@ -232,6 +232,9 @@ pub const fn shared_shop_bark_record(
 ///
 /// The engine had `0x84` and `0x88` off it too, on an earlier revision's
 /// "print their own branch text".
+/// `shops.md §8.B`: the one shop kind with its own entry sequence.
+pub const SHOP_DIALOG_ID_ARMS: u8 = 0x81;
+
 pub const fn talk_entry_uses_shared_preamble(dialog_id: u8) -> bool {
     matches!(dialog_id, 0x82 | 0x83 | 0x84 | 0x85 | 0x86 | 0x87 | 0x88)
 }

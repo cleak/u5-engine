@@ -54,6 +54,11 @@ pub struct ShopTransactionContext {
 /// player is and produces transition outcomes on input.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Default)]
 pub enum ArmsShopState {
+    /// `shops.md §8.B`'s arms entry, stages 1 and 2: the welcome line is on
+    /// screen and the shop is waiting for one key before the attribution and
+    /// greeting print. Only the Talk entry starts here; fixtures that want the
+    /// Buy/Sell prompt directly still use [`ArmsShopState::Greeting`].
+    Welcome,
     /// Initial state: shop has presented Buy/Sell prompt.
     #[default]
     Greeting,

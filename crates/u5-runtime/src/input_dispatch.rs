@@ -1963,6 +1963,35 @@ fn healer_service_echo(treatment: crate::shops::HealerTreatment) -> &'static str
     }
 }
 
+/// `shops.md §8.B`'s arms entry, stage 1: "Welcome | `"Good @, and welcome to
+/// #!"\n`, with token expansion" - `@` the time of day, `#` the shop name.
+pub(crate) fn arms_welcome_line(hour: u8, shop_name: &str) -> String {
+    // `§8.0`'s Talk entry newline opens the row the welcome prints on, the
+    // same way it does for the seven shared-greeting kinds.
+    format!(
+        "\n\"Good {}, and welcome to {shop_name}!\"\n",
+        crate::shops::shoppe_time_of_day_word(hour)
+    )
+}
+
+/// §8.B's two equal-probability arms greetings, and the stages around them:
+/// "Attribution | `\n$ says,\n"`", the selected variant, then "Tail after the
+/// selected variant | `" ` - a closing quote and one space".
+pub(crate) const ARMS_GREETINGS: [&str; 2] = [
+    "Hail, friend! Wouldst thou Buy or Sell?",
+    "Greetings, traveller! Wish ye to Buy, or hast thou wares to Sell?",
+];
+
+pub(crate) fn arms_attribution_and_greeting(vendor_name: Option<&str>, variant_roll: u8) -> String {
+    let greeting = ARMS_GREETINGS[usize::from(variant_roll & 1)];
+    match vendor_name {
+        Some(vendor) => format!("\n{vendor} says,\n\"{greeting}\" "),
+        // The attribution carries the vendor token; with no vendor resolved
+        // the quote still opens, which is what the tail closes.
+        None => format!("\n\"{greeting}\" "),
+    }
+}
+
 const SHOP_DIALOG_ID_TAVERN: u8 = 0x82;
 const SHOP_DIALOG_ID_STABLE: u8 = 0x83;
 const SHOP_DIALOG_ID_SHIPWRIGHT: u8 = 0x84;
@@ -2107,8 +2136,24 @@ fn handle_arms_shop_key_input(
     prices.copy_from_slice(&crate::EQUIPMENT_BASE_PRICES);
     let mut stock = state.equipment_stock;
     let prior_state = *shop_state;
+    // `shops.md §8.B` stage 2: "Pause | Wait for one key before the next
+    // text", then stage 3's attribution and the selected greeting. The
+    // greeting is one of two equal-probability variants, so this is where that
+    // draw is spent.
+    if matches!(prior_state, ArmsShopState::Welcome) {
+        *shop_state = ArmsShopState::Greeting;
+        let vendor = match state.area {
+            Area::Town { scene, .. } => crate::play_state_impl::shop_vendor_name_for_scene(
+                crate::shoppe_records::SHOP_DIALOG_ID_ARMS,
+                scene.byte,
+            ),
+            _ => None,
+        };
+        let roll = state.random_range_u8(0, 1);
+        return arms_attribution_and_greeting(vendor, roll);
+    }
     let outcome = match (prior_state, yes, no, inline_digit) {
-        (ArmsShopState::Greeting, _, _, _) => step_arms_shop(
+        (ArmsShopState::Welcome | ArmsShopState::Greeting, _, _, _) => step_arms_shop(
             shop_state,
             ArmsShopInput::Key(key_byte),
             ctx,

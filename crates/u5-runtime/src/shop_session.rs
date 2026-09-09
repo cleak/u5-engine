@@ -36,7 +36,7 @@ impl ActiveShopSession {
     pub fn awaiting_entry_answer(&self) -> bool {
         match self {
             Self::Arms(state) | Self::ArmsLocal(state, _) | Self::ArmsStocked(state, _) => {
-                matches!(state, ArmsShopState::Greeting)
+                matches!(state, ArmsShopState::Greeting | ArmsShopState::Welcome)
             }
             Self::Healer(state, _) => matches!(state, HealerShopState::Greeting),
             Self::Innkeeper(state) => matches!(state, InnkeeperState::Greeting { .. }),
@@ -144,12 +144,20 @@ pub fn shop_session_for_talk_context(
     scene_byte: Option<u8>,
 ) -> Option<ActiveShopSession> {
     Some(match dialog_id {
+        // `shops.md §8.B`: the arms entry opens on its welcome line and waits
+        // for one key before the attribution and greeting; the Buy/Sell
+        // prompt is stage 4, not stage 1.
         0x81 => {
             if let Some(scene) = scene_byte {
+                // `ArmsLocal` carries the shop itself, and its stock table is
+                // derivable from it; `ArmsStocked` keeps only the table, so
+                // `shop_label` fell back to the family name `Weaponsmith /
+                // Armourer` and §8.B's welcome named that instead of the shop.
+                // The stock game says `welcome to Iolo's Bows!`.
                 let shop = arms_shop_for_scene(scene)?;
-                ActiveShopSession::ArmsStocked(ArmsShopState::Greeting, shop.stock_table())
+                ActiveShopSession::ArmsLocal(ArmsShopState::Welcome, shop)
             } else {
-                ActiveShopSession::Arms(ArmsShopState::Greeting)
+                ActiveShopSession::Arms(ArmsShopState::Welcome)
             }
         }
         0x82 => ActiveShopSession::Tavern(match scene_byte {
@@ -348,10 +356,12 @@ mod tests {
 
     #[test]
     fn talk_context_resolves_scene_local_shop_instances() {
+        // §8.B's welcome names the shop, so the Talk entry keeps the shop
+        // rather than only its stock table.
         assert!(matches!(
             shop_session_for_talk_context(0x81, Some(26)),
-            Some(ActiveShopSession::ArmsStocked(_, table))
-                if table == ArmsShop::TheShatteredShield.stock_table()
+            Some(ActiveShopSession::ArmsLocal(_, shop))
+                if shop == ArmsShop::TheShatteredShield
         ));
         assert!(matches!(
             shop_session_for_talk_context(0x86, Some(8)),
@@ -570,9 +580,13 @@ mod tests {
         for (scene, shop, name) in cases {
             assert_eq!(arms_shop_for_scene(scene), Some(shop), "scene {scene}");
             assert_eq!(shop.display_name(), name);
+            // The Talk entry keeps the shop itself, not just its stock table:
+            // `shops.md §8.B`'s welcome names the shop, and the table cannot
+            // be mapped back to a name.
             assert!(matches!(
                 shop_session_for_talk_context(0x81, Some(scene)),
-                Some(ActiveShopSession::ArmsStocked(_, table)) if table == shop.stock_table()
+                Some(ActiveShopSession::ArmsLocal(ArmsShopState::Welcome, resolved))
+                    if resolved == shop && resolved.stock_table() == shop.stock_table()
             ));
         }
         assert_eq!(arms_shop_for_scene(1), None);

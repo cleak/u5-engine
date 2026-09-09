@@ -4329,7 +4329,21 @@ impl PlayState {
             }
         }
 
-        // `shops.md §8` gives every shop kind a `SHOPPE.DAT` entry
+        // `shops.md §8.B`, "Arms entry, in order": arms does not use the
+        // shared entry greeting - it opens on its own resident welcome line,
+        // "`\"Good @, and welcome to #!\"\n`, with token expansion". The
+        // attribution and greeting follow the stage-2 pause, in
+        // `handle_arms_shop_key_input`.
+        //
+        // Without this the arms entry fell through to the no-assets fallback
+        // below and printed `Weaponsmith / Armourer is now open.` in ordinary
+        // play, which is how it read at Britain's weaponsmith with a full
+        // asset directory loaded.
+        if dialog_id == crate::shoppe_records::SHOP_DIALOG_ID_ARMS {
+            return crate::input_dispatch::arms_welcome_line(self.clock.hour, session.shop_label());
+        }
+
+        // `shops.md §8` gives every other shop kind a `SHOPPE.DAT` entry
         // greeting; this is the fallback for when that record cannot be
         // rendered. It used to append `Dispatch family: {family}.`, which
         // is engine-internal routing vocabulary with no counterpart in the

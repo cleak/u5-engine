@@ -5915,7 +5915,12 @@ fn end_to_end_arms_shop_exit_clears_session() {
     ]);
     state.talk_facing_with_dialogue(&dialogue);
     assert!(state.active_shop.is_some());
-    // Space exits the arms shop greeting.
+    // `shops.md §8.B` stage 2: the welcome line waits for one key before the
+    // attribution and greeting print, so Space here releases the pause rather
+    // than answering the Buy/Sell prompt.
+    handle_play_key_input(&mut state, ' ', "", Path::new("")).unwrap();
+    assert!(state.message.contains("Buy or Sell"), "{}", state.message);
+    // Space at the greeting exits the shop.
     handle_play_key_input(&mut state, ' ', "", Path::new("")).unwrap();
     assert!(state.active_shop.is_none());
     // The closing flourish is a `SHOPPE.DAT` record, so a test with no game
