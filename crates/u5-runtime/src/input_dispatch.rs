@@ -4079,7 +4079,18 @@ fn handle_combat_multistage_command(
                 // other multi-stage arm reinstates the slot here; these did
                 // not.
                 state.pending_combat_actor_slot = Some(actor_slot);
-                state.message = state.render_active_direction_prompt();
+                // `commands.md §5.1`: "Every mode's turn loop opens its input
+                // line with the same two steps: emit a newline into the
+                // message window, then draw that one triangle", and the verb
+                // echo "begins in the cell the cursor occupied, one cell right
+                // of the triangle". The arena echo is such a line - the stock
+                // window shows ` Get-North`, ` Klimb-Pass` and ` Attack-North`
+                // all end-capped - so it has to be logged as a command echo.
+                // Assigning it to the message slot flushed it as ordinary
+                // output, which drew the row one column left of the original.
+                let echo = state.render_active_direction_prompt();
+                state.message.clear();
+                state.emit_combat_command_echo_line(&echo);
             }
             true
         }
@@ -4120,7 +4131,18 @@ fn handle_combat_multistage_command(
                 // other multi-stage arm reinstates the slot here; these did
                 // not.
                 state.pending_combat_actor_slot = Some(actor_slot);
-                state.message = state.render_active_direction_prompt();
+                // `commands.md §5.1`: "Every mode's turn loop opens its input
+                // line with the same two steps: emit a newline into the
+                // message window, then draw that one triangle", and the verb
+                // echo "begins in the cell the cursor occupied, one cell right
+                // of the triangle". The arena echo is such a line - the stock
+                // window shows ` Get-North`, ` Klimb-Pass` and ` Attack-North`
+                // all end-capped - so it has to be logged as a command echo.
+                // Assigning it to the message slot flushed it as ordinary
+                // output, which drew the row one column left of the original.
+                let echo = state.render_active_direction_prompt();
+                state.message.clear();
+                state.emit_combat_command_echo_line(&echo);
             }
             true
         }
@@ -4170,7 +4192,18 @@ fn handle_combat_multistage_command(
                 // other multi-stage arm reinstates the slot here; these did
                 // not.
                 state.pending_combat_actor_slot = Some(actor_slot);
-                state.message = state.render_active_direction_prompt();
+                // `commands.md §5.1`: "Every mode's turn loop opens its input
+                // line with the same two steps: emit a newline into the
+                // message window, then draw that one triangle", and the verb
+                // echo "begins in the cell the cursor occupied, one cell right
+                // of the triangle". The arena echo is such a line - the stock
+                // window shows ` Get-North`, ` Klimb-Pass` and ` Attack-North`
+                // all end-capped - so it has to be logged as a command echo.
+                // Assigning it to the message slot flushed it as ordinary
+                // output, which drew the row one column left of the original.
+                let echo = state.render_active_direction_prompt();
+                state.message.clear();
+                state.emit_combat_command_echo_line(&echo);
             }
             true
         }

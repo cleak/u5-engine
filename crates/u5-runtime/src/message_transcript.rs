@@ -728,6 +728,15 @@ impl PlayState {
             self.message.push_str(continuation);
             self.message_flushed = self.message.clone();
         }
+        // `commands.md §5.3`/`§5.4`: the direction word "is appended on the
+        // same line", and the handler's own output starts on the row below -
+        // so completing the echo *closes* that row. In the arena the verb
+        // echo is emitted as a combat print, which leaves
+        // `combat_transcript_row_open` set; without clearing it here the next
+        // combat print's leading newline is spent closing a row that the
+        // handler's result already ended, and `§8.1`'s blank row between the
+        // result and the following turn banner is lost.
+        self.combat_transcript_row_open = false;
         true
     }
 }
