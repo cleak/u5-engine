@@ -1409,24 +1409,51 @@ impl PlayState {
             self.message.clear();
             return MoveOutcome::Blocked;
         }
-        if matches!(self.area, Area::Dungeon { .. }) {
+        // `inventory.md §7.1` (`cleak/u5-spec#251`) publishes the whole gate
+        // order, and it is not the carpet movement predicate the engine was
+        // reusing: "Activating a carried carpet uses its own terrain rule: it
+        // accepts map tile ids `0x00..0x0B` and `0x0D..0xFF`, and rejects only
+        // mountains `0x0C`. Neither the on-foot nor the carpet movement
+        // predicate is consulted." Chairs `0x90..0x93` therefore permit
+        // boarding even though carpet *movement* rejects them, which is what
+        // a capture at Iolo's hut shows.
+        //
+        // Gate 1: "Scene ids `0x21..0xFF` produce `Not here!\n` without a
+        // terrain lookup." That band is every dungeon and the temporary
+        // combat scene; `0x00..0x20` is the overworld and the town family.
+        if self.current_scene_byte() > CARPET_BOARDING_LAST_ELIGIBLE_SCENE {
             self.message = "Not here!".to_string();
             return MoveOutcome::Blocked;
         }
+        // Gate 2: "In an eligible scene, mountains produce that same refusal
+        // **before transport is considered**. Thus a ship marker on mountains
+        // receives `Not here!\n`."
+        let tile = self.current_area_tile(self.player.x, self.player.y);
+        if tile == CARPET_BOARDING_REJECTED_TILE {
+            self.message = "Not here!".to_string();
+            return MoveOutcome::Blocked;
+        }
+        // Gate 3: "exact transport marker `0x1C` permits boarding; ship
+        // markers `0x20..0x27` produce `X-it ship first!\n`, and every other
+        // marker produces `Only on foot!\n`." Foot persists exactly `0x1C`.
         if !self.player.transport.is_foot() {
-            self.message = USE_MAGIC_CARPET_XIT_FIRST.to_string();
+            self.message = if matches!(self.player.transport, TransportState::Ship { .. }) {
+                USE_MAGIC_CARPET_XIT_FIRST.to_string()
+            } else {
+                USE_MAGIC_CARPET_ONLY_ON_FOOT.to_string()
+            };
             return MoveOutcome::Blocked;
         }
 
-        let tile = self.current_area_tile(self.player.x, self.player.y);
+        // "Success prints `Boarded!\n`, selects one of the two carpet frames
+        // with equal probability" - markers `0x14` and `0x15`, which are the
+        // first two tiles of the playable carpet band.
+        let frame =
+            FIRST_PLAYABLE_MAGIC_CARPET_TILE + u5_prng_range_u16(&mut self.prng_state, 0, 1) as u8;
         let transport = TransportState::Carpet {
-            type_byte: FIRST_PLAYABLE_MAGIC_CARPET_TILE,
-            tile: FIRST_PLAYABLE_MAGIC_CARPET_TILE,
+            type_byte: frame,
+            tile: frame,
         };
-        if !is_tile_walkable_for_transport(tile, self.passability.as_ref(), transport) {
-            self.message = "Not here!".to_string();
-            return MoveOutcome::Blocked;
-        }
 
         self.special_items[SPECIAL_ITEM_MAGIC_CARPET_INDEX] =
             self.special_items[SPECIAL_ITEM_MAGIC_CARPET_INDEX].saturating_sub(1);

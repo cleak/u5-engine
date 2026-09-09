@@ -1161,16 +1161,22 @@ fn use_command_routes_inline_magic_carpet_request() {
         PlayInputDisposition::Continue
     );
 
-    assert_eq!(
-        world.player.transport,
-        TransportState::Carpet {
-            type_byte: FIRST_PLAYABLE_MAGIC_CARPET_TILE,
-            tile: FIRST_PLAYABLE_MAGIC_CARPET_TILE,
+    // `inventory.md §7.1`: success "selects one of the two carpet frames with
+    // equal probability" - markers `0x14` or `0x15`.
+    let frame = match world.player.transport {
+        TransportState::Carpet { type_byte, tile } => {
+            assert_eq!(type_byte, tile);
+            tile
         }
+        other => panic!("expected a carpet, got {other:?}"),
+    };
+    assert!(
+        (FIRST_PLAYABLE_MAGIC_CARPET_TILE..=FIRST_PLAYABLE_MAGIC_CARPET_TILE + 1).contains(&frame),
+        "carpet frame {frame:#04x} is outside the published pair"
     );
     assert_eq!(
         world.active_objects[0].tile,
-        TRANSPORT_MARKER_MAGIC_CARPET_FIRST
+        TRANSPORT_MARKER_MAGIC_CARPET_FIRST + (frame - FIRST_PLAYABLE_MAGIC_CARPET_TILE)
     );
     assert_eq!(world.special_items[SPECIAL_ITEM_MAGIC_CARPET_INDEX], 1);
     assert_eq!(world.turn, 1);
@@ -1185,16 +1191,67 @@ fn magic_carpet_use_requires_stock_footing_and_accepted_tile() {
     assert_eq!(no_stock.message, "");
     assert_eq!(no_stock.turn, 0);
 
-    let mut boarded = world_state(open_world_grid(), 1, 1);
-    boarded.special_items[SPECIAL_ITEM_MAGIC_CARPET_INDEX] = 1;
-    boarded.player.transport = TransportState::Skiff {
+    // `inventory.md §7.1` (`cleak/u5-spec#251`): "ship markers `0x20..0x27`
+    // produce `X-it ship first!`, and every other marker produces
+    // `Only on foot!`." A skiff marker is `0x28..0x2B`, so it takes the
+    // second line, not the first.
+    let mut skiff = world_state(open_world_grid(), 1, 1);
+    skiff.special_items[SPECIAL_ITEM_MAGIC_CARPET_INDEX] = 1;
+    skiff.player.transport = TransportState::Skiff {
         type_byte: FIRST_PLAYABLE_SKIFF_TILE,
         tile: FIRST_PLAYABLE_SKIFF_TILE,
     };
-    boarded.sync_player_object();
-    assert_eq!(boarded.use_magic_carpet(), MoveOutcome::Blocked);
-    assert_eq!(boarded.special_items[SPECIAL_ITEM_MAGIC_CARPET_INDEX], 1);
-    assert_eq!(boarded.message, USE_MAGIC_CARPET_XIT_FIRST);
+    skiff.sync_player_object();
+    assert_eq!(skiff.use_magic_carpet(), MoveOutcome::Blocked);
+    assert_eq!(skiff.special_items[SPECIAL_ITEM_MAGIC_CARPET_INDEX], 1);
+    assert_eq!(skiff.message, USE_MAGIC_CARPET_ONLY_ON_FOOT);
+
+    let mut ship = world_state(open_world_grid(), 1, 1);
+    ship.special_items[SPECIAL_ITEM_MAGIC_CARPET_INDEX] = 1;
+    ship.player.transport = TransportState::Ship {
+        type_byte: FIRST_PLAYABLE_FRIGATE_TILE,
+        tile: FIRST_PLAYABLE_FRIGATE_TILE,
+        sails_hoisted: false,
+        hull: 10,
+        skiffs: 1,
+    };
+    ship.sync_player_object();
+    assert_eq!(ship.use_magic_carpet(), MoveOutcome::Blocked);
+    assert_eq!(ship.message, USE_MAGIC_CARPET_XIT_FIRST);
+
+    // "mountains produce that same refusal **before transport is
+    // considered**. Thus a ship marker on mountains receives `Not here!`."
+    let mut mountain_grid = open_world_grid();
+    mountain_grid[world_cell_index(1, 1)] = 0x0c;
+    let mut ship_on_mountains = world_state(mountain_grid, 1, 1);
+    ship_on_mountains.special_items[SPECIAL_ITEM_MAGIC_CARPET_INDEX] = 1;
+    ship_on_mountains.player.transport = TransportState::Ship {
+        type_byte: FIRST_PLAYABLE_FRIGATE_TILE,
+        tile: FIRST_PLAYABLE_FRIGATE_TILE,
+        sails_hoisted: false,
+        hull: 10,
+        skiffs: 1,
+    };
+    ship_on_mountains.sync_player_object();
+    assert_eq!(ship_on_mountains.use_magic_carpet(), MoveOutcome::Blocked);
+    assert_eq!(ship_on_mountains.message, "Not here!");
+
+    // "chair tiles `0x90..0x93` permit boarding even though subsequent carpet
+    // movement rejects them." This is the case the engine got wrong by
+    // reusing the movement predicate as the boarding gate.
+    for chair in 0x90u8..=0x93 {
+        let mut chair_grid = open_world_grid();
+        chair_grid[world_cell_index(1, 1)] = chair;
+        let mut on_chair = world_state(chair_grid, 1, 1);
+        on_chair.special_items[SPECIAL_ITEM_MAGIC_CARPET_INDEX] = 1;
+        assert_eq!(
+            on_chair.use_magic_carpet(),
+            MoveOutcome::Boarded,
+            "chair tile {chair:#04x} should accept boarding"
+        );
+        assert_eq!(on_chair.message, "Boarded!");
+        assert_eq!(on_chair.special_items[SPECIAL_ITEM_MAGIC_CARPET_INDEX], 0);
+    }
 
     let mut blocked_grid = open_world_grid();
     blocked_grid[world_cell_index(1, 1)] = 0x0c;

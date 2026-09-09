@@ -730,6 +730,12 @@ pub const USE_MAGIC_CARPET_BOARDED: &str = "Boarded!";
 /// mounted or aboard answers `X-it ship first!`, where the engine had the
 /// two-word `On foot.`.
 pub const USE_MAGIC_CARPET_XIT_FIRST: &str = "X-it ship first!";
+/// `inventory.md §7.1` (`cleak/u5-spec#251`): boarding tests the transport
+/// marker after the scene and terrain gates. "Ship markers `0x20..0x27`
+/// produce `X-it ship first!\n`, and every other marker produces
+/// `Only on foot!\n`" - so a horse, skiff, balloon or carpet answers this
+/// one, not the ship line the engine used for every non-foot transport.
+pub const USE_MAGIC_CARPET_ONLY_ON_FOOT: &str = "Only on foot!";
 /// The HMS Cape plans read off a ship. Measured: `Only usable on shipboard!`,
 /// where the engine had `Not aboard ship!`.
 pub const USE_PLANS_SHIPBOARD_ONLY_REFUSAL: &str = "Only usable on shipboard!";

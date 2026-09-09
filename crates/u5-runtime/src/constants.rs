@@ -1708,6 +1708,15 @@ pub const FIRST_PLAYABLE_FRIGATE_TILE: u8 = FIRST_PLAYABLE_HORSE_TILE + 8;
 pub const FIRST_PLAYABLE_SKIFF_TILE: u8 = FIRST_PLAYABLE_FRIGATE_TILE + 8;
 pub const FIRST_PLAYABLE_MAGIC_CARPET_TILE: u8 = FIRST_PLAYABLE_SKIFF_TILE + 8;
 pub const FIRST_PLAYABLE_BALLOON_TILE: u8 = FIRST_PLAYABLE_MAGIC_CARPET_TILE + 4;
+
+/// `inventory.md §7.1` (`cleak/u5-spec#251`): carpet boarding is "[u]sable in
+/// scene ids `0x00..0x20`" - the overworld and the town family - and "[s]cene
+/// ids `0x21..0xFF` produce `Not here!` without a terrain lookup".
+pub const CARPET_BOARDING_LAST_ELIGIBLE_SCENE: u8 = 0x20;
+/// The one tile the boarding rule rejects: mountains
+/// (`catalogs/tile-catalog.md` row 12). Every other id, chairs and
+/// foot-rejected terrain included, permits boarding.
+pub const CARPET_BOARDING_REJECTED_TILE: u8 = 0x0C;
 pub const DEFAULT_PARTY_HP: u16 = 60;
 pub const DEFAULT_PARTY_MAX_HP: u16 = 150;
 /// `rest-and-camp.md §5`: dungeon watch-rest retains its three passes per
