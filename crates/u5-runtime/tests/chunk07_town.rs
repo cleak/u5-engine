@@ -303,6 +303,15 @@ fn blackthorn_fourth_wrong_answer_executes_the_named_companion() {
         .submit_blackthorn_audience_answer("nonsense", &dir)
         .unwrap();
 
+    // `blackthorn.md §5` step 5: "Wait for player acknowledgement before
+    // returning to the caller branch."
+    assert!(
+        state
+            .active_blackthorn
+            .as_ref()
+            .is_some_and(|challenge| challenge.awaiting_closing_acknowledgement())
+    );
+    state.submit_blackthorn_audience_answer("", &dir).unwrap();
     assert!(
         state.active_blackthorn.is_none(),
         "the fourth wrong answer resolves the interrogation",

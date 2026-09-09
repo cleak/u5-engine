@@ -355,6 +355,16 @@ fn blackthorn_capture_chain_leaves_the_party_without_its_keys() {
         .submit_blackthorn_audience_answer("Ahm", &dir)
         .unwrap();
 
+    // `blackthorn.md §5` step 5: the outcome holds for an acknowledgement,
+    // and §8's carried-key debit rides the captive-cell cleanup that key runs.
+    assert!(
+        state
+            .active_blackthorn
+            .as_ref()
+            .is_some_and(|challenge| challenge.awaiting_closing_acknowledgement())
+    );
+    state.submit_blackthorn_audience_answer("", &dir).unwrap();
+
     assert!(state.active_blackthorn.is_none());
     assert_eq!(state.keys, 0);
     assert_eq!(

@@ -24898,7 +24898,15 @@ mod tests {
         .unwrap();
 
         assert!(input_line.is_empty());
-        assert!(state.active_blackthorn.is_none());
+        // `blackthorn.md §5` step 5: the resolved outcome holds on screen
+        // until the player acknowledges it, and the captive-cell handoff runs
+        // on that key.
+        assert!(
+            state
+                .active_blackthorn
+                .as_ref()
+                .is_some_and(|challenge| challenge.awaiting_closing_acknowledgement())
+        );
         // blackthorn.md §4: "A correct answer ruins that shrine and
         // costs five points of moral standing." The withdrawn reading
         // set a durable per-member Blackthorn-jail flag instead; §3 and
@@ -24915,6 +24923,8 @@ mod tests {
             "{}",
             state.message
         );
+        state.submit_blackthorn_audience_answer("", &dir).unwrap();
+        assert!(state.active_blackthorn.is_none());
         let _ = fs::remove_dir_all(dir);
     }
 

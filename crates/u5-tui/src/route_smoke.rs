@@ -1320,7 +1320,10 @@ pub fn route_smoke_cases() -> Vec<RouteSmokeCase> {
         RouteSmokeCase {
             name: "blackthorn-audience-correct",
             options: PlayOptions::default(),
-            script: &["Ahm"],
+            // `blackthorn.md §5` step 5: "Wait for player acknowledgement
+            // before returning to the caller branch." The second line is that
+            // acknowledgement; the captive-cell handoff runs on it.
+            script: &["Ahm", " "],
             expected: RouteSmokeExpectation::Town(blackthorn_captive_scene),
             min_turn: 0,
             expected_frame_kind: "tile viewport",
@@ -1328,7 +1331,9 @@ pub fn route_smoke_cases() -> Vec<RouteSmokeCase> {
         RouteSmokeCase {
             name: "blackthorn-audience-wrong",
             options: PlayOptions::default(),
-            script: &["wrong"],
+            // As above: the terminating wrong answer's reaction is
+            // acknowledged before the handoff runs.
+            script: &["wrong", " "],
             expected: RouteSmokeExpectation::Town(blackthorn_captive_scene),
             min_turn: 0,
             expected_frame_kind: "tile viewport",

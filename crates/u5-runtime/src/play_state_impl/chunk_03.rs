@@ -179,7 +179,10 @@ impl PlayState {
             // While the loop holds on a wrong-answer reaction it is waiting
             // for an acknowledgement, not for typed text, so there is no
             // answer row yet.
-            .filter(|challenge| !challenge.awaiting_acknowledgement())
+            .filter(|challenge| {
+                !challenge.awaiting_acknowledgement()
+                    && !challenge.awaiting_closing_acknowledgement()
+            })
             .map(|_| super::chunk_07::BLACKTHORN_ANSWER_ROW_PREFIX.to_string())
     }
 
@@ -221,10 +224,9 @@ impl PlayState {
             || self.pending_town_arrest.is_some()
             // `blackthorn.md §4.1`'s acknowledgement reads a key with the
             // reaction on screen; the cursor sits inline after it.
-            || self
-                .active_blackthorn
-                .as_ref()
-                .is_some_and(|challenge| challenge.awaiting_acknowledgement())
+            || self.active_blackthorn.as_ref().is_some_and(|challenge| {
+                challenge.awaiting_acknowledgement() || challenge.awaiting_closing_acknowledgement()
+            })
     }
 
     pub fn open_prompt_line(&self) -> Option<String> {

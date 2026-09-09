@@ -4240,6 +4240,21 @@ impl PlayState {
         self.apply_blackthorn_captive_cell_handoff(game_dir, "")
     }
 
+    /// `blackthorn.md §5` step 5: print a resolved outcome and hold it on
+    /// screen until the player acknowledges it. The captive-cell handoff runs
+    /// on that key, not before - the engine ran it immediately, so the frame
+    /// carried a live command row where the stock game's was still blank.
+    fn hold_blackthorn_closing(
+        &mut self,
+        mut challenge: crate::blackthorn_session::BlackthornChallenge,
+        line: String,
+    ) -> io::Result<MoveOutcome> {
+        challenge.await_closing_acknowledgement();
+        self.active_blackthorn = Some(challenge);
+        self.message = line;
+        Ok(MoveOutcome::PromptDeclined)
+    }
+
     /// `blackthorn.md §4.1`'s reaction records. The measured constants are
     /// the fallbacks for the paths that run without `MISCMSG.DAT`.
     pub fn blackthorn_reaction_text(
@@ -4397,6 +4412,17 @@ impl PlayState {
         typed: &str,
         game_dir: &Path,
     ) -> io::Result<MoveOutcome> {
+        // `blackthorn.md §5` step 5: "Wait for player acknowledgement before
+        // returning to the caller branch." The outcome is on screen and the
+        // durable consequences have run; this key is what returns the party
+        // to the captive cell.
+        if self.active_blackthorn.as_ref().is_some_and(
+            crate::blackthorn_session::BlackthornChallenge::awaiting_closing_acknowledgement,
+        ) {
+            self.active_blackthorn = None;
+            return self.apply_blackthorn_captive_cell_handoff(game_dir, "");
+        }
+
         // `blackthorn.md §4.1`: the wrong-answer reaction is followed by
         // "acknowledgement, then `\n\n` before the second ask", so while the
         // loop is holding on that reaction any key advances it and nothing is
@@ -4484,7 +4510,7 @@ impl PlayState {
                         crate::MISCMSG_BLACKTHORN_MERCIFUL_DEATH,
                         BLACKTHORN_MERCIFUL_DEATH_LINE,
                     )?;
-                    self.apply_blackthorn_captive_cell_handoff(game_dir, &line)
+                    self.hold_blackthorn_closing(challenge, line)
                 }
             }
             crate::blackthorn_session::BlackthornChallengeOutcome::Survived => {
@@ -4528,7 +4554,7 @@ impl PlayState {
                         "",
                     )?
                 };
-                self.apply_blackthorn_captive_cell_handoff(game_dir, &reward)
+                self.hold_blackthorn_closing(challenge, reward)
             }
             crate::blackthorn_session::BlackthornChallengeOutcome::Wrong { ordinal, expected } => {
                 // `blackthorn.md §4`: "**A wrong answer, when few companions
@@ -4561,7 +4587,7 @@ impl PlayState {
                         crate::MISCMSG_BLACKTHORN_DUNGEON_THREAT,
                         BLACKTHORN_DUNGEON_THREAT,
                     )?;
-                    return self.apply_blackthorn_captive_cell_handoff(game_dir, &line);
+                    return self.hold_blackthorn_closing(challenge, line);
                 };
                 match challenge.wrong_escalation() {
                     // First wrong answer: a threat only. No tile is stamped
@@ -4661,7 +4687,7 @@ impl PlayState {
                             crate::MISCMSG_BLACKTHORN_PENDULUM_NARRATION,
                             BLACKTHORN_PENDULUM_NARRATION,
                         )?;
-                        self.apply_blackthorn_captive_cell_handoff(game_dir, &line)
+                        self.hold_blackthorn_closing(challenge, line)
                     }
                 }
             }

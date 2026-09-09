@@ -23,6 +23,11 @@ pub enum BlackthornChallengePhase {
     AwaitingAcknowledgement {
         ordinal: u8,
     },
+    /// `blackthorn.md §5` step 5: "Wait for player acknowledgement before
+    /// returning to the caller branch." The outcome text is on screen, the
+    /// durable consequences have run, and the captive-cell handoff is held
+    /// until a key arrives.
+    AwaitingClosingAcknowledgement,
     Punished {
         failed_ordinal: u8,
     },
@@ -151,6 +156,10 @@ impl BlackthornChallenge {
             BlackthornChallengePhase::Survived => BlackthornChallengeOutcome::AlreadySurvived,
             BlackthornChallengePhase::Aborted => BlackthornChallengeOutcome::AlreadyAborted,
             BlackthornChallengePhase::AwaitingAudience => self.begin(),
+            BlackthornChallengePhase::AwaitingClosingAcknowledgement => {
+                self.phase = BlackthornChallengePhase::Survived;
+                BlackthornChallengeOutcome::AlreadySurvived
+            }
             BlackthornChallengePhase::AwaitingAcknowledgement { ordinal } => {
                 self.phase = BlackthornChallengePhase::PresentingPrompt { ordinal };
                 BlackthornChallengeOutcome::PromptPresented {
@@ -204,6 +213,19 @@ impl BlackthornChallenge {
     /// Hold the reaction on screen until the player acknowledges it.
     pub fn await_acknowledgement(&mut self, ordinal: u8) {
         self.phase = BlackthornChallengePhase::AwaitingAcknowledgement { ordinal };
+    }
+
+    /// `blackthorn.md §5` step 5: hold the resolved outcome on screen until
+    /// the player acknowledges it.
+    pub fn await_closing_acknowledgement(&mut self) {
+        self.phase = BlackthornChallengePhase::AwaitingClosingAcknowledgement;
+    }
+
+    pub fn awaiting_closing_acknowledgement(&self) -> bool {
+        matches!(
+            self.phase,
+            BlackthornChallengePhase::AwaitingClosingAcknowledgement
+        )
     }
 
     pub fn abort(&mut self) {

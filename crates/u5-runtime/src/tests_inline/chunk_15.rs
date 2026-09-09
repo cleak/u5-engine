@@ -2174,6 +2174,28 @@
             PlayInputDisposition::Continue
         );
 
+        // `blackthorn.md §4.1`: the correct answer prints the reward speech,
+        // and the captive-cell relocation is a diagnostic rather than a
+        // printed line. This party has three members, so it is record `5`.
+        assert!(
+            state
+                .message
+                .contains("I will grant thy companion a merciful death!"),
+            "{}",
+            state.message
+        );
+        // `blackthorn.md §5` step 5: "Wait for player acknowledgement before
+        // returning to the caller branch."
+        assert!(
+            state
+                .active_blackthorn
+                .as_ref()
+                .is_some_and(|challenge| challenge.awaiting_closing_acknowledgement())
+        );
+        assert_eq!(
+            handle_play_key_input(&mut state, ' ', "", &dir).unwrap(),
+            PlayInputDisposition::Continue
+        );
         assert!(state.active_blackthorn.is_none());
         // blackthorn.md §8: "Roster removal of an executed companion |
         // Durable and irreversible: record lifted from the party, party
@@ -2199,7 +2221,6 @@
         // verbatim at HEAD. Verify spec claims against the remote, not
         // that checkout.
         assert_eq!(state.party[1].slot, 1);
-        assert!(state.message.contains("merciful death"));
         // blackthorn.md §4: "A correct answer ruins that shrine and
         // costs five points of moral standing."
         assert_ne!(state.shrine_ruin_flags[0], 0);
@@ -2216,16 +2237,6 @@
                 BLACKTHORN_CAPTIVE_CELL_X as usize,
                 BLACKTHORN_CAPTIVE_CELL_Y as usize
             )
-        );
-        // `blackthorn.md §4.1`: the correct answer prints the reward speech,
-        // and the captive-cell relocation is a diagnostic rather than a
-        // printed line. This party has three members, so it is record `5`.
-        assert!(
-            state
-                .message
-                .contains("I will grant thy companion a merciful death!"),
-            "{}",
-            state.message
         );
         assert!(
             state
