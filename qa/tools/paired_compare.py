@@ -32,6 +32,7 @@ silently.
 
 import json
 import pathlib
+import re
 import sys
 
 from PIL import Image
@@ -206,8 +207,18 @@ def latest_artifacts(names: list[str]) -> list[pathlib.Path]:
         )
     found = []
     for name in names:
+        # The artifact directory is `<scenario>-<YYYYMMDD>-<HHMMSS>`, so a bare
+        # `<name>-*` glob also matches every longer scenario sharing the
+        # prefix: `nb-inn` picked up `nb-inn-refusals`, and `cove-healer`
+        # picked up `cove-healer-services`, silently comparing the wrong
+        # scenario. Require the timestamp.
         runs = sorted(
-            (path for path in ARTIFACTS.glob(f"{name}-*") if (path / "record.json").is_file()),
+            (
+                path
+                for path in ARTIFACTS.glob(f"{name}-*")
+                if (path / "record.json").is_file()
+                and re.fullmatch(rf"{re.escape(name)}-\d{{8}}-\d{{6}}", path.name)
+            ),
             key=lambda path: path.name,
         )
         if runs:

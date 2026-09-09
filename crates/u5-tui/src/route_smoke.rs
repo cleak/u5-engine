@@ -7308,7 +7308,11 @@ fn validate_route_smoke_case_state(
                     .party
                     .first()
                     .is_none_or(|member| member.hp == member.max_hp)
-                || !state.message.contains("Declined Heal")
+                // `shops.md §8.C`: the fee prompt echoes a bare `No`, then the
+                // visit continues on its published question. `Declined Heal`
+                // was the engine's own sentence.
+                || !state.message.starts_with("No")
+                || !state.message.contains("aid thee?")
             {
                 return Err(io::Error::other(format!(
                     "route smoke `{case_name}` did not quote and decline healer treatment"

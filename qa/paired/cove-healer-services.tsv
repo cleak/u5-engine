@@ -71,10 +71,13 @@ both	key	Y
 both	wait	5000
 both	key	H
 both	wait	5000
-both	shot	heal	H for heal
+both	shot	heal	H echoes and quotes
+both	key	N
+both	wait	4000
+both	shot	declined	N at the quote
 both	key	R
 both	wait	5000
-both	shot	resurrect	R for resurrect
+both	shot	resurrect	R echoes
 both	key	space
 both	wait	4000
 both	shot	space	Space at the service menu

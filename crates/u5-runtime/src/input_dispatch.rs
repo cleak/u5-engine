@@ -856,10 +856,11 @@ fn handle_active_shop_key_input(
                             };
                         }
                         *s = HealerShopState::PickPartyMember { service, cost };
-                        // Unmeasured: no capture yet drives this branch with a
-                        // party of two or more, and §8 publishes no wording
-                        // for the picker it describes.
-                        String::new()
+                        // §8.C publishes this after all: "A sole party member
+                        // is selected automatically; otherwise print
+                        // `\n\n"Who needs my aid?" ` and use the party
+                        // selector."
+                        HEALER_WHO_NEEDS_AID.to_string()
                     }
                     HealerServiceAction::Exit => {
                         *s = HealerShopState::Exited;
@@ -869,8 +870,10 @@ fn handle_active_shop_key_input(
                 },
                 (HealerShopState::PickPartyMember { service, .. }, _, true, _) => {
                     *s = HealerShopState::PickService;
-                    let treatment = healer_treatment_for_service(service);
-                    format!("Cancelled {}.", treatment.display_name())
+                    let _ = service;
+                    // §8.C: "Cancellation adds `No one`, with no trailing line
+                    // feed", then the visit continues on its own question.
+                    format!("No one{HEALER_CONTINUATION}")
                 }
                 (HealerShopState::PickPartyMember { service, .. }, _, _, Some(d)) if d >= 1 => {
                     let target_index = usize::from(d - 1);
@@ -907,7 +910,7 @@ fn handle_active_shop_key_input(
                                     slot: d - 1,
                                     cost,
                                 };
-                                format!("{} costs {cost} gold. (Y/N)", treatment.display_name())
+                                healer_fee_and_confirmation(treatment, cost)
                             }
                         }
                     }
@@ -950,8 +953,10 @@ fn handle_active_shop_key_input(
                 }
                 (HealerShopState::Confirm { service, .. }, _, true, _) => {
                     *s = HealerShopState::PickService;
-                    let treatment = healer_treatment_for_service(service);
-                    format!("Declined {}.", treatment.display_name())
+                    let _ = service;
+                    // §8.C: the fee prompt echoes a bare `No`, and the visit
+                    // continues on its own question.
+                    format!("No{HEALER_CONTINUATION}")
                 }
                 (HealerShopState::Exited, _, _, _) => "Farewell.".to_string(),
                 // `shops.md §8.B`/`§8.C`: every shop kind ignores a key it does
@@ -1897,16 +1902,48 @@ fn healer_service_menu(name: Option<&'static str>) -> String {
 /// treatment returns to.
 const HEALER_SERVICE_QUESTION: &str = "\"What is the nature of thy need?\"";
 
-/// **Measured**: the refusal a service nobody needs draws, attributed, with
-/// the follow-up question the visit continues on.
+/// `shops.md §8.C`'s healer result table: "Selected member is untreatable |
+/// Token-expanded `\n\n"Thou hast no need of this art!"\nsays $.`", then
+/// separately "Continuation after treatment, refusal, or member cancellation |
+/// `\n\n"Is there any other way in which I may\n`, then `aid thee?" `".
 fn healer_no_need_refusal(name: Option<&'static str>) -> String {
     let refusal = "\"Thou hast no need of this art!\"";
-    let follow_up = "\"Is there any other way in which I may aid thee?\"";
     match name {
-        Some(name) => format!("{refusal}\nsays {name}.\n\n{follow_up}"),
-        None => format!("{refusal}\n\n{follow_up}"),
+        Some(name) => format!("{refusal}\nsays {name}.{HEALER_CONTINUATION}"),
+        None => format!("{refusal}{HEALER_CONTINUATION}"),
     }
 }
+
+/// §8.C: the continuation the visit resumes on. Its own leading line feeds
+/// and its trailing space are the published text's.
+const HEALER_CONTINUATION: &str = "\n\n\"Is there any other way in which I may\naid thee?\" ";
+
+/// §8.C's three paid introductions. The fee row completes each of them.
+fn healer_paid_introduction(treatment: crate::shops::HealerTreatment) -> &'static str {
+    match treatment {
+        crate::shops::HealerTreatment::Cure => "\"I can cure thy poisoned body ",
+        crate::shops::HealerTreatment::Heal => "\"I can heal thee ",
+        crate::shops::HealerTreatment::Resurrect => {
+            "\"I can raise this unfortunate person from the dead "
+        }
+    }
+}
+
+/// §8.C: "Fee and confirmation, after an introduction | Token-expanded
+/// `for % gold.\n\nWilt thou\npay?" `; accept Y/N only and echo bare `Yes`
+/// or `No`". Measured at Cove's Sanctuary
+/// (`qa/paired/cove-healer-services.tsv`, beat `heal`), which reads back
+/// `"I can heal thee` / `for 55 gold.` / blank / `Wilt thou` / `pay?"`.
+fn healer_fee_and_confirmation(treatment: crate::shops::HealerTreatment, cost: u16) -> String {
+    format!(
+        "{}for {cost} gold.\n\nWilt thou\npay?\" ",
+        healer_paid_introduction(treatment)
+    )
+}
+
+/// §8.C: "A sole party member is selected automatically; otherwise print
+/// `\n\n"Who needs my aid?" ` and use the party selector."
+const HEALER_WHO_NEEDS_AID: &str = "\n\n\"Who needs my aid?\" ";
 
 /// `shops.md §8.B`, the innkeeper's row: "`Yes`, then token-expanded
 /// `\n\n$ asks,\n"Art thou here\nto Pick up or\n`, then `Leave a\ncompanion,
