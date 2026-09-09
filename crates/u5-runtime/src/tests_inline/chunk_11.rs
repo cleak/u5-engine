@@ -1343,7 +1343,8 @@
             PlayInputDisposition::Continue
         );
         assert!(state.active_direction_prompt.is_none());
-        assert_eq!(state.message, DIRECTION_PROMPT_LABEL_PASS);
+        // `commands.md §5.4`: the cancel word lands on the open verb line.
+        assert_eq!(state.message, format!("Klimb-{DIRECTION_PROMPT_LABEL_PASS}"));
         assert_eq!(state.turn, 1);
     }
 

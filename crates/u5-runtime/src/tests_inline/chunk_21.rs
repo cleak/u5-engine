@@ -6512,7 +6512,11 @@ fn escape_is_ignored_at_the_adjacent_tile_direction_prompt() {
             PlayInputDisposition::Continue
         );
         assert!(state.active_direction_prompt.is_none());
-        assert_eq!(state.message, "Pass");
+        // `commands.md §5.4`: `Space` prints `Pass` on the open verb line -
+        // "A cancelled Look therefore renders as the verb, the hyphen and
+        // the cancel word **on one line**" - so the slot holds the whole
+        // row, not a second bare `Pass` under it.
+        assert_eq!(state.message, format!("{prefix}Pass"));
     }
 
     let _ = fs::remove_dir_all(dir);

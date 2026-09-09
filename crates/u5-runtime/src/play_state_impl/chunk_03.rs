@@ -2253,12 +2253,17 @@ impl PlayState {
                 if matches!(session.kind, DirectionPromptKind::Klimb) {
                     self.advance_turn();
                 }
-                if let Some(verb) = Self::direction_prompt_open_verb_echo(session.kind) {
-                    // `commands.md §5.4`: `Space` prints `Pass` on the
-                    // open verb line, "the same word the Pass command
-                    // echoes".
-                    let _ = self.complete_open_direction_echo(&verb, DIRECTION_PROMPT_LABEL_PASS);
-                }
+                // `commands.md §5.4`: `Space` prints `Pass` on the
+                // open verb line, "the same word the Pass command
+                // echoes" - "A cancelled Look therefore renders as the
+                // verb, the hyphen and the cancel word **on one line**."
+                // Whether that landed decides the fall-through below: a
+                // second bare `Pass` in the message slot renders a loose
+                // row of its own under the completed `Verb-Pass` one.
+                let completed_on_verb_row = Self::direction_prompt_open_verb_echo(session.kind)
+                    .is_some_and(|verb| {
+                        self.complete_open_direction_echo(&verb, DIRECTION_PROMPT_LABEL_PASS)
+                    });
                 if push_prompt {
                     if matches!(session.kind, DirectionPromptKind::Push) {
                         match self.area {
@@ -2273,11 +2278,14 @@ impl PlayState {
                 // verb line - "A cancelled Look therefore renders as the
                 // verb, the hyphen and the cancel word on one line."
                 if matches!(session.kind, DirectionPromptKind::Attack) {
-                    let _ =
-                        self.complete_open_direction_echo("Attack-", DIRECTION_PROMPT_LABEL_PASS);
                     return Ok(Some(MoveOutcome::PromptDeclined));
                 }
-                self.message = DIRECTION_PROMPT_LABEL_PASS.to_string();
+                // Only a prompt with no open verb row of its own needs the
+                // cancel word written into the slot; writing it after a
+                // successful completion doubles the word onto a second row.
+                if !completed_on_verb_row {
+                    self.message = DIRECTION_PROMPT_LABEL_PASS.to_string();
+                }
                 return Ok(Some(MoveOutcome::PromptDeclined));
             }
             if matches!(session.kind, DirectionPromptKind::Klimb) {

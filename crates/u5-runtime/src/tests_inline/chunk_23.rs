@@ -10988,7 +10988,7 @@ fn combat_klimb_prompt_cancel_commits_but_blocked_direction_reprompts() {
     );
     assert_eq!(
         cancelled.message,
-        format!("{DIRECTION_PROMPT_LABEL_PASS}\nAvatar, armed with bare hands:\n")
+        format!("Klimb-{DIRECTION_PROMPT_LABEL_PASS}\nAvatar, armed with bare hands:\n")
     );
 
     let mut blocked = combat_player_command_state(10, 10);
@@ -11180,7 +11180,7 @@ fn combat_sjog_prompt_cancel_commits_actor_action() {
     );
     assert_eq!(
         state.message,
-        format!("{DIRECTION_PROMPT_LABEL_PASS}\nAvatar, armed with bare hands:\n")
+        format!("Get-{DIRECTION_PROMPT_LABEL_PASS}\nAvatar, armed with bare hands:\n")
     );
 }
 
