@@ -383,8 +383,28 @@ pub fn combat_prompt_row_follows_history(state: &crate::PlayState) -> bool {
     // This engine folded them into one, spending the banner's newline as the
     // turn loop's, so every combat prompt sat a row high and every later beat
     // of a combat transcript was adrift.
-    let _ = state;
-    false
+    //
+    // The arms shop's entry pause is the other producer that spends its own
+    // line feed. `shops.md §8.B` stage 1 is the welcome, `"Good @, and welcome
+    // to #!"\n` - the literal carries the newline - and stage 2 is "Pause |
+    // Wait for one key before the next text". So the cursor is already at
+    // column 0 of a fresh row when that key is read, and §10.4's blank has
+    // been spent; the pause's row follows the welcome's last row immediately.
+    // Measured 2026-09-09 (`qa/paired/shop-arms-seeded.tsv`, beat `pass1`).
+    matches!(
+        state.active_shop,
+        Some(
+            crate::shop_session::ActiveShopSession::Arms(
+                crate::shop_runtime::ArmsShopState::Welcome
+            ) | crate::shop_session::ActiveShopSession::ArmsLocal(
+                crate::shop_runtime::ArmsShopState::Welcome,
+                _
+            ) | crate::shop_session::ActiveShopSession::ArmsStocked(
+                crate::shop_runtime::ArmsShopState::Welcome,
+                _
+            )
+        )
+    )
 }
 
 /// Place a log — and optionally the live input line — into the window.

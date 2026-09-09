@@ -24,16 +24,15 @@ both	wait	4000
 both	key	j
 both	wait	9000
 both	shot	seeded	Journey Onward beside the weaponsmith
-both	key	l
-both	wait	1000
-both	key	Right
-both	wait	4000
-both	shot	look	Look east at the weaponsmith
-both	key	t
-both	wait	1000
-both	key	Right
-both	wait	5000
-both	shot	talk	Talk east: the shop greeting
+both	key	space
+both	wait	3000
+both	shot	pass1	One Pass beside the keeper
+both	key	space
+both	wait	3000
+both	shot	pass2	A second Pass
 both	key	space
 both	wait	4000
-both	shot	after	One key at the shop prompt
+both	shot	greeted	The attribution and the Buy/Sell greeting
+both	key	space
+both	wait	4000
+both	shot	declined	Space answers the Buy/Sell question

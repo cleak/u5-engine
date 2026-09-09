@@ -35,8 +35,23 @@ impl ActiveShopSession {
     /// `:Yes` and `N` as `:No` before the answer's own text.
     pub fn awaiting_entry_answer(&self) -> bool {
         match self {
+            // `shops.md §8.B` lists the arms entry as five stages, and the
+            // first key is not an answer to anything: stage 2 is "Pause | Wait
+            // for one key before the next text", and only stage 5 - after the
+            // attribution and the selected greeting, whose tail is `" `, a
+            // closing quote and one space - is "Input | Wait for `B`, `S`, or
+            // Space".
+            //
+            // Treating the pause as the entry question cost the window a row.
+            // The question ends mid-row and keeps its cursor inline
+            // (`text-output.md §10.6`), so it draws no live row; the pause is
+            // an ordinary key read and takes §10.2's fresh command row. The
+            // original shows that row - measured 2026-09-09
+            // (`qa/paired/shop-arms-seeded.tsv`), where the welcome's block is
+            // one row taller than this engine's - and a key at the pause
+            // echoes nothing, where `Y`/`N` at the question echo a word.
             Self::Arms(state) | Self::ArmsLocal(state, _) | Self::ArmsStocked(state, _) => {
-                matches!(state, ArmsShopState::Greeting | ArmsShopState::Welcome)
+                matches!(state, ArmsShopState::Greeting)
             }
             Self::Healer(state, _) => matches!(state, HealerShopState::Greeting),
             Self::Innkeeper(state) => matches!(state, InnkeeperState::Greeting { .. }),
