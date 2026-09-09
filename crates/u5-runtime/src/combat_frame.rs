@@ -2462,7 +2462,19 @@ impl PlayState {
         // confirmation plays the spell effect before the target resolver.
         self.emit_sound_effect(SoundEffect::SharedVariant { variant: 6 });
 
-        let applied = self.apply_combat_polymorph_giant_rat(target_slot);
+        // `magic.md §8` Creature-prompt targeters (`RETRACTIONS.md` R446):
+        // "Polymorph rejects protected classes 14/15/47 before resistance and
+        // replacement; other targets must pass its shared resistance gate."
+        // Both gates were attributed to Kill, whose creature-helper binding
+        // R446 withdraws - "the traced creature helper belongs to
+        // **Polymorph**" - so the engine had them on the wrong spell.
+        let protected = combat_class_is_protected_special(target_actor.owner_target_class);
+        let resisted = !protected && self.combat_resistance_blocks(caster_index, target_slot);
+        let applied = if protected || resisted {
+            None
+        } else {
+            self.apply_combat_polymorph_giant_rat(target_slot)
+        };
         self.advance_turn();
         self.message = if applied.is_some() {
             "Polymorph!".to_string()
@@ -4937,23 +4949,30 @@ impl PlayState {
             }),
         }
 
-        // Public clean-spec issue #132: protected Kill targets are rejected
-        // only after the shared cast/resource and normal pre-effect envelope.
-        // They bypass resistance and all target-death/effect work, but the
-        // combat action is committed through the ordinary failure return.
-        if matches!(kind, CombatSpellDamageKind::Kill)
-            && target_actor
-                .is_some_and(|actor| combat_class_is_protected_special(actor.owner_target_class))
-        {
-            self.advance_turn();
-            self.message = "Failed!".to_string();
-            // `audio.md §8.3`: after `Failed!`, the common spell failure tail.
-            self.emit_sound_effect(SoundEffect::CastFailure);
-            return MoveOutcome::Blocked;
-        }
-
-        let resistance_blocked = matches!(kind, CombatSpellDamageKind::Kill)
-            && self.combat_resistance_blocks(caster_index, target_slot);
+        // `RETRACTIONS.md` R446 / `magic.md §8`: "Kill does not use a separate
+        // `Creature:` prompt, a protected-class rejection before resistance,
+        // or the creature helper's viewport-inversion pre-effect ... the
+        // traced creature helper belongs to **Polymorph**. Classes 14, 15 and
+        // 47 can reach Kill's shared damage endpoint after an admitted hit;
+        // this does not remove their existing class-specific death behavior."
+        // The engine rejected those three classes here, and then ran the
+        // shared resistance predicate, on the withdrawn attribution.
+        //
+        // "Magic Missile and Fireball force the attack hit check to succeed;
+        // Kill instead compares the ordinary two actor ratings and combat roll
+        // specified in `systems/combat.md` Section 11." §11's terms are the
+        // actors' combat weights - the item selector belongs to a swing, and
+        // a cast readies nothing - and the draw is the same inclusive `0..60`
+        // the resistance predicate used, so the PRNG shape is unchanged.
+        let hit_missed = matches!(kind, CombatSpellDamageKind::Kill) && {
+            let raw_roll = self.combat_monster_hit_roll();
+            let ratings = self
+                .combat_target_weight(caster_index)
+                .zip(self.combat_target_weight(target_slot));
+            ratings.is_some_and(|(attacker, defender)| {
+                !crate::resolve_combat_hit_from_raw_roll(attacker, defender, raw_roll)
+            })
+        };
         let raw_roll = self.combat_spell_damage_roll_for_kind(kind);
         let defense_roll = match kind {
             CombatSpellDamageKind::MagicMissile | CombatSpellDamageKind::Fireball => {
@@ -4964,7 +4983,7 @@ impl PlayState {
             | CombatSpellDamageKind::DeathWind
             | CombatSpellDamageKind::FlameWind => 0,
         };
-        let applied = if resistance_blocked {
+        let applied = if hit_missed {
             None
         } else {
             self.apply_active_target_combat_spell_damage(

@@ -185,25 +185,22 @@
             ]
         );
 
-        // Kill against a protected special class: rejected after the resource gate
-        // and the pre-effect, without consuming gameplay randomness.
+        // Kill against a protected special class. `RETRACTIONS.md` R446
+        // withdraws the pre-roll rejection that used to end this cast without
+        // consuming randomness: classes 14, 15 and 47 "can reach Kill's shared
+        // damage endpoint after an admitted hit", so the ordinary §11 check
+        // runs and spends its draw. What this test still pins is the audio
+        // envelope's opening - Kill's template lead, not a shared variant.
         let kill = spell_index_from_code("CX").unwrap();
         let mut state = spells_combat_audio_state(kill);
         let target = spells_combat_audio_hostile_target(&mut state, COMBAT_CLASS_BLACKTHORN);
         let prng_before = state.prng_state;
         let serial = state.sound_effect_serial;
+        state.cast_active_target_combat_spell(0, kill, CombatSpellDamageKind::Kill, target);
+        assert_ne!(state.prng_state, prng_before);
         assert_eq!(
-            state.cast_active_target_combat_spell(0, kill, CombatSpellDamageKind::Kill, target),
-            MoveOutcome::Blocked
-        );
-        assert_eq!(state.message, "Failed!");
-        assert_eq!(state.prng_state, prng_before);
-        assert_eq!(
-            state.sound_effects_after(serial),
-            vec![
-                SoundEffect::CircleRumbleLead { circle: 7 },
-                SoundEffect::CastFailure,
-            ],
+            state.sound_effects_after(serial).first(),
+            Some(&SoundEffect::CircleRumbleLead { circle: 7 }),
             "Kill opens with its template lead, not a shared variant",
         );
     }

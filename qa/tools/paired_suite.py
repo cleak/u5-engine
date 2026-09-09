@@ -123,9 +123,27 @@ def main() -> None:
         # the last path under the artifact root rather than the last line.
         paths = re.findall(r"/[\w./-]*artifacts/u5/paired/[\w.-]+", result.stdout)
         artifact = paths[-1] if paths else ""
-        status = "ok  " if result.returncode == 0 else "FAIL"
-        if result.returncode != 0:
+        # `game-dev-u5-paired` exits zero when the *run* completed, and a run
+        # whose engine side never launched completes in seconds with no shots
+        # at all. That is how a whole suite pass once produced 30 artifacts
+        # carrying nothing but a DOSBox video: a plain `cargo build --release`
+        # elsewhere in the tree had replaced the windowed binary, every engine
+        # process died on `--visual-playable ... requires building with
+        # --features visual`, and the suite still printed `ok`. A scenario that
+        # asks for shots and produces none is a failed run.
+        wanted_shots = any(
+            line.split("\t")[1:2] == ["shot"]
+            for line in (ROOT / f"{name}.tsv").read_text().splitlines()
+        )
+        captured = bool(artifact) and any(
+            pathlib.Path(artifact).glob("engine-*.png")
+        )
+        launched = result.returncode == 0 and (captured or not wanted_shots)
+        status = "ok  " if launched else "FAIL"
+        if not launched:
             failures += 1
+            if result.returncode == 0:
+                artifact = f"{artifact}\t(no engine capture; is the visual build current?)"
         print(f"{status} {name}\t{artifact}", flush=True)
     for name, why in blocked:
         print(f"skip {name}\t{why}", flush=True)

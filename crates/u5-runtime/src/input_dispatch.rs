@@ -2089,8 +2089,7 @@ fn handle_arms_shop_key_input(
             // list.
             let listing = format_arms_stock_buy_menu(
                 table,
-                state.random_range_u8(0, 3),
-                state.random_range_u8(0, 3),
+                Some((state.random_range_u8(0, 3), state.random_range_u8(0, 3))),
             );
             let call = arms_stock_call_for_roll(state.random_range_u8(0, 3));
             format!("{listing}\n{call}")
@@ -2099,7 +2098,7 @@ fn handle_arms_shop_key_input(
             // `§8.1`: an invalid stock letter "leave[s] the stock list visible
             // and keep[s] waiting; they do not redraw the list or consume a
             // random draw", so the redraw reuses no fresh heading draw.
-            format_arms_stock_buy_menu(table, 3, 2)
+            format_arms_stock_buy_menu(table, None)
         }
         (ArmsShopOutcome::InvalidInput, _)
             if matches!(
@@ -2156,22 +2155,14 @@ fn handle_arms_shop_key_input(
         // the next letter buys again without a second `B`.
         (ArmsShopOutcome::Bought { .. }, Some(table)) => {
             let post = arms_post_item_prompt(speech.speaker_is_female, true);
-            let listing = format_arms_stock_buy_menu(
-                table,
-                state.random_range_u8(0, 3),
-                state.random_range_u8(0, 3),
-            );
+            let listing = format_arms_stock_buy_menu(table, None);
             let call = arms_stock_call_for_roll(state.random_range_u8(0, 3));
             format!("Sold!\n{post}\n\n{listing}\n{call}")
         }
         (ArmsShopOutcome::Declined, Some(table))
             if matches!(prior_state, ArmsShopState::BuyConfirm { .. }) =>
         {
-            let listing = format_arms_stock_buy_menu(
-                table,
-                state.random_range_u8(0, 3),
-                state.random_range_u8(0, 3),
-            );
+            let listing = format_arms_stock_buy_menu(table, None);
             let call = arms_stock_call_for_roll(state.random_range_u8(0, 3));
             format!("{listing}\n{call}")
         }
@@ -2377,8 +2368,7 @@ fn arms_buy_menu_heading(affirmation_roll: u8, introduction_roll: u8) -> String 
 /// read back by glyph index rather than guessed from the blank-cell filler.
 fn format_arms_stock_buy_menu(
     table: crate::shops::ArmsStockTable,
-    affirmation_roll: u8,
-    introduction_roll: u8,
+    heading: Option<(u8, u8)>,
 ) -> String {
     if table.is_empty() {
         // Unmeasured: no shipped arms shop ships an empty stock table, so this
@@ -2393,10 +2383,18 @@ fn format_arms_stock_buy_menu(
         let letter = (b'a' + index as u8) as char;
         rows.push_str(&format!("{letter}...{}\n", equipment_name(item)));
     }
-    format!(
-        "{}\n\n{rows}",
-        arms_buy_menu_heading(affirmation_roll, introduction_roll)
-    )
+    // `shops.md §8.B`: "These two draws occur once per accepted Buy entry.
+    // Repeated item listings do not redraw either heading." The engine drew a
+    // fresh affirmation and introduction after every purchase and declined
+    // quote, which both reprinted the heading and spent two draws the original
+    // does not.
+    match heading {
+        Some((affirmation_roll, introduction_roll)) => format!(
+            "{}\n\n{rows}",
+            arms_buy_menu_heading(affirmation_roll, introduction_roll)
+        ),
+        None => rows,
+    }
 }
 
 /// `shops.md §8.C`'s "Inn result" table, which publishes every one of these
@@ -4995,9 +4993,12 @@ mod arms_shop_resident_literal_tests {
             "the redraw must not re-print the call line: {:?}",
             state.message
         );
+        // `§8.B`: "These two draws occur once per accepted Buy entry.
+        // Repeated item listings do not redraw either heading." The engine
+        // reprinted a fixed affirmation/introduction pair here.
         assert!(
-            state.message.starts_with("\"But of course!"),
-            "the redraw re-renders the bare stock list: {:?}",
+            state.message.starts_with("a...Short Sword"),
+            "the redraw re-renders the stock rows without the heading: {:?}",
             state.message
         );
     }

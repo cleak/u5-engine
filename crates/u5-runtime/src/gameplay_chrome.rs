@@ -169,11 +169,12 @@ pub const SKY_STRIP_FIRST_COLUMN: u8 = 6;
 /// `0x08` (97) - 382 samples, four codes, no others. (The remaining low
 /// codes found, `0x18..=0x1B` at seven each, are the panel's own arrows.)
 ///
-/// That set is **narrower than `input.md §3` describes**. Its Cursor-Blink
-/// Parameters give a base glyph of `4` and say "a glyph code is computed as
-/// `blink_base + counter`" with the counter wrapping at `4658`, which would
-/// walk the whole font rather than a four-frame cycle. The observation wins
-/// here; the discrepancy is reported upstream.
+/// That set was **narrower than `input.md §3` then described** - a base glyph
+/// of `4` and a counter wrapping at `4658`, which would walk the whole font.
+/// The observation was kept and reported upstream; `RETRACTIONS.md` R449
+/// withdrew the base and the modulus, and §3's Cursor-Blink Parameters now
+/// publish base `5`, cycle length `4` and initial phase `0` - these four
+/// codes, in this order.
 pub const PROMPT_CURSOR_FRAME_GLYPHS: [u8; 4] = [0x05, 0x06, 0x07, 0x08];
 
 /// Barber-pole cursor glyph for an animation frame counter.

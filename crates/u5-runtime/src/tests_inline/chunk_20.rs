@@ -1466,7 +1466,7 @@ fn town_search_secret_door_tile_guard_mismatch_is_not_a_turn() {
 }
 
 #[test]
-fn town_open_revealed_secret_door_stays_open_without_auto_close_tracker() {
+fn town_open_revealed_below_ground_secret_door_takes_the_ordinary_door_path() {
     let dir = debug_game_dir();
     fs::write(
         dir.join(SECRET_DOOR_TABLE_FILE),
@@ -1490,19 +1490,56 @@ fn town_open_revealed_secret_door_stays_open_without_auto_close_tracker() {
         MoveOutcome::DoorOpened
     );
 
+    // `RETRACTIONS.md` R448 / `doors-and-z-transitions.md` §8: the
+    // below-ground reveal "accepts O-Open, prints `Opened!` and clears the
+    // cell through the ordinary door-opening path". The engine used to give
+    // the reveal its own path, with no auto-close tracker, on R412's withdrawn
+    // "responds like an ordinary unlocked door" reading.
     assert_eq!(state.grid[32 + 2], TOWN_DOOR_CLEARED_TILE);
     assert_eq!(state.message, "Opened!");
     assert_eq!(state.turn, 2);
-    assert_eq!(state.door_tracker, None);
+    assert_eq!(
+        state.door_tracker.map(|tracker| (tracker.x, tracker.y)),
+        Some((2, 1))
+    );
     assert!(state.is_recorded_open_town_door(scene, 0, 2, 1));
 
-    for _ in 0..4 {
-        state.advance_turn();
-    }
+    // The tracker restores the reveal tile, not a bare wall.
+    assert_eq!(
+        state
+            .door_tracker
+            .map(|tracker| tracker.previous_tile),
+        Some(TOWN_HIDDEN_DOOR_REVEAL_BELOW_GROUND)
+    );
+    let _ = fs::remove_dir_all(dir);
+}
 
-    assert_eq!(state.grid[32 + 2], TOWN_DOOR_CLEARED_TILE);
-    assert_eq!(state.door_tracker, None);
-    assert!(state.is_recorded_open_town_door(scene, 0, 2, 1));
+#[test]
+fn town_ground_floor_secret_door_reveal_is_locked() {
+    // `RETRACTIONS.md` R448 / `doors-and-z-transitions.md` §8: "direct O-Open
+    // on the ground/upper-floor reveal prints `Locked!\n` and leaves the door
+    // unchanged". The engine gave every revealed secret door a lock bypass,
+    // on R412's now-withdrawn "responds like an ordinary unlocked door".
+    let dir = debug_game_dir();
+    let scene = Scene::new(17).unwrap();
+    let mut grid = open_grid();
+    grid[32 + 2] = TOWN_HIDDEN_DOOR_TILE;
+    let mut state = test_state(grid, 1, 1);
+    state.player.facing = Direction::East;
+
+    assert_eq!(
+        state.search_facing_with_game_dir(&dir).unwrap(),
+        MoveOutcome::Searched
+    );
+    assert_eq!(state.grid[32 + 2], TOWN_HIDDEN_DOOR_REVEAL_ABOVE_GROUND);
+    assert!(state.is_revealed_town_secret_door(scene, 0, 2, 1));
+
+    assert_eq!(
+        state.open_facing_with_game_dir(Some(&dir)).unwrap(),
+        MoveOutcome::Blocked
+    );
+    assert_eq!(state.message, "Locked!");
+    assert_eq!(state.grid[32 + 2], TOWN_HIDDEN_DOOR_REVEAL_ABOVE_GROUND);
     let _ = fs::remove_dir_all(dir);
 }
 

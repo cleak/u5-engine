@@ -15344,8 +15344,15 @@ fn input_function_key_remap_and_cursor_blink_match_spec() {
     assert_eq!(INPUT_CODE_F10, 0xD2);
     assert_eq!(INPUT_CODE_FUNCTION_FIRST, INPUT_CODE_F1);
     assert_eq!(INPUT_CODE_FUNCTION_LAST, INPUT_CODE_F10);
-    assert_eq!(CURSOR_BLINK_BASE_GLYPH, 4);
-    assert_eq!(CURSOR_BLINK_MODULUS, 4658);
+    // `input.md §3` Cursor-Blink Parameters after `RETRACTIONS.md` R449:
+    // base glyph `5`, cycle length `4`, initial phase `0`, and no 4,658-poll
+    // divider. The four codes are the ones the painter already draws.
+    assert_eq!(CURSOR_BLINK_BASE_GLYPH, 0x05);
+    assert_eq!(CURSOR_BLINK_CYCLE_LENGTH as usize, PROMPT_CURSOR_FRAME_GLYPHS.len());
+    for (phase, glyph) in PROMPT_CURSOR_FRAME_GLYPHS.iter().enumerate() {
+        assert_eq!(*glyph, CURSOR_BLINK_BASE_GLYPH + phase as u8);
+        assert_eq!(prompt_cursor_glyph(phase as u64), *glyph);
+    }
 
     // F1..F10 -> 1..=10.
     assert_eq!(input_function_key_index(0xC9), Some(1));

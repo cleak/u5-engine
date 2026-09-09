@@ -121,13 +121,22 @@ pub const fn input_function_key_code(index: u8) -> Option<u8> {
     }
 }
 
-/// `input.md §3` cursor-blink defaults: glyph code `4` is the first
-/// frame; the blink modulus wraps the phase counter every `4658` poll
-/// iterations. These are mutable resident values; callers that need
-/// real-time pacing derive a visually similar cadence from elapsed
-/// time while preserving the no-advance/erase contract.
-pub const CURSOR_BLINK_BASE_GLYPH: u8 = 4;
-pub const CURSOR_BLINK_MODULUS: u16 = 4658;
+/// `input.md §3` Cursor-Blink Parameters: "Base glyph | glyph code `5`
+/// (`0x05`) ... Cycle length / modulus | `4` cursor-poll calls | Phases 0, 1,
+/// 2 and 3 select glyphs `0x05` through `0x08`, in that order. Initial phase |
+/// `0`." Glyph selection uses the phase *before* its increment, and "There is
+/// no 4,658-poll animation divider or whole-font cycle."
+///
+/// `RETRACTIONS.md` R449 withdrew the earlier base `4` and modulus `4658`,
+/// which this engine had already contradicted from ~400 stock captures - see
+/// [`crate::gameplay_chrome::PROMPT_CURSOR_FRAME_GLYPHS`], whose four codes
+/// these two constants now agree with.
+///
+/// These are mutable resident values; callers that need real-time pacing
+/// derive a visually similar cadence from elapsed time while preserving the
+/// no-advance/erase contract.
+pub const CURSOR_BLINK_BASE_GLYPH: u8 = 5;
+pub const CURSOR_BLINK_CYCLE_LENGTH: u16 = 4;
 
 /// `input.md §5` direction codes (eight directions plus the "no direction"
 /// case that the upper layer represents by simply not seeing one of these

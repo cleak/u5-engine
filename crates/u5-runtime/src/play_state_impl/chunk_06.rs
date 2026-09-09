@@ -275,14 +275,17 @@ impl PlayState {
             self.message = "Too heavy!".to_string();
             return Ok(MoveOutcome::Blocked);
         }
-        let revealed_secret_door =
-            openable_town_door(tile) && self.is_revealed_town_secret_door(scene, floor, tx, ty);
-        if !revealed_secret_door
-            && (jimmy_locked_door_rewrite(tile).is_some()
-                || jimmy_magic_locked_door(tile)
-                || self
-                    .town_lock_at(game_dir, scene, floor, tx, ty, tile)?
-                    .is_some())
+        // `RETRACTIONS.md` R448 withdraws R412's "revealed town/dwelling
+        // secret doors respond like ordinary unlocked doors":
+        // `doors-and-z-transitions.md` §8 now says the reveal "obeys the
+        // resulting lock state" - the ground/upper-floor `0xB9` is an
+        // ordinary *locked* door and the below-ground `0xB8` an ordinary
+        // closed one - so the reveal gets no special case at all.
+        if jimmy_locked_door_rewrite(tile).is_some()
+            || jimmy_magic_locked_door(tile)
+            || self
+                .town_lock_at(game_dir, scene, floor, tx, ty, tile)?
+                .is_some()
         {
             self.message = "Locked!".to_string();
             return Ok(MoveOutcome::Blocked);
@@ -299,15 +302,16 @@ impl PlayState {
         self.record_open_town_door(scene, floor, tx, ty);
         self.mark_visibility_dirty();
         self.advance_turn_without_door_tick();
-        if !revealed_secret_door {
-            self.door_tracker = Some(DoorTracker {
-                previous_tile: tile,
-                x: tx,
-                y: ty,
-                turns_remaining: DOOR_AUTO_CLOSE_TURNS,
-            });
-            self.door_tracker_closed = false;
-        }
+        // R448: the below-ground reveal "accepts O-Open, prints `Opened!` and
+        // clears the cell through the ordinary door-opening path", auto-close
+        // tracker included.
+        self.door_tracker = Some(DoorTracker {
+            previous_tile: tile,
+            x: tx,
+            y: ty,
+            turns_remaining: DOOR_AUTO_CLOSE_TURNS,
+        });
+        self.door_tracker_closed = false;
         self.message = "Opened!".to_string();
         Ok(MoveOutcome::DoorOpened)
     }
@@ -603,11 +607,12 @@ impl PlayState {
 
         let idx = ty * 32 + tx;
         let tile = self.grid[idx];
-        if openable_town_door(tile) && self.is_revealed_town_secret_door(scene, floor, tx, ty) {
-            self.advance_turn();
-            self.message = USE_SKULL_KEY_FAILED.to_string();
-            return Ok(MoveOutcome::LockTried);
-        }
+        // `RETRACTIONS.md` R448 withdraws R412's "revealed town/dwelling
+        // secret doors respond like ordinary unlocked doors":
+        // `doors-and-z-transitions.md` §8 now says the reveal "obeys the
+        // resulting lock state" - the ground/upper-floor `0xB9` is an
+        // ordinary *locked* door and the below-ground `0xB8` an ordinary
+        // closed one - so the reveal gets no special case at all.
         if let Some(entry) = self.town_lock_at(game_dir, scene, floor, tx, ty, tile)? {
             if entry.kind == TownLockKind::Magic {
                 self.advance_turn();
@@ -717,13 +722,13 @@ impl PlayState {
         let tx = tx as usize;
         let ty = ty as usize;
         let tile = self.grid[ty * 32 + tx];
-        let revealed_secret_door =
-            openable_town_door(tile) && self.is_revealed_town_secret_door(scene, floor, tx, ty);
-        let sidecar_lock = if revealed_secret_door {
-            None
-        } else {
-            self.town_lock_at(game_dir, scene, floor, tx, ty, tile)?
-        };
+        // `RETRACTIONS.md` R448 withdraws R412's "revealed town/dwelling
+        // secret doors respond like ordinary unlocked doors":
+        // `doors-and-z-transitions.md` §8 now says the reveal "obeys the
+        // resulting lock state" - the ground/upper-floor `0xB9` is an
+        // ordinary *locked* door and the below-ground `0xB8` an ordinary
+        // closed one - so the reveal gets no special case at all.
+        let sidecar_lock = self.town_lock_at(game_dir, scene, floor, tx, ty, tile)?;
 
         if jimmy_magic_locked_door(tile)
             || sidecar_lock.is_some_and(|entry| entry.kind == TownLockKind::Magic)
@@ -810,11 +815,12 @@ impl PlayState {
         let ty = ty as usize;
         let idx = ty * 32 + tx;
         let tile = self.grid[idx];
-        if openable_town_door(tile) && self.is_revealed_town_secret_door(scene, floor, tx, ty) {
-            self.advance_turn();
-            self.message = "No lock!".to_string();
-            return Ok(MoveOutcome::LockTried);
-        }
+        // `RETRACTIONS.md` R448 withdraws R412's "revealed town/dwelling
+        // secret doors respond like ordinary unlocked doors":
+        // `doors-and-z-transitions.md` §8 now says the reveal "obeys the
+        // resulting lock state" - the ground/upper-floor `0xB9` is an
+        // ordinary *locked* door and the below-ground `0xB8` an ordinary
+        // closed one - so the reveal gets no special case at all.
         if jimmy_magic_locked_door(tile) {
             self.advance_turn();
             self.message = "Key broke!".to_string();
@@ -2181,7 +2187,7 @@ impl PlayState {
         // withdrawn object-table model - so no shipped hidden door in any town
         // could be found at all.
         if tile == TOWN_HIDDEN_DOOR_TILE {
-            // "changes the target tile to the ordinary unlocked door `0xB9` on
+            // "changes the target tile to the ordinary **locked** door `0xB9` on
             // ground/above-ground floors (floor byte below `128`), or `0xB8`
             // on below-ground floors (floor byte at least `128`)". This
             // engine's floor is the signed form of that byte.

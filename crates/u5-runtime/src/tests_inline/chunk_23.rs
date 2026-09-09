@@ -16142,7 +16142,7 @@ fn combat_cast_active_target_spell_gates_target_and_negate_magic_before_resource
 }
 
 #[test]
-fn kill_rejects_protected_special_classes_after_resources_without_randomness() {
+fn kill_reaches_protected_special_classes_through_the_ordinary_hit_check() {
     assert!(combat_class_is_protected_special(COMBAT_CLASS_BLACKTHORN));
     assert!(combat_class_is_protected_special(COMBAT_CLASS_LORD_BRITISH));
     assert!(combat_class_is_protected_special(COMBAT_CLASS_SHADOW_LORD));
@@ -16188,9 +16188,13 @@ fn kill_rejects_protected_special_classes_after_resources_without_randomness() {
         assert_eq!(state.spell_charges[spell_index], 0);
         assert_eq!(state.party[0].mana, 0);
         assert_eq!(state.turn, 1);
-        assert_eq!(state.prng_state, prng_before);
-        assert_eq!(state.combat_actors[target_slot], target_before);
-        assert_eq!(state.message, "Failed!");
+        // `RETRACTIONS.md` R446: "Classes 14, 15 and 47 can reach Kill's
+        // shared damage endpoint after an admitted hit". The engine rejected
+        // them before drawing anything, on the withdrawn creature-helper
+        // attribution; the ordinary §11 hit check now runs, so the draw is
+        // spent whatever the outcome.
+        assert_ne!(state.prng_state, prng_before);
+        let _ = target_before;
     }
 }
 
@@ -16818,6 +16822,8 @@ fn the_creature_prompt_opens_the_arena_cursor_and_casts_on_the_confirmed_cell() 
     }];
     let spell_index = spell_index_from_code("BRX").unwrap();
     state.spell_charges[spell_index] = 1;
+    // R446: Polymorph's own resistance gate; see the sibling test.
+    state.party_intelligence = vec![255; 6];
     state.combat_actors[0] =
         CombatActorDescriptor::from_row([30, 1, COMBAT_ACTOR_FLAG_SELECTABLE_80, 0, 0, 0, 3, 3]);
     let target_slot = COMBAT_PARTY_ACTOR_SLOTS;
@@ -16894,6 +16900,53 @@ fn the_creature_prompt_opens_the_arena_cursor_and_casts_on_the_confirmed_cell() 
 }
 
 #[test]
+fn polymorph_rejects_protected_classes_before_resistance_and_replacement() {
+    // `magic.md §8` Creature-prompt targeters (`RETRACTIONS.md` R446):
+    // "Polymorph rejects protected classes 14/15/47 before resistance and
+    // replacement; other targets must pass its shared resistance gate." The
+    // engine had both gates on Kill, whose creature-helper attribution R446
+    // withdraws.
+    let spell_index = spell_index_from_code("BRX").unwrap();
+    let mana_cost = (spell_index / 6 + 1) as u8;
+    let target_slot = COMBAT_PARTY_ACTOR_SLOTS;
+    for class in [
+        COMBAT_CLASS_BLACKTHORN,
+        COMBAT_CLASS_LORD_BRITISH,
+        COMBAT_CLASS_SHADOW_LORD,
+    ] {
+        let mut state = world_state(open_world_grid(), 10, 20);
+        state.combat_active = true;
+        state.party[0].mana = mana_cost;
+        state.party[0].level = mana_cost;
+        state.spell_charges[spell_index] = 1;
+        // A caster rating that would always land, so a surviving replacement
+        // could only mean the protected gate never ran.
+        state.party_intelligence = vec![255; 6];
+        state.prng_state = 0x1234;
+        state.combat_actors[target_slot] = CombatActorDescriptor::from_row([
+            20,
+            1,
+            COMBAT_ACTOR_FLAG_SELECTABLE_40,
+            class,
+            0,
+            0,
+            5,
+            5,
+        ]);
+        let target_before = state.combat_actors[target_slot];
+
+        assert_eq!(
+            state.cast_combat_polymorph_spell(0, spell_index, target_slot),
+            MoveOutcome::Blocked
+        );
+        assert_eq!(state.message, "Failed!");
+        assert_eq!(state.combat_actors[target_slot], target_before);
+        // The rejection precedes resistance, so no roll is spent.
+        assert_eq!(state.prng_state, 0x1234);
+    }
+}
+
+#[test]
 fn combat_cast_polymorph_routes_resources_and_replaces_hostile_creature() {
     let mut state = world_state(open_world_grid(), 10, 20);
     state.combat_active = true;
@@ -16934,6 +16987,11 @@ fn combat_cast_polymorph_routes_resources_and_replaces_hostile_creature() {
         aux1: 0x33,
         aux3: 0x44,
     };
+    // `magic.md §8` (R446): Polymorph's own resistance gate stands between the
+    // cast and the replacement. A caster rating far above the target's makes
+    // the shared score one or less, which always lands, so this case still
+    // exercises the replacement rather than the roll.
+    state.party_intelligence = vec![255; 6];
     state.visibility_dirty = false;
 
     assert_eq!(

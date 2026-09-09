@@ -5231,7 +5231,9 @@ fn seed_combat_spell_route(state: &mut PlayState, code: &str) -> io::Result<()> 
     state.party_stay_counters = default_party_stay_counters(1);
     state.party_strengths = vec![30];
     state.party_intelligence = default_party_intelligence(1);
-    if matches!(code, "ACX" | "AEX" | "CIQ" | "CKX") {
+    // `BRX` joined this list with `RETRACTIONS.md` R446: Polymorph, not Kill,
+    // owns the shared resistance gate.
+    if matches!(code, "ACX" | "AEX" | "BRX" | "CIQ" | "CKX") {
         // Shared-resistance route cases exercise the accepted branch
         // deterministically; the formula itself is pinned in runtime tests.
         state.party_intelligence[0] = u8::MAX;
@@ -7233,7 +7235,11 @@ fn validate_route_smoke_case_state(
                     ))
                 )
                 || state.equipment_stock[EQUIPMENT_ID_BOW] != 1
-                || !state.message.starts_with("\"But of course!")
+                // `shops.md §8.B`: "These two draws occur once per accepted
+                // Buy entry. Repeated item listings do not redraw either
+                // heading", so the re-listing under a declined quote opens on
+                // the stock rows rather than on a fresh affirmation.
+                || !state.message.starts_with("a...")
             {
                 return Err(io::Error::other(format!(
                     "route smoke `{case_name}` did not exercise an arms buy decline without mutation"
