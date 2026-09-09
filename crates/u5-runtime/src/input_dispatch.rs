@@ -3644,6 +3644,13 @@ fn handle_combat_cast_key_input(
         return Ok(PlayInputDisposition::Continue);
     }
 
+    // `combat.md §8`, the `C` row: "The branch first prints `Cast...`". The
+    // refusal arm above already carries the label on its own row, so the
+    // accepted arm supplies it here, before the spell-name exchange. Stock
+    // shows ` Cast...` and `Spell name:` on consecutive rows.
+    state.message.clear();
+    state.emit_combat_command_echo_line(COMBAT_CAST_COMMAND_LABEL);
+
     // `combat.md §8`: the player's cast path reads only the Negate Magic tag.
     // The single Quickness gate lives at the head of the automatic actor
     // driver, not here.
@@ -3966,6 +3973,15 @@ fn handle_combat_multistage_command(
             true
         }
         CombatCommandBranch::CastSpell => {
+            // `combat.md §8`, the `C` row: "The branch first prints
+            // `Cast...`" - before its party-side test and before the
+            // spell-name exchange (`RETRACTIONS.md` R381). The caller left
+            // this branch's placeholder in the message slot; the label is
+            // what actually reaches the window, on the marker row the turn
+            // banner opened, so it is emitted as a command echo here rather
+            // than being overwritten by the prompt below.
+            state.message.clear();
+            state.emit_combat_command_echo_line(COMBAT_CAST_COMMAND_LABEL);
             if let Some(source_slot) = state.combat_cast_interference_source_for_slot(actor_slot) {
                 state.message = format!(
                     "\n{} interferes!",

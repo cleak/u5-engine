@@ -351,6 +351,16 @@ impl PlayState {
         }) {
             return Some(COMBAT_CREATURE_TARGET_PROMPT.to_string());
         }
+        // `magic.md §8`/`catalogs/spell-list.md`: the three aimed attack
+        // spells print the shared `Aim! ` prompt, which carries a trailing
+        // space and no newline, so the arena cursor waits on that same row.
+        if self
+            .active_cast_followup
+            .as_ref()
+            .is_some_and(|session| matches!(session.kind, CastFollowupKind::CombatAimCursor { .. }))
+        {
+            return Some(crate::combat_frame::COMBAT_ATTACK_AIM_PROMPT.to_string());
+        }
         // `combat.md §8.2`: each Attack attempt prints `Attack-` and then,
         // "immediately before the cursor opens", `Aim! ` - which carries a
         // trailing space and no newline, so the arena's targeting cursor
@@ -865,6 +875,28 @@ impl PlayState {
         Ok(None)
     }
 
+    /// Close a spell's `Aim! ` cursor without a target.
+    ///
+    /// `combat.md §8.2`'s three `Nothing!` routes belong to the **melee
+    /// attack** arm: `RETRACTIONS.md` R382 scopes `Nothing!`, `Aim! ` and
+    /// the melee miss line together to "a class whose reach selector is
+    /// one", and `systems/magic.md` §8 publishes no cancel line for the
+    /// aimed attack spells, which reuse only the cursor and projectile
+    /// path. A capture of the original casting Grav Por and confirming an
+    /// empty cell prints nothing at all before the next turn banner, so the
+    /// cursor closes silently rather than borrowing Attack's word.
+    fn cancel_combat_aim_cursor(&mut self) {
+        // `combat.md §8.2`: `Aim! ` leaves the cursor mid-row. Closing the
+        // cursor closes that row, so `§8.1`'s banner - which "is a newline,
+        // the actor's name ..." - starts its leading newline on a fresh row
+        // and leaves one blank between the two. The stock arena shows
+        // `Aim!` / blank / `Avatar, armed`.
+        self.push_explicit_blank_message_entry();
+        self.message.clear();
+        self.combat_aim_marker_cell = None;
+        self.mark_visibility_dirty();
+    }
+
     pub fn render_active_cast_followup(&self) -> String {
         self.active_cast_followup
             .as_ref()
@@ -900,6 +932,9 @@ impl PlayState {
                 // which cell is selected.
                 CastFollowupKind::CombatCreatureCursor { .. } => {
                     COMBAT_CREATURE_TARGET_PROMPT.to_string()
+                }
+                CastFollowupKind::CombatAimCursor { .. } => {
+                    crate::combat_frame::COMBAT_ATTACK_AIM_PROMPT.to_string()
                 }
             })
             .unwrap_or_else(|| "Cast target?".to_string())
@@ -1049,6 +1084,46 @@ impl PlayState {
                         continue;
                     }
                     session.kind = CastFollowupKind::CombatCreatureCursor {
+                        x: nx as u8,
+                        y: ny as u8,
+                    };
+                    self.combat_aim_marker_cell = Some((nx as u8, ny as u8));
+                    self.mark_visibility_dirty();
+                }
+                CastFollowupKind::CombatAimCursor { x, y } => {
+                    // `combat.md §8.2`: the shared cursor's cancel routes -
+                    // Escape, Space on the actor's own cell, and a confirm on
+                    // a cell holding nobody the occupancy lookup accepts -
+                    // all answer `Nothing!`, which lands on the row `Aim! `
+                    // left open.
+                    if ch == '\u{1b}' {
+                        self.cancel_combat_aim_cursor();
+                        return Ok(None);
+                    }
+                    if matches!(ch, ' ' | '\r' | '\n') {
+                        match self.combat_targeting_occupant_at((x, y)) {
+                            Some(slot) => {
+                                let tail = (slot + 1).to_string();
+                                return self.finish_active_cast_followup(session, &tail, game_dir);
+                            }
+                            None => {
+                                self.cancel_combat_aim_cursor();
+                                return Ok(None);
+                            }
+                        }
+                    }
+                    let Some(direction) =
+                        Direction::from_prompt_key(ch).filter(|direction| direction.is_cardinal())
+                    else {
+                        continue;
+                    };
+                    let (dx, dy) = direction.delta();
+                    let nx = i16::from(x) + dx as i16;
+                    let ny = i16::from(y) + dy as i16;
+                    if !combat_arena_coordinate_in_bounds(nx, ny) {
+                        continue;
+                    }
+                    session.kind = CastFollowupKind::CombatAimCursor {
                         x: nx as u8,
                         y: ny as u8,
                     };
@@ -1260,9 +1335,43 @@ impl PlayState {
                     }
                 })
             }
-            Some(CastArgumentRequest::Target) => {
-                Some(CastFollowupKind::CombatTarget { creature: false })
-            }
+            // `magic.md §8`: Magic Missile and Fireball each "print the
+            // shared aiming prompt" and use "the combat aiming/projectile
+            // path"; Kill "uses the shared `Aim! ` cursor and projectile
+            // path" (`RETRACTIONS.md` R446 withdrew its `Creature:` prompt).
+            // Those three spells are the only ones that reach this request,
+            // so the arena cursor is the whole of its combat form. Outside
+            // combat there is no arena and the inline slot prompt remains.
+            Some(CastArgumentRequest::Target) => match self
+                .combat_active
+                .then(|| self.combat_actors.get(caster_index).copied())
+                .flatten()
+                .filter(|actor| combat_actor_is_active_not_dead(*actor))
+            {
+                Some(actor) => {
+                    // `combat.md §8.2`'s published cursor start: the
+                    // attacker's remembered previous target when it is still
+                    // valid, live and visible, and the attacker's own cell
+                    // otherwise. These spells' cursor range is unpublished,
+                    // so it is the arena, as for the creature cursor above.
+                    let remembered = self
+                        .combat_remembered_targets
+                        .get(caster_index)
+                        .copied()
+                        .flatten()
+                        .and_then(|slot| self.combat_actors.get(usize::from(slot)).copied());
+                    let displayed = remembered
+                        .is_some_and(|target| self.combat_actor_presentation_displayed(target));
+                    let (x, y) = combat_targeting_cursor_start(
+                        (actor.x, actor.y),
+                        remembered,
+                        displayed,
+                        COMBAT_ARENA_SIDE as u8,
+                    );
+                    Some(CastFollowupKind::CombatAimCursor { x, y })
+                }
+                None => Some(CastFollowupKind::CombatTarget { creature: false }),
+            },
             // The interactive prompt always names its caster, so a caster
             // request means an inline caller supplied no party slot.
             Some(CastArgumentRequest::Caster) | None => None,

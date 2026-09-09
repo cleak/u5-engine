@@ -215,6 +215,17 @@ pub enum CastFollowupKind {
         x: u8,
         y: u8,
     },
+    /// `magic.md §8`: Magic Missile and Fireball "print the shared aiming
+    /// prompt" and use "the combat aiming/projectile path", and Kill
+    /// "uses the shared `Aim! ` cursor and projectile path"
+    /// (`catalogs/spell-list.md`: `CX` "uses `Aim! ` and the same
+    /// attack-wrapper family as Magic Missile and Fireball"). Kill's former
+    /// `Creature:` prompt is withdrawn by `RETRACTIONS.md` R446. The target
+    /// is therefore a confirmed arena *cell*, not a typed slot number.
+    CombatAimCursor {
+        x: u8,
+        y: u8,
+    },
 }
 
 #[derive(Clone, Debug, PartialEq, Eq)]

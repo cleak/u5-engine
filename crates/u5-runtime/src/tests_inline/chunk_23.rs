@@ -16201,115 +16201,133 @@ fn kill_reaches_protected_special_classes_through_the_ordinary_hit_check() {
 }
 
 #[test]
-fn active_combat_cast_target_followup_collects_one_and_two_digit_slots() {
+fn combat_cast_magic_missile_aims_with_the_arena_cursor() {
+    // `magic.md §8`: Magic Missile and Fireball are "active-target attack
+    // wrappers: each spell prints the shared aiming prompt, uses the combat
+    // aiming/projectile path"; `catalogs/spell-list.md` says the same of
+    // Kill, whose separate `Creature:` prompt is withdrawn by
+    // `RETRACTIONS.md` R446. So the target is a confirmed arena *cell*
+    // reached with the cursor, not a slot number typed at a prompt.
     let spell_index = spell_index_from_code("GP").unwrap();
     let stats = combat_class_stats(32).unwrap();
 
-    let mut single = world_state(open_world_grid(), 10, 20);
-    single.combat_active = true;
-    single.party[0].mana = 1;
-    single.party[0].level = 1;
-    single.spell_charges[spell_index] = 1;
-    single.combat_actors[0] =
+    let mut state = world_state(open_world_grid(), 10, 20);
+    state.combat_active = true;
+    state.party[0].mana = 1;
+    state.party[0].level = 1;
+    state.spell_charges[spell_index] = 1;
+    state.combat_actors[0] =
         CombatActorDescriptor::from_row([12, 1, COMBAT_ACTOR_FLAG_SELECTABLE_80, 0, 0, 0, 4, 5]);
-    let single_target = COMBAT_PARTY_ACTOR_SLOTS;
-    single.combat_actors[single_target] = CombatActorDescriptor::for_monster_placement(
+    let target = COMBAT_PARTY_ACTOR_SLOTS;
+    state.combat_actors[target] = CombatActorDescriptor::for_monster_placement(
         stats,
         7,
-        4,
+        5,
         5,
         COMBAT_ACTOR_FLAG_SELECTABLE_40,
         0,
     );
 
     assert_eq!(
-        single.start_combat_cast_spell_prompt(0, false),
+        state.start_combat_cast_spell_prompt(0, false),
         MoveOutcome::Observed
     );
     assert!(
-        single
+        state
             .step_active_cast('G', "P", std::path::Path::new(""))
             .unwrap()
             .is_none()
     );
     assert!(
-        single
+        state
             .step_active_cast(' ', "", std::path::Path::new(""))
             .unwrap()
             .is_none()
     );
-    assert!(single.active_cast_followup.is_some());
-    assert!(single.message.contains("Target?"));
-    assert_eq!(single.spell_charges[spell_index], 1);
-    assert_eq!(single.party[0].mana, 1);
-    assert_eq!(single.turn, 0);
 
-    let single_result = single
-        .step_active_cast_followup('7', "", std::path::Path::new(""))
-        .unwrap()
-        .expect("slot 7 should finish the combat spell");
-    assert_eq!(single_result.0, MoveOutcome::Cast);
-    assert_eq!(single.spell_charges[spell_index], 0);
-    assert_eq!(single.party[0].mana, 0);
-    assert_eq!(single.turn, 1);
-    assert_eq!(single.message, "Orc barely wounded!");
-
-    let mut double = world_state(open_world_grid(), 10, 20);
-    double.combat_active = true;
-    double.party[0].mana = 1;
-    double.party[0].level = 1;
-    double.spell_charges[spell_index] = 1;
-    double.combat_actors[0] =
-        CombatActorDescriptor::from_row([12, 1, COMBAT_ACTOR_FLAG_SELECTABLE_80, 0, 0, 0, 4, 5]);
-    let double_target = 9;
-    double.combat_actors[double_target] = CombatActorDescriptor::for_monster_placement(
-        stats,
-        7,
-        4,
-        5,
-        COMBAT_ACTOR_FLAG_SELECTABLE_40,
-        0,
-    );
-
+    // `combat.md §8.2`: the cursor starts on the attacker's own cell when it
+    // has no live remembered target, and "immediately before the cursor
+    // opens the engine prints `Aim! `".
     assert_eq!(
-        double.start_combat_cast_spell_prompt(0, false),
-        MoveOutcome::Observed
+        state.active_cast_followup.as_ref().map(|s| s.kind),
+        Some(CastFollowupKind::CombatAimCursor { x: 4, y: 5 })
     );
-    assert!(
-        double
-            .step_active_cast('G', "P", std::path::Path::new(""))
-            .unwrap()
-            .is_none()
-    );
-    assert!(
-        double
-            .step_active_cast(' ', "", std::path::Path::new(""))
-            .unwrap()
-            .is_none()
-    );
-    assert!(
-        double
-            .step_active_cast_followup('1', "", std::path::Path::new(""))
-            .unwrap()
-            .is_none()
-    );
-    assert!(double.active_cast_followup.is_some());
-    assert!(double.message.contains("1_"));
-    assert_eq!(double.spell_charges[spell_index], 1);
-    assert_eq!(double.party[0].mana, 1);
-    assert_eq!(double.turn, 0);
+    assert!(state.message.contains("Aim!"));
+    assert_eq!(state.spell_charges[spell_index], 1);
+    assert_eq!(state.turn, 0);
 
-    let double_result = double
-        .step_active_cast_followup('0', "", std::path::Path::new(""))
+    // One cardinal step east puts the cursor on the orc.
+    assert!(
+        state
+            .step_active_cast_followup('6', "", std::path::Path::new(""))
+            .unwrap()
+            .is_none()
+    );
+    assert_eq!(
+        state.active_cast_followup.as_ref().map(|s| s.kind),
+        Some(CastFollowupKind::CombatAimCursor { x: 5, y: 5 })
+    );
+    assert_eq!(state.combat_aim_marker_cell, Some((5, 5)));
+
+    let result = state
+        .step_active_cast_followup('\r', "", std::path::Path::new(""))
         .unwrap()
-        .expect("slot 10 should finish the combat spell");
-    assert_eq!(double_result.0, MoveOutcome::Cast);
-    assert_eq!(double.spell_charges[spell_index], 0);
-    assert_eq!(double.party[0].mana, 0);
-    assert_eq!(double.turn, 1);
-    assert_eq!(double.message, "Orc barely wounded!");
+        .expect("a confirmed occupied cell should finish the combat spell");
+    assert_eq!(result.0, MoveOutcome::Cast);
+    assert_eq!(state.spell_charges[spell_index], 0);
+    assert_eq!(state.party[0].mana, 0);
+    assert_eq!(state.turn, 1);
+    assert_eq!(state.message, "Orc barely wounded!");
 }
 
+#[test]
+fn combat_cast_aim_cursor_cancels_without_borrowing_attacks_nothing_line() {
+    // `RETRACTIONS.md` R382 scopes `Aim! `, `Nothing!` and the melee miss
+    // line together to the melee attack arm, and `magic.md §8` publishes no
+    // cancel line for the aimed attack spells. A capture of the original
+    // confirming an empty cell prints nothing before the next turn banner,
+    // so the cursor closes its row and says nothing.
+    let spell_index = spell_index_from_code("GP").unwrap();
+
+    let mut state = world_state(open_world_grid(), 10, 20);
+    state.combat_active = true;
+    state.party[0].mana = 1;
+    state.party[0].level = 1;
+    state.spell_charges[spell_index] = 1;
+    state.combat_actors[0] =
+        CombatActorDescriptor::from_row([12, 1, COMBAT_ACTOR_FLAG_SELECTABLE_80, 0, 0, 0, 4, 5]);
+
+    assert_eq!(
+        state.start_combat_cast_spell_prompt(0, false),
+        MoveOutcome::Observed
+    );
+    assert!(
+        state
+            .step_active_cast('G', "P", std::path::Path::new(""))
+            .unwrap()
+            .is_none()
+    );
+    assert!(
+        state
+            .step_active_cast(' ', "", std::path::Path::new(""))
+            .unwrap()
+            .is_none()
+    );
+    assert!(matches!(
+        state.active_cast_followup.as_ref().map(|s| s.kind),
+        Some(CastFollowupKind::CombatAimCursor { .. })
+    ));
+
+    assert!(
+        state
+            .step_active_cast_followup('\u{1b}', "", std::path::Path::new(""))
+            .unwrap()
+            .is_none()
+    );
+    assert!(state.active_cast_followup.is_none());
+    assert!(state.message.is_empty());
+    assert!(!state.message.contains("Nothing!"));
+}
 #[test]
 fn combat_cast_repel_undead_routes_resources_and_forces_undead_to_flee() {
     let mut state = world_state(open_world_grid(), 10, 20);
