@@ -3807,7 +3807,12 @@ impl PlayState {
                     .then_some((npc.x, npc.y))
             })
         {
-            return Ok(Some(self.begin_blackthorn_guard_demand(x, y, false)));
+            return Ok(Some(self.begin_blackthorn_guard_demand(
+                x,
+                y,
+                false,
+                Some(game_dir),
+            )?));
         }
         // §9.2, first row: "AI 4 or 5 | Nonzero live dialogue | Enter the
         // shared conversation dispatcher for that NPC." The zero-dialogue
@@ -3852,33 +3857,25 @@ impl PlayState {
             // `"Wilt thou come quietly?"` where the stock game was already
             // asking the first mantra. Caught at `bt-audience`'s `ask1` beat
             // by `qa/tools/paired_compare.py` (`cleak/u5-engine#21`).
-            if scene.byte == crate::blackthorn::BLACKTHORN_CAPTIVE_CELL_SCENE {
+            let arrest = TownArrestPrompt {
+                scene_byte: scene.byte,
+                floor,
+                npc_slot,
+            };
+            if scene.byte == crate::blackthorn::BLACKTHORN_CAPTIVE_CELL_SCENE
+                && self.party_capability() == PartyCapability::Defeated
+            {
                 // `RETRACTIONS.md` R442: with nobody able to act and nobody
                 // asleep the helper "returns silently without an audience or
                 // surrender prompt"; the exploration loop's own defeat check
                 // owns the rescue from there.
-                return match self.party_capability() {
-                    PartyCapability::Defeated => Ok(None),
-                    _ => self.begin_blackthorn_audience_capture(game_dir),
-                };
+                return Ok(None);
             }
-            self.pending_town_arrest = Some(TownArrestPrompt {
-                scene_byte: scene.byte,
-                floor,
-                npc_slot,
-            });
-            // The challenge opens on its own row: it is a fresh two-line
-            // exchange, not a tail appended to whatever the contact
-            // already printed.
-            self.message = if self.message.is_empty() {
-                TOWN_ARREST_SURRENDER_PROMPT.to_string()
-            } else {
-                format!("{}\n{TOWN_ARREST_SURRENDER_PROMPT}", self.message)
-            };
+            let outcome = self.open_town_arrest(arrest, Some(game_dir))?;
             self.push_diagnostic(format!(
-                "Guard NPC slot {npc_slot} catches the party; arrest prompt opened."
+                "Guard NPC slot {npc_slot} catches the party; arrest opened."
             ));
-            return Ok(Some(MoveOutcome::Used));
+            return Ok(Some(outcome));
         }
         if behavior.raises_arrest_or_conflict_contact() {
             let (pursued, fled) = self.town_alarm_sweep(scene, floor, Some(npc_slot));
@@ -4033,6 +4030,43 @@ impl PlayState {
         Ok(Some(MoveOutcome::Transition(
             AreaTransition::EnteredLocation(scene),
         )))
+    }
+
+    /// `town-mode.md §14`: "The arrest sequence itself branches on the
+    /// current location **before it prints anything**. Inside Lord
+    /// Blackthorn's Castle ... it plays the Blackthorn audience/capture
+    /// cinematic ... In every other location it prints the arrest
+    /// challenge." Every caller that reaches an arrest - the guard-event
+    /// contact and both refused guard demands, which `blackthorn.md §7a`
+    /// hands to "the caller ... under `town-mode.md` Section 14" - goes
+    /// through here, so the branch happens once and in one place.
+    ///
+    /// `game_dir` is `None` on the dialogue-map Talk paths, which carry no
+    /// assets and so cannot run the cinematic; those keep the surrender
+    /// prompt.
+    pub(crate) fn open_town_arrest(
+        &mut self,
+        arrest: TownArrestPrompt,
+        game_dir: Option<&Path>,
+    ) -> io::Result<MoveOutcome> {
+        if arrest.scene_byte == crate::blackthorn::BLACKTHORN_CAPTIVE_CELL_SCENE
+            && let Some(game_dir) = game_dir
+            && self.party_capability() != PartyCapability::Defeated
+        {
+            return Ok(self
+                .begin_blackthorn_audience_capture(game_dir)?
+                .unwrap_or(MoveOutcome::Used));
+        }
+        self.pending_town_arrest = Some(arrest);
+        // The challenge opens on its own row: it is a fresh two-line
+        // exchange, not a tail appended to whatever the contact
+        // already printed.
+        self.message = if self.message.is_empty() {
+            TOWN_ARREST_SURRENDER_PROMPT.to_string()
+        } else {
+            format!("{}\n{TOWN_ARREST_SURRENDER_PROMPT}", self.message)
+        };
+        Ok(MoveOutcome::Used)
     }
 
     pub fn begin_blackthorn_audience_capture(

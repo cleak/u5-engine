@@ -160,7 +160,7 @@ fn handle_play_key_input_inner(
         return Ok(handle_active_conversation_key_input(state, key, suffix));
     }
     if state
-        .resolve_blackthorn_guard_demand_input(key, suffix)
+        .resolve_blackthorn_guard_demand_input(key, suffix, Some(game_dir))
         .is_some()
     {
         return Ok(PlayInputDisposition::Continue);

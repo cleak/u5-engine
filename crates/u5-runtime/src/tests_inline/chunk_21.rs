@@ -2914,11 +2914,47 @@ fn town_talk_reserved_guard_dialog_opens_default_tribute_demand() {
         })
     ));
     assert_eq!(
-        state.resolve_blackthorn_guard_demand_input('Y', ""),
+        state.resolve_blackthorn_guard_demand_input('Y', "", None),
         Some(MoveOutcome::Talked)
     );
     assert_eq!(state.gold, 90);
     assert!(state.pending_town_arrest.is_none());
+}
+
+#[test]
+fn town_arrest_opener_branches_on_location_before_printing() {
+    // `town-mode.md §14`: "The arrest sequence itself branches on the current
+    // location **before it prints anything**." Everywhere but Blackthorn's
+    // castle it prints the challenge; the castle plays the audience, which
+    // needs the game directory, so a caller with no assets keeps the
+    // challenge rather than silently dropping the arrest.
+    let arrest_at = |scene_byte: u8| crate::TownArrestPrompt {
+        scene_byte,
+        floor: 0,
+        npc_slot: 1,
+    };
+
+    let mut state = test_state(open_grid(), 1, 1);
+    let outcome = state
+        .open_town_arrest(arrest_at(crate::SCENE_MINOC), Some(std::path::Path::new("/")))
+        .expect("no assets are read on the challenge branch");
+    assert_eq!(outcome, MoveOutcome::Used);
+    assert_eq!(state.message, crate::TOWN_ARREST_SURRENDER_PROMPT);
+    assert_eq!(
+        state.pending_town_arrest.map(|prompt| prompt.scene_byte),
+        Some(crate::SCENE_MINOC)
+    );
+
+    let mut state = test_state(open_grid(), 1, 1);
+    let outcome = state
+        .open_town_arrest(
+            arrest_at(crate::blackthorn::BLACKTHORN_CAPTIVE_CELL_SCENE),
+            None,
+        )
+        .expect("the no-assets fallback reads nothing either");
+    assert_eq!(outcome, MoveOutcome::Used);
+    assert_eq!(state.message, crate::TOWN_ARREST_SURRENDER_PROMPT);
+    assert!(state.pending_town_arrest.is_some());
 }
 
 #[test]
@@ -2953,7 +2989,7 @@ fn town_raw_tlk_reserved_guard_dialog_refusal_requests_arrest_cleanup() {
     assert_eq!(state.message, "A guard demands a 10 gp tribute to Blackthorn!\n\nDost thou pay?\n\n:");
     assert_eq!(state.turn, 1);
     assert_eq!(
-        state.resolve_blackthorn_guard_demand_input('Y', ""),
+        state.resolve_blackthorn_guard_demand_input('Y', "", None),
         Some(MoveOutcome::Used)
     );
     assert_eq!(state.gold, 5);
@@ -3008,7 +3044,7 @@ fn blackthorn_palace_guard_requires_active_badge_code_and_accepts_four_letter_pr
         })
     ));
     assert_eq!(
-        state.resolve_blackthorn_guard_demand_input('i', "mpeachment"),
+        state.resolve_blackthorn_guard_demand_input('i', "mpeachment", None),
         Some(MoveOutcome::Talked)
     );
     assert_eq!(state.message, "\"Pass, friend!\"");
@@ -3047,7 +3083,7 @@ fn minoc_guard_charity_halves_gold_on_yes() {
         MoveOutcome::Talked
     );
     assert_eq!(
-        state.resolve_blackthorn_guard_demand_input('y', ""),
+        state.resolve_blackthorn_guard_demand_input('y', "", None),
         Some(MoveOutcome::Talked)
     );
     assert_eq!(state.gold, 50);

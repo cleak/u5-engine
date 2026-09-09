@@ -3875,7 +3875,10 @@ impl PlayState {
             }
         }
         if dialog_id == BLACKTHORN_GUARD_DEMAND_DIALOG_ID {
-            return self.begin_blackthorn_guard_demand(target_x, target_y, true);
+            return match self.begin_blackthorn_guard_demand(target_x, target_y, true, None) {
+                Ok(outcome) => outcome,
+                Err(_) => MoveOutcome::Blocked,
+            };
         }
         if matches!(
             npc_dialog_id_kind(dialog_id),
@@ -4046,7 +4049,10 @@ impl PlayState {
             }
         }
         if dialog_id == BLACKTHORN_GUARD_DEMAND_DIALOG_ID {
-            return self.begin_blackthorn_guard_demand(target_x, target_y, true);
+            return match self.begin_blackthorn_guard_demand(target_x, target_y, true, None) {
+                Ok(outcome) => outcome,
+                Err(_) => MoveOutcome::Blocked,
+            };
         }
         if matches!(
             npc_dialog_id_kind(dialog_id),
@@ -5218,9 +5224,10 @@ impl PlayState {
         target_x: usize,
         target_y: usize,
         consume_turn: bool,
-    ) -> MoveOutcome {
+        game_dir: Option<&std::path::Path>,
+    ) -> io::Result<MoveOutcome> {
         let Area::Town { scene, floor } = self.area else {
-            return self.consume_ordinary_town_talk();
+            return Ok(self.consume_ordinary_town_talk());
         };
         let npc_slot = self
             .npc_at_current_floor(target_x, target_y)
@@ -5247,10 +5254,9 @@ impl PlayState {
                 self.active_blackthorn_guard_demand =
                     Some(ActiveBlackthornGuardDemand { prompt, arrest });
                 self.message = prompt.message();
-                MoveOutcome::Talked
+                Ok(MoveOutcome::Talked)
             }
             BlackthornGuardDemandStart::Refused => {
-                self.pending_town_arrest = Some(arrest);
                 // Measured 2026-09-08 at Minoc's gate
                 // (`qa/paired/minoc-refuse.tsv`): a refused demand goes
                 // straight into the published arrest exchange - `"Thou art
@@ -5258,8 +5264,19 @@ impl PlayState {
                 // and a `:` row - with no sentence of the engine's own in
                 // between. `blackthorn.md` §7a says exactly this; the engine
                 // was printing its own summary instead.
-                self.message = TOWN_ARREST_SURRENDER_PROMPT.to_string();
-                MoveOutcome::Used
+                //
+                // §7a also says "Palace contact without the worn Badge
+                // returns failure before printing a demand at all. The
+                // caller then owns arrest or capture under `town-mode.md`
+                // Section 14", and §14's arrest branches on location before
+                // printing - so inside Blackthorn's castle this refusal is
+                // the audience, not the challenge. Caught at `bt-audience`'s
+                // `ask1` beat by `qa/tools/paired_compare.py`
+                // (`cleak/u5-engine#21`): the stock side was already asking
+                // the first mantra where this engine printed `"Thou art
+                // under arrest!"`.
+                self.message.clear();
+                self.open_town_arrest(arrest, game_dir)
             }
         }
     }
@@ -5268,6 +5285,7 @@ impl PlayState {
         &mut self,
         key: char,
         suffix: &str,
+        game_dir: Option<&std::path::Path>,
     ) -> Option<MoveOutcome> {
         let active = self.active_blackthorn_guard_demand?;
         let mut input = String::new();
@@ -5309,9 +5327,9 @@ impl PlayState {
             BlackthornGuardDemandResolution::Refused { gold } => {
                 self.gold = gold;
                 self.active_blackthorn_guard_demand = None;
-                self.pending_town_arrest = Some(active.arrest);
-                self.message = TOWN_ARREST_SURRENDER_PROMPT.to_string();
-                Some(MoveOutcome::Used)
+                // Same §7a / §14 hand-off as the immediate refusal above.
+                self.message.clear();
+                Some(self.open_town_arrest(active.arrest, game_dir).ok()?)
             }
         }
     }

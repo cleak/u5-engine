@@ -15,7 +15,7 @@ use u5_runtime::{
     WorldPlane, configure_play_text_windows, gameplay_chrome_content, hash_bytes, load_ibm_ch_font,
     load_runes_ch_font, load_tile_atlas, message_log_from_entries, paint_fixed_cell_glyph,
     paint_gameplay_frame_chrome, paint_message_line_cap, paint_stats_panel_text_window,
-    prompt_cursor_glyph, render_text_panel_rgba, render_text_window_rgba,
+    prompt_cursor_glyph, render_text_panel_rgba,
 };
 
 use crate::{
