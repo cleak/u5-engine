@@ -727,7 +727,9 @@
         assert_eq!(state.active_effect_tag, Some(NEGATE_TIME_ACTIVE_EFFECT_TAG));
         assert_eq!(state.active_effect_counter, TIME_STOP_DURATION);
         assert_eq!(state.time_stop_counter, 0);
-        assert_eq!(state.message, "Negate time!");
+        // `magic.md §5.1`: An Tym takes no generic completion line and does
+        // not acquire its scroll counterpart's banner (`RETRACTIONS.md` R402).
+        assert!(state.message.is_empty(), "{}", state.message);
     }
 
     #[test]

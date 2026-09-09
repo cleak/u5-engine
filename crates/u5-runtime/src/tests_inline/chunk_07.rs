@@ -206,7 +206,7 @@ fn use_command_routes_inline_spyglass_request_to_night_sky() {
     );
     assert_eq!(
         world.message,
-        "Spyglass: Looking at the stars\nthe night sky! "
+        "Looking...\nthe night sky! "
     );
     assert!(world
         .active_view_overlay
@@ -281,7 +281,7 @@ fn spyglass_admits_a_town_scene_and_the_published_night_window() {
         );
         assert_eq!(
             town.message,
-            "Spyglass: Looking at the stars\nthe night sky! "
+            "Looking...\nthe night sky! "
         );
     }
 
@@ -441,6 +441,8 @@ fn use_command_routes_scrolls_to_item_effects_without_spell_resources() {
     assert_eq!(town.active_effect_tag, Some(NEGATE_TIME_ACTIVE_EFFECT_TAG));
     assert_eq!(town.active_effect_counter, SCROLL_NEGATE_TIME_DURATION - 1);
     assert_eq!(town.turn, 5);
+    // The scroll keeps its banner: `RETRACTIONS.md` R402 says those named
+    // banners *belong* to scroll dispatch. Only the An Tym spell drops it.
     assert_eq!(town.message, "Negate time!");
 }
 

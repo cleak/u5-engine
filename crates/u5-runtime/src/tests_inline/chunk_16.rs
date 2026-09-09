@@ -419,7 +419,6 @@ BRITANNIA 11 21
                 PROTECTION_COST,
                 PROTECTION_ACTIVE_EFFECT_TAG,
                 PROTECTION_ACTIVE_EFFECT_DURATION,
-                "Protection!",
             ),
             (
                 "1RT",
@@ -427,7 +426,6 @@ BRITANNIA 11 21
                 QUICKNESS_COST,
                 QUICKNESS_ACTIVE_EFFECT_TAG,
                 QUICKNESS_ACTIVE_EFFECT_DURATION,
-                "Quickness!",
             ),
             (
                 "1AI",
@@ -435,11 +433,13 @@ BRITANNIA 11 21
                 NEGATE_MAGIC_COST,
                 NEGATE_MAGIC_ACTIVE_EFFECT_TAG,
                 NEGATE_MAGIC_ACTIVE_EFFECT_DURATION,
-                "Negate magic!",
             ),
         ];
 
-        for (suffix, spell_index, cost, tag, duration, message) in cases {
+        // `magic.md §5.1`: all three are in the "No generic completion
+        // line" row and do not borrow their scroll counterparts' banners
+        // (`RETRACTIONS.md` R402).
+        for (suffix, spell_index, cost, tag, duration) in cases {
             let mut state = dungeon_state(open_dungeon_record(), 0, 1, 1);
             state.spell_charges[spell_index] = 1;
             state.party[0].mana = cost + 1;
@@ -456,7 +456,7 @@ BRITANNIA 11 21
             assert_eq!(state.active_effect_counter, duration);
             assert_eq!(state.turn, 1);
             assert_eq!(state.clock, GameClock::new(12, 1).unwrap());
-            assert_eq!(state.message, message);
+            assert!(state.message.is_empty(), "{}", state.message);
             assert!(state.z_stats_message().contains(&format!(
                 "effect={}/{}",
                 char::from(tag),
@@ -558,7 +558,8 @@ BRITANNIA 11 21
         // newline is emitted before the pair as well as after it.
         // This assertion previously pinned the retracted
         // single-line, single-quote wording.
-        assert_eq!(state.message, "Locate:\nK'P\", C'D\"\n");
+        // `RETRACTIONS.md` R413: "In Wis has no separate `Locate` label."
+        assert_eq!(state.message, "\nK'P\", C'D\"\n");
     }
 
     #[test]

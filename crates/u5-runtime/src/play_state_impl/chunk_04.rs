@@ -1548,7 +1548,10 @@ impl PlayState {
             return MoveOutcome::Blocked;
         }
 
-        self.activate_night_sky_overlay(Some("Spyglass: Looking at the stars"));
+        // `inventory.md §7.1` utility results: "Spyglass accepted | `Looking...\n`,
+        // then the sky view". The engine's own sentence named the item and
+        // described the act.
+        self.activate_night_sky_overlay(Some("Looking..."));
         MoveOutcome::Observed
     }
 

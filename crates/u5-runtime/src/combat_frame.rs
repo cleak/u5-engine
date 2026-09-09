@@ -3958,7 +3958,11 @@ impl PlayState {
             MoveOutcome::Blocked
         } else {
             self.combat_actors[applied.actor_slot].flags |= COMBAT_ACTOR_FLAG_CONTROLLED;
-            self.message = "Summon Daemon!".to_string();
+            // `magic.md §5.1`, the Kal Xen Corp row: "A controlled Daemon
+            // placement prints `Success!`." `Summon Daemon!` is a
+            // scroll-dispatch banner (`RETRACTIONS.md` R402); the scroll path
+            // in `chunk_04` keeps it, the spell does not borrow it.
+            self.message = "Success!".to_string();
             MoveOutcome::Cast
         }
     }

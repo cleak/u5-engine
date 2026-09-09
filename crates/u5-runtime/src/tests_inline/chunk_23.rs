@@ -8831,7 +8831,9 @@ fn combat_cast_summon_daemon_routes_resources_and_places_daemon() {
     assert_eq!(state.party[0].mana, 0);
     assert_eq!(state.turn, 1);
     assert_eq!(state.prng_state, expected_prng);
-    assert_eq!(state.message, "Summon Daemon!");
+    // `magic.md §5.1`, Kal Xen Corp: "A controlled Daemon placement prints
+    // `Success!`." The banner belongs to scroll dispatch (R402).
+    assert_eq!(state.message, "Success!");
     assert_eq!(
         state.combat_actors[COMBAT_PARTY_ACTOR_SLOTS],
         resolve_summoned_combat_actor_descriptor(

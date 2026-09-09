@@ -5408,7 +5408,9 @@ fn visual_route_suite_cases() -> Vec<VisualRouteSuiteCase> {
                 target: PlayTarget::Town(castle),
                 ..PlayOptions::default()
             },
-            script: &["Y", "H", "1", "N"],
+            // **Measured** at Cove: a one-member party is treated straight
+            // off the service letter, with no member prompt to answer.
+            script: &["Y", "H", "N"],
             configure: Some(seed_visual_route_healer),
         },
         VisualRouteSuiteCase {
@@ -5418,7 +5420,9 @@ fn visual_route_suite_cases() -> Vec<VisualRouteSuiteCase> {
                 target: PlayTarget::Town(castle),
                 ..PlayOptions::default()
             },
-            script: &["Y", "H", "1", "N"],
+            // **Measured** at Cove: a one-member party is treated straight
+            // off the service letter, with no member prompt to answer.
+            script: &["Y", "H", "N"],
             configure: Some(seed_visual_route_healer),
         },
         VisualRouteSuiteCase {
@@ -5428,7 +5432,9 @@ fn visual_route_suite_cases() -> Vec<VisualRouteSuiteCase> {
                 target: PlayTarget::Town(castle),
                 ..PlayOptions::default()
             },
-            script: &["Y", "C", "1", "Y"],
+            // **Measured** at Cove: a one-member party needs no member
+            // prompt; the quote follows the service letter directly.
+            script: &["Y", "C", "Y"],
             configure: Some(seed_visual_route_healer_cure),
         },
         VisualRouteSuiteCase {
@@ -5438,7 +5444,9 @@ fn visual_route_suite_cases() -> Vec<VisualRouteSuiteCase> {
                 target: PlayTarget::Town(castle),
                 ..PlayOptions::default()
             },
-            script: &["Y", "H", "1", "Y"],
+            // **Measured** at Cove: a one-member party needs no member
+            // prompt; the quote follows the service letter directly.
+            script: &["Y", "H", "Y"],
             configure: Some(seed_visual_route_healer_heal),
         },
         VisualRouteSuiteCase {
@@ -5448,7 +5456,9 @@ fn visual_route_suite_cases() -> Vec<VisualRouteSuiteCase> {
                 target: PlayTarget::Town(castle),
                 ..PlayOptions::default()
             },
-            script: &["Y", "R", "1", "Y"],
+            // **Measured** at Cove: a one-member party needs no member
+            // prompt; the quote follows the service letter directly.
+            script: &["Y", "R", "Y"],
             configure: Some(seed_visual_route_healer_resurrect),
         },
         VisualRouteSuiteCase {
@@ -5458,7 +5468,9 @@ fn visual_route_suite_cases() -> Vec<VisualRouteSuiteCase> {
                 target: PlayTarget::Town(castle),
                 ..PlayOptions::default()
             },
-            script: &["R", "N", "P"],
+            // `shops.md §8`: the inn greeting takes `Y`/`N`/Space before
+            // any service letter is read.
+            script: &["Y", "R", "N", "P"],
             configure: Some(seed_visual_route_inn_rest_decline),
         },
         VisualRouteSuiteCase {
@@ -5468,7 +5480,9 @@ fn visual_route_suite_cases() -> Vec<VisualRouteSuiteCase> {
                 target: PlayTarget::Town(castle),
                 ..PlayOptions::default()
             },
-            script: &["R", "N", "P"],
+            // `shops.md §8`: the inn greeting takes `Y`/`N`/Space before
+            // any service letter is read.
+            script: &["Y", "R", "N", "P"],
             configure: Some(seed_visual_route_inn_rest_decline),
         },
         VisualRouteSuiteCase {
@@ -6293,7 +6307,9 @@ fn visual_route_suite_cases() -> Vec<VisualRouteSuiteCase> {
                 target: PlayTarget::Town(castle),
                 ..PlayOptions::default()
             },
-            script: &["R", "Y"],
+            // `shops.md §8`: the inn greeting takes `Y`/`N`/Space before
+            // any service letter is read.
+            script: &["Y", "R", "Y"],
             configure: Some(seed_visual_route_inn_rest_accept),
         },
         VisualRouteSuiteCase {
@@ -6303,7 +6319,9 @@ fn visual_route_suite_cases() -> Vec<VisualRouteSuiteCase> {
                 target: PlayTarget::Town(castle),
                 ..PlayOptions::default()
             },
-            script: &["R", "Y"],
+            // `shops.md §8`: the inn greeting takes `Y`/`N`/Space before
+            // any service letter is read.
+            script: &["Y", "R", "Y"],
             configure: Some(seed_visual_route_inn_rest_accept),
         },
         VisualRouteSuiteCase {
@@ -23144,8 +23162,11 @@ mod tests {
         // route-endgame-tableau-walk-in adds 29 (endgame.md §4 walk-in);
         // the full-victory cinematic now runs to the §9.5 terminal hold;
         // the New Order key route commits each pick with Return (+2);
-        // the death-vision Look lost its invented member prompt (-1).
-        assert_eq!(reports.len(), 1954);
+        // the death-vision Look lost its invented member prompt (-1);
+        // the inn gained `shops.md` §8's `Y`/`N`/Space entry answer on four
+        // routes (+4) and the healer lost its invented member prompt on five
+        // (-5), a one-member party being treated off the service letter.
+        assert_eq!(reports.len(), 1953);
         for report in &reports {
             assert!(report.path.exists());
             assert_eq!(report.width, VISUAL_PLAY_FRAME_WIDTH);
@@ -23160,7 +23181,7 @@ mod tests {
             }
         }
         let manifest = fs::read_to_string(dir.join("manifest.txt")).unwrap();
-        assert!(manifest.contains("coverage\tvisual-route-steps\t1954"));
+        assert!(manifest.contains("coverage\tvisual-route-steps\t1953"));
         assert!(manifest.contains("coverage\tvisual-key-route-steps\t90"));
         assert!(manifest.contains("coverage\tvisual-route-combat-steps\t"));
         assert!(manifest.contains("route-world-movement-01-d\t320x200\t"));
@@ -23331,13 +23352,13 @@ mod tests {
         assert!(manifest.contains("route-shop-arms-local-buy-sell-route-06-a"));
         assert!(manifest.contains("route-shop-arms-iolos-bows-terminator-refusal-03-_"));
         assert!(manifest.contains("route-shop-arms-siege-crafters-terminator-refusal-03-_"));
-        assert!(manifest.contains("route-shop-healer-heal-decline-04-n"));
-        assert!(manifest.contains("route-shop-healer-heal-decline-route-04-n"));
-        assert!(manifest.contains("route-shop-healer-cure-accept-04-y"));
-        assert!(manifest.contains("route-shop-healer-heal-accept-04-y"));
-        assert!(manifest.contains("route-shop-healer-resurrect-accept-04-y"));
-        assert!(manifest.contains("route-shop-inn-rest-decline-03-p"));
-        assert!(manifest.contains("route-shop-inn-rest-decline-route-03-p"));
+        assert!(manifest.contains("route-shop-healer-heal-decline-03-n"));
+        assert!(manifest.contains("route-shop-healer-heal-decline-route-03-n"));
+        assert!(manifest.contains("route-shop-healer-cure-accept-03-y"));
+        assert!(manifest.contains("route-shop-healer-heal-accept-03-y"));
+        assert!(manifest.contains("route-shop-healer-resurrect-accept-03-y"));
+        assert!(manifest.contains("route-shop-inn-rest-decline-04-p"));
+        assert!(manifest.contains("route-shop-inn-rest-decline-route-04-p"));
         assert!(manifest.contains("route-shop-reagent-buy-03-n"));
         assert!(manifest.contains("route-shop-reagent-buy-route-03-n"));
         assert!(manifest.contains("route-shop-tavern-drink-and-food-06-n"));
@@ -23423,8 +23444,8 @@ mod tests {
         assert!(manifest.contains("route-dungeon-field-cycle-spells-08-c1ag6"));
         assert!(manifest.contains("route-dungeon-open-chest-spell-01-c1as"));
         assert!(manifest.contains("route-castle-poison-gas-step-01-d"));
-        assert!(manifest.contains("route-shop-inn-rest-accept-02-y"));
-        assert!(manifest.contains("route-shop-inn-rest-accept-public-rate-02-y"));
+        assert!(manifest.contains("route-shop-inn-rest-accept-03-y"));
+        assert!(manifest.contains("route-shop-inn-rest-accept-public-rate-03-y"));
         assert!(manifest.contains("route-shop-horse-trader-horse-and-rider-buy-02-y"));
         assert!(manifest.contains("route-reload-horse-trader-horse-and-rider-buy-pass-03-empty"));
         assert!(manifest.contains("route-shop-horse-trader-stablehouse-buy-02-y"));

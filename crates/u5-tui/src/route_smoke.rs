@@ -1838,7 +1838,9 @@ pub fn route_smoke_cases() -> Vec<RouteSmokeCase> {
         RouteSmokeCase {
             name: "shop-healer-heal-decline-route",
             options: PlayOptions::default(),
-            script: &["Y", "H", "1", "N"],
+            // **Measured** at Cove: a one-member party is treated straight
+            // off the service letter, with no member prompt to answer.
+            script: &["Y", "H", "N"],
             expected: RouteSmokeExpectation::Town(castle),
             min_turn: 0,
             expected_frame_kind: "tile viewport",
@@ -1849,7 +1851,11 @@ pub fn route_smoke_cases() -> Vec<RouteSmokeCase> {
             // Measured 2026-09-08 (`qa/paired/nb-inn-branches.tsv`): a declined
             // room ends the visit, so the `P` this case used to press
             // afterwards would land in the world loop rather than the inn.
-            script: &["R", "N"],
+            //
+            // `shops.md §8`'s entry table gives `0x88` a `Y`/`N`/Space greeting
+            // ahead of the service letter; the engine used to read that first
+            // key as the service itself.
+            script: &["Y", "R", "N"],
             expected: RouteSmokeExpectation::Town(castle),
             min_turn: 0,
             expected_frame_kind: "tile viewport",
@@ -1857,7 +1863,9 @@ pub fn route_smoke_cases() -> Vec<RouteSmokeCase> {
         RouteSmokeCase {
             name: "shop-inn-rest-accept-public-rate",
             options: PlayOptions::default(),
-            script: &["R", "Y"],
+            // `shops.md §8`: the `Y`/`N`/Space entry greeting precedes the
+            // service letter.
+            script: &["Y", "R", "Y"],
             expected: RouteSmokeExpectation::Town(castle),
             min_turn: 1,
             expected_frame_kind: "tile viewport",
@@ -5594,8 +5602,11 @@ fn validate_combat_spell_route_state(state: &PlayState, case_name: &str) -> io::
             // "does not" affect side counting either way. The expectation
             // is pinned exactly rather than as a range.
             const MASS_CHARM_ROUTE_AGE_STEPS: u8 = 1;
-            if !state.message.starts_with("Mass charm!")
-                || state.active_effect_tag != Some(MASS_CHARM_ACTIVE_EFFECT_TAG)
+            // `magic.md §5.1` puts An Xen Ex in the row that prints "their own
+            // effect narration ... with no appended `Success!`" - not the
+            // `Mass charm!` banner this route used to pin. What the case is
+            // actually about is the effect surviving the action that follows.
+            if state.active_effect_tag != Some(MASS_CHARM_ACTIVE_EFFECT_TAG)
                 || state.active_effect_counter
                     != MASS_CHARM_ACTIVE_EFFECT_DURATION.saturating_sub(MASS_CHARM_ROUTE_AGE_STEPS)
             {
@@ -5681,7 +5692,7 @@ fn validate_combat_spell_route_state(state: &PlayState, case_name: &str) -> io::
             }
         }
         "combat-summon-daemon-ring" => {
-            if !state.message.starts_with("Summon Daemon!")
+            if !state.message.starts_with("Success!")
                 || state.combat_actors[COMBAT_PARTY_ACTOR_SLOTS].is_empty()
             {
                 return Err(io::Error::other(format!(
@@ -6032,7 +6043,9 @@ fn validate_route_smoke_case_state(
                 || state.player.y != 124
                 || state.spell_charges[IN_WIS_SPELL_INDEX] != 0
                 || state.party.first().is_none_or(|member| member.mana != 0)
-                || state.message != "Locate:\nH'M\", D'O\"\n"
+                // `RETRACTIONS.md` R413: "In Wis has no separate `Locate`
+                // label." The readout is the whole message.
+                || state.message != "\nH'M\", D'O\"\n"
             {
                 return Err(io::Error::other(format!(
                     "route smoke `{case_name}` did not apply the public Locate sextant output"
@@ -6097,10 +6110,21 @@ fn validate_route_smoke_case_state(
                 || state.spell_charges[TIME_STOP_SPELL_INDEX] != 0
                 || state.active_effect_tag != Some(NEGATE_TIME_ACTIVE_EFFECT_TAG)
                 || state.active_effect_counter != TIME_STOP_DURATION
-                || state.message != "Negate time!"
+                // `magic.md §5.1`: An Tym takes no generic completion line and
+                // does not acquire the scroll's `Negate time!` banner (R402).
+                || !state.message.is_empty()
             {
                 return Err(io::Error::other(format!(
-                    "route smoke `{case_name}` did not apply the active-effect spell sequence"
+                    "route smoke `{case_name}` did not apply the active-effect spell sequence: \
+                     charges P/Q/NM/TS {}/{}/{}/{}, tag {:?}, counter {} (want {}), message {:?}",
+                    state.spell_charges[PROTECTION_SPELL_INDEX],
+                    state.spell_charges[QUICKNESS_SPELL_INDEX],
+                    state.spell_charges[NEGATE_MAGIC_SPELL_INDEX],
+                    state.spell_charges[TIME_STOP_SPELL_INDEX],
+                    state.active_effect_tag,
+                    state.active_effect_counter,
+                    TIME_STOP_DURATION,
+                    state.message,
                 )));
             }
         }

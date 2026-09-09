@@ -4259,7 +4259,6 @@ impl PlayState {
         mana_cost: u8,
         tag: u8,
         duration: u8,
-        label: &str,
     ) -> MoveOutcome {
         if !self.spell_allowed_in_current_cast_context(spell_index) {
             self.message = "Not here!".to_string();
@@ -4283,7 +4282,18 @@ impl PlayState {
         self.advance_turn();
         self.active_effect_tag = Some(tag);
         self.active_effect_counter = duration;
-        self.message = format!("{label}!");
+        // `magic.md §5.1`: every spell reaching this helper is in the "No
+        // generic completion line" row - `In Sanct` (Protection), `Rel Tym`
+        // (Quickness) and `In An` among them - and the row's prose is explicit
+        // that "Protection, Negate Magic, Peer and Negate Time do not acquire
+        // their scroll counterparts' banners". `combat.md §8.4` says the same
+        // of the fourth from its own side: there is no "`Quickness!` command
+        // result".
+        //
+        // This helper composed `{label}!` for all four, which is exactly the
+        // scroll banner each was told not to borrow; the scroll paths in
+        // `chunk_04` keep theirs. `RETRACTIONS.md` R402 is the withdrawal.
+        self.message.clear();
         MoveOutcome::Cast
     }
 
@@ -4644,12 +4654,13 @@ impl PlayState {
         // `magic.md §8`: "Locate uses the shared sextant-style
         // coordinate printer" — Y first, then X, each carrying its own
         // closing double-quote, joined by comma-space, with a newline
-        // before the pair as well as after it. The label carries no
-        // newline of its own.
-        self.message = format!(
-            "Locate:{}",
-            sextant_coordinate_pair_line(self.player.y as u8, self.player.x as u8)
-        );
+        // before the pair as well as after it.
+        //
+        // `RETRACTIONS.md` R413 withdrew the label this used to carry:
+        // "Sextant prints `Position:`; In Wis has no separate `Locate` label."
+        // §5.1 says the same from the other side - In Wis completes with "Its
+        // location readout, with no appended generic completion line."
+        self.message = sextant_coordinate_pair_line(self.player.y as u8, self.player.x as u8);
         MoveOutcome::Observed
     }
 
@@ -5122,7 +5133,12 @@ impl PlayState {
         self.advance_turn();
         self.active_effect_tag = Some(NEGATE_TIME_ACTIVE_EFFECT_TAG);
         self.active_effect_counter = TIME_STOP_DURATION;
-        self.message = "Negate time!".to_string();
+        // `magic.md §5.1`: An Tym is in the "No generic completion line" row -
+        // "In particular Protection, Negate Magic, Peer and Negate Time do not
+        // acquire their scroll counterparts' banners." `Negate time!` is a
+        // scroll-dispatch banner (`RETRACTIONS.md` R402) and stays on the
+        // scroll path in `use_negate_time_scroll`.
+        self.message.clear();
         MoveOutcome::Cast
     }
 

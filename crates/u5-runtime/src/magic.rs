@@ -49,8 +49,10 @@ pub const fn sextant_coordinate_letters(coordinate: u8) -> (u8, u8) {
 /// below, followed by a further line break."
 ///
 /// The Y coordinate (latitude) prints first, then X (longitude).
-/// Callers print only their own label — Locate's `Locate:` and the
-/// Sextant U-Use's `Sextant:` — and concatenate this string after it.
+/// Callers print only their own label and concatenate this string after it:
+/// the Sextant's `Position:` and the Sextant U-Use's `Sextant:`. In Wis has
+/// no label of its own — `RETRACTIONS.md` R413 withdrew the `Locate:` this
+/// engine used to print.
 pub fn sextant_coordinate_pair_line(y: u8, x: u8) -> String {
     let (y_high, y_low) = sextant_coordinate_letters(y);
     let (x_high, x_low) = sextant_coordinate_letters(x);
