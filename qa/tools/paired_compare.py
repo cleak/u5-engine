@@ -161,21 +161,30 @@ def _flatten(rows: list[str]) -> str:
     return " ".join(" ".join(rows).split())
 
 
+def _canonical(text: str) -> str:
+    """Replace every published variant with a token for its pool.
+
+    One beat can spend several draws at once - `shops.md` §8.B's Buy entry
+    prints an affirmation and a stock introduction, and §8.1 then adds the
+    stock-call question, three independent uniform choices in one window - so
+    this canonicalises all of them rather than trying one substitution.
+    Longest first, so a short entry cannot eat part of a longer one.
+    """
+    for index, group in enumerate(VARIANT_GROUPS):
+        for member in sorted(group, key=len, reverse=True):
+            text = text.replace(member, f"<v{index}>")
+    return text
+
+
 def variant_only(stock: list[str], engine: list[str]) -> bool:
-    """Do the two sides differ only by which published variant was drawn?"""
+    """Do the two sides differ only by which published variants were drawn?"""
     left, right = _flatten(stock), _flatten(engine)
     if left == right:
         return False
-    for group in VARIANT_GROUPS:
-        for chosen in group:
-            if chosen not in right:
-                continue
-            for other in group:
-                if other is chosen:
-                    continue
-                if _flatten([right.replace(chosen, other)]) == left:
-                    return True
-    return False
+    canon_left, canon_right = _canonical(left), _canonical(right)
+    # Both sides must actually carry a variant token, or two unrelated windows
+    # that happen to canonicalise alike would be excused.
+    return canon_left == canon_right and "<v" in canon_left
 
 
 def classify(left: list[list[str]], right: list[list[str]], rows: list[int]) -> str:
