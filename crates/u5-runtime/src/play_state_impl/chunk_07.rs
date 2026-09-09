@@ -7,6 +7,15 @@ use crate::*;
 /// prompt Blackthorn's demand ends on. Note it differs from the sage's
 /// `You respond:`.
 pub const BLACKTHORN_RESPONSE_PROMPT: &str = "Your response?";
+/// `blackthorn.md §4.1`: "Each demand is followed by `\n\nYour response?\n:`
+/// ... The colon belongs to this audience prompt. The Badge password in
+/// Section 7a uses the same question words but starts input on a colon-free
+/// row."
+pub const BLACKTHORN_INPUT_PROMPT: &str = "Your response?\n:";
+/// §4.1's second demand, record `1`. The engine had no wording for it at
+/// all: the first wrong answer printed the rebuke and the threat and then
+/// stopped, so the ask the player was answering was never on screen.
+pub const BLACKTHORN_SECOND_DEMAND: &str = "\"Now tell me, what is the Mantra of {}?\"";
 /// **Measured**: what a wrong mantra draws when the interrogation ends.
 /// **Measured** 2026-09-08 (`qa/paired/bt-escalate.tsv`) with a party of
 /// three, driving the loop's four asks with wrong answers. Blackthorn's
@@ -30,6 +39,17 @@ pub const BLACKTHORN_PENDULUM_NARRATION: &str =
     "With a wave of Blackthorn's hand, the pendulum blade falls!";
 pub const BLACKTHORN_DUNGEON_THREAT: &str =
     "\"A child would catch thee in thy lies, foolish one! To the dungeon with thee!\"";
+
+/// `blackthorn.md §4.1`'s four demands, for the paths that run without
+/// `MISCMSG.DAT`. `{}` takes the interrogated shrine's virtue name.
+const fn blackthorn_demand_fallback(index: usize) -> &'static str {
+    match index {
+        0 => "\"What is the Mantra of the Mystic Shrine of {}?\"",
+        1 => BLACKTHORN_SECOND_DEMAND,
+        2 => BLACKTHORN_RESISTANCE_LINE,
+        _ => BLACKTHORN_FINAL_DEMAND,
+    }
+}
 
 impl PlayState {
     /// `town-mode.md §10`: the fireplace id of the town burning family.
@@ -4146,11 +4166,9 @@ impl PlayState {
             } => prompt,
             _ => "Virtue",
         };
-        let opening = self
-            .blackthorn_audience_opening_text(game_dir)?
-            .unwrap_or_else(|| {
-                "the party is overcome and dragged before Lord Blackthorn".to_string()
-            });
+        let virtue = challenge.shrine_virtue();
+        let preamble = self.blackthorn_audience_opening_text(game_dir)?;
+        let demand = self.blackthorn_demand_text(game_dir, 0, virtue)?;
         self.blackthorn_audience_map =
             load_miscmaps_cutscene_map(game_dir, BLACKTHORN_AUDIENCE_CUTSCENE_MAP_RECORD)?;
         self.install_blackthorn_audience_actors();
@@ -4158,27 +4176,71 @@ impl PlayState {
             self.run_blackthorn_cutscene_beat(BlackthornCutsceneBeat::AudienceThroneApproach);
         let release = self.run_blackthorn_cutscene_beat(BlackthornCutsceneBeat::GuardReleaseRoute);
         self.active_blackthorn = Some(challenge);
-        // `blackthorn.md §4`: "The loop asks about ONE shrine, up to four
-        // times." The withdrawn reading made the loop's party-slot
-        // argument semantic - "it names which companion is at risk" - so
-        // the prompt names the shrine's virtue and nothing else.
-        self.message = format!(
-            "Blackthorn audience: {opening}. Opening cutscene advanced {} world ticks; the guard release advanced {}. Blackthorn demands the mantra of {prompt}.",
+        let _ = prompt;
+        // `blackthorn.md §4.1`: record `11` is "the Wait/Avatarhood speech,
+        // then acknowledgement and two line feeds before the first demand",
+        // and every demand "is followed by `\n\nYour response?\n:`". The
+        // section is equally explicit about what must not appear: "Do not
+        // append an answer, prompt ordinal, roster slot number, cutscene
+        // timing value or other diagnostic information to the original
+        // text." The engine printed exactly that - `Blackthorn audience:
+        // <record 0>. Opening cutscene advanced 57 world ticks; the guard
+        // release advanced 23. Blackthorn demands the mantra of Honesty.` -
+        // where the stock game printed the speech and the quoted first
+        // demand. Caught by `qa/tools/paired_compare.py` at `bt-audience`'s
+        // `ask1` beat (`cleak/u5-engine#21`); the cutscene tick counts move
+        // to the diagnostic channel, where the rest of the audience's
+        // bookkeeping already lives.
+        self.push_diagnostic(format!(
+            "Blackthorn audience opened: the approach advanced {} world ticks and the guard release {}.",
             approach.world_ticks, release.world_ticks,
-        );
+        ));
+        self.message = match preamble {
+            Some(preamble) => format!("{preamble}\n\n{demand}\n\n{BLACKTHORN_INPUT_PROMPT}"),
+            None => format!("{demand}\n\n{BLACKTHORN_INPUT_PROMPT}"),
+        };
         Ok(Some(MoveOutcome::Used))
     }
 
+    /// `blackthorn.md §4.1`: the audience preamble is record
+    /// [`crate::MISCMSG_BLACKTHORN_AUDIENCE_PREAMBLE`], "the Wait/Avatarhood
+    /// speech". Its own leading line feeds and trailing space are authored,
+    /// so the record is used exactly as it reads - §4.1 asks callers to
+    /// "preserve the selected record's wording and spacing".
     pub fn blackthorn_audience_opening_text(&self, game_dir: &Path) -> io::Result<Option<String>> {
         let Some(messages) = load_misc_messages(game_dir)? else {
             return Ok(None);
         };
         Ok(messages
-            .blackthorn_audience()
-            .iter()
-            .map(|record| record.trim())
-            .find(|record| !record.is_empty())
+            .record(crate::MISCMSG_BLACKTHORN_AUDIENCE_PREAMBLE)
+            .filter(|record| !record.trim().is_empty())
             .map(str::to_string))
+    }
+
+    /// `blackthorn.md §4.1`: the demand for one prompt ordinal. Records
+    /// `0..=3` hold the four escalating wordings; the first three end on the
+    /// virtue's place and take the virtue name plus the question-mark and
+    /// closing quote, and the fourth "has an opening quotation mark but **no
+    /// closing quotation mark**, and its caller adds none".
+    ///
+    /// The fallbacks are the same four wordings, measured, for the paths that
+    /// run without `MISCMSG.DAT`.
+    pub fn blackthorn_demand_text(
+        &self,
+        game_dir: &Path,
+        ordinal: u8,
+        virtue: &str,
+    ) -> io::Result<String> {
+        let index = usize::from(ordinal).min(*crate::MISCMSG_BLACKTHORN_DEMAND_RANGE.end());
+        let record = load_misc_messages(game_dir)?
+            .and_then(|messages| messages.record(index).map(str::to_string))
+            .filter(|record| !record.trim().is_empty());
+        let last = *crate::MISCMSG_BLACKTHORN_DEMAND_RANGE.end();
+        Ok(match record {
+            Some(record) if index == last => record,
+            Some(record) => format!("{record}{virtue}?\""),
+            None => blackthorn_demand_fallback(index).replace("{}", virtue),
+        })
     }
 
     pub fn install_blackthorn_audience_actors(&mut self) {
@@ -4300,7 +4362,7 @@ impl PlayState {
     ) -> io::Result<MoveOutcome> {
         let answer = blackthorn_challenge_limited_input(typed);
         if answer.is_empty() {
-            self.message = self.blackthorn_current_prompt_message();
+            self.message = self.blackthorn_current_prompt_message(game_dir)?;
             return Ok(MoveOutcome::PromptDeclined);
         }
 
@@ -4394,20 +4456,27 @@ impl PlayState {
                     // First wrong answer: a threat only. No tile is stamped
                     // yet, and the loop re-asks with the next wording.
                     Some(crate::blackthorn_session::BlackthornWrongEscalation::Threat) => {
-                        let prompt = challenge
+                        let (next_ordinal, prompt) = challenge
                             .current_prompt()
-                            .map(|(_, prompt)| prompt)
-                            .unwrap_or("Virtue");
-                        let _ = prompt;
+                            .unwrap_or((ordinal + 1, "Virtue"));
                         let victim_name = self.blackthorn_victim_display_name(victim);
+                        let demand = self.blackthorn_demand_text(game_dir, next_ordinal, prompt)?;
                         self.active_blackthorn = Some(challenge);
                         self.push_diagnostic(format!(
                             "Failed Blackthorn's prompt {}; expected {expected}; victim slot {}.",
                             ordinal + 1,
                             victim + 1,
                         ));
+                        // `blackthorn.md §4.1`, the first wrong answer with at
+                        // least two nondead members: record `7`, then record
+                        // `8` with the second roster entry's name, then
+                        // "acknowledgement, then `\n\n` before the second
+                        // ask". The engine stopped after the threat, so the
+                        // second demand - §4.1's record `1` - never printed
+                        // and the player answered a question that was not on
+                        // screen.
                         self.message = format!(
-                            "{BLACKTHORN_FIRST_WRONG_LINE}\n\n{}",
+                            "{BLACKTHORN_FIRST_WRONG_LINE}\n\n{}\n\n{demand}\n\n{BLACKTHORN_INPUT_PROMPT}",
                             BLACKTHORN_SAND_THREAT.replace("{}", &victim_name)
                         );
                         Ok(MoveOutcome::PromptDeclined)
@@ -4429,10 +4498,10 @@ impl PlayState {
                             BlackthornCutsceneCommand::ExplicitRedraw,
                         ]);
                         self.apply_blackthorn_cutscene_vm_to_audience_state(&vm);
-                        let prompt = challenge
+                        let (next_ordinal, prompt) = challenge
                             .current_prompt()
-                            .map(|(_, prompt)| prompt)
-                            .unwrap_or("Virtue");
+                            .unwrap_or((ordinal + 1, "Virtue"));
+                        let demand = self.blackthorn_demand_text(game_dir, next_ordinal, prompt)?;
                         self.active_blackthorn = Some(challenge);
                         self.push_diagnostic(format!(
                             "Failed Blackthorn's prompt {}; expected {expected}; victim slot {}; cutscene advanced {} world tick.",
@@ -4440,16 +4509,10 @@ impl PlayState {
                             victim + 1,
                             vm.world_ticks,
                         ));
-                        // Measured: the second ask re-states the question, the
-                        // third shouts it.
-                        self.message = if ordinal == 1 {
-                            format!(
-                                "{}\n\n{BLACKTHORN_RESPONSE_PROMPT}",
-                                BLACKTHORN_RESISTANCE_LINE.replace("{}", prompt)
-                            )
-                        } else {
-                            format!("{BLACKTHORN_FINAL_DEMAND}\n\n{BLACKTHORN_RESPONSE_PROMPT}")
-                        };
+                        // The third ask re-states the question and the fourth
+                        // shouts it; both come from §4.1's own records rather
+                        // than from the ordinal the engine happened to be on.
+                        self.message = format!("{demand}\n\n{BLACKTHORN_INPUT_PROMPT}");
                         Ok(MoveOutcome::PromptDeclined)
                     }
                     // Fourth wrong answer: the §5 execution.
@@ -4473,15 +4536,14 @@ impl PlayState {
                 }
             }
             crate::blackthorn_session::BlackthornChallengeOutcome::PromptPresented {
+                ordinal,
                 prompt,
-                ..
             } => {
+                let demand = self.blackthorn_demand_text(game_dir, ordinal, prompt)?;
                 self.active_blackthorn = Some(challenge);
-                // The same measured demand the session renders elsewhere; this
-                // arm used to print `Blackthorn asks for <virtue>.`
-                self.message = format!(
-                    "\"What is the Mantra of the Mystic Shrine of {prompt}?\"\n\n{BLACKTHORN_RESPONSE_PROMPT}"
-                );
+                // The same §4.1 demand the session renders elsewhere; this arm
+                // used to print `Blackthorn asks for <virtue>.`
+                self.message = format!("{demand}\n\n{BLACKTHORN_INPUT_PROMPT}");
                 Ok(MoveOutcome::PromptDeclined)
             }
             crate::blackthorn_session::BlackthornChallengeOutcome::AlreadyPunished => self
@@ -4517,13 +4579,13 @@ impl PlayState {
             .unwrap_or_else(|| "thy companion".to_string())
     }
 
-    pub fn blackthorn_current_prompt_message(&self) -> String {
+    pub fn blackthorn_current_prompt_message(&self, game_dir: &Path) -> io::Result<String> {
         let Some(challenge) = self.active_blackthorn.as_ref() else {
             // The session cannot be absent when this renders; the string is a
             // harness fallback, never a printed line.
-            return "Blackthorn audience is not active.".to_string(); // audit: not a player-facing line
+            return Ok("Blackthorn audience is not active.".to_string()); // audit: not a player-facing line
         };
-        if let Some((_, prompt)) = challenge.current_prompt() {
+        if let Some((ordinal, prompt)) = challenge.current_prompt() {
             // `blackthorn.md §4` withdrawal: "the loop's party-slot
             // argument is semantic: it names which companion is at risk"
             // is withdrawn. "The loop asks about ONE shrine, up to four
@@ -4543,11 +4605,10 @@ impl PlayState {
             // ```
             //
             // The engine printed `Blackthorn asks for the mantra of Honesty.`
-            format!(
-                "\"What is the Mantra of the Mystic Shrine of {prompt}?\"\n\n{BLACKTHORN_RESPONSE_PROMPT}"
-            )
+            let demand = self.blackthorn_demand_text(game_dir, ordinal, prompt)?;
+            Ok(format!("{demand}\n\n{BLACKTHORN_INPUT_PROMPT}"))
         } else {
-            "Blackthorn waits.".to_string()
+            Ok("Blackthorn waits.".to_string())
         }
     }
 

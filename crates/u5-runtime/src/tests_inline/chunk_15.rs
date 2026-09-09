@@ -2151,8 +2151,20 @@
             state.active_objects[1].aux3,
             BLACKTHORN_CUTSCENE_AUX3_ROLE_MARKER
         );
-        assert!(state.message.contains("Blackthorn audience"));
-        assert!(state.message.contains("Honesty"));
+        // `blackthorn.md §4.1`: the audience prints the demand and "Do not
+        // append an answer, prompt ordinal, roster slot number, cutscene
+        // timing value or other diagnostic information to the original text."
+        // This fixture has no `MISCMSG.DAT`, so the demand is the measured
+        // fallback wording.
+        assert!(
+            state
+                .message
+                .contains("\"What is the Mantra of the Mystic Shrine of Honesty?\""),
+            "{}",
+            state.message
+        );
+        assert!(state.message.ends_with("Your response?\n:"), "{}", state.message);
+        assert!(!state.message.contains("world ticks"), "{}", state.message);
 
         assert_eq!(
             handle_play_key_input(&mut state, 'A', "hm", &dir).unwrap(),
@@ -2211,8 +2223,16 @@
         let dir = debug_game_dir();
         let mut miscmsg = Vec::new();
         for index in 0..MISCMSG_DAT_RECORDS {
-            if index == 0 {
+            // `blackthorn.md §4.1`: record `11` is the audience preamble and
+            // record `0` is the first demand, which "receive[s] the virtue
+            // name and the question-mark/closing-quote suffix". The engine
+            // read the preamble from the first nonblank record of the whole
+            // family - record `0` - so the demand's own template printed as
+            // the speech and the demand itself never appeared.
+            if index == MISCMSG_BLACKTHORN_AUDIENCE_PREAMBLE {
                 miscmsg.extend_from_slice(b"authored capture line");
+            } else if index == 0 {
+                miscmsg.extend_from_slice(b"authored demand for ");
             } else {
                 miscmsg.extend_from_slice(format!("rec{index}").as_bytes());
             }
@@ -2228,8 +2248,10 @@
         );
 
         assert!(state.active_blackthorn.is_some());
-        assert!(state.message.contains("authored capture line"));
-        assert!(state.message.contains("Honesty"));
+        assert_eq!(
+            state.message,
+            "authored capture line\n\nauthored demand for Honesty?\"\n\nYour response?\n:"
+        );
         let _ = fs::remove_dir_all(dir);
     }
 

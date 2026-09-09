@@ -180,6 +180,23 @@ fn blackthorn_first_wrong_answer_threatens_and_re_asks_instead_of_ending() {
         "the first wrong answer names the companion at risk: {}",
         state.message,
     );
+    // `blackthorn.md §4.1`: after the threat comes "acknowledgement, then
+    // `\n\n` before the second ask", which is record `1`. The engine stopped
+    // at the threat, so the question the player was answering was not on
+    // screen; §4.1 also requires every demand to be followed by
+    // `\n\nYour response?\n:`.
+    assert!(
+        state
+            .message
+            .contains("\"Now tell me, what is the Mantra of Honesty?\""),
+        "the threat is followed by the second ask: {}",
+        state.message,
+    );
+    assert!(
+        state.message.ends_with("Your response?\n:"),
+        "the second ask carries the audience input prompt: {}",
+        state.message,
+    );
     let _ = fs::remove_dir_all(dir);
 }
 
@@ -208,6 +225,12 @@ fn blackthorn_middle_wrong_answers_stamp_props_without_erasing_the_victim() {
         Some(BLACKTHORN_PENDULUM_TILE)
     );
     assert!(!state.active_objects[1].is_empty());
+    // §4.1's third demand, record `2`, follows the second wrong answer.
+    assert!(
+        state.message.starts_with("\"Resistance is futile!"),
+        "{}",
+        state.message,
+    );
 
     state
         .submit_blackthorn_audience_answer("nonsense", &dir)
@@ -218,6 +241,15 @@ fn blackthorn_middle_wrong_answers_stamp_props_without_erasing_the_victim() {
             .as_ref()
             .and_then(|map| map.tile(5, 9)),
         Some(BLACKTHORN_HOURGLASS_TILE)
+    );
+    // §4.1's fourth demand, record `3`, which "has an opening quotation mark
+    // but **no closing quotation mark**, and its caller adds none".
+    assert!(
+        state
+            .message
+            .starts_with("\"My patience with thee has worn away!"),
+        "{}",
+        state.message,
     );
     assert!(!state.active_objects[1].is_empty());
     assert_eq!(state.party.len(), 3);

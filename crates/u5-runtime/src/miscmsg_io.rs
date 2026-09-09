@@ -99,6 +99,22 @@ pub enum MiscMsgFamily {
 /// the family classifier and the per-family slice accessors share
 /// one source of truth.
 pub const MISCMSG_BLACKTHORN_AUDIENCE_RANGE: std::ops::RangeInclusive<usize> = 0..=11;
+/// `blackthorn.md §4.1`: the four escalating audience demands are records
+/// `0..=3`. "The first three records receive the virtue name and the
+/// question-mark/closing-quote suffix"; the fourth "has an opening quotation
+/// mark but **no closing quotation mark**, and its caller adds none."
+pub const MISCMSG_BLACKTHORN_DEMAND_RANGE: std::ops::RangeInclusive<usize> = 0..=3;
+/// §4.1: record `11` is "the Wait/Avatarhood speech, then acknowledgement and
+/// two line feeds before the first demand". The engine took the audience's
+/// opening from the first nonblank record of the whole family instead, which
+/// is record `0` - the first demand's own template, printed without its
+/// virtue.
+pub const MISCMSG_BLACKTHORN_AUDIENCE_PREAMBLE: usize = 11;
+/// §4.1, the first wrong answer with at least two nondead members: record `7`,
+/// "the quoted laughing-at-me rebuke", then record `8`, "which begins with two
+/// line feeds and the quoted sand/threat prefix".
+pub const MISCMSG_BLACKTHORN_FIRST_WRONG_REBUKE: usize = 7;
+pub const MISCMSG_BLACKTHORN_SAND_THREAT_PREFIX: usize = 8;
 pub const MISCMSG_VIRTUE_FAILING_RANGE: std::ops::RangeInclusive<usize> = 12..=19;
 pub const MISCMSG_VIRTUE_APHORISM_RANGE: std::ops::RangeInclusive<usize> = 20..=27;
 /// `formats/miscmsg-dat.md §3`: "28-36 | Shrine meditation | Meditation
