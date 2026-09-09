@@ -1,77 +1,29 @@
 # The arms Buy confirmation: quote, Y, the success line and the post-item
 # prompt, then a second item declined with N (cleak/u5-spec#238).
-# requires-seed: outside Britain at 10:00, gold to spend
+#
+# Seeded rather than walked to. The walk-up form of this scenario scripted its
+# way in from the town gate, and the resident walks its own schedule while
+# those steps run, so the two sides arrived with it in different cells and
+# every later beat compared unrelated windows (`cleak/u5-engine#22`).
+# `qa/tools/reseed.py` replayed that walk once into the seed named below.
+#
+# `shops.md` §2: a shopkeeper's "conversation-contact event also reaches it
+# automatically during a town schedule pass, even if the player has issued no
+# Talk command", so the first Pass beside the keeper opens the overlay and the
+# script drives it from there rather than issuing Talk.
+# requires-seed: profile `seed-shop-arms-sell-zero-price-reseeded`, built by qa/tools/reseed.py
 both	wait	9000
 both	key	space
 both	wait	4000
 both	key	j
-both	wait	8000
-both	shot	overworld	Journey Onward on the overworld at Britain
-both	key	e
+both	wait	9000
+both	shot	seeded	Journey Onward on the seeded cell
+both	key	space
 both	wait	4000
-both	shot	entered	Entered Britain through the door
-both	key	Up
-both	wait	450
-both	key	Up
-both	wait	450
-both	key	Up
-both	wait	450
-both	key	Up
-both	wait	450
-both	key	Up
-both	wait	450
-both	key	Up
-both	wait	450
-both	key	Up
-both	wait	450
-both	key	Up
-both	wait	450
-both	key	Up
-both	wait	450
-both	key	Left
-both	wait	450
-both	key	Left
-both	wait	450
-both	key	Left
-both	wait	450
-both	key	Left
-both	wait	450
-both	key	Left
-both	wait	450
-both	key	Left
-both	wait	450
-both	key	Left
-both	wait	450
-both	key	Left
-both	wait	450
-both	key	Left
-both	wait	450
-both	key	Left
-both	wait	450
-both	key	Left
-both	wait	450
-both	key	Left
-both	wait	450
-both	key	Left
-both	wait	450
-both	key	Left
-both	wait	450
-both	key	Up
-both	wait	450
-both	key	Up
-both	wait	450
-both	wait	2500
-both	shot	arrived	Arrived beside the weaponsmith
-both	key	l
-both	wait	1200
-both	key	Right
-both	wait	2500
-both	shot	look	Look east at the weaponsmith
-both	key	t
-both	wait	1200
-both	key	Right
-both	wait	3500
-both	shot	talk	Talk east: does the arms shop open at 10:00?
+both	shot	welcome	Contact opens the overlay: the welcome
+both	key	space
+both	wait	4000
+both	shot	greeted	The attribution and the entry question
 both	wait	14000
 both	key	S
 both	wait	4000

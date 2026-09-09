@@ -84,6 +84,15 @@ def main() -> None:
     ap.add_argument("--through", required=True)
     ap.add_argument("--beside")
     ap.add_argument("--name")
+    ap.add_argument(
+        "--resume-after",
+        help="rewrite the scenario to start after this shot, dropping the walk",
+    )
+    ap.add_argument(
+        "--contact-opens",
+        action="store_true",
+        help="the seeded target opens on contact, so open with Passes not Talk",
+    )
     args = ap.parse_args()
 
     keys = scenario_keys(args.scenario, args.through)
@@ -132,6 +141,72 @@ def main() -> None:
     shutil.rmtree(work, ignore_errors=True)
     print(f"seed profile: {dest.name}")
     print(f"consumed {len(keys)} key(s): {' '.join(keys)}")
+
+    if args.resume_after:
+        rewrite(args.scenario, args.resume_after, dest.name, args.contact_opens)
+        print(f"rewrote {args.scenario}.tsv and its seeds.tsv row")
+
+
+SEEDED_OPENING = """both\twait\t9000
+both\tkey\tspace
+both\twait\t4000
+both\tkey\tj
+both\twait\t9000
+both\tshot\tseeded\tJourney Onward on the seeded cell
+"""
+
+CONTACT_OPENING = """both\tkey\tspace
+both\twait\t4000
+both\tshot\twelcome\tContact opens the overlay: the welcome
+both\tkey\tspace
+both\twait\t4000
+both\tshot\tgreeted\tThe attribution and the entry question
+"""
+
+NOTE = """#
+# Seeded rather than walked to. The walk-up form of this scenario scripted its
+# way in from the town gate, and the resident walks its own schedule while
+# those steps run, so the two sides arrived with it in different cells and
+# every later beat compared unrelated windows (`cleak/u5-engine#22`).
+# `qa/tools/reseed.py` replayed that walk once into the seed named below.
+"""
+
+CONTACT_NOTE = """#
+# `shops.md` §2: a shopkeeper's "conversation-contact event also reaches it
+# automatically during a town schedule pass, even if the player has issued no
+# Talk command", so the first Pass beside the keeper opens the overlay and the
+# script drives it from there rather than issuing Talk.
+"""
+
+
+def rewrite(name: str, resume_after: str, profile: str, contact_opens: bool) -> None:
+    path = ROOT / f"{name}.tsv"
+    lines = path.read_text().splitlines()
+    header = [line for line in lines if line.startswith("#")]
+    body: list[str] = []
+    keep = False
+    for line in lines:
+        parts = line.split("\t")
+        if not keep:
+            if len(parts) > 2 and parts[1] == "shot" and parts[2] == resume_after:
+                keep = True
+            continue
+        body.append(line)
+    header = [line for line in header if not line.startswith("# requires-seed")]
+    note = NOTE + (CONTACT_NOTE if contact_opens else "")
+    opening = SEEDED_OPENING + (CONTACT_OPENING if contact_opens else "")
+    requires = f"# requires-seed: profile `{profile}`, built by qa/tools/reseed.py\n"
+    path.write_text(
+        "\n".join(header) + "\n" + note + requires + opening + "\n".join(body) + "\n"
+    )
+
+    table = ROOT / "seeds.tsv"
+    rows = []
+    for line in table.read_text().splitlines():
+        if line.startswith(f"{name}\t"):
+            line = f"{name}\t{profile}\tthe walk-up replayed once by reseed.py"
+        rows.append(line)
+    table.write_text("\n".join(rows) + "\n")
 
 
 if __name__ == "__main__":

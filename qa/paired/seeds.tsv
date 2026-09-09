@@ -67,14 +67,14 @@ ship-repair	seed-ship-repair	copied from the paired-ship-repair run profile
 shop-arms	seed-shop-arms	copied from the paired-shop-arms run profile
 shop-arms-after-entry	seed-shop-arms-after-entry	copied from the paired-shop-arms-after-entry run profile
 shop-arms-buy	seed-shop-arms-buy	copied from the paired-shop-arms-buy run profile
-shop-arms-buy-confirm	seed-shop-arms-buy-confirm	copied from paired-arms-buyconfirm: the 10:00 Britain walk-in with stock
+shop-arms-buy-confirm	seed-shop-arms-buy-confirm-reseeded	the walk-up replayed once by reseed.py
 shop-arms-menus	seed-shop-arms-menus-reseeded	the walk-up replayed once by reseed.py, beside the keeper
-shop-arms-navigation	seed-shop-arms-navigation	copied from paired-arms-nav: the 10:00 Britain walk-in with stock
-shop-arms-sell	seed-shop-arms-sell	copied from the paired-shop-arms-sell run profile
-shop-arms-sell-ammunition	seed-shop-arms-sell-ammunition	copied from paired-arms-ammo: the 10:00 walk-in carrying ammunition
-shop-arms-sell-flow	seed-shop-arms-sell-flow	copied from paired-arms-sellflow: the 10:00 walk-in with a sellable pack
-shop-arms-sell-keys	seed-shop-arms-sell-keys	copied from paired-arms-sellkeys: the 10:00 walk-in with a sellable pack
-shop-arms-sell-zero-price	seed-shop-arms-sell-zero-price	copied from paired-arms-zero: the 10:00 walk-in carrying a zero-price item
+shop-arms-navigation	seed-shop-arms-navigation-reseeded	the walk-up replayed once by reseed.py
+shop-arms-sell	seed-shop-arms-sell-reseeded	the walk-up replayed once by reseed.py
+shop-arms-sell-ammunition	seed-shop-arms-sell-ammunition-reseeded	the walk-up replayed once by reseed.py
+shop-arms-sell-flow	seed-shop-arms-sell-flow-reseeded	the walk-up replayed once by reseed.py
+shop-arms-sell-keys	seed-shop-arms-sell-keys-reseeded	the walk-up replayed once by reseed.py
+shop-arms-sell-zero-price	seed-shop-arms-sell-zero-price-reseeded	the walk-up replayed once by reseed.py
 shop-inn-after-entry	seed-shop-inn-after-entry	copied from the paired-shop-inn-after-entry run profile
 shrine-enter	seed-shrine-enter	copied from the paired-shrine-enter run profile
 shrine-flow	seed-shrine-flow	copied from the paired-shrine-flow run profile
