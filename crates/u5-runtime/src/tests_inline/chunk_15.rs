@@ -2217,7 +2217,22 @@
                 BLACKTHORN_CAPTIVE_CELL_Y as usize
             )
         );
-        assert!(state.message.contains("Returned to Blackthorn's captive cell"));
+        // `blackthorn.md §4.1`: the correct answer prints the reward speech,
+        // and the captive-cell relocation is a diagnostic rather than a
+        // printed line. This party has three members, so it is record `5`.
+        assert!(
+            state
+                .message
+                .contains("I will grant thy companion a merciful death!"),
+            "{}",
+            state.message
+        );
+        assert!(
+            state
+                .diagnostics
+                .iter()
+                .any(|line| line.contains("Returned to Blackthorn's captive cell")),
+        );
         let _ = fs::remove_dir_all(dir);
     }
 

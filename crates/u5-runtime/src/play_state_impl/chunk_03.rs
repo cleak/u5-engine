@@ -165,6 +165,14 @@ impl PlayState {
     /// response?\n:` ... The colon belongs to this audience prompt." Like the
     /// shrine's virtue row it is a live row, so the typed answer echoes after
     /// it rather than on a fresh row below.
+    /// **Measured** 2026-09-08 (`qa/paired/bt-correct.tsv`, beat `typed`):
+    /// typing `ahm` at the audience's answer row echoes `:AHM`. The spec
+    /// publishes the comparison as case-insensitive but says nothing about
+    /// the echo, so this is a runtime observation, not a §4.1 clause.
+    pub fn typed_prompt_echo_uppercases(&self) -> bool {
+        self.active_blackthorn.is_some()
+    }
+
     pub fn blackthorn_prompt_echo(&self) -> Option<String> {
         self.active_blackthorn
             .as_ref()

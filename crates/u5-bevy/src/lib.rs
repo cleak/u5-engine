@@ -16810,7 +16810,14 @@ fn render_integrated_status_framebuffer(
         // the stock game echoed every letter. Caught by
         // `qa/tools/paired_compare.py` on `shrine-flow`'s `typed` beat.
         let composed_echo = match (spell_echo.as_deref(), input_echo) {
-            (Some(stored), Some(typed)) if !typed.is_empty() => Some(format!("{stored}{typed}")),
+            (Some(stored), Some(typed)) if !typed.is_empty() => {
+                let typed = if display_state.typed_prompt_echo_uppercases() {
+                    typed.to_ascii_uppercase()
+                } else {
+                    typed.to_string()
+                };
+                Some(format!("{stored}{typed}"))
+            }
             _ => None,
         };
         let live_row = if display_state.message_window_live_row_suppressed() {
@@ -24859,6 +24866,10 @@ mod tests {
         let mut challenge = BlackthornChallenge::new();
         challenge.begin();
         state.active_blackthorn = Some(challenge);
+        // `blackthorn.md §4.1` selects the reward speech by the nondead
+        // count, so the fixture carries the companion the ≥2 branch names.
+        let companion = state.party[0];
+        state.party.push(companion);
 
         let mut input_line = String::new();
         for key in [KeyCode::KeyA, KeyCode::KeyH, KeyCode::KeyM] {
@@ -24888,10 +24899,16 @@ mod tests {
         // set a durable per-member Blackthorn-jail flag instead; §3 and
         // §8 both state there is no such flag.
         assert_ne!(state.shrine_ruin_flags[0], 0);
+        // `blackthorn.md §4.1`: a correct answer with at least two nondead
+        // members prints record `5`, the merciful-death speech. This fixture
+        // has no `MISCMSG.DAT`, so the measured fallback stands in; the
+        // captive-cell relocation is a diagnostic, not a printed line.
         assert!(
             state
                 .message
-                .contains("Returned to Blackthorn's captive cell")
+                .contains("I will grant thy companion a merciful death!"),
+            "{}",
+            state.message
         );
         let _ = fs::remove_dir_all(dir);
     }

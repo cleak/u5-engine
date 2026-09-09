@@ -110,6 +110,13 @@ pub const MISCMSG_BLACKTHORN_DEMAND_RANGE: std::ops::RangeInclusive<usize> = 0..
 /// is record `0` - the first demand's own template, printed without its
 /// virtue.
 pub const MISCMSG_BLACKTHORN_AUDIENCE_PREAMBLE: usize = 11;
+/// §4.1's reaction records: `4` is "the unquoted pendulum narration", `5` "the
+/// merciful-death speech", `9` "the truth/life reward speech" for a correct
+/// answer with only one nondead member, and `10` the child/dungeon line.
+pub const MISCMSG_BLACKTHORN_PENDULUM_NARRATION: usize = 4;
+pub const MISCMSG_BLACKTHORN_MERCIFUL_DEATH: usize = 5;
+pub const MISCMSG_BLACKTHORN_TRUTH_REWARD: usize = 9;
+pub const MISCMSG_BLACKTHORN_DUNGEON_THREAT: usize = 10;
 /// §4.1, the first wrong answer with at least two nondead members: record `7`,
 /// "the quoted laughing-at-me rebuke", then record `8`, "which begins with two
 /// line feeds and the quoted sand/threat prefix".

@@ -4143,10 +4143,10 @@ impl PlayState {
             // two early exits, so it is wired here and nowhere on the
             // ordinary cutscene path.
             self.refresh_cached_moon_glyphs_at_scene_entry();
-            let outcome = self.apply_blackthorn_captive_cell_handoff(
-                game_dir,
-                "Blackthorn audience found no un-ruined shrine to interrogate.",
-            )?;
+            self.push_diagnostic(
+                "Blackthorn audience found no un-ruined shrine to interrogate.".to_string(),
+            );
+            let outcome = self.apply_blackthorn_captive_cell_handoff(game_dir, "")?;
             return Ok(Some(outcome));
         };
 
@@ -4158,10 +4158,8 @@ impl PlayState {
             // `moons.md §3` (R375): the routine's second repaint, on the
             // other early-exit path. See the shrine-scan exit above.
             self.refresh_cached_moon_glyphs_at_scene_entry();
-            let outcome = self.apply_blackthorn_captive_cell_handoff(
-                game_dir,
-                "Blackthorn audience found no eligible party member.",
-            )?;
+            self.push_diagnostic("Blackthorn audience found no eligible party member.".to_string());
+            let outcome = self.apply_blackthorn_captive_cell_handoff(game_dir, "")?;
             return Ok(Some(outcome));
         }
 
@@ -4223,6 +4221,32 @@ impl PlayState {
             .record(crate::MISCMSG_BLACKTHORN_AUDIENCE_PREAMBLE)
             .filter(|record| !record.trim().is_empty())
             .map(str::to_string))
+    }
+
+    /// The three already-resolved arms print nothing: `blackthorn.md §4.1`
+    /// publishes no line for them, and the sentence the engine used to print
+    /// was a status report about its own state machine.
+    fn blackthorn_resolved_handoff(
+        &mut self,
+        game_dir: &Path,
+        note: &str,
+    ) -> io::Result<MoveOutcome> {
+        self.push_diagnostic(note.to_string());
+        self.apply_blackthorn_captive_cell_handoff(game_dir, "")
+    }
+
+    /// `blackthorn.md §4.1`'s reaction records. The measured constants are
+    /// the fallbacks for the paths that run without `MISCMSG.DAT`.
+    pub fn blackthorn_reaction_text(
+        &self,
+        game_dir: &Path,
+        record: usize,
+        fallback: &str,
+    ) -> io::Result<String> {
+        Ok(load_misc_messages(game_dir)?
+            .and_then(|messages| messages.record(record).map(str::to_string))
+            .filter(|text| !text.trim().is_empty())
+            .unwrap_or_else(|| fallback.to_string()))
     }
 
     /// `blackthorn.md §4.1`: the demand for one prompt ordinal. Records
@@ -4408,7 +4432,14 @@ impl PlayState {
                     shrine_index + 1,
                     vm.world_ticks
                 ));
-                self.apply_blackthorn_captive_cell_handoff(game_dir, BLACKTHORN_MERCIFUL_DEATH_LINE)
+                {
+                    let line = self.blackthorn_reaction_text(
+                        game_dir,
+                        crate::MISCMSG_BLACKTHORN_MERCIFUL_DEATH,
+                        BLACKTHORN_MERCIFUL_DEATH_LINE,
+                    )?;
+                    self.apply_blackthorn_captive_cell_handoff(game_dir, &line)
+                }
             }
             crate::blackthorn_session::BlackthornChallengeOutcome::Survived => {
                 // `blackthorn.md §4`: a correct answer resolves the
@@ -4417,17 +4448,41 @@ impl PlayState {
                 // moral standing.
                 self.apply_blackthorn_correct_answer_consequences(shrine_index);
                 let standing = self.moral_standing;
+                // §4 counts "all nondead travelling party members at audience
+                // setup", which is the count the fate branch itself uses, so
+                // it is read before the fate resolves.
+                let nondead = self.blackthorn_eligible_party_member_count();
                 let fate = self.apply_blackthorn_correct_answer_companion_fate();
                 let vm = self
                     .run_blackthorn_cutscene_beat(BlackthornCutsceneBeat::ConditionalThroneCleanup);
-                self.apply_blackthorn_captive_cell_handoff(
-                    game_dir,
-                    &format!(
-                        "Survived Blackthorn's challenge; shrine {} is ruined; standing {standing}; {fate}; cutscene advanced {} world ticks without clearing the screen.",
-                        shrine_index + 1,
-                        vm.world_ticks
-                    ),
-                )
+                self.push_diagnostic(format!(
+                    "Survived Blackthorn's challenge; shrine {} is ruined; standing {standing}; {fate}; cutscene advanced {} world ticks without clearing the screen.",
+                    shrine_index + 1,
+                    vm.world_ticks
+                ));
+                // `blackthorn.md §4.1`: "Correct answer with at least two
+                // nondead members | Record `5`, the merciful-death speech";
+                // "Correct answer with only one nondead member | Record `9`,
+                // the truth/life reward speech". The engine printed the
+                // sentence above instead - `qa/tools/paired_compare.py` read
+                // `Survived Blackthorn's challenge; ... advanced 17 world
+                // ticks without clearing the screen. Returned to
+                // Blackthorn's captive cell ...` on `bt-correct`'s `right`
+                // beat where the stock game printed the speech.
+                let reward = if nondead >= 2 {
+                    self.blackthorn_reaction_text(
+                        game_dir,
+                        crate::MISCMSG_BLACKTHORN_MERCIFUL_DEATH,
+                        BLACKTHORN_MERCIFUL_DEATH_LINE,
+                    )?
+                } else {
+                    self.blackthorn_reaction_text(
+                        game_dir,
+                        crate::MISCMSG_BLACKTHORN_TRUTH_REWARD,
+                        "",
+                    )?
+                };
+                self.apply_blackthorn_captive_cell_handoff(game_dir, &reward)
             }
             crate::blackthorn_session::BlackthornChallengeOutcome::Wrong { ordinal, expected } => {
                 // `blackthorn.md §4`: "**A wrong answer, when few companions
@@ -4455,10 +4510,12 @@ impl PlayState {
                         "Failed Blackthorn's prompt {}; expected {expected}.",
                         ordinal + 1
                     ));
-                    return self.apply_blackthorn_captive_cell_handoff(
+                    let line = self.blackthorn_reaction_text(
                         game_dir,
+                        crate::MISCMSG_BLACKTHORN_DUNGEON_THREAT,
                         BLACKTHORN_DUNGEON_THREAT,
-                    );
+                    )?;
+                    return self.apply_blackthorn_captive_cell_handoff(game_dir, &line);
                 };
                 match challenge.wrong_escalation() {
                     // First wrong answer: a threat only. No tile is stamped
@@ -4536,10 +4593,12 @@ impl PlayState {
                             ordinal + 1,
                             vm.world_ticks
                         ));
-                        self.apply_blackthorn_captive_cell_handoff(
+                        let line = self.blackthorn_reaction_text(
                             game_dir,
+                            crate::MISCMSG_BLACKTHORN_PENDULUM_NARRATION,
                             BLACKTHORN_PENDULUM_NARRATION,
-                        )
+                        )?;
+                        self.apply_blackthorn_captive_cell_handoff(game_dir, &line)
                     }
                 }
             }
@@ -4555,20 +4614,18 @@ impl PlayState {
                 Ok(MoveOutcome::PromptDeclined)
             }
             crate::blackthorn_session::BlackthornChallengeOutcome::AlreadyPunished => self
-                .apply_blackthorn_captive_cell_handoff(
+                .blackthorn_resolved_handoff(
                     game_dir,
                     "Blackthorn's punishment has already resolved.",
                 ),
             crate::blackthorn_session::BlackthornChallengeOutcome::AlreadySurvived => self
-                .apply_blackthorn_captive_cell_handoff(
+                .blackthorn_resolved_handoff(
                     game_dir,
                     "Blackthorn's challenge has already resolved.",
                 ),
-            crate::blackthorn_session::BlackthornChallengeOutcome::AlreadyAborted => self
-                .apply_blackthorn_captive_cell_handoff(
-                    game_dir,
-                    "Blackthorn's challenge was aborted.",
-                ),
+            crate::blackthorn_session::BlackthornChallengeOutcome::AlreadyAborted => {
+                self.blackthorn_resolved_handoff(game_dir, "Blackthorn's challenge was aborted.")
+            }
         }
     }
 
@@ -4881,12 +4938,17 @@ impl PlayState {
         let _ = self.restore_resident_shadowlord_after_floor_reload();
         self.sync_player_object();
         self.mark_visibility_dirty();
-        self.message = format!(
-            "{prefix} Returned to Blackthorn's captive cell in {} at ({}, {}).",
+        // The location report is harness detail: `blackthorn.md §4.1` says
+        // "Do not append an answer, prompt ordinal, roster slot number,
+        // cutscene timing value or other diagnostic information to the
+        // original text", and the handoff's caller supplies that text.
+        self.push_diagnostic(format!(
+            "Returned to Blackthorn's captive cell in {} at ({}, {}).",
             scene.key(),
             self.player.x,
             self.player.y
-        );
+        ));
+        self.message = prefix.to_string();
         Ok(MoveOutcome::Transition(AreaTransition::EnteredLocation(
             scene,
         )))
