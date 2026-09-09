@@ -4248,15 +4248,21 @@ impl PlayState {
         &mut self,
         mut challenge: crate::blackthorn_session::BlackthornChallenge,
         line: String,
+        executes: bool,
     ) -> io::Result<MoveOutcome> {
         challenge.await_closing_acknowledgement();
         self.active_blackthorn = Some(challenge);
         // `blackthorn.md §5`: "The execution helper finishes with one line
-        // feed", and the correct-answer branch "also finishes with one line
-        // feed" - a blank row under the outcome, which `bt-correct`'s `right`
-        // beat shows the stock game carrying.
+        // feed", and the correct-answer execution "also finishes with one
+        // line feed" - the blank row under the outcome that `bt-correct`'s
+        // `right` beat shows the stock game carrying. The two branches that
+        // execute nobody, records `9` and `10`, end on "acknowledgement and
+        // the closing scene beat" with no such row: `bt-audience`'s `ask3`
+        // beat has the next command echo directly under `thee!"`.
         self.emit_message_line(line.clone());
-        self.push_explicit_blank_message_entry();
+        if executes {
+            self.push_explicit_blank_message_entry();
+        }
         self.message = line;
         Ok(MoveOutcome::PromptDeclined)
     }
@@ -4516,7 +4522,7 @@ impl PlayState {
                         crate::MISCMSG_BLACKTHORN_MERCIFUL_DEATH,
                         BLACKTHORN_MERCIFUL_DEATH_LINE,
                     )?;
-                    self.hold_blackthorn_closing(challenge, line)
+                    self.hold_blackthorn_closing(challenge, line, true)
                 }
             }
             crate::blackthorn_session::BlackthornChallengeOutcome::Survived => {
@@ -4560,7 +4566,7 @@ impl PlayState {
                         "",
                     )?
                 };
-                self.hold_blackthorn_closing(challenge, reward)
+                self.hold_blackthorn_closing(challenge, reward, nondead >= 2)
             }
             crate::blackthorn_session::BlackthornChallengeOutcome::Wrong { ordinal, expected } => {
                 // `blackthorn.md §4`: "**A wrong answer, when few companions
@@ -4593,7 +4599,7 @@ impl PlayState {
                         crate::MISCMSG_BLACKTHORN_DUNGEON_THREAT,
                         BLACKTHORN_DUNGEON_THREAT,
                     )?;
-                    return self.hold_blackthorn_closing(challenge, line);
+                    return self.hold_blackthorn_closing(challenge, line, false);
                 };
                 match challenge.wrong_escalation() {
                     // First wrong answer: a threat only. No tile is stamped
@@ -4693,7 +4699,7 @@ impl PlayState {
                             crate::MISCMSG_BLACKTHORN_PENDULUM_NARRATION,
                             BLACKTHORN_PENDULUM_NARRATION,
                         )?;
-                        self.hold_blackthorn_closing(challenge, line)
+                        self.hold_blackthorn_closing(challenge, line, true)
                     }
                 }
             }
