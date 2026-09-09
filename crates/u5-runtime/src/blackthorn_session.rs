@@ -27,7 +27,12 @@ pub enum BlackthornChallengePhase {
     /// returning to the caller branch." The outcome text is on screen, the
     /// durable consequences have run, and the captive-cell handoff is held
     /// until a key arrives.
-    AwaitingClosingAcknowledgement,
+    AwaitingClosingAcknowledgement {
+        /// `blackthorn.md §5`: the fourth-wrong branch has a second page -
+        /// "After acknowledgement, record `6` supplies the quoted
+        /// unfairness/treachery speech" - before the handoff.
+        epilogue: bool,
+    },
     Punished {
         failed_ordinal: u8,
     },
@@ -156,7 +161,7 @@ impl BlackthornChallenge {
             BlackthornChallengePhase::Survived => BlackthornChallengeOutcome::AlreadySurvived,
             BlackthornChallengePhase::Aborted => BlackthornChallengeOutcome::AlreadyAborted,
             BlackthornChallengePhase::AwaitingAudience => self.begin(),
-            BlackthornChallengePhase::AwaitingClosingAcknowledgement => {
+            BlackthornChallengePhase::AwaitingClosingAcknowledgement { .. } => {
                 self.phase = BlackthornChallengePhase::Survived;
                 BlackthornChallengeOutcome::AlreadySurvived
             }
@@ -217,14 +222,22 @@ impl BlackthornChallenge {
 
     /// `blackthorn.md §5` step 5: hold the resolved outcome on screen until
     /// the player acknowledges it.
-    pub fn await_closing_acknowledgement(&mut self) {
-        self.phase = BlackthornChallengePhase::AwaitingClosingAcknowledgement;
+    pub fn await_closing_acknowledgement(&mut self, epilogue: bool) {
+        self.phase = BlackthornChallengePhase::AwaitingClosingAcknowledgement { epilogue };
     }
 
     pub fn awaiting_closing_acknowledgement(&self) -> bool {
         matches!(
             self.phase,
-            BlackthornChallengePhase::AwaitingClosingAcknowledgement
+            BlackthornChallengePhase::AwaitingClosingAcknowledgement { .. }
+        )
+    }
+
+    /// Whether the held closing page still owes §5's record `6` epilogue.
+    pub fn closing_epilogue_pending(&self) -> bool {
+        matches!(
+            self.phase,
+            BlackthornChallengePhase::AwaitingClosingAcknowledgement { epilogue: true }
         )
     }
 

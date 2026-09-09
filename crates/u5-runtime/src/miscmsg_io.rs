@@ -115,6 +115,9 @@ pub const MISCMSG_BLACKTHORN_AUDIENCE_PREAMBLE: usize = 11;
 /// answer with only one nondead member, and `10` the child/dungeon line.
 pub const MISCMSG_BLACKTHORN_PENDULUM_NARRATION: usize = 4;
 pub const MISCMSG_BLACKTHORN_MERCIFUL_DEATH: usize = 5;
+/// §5: "After acknowledgement, record `6` supplies the quoted
+/// unfairness/treachery speech, including its leading two line feeds."
+pub const MISCMSG_BLACKTHORN_TREACHERY_SPEECH: usize = 6;
 pub const MISCMSG_BLACKTHORN_TRUTH_REWARD: usize = 9;
 pub const MISCMSG_BLACKTHORN_DUNGEON_THREAT: usize = 10;
 /// §4.1, the first wrong answer with at least two nondead members: record `7`,

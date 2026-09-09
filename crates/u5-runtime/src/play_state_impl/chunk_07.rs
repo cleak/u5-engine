@@ -4246,11 +4246,21 @@ impl PlayState {
     /// carried a live command row where the stock game's was still blank.
     fn hold_blackthorn_closing(
         &mut self,
-        mut challenge: crate::blackthorn_session::BlackthornChallenge,
+        challenge: crate::blackthorn_session::BlackthornChallenge,
         line: String,
         executes: bool,
     ) -> io::Result<MoveOutcome> {
-        challenge.await_closing_acknowledgement();
+        self.hold_blackthorn_closing_page(challenge, line, executes, false)
+    }
+
+    fn hold_blackthorn_closing_page(
+        &mut self,
+        mut challenge: crate::blackthorn_session::BlackthornChallenge,
+        line: String,
+        executes: bool,
+        epilogue: bool,
+    ) -> io::Result<MoveOutcome> {
+        challenge.await_closing_acknowledgement(epilogue);
         self.active_blackthorn = Some(challenge);
         // `blackthorn.md §5`: "The execution helper finishes with one line
         // feed", and the correct-answer execution "also finishes with one
@@ -4431,7 +4441,19 @@ impl PlayState {
         if self.active_blackthorn.as_ref().is_some_and(
             crate::blackthorn_session::BlackthornChallenge::awaiting_closing_acknowledgement,
         ) {
-            self.active_blackthorn = None;
+            let challenge = self.active_blackthorn.take().expect("checked above");
+            if challenge.closing_epilogue_pending() {
+                // `blackthorn.md §5`: "After acknowledgement, record `6`
+                // supplies the quoted unfairness/treachery speech, including
+                // its leading two line feeds. The execution helper finishes
+                // with one line feed."
+                let speech = self.blackthorn_reaction_text(
+                    game_dir,
+                    crate::MISCMSG_BLACKTHORN_TREACHERY_SPEECH,
+                    "",
+                )?;
+                return self.hold_blackthorn_closing_page(challenge, speech, true, false);
+            }
             return self.apply_blackthorn_captive_cell_handoff(game_dir, "");
         }
 
@@ -4683,6 +4705,9 @@ impl PlayState {
                     }
                     // Fourth wrong answer: the §5 execution.
                     _ => {
+                        // §5: the tail names "the actual removed member",
+                        // read before the roster record is lifted out.
+                        let victim_name = self.blackthorn_victim_display_name(victim);
                         let vm = self.run_blackthorn_cutscene_beat(
                             BlackthornCutsceneBeat::FailedChallengeReaction,
                         );
@@ -4699,7 +4724,20 @@ impl PlayState {
                             crate::MISCMSG_BLACKTHORN_PENDULUM_NARRATION,
                             BLACKTHORN_PENDULUM_NARRATION,
                         )?;
-                        self.hold_blackthorn_closing(challenge, line, true)
+                        // `blackthorn.md §5`: "After the execution and roster
+                        // removal, print `\n\n`, the actual removed member's
+                        // name, and ` is sliced in half! `. After
+                        // acknowledgement, record `6` supplies the quoted
+                        // unfairness/treachery speech". The line feed belongs
+                        // to the end of that helper, not to this page - which
+                        // `bt-escalate`'s `ask5` beat shows, the stock game
+                        // ending on `falls!` with no blank row under it.
+                        self.hold_blackthorn_closing_page(
+                            challenge,
+                            format!("{line}\n\n{victim_name} is sliced in half! "),
+                            false,
+                            true,
+                        )
                     }
                 }
             }
