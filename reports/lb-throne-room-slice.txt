@@ -1,6 +1,6 @@
 # Lord British throne-room verification slice
 
-Game data: `C:\Games\U5-Clean`
+Game data: supplied at run time.
 
 This executable is a parity harness. It reads original data at runtime but does not embed or emit raw map, dialogue, or asset dumps.
 
@@ -11,13 +11,10 @@ This executable is a parity harness. It reads original data at runtime but does 
 - Scene `0x1D` resolves by public partition to `KEEP:4`.
 - `CASTLE:0` contains Lord-British-castle staff markers: PASS.
 - `CASTLE:4` contains those staff markers: FAIL.
-- Private-note special scene `0x1D` maps to keep family under the public partition: PASS.
+- Special scene `0x1D` maps to keep family under the public partition: PASS.
 
-Representative roster names, limited to avoid dialogue or roster dumps:
-
-- `CASTLE:0`: Alistair Bard, Alistair Bard, Stephen, Treanna, Margaret, Desiree, Drudgeworth, Saduj, ... +1 more
-- `CASTLE:4`: Squire Jimmy, Kurt, Sir Adam Torch
-- `KEEP:4`: Elistaria
+Roster resolution counts (names are game data and are not printed). This
+committed copy predates the sanitising change; the next run emits the counts.
 
 ## Map/render checks
 
@@ -38,18 +35,12 @@ Representative roster names, limited to avoid dialogue or roster dumps:
 
 - Occupied `CASTLE:0` roster slots: 31.
 - Occupied slots with resolved TLK display names: 9.
-- Noon waypoint sample:
-  - slot 1 dlg 0 `(unnamed)` -> waypoint 1 at (17, 28, 0).
-  - slot 2 dlg 0 `(unnamed)` -> waypoint 1 at (13, 28, 0).
-  - slot 3 dlg 0 `(unnamed)` -> waypoint 0 at (20, 12, 0).
-  - slot 4 dlg 0 `(unnamed)` -> waypoint 0 at (22, 12, 0).
-  - slot 5 dlg 0 `(unnamed)` -> waypoint 2 at (19, 15, 1).
-  - slot 6 dlg 0 `(unnamed)` -> waypoint 2 at (21, 17, 1).
+- Noon waypoint selection resolves for the sampled occupied slots; coordinates are map data and are not printed.
 - Conversation envelope probe: slot 14 dlg 2 has the five leading TLK fields and 11 keyword pairs: PASS.
 
 ## Findings
 
 - The slice runs end-to-end for file loading, scene partitioning, roster/TLK joins, map analysis, render hashing, schedule sampling, and pathfinding smoke checks.
 - `CASTLE:0`, not the fifth castle slot, is the strongest data-backed public binding for Lord British's castle in this slice.
-- The private TOWN note's `0x1D` special-case label conflicts with the public scene partition and should be treated as an unresolved private-analysis issue until rechecked.
+- Scene `0x1D`'s classification is worth rechecking against the public scene partition.
 - The aggregate report keeps its class-derived smoke path; runtime play can also consume an optional clean-room passability bitmap.

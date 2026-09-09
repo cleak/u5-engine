@@ -1786,14 +1786,6 @@ pub fn contains_any(names: &[String], needles: &[&str]) -> bool {
     })
 }
 
-pub fn sample_names(names: &[String]) -> String {
-    let mut sample: Vec<_> = names.iter().take(8).cloned().collect();
-    if names.len() > sample.len() {
-        sample.push(format!("... +{} more", names.len() - sample.len()));
-    }
-    sample.join(", ")
-}
-
 pub fn hash_palette_indices(pixels: &[u8]) -> u64 {
     hash_bytes(pixels)
 }

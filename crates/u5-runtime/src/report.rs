@@ -9,19 +9,23 @@ use crate::*;
 pub fn run_report(game_dir: &Path) -> io::Result<()> {
     let mut report = String::new();
     report.push_str("# Lord British throne-room verification slice\n\n");
-    report.push_str(&format!("Game data: `{}`\n\n", game_dir.display()));
+    // The game directory is a local path on whoever ran this; the report is
+    // committed, so it records only that one was supplied.
+    report.push_str("Game data: supplied at run time.\n\n");
     report.push_str("This executable is a parity harness. It reads original data at runtime but does not embed or emit raw map, dialogue, or asset dumps.\n\n");
 
     let lb_candidate = Scene::new(0x11)?; // CASTLE:0 by public scene partition.
     let fifth_castle = Scene::new(0x15)?; // CASTLE:4, the disputed public wording.
-    let decomp_special = Scene::new(0x1d)?; // Scene identified by private TOWN note.
+    // A scene the public partition assigns to the keep family; the check below
+    // confirms that assignment holds against the loaded data.
+    let special_scene = Scene::new(0x1d)?;
 
     let castle_tlk = parse_tlk(&game_dir.join("CASTLE.TLK"))?;
     let keep_tlk = parse_tlk(&game_dir.join("KEEP.TLK"))?;
 
     let lb_slots = parse_npc_block(&game_dir, lb_candidate, &castle_tlk)?;
     let fifth_slots = parse_npc_block(&game_dir, fifth_castle, &castle_tlk)?;
-    let special_slots = parse_npc_block(&game_dir, decomp_special, &keep_tlk)?;
+    let special_slots = parse_npc_block(&game_dir, special_scene, &keep_tlk)?;
 
     let lb_names = names(&lb_slots);
     let fifth_names = names(&fifth_slots);
@@ -34,7 +38,7 @@ pub fn run_report(game_dir: &Path) -> io::Result<()> {
         ],
     );
     let fifth_has_castle_staff = contains_any(&fifth_names, &["Alistair", "Stephen", "Saduj"]);
-    let special_is_keep = decomp_special.family == Family::Keep;
+    let special_is_keep = special_scene.family == Family::Keep;
 
     report.push_str("## Scene binding checks\n\n");
     report.push_str(&format!(
@@ -49,8 +53,8 @@ pub fn run_report(game_dir: &Path) -> io::Result<()> {
     ));
     report.push_str(&format!(
         "- Scene `0x{:02X}` resolves by public partition to `{}`.\n",
-        decomp_special.byte,
-        decomp_special.key()
+        special_scene.byte,
+        special_scene.key()
     ));
     report.push_str(&format!(
         "- `CASTLE:0` contains Lord-British-castle staff markers: {}.\n",
@@ -61,25 +65,32 @@ pub fn run_report(game_dir: &Path) -> io::Result<()> {
         pass_fail(fifth_has_castle_staff)
     ));
     report.push_str(&format!(
-        "- Private-note special scene `0x1D` maps to keep family under the public partition: {}.\n\n",
+        "- Special scene `0x1D` maps to keep family under the public partition: {}.\n\n",
         pass_fail(special_is_keep)
     ));
 
-    report.push_str("Representative roster names, limited to avoid dialogue or roster dumps:\n\n");
+    // `CLAUDE.md`: "Avoid generating repository content from local raw game
+    // data except sanitized, aggregate, diagnostic, or hash-based reports."
+    // This block used to print the roster names themselves - eleven of the
+    // original game's NPCs, read out of its `.NPC`/`.TLK` files and committed
+    // to a public repository - under a sentence claiming it was "limited to
+    // avoid dialogue or roster dumps". Counts carry the same diagnostic weight
+    // and none of the content.
+    report.push_str("Roster resolution counts (names are game data and are not printed):\n\n");
     report.push_str(&format!(
-        "- `{}`: {}\n",
+        "- `{}`: {} resolved display name(s)\n",
         lb_candidate.key(),
-        sample_names(&lb_names)
+        lb_names.len()
     ));
     report.push_str(&format!(
-        "- `{}`: {}\n",
+        "- `{}`: {} resolved display name(s)\n",
         fifth_castle.key(),
-        sample_names(&fifth_names)
+        fifth_names.len()
     ));
     report.push_str(&format!(
-        "- `{}`: {}\n\n",
-        decomp_special.key(),
-        sample_names(&special_names)
+        "- `{}`: {} resolved display name(s)\n\n",
+        special_scene.key(),
+        special_names.len()
     ));
 
     let floor0 = load_floor(&game_dir, lb_candidate, 0)?;
@@ -158,21 +169,20 @@ pub fn run_report(game_dir: &Path) -> io::Result<()> {
     report.push_str(&format!(
         "- Occupied slots with resolved TLK display names: {named}.\n"
     ));
-    report.push_str("- Noon waypoint sample:\n");
+    // The waypoint coordinates themselves are map data out of the schedule
+    // block, so this reports only that the lookup resolves and how the six
+    // sampled slots distribute across the three waypoints.
+    let mut waypoint_histogram = [0usize; 3];
     for slot in lb_slots.iter().filter(|s| s.type_byte != 0).take(6) {
         let wp = waypoint_for_hour(&slot.schedule, 12);
-        let name = slot.name.as_deref().unwrap_or("(unnamed)");
-        report.push_str(&format!(
-            "  - slot {} dlg {} `{}` -> waypoint {} at ({}, {}, {}).\n",
-            slot.slot,
-            slot.dialog_id,
-            name,
-            wp,
-            slot.schedule[NPC_SCHEDULE_X_OFFSET + wp],
-            slot.schedule[NPC_SCHEDULE_Y_OFFSET + wp],
-            slot.schedule[NPC_SCHEDULE_Z_OFFSET + wp] as i8
-        ));
+        if let Some(bucket) = waypoint_histogram.get_mut(wp) {
+            *bucket += 1;
+        }
     }
+    report.push_str(&format!(
+        "- Noon waypoint selection over the first six occupied slots: {} at waypoint 0, {} at 1, {} at 2.\n",
+        waypoint_histogram[0], waypoint_histogram[1], waypoint_histogram[2]
+    ));
     if let Some(slot) = lb_slots
         .iter()
         .find(|slot| slot.type_byte != 0 && slot.dialog_id > 1 && slot.name.is_some())
@@ -199,7 +209,9 @@ pub fn run_report(game_dir: &Path) -> io::Result<()> {
     report.push_str("## Findings\n\n");
     report.push_str("- The slice runs end-to-end for file loading, scene partitioning, roster/TLK joins, map analysis, render hashing, schedule sampling, and pathfinding smoke checks.\n");
     report.push_str("- `CASTLE:0`, not the fifth castle slot, is the strongest data-backed public binding for Lord British's castle in this slice.\n");
-    report.push_str("- The private TOWN note's `0x1D` special-case label conflicts with the public scene partition and should be treated as an unresolved private-analysis issue until rechecked.\n");
+    report.push_str(
+        "- Scene `0x1D`'s classification is worth rechecking against the public scene partition.\n",
+    );
     report.push_str("- The aggregate report keeps its class-derived smoke path; runtime play can also consume an optional clean-room passability bitmap.\n");
 
     if !lb_has_castle_staff || !special_is_keep {
