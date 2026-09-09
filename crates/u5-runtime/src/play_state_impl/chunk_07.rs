@@ -147,12 +147,29 @@ impl PlayState {
         if let Some((_, object)) =
             self.combat_loose_object_slot_at(x, y, actor.active_object_slot as usize)
         {
+            // `combat.md §8` hands Search "to one shared world-mode delegate",
+            // and the delegate's found-something wording in an arena is not
+            // published; no capture exercises it either. Left silent rather
+            // than borrowing the town handler's object naming.
             let _ = object;
             self.message.clear();
             return MoveOutcome::Searched;
         }
 
-        self.message.clear();
+        // `combat.md §8`, the Get/Search row: the arena echoes `Search-`,
+        // "then the shared cardinal-direction input" - and the shared
+        // delegate prints its own result. Measured 2026-09-09
+        // (`qa/paired/combat-commands.tsv`, `search` beat): the original's
+        // arena shows ` Search-North`, a blank row, and
+        // `Thou dost find nothing of note.` before the next turn banner.
+        //
+        // This replaces the 2026-09-07 note that "the arena's Get, Search and
+        // X-it print no line of their own", which was read off a capture
+        // taken while the engine's own echo and banner ordering were wrong.
+        // It is also the frame-sequence evidence `cleak/u5-spec#231` asks for
+        // to reconcile its G/S/X absence report with the original's output
+        // calls.
+        self.message = SEARCH_NOTHING_FOUND.to_string();
         MoveOutcome::Searched
     }
 

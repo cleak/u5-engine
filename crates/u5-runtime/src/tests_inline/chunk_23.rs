@@ -12240,9 +12240,14 @@ fn combat_input_dispatch_routes_play_keys_to_combat_parser() {
         (8, 5)
     );
 
+    // `combat.md §8`'s X-it row publishes the literal with its own trailing
+    // line feed - "`X-it what?\n`, followed by the refusal tones and a full
+    // retry" - so the `what?` family closes its row and the reprinted banner's
+    // leading newline lands on a fresh one, leaving the blank between them
+    // that the original shows (`qa/paired/combat-commands.tsv`, `xit` beat).
     for (key, expected) in [
-        ('X', "X-it what?"),
-        ('B', "Board what?"),
+        ('X', "X-it what?\n"),
+        ('B', "Board what?\n"),
         ('E', "Enter-Not here"),
         ('T', "Talk-Funny, no response!"),
     ] {

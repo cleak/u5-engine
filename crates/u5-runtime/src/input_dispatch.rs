@@ -4353,8 +4353,13 @@ fn combat_command_branch_message(branch: CombatCommandBranch) -> String {
 
     match branch {
         CombatCommandBranch::SceneMessageAbort(verb) => match combat_scene_abort_tail(verb) {
+            // `combat.md §8`, the X-it row: "`X-it what?\n`, followed by the
+            // refusal tones and a full retry" - the literal carries its own
+            // line feed, which closes its row so `§8.1`'s banner leaves the
+            // blank the original shows between the two. Measured 2026-09-09
+            // (`qa/paired/combat-commands.tsv`, `xit` beat).
             CombatSceneAbortTail::What => {
-                format!("{} what?", combat_scene_abort_verb_prefix(verb))
+                format!("{} what?\n", combat_scene_abort_verb_prefix(verb))
             }
             CombatSceneAbortTail::NotHere => {
                 format!("{}-Not here", combat_scene_abort_verb_prefix(verb))
