@@ -235,6 +235,15 @@ impl PlayState {
                 .active_shop
                 .as_ref()
                 .is_some_and(crate::shop_session::ActiveShopSession::awaiting_entry_answer)
+            // `shops.md §8.C`: the sage's fee quote ends `Fair 'nuff?" ` and
+            // accepts "Y/N only", so it is a key wait that keeps its own row
+            // rather than a typed prompt with a live row under it.
+            || matches!(
+                self.active_shop,
+                Some(crate::shop_session::ActiveShopSession::Sage(
+                    crate::shop_runtime::SageState::Confirm { .. }
+                ))
+            )
     }
 
     pub fn open_prompt_line(&self) -> Option<String> {
@@ -2524,6 +2533,18 @@ impl PlayState {
     /// engine now wires six of §3's seven census rows. Only the
     /// stats-panel negative above survives, and it is all these two
     /// functions need.
+    /// `inventory.md §5.2`: "Each ordinary voiced refusal below prints **two
+    /// line feeds, the listed message, then two line feeds and `Item:_`**."
+    ///
+    /// The lead-in is what puts the blank row between the open `Item:` prompt
+    /// and the refusal, which a capture of the stock game shows. Six of the
+    /// seven R-Ready refusal arms omitted it and only the strength one had it,
+    /// so every later beat of `qa/paired/ready-slots.tsv` was a row adrift.
+    /// It lives here now rather than at each arm.
+    fn ready_refusal(refusal: &str) -> String {
+        format!("\n{refusal}")
+    }
+
     pub fn render_text_window_frame(&mut self, input_echo: Option<&str>) -> String {
         let active_cursor = self.active_player;
         let frame = render_play_text_window_ascii(self, active_cursor, input_echo);
@@ -3838,7 +3859,7 @@ impl PlayState {
                 // `inventory.md §5.2`: one line covers arrows and quarrels
                 // alike - "Required arrows or quarrels absent | `Thou hast no
                 // ammunition for that weapon!`".
-                self.message = READY_NO_AMMUNITION_REFUSAL.to_string();
+                self.message = Self::ready_refusal(READY_NO_AMMUNITION_REFUSAL);
                 return MoveOutcome::Blocked;
             }
         }
@@ -3870,7 +3891,7 @@ impl PlayState {
         // slot name substituted, which only ever matched the helm.
         if self.party_equipment[request.party_index][slot] != EQUIPMENT_EMPTY {
             if let Some(refusal) = ready_occupied_slot_refusal(slot) {
-                self.message = refusal.to_string();
+                self.message = Self::ready_refusal(refusal);
                 return MoveOutcome::Blocked;
             }
         }
@@ -3895,19 +3916,19 @@ impl PlayState {
             };
             if equipment[slot] != EQUIPMENT_EMPTY {
                 if two_handed_held || equipment[other] != EQUIPMENT_EMPTY {
-                    self.message = READY_FREE_A_HAND_REFUSAL.to_string();
+                    self.message = Self::ready_refusal(READY_FREE_A_HAND_REFUSAL);
                     return MoveOutcome::Blocked;
                 }
                 slot = other;
             } else if two_handed_held {
-                self.message = READY_FREE_A_HAND_REFUSAL.to_string();
+                self.message = Self::ready_refusal(READY_FREE_A_HAND_REFUSAL);
                 return MoveOutcome::Blocked;
             }
         }
         if EQUIPMENT_CLASS_TAGS[item_id] == EQUIPMENT_TAG_TWO_HAND
             && self.party_equipment[request.party_index][EQUIP_SLOT_OFFHAND] != EQUIPMENT_EMPTY
         {
-            self.message = READY_BOTH_HANDS_REFUSAL.to_string();
+            self.message = Self::ready_refusal(READY_BOTH_HANDS_REFUSAL);
             return MoveOutcome::Blocked;
         }
         if slot == EQUIP_SLOT_OFFHAND {
@@ -3915,7 +3936,7 @@ impl PlayState {
             if weapon != EQUIPMENT_EMPTY
                 && EQUIPMENT_CLASS_TAGS[weapon as usize] == EQUIPMENT_TAG_TWO_HAND
             {
-                self.message = READY_FREE_A_HAND_REFUSAL.to_string();
+                self.message = Self::ready_refusal(READY_FREE_A_HAND_REFUSAL);
                 return MoveOutcome::Blocked;
             }
         }
@@ -3938,7 +3959,7 @@ impl PlayState {
         ) {
             // Measured: the refusal opens a block under the `Item: ` row
             // the pick completed, and the reopened prompt opens another.
-            self.message = format!("\n{READY_NOT_STRONG_ENOUGH_REFUSAL}");
+            self.message = Self::ready_refusal(READY_NOT_STRONG_ENOUGH_REFUSAL);
             return MoveOutcome::Blocked;
         }
 

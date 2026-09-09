@@ -1498,6 +1498,24 @@ fn handle_active_shop_key_input(
             let outcome = match *s {
                 SageState::Prompt { .. } => {
                     let line = active_shop_text_line(key, suffix);
+                    // `shops.md §8.C`, the sage result table: the topic prompt
+                    // ends `You respond:\n`, and "After typed topic | `\n\n`".
+                    // The typed word therefore occupies the row that prompt
+                    // opened, and two line feeds follow it.
+                    //
+                    // The word is only ever a live row in this engine - the
+                    // shell's own input buffer - so it never reached the
+                    // transcript, and the sage's quote printed two rows high.
+                    // Same shape as the Blackthorn answer row.
+                    if !line.trim().is_empty() {
+                        // The prompt ends `You respond:\n`, so the typed word
+                        // opens the row below it rather than continuing that
+                        // one, and it echoes upper-cased - measured at the Paws
+                        // sage, which reads back `You respond:` / `SPIR` for a
+                        // topic typed lower-case.
+                        state.emit_message_line(line.to_uppercase());
+                        state.push_explicit_blank_message_entry();
+                    }
                     step_sage(s, SageInput::Keyword(&line), &mut state.gold)
                 }
                 SageState::Confirm { quote, .. } if yes && state.gold >= quote.entry.fee => {
@@ -3146,7 +3164,13 @@ fn format_tavern_outcome_with_shoppe(
 fn format_sage_outcome(outcome: crate::shop_runtime::SageOutcome) -> String {
     use crate::shop_runtime::SageOutcome::*;
     match outcome {
-        QuotedFee { quote } => format!("That will cost {} gold. Pay? (Y/N)", quote.entry.fee),
+        // The quote body is `SHOPPE.DAT` record `84`; this is the no-assets
+        // fallback, and `§8.C`'s resident suffix is the part that is ours to
+        // print either way. The engine's own `That will cost % gold. Pay?
+        // (Y/N)` sentence appears nowhere in the spec.
+        QuotedFee { .. } => crate::shoppe_bark::SAGE_FEE_CONFIRMATION_SUFFIX
+            .trim_start()
+            .to_string(),
         RumourFound { rendered, .. } => rendered,
         Declined => "Farewell.".to_string(),
         RefusedShortFunds { .. } => TAVERN_AFFORDABILITY_REFUSAL_BARK.to_string(),

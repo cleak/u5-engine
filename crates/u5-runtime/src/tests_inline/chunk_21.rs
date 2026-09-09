@@ -5451,7 +5451,7 @@ fn end_to_end_sage_rumour_quotes_confirms_debits_and_renders() {
 
     handle_play_key_input(&mut state, 'H', "ONE", Path::new("")).unwrap();
     assert_eq!(state.gold, 200);
-    assert_eq!(state.message, "That will cost 50 gold. Pay? (Y/N)");
+    assert_eq!(state.message, "Fair 'nuff?\" ");
     assert!(state.active_shop.is_some());
 
     handle_play_key_input(&mut state, 'Y', "", Path::new("")).unwrap();
@@ -5492,7 +5492,7 @@ fn end_to_end_tavern_menu_lore_letter_reaches_paid_sage_lookup() {
     ));
 
     handle_play_key_input(&mut state, 'H', "ONE", Path::new("")).unwrap();
-    assert_eq!(state.message, "That will cost 50 gold. Pay? (Y/N)");
+    assert_eq!(state.message, "Fair 'nuff?\" ");
     handle_play_key_input(&mut state, 'Y', "", Path::new("")).unwrap();
 
     assert!(state.gold <= 150);
@@ -5527,7 +5527,7 @@ fn end_to_end_sage_rumour_prefers_shoppe_record_rendering() {
     state.active_shop = Some(ActiveShopSession::Sage(SageState::default()));
 
     handle_play_key_input(&mut state, 'H', "ONE", &dir).unwrap();
-    assert_eq!(state.message, "Asset fee: 50 gold?");
+    assert_eq!(state.message, "Asset fee: 50 gold?\n\nFair 'nuff?\" ");
     handle_play_key_input(&mut state, 'Y', "", &dir).unwrap();
 
     assert!(
@@ -5561,7 +5561,7 @@ fn end_to_end_sage_short_funds_prefers_shoppe_record_rendering() {
     state.active_shop = Some(ActiveShopSession::Sage(SageState::default()));
 
     handle_play_key_input(&mut state, 'H', "ONE", &dir).unwrap();
-    assert_eq!(state.message, "Asset fee: 50 gold?");
+    assert_eq!(state.message, "Asset fee: 50 gold?\n\nFair 'nuff?\" ");
     handle_play_key_input(&mut state, 'Y', "", &dir).unwrap();
 
     assert_eq!(state.gold, 49);
@@ -5861,7 +5861,9 @@ fn end_to_end_sage_short_funds_does_not_draw_success_record() {
     state.active_shop = Some(ActiveShopSession::Sage(SageState::default()));
 
     handle_play_key_input(&mut state, 'H', "ONE", Path::new("")).unwrap();
-    assert!(state.message.contains("50 gold"));
+    // The fee lives in `SHOPPE.DAT` record `84`, which this fixture has no
+    // assets to render; §8.C's resident confirmation is what remains.
+    assert!(state.message.contains("Fair 'nuff?"), "{}", state.message);
     handle_play_key_input(&mut state, 'Y', "", Path::new("")).unwrap();
 
     assert_eq!(state.gold, 49);

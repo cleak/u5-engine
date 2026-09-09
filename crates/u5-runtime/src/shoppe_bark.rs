@@ -309,19 +309,27 @@ impl ShoppeTextRenderer {
         )
     }
 
+    /// `shops.md §8.C`'s sage result table: "Matched topic | Record `84`,
+    /// then `\n\nFair 'nuff?" `; Y/N only".
+    ///
+    /// The suffix is resident text, not part of the record, and the engine
+    /// returned the record alone - so the quote ended on `troubled mind.` and
+    /// the question the shop was waiting on never printed. It is appended here
+    /// rather than at the call site so both callers get it.
     pub fn render_sage_fee_quote_record(
         &self,
         fee: u16,
         dictionary: Option<&[&str; COMMON_WORD_DICTIONARY_ENTRIES]>,
     ) -> Result<String, ShoppeDatError> {
-        self.render_record(
+        let record = self.render_record(
             SAGE_RUMOUR_FEE_QUOTE_RECORD,
             &ShoppeBarkContext {
                 gold: fee,
                 dictionary,
                 ..Default::default()
             },
-        )
+        )?;
+        Ok(format!("{record}{SAGE_FEE_CONFIRMATION_SUFFIX}"))
     }
 
     pub fn render_sage_short_funds_record(
@@ -351,6 +359,9 @@ impl From<ShoppeRecords> for ShoppeTextRenderer {
 /// Render one bark record byte slice into a String, substituting the
 /// seven placeholder sigils and expanding high-bit phrase-token
 /// indices through the optional dictionary.
+/// `shops.md §8.C`: the resident confirmation the sage's fee quote ends on.
+pub const SAGE_FEE_CONFIRMATION_SUFFIX: &str = "\n\nFair 'nuff?\" ";
+
 pub fn render_shoppe_bark(bytes: &[u8], ctx: &ShoppeBarkContext) -> Result<String, ShoppeDatError> {
     let mut out = String::with_capacity(bytes.len());
     let dictionary = ctx.dictionary.unwrap_or(&PUBLISHED_COMMON_WORD_DICTIONARY);
@@ -785,7 +796,8 @@ mod tests {
 
         assert_eq!(
             renderer.render_sage_fee_quote_record(50, None).unwrap(),
-            "Pay 50 gold?"
+            // `shops.md §8.C` appends the resident confirmation to record 84.
+            "Pay 50 gold?\n\nFair 'nuff?\" "
         );
         assert_eq!(
             renderer.render_sage_short_funds_record(None).unwrap(),
