@@ -10833,7 +10833,11 @@ fn combat_input_dispatch_push_prompt_cancel_commits_actor_action() {
         PlayInputDisposition::Continue
     );
     assert!(state.active_direction_prompt.is_some());
-    assert_eq!(state.pending_combat_actor_slot, None);
+    // `combat.md §7`: a round is "a per-actor body that runs zero or one
+    // times per slot", so the acting slot stays bound while its direction
+    // prompt waits - otherwise the paced round walker opens the next turn
+    // and prints a second banner over the open `Push-` row.
+    assert_eq!(state.pending_combat_actor_slot, Some(0));
 
     assert_eq!(
         handle_play_key_input(&mut state, '\u{1b}', "", game_dir).unwrap(),

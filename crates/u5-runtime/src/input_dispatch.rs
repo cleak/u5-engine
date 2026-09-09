@@ -654,6 +654,12 @@ fn handle_active_direction_prompt_key_input(
                 // letter has been accepted, including a canceled shared
                 // direction prompt. Klimb cancellation is likewise distinct
                 // from its explicitly free blocked-result branch.
+                //
+                // The prompt held the acting slot open so the paced round
+                // walker could not start the next turn underneath it; the
+                // action is now spent, so release it before advancing, the
+                // same order the Cast/Use/Ready arms use.
+                state.pending_combat_actor_slot = None;
                 let _ = apply_combat_committed_action_maintenance(state, actor_slot);
                 advance_combat_round_after_actor_and_append_message(state, actor_slot);
             }
@@ -4062,6 +4068,18 @@ fn handle_combat_multistage_command(
                 state.active_direction_prompt = Some(DirectionPromptSession::new(
                     DirectionPromptKind::CombatPush { actor_slot },
                 ));
+                // `combat.md §7`: a round is "a per-actor body that runs
+                // zero or one times per slot", and `§8.1` emits the turn
+                // banner "at the start of every keyboard-driven combatant's
+                // turn, *before any key is read*". The acting slot was taken
+                // out of the state when this key was read, so leaving it
+                // `None` while the direction prompt waits lets the paced
+                // round walker open the *next* turn - printing a second
+                // banner over the open `Verb-` row, which then refuses the
+                // direction word because its row is no longer last. Every
+                // other multi-stage arm reinstates the slot here; these did
+                // not.
+                state.pending_combat_actor_slot = Some(actor_slot);
                 state.message = state.render_active_direction_prompt();
             }
             true
@@ -4091,6 +4109,18 @@ fn handle_combat_multistage_command(
                 state.active_direction_prompt = Some(DirectionPromptSession::new(
                     DirectionPromptKind::CombatKlimb { actor_slot },
                 ));
+                // `combat.md §7`: a round is "a per-actor body that runs
+                // zero or one times per slot", and `§8.1` emits the turn
+                // banner "at the start of every keyboard-driven combatant's
+                // turn, *before any key is read*". The acting slot was taken
+                // out of the state when this key was read, so leaving it
+                // `None` while the direction prompt waits lets the paced
+                // round walker open the *next* turn - printing a second
+                // banner over the open `Verb-` row, which then refuses the
+                // direction word because its row is no longer last. Every
+                // other multi-stage arm reinstates the slot here; these did
+                // not.
+                state.pending_combat_actor_slot = Some(actor_slot);
                 state.message = state.render_active_direction_prompt();
             }
             true
@@ -4129,6 +4159,18 @@ fn handle_combat_multistage_command(
                         branch: *branch,
                     },
                 ));
+                // `combat.md §7`: a round is "a per-actor body that runs
+                // zero or one times per slot", and `§8.1` emits the turn
+                // banner "at the start of every keyboard-driven combatant's
+                // turn, *before any key is read*". The acting slot was taken
+                // out of the state when this key was read, so leaving it
+                // `None` while the direction prompt waits lets the paced
+                // round walker open the *next* turn - printing a second
+                // banner over the open `Verb-` row, which then refuses the
+                // direction word because its row is no longer last. Every
+                // other multi-stage arm reinstates the slot here; these did
+                // not.
+                state.pending_combat_actor_slot = Some(actor_slot);
                 state.message = state.render_active_direction_prompt();
             }
             true
