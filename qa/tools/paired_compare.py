@@ -125,6 +125,45 @@ def row_text(row: list[str]) -> str:
     return "".join(" " if cell in BLANK_CELLS else cell for cell in row).rstrip()
 
 
+# Published equal-probability variant pools. Each group is one draw; a beat
+# that differs only by which member was selected is not a conformance failure.
+# Decoded rows drop the cell the font renders as `?`, so the entries below end
+# where the capture does.
+VARIANT_GROUPS: list[tuple[str, ...]] = [
+    # `shops.md` §8.B, the arms entry greeting: two equal-probability variants.
+    (
+        "Hail, friend! Wouldst thou Buy or Sell",
+        "Greetings, traveller! Wish ye to Buy, or hast thou wares to Sell",
+    ),
+    # §8.B, on Buy: "one uniformly selected affirmation".
+    ("Very good!", "Excellent!", "Fine, fine!", "But of course!"),
+    # §8.B, then "one independently selected stock introduction".
+    ("We have:", "We stock:", "Thou canst buy:", "We've got:"),
+]
+
+
+def _flatten(rows: list[str]) -> str:
+    """The beat's visible text as one wrap-independent string."""
+    return " ".join(" ".join(rows).split())
+
+
+def variant_only(stock: list[str], engine: list[str]) -> bool:
+    """Do the two sides differ only by which published variant was drawn?"""
+    left, right = _flatten(stock), _flatten(engine)
+    if left == right:
+        return False
+    for group in VARIANT_GROUPS:
+        for chosen in group:
+            if chosen not in right:
+                continue
+            for other in group:
+                if other is chosen:
+                    continue
+                if _flatten([right.replace(chosen, other)]) == left:
+                    return True
+    return False
+
+
 def classify(left: list[list[str]], right: list[list[str]], rows: list[int]) -> str:
     """Why a beat differs, so a suite pass can be triaged without eyeballing it.
 
@@ -174,6 +213,17 @@ def classify(left: list[list[str]], right: list[list[str]], rows: list[int]) -> 
             continue
         if all(stock[index] == engine[index - shift] for index in window):
             return f"offset{shift:+d}"
+    # `systems/prng.md` §3: the generator is seeded from the host clock at the
+    # intro menu, and only two runs "that reach the intro menu within the same
+    # host clock tick receive the same seed". So a line the game *chooses at
+    # random* cannot be expected to agree between the two sides, and reporting
+    # it as a wording difference measures the clock rather than the engine.
+    #
+    # A beat whose two sides differ only by which published equal-probability
+    # variant was drawn is `variant`: the engine printed a legal line, just not
+    # the one the original happened to draw. Anything else is still `text`.
+    if variant_only(stock, engine):
+        return "variant"
     if len(rows) == 1:
         a, b = stock[rows[0]], engine[rows[0]]
         if a.rstrip() == b.rstrip():
