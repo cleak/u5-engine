@@ -45,9 +45,15 @@ impl ActiveShopSession {
         }
         matches!(
             self,
-            Self::Arms(ArmsShopState::BuyPickItem)
-                | Self::ArmsLocal(ArmsShopState::BuyPickItem, _)
-                | Self::ArmsStocked(ArmsShopState::BuyPickItem, _)
+            Self::Arms(ArmsShopState::BuyPickItem | ArmsShopState::BuyConfirm { .. })
+                | Self::ArmsLocal(
+                    ArmsShopState::BuyPickItem | ArmsShopState::BuyConfirm { .. },
+                    _
+                )
+                | Self::ArmsStocked(
+                    ArmsShopState::BuyPickItem | ArmsShopState::BuyConfirm { .. },
+                    _
+                )
         )
     }
 

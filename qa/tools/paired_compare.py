@@ -146,6 +146,13 @@ VARIANT_GROUPS: list[tuple[str, ...]] = [
         "What is thine interest",
         "Which would ye see",
     ),
+    # §8.1's four buy confirmation prompts, "chosen uniformly".
+    (
+        "Wouldst thou buy one",
+        "Wilt thou take it",
+        "Wish ye it",
+        "May I get one for thee",
+    ),
     # §8's arms no-credit bark pool, "one chosen uniformly".
     (
         "Can't pay?! Out with ye, orc-face!",

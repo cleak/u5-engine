@@ -2197,7 +2197,7 @@ fn handle_arms_shop_key_input(
         }
         (ArmsShopState::BuyPickItem, _, _, _) => {
             if let Some(table) = stock_table {
-                step_arms_shop(
+                let outcome = step_arms_shop(
                     shop_state,
                     ArmsShopInput::StockLetter {
                         letter: key_byte,
@@ -2207,7 +2207,22 @@ fn handle_arms_shop_key_input(
                     &mut state.gold,
                     &mut stock,
                     &prices,
-                )
+                );
+                // The accepted stock letter echoes onto the row the stock-call
+                // question left open, exactly as `shops.md §8.B`'s entry answer
+                // does - the question's tail is `" `, a closing quote and one
+                // space, so the cursor is sitting there. Measured 2026-09-09
+                // (`qa/paired/shop-arms-menus.tsv`, beat `buyquote`): the
+                // original shows `see?" a`, a blank row, then the quote.
+                // §8.1: "Invalid listing keys keep the existing text and
+                // consume no new draw", so only an accepted letter echoes.
+                if matches!(outcome, ArmsShopOutcome::QuotedBuyPrice { .. }) {
+                    state.emit_message_line_continuing_row(
+                        (key_byte as char).to_ascii_lowercase().to_string(),
+                    );
+                    state.push_explicit_blank_message_entry();
+                }
+                outcome
             } else if let Some(d) = inline_digit {
                 step_arms_shop(
                     shop_state,
@@ -2714,8 +2729,15 @@ fn format_arms_outcome_with_rolls(
             quote_record_id,
         } => {
             let quote = render_shoppe_record_for_arms_quote(game_dir, quote_record_id, item, price);
+            // Measured 2026-09-09 (`qa/paired/shop-arms-menus.tsv`, beat
+            // `buyquote`): the description and its confirmation prompt are one
+            // quoted speech - an opening `"` before the description, a blank
+            // row, the prompt, and the closing `" ` that keeps the cursor on
+            // that row. This is the same shape `shops.md §8.B` gives the entry
+            // answer, whose Buy echo is `Buy\n\n"`, and the same closing the
+            // sell offer's `Deal?"` already used.
             format!(
-                "{quote}\n{}",
+                "\"{quote}\n\n{}\" ",
                 confirmation_prompt_roll
                     .map(crate::shops::arms_buy_confirmation_prompt_for_roll)
                     .unwrap_or_else(|| crate::shops::arms_buy_confirmation_prompt(item))
