@@ -141,19 +141,12 @@ def classify(left: list[list[str]], right: list[list[str]], rows: list[int]) -> 
         return "stock-idle"
     if not any(engine):
         return "engine-idle"
-    # The window is `ROWS` tall, so a transcript that is out of step can be
-    # adrift by almost all of it - an 8-row shift turned up in the arms shop,
-    # and probing only +-3 reported it as a wording difference. Nearest shifts
-    # first, so the smallest explanation wins.
-    for shift in sorted(
-        (s for s in range(-(ROWS - 1), ROWS) if s), key=lambda s: (abs(s), s)
-    ):
-        lo, hi = max(0, shift), min(ROWS, ROWS + shift)
-        window = range(lo, hi)
-        if not any(stock[index] for index in window):
-            continue
-        if all(stock[index] == engine[index - shift] for index in window):
-            return f"offset{shift:+d}"
+    # The differing-row list is built from raw cells, so a row whose only
+    # disagreement is where the input cursor sits lands in it. `row_text`
+    # already drops the cursor glyph, so once every differing row reads the
+    # same the beat's *wording* agrees and only the cursor is misplaced.
+    if all(stock[index] == engine[index] for index in rows):
+        return "cursor"
     # Two sides can also be in different *places*: a walk-up scenario whose
     # NPC did not reach the counter on one side leaves that side in the world
     # loop pressing its scripted shop keys as world commands, and every beat
@@ -167,6 +160,20 @@ def classify(left: list[list[str]], right: list[list[str]], rows: list[int]) -> 
         shared = len(stock_lines & engine_lines) / len(stock_lines | engine_lines)
         if shared < 0.2:
             return "diverged"
+
+    # The window is `ROWS` tall, so a transcript that is out of step can be
+    # adrift by almost all of it - an 8-row shift turned up in the arms shop,
+    # and probing only +-3 reported it as a wording difference. Nearest shifts
+    # first, so the smallest explanation wins.
+    for shift in sorted(
+        (s for s in range(-(ROWS - 1), ROWS) if s), key=lambda s: (abs(s), s)
+    ):
+        lo, hi = max(0, shift), min(ROWS, ROWS + shift)
+        window = range(lo, hi)
+        if not any(stock[index] for index in window):
+            continue
+        if all(stock[index] == engine[index - shift] for index in window):
+            return f"offset{shift:+d}"
     if len(rows) == 1:
         a, b = stock[rows[0]], engine[rows[0]]
         if a.rstrip() == b.rstrip():
