@@ -2064,6 +2064,18 @@ impl PlayState {
             next.message_flushed = entry_message_flushed;
             next.pending_command_echo = None;
         }
+        // `text-output.md §9`: window 2's "only mutable state is its cursor,
+        // which advances with output and is moved only by explicit cursor
+        // calls made while it is active". A location entry makes no such
+        // call, so the cursor - and with it the log's top offset - has to
+        // survive the scene rebuild alongside the transcript it places.
+        // `load_town_scene`/`load_dungeon_scene` bypass `load_scene`, which
+        // is the only setter of the loaded value, so without this the window
+        // silently flips from `§10.1`'s bottom anchor ("Window 2's cursor is
+        // explicitly set to window-relative `(0, 12)` ... so the message log
+        // is bottom-anchored from the very first frame") to a top anchor and
+        // draws every entry block up to twelve rows too high.
+        next.message_window_top_offset = self.message_window_top_offset;
         if debug {
             next.append_stonegate_entry_presentation_message();
         }
