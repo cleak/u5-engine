@@ -148,6 +148,19 @@ def classify(left: list[list[str]], right: list[list[str]], rows: list[int]) -> 
             continue
         if all(stock[index] == engine[index - shift] for index in window):
             return f"offset{shift:+d}"
+    # Two sides can also be in different *places*: a walk-up scenario whose
+    # NPC did not reach the counter on one side leaves that side in the world
+    # loop pressing its scripted shop keys as world commands, and every beat
+    # after it disagrees on every row. That is a scenario-reliability problem,
+    # not a wording one, and counting it as `text` overstates the conformance
+    # queue. Rows the two sides share are the signal: a real wording difference
+    # still has most of the window in common.
+    stock_lines = {line for line in stock if line}
+    engine_lines = {line for line in engine if line}
+    if stock_lines and engine_lines:
+        shared = len(stock_lines & engine_lines) / len(stock_lines | engine_lines)
+        if shared < 0.2:
+            return "diverged"
     if len(rows) == 1:
         a, b = stock[rows[0]], engine[rows[0]]
         if a.rstrip() == b.rstrip():
