@@ -22,6 +22,12 @@ Reads captures and prints agreement; writes nothing. The decoded text stays in
 the process - it is game text, and only the verdict leaves.
 
 Usage: paired_compare.py <ARTIFACT_DIR>...
+       paired_compare.py --latest [SCENARIO]...
+
+`--latest` compares the newest artifact directory for each scenario - every
+scenario in `qa/paired` when none are named - which is what a suite pass
+leaves behind. Runs that captured nothing are reported rather than skipped
+silently.
 """
 
 import json
@@ -138,11 +144,39 @@ def compare(artifact: pathlib.Path) -> tuple[int, int, int]:
     return same, differ, skipped
 
 
+ARTIFACTS = pathlib.Path.home() / "artifacts/u5/paired"
+SCENARIOS = pathlib.Path(__file__).resolve().parent.parent / "paired"
+
+
+def latest_artifacts(names: list[str]) -> list[pathlib.Path]:
+    """The newest artifact directory for each named scenario."""
+    if not names:
+        names = sorted(
+            path.stem
+            for path in SCENARIOS.glob("*.tsv")
+            if path.stem != "seeds"
+        )
+    found = []
+    for name in names:
+        runs = sorted(
+            (path for path in ARTIFACTS.glob(f"{name}-*") if (path / "record.json").is_file()),
+            key=lambda path: path.name,
+        )
+        if runs:
+            found.append(runs[-1])
+        else:
+            print(f"  no run  {name}")
+    return found
+
+
 def main() -> None:
     if len(sys.argv) < 2:
         raise SystemExit(__doc__)
+    args = sys.argv[1:]
+    if args[0] == "--latest":
+        args = [str(path) for path in latest_artifacts(args[1:])]
     total = [0, 0, 0]
-    for arg in sys.argv[1:]:
+    for arg in args:
         same, differ, skipped = compare(pathlib.Path(arg))
         status = "match" if differ == 0 else "DIFFER"
         print(f"{status} {pathlib.Path(arg).name}: {same} beat(s) agree, {differ} differ, {skipped} skipped")

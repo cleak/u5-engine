@@ -221,10 +221,38 @@ pub const fn shared_shop_bark_record(
 /// (`RETRACTIONS.md` R294); only the list records `69..72` and the
 /// follow-up records `73..76` are deterministic from the state.
 ///
-/// `0x81` arms "does not use this shared entry greeting" and `0x84`/`0x88`
-/// print their own branch text, so all three stay off the list.
+/// `shops.md §8.B`: "**All seven non-arms entries** first emit an opening
+/// double quote, render one record from their shared entry row, then place
+/// the input continuation according to the resulting window-local cursor
+/// column". §8 names those seven as "tavern, horse trader, shipwright,
+/// reagent vendor, guildmaster, healer and innkeeper", and adds that "inn and
+/// ship entry do have shared greeting records; neither starts directly at its
+/// service-letter menu". Only `0x81` arms, with its own welcome/attribution
+/// stages, stays off the list.
+///
+/// The engine had `0x84` and `0x88` off it too, on an earlier revision's
+/// "print their own branch text".
 pub const fn talk_entry_uses_shared_preamble(dialog_id: u8) -> bool {
-    matches!(dialog_id, 0x82 | 0x83 | 0x85 | 0x86 | 0x87)
+    matches!(dialog_id, 0x82 | 0x83 | 0x84 | 0x85 | 0x86 | 0x87 | 0x88)
+}
+
+/// `shops.md §8.B`'s continuation table for a non-arms entry greeting:
+///
+/// | Cursor column after the record | Additional output |
+/// |---:|---|
+/// | 0 | `\n:` |
+/// | 1 through 11 | One space; no colon |
+/// | 12 through 15 | `\n\n:` |
+///
+/// "The colon is therefore conditional on the finished greeting's column. It
+/// is resident prompt punctuation, not part of the greeting record or a new
+/// key-summary line."
+pub const fn shop_entry_input_continuation(cursor_column: usize) -> &'static str {
+    match cursor_column {
+        0 => "\n:",
+        1..=11 => " ",
+        _ => "\n\n:",
+    }
 }
 
 #[cfg(test)]
@@ -421,11 +449,11 @@ mod tests {
             Some(60)
         );
         assert!(talk_entry_uses_shared_preamble(0x83));
-        assert!(!talk_entry_uses_shared_preamble(0x84));
+        assert!(talk_entry_uses_shared_preamble(0x84));
         assert!(talk_entry_uses_shared_preamble(0x85));
         assert!(talk_entry_uses_shared_preamble(0x86));
         assert!(talk_entry_uses_shared_preamble(0x87));
-        assert!(!talk_entry_uses_shared_preamble(0x88));
+        assert!(talk_entry_uses_shared_preamble(0x88));
     }
 
     #[test]

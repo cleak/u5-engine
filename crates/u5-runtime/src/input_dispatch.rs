@@ -757,9 +757,9 @@ fn handle_active_shop_key_input(
     // is the same rule when the greeting happens to fill its last row.
     let entry_answer_echo = session.awaiting_entry_answer().then(|| {
         if yes {
-            Some(" Yes")
+            Some("Yes")
         } else if no {
-            Some(" No")
+            Some("No")
         } else {
             None
         }
@@ -1715,7 +1715,20 @@ fn handle_active_shop_key_input(
         }
     };
     if let Some(Some(echo)) = entry_answer_echo {
+        // `shops.md §8.B`: "Where a colon is emitted, the accepted answer
+        // appends directly after it, producing `:Yes` or `:No`; do not insert
+        // an intervening space. A greeting ending in columns 1 through 11
+        // instead receives the single-space continuation shown above." The
+        // greeting already placed that space or that colon, so the echo is
+        // the bare word either way; the engine used to supply a space of its
+        // own and so double-spaced the tavern's row and put the healer's
+        // answer on a row with no colon.
         state.emit_message_line_continuing_row(echo);
+        if echo == "Yes" {
+            // `§8.B`'s per-kind table gives every Yes branch `Yes\n\n` before
+            // its service text.
+            state.push_explicit_blank_message_entry();
+        }
     }
     state.message = message;
 

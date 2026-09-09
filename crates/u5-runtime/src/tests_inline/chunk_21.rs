@@ -2732,10 +2732,13 @@ fn talk_shop_entry_uses_shared_preamble_record_when_shoppe_dat_is_loaded() {
         MoveOutcome::Talked
     );
 
-    // Measured 2026-09-07/08 at four shops: entry prints the greeting record
-    // and nothing else - the invented key summary that used to follow it is
-    // gone (`qa/paired/paws-tavern.tsv` and the three beside it).
-    assert_eq!(state.message.trim(), "Guild preamble two.");
+    // `shops.md §8.B`: a non-arms entry "first emit[s] an opening double
+    // quote, render[s] one record from their shared entry row, then place[s]
+    // the input continuation according to the resulting window-local cursor
+    // column". This record wraps to a four-column final row, which takes the
+    // one-space continuation rather than a colon. The invented key summary
+    // that used to follow the record is gone.
+    assert_eq!(state.message, "\"Guild preamble two. ");
     assert_eq!(state.prng_state, expected_prng);
     assert!(state.active_shop.is_some());
     assert_eq!(state.turn, 1);

@@ -585,6 +585,20 @@ fn layout_message_window_inner(
     }
 }
 
+/// `shops.md §8.B`: the column the window's cursor sits in after a shop's
+/// entry greeting has been printed, which is what selects that entry's input
+/// continuation (`\n:`, one space, or `\n\n:`).
+///
+/// The printer is the same wrap-aware one the message window uses, so this
+/// wraps the text the same way and reports the width of the row it finished
+/// on.
+pub fn wrapped_final_row_columns(text: &str) -> usize {
+    let glyphs = crate::ordinary_glyphs_from_engine_text(text);
+    wrap_rendered_to_width(&glyphs, MESSAGE_WINDOW_WIDTH)
+        .last()
+        .map_or(0, |row| row.len())
+}
+
 fn wrap_rendered_to_width(
     glyphs: &[crate::TlkRenderedGlyph],
     width: usize,

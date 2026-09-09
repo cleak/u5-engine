@@ -4290,6 +4290,22 @@ impl PlayState {
                         ..Default::default()
                     };
                     if let Ok(rendered) = renderer.render_record(record_id, &ctx) {
+                        // `shops.md §8.B`: "**All seven non-arms entries**
+                        // first emit an opening double quote, render one
+                        // record from their shared entry row, then place the
+                        // input continuation according to the resulting
+                        // window-local cursor column ... The record supplies
+                        // the greeting/question and its closing quote."
+                        //
+                        // The engine printed the record bare: Cove's healer
+                        // opened `I bid thee welcome` where the stock game
+                        // opened `"I bid thee welcome`, and its answer row
+                        // never appeared at all.
+                        let greeting = format!("\"{rendered}");
+                        let continuation = crate::shoppe_records::shop_entry_input_continuation(
+                            crate::wrapped_final_row_columns(&greeting),
+                        );
+                        let rendered = format!("{greeting}{continuation}");
                         // Measured 2026-09-07/08 at four shops - the Paws
                         // tavern, the North Britanny inn, Cove's healer and
                         // Cove's herbalist (`qa/paired/paws-tavern.tsv`,
