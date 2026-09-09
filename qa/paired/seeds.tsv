@@ -24,6 +24,7 @@ combat-rounds	seed-combat-rounds	copied from the paired-combat-rounds run profil
 combat-town-attack	seed-combat-town-attack	copied from the paired-combat-town-attack run profile
 combat-town-attack-after-entry	seed-combat-town-attack-after-entry	copied from the paired-combat-town-attack-after-entry run profile
 cove-healer	seed-cove-healer	copied from the paired-cove-healer run profile
+cove-healer-services	seed-cove-healer	the same Cove seed; the service menu's own echoes
 cove-herbalist	seed-cove-herbalist	copied from the paired-cove-herbalist run profile
 doom-endgame-audio	seed-doom-endgame-audio	copied from the paired-doom-endgame-audio run profile
 doom-final-room	seed-doom-final-room	copied from the paired-doom-final-room run profile

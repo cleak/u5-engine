@@ -114,6 +114,48 @@ def decode(path: pathlib.Path) -> list[list[str]] | None:
     return rows
 
 
+# The window's empty cell is glyph code zero, which `decode` renders as its
+# escaped form rather than as a space.
+BLANK_CELLS = {"<00>", "~", "?"}
+
+
+def row_text(row: list[str]) -> str:
+    """A decoded row as comparable text, with blanks and the cursor dropped."""
+    return "".join(" " if cell in BLANK_CELLS else cell for cell in row).rstrip()
+
+
+def classify(left: list[list[str]], right: list[list[str]], rows: list[int]) -> str:
+    """Why a beat differs, so a suite pass can be triaged without eyeballing it.
+
+    The buckets are the ones that actually recur. `stock-idle` and `engine-idle`
+    are not conformance differences at all: one side simply had not reached the
+    beat when the shot was taken, which the walk-up scenarios do routinely
+    because NPC positions run off the host clock. `offset` is the same text a
+    row or two adrift - a row-accounting difference, not a wording one. `cursor`
+    is a single trailing cell. Only `text` is a wording difference.
+    """
+    stock = [row_text(row) for row in left]
+    engine = [row_text(row) for row in right]
+    if not any(stock):
+        return "stock-idle"
+    if not any(engine):
+        return "engine-idle"
+    for shift in (1, -1, 2, -2, 3, -3):
+        lo, hi = max(0, shift), min(ROWS, ROWS + shift)
+        window = range(lo, hi)
+        if not any(stock[index] for index in window):
+            continue
+        if all(stock[index] == engine[index - shift] for index in window):
+            return f"offset{shift:+d}"
+    if len(rows) == 1:
+        a, b = stock[rows[0]], engine[rows[0]]
+        if a.rstrip() == b.rstrip():
+            return "cursor"
+        if abs(len(a) - len(b)) <= 1 and (a.startswith(b) or b.startswith(a)):
+            return "cursor"
+    return "text"
+
+
 def compare(artifact: pathlib.Path) -> tuple[int, int, int]:
     record = json.loads((artifact / "record.json").read_text())
     scenario = record.get("scenario", artifact.name)
@@ -138,11 +180,17 @@ def compare(artifact: pathlib.Path) -> tuple[int, int, int]:
         ]
         if rows:
             differ += 1
-            print(f"  differ {scenario}/{label}: rows {[r + TOP for r in rows]}")
+            kind = classify(left, right, rows)
+            KINDS[kind] = KINDS.get(kind, 0) + 1
+            print(
+                f"  differ {scenario}/{label}: {kind}, rows {[r + TOP for r in rows]}"
+            )
         else:
             same += 1
     return same, differ, skipped
 
+
+KINDS: dict[str, int] = {}
 
 ARTIFACTS = pathlib.Path.home() / "artifacts/u5/paired"
 SCENARIOS = pathlib.Path(__file__).resolve().parent.parent / "paired"
@@ -183,6 +231,13 @@ def main() -> None:
         for index, value in enumerate((same, differ, skipped)):
             total[index] += value
     print(f"\n{total[0]} beat(s) agree, {total[1]} differ, {total[2]} skipped")
+    if KINDS:
+        # `stock-idle`/`engine-idle` are re-run candidates, `offset`/`cursor`
+        # are row accounting, and `text` is the conformance queue.
+        print(
+            "by kind: "
+            + ", ".join(f"{kind} {count}" for kind, count in sorted(KINDS.items()))
+        )
     sys.exit(1 if total[1] else 0)
 
 

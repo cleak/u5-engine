@@ -1,0 +1,80 @@
+# Cove's healer service menu: what `H` and `R` echo there, and what Space
+# does. `shops.md` §8 describes the three services but publishes none of
+# the menu's own echoes; `C` was measured as `Curing` on `cove-healer`'s
+# `cure` beat.
+# requires-seed: the party on the Cove village tile (`--scene BRITANNIA --at 136,90 --time 13:00`)
+both	wait	9000
+both	key	space
+both	wait	4000
+both	key	j
+both	wait	8000
+both	key	e
+both	wait	4000
+both	key	Up
+both	wait	480
+both	key	Up
+both	wait	480
+both	key	Up
+both	wait	480
+both	key	Up
+both	wait	480
+both	key	Up
+both	wait	480
+both	key	Right
+both	wait	480
+both	key	Right
+both	wait	480
+both	key	Right
+both	wait	480
+both	key	Right
+both	wait	480
+both	key	Right
+both	wait	480
+both	key	Right
+both	wait	480
+both	key	o
+both	wait	900
+both	key	Right
+both	wait	1500
+both	key	Right
+both	wait	480
+both	key	Right
+both	wait	480
+both	key	Up
+both	wait	480
+both	key	Right
+both	wait	480
+both	key	Right
+both	wait	480
+both	key	o
+both	wait	900
+both	key	Up
+both	wait	1500
+both	key	Up
+both	wait	480
+both	key	Up
+both	wait	480
+both	key	Right
+both	wait	480
+both	wait	2500
+both	key	l
+both	wait	1200
+both	key	Up
+both	wait	3000
+both	shot	look	Look north
+both	key	t
+both	wait	1200
+both	key	Up
+both	wait	12000
+both	shot	talk	Talk north
+both	key	Y
+both	wait	5000
+both	key	H
+both	wait	5000
+both	shot	heal	H for heal
+both	key	R
+both	wait	5000
+both	shot	resurrect	R for resurrect
+both	key	space
+both	wait	4000
+both	shot	space	Space at the service menu
