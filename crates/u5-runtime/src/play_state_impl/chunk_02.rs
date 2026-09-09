@@ -2084,29 +2084,81 @@ impl PlayState {
         Ok(Some(outcome))
     }
 
-    /// `karma.md §8`: run the Codex reader after E-Enter has echoed
+    /// `karma.md §8`: run the Codex presentation after E-Enter has echoed
     /// `Enter the Shrine of the Codex!`.
     ///
-    /// "Urn reading is gated by the ordained mask set at the virtue shrines.
-    /// The reader walks the eight virtues in the standard virtue order and
-    /// considers only virtues whose ordained bit is set. For the selected
-    /// ordained virtue, the reader sets the matching Codex-read bit and
-    /// displays that virtue's prophecy/Codex text." That text is
-    /// `MISCMSG.DAT`'s, so a profile without the file prints nothing rather
-    /// than engine prose.
+    /// Measured 2026-09-09 (`qa/paired/codex-enter.tsv`) against the original,
+    /// seeded straight onto Britannia `(233, 233)`. The presentation prints
+    /// `MISCMSG.DAT` record `46`, then `37`, then `38`, then one page, each
+    /// with its own authored line feeds:
     ///
-    /// The completed and no-ordained branches publish no line of their own -
-    /// §8 says only that the reader "takes its completed branch instead of
-    /// stamping another virtue" - so neither invents one.
+    /// ```text
+    /// The Codex of Ultimate Wisdom lies before thee...
+    /// The book is open to the page thou dost seek!
+    ///
+    /// Upon the hallowed page thou dost read:
+    ///
+    /// HOW DID YOU GET HERE?
+    /// ```
+    ///
+    /// §8 says the reader "walks the eight virtues in the standard virtue
+    /// order and considers only virtues whose ordained bit is set", and
+    /// publishes no line for the no-ordained branch. Record `39` is that
+    /// line, and the preamble prints whatever the quest state.
+    ///
+    /// The **ordained** page is not implemented. `formats/miscmsg-dat.md §3`
+    /// calls records `37-44` "Urn/Codex prophecy", and this engine read that
+    /// as eight per-virtue pages indexed by virtue - which cannot be right,
+    /// since `37` and `38` are the preamble above. Printing the wrong record
+    /// is worse than printing none, so the stamped branch stays silent until
+    /// `cleak/u5-spec#253` answers which record a quest page comes from. The
+    /// Codex-read bit is still stamped, so quest progress is unaffected.
     pub fn read_codex_urn_after_entry(&mut self, game_dir: &Path) -> io::Result<MoveOutcome> {
-        if let CodexUrnReadOutcome::Stamped(virtue) =
-            read_codex_urn(self.shrine_ordained_mask, &mut self.shrine_codex_mask)
-            && let Some(text) = self.codex_urn_text_for_virtue(game_dir, virtue)?
-            && !text.is_empty()
-        {
-            self.emit_message_line(format!("\n{text}"));
+        let outcome = read_codex_urn(self.shrine_ordained_mask, &mut self.shrine_codex_mask);
+        let Some(messages) = load_misc_messages(game_dir)? else {
+            // A profile without the file logs nothing rather than
+            // substituting engine prose.
+            return Ok(MoveOutcome::Observed);
+        };
+        let mut text = String::new();
+        for index in [
+            MISCMSG_CODEX_ENTRY_NARRATION,
+            MISCMSG_CODEX_PAGE_OPENED,
+            MISCMSG_CODEX_READS_PREFIX,
+        ] {
+            if let Some(record) = messages.record(index) {
+                text.push_str(&record.replace('\r', "\n"));
+            }
         }
+        if matches!(outcome, CodexUrnReadOutcome::NoOrdained)
+            && let Some(record) = messages.record(MISCMSG_CODEX_NO_QUEST_PAGE)
+        {
+            text.push_str(&record.replace('\r', "\n"));
+        }
+        if !text.is_empty() {
+            self.emit_message_line(text);
+        }
+        // Measured: the original draws record `46` and then waits. Sixteen
+        // seconds with no key left it there; the next three keys stepped it
+        // through the remaining records without reaching the command parser,
+        // and the fourth was an ordinary command again. This engine has
+        // already drawn the whole presentation, so the steps only owe the
+        // keys - which is what keeps a scripted Space from becoming a `Pass`
+        // the original never printed.
+        self.codex_presentation_steps = CODEX_PRESENTATION_KEY_STEPS;
         Ok(MoveOutcome::Observed)
+    }
+
+    /// Absorb one key owed to an open Codex presentation.
+    ///
+    /// Returns `true` when the key belonged to the presentation and must not
+    /// reach the command parser.
+    pub fn step_codex_presentation(&mut self) -> bool {
+        if self.codex_presentation_steps == 0 {
+            return false;
+        }
+        self.codex_presentation_steps -= 1;
+        true
     }
 
     pub fn codex_urn_text_for_virtue(

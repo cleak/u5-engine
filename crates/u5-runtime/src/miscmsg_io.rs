@@ -142,6 +142,28 @@ pub const MISCMSG_SHRINE_ENTRY_NARRATION: usize = 45;
 /// §3: "46 | Codex entry | Approach narration for the Codex presentation".
 pub const MISCMSG_CODEX_ENTRY_NARRATION: usize = 46;
 
+/// The Codex presentation's shared preamble, measured 2026-09-09
+/// (`qa/paired/codex-enter.tsv`): record `46`, then record `37`, then record
+/// `38`, then the page itself.
+///
+/// `formats/miscmsg-dat.md §3` calls `37-44` "Urn/Codex prophecy" and this
+/// engine read it as eight per-virtue pages indexed by virtue. It is not an
+/// array: `37` and `38` are this preamble, `39` is the page an unordained
+/// party reads, `40` is a page-turn line, and `41`-`44` are four sequential
+/// runic pages. Asked on `cleak/u5-spec#253`.
+pub const MISCMSG_CODEX_PAGE_OPENED: usize = 37;
+pub const MISCMSG_CODEX_READS_PREFIX: usize = 38;
+/// The page an unordained party turns to. Measured: the original prints it
+/// where `karma.md §8` publishes no line for the no-ordained branch.
+pub const MISCMSG_CODEX_NO_QUEST_PAGE: usize = 39;
+
+/// Keys the Codex presentation absorbs after its first record is drawn.
+///
+/// Measured 2026-09-09 (`qa/paired/codex-enter.tsv`): three keys stepped the
+/// original through the rest of the presentation and printed nothing of their
+/// own; the fourth and fifth printed the ordinary ` Pass` echo.
+pub const CODEX_PRESENTATION_KEY_STEPS: u8 = 3;
+
 /// `karma.md §12`, the Codex-unread arm: record `31` is "the altar's quest
 /// announcement", record `32` opens the quest sentence that the virtue's own
 /// `12..19` record completes, and record `33` is "the instruction to return

@@ -6,6 +6,11 @@
 # its profile is seeded straight onto the Codex cell rather than walked to, so
 # there is no walk-up for town schedules to diverge during
 # (`cleak/u5-engine#22`).
+#
+# The presentation is paced in the original and instant in this engine, so the
+# script waits it out rather than pressing through it: a key sent mid-draw is a
+# `Pass` on one side and a page turn on the other. Pacing is tracked separately
+# from the text contract this scenario measures.
 # requires-seed: the party on the Britannia Codex cell (`--scene BRITANNIA --at 233,233 --time 09:15`)
 both	wait	9000
 both	key	space
@@ -14,11 +19,14 @@ both	key	j
 both	wait	9000
 both	shot	seeded	Journey Onward onto the Codex cell
 both	key	e
-both	wait	4000
-both	shot	entered	E-Enter on the Codex tile
+both	wait	5000
 both	key	space
-both	wait	3000
-both	shot	after	One key later
+both	wait	4000
+both	key	space
+both	wait	4000
+both	key	space
+both	wait	5000
+both	shot	presented	The Codex presentation, stepped to its end
 both	key	m
-both	wait	3000
+both	wait	4000
 both	shot	mix	M is Mix Reagents here, not Codex entry
