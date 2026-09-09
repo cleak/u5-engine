@@ -128,7 +128,7 @@ use u5_runtime::{
     menu_dispatch::{UnifiedMenuDispatch, UnifiedMenuStep},
     moongate_phase_draw, moongate_phase_gate_tile, paint_arms_sell_browser_text_window,
     paint_inn_pickup_register_text_window, paint_prompt_text_window_with_cursor,
-    paint_stats_panel_text_window, paint_talk_shop_text_window, play_options_from_save_bytes_named,
+    paint_stats_panel_text_window, play_options_from_save_bytes_named,
     published_world_location_entries, read_save_image_file, render_play_text_window_system,
     render_return_to_view_playback_frame_over, render_text_panel_rgba, render_text_window_rgba,
     render_text_window_rgba_with_runes, resolve_palette_register,
@@ -16762,17 +16762,25 @@ fn render_integrated_status_framebuffer(
     };
     let mut system = TextWindowSystem::new();
     configure_play_text_windows(&mut system);
-    let message = display_state
-        .active_shop
-        .as_ref()
-        .map(|shop| shop.modal_text(&display_state.message))
-        .unwrap_or_else(|| display_state.message.clone());
-    let mut message_rows = Vec::new();
-    let mut inline_prompt_cursor: Option<(u8, u8)> = None;
+    let message = display_state.message.clone();
+    let message_rows;
+    let inline_prompt_cursor;
+    // `shops.md §8`: a shop's screen is the ordinary append-and-scroll
+    // transcript, carrying the entry greeting, the echoed answer and the
+    // service text in the order they printed. This branch used to replace
+    // that window with `ActiveShopSession::modal_text` - the shop's label on
+    // its own row, then an invented key summary - and drop the transcript
+    // behind it. `qa/tools/paired_compare.py` read Cove's healer as
+    // `Sanctuary.` / `Cure (C), Heal (H), Resurrect (R), or Space.` above
+    // text that was otherwise exact, where the stock game had the tail of
+    // the greeting and its `Yes` echo (`cleak/u5-engine#21`).
+    //
+    // The shop's own window descriptor is still configured: `§8.0` gives the
+    // shop text its own window, and the side panels below draw into it.
     if display_state.active_shop.is_some() {
         configure_talk_shop_text_window(&mut system);
-        paint_talk_shop_text_window(&mut system, &message);
-    } else {
+    }
+    {
         // The message window is drawn straight into the framebuffer by
         // the compositor: its echoed lines carry the two-colour ribbon
         // end cap, which text cells cannot represent.
@@ -24950,7 +24958,7 @@ mod tests {
     }
 
     #[test]
-    fn visual_summary_includes_active_shop_modal_text() {
+    fn visual_summary_of_an_active_shop_carries_only_the_shop_s_own_text() {
         let mut state = test_state(open_grid(), 1, 1);
         state.message = "Mace costs 42 gold.".to_string();
         state.active_shop = Some(ActiveShopSession::ArmsStocked(
@@ -24965,9 +24973,13 @@ mod tests {
         let summary = summarize(&mut state, "", "");
 
         let squished: String = summary.chars().filter(|ch| !ch.is_whitespace()).collect();
-        assert!(squished.contains("Iolo"), "{summary}");
-        assert!(squished.contains("Item1costs42gold"), "{summary}");
+        // `shops.md §8`: the shop's window carries the shop's own printed
+        // text and nothing else. The engine used to prepend
+        // `ActiveShopSession::modal_text` - the shop label on its own row and
+        // an invented state summary - above it.
         assert!(squished.contains("Macecosts42gold."), "{summary}");
+        assert!(!squished.contains("Item1costs42gold"), "{summary}");
+        assert!(!squished.contains("IolosBows."), "{summary}");
         // The invented "STATS" header is gone; the roster starts at the
         // panel's first row.
         assert!(squished.contains("Avatar"), "{summary}");
@@ -24995,7 +25007,9 @@ mod tests {
             false,
         );
 
-        assert_ne!(hash_bytes(&before.rgba), hash_bytes(&after.rgba));
+        // The shop's text is transcript rows now, which the caller paints
+        // over the surface rather than into it, so the rows are what moved.
+        assert_ne!(before.message_rows, after.message_rows);
     }
 
     #[test]

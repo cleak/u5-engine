@@ -30,9 +30,6 @@ pub const BLACKTHORN_SECOND_DEMAND: &str = "\"Now tell me, what is the Mantra of
 /// wording escalates and the second ask names the companion at risk.
 pub const BLACKTHORN_FIRST_WRONG_LINE: &str =
     "\"Make not the mistake of laughing at me, simple one!\"";
-/// The threat that follows it. `{}` takes the companion's name.
-pub const BLACKTHORN_SAND_THREAT: &str =
-    "\"I will ask thee until the sand has fallen. And then will {} die!\"";
 /// `blackthorn.md §4.1`: record `8` "begins with two line feeds and the
 /// quoted sand/threat prefix" and stops where the name goes. This is that
 /// record's shape, for the paths that run without `MISCMSG.DAT`.

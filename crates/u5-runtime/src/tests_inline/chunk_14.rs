@@ -2929,16 +2929,16 @@
                 .bottom_right_x,
             MESSAGE_TEXT_WINDOW_RIGHT
         );
-        assert!(
-            system.cell(MESSAGE_WINDOW_LEFT, MESSAGE_WINDOW_TOP).is_none(),
-            "Talk entry newline leaves the window's first row untouched"
-        );
-        // The window is sixteen columns wide (`RETRACTIONS.md` R344), so
-        // the modal text wraps; compare with whitespace squeezed out.
+        // `shops.md §8`: an active shop keeps its own window descriptor but
+        // its text is the ordinary message window's, so the shop's line
+        // starts at the window's own first row. The engine used to open with
+        // a carriage return and line feed and then paint
+        // `ActiveShopSession::modal_text` - the shop label on its own row
+        // and an invented state summary - above the printed line.
         let squished: String = main.chars().filter(|ch| !ch.is_whitespace()).collect();
-        assert!(squished.contains("Iolo"), "{main}");
-        assert!(squished.contains("Item1costs42gold"), "{main}");
         assert!(squished.contains("Macecosts42gold."), "{main}");
+        assert!(!squished.contains("Item1costs42gold"), "{main}");
+        assert!(!squished.contains("IolosBows."), "{main}");
         assert_eq!(
             system
                 .region_rows(

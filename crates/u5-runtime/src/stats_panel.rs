@@ -184,17 +184,15 @@ pub fn render_play_text_window_system(
 ) -> TextWindowSystem {
     let mut system = TextWindowSystem::new();
     configure_play_text_windows(&mut system);
-    let message = state
-        .active_shop
-        .as_ref()
-        .map(|shop| shop.modal_text(&state.message))
-        .unwrap_or_else(|| state.message.clone());
+    // `shops.md §8`: the shop's screen is the ordinary message window's
+    // append-and-scroll transcript, not a modal repaint. The label row and
+    // key summary `ActiveShopSession::modal_text` prepended here are the
+    // engine's own; see the same change in the Bevy shell.
+    let message = state.message.clone();
     if state.active_shop.is_some() {
         configure_talk_shop_text_window(&mut system);
-        paint_talk_shop_text_window(&mut system, &message);
-    } else {
-        paint_message_text_window(&mut system, &message);
     }
+    paint_message_text_window(&mut system, &message);
     paint_stats_panel_text_window(&mut system, state, active_cursor);
     if state.active_shop.is_some() {
         paint_arms_sell_browser_text_window(&mut system, state);
