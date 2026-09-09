@@ -460,11 +460,12 @@ impl PlayState {
     /// the per-tick NPC walker skips every roster slot whose type byte is
     /// zero and the type array was never loaded".
     ///
-    /// The roster is still parsed here, because this engine does not yet
-    /// persist the `0x07B4..0x105F` band that carries the schedule table,
-    /// the dialogue indices and the per-NPC runtime block
-    /// (`formats/saved-gam.md §12`). Matching the restored records against
-    /// the roster is how a resumed NPC keeps its schedule and its
+    /// The roster is still parsed here, because this engine's *load* path
+    /// does not yet consume the `0x07B4..0x105F` band that carries the
+    /// schedule table, the dialogue indices and the per-NPC runtime block
+    /// (`formats/saved-gam.md §12`); the save writer does emit it, through
+    /// [`crate::npc_band::write_npc_band`]. Matching the restored records
+    /// against the roster is how a resumed NPC keeps its schedule and its
     /// conversation; the records themselves, not the hour, decide who is
     /// present and where they stand.
     pub fn load_scheduled_npcs_from_existing_active_objects(&mut self, slots: &[NpcSlot]) {
@@ -574,9 +575,9 @@ impl PlayState {
     /// The pairing is by tile class and floor, taking roster slots in
     /// order. The original pairs them through the NPC's linked-slot field
     /// inside the `0x07B4..0x105F` band (`formats/saved-gam.md §12`), which
-    /// this engine does not persist yet; two roster slots of the same class
-    /// on one floor can therefore swap schedules across a save, which the
-    /// original does not do.
+    /// this engine now writes but does not read back; until the load path
+    /// reads it, two roster slots of the same class on one floor can still
+    /// swap schedules across a save, which the original does not do.
     ///
     /// The floor is compared in the save image's own signed encoding
     /// (`formats/saved-gam.md §6`, party Z: "`0x00` is the entry floor,

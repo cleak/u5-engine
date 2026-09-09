@@ -458,6 +458,25 @@ impl PlayState {
         let active_table = encode_active_object_table(&self.active_objects)?;
         save[SAVE_ACTIVE_OBJECTS_OFFSET..SAVE_ACTIVE_OBJECTS_OFFSET + OOL_PLANE_LEN]
             .copy_from_slice(&active_table);
+        // `formats/saved-gam.md §12`: "The final 2,220 bytes,
+        // `0x07B4..0x105F`, contain the current location's live NPC family
+        // ... **An active-object-only writer cannot restore a working town
+        // cast.**" `RETRACTIONS.md` R341: a producer that "declines to
+        // persist the band at all ... resumes a **completely empty
+        // location**", because "the per-tick NPC walker skips every roster
+        // slot whose type byte is zero and the type array was never
+        // loaded".
+        //
+        // §12.3 scopes the write: "A town-family scene (`1..32` at file
+        // `0x02ED`) reaches the **preserving** entry mode", the only mode
+        // for which the band is a live cast. A world save (`scene 0`) or a
+        // dungeon save (`scene > 32`) leaves every band byte at its
+        // template value; the three dungeon-mode bytes at `0x105C..0x105E`
+        // are "dungeon-mode state, not an NPC field" and the engine has no
+        // live source for them in any scene.
+        if scene_byte_is_town_family(scene) && matches!(self.area, Area::Town { .. }) {
+            write_npc_band(&mut save, &self.npcs, self.active_objects.len())?;
+        }
 
         disk_session.request_operation(DiskOperationFamily::GameplayResources);
         let (saved_ool, _) = stage_saved_ool_for_save(game_dir, entry_required_disk)?;

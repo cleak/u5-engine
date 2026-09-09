@@ -736,10 +736,13 @@ pub const SAVE_AVATAR_NAME_LEN: usize = SAVE_CHARACTER_NAME_LEN;
 /// of truth.
 pub const SAVE_ACTIVE_OBJECTS_OFFSET: usize = SAVE_ACTIVE_OBJECT_TABLE_OFFSET;
 /// `formats/saved-gam.md §12` (spec `0170809`): 2,220-byte tail at file
-/// offsets `0x07B4..=0x105F` that follows the active-object table. In
-/// memory the region holds the NPC schedule blob, NPC runtime state, NPC
-/// path queues, the NPC type array, the per-NPC stuck counters and the
-/// world-tile render buffer.
+/// offsets `0x07B4..=0x105F` that follows the active-object table. It
+/// holds the six NPC tables - live schedules, NPC runtime records, route
+/// buffers, route cursors, the type array and the stuck counters - plus
+/// the engagement event pair, six opaque bytes and four final mode-state
+/// bytes. `RETRACTIONS.md` R395 (issue #217) withdraws the claim that the
+/// world-tile render buffer sits at the tail of this band: "The 1,024-byte
+/// location/world tile buffer is outside the 4,192-byte save image."
 ///
 /// **This band is durable gameplay state, not scratch.** "A save taken
 /// inside a town-family location carries that location's entire live cast
@@ -747,17 +750,15 @@ pub const SAVE_ACTIVE_OBJECTS_OFFSET: usize = SAVE_ACTIVE_OBJECT_TABLE_OFFSET;
 /// reload it: on a Journey Onward the restored image **is** the cast."
 /// `RETRACTIONS.md` R341 withdraws the earlier reading this comment
 /// carried - that the contents "are transient for gameplay" and that "a
-/// clean implementation may rebuild them on load". Only the world-tile
-/// render buffer at the tail of the band is genuinely rebuildable.
+/// clean implementation may rebuild them on load".
 ///
-/// This engine does not write the band yet: it persists the
-/// active-object table of §8.1 and pairs restored records against the
-/// `.NPC` roster on a preserving entry (see
-/// [`crate::PlayState::link_npcs_to_existing_active_objects`]), which
-/// reproduces the empty-location and mid-route-position behaviour but not
-/// the queued paths, pursuit targets or stuck counters. The bytes are
-/// preserved byte-for-byte through a save either way. Promote the offset
-/// and length so the tail span has one named source of truth.
+/// The save writer now emits the six NPC tables for a town-family scene;
+/// [`crate::npc_band`] owns the encoding and the per-sub-table constants
+/// below name the offsets. The load path still rebuilds the cast by
+/// pairing restored active-object records against the `.NPC` roster (see
+/// [`crate::PlayState::link_npcs_to_existing_active_objects`]) rather
+/// than reading the band back. Promote the offset and length so the tail
+/// span has one named source of truth.
 pub const SAVE_RESERVED_TAIL_OFFSET: usize = SAVE_ACTIVE_OBJECT_TABLE_OFFSET + OOL_PLANE_LEN;
 pub const SAVE_RESERVED_TAIL_LEN: usize = 2_220;
 pub const SAVE_PARTY_SIZE_OFFSET: usize = 0x02b5;
@@ -1986,3 +1987,166 @@ pub const ACTIVE_OBJECT_PRUNE_WINDOW_EXTENT: u8 = 31;
 /// while the native prune pass compares unsigned positions from a corner.
 pub const WORLD_ENCOUNTER_SPAWN_OFFSET_MAX_AXIS: u8 = 32;
 pub const LOCATION_MARKER_CLEANUP_TILE: u8 = 16;
+
+// ---------------------------------------------------------------------------
+// `formats/saved-gam.md §12` - the saved NPC family and final mode state.
+// ---------------------------------------------------------------------------
+//
+// §12: "The final 2,220 bytes, `0x07B4..0x105F`, contain the current
+// location's live NPC family and several other fields. ... An
+// active-object-only writer cannot restore a working town cast."
+//
+// §12.1 gives the complete band map. Every offset below is anchored to the
+// previous sub-table's end so the map has one source of truth, exactly as
+// §12.1's own second column ("Offsets in the second column are relative to
+// `0x07B4`") is a running total.
+
+/// `formats/saved-gam.md §12`: the band begins at file offset `0x07B4`,
+/// immediately after the active-object table. Anchored to
+/// [`SAVE_RESERVED_TAIL_OFFSET`], which names the same span.
+pub const SAVE_NPC_BAND_OFFSET: usize = SAVE_RESERVED_TAIL_OFFSET;
+/// `formats/saved-gam.md §12.1`: "Parallel NPC tables use the same slot
+/// index `0..31`; slot zero is reserved, and ordinary scheduling walks
+/// slots `1..31` whose type byte is nonzero." Anchored to the roster's own
+/// slot count so the band and the `.NPC` sub-map cannot drift.
+pub const SAVE_NPC_BAND_SLOT_COUNT: usize = crate::NPC_SLOTS_PER_SUB_MAP;
+/// `formats/saved-gam.md §12.1`: "slot zero is reserved". The writer never
+/// touches it.
+pub const SAVE_NPC_BAND_RESERVED_SLOT: usize = 0;
+/// `formats/saved-gam.md §12.1`, row 1: `0x07B4..0x07B7`, "Opaque
+/// pass-through bytes; no field meaning is assigned here."
+pub const SAVE_NPC_BAND_OPAQUE_HEAD_OFFSET: usize = SAVE_NPC_BAND_OFFSET;
+pub const SAVE_NPC_BAND_OPAQUE_HEAD_LEN: usize = 4;
+/// `formats/saved-gam.md §12.1`, row 2: `0x07B8..0x09B7`, "Live schedules:
+/// 32 records of 16 bytes." §12.1 also fixes the shape: "The schedule
+/// record has exactly the source `.NPC` shape", so the stride is anchored
+/// to [`crate::NPC_SCHEDULE_RECORD_LEN`].
+pub const SAVE_NPC_BAND_SCHEDULES_OFFSET: usize =
+    SAVE_NPC_BAND_OPAQUE_HEAD_OFFSET + SAVE_NPC_BAND_OPAQUE_HEAD_LEN;
+pub const SAVE_NPC_BAND_SCHEDULE_RECORD_LEN: usize = crate::NPC_SCHEDULE_RECORD_LEN;
+pub const SAVE_NPC_BAND_SCHEDULES_LEN: usize =
+    SAVE_NPC_BAND_SLOT_COUNT * SAVE_NPC_BAND_SCHEDULE_RECORD_LEN;
+/// `formats/saved-gam.md §12.1`, row 3: `0x09B8..0x0BB7`, "NPC runtime: 32
+/// records of 16 bytes, described below." The record is "eight words", all
+/// little-endian.
+pub const SAVE_NPC_BAND_RUNTIME_OFFSET: usize =
+    SAVE_NPC_BAND_SCHEDULES_OFFSET + SAVE_NPC_BAND_SCHEDULES_LEN;
+pub const SAVE_NPC_BAND_RUNTIME_WORD_COUNT: usize = 8;
+pub const SAVE_NPC_BAND_RUNTIME_RECORD_LEN: usize = SAVE_NPC_BAND_RUNTIME_WORD_COUNT * 2;
+pub const SAVE_NPC_BAND_RUNTIME_LEN: usize =
+    SAVE_NPC_BAND_SLOT_COUNT * SAVE_NPC_BAND_RUNTIME_RECORD_LEN;
+/// `formats/saved-gam.md §12.1` runtime record, word `0`: "State | Full
+/// 16-bit state, with ordinary values `0..8` from
+/// `systems/npc-schedules.md` Section 7; the high byte is not padding."
+pub const SAVE_NPC_BAND_RUNTIME_STATE_OFFSET: usize = 0;
+/// Word `2`: "Logical X | NPC's current map column, including while
+/// following a route."
+pub const SAVE_NPC_BAND_RUNTIME_X_OFFSET: usize = SAVE_NPC_BAND_RUNTIME_STATE_OFFSET + 2;
+/// Word `4`: "Logical Y | NPC's current map row."
+pub const SAVE_NPC_BAND_RUNTIME_Y_OFFSET: usize = SAVE_NPC_BAND_RUNTIME_X_OFFSET + 2;
+/// Word `6`: "Logical floor | Current floor. Initialization zero-extends
+/// the source byte: a basement floor byte `0xFF` is stored as word
+/// `0x00FF`."
+pub const SAVE_NPC_BAND_RUNTIME_Z_OFFSET: usize = SAVE_NPC_BAND_RUNTIME_Y_OFFSET + 2;
+/// Word `8`: "Type mirror | Word copy of the NPC type byte."
+pub const SAVE_NPC_BAND_RUNTIME_TYPE_MIRROR_OFFSET: usize = SAVE_NPC_BAND_RUNTIME_Z_OFFSET + 2;
+/// Word `10`: "Dialogue index | Word initialized by zero-extending the
+/// source dialogue byte. ... There is no separate saved 32-byte dialogue
+/// array."
+pub const SAVE_NPC_BAND_RUNTIME_DIALOGUE_OFFSET: usize =
+    SAVE_NPC_BAND_RUNTIME_TYPE_MIRROR_OFFSET + 2;
+/// Word `12`: "Linked object | Index into the saved active-object table,
+/// or zero when no object is linked. It is an object-table index, not the
+/// NPC's roster index."
+pub const SAVE_NPC_BAND_RUNTIME_LINKED_OBJECT_OFFSET: usize =
+    SAVE_NPC_BAND_RUNTIME_DIALOGUE_OFFSET + 2;
+/// `formats/saved-gam.md §12.1`: "Linked object | ... or zero when no
+/// object is linked."
+pub const SAVE_NPC_BAND_RUNTIME_LINKED_OBJECT_NONE: u16 = 0;
+/// Word `14`: "Cached waypoint | Last reached waypoint index, normally
+/// `0..2`; retain it independently of the waypoint selected by the current
+/// hour."
+pub const SAVE_NPC_BAND_RUNTIME_CACHED_WP_OFFSET: usize =
+    SAVE_NPC_BAND_RUNTIME_LINKED_OBJECT_OFFSET + 2;
+/// `formats/saved-gam.md §12.1`, row 4: `0x0BB8..0x0FB7`, "Routes: 32
+/// buffers of 32 bytes, one per NPC."
+pub const SAVE_NPC_BAND_ROUTES_OFFSET: usize =
+    SAVE_NPC_BAND_RUNTIME_OFFSET + SAVE_NPC_BAND_RUNTIME_LEN;
+pub const SAVE_NPC_BAND_ROUTE_BUFFER_LEN: usize = 32;
+pub const SAVE_NPC_BAND_ROUTES_LEN: usize =
+    SAVE_NPC_BAND_SLOT_COUNT * SAVE_NPC_BAND_ROUTE_BUFFER_LEN;
+/// `formats/saved-gam.md §12.2`: "A route buffer holds up to sixteen
+/// two-byte runs." Anchored to the buffer length so the two cannot drift.
+pub const SAVE_NPC_BAND_ROUTE_RUN_LEN: usize = 2;
+pub const SAVE_NPC_BAND_ROUTE_MAX_RUNS: usize =
+    SAVE_NPC_BAND_ROUTE_BUFFER_LEN / SAVE_NPC_BAND_ROUTE_RUN_LEN;
+/// `formats/saved-gam.md §12.2`: "The first byte of a run is its remaining
+/// step count; the second is a direction: `1` east, `2` north, `3` west,
+/// `4` south." These are **not** the engine's internal BFS codes of
+/// `npc-schedules.md §8.2` (`1` west, `2` south, `3` east, `4` north);
+/// [`crate::npc_band`] translates between the two.
+pub const SAVE_NPC_BAND_ROUTE_DIR_EAST: u8 = 1;
+pub const SAVE_NPC_BAND_ROUTE_DIR_NORTH: u8 = 2;
+pub const SAVE_NPC_BAND_ROUTE_DIR_WEST: u8 = 3;
+pub const SAVE_NPC_BAND_ROUTE_DIR_SOUTH: u8 = 4;
+/// `formats/saved-gam.md §12.1`, row 5: `0x0FB8..0x0FF7`, "Route cursors:
+/// 32 words, one per NPC."
+pub const SAVE_NPC_BAND_ROUTE_CURSORS_OFFSET: usize =
+    SAVE_NPC_BAND_ROUTES_OFFSET + SAVE_NPC_BAND_ROUTES_LEN;
+pub const SAVE_NPC_BAND_ROUTE_CURSORS_LEN: usize = SAVE_NPC_BAND_SLOT_COUNT * 2;
+/// `formats/saved-gam.md §12.2`: "The cursor is a **byte offset within
+/// that NPC's buffer**, normally even and in `0..30`; `0xFFFF` means
+/// inactive."
+pub const SAVE_NPC_BAND_ROUTE_CURSOR_INACTIVE: u16 = 0xFFFF;
+/// `formats/saved-gam.md §12.1`, row 6: `0x0FF8..0x1017`, "NPC types: one
+/// byte per slot, using `formats/npc.md` Section 6."
+pub const SAVE_NPC_BAND_TYPES_OFFSET: usize =
+    SAVE_NPC_BAND_ROUTE_CURSORS_OFFSET + SAVE_NPC_BAND_ROUTE_CURSORS_LEN;
+pub const SAVE_NPC_BAND_TYPES_LEN: usize = SAVE_NPC_BAND_SLOT_COUNT;
+/// `formats/npc.md §6`: "`0` | Empty slot. The scheduler skips the slot."
+pub const SAVE_NPC_BAND_TYPE_EMPTY: u8 = 0;
+/// `formats/saved-gam.md §12.1`, row 7: `0x1018`, "Pending NPC engagement
+/// event kind: zero after the schedule-pass reset, `0x74` or `0x61` when
+/// an engagement is raised."
+pub const SAVE_NPC_BAND_EVENT_KIND_OFFSET: usize =
+    SAVE_NPC_BAND_TYPES_OFFSET + SAVE_NPC_BAND_TYPES_LEN;
+/// `formats/saved-gam.md §12.1`, row 8: `0x1019`, "NPC roster index
+/// associated with that event; zero means no pending NPC index."
+pub const SAVE_NPC_BAND_EVENT_NPC_INDEX_OFFSET: usize = SAVE_NPC_BAND_EVENT_KIND_OFFSET + 1;
+/// `formats/saved-gam.md §12.1`, row 9: `0x101A..0x101B`, "Opaque
+/// pass-through bytes; no field meaning is assigned here."
+pub const SAVE_NPC_BAND_OPAQUE_TAIL_OFFSET: usize = SAVE_NPC_BAND_EVENT_NPC_INDEX_OFFSET + 1;
+pub const SAVE_NPC_BAND_OPAQUE_TAIL_LEN: usize = 2;
+/// `formats/saved-gam.md §12.1`, row 10: `0x101C..0x105B`, "Stuck
+/// counters: 32 words, one per NPC; lifecycle in
+/// `systems/npc-schedules.md` Sections 4 and 9.1."
+pub const SAVE_NPC_BAND_STUCK_COUNTERS_OFFSET: usize =
+    SAVE_NPC_BAND_OPAQUE_TAIL_OFFSET + SAVE_NPC_BAND_OPAQUE_TAIL_LEN;
+pub const SAVE_NPC_BAND_STUCK_COUNTERS_LEN: usize = SAVE_NPC_BAND_SLOT_COUNT * 2;
+/// `formats/saved-gam.md §12.1`, row 11: `0x105C`, "Dungeon
+/// arrival/movement selector; dungeon-mode state, not an NPC field."
+pub const SAVE_NPC_BAND_DUNGEON_ARRIVAL_SELECTOR_OFFSET: usize =
+    SAVE_NPC_BAND_STUCK_COUNTERS_OFFSET + SAVE_NPC_BAND_STUCK_COUNTERS_LEN;
+/// `formats/saved-gam.md §12.1`, row 12: `0x105D`, "Dungeon facing;
+/// dungeon-mode state, not an NPC field."
+pub const SAVE_NPC_BAND_DUNGEON_FACING_OFFSET: usize =
+    SAVE_NPC_BAND_DUNGEON_ARRIVAL_SELECTOR_OFFSET + 1;
+/// `formats/saved-gam.md §12.1`, row 13: `0x105E`, "Dungeon view/flavour
+/// state; preserve outside dungeon play."
+pub const SAVE_NPC_BAND_DUNGEON_VIEW_STATE_OFFSET: usize = SAVE_NPC_BAND_DUNGEON_FACING_OFFSET + 1;
+/// `formats/saved-gam.md §12.1`, row 14: `0x105F`, "Pending shipwright
+/// delivery class/payload, specified in Section 9.3." Already owned by
+/// [`SAVE_PENDING_VEHICLE_CLASS_OFFSET`]; anchored here so the band map
+/// closes on the same byte.
+pub const SAVE_NPC_BAND_SHIPWRIGHT_CLASS_OFFSET: usize =
+    SAVE_NPC_BAND_DUNGEON_VIEW_STATE_OFFSET + 1;
+/// `formats/saved-gam.md §12`: "The final 2,220 bytes, `0x07B4..0x105F`".
+/// Anchored to the last band byte so the sum of the sub-tables is checked
+/// against the published total.
+pub const SAVE_NPC_BAND_LEN: usize =
+    SAVE_NPC_BAND_SHIPWRIGHT_CLASS_OFFSET + 1 - SAVE_NPC_BAND_OFFSET;
+/// `formats/saved-gam.md §12.3`: "A town-family scene (`1..32` at file
+/// `0x02ED`) reaches the **preserving** entry mode", which is the only
+/// mode for which the band is the location's live cast.
+pub const SAVE_TOWN_FAMILY_SCENE_FIRST: u8 = 1;
+pub const SAVE_TOWN_FAMILY_SCENE_LAST: u8 = 32;

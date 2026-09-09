@@ -78,6 +78,7 @@ pub mod miscmsg_io;
 pub mod moongate;
 pub mod moongate_phase;
 pub mod moongate_transit;
+pub mod npc_band;
 pub mod npc_runtime;
 pub mod ool_audit;
 pub mod outdoor_ranged_attack;
@@ -632,6 +633,7 @@ pub use moongate_transit::{
     moongate_transit_stage_a_pixel_order, moongate_transit_steps, run_moongate_transit,
     run_moongate_transit_presentation,
 };
+pub use npc_band::*;
 pub use npc_runtime::{
     DoorTracker, LocationNpcStartMarkers, NPC_DEFAULT_PERSON_SPRITE_TILE,
     NPC_DIALOG_ID_HIGH_FALLBACK, NPC_DIALOG_ID_HIGH_FIRST, NPC_DIALOG_ID_HIGH_LAST,
@@ -1067,6 +1069,7 @@ mod tests {
     include!("tests_inline/recovered_chunk_17.rs");
     include!("tests_inline/npc_schedules_conformance.rs");
     include!("tests_inline/save_fidelity.rs");
+    include!("tests_inline/npc_band_conformance.rs");
     include!("tests_inline/spec_conformance_chunk_07.rs");
     include!("tests_inline/variant_rescope.rs");
     include!("tests_inline/combat_frame_conformance.rs");
