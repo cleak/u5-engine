@@ -1515,6 +1515,43 @@ fn town_open_revealed_below_ground_secret_door_takes_the_ordinary_door_path() {
 }
 
 #[test]
+fn codex_urn_is_reachable_without_a_sidecar() {
+    // `karma.md §8`: reading the Codex is the middle state of the shrine quest
+    // cycle - "1. Correct shrine mantra ... 2. Reading the corresponding Codex
+    // urn/page sets the Codex-read bit. 3. Returning to the shrine with both
+    // bits set ...". The lookup used to return early whenever `codex_urns.tsv`
+    // was absent, and no shipped profile carries one, so no virtue could ever
+    // be completed.
+    //
+    // `catalogs/gazetteer.md §7` publishes the cell: "The shrine tile itself
+    // is at `(233, 233)`."
+    let dir = debug_game_dir();
+    let (x, y) = crate::PUBLISHED_CODEX_URN_COORDINATE;
+    // `world_state` seats the party in the Underworld; the Codex is a
+    // Britannia landmark.
+    let mut state = world_state(open_world_grid(), x, y);
+    state.area = Area::World {
+        plane: WorldPlane::Britannia,
+    };
+
+    let entry = state
+        .current_codex_urn_entry(&dir)
+        .unwrap()
+        .expect("the published Codex cell resolves with no sidecar present");
+    assert_eq!((entry.x, entry.y), (x, y));
+    assert_eq!(entry.plane, WorldPlane::Britannia);
+
+    // One cell away is not the Codex.
+    let mut elsewhere = world_state(open_world_grid(), x, y + 2);
+    elsewhere.area = Area::World {
+        plane: WorldPlane::Britannia,
+    };
+    assert!(elsewhere.current_codex_urn_entry(&dir).unwrap().is_none());
+    let _ = &mut state;
+    let _ = fs::remove_dir_all(dir);
+}
+
+#[test]
 fn town_ground_floor_secret_door_reveal_is_locked() {
     // `RETRACTIONS.md` R448 / `doors-and-z-transitions.md` §8: "direct O-Open
     // on the ground/upper-floor reveal prints `Locked!\n` and leaves the door

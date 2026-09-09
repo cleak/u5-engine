@@ -1047,7 +1047,6 @@ impl PlayState {
                     PROTECTION_COST,
                     PROTECTION_ACTIVE_EFFECT_TAG,
                     PROTECTION_ACTIVE_EFFECT_DURATION,
-                    "Protection",
                 ))
             }
             "IMX" => {
@@ -1303,7 +1302,6 @@ impl PlayState {
                     QUICKNESS_COST,
                     QUICKNESS_ACTIVE_EFFECT_TAG,
                     QUICKNESS_ACTIVE_EFFECT_DURATION,
-                    "Quickness",
                 ))
             }
             "AQW" => {
@@ -1317,7 +1315,6 @@ impl PlayState {
                     MASS_CHARM_COST,
                     MASS_CHARM_ACTIVE_EFFECT_TAG,
                     MASS_CHARM_ACTIVE_EFFECT_DURATION,
-                    "Mass charm",
                 ))
             }
             "AI" => {
@@ -1331,7 +1328,6 @@ impl PlayState {
                     NEGATE_MAGIC_COST,
                     NEGATE_MAGIC_ACTIVE_EFFECT_TAG,
                     NEGATE_MAGIC_ACTIVE_EFFECT_DURATION,
-                    "Negate magic",
                 ))
             }
             _ => {
@@ -2137,9 +2133,15 @@ impl PlayState {
         let Area::World { plane } = self.area else {
             return Ok(None);
         };
-        let Some(entries) = load_codex_urn_entries(game_dir)? else {
-            return Ok(None);
-        };
+        // The sidecar is an override, not the only source. It used to be the
+        // only source - `else { return Ok(None) }` - and no shipped profile
+        // carries a `codex_urns.tsv`, so the urn was unreachable and with it
+        // every virtue quest, whose middle step is reading the Codex
+        // (`karma.md` §8). Its sibling tables were converted to native rows
+        // and this one was missed; `published_codex_urn_entries` is that
+        // conversion.
+        let entries = load_codex_urn_entries(game_dir)?
+            .unwrap_or_else(crate::world_tables::published_codex_urn_entries);
         let tile = self.grid[world_cell_index(self.player.x, self.player.y)];
         Ok(entries.into_iter().find(|entry| {
             entry.plane == plane

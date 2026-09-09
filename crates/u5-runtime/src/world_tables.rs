@@ -161,6 +161,40 @@ pub struct CodexUrnEntry {
     pub expected_tile: Option<u8>,
 }
 
+/// `catalogs/gazetteer.md` §7: "The shrine tile itself is at `(233, 233)`. The
+/// gate the player actually meets is one cell of open approach at
+/// `(233, 235)`" - the Shrine of the Codex, "a separate landmark with its own
+/// tile", on the Britannia surface.
+pub const PUBLISHED_CODEX_URN_COORDINATE: (usize, usize) = (233, 233);
+
+/// The published Codex cell as a [`CodexUrnEntry`], for the scan that runs
+/// when the game directory publishes no sidecar of its own.
+///
+/// Without this the urn was unreachable in every shipped profile: the lookup
+/// returned early whenever `codex_urns.tsv` was absent, and no profile ships
+/// one. `karma.md` §8 makes reading the Codex the middle state of the shrine
+/// quest cycle - "1. Correct shrine mantra ... 2. Reading the corresponding
+/// Codex urn/page sets the Codex-read bit. 3. Returning to the shrine with
+/// both bits set ..." - so with no urn to read, no virtue could be completed
+/// at all. Its sibling tables (`shrines.tsv`, `eternal_flames.tsv`) were given
+/// native rows and this one was left behind.
+///
+/// `expected_tile` is `None` deliberately: §8 says the handler runs "when the
+/// party kneels on the urn/Codex special tile", and `catalogs/tile-catalog.md`
+/// carries both a `0x11` "Codex shrine marker" and a `0x41` "the Codex"
+/// without saying which one the `M` kneel consumes here. `cleak/u5-spec#250`
+/// asks. Until it answers, the published coordinate is the gate and the tile
+/// is not second-guessed.
+pub fn published_codex_urn_entries() -> Vec<CodexUrnEntry> {
+    let (x, y) = PUBLISHED_CODEX_URN_COORDINATE;
+    vec![CodexUrnEntry {
+        plane: WorldPlane::Britannia,
+        x,
+        y,
+        expected_tile: None,
+    }]
+}
+
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub struct EternalFlameEntry {
     pub target: PlayTarget,
