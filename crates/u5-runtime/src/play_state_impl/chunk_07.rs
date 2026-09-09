@@ -3838,6 +3838,30 @@ impl PlayState {
             return Ok(Some(outcome));
         }
         if behavior.raises_guard_event() {
+            // `town-mode.md §14` / `blackthorn.md §3`: "The arrest sequence
+            // itself branches on the current location **before it prints
+            // anything**. Inside Lord Blackthorn's Castle, and while the
+            // shared party-capability check reports that at least one member
+            // can act or is asleep, it plays the Blackthorn audience/capture
+            // cinematic ... In every other location it prints the arrest
+            // challenge."
+            //
+            // This engine opened the challenge everywhere and reached the
+            // audience only if the player then answered `Y`, so walking up
+            // the palace approach read `"Thou art under arrest!"` /
+            // `"Wilt thou come quietly?"` where the stock game was already
+            // asking the first mantra. Caught at `bt-audience`'s `ask1` beat
+            // by `qa/tools/paired_compare.py` (`cleak/u5-engine#21`).
+            if scene.byte == crate::blackthorn::BLACKTHORN_CAPTIVE_CELL_SCENE {
+                // `RETRACTIONS.md` R442: with nobody able to act and nobody
+                // asleep the helper "returns silently without an audience or
+                // surrender prompt"; the exploration loop's own defeat check
+                // owns the rescue from there.
+                return match self.party_capability() {
+                    PartyCapability::Defeated => Ok(None),
+                    _ => self.begin_blackthorn_audience_capture(game_dir),
+                };
+            }
             self.pending_town_arrest = Some(TownArrestPrompt {
                 scene_byte: scene.byte,
                 floor,
