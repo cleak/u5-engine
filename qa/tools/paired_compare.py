@@ -141,7 +141,13 @@ def classify(left: list[list[str]], right: list[list[str]], rows: list[int]) -> 
         return "stock-idle"
     if not any(engine):
         return "engine-idle"
-    for shift in (1, -1, 2, -2, 3, -3):
+    # The window is `ROWS` tall, so a transcript that is out of step can be
+    # adrift by almost all of it - an 8-row shift turned up in the arms shop,
+    # and probing only +-3 reported it as a wording difference. Nearest shifts
+    # first, so the smallest explanation wins.
+    for shift in sorted(
+        (s for s in range(-(ROWS - 1), ROWS) if s), key=lambda s: (abs(s), s)
+    ):
         lo, hi = max(0, shift), min(ROWS, ROWS + shift)
         window = range(lo, hi)
         if not any(stock[index] for index in window):

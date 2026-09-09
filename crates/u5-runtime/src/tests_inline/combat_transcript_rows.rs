@@ -83,24 +83,37 @@ fn opening_a_turn_after_the_conflict_banner_prints_the_banner_once() {
     // lands on row 12 - the row under the one the redraw's leading feed
     // spent (`cleak/u5-engine#11`).
     assert_eq!(
-        rows[1..6],
+        rows[1..7],
         [
             combat_banner_line(),
             String::new(),
             "Avatar, armed".to_string(),
             "with bare hands:".to_string(),
+            // `commands.md §5.1`'s turn-loop newline, on top of the banner's
+            // own - measured at the arena.
+            String::new(),
             ">".to_string(),
         ]
     );
 }
 
 #[test]
-fn the_marker_row_follows_the_turn_banner_with_no_blank_between_them() {
-    // `combat.md §8.1`: the turn handler "emits the line feed itself,
-    // unconditionally, between printing the banner and reading the command
-    // byte". That line feed is the one `text-output.md §10.2` puts before the
-    // end-cap, so the marker row sits directly under the banner's last row
-    // and §10.4's blank row is not spent a second time.
+fn the_marker_row_is_one_blank_row_below_the_turn_banner() {
+    // **Measured** at the arena (`qa/paired/combat-rounds.tsv`, beat `pass1`):
+    // `Avatar, armed` / `with bare hands:` / blank / ` Pass`. There are two
+    // line feeds between the colon row and the echo, and the spec gives one to
+    // each producer - `combat.md §8.1` ends the banner "terminated by a colon
+    // **and then a newline**. The banner's line ends there; whatever the
+    // player types next is announced on a fresh row", and `commands.md §5.1`
+    // adds "Every mode's turn loop opens its input line with the same two
+    // steps: emit a newline into the message window, then draw that one
+    // triangle."
+    //
+    // This test previously asserted the opposite in its own name, on the
+    // reading that the banner's newline *was* the turn loop's. With them
+    // folded into one, every combat prompt sat a row high and every later beat
+    // of a combat transcript was adrift; `combat-rounds` now agrees with the
+    // stock game on all five beats.
     let mut state = combat_state_after_the_conflict_banner(6, 5);
     state.ensure_pending_combat_player_turn();
 
@@ -109,7 +122,8 @@ fn the_marker_row_follows_the_turn_banner_with_no_blank_between_them() {
         .iter()
         .position(|row| row == ">")
         .expect("the marker row is drawn");
-    assert_eq!(rows[marker - 1], "with bare hands:");
+    assert_eq!(rows[marker - 1], "");
+    assert_eq!(rows[marker - 2], "with bare hands:");
 }
 
 #[test]
@@ -135,12 +149,14 @@ fn a_pass_turn_draws_the_rows_the_original_draws() {
 
     // `Avatar is poisoned!` is nineteen characters, so the sixteen-column
     // window wraps it onto two rows (`text-output.md` 4 and 6).
+    // Each turn's prompt now costs the blank row `commands.md §5.1` gives the
+    // turn loop on top of the banner's own line feed, so the conflict banner
+    // has scrolled off the top of the thirteen-row window.
     assert_eq!(combat_message_window_rows(&state), [
-        String::new(),
-        combat_banner_line(),
         String::new(),
         "Avatar, armed".to_string(),
         "with bare hands:".to_string(),
+        String::new(),
         ">Pass".to_string(),
         String::new(),
         "Avatar is".to_string(),
@@ -148,6 +164,7 @@ fn a_pass_turn_draws_the_rows_the_original_draws() {
         String::new(),
         "Avatar, armed".to_string(),
         "with bare hands:".to_string(),
+        String::new(),
         ">".to_string(),
     ]);
 }
@@ -212,10 +229,11 @@ fn the_aim_prompt_keeps_the_marker_row_and_carries_the_cursor_inline() {
     assert!(prompt.prefixed);
     assert_eq!(prompt.column, MESSAGE_WINDOW_LEFT + 1);
     // The measurement this pins is the row's *columns*; the row itself is
-    // wherever the window's cursor has reached, which for this fixture is
-    // the banner's marker row (`cleak/u5-engine#11`).
+    // wherever the window's cursor has reached, which for this fixture is now
+    // one row further down, because the turn loop's own newline puts a blank
+    // between the banner's colon row and the prompt (`commands.md §5.1`).
     let banner_row = layout.rows[layout.rows.len() - 2].row;
-    assert_eq!(prompt.row, banner_row + 1);
+    assert_eq!(prompt.row, banner_row + 2);
     assert_eq!(
         layout.inline_cursor,
         Some((MESSAGE_WINDOW_LEFT + 13, prompt.row))
@@ -223,32 +241,29 @@ fn the_aim_prompt_keeps_the_marker_row_and_carries_the_cursor_inline() {
 }
 
 #[test]
-fn a_free_re_prompt_after_a_refusal_keeps_the_blank_row_the_banner_paid_for() {
-    // `combat.md §8.1` buys the marker row with the banner's own line feed -
-    // the turn handler "emits the line feed itself, unconditionally, between
-    // printing the banner and reading the command byte" - and that is the
-    // only prompt row that comes free. The same section says a free
-    // re-prompt after a refusal "uses the short form and does **not**
-    // reprint the banner", so nothing spends a line feed for it and
-    // `text-output.md §10.4`'s derived blank row stands above it, exactly as
-    // it does for a world-loop prompt.
+fn a_free_re_prompt_after_a_refusal_keeps_its_blank_row() {
+    // `combat.md §8.1` says a free re-prompt after a refusal "uses the short
+    // form and does **not** reprint the banner", so nothing spends a line feed
+    // for it and `text-output.md §10.4`'s derived blank row stands above it,
+    // exactly as it does for a world-loop prompt.
+    //
+    // The banner-opened prompt has a blank above it too, which this test used
+    // to treat as the distinguishing feature: §8.1 ends the banner "terminated
+    // by a colon **and then a newline**" and `commands.md §5.1` gives the turn
+    // loop a second one. Measured at the arena, both shapes have the blank.
     let game_dir = std::path::Path::new(".");
     let mut state = combat_state_after_the_conflict_banner(8, 5);
     state.active_player = Some(0);
     state.ensure_pending_combat_player_turn();
 
-    assert!(
-        combat_prompt_row_follows_history(&state),
-        "the banner's line feed opened this marker row"
-    );
     let banner_rows = combat_message_window_rows(&state);
     let banner_prompt = banner_rows
         .iter()
         .rposition(|row| row.starts_with('>'))
         .expect("the marker row is drawn");
     assert!(
-        !banner_rows[banner_prompt - 1].is_empty(),
-        "no blank row under the banner: {banner_rows:?}"
+        banner_rows[banner_prompt - 1].is_empty(),
+        "the banner-opened prompt keeps its own blank row: {banner_rows:?}"
     );
 
     // A blocked step is one of `combat.md §8.1`'s refusals: it prints its
@@ -260,10 +275,6 @@ fn a_free_re_prompt_after_a_refusal_keeps_the_blank_row_the_banner_paid_for() {
     );
     assert_eq!(state.pending_combat_actor_slot, Some(0));
 
-    assert!(
-        !combat_prompt_row_follows_history(&state),
-        "the re-prompt reprinted no banner, so it spent no line feed"
-    );
     let rows = combat_message_window_rows(&state);
     let prompt = rows
         .iter()

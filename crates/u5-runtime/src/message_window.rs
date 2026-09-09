@@ -343,9 +343,21 @@ pub fn message_log_from_entries<'a>(
 /// §10.4's blank; [`crate::PlayState::combat_prompt_row_opened_by_banner`]
 /// is which of the two this prompt is.
 pub fn combat_prompt_row_follows_history(state: &crate::PlayState) -> bool {
-    state.combat_active
-        && state.pending_combat_actor_slot.is_some()
-        && state.combat_prompt_row_opened_by_banner
+    // **Measured** at the arena (`qa/paired/combat-rounds.tsv`, beat `pass1`):
+    // the stock game leaves one blank row between the banner's colon row and
+    // the marker row - `Avatar, armed` / `with bare hands:` / blank / `>Pass`.
+    // There are two line feeds there, not one, and the spec gives one to each
+    // producer: `combat.md §8.1` ends the banner "terminated by a colon **and
+    // then a newline**. The banner's line ends there; whatever the player
+    // types next is announced on a fresh row", and `commands.md §5.1` has
+    // "Every mode's turn loop opens its input line with the same two steps:
+    // emit a newline into the message window, then draw that one triangle."
+    //
+    // This engine folded them into one, spending the banner's newline as the
+    // turn loop's, so every combat prompt sat a row high and every later beat
+    // of a combat transcript was adrift.
+    let _ = state;
+    false
 }
 
 /// Place a log — and optionally the live input line — into the window.

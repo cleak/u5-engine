@@ -1631,6 +1631,15 @@ impl PlayState {
             // already flushed was re-flushed whole, which printed
             // `*** CONFLICT ***` a second time.
             self.emit_combat_print(banner);
+            // `commands.md §5.1`: "Every mode's turn loop opens its input line
+            // with the same two steps: emit a newline into the message window,
+            // then draw that one triangle." That newline is the turn loop's,
+            // not the banner's - §8.1 already spent the banner's own on
+            // ending its line, "whatever the player types next is announced on
+            // a fresh row" - so there is one blank row between the colon row
+            // and the echo. The stock arena shows exactly that:
+            // `with bare hands:` / blank / ` Pass`.
+            self.push_explicit_blank_message_entry();
         }
     }
 
