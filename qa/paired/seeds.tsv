@@ -6,7 +6,7 @@
 # scenario's seed cannot be its own `paired-<scenario>` output profile; the
 # `seed-<scenario>` rows below are copies made for that reason.
 
-bd-shipwright	seed-bd-shipwright	copied from the paired-bd-shipwright run profile
+bd-shipwright	seed-bd-shipwright-reseeded	the walk-up replayed once by reseed.py
 blackthorn-palace-password	seed-blackthorn-palace-password	copied from the paired-blackthorn-palace-password run profile
 bt-audience	seed-bt-audience	copied from the paired-bt-audience run profile
 bt-correct	seed-bt-correct	copied from the paired-bt-correct run profile
@@ -23,9 +23,9 @@ combat-refusal-audio	seed-combat-refusal-audio	copied from the paired-combat-ref
 combat-rounds	seed-combat-rounds	copied from the paired-combat-rounds run profile
 combat-town-attack	seed-combat-town-attack	copied from the paired-combat-town-attack run profile
 combat-town-attack-after-entry	seed-combat-town-attack-after-entry	copied from the paired-combat-town-attack-after-entry run profile
-cove-healer	seed-cove-healer	copied from the paired-cove-healer run profile
-cove-healer-services	seed-cove-healer	the same Cove seed; the service menu's own echoes
-cove-herbalist	seed-cove-herbalist	copied from the paired-cove-herbalist run profile
+cove-healer	seed-cove-healer-reseeded	the walk-up replayed once by reseed.py
+cove-healer-services	seed-cove-healer-services-reseeded	the walk-up replayed once by reseed.py
+cove-herbalist	seed-cove-herbalist-reseeded	the walk-up replayed once by reseed.py
 doom-endgame-audio	seed-doom-endgame-audio	copied from the paired-doom-endgame-audio run profile
 doom-final-room	seed-doom-final-room	copied from the paired-doom-final-room run profile
 doom-final-room-refusal	seed-doom-final-room-refusal	copied from the paired-doom-final-room-refusal run profile
@@ -44,21 +44,21 @@ minoc-guard	seed-minoc-guard	copied from the paired-minoc-guard run profile
 minoc-refuse	seed-minoc-refuse	copied from the paired-minoc-refuse run profile
 minoc-tribute	seed-minoc-tribute	copied from the paired-minoc-tribute run profile
 nb-inn	seed-nb-inn	copied from the paired-nb-inn run profile
-nb-inn-branches	seed-nb-inn-branches	copied from the paired-nb-inn-branches run profile
-nb-inn-commit	seed-nb-inn-commit	copied from the paired-nb-inn-commit run profile
-nb-inn-companion	seed-nb-inn-companion	copied from the paired-nb-inn-companion run profile
-nb-inn-pickup	seed-nb-inn-pickup	copied from the paired-nb-inn-pickup run profile
-nb-inn-refusals	seed-nb-inn-refusals	copied from the paired-nb-inn-refusals run profile
-nb-stable-closed	seed-nb-stable-closed	copied from paired-nb-stable: the North Britanny stable approach
-nb-stable-open	seed-nb-stable-open	copied from the paired-nb-stable-open run profile
+nb-inn-branches	seed-nb-inn-branches-reseeded	the walk-up replayed once by reseed.py
+nb-inn-commit	seed-nb-inn-commit-reseeded	the walk-up replayed once by reseed.py
+nb-inn-companion	seed-nb-inn-companion-reseeded	the walk-up replayed once by reseed.py
+nb-inn-pickup	seed-nb-inn-pickup-reseeded	the walk-up replayed once by reseed.py
+nb-inn-refusals	seed-nb-inn-refusals-reseeded	the walk-up replayed once by reseed.py
+nb-stable-closed	seed-nb-stable-closed-reseeded	the walk-up replayed once by reseed.py
+nb-stable-open	seed-nb-stable-open-reseeded	the walk-up replayed once by reseed.py
 night-cast	seed-night-cast	copied from the paired-night-cast run profile
 night-sextant	seed-night-sextant	copied from the paired-night-sextant run profile
 overworld-camp	seed-overworld-camp	copied from the paired-overworld-camp run profile
 overworld-night-walk	seed-overworld-night-walk	copied from the paired-overworld-night-walk run profile
-paws-guild	seed-paws-guild	copied from the paired-paws-guild run profile
+paws-guild	seed-paws-guild-reseeded	the walk-up replayed once by reseed.py
 paws-sage	seed-paws-sage	copied from the paired-paws-sage run profile
 paws-sleeper	seed-paws-sleeper	copied from the paired-paws-sleeper run profile
-paws-tavern	seed-paws-tavern	copied from the paired-paws-tavern run profile
+paws-tavern	seed-paws-tavern-reseeded	the walk-up replayed once by reseed.py
 prompt-cancels	seed-prompt-cancels	copied from the paired-prompt-cancels run profile
 ready-slots	seed-ready-slots	copied from the paired-ready-slots run profile
 ready-two-handed	seed-ready-two-handed	copied from paired-ready-twohand: the ready-slots party with a two-handed weapon

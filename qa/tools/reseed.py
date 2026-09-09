@@ -90,8 +90,10 @@ def main() -> None:
     )
     ap.add_argument(
         "--contact-opens",
-        action="store_true",
-        help="the seeded target opens on contact, so open with Passes not Talk",
+        type=int,
+        default=0,
+        metavar="KEYS",
+        help="the seeded target opens on contact; how many keys reach its prompt",
     )
     args = ap.parse_args()
 
@@ -155,13 +157,21 @@ both\twait\t9000
 both\tshot\tseeded\tJourney Onward on the seeded cell
 """
 
-CONTACT_OPENING = """both\tkey\tspace
+CONTACT_STEP = """both\tkey\tspace
 both\twait\t4000
-both\tshot\twelcome\tContact opens the overlay: the welcome
-both\tkey\tspace
-both\twait\t4000
-both\tshot\tgreeted\tThe attribution and the entry question
+both\tshot\t{label}\t{caption}
 """
+
+# The arms overlay is the one with a pause between its welcome and its entry
+# question (`shops.md` §8.B stage 2), so it needs two keys to reach the
+# question; every other overlay prints its greeting and waits in one step.
+CONTACT_LABELS = {
+    1: [("opened", "Contact opens the overlay")],
+    2: [
+        ("welcome", "Contact opens the overlay: the welcome"),
+        ("greeted", "The attribution and the entry question"),
+    ],
+}
 
 NOTE = """#
 # Seeded rather than walked to. The walk-up form of this scenario scripted its
@@ -194,7 +204,10 @@ def rewrite(name: str, resume_after: str, profile: str, contact_opens: bool) -> 
         body.append(line)
     header = [line for line in header if not line.startswith("# requires-seed")]
     note = NOTE + (CONTACT_NOTE if contact_opens else "")
-    opening = SEEDED_OPENING + (CONTACT_OPENING if contact_opens else "")
+    steps = CONTACT_LABELS.get(contact_opens, [])
+    opening = SEEDED_OPENING + "".join(
+        CONTACT_STEP.format(label=label, caption=caption) for label, caption in steps
+    )
     requires = f"# requires-seed: profile `{profile}`, built by qa/tools/reseed.py\n"
     path.write_text(
         "\n".join(header) + "\n" + note + requires + opening + "\n".join(body) + "\n"
