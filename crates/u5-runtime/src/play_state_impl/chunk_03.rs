@@ -227,6 +227,14 @@ impl PlayState {
             || self.active_blackthorn.as_ref().is_some_and(|challenge| {
                 challenge.awaiting_acknowledgement() || challenge.awaiting_closing_acknowledgement()
             })
+            // `shops.md §8.B`: a shop's entry question waits on `Y`, `N` or
+            // Space, and its answer "appends directly after" the greeting's
+            // own continuation - so the greeting keeps its row open and the
+            // cursor sits inline on it, with no live command row below.
+            || self
+                .active_shop
+                .as_ref()
+                .is_some_and(crate::shop_session::ActiveShopSession::awaiting_entry_answer)
     }
 
     pub fn open_prompt_line(&self) -> Option<String> {

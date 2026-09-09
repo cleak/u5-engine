@@ -4301,7 +4301,12 @@ impl PlayState {
                         // opened `I bid thee welcome` where the stock game
                         // opened `"I bid thee welcome`, and its answer row
                         // never appeared at all.
-                        let greeting = format!("\"{rendered}");
+                        // `shops.md §8.0`: the Talk dispatcher "first emits
+                        // the same conversation entry newline used for all
+                        // Talk dispatches" before handing control to the shop
+                        // overlay, so the greeting opens a row below the
+                        // command echo the way a conversation reply does.
+                        let greeting = format!("\n\"{rendered}");
                         let continuation = crate::shoppe_records::shop_entry_input_continuation(
                             crate::wrapped_final_row_columns(&greeting),
                         );

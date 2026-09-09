@@ -2738,7 +2738,8 @@ fn talk_shop_entry_uses_shared_preamble_record_when_shoppe_dat_is_loaded() {
     // column". This record wraps to a four-column final row, which takes the
     // one-space continuation rather than a colon. The invented key summary
     // that used to follow the record is gone.
-    assert_eq!(state.message, "\"Guild preamble two. ");
+    // `§8.0`'s Talk entry newline opens the row the greeting prints on.
+    assert_eq!(state.message, "\n\"Guild preamble two. ");
     assert_eq!(state.prng_state, expected_prng);
     assert!(state.active_shop.is_some());
     assert_eq!(state.turn, 1);
