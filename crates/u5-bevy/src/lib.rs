@@ -16886,29 +16886,31 @@ fn render_integrated_status_framebuffer(
     // ribbon cap, and that cursor is a four-frame barber pole rather
     // than a blink: every capture of the shipped build shows one of
     // `IBM.CH` 0x05..=0x08 there, on ordinary turns as well as during
-    // line prompts. `prompt_cursor_visible` therefore no longer gates
-    // it; it only drives the shop path's own prompt window.
-    if display_state.active_shop.is_none() {
-        let cursor_cell = inline_prompt_cursor.or_else(|| {
-            message_rows.last().map(|live| {
-                (
-                    (live.column + live.glyphs.len().min(15) as u8).min(MESSAGE_WINDOW_RIGHT),
-                    live.row,
-                )
-            })
-        });
-        if let Some((column, row)) = cursor_cell {
-            paint_fixed_cell_glyph(
-                &mut rgba,
-                VISUAL_PLAY_FRAME_WIDTH as usize,
-                VISUAL_PLAY_FRAME_HEIGHT as usize,
-                ctx.ibm,
-                prompt_cursor_glyph(ctx.cursor_frame),
-                column,
-                row,
-                CHROME_RULE_INDEX,
-            );
-        }
+    // line prompts. `prompt_cursor_visible` therefore no longer gates it.
+    //
+    // A shop is no longer an exception either: its text is the ordinary
+    // message window's now, and `shops.md §8.B`'s entry question carries
+    // the cursor on the row its greeting left open - `:` with the barber
+    // pole after it at Cove, which the engine drew as a bare `:`.
+    let cursor_cell = inline_prompt_cursor.or_else(|| {
+        message_rows.last().map(|live| {
+            (
+                (live.column + live.glyphs.len().min(15) as u8).min(MESSAGE_WINDOW_RIGHT),
+                live.row,
+            )
+        })
+    });
+    if let Some((column, row)) = cursor_cell {
+        paint_fixed_cell_glyph(
+            &mut rgba,
+            VISUAL_PLAY_FRAME_WIDTH as usize,
+            VISUAL_PLAY_FRAME_HEIGHT as usize,
+            ctx.ibm,
+            prompt_cursor_glyph(ctx.cursor_frame),
+            column,
+            row,
+            CHROME_RULE_INDEX,
+        );
     }
     IntegratedStatusSurface { rgba, message_rows }
 }
