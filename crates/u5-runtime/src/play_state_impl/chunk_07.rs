@@ -33,6 +33,11 @@ pub const BLACKTHORN_FIRST_WRONG_LINE: &str =
 /// The threat that follows it. `{}` takes the companion's name.
 pub const BLACKTHORN_SAND_THREAT: &str =
     "\"I will ask thee until the sand has fallen. And then will {} die!\"";
+/// `blackthorn.md §4.1`: record `8` "begins with two line feeds and the
+/// quoted sand/threat prefix" and stops where the name goes. This is that
+/// record's shape, for the paths that run without `MISCMSG.DAT`.
+pub const BLACKTHORN_SAND_THREAT_PREFIX_FALLBACK: &str =
+    "\n\n\"I will ask thee until the sand has fallen. And then will ";
 /// The second and third asks.
 pub const BLACKTHORN_RESISTANCE_LINE: &str = "\"Resistance is futile! Thou must yield the truth unto me! Tell me, what is the Mantra of {}?\"";
 /// The fourth, shouted.
@@ -4435,7 +4440,13 @@ impl PlayState {
         // `qa/tools/paired_compare.py` read `bt-correct`'s `right` beat with
         // the stock game still showing `:AHM` above the reward speech and
         // this engine having dropped it.
-        self.commit_prompt_reply(BLACKTHORN_ANSWER_ROW_PREFIX, &answer.to_ascii_uppercase());
+        // The answer row is a *live* row, not an open transcript entry, so
+        // `commit_prompt_reply` has nothing to append the typed word to; the
+        // finished row is emitted as its own line instead.
+        self.emit_message_line(format!(
+            "{BLACKTHORN_ANSWER_ROW_PREFIX}{}",
+            answer.to_ascii_uppercase()
+        ));
         self.push_explicit_blank_message_entry();
 
         // `blackthorn.md §4`: "The shrine index is fixed before the loop
@@ -4576,10 +4587,26 @@ impl PlayState {
                         // second demand - §4.1's record `1` - never printed
                         // and the player answered a question that was not on
                         // screen.
-                        self.message = format!(
-                            "{BLACKTHORN_FIRST_WRONG_LINE}\n\n{}",
-                            BLACKTHORN_SAND_THREAT.replace("{}", &victim_name)
-                        );
+                        // `blackthorn.md §4.1`: record `7`, "the quoted
+                        // laughing-at-me rebuke; after its scene beat, record
+                        // `8`, which begins with two line feeds and the
+                        // quoted sand/threat prefix; append the second roster
+                        // entry's name and ` die!\" `". Record `8` carries
+                        // its own leading line feeds and its trailing space,
+                        // so the composition adds neither - the cursor sits
+                        // one cell further right than the engine had it on
+                        // `bt-escalate`'s `ask2` beat.
+                        let rebuke = self.blackthorn_reaction_text(
+                            game_dir,
+                            crate::MISCMSG_BLACKTHORN_FIRST_WRONG_REBUKE,
+                            BLACKTHORN_FIRST_WRONG_LINE,
+                        )?;
+                        let threat = self.blackthorn_reaction_text(
+                            game_dir,
+                            crate::MISCMSG_BLACKTHORN_SAND_THREAT_PREFIX,
+                            BLACKTHORN_SAND_THREAT_PREFIX_FALLBACK,
+                        )?;
+                        self.message = format!("{rebuke}{threat}{victim_name} die!\" ");
                         Ok(MoveOutcome::PromptDeclined)
                     }
                     // Second and third wrong answers: "Later wrong answers

@@ -16992,7 +16992,12 @@ fn summarize(state: &mut PlayState, default_message: &str, input_line: &str) -> 
 
 fn visual_line_prompt_active(state: &PlayState) -> bool {
     state.active_conversation.is_some()
-        || state.active_blackthorn.is_some()
+        // `blackthorn.md §4.1`: while the audience is holding on a
+        // wrong-answer reaction it is reading an *acknowledgement*, not text.
+        // The key that clears it is consumed there and the rest of the word
+        // is typed into the ask that follows - which is why the stock game's
+        // `ask3` beat reads back `:UL` after `mul` was typed at `ask2`.
+        || state.blackthorn_prompt_echo().is_some()
         || state.active_shrine.is_some()
         || state.active_yell.is_some()
         || state.active_shrine_restoration.is_some()
