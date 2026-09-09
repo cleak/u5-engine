@@ -1,0 +1,39 @@
+# `shops.md` §2 and §8.B at the Britain weaponsmith, reached without a walk.
+#
+# The walk-up form of this scenario (`shop-arms-after-entry`) scripts sixteen
+# steps in from the town gate, and the keeper walks its own schedule while they
+# run: the two sides arrive with the merchant in different cells, and every
+# beat after that compares unrelated windows. This seed is that walk, replayed
+# once and saved, with the party placed beside the keeper - so both sides load
+# one save with the pair already in contact (`cleak/u5-engine#22`).
+# BLOCKED on the save writer, and deliberately left without a `seeds.tsv` row
+# so the suite reports it rather than running it. `formats/saved-gam.md` §12:
+# "An active-object-only writer cannot restore a working town cast." This
+# engine writes the active-object table but not the `0x07B4..0x105F` NPC band,
+# so a seed written here carries the template's NPC runtime state. The original
+# loads it, draws the merchant from the active-object table - `Look-East`
+# agrees, `Thou dost see a merchant` - and then answers `No response!` to Talk,
+# because the cast behind the sprite is not the one the walk produced.
+#
+# Unblock by persisting the §12 band; then restore the row below.
+# requires-seed: the party beside Britain's weaponsmith, built with
+# `--write-seed --seed-beside 0x81 --from-save --play-script <the walk>`
+both	wait	9000
+both	key	space
+both	wait	4000
+both	key	j
+both	wait	9000
+both	shot	seeded	Journey Onward beside the weaponsmith
+both	key	l
+both	wait	1000
+both	key	Right
+both	wait	4000
+both	shot	look	Look east at the weaponsmith
+both	key	t
+both	wait	1000
+both	key	Right
+both	wait	5000
+both	shot	talk	Talk east: the shop greeting
+both	key	space
+both	wait	4000
+both	shot	after	One key at the shop prompt

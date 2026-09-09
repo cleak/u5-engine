@@ -71,6 +71,9 @@ pub struct CliArgs {
     /// Write `SAVED.GAM` for the requested start state into the game
     /// directory and exit, instead of playing.
     pub write_seed: bool,
+    /// Place the party beside the NPC carrying this `.NPC` dialog byte before
+    /// writing the seed.
+    pub seed_beside: Option<u8>,
 }
 
 pub fn split_play_script(script: &str) -> Vec<String> {
@@ -117,6 +120,7 @@ where
     let mut create_character_winners: Option<Vec<ShrineVirtue>> = None;
     let mut create_character_interactive = false;
     let mut write_seed = false;
+    let mut seed_beside: Option<u8> = None;
     let mut args = args.into_iter().map(Into::into);
     while let Some(arg) = args.next() {
         match arg.as_str() {
@@ -128,6 +132,34 @@ where
             // describe and persist it, so a paired scenario can start both
             // sides on the thing under test instead of walking to it
             // (`cleak/u5-engine#22`).
+            // Seeding a *talk* scenario needs the target beside the party, and
+            // a shopkeeper walks its schedule: replaying the scenario's walk
+            // lands the party correctly but the keeper may have moved on. This
+            // places the party on a walkable cell adjacent to the NPC carrying
+            // the given `.NPC` dialog byte, facing it, so both sides load one
+            // save with the pair already in contact.
+            "--seed-beside" => {
+                let value = args.next().ok_or_else(|| {
+                    io::Error::new(
+                        io::ErrorKind::InvalidInput,
+                        "--seed-beside requires a .NPC dialog byte, e.g. 0x81",
+                    )
+                })?;
+                let text = value.trim().to_ascii_lowercase();
+                let parsed = text
+                    .strip_prefix("0x")
+                    .map(|hex| u8::from_str_radix(hex, 16))
+                    .unwrap_or_else(|| text.parse::<u8>())
+                    .map_err(|_| {
+                        io::Error::new(
+                            io::ErrorKind::InvalidInput,
+                            "--seed-beside takes a decimal or 0x-prefixed byte",
+                        )
+                    })?;
+                seed_beside = Some(parsed);
+                write_seed = true;
+                play = true;
+            }
             "--write-seed" => {
                 write_seed = true;
                 play = true;
@@ -431,6 +463,7 @@ where
             create_character: None,
             create_character_interactive: false,
             write_seed: false,
+            seed_beside: None,
         });
     }
     if from_save && from_init {
@@ -727,6 +760,7 @@ where
         create_character,
         create_character_interactive,
         write_seed,
+        seed_beside,
     })
 }
 
@@ -747,6 +781,8 @@ OPTIONS:
                               Implies --play.
         --scene <KEY>         Start scene, e.g. CASTLE:0 or DUNGEON:0.
         --floor <N>           Start floor/level (signed).
+        --seed-beside <BYTE>  With --write-seed, put the party beside the NPC
+                              carrying this .NPC dialog byte (e.g. 0x81).
         --write-seed          Write SAVED.GAM for the requested start state
                               into the game directory and exit. Use with
                               --scene/--at/--time to seed a paired scenario.
