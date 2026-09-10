@@ -30,6 +30,7 @@ leaves behind. Runs that captured nothing are reported rather than skipped
 silently.
 """
 
+import builtins
 import json
 import pathlib
 import re
@@ -431,12 +432,29 @@ def compare_cached(artifact: pathlib.Path, cache: dict) -> tuple:
     if hit and hit.get("stamp") == stamp and hit.get("version") == CACHE_VERSION:
         for kind, count in hit["kinds"].items():
             KINDS[kind] = KINDS.get(kind, 0) + count
+        # Replay the per-beat lines too. Without them a cached pass cannot be
+        # used to *find* anything - only to total it - and the first thing I
+        # wanted from the cache was which beats carry a given classification.
+        for line in hit.get("lines", []):
+            print(line)
         return tuple(hit["totals"])
     before = dict(KINDS)
-    totals = compare(artifact)
+    buffer: list[str] = []
+    real_print = builtins.print
+
+    def capturing(*args, **kwargs):
+        text = " ".join(str(a) for a in args)
+        buffer.append(text)
+        real_print(*args, **kwargs)
+
+    builtins.print = capturing
+    try:
+        totals = compare(artifact)
+    finally:
+        builtins.print = real_print
     kinds = {k: KINDS[k] - before.get(k, 0) for k in KINDS if KINDS[k] - before.get(k, 0)}
     cache[key] = {"stamp": stamp, "totals": list(totals), "kinds": kinds,
-                  "version": CACHE_VERSION}
+                  "lines": buffer, "version": CACHE_VERSION}
     return totals
 
 

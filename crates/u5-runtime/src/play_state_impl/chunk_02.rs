@@ -1943,7 +1943,11 @@ impl PlayState {
             // "Unfocused result | If the virtue answer or any of the three
             // mantra answers was wrong, render record `30` after the third
             // nonblank mantra, then return without quest progress."
-            self.emit_shrine_misc_record(game_dir, MISCMSG_SHRINE_UNFOCUSED_RESULT)?;
+            self.emit_shrine_misc_record_after_open_row(
+                game_dir,
+                MISCMSG_SHRINE_UNFOCUSED_RESULT,
+                true,
+            )?;
             return Ok(Some(MoveOutcome::PromptDeclined));
         }
         {
@@ -2208,11 +2212,38 @@ impl PlayState {
     /// exactly as `karma.md §12` requires. A profile without the file logs
     /// nothing rather than substituting engine prose.
     fn emit_shrine_misc_record(&mut self, game_dir: &Path, index: usize) -> io::Result<()> {
+        self.emit_shrine_misc_record_after_open_row(game_dir, index, false)
+    }
+
+    /// As [`Self::emit_shrine_misc_record`], but for a record printed while a
+    /// typed prompt row is still open.
+    ///
+    /// `karma.md §12` renders record `30` "after the third nonblank mantra",
+    /// and that record is `\n\nThine thoughts are unfocused.\n`. The cursor is
+    /// sitting at the end of the `Mantra:AHM` row when it prints, so the
+    /// record's *first* newline is what closes that row and only the second
+    /// leaves a blank - the same split `combat.md §8.1` makes between the
+    /// banner's newline and the turn loop's.
+    ///
+    /// Measured (`qa/paired/shrine-three-mantras.tsv`, beat `mantra3`): the
+    /// original shows one blank row between the last mantra and the result;
+    /// this engine closed the row itself and then spent both newlines, so it
+    /// showed two.
+    fn emit_shrine_misc_record_after_open_row(
+        &mut self,
+        game_dir: &Path,
+        index: usize,
+        row_open: bool,
+    ) -> io::Result<()> {
         if let Some(text) = load_misc_messages(game_dir)?.and_then(|messages| {
             messages
                 .record(index)
                 .map(|record| record.replace('\r', "\n"))
         }) {
+            let text = match row_open {
+                true => text.strip_prefix('\n').map(str::to_string).unwrap_or(text),
+                false => text,
+            };
             self.emit_message_line(text);
         }
         Ok(())
