@@ -462,6 +462,24 @@ def compare_cached(artifact: pathlib.Path, cache: dict) -> tuple:
 CACHE_VERSION = 3
 
 
+# Some scenarios are explicitly a lottery: their own headers say so. The night
+# encounter roll of `encounters.md` §2.1 runs every overworld turn, so a run
+# where one side meets a creature and the other does not "has measured nothing
+# and must be re-run" - `night-cast` says exactly that. Scoring such a run as a
+# wording difference counts the dice, not the engine.
+LOTTERY_MARKERS = ("lottery", "measured nothing", "must be re-run")
+
+
+def is_lottery(scenario: str) -> bool:
+    path = SCENARIOS / f"{scenario}.tsv"
+    try:
+        header = [l for l in path.read_text().splitlines() if l.startswith("#")]
+    except OSError:
+        return False
+    text = " ".join(header).lower()
+    return any(marker in text for marker in LOTTERY_MARKERS)
+
+
 def compare(artifact: pathlib.Path) -> tuple[int, int, int, int, int]:
     record = json.loads((artifact / "record.json").read_text())
     scenario = record.get("scenario", artifact.name)
@@ -571,7 +589,13 @@ def main() -> None:
         # A cached verdict replays totals but not the per-beat detail lines, so
         # the panel count belongs on the status line: without it a cached
         # scenario reads as clean whatever its roster panel did.
-        status = "RERUN" if idle else ("match" if differ == 0 and panel == 0 else "DIFFER")
+        scenario = re.sub(r"-\d{8}-\d{6}$", "", pathlib.Path(arg).name)
+        lottery = differ and is_lottery(scenario)
+        status = (
+            "RERUN"
+            if idle or lottery
+            else ("match" if differ == 0 and panel == 0 else "DIFFER")
+        )
         print(
             f"{status} {pathlib.Path(arg).name}: {same} beat(s) agree, "
             f"{differ} differ, {skipped} skipped, {idle} idle, {panel} panel"
