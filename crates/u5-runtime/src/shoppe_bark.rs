@@ -402,6 +402,17 @@ pub fn render_shoppe_bark(bytes: &[u8], ctx: &ShoppeBarkContext) -> Result<Strin
             }
             continue;
         }
+        // A record's own line breaks are part of its text. `shops.md` §8.B
+        // says record `119` "carries its own leading spacing and prompt", and
+        // eighteen records across seven bands carry `\n` bytes. The printable
+        // test below starts at `0x20`, so every one of them was being dropped
+        // silently, joining the words on either side: record 119 rendered
+        // `Frigatesand small, lightSkiffs.Which would yelike to see?`.
+        // Measured 2026-09-10 (`bd-shipwright/yes`).
+        if byte == b'\n' {
+            out.push('\n');
+            continue;
+        }
         if (0x20..0x7F).contains(&byte) {
             out.push(byte as char);
         }
@@ -645,6 +656,21 @@ mod tests {
     }
 
     #[test]
+    /// A record's own `\n` bytes are part of its text. The printable test in
+    /// [`render_shoppe_bark`] starts at `0x20`, so newlines were dropped and
+    /// the words on either side ran together. Measured 2026-09-10
+    /// (`bd-shipwright/yes`): record `119` rendered `Frigatesand small,
+    /// lightSkiffs.Which would yelike to see?` where the original breaks the
+    /// lines.
+    #[test]
+    fn a_records_own_line_breaks_survive_rendering() {
+        let ctx = ShoppeBarkContext::default();
+        let rendered = render_shoppe_bark(b"one\ntwo\n\nthree", &ctx).unwrap();
+        assert_eq!(rendered, "one\ntwo\n\nthree");
+        // The words either side of a break must not be joined.
+        assert!(!rendered.contains("onetwo"));
+    }
+
     fn render_shoppe_record_uses_required_lookup() {
         let bytes = b"hello\0";
         let records = parse_shoppe_records(bytes);
