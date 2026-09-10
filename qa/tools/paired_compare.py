@@ -772,7 +772,12 @@ def main() -> None:
         # the panel count belongs on the status line: without it a cached
         # scenario reads as clean whatever its roster panel did.
         scenario = re.sub(r"-\d{8}-\d{6}$", "", pathlib.Path(arg).name)
-        lottery = differ and is_lottery(scenario)
+        # A lottery can live in the roster panel alone: `cast-results` agrees
+        # on every message-window beat and parts company only on the `F:`
+        # counter, because `magic.md` gives Create Food "a uniform
+        # food/provisions delta in `[1, 3]`". Gating this on the message-window
+        # count alone reported that as a plain difference.
+        lottery = (differ or panel) and is_lottery(scenario)
         status = (
             "RERUN"
             if idle or lottery

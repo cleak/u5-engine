@@ -1,5 +1,14 @@
 # Cast the spells whose result lines the engine had invented: the locate
 # refusal indoors, create food, and the two party-target restores.
+#
+# The roster panel is a lottery on this scenario from the `food` beat onward.
+# `magic.md` section on utility effects: "Create Food (*In Xen Mani*) rolls a
+# uniform food/provisions delta in `[1, 3]`, adds it to the shared party food
+# word". The two sides never share a seed, so the `F:` counter parts company
+# on that cast and stays parted for every later beat - measured 2026-09-10,
+# where the original rolled 3 and this engine rolled 1. The message window,
+# which is what this scenario pins, agrees on every beat; a panel-only
+# difference here must be re-run before it means anything.
 # requires-seed: a caster with charges, reagents, mana and potions, built with
 # the `seed_inventory` example (`potions=3 spells=9 reagents=20 mana=99`)
 both	wait	9000
