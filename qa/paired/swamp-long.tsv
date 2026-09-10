@@ -1,5 +1,17 @@
 # Probe: 40 swamp steps - does the party ever get poisoned?
 #
+# This is a lottery on the encounter probe. `encounters.md` Section 2: "Every
+# turn the overworld mode loop runs its per-turn block", which rolls and
+# compares against a tile-derived threshold, and on success "writes one new
+# monster into the active-object table on a tile near the party". Forty swamp
+# steps are forty of those rolls, and the two sides never share a seed - so a
+# run where one side meets a monster and the other does not has measured the
+# probe rather than the swamp. Measured 2026-09-10: the original spawned one
+# and was in combat by the `after30` shot, showing its actor banner, while
+# this engine was still walking and printing `Slow progress!`.
+#
+# The early beats are the comparable part: `after20` agrees step for step.
+#
 # Seeded rather than walked to. The walk-up form of this scenario scripted its
 # way in from the town gate, and the resident walks its own schedule while
 # those steps run, so the two sides arrived with it in different cells and
