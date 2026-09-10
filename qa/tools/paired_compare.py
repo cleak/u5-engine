@@ -393,6 +393,19 @@ def classify(left: list[list[str]], right: list[list[str]], rows: list[int]) -> 
     # not a wording one, and counting it as `text` overstates the conformance
     # queue. Rows the two sides share are the signal: a real wording difference
     # still has most of the window in common.
+    # `systems/prng.md` §3: the generator is seeded from the host clock at the
+    # intro menu, so a line the game *chooses at random* cannot be expected to
+    # agree between the two sides. A beat whose two sides differ only by which
+    # published equal-probability variant was drawn is `variant`: the engine
+    # printed a legal line, just not the one the original happened to draw.
+    #
+    # This runs before the `diverged` heuristic below, because two greeting
+    # templates from one pool can share almost no rows and would otherwise be
+    # reported as the two sides being in different places. `bd-shipwright`
+    # read `diverged 4` that way while both sides were in the same shop
+    # drawing different records from the published shipwright band.
+    if variant_only(stock, engine):
+        return "variant"
     stock_lines = {line for line in stock if line}
     engine_lines = {line for line in engine if line}
     if stock_lines and engine_lines:
@@ -422,8 +435,6 @@ def classify(left: list[list[str]], right: list[list[str]], rows: list[int]) -> 
     # A beat whose two sides differ only by which published equal-probability
     # variant was drawn is `variant`: the engine printed a legal line, just not
     # the one the original happened to draw. Anything else is still `text`.
-    if variant_only(stock, engine):
-        return "variant"
     # The window is a scrolling stream. Two sides that printed the same text
     # but are showing a different amount of it - because one spent a row the
     # other did not, or because a length-changing variant re-wrapped a line -
@@ -522,7 +533,7 @@ def compare_cached(artifact: pathlib.Path, cache: dict) -> tuple:
 
 
 # Bump when a classifier change would alter a cached verdict.
-CACHE_VERSION = 7
+CACHE_VERSION = 8
 
 
 # Some scenarios are explicitly a lottery: their own headers say so. The night
