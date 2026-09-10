@@ -880,7 +880,12 @@ impl PlayState {
         self.push_counted_use_row(
             &mut rows,
             SPECIAL_ITEM_MAGIC_CARPET_INDEX,
-            "Magic Carpet",
+            // Measured (`qa/paired/use-specials.tsv`, beat `skullkeysrow`):
+            // the original's row reads ` 1 Magic Crpt`. The name field is ten
+            // cells, and the original abbreviates rather than truncating -
+            // truncation of `Magic Carpet` gives `Magic Carp`, which is what
+            // this engine printed.
+            "Magic Crpt",
             UseItemRequest::MagicCarpet,
         );
 
@@ -1043,7 +1048,21 @@ impl PlayState {
             rows.push(UseItemPickerRow {
                 label: label.to_string(),
                 decoration: crate::stats_panel::PanelPickerDecoration::None,
-                quantity: None,
+                // `inventory.md §4.5`: the quantity and selector cells are
+                // "independent" of the decoration marker, and the row format is
+                // `[two-cell quantity][one-cell selector][name]` for every row
+                // except the "no quantity" marker, which §4.5 reserves for rows
+                // that print "only its name" - the moonstone
+                // (`cleak/u5-spec#246`). A carried regalia piece is not one of
+                // those: §4.5's own classification calls the Sceptre and Skull
+                // Keys "plain-name rows", which is about *decoration*, not
+                // about the quantity cells.
+                //
+                // Measured (`qa/paired/use-specials.tsv`, beat
+                // `skullkeysrow`): the original prints ` 1 Amulet`, ` 1 Crown`
+                // and ` 1 Sceptre`; this engine printed the bare names,
+                // shifting each row three cells left.
+                quantity: Some(value),
                 request,
             });
         }

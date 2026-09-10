@@ -1339,11 +1339,11 @@
 
         assert!(at("VL") < at("Yellow"), "scrolls lead the picker: {names:?}");
         assert!(
-            at("Yellow") < at("Magic Carpet"),
+            at("Yellow") < at("Magic Crpt"),
             "potions precede the special items: {names:?}"
         );
         assert!(
-            at("Magic Carpet") < at("Pocket Watch"),
+            at("Magic Crpt") < at("Pocket Watch"),
             "the carpet precedes the Pocket Watch: {names:?}"
         );
     }
