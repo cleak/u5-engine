@@ -117,6 +117,24 @@ impl PlayState {
             ) {
                 return Some(PARTY_SELECTOR_ROSTER_BOX_LABEL.to_string());
             }
+            // A follow-up that is *not* a panel surface has dismissed the
+            // picker: the skull key and the wind scroll both hand off to the
+            // shared `Direction-` prompt, which lives in the message window
+            // and leaves the roster panel restored. `inventory.md §4.4` gives
+            // the `Items:` label to the picker frame, so it goes with it.
+            //
+            // Measured (`qa/paired/use-specials.tsv`, beat `skullkeys`): the
+            // original's border band is blank there and this engine still read
+            // `Items:`.
+            if matches!(
+                session.pending,
+                Some(
+                    crate::z_stats::UsePendingAction::SkullKeyDirection
+                        | crate::z_stats::UsePendingAction::ScrollWindDirection { .. }
+                )
+            ) {
+                return None;
+            }
             return Some(USE_PICKER_ROSTER_BOX_LABEL.to_string());
         }
         if let Some(session) = self.active_ready.as_ref() {
