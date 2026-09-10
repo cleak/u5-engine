@@ -1521,6 +1521,13 @@ fn handle_active_shop_key_input(
                         _ => None,
                     },
                     active_speaker_is_female(state),
+                    // `shops.md` §4: the bill's count "is the number of
+                    // nondead party members".
+                    state
+                        .party
+                        .iter()
+                        .filter(|member| member.status != crate::PARTY_STATUS_DEAD)
+                        .count(),
                     game_dir,
                 ),
                 surcharge,
@@ -3145,9 +3152,38 @@ fn inn_declined_line(innkeeper_name: Option<&'static str>) -> String {
     }
 }
 
+/// `shops.md` §4's "Tavern count-word exception": the bill's count "is the
+/// number of nondead party members: two through six produce English number
+/// words; zero or one produce nothing. The surrounding spaces remain, so a
+/// solo party sees `for the  of ye,` with two spaces".
+fn tavern_bill_count_word(living_party: usize) -> &'static str {
+    match living_party {
+        2 => "two",
+        3 => "three",
+        4 => "four",
+        5 => "five",
+        6 => "six",
+        _ => "",
+    }
+}
+
+/// `shops.md` §8.C's tavern result table: the ordinary round/meal and
+/// secondary-drink bill is `"That will be `, the decimal price, ` gold for the
+/// `, the count word, ` of ye,\n`, the honorific, `.` - and a paid purchase
+/// then adds `\nEnjoy!"`. §4 stresses that this "is resident text, not a
+/// resource record" and "has no `SHOPPE.DAT` record ordinal".
+fn tavern_bill_line(price: u16, living_party: usize, speaker_is_female: bool) -> String {
+    format!(
+        "\"That will be {price} gold for the {} of ye,\n{}.\nEnjoy!\"",
+        tavern_bill_count_word(living_party),
+        tavern_honorific(speaker_is_female)
+    )
+}
+
 fn format_tavern_outcome(
     outcome: crate::shop_runtime::TavernOutcome,
     speaker_is_female: bool,
+    living_party: usize,
 ) -> String {
     use crate::shop_runtime::TavernOutcome::*;
     match outcome {
@@ -3185,12 +3221,17 @@ fn format_tavern_outcome(
             // **Measured** 2026-09-08 at The Cat's Lair
             // (`qa/paired/paws-sage.tsv`): a served purchase is followed by
             // the tavern's own question, `"Anything else for thee?"`, not by
-            // an `Anything else? (Y/N)` of the engine's invention. The
-            // purchase line itself is a `SHOPPE.DAT` record whose id is not
-            // published, so the engine's sentence still stands above it.
+            // an `Anything else? (Y/N)` of the engine's invention.
+            //
+            // The bill above it used to be the engine's own sentence, on the
+            // grounds that its record id was unpublished. `shops.md` §8.C now
+            // publishes it as *resident* text with no record at all, so the
+            // invented `<tavern> served a round for N gold.` is replaced by
+            // the published assembly. Measured 2026-09-10 (`paws-sage/ale`).
+            let _ = tavern;
             format!(
-                "{} served a round for {cost} gold.\n\n{TAVERN_ANYTHING_ELSE_PROMPT}",
-                tavern.display_name()
+                "{}\n\n{TAVERN_ANYTHING_ELSE_PROMPT}",
+                tavern_bill_line(cost, living_party, speaker_is_female)
             )
         }
         SecondaryTavernSelected {
@@ -3198,9 +3239,12 @@ fn format_tavern_outcome(
             letter,
             cost,
         } => {
+            // Same published bill as the round; the accepted letter has
+            // already echoed onto the list's open row.
+            let _ = (tavern, letter);
             format!(
-                "{} served {letter} for {cost} gold.\n\n{TAVERN_ANYTHING_ELSE_PROMPT}",
-                tavern.display_name()
+                "{}\n\n{TAVERN_ANYTHING_ELSE_PROMPT}",
+                tavern_bill_line(cost, living_party, speaker_is_female)
             )
         }
         // **Measured** 2026-09-08 at the Blue Boar in West Britanny
@@ -3309,6 +3353,7 @@ fn format_tavern_outcome_with_shoppe(
     no_sale_record_id: Option<usize>,
     tavern_vendor_name: Option<&'static str>,
     speaker_is_female: bool,
+    living_party: usize,
     game_dir: &Path,
 ) -> String {
     use crate::shop_runtime::TavernOutcome::*;
@@ -3398,7 +3443,7 @@ fn format_tavern_outcome_with_shoppe(
     });
     rendered
         .filter(|text| !text.is_empty())
-        .unwrap_or_else(|| format_tavern_outcome(outcome, speaker_is_female))
+        .unwrap_or_else(|| format_tavern_outcome(outcome, speaker_is_female, living_party))
 }
 
 fn format_sage_outcome(outcome: crate::shop_runtime::SageOutcome) -> String {

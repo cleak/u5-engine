@@ -5359,7 +5359,9 @@ fn active_shop_surcharge_applies_only_for_zero_shadowlord_sentinel() {
 
     assert_eq!(state.gold, 78);
     assert_eq!(state.prng_state, expected_prng_state);
-    assert!(state.message.contains("served a round for 3 gold"));
+    // `shops.md` §8.C's published bill, resident text with no record.
+    assert!(state.message.contains("\"That will be 3 gold for the"));
+    assert!(state.message.contains("of ye,"));
     assert!(state.message.contains("Surcharge 19 gold"));
 }
 
@@ -5380,7 +5382,9 @@ fn active_shop_surcharge_suppresses_without_zero_shadowlord_sentinel() {
 
     assert_eq!(state.gold, 97);
     assert_eq!(state.prng_state, 0x1234);
-    assert!(state.message.contains("served a round for 3 gold"));
+    // `shops.md` §8.C's published bill, resident text with no record.
+    assert!(state.message.contains("\"That will be 3 gold for the"));
+    assert!(state.message.contains("of ye,"));
     assert!(!state.message.contains("Surcharge"));
 }
 
@@ -5476,7 +5480,7 @@ fn end_to_end_tavern_menu_lore_letter_reaches_paid_sage_lookup() {
     handle_play_key_input(&mut state, 'Y', "", Path::new("")).unwrap();
     assert!(state.message.contains("lore"));
     handle_play_key_input(&mut state, 'A', "", Path::new("")).unwrap();
-    assert!(state.message.contains("served A for 1 gold"));
+    assert!(state.message.contains("\"That will be 1 gold for the"));
     handle_play_key_input(&mut state, 'Y', "", Path::new("")).unwrap();
     handle_play_key_input(&mut state, 'C', "", Path::new("")).unwrap();
 
