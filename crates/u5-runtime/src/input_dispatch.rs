@@ -1354,6 +1354,18 @@ fn handle_active_shop_key_input(
         }
         ActiveShopSession::Tavern(s) => {
             let mut food = state.food;
+            // `shops.md` §8.C's result table opens the bill "After the
+            // action-letter echo", and the tavern's list and follow-up records
+            // both end in a closing quote and a space - that space is the cell
+            // the accepted letter echoes into. Measured 2026-09-10
+            // (`paws-sage/lore`): the original's row reads `Rations?" C`,
+            // where this engine printed the row with nothing after the quote.
+            let tavern_letter_echo = matches!(
+                *s,
+                TavernState::Menu { .. } | TavernState::PostListWait { .. }
+            )
+            .then(|| tavern_accepted_menu_letter(*s, key_byte))
+            .flatten();
             let outcome = match (*s, yes, no, inline_digit) {
                 (TavernState::Greeting { .. }, _, _, _) => step_tavern(
                     s,
@@ -1506,6 +1518,11 @@ fn handle_active_shop_key_input(
                     TAVERN_NO_SALE_RECORD_LAST as u8,
                 ))
             });
+            if let Some(letter) = tavern_letter_echo {
+                if !matches!(outcome, TavernOutcome::InvalidInput) {
+                    state.emit_message_line_continuing_row(letter.to_string());
+                }
+            }
             append_active_shop_surcharge(
                 format_tavern_outcome_with_shoppe(
                     outcome,
@@ -3345,6 +3362,36 @@ fn format_tavern_outcome(
         // I-do-not-understand line anywhere in the shop family.
         InvalidInput => String::new(),
     }
+}
+
+/// The accepted tavern menu letter this key answers, if any.
+///
+/// `shops.md` §8.C: the four letters are the tavern's own round, secondary,
+/// provisions and lore keys; anything else "silently wait[s]". The echo is the
+/// uppercase form, printed onto the row the list or follow-up record left open
+/// after its closing quote and space.
+fn tavern_accepted_menu_letter(
+    state: crate::shop_runtime::TavernState,
+    key_byte: u8,
+) -> Option<char> {
+    use crate::shop_runtime::TavernState;
+    let tavern = match state {
+        TavernState::Menu { tavern, .. } | TavernState::PostListWait { tavern, .. } => tavern,
+        _ => return None,
+    };
+    let letters = tavern_menu_letters(tavern);
+    let upper = key_byte.to_ascii_uppercase() as char;
+    let accepted = [
+        Some(letters.round),
+        Some(letters.secondary),
+        letters.provisions,
+        Some(letters.lore),
+    ];
+    accepted
+        .into_iter()
+        .flatten()
+        .any(|letter| letter.to_ascii_uppercase() == upper)
+        .then_some(upper)
 }
 
 fn format_tavern_outcome_with_shoppe(
