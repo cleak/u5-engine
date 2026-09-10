@@ -1,5 +1,15 @@
 # Drink the potion colours whose results the shipped game prints, to measure
 # the lines `inventory.md` section 7 describes but does not quote.
+#
+# This is a lottery on the result line. `inventory.md` section 7 (Potions): "a
+# variation roll gives one chance in sixteen to force the Orange sleep effect
+# and one chance in sixteen to replace the effect with a random potion row",
+# and section 7.2 adds that "Results belong to the effective colour after the
+# existing variation roll". So about one drink in eight prints a line for a
+# colour other than the one in the bottle, and the two sides never share a
+# seed. A run whose result lines disagree has measured that roll rather than
+# the engine and must be re-run; the structure around them - the `Item:` and
+# `On who:` rows and their spacing - is what this scenario pins.
 # example (`potions=3 scrolls=3`)
 #
 # Seeded rather than walked to. The walk-up form of this scenario scripted its
