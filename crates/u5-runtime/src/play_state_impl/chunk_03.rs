@@ -5761,7 +5761,13 @@ fn z_stats_centred_panel_row(text: &str) -> String {
     if length >= width {
         return crate::stats_panel::truncate_ascii_chars(text, crate::STATS_PANEL_WIDTH);
     }
-    format!("{}{text}", " ".repeat((width - length) / 2))
+    // The remainder goes to the *left*. Measured 2026-09-10
+    // (`zstats-pages/p3`): Shamino's fourteen-cell `Lv-2 Fighter` line sits at
+    // column 1 in the original, where rounding down puts it at column 0. The
+    // Avatar's `Lv-2 Avatar` is thirteen cells and lands at column 1 under
+    // either rounding, which is why this survived - the same way `Str=20` hid
+    // the zero-padding fault until `Int=05` turned up.
+    format!("{}{text}", " ".repeat((width - length).div_ceil(2)))
 }
 
 /// One `Str=`/`__HP:`-shaped attribute row: the left label and its value
