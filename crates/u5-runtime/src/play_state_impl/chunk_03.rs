@@ -254,6 +254,13 @@ impl PlayState {
                     Some(
                         crate::z_stats::UsePendingAction::PotionTarget { .. }
                             | crate::z_stats::UsePendingAction::ScrollResurrectionTarget { .. }
+                            // The wind scroll's `Direction-` is `commands.md
+                            // §5.3`'s open verb echo: "a **direction** is
+                            // awaited. The chosen direction's name is appended
+                            // on the same line", so the cursor waits on that
+                            // row too. Measured (`qa/paired/stray-keys.tsv`,
+                            // beat `wind-prompt`).
+                            | crate::z_stats::UsePendingAction::ScrollWindDirection { .. }
                     )
                 )
             })
