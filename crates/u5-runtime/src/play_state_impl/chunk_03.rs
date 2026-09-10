@@ -1808,9 +1808,20 @@ impl PlayState {
         let Some(mut session) = self.active_yell.take() else {
             return None;
         };
+        // `commands.md §11` publishes two results for this prompt and neither
+        // is a cancel: "Empty input prints the ordinary nothing-said result.
+        // Nonempty input in this range prints the ordinary no-effect result."
+        // §5's table names them - `Y`, Return with nothing typed gives
+        // `Yell what?` / `:` / `Nothing` - and lists no Escape row at all.
+        //
+        // Measured 2026-09-09 (`qa/paired/nb-stable-open.tsv` and four
+        // siblings, beat `esc`): Escape at the open `:` row leaves the
+        // original still waiting on it, where this engine answered `None!` -
+        // a literal the prompt has no use for - and spent the turn.
         if key == '\u{1b}' {
-            self.message = "None!".to_string();
-            return Some(MoveOutcome::PromptDeclined);
+            self.message = self.render_yell_session(&session);
+            self.active_yell = Some(session);
+            return None;
         }
         let mut line = String::new();
         if !matches!(key, '\r' | '\n') {

@@ -277,10 +277,14 @@ def classify(left: list[list[str]], right: list[list[str]], rows: list[int]) -> 
     return "text"
 
 
-def compare(artifact: pathlib.Path) -> tuple[int, int, int]:
+# One side had not reached the beat when the shot was taken. Not a difference.
+IDLE_KINDS = {"stock-idle", "engine-idle"}
+
+
+def compare(artifact: pathlib.Path) -> tuple[int, int, int, int]:
     record = json.loads((artifact / "record.json").read_text())
     scenario = record.get("scenario", artifact.name)
-    same = differ = skipped = 0
+    same = differ = skipped = idle = 0
     for capture in record.get("captures", []):
         label = capture.get("label")
         stock = artifact / f"dosbox-{label}.png"
@@ -300,15 +304,24 @@ def compare(artifact: pathlib.Path) -> tuple[int, int, int]:
             if any(x != y and "?" not in (x, y) for x, y in zip(a, b))
         ]
         if rows:
-            differ += 1
             kind = classify(left, right, rows)
             KINDS[kind] = KINDS.get(kind, 0) + 1
+            # A side that never reached the beat is not a difference: the DOSBox
+            # side sometimes boots too slowly for the scripted Journey Onward,
+            # and the whole run then compares a blank window against a working
+            # one. Counting that as a conformance failure is how `cove-herbalist`
+            # once read 0 of 7 and then matched 7 of 7 unchanged on a re-run.
+            if kind in IDLE_KINDS:
+                idle += 1
+                print(f"  idle   {scenario}/{label}: {kind}, re-run needed")
+                continue
+            differ += 1
             print(
                 f"  differ {scenario}/{label}: {kind}, rows {[r + TOP for r in rows]}"
             )
         else:
             same += 1
-    return same, differ, skipped
+    return same, differ, skipped, idle
 
 
 KINDS: dict[str, int] = {}
@@ -354,14 +367,22 @@ def main() -> None:
     args = sys.argv[1:]
     if args[0] == "--latest":
         args = [str(path) for path in latest_artifacts(args[1:])]
-    total = [0, 0, 0]
+    total = [0, 0, 0, 0]
     for arg in args:
-        same, differ, skipped = compare(pathlib.Path(arg))
-        status = "match" if differ == 0 else "DIFFER"
-        print(f"{status} {pathlib.Path(arg).name}: {same} beat(s) agree, {differ} differ, {skipped} skipped")
-        for index, value in enumerate((same, differ, skipped)):
+        same, differ, skipped, idle = compare(pathlib.Path(arg))
+        # A run carrying idle beats is not a verdict either way: it needs
+        # re-running before its differences mean anything.
+        status = "RERUN" if idle else ("match" if differ == 0 else "DIFFER")
+        print(
+            f"{status} {pathlib.Path(arg).name}: {same} beat(s) agree, "
+            f"{differ} differ, {skipped} skipped, {idle} idle"
+        )
+        for index, value in enumerate((same, differ, skipped, idle)):
             total[index] += value
-    print(f"\n{total[0]} beat(s) agree, {total[1]} differ, {total[2]} skipped")
+    print(
+        f"\n{total[0]} beat(s) agree, {total[1]} differ, "
+        f"{total[2]} skipped, {total[3]} idle (re-run)"
+    )
     if KINDS:
         # `stock-idle`/`engine-idle` are re-run candidates, `offset`/`cursor`
         # are row accounting, and `text` is the conformance queue.
