@@ -1,7 +1,9 @@
 # Does the stock game enter the arms shop when the shopkeeper is *not* seated?
-# `shop-arms` seeds the party at the counter from an engine-written save, so the
-# stock side's NPC band is zero and every Talk answers `No response!`
-# (see the README) - it compares nothing. `town-talk-after-entry` walks in and
+# `shop-arms` seeds the party at the counter from an engine-written save. Its
+# seed used to reach DOSBox with the NPC band zero, so every Talk answered
+# `No response!` and it compared nothing; it was re-seeded on 2026-09-10 and
+# now matches on every beat, so it is no longer the broken control this
+# paragraph was written around. `town-talk-after-entry` walks in and
 # reaches the same weaponsmith at 12:39, when it is sitting on a chair, and the
 # stock refuses the trigger with a fixed merchant line while the engine opens
 # the overlay (u5-engine#15, u5-spec#214). This scenario is the control for

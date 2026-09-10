@@ -64,7 +64,7 @@ ready-slots	seed-ready-slots	copied from the paired-ready-slots run profile
 ready-two-handed	seed-ready-two-handed	copied from paired-ready-twohand: the ready-slots party with a two-handed weapon
 ship-commands	seed-ship-commands	copied from the paired-ship-commands run profile
 ship-repair	seed-ship-repair	copied from the paired-ship-repair run profile
-shop-arms	seed-shop-arms	copied from the paired-shop-arms run profile
+shop-arms	seed-shop-arms-reseeded	re-written by reseed.py so the save carries a populated NPC band
 shop-arms-after-entry	seed-shop-arms-after-entry	copied from the paired-shop-arms-after-entry run profile
 shop-arms-buy	seed-shop-arms-buy	copied from the paired-shop-arms-buy run profile
 shop-arms-buy-confirm	seed-shop-arms-buy-confirm-reseeded	the walk-up replayed once by reseed.py

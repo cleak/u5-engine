@@ -1,4 +1,15 @@
 # Talk to the weaponsmith from a seeded save standing south of the counter.
+#
+# The seed was re-written by `reseed.py` on 2026-09-10. The previous one was
+# copied from a run profile and predated the NPC-band writer, so it reached
+# DOSBox with that region zero - and `conversation.md` Section 2 says what
+# that does: "A save written by another program that leaves that region zero
+# makes every NPC in the location answer `No response!` until the location is
+# re-entered from outside - that is a property of the save, not of the game."
+# The stock side duly answered `No response!` to every Talk, and this scenario
+# compared nothing. With a populated band it matches the engine on all three
+# beats. Nothing about the engine changed.
+#
 # requires-seed: the party standing south of the weaponsmith's counter
 both	wait	9000
 both	key	space
