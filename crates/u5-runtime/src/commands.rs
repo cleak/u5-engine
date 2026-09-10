@@ -745,9 +745,14 @@ pub const USE_MAGIC_CARPET_ONLY_ON_FOOT: &str = "Only on foot!";
 pub const USE_PLANS_SHIPBOARD_ONLY_REFUSAL: &str = "Only usable on shipboard!";
 /// And the accepted form, measured aboard the ship.
 pub const USE_PLANS_RIGGED_LINE: &str = "Ship rigged for double speed!";
-pub const USE_AMULET_WORN: &str = "Wearing the Amulet of Lord British";
-pub const USE_CROWN_WORN: &str = "Thou dost don the Crown of Lord British";
-pub const USE_SCEPTRE_WIELDED: &str = "Wielding the Sceptre of Lord British";
+/// `inventory.md §7`'s Use result table ends all three regalia lines with an
+/// ellipsis: `Wearing the Amulet of Lord British...`, `Thou dost don the Crown
+/// of Lord British...` and `Wielding the Sceptre of Lord British...`. The
+/// engine dropped it on all three. Measured 2026-09-10
+/// (`use-specials/crown`): the original reads `British...` over `No effect!`.
+pub const USE_AMULET_WORN: &str = "Wearing the Amulet of Lord British...";
+pub const USE_CROWN_WORN: &str = "Thou dost don the Crown of Lord British...";
+pub const USE_SCEPTRE_WIELDED: &str = "Wielding the Sceptre of Lord British...";
 pub const USE_BLACK_BADGE_WORN: &str = "Badge worn!";
 pub const USE_REGALIA_REMOVED: &str = "Removed!";
 /// The shard line names the shard on its own row run: `Thou dost hold above

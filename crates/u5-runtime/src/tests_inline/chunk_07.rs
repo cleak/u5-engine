@@ -986,7 +986,7 @@ fn sceptre_requires_item_non_dungeon_and_matching_nearby_barriers() {
     );
     assert_eq!(no_barrier.turn, 0);
     assert!(!no_barrier.visibility_dirty);
-    assert_eq!(no_barrier.message, "Wielding the Sceptre of Lord British\nNo effect!");
+    assert_eq!(no_barrier.message, "Wielding the Sceptre of Lord British...\nNo effect!");
 }
 
 #[test]
@@ -1015,7 +1015,7 @@ fn use_command_routes_worn_regalia_and_badge_toggles() {
     assert_eq!(town.active_effect_tag, Some(CROWN_LB_ACTIVE_EFFECT_TAG));
     assert_eq!(town.active_effect_counter, PERMANENT_ACTIVE_EFFECT_DURATION);
     assert!(town.visibility_dirty);
-    assert_eq!(town.message, "Thou dost don the Crown of Lord British");
+    assert_eq!(town.message, "Thou dost don the Crown of Lord British...");
 
     town.visibility_dirty = false;
     assert_eq!(
@@ -1036,7 +1036,7 @@ fn use_command_routes_worn_regalia_and_badge_toggles() {
     assert_eq!(town.active_effect_tag, Some(AMULET_LB_ACTIVE_EFFECT_TAG));
     assert_eq!(town.active_effect_counter, PERMANENT_ACTIVE_EFFECT_DURATION);
     assert!(town.visibility_dirty);
-    assert_eq!(town.message, "Wearing the Amulet of Lord British");
+    assert_eq!(town.message, "Wearing the Amulet of Lord British...");
 
     assert_eq!(
         handle_play_key_input(&mut town, 'U', "AM", Path::new("")).unwrap(),
@@ -1072,7 +1072,7 @@ fn worn_regalia_requires_owned_item_without_turn() {
             SPECIAL_ITEM_CROWN_LB_INDEX,
             CROWN_LB_ACTIVE_EFFECT_TAG,
             "Crown",
-            "Thou dost don the Crown of Lord British",
+            "Thou dost don the Crown of Lord British...",
             "Removed!",
         ),
         MoveOutcome::Blocked
