@@ -2498,7 +2498,8 @@ fn handle_arms_shop_key_input(
         // between them, so the draw is the record id for this shop's row.
         (ArmsShopOutcome::Exited | ArmsShopOutcome::Declined, _) => {
             let roll = state.random_range_u8(0, 3);
-            render_shared_shoppe_flourish(game_dir, usize::from(roll))
+            let record = arms_closing_bark_record(state.arms_transaction_completed, roll);
+            render_shared_shoppe_flourish(game_dir, record)
                 .map(|flourish| speech.attribute(&flourish, "says"))
                 .unwrap_or_default()
         }
@@ -2887,6 +2888,31 @@ fn render_shared_shoppe_flourish(game_dir: &Path, record_id: usize) -> Option<St
 /// and printed one closing quote, while this engine drew `Harrumph!` and
 /// printed `"Harrumph!""`. Appending is guarded rather than dropped outright so
 /// a record that lacks the trailing quote still closes.
+/// The `SHOPPE.DAT` record the arms shop closes a visit on.
+///
+/// `shops.md` §8.A lists the closing bark as *two* rows, not one - "Shared
+/// closing bark, nothing bought" and "Shared closing bark, purchase completed"
+/// - each "one of four `SHOPPE.DAT` records from the current shop-kind" row
+/// under a uniform `0..3` draw. The arms rows are the two halves of the shared
+/// `0..7` band, which is what the engine had collapsed: it drew `0..3`
+/// whichever way the visit went, so a paid-up customer got sent off with
+/// `Harrumph!`.
+///
+/// Measured 2026-09-10. `shop-arms-buy-confirm` buys a Dagger and leaves, and
+/// the original closed it on record `7`; the scenarios that buy nothing and
+/// leave have only ever drawn `0..3`. The bands read that way too - `0..3` are
+/// the dismissals and `4..7` the warm send-offs - which is the sentiment split
+/// the two outcome rows describe.
+fn arms_closing_bark_record(transaction_completed: bool, roll: u8) -> usize {
+    const PURCHASE_COMPLETED_BASE: usize = 4;
+    let base = if transaction_completed {
+        PURCHASE_COMPLETED_BASE
+    } else {
+        0
+    };
+    base + usize::from(roll & 0x03)
+}
+
 fn quote_shoppe_flourish(text: &str) -> String {
     let text = text.trim();
     if text.ends_with('"') {
@@ -5424,6 +5450,26 @@ mod arms_shop_resident_literal_tests {
             state.message, message_after_entry,
             "an invalid selector must leave the existing text exactly as it was"
         );
+    }
+
+    /// `systems/shops.md §8.A` lists the closing bark as two rows, one for a
+    /// visit that bought nothing and one for a visit that completed a
+    /// purchase, each a uniform `0..3` draw into its own row. Measured
+    /// 2026-09-10: `shop-arms-buy-confirm` buys and leaves, and the original
+    /// closed it on record `7`, which a `0..3` draw into a row based at `0`
+    /// cannot reach.
+    #[test]
+    fn the_arms_closing_bark_row_follows_the_visits_outcome() {
+        for roll in 0..4 {
+            assert_eq!(arms_closing_bark_record(false, roll), usize::from(roll));
+            assert_eq!(arms_closing_bark_record(true, roll), usize::from(roll) + 4);
+        }
+        // Every record the draw can reach is inside the shared 0..7 band.
+        for completed in [false, true] {
+            for roll in 0..4 {
+                assert!(arms_closing_bark_record(completed, roll) < 8);
+            }
+        }
     }
 
     /// `systems/shops.md §8.1` / `§8.A`: the drawn no-credit bark is wrapped
