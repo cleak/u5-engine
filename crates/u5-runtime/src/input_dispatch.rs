@@ -2349,11 +2349,18 @@ fn handle_arms_shop_key_input(
             let call = arms_stock_call_for_roll(state.random_range_u8(0, 3));
             format!("{listing}\n{call}")
         }
-        (ArmsShopOutcome::InvalidInput, Some(table)) if was_invalid_stock_pick => {
-            // `§8.1`: an invalid stock letter "leave[s] the stock list visible
-            // and keep[s] waiting; they do not redraw the list or consume a
-            // random draw", so the redraw reuses no fresh heading draw.
-            format_arms_stock_buy_menu(table, None)
+        (ArmsShopOutcome::InvalidInput, Some(_)) if was_invalid_stock_pick => {
+            // `§8.A`'s "Arms buy stock list" row: invalid stock letters "leave
+            // the stock list visible and keep waiting; they do not redraw the
+            // list or consume a random draw", and `§8.1` repeats it - "Invalid
+            // listing keys keep the existing text and consume no new draw."
+            // This arm re-rendered the listing, which appended a second copy
+            // under the first. Measured 2026-09-10 (`shop-arms-menus/sell`,
+            // where the scripted `S` is not a stock letter): the original's
+            // window is unchanged from the previous beat while this engine had
+            // grown a duplicate list. Keeping the existing text is the same
+            // thing the sell-side sibling arm below already does.
+            state.message.clone()
         }
         (ArmsShopOutcome::InvalidInput, _)
             if matches!(
@@ -5385,20 +5392,25 @@ mod arms_shop_resident_literal_tests {
         assert_eq!(lines.last(), Some(&expected_call));
     }
 
-    /// `systems/shops.md §8.1`: "Invalid buy selectors ... do not print a
-    /// refusal line. The buy menu simply keeps waiting for a valid letter,
-    /// Space, or Escape." `§8.A` adds that plain ignored-key waits "do not
-    /// re-render the visible quote or menu, and do not consume a random bark
-    /// draw" — so this redraw arm must not take a fresh call-line draw.
+    /// `systems/shops.md §8.A`, the "Arms buy stock list" row: invalid stock
+    /// letters "leave the stock list visible and keep waiting; they do not
+    /// redraw the list or consume a random draw". `§8.1` repeats it: "Invalid
+    /// listing keys keep the existing text and consume no new draw."
     ///
-    /// The PRNG word is the observable: a re-drawn call line would advance it.
+    /// This engine re-rendered the stock rows, which appended a second copy of
+    /// the list under the first. Measured 2026-09-10 on
+    /// `shop-arms-menus/sell`, where the scripted `S` is not a stock letter:
+    /// the original's window is byte-identical to the previous beat's.
+    ///
+    /// The window text and the PRNG word are both observables here - a redraw
+    /// would change the first, a fresh call-line draw the second.
     #[test]
-    fn arms_invalid_buy_letter_redraw_consumes_no_random_draw() {
+    fn arms_invalid_buy_letter_leaves_the_window_and_the_prng_untouched() {
         let mut state = stocked_arms_state();
         handle_play_key_input(&mut state, 'B', "", Path::new("")).unwrap();
 
         let prng_after_entry = state.prng_state;
-        let call_after_entry = state.message.lines().last().unwrap().to_string();
+        let message_after_entry = state.message.clone();
 
         // `d` is past the three-entry stock table, so it is an invalid buy
         // selector rather than a purchase.
@@ -5406,20 +5418,11 @@ mod arms_shop_resident_literal_tests {
 
         assert_eq!(
             state.prng_state, prng_after_entry,
-            "the invalid-selector redraw must not consume a random draw"
+            "an invalid selector must not consume a random draw"
         );
-        assert!(
-            !state.message.contains(&call_after_entry),
-            "the redraw must not re-print the call line: {:?}",
-            state.message
-        );
-        // `§8.B`: "These two draws occur once per accepted Buy entry.
-        // Repeated item listings do not redraw either heading." The engine
-        // reprinted a fixed affirmation/introduction pair here.
-        assert!(
-            state.message.starts_with("a...Short Sword"),
-            "the redraw re-renders the stock rows without the heading: {:?}",
-            state.message
+        assert_eq!(
+            state.message, message_after_entry,
+            "an invalid selector must leave the existing text exactly as it was"
         );
     }
 
