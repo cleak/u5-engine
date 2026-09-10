@@ -555,9 +555,25 @@ impl PlayState {
     ) -> io::Result<MoveOutcome> {
         let facing = self.player.facing;
         self.player.facing = direction;
-        let outcome = self.use_skull_key(game_dir);
+        // The picker spent the key when the row was accepted, so this is the
+        // lock attempt alone.
+        let outcome = self.use_skull_key_dispatch(game_dir);
         self.player.facing = facing;
         outcome
+    }
+
+    /// `inventory.md §7`: "Skull Key | **Decrements the skull-key/special-key
+    /// counter, then** asks for a cardinal target and runs the lock helper".
+    ///
+    /// The counter is spent when the row is accepted, before the direction is
+    /// asked for - not when the lock is tried. Measured
+    /// (`qa/paired/use-specials.tsv`, beat `amuletrow`): the original's picker
+    /// has already lost its `Skull Keys` row by the next beat, and this
+    /// engine's still listed it because the spend waited for the direction.
+    /// A target outside the map also skipped the spend entirely.
+    pub fn spend_skull_key(&mut self) {
+        self.special_items[SPECIAL_ITEM_SKULL_KEY_INDEX] =
+            self.special_items[SPECIAL_ITEM_SKULL_KEY_INDEX].saturating_sub(1);
     }
 
     pub fn use_skull_key(&mut self, game_dir: Option<&Path>) -> io::Result<MoveOutcome> {
@@ -568,6 +584,20 @@ impl PlayState {
             self.message.clear();
             return Ok(MoveOutcome::Blocked);
         }
+        // `inventory.md §7`: "Dungeon exploration refuses through this path",
+        // and §7's result table gives it `Not here!`. The refusal comes before
+        // the spend - a refused use keeps the key, which
+        // `skull_key_dungeon_refusal_keeps_stock_and_runs_the_normal_turn`
+        // measured.
+        if matches!(self.area, Area::Dungeon { .. }) {
+            return self.use_skull_key_dispatch(game_dir);
+        }
+        self.spend_skull_key();
+        self.use_skull_key_dispatch(game_dir)
+    }
+
+    /// The lock attempt itself, with the counter already spent.
+    pub fn use_skull_key_dispatch(&mut self, game_dir: Option<&Path>) -> io::Result<MoveOutcome> {
         match self.area {
             Area::Town { scene, floor } => self.use_skull_key_town_facing(game_dir, scene, floor),
             Area::Dungeon { .. } => {
@@ -595,8 +625,6 @@ impl PlayState {
             return Ok(MoveOutcome::Blocked);
         }
 
-        self.special_items[SPECIAL_ITEM_SKULL_KEY_INDEX] =
-            self.special_items[SPECIAL_ITEM_SKULL_KEY_INDEX].saturating_sub(1);
         let tx = tx as usize;
         let ty = ty as usize;
         if self.blocking_object_at(tx, ty).is_some() {

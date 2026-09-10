@@ -521,9 +521,18 @@ impl PlayState {
                 });
                 if let Some(pending) = pending_action_for_use_request(row.request) {
                     // The potion and scroll rows debit their stock when the
-                    // row is accepted, before the argument is asked for; the
-                    // skull key does its whole job once the direction is in.
-                    if !matches!(pending, UsePendingAction::SkullKeyDirection) {
+                    // row is accepted, before the argument is asked for, and
+                    // `inventory.md §7` puts the skull key in the same place:
+                    // it "**Decrements the skull-key/special-key counter,
+                    // then** asks for a cardinal target". Its lock attempt is
+                    // what waits for the direction, not its cost.
+                    if matches!(pending, UsePendingAction::SkullKeyDirection) {
+                        // Except in a dungeon, where §7 refuses instead and
+                        // the key is kept.
+                        if !matches!(self.area, Area::Dungeon { .. }) {
+                            self.spend_skull_key();
+                        }
+                    } else {
                         let _ = self.use_item_command(Some(row.request), Some(game_dir))?;
                     }
                     session.pending = Some(pending);
