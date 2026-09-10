@@ -234,21 +234,44 @@ def _flatten(rows: list[str]) -> str:
 # The pools are read from a local profile at run time rather than transcribed
 # here: they are the original's text and this repository does not carry it.
 # Only the published record ranges live in the source.
+# `shops.md` §4 clusters `SHOPPE.DAT` by consumer, and those clusters are draw
+# pools: an overlay picks one record per visit. Two sides with different
+# host-clock seeds draw different records, which is not a conformance
+# difference.
+#
+# The clusters below are per shop kind, because that is the granularity the
+# spec publishes. §8.A describes each kind as owning *rows* within its cluster
+# - a preamble, an entry greeting and a farewell, each a uniform `0..3` draw -
+# but only publishes the row bases for the arms closing bark, whose two halves
+# have opposite sentiment and are split here. Modelling the other kinds' rows
+# from the engine's own base table was tried and is wrong: `bd-shipwright`'s
+# greeting draws from a wider span than any single four-record row, which is
+# the open question in `cleak/u5-spec#254`. Until that is published, a
+# kind-wide cluster is what the evidence supports.
 SHOPPE_POOLS = {
-    # `shops.md` §8.A lists the closing bark as two rows - "nothing bought"
-    # and "purchase completed" - each a uniform `0..3` draw into its own half
-    # of the shared band. They are separate pools here, so two sides that drew
-    # from *different* halves are a real difference rather than one draw.
-    "shared-barks-nothing-bought": range(0, 4),
-    "shared-barks-purchase-completed": range(4, 8),
+    # The two arms closing-bark rows. `shops.md` line 693: "a visit that bought
+    # nothing draws from a curt no-sale row, a completed purchase draws from a
+    # courteous farewell row". Measured 2026-09-10: a paid-up
+    # `shop-arms-buy-confirm` visit closed on record 7 and the no-purchase
+    # visits have only ever drawn `0..3`. Separate pools, so a cross-row draw
+    # stays a real difference - it was a real engine defect.
+    "arms-bark-nothing-bought": range(0, 4),
+    "arms-bark-purchase-completed": range(4, 8),
+    # `shops.md` §8.1: an ordinary sellable selection draws "uniform `0..7`
+    # over `SHOPPE.DAT` records `49..56`".
     "arms-sell-back": range(49, 57),
+    # The tavern, meal and sage band. This was missing entirely, so every
+    # tavern arrival greeting - §8.A's "one shared tavern greeting record
+    # selected uniformly from `57..60`" - read as a wording difference.
+    "tavern-sage": range(57, 92),
     "horse-trader": range(92, 105),
     "ship-broker": range(105, 127),
-    "reagent": range(127, 147),
-    "guild": range(148, 163),
-    "healer": range(163, 174),
+    "reagent": range(127, 148),
+    "guild": range(148, 165),
+    "healer": range(165, 174),
     "innkeeper": range(174, 194),
 }
+
 ASSET_PROFILE = pathlib.Path.home() / ".local/share/u5/engine/codex-seed"
 _SIGNATURES: dict[str, list[tuple[str, ...]]] | None = None
 
@@ -582,7 +605,7 @@ def compare_cached(artifact: pathlib.Path, cache: dict) -> tuple:
 
 
 # Bump when a classifier change would alter a cached verdict.
-CACHE_VERSION = 13
+CACHE_VERSION = 15
 
 
 # Some scenarios are explicitly a lottery: their own headers say so. The night
