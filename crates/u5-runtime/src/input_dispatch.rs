@@ -3230,8 +3230,14 @@ fn format_tavern_outcome(
         //
         // You respond:
         // ```
+        // `shops.md` §8.C's sage result table: "Topic prompt | Echo the
+        // state's lore letter, then `\n\n"Of what wouldst\nthou hear my\nlore,
+        // `, honorific, `?"\n\nYou respond:\n`". The letter now echoes onto
+        // the follow-up record's open row, and the two line feeds after it
+        // leave the blank row the original shows above the question.
+        // Measured 2026-09-10 (`paws-sage/lore`).
         EnteredSagePrompt => format!(
-            "\"Of what wouldst thou hear my lore, {}?\"\n\n{SAGE_RESPOND_PROMPT}",
+            "\n\"Of what wouldst thou hear my lore, {}?\"\n\n{SAGE_RESPOND_PROMPT}",
             if speaker_is_female { "milady" } else { "sir" }
         ),
         RoundDrinkServed { tavern, cost } => {

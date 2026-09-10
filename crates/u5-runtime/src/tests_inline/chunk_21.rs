@@ -5486,9 +5486,13 @@ fn end_to_end_tavern_menu_lore_letter_reaches_paid_sage_lookup() {
 
     // Measured 2026-09-08 at The Cat's Lair (`qa/paired/paws-sage.tsv`): the
     // question is quoted and gendered, and a typed-input prompt follows it.
+    // `shops.md` §8.C: the lore letter echoes onto the follow-up record's open
+    // row and the question follows two line feeds, so the rendered message
+    // opens with the one that leaves the blank row (measured 2026-09-10,
+    // `paws-sage/lore`).
     assert_eq!(
         state.message,
-        "\"Of what wouldst thou hear my lore, sir?\"\n\nYou respond:"
+        "\n\"Of what wouldst thou hear my lore, sir?\"\n\nYou respond:"
     );
     assert!(matches!(
         state.active_shop,
