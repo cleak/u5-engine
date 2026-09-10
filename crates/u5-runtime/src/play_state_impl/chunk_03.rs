@@ -2852,10 +2852,11 @@ impl PlayState {
                         format!(" {}", line.rsplit(": ").next().unwrap_or(line))
                     };
                 }
-                // Measured: the stock game puts the `Arms` list - or its
-                // `(None ready)` placeholder - on panel row 4, not
-                // directly under the heading.
-                z_stats_place_panel_rows(&mut rows, 4, &lines);
+                // Measured 2026-09-10 (`zstats-pages/p2`): the stock game
+                // puts the `Arms` list - or its `(None ready)` placeholder -
+                // two rows higher than this engine did, starting at decoded
+                // panel row 3 where the engine started at row 5.
+                z_stats_place_panel_rows(&mut rows, 2, &lines);
             }
             ZStatsPage::Counters => self.z_stats_counters_page_rows(&mut rows),
             page => {
@@ -3597,10 +3598,20 @@ impl PlayState {
                 continue;
             }
             count += 1;
+            // `catalogs/item-list.md` §7's short-label row: "Character-sheet
+            // inventory consumers also draw from this row where their owning
+            // display contract says so." The readied-equipment page is such a
+            // consumer - measured 2026-09-10 (`zstats-pages/p2`), where the
+            // original's row reads ` Chain` for Chain Mail and this engine
+            // read ` Chain Mail`. The engine already carried the published
+            // table; this page was reaching past it to the canonical name.
             lines.push(format!(
                 "{}: {}",
                 slot_name(slot),
-                equipment_name(item as usize)
+                crate::EQUIPMENT_SHORT_LABELS
+                    .get(item as usize)
+                    .copied()
+                    .unwrap_or_else(|| equipment_name(item as usize))
             ));
         }
         if count == 0 {
