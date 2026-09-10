@@ -679,9 +679,30 @@ pub const PANEL_PICKER_FRAME_RIGHT_COLUMN: u8 = 14;
 /// 9", so the bottom edge lands on window row 8.
 pub const PANEL_PICKER_FRAME_BOTTOM_ROW: u8 = 8;
 
+/// `inventory.md §4.4`: "Moving Down through a long list first moves the
+/// highlight through rows one to four", so the highlight rests on interior row
+/// four - zero-based row three - once the list has scrolled at all.
+const PANEL_PICKER_RESTING_ROW: usize = 3;
+
 impl PanelPickerView {
+    /// The first row the frame shows.
+    ///
+    /// `inventory.md §4.4` describes a **scrolling** window, not a paged one:
+    /// "Moving Down through a long list first moves the highlight through rows
+    /// one to four. Further Down steps scroll the list while the highlight
+    /// stays on row four. Once the final seven-item window is visible, the
+    /// remaining steps move the highlight through rows five to seven."
+    ///
+    /// This used to page - `(selected / ROWS) * ROWS` - which jumps seven rows
+    /// at the boundary and shows a different slice of the list everywhere
+    /// except the first page. Measured (`qa/paired/use-specials.tsv`, beats
+    /// `amuletrow` and `crownrow`): the original's frame sits one row further
+    /// down the list than this engine's at the same selection.
     pub fn page_start(&self) -> usize {
-        (self.selected / PANEL_PICKER_ROWS) * PANEL_PICKER_ROWS
+        let last_start = self.rows.len().saturating_sub(PANEL_PICKER_ROWS);
+        self.selected
+            .saturating_sub(PANEL_PICKER_RESTING_ROW)
+            .min(last_start)
     }
 
     pub fn visible_rows(&self) -> &[PanelPickerRow] {
