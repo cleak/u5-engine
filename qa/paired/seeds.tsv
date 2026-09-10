@@ -21,7 +21,7 @@ combat-dungeon-room	seed-combat-dungeon-room	copied from the paired-combat-dunge
 combat-ready-armour	seed-combat-ready-armour	copied from paired-combat-dungeon-room: the same dungeon-room seed
 combat-refusal-audio	seed-combat-refusal-audio	copied from the paired-combat-refusal-audio run profile
 combat-rounds	seed-combat-rounds	copied from the paired-combat-rounds run profile
-combat-town-attack	seed-combat-town-attack	copied from the paired-combat-town-attack run profile
+combat-town-attack	seed-combat-town-attack-reseeded	re-written by reseed.py so the save carries a populated NPC band
 combat-town-attack-after-entry	seed-combat-town-attack-after-entry-reseeded	the walk-up replayed once by reseed.py
 cove-healer	seed-cove-healer-reseeded	the walk-up replayed once by reseed.py
 cove-healer-services	seed-cove-healer-services-reseeded	the walk-up replayed once by reseed.py
