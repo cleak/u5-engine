@@ -350,6 +350,18 @@ def classify(left: list[list[str]], right: list[list[str]], rows: list[int]) -> 
     # the one the original happened to draw. Anything else is still `text`.
     if variant_only(stock, engine):
         return "variant"
+    # The window is a scrolling stream. Two sides that printed the same text
+    # but are showing a different amount of it - because one spent a row the
+    # other did not, or because a length-changing variant re-wrapped a line -
+    # disagree on every row without disagreeing on a word. The row-shift probe
+    # above only catches that when the wrap is identical, so compare the
+    # flattened streams too: if one side's visible text is a contiguous run of
+    # the other's, the content agrees and the row accounting does not.
+    left, right = _flatten(stock), _flatten(engine)
+    if len(left) >= 24 and len(right) >= 24:
+        short, long_ = sorted((left, right), key=len)
+        if _canonical(short) in _canonical(long_):
+            return "scroll"
     if len(rows) == 1:
         a, b = stock[rows[0]], engine[rows[0]]
         if a.rstrip() == b.rstrip():
