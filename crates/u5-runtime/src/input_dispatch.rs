@@ -2293,6 +2293,7 @@ fn handle_arms_shop_key_input(
             })
         }
         (ArmsShopState::BuyConfirm { .. } | ArmsShopState::SellConfirm { .. }, true, _, _) => {
+            emit_sell_confirm_echo(state, prior_state, "Yes");
             step_arms_shop(
                 shop_state,
                 ArmsShopInput::Confirm(true),
@@ -2303,6 +2304,7 @@ fn handle_arms_shop_key_input(
             )
         }
         (ArmsShopState::BuyConfirm { .. } | ArmsShopState::SellConfirm { .. }, _, true, _) => {
+            emit_sell_confirm_echo(state, prior_state, "No");
             step_arms_shop(
                 shop_state,
                 ArmsShopInput::Confirm(false),
@@ -2457,8 +2459,13 @@ fn handle_arms_shop_key_input(
             )
         }
         (ArmsShopOutcome::Declined, _) if matches!(shop_state, ArmsShopState::SellPickItem(_)) => {
+            // The `No` is echoed onto the open `Deal?" ` row above, not
+            // printed here on a row of its own, and the continuation prompt
+            // follows two line feeds. Measured 2026-09-10
+            // (`shop-arms-sell-flow/declined`): the original reads
+            // `Deal?" No`, a blank row, then the prompt.
             format!(
-                "No\n{}",
+                "\n{}",
                 arms_sell_continuation_prompt(state.random_range_u8(0, 3))
             )
         }
@@ -2472,7 +2479,10 @@ fn handle_arms_shop_key_input(
             },
             _,
         ) => format!(
-            "{}\n{}",
+            // Measured 2026-09-10 (`shop-arms-sell-flow/sold`): the original
+            // reads `Deal?" Yes`, a blank row, `"Done!"` over its
+            // attribution, another blank row, then the continuation prompt.
+            "\n{}\n\n{}",
             speech.attribute("\"Done!\"", "says"),
             arms_sell_continuation_prompt(state.random_range_u8(0, 3))
         ),
@@ -2483,7 +2493,10 @@ fn handle_arms_shop_key_input(
             },
             _,
         ) => format!(
-            "{}\n{}",
+            // The sale that empties the browser takes the same spacing, with
+            // the local goodbye where the continuation prompt would be. Not
+            // separately measured.
+            "\n{}\n\n{}",
             speech.attribute("\"Done!\"", "says"),
             speech.attribute(&arms_sell_goodbye(state.random_range_u8(0, 3)), "says")
         ),
@@ -2913,6 +2926,32 @@ fn render_shared_shoppe_flourish(game_dir: &Path, record_id: usize) -> Option<St
 /// leave have only ever drawn `0..3`. The bands read that way too - `0..3` are
 /// the dismissals and `4..7` the warm send-offs - which is the sentiment split
 /// the two outcome rows describe.
+/// Echo the accepted `Y`/`N` onto the row the sell quote's `Deal?" ` tail left
+/// the cursor on.
+///
+/// `shops.md` §8.A's "Shared `Y`/`N` prompt primitive" row: the prompt "loops
+/// until uppercase `Y` or `N`; `Y` echoes the resident `Yes` literal and `N`
+/// echoes the resident `No` literal". Measured 2026-09-10
+/// (`shop-arms-sell-flow/declined` and `/sold`): the original reads
+/// `Deal?" No` and `Deal?" Yes` on one row. This engine printed the `No` on a
+/// row of its own and omitted the `Yes` entirely, so the sell transcript ran a
+/// row short of the original from the first quote onward.
+///
+/// The buy side already echoes its own decline through a different path, so
+/// only the sell confirmation is echoed here.
+fn emit_sell_confirm_echo(
+    state: &mut PlayState,
+    prior_state: crate::shop_runtime::ArmsShopState,
+    echo: &str,
+) {
+    if matches!(
+        prior_state,
+        crate::shop_runtime::ArmsShopState::SellConfirm { .. }
+    ) {
+        state.emit_message_line_continuing_row(echo.to_string());
+    }
+}
+
 fn arms_closing_bark_record(transaction_completed: bool, roll: u8) -> Option<usize> {
     // The row bases are the ones already tabulated for every shop kind, so
     // this reads the arms row out of that table rather than repeating its

@@ -411,13 +411,6 @@ def classify(left: list[list[str]], right: list[list[str]], rows: list[int]) -> 
     # drawing different records from the published shipwright band.
     if variant_only(stock, engine):
         return "variant"
-    stock_lines = {line for line in stock if line}
-    engine_lines = {line for line in engine if line}
-    if stock_lines and engine_lines:
-        shared = len(stock_lines & engine_lines) / len(stock_lines | engine_lines)
-        if shared < 0.2:
-            return "diverged"
-
     # The window is `ROWS` tall, so a transcript that is out of step can be
     # adrift by almost all of it - an 8-row shift turned up in the arms shop,
     # and probing only +-3 reported it as a wording difference. Nearest shifts
@@ -431,15 +424,6 @@ def classify(left: list[list[str]], right: list[list[str]], rows: list[int]) -> 
             continue
         if all(stock[index] == engine[index - shift] for index in window):
             return f"offset{shift:+d}"
-    # `systems/prng.md` §3: the generator is seeded from the host clock at the
-    # intro menu, and only two runs "that reach the intro menu within the same
-    # host clock tick receive the same seed". So a line the game *chooses at
-    # random* cannot be expected to agree between the two sides, and reporting
-    # it as a wording difference measures the clock rather than the engine.
-    #
-    # A beat whose two sides differ only by which published equal-probability
-    # variant was drawn is `variant`: the engine printed a legal line, just not
-    # the one the original happened to draw. Anything else is still `text`.
     # The window is a scrolling stream. Two sides that printed the same text
     # but are showing a different amount of it - because one spent a row the
     # other did not, or because a length-changing variant re-wrapped a line -
@@ -456,9 +440,37 @@ def classify(left: list[list[str]], right: list[list[str]], rows: list[int]) -> 
         # run the containment test backwards. That reported the whole arms
         # sell-keys family as `text` when it was one greeting coin re-wrapping
         # the scrollback. Try both directions rather than guessing an order.
-        canon_left, canon_right = _canonical(left), _canonical(right)
+        # Compared without spaces. The decoder drops the cell the font renders
+        # as `?`, so a pool member that ends in a question mark leaves a gap
+        # where one that does not leaves none - `...to sell "` against
+        # `...got..."` - and that one-space difference broke containment on
+        # beats whose letters agreed exactly. Letter order alone is still
+        # strong evidence, and the row accounting is what `scroll` reports on.
+        canon_left = _canonical(left).replace(" ", "")
+        canon_right = _canonical(right).replace(" ", "")
         if canon_left in canon_right or canon_right in canon_left:
             return "scroll"
+    # Two sides can also be in different *places*: a walk-up scenario whose
+    # NPC did not reach the counter on one side leaves that side in the world
+    # loop pressing its scripted shop keys as world commands, and every beat
+    # after it disagrees on every row. That is a scenario-reliability problem,
+    # not a wording one, and counting it as `text` overstates the conformance
+    # queue. Rows the two sides share are the signal: a real wording difference
+    # still has most of the window in common.
+    #
+    # This runs *after* the benign explanations above, not before them. A
+    # variant draw that re-wraps the scrollback moves nearly every row, so the
+    # shared-row fraction collapses and two sides standing in the same shop
+    # printing the same thing were being reported as being in different places
+    # - five of `shop-arms-sell-flow`'s eight beats read `diverged` that way.
+    # Divergence is what is left when nothing benign fits, so it is tested
+    # last.
+    stock_lines = {line for line in stock if line}
+    engine_lines = {line for line in engine if line}
+    if stock_lines and engine_lines:
+        shared = len(stock_lines & engine_lines) / len(stock_lines | engine_lines)
+        if shared < 0.2:
+            return "diverged"
     if len(rows) == 1:
         a, b = stock[rows[0]], engine[rows[0]]
         if a.rstrip() == b.rstrip():
@@ -538,7 +550,7 @@ def compare_cached(artifact: pathlib.Path, cache: dict) -> tuple:
 
 
 # Bump when a classifier change would alter a cached verdict.
-CACHE_VERSION = 9
+CACHE_VERSION = 11
 
 
 # Some scenarios are explicitly a lottery: their own headers say so. The night
