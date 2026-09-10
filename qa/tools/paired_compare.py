@@ -227,7 +227,12 @@ def _flatten(rows: list[str]) -> str:
 # here: they are the original's text and this repository does not carry it.
 # Only the published record ranges live in the source.
 SHOPPE_POOLS = {
-    "shared-barks": range(0, 8),
+    # `shops.md` §8.A lists the closing bark as two rows - "nothing bought"
+    # and "purchase completed" - each a uniform `0..3` draw into its own half
+    # of the shared band. They are separate pools here, so two sides that drew
+    # from *different* halves are a real difference rather than one draw.
+    "shared-barks-nothing-bought": range(0, 4),
+    "shared-barks-purchase-completed": range(4, 8),
     "arms-sell-back": range(49, 57),
     "horse-trader": range(92, 105),
     "ship-broker": range(105, 127),
@@ -533,7 +538,7 @@ def compare_cached(artifact: pathlib.Path, cache: dict) -> tuple:
 
 
 # Bump when a classifier change would alter a cached verdict.
-CACHE_VERSION = 8
+CACHE_VERSION = 9
 
 
 # Some scenarios are explicitly a lottery: their own headers say so. The night
