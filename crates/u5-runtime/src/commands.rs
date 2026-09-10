@@ -602,7 +602,17 @@ pub const READY_BOTH_HANDS_REFUSAL: &str = "Both hands must be free before thou 
 /// **Measured** 2026-09-07 (a party carrying nothing): opening R-Ready with
 /// an empty pack answers `Thou art empty-handed!`, where the engine had
 /// `Nothing to ready.`
-pub const READY_EMPTY_HANDED_REFUSAL: &str = "Thou art empty-handed!";
+///
+/// The line feed after the hyphen is authored, not wrapped. Measured
+/// 2026-09-10 (`combat-ready-armour/ready-open`): the original breaks it
+/// `Thou art empty-` / `handed!`, and `text-output.md` §5 defines the
+/// wrap-aware printer's soft break as "(space, line-feed, or
+/// carriage-return)" - no hyphen. `Thou art empty-` is fifteen cells in a
+/// sixteen-cell window, so it does not reach the edge and cannot break there
+/// on its own; only an authored feed puts `handed!` on the next row. The
+/// soft-hyphen underscore of §8 is the *proportional* renderer's and does not
+/// reach this printer.
+pub const READY_EMPTY_HANDED_REFUSAL: &str = "Thou art empty-\nhanded!";
 
 pub const READY_NOT_STRONG_ENOUGH_REFUSAL: &str = "Thou art not strong enough!";
 
