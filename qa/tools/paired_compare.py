@@ -280,7 +280,13 @@ _SIGNATURES: dict[str, list[tuple[str, ...]]] | None = None
 # gets the lower floor, because the conjunction supplies the specificity that a
 # single run needs length for.
 _SIGNATURE_FLOOR = 8
-_CONJUNCTION_FLOOR = 5
+_CONJUNCTION_FLOOR = 4
+# A conjunction also has to carry enough letters between its runs. Two short
+# common words are not an identification: `SHOPPE.DAT` record 87's runs are
+# `able` and `thee`, eight letters that appear all over the game's prose,
+# while record 3's `Be off` and `then` are ten letters that only occur
+# together in that bark. Ten is the line between the two.
+_CONJUNCTION_TOTAL = 10
 
 # Ordinary Ultima phrasing that occurs in prompts and resident literals, not
 # only in the pools. A record whose *only* handle is one of these cannot be
@@ -320,7 +326,7 @@ def _record_signature(text: str) -> tuple[str, ...]:
             if len(" ".join(run.split())) >= _CONJUNCTION_FLOOR
         }
     )
-    if len(runs) >= 2:
+    if len(runs) >= 2 and sum(len(run) for run in runs) >= _CONJUNCTION_TOTAL:
         return tuple(runs)
     solo = [
         run
@@ -605,7 +611,7 @@ def compare_cached(artifact: pathlib.Path, cache: dict) -> tuple:
 
 
 # Bump when a classifier change would alter a cached verdict.
-CACHE_VERSION = 15
+CACHE_VERSION = 16
 
 
 # Some scenarios are explicitly a lottery: their own headers say so. The night
