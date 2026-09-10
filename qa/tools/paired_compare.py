@@ -265,7 +265,13 @@ SHOPPE_POOLS = {
     # selected uniformly from `57..60`" - read as a wording difference.
     "tavern-sage": range(57, 92),
     "horse-trader": range(92, 105),
-    "ship-broker": range(105, 127),
+    # `formats/shoppe-dat.md`: records 105..126 are "Ship-broker text,
+    # including the four interchangeable entry greetings `105..108`" - the
+    # answer to cleak/u5-spec#254, published 2026-09-10. The greetings are
+    # their own pool; the rest of the band stays one cluster because its row
+    # structure is still unpublished.
+    "ship-greeting": range(105, 109),
+    "ship-broker": range(109, 127),
     "reagent": range(127, 148),
     "guild": range(148, 165),
     "healer": range(165, 174),
@@ -365,14 +371,38 @@ def _pool_signatures() -> dict[str, list[tuple[str, ...]]]:
     return _SIGNATURES
 
 
+def _record_present(signature: tuple[str, ...], text: str) -> bool:
+    """Is this record the one the window is showing?
+
+    The window is a scrolling stream, so a record printed a beat ago can be
+    half off the top: `bd-shipwright`'s stock side shows the tail of greeting
+    record 108 with its opening `do welcome` already gone. Demanding every run
+    therefore fails exactly when the record is oldest, which is when the other
+    side has usually scrolled it away entirely - and the beat then reads as a
+    divergence between two sides printing the same thing.
+
+    A record with one run still needs that run. A record with several is
+    present when at least two of them are, carrying the same ten letters
+    between them that `_record_signature` demands of a conjunction in the first
+    place.
+    """
+    matched = [run for run in signature if run in text]
+    if len(signature) == 1:
+        return len(matched) == 1
+    return (
+        len(matched) >= 2
+        and sum(len(run) for run in matched) >= _CONJUNCTION_TOTAL
+    )
+
+
 def _same_pool_different_record(left: str, right: str) -> bool:
     """Did the two sides draw different records from one published pool?"""
     for signatures in _pool_signatures().values():
         # A record counts as drawn only when *every* one of its usable runs is
         # present, so a lone generic fragment cannot stand in for a record that
         # has more to it.
-        hit_left = {sig for sig in signatures if all(run in left for run in sig)}
-        hit_right = {sig for sig in signatures if all(run in right for run in sig)}
+        hit_left = {sig for sig in signatures if _record_present(sig, left)}
+        hit_right = {sig for sig in signatures if _record_present(sig, right)}
         if hit_left and hit_right and hit_left != hit_right:
             return True
     return False
@@ -611,7 +641,7 @@ def compare_cached(artifact: pathlib.Path, cache: dict) -> tuple:
 
 
 # Bump when a classifier change would alter a cached verdict.
-CACHE_VERSION = 16
+CACHE_VERSION = 18
 
 
 # Some scenarios are explicitly a lottery: their own headers say so. The night
