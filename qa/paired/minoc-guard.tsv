@@ -6,6 +6,19 @@
 # those steps run, so the two sides arrived with it in different cells and
 # every later beat compared unrelated windows (`cleak/u5-engine#22`).
 # `qa/tools/reseed.py` replayed that walk once into the seed named below.
+#
+# This scenario is a lottery in the same sense `night-cast` is, for a different
+# reason. The regime guard's waypoint behaviour is `npc-schedules.md` §9's
+# value 4, whose far-from-waypoint arm "takes the ordinary bounded wander step
+# with the same constant cap of three that value `1` uses" - and §9.1 gates
+# that step on a fair coin. The two sides do not share a PRNG seed
+# (`prng.md` §3 seeds from the host clock at the intro menu), so the guard is
+# not necessarily in the same cell when the party walks up: one side's step
+# into it answers `Blocked!` and the other's succeeds.
+#
+# Measured: every beat differs on exactly the two rows carrying that step, and
+# the demand text below them agrees character for character. A run whose step
+# counts differ has measured the coin, not the engine, and must be re-run.
 # requires-seed: profile `seed-minoc-guard-reseeded`, built by qa/tools/reseed.py
 both	wait	9000
 both	key	space
