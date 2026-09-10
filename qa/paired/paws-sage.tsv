@@ -34,7 +34,7 @@ both	key	C
 both	wait	5500
 both	shot	lore	The lore letter
 both	type	spir
-both	wait	1500
+both	wait	2500
 both	shot	topic	The topic typed
 both	key	Return
 both	wait	5500

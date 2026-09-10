@@ -52,7 +52,7 @@ both	wait	260
 both	key	Down
 both	wait	260
 both	key	Down
-both	wait	260
+both	wait	2500
 both	shot	skullkeysrow	The skullkeys row
 both	key	Return
 both	wait	3000
@@ -96,7 +96,7 @@ both	wait	260
 both	key	Down
 both	wait	260
 both	key	Down
-both	wait	260
+both	wait	2500
 both	shot	amuletrow	The amulet row
 both	key	Return
 both	wait	3000
@@ -142,7 +142,7 @@ both	wait	260
 both	key	Down
 both	wait	260
 both	key	Down
-both	wait	260
+both	wait	2500
 both	shot	crownrow	The crown row
 both	key	Return
 both	wait	3000
@@ -190,7 +190,7 @@ both	wait	260
 both	key	Down
 both	wait	260
 both	key	Down
-both	wait	260
+both	wait	2500
 both	shot	sceptrerow	The sceptre row
 both	key	Return
 both	wait	3000

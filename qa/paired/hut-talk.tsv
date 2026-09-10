@@ -38,7 +38,7 @@ both	key	Left
 both	wait	1500
 both	shot	beside-resident	Beside the hut's resident
 both	key	t
-both	wait	1500
+both	wait	2500
 both	shot	talk-prompt	Talk direction prompt
 both	key	Left
 both	wait	3000

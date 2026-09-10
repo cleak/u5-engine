@@ -7,7 +7,7 @@ both	wait	4000
 both	key	j
 both	wait	9000
 both	key	l
-both	wait	1500
+both	wait	2500
 both	shot	prompt	The open Look- prompt
 both	key	Left
 both	wait	3000

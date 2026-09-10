@@ -31,7 +31,7 @@ both	key	j
 both	wait	7000
 both	shot	start	Starting hut after Journey Onward
 both	key	l
-both	wait	1500
+both	wait	2500
 both	shot	look-prompt	Look direction prompt
 both	key	Up
 both	wait	2000

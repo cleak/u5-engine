@@ -8,7 +8,7 @@ both	wait	8000
 both	key	e
 both	wait	4000
 both	type	HONESTY
-both	wait	1200
+both	wait	2500
 both	shot	typed	The virtue typed
 both	key	Return
 both	wait	3000

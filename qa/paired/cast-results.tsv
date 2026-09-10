@@ -31,7 +31,7 @@ both	wait	900
 both	key	m
 both	wait	900
 both	key	x
-both	wait	900
+both	wait	2500
 both	shot	food-typed	The food selector
 both	key	Return
 both	wait	2500
@@ -46,7 +46,7 @@ both	wait	1200
 both	key	a
 both	wait	900
 both	key	z
-both	wait	900
+both	wait	2500
 both	shot	wake-typed	The wake selector
 both	key	Return
 both	wait	2500

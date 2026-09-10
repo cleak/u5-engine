@@ -45,7 +45,7 @@ both	wait	900
 both	wait	3000
 both	shot	ask	The demand
 both	type	ahm
-both	wait	1200
+both	wait	2500
 both	shot	typed	The mantra typed
 both	key	Return
 both	wait	6000
