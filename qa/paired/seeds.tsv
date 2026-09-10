@@ -35,8 +35,8 @@ dungeon-exit-klimb	seed-dungeon-exit-klimb	copied from the paired-dungeon-exit-k
 dungeon-look	seed-dungeon-look	copied from the paired-dungeon-look run profile
 dungeon-search	seed-dungeon-search	copied from the paired-dungeon-search run profile
 dungeon-view	seed-dungeon-view	copied from the paired-dungeon-view run profile
-dwelling-talk-after-entry	seed-dwelling-talk-after-entry	copied from the paired-dwelling-talk-after-entry run profile
-dwelling-talk-after-restore	seed-dwelling-talk-after-restore	copied from the paired-dwelling-talk-after-restore run profile
+dwelling-talk-after-entry	seed-dwelling-talk-after-entry-reseeded	re-written by reseed.py so the save carries a populated NPC band
+dwelling-talk-after-restore	seed-dwelling-talk-after-restore-reseeded	re-written by reseed.py so the save carries a populated NPC band
 magic-mix	seed-magic-mix	copied from the paired-magic-mix run profile
 magic-mix-and-cast	seed-magic-mix-and-cast	copied from the paired-magic-mix-and-cast run profile
 minoc-entry-walk	seed-minoc-entry-walk	copied from the paired-minoc-entry-walk run profile
@@ -89,18 +89,18 @@ swamp-long	seed-swamp-long-reseeded	the walk-up replayed once by reseed.py
 swamp-step	seed-swamp-step	copied from paired-swamp: the grass cell south of the swamp at (64,14)
 swamp-walk	seed-swamp-walk	copied from the paired-swamp-walk run profile
 town-britain-seeded	seed-town-britain-seeded	copied from the paired-town-britain-seeded run profile
-town-death-vision	seed-town-death-vision	copied from the paired-town-death-vision run profile
-town-fountain	seed-town-fountain	copied from the paired-town-fountain run profile
+town-death-vision	seed-town-death-vision-reseeded	re-written by reseed.py so the save carries a populated NPC band
+town-fountain	seed-town-fountain-reseeded	re-written by reseed.py so the save carries a populated NPC band
 town-hidden-door	seed-town-hidden-door	copied from the paired-town-hidden-door run profile
 town-look-npc-cell	seed-town-look-npc-cell	copied from the paired-town-look-npc-cell run profile
 town-night-schedule	seed-town-night-schedule	copied from the paired-town-night-schedule run profile
 town-talk	seed-town-talk-reseeded	the walk-up replayed once by reseed.py
 town-talk-after-entry	seed-town-talk-after-entry	copied from the paired-town-talk-after-entry run profile
-town-talk-high-dialog-id	seed-town-talk-high-dialog-id	copied from the paired-town-talk-high-dialog-id run profile
-town-talk-nonspeaker	seed-town-talk-nonspeaker	copied from the paired-town-talk-nonspeaker run profile
+town-talk-high-dialog-id	seed-town-talk-high-dialog-id-reseeded	re-written by reseed.py so the save carries a populated NPC band
+town-talk-nonspeaker	seed-town-talk-nonspeaker-reseeded	re-written by reseed.py so the save carries a populated NPC band
 town-talk-second-npc	seed-town-talk-second-npc	copied from the paired-town-talk-second-npc run profile
 town-talk-speaker	seed-town-talk-speaker-reseeded	the walk-up replayed once by reseed.py
-town-wishing-well	seed-town-wishing-well	copied from the paired-town-wishing-well run profile
+town-wishing-well	seed-town-wishing-well-reseeded	re-written by reseed.py so the save carries a populated NPC band
 town-wishing-well-refusals	seed-town-wishing-well-refusals	copied from paired-town-wishing-well: the Paws wishing-well approach
 underworld-walk	seed-underworld-walk	copied from underworld: the Underworld plane at (100,100)
 use-moonstone	seed-use-moonstone	copied from useitems: a party carrying every U-Use family
