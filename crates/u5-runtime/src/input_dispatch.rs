@@ -3418,7 +3418,14 @@ fn format_tavern_outcome_with_shoppe(
                 },
             )
             .ok()
-            .map(|rendered| format!("Yes\n{rendered}")),
+            // `shops.md` §8.C, "Tavern and sage continuation": "Y prints
+            // `Yes\n\n\"`, the applicable follow-up record, a closing quote
+            // and a space." The engine printed `Yes`, one line feed and the
+            // bare record - no opening quote, no closing quote, and no
+            // trailing space for the next accepted letter to echo into.
+            // Measured 2026-09-10 (`paws-sage/lore`): the original's row
+            // reads `Rations?" C`, this engine's read `Rations`.
+            .map(|rendered| format!("Yes\n\n\"{rendered}\" ")),
         // Measured: the closing bark is attributed to the tavern's own vendor
         // - `"What's wrong with ye? Can't hold thy liquor?"` over
         // `says Dr. Cat.` - using the §8.0 vendor-name row the engine already

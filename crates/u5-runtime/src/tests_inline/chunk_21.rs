@@ -5672,7 +5672,10 @@ fn end_to_end_tavern_renders_state_menu_quote_and_follow_up_records() {
     handle_play_key_input(&mut state, '1', "", &dir).unwrap();
     assert_eq!(state.food, 25);
     handle_play_key_input(&mut state, 'Y', "", &dir).unwrap();
-    assert_eq!(state.message, "Yes\nAsset tavern follow-up.");
+    // `shops.md` §8.C: "Y prints `Yes\n\n\"`, the applicable follow-up
+    // record, a closing quote and a space." The trailing space is the cell
+    // the next accepted menu letter echoes into.
+    assert_eq!(state.message, "Yes\n\n\"Asset tavern follow-up.\" ");
 
     let _ = fs::remove_dir_all(dir);
 }
