@@ -2399,7 +2399,13 @@ fn handle_arms_shop_key_input(
             // Measured 2026-09-07 (`qa/paired/shop-arms-sell.tsv`): the offer
             // record, a blank row, then `Deal?"` - the closing quote of the
             // shopkeeper's speech, and no `(Y/N)`.
-            format!("{quote}\n\nDeal?\"")
+            //
+            // The closing quote is followed by one space, which is the cell
+            // the accepted `Yes`/`No` echoes into - the same tail shape §8.1
+            // gives the stock-call question and §8.B the entry greeting.
+            // Measured 2026-09-10 (`shop-arms-sell-flow/sold`): the original
+            // reads `Deal?" Yes`, this engine read `Deal?"Yes`.
+            format!("{quote}\n\nDeal?\" ")
         }
         (ArmsShopOutcome::SellRefusedZeroPrice { .. }, _)
             if matches!(shop_state, ArmsShopState::SellPickItem(_)) =>
@@ -2408,8 +2414,14 @@ fn handle_arms_shop_key_input(
             // quoted and attributed with `says` - unlike the ammunition
             // refusal's `growls` - and the browser keeps going with its
             // continuation prompt.
+            // The refusal and the continuation prompt each follow two line
+            // feeds, the same spacing the sale and the decline take. Measured
+            // 2026-09-10 (`shop-arms-sell-zero-price/ammo` and `/after`): the
+            // original has a blank row before the refusal and another between
+            // its attribution and the prompt; this engine had neither, so the
+            // browser transcript ran two rows short.
             format!(
-                "{}\n{}",
+                "\n{}\n\n{}",
                 speech.attribute("\"That, I cannot buy from thee.\"", "says"),
                 arms_sell_continuation_prompt(state.random_range_u8(0, 3))
             )
@@ -2501,7 +2513,12 @@ fn handle_arms_shop_key_input(
             speech.attribute(&arms_sell_goodbye(state.random_range_u8(0, 3)), "says")
         ),
         (ArmsShopOutcome::Exited, _) if matches!(prior_state, ArmsShopState::SellPickItem(_)) => {
-            speech.attribute(&arms_sell_goodbye(state.random_range_u8(0, 3)), "says")
+            // Two line feeds before the local goodbye as well. Measured
+            // 2026-09-10 (`shop-arms-sell-zero-price/after`).
+            format!(
+                "\n{}",
+                speech.attribute(&arms_sell_goodbye(state.random_range_u8(0, 3)), "says")
+            )
         }
         // Measured 2026-09-07 (`qa/paired/shop-arms-buy.tsv`): a visit that
         // ends without a sale closes on a *rendered* shared-band record, not

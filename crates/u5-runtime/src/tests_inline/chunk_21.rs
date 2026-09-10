@@ -6027,7 +6027,15 @@ fn end_to_end_stocked_arms_shop_escape_exits_buy_and_sell_submenus() {
     assert_eq!(sell_state.gold, 1000);
     assert_eq!(sell_state.equipment_stock[23], 1);
     // Measured 2026-09-07: the goodbye is quoted and attributed to the
-    // shopkeeper (`qa/paired/shop-arms-sell-flow.tsv`).
+    // shopkeeper (`qa/paired/shop-arms-sell-flow.tsv`). Measured 2026-09-10
+    // (`shop-arms-sell-zero-price/after`): it follows two line feeds, so the
+    // rendered message opens with the one that leaves the blank row.
+    assert!(
+        sell_state.message.starts_with('\n'),
+        "the goodbye follows a blank row: {:?}",
+        sell_state.message
+    );
+    let sell_goodbye = sell_state.message.trim_start_matches('\n');
     assert!(
         [
             "\"Good-bye...\"",
@@ -6036,7 +6044,7 @@ fn end_to_end_stocked_arms_shop_escape_exits_buy_and_sell_submenus() {
             "\"Fare thee well...\"",
         ]
         .iter()
-        .any(|line| sell_state.message.starts_with(line))
+        .any(|line| sell_goodbye.starts_with(line))
     );
 }
 
