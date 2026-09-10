@@ -4,66 +4,19 @@
 # whether `conversation.md §9`'s opening lead-in is one fixed literal.
 # Route from the engine's own `talk_gate_probe`. Filed against
 # cleak/u5-spec#198.
-# requires-seed: the party outside Cove, so the scenario can walk in through the door
+#
+# Seeded rather than walked to. The walk-up form of this scenario scripted its
+# way in from the town gate, and the resident walks its own schedule while
+# those steps run, so the two sides arrived with it in different cells and
+# every later beat compared unrelated windows (`cleak/u5-engine#22`).
+# `qa/tools/reseed.py` replayed that walk once into the seed named below.
+# requires-seed: profile `seed-castle-talk-after-entry-reseeded`, built by qa/tools/reseed.py
 both	wait	9000
 both	key	space
 both	wait	4000
 both	key	j
-both	wait	8000
-both	key	e
-both	wait	4000
-both	key	Up
-both	wait	450
-both	key	Up
-both	wait	450
-both	key	Up
-both	wait	450
-both	key	Up
-both	wait	450
-both	key	Up
-both	wait	450
-both	key	Up
-both	wait	450
-both	key	Up
-both	wait	450
-both	key	Up
-both	wait	450
-both	key	Up
-both	wait	450
-both	key	Up
-both	wait	450
-both	key	Up
-both	wait	450
-both	key	Up
-both	wait	450
-both	key	Up
-both	wait	450
-both	key	Up
-both	wait	450
-both	key	Up
-both	wait	450
-both	key	Up
-both	wait	450
-both	key	Up
-both	wait	450
-both	key	Up
-both	wait	450
-both	key	Up
-both	wait	450
-both	key	Up
-both	wait	450
-both	key	Up
-both	wait	450
-both	key	Up
-both	wait	450
-both	key	Left
-both	wait	450
-both	wait	2500
-both	key	l
-both	wait	1200
-both	key	Up
-both	wait	2500
-both	shot	look	Look north at the NPC
+both	wait	9000
+both	shot	seeded	Journey Onward on the seeded cell
 both	key	t
 both	wait	1200
 both	key	Up

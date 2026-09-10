@@ -1,79 +1,18 @@
 # Paws' tavern keeper at 10:00 stands on a bed tile, so Talk should answer
 # the sleeping line of `conversation.md` §2 step 4. The route opens one door.
-# requires-seed: the party on the Paws village tile (`--scene BRITANNIA --at 98,145 --time 10:00`)
+#
+# Seeded rather than walked to. The walk-up form of this scenario scripted its
+# way in from the town gate, and the resident walks its own schedule while
+# those steps run, so the two sides arrived with it in different cells and
+# every later beat compared unrelated windows (`cleak/u5-engine#22`).
+# `qa/tools/reseed.py` replayed that walk once into the seed named below.
+# requires-seed: profile `seed-paws-sleeper-reseeded`, built by qa/tools/reseed.py
 both	wait	9000
 both	key	space
 both	wait	4000
 both	key	j
-both	wait	8000
-both	key	e
-both	wait	4000
-both	key	Up
-both	wait	480
-both	key	Up
-both	wait	480
-both	key	Up
-both	wait	480
-both	key	Up
-both	wait	480
-both	key	Up
-both	wait	480
-both	key	Up
-both	wait	480
-both	key	Right
-both	wait	480
-both	key	Right
-both	wait	480
-both	key	Right
-both	wait	480
-both	key	Right
-both	wait	480
-both	key	Right
-both	wait	480
-both	key	Right
-both	wait	480
-both	key	o
-both	wait	900
-both	key	Right
-both	wait	1500
-both	key	Right
-both	wait	480
-both	key	Right
-both	wait	480
-both	key	Up
-both	wait	480
-both	key	Right
-both	wait	480
-both	key	Right
-both	wait	480
-both	key	Right
-both	wait	480
-both	key	Right
-both	wait	480
-both	key	Right
-both	wait	480
-both	key	Up
-both	wait	480
-both	key	Up
-both	wait	480
-both	key	Up
-both	wait	480
-both	key	Left
-both	wait	480
-both	key	Left
-both	wait	480
-both	key	Left
-both	wait	480
-both	key	Left
-both	wait	480
-both	key	Left
-both	wait	480
-both	wait	2500
-both	key	l
-both	wait	1200
-both	key	Up
-both	wait	3000
-both	shot	look	Look north at the keeper
+both	wait	9000
+both	shot	seeded	Journey Onward on the seeded cell
 both	key	t
 both	wait	1200
 both	key	Up

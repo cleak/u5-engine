@@ -1,39 +1,18 @@
 # Blackthorn's audience answered correctly: the mantra of the shrine the
 # interrogation selected (`blackthorn.md` §4).
-# requires-seed: the Blackthorn palace tile at 12:00 with companions=3
+#
+# Seeded rather than walked to. The walk-up form of this scenario scripted its
+# way in from the town gate, and the resident walks its own schedule while
+# those steps run, so the two sides arrived with it in different cells and
+# every later beat compared unrelated windows (`cleak/u5-engine#22`).
+# `qa/tools/reseed.py` replayed that walk once into the seed named below.
+# requires-seed: profile `seed-bt-correct-reseeded`, built by qa/tools/reseed.py
 both	wait	9000
 both	key	space
 both	wait	4000
 both	key	j
-both	wait	8000
-both	key	e
-both	wait	5000
-both	key	Up
-both	wait	900
-both	key	Up
-both	wait	900
-both	key	Up
-both	wait	900
-both	key	Left
-both	wait	900
-both	key	Up
-both	wait	900
-both	key	Up
-both	wait	900
-both	key	Up
-both	wait	900
-both	key	Up
-both	wait	900
-both	key	Up
-both	wait	900
-both	key	Up
-both	wait	900
-both	key	Up
-both	wait	900
-both	key	Right
-both	wait	900
-both	wait	3000
-both	shot	ask	The demand
+both	wait	9000
+both	shot	seeded	Journey Onward on the seeded cell
 both	type	ahm
 both	wait	1200
 both	shot	typed	The mantra typed

@@ -1,77 +1,26 @@
 # The Paws tavern's lore branch: buy a drink to establish continuation,
 # then follow the advertised letter into the sage flow (cleak/u5-spec#238).
-# requires-seed: the party on the Paws village tile at 13:00
+#
+# Seeded rather than walked to. The walk-up form of this scenario scripted its
+# way in from the town gate, and the resident walks its own schedule while
+# those steps run, so the two sides arrived with it in different cells and
+# every later beat compared unrelated windows (`cleak/u5-engine#22`).
+# `qa/tools/reseed.py` replayed that walk once into the seed named below.
+#
+# `shops.md` §2: a shopkeeper's "conversation-contact event also reaches it
+# automatically during a town schedule pass, even if the player has issued no
+# Talk command", so the first Pass beside the keeper opens the overlay and the
+# script drives it from there rather than issuing Talk.
+# requires-seed: profile `seed-paws-sage-reseeded`, built by qa/tools/reseed.py
 both	wait	9000
 both	key	space
 both	wait	4000
 both	key	j
-both	wait	8000
-both	key	e
+both	wait	9000
+both	shot	seeded	Journey Onward on the seeded cell
+both	key	space
 both	wait	4000
-both	key	Up
-both	wait	480
-both	key	Up
-both	wait	480
-both	key	Up
-both	wait	480
-both	key	Up
-both	wait	480
-both	key	Up
-both	wait	480
-both	key	Up
-both	wait	480
-both	key	Right
-both	wait	480
-both	key	Right
-both	wait	480
-both	key	Right
-both	wait	480
-both	key	Right
-both	wait	480
-both	key	Right
-both	wait	480
-both	key	Right
-both	wait	480
-both	key	o
-both	wait	900
-both	key	Right
-both	wait	1500
-both	key	Right
-both	wait	480
-both	key	Right
-both	wait	480
-both	key	Up
-both	wait	480
-both	key	Right
-both	wait	480
-both	key	Right
-both	wait	480
-both	key	Right
-both	wait	480
-both	key	Right
-both	wait	480
-both	key	Right
-both	wait	480
-both	key	Up
-both	wait	480
-both	key	Up
-both	wait	480
-both	key	Left
-both	wait	480
-both	key	Left
-both	wait	480
-both	key	Left
-both	wait	480
-both	key	Left
-both	wait	480
-both	key	Left
-both	wait	480
-both	wait	2500
-both	key	t
-both	wait	1200
-both	key	Up
-both	wait	12000
-both	shot	talk	Talk north
+both	shot	opened	Contact opens the overlay
 both	key	Y
 both	wait	5500
 both	shot	menu	Yes at the entry prompt

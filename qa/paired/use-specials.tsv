@@ -1,45 +1,17 @@
 # The special-item rows of the U-Use picker, one at a time.
-# requires-seed: a party carrying every special item
+#
+# Seeded rather than walked to. The walk-up form of this scenario scripted its
+# way in from the town gate, and the resident walks its own schedule while
+# those steps run, so the two sides arrived with it in different cells and
+# every later beat compared unrelated windows (`cleak/u5-engine#22`).
+# `qa/tools/reseed.py` replayed that walk once into the seed named below.
+# requires-seed: profile `seed-use-specials-reseeded`, built by qa/tools/reseed.py
 both	wait	9000
 both	key	space
 both	wait	4000
 both	key	j
-both	wait	7000
-both	key	u
-both	wait	2000
-both	key	Down
-both	wait	260
-both	key	Down
-both	wait	260
-both	key	Down
-both	wait	260
-both	key	Down
-both	wait	260
-both	key	Down
-both	wait	260
-both	key	Down
-both	wait	260
-both	key	Down
-both	wait	260
-both	key	Down
-both	wait	260
-both	key	Down
-both	wait	260
-both	key	Down
-both	wait	260
-both	key	Down
-both	wait	260
-both	key	Down
-both	wait	260
-both	key	Down
-both	wait	260
-both	key	Down
-both	wait	260
-both	key	Down
-both	wait	260
-both	key	Down
-both	wait	260
-both	shot	carpetrow	The carpet row
+both	wait	9000
+both	shot	seeded	Journey Onward on the seeded cell
 both	key	Return
 both	wait	3000
 both	shot	carpet	The carpet result

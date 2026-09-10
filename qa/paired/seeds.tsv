@@ -7,14 +7,14 @@
 # `seed-<scenario>` rows below are copies made for that reason.
 
 bd-shipwright	seed-bd-shipwright-reseeded	the walk-up replayed once by reseed.py
-blackthorn-palace-password	seed-blackthorn-palace-password	copied from the paired-blackthorn-palace-password run profile
-bt-audience	seed-bt-audience	copied from the paired-bt-audience run profile
-bt-correct	seed-bt-correct	copied from the paired-bt-correct run profile
-bt-escalate	seed-bt-escalate	copied from the paired-bt-escalate run profile
+blackthorn-palace-password	seed-blackthorn-palace-password-reseeded	the walk-up replayed once by reseed.py
+bt-audience	seed-bt-audience-reseeded	the walk-up replayed once by reseed.py
+bt-correct	seed-bt-correct-reseeded	the walk-up replayed once by reseed.py
+bt-escalate	seed-bt-escalate-reseeded	the walk-up replayed once by reseed.py
 bt-password	seed-bt-password-reseeded	the walk-up replayed once by reseed.py
 cast-results	seed-cast-results	copied from the paired-cast-results run profile
 castle-talk	seed-castle-talk	copied from the paired-castle-talk run profile
-castle-talk-after-entry	seed-castle-talk-after-entry	copied from the paired-castle-talk-after-entry run profile
+castle-talk-after-entry	seed-castle-talk-after-entry-reseeded	the walk-up replayed once by reseed.py
 combat-cast	seed-combat-cast	copied from the paired-combat-cast run profile
 combat-commands	seed-combat-commands	copied from paired-combat-dungeon-room: the dungeon-room seed `combat-dungeon-room` uses
 combat-dungeon-room	seed-combat-dungeon-room	copied from the paired-combat-dungeon-room run profile
@@ -40,10 +40,10 @@ dwelling-talk-after-restore	seed-dwelling-talk-after-restore	copied from the pai
 magic-mix	seed-magic-mix	copied from the paired-magic-mix run profile
 magic-mix-and-cast	seed-magic-mix-and-cast	copied from the paired-magic-mix-and-cast run profile
 minoc-entry-walk	seed-minoc-entry-walk	copied from the paired-minoc-entry-walk run profile
-minoc-guard	seed-minoc-guard	copied from the paired-minoc-guard run profile
+minoc-guard	seed-minoc-guard-reseeded	the walk-up replayed once by reseed.py
 minoc-refuse	seed-minoc-refuse-reseeded	the walk-up replayed once by reseed.py
 minoc-tribute	seed-minoc-tribute-reseeded	the walk-up replayed once by reseed.py
-nb-inn	seed-nb-inn	copied from the paired-nb-inn run profile
+nb-inn	seed-nb-inn-reseeded	the walk-up replayed once by reseed.py
 nb-inn-branches	seed-nb-inn-branches-reseeded	the walk-up replayed once by reseed.py
 nb-inn-commit	seed-nb-inn-commit-reseeded	the walk-up replayed once by reseed.py
 nb-inn-companion	seed-nb-inn-companion-reseeded	the walk-up replayed once by reseed.py
@@ -52,12 +52,12 @@ nb-inn-refusals	seed-nb-inn-refusals-reseeded	the walk-up replayed once by resee
 nb-stable-closed	seed-nb-stable-closed-reseeded	the walk-up replayed once by reseed.py
 nb-stable-open	seed-nb-stable-open-reseeded	the walk-up replayed once by reseed.py
 night-cast	seed-night-cast	copied from the paired-night-cast run profile
-night-sextant	seed-night-sextant	copied from the paired-night-sextant run profile
+night-sextant	seed-night-sextant-reseeded	the walk-up replayed once by reseed.py
 overworld-camp	seed-overworld-camp	copied from the paired-overworld-camp run profile
 overworld-night-walk	seed-overworld-night-walk	copied from the paired-overworld-night-walk run profile
 paws-guild	seed-paws-guild-reseeded	the walk-up replayed once by reseed.py
-paws-sage	seed-paws-sage	copied from the paired-paws-sage run profile
-paws-sleeper	seed-paws-sleeper	copied from the paired-paws-sleeper run profile
+paws-sage	seed-paws-sage-reseeded	the walk-up replayed once by reseed.py
+paws-sleeper	seed-paws-sleeper-reseeded	the walk-up replayed once by reseed.py
 paws-tavern	seed-paws-tavern-reseeded	the walk-up replayed once by reseed.py
 prompt-cancels	seed-prompt-cancels	copied from the paired-prompt-cancels run profile
 ready-slots	seed-ready-slots	copied from the paired-ready-slots run profile
@@ -75,7 +75,7 @@ shop-arms-sell-ammunition	seed-shop-arms-sell-ammunition-reseeded	the walk-up re
 shop-arms-sell-flow	seed-shop-arms-sell-flow-reseeded	the walk-up replayed once by reseed.py
 shop-arms-sell-keys	seed-shop-arms-sell-keys-reseeded	the walk-up replayed once by reseed.py
 shop-arms-sell-zero-price	seed-shop-arms-sell-zero-price-reseeded	the walk-up replayed once by reseed.py
-shop-inn-after-entry	seed-shop-inn-after-entry	copied from the paired-shop-inn-after-entry run profile
+shop-inn-after-entry	seed-shop-inn-after-entry-reseeded	the walk-up replayed once by reseed.py
 shrine-enter	seed-shrine-enter	copied from the paired-shrine-enter run profile
 shrine-flow	seed-shrine-flow	copied from the paired-shrine-flow run profile
 shrine-mantra-close	seed-shrine-mantra-close	copied from the paired-shrine-mantra-close run profile
@@ -85,7 +85,7 @@ slow-progress	seed-slow-progress	copied from the paired-slow-progress run profil
 slow-terrain	seed-slow-terrain	copied from the paired-slow-terrain run profile
 stonegate-trapdoor-audio	seed-stonegate-trapdoor-audio	copied from the paired-stonegate-trapdoor-audio run profile
 stray-keys	seed-stray-keys	copied from useitems: a party carrying scrolls and potions
-swamp-long	seed-swamp-long	copied from the paired-swamp-long run profile
+swamp-long	seed-swamp-long-reseeded	the walk-up replayed once by reseed.py
 swamp-step	seed-swamp-step	copied from paired-swamp: the grass cell south of the swamp at (64,14)
 swamp-walk	seed-swamp-walk	copied from the paired-swamp-walk run profile
 town-britain-seeded	seed-town-britain-seeded	copied from the paired-town-britain-seeded run profile
@@ -105,13 +105,13 @@ town-wishing-well-refusals	seed-town-wishing-well-refusals	copied from paired-to
 underworld-walk	seed-underworld-walk	copied from underworld: the Underworld plane at (100,100)
 use-moonstone	seed-use-moonstone	copied from useitems: a party carrying every U-Use family
 use-picker	seed-use-picker	copied from the paired-use-picker run profile
-use-potions	seed-use-potions	copied from the paired-use-potions run profile
-use-scrolls	seed-use-scrolls	copied from the paired-use-scrolls run profile
+use-potions	seed-use-potions-reseeded	the walk-up replayed once by reseed.py
+use-scrolls	seed-use-scrolls-reseeded	the walk-up replayed once by reseed.py
 use-single-item	seed-use-single-item	copied from useitems: the same
-use-skull-key	seed-use-skull-key	copied from the paired-use-skull-key run profile
-use-specials	seed-use-specials	copied from the paired-use-specials run profile
-use-target-cancel	seed-use-target-cancel	copied from useitems: the same
-wb-blueboar	seed-wb-blueboar	copied from the paired-wb-blueboar run profile
+use-skull-key	seed-use-skull-key-reseeded	the walk-up replayed once by reseed.py
+use-specials	seed-use-specials-reseeded	the walk-up replayed once by reseed.py
+use-target-cancel	seed-use-target-cancel-reseeded	the walk-up replayed once by reseed.py
+wb-blueboar	seed-wb-blueboar-reseeded	the walk-up replayed once by reseed.py
 word-of-power-audio	seed-word-of-power-audio	copied from the paired-word-of-power-audio run profile
 zstats-pages	seed-zstats-pages	copied from the paired-zstats-pages run profile
 codex-enter	codex-seed	seeded onto Britannia (233,233) at 09:15 with --write-seed

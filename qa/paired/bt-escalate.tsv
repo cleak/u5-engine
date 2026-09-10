@@ -1,39 +1,18 @@
 # Blackthorn's audience: the mantra interrogation and its escalation
 # (`blackthorn.md` §4). Walking up the approach is enough to trigger it.
-# requires-seed: the party on the Blackthorn palace tile at 12:00
+#
+# Seeded rather than walked to. The walk-up form of this scenario scripted its
+# way in from the town gate, and the resident walks its own schedule while
+# those steps run, so the two sides arrived with it in different cells and
+# every later beat compared unrelated windows (`cleak/u5-engine#22`).
+# `qa/tools/reseed.py` replayed that walk once into the seed named below.
+# requires-seed: profile `seed-bt-escalate-reseeded`, built by qa/tools/reseed.py
 both	wait	9000
 both	key	space
 both	wait	4000
 both	key	j
-both	wait	8000
-both	key	e
-both	wait	5000
-both	key	Up
-both	wait	900
-both	key	Up
-both	wait	900
-both	key	Up
-both	wait	900
-both	key	Left
-both	wait	900
-both	key	Up
-both	wait	900
-both	key	Up
-both	wait	900
-both	key	Up
-both	wait	900
-both	key	Up
-both	wait	900
-both	key	Up
-both	wait	900
-both	key	Up
-both	wait	900
-both	key	Up
-both	wait	900
-both	key	Right
-both	wait	900
-both	wait	3000
-both	shot	ask1	The first demand
+both	wait	9000
+both	shot	seeded	Journey Onward on the seeded cell
 both	type	mul
 both	wait	1200
 both	key	Return
