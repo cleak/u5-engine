@@ -550,10 +550,13 @@ def main() -> None:
         same, differ, skipped, idle, panel = compare_cached(pathlib.Path(arg), cache)
         # A run carrying idle beats is not a verdict either way: it needs
         # re-running before its differences mean anything.
-        status = "RERUN" if idle else ("match" if differ == 0 else "DIFFER")
+        # A cached verdict replays totals but not the per-beat detail lines, so
+        # the panel count belongs on the status line: without it a cached
+        # scenario reads as clean whatever its roster panel did.
+        status = "RERUN" if idle else ("match" if differ == 0 and panel == 0 else "DIFFER")
         print(
             f"{status} {pathlib.Path(arg).name}: {same} beat(s) agree, "
-            f"{differ} differ, {skipped} skipped, {idle} idle"
+            f"{differ} differ, {skipped} skipped, {idle} idle, {panel} panel"
         )
         for index, value in enumerate((same, differ, skipped, idle, panel)):
             total[index] += value
