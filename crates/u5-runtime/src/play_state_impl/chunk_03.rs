@@ -1630,8 +1630,18 @@ impl PlayState {
     }
 
     fn accept_mix_spell(&mut self, session: &mut MixSession) {
+        // `magic.md §5` step 2: "the parser sorts the typed letters before
+        // lookup. Order therefore does not matter for the selector itself:
+        // `FV` and `VF` both resolve to *Vas Flam*." The sort belongs to the
+        // **lookup**; the echo is what the player typed - "each letter prints
+        // its associated rune word followed by a space" - and the `:` row is
+        // rendered from this buffer after the spell is accepted.
+        //
+        // Overwriting the buffer with the sorted code alphabetised that row.
+        // Measured 2026-09-09 (`qa/paired/bt-audience.tsv`, beat `ask2`):
+        // typing `u` then `l` shows `:UUS L0R` in the original and showed
+        // `:L0R UUS` here.
         let code = inline_spell_code(&session.spell_buffer);
-        session.spell_buffer = code.clone();
         session.spell_index = spell_index_from_code(&code);
         session.phase = MixPhase::Reagents;
         session.reagent_cursor = 0;
