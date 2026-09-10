@@ -1,3 +1,12 @@
+# A lottery on the stranger-introduction coin, like `town-talk`.
+# `conversation.md` Section 6: with the acquaintance bit clear, "the engine
+# makes one fresh host-clock read, assigns the transformed value as the shared
+# random-generator state, and immediately flips a fair coin. On one outcome
+# the conversation simply proceeds to the keyword prompt with nothing said
+# after the description. On the other the NPC introduces itself". The two
+# sides never share a host clock, so the `"I am called <name>"` row is the
+# coin's and not the engine's, and a run that disagrees on it must be re-run.
+#
 # Talk to a castle NPC (`CASTLE.TLK`), seeded at Lord British's castle (15,25)
 # with a dialog-id 9 NPC directly north at (15,24) on ordinary floor. Companion
 # to `town-talk-speaker`, which does the same in a TOWNE scene. Filed against
