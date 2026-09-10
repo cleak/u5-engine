@@ -242,6 +242,21 @@ impl PlayState {
         self.mix_reagent_selection_active()
             || self.active_blackthorn_guard_demand.is_some()
             || self.pending_town_arrest.is_some()
+            // `commands.md §5.6` / `inventory.md §4.3`: a U-Use item that asks
+            // for a target ends its question with a trailing space -
+            // `On who: ` - so `§10.6` keeps the cursor on that row. Measured
+            // 2026-09-09 (`qa/paired/use-target-cancel.tsv`, beat `prompt`):
+            // the original's `On who:` is the window's last row, and this
+            // engine spent a blank and a fresh command row beneath it.
+            || self.active_use.as_ref().is_some_and(|session| {
+                matches!(
+                    session.pending,
+                    Some(
+                        crate::z_stats::UsePendingAction::PotionTarget { .. }
+                            | crate::z_stats::UsePendingAction::ScrollResurrectionTarget { .. }
+                    )
+                )
+            })
             // `blackthorn.md §4.1`'s acknowledgement reads a key with the
             // reaction on screen; the cursor sits inline after it.
             || self.active_blackthorn.as_ref().is_some_and(|challenge| {
