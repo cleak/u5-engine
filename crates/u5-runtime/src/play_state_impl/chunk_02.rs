@@ -2130,8 +2130,38 @@ impl PlayState {
                 text.push_str(&record.replace('\r', "\n"));
             }
         }
-        if matches!(outcome, CodexUrnReadOutcome::NoOrdained)
-            && let Some(record) = messages.record(MISCMSG_CODEX_NO_QUEST_PAGE)
+        // The page itself. `formats/miscmsg-dat.md §3` calls records `37-44`
+        // "Urn/Codex prophecy" and this engine read that as eight per-virtue
+        // pages indexed by virtue, which cannot be right - `37` and `38` are
+        // the preamble above (`cleak/u5-spec#253`).
+        //
+        // The per-virtue pages are the aphorism range `20..27`, in the
+        // standard virtue order. Established from the shipped records
+        // themselves - `20` opens "A dishonest life brings unto thee
+        // temporary", `25` "It is the guilt, not the guillotine", `27` "Pride
+        // is a vice, which Pride itself inclines" - and corroborated against
+        // public Ultima V documentation, which summarises the eight Codex
+        // readings as Honesty teaching about dishonest gains, Honor about
+        // guilt and shame, Humility about pride, and so on, one per virtue in
+        // that same order.
+        //
+        // `12..19` are a different cluster: they complete the *shrine's* quest
+        // sentence (`karma.md §12`, record `32` plus the virtue's own), and
+        // read as fragments - "the failing of Dishonesty!" - not as pages.
+        let page = match outcome {
+            CodexUrnReadOutcome::NoOrdained => Some(MISCMSG_CODEX_NO_QUEST_PAGE),
+            CodexUrnReadOutcome::Stamped(virtue) => {
+                Some(*MISCMSG_VIRTUE_APHORISM_RANGE.start() + virtue.index())
+            }
+            // The completed branch's page is still unmeasured; public
+            // documentation says the eighth reading also reveals the endgame
+            // location and Dungeon Doom's word of power, which would be the
+            // runic pages `41..44`. That is fan documentation rather than
+            // spec or capture, so it stays unimplemented until #253 answers.
+            CodexUrnReadOutcome::Completed => None,
+        };
+        if let Some(index) = page
+            && let Some(record) = messages.record(index)
         {
             text.push_str(&record.replace('\r', "\n"));
         }
