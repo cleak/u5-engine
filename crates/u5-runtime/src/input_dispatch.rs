@@ -2431,6 +2431,24 @@ fn handle_arms_shop_key_input(
             let call = arms_stock_call_for_roll(state.random_range_u8(0, 3));
             format!("{post}\n\n{listing}\n{call}")
         }
+        // `shops.md` §8.1 groups the carry-cap refusal with the decline: "A
+        // decline or carry-cap refusal uses this same prompt, retaining
+        // whether an earlier purchase completed." The refusal line itself is
+        // the fixed `Thou canst not carry any more!` over its attribution
+        // tail, and the prompt, repeated list and stock call follow it in the
+        // shape the declined quote takes. Not separately measured - reaching
+        // the cap needs 99 of an item - so it follows the spec sentence and
+        // the decline's measured shape rather than a capture of its own.
+        (ArmsShopOutcome::BuyRefusedCapHit { .. }, Some(table)) => {
+            let post =
+                arms_post_item_prompt(speech.speaker_is_female, state.arms_transaction_completed);
+            let listing = format_arms_stock_buy_menu(table, None);
+            let call = arms_stock_call_for_roll(state.random_range_u8(0, 3));
+            format!(
+                "{}\n{post}\n\n{listing}\n{call}",
+                speech.attribute("Thou canst not carry any more!", "says")
+            )
+        }
         (ArmsShopOutcome::Declined, _) if matches!(shop_state, ArmsShopState::SellPickItem(_)) => {
             format!(
                 "No\n{}",
