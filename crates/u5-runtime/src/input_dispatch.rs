@@ -2498,8 +2498,8 @@ fn handle_arms_shop_key_input(
         // between them, so the draw is the record id for this shop's row.
         (ArmsShopOutcome::Exited | ArmsShopOutcome::Declined, _) => {
             let roll = state.random_range_u8(0, 3);
-            let record = arms_closing_bark_record(state.arms_transaction_completed, roll);
-            render_shared_shoppe_flourish(game_dir, record)
+            arms_closing_bark_record(state.arms_transaction_completed, roll)
+                .and_then(|record| render_shared_shoppe_flourish(game_dir, record))
                 .map(|flourish| speech.attribute(&flourish, "says"))
                 .unwrap_or_default()
         }
@@ -2903,14 +2903,21 @@ fn render_shared_shoppe_flourish(game_dir: &Path, record_id: usize) -> Option<St
 /// leave have only ever drawn `0..3`. The bands read that way too - `0..3` are
 /// the dismissals and `4..7` the warm send-offs - which is the sentiment split
 /// the two outcome rows describe.
-fn arms_closing_bark_record(transaction_completed: bool, roll: u8) -> usize {
-    const PURCHASE_COMPLETED_BASE: usize = 4;
-    let base = if transaction_completed {
-        PURCHASE_COMPLETED_BASE
+fn arms_closing_bark_record(transaction_completed: bool, roll: u8) -> Option<usize> {
+    // The row bases are the ones already tabulated for every shop kind, so
+    // this reads the arms row out of that table rather than repeating its
+    // numbers. The purchase-completed row is the `Farewell` row, whose arms
+    // base is `4` - the value the record-7 measurement implies.
+    let kind = if transaction_completed {
+        crate::shoppe_records::SharedShopBarkKind::Farewell
     } else {
-        0
+        crate::shoppe_records::SharedShopBarkKind::InitialGreeting
     };
-    base + usize::from(roll & 0x03)
+    crate::shoppe_records::shared_shop_bark_record(
+        crate::shoppe_records::SHOP_DIALOG_ID_ARMS,
+        kind,
+        roll & 0x03,
+    )
 }
 
 fn quote_shoppe_flourish(text: &str) -> String {
@@ -5461,13 +5468,19 @@ mod arms_shop_resident_literal_tests {
     #[test]
     fn the_arms_closing_bark_row_follows_the_visits_outcome() {
         for roll in 0..4 {
-            assert_eq!(arms_closing_bark_record(false, roll), usize::from(roll));
-            assert_eq!(arms_closing_bark_record(true, roll), usize::from(roll) + 4);
+            assert_eq!(
+                arms_closing_bark_record(false, roll),
+                Some(usize::from(roll))
+            );
+            assert_eq!(
+                arms_closing_bark_record(true, roll),
+                Some(usize::from(roll) + 4)
+            );
         }
         // Every record the draw can reach is inside the shared 0..7 band.
         for completed in [false, true] {
             for roll in 0..4 {
-                assert!(arms_closing_bark_record(completed, roll) < 8);
+                assert!(arms_closing_bark_record(completed, roll).unwrap() < 8);
             }
         }
     }
