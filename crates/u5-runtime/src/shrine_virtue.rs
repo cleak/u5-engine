@@ -318,29 +318,45 @@ pub const fn shrine_meditation_outcome(
 /// Result of one Codex urn read per `karma.md §8`.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum CodexUrnReadOutcome {
-    /// All eight Codex-read bits are set; the reader takes its completed
-    /// branch and the saved masks are unchanged.
-    Completed,
-    /// No virtue currently has its ordained bit set; nothing happens.
+    /// No virtue currently has its ordained bit set.
+    ///
+    /// `karma.md` §8.1: the page result is record `39`, "the unexpected
+    /// visitor response. Neither quest mask changes". "This also applies when
+    /// all Codex-read bits are already set but no virtue remains ordained."
     NoOrdained,
-    /// The first ordained, not-yet-Codex-read virtue had its bit stamped.
-    Stamped(ShrineVirtue),
+    /// The first ordained virtue in the standard order had its Codex-read bit
+    /// stamped. `read_mask_complete` reports whether the *updated* mask has
+    /// all eight bits, which selects the completion extension.
+    Stamped {
+        virtue: ShrineVirtue,
+        read_mask_complete: bool,
+    },
 }
 
-/// `karma.md §8`: walk virtues in the standard order, pick the first virtue
-/// whose ordained bit is set and Codex-read bit is not set, set the matching
-/// Codex-read bit, and report the chosen virtue. If all eight Codex-read
-/// bits are already set, take the completed branch instead. If no virtue is
-/// ordained, do nothing. Updates `*codex_mask` in place.
+/// `karma.md` §8.1: "select the **first ordained virtue in the standard virtue
+/// order**. An already-set Codex-read bit does not exclude that virtue. Set its
+/// matching Codex-read bit, retain the ordained mask". With no ordained bits
+/// set the result is [`CodexUrnReadOutcome::NoOrdained`] and neither mask
+/// changes.
+///
+/// Two earlier readings are retracted and were both implemented here:
+/// `RETRACTIONS.md` R452 retracts "the claim that an already-complete read
+/// mask takes a completed branch instead of stamping a selected virtue", so
+/// there is no completed-instead-of-stamping arm; and the selection must not
+/// skip a virtue whose read bit is already set, which is why "Repeating the
+/// visit while that first virtue remains ordained repeats its aphorism; it
+/// does not advance to the next unread ordained virtue."
+///
+/// Updates `*codex_mask` in place.
 pub fn read_codex_urn(ordained_mask: u8, codex_mask: &mut u8) -> CodexUrnReadOutcome {
-    if *codex_mask == 0xFF {
-        return CodexUrnReadOutcome::Completed;
-    }
     for virtue in ShrineVirtue::ALL {
         let bit = virtue.bit();
-        if ordained_mask & bit != 0 && *codex_mask & bit == 0 {
+        if ordained_mask & bit != 0 {
             *codex_mask |= bit;
-            return CodexUrnReadOutcome::Stamped(virtue);
+            return CodexUrnReadOutcome::Stamped {
+                virtue,
+                read_mask_complete: *codex_mask == 0xFF,
+            };
         }
     }
     CodexUrnReadOutcome::NoOrdained

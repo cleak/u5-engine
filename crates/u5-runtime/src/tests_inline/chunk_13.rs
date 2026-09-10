@@ -7447,17 +7447,18 @@ fn town_entry_jail_wakeup_predicate_matches_published_coordinate() {
 fn tile_glyph_digraph_classifies_published_byte_codes() {
     // formats/miscmsg-dat.md §4: Codex/prophecy tile-glyph
     // records use `@` for inter-word space, `[` for TH, `]` for
-    // NG, `_` for ER. Other bytes are ordinary text glyphs.
+    // NG, `_` for ST (`RETRACTIONS.md` R455 retracts the earlier ER label).
+    // Other bytes are ordinary text glyphs.
     use TileGlyphDigraph::*;
     assert_eq!(tile_glyph_digraph(b'@'), Some(InterWordSpace));
     assert_eq!(tile_glyph_digraph(b'['), Some(Th));
     assert_eq!(tile_glyph_digraph(b']'), Some(Ng));
-    assert_eq!(tile_glyph_digraph(b'_'), Some(Er));
+    assert_eq!(tile_glyph_digraph(b'_'), Some(St));
     assert_eq!(InterWordSpace.expansion(), " ");
     assert_eq!(Th.expansion(), "TH");
     assert_eq!(Ng.expansion(), "NG");
-    assert_eq!(Er.expansion(), "ER");
-    assert_eq!(render_miscmsg_tile_glyph_text("TRU[@_"), "TRUTH ER");
+    assert_eq!(St.expansion(), "ST");
+    assert_eq!(render_miscmsg_tile_glyph_text("TRU[@_"), "TRUTH ST");
     // Ordinary ASCII letters and punctuation are not digraphs.
     assert_eq!(tile_glyph_digraph(b'A'), None);
     assert_eq!(tile_glyph_digraph(b' '), None);
@@ -23152,39 +23153,81 @@ fn shrine_virtue_companion_table_matches_karma_md_section_nine() {
 }
 
 #[test]
-fn read_codex_urn_walks_virtues_in_standard_order() {
-    // karma.md §8: walk the eight virtues in standard order, stamp the
-    // first ordained-and-not-yet-Codex-read virtue, return the chosen
-    // virtue. Honesty is index 0 and so should be picked first when
-    // ordained.
+fn read_codex_urn_repeats_the_first_ordained_virtue() {
+    // `karma.md` §8.1: "select the **first ordained virtue in the standard
+    // virtue order**. An already-set Codex-read bit does not exclude that
+    // virtue." And: "Repeating the visit while that first virtue remains
+    // ordained repeats its aphorism; it does not advance to the next unread
+    // ordained virtue."
+    //
+    // This engine skipped a virtue whose read bit was already set, so a second
+    // visit advanced to Justice.
+    let ordained = ShrineVirtue::Honesty.bit() | ShrineVirtue::Justice.bit();
     let mut codex = 0u8;
-    let outcome = read_codex_urn(
-        ShrineVirtue::Honesty.bit() | ShrineVirtue::Justice.bit(),
-        &mut codex,
+    let outcome = read_codex_urn(ordained, &mut codex);
+    assert_eq!(
+        outcome,
+        CodexUrnReadOutcome::Stamped {
+            virtue: ShrineVirtue::Honesty,
+            read_mask_complete: false,
+        }
     );
-    assert_eq!(outcome, CodexUrnReadOutcome::Stamped(ShrineVirtue::Honesty));
     assert_eq!(codex, ShrineVirtue::Honesty.bit());
 
-    // Second read with same ordained mask should pick Justice next
-    // because Honesty's Codex-read bit is now set.
-    let outcome = read_codex_urn(
-        ShrineVirtue::Honesty.bit() | ShrineVirtue::Justice.bit(),
-        &mut codex,
-    );
-    assert_eq!(outcome, CodexUrnReadOutcome::Stamped(ShrineVirtue::Justice));
+    let outcome = read_codex_urn(ordained, &mut codex);
     assert_eq!(
-        codex,
-        ShrineVirtue::Honesty.bit() | ShrineVirtue::Justice.bit()
+        outcome,
+        CodexUrnReadOutcome::Stamped {
+            virtue: ShrineVirtue::Honesty,
+            read_mask_complete: false,
+        },
+        "the first ordained virtue repeats; it does not advance to Justice"
     );
+    assert_eq!(codex, ShrineVirtue::Honesty.bit());
 }
 
 #[test]
-fn read_codex_urn_returns_completed_when_all_codex_bits_set() {
-    // karma.md §8: with all eight Codex-read bits set, the reader takes
-    // its completed branch and the saved masks are unchanged.
+fn read_codex_urn_still_stamps_when_every_read_bit_is_already_set() {
+    // `RETRACTIONS.md` R452 retracts "the claim that an already-complete read
+    // mask takes a completed branch instead of stamping a selected virtue".
+    // The visit stamps its virtue as usual and reports the completed mask, so
+    // the caller runs `karma.md` §8.1's completion extension.
     let mut codex = 0xFFu8;
-    let outcome = read_codex_urn(0xFF, &mut codex);
-    assert_eq!(outcome, CodexUrnReadOutcome::Completed);
+    let outcome = read_codex_urn(ShrineVirtue::Honesty.bit(), &mut codex);
+    assert_eq!(
+        outcome,
+        CodexUrnReadOutcome::Stamped {
+            virtue: ShrineVirtue::Honesty,
+            read_mask_complete: true,
+        }
+    );
+    assert_eq!(codex, 0xFF);
+}
+
+#[test]
+fn read_codex_urn_reports_a_complete_mask_only_once_the_last_bit_lands() {
+    // The extension "occurs both when the selected virtue supplies the final
+    // missing read bit and when the read mask was already complete on arrival
+    // with at least one ordained virtue" (§8.1).
+    let mut codex = 0xFFu8 & !ShrineVirtue::Honesty.bit();
+    let outcome = read_codex_urn(ShrineVirtue::Honesty.bit(), &mut codex);
+    assert_eq!(
+        outcome,
+        CodexUrnReadOutcome::Stamped {
+            virtue: ShrineVirtue::Honesty,
+            read_mask_complete: true,
+        }
+    );
+    assert_eq!(codex, 0xFF);
+}
+
+#[test]
+fn read_codex_urn_takes_the_no_ordained_branch_with_a_complete_read_mask() {
+    // §8.1: the no-ordained result "also applies when all Codex-read bits are
+    // already set but no virtue remains ordained".
+    let mut codex = 0xFFu8;
+    let outcome = read_codex_urn(0, &mut codex);
+    assert_eq!(outcome, CodexUrnReadOutcome::NoOrdained);
     assert_eq!(codex, 0xFF);
 }
 

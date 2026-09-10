@@ -2152,34 +2152,83 @@ impl PlayState {
         // `12..19` are a different cluster: they complete the *shrine's* quest
         // sentence (`karma.md §12`, record `32` plus the virtue's own), and
         // read as fragments - "the failing of Dishonesty!" - not as pages.
-        let page = match outcome {
-            CodexUrnReadOutcome::NoOrdained => Some(MISCMSG_CODEX_NO_QUEST_PAGE),
-            CodexUrnReadOutcome::Stamped(virtue) => {
-                Some(*MISCMSG_VIRTUE_APHORISM_RANGE.start() + virtue.index())
+        // `karma.md` §8.1 / §8.2 and `miscmsg-dat.md` §3, published
+        // 2026-09-10 in answer to cleak/u5-spec#253.
+        //
+        // The per-virtue pages are the aphorism range `20..27` in the standard
+        // virtue order - Honesty `20` through Humility `27` - not the `37..44`
+        // cluster, whose `37`/`38` are the preamble above. That was already
+        // corrected here; the rest of the contract was not.
+        //
+        // The aphorism "is enclosed by an opening double quote and a closing
+        // double quote followed by two newlines, in addition to the record's
+        // own authored content".
+        let steps = match outcome {
+            CodexUrnReadOutcome::NoOrdained => {
+                if let Some(record) = messages.record(MISCMSG_CODEX_NO_QUEST_PAGE) {
+                    text.push_str(&record.replace('\r', "\n"));
+                }
+                crate::miscmsg_io::CODEX_PRESENTATION_KEY_STEPS_NO_ORDAINED
             }
-            // The completed branch's page is still unmeasured; public
-            // documentation says the eighth reading also reveals the endgame
-            // location and Dungeon Doom's word of power, which would be the
-            // runic pages `41..44`. That is fan documentation rather than
-            // spec or capture, so it stays unimplemented until #253 answers.
-            CodexUrnReadOutcome::Completed => None,
+            CodexUrnReadOutcome::Stamped {
+                virtue,
+                read_mask_complete,
+            } => {
+                let index = *MISCMSG_VIRTUE_APHORISM_RANGE.start() + virtue.index();
+                if let Some(record) = messages.record(index) {
+                    text.push('"');
+                    text.push_str(&record.replace('\r', "\n"));
+                    text.push_str("\"\n\n");
+                }
+                if read_mask_complete {
+                    // §8.1: "continue with three shared viewport flash/rumble
+                    // effects, then record `40` once as the page-turn
+                    // transition. After another key, print `Thou dost read:`
+                    // and the shared runic pages `41`, `42`, `43`, `44` in
+                    // that order [...] record `40` is not repeated between
+                    // them."
+                    //
+                    // The three flash/rumble effects are not emitted here.
+                    // This engine models a viewport flash as a playback record
+                    // a frontend replays (see `blackthorn_rescue_playback`),
+                    // and the Codex has no such record yet; the text and key
+                    // contract below is what a paired capture measures.
+                    // Tracked as unfinished rather than faked.
+                    if let Some(record) =
+                        messages.record(crate::miscmsg_io::MISCMSG_CODEX_PAGE_TURN)
+                    {
+                        text.push_str(&record.replace('\r', "\n"));
+                    }
+                    text.push_str(crate::miscmsg_io::CODEX_COMPLETION_READ_LEAD_IN);
+                    for index in crate::miscmsg_io::MISCMSG_CODEX_COMPLETION_PAGES {
+                        if let Some(record) = messages.record(index) {
+                            // §3 (`RETRACTIONS.md` R453): these are printed by
+                            // "the ordinary fixed-window message printer" with
+                            // the runic font selected, not by a separate
+                            // sign-stream path. The glyph stream is expanded
+                            // here; selecting the runic font for the row is a
+                            // presentation detail the message log cannot carry
+                            // yet.
+                            text.push_str(&render_miscmsg_tile_glyph_text(
+                                &record.replace('\r', "\n"),
+                            ));
+                        }
+                    }
+                    crate::miscmsg_io::CODEX_PRESENTATION_KEY_STEPS_COMPLETION
+                } else {
+                    crate::miscmsg_io::CODEX_PRESENTATION_KEY_STEPS_ORDAINED
+                }
+            }
         };
-        if let Some(index) = page
-            && let Some(record) = messages.record(index)
-        {
-            text.push_str(&record.replace('\r', "\n"));
-        }
         if !text.is_empty() {
             self.emit_message_line(text);
         }
-        // Measured: the original draws record `46` and then waits. Sixteen
-        // seconds with no key left it there; the next three keys stepped it
-        // through the remaining records without reaching the command parser,
-        // and the fourth was an ordinary command again. This engine has
-        // already drawn the whole presentation, so the steps only owe the
-        // keys - which is what keeps a scripted Space from becoming a `Pass`
-        // the original never printed.
-        self.codex_presentation_steps = CODEX_PRESENTATION_KEY_STEPS;
+        // Measured: the original draws record `46` and then waits, and each
+        // accepted key advances the presentation without reaching the command
+        // parser. This engine has already drawn the whole presentation, so the
+        // steps only owe the keys - which is what keeps a scripted Space from
+        // becoming a `Pass` the original never printed.
+        self.codex_presentation_steps = steps;
         Ok(MoveOutcome::Observed)
     }
 

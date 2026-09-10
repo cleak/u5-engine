@@ -36,8 +36,12 @@ pub enum TileGlyphDigraph {
     Th,
     /// `]` — `NG` digraph.
     Ng,
-    /// `_` — `ER` digraph.
-    Er,
+    /// `_` — `ST` digraph.
+    ///
+    /// `formats/miscmsg-dat.md` §4 (`RETRACTIONS.md` R455): "The earlier `ER`
+    /// label for `_` is retracted; Codex and endgame text use the same runic
+    /// `ST` glyph."
+    St,
 }
 
 impl TileGlyphDigraph {
@@ -48,7 +52,7 @@ impl TileGlyphDigraph {
             Self::InterWordSpace => " ",
             Self::Th => "TH",
             Self::Ng => "NG",
-            Self::Er => "ER",
+            Self::St => "ST",
         }
     }
 }
@@ -61,7 +65,7 @@ pub const fn tile_glyph_digraph(byte: u8) -> Option<TileGlyphDigraph> {
         b'@' => TileGlyphDigraph::InterWordSpace,
         b'[' => TileGlyphDigraph::Th,
         b']' => TileGlyphDigraph::Ng,
-        b'_' => TileGlyphDigraph::Er,
+        b'_' => TileGlyphDigraph::St,
         _ => return None,
     })
 }
@@ -159,10 +163,29 @@ pub const MISCMSG_CODEX_NO_QUEST_PAGE: usize = 39;
 
 /// Keys the Codex presentation absorbs after its first record is drawn.
 ///
-/// Measured 2026-09-09 (`qa/paired/codex-enter.tsv`): three keys stepped the
-/// original through the rest of the presentation and printed nothing of their
-/// own; the fourth and fifth printed the ordinary ` Pass` echo.
-pub const CODEX_PRESENTATION_KEY_STEPS: u8 = 3;
+/// `karma.md` §8.2 publishes three lengths, counted from after the approach
+/// record `46`: "a no-ordained visit consumes **three** keys, an ordained
+/// visit with an incomplete resulting read mask consumes **four**, and an
+/// ordained visit with a complete resulting read mask consumes **nine**."
+///
+/// Measured 2026-09-09 (`qa/paired/codex-enter.tsv`) on the no-ordained path:
+/// three keys stepped the original through the rest of the presentation and
+/// printed nothing of their own; the fourth and fifth printed the ordinary
+/// ` Pass` echo. The engine applied that count to every path.
+pub const CODEX_PRESENTATION_KEY_STEPS_NO_ORDAINED: u8 = 3;
+pub const CODEX_PRESENTATION_KEY_STEPS_ORDAINED: u8 = 4;
+pub const CODEX_PRESENTATION_KEY_STEPS_COMPLETION: u8 = 9;
+
+/// `miscmsg-dat.md` §3: record `40` is the "Page-turn transition, printed once
+/// before the shared completion pages", and `41`-`44` are "Four shared runic
+/// pages, presented sequentially when the selected virtue leaves the read mask
+/// complete".
+pub const MISCMSG_CODEX_PAGE_TURN: usize = 40;
+pub const MISCMSG_CODEX_COMPLETION_PAGES: std::ops::RangeInclusive<usize> = 41..=44;
+
+/// `karma.md` §8.1: after the page-turn record and its key, the presentation
+/// prints this lead-in in the ordinary font before the four runic pages.
+pub const CODEX_COMPLETION_READ_LEAD_IN: &str = "Thou dost read:\n\n";
 
 /// `karma.md §12`, the Codex-unread arm: record `31` is "the altar's quest
 /// announcement", record `32` opens the quest sentence that the virtue's own
