@@ -635,26 +635,29 @@ impl PlayState {
                     return Ok(true);
                 }
             }
-            UsePendingAction::PotionTarget { index } => {
-                let key = if key == ' ' { '1' } else { key };
-                if let Some(target) = pending_use_party_target(key, suffix) {
-                    if target < self.party.len() {
+            UsePendingAction::PotionTarget { index, highlight } => {
+                match self.step_use_target_selector(key, suffix, highlight) {
+                    UseTargetStep::Moved(next) => {
+                        session.pending = Some(UsePendingAction::PotionTarget {
+                            index,
+                            highlight: next,
+                        });
+                        self.message = self.render_use_session(&session);
+                        self.active_use = Some(session);
+                        return Ok(true);
+                    }
+                    UseTargetStep::Waiting => {
+                        session.pending = Some(pending);
+                        self.message = self.render_use_session(&session);
+                        self.active_use = Some(session);
+                        return Ok(true);
+                    }
+                    UseTargetStep::Committed(target) => {
                         // The answer completes the prompt's own row.
                         let name = self.party_member_display_name(target);
                         self.commit_prompt_reply(USE_POTION_TARGET_PROMPT, &name);
                         self.use_potion_consumed_target(index, target)
-                    } else {
-                        // Out-of-range member: the interactive pickers bound the
-                        // index, so only the inline harness form reaches this. The
-                        // original has no line for a state it cannot enter.
-                        self.message.clear();
-                        MoveOutcome::Blocked
                     }
-                } else {
-                    session.pending = Some(pending);
-                    self.message = self.render_use_session(&session);
-                    self.active_use = Some(session);
-                    return Ok(true);
                 }
             }
             UsePendingAction::ScrollWindDirection { .. } => {
@@ -669,19 +672,28 @@ impl PlayState {
                     return Ok(true);
                 }
             }
-            UsePendingAction::ScrollResurrectionTarget { index } => {
-                let key = if key == ' ' { '1' } else { key };
-                if let Some(target) = pending_use_party_target(key, suffix) {
-                    if target < self.party.len() {
+            UsePendingAction::ScrollResurrectionTarget { index, highlight } => {
+                match self.step_use_target_selector(key, suffix, highlight) {
+                    UseTargetStep::Moved(next) => {
+                        session.pending = Some(UsePendingAction::ScrollResurrectionTarget {
+                            index,
+                            highlight: next,
+                        });
+                        self.message = self.render_use_session(&session);
+                        self.active_use = Some(session);
+                        return Ok(true);
+                    }
+                    UseTargetStep::Waiting => {
+                        session.pending = Some(pending);
+                        self.message = self.render_use_session(&session);
+                        self.active_use = Some(session);
+                        return Ok(true);
+                    }
+                    UseTargetStep::Committed(target) => {
                         let name = self.party_member_display_name(target);
                         self.commit_prompt_reply(USE_POTION_TARGET_PROMPT, &name);
+                        self.use_resurrection_scroll_consumed_target(index, target)
                     }
-                    self.use_resurrection_scroll_consumed_target(index, target)
-                } else {
-                    session.pending = Some(pending);
-                    self.message = self.render_use_session(&session);
-                    self.active_use = Some(session);
-                    return Ok(true);
                 }
             }
         };
@@ -743,7 +755,7 @@ impl PlayState {
             // completes its row. The two scroll prompts below are not
             // measured and keep the harness text for now
             // (`cleak/u5-spec#225`).
-            UsePendingAction::PotionTarget { index } => {
+            UsePendingAction::PotionTarget { index, .. } => {
                 let _ = index;
                 USE_POTION_TARGET_PROMPT.to_string()
             }
@@ -751,7 +763,7 @@ impl PlayState {
                 let _ = index;
                 SPELL_DIRECTION_PROMPT_PREFIX.to_string()
             }
-            UsePendingAction::ScrollResurrectionTarget { index } => {
+            UsePendingAction::ScrollResurrectionTarget { index, .. } => {
                 let _ = index;
                 USE_POTION_TARGET_PROMPT.to_string()
             }
@@ -5587,7 +5599,10 @@ fn pending_action_for_use_request(request: UseItemRequest) -> Option<UsePendingA
         UseItemRequest::Potion {
             index,
             target: None,
-        } => Some(UsePendingAction::PotionTarget { index }),
+        } => Some(UsePendingAction::PotionTarget {
+            index,
+            highlight: 0,
+        }),
         UseItemRequest::Scroll {
             index: SCROLL_WIND_CHANGE_INDEX,
             direction: None,
@@ -5600,6 +5615,7 @@ fn pending_action_for_use_request(request: UseItemRequest) -> Option<UsePendingA
             target: None,
             ..
         } => Some(UsePendingAction::ScrollResurrectionTarget {
+            highlight: 0,
             index: SCROLL_RESURRECTION_INDEX,
         }),
         // Measured: the skull key asks `Direction-` before it acts.
@@ -5614,6 +5630,37 @@ fn shadowlord_shard_special_item_index(index: usize) -> Option<usize> {
         SHADOWLORD_HATRED_INDEX => Some(SPECIAL_ITEM_SHARD_HATRED_INDEX),
         SHADOWLORD_COWARDICE_INDEX => Some(SPECIAL_ITEM_SHARD_COWARDICE_INDEX),
         _ => None,
+    }
+}
+
+impl PlayState {
+    /// Step the shared `On who:` party-member prompt by one key.
+    ///
+    /// See [`UseTargetStep`] for the published rule this follows.
+    fn step_use_target_selector(&self, key: char, suffix: &str, highlight: usize) -> UseTargetStep {
+        let last = self.party.len().saturating_sub(1);
+        // Return or Space commits the indicated row.
+        if matches!(key, '\r' | '\n' | ' ') {
+            return UseTargetStep::Committed(highlight.min(last));
+        }
+        // The four direction keys move the indicator.
+        if let Some(forward) = party_selector_direction_step(key) {
+            let next = if forward {
+                highlight.saturating_add(1).min(last)
+            } else {
+                highlight.saturating_sub(1)
+            };
+            return UseTargetStep::Moved(next);
+        }
+        // A digit repositions it, bounded by the party size; an out-of-range
+        // digit leaves the indicator where it is.
+        if let Some(target) = pending_use_party_target(key, suffix) {
+            if target < self.party.len() {
+                return UseTargetStep::Moved(target);
+            }
+            return UseTargetStep::Moved(highlight);
+        }
+        UseTargetStep::Waiting
     }
 }
 
@@ -6380,4 +6427,28 @@ mod shop_vendor_name_tests {
         assert_eq!(shop_vendor_name_for_scene(0x88, 32), None);
         assert_eq!(shop_vendor_name_for_scene(0x89, 2), None);
     }
+}
+
+/// What one key did at the shared `On who:` party-member prompt.
+///
+/// `inventory.md §4`: "**A digit moves the indicator; it does not commit.**
+/// `1` through `6`, bounded by the party size, reposition the inverted row
+/// exactly as the direction keys do and leave the prompt open. Only Return or
+/// Space commits the indicated row, Escape cancels" - and "This is one shared
+/// routine, so the rule is the same for Z-stats, R-Ready, New Order, the
+/// fountain, Search and every other caller." The `On who:` prompt the potion
+/// and the Resurrection scroll share is such a caller.
+///
+/// This engine committed on the digit instead, so it consumed one key fewer
+/// than the original and the scripted Return that should have committed fell
+/// through to the world loop and echoed `What`. Measured 2026-09-10
+/// (`use-potions/red`), where the original shows no such line.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum UseTargetStep {
+    /// A digit or direction key repositioned the indicator.
+    Moved(usize),
+    /// An unrecognised key; the prompt stays open and nothing is redrawn.
+    Waiting,
+    /// Return or Space committed the indicated row.
+    Committed(usize),
 }

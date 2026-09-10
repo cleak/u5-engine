@@ -454,14 +454,20 @@ pub enum YesNoPromptKind {
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum UsePendingAction {
+    /// `inventory.md §4`: the `On who:` prompt is the shared party-member
+    /// selector, and there "a digit moves the indicator; it does not commit
+    /// [...] Only Return or Space commits the indicated row". `highlight` is
+    /// the row the digits and direction keys move.
     PotionTarget {
         index: usize,
+        highlight: usize,
     },
     ScrollWindDirection {
         index: usize,
     },
     ScrollResurrectionTarget {
         index: usize,
+        highlight: usize,
     },
     /// **Measured** 2026-09-07: the skull key completes its row as
     /// `Item: Skull Key` and then opens the shared `Direction-` prompt

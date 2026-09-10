@@ -1489,8 +1489,21 @@
         // name onto that row.
         assert_eq!(state.message, USE_POTION_TARGET_PROMPT);
 
+        // `inventory.md §4`: at the shared party-member prompt "a digit moves
+        // the indicator; it does not commit [...] Only Return or Space commits
+        // the indicated row". The engine used to commit on the digit, which
+        // left the scripted Return to fall through to the world loop and echo
+        // `What` (measured 2026-09-10, `use-potions/red`).
         assert_eq!(
             handle_play_key_input(&mut state, '1', "", Path::new("")).unwrap(),
+            PlayInputDisposition::Continue
+        );
+        assert!(
+            state.active_use.is_some(),
+            "a digit must leave the On who: prompt open"
+        );
+        assert_eq!(
+            handle_play_key_input(&mut state, '\r', "", Path::new("")).unwrap(),
             PlayInputDisposition::Continue
         );
         assert!(state.active_use.is_none());
@@ -1558,8 +1571,21 @@
         assert!(state.message.contains(SCROLL_RESURRECTION_RESULT));
         assert!(state.message.ends_with(USE_POTION_TARGET_PROMPT));
 
+        // `inventory.md §4`: at the shared party-member prompt "a digit moves
+        // the indicator; it does not commit [...] Only Return or Space commits
+        // the indicated row". The engine used to commit on the digit, which
+        // left the scripted Return to fall through to the world loop and echo
+        // `What` (measured 2026-09-10, `use-potions/red`).
         assert_eq!(
             handle_play_key_input(&mut state, '1', "", Path::new("")).unwrap(),
+            PlayInputDisposition::Continue
+        );
+        assert!(
+            state.active_use.is_some(),
+            "a digit must leave the On who: prompt open"
+        );
+        assert_eq!(
+            handle_play_key_input(&mut state, '\r', "", Path::new("")).unwrap(),
             PlayInputDisposition::Continue
         );
         assert!(state.active_use.is_none());
