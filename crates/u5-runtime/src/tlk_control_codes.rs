@@ -687,6 +687,12 @@ pub const TLK_ASK_WHO_NAME_PREFIX_LEN: usize = 4;
 /// envelope; callers may strip the spacing in display layers that
 /// own their own line breaks.
 pub const TLK_NO_KEYWORD_MATCH_MESSAGE: &str = "I cannot help thee with that.\n\n";
+/// `conversation.md` §7's reserved-keyword table gives index 0, `NAME`, as
+/// "Run the Name entry with the **fixed name prefix**", but does not quote the
+/// prefix. Measured 2026-09-10 (`castle-talk/name`): the original answers
+/// `"My name is Chuckles"` where the bare Name entry is `Chuckles`. The
+/// introduction uses its own separate prefix, `I am called `.
+pub const TLK_NAME_KEYWORD_PREFIX: &str = "My name is ";
 
 pub const TLK_RESERVED_REBUKE_MESSAGE: &str =
     "With language like that, how did you become an Avatar?\n\n";

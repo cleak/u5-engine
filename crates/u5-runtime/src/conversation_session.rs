@@ -396,7 +396,23 @@ impl ConversationSession {
             out.push_plain_text(TLK_EMPTY_INPUT_BYE_MESSAGE);
         }
         let response = self.run_field_from(field_idx, 0, ctx, 0);
-        out.push_framed_response(&response.rendered_text());
+        // `conversation.md` §7's reserved-keyword table: index 0, `NAME`,
+        // "Run the Name entry with the **fixed name prefix**". The section
+        // names the prefix but does not quote it; measured 2026-09-10
+        // (`castle-talk/name`), the original answers `"My name is Chuckles"`
+        // where this engine answered `"Chuckles"` - the bare Name entry, the
+        // same field the introduction prefixes with `I am called `.
+        // Published wording requested in cleak/u5-spec.
+        if matches!(
+            kind,
+            TlkPlayerInputKind::Reserved(ReservedKeywordEffect::NameEntry)
+        ) {
+            let mut rendered = TlkRenderedText::plain(TLK_NAME_KEYWORD_PREFIX);
+            rendered.push_rendered(&response.rendered_text());
+            out.push_framed_response(&rendered);
+        } else {
+            out.push_framed_response(&response.rendered_text());
+        }
         out.branch_flags_set |= response.branch_flags_set;
         out.action_grants.extend(response.action_grants);
         out.gold_payments.extend(response.gold_payments);
@@ -1254,8 +1270,14 @@ mod tests {
         );
         assert_eq!(s.prompt_message(), TLK_KEYWORD_PROMPT);
 
+        // `conversation.md` §7: `NAME` runs the Name entry "with the fixed
+        // name prefix" - measured 2026-09-10 (`castle-talk/name`) as
+        // `My name is `.
         let name = s.submit_keyword("name", &context);
-        assert_eq!(name.text, framed_response("Ada"));
+        assert_eq!(
+            name.text,
+            framed_response(&format!("{TLK_NAME_KEYWORD_PREFIX}Ada"))
+        );
         assert!(!name.ended);
         assert_eq!(
             s.phase,
