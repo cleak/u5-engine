@@ -3914,6 +3914,10 @@ impl PlayState {
                 if matches!(&session, crate::shop_session::ActiveShopSession::Tavern(_)) {
                     self.tavern_secondary_drink_count = 0;
                 }
+                // `shops.md §8.1`: the post-item prompt's suffix reports
+                // whether a transaction has completed "in this visit", so the
+                // flag is per-visit and resets as the session opens.
+                self.arms_transaction_completed = false;
                 if matches!(
                     &session,
                     crate::shop_session::ActiveShopSession::Innkeeper(_)
@@ -4088,6 +4092,10 @@ impl PlayState {
                 if matches!(&session, crate::shop_session::ActiveShopSession::Tavern(_)) {
                     self.tavern_secondary_drink_count = 0;
                 }
+                // `shops.md §8.1`: the post-item prompt's suffix reports
+                // whether a transaction has completed "in this visit", so the
+                // flag is per-visit and resets as the session opens.
+                self.arms_transaction_completed = false;
                 if matches!(
                     &session,
                     crate::shop_session::ActiveShopSession::Innkeeper(_)

@@ -240,6 +240,45 @@ ASSET_PROFILE = pathlib.Path.home() / ".local/share/u5/engine/codex-seed"
 _SIGNATURES: dict[str, list[str]] | None = None
 
 
+# A signature shorter than this cannot identify a record at all.
+_SIGNATURE_FLOOR = 8
+
+# Ordinary Ultima phrasing that occurs outside the pools too. A pool record
+# whose longest plain run is only one of these cannot be told apart from a
+# resident literal that happens to contain it, and excusing a beat on that
+# basis would mask a real wording difference. Such a record simply has no
+# usable signature and is left out, exactly as a too-short one is.
+_GENERIC_RUNS = frozenset(
+    {
+        "wilt thou",
+        "use them",
+        "do for thee",
+        "can i show",
+        "come again",
+        "day mate",
+        "anything else",
+        "s already",
+        "s right now",
+        "then beat it",
+        "cheat me",
+    }
+)
+
+
+def _is_distinctive(run: str) -> bool:
+    """Can this plain-letter run stand in for one record of a pool?
+
+    The original test was a bare `len(run) >= 14`, which silently dropped every
+    short record - `SHOPPE.DAT`'s `Harrumph!` bark among them - so a visit that
+    drew one reported the pool draw as a wording difference. Measured
+    2026-09-10 on `shop-arms-menus/exit`. Length alone is the wrong axis: some
+    short runs are perfectly distinctive and some longer ones are stock phrases.
+    """
+    if len(run) < _SIGNATURE_FLOOR:
+        return False
+    return run.casefold() not in _GENERIC_RUNS
+
+
 def _pool_signatures() -> dict[str, list[str]]:
     """Per cluster, a distinctive fragment of each record.
 
@@ -263,8 +302,9 @@ def _pool_signatures() -> dict[str, list[str]]:
             text = records[index].decode("latin-1")
             runs = re.split(r"[^A-Za-z ]+", text)
             best = max((run.strip() for run in runs), key=len, default="")
-            if len(best) >= 14:
-                signatures.append(" ".join(best.split()))
+            best = " ".join(best.split())
+            if _is_distinctive(best):
+                signatures.append(best)
         if signatures:
             _SIGNATURES[name] = signatures
     return _SIGNATURES
@@ -377,8 +417,15 @@ def classify(left: list[list[str]], right: list[list[str]], rows: list[int]) -> 
     # the other's, the content agrees and the row accounting does not.
     left, right = _flatten(stock), _flatten(engine)
     if len(left) >= 24 and len(right) >= 24:
-        short, long_ = sorted((left, right), key=len)
-        if _canonical(short) in _canonical(long_):
+        # Containment is tested on the *canonicalised* streams, so which side
+        # is shorter must be decided there too. A long variant draw collapses
+        # to a short token - `shops.md` §8.B's greeting variant 2 is 63 raw
+        # characters and becomes 4 - which can invert the raw-length order and
+        # run the containment test backwards. That reported the whole arms
+        # sell-keys family as `text` when it was one greeting coin re-wrapping
+        # the scrollback. Try both directions rather than guessing an order.
+        canon_left, canon_right = _canonical(left), _canonical(right)
+        if canon_left in canon_right or canon_right in canon_left:
             return "scroll"
     if len(rows) == 1:
         a, b = stock[rows[0]], engine[rows[0]]
@@ -459,7 +506,7 @@ def compare_cached(artifact: pathlib.Path, cache: dict) -> tuple:
 
 
 # Bump when a classifier change would alter a cached verdict.
-CACHE_VERSION = 3
+CACHE_VERSION = 5
 
 
 # Some scenarios are explicitly a lottery: their own headers say so. The night

@@ -2409,17 +2409,27 @@ fn handle_arms_shop_key_input(
         // Buy listing on screen with a freshly drawn call line under it, and
         // the next letter buys again without a second `B`.
         (ArmsShopOutcome::Bought { .. }, Some(table)) => {
+            state.arms_transaction_completed = true;
             let post = arms_post_item_prompt(speech.speaker_is_female, true);
             let listing = format_arms_stock_buy_menu(table, None);
             let call = arms_stock_call_for_roll(state.random_range_u8(0, 3));
             format!("Sold!\n{post}\n\n{listing}\n{call}")
         }
+        // `shops.md §8.1`: "A decline or carry-cap refusal uses this same
+        // prompt, retaining whether an earlier purchase completed." This arm
+        // printed the redrawn listing alone, so a declined quote lost the
+        // prompt entirely. Measured 2026-09-10: `shop-arms-menus/buydecline`
+        // has the original on `then?` with nothing bought yet, and
+        // `shop-arms-buy-confirm/declined` on `sir?` after a purchase - the
+        // two suffixes the retained flag selects between.
         (ArmsShopOutcome::Declined, Some(table))
             if matches!(prior_state, ArmsShopState::BuyConfirm { .. }) =>
         {
+            let post =
+                arms_post_item_prompt(speech.speaker_is_female, state.arms_transaction_completed);
             let listing = format_arms_stock_buy_menu(table, None);
             let call = arms_stock_call_for_roll(state.random_range_u8(0, 3));
-            format!("{listing}\n{call}")
+            format!("{post}\n\n{listing}\n{call}")
         }
         (ArmsShopOutcome::Declined, _) if matches!(shop_state, ArmsShopState::SellPickItem(_)) => {
             format!(
@@ -2841,7 +2851,24 @@ fn render_shared_shoppe_flourish(game_dir: &Path, record_id: usize) -> Option<St
     crate::shoppe_bark::ShoppeTextRenderer::load_from_game_dir(game_dir)
         .ok()
         .and_then(|renderer| renderer.render_record(record_id, &placeholders).ok())
-        .map(|text| format!("\"{}\"", text.trim()))
+        .map(|text| quote_shoppe_flourish(&text))
+}
+
+/// Wrap a rendered shared bark in its speech quotes.
+///
+/// The `SHOPPE.DAT` bark records carry their own closing quote and no opening
+/// one, so the caller supplies the opening quote only. Measured 2026-09-10
+/// against `shop-arms-menus/exit`: the original drew the `Come back...` record
+/// and printed one closing quote, while this engine drew `Harrumph!` and
+/// printed `"Harrumph!""`. Appending is guarded rather than dropped outright so
+/// a record that lacks the trailing quote still closes.
+fn quote_shoppe_flourish(text: &str) -> String {
+    let text = text.trim();
+    if text.ends_with('"') {
+        format!("\"{text}")
+    } else {
+        format!("\"{text}\"")
+    }
 }
 
 fn render_shoppe_record_for_arms_quote(
@@ -5489,6 +5516,49 @@ mod arms_shop_resident_literal_tests {
             ArmsShopSpeech::default(),
         );
         assert_eq!(rendered, "Sold!\n\"Anything else, sir?");
+    }
+
+    /// `systems/shops.md §8.1`: "A decline or carry-cap refusal uses this
+    /// same prompt, retaining whether an earlier purchase completed."
+    /// Measured 2026-09-10: `shop-arms-menus/buydecline` shows the original on
+    /// `then?` with nothing bought this visit, and
+    /// `shop-arms-buy-confirm/declined` on `sir?` after a purchase. This
+    /// engine printed the redrawn listing with no prompt at all, which left
+    /// the two windows a row apart for the rest of the visit.
+    #[test]
+    fn arms_declined_quote_keeps_the_post_item_prompt_and_its_retained_suffix() {
+        for (completed, suffix) in [(false, "then?"), (true, "sir?")] {
+            let mut state = stocked_arms_state();
+            state.arms_transaction_completed = completed;
+            // `B` opens the buy listing, `a` quotes the first stock row, and
+            // `N` declines it.
+            for key in ['B', 'a', 'N'] {
+                handle_active_shop_key_input(&mut state, key, "", game_dir());
+            }
+            let rendered = state.message.clone();
+            assert!(
+                rendered.starts_with(&format!("\"Anything else, {suffix}")),
+                "declined quote with completed={completed} rendered {rendered:?}"
+            );
+        }
+    }
+
+    /// The shared `SHOPPE.DAT` bark records carry their own closing quote and
+    /// no opening one, so the renderer supplies the opening quote only.
+    /// Measured 2026-09-10 on `shop-arms-menus/exit`: the original printed one
+    /// closing quote while this engine printed `"Harrumph!""`.
+    #[test]
+    fn shared_shoppe_flourish_does_not_double_the_records_closing_quote() {
+        assert_eq!(quote_shoppe_flourish("Harrumph!\""), "\"Harrumph!\"");
+        assert_eq!(
+            quote_shoppe_flourish("Come back when you're ready to buy something!\""),
+            "\"Come back when you're ready to buy something!\""
+        );
+        // A record without the trailing quote still gets one, so the guard
+        // cannot leave a line unclosed.
+        assert_eq!(quote_shoppe_flourish("Harrumph!"), "\"Harrumph!\"");
+        // The rendered record is trimmed before it is quoted.
+        assert_eq!(quote_shoppe_flourish("  Harrumph!\" "), "\"Harrumph!\"");
     }
 
     /// `systems/shops.md §8.0`: the shopkeeper filling the attribution tails

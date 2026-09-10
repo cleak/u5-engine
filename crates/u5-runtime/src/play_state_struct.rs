@@ -559,6 +559,13 @@ pub struct PlayState {
     pub active_blackthorn: Option<crate::blackthorn_session::BlackthornChallenge>,
     pub blackthorn_audience_map: Option<MiscmapsCutsceneMap>,
     pub active_shop: Option<crate::shop_session::ActiveShopSession>,
+    /// `shops.md §8.1`: the arms post-item prompt closes with `sir?`/`milady?`
+    /// once a transaction has completed in this visit and with `then?` before
+    /// then, and "a decline or carry-cap refusal uses this same prompt,
+    /// retaining whether an earlier purchase completed". That is a property of
+    /// the visit rather than of the menu state, so it lives beside the session
+    /// and is cleared whenever a new shop session opens.
+    pub arms_transaction_completed: bool,
     pub common_word_dictionary: Option<crate::common_words_io::CommonWordDictionary>,
     pub active_conversation: Option<Box<crate::conversation_session::ConversationSession>>,
     /// NPC roster slot captured when the active conversation opens. The
