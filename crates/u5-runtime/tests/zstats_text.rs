@@ -501,7 +501,9 @@ fn the_selector_accepts_on_return_or_space_and_cancels_on_escape_or_zero() {
         assert_eq!(state.message, Z_STATS_STATUS_PROMPT);
         assert_ne!(state.message, "Player: None!");
     }
-    for cancel in ['\u{1b}', '0'] {
+    // `RETRACTIONS.md` R459: "The initial Z selector accepts zero and opens
+    // shared Equipment without selecting a member." Only Escape cancels here.
+    for cancel in ['\u{1b}'] {
         let mut state = test_state(open_grid(), 5, 5);
         assert_eq!(
             handle_play_key_input(&mut state, 'Z', "", Path::new("")).unwrap(),
@@ -514,6 +516,23 @@ fn the_selector_accepts_on_return_or_space_and_cancels_on_escape_or_zero() {
         assert!(state.active_z_stats.is_none(), "{cancel:?} must cancel");
         assert_eq!(state.message, "Player: None!");
     }
+
+    // `0` opens the shared Equipment screen instead of cancelling.
+    let mut state = test_state(open_grid(), 5, 5);
+    assert_eq!(
+        handle_play_key_input(&mut state, 'Z', "", Path::new("")).unwrap(),
+        PlayInputDisposition::Continue
+    );
+    assert_eq!(
+        handle_play_key_input(&mut state, '0', "", Path::new("")).unwrap(),
+        PlayInputDisposition::Continue
+    );
+    assert!(state.active_party_selector.is_none());
+    assert_eq!(
+        state.active_z_stats.as_ref().map(|session| session.page),
+        Some(ZStatsPage::Counters),
+        "`0` opens the shared Equipment screen"
+    );
 }
 
 /// `inventory.md §4.7` publishes the page loop's sub-prompt as

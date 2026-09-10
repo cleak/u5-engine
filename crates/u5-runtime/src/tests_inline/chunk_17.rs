@@ -156,7 +156,20 @@
         assert!(!panel.contains("helm:"));
         assert!(!panel.contains("offhand:"));
 
+        // `RETRACTIONS.md` R458: "A valid member digit always opens that
+        // member's Attributes, from Arms or any shared screen as well." The
+        // engine preserved the Attributes/Arms half.
         assert!(state.step_active_z_stats('2', ""));
+        assert_eq!(
+            state
+                .active_z_stats
+                .as_ref()
+                .map(|session| (session.selected_party_index, session.page)),
+            Some((1, ZStatsPage::Stats))
+        );
+        // The Arms half is the screen after that member's Attributes, so the
+        // placeholder check takes one forward step to reach it.
+        assert!(state.step_active_z_stats('>', ""));
         assert_eq!(
             state
                 .active_z_stats
@@ -463,15 +476,20 @@
 
         assert_eq!(state.z_stats(), MoveOutcome::Observed);
         assert!(state.step_active_z_stats('>', ""));
+        // `RETRACTIONS.md` R458: "A valid member digit always opens that
+        // member's Attributes, from Arms or any shared screen as well." The
+        // engine preserved the Attributes/Arms half.
         assert!(state.step_active_z_stats('2', ""));
         assert_eq!(
             state
                 .active_z_stats
                 .as_ref()
                 .map(|session| (session.selected_party_index, session.page)),
-            Some((1, ZStatsPage::Equipment))
+            Some((1, ZStatsPage::Stats))
         );
 
+        // `RETRACTIONS.md` R458: "out-of-range member digits leave the page
+        // unchanged" - and the page the accepted digit left open is Attributes.
         assert!(state.step_active_z_stats('6', ""));
         assert!(state.message.contains(""));
         assert_eq!(
@@ -479,7 +497,7 @@
                 .active_z_stats
                 .as_ref()
                 .map(|session| (session.selected_party_index, session.page)),
-            Some((1, ZStatsPage::Equipment))
+            Some((1, ZStatsPage::Stats))
         );
 
         assert!(state.step_active_z_stats(' ', ""));

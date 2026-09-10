@@ -25288,7 +25288,11 @@ fn z_stats_selector_cancels_with_the_published_none_result() {
     // "the universal cancel response". Space is NOT a cancel key there -
     // 10.6 accepts on "Return or Space" - so it is covered by the accept
     // test below instead.
-    for cancel in ['\u{1b}', '0'] {
+    // `RETRACTIONS.md` R459 removes `0` from this list for Z: "The initial Z
+    // selector accepts zero and opens shared Equipment without selecting a
+    // member." Escape still cancels, and `0` keeps its cancel meaning at the
+    // callers that do not enable the shared-Equipment answer.
+    for cancel in ['\u{1b}'] {
         let mut state = test_state(open_grid(), 5, 5);
         assert!(
             state
