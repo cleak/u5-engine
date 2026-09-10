@@ -16846,6 +16846,15 @@ fn render_integrated_status_framebuffer(
             }
             _ => None,
         };
+        // A prompt that echoes upper-cased does so for the row being typed as
+        // well as the committed one, so an `input_echo` that reaches the live
+        // row on such a prompt is folded here.
+        let uppercased_input = input_echo.filter(|_| {
+            composed_echo.is_none()
+                && spell_echo.is_none()
+                && display_state.typed_prompt_echo_uppercases()
+        });
+        let uppercased_input = uppercased_input.map(str::to_ascii_uppercase);
         let live_row = if display_state.message_window_live_row_suppressed() {
             None
         } else {
@@ -16853,6 +16862,7 @@ fn render_integrated_status_framebuffer(
                 composed_echo
                     .as_deref()
                     .or(spell_echo.as_deref())
+                    .or(uppercased_input.as_deref())
                     .or(input_echo)
                     .unwrap_or(""),
             )

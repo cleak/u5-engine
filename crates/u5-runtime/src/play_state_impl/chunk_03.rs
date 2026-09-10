@@ -208,7 +208,13 @@ impl PlayState {
     /// publishes the comparison as case-insensitive but says nothing about
     /// the echo, so this is a runtime observation, not a §4.1 clause.
     pub fn typed_prompt_echo_uppercases(&self) -> bool {
+        // `shops.md` §8.5: the sage's `You respond:` prompt echoes the typed
+        // topic below it, and the original reads it back upper-cased -
+        // measured 2026-09-10 (`paws-sage/topic`), where a topic typed in
+        // lower case shows as `SPIR`. The committed transcript row already
+        // upper-cased; the live row being typed did not.
         self.blackthorn_prompt_echo().is_some()
+            || crate::message_window::sage_topic_row_is_continuation(self)
     }
 
     pub fn blackthorn_prompt_echo(&self) -> Option<String> {

@@ -457,6 +457,23 @@ pub fn shop_pause_row_is_continuation(state: &crate::PlayState) -> bool {
                 _
             )
         )
+    ) || sage_topic_row_is_continuation(state)
+}
+
+/// The sage's typed topic continues the row `You respond:` opened.
+///
+/// `shops.md` §8.C's sage result table ends the topic prompt with
+/// `You respond:\n`, and §8.5 adds that "a separate `You respond:` prompt
+/// follows, with the typed topic echoed below it". Below it - not after a
+/// blank row, and not behind a command-row end cap. Measured 2026-09-10
+/// (`paws-sage/topic`): the original reads `You respond:` / `SPIR` on
+/// consecutive rows where this engine left a blank row and a leading space.
+pub fn sage_topic_row_is_continuation(state: &crate::PlayState) -> bool {
+    matches!(
+        state.active_shop,
+        Some(crate::shop_session::ActiveShopSession::Sage(
+            crate::shop_runtime::SageState::Prompt { .. }
+        ))
     )
 }
 
