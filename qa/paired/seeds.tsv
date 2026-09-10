@@ -8,9 +8,9 @@
 
 bd-shipwright	seed-bd-shipwright-reseeded	the walk-up replayed once by reseed.py
 blackthorn-palace-password	seed-blackthorn-palace-password-reseeded	the walk-up replayed once by reseed.py
-bt-audience	seed-bt-audience-reseeded	the walk-up replayed once by reseed.py
-bt-correct	seed-bt-correct-reseeded	the walk-up replayed once by reseed.py
-bt-escalate	seed-bt-escalate-reseeded	the walk-up replayed once by reseed.py
+bt-audience	seed-bt-audience	the audience is a cutscene and cannot be seeded; walk-up form kept
+bt-correct	seed-bt-correct	the audience is a cutscene and cannot be seeded; walk-up form kept
+bt-escalate	seed-bt-escalate	the audience is a cutscene and cannot be seeded; walk-up form kept
 bt-password	seed-bt-password-reseeded	the walk-up replayed once by reseed.py
 cast-results	seed-cast-results	copied from the paired-cast-results run profile
 castle-talk	seed-castle-talk	copied from the paired-castle-talk run profile

@@ -1,18 +1,49 @@
 # Blackthorn's audience answered correctly: the mantra of the shrine the
 # interrogation selected (`blackthorn.md` §4).
 #
-# Seeded rather than walked to. The walk-up form of this scenario scripted its
-# way in from the town gate, and the resident walks its own schedule while
-# those steps run, so the two sides arrived with it in different cells and
-# every later beat compared unrelated windows (`cleak/u5-engine#22`).
-# `qa/tools/reseed.py` replayed that walk once into the seed named below.
-# requires-seed: profile `seed-bt-correct-reseeded`, built by qa/tools/reseed.py
+# NOT reseeded, deliberately. `qa/tools/reseed.py` replays a scenario's walk
+# into a save so both sides start where it was heading, but this scenario
+# measures the Blackthorn audience, and `blackthorn.md` §2 makes that a
+# **cinematic handler**: it "replace[s] the ordinary map loop while [it]
+# runs" and hands back through an explicit scene transition. A cutscene in
+# progress is not in `SAVED.GAM`, so a seed written inside one loads as an
+# ordinary party standing in the castle and the audience never happens.
+# Measured 2026-09-09: a seed taken at the `ask` beat reloads to CASTLE:1 on
+# foot with no interrogation pending.
+# requires-seed: the Blackthorn palace tile at 12:00 with companions=3
 both	wait	9000
 both	key	space
 both	wait	4000
 both	key	j
-both	wait	9000
-both	shot	seeded	Journey Onward on the seeded cell
+both	wait	8000
+both	key	e
+both	wait	5000
+both	key	Up
+both	wait	900
+both	key	Up
+both	wait	900
+both	key	Up
+both	wait	900
+both	key	Left
+both	wait	900
+both	key	Up
+both	wait	900
+both	key	Up
+both	wait	900
+both	key	Up
+both	wait	900
+both	key	Up
+both	wait	900
+both	key	Up
+both	wait	900
+both	key	Up
+both	wait	900
+both	key	Up
+both	wait	900
+both	key	Right
+both	wait	900
+both	wait	3000
+both	shot	ask	The demand
 both	type	ahm
 both	wait	1200
 both	shot	typed	The mantra typed

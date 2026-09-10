@@ -19,6 +19,14 @@ Usage:
 into the seed. `--beside` additionally places the party next to the NPC
 carrying that `.NPC` dialog byte, for a scenario whose target walks its own
 schedule and so may not be where the walk aimed.
+
+**Do not reseed a scenario whose measured behaviour begins inside a cutscene.**
+`systems/blackthorn.md` Section 2 calls the audience and rescue handlers
+cinematic: they "replace the ordinary map loop while they run" and hand control
+back through an explicit scene transition. A cutscene in progress is not part of
+`SAVED.GAM`, so a seed written inside one reloads as an ordinary party standing
+in the scene and the cutscene never happens. Seed such a scenario *before* its
+trigger and let the script perform it, or leave the walk in place.
 """
 
 import argparse
