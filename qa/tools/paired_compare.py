@@ -237,50 +237,65 @@ SHOPPE_POOLS = {
     "innkeeper": range(174, 194),
 }
 ASSET_PROFILE = pathlib.Path.home() / ".local/share/u5/engine/codex-seed"
-_SIGNATURES: dict[str, list[str]] | None = None
+_SIGNATURES: dict[str, list[tuple[str, ...]]] | None = None
 
 
-# A signature shorter than this cannot identify a record at all.
+# A run shorter than this is noise. A record identified by several runs at once
+# gets the lower floor, because the conjunction supplies the specificity that a
+# single run needs length for.
 _SIGNATURE_FLOOR = 8
+_CONJUNCTION_FLOOR = 5
 
-# Ordinary Ultima phrasing that occurs outside the pools too. A pool record
-# whose longest plain run is only one of these cannot be told apart from a
-# resident literal that happens to contain it, and excusing a beat on that
-# basis would mask a real wording difference. Such a record simply has no
-# usable signature and is left out, exactly as a too-short one is.
+# Ordinary Ultima phrasing that occurs in prompts and resident literals, not
+# only in the pools. A record whose *only* handle is one of these cannot be
+# told apart from a window that contains the phrase for another reason, and
+# excusing a beat on that basis would mask a real wording difference. Such a
+# record simply has no usable signature, exactly as a too-short one has none.
+# A record identified by a conjunction of runs is not subject to this: the
+# other runs already rule out the coincidence.
 _GENERIC_RUNS = frozenset(
     {
         "wilt thou",
         "use them",
         "do for thee",
         "can i show",
-        "come again",
-        "day mate",
         "anything else",
-        "s already",
-        "s right now",
-        "then beat it",
-        "cheat me",
     }
 )
 
 
-def _is_distinctive(run: str) -> bool:
-    """Can this plain-letter run stand in for one record of a pool?
+def _record_signature(text: str) -> tuple[str, ...]:
+    """The plain-letter runs that together identify one pool record.
 
-    The original test was a bare `len(run) >= 14`, which silently dropped every
+    A record carries `@`/`#`/`$` substitution placeholders and its own line
+    breaks, so it never matches the wrapped window text directly; the runs
+    between those are stable under both. The original rule took the single
+    longest run and required 14 characters of it, which silently dropped every
     short record - `SHOPPE.DAT`'s `Harrumph!` bark among them - so a visit that
-    drew one reported the pool draw as a wording difference. Measured
-    2026-09-10 on `shop-arms-menus/exit`. Length alone is the wrong axis: some
-    short runs are perfectly distinctive and some longer ones are stock phrases.
+    drew one reported the pool draw as a wording difference (measured
+    2026-09-10 on `shop-arms-menus/exit`). Length alone is the wrong axis: some
+    short runs are perfectly distinctive, some long ones are stock phrases, and
+    several runs together are specific however short each one is.
     """
-    if len(run) < _SIGNATURE_FLOOR:
-        return False
-    return run.casefold() not in _GENERIC_RUNS
+    runs = sorted(
+        {
+            " ".join(run.split())
+            for run in re.split(r"[^A-Za-z ]+", text)
+            if len(" ".join(run.split())) >= _CONJUNCTION_FLOOR
+        }
+    )
+    if len(runs) >= 2:
+        return tuple(runs)
+    solo = [
+        run
+        for run in runs
+        if len(run) >= _SIGNATURE_FLOOR and run.casefold() not in _GENERIC_RUNS
+    ]
+    return tuple(solo)
 
 
-def _pool_signatures() -> dict[str, list[str]]:
-    """Per cluster, a distinctive fragment of each record.
+def _pool_signatures() -> dict[str, list[tuple[str, ...]]]:
+    """Per cluster, the identifying fragments of each record.
 
     A record carries `@`/`#`/`$` substitution placeholders and its own line
     breaks, so it never matches the wrapped window text directly. The longest
@@ -300,11 +315,9 @@ def _pool_signatures() -> dict[str, list[str]]:
             if index >= len(records):
                 break
             text = records[index].decode("latin-1")
-            runs = re.split(r"[^A-Za-z ]+", text)
-            best = max((run.strip() for run in runs), key=len, default="")
-            best = " ".join(best.split())
-            if _is_distinctive(best):
-                signatures.append(best)
+            usable = _record_signature(text)
+            if usable:
+                signatures.append(usable)
         if signatures:
             _SIGNATURES[name] = signatures
     return _SIGNATURES
@@ -313,8 +326,11 @@ def _pool_signatures() -> dict[str, list[str]]:
 def _same_pool_different_record(left: str, right: str) -> bool:
     """Did the two sides draw different records from one published pool?"""
     for signatures in _pool_signatures().values():
-        hit_left = {sig for sig in signatures if sig in left}
-        hit_right = {sig for sig in signatures if sig in right}
+        # A record counts as drawn only when *every* one of its usable runs is
+        # present, so a lone generic fragment cannot stand in for a record that
+        # has more to it.
+        hit_left = {sig for sig in signatures if all(run in left for run in sig)}
+        hit_right = {sig for sig in signatures if all(run in right for run in sig)}
         if hit_left and hit_right and hit_left != hit_right:
             return True
     return False
@@ -506,7 +522,7 @@ def compare_cached(artifact: pathlib.Path, cache: dict) -> tuple:
 
 
 # Bump when a classifier change would alter a cached verdict.
-CACHE_VERSION = 5
+CACHE_VERSION = 7
 
 
 # Some scenarios are explicitly a lottery: their own headers say so. The night
