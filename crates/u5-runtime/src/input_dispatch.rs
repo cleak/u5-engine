@@ -1732,31 +1732,49 @@ fn handle_active_shop_key_input(
             append_active_shop_surcharge(message, surcharge)
         }
         ActiveShopSession::ShipBroker(s) => {
-            let outcome = if let Some(return_world) = state.return_world.as_mut() {
-                match (*s, yes, no) {
-                    (ShipBrokerState::Greeting { .. }, _, _) => step_ship_broker(
-                        s,
-                        ShipBrokerInput::Key(key_byte),
-                        &mut state.gold,
-                        &mut return_world.pending_vehicle,
-                    ),
-                    (ShipBrokerState::ConfirmPurchase { .. }, true, _) => step_ship_broker(
-                        s,
-                        ShipBrokerInput::Confirm(true),
-                        &mut state.gold,
-                        &mut return_world.pending_vehicle,
-                    ),
-                    (ShipBrokerState::ConfirmPurchase { .. }, _, true) => step_ship_broker(
-                        s,
-                        ShipBrokerInput::Confirm(false),
-                        &mut state.gold,
-                        &mut return_world.pending_vehicle,
-                    ),
-                    _ => ShipBrokerOutcome::InvalidInput,
-                }
-            } else {
-                ShipBrokerOutcome::InvalidInput
+            // The pending delivery is scratch for the step function; the
+            // durable copy is `pending_vehicle_save`, which
+            // `sync_pending_vehicle_purchase_state` writes below and which the
+            // town-exit and dungeon-return paths both read.
+            //
+            // This branch used to be gated on `return_world` being present so
+            // it could borrow that record's copy - but `return_world` is only
+            // populated when entering a *dungeon*, and every shipwright is in
+            // a town. The live game therefore never satisfied the gate: `Y` at
+            // the greeting fell through to `InvalidInput` and printed nothing,
+            // so the Frigate/Skiff menu was unreachable. Measured 2026-09-10
+            // (`bd-shipwright/yes`, both sides on the same greeting record).
+            // The end-to-end test set `return_world` by hand, which is why it
+            // passed throughout.
+            let mut pending = state
+                .return_world
+                .as_ref()
+                .map(|world| world.pending_vehicle)
+                .unwrap_or_else(|| state.pending_vehicle_save.acquisition());
+            let outcome = match (*s, yes, no) {
+                (ShipBrokerState::Greeting { .. }, _, _) => step_ship_broker(
+                    s,
+                    ShipBrokerInput::Key(key_byte),
+                    &mut state.gold,
+                    &mut pending,
+                ),
+                (ShipBrokerState::ConfirmPurchase { .. }, true, _) => step_ship_broker(
+                    s,
+                    ShipBrokerInput::Confirm(true),
+                    &mut state.gold,
+                    &mut pending,
+                ),
+                (ShipBrokerState::ConfirmPurchase { .. }, _, true) => step_ship_broker(
+                    s,
+                    ShipBrokerInput::Confirm(false),
+                    &mut state.gold,
+                    &mut pending,
+                ),
+                _ => ShipBrokerOutcome::InvalidInput,
             };
+            if let Some(world) = state.return_world.as_mut() {
+                world.pending_vehicle = pending;
+            }
             if let ShipBrokerOutcome::PurchaseApplied { outcome: purchase } = outcome {
                 state.sync_pending_vehicle_purchase_state(purchase);
             }

@@ -6147,6 +6147,37 @@ fn end_to_end_stocked_arms_shop_confirmation_ignores_non_yes_no_keys() {
     ));
 }
 
+/// `shops.md` §8.7: `Y` at the shipwright greeting prints the Frigate/Skiff
+/// menu from record `119`. Measured 2026-09-10 (`bd-shipwright/yes`, both
+/// sides drawing the same greeting record): the original prints the menu and
+/// this engine printed nothing at all.
+///
+/// The cause is the dispatcher gating the whole ship-broker branch on
+/// `return_world` being present, and `return_world` is only populated when
+/// entering a *dungeon*. A shipwright is in a town, so the live game never
+/// satisfies that gate. The existing end-to-end test below sets the field by
+/// hand, which is why it passed throughout.
+#[test]
+fn end_to_end_shipwright_greeting_opens_the_menu_without_a_dungeon_return() {
+    use crate::shop_runtime::ShipBrokerState;
+    use crate::shop_session::ActiveShopSession;
+
+    let mut state = test_state(open_grid(), 3, 4);
+    state.gold = 700;
+    state.active_shop = Some(ActiveShopSession::ShipBroker(
+        ShipBrokerState::for_shipwright(Shipwright::TheRustyBucket),
+    ));
+    // A town visit, so there is no dungeon return record.
+    state.return_world = None;
+
+    handle_play_key_input(&mut state, 'Y', "", Path::new("")).unwrap();
+    assert!(
+        !state.message.trim().is_empty(),
+        "Y at the greeting must print the Frigate/Skiff menu, got {:?}",
+        state.message
+    );
+}
+
 #[test]
 fn end_to_end_shipwright_frigate_queues_published_dock_delivery() {
     use crate::shop_runtime::ShipBrokerState;
