@@ -2500,7 +2500,17 @@ fn handle_arms_shop_key_input(
             let roll = state.random_range_u8(0, 3);
             arms_closing_bark_record(state.arms_transaction_completed, roll)
                 .and_then(|record| render_shared_shoppe_flourish(game_dir, record))
-                .map(|flourish| speech.attribute(&flourish, "says"))
+                // The farewell follows *two* line feeds, not one: the first
+                // closes the row the stock-call question left its cursor on,
+                // the second leaves a blank row. `shops.md` §8.C states the
+                // rule for the inn's ordinary farewell - "After the bare `No`
+                // and two line feeds, end the visit through the ordinary
+                // farewell" - and the arms exit measures the same. Measured
+                // 2026-09-10 (`shop-arms-menus/exit`,
+                // `shop-arms-buy-confirm/exit`): the original has a blank row
+                // between the call line and the bark, and this engine put the
+                // bark straight onto the next row.
+                .map(|flourish| format!("\n{}", speech.attribute(&flourish, "says")))
                 .unwrap_or_default()
         }
         (outcome, _) => format_arms_outcome_with_rolls(
