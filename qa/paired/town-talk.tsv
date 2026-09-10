@@ -5,6 +5,18 @@
 # those steps run, so the two sides arrived with it in different cells and
 # every later beat compared unrelated windows (`cleak/u5-engine#22`).
 # `qa/tools/reseed.py` replayed that walk once into the seed named below.
+#
+# A lottery on the stranger-introduction coin. `conversation.md` §9: on first
+# meeting the dispatcher "assigns the transformed value as the shared
+# random-generator state, and immediately flips a fair coin. On one outcome the
+# conversation simply proceeds to the keyword prompt with nothing said after
+# the description. On the other the NPC introduces itself" with `I am called`.
+# The section names this as "one of the sites that re-seeds the generator from"
+# the host clock, so the two sides cannot agree except by luck.
+#
+# Measured: the beats differ by the presence of the `"I am called <name>"` row
+# and nothing else. A run whose two sides flipped differently has measured the
+# coin, not the engine, and must be re-run.
 # requires-seed: profile `seed-town-talk-reseeded`, built by qa/tools/reseed.py
 both	wait	9000
 both	key	space
