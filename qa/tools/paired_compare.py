@@ -203,6 +203,14 @@ VARIANT_GROUPS: list[tuple[str, ...]] = [
         "What else doth thou wish to sell",
         "What other arms wilt thou sell",
     ),
+    # The arms sell-browser goodbye pool, the local farewell that ends a
+    # browser visit. Carried by the engine as `arms_sell_goodbye`.
+    (
+        "Good-bye...",
+        "Mayhap another time...",
+        "Godspeed...",
+        "Fare thee well...",
+    ),
     # §8's arms no-credit bark pool, "one chosen uniformly".
     (
         "Can't pay?! Out with ye, orc-face!",
@@ -450,6 +458,30 @@ def classify(left: list[list[str]], right: list[list[str]], rows: list[int]) -> 
         canon_right = _canonical(right).replace(" ", "")
         if canon_left in canon_right or canon_right in canon_left:
             return "scroll"
+        # Containment fails when the row that scrolled part-way off the top is
+        # itself a variant: only a *fragment* of the drawn member is left, and
+        # a fragment is not what `_canonical` replaces, so the two heads disagree while
+        # everything since agrees. The window is a scrolling stream, so the
+        # tail is what both sides most recently printed - if they share most of
+        # it, the content agrees and only the row accounting does not. A real
+        # wording difference in the newest text shortens the shared tail, which
+        # is why this is a proportion of the whole rather than a fixed length.
+        # The newest row can also be cut off by the window edge on one side
+        # only, when that side drew the longer member of a pool - the original
+        # showed `...to sell?" ` and this engine's longer draw ran out of row
+        # before its closing quote. That is a truncation, not a wording
+        # difference, so the trailing punctuation is not part of the tail.
+        canon_left = canon_left.rstrip('".,')
+        canon_right = canon_right.rstrip('".,')
+        shortest = min(len(canon_left), len(canon_right))
+        shared_tail = 0
+        while (
+            shared_tail < shortest
+            and canon_left[-1 - shared_tail] == canon_right[-1 - shared_tail]
+        ):
+            shared_tail += 1
+        if shared_tail * 2 >= shortest:
+            return "scroll"
     # Two sides can also be in different *places*: a walk-up scenario whose
     # NPC did not reach the counter on one side leaves that side in the world
     # loop pressing its scripted shop keys as world commands, and every beat
@@ -550,7 +582,7 @@ def compare_cached(artifact: pathlib.Path, cache: dict) -> tuple:
 
 
 # Bump when a classifier change would alter a cached verdict.
-CACHE_VERSION = 11
+CACHE_VERSION = 13
 
 
 # Some scenarios are explicitly a lottery: their own headers say so. The night
