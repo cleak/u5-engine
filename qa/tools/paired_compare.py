@@ -109,14 +109,31 @@ def decode_region(
                     ]
                     bits.append(1 if r + g + b > 200 else 0)
             cell = tuple(tuple(bits[j * 8 : (j + 1) * 8]) for j in range(8))
+            # `inventory.md §4.4`: the picker draws its selected row "with its
+            # ordinary label and padding in inverted glyph pixels", and
+            # `text-output.md §5` gives the same inverse flag to the text
+            # system generally. Matching only the upright font turned every
+            # such cell into whichever glyph scored least badly, so a selected
+            # picker row and its neighbours decoded as runs of `<7f>` and the
+            # comparison of those rows meant nothing. Score the inverted cell
+            # too and keep whichever reads better.
+            inverted = tuple(tuple(1 - bit for bit in row_bits) for row_bits in cell)
             best = None
             for name, table in TABLES.items():
                 for code, glyph in table.items():
-                    score = sum(
-                        1
-                        for j in range(8)
-                        for i in range(8)
-                        if glyph[j][i] == cell[j][i]
+                    score = max(
+                        sum(
+                            1
+                            for j in range(8)
+                            for i in range(8)
+                            if glyph[j][i] == cell[j][i]
+                        ),
+                        sum(
+                            1
+                            for j in range(8)
+                            for i in range(8)
+                            if glyph[j][i] == inverted[j][i]
+                        ),
                     )
                     if best is None or score > best[0]:
                         best = (score, name, code)
