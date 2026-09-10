@@ -200,6 +200,68 @@ def _flatten(rows: list[str]) -> str:
     return " ".join(" ".join(rows).split())
 
 
+# `shops.md §4` clusters `SHOPPE.DAT` by consumer, and several of those
+# clusters are uniform draw pools: an overlay picks one record per visit. Two
+# sides with different host-clock seeds draw different records, which is not a
+# conformance difference.
+#
+# The pools are read from a local profile at run time rather than transcribed
+# here: they are the original's text and this repository does not carry it.
+# Only the published record ranges live in the source.
+SHOPPE_POOLS = {
+    "shared-barks": range(0, 8),
+    "arms-sell-back": range(49, 57),
+    "horse-trader": range(92, 105),
+    "ship-broker": range(105, 127),
+    "reagent": range(127, 147),
+    "guild": range(148, 163),
+    "healer": range(163, 174),
+    "innkeeper": range(174, 194),
+}
+ASSET_PROFILE = pathlib.Path.home() / ".local/share/u5/engine/codex-seed"
+_SIGNATURES: dict[str, list[str]] | None = None
+
+
+def _pool_signatures() -> dict[str, list[str]]:
+    """Per cluster, a distinctive fragment of each record.
+
+    A record carries `@`/`#`/`$` substitution placeholders and its own line
+    breaks, so it never matches the wrapped window text directly. The longest
+    run of plain letters and spaces is stable under both.
+    """
+    global _SIGNATURES
+    if _SIGNATURES is not None:
+        return _SIGNATURES
+    _SIGNATURES = {}
+    source = ASSET_PROFILE / "SHOPPE.DAT"
+    if not source.is_file():
+        return _SIGNATURES
+    records = source.read_bytes().split(b"\x00")
+    for name, span in SHOPPE_POOLS.items():
+        signatures = []
+        for index in span:
+            if index >= len(records):
+                break
+            text = records[index].decode("latin-1")
+            runs = re.split(r"[^A-Za-z ]+", text)
+            best = max((run.strip() for run in runs), key=len, default="")
+            if len(best) >= 14:
+                signatures.append(" ".join(best.split()))
+        if signatures:
+            _SIGNATURES[name] = signatures
+    return _SIGNATURES
+
+
+def _same_pool_different_record(left: str, right: str) -> bool:
+    """Did the two sides draw different records from one published pool?"""
+    for signatures in _pool_signatures().values():
+        hit_left = {sig for sig in signatures if sig in left}
+        hit_right = {sig for sig in signatures if sig in right}
+        if hit_left and hit_right and hit_left != hit_right:
+            return True
+    return False
+
+
 def _canonical(text: str) -> str:
     """Replace every published variant with a token for its pool.
 
@@ -220,6 +282,8 @@ def variant_only(stock: list[str], engine: list[str]) -> bool:
     left, right = _flatten(stock), _flatten(engine)
     if left == right:
         return False
+    if _same_pool_different_record(left, right):
+        return True
     canon_left, canon_right = _canonical(left), _canonical(right)
     # Both sides must actually carry a variant token, or two unrelated windows
     # that happen to canonicalise alike would be excused.
