@@ -70,7 +70,25 @@ def frame_rect(size: tuple[int, int]) -> tuple[int, int, float, float]:
     return (width - frame_w) // 2, 0, frame_w / 320.0, height / 200.0
 
 
+# `text-output.md §10.1`: window 2 is the message window at `(24, 11)`-`(39,
+# 23)`. The panel above it, rows `0..10` of the same columns, is window 1 - the
+# party roster, the food/gold line and the date. It is as deterministic as the
+# message window given one save, and until now nothing compared it: every
+# "matches" this tool has ever reported meant *the message window* matched.
+PANEL_TOP, PANEL_ROWS = 0, 11
+
+
 def decode(path: pathlib.Path) -> list[list[str]] | None:
+    return decode_region(path, LEFT, TOP, COLS, ROWS)
+
+
+def decode_panel(path: pathlib.Path) -> list[list[str]] | None:
+    return decode_region(path, LEFT, PANEL_TOP, COLS, PANEL_ROWS)
+
+
+def decode_region(
+    path: pathlib.Path, left: int, top: int, cols: int, rows_count: int
+) -> list[list[str]] | None:
     image = Image.open(path).convert("RGB")
     width, height = image.size
     if width < 320 or height < 200:
@@ -78,14 +96,14 @@ def decode(path: pathlib.Path) -> list[list[str]] | None:
     origin_x, origin_y, scale_x, scale_y = frame_rect(image.size)
     pixels = image.load()
     rows = []
-    for row in range(ROWS):
+    for row in range(rows_count):
         line = []
-        for col in range(COLS):
+        for col in range(cols):
             bits = []
             for j in range(8):
                 for i in range(8):
-                    x = int(origin_x + ((LEFT + col) * 8 + i + 0.5) * scale_x)
-                    y = int(origin_y + ((TOP + row) * 8 + j + 0.5) * scale_y)
+                    x = int(origin_x + ((left + col) * 8 + i + 0.5) * scale_x)
+                    y = int(origin_y + ((top + row) * 8 + j + 0.5) * scale_y)
                     r, g, b = pixels[
                         min(max(x, 0), width - 1), min(max(y, 0), height - 1)
                     ]
@@ -281,10 +299,10 @@ def classify(left: list[list[str]], right: list[list[str]], rows: list[int]) -> 
 IDLE_KINDS = {"stock-idle", "engine-idle"}
 
 
-def compare(artifact: pathlib.Path) -> tuple[int, int, int, int]:
+def compare(artifact: pathlib.Path) -> tuple[int, int, int, int, int]:
     record = json.loads((artifact / "record.json").read_text())
     scenario = record.get("scenario", artifact.name)
-    same = differ = skipped = idle = 0
+    same = differ = skipped = idle = panel = 0
     for capture in record.get("captures", []):
         label = capture.get("label")
         stock = artifact / f"dosbox-{label}.png"
@@ -296,6 +314,20 @@ def compare(artifact: pathlib.Path) -> tuple[int, int, int, int]:
         if left is None or right is None:
             skipped += 1
             continue
+        # The roster panel above the message window is compared too, and
+        # counted on its own: it is a different window with its own contract,
+        # and folding it into the message-window total would make two years of
+        # earlier numbers incomparable.
+        panel_left, panel_right = decode_panel(stock), decode_panel(engine)
+        if panel_left is not None and panel_right is not None:
+            panel_rows = [
+                index + PANEL_TOP
+                for index, (a, b) in enumerate(zip(panel_left, panel_right))
+                if row_text(a) != row_text(b)
+            ]
+            if panel_rows:
+                panel += 1
+                print(f"  panel  {scenario}/{label}: rows {panel_rows}")
         rows = [
             index
             for index, (a, b) in enumerate(zip(left, right))
@@ -321,7 +353,7 @@ def compare(artifact: pathlib.Path) -> tuple[int, int, int, int]:
             )
         else:
             same += 1
-    return same, differ, skipped, idle
+    return same, differ, skipped, idle, panel
 
 
 KINDS: dict[str, int] = {}
@@ -367,9 +399,9 @@ def main() -> None:
     args = sys.argv[1:]
     if args[0] == "--latest":
         args = [str(path) for path in latest_artifacts(args[1:])]
-    total = [0, 0, 0, 0]
+    total = [0, 0, 0, 0, 0]
     for arg in args:
-        same, differ, skipped, idle = compare(pathlib.Path(arg))
+        same, differ, skipped, idle, panel = compare(pathlib.Path(arg))
         # A run carrying idle beats is not a verdict either way: it needs
         # re-running before its differences mean anything.
         status = "RERUN" if idle else ("match" if differ == 0 else "DIFFER")
@@ -377,11 +409,12 @@ def main() -> None:
             f"{status} {pathlib.Path(arg).name}: {same} beat(s) agree, "
             f"{differ} differ, {skipped} skipped, {idle} idle"
         )
-        for index, value in enumerate((same, differ, skipped, idle)):
+        for index, value in enumerate((same, differ, skipped, idle, panel)):
             total[index] += value
     print(
         f"\n{total[0]} beat(s) agree, {total[1]} differ, "
-        f"{total[2]} skipped, {total[3]} idle (re-run)"
+        f"{total[2]} skipped, {total[3]} idle (re-run); "
+        f"{total[4]} beat(s) differ in the roster panel"
     )
     if KINDS:
         # `stock-idle`/`engine-idle` are re-run candidates, `offset`/`cursor`

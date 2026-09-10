@@ -1110,6 +1110,11 @@ pub const Z_STATS_EQUIPMENT_HEADING: &str = "Equipment";
 /// roster rows use — so the value after `__HP:` / `__HM:` / `__Ex:` is
 /// right-justified in four cells.
 pub const Z_STATS_ATTRIBUTE_VALUE_CELLS: usize = 4;
+/// Digits the left attribute column prints, zero-padded.
+///
+/// Measured 2026-09-09 (`qa/paired/zstats-pages.tsv`, page `p1`): the original
+/// prints `Int=05`, not `Int=5`.
+pub const Z_STATS_ATTRIBUTE_LEFT_DIGITS: usize = 2;
 
 /// The condition line beneath the name on the attribute page.
 ///

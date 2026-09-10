@@ -5627,17 +5627,25 @@ fn z_stats_centred_panel_row(text: &str) -> String {
 }
 
 /// One `Str=`/`__HP:`-shaped attribute row: the left label and its value
-/// at natural width, then the right label, then that value
+/// zero-padded to two digits, then the right label, then that value
 /// right-justified in [`Z_STATS_ATTRIBUTE_VALUE_CELLS`] cells.
+///
+/// `inventory.md §7` describes the two columns and says the counts "align at
+/// the thirteenth cell of the line" but does not publish the attribute field's
+/// width. Measured 2026-09-09 (`qa/paired/zstats-pages.tsv`, page `p1`): the
+/// original prints `Int=05` for a five-point attribute, so the left value is
+/// two digits, zero-padded. `Str=20` and `Dex=20` agreed only because they
+/// happen to be two digits already, which is why this survived until the
+/// roster panel was compared at all.
 fn z_stats_attribute_row(
     left_label: &str,
     left_value: u16,
     right_label: &str,
     right_value: u16,
 ) -> String {
-    let line = format!(
-        "{left_label}{left_value}{right_label}{right_value:>Z_STATS_ATTRIBUTE_VALUE_CELLS$}"
-    );
+    let left = format!("{left_value:0>Z_STATS_ATTRIBUTE_LEFT_DIGITS$}");
+    let line =
+        format!("{left_label}{left}{right_label}{right_value:>Z_STATS_ATTRIBUTE_VALUE_CELLS$}");
     crate::stats_panel::truncate_ascii_chars(&line, crate::STATS_PANEL_WIDTH)
 }
 
