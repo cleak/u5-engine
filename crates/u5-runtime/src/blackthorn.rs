@@ -913,6 +913,21 @@ pub const BLACKTHORN_CAPTIVE_CELL_SCENE: u8 = crate::SCENE_LORD_BLACKTHORNS_CAST
 pub const BLACKTHORN_CAPTIVE_CELL_X: u8 = 10;
 pub const BLACKTHORN_CAPTIVE_CELL_Y: u8 = 7;
 
+/// `blackthorn.md §3` setup step 1's capture narration, measured 2026-09-09
+/// (`qa/paired/bt-correct.tsv`, beat `after`). Two sentences, two rows apart:
+///
+/// ```text
+/// Thou art subdued and blindfolded!
+///
+/// Strong guards drag thee away!
+/// ```
+///
+/// §3 describes this step without quoting it, and it runs before step 5 loads
+/// the `MISCMSG.DAT` cluster, so these are resident literals - they are not in
+/// that file.
+pub const BLACKTHORN_CAPTURE_NARRATION: &str =
+    "\n\nThou art subdued and blindfolded!\n\n\nStrong guards drag thee away!";
+
 /// `blackthorn.md §2` two player-visible Blackthorn cinematic
 /// families. Both replace the ordinary map loop and hand control
 /// back through an explicit scene/position transition.

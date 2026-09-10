@@ -4122,6 +4122,16 @@ impl PlayState {
     ) -> io::Result<Option<MoveOutcome>> {
         self.pending_town_arrest = None;
         self.blackthorn_audience_map = None;
+        // `blackthorn.md §3` setup step 1: "Print the capture narration: the
+        // party is overcome, blinded, and dragged away by guards." The section
+        // describes it without quoting it, and it precedes the `MISCMSG.DAT`
+        // cluster load of step 5, so the lines are resident rather than asset
+        // records - confirmed by their absence from that file.
+        //
+        // Measured 2026-09-09 (`qa/paired/bt-correct.tsv`, beat `after`): the
+        // original prints them after the arresting blow, two rows apart, where
+        // this engine went straight to the cutscene and printed nothing.
+        self.emit_message_line(BLACKTHORN_CAPTURE_NARRATION);
         self.clear_non_player_active_objects();
         self.mark_visibility_dirty();
 
