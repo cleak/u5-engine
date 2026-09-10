@@ -213,8 +213,13 @@ impl PlayState {
         // measured 2026-09-10 (`paws-sage/topic`), where a topic typed in
         // lower case shows as `SPIR`. The committed transcript row already
         // upper-cased; the live row being typed did not.
+        // `commands.md` §11's command table gives the Yell echo as "`:WORD`
+        // (the typed word, **upper-cased**, after the colon)". Measured
+        // 2026-09-10 (`ship-commands/stalled`, `/diagonal`, `/xit-sails`):
+        // the original's row reads `:X` where this engine read `:x`.
         self.blackthorn_prompt_echo().is_some()
             || crate::message_window::sage_topic_row_is_continuation(self)
+            || self.active_yell.is_some()
     }
 
     pub fn blackthorn_prompt_echo(&self) -> Option<String> {
