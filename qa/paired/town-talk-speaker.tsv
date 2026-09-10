@@ -2,13 +2,19 @@
 # with a dialog-id 12 NPC directly west at (3,10). Paired with
 # `town-talk-nonspeaker`, which puts a dialog-id 0 NPC under the same
 # keystrokes. Filed against cleak/u5-spec#198.
-# requires-seed: the party at Britain (4,10) beside a speaking resident
+#
+# Seeded rather than walked to. The walk-up form of this scenario scripted its
+# way in from the town gate, and the resident walks its own schedule while
+# those steps run, so the two sides arrived with it in different cells and
+# every later beat compared unrelated windows (`cleak/u5-engine#22`).
+# `qa/tools/reseed.py` replayed that walk once into the seed named below.
+# requires-seed: profile `seed-town-talk-speaker-reseeded`, built by qa/tools/reseed.py
 both	wait	9000
 both	key	space
 both	wait	4000
 both	key	j
-both	wait	8000
-both	shot	arrival	Journey Onward beside the speaker
+both	wait	9000
+both	shot	seeded	Journey Onward on the seeded cell
 both	key	l
 both	wait	1200
 both	key	Left

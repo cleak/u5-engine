@@ -11,7 +11,7 @@ blackthorn-palace-password	seed-blackthorn-palace-password	copied from the paire
 bt-audience	seed-bt-audience	copied from the paired-bt-audience run profile
 bt-correct	seed-bt-correct	copied from the paired-bt-correct run profile
 bt-escalate	seed-bt-escalate	copied from the paired-bt-escalate run profile
-bt-password	seed-bt-password	copied from the paired-bt-password run profile
+bt-password	seed-bt-password-reseeded	the walk-up replayed once by reseed.py
 cast-results	seed-cast-results	copied from the paired-cast-results run profile
 castle-talk	seed-castle-talk	copied from the paired-castle-talk run profile
 castle-talk-after-entry	seed-castle-talk-after-entry	copied from the paired-castle-talk-after-entry run profile
@@ -22,7 +22,7 @@ combat-ready-armour	seed-combat-ready-armour	copied from paired-combat-dungeon-r
 combat-refusal-audio	seed-combat-refusal-audio	copied from the paired-combat-refusal-audio run profile
 combat-rounds	seed-combat-rounds	copied from the paired-combat-rounds run profile
 combat-town-attack	seed-combat-town-attack	copied from the paired-combat-town-attack run profile
-combat-town-attack-after-entry	seed-combat-town-attack-after-entry	copied from the paired-combat-town-attack-after-entry run profile
+combat-town-attack-after-entry	seed-combat-town-attack-after-entry-reseeded	the walk-up replayed once by reseed.py
 cove-healer	seed-cove-healer-reseeded	the walk-up replayed once by reseed.py
 cove-healer-services	seed-cove-healer-services-reseeded	the walk-up replayed once by reseed.py
 cove-herbalist	seed-cove-herbalist-reseeded	the walk-up replayed once by reseed.py
@@ -41,8 +41,8 @@ magic-mix	seed-magic-mix	copied from the paired-magic-mix run profile
 magic-mix-and-cast	seed-magic-mix-and-cast	copied from the paired-magic-mix-and-cast run profile
 minoc-entry-walk	seed-minoc-entry-walk	copied from the paired-minoc-entry-walk run profile
 minoc-guard	seed-minoc-guard	copied from the paired-minoc-guard run profile
-minoc-refuse	seed-minoc-refuse	copied from the paired-minoc-refuse run profile
-minoc-tribute	seed-minoc-tribute	copied from the paired-minoc-tribute run profile
+minoc-refuse	seed-minoc-refuse-reseeded	the walk-up replayed once by reseed.py
+minoc-tribute	seed-minoc-tribute-reseeded	the walk-up replayed once by reseed.py
 nb-inn	seed-nb-inn	copied from the paired-nb-inn run profile
 nb-inn-branches	seed-nb-inn-branches-reseeded	the walk-up replayed once by reseed.py
 nb-inn-commit	seed-nb-inn-commit-reseeded	the walk-up replayed once by reseed.py
@@ -94,12 +94,12 @@ town-fountain	seed-town-fountain	copied from the paired-town-fountain run profil
 town-hidden-door	seed-town-hidden-door	copied from the paired-town-hidden-door run profile
 town-look-npc-cell	seed-town-look-npc-cell	copied from the paired-town-look-npc-cell run profile
 town-night-schedule	seed-town-night-schedule	copied from the paired-town-night-schedule run profile
-town-talk	seed-town-talk	copied from the paired-town-talk run profile
+town-talk	seed-town-talk-reseeded	the walk-up replayed once by reseed.py
 town-talk-after-entry	seed-town-talk-after-entry	copied from the paired-town-talk-after-entry run profile
 town-talk-high-dialog-id	seed-town-talk-high-dialog-id	copied from the paired-town-talk-high-dialog-id run profile
 town-talk-nonspeaker	seed-town-talk-nonspeaker	copied from the paired-town-talk-nonspeaker run profile
 town-talk-second-npc	seed-town-talk-second-npc	copied from the paired-town-talk-second-npc run profile
-town-talk-speaker	seed-town-talk-speaker	copied from the paired-town-talk-speaker run profile
+town-talk-speaker	seed-town-talk-speaker-reseeded	the walk-up replayed once by reseed.py
 town-wishing-well	seed-town-wishing-well	copied from the paired-town-wishing-well run profile
 town-wishing-well-refusals	seed-town-wishing-well-refusals	copied from paired-town-wishing-well: the Paws wishing-well approach
 underworld-walk	seed-underworld-walk	copied from underworld: the Underworld plane at (100,100)

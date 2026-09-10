@@ -4,27 +4,19 @@
 # on the overworld at 16:00; walk in through the door and north to the gate,
 # then Talk across the counter-height tile at (15,28) - `conversation.md §2`
 # step 3's talk-through rule is what reaches the guard behind it.
-# requires-seed: the party at Minoc's gate at an hour its dialog-id 255 guard stands there
+#
+# Seeded rather than walked to. The walk-up form of this scenario scripted its
+# way in from the town gate, and the resident walks its own schedule while
+# those steps run, so the two sides arrived with it in different cells and
+# every later beat compared unrelated windows (`cleak/u5-engine#22`).
+# `qa/tools/reseed.py` replayed that walk once into the seed named below.
+# requires-seed: profile `seed-minoc-tribute-reseeded`, built by qa/tools/reseed.py
 both	wait	9000
 both	key	space
 both	wait	4000
 both	key	j
-both	wait	8000
-both	key	e
-both	wait	4000
-both	key	Up
-both	wait	600
-both	key	Up
-both	wait	600
-both	key	Up
-both	wait	600
-both	key	Up
-both	wait	600
-both	key	Up
-both	wait	600
-both	key	Up
-both	wait	2000
-both	shot	at-gate	At the gate counter
+both	wait	9000
+both	shot	seeded	Journey Onward on the seeded cell
 both	key	l
 both	wait	1200
 both	key	Up
