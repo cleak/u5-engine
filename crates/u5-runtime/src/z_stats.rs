@@ -71,6 +71,19 @@ impl ZStatsPage {
         Self::EquipmentStock,
     ];
 
+    /// The five screens that follow every member's Attributes/Arms pair.
+    ///
+    /// `inventory.md` §4.7: "shared Equipment, Reagents, Spells, Items and
+    /// Armaments". `Counters` is this engine's name for the shared Equipment
+    /// screen, `SpecialUse` for Items and `EquipmentStock` for Armaments.
+    pub const SHARED: [Self; 5] = [
+        Self::Counters,
+        Self::Reagents,
+        Self::Spells,
+        Self::SpecialUse,
+        Self::EquipmentStock,
+    ];
+
     /// `inventory.md §4.6`/`§4.7`: the panel's top border label for
     /// this page, or `None` for the two character-specific pages,
     /// whose border carries no label at all.
@@ -514,18 +527,78 @@ impl ZStatsSession {
         }
     }
 
-    pub fn move_next_page(&mut self) {
-        self.page = self.page.next();
+    /// Where this session sits in the published page cycle.
+    ///
+    /// `inventory.md` §4.7 (`RETRACTIONS.md` R457): "Attributes and Arms
+    /// repeat for every current party slot, followed by shared Equipment,
+    /// Reagents, Spells, Items and Armaments. Total 2N+5, including eleven for
+    /// three members; seven applies only to one member."
+    ///
+    /// So positions `0..2N` are the per-member pairs - even is that member's
+    /// Attributes, odd its Arms - and the five shared screens follow. The
+    /// engine walked a flat seven-entry list, which is the cycle only for a
+    /// solo party; with a fuller party it skipped every companion's pages.
+    pub fn cycle_position(&self, party_len: usize) -> usize {
+        let members = party_len.max(1);
+        match self.page {
+            ZStatsPage::Stats => self.selected_party_index.min(members - 1) * 2,
+            ZStatsPage::Equipment => self.selected_party_index.min(members - 1) * 2 + 1,
+            page => {
+                let shared = ZStatsPage::SHARED
+                    .iter()
+                    .position(|candidate| *candidate == page)
+                    .unwrap_or(0);
+                members * 2 + shared
+            }
+        }
+    }
+
+    pub fn cycle_len(party_len: usize) -> usize {
+        party_len.max(1) * 2 + ZStatsPage::SHARED.len()
+    }
+
+    fn seek(&mut self, position: usize, party_len: usize) {
+        let members = party_len.max(1);
+        if position < members * 2 {
+            self.selected_party_index = position / 2;
+            self.page = if position % 2 == 0 {
+                ZStatsPage::Stats
+            } else {
+                ZStatsPage::Equipment
+            };
+        } else {
+            let shared = (position - members * 2).min(ZStatsPage::SHARED.len() - 1);
+            self.page = ZStatsPage::SHARED[shared];
+        }
         self.inventory_cursor = 0;
     }
 
-    pub fn move_previous_page(&mut self) {
-        self.page = self.page.previous();
-        self.inventory_cursor = 0;
+    pub fn move_next_page(&mut self, party_len: usize) {
+        let len = Self::cycle_len(party_len);
+        let next = (self.cycle_position(party_len) + 1) % len;
+        self.seek(next, party_len);
     }
 
+    pub fn move_previous_page(&mut self, party_len: usize) {
+        let len = Self::cycle_len(party_len);
+        let previous = (self.cycle_position(party_len) + len - 1) % len;
+        self.seek(previous, party_len);
+    }
+
+    /// `inventory.md` §4 (`RETRACTIONS.md` R458): "A valid member digit always
+    /// opens that member's Attributes, from Arms or any shared screen as
+    /// well." The engine used to preserve the Attributes/Arms half.
     pub fn select_party_index(&mut self, party_index: usize) {
         self.selected_party_index = party_index;
+        self.page = ZStatsPage::Stats;
+        self.inventory_cursor = 0;
+    }
+
+    /// `inventory.md` §4 (`RETRACTIONS.md` R459): at the initial Z selector
+    /// "`0` opens the shared Equipment screen without choosing a member".
+    pub fn open_shared_equipment(&mut self) {
+        self.page = ZStatsPage::Counters;
+        self.inventory_cursor = 0;
     }
 }
 

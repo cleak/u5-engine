@@ -518,7 +518,7 @@ fn z_stats_direction_navigation_cycles_exactly_the_observed_pages() {
     let mut forward = Vec::new();
     for _ in 0..ZStatsPage::ORDERED.len() {
         forward.push(session.page);
-        session.move_next_page();
+        session.move_next_page(1);
     }
     assert_eq!(forward, ZStatsPage::ORDERED.to_vec());
     assert_eq!(
@@ -530,7 +530,7 @@ fn z_stats_direction_navigation_cycles_exactly_the_observed_pages() {
     // Backward navigation is the exact inverse over the same sequence.
     let mut backward = Vec::new();
     for _ in 0..ZStatsPage::ORDERED.len() {
-        session.move_previous_page();
+        session.move_previous_page(1);
         backward.push(session.page);
     }
     let mut reversed = ZStatsPage::ORDERED.to_vec();
@@ -561,4 +561,72 @@ fn z_stats_direction_navigation_cycles_exactly_the_observed_pages() {
             "backward navigation stays inside the published sequence"
         );
     }
+}
+
+/// `inventory.md` §4.7 (`RETRACTIONS.md` R457): "Attributes and Arms repeat
+/// for every current party slot, followed by shared Equipment, Reagents,
+/// Spells, Items and Armaments. Total 2N+5, including eleven for three
+/// members; seven applies only to one member."
+///
+/// The engine walked a flat seven-entry list, so with a fuller party it never
+/// reached a companion's Attributes or Arms.
+#[test]
+fn z_stats_cycle_repeats_the_member_pair_for_every_party_slot() {
+    use crate::z_stats::ZStatsSession;
+
+    assert_eq!(ZStatsSession::cycle_len(1), 7);
+    assert_eq!(ZStatsSession::cycle_len(3), 11);
+    assert_eq!(ZStatsSession::cycle_len(6), 17);
+
+    let mut session = ZStatsSession {
+        selected_party_index: 0,
+        page: ZStatsPage::Stats,
+        inventory_cursor: 0,
+    };
+    let mut visited = Vec::new();
+    for _ in 0..ZStatsSession::cycle_len(3) {
+        visited.push((session.selected_party_index, session.page));
+        session.move_next_page(3);
+    }
+    assert_eq!(
+        visited,
+        vec![
+            (0, ZStatsPage::Stats),
+            (0, ZStatsPage::Equipment),
+            (1, ZStatsPage::Stats),
+            (1, ZStatsPage::Equipment),
+            (2, ZStatsPage::Stats),
+            (2, ZStatsPage::Equipment),
+            (2, ZStatsPage::Counters),
+            (2, ZStatsPage::Reagents),
+            (2, ZStatsPage::Spells),
+            (2, ZStatsPage::SpecialUse),
+            (2, ZStatsPage::EquipmentStock),
+        ]
+    );
+    // The cycle closes back onto the first member's Attributes.
+    assert_eq!(session.page, ZStatsPage::Stats);
+    assert_eq!(session.selected_party_index, 0);
+}
+
+/// `RETRACTIONS.md` R458: "A valid member digit always opens that member's
+/// Attributes, from Arms or any shared screen as well." The engine preserved
+/// the Attributes/Arms half instead.
+#[test]
+fn a_member_digit_always_opens_that_members_attributes() {
+    use crate::z_stats::ZStatsSession;
+
+    let mut session = ZStatsSession {
+        selected_party_index: 0,
+        page: ZStatsPage::EquipmentStock,
+        inventory_cursor: 4,
+    };
+    session.select_party_index(2);
+    assert_eq!(session.selected_party_index, 2);
+    assert_eq!(session.page, ZStatsPage::Stats);
+    assert_eq!(session.inventory_cursor, 0);
+
+    session.page = ZStatsPage::Equipment;
+    session.select_party_index(1);
+    assert_eq!(session.page, ZStatsPage::Stats);
 }

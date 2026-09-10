@@ -588,15 +588,25 @@ impl PlayState {
         // which prints the same word. Space is deliberately absent:
         // §10.6 accepts on Return *or* Space.
         //
-        // Open spec question on `0` only: `inventory.md §4`'s own
-        // paragraph on this selector says "Escape cancels the selector,
-        // while the explicit none/retry result only redraws the prompt
-        // path and does not select a character", which would keep the
-        // selector live on `0` rather than closing it - and that is what
-        // the R-Ready arm of `step_active_ready` already does. Closing it
-        // here is the engine's pre-existing behaviour and no capture of
-        // the original settles which reading is right, so it is left
-        // alone until the spec answers.
+        // `inventory.md` §4 (`RETRACTIONS.md` R459, answering
+        // cleak/u5-spec#256): "The initial Z selector accepts zero and opens
+        // shared Equipment without selecting a member." The earlier reading -
+        // that the explicit none result only redraws the prompt - is withdrawn
+        // for Z, and this engine's own behaviour of closing the selector on
+        // `0` was wrong in the other direction. Every other caller still
+        // ignores `0` unless it enables that answer.
+        if key == '0' && matches!(session.target, PartySelectorTarget::ZStats) {
+            self.active_party_selector = None;
+            let mut z_stats = crate::z_stats::ZStatsSession {
+                selected_party_index: session.highlight,
+                page: crate::ZStatsPage::Stats,
+                inventory_cursor: 0,
+            };
+            z_stats.open_shared_equipment();
+            self.message = self.render_z_stats_session(&z_stats);
+            self.active_z_stats = Some(z_stats);
+            return true;
+        }
         if matches!(key, '\u{1b}' | '0') {
             self.active_party_selector = None;
             let prompt = session.target.prompt();
@@ -2963,12 +2973,12 @@ impl PlayState {
                 }
             }
             ZStatsInputAction::NextPage => {
-                session.move_next_page();
+                session.move_next_page(self.party.len());
                 self.message = self.render_z_stats_session(&session);
                 self.active_z_stats = Some(session);
             }
             ZStatsInputAction::PreviousPage => {
-                session.move_previous_page();
+                session.move_previous_page(self.party.len());
                 self.message = self.render_z_stats_session(&session);
                 self.active_z_stats = Some(session);
             }
