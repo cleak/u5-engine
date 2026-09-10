@@ -392,6 +392,58 @@ def classify(left: list[list[str]], right: list[list[str]], rows: list[int]) -> 
 IDLE_KINDS = {"stock-idle", "engine-idle"}
 
 
+# Decoding a beat matches every cell against two fonts, so a suite-wide pass
+# costs minutes. An artifact directory never changes after its run finishes, so
+# its verdict is cacheable: keyed by the directory name and the newest capture's
+# timestamp, a re-run of the same artifacts is a lookup. This is what makes the
+# suite total a query rather than a three-hour sweep - and the sweep is not only
+# slow but *less* accurate, because the machine is under load throughout and the
+# DOSBox side boots late more often.
+CACHE = pathlib.Path.home() / ".cache/u5-qa/paired-compare.json"
+
+
+def _cache_load() -> dict:
+    try:
+        return json.loads(CACHE.read_text())
+    except Exception:
+        return {}
+
+
+def _cache_save(cache: dict) -> None:
+    try:
+        CACHE.parent.mkdir(parents=True, exist_ok=True)
+        CACHE.write_text(json.dumps(cache))
+    except OSError:
+        pass
+
+
+def _stamp(artifact: pathlib.Path) -> str:
+    newest = max(
+        (p.stat().st_mtime for p in artifact.glob("*.png")), default=0.0
+    )
+    return f"{newest:.0f}"
+
+
+def compare_cached(artifact: pathlib.Path, cache: dict) -> tuple:
+    key = artifact.name
+    stamp = _stamp(artifact)
+    hit = cache.get(key)
+    if hit and hit.get("stamp") == stamp and hit.get("version") == CACHE_VERSION:
+        for kind, count in hit["kinds"].items():
+            KINDS[kind] = KINDS.get(kind, 0) + count
+        return tuple(hit["totals"])
+    before = dict(KINDS)
+    totals = compare(artifact)
+    kinds = {k: KINDS[k] - before.get(k, 0) for k in KINDS if KINDS[k] - before.get(k, 0)}
+    cache[key] = {"stamp": stamp, "totals": list(totals), "kinds": kinds,
+                  "version": CACHE_VERSION}
+    return totals
+
+
+# Bump when a classifier change would alter a cached verdict.
+CACHE_VERSION = 3
+
+
 def compare(artifact: pathlib.Path) -> tuple[int, int, int, int, int]:
     record = json.loads((artifact / "record.json").read_text())
     scenario = record.get("scenario", artifact.name)
@@ -493,8 +545,9 @@ def main() -> None:
     if args[0] == "--latest":
         args = [str(path) for path in latest_artifacts(args[1:])]
     total = [0, 0, 0, 0, 0]
+    cache = _cache_load()
     for arg in args:
-        same, differ, skipped, idle, panel = compare(pathlib.Path(arg))
+        same, differ, skipped, idle, panel = compare_cached(pathlib.Path(arg), cache)
         # A run carrying idle beats is not a verdict either way: it needs
         # re-running before its differences mean anything.
         status = "RERUN" if idle else ("match" if differ == 0 else "DIFFER")
@@ -504,6 +557,7 @@ def main() -> None:
         )
         for index, value in enumerate((same, differ, skipped, idle, panel)):
             total[index] += value
+    _cache_save(cache)
     print(
         f"\n{total[0]} beat(s) agree, {total[1]} differ, "
         f"{total[2]} skipped, {total[3]} idle (re-run); "
