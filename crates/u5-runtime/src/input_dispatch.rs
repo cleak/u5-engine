@@ -2534,12 +2534,20 @@ fn arms_sell_goodbye(roll: u8) -> String {
 /// the listing heading opened, so it carries a closing double quote and no
 /// opening one - `Which would ye see?"`, `What is thine interest?"` and
 /// `What may I show thee?"` all drew that way.
+/// `shops.md §8.1`: the stock-call line "is followed immediately by a closing
+/// double quote and one space".
+///
+/// That space is not decoration: it is the cell the accepted item letter
+/// echoes into, and `text-output.md §10.6` leaves the cursor on it while the
+/// list waits. Measured (`qa/paired/shop-arms-menus.tsv`, beat `buyquote`):
+/// the original reads `see?" a`, and this engine read `interest?"a` because
+/// the literals stopped at the quote.
 const fn arms_stock_call_for_roll(roll: u8) -> &'static str {
     match roll & 0x03 {
-        0 => "What may I show thee?\"",
-        1 => "Which wouldst thou like to see?\"",
-        2 => "What is thine interest?\"",
-        _ => "Which would ye see?\"",
+        0 => "What may I show thee?\" ",
+        1 => "Which wouldst thou like to see?\" ",
+        2 => "What is thine interest?\" ",
+        _ => "Which would ye see?\" ",
     }
 }
 
@@ -5251,15 +5259,21 @@ mod arms_shop_resident_literal_tests {
     /// Measured 2026-09-07 (`qa/paired/shop-arms-menus.tsv`): each line ends
     /// with the closing double quote of the speech the listing heading
     /// opened, which the published transcription omits.
+    ///
+    /// And with the space after it. `§8.1` says the question "is followed
+    /// immediately by a closing double quote **and one space**", and that
+    /// space is the cell the accepted item letter echoes into - measured
+    /// 2026-09-10 on the same scenario's `buyquote` beat, where the original
+    /// reads `see?" a` and this engine read `interest?"a`.
     #[test]
     fn arms_stock_call_pool_is_the_published_four_with_their_closing_quote() {
-        assert_eq!(arms_stock_call_for_roll(0), "What may I show thee?\"");
+        assert_eq!(arms_stock_call_for_roll(0), "What may I show thee?\" ");
         assert_eq!(
             arms_stock_call_for_roll(1),
-            "Which wouldst thou like to see?\""
+            "Which wouldst thou like to see?\" "
         );
-        assert_eq!(arms_stock_call_for_roll(2), "What is thine interest?\"");
-        assert_eq!(arms_stock_call_for_roll(3), "Which would ye see?\"");
+        assert_eq!(arms_stock_call_for_roll(2), "What is thine interest?\" ");
+        assert_eq!(arms_stock_call_for_roll(3), "Which would ye see?\" ");
     }
 
     /// The draw is uniform over `0..3`, so the pool wraps rather than
