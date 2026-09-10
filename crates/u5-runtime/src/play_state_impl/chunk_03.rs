@@ -96,7 +96,27 @@ impl PlayState {
         if self.active_party_selector.is_some() {
             return Some(PARTY_SELECTOR_ROSTER_BOX_LABEL.to_string());
         }
-        if self.active_use.is_some() {
+        if let Some(session) = self.active_use.as_ref() {
+            // `inventory.md §4.3`: the party-member selection surface is
+            // shared, and "[t]he panel's **top border band** carries the
+            // framed label `Select:`". A U-Use item that asks `On who: ` is on
+            // that surface, not on §4.4's item list, so the box is relabelled
+            // for as long as the question stands - the item list is no longer
+            // what the panel is showing.
+            //
+            // Measured 2026-09-09 (`qa/paired/use-scrolls.tsv`, beat
+            // `resurrection-prompt`): the original's band reads `Select:`
+            // where this engine kept `Items:`. Only the roster panel shows
+            // this, which is why it survived until that panel was compared.
+            if matches!(
+                session.pending,
+                Some(
+                    UsePendingAction::PotionTarget { .. }
+                        | UsePendingAction::ScrollResurrectionTarget { .. }
+                )
+            ) {
+                return Some(PARTY_SELECTOR_ROSTER_BOX_LABEL.to_string());
+            }
             return Some(USE_PICKER_ROSTER_BOX_LABEL.to_string());
         }
         if let Some(session) = self.active_ready.as_ref() {
