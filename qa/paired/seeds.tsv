@@ -13,7 +13,7 @@ bt-correct	seed-bt-correct	the audience is a cutscene and cannot be seeded; walk
 bt-escalate	seed-bt-escalate	the audience is a cutscene and cannot be seeded; walk-up form kept
 bt-password	seed-bt-password-reseeded	the walk-up replayed once by reseed.py
 cast-results	seed-cast-results	copied from the paired-cast-results run profile
-castle-talk	seed-castle-talk	copied from the paired-castle-talk run profile
+castle-talk	seed-castle-talk-reseeded	re-written by reseed.py so the save carries a populated NPC band
 castle-talk-after-entry	seed-castle-talk-after-entry-reseeded	the walk-up replayed once by reseed.py
 combat-cast	seed-combat-cast	copied from the paired-combat-cast run profile
 combat-commands	seed-combat-commands	copied from paired-combat-dungeon-room: the dungeon-room seed `combat-dungeon-room` uses
