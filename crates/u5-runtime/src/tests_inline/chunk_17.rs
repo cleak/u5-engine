@@ -702,8 +702,18 @@
         );
         assert!(state.active_cast_followup.is_some());
 
+        // `inventory.md` §4: at the shared party-member prompt a digit moves
+        // the indicator and "Only Return or Space commits the indicated row".
+        // The engine used to commit on the digit and treat Return as a cancel.
+        assert!(
+            state
+                .step_active_cast_followup('2', "", Path::new(""))
+                .unwrap()
+                .is_none(),
+            "a digit must leave the On who: prompt open"
+        );
         let result = state
-            .step_active_cast_followup('2', "", Path::new(""))
+            .step_active_cast_followup('\r', "", Path::new(""))
             .unwrap()
             .expect("party target should finish Heal");
         assert_eq!(result.0, MoveOutcome::Cast);

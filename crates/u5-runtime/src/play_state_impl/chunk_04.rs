@@ -5637,7 +5637,12 @@ impl PlayState {
     /// Step the shared `On who:` party-member prompt by one key.
     ///
     /// See [`UseTargetStep`] for the published rule this follows.
-    fn step_use_target_selector(&self, key: char, suffix: &str, highlight: usize) -> UseTargetStep {
+    pub(crate) fn step_use_target_selector(
+        &self,
+        key: char,
+        suffix: &str,
+        highlight: usize,
+    ) -> UseTargetStep {
         let last = self.party.len().saturating_sub(1);
         // Return or Space commits the indicated row.
         if matches!(key, '\r' | '\n' | ' ') {

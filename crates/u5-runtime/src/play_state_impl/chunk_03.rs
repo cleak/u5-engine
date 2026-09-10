@@ -1083,23 +1083,40 @@ impl PlayState {
                     );
                 }
                 CastFollowupKind::PartyTarget => {
-                    if matches!(ch, '\u{1b}' | ' ' | '\r' | '\n' | '0') {
+                    // `inventory.md` §4: "**A digit moves the indicator; it
+                    // does not commit.** [...] Only Return or Space commits
+                    // the indicated row, Escape cancels" - and "This is one
+                    // shared routine, so the rule is the same for [...] every
+                    // other caller." A party-target spell asks with the same
+                    // `On who: ` prompt a potion does, so it is such a caller.
+                    //
+                    // This arm treated Space and Return as *cancels* and
+                    // committed on the digit, which is two ways round from the
+                    // published rule. Committing early left the scripted
+                    // Return to fall through to the world loop and echo
+                    // `What`; measured 2026-09-10 (`cast-results/cure` and
+                    // `/wake`), where the original shows no such line.
+                    if ch == '\u{1b}' || ch == '0' {
                         self.message = "None!".to_string();
                         return Ok(None);
                     }
-                    let Some(digit) = ch
-                        .to_digit(10)
-                        .and_then(|digit| usize::try_from(digit).ok())
-                    else {
-                        continue;
-                    };
-                    let max_party_slot = self.party.len().min(6);
-                    if !(1..=max_party_slot).contains(&digit) {
-                        continue;
+                    let highlight = session.buffer.parse::<usize>().unwrap_or(1).max(1);
+                    match self.step_use_target_selector(ch, "", highlight - 1) {
+                        crate::play_state_impl::chunk_04::UseTargetStep::Moved(next) => {
+                            session.buffer = (next + 1).to_string();
+                            continue;
+                        }
+                        crate::play_state_impl::chunk_04::UseTargetStep::Waiting => continue,
+                        crate::play_state_impl::chunk_04::UseTargetStep::Committed(target) => {
+                            let name = self.party_member_display_name(target);
+                            self.commit_prompt_reply(USE_POTION_TARGET_PROMPT, &name);
+                            return self.finish_active_cast_followup(
+                                session,
+                                &(target + 1).to_string(),
+                                game_dir,
+                            );
+                        }
                     }
-                    let name = self.party_member_display_name(digit - 1);
-                    self.commit_prompt_reply(USE_POTION_TARGET_PROMPT, &name);
-                    return self.finish_active_cast_followup(session, &digit.to_string(), game_dir);
                 }
                 CastFollowupKind::GatePhase => {
                     if matches!(ch, '\u{1b}' | ' ' | '\r' | '\n' | '0') {
