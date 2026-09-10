@@ -257,6 +257,23 @@ impl PlayState {
                     )
                 )
             })
+            // The same shape, measured the same way, in four more prompts that
+            // read a key with their question still on the row: the camp's
+            // `For how many hours? (1-9)`, the wishing well's `Drop a coin?`,
+            // and the mixer's `How much? `. Each showed as `offset+2` - the
+            // blank and the fresh command row this engine added under them.
+            || self
+                .active_rest
+                .as_ref()
+                .is_some_and(|session| matches!(session.phase, crate::z_stats::RestPhase::Hours))
+            || self
+                .active_wishing_well
+                .as_ref()
+                .is_some_and(|session| !session.coin_accepted)
+            || self
+                .active_mix
+                .as_ref()
+                .is_some_and(|session| matches!(session.phase, crate::z_stats::MixPhase::Quantity))
             // `blackthorn.md §4.1`'s acknowledgement reads a key with the
             // reaction on screen; the cursor sits inline after it.
             || self.active_blackthorn.as_ref().is_some_and(|challenge| {
