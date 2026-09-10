@@ -3048,6 +3048,60 @@
 
         paint_arms_sell_browser_text_window(&mut system, &state);
 
+        // `shops.md` §8's geometry section: the browser "draws row borders at
+        // window-local `(0, row)` and `(14, row)` over rows `1..4`", inside
+        // the shared frame idiom's top and bottom ornaments. The window's
+        // origin is `(24, 1)`, so column 0 is screen column 24, column 14 is
+        // screen column 38, and window row 5 is screen row 6.
+        //
+        // The clear/widen handoff and the column-1 row interiors were already
+        // implemented; the rules themselves were never drawn. Measured
+        // 2026-09-10 on `shop-arms-sell-keys/sell`.
+        let frame_left = ARMS_SELL_BROWSER_LEFT;
+        let frame_right =
+            ARMS_SELL_BROWSER_LEFT + crate::stats_panel::PANEL_PICKER_FRAME_RIGHT_COLUMN;
+        let frame_bottom =
+            ARMS_SELL_BROWSER_TOP + crate::stats_panel::ARMS_SELL_BROWSER_FRAME_BOTTOM_ROW;
+        let glyph = |x: u8, y: u8| system.cell(x, y).map(|cell| cell.byte);
+        assert_eq!(
+            glyph(frame_left, ARMS_SELL_BROWSER_TOP),
+            Some(crate::stats_panel::PANEL_PICKER_FRAME_TOP_LEFT)
+        );
+        assert_eq!(
+            glyph(frame_right, ARMS_SELL_BROWSER_TOP),
+            Some(crate::stats_panel::PANEL_PICKER_FRAME_TOP_RIGHT)
+        );
+        assert_eq!(
+            glyph(frame_left, frame_bottom),
+            Some(crate::stats_panel::PANEL_PICKER_FRAME_BOTTOM_LEFT)
+        );
+        assert_eq!(
+            glyph(frame_right, frame_bottom),
+            Some(crate::stats_panel::PANEL_PICKER_FRAME_BOTTOM_RIGHT)
+        );
+        for column in (frame_left + 1)..frame_right {
+            assert_eq!(
+                glyph(column, ARMS_SELL_BROWSER_TOP),
+                Some(crate::stats_panel::PANEL_PICKER_FRAME_TOP_EDGE),
+                "top edge at column {column}"
+            );
+            assert_eq!(
+                glyph(column, frame_bottom),
+                Some(crate::stats_panel::PANEL_PICKER_FRAME_BOTTOM_EDGE),
+                "bottom edge at column {column}"
+            );
+        }
+        // All four item rows are capped, including the blank tail rows.
+        for row in 1..crate::stats_panel::ARMS_SELL_BROWSER_FRAME_BOTTOM_ROW {
+            for column in [frame_left, frame_right] {
+                assert_eq!(
+                    glyph(column, ARMS_SELL_BROWSER_TOP + row),
+                    Some(crate::stats_panel::PANEL_PICKER_FRAME_VERTICAL_RULE),
+                    "vertical rule at ({column}, {row})"
+                );
+            }
+        }
+
         assert_eq!(system.active_window_index(), TALK_SHOP_TEXT_WINDOW_INDEX);
         let browser = system
             .window(ARMS_SELL_BROWSER_TEXT_WINDOW_INDEX)

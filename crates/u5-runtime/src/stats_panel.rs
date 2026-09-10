@@ -90,6 +90,12 @@ pub const ARMS_SELL_BROWSER_INITIAL_RIGHT: u8 = 38;
 pub const ARMS_SELL_BROWSER_INITIAL_BOTTOM: u8 = 6;
 pub const ARMS_SELL_BROWSER_FRAME_RIGHT: u8 = 39;
 pub const ARMS_SELL_BROWSER_FRAME_BOTTOM: u8 = 9;
+/// Window-local row carrying the sell browser's bottom ornaments.
+///
+/// `shops.md` §8: the browser "draws row borders at window-local `(0, row)`
+/// and `(14, row)` over rows `1..4`", so the four item rows sit inside the
+/// rules and the bottom edge is the row after them.
+pub const ARMS_SELL_BROWSER_FRAME_BOTTOM_ROW: u8 = 5;
 pub const ARMS_SELL_BROWSER_BORDER_FIRST_ROW: u8 = 2;
 pub const ARMS_SELL_BROWSER_BORDER_LAST_ROW: u8 = 5;
 pub const ARMS_SELL_BROWSER_PAGE_BADGE_LOCAL_COLUMN: u8 = 6;
@@ -352,6 +358,16 @@ pub fn paint_arms_sell_browser_text_window(system: &mut TextWindowSystem, state:
         ARMS_SELL_BROWSER_FRAME_RIGHT,
         ARMS_SELL_BROWSER_FRAME_BOTTOM,
     );
+    // `shops.md` §8's geometry section makes the browser one of the two
+    // shop-owned framed panels, sharing the character sheet's frame idiom.
+    // The clear/widen handoff was implemented and the row interiors were
+    // cursored to column 1 to leave room for the rules, but the rules
+    // themselves were never drawn. Measured 2026-09-10
+    // (`shop-arms-sell-keys/sell`): the original's panel carries the top
+    // ornaments, a vertical rule at each edge of all four item rows, and the
+    // bottom ornaments; this engine's panel rows 1 and 6 were blank and the
+    // item rows had no caps.
+    paint_ornamental_frame(system, ARMS_SELL_BROWSER_FRAME_BOTTOM_ROW);
 
     for (row, item) in browser
         .visible_items(&state.equipment_stock)
@@ -823,6 +839,19 @@ pub fn active_panel_picker(state: &PlayState) -> Option<PanelPickerView> {
 /// the caller has already cleared the panel, which is what erases the
 /// food/gold and date lines "for the duration of the picker".
 fn paint_panel_picker_frame(system: &mut TextWindowSystem) {
+    paint_ornamental_frame(system, PANEL_PICKER_FRAME_BOTTOM_ROW);
+}
+
+/// Draw the shared ornamental frame into the active window.
+///
+/// `shops.md` §8's geometry section: the two shop-owned panels and the
+/// character-sheet/inventory panels "use the same `(24, 1)..(38, N)` clear /
+/// `(24, 1)..(39, 9)` frame idiom", so "a clean engine can implement one panel
+/// primitive and parameterise the cleared height and the number of bordered
+/// rows". `bottom_row` is that parameter: window row 0 carries the top
+/// ornaments and rule, rows `1..bottom_row` carry a vertical rule at each
+/// edge, and `bottom_row` carries the bottom ornaments and rule.
+fn paint_ornamental_frame(system: &mut TextWindowSystem, bottom_row: u8) {
     system.set_active_cursor(0, 0);
     system.emit_byte(PANEL_PICKER_FRAME_TOP_LEFT);
     for _ in 0..PANEL_PICKER_CONTENT_COLUMNS {
@@ -830,14 +859,14 @@ fn paint_panel_picker_frame(system: &mut TextWindowSystem) {
     }
     system.emit_byte(PANEL_PICKER_FRAME_TOP_RIGHT);
 
-    for row in 1..PANEL_PICKER_FRAME_BOTTOM_ROW {
+    for row in 1..bottom_row {
         for column in [0, PANEL_PICKER_FRAME_RIGHT_COLUMN] {
             system.set_active_cursor(column, row);
             system.emit_byte(PANEL_PICKER_FRAME_VERTICAL_RULE);
         }
     }
 
-    system.set_active_cursor(0, PANEL_PICKER_FRAME_BOTTOM_ROW);
+    system.set_active_cursor(0, bottom_row);
     system.emit_byte(PANEL_PICKER_FRAME_BOTTOM_LEFT);
     for _ in 0..PANEL_PICKER_CONTENT_COLUMNS {
         system.emit_byte(PANEL_PICKER_FRAME_BOTTOM_EDGE);
