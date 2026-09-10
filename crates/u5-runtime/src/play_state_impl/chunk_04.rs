@@ -934,21 +934,30 @@ impl PlayState {
         self.push_owned_use_row(
             &mut rows,
             SPECIAL_ITEM_SHARD_FALSEHOOD_INDEX,
-            "Shard of Falsehood",
+            // `inventory.md §4.5`'s complete 38-entry label table, published
+            // 2026-09-10 in answer to cleak/u5-spec#255: the shards are
+            // `Shard/Falsehd`, `Shard/Hatred` and `Shard/Cowrdce`, and the
+            // section adds "Use these labels verbatim, including
+            // abbreviations and the singular `Plan`". The row renderer
+            // "prints each authored label and then pads short rows; it does
+            // not abbreviate or truncate a longer name at runtime", so the
+            // engine's long forms were not merely rendered short - they were
+            // the wrong strings.
+            "Shard/Falsehd",
             UseItemRequest::ShadowlordShard(SHADOWLORD_FALSEHOOD_INDEX),
         );
 
         self.push_owned_use_row(
             &mut rows,
             SPECIAL_ITEM_SHARD_HATRED_INDEX,
-            "Shard of Hatred",
+            "Shard/Hatred",
             UseItemRequest::ShadowlordShard(SHADOWLORD_HATRED_INDEX),
         );
 
         self.push_owned_use_row(
             &mut rows,
             SPECIAL_ITEM_SHARD_COWARDICE_INDEX,
-            "Shard of Cowardice",
+            "Shard/Cowrdce",
             UseItemRequest::ShadowlordShard(SHADOWLORD_COWARDICE_INDEX),
         );
 
@@ -992,7 +1001,7 @@ impl PlayState {
         self.push_owned_use_row(
             &mut rows,
             SPECIAL_ITEM_HMS_CAPE_PLANS_INDEX,
-            "HMS Cape Plans",
+            "HMS Cape Plan",
             UseItemRequest::HmsCapePlans,
         );
 

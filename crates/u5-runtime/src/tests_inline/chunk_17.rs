@@ -1580,7 +1580,12 @@
             PlayInputDisposition::Continue
         );
         assert!(state.active_use.is_some());
-        assert!(picker_row_names(&state).iter().any(|name| name.contains("Shard of Falsehood")));
+        // `inventory.md §4.5`'s published label table (cleak/u5-spec#255):
+        // the picker row is the abbreviated `Shard/Falsehd`, while the Use
+        // result sentence below still names the shard in full.
+        assert!(picker_row_names(&state)
+            .iter()
+            .any(|name| name.contains("Shard/Falsehd")));
 
         assert_eq!(
             handle_play_key_input(&mut state, '\r', "", Path::new("")).unwrap(),
