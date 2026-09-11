@@ -4212,11 +4212,21 @@ impl PlayState {
                 return MoveOutcome::Blocked;
             }
         }
-        if EQUIPMENT_CLASS_TAGS[item_id] == EQUIPMENT_TAG_TWO_HAND
-            && self.party_equipment[request.party_index][EQUIP_SLOT_OFFHAND] != EQUIPMENT_EMPTY
-        {
-            self.message = Self::ready_refusal(READY_BOTH_HANDS_REFUSAL);
-            return MoveOutcome::Blocked;
+        // `inventory.md` §5.2's refusal table: "Two-handed item selected while
+        // **either hand** is occupied" takes the both-hands refusal. This
+        // tested the off-hand alone, so a character with a weapon readied and
+        // an empty off-hand fell past it to the burden gate and was refused
+        // for strength instead. Measured 2026-09-10 (`ready-slots/twohander`):
+        // the original reads `Both hands must be free before thou canst wield
+        // that!` where this engine read `Thou art not strong enough!`.
+        if EQUIPMENT_CLASS_TAGS[item_id] == EQUIPMENT_TAG_TWO_HAND {
+            let equipment = &self.party_equipment[request.party_index];
+            if equipment[EQUIP_SLOT_WEAPON] != EQUIPMENT_EMPTY
+                || equipment[EQUIP_SLOT_OFFHAND] != EQUIPMENT_EMPTY
+            {
+                self.message = Self::ready_refusal(READY_BOTH_HANDS_REFUSAL);
+                return MoveOutcome::Blocked;
+            }
         }
         if slot == EQUIP_SLOT_OFFHAND {
             let weapon = self.party_equipment[request.party_index][EQUIP_SLOT_WEAPON];
