@@ -3377,8 +3377,20 @@ impl PlayState {
                 );
                 self.active_ready = Some(session);
             }
+            // An unrecognised key leaves the window alone. `inventory.md`
+            // §5's picker keeps the list up and waits, the same way §8.A's
+            // arms listing does - "Invalid listing keys keep the existing text
+            // and consume no new draw". Re-rendering here logged a second
+            // `Item: ` row, so pressing the R key again while the picker was
+            // still open - which is what a scenario does to ready another
+            // item after a refusal - showed two adjacent `Item:` rows and
+            // shifted every row beneath them.
+            //
+            // Measured 2026-09-10 (`hut-ready-picker/shield`,
+            // `ready-slots/shield`) and confirmed with a transcript probe:
+            // the cycle logs `Item: `, then the refusal block ending in
+            // another `Item: `, and the reopening key added a third.
             ReadyInputAction::Redraw | ReadyInputAction::Discard => {
-                self.message = self.render_ready_session(&session);
                 self.active_ready = Some(session);
             }
             ReadyInputAction::Exit => unreachable!(),
