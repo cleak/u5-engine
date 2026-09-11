@@ -1724,6 +1724,16 @@ impl PlayState {
                     self.message = "None!".to_string();
                     Some(MoveOutcome::PromptDeclined)
                 }
+                // `magic.md` §6 step 4: the prompt "reads a two-digit
+                // unsigned quantity", and of the cancels it names only one -
+                // "Zero cancels through the cleanup path". An accept key with
+                // nothing typed is not a zero, and the original keeps waiting
+                // on it. This engine completed on the bare key, which took
+                // the empty buffer as zero and answered `None!`. Measured
+                // 2026-09-11 (`bt-audience/ask5`): the original's row reads
+                // `How much` with the prompt still open where this engine had
+                // already printed `None!`.
+                '\r' | '\n' | ' ' if session.quantity_buffer.is_empty() => None,
                 '\r' | '\n' | ' ' => self.complete_mix_session(session),
                 '\u{8}' | '\u{7f}' => {
                     session.quantity_buffer.pop();
