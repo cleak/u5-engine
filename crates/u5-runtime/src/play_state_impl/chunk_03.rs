@@ -510,7 +510,28 @@ impl PlayState {
                 self.active_player = None;
                 SET_ACTIVE_PLAYER_NONE_REPLY.to_string()
             }
-            Some(slot) if slot <= self.party.len() && slot <= SAVE_PARTY_SIZE_MAX as usize => {
+            // A dead member is not a valid selection. `commands.md` §7 gives
+            // `Invalid!` as "A selection outside the valid range", and
+            // `combat.md` §4 keeps the active-player slot cleared rather than
+            // restoring it "if their status is now `'D'` (dead)". Measured
+            // 2026-09-10 (`use-scrolls/resurrection`, seeded `status1=D`):
+            // answering the prompt with the dead member's digit reads
+            // `Invalid!` in the original, where this engine set the slot and
+            // answered `Shamino`.
+            //
+            // Only the dead case is measured. `inventory.md` §4.2 suppresses
+            // the roster marker for a dead *or* sleeping active player, which
+            // reads as a member changing status while selected rather than as
+            // a second rejection, so the sleeping letter is left accepted
+            // here until a capture settles it.
+            Some(slot)
+                if slot <= self.party.len()
+                    && slot <= SAVE_PARTY_SIZE_MAX as usize
+                    && self
+                        .party
+                        .get(slot - 1)
+                        .is_some_and(|member| member.status != crate::PARTY_STATUS_DEAD) =>
+            {
                 let index = slot - 1;
                 self.active_player = Some(index);
                 self.party_member_display_name(index)
