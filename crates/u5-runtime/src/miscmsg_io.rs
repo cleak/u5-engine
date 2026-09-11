@@ -154,7 +154,9 @@ pub const MISCMSG_CODEX_ENTRY_NARRATION: usize = 46;
 /// engine read it as eight per-virtue pages indexed by virtue. It is not an
 /// array: `37` and `38` are this preamble, `39` is the page an unordained
 /// party reads, `40` is a page-turn line, and `41`-`44` are four sequential
-/// runic pages. Asked on `cleak/u5-spec#253`.
+/// runic pages. Answered on `cleak/u5-spec#253` (closed) and published in
+/// `miscmsg-dat.md` §3; `RETRACTIONS.md` R453 adds that `41`-`44` print
+/// through the ordinary fixed-window printer with the runic font selected.
 pub const MISCMSG_CODEX_PAGE_OPENED: usize = 37;
 pub const MISCMSG_CODEX_READS_PREFIX: usize = 38;
 /// The page an unordained party turns to. Measured: the original prints it

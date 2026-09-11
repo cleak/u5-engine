@@ -1202,6 +1202,13 @@ pub const YELL_FREE_TEXT_OPEN_LINE: &str = ":";
 /// the `Yell ` echo.
 pub const YELL_QUESTION: &str = "what?";
 /// `cleak/u5-spec#194` (black-box): `Get-<dir>` with nothing to pick up.
+/// `inventory.md §4.5` "Which U-Use rows omit quantity": "In the picker
+/// stock, value 255 is the no-quantity marker; zero means absent from
+/// U-Use, and ordinary positive quantities produce the counted layout."
+/// A row holding this value prints only its name, starting in window
+/// column 1 with all thirteen interior cells available.
+pub const USE_PICKER_NO_QUANTITY: u8 = 255;
+
 pub const GET_NOTHING_REFUSAL: &str = "\nNothing to get!";
 /// `cleak/u5-spec#194` (black-box): `Hole up- ` off an inn bed completes
 /// its echo line with this refusal.

@@ -681,6 +681,12 @@ impl PlayState {
                 self.active_effect_counter,
             )
         {
+            // UNSOURCED (u5-spec#260). `magic.md §7` and `combat.md §8`
+            // both say only that the `N`-tag cast is "absorbed" before
+            // the shared dispatcher; neither publishes a literal. This
+            // string was copied from the castle gate back when that gate
+            // also used it, and R462 has since replaced the castle gate's
+            // label with `Absorbed!`. Awaiting a measured string.
             self.message = "Magic absorbed!".to_string();
             return Ok(MoveOutcome::Blocked);
         }

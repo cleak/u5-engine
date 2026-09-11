@@ -1078,21 +1078,22 @@ impl PlayState {
             rows.push(UseItemPickerRow {
                 label: label.to_string(),
                 decoration: crate::stats_panel::PanelPickerDecoration::None,
-                // `inventory.md §4.5`: the quantity and selector cells are
-                // "independent" of the decoration marker, and the row format is
-                // `[two-cell quantity][one-cell selector][name]` for every row
-                // except the "no quantity" marker, which §4.5 reserves for rows
-                // that print "only its name" - the moonstone
-                // (`cleak/u5-spec#246`). A carried regalia piece is not one of
-                // those: §4.5's own classification calls the Sceptre and Skull
-                // Keys "plain-name rows", which is about *decoration*, not
-                // about the quantity cells.
+                // `inventory.md §4.5` "Which U-Use rows omit quantity":
+                // quantity suppression is independent of name decoration,
+                // and it is driven by the *saved value*, not by the item's
+                // identity. "In the picker stock, value 255 is the
+                // no-quantity marker; zero means absent from U-Use, and
+                // ordinary positive quantities produce the counted layout."
                 //
-                // Measured (`qa/paired/use-specials.tsv`, beat
-                // `skullkeysrow`): the original prints ` 1 Amulet`, ` 1 Crown`
-                // and ` 1 Sceptre`; this engine printed the bare names,
-                // shifting each row three cells left.
-                quantity: Some(value),
+                // `RETRACTIONS.md` R456 settles the case that produced the
+                // earlier reading here. Normal acquisition gives the
+                // Amulet, Crown and Sceptre the no-quantity value, so their
+                // rows omit both cells; a *saved* quantity-one value still
+                // yields the counted row. The measurement this engine took
+                // (`qa/paired/use-specials.tsv`, beat `skullkeysrow`,
+                // printing ` 1 Amulet`) came from a save holding one, so it
+                // remains correct - it was generalised too far.
+                quantity: (value != crate::commands::USE_PICKER_NO_QUANTITY).then_some(value),
                 request,
             });
         }
