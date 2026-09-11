@@ -1178,13 +1178,23 @@ fn handle_active_shop_key_input(
                             )
                         }
                     }
+                    // `shops.md §8.A` "Shared closing envelope": "There is
+                    // no universal `Farewell.` or `As you wish.` line." A
+                    // visit that bought nothing draws the no-sale row of the
+                    // inn's own four `SHOPPE.DAT` records, inside the
+                    // ordinary quote/attribution envelope - the same shape
+                    // the entry decline and the other shop kinds use.
                     InnMainAction::Exit => {
                         *s = InnkeeperState::Exited;
-                        "Farewell.".to_string()
+                        inn_service_exit_message(state, game_dir, innkeeper_name)
                     }
-                    InnMainAction::Discard => {
-                        "Rest (R), Leave (L), Pick up (P), or Space.".to_string()
-                    }
+                    // `shops.md §8.B` "Inn actions": keys outside `L`/`P`/`R`
+                    // and Space "silently wait". The engine answered them
+                    // with a menu-letter reminder the original never prints,
+                    // which put every later row one line low. Measured
+                    // 2026-09-11 (`nb-inn/no` and `/esc`), where the original
+                    // leaves the cursor on the question's own trailing space.
+                    InnMainAction::Discard => String::new(),
                 },
                 (
                     InnkeeperState::ConfirmRest {
@@ -3419,6 +3429,31 @@ fn tavern_accepted_menu_letter(
 /// "prints the resident refusal and exits". The inn's row is records
 /// `178..181` under a uniform `0..3` draw, the same shape every other shared
 /// row takes, and the result carries the ordinary `says $.` attribution.
+/// `shops.md §8.A`'s shared closing envelope for an inn visit that ends
+/// from the service menu without a completed transaction.
+///
+/// The no-sale row is the same one [`arms_closing_bark_record`] reads for a
+/// visit that bought nothing; only the shop-kind dialog id differs.
+fn inn_service_exit_message(
+    state: &mut crate::PlayState,
+    game_dir: &Path,
+    innkeeper_name: Option<&'static str>,
+) -> String {
+    let roll = state.random_range_u8(0, 3);
+    let record = crate::shoppe_records::shared_shop_bark_record(
+        SHOP_DIALOG_ID_INN,
+        crate::shoppe_records::SharedShopBarkKind::InitialGreeting,
+        roll,
+    );
+    record
+        .and_then(|record_id| render_shared_shoppe_flourish(game_dir, record_id))
+        .map(|line| match innkeeper_name {
+            Some(name) => format!("{line}\nsays {name}."),
+            None => line,
+        })
+        .unwrap_or_default()
+}
+
 fn inn_entry_decline_message(
     state: &mut crate::PlayState,
     game_dir: &Path,

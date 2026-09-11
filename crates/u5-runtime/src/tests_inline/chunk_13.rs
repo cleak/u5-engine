@@ -9771,8 +9771,9 @@ fn inn_main_action_routes_r_l_p_exit_and_discard() {
     assert_eq!(inn_main_action(b'P'), InnMainAction::PickUpCompanion);
     assert_eq!(inn_main_action(b'p'), InnMainAction::PickUpCompanion);
     assert_eq!(inn_main_action(b' '), InnMainAction::Exit);
-    assert_eq!(inn_main_action(0x1B), InnMainAction::Exit);
-    for byte in [b'A', b'B', b'C', b'X', b'Y', b'N', b'\r', 0x00, 0x08, 0xFF] {
+    // §8.B: "Space exits the service menu, while other keys outside L/P/R,
+    // including Escape and Return, silently wait."
+    for byte in [b'A', b'B', b'C', b'X', b'Y', b'N', b'\r', 0x1B, 0x00, 0x08, 0xFF] {
         assert_eq!(
             inn_main_action(byte),
             InnMainAction::Discard,

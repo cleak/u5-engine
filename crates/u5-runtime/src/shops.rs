@@ -1351,7 +1351,10 @@ pub const fn inn_main_action(byte: u8) -> InnMainAction {
         b'R' | b'r' => InnMainAction::Rest,
         b'L' | b'l' => InnMainAction::LeaveCompanion,
         b'P' | b'p' => InnMainAction::PickUpCompanion,
-        b' ' | 0x1B => InnMainAction::Exit,
+        // `shops.md §8.B` "Inn actions": "Space exits the service menu,
+        // while other keys outside L/P/R, including Escape and Return,
+        // silently wait." Escape used to exit here.
+        b' ' => InnMainAction::Exit,
         _ => InnMainAction::Discard,
     }
 }
