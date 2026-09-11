@@ -1210,7 +1210,7 @@ pub const HOLE_UP_NOT_IN_BED_REFUSAL: &str = "Only in bed!";
 pub const ENTER_NOTHING_REFUSAL: &str = "what?";
 /// `cleak/u5-spec#194` capture (town) and `dungeon-mode.md` (dungeon):
 /// the Search result when nothing is found.
-pub const SEARCH_NOTHING_FOUND: &str = "\nThou dost find nothing of note.";
+pub const SEARCH_NOTHING_FOUND: &str = "\nThou dost find\nnothing of note.";
 pub const ITEM_SELECTION_PROMPT: &str = "Item: ";
 /// The cancel result appended to an open selection prompt line.
 pub const SELECTION_CANCELLED_LITERAL: &str = "None!";

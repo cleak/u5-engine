@@ -1124,7 +1124,8 @@
             under_level.cast_spell_resource_gate(0, GREAT_HEAL_SPELL_INDEX, GREAT_HEAL_COST),
             Some(MoveOutcome::Blocked)
         );
-        assert_eq!(under_level.message, "M.P. too low!");
+        // R460: the level gate prints only the shared failure line.
+        assert_eq!(under_level.message, "Failed!");
         assert_eq!(under_level.spell_charges[GREAT_HEAL_SPELL_INDEX], 0);
         assert_eq!(under_level.party[0].mana, 9 - circle);
         assert_eq!(under_level.turn, 1);
@@ -1152,7 +1153,7 @@
             under_mana.cast_spell_resource_gate(0, GREAT_HEAL_SPELL_INDEX, GREAT_HEAL_COST),
             Some(MoveOutcome::Blocked)
         );
-        assert_eq!(under_mana.message, "M.P. too low!");
+        assert_eq!(under_mana.message, "M.P. too low!\nFailed!");
         assert_eq!(under_mana.spell_charges[GREAT_HEAL_SPELL_INDEX], 0);
         assert_eq!(under_mana.party[0].mana, circle - 1);
         assert_eq!(under_mana.turn, 1);

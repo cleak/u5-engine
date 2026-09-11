@@ -581,10 +581,10 @@ pub enum CastGateOutcome {
     NotHere,
     /// Charges-gate refusal — `None mixed!`. No charge spent.
     NoneMixed,
-    /// Mana-gate refusal — `M.P. too low!`. The charge has already been
-    /// consumed; mana is *not* spent.
+    /// Mana-gate refusal — `M.P. too low!` then `Failed!`. The charge has
+    /// already been consumed; mana is *not* spent.
     ManaTooLowChargeOnly,
-    /// Level-gate refusal — `M.P. too low!`. The charge AND the mana have
+    /// Level-gate refusal — `Failed!` only. The charge AND the mana have
     /// both been consumed.
     LevelTooLowChargeAndMana,
 }
@@ -608,17 +608,30 @@ impl CastGateOutcome {
         )
     }
 
-    /// Player-visible message string; multiple outcomes share the
-    /// `M.P. too low!` text per the spec.
+    /// Player-visible message string. `magic.md §7` R460 retracts the
+    /// earlier same-message claim: only the mana gate prints
+    /// `M.P. too low!`, and it is followed by the shared `Failed!` line
+    /// that the level gate prints on its own.
     pub const fn message(self) -> &'static str {
         match self {
             CastGateOutcome::Cast => "",
             CastGateOutcome::NotHere => "Not here!",
             CastGateOutcome::NoneMixed => "None mixed!",
-            CastGateOutcome::ManaTooLowChargeOnly | CastGateOutcome::LevelTooLowChargeAndMana => {
-                "M.P. too low!"
-            }
+            CastGateOutcome::ManaTooLowChargeOnly => "M.P. too low!\nFailed!",
+            CastGateOutcome::LevelTooLowChargeAndMana => "Failed!",
         }
+    }
+
+    /// `magic.md §7` result table: every rejection but `None mixed!`
+    /// plays the failure glissando. R461 retracts audio's earlier claim
+    /// that the no-charge rejection sounds.
+    pub const fn plays_failure_glissando(self) -> bool {
+        matches!(
+            self,
+            CastGateOutcome::NotHere
+                | CastGateOutcome::ManaTooLowChargeOnly
+                | CastGateOutcome::LevelTooLowChargeAndMana
+        )
     }
 }
 

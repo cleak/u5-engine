@@ -2357,6 +2357,11 @@ impl PlayState {
         if outcome.consumed_mana() {
             self.party[caster_index].mana = self.party[caster_index].mana.saturating_sub(circle);
         }
+        if outcome.plays_failure_glissando() {
+            // `magic.md §7` result table: the glissando follows the
+            // rejection text; `None mixed!` is silent.
+            self.emit_sound_effect(crate::audio::SoundEffect::CastFailure);
+        }
         match outcome {
             CastGateOutcome::Cast => None,
             // `magic.md §5` step 3: the scene rejection costs no time. The
