@@ -960,18 +960,40 @@ impl PlayState {
         } else {
             state.load_scheduled_npcs(&npc_slots);
         }
+        // `town-mode.md §13`: "a settlement that hosts a Shadowlord prints
+        // one line naming which [...] That single line is the only in-town
+        // notice, and a settlement hosting none prints nothing."
         if let Some((slot, index)) = state.install_shadowlord_entry_encounter() {
-            let shadowlord = Self::shadowlord_title_for_index(index).unwrap_or("Shadowlord");
-            if !state.message.is_empty() {
-                state.message.push('\n');
+            if let Some(line) = Self::shadowlord_air_line_for_index(index) {
+                if !state.message.is_empty() {
+                    state.message.push('\n');
+                }
+                state.message.push_str(&line);
             }
-            state
-                .message
-                .push_str(&format!("An air of {shadowlord} doth surround thee."));
-            if let Some(slot) = slot {
-                state.message.push_str(&format!(
-                    " Shadowlord actor installed in active-object slot {slot}."
-                ));
+            // The installed actor's slot is an engine internal. It used to be
+            // appended to the notice as a second sentence, which put a line
+            // the original never prints into the message window.
+            let title = Self::shadowlord_title_for_index(index).unwrap_or("Shadowlord");
+            state.diagnostics.push(match slot {
+                Some(slot) => {
+                    format!("{title} resident; actor installed in active-object slot {slot}")
+                }
+                None => format!("{title} resident; actor rejected by the one-at-a-time gate"),
+            });
+        } else if matches!(
+            state.area,
+            Area::Town { scene, .. } if scene.byte == STONEGATE_SCENE_BYTE
+        ) {
+            // `town-mode.md §13`: Stonegate's separate entry presentation
+            // "prints one such line per still-living Shadowlord regardless of
+            // where each is hiding". It is not the resident producer above -
+            // no hideout slot ever holds Stonegate's scene byte - so it runs
+            // on the arm where that producer selected nothing.
+            for line in state.stonegate_entry_presentation_lines() {
+                if !state.message.is_empty() {
+                    state.message.push_str("\n\n");
+                }
+                state.message.push_str(&line);
             }
         }
         // `moons.md §3`, caller census: the town-family floor loader

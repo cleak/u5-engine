@@ -1368,9 +1368,9 @@ fn stonegate_load_appends_entry_presentation_notes() {
     // The entry itself prints nothing (no published scene-entry narration),
     // so the presentation notes are the whole of the slot.
     assert!(state.message.contains("Sceptre prelude"));
-    assert!(state.message.contains("air of Hatred"));
-    assert!(!state.message.contains("air of Falsehood"));
-    assert!(!state.message.contains("air of Cowardice"));
+    assert!(state.message.contains("air of hatred"));
+    assert!(!state.message.contains("air of falsehood"));
+    assert!(!state.message.contains("air of cowardice"));
     let _ = fs::remove_dir_all(dir);
 }
 
@@ -1389,7 +1389,7 @@ fn town_entry_installs_living_shadowlord_for_matching_fresh_scene() {
 
     let state = PlayState::load_town_scene(&dir, scene, options).unwrap();
 
-    assert!(state.message.contains("air of Falsehood"));
+    assert!(state.message.contains("air of falsehood"));
     assert_eq!(state.resident_shadowlord, Some(SHADOWLORD_FALSEHOOD_INDEX));
     let resident = state
         .npcs
@@ -1445,7 +1445,7 @@ fn town_entry_preserving_reentry_records_host_without_duplicate_shadowlord_actor
 
     let state = PlayState::load_town_scene(&dir, scene, options).unwrap();
 
-    assert!(state.message.contains("air of Falsehood"));
+    assert!(state.message.contains("air of falsehood"));
     assert_eq!(state.resident_shadowlord, Some(SHADOWLORD_FALSEHOOD_INDEX));
     assert_eq!(
         state

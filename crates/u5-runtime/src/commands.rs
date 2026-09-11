@@ -616,9 +616,15 @@ pub const READY_BOTH_HANDS_REFUSAL: &str = "Both hands must be free before thou 
 /// vanishes!\n` and closes without `Done`."
 /// `commands.md` §11.1: a recognised Word of Power "immediately prints the
 /// uttered-word result". Measured 2026-09-11
-/// (`word-of-power-audio/dosbox-word`): the original's rows read `A word of
-/// power` / `is uttered`.
-pub const WORD_OF_POWER_UTTERED_MESSAGE: &str = "A word of power is uttered";
+/// (`word-of-power-audio/dosbox-word`): the original's rows read a blank
+/// row, `A word of power`, `is uttered`.
+///
+/// The leading blank row belongs to this result, exactly as §5.2's
+/// no-effect result owns the blank row above its own text (`Yell what?` /
+/// `:WORD` / `[blank]` / `No effect!`). Without it the engine ran the
+/// uttered line straight onto the typed-word row and sat one row high for
+/// the rest of the capture.
+pub const WORD_OF_POWER_UTTERED_MESSAGE: &str = "\nA word of power is uttered";
 /// The tail a recognised Word adds when no adjacent cell qualifies, or the
 /// coordinate does not match. Measured in the same capture: a blank row and
 /// `No effect!`.

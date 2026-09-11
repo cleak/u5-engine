@@ -1522,6 +1522,52 @@ impl PlayState {
         }
     }
 
+    /// The virtue-opposition word as the "air of" line spells it.
+    ///
+    /// `town-mode.md §13` names the three as "an air of falsehood, of hatred,
+    /// or of cowardice", lower case; [`Self::shadowlord_title_for_index`] is
+    /// the capitalised title used elsewhere.
+    pub fn shadowlord_air_word_for_index(index: usize) -> Option<&'static str> {
+        match index {
+            SHADOWLORD_FALSEHOOD_INDEX => Some("falsehood"),
+            SHADOWLORD_HATRED_INDEX => Some("hatred"),
+            SHADOWLORD_COWARDICE_INDEX => Some("cowardice"),
+            _ => None,
+        }
+    }
+
+    /// `town-mode.md §13`: the single in-town notice a settlement hosting a
+    /// Shadowlord prints after its map is drawn, and the per-Shadowlord row
+    /// Stonegate's separate entry presentation prints.
+    ///
+    /// Measured 2026-09-11 (`stonegate-trapdoor-audio/arrival`): the rows read
+    /// `An air of` / `cowardice doth` / `surround thee...`, so the sentence
+    /// ends in a three-dot ellipsis rather than a full stop.
+    pub fn shadowlord_air_line_for_index(index: usize) -> Option<String> {
+        Self::shadowlord_air_word_for_index(index)
+            .map(|word| format!("An air of {word} doth surround thee..."))
+    }
+
+    /// `town-mode.md §13`, Stonegate's separate entry presentation: it
+    /// "prints one such line per still-living Shadowlord regardless of where
+    /// each is hiding", walking the three runtime slots and skipping any
+    /// holding the vanquished marker.
+    ///
+    /// Measured in the same capture with all three alive: the rows arrive as
+    /// cowardice, then hatred, then falsehood - the descending slot order -
+    /// each followed by a blank row. The spec says "walks the three
+    /// Shadowlord runtime slots" without naming a direction, so the order
+    /// here is the measurement.
+    pub fn stonegate_entry_presentation_lines(&self) -> Vec<String> {
+        (0..SHADOWLORD_COUNT)
+            .rev()
+            .filter(|index| {
+                self.shadowlord_hideouts[*index] != crate::clock::SHADOWLORD_HIDEOUT_VANQUISHED
+            })
+            .filter_map(Self::shadowlord_air_line_for_index)
+            .collect()
+    }
+
     pub fn shadowlord_object_tile_for_index(index: usize) -> Option<u8> {
         (index < SHADOWLORD_COUNT).then_some(SHADOWLORD_ACTOR_TILE)
     }
