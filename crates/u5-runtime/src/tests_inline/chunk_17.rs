@@ -721,7 +721,10 @@
         assert_eq!(state.spell_charges[HEAL_SPELL_INDEX], 0);
         assert_eq!(state.party[0].mana, 0);
         assert_eq!(state.turn, 1);
-        assert!(state.message.starts_with("Healed party member 2"));
+        // `magic.md` §5.1: the heal prints the shared `Success!`; the
+        // arithmetic is a diagnostic.
+        assert_eq!(state.message, crate::commands::SPELL_SUCCESS_LINE);
+        assert!(state.diagnostics.iter().any(|d| d.starts_with("Healed party member 2")));
     }
 
     #[test]
@@ -3779,13 +3782,7 @@
         assert_eq!(heal.spell_charges[HEAL_SPELL_INDEX], 0);
         assert_eq!(heal.party[0].mana, 2);
         assert_eq!(heal.turn, 1);
-        assert_eq!(
-            heal.message,
-            format!(
-                "Healed party member 2 for {expected_heal} HP ({}/25).",
-                8 + expected_heal
-            )
-        );
+        assert_eq!(heal.message, crate::commands::SPELL_SUCCESS_LINE);
 
         let mut great_heal = dungeon_state(open_dungeon_record(), 0, 1, 1);
         great_heal.party = heal.party.clone();
@@ -3806,7 +3803,7 @@
         assert_eq!(great_heal.turn, 1);
         assert_eq!(
             great_heal.message,
-            "Great healed party member 2 for 18 HP (22/22)."
+            crate::commands::SPELL_SUCCESS_LINE
         );
 
         let mut resurrect = dungeon_state(open_dungeon_record(), 0, 1, 1);
@@ -3838,7 +3835,7 @@
         assert_eq!(resurrect.spell_charges[RESURRECT_SPELL_INDEX], 0);
         assert_eq!(resurrect.party[0].mana, 0);
         assert_eq!(resurrect.turn, 1);
-        assert_eq!(resurrect.message, "Resurrected party member 2 (1/90).");
+        assert_eq!(resurrect.message, crate::commands::SPELL_SUCCESS_LINE);
     }
 
     #[test]
@@ -3929,7 +3926,8 @@
         assert_eq!(heal.spell_charges[HEAL_SPELL_INDEX], 0);
         assert_eq!(heal.party[0].mana, 0);
         assert_eq!(heal.turn, 1);
-        assert!(heal.message.starts_with("Healed party member 2"));
+        assert_eq!(heal.message, crate::commands::SPELL_SUCCESS_LINE);
+        assert!(heal.diagnostics.iter().any(|d| d.starts_with("Healed party member 2")));
 
         let mut great_heal = heal.clone();
         great_heal.turn = 0;
@@ -3950,7 +3948,7 @@
         assert_eq!(great_heal.turn, 1);
         assert_eq!(
             great_heal.message,
-            "Great healed party member 2 for 30 HP (30/30)."
+            crate::commands::SPELL_SUCCESS_LINE
         );
     }
 
@@ -4023,7 +4021,7 @@
         assert_eq!(state.party[1].mana, 21);
         assert_eq!(state.party[1].level, 4);
         assert_eq!(state.party[1].max_hp, 120);
-        assert_eq!(state.message, "Resurrected party member 2 (1/120).");
+        assert_eq!(state.message, crate::commands::SPELL_SUCCESS_LINE);
     }
 
     #[test]

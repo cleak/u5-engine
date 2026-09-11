@@ -4878,10 +4878,18 @@ impl PlayState {
         let hp = self.party[target_index].hp;
         let max_hp = self.party[target_index].max_hp;
         self.advance_turn();
-        self.message = format!(
+        // `magic.md` §5.1's result table: `Mani`, `Vas Mani` and `In Mani
+        // Corp` are all in the row that prints "`Success!` after the
+        // successful effect", and §5.1's issue-#225 table stresses the shape -
+        // Cure has "no `Cured` or `Poison cured!` line", Create Food "no
+        // created-food or remaining-stock count", Awaken "no result message;
+        // no member-number sentence". This engine printed its own sentence
+        // carrying the member number and the HP arithmetic.
+        self.diagnostics.push(format!(
             "Healed party member {} for {healed} HP ({hp}/{max_hp}).",
             target_index + 1
-        );
+        ));
+        self.message = crate::commands::SPELL_SUCCESS_LINE.to_string();
         MoveOutcome::Cast
     }
 
@@ -4965,10 +4973,18 @@ impl PlayState {
         let healed = hp.saturating_sub(before);
         let max_hp = self.party[target_index].max_hp;
         self.advance_turn();
-        self.message = format!(
+        // `magic.md` §5.1's result table: `Mani`, `Vas Mani` and `In Mani
+        // Corp` are all in the row that prints "`Success!` after the
+        // successful effect", and §5.1's issue-#225 table stresses the shape -
+        // Cure has "no `Cured` or `Poison cured!` line", Create Food "no
+        // created-food or remaining-stock count", Awaken "no result message;
+        // no member-number sentence". This engine printed its own sentence
+        // carrying the member number and the HP arithmetic.
+        self.diagnostics.push(format!(
             "Great healed party member {} for {healed} HP ({hp}/{max_hp}).",
             target_index + 1
-        );
+        ));
+        self.message = crate::commands::SPELL_SUCCESS_LINE.to_string();
         MoveOutcome::Cast
     }
 
@@ -5001,10 +5017,18 @@ impl PlayState {
             .resurrect_party_member_to_hp(target_index, 1)
             .expect("target status checked before spell resurrection");
         self.advance_turn();
-        self.message = format!(
+        // `magic.md` §5.1's result table: `Mani`, `Vas Mani` and `In Mani
+        // Corp` are all in the row that prints "`Success!` after the
+        // successful effect", and §5.1's issue-#225 table stresses the shape -
+        // Cure has "no `Cured` or `Poison cured!` line", Create Food "no
+        // created-food or remaining-stock count", Awaken "no result message;
+        // no member-number sentence". This engine printed its own sentence
+        // carrying the member number and the HP arithmetic.
+        self.diagnostics.push(format!(
             "Resurrected party member {} (1/{max_hp}).",
             target_index + 1
-        );
+        ));
+        self.message = crate::commands::SPELL_SUCCESS_LINE.to_string();
         MoveOutcome::Cast
     }
 
