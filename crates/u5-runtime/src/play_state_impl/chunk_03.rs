@@ -312,6 +312,18 @@ impl PlayState {
                 .active_mix
                 .as_ref()
                 .is_some_and(|session| matches!(session.phase, crate::z_stats::MixPhase::Quantity))
+            // The inn's service question ends `night?" ` - a closing quote and
+            // one space - so `text-output.md` §10.6 keeps the cursor on that
+            // row and no fresh live row is drawn. This engine spent a blank
+            // and a command row beneath it, which put the whole visit two rows
+            // ahead of the original from that point. Measured 2026-09-11
+            // (`nb-inn/yes`, `/no`, `/esc`, reading `offset+2`, `+5`, `+6`).
+            || matches!(
+                self.active_shop,
+                Some(crate::shop_session::ActiveShopSession::Innkeeper(
+                    crate::shop_runtime::InnkeeperState::ServiceMenu { .. }
+                ))
+            )
             // `blackthorn.md §4.1`'s acknowledgement reads a key with the
             // reaction on screen; the cursor sits inline after it.
             || self.active_blackthorn.as_ref().is_some_and(|challenge| {
