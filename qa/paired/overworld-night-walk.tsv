@@ -1,3 +1,11 @@
+# This is a lottery on the encounter probe. `encounters.md` Section 2: "Every
+# turn the overworld mode loop runs its per-turn block", rolling against a
+# tile-derived threshold and, on success, writing "one new monster into the
+# active-object table on a tile near the party". A long night walk is that many
+# rolls and the two sides never share a seed - measured 2026-09-11, where the
+# original had met a monster and was showing its combat actor banner while this
+# engine was still walking. A run whose beats disagree that way has measured
+# the probe and must be re-run.
 # Do outdoor creatures act on a party that is walking?
 #
 # `encounters.md §2.1` runs the encounter probe every overworld turn, and

@@ -1658,7 +1658,7 @@
         // §5 names explicitly.
         assert_eq!(
             state.message,
-            "\nThou dost hold above thee the evil Shard of Falsehood\nNo effect!"
+            "\nThou dost hold above thee the evil Shard of Falsehood...\n\nNo effect!\n"
         );
     }
 
@@ -1671,17 +1671,17 @@
             (
                 "Falsehood",
                 SPECIAL_ITEM_SHARD_FALSEHOOD_INDEX,
-                "Thou dost hold above thee the evil Shard of Falsehood\nNo effect!",
+                "Thou dost hold above thee the evil Shard of Falsehood...\n\nNo effect!\n",
             ),
             (
                 "Shard Hatred",
                 SPECIAL_ITEM_SHARD_HATRED_INDEX,
-                "Thou dost hold above thee the evil Shard of Hatred\nNo effect!",
+                "Thou dost hold above thee the evil Shard of Hatred...\n\nNo effect!\n",
             ),
             (
                 "CW",
                 SPECIAL_ITEM_SHARD_COWARDICE_INDEX,
-                "Thou dost hold above thee the evil Shard of Cowardice\nNo effect!",
+                "Thou dost hold above thee the evil Shard of Cowardice...\n\nNo effect!\n",
             ),
         ];
 
@@ -1766,7 +1766,7 @@
         assert_eq!(vanquished.special_items[SPECIAL_ITEM_SHARD_COWARDICE_INDEX], 1);
         assert_eq!(
             vanquished.message,
-            "Thou dost hold above thee the evil Shard of Cowardice\nThou dost cast it into the Flame of Courage!"
+            "Thou dost hold above thee the evil Shard of Cowardice...\n\n...and cast it into the Flame of Courage!\n"
         );
         assert_eq!(vanquished.turn, 0);
     }
@@ -1806,7 +1806,7 @@
         assert_eq!(state.turn, 1);
         assert_eq!(
             state.message,
-            "Thou dost hold above thee the evil Shard of Falsehood\nThou dost cast it into the Flame of Truth!\nFAULINEI is vanquished! Cleared 1 encounter(s)."
+            "Thou dost hold above thee the evil Shard of Falsehood...\n\n...and cast it into the Flame of Truth!\n\nFAULINEI is vanquished! Cleared 1 encounter(s)."
         );
     }
 
@@ -1822,7 +1822,7 @@
                 15,
                 9,
                 EternalFlame::Truth,
-                "Thou dost hold above thee the evil Shard of Falsehood\nThou dost cast it into the Flame of Truth!\nFAULINEI is vanquished! Cleared 1 encounter(s).",
+                "Thou dost hold above thee the evil Shard of Falsehood...\n\n...and cast it into the Flame of Truth!\n\nFAULINEI is vanquished! Cleared 1 encounter(s).",
             ),
             (
                 SHADOWLORD_HATRED_INDEX,
@@ -1832,7 +1832,7 @@
                 15,
                 3,
                 EternalFlame::Love,
-                "Thou dost hold above thee the evil Shard of Hatred\nThou dost cast it into the Flame of Love!\nASTAROTH is vanquished! Cleared 1 encounter(s).",
+                "Thou dost hold above thee the evil Shard of Hatred...\n\n...and cast it into the Flame of Love!\n\nASTAROTH is vanquished! Cleared 1 encounter(s).",
             ),
             (
                 SHADOWLORD_COWARDICE_INDEX,
@@ -1842,7 +1842,7 @@
                 15,
                 16,
                 EternalFlame::Courage,
-                "Thou dost hold above thee the evil Shard of Cowardice\nThou dost cast it into the Flame of Courage!\nNOSFENTOR is vanquished! Cleared 1 encounter(s).",
+                "Thou dost hold above thee the evil Shard of Cowardice...\n\n...and cast it into the Flame of Courage!\n\nNOSFENTOR is vanquished! Cleared 1 encounter(s).",
             ),
         ];
 
@@ -1964,7 +1964,7 @@
         // unconditional heading and aloft line.
         assert_eq!(
             state.message,
-            "Thou dost hold above thee the evil Shard of Falsehood\nNo effect!"
+            "Thou dost hold above thee the evil Shard of Falsehood...\n\nNo effect!\n"
         );
     }
 
@@ -1996,7 +1996,7 @@
         // divergence §5 names explicitly.
         assert_eq!(
             state.message,
-            "Thou dost hold above thee the evil Shard of Falsehood\nThou dost cast it into the Flame of Truth!"
+            "Thou dost hold above thee the evil Shard of Falsehood...\n\n...and cast it into the Flame of Truth!\n"
         );
     }
 
@@ -2032,7 +2032,7 @@
         // unconditional heading and aloft line.
         assert_eq!(
             state.message,
-            "Thou dost hold above thee the evil Shard of Falsehood\nNo effect!"
+            "Thou dost hold above thee the evil Shard of Falsehood...\n\nNo effect!\n"
         );
     }
 
@@ -2069,7 +2069,7 @@
         // publishes exactly one refusal result here.
         assert_eq!(
             state.message,
-            "Thou dost hold above thee the evil Shard of Falsehood\nNo effect!"
+            "Thou dost hold above thee the evil Shard of Falsehood...\n\nNo effect!\n"
         );
     }
 

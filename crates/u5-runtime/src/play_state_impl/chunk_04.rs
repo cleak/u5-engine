@@ -1167,7 +1167,13 @@ impl PlayState {
         // shard's own virtue word.
         let virtue = Self::shadowlord_title_for_index(index).unwrap_or("Shadowlord");
         let _ = virtue;
-        self.message = format!("{USE_SHARD_ALOFT_PREFIX}{name}");
+        // `inventory.md` §7.1: "The shard continuation is `Thou dost hold
+        // above thee the evil Shard of_` followed by `Falsehood...`,
+        // `Hatred...` or `Cowardice...`" - the shard's own word carries an
+        // ellipsis. Measured 2026-09-11 (`use-specials/sceptre`): the
+        // original's row reads `Falsehood...` where this engine read
+        // `Falsehood`.
+        self.message = format!("{USE_SHARD_ALOFT_PREFIX}{name}...");
 
         // Phase 3: the position gate is the only one that speaks. The
         // published destruction rows (Lycaeum floor 2 (15,9); Empath Abbey
@@ -1182,14 +1188,20 @@ impl PlayState {
         };
         let on_position = flame_entry.is_some_and(|entry| entry.flame == required_flame);
         if !on_position {
-            self.message.push_str("\nNo effect!");
+            // §7.1: "A wrong destruction position adds `\n\nNo effect!\n`" -
+            // two line feeds, so a blank row stands between the aloft line and
+            // the refusal. This engine spent one.
+            self.message.push_str("\n\nNo effect!\n");
             return Ok(MoveOutcome::Blocked);
         }
 
         // Phase 4: the cast-into-the-flame line, completed by the opposed
         // principle's word, printed *before* the remaining two gates.
+        // §7.1: "At the matching position, the next text is
+        // `\n\n...and cast it into the Flame of_` followed by `Truth!\n`,
+        // `Love!\n` or `Courage!\n`."
         self.message.push_str(&format!(
-            "\nThou dost cast it into the {}!",
+            "\n\n...and cast it into the {}!\n",
             required_flame.label()
         ));
 
