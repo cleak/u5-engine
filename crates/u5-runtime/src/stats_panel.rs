@@ -496,6 +496,14 @@ pub struct PanelPickerRow {
     /// The M-Mix reagent list does use it, for
     /// [`PANEL_PICKER_SELECTOR_SELECTED`].
     pub selector: u8,
+    /// Whether [`Self::selector`] is a `RUNES.CH` code that the painter must
+    /// draw from the runic font.
+    ///
+    /// `inventory.md` §4.5 sets this for R-Ready's readied-item glyphs. It is
+    /// not implied by the byte value: the M-Mix toggled-reagent selector
+    /// `0x0F` is below the same threshold and the original draws it from the
+    /// *text* font (measured 2026-09-10, `magic-mix/reagent-toggled`).
+    pub selector_runic: bool,
     pub name: String,
     /// `04 Sulfur Ash`, not `_4 Sulfur Ash`: the M-Mix reagent rows pad
     /// their count with a leading zero where the U-Use picker of
@@ -511,11 +519,14 @@ impl PanelPickerRow {
         // are drawn from the **runic** font rather than the text font; the
         // renderer switches fonts for that one cell and switches back." The
         // painter performs that switch when it sees a private-use character,
-        // so a sub-`0x20` selector has to be wrapped rather than cast
-        // straight to a `char`. Measured 2026-09-10 (`ready-slots/twohander`):
-        // the original's readied-item cell is runic `0x0B` and this engine
-        // emitted the same code in the *text* font.
-        let selector = if self.selector < 0x20 {
+        // so such a selector must be wrapped rather than cast straight to a
+        // `char`. Measured 2026-09-10 (`ready-slots/twohander`): the
+        // original's readied-item cell decodes as runic `0x0B`.
+        //
+        // It is not a blanket rule on the byte value - `magic-mix`'s toggled
+        // reagent selector `0x0F` is below the same threshold and the original
+        // draws it from the text font - so the row carries the flag.
+        let selector = if self.selector_runic {
             panel_runic_char(self.selector)
         } else {
             self.selector as char
@@ -768,6 +779,7 @@ pub fn active_panel_picker(state: &PlayState) -> Option<PanelPickerView> {
             .map(|row| PanelPickerRow {
                 quantity: row.quantity,
                 selector: PANEL_PICKER_SELECTOR_BLANK,
+                selector_runic: false,
                 // `inventory.md §4.5` (`RETRACTIONS.md` R403): the marker
                 // decorates the *name* portion, "after the independent
                 // quantity/selector cells".
@@ -814,6 +826,8 @@ pub fn active_panel_picker(state: &PlayState) -> Option<PanelPickerView> {
                     .then(|| crate::equipment::ready_picker_selector_glyph(item_id))
                     .flatten()
                     .unwrap_or(PANEL_PICKER_SELECTOR_BLANK),
+                // §4.5's readied-item glyphs are `RUNES.CH` codes.
+                selector_runic: true,
                 zero_padded: false,
                 name: crate::EQUIPMENT_SHORT_LABELS
                     .get(item_id)
@@ -843,6 +857,9 @@ pub fn active_panel_picker(state: &PlayState) -> Option<PanelPickerView> {
                 } else {
                     PANEL_PICKER_SELECTOR_BLANK
                 },
+                // Measured: the original draws the toggled-reagent selector
+                // from the text font, not `RUNES.CH`.
+                selector_runic: false,
                 name,
                 zero_padded: true,
             })
