@@ -779,11 +779,28 @@ pub fn active_panel_picker(state: &PlayState) -> Option<PanelPickerView> {
             return None;
         }
         let selected = state.ready_picker_cursor(session);
+        let equipped = state
+            .party_equipment
+            .get(party_index)
+            .copied()
+            .unwrap_or_default();
         let rows = visible
             .into_iter()
             .map(|item_id| PanelPickerRow {
                 quantity: Some(state.equipment_stock[item_id]),
-                selector: PANEL_PICKER_SELECTOR_BLANK,
+                // `inventory.md` §4.5: "If the selected character has the
+                // row's item in any equipment slot, use the following
+                // `RUNES.CH` glyph; otherwise use a space. The glyph does not
+                // depend on which hand or slot holds the item". This engine
+                // blanked every row's selector. Measured 2026-09-10
+                // (`ready-slots/twohander`): the original's readied Long Sword
+                // carries glyph `0x0B`.
+                selector: equipped
+                    .iter()
+                    .any(|slot| usize::from(*slot) == item_id)
+                    .then(|| crate::equipment::ready_picker_selector_glyph(item_id))
+                    .flatten()
+                    .unwrap_or(PANEL_PICKER_SELECTOR_BLANK),
                 zero_padded: false,
                 name: crate::EQUIPMENT_SHORT_LABELS
                     .get(item_id)

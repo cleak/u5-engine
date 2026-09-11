@@ -999,3 +999,86 @@ mod sword_of_chaos_tests {
         }
     }
 }
+
+/// `inventory.md` §4.5, "R-Ready's readied selector is item-specific": "If the
+/// selected character has the row's item in any equipment slot, use the
+/// following `RUNES.CH` glyph; otherwise use a space. The glyph does not
+/// depend on which hand or slot holds the item, and is not calculated from its
+/// equipment-class tag."
+///
+/// Measured 2026-09-10 (`ready-slots/twohander`): the original's readied Long
+/// Sword row carries glyph `0x0B` in the selector cell where this engine
+/// printed a space for every row.
+///
+/// The two ammunition entries carry an assigned glyph in the published table,
+/// but "ordinary R-Ready cannot put ammunition into a readied slot; their
+/// normal selector is therefore a space", so they are absent here.
+pub const fn ready_picker_selector_glyph(item_id: usize) -> Option<u8> {
+    Some(match item_id {
+        0..=3 => 0x01,                  // the four helms
+        4..=8 => 0x02,                  // the five shields
+        9..=15 => 0x03,                 // the seven body armours
+        16 | 20 => 0x04,                // Dagger; Main Gauche
+        17 => 0x05,                     // Sling
+        18 => 0x06,                     // Club
+        19 => 0x07,                     // Flaming Oil
+        21 => 0x08,                     // Spear
+        22 => 0x09,                     // Throwing Axe
+        23 | 30 => 0x0B,                // Short Sword; Long Sword
+        24 => 0x0C,                     // Mace
+        25 => 0x1E,                     // Morning Star
+        26 => 0x0F,                     // Bow
+        28 => 0x10,                     // Crossbow
+        31 => 0x11,                     // Two-handed Hammer
+        32 => 0x12,                     // Two-handed Axe
+        33 => 0x13,                     // Two-handed Sword
+        34 => 0x14,                     // Halberd
+        35 | 37 | 39 | 40 | 41 => 0x15, // Chaos/Silver/Glass/Jeweled/Mystic Swords
+        36 => 0x16,                     // Magic Bow
+        38 => 0x17,                     // Magic Axe
+        42..=44 => 0x18,                // the three magic rings
+        45 => 0x19,                     // Amulet of Turning
+        46 => 0x1A,                     // Spiked Collar
+        47 => 0x1B,                     // Ankh
+        _ => return None,
+    })
+}
+
+#[cfg(test)]
+mod ready_selector_tests {
+    use super::ready_picker_selector_glyph;
+
+    /// `inventory.md` §4.5's published R-Ready selector table.
+    #[test]
+    fn the_readied_selector_glyphs_are_the_published_table() {
+        // Group rows.
+        for helm in 0..=3 {
+            assert_eq!(ready_picker_selector_glyph(helm), Some(0x01), "helm {helm}");
+        }
+        for shield in 4..=8 {
+            assert_eq!(ready_picker_selector_glyph(shield), Some(0x02));
+        }
+        for armour in 9..=15 {
+            assert_eq!(ready_picker_selector_glyph(armour), Some(0x03));
+        }
+        for ring in 42..=44 {
+            assert_eq!(ready_picker_selector_glyph(ring), Some(0x18));
+        }
+        for sword in [35, 37, 39, 40, 41] {
+            assert_eq!(ready_picker_selector_glyph(sword), Some(0x15));
+        }
+        // The paired-with rows.
+        assert_eq!(ready_picker_selector_glyph(16), Some(0x04));
+        assert_eq!(ready_picker_selector_glyph(20), Some(0x04));
+        assert_eq!(ready_picker_selector_glyph(23), Some(0x0B));
+        // Measured 2026-09-10 (`ready-slots/twohander`).
+        assert_eq!(ready_picker_selector_glyph(30), Some(0x0B));
+        // Morning Star is out of sequence in the published table.
+        assert_eq!(ready_picker_selector_glyph(25), Some(0x1E));
+        assert_eq!(ready_picker_selector_glyph(47), Some(0x1B));
+        // "ordinary R-Ready cannot put ammunition into a readied slot; their
+        // normal selector is therefore a space."
+        assert_eq!(ready_picker_selector_glyph(27), None, "arrows");
+        assert_eq!(ready_picker_selector_glyph(29), None, "quarrels");
+    }
+}
