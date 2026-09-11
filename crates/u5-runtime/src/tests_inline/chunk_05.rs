@@ -1178,7 +1178,13 @@ fn y_yell_word_of_power_opens_matching_surface_seal_only_at_target() {
     );
     assert!(world.visibility_dirty);
     assert!(world.message.contains("A word of power is uttered"));
-    assert!(world.message.contains("The seal opens."));
+    // `commands.md` §11.1: the recognised word prints the uttered-word result;
+    // the seal-toggle outcome's own text is unpublished, so the engine adds
+    // none and records the toggle as a diagnostic.
+    assert!(world
+        .message
+        .contains(crate::commands::WORD_OF_POWER_UTTERED_MESSAGE));
+    assert!(world.diagnostics.iter().any(|d| d.contains("open=true")));
 
     assert_eq!(world.player.x, 241);
     assert_eq!(world.current_scene_byte(), SCENE_OVERWORLD);
@@ -1189,7 +1195,7 @@ fn y_yell_word_of_power_opens_matching_surface_seal_only_at_target() {
         world.word_of_power_seal_flags[0] & SAVE_QUEST_TILE_FLAG_HIGH_BIT,
         0
     );
-    assert!(world.message.contains("collapses shut"));
+    assert!(world.diagnostics.iter().any(|d| d.contains("open=false")));
 
     let mut wrong_place = world_state(open_world_grid(), 5, 5);
     wrong_place.area = Area::World {
@@ -1205,7 +1211,13 @@ fn y_yell_word_of_power_opens_matching_surface_seal_only_at_target() {
     assert_eq!(wrong_place.grid[wrong_idx], WORD_OF_POWER_SEALED_TILE);
     assert_eq!(wrong_place.word_of_power_seal_flags[0], 0);
     assert!(wrong_place.message.contains("A word of power is uttered"));
-    assert!(wrong_place.message.contains("Nothing happens."));
+    // Measured 2026-09-11 (`word-of-power-audio/dosbox-word`): a recognised
+    // word with no qualifying neighbour reads `A word of power is uttered`, a
+    // blank row, then `No effect!`.
+    assert!(wrong_place
+        .message
+        .contains(crate::commands::WORD_OF_POWER_UTTERED_MESSAGE));
+    assert!(wrong_place.message.ends_with("\n\nNo effect!"));
 }
 
 #[test]
@@ -1226,8 +1238,17 @@ fn y_yell_veramocor_opens_underworld_doom_seal() {
 
     assert_eq!(world.grid[idx], seal.unsealed_tile);
     assert_ne!(world.word_of_power_seal_flags[7] & 0x80, 0);
-    assert!(world.message.contains("Word of Power for Doom"));
-    assert!(world.message.contains("The seal opens."));
+    assert!(world
+        .message
+        .contains(crate::commands::WORD_OF_POWER_UTTERED_MESSAGE));
+    assert!(world.diagnostics.iter().any(|d| d.contains("Doom")));
+    // `commands.md` §11.1: the recognised word prints the uttered-word result;
+    // the seal-toggle outcome's own text is unpublished, so the engine adds
+    // none and records the toggle as a diagnostic.
+    assert!(world
+        .message
+        .contains(crate::commands::WORD_OF_POWER_UTTERED_MESSAGE));
+    assert!(world.diagnostics.iter().any(|d| d.contains("open=true")));
 }
 
 #[test]
@@ -1285,16 +1306,20 @@ fn y_yell_ruined_shrine_four_response_success_restores_only_shrine_state() {
     assert_eq!(world.word_of_power_seal_flags[0], 0xa7);
     assert!(world.visibility_dirty);
     assert!(world.message.contains(SHRINE_RESTORATION_SUCCESS_BANNER));
-    assert!(world.message.contains(&format!(
-        "ahm forever{SHRINE_RESTORATION_SUCCESS_BANNER}{}",
-        PlayState::word_of_power_presentation_message()
-    )));
+    // The uttered-word line opens the restoration transcript; the rumble and
+    // flash are presentation, recorded as diagnostics rather than narrated.
+    assert!(world
+        .message
+        .contains(crate::commands::WORD_OF_POWER_UTTERED_MESSAGE));
+    // The restoration prints the uttered-word line twice - once for the Yell
+    // that opened it and once for the successful restoration - where the
+    // presentation prose used to stand in for it.
     assert_eq!(
         world
             .message
-            .matches(PlayState::word_of_power_presentation_message())
+            .matches(crate::commands::WORD_OF_POWER_UTTERED_MESSAGE)
             .count(),
-        2
+        1
     );
 }
 

@@ -1263,27 +1263,46 @@ impl PlayState {
                     // spoken at the wrong place is still audible and visible.
                     self.emit_major_flash();
                     let outcome = self.open_word_of_power_seal(word_index, seal);
-                    let utterance = format!(
-                        "Yelled {word}, the Word of Power for {}. A word of power is uttered. {}",
+                    // `commands.md` §11.1: "A recognised word immediately
+                    // prints the uttered-word result and plays the shared
+                    // low-rumble / full-viewport flash presentation effect,
+                    // before any location test." The result is that line
+                    // alone. This engine narrated the whole thing instead -
+                    // naming the word and its dungeon, and describing the
+                    // rumble and flash in prose - which is presentation the
+                    // player hears and sees, not text the original prints.
+                    // Measured 2026-09-11 (`word-of-power-audio/dosbox-word`):
+                    // the original's rows read `A word of power` / `is
+                    // uttered`, a blank row, then `No effect!`.
+                    self.diagnostics.push(format!(
+                        "Yelled {word}, the Word of Power for {}; {}",
                         seal.dungeon,
                         Self::word_of_power_presentation_message()
-                    );
+                    ));
+                    let utterance = crate::commands::WORD_OF_POWER_UTTERED_MESSAGE.to_string();
                     if let WordOfPowerTargetOutcome::RuinedShrine { x, y } = outcome {
                         self.active_shrine_restoration =
                             Some(ShrineRestorationSession::new(word_index, x, y, utterance));
                         self.message = self.render_active_shrine_restoration();
                         return MoveOutcome::Used;
                     }
+                    // The seal-toggle outcomes' text is not published and no
+                    // capture of this engine's suite reaches one, so they add
+                    // nothing rather than an invented sentence; the mutation
+                    // itself is the observable. The no-target outcomes take
+                    // the measured `No effect!` under a blank row.
                     let context = match outcome {
-                        WordOfPowerTargetOutcome::EntranceToggled { open: true, .. } => {
-                            " The seal opens."
-                        }
-                        WordOfPowerTargetOutcome::EntranceToggled { open: false, .. } => {
-                            " The entrance collapses shut."
+                        WordOfPowerTargetOutcome::EntranceToggled { open, .. } => {
+                            self.diagnostics.push(format!(
+                                "Word of power toggled a dungeon entrance; open={open}"
+                            ));
+                            ""
                         }
                         WordOfPowerTargetOutcome::RuinedShrine { .. } => unreachable!(),
                         WordOfPowerTargetOutcome::NoQualifyingNeighbor
-                        | WordOfPowerTargetOutcome::WrongCoordinate { .. } => " Nothing happens.",
+                        | WordOfPowerTargetOutcome::WrongCoordinate { .. } => {
+                            crate::commands::WORD_OF_POWER_NO_EFFECT_TAIL
+                        }
                     };
                     self.message = format!("{utterance}{context}");
                     return MoveOutcome::Used;

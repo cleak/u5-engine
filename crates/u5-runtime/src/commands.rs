@@ -614,6 +614,16 @@ pub const READY_BOTH_HANDS_REFUSAL: &str = "Both hands must be free before thou 
 /// reach this printer.
 /// `inventory.md` §5.2: "The ring vanish instead prints `\n\nRing
 /// vanishes!\n` and closes without `Done`."
+/// `commands.md` §11.1: a recognised Word of Power "immediately prints the
+/// uttered-word result". Measured 2026-09-11
+/// (`word-of-power-audio/dosbox-word`): the original's rows read `A word of
+/// power` / `is uttered`.
+pub const WORD_OF_POWER_UTTERED_MESSAGE: &str = "A word of power is uttered";
+/// The tail a recognised Word adds when no adjacent cell qualifies, or the
+/// coordinate does not match. Measured in the same capture: a blank row and
+/// `No effect!`.
+pub const WORD_OF_POWER_NO_EFFECT_TAIL: &str = "\n\nNo effect!";
+
 pub const READY_RING_VANISHES_MESSAGE: &str = "\n\nRing vanishes!\n";
 
 pub const READY_EMPTY_HANDED_REFUSAL: &str = "Thou art empty-\nhanded!";
