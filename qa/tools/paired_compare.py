@@ -641,7 +641,7 @@ def compare_cached(artifact: pathlib.Path, cache: dict) -> tuple:
 
 
 # Bump when a classifier change would alter a cached verdict.
-CACHE_VERSION = 18
+CACHE_VERSION = 19
 
 
 # Some scenarios are explicitly a lottery: their own headers say so. The night
@@ -666,8 +666,23 @@ def compare(artifact: pathlib.Path) -> tuple[int, int, int, int, int]:
     record = json.loads((artifact / "record.json").read_text())
     scenario = record.get("scenario", artifact.name)
     same = differ = skipped = idle = panel = 0
+    labels = {capture.get("label") for capture in record.get("captures", [])}
     for capture in record.get("captures", []):
         label = capture.get("label")
+        # Staggered A/B beats. The four audio scenarios drive one side, shoot
+        # it, then drive the other side and shoot again, so the two windows
+        # are deliberately out of step at the first shot of each pair. Only
+        # the second shot has both sides acted, and it is the one that
+        # carries the comparison; the first is engine-only by construction.
+        # `engine-<x>` paired with a `dosbox-<x>` in the same run is that
+        # first shot.
+        if (
+            isinstance(label, str)
+            and label.startswith("engine-")
+            and f"dosbox-{label[len('engine-'):]}" in labels
+        ):
+            skipped += 1
+            continue
         stock = artifact / f"dosbox-{label}.png"
         engine = artifact / f"engine-{label}.png"
         if not stock.exists() or not engine.exists():
