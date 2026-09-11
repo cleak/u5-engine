@@ -1017,14 +1017,27 @@ fn handle_active_shop_key_input(
                         None => INN_SERVICE_QUESTION.to_string(),
                     }
                 }
+                // `shops.md` §8's entry table gives the non-arms kinds' `N` or
+                // Space as "prints the resident refusal and exits". The inn
+                // declines through its own `SHOPPE.DAT` row - records
+                // `178..181`, the four `Then thou hast come to the wrong
+                // place.` / `Well, we can't help thee, then.` / `Perhaps
+                // another time...` / `Hmm. Well, don't bother me then.`
+                // responses - wrapped in the ordinary `says $.` attribution.
+                //
+                // This engine exited silently, so a declined inn visit
+                // printed nothing at all. Measured 2026-09-11
+                // (`shop-inn-after-entry/after-space`), where the original
+                // answers `No` and then `"Well, we can't help thee, then."`
+                // over `says Donya.`
                 (InnkeeperState::Greeting { .. }, _, true, _) => {
                     *s = InnkeeperState::Exited;
-                    String::new()
+                    inn_entry_decline_message(state, game_dir, innkeeper_name)
                 }
                 (InnkeeperState::Greeting { inn }, _, _, _) => {
                     if matches!(key_byte, b' ' | b'\r' | b'\n' | 0x1b) {
                         *s = InnkeeperState::Exited;
-                        String::new()
+                        inn_entry_decline_message(state, game_dir, innkeeper_name)
                     } else {
                         // "Other initial keys leave the existing greeting
                         // visible and re-poll", without redrawing it.
@@ -3398,6 +3411,32 @@ fn tavern_accepted_menu_letter(
         .flatten()
         .any(|letter| letter.to_ascii_uppercase() == upper)
         .then_some(upper)
+}
+
+/// The inn's decline response, drawn from its own `SHOPPE.DAT` row.
+///
+/// `shops.md` §8's entry table gives the non-arms kinds' `N` or Space as
+/// "prints the resident refusal and exits". The inn's row is records
+/// `178..181` under a uniform `0..3` draw, the same shape every other shared
+/// row takes, and the result carries the ordinary `says $.` attribution.
+fn inn_entry_decline_message(
+    state: &mut crate::PlayState,
+    game_dir: &Path,
+    innkeeper_name: Option<&'static str>,
+) -> String {
+    let roll = state.random_range_u8(0, 3);
+    let record = crate::shoppe_records::shared_shop_bark_record(
+        SHOP_DIALOG_ID_INN,
+        crate::shoppe_records::SharedShopBarkKind::InitialGreeting,
+        roll,
+    );
+    record
+        .and_then(|record_id| render_shared_shoppe_flourish(game_dir, record_id))
+        .map(|line| match innkeeper_name {
+            Some(name) => format!("{line}\nsays {name}."),
+            None => line,
+        })
+        .unwrap_or_default()
 }
 
 fn format_tavern_outcome_with_shoppe(
