@@ -3368,13 +3368,23 @@ impl PlayState {
                 }
                 let outcome_message = self.message.clone();
                 self.normalize_ready_cursor(&mut session);
-                // Measured: the reopened `Item: ` prompt opens its own
-                // block under the handler's line, so a blank row stands
-                // between them.
-                self.message = format!(
-                    "{outcome_message}\n\n{}",
-                    self.render_ready_session(&session)
-                );
+                // `inventory.md` §5.2: a voiced refusal prints "two line
+                // feeds, the listed message, then two line feeds and
+                // `Item:_`" - but an "ordinary successful equip and unequip
+                // print **no result message**, no item name echo and **no
+                // fresh `Item:_` prompt**. The picker remains active."
+                //
+                // This engine appended the prompt on every outcome, so a
+                // successful ready logged an `Item:` row the original does
+                // not, and the window ran a row ahead from there. Measured
+                // 2026-09-10 (`hut-ready-picker/shield`), where the original
+                // shows one `Item:` per cycle.
+                if !outcome_message.is_empty() {
+                    self.message = format!(
+                        "{outcome_message}\n\n{}",
+                        self.render_ready_session(&session)
+                    );
+                }
                 self.active_ready = Some(session);
             }
             // An unrecognised key leaves the window alone. `inventory.md`
@@ -4124,11 +4134,18 @@ impl PlayState {
             self.equipment_stock[item_id] = self.equipment_stock[item_id]
                 .saturating_add(1)
                 .min(EQUIPMENT_STOCK_CAP);
-            self.message = format!(
+            // `inventory.md` §5.2: "Ordinary successful equip and unequip
+            // print **no result message**, no item name echo and no fresh
+            // `Item:_` prompt. The picker remains active." The sentence this
+            // engine printed was its own; it goes to the diagnostics channel
+            // the acceptance suites read, which exists so internal
+            // identifiers stay out of the message window.
+            self.diagnostics.push(format!(
                 "Unequipped {name} from party member {}; stock is {}.",
                 request.party_index + 1,
                 self.equipment_stock[item_id]
-            );
+            ));
+            self.message.clear();
             if self.combat_active
                 && item_id == EQUIPMENT_ID_RING_INVISIBILITY
                 && request.party_index < COMBAT_PARTY_ACTOR_SLOTS
@@ -4289,10 +4306,13 @@ impl PlayState {
             && self.ready_ring_vanish_roll(request.party_index, item_id) == 0
         {
             self.party_equipment[request.party_index][slot] = EQUIPMENT_EMPTY;
-            self.message = format!(
+            // `inventory.md` §5.2: "The ring vanish instead prints
+            // `\n\nRing vanishes!\n` and closes without `Done`."
+            self.diagnostics.push(format!(
                 "Readied {name} for party member {}, but it vanished.",
                 request.party_index + 1
-            );
+            ));
+            self.message = crate::commands::READY_RING_VANISHES_MESSAGE.to_string();
             // `audio.md §8.1` Ready/equip path, in its published order:
             // "print `Ring vanishes!`, destroy the item, then play the
             // 40-update action snap". The terrain-combat-entry path shares the
@@ -4302,12 +4322,14 @@ impl PlayState {
             // cancelled-confirmation clause is withdrawn (`RETRACTIONS.md`).
             self.emit_sound_effect(SoundEffect::ActionSnap);
         } else {
-            self.message = format!(
+            // §5.2, as above: an ordinary successful equip prints nothing.
+            self.diagnostics.push(format!(
                 "Readied {name} for party member {} in {}; stock is {}.",
                 request.party_index + 1,
                 slot_name(slot),
                 self.equipment_stock[item_id]
-            );
+            ));
+            self.message.clear();
         }
         MoveOutcome::Used
     }

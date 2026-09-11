@@ -2836,14 +2836,18 @@
         assert_eq!(state.equipment_stock[EQUIPMENT_ID_BOW], 0);
         assert_eq!(state.turn, 1);
         assert!(state.active_ready.is_some());
-        assert!(state.message.contains("Readied Bow"));
+        // `inventory.md` §5.2: an ordinary successful equip prints no result
+        // message. The detail moved to the diagnostics channel.
+        assert!(state.message.is_empty());
+        assert!(state.diagnostics.iter().any(|d| d.contains("Readied Bow")));
         assert!(picker_row_names(&state).iter().any(|name| name.contains("Bow")));
 
         handle_play_key_input(&mut state, '\n', "", Path::new("")).unwrap();
         assert_eq!(state.party_equipment[0][EQUIP_SLOT_WEAPON], EQUIPMENT_EMPTY);
         assert_eq!(state.equipment_stock[EQUIPMENT_ID_BOW], 1);
         assert_eq!(state.turn, 1);
-        assert!(state.message.contains("Unequipped Bow"));
+        assert!(state.message.is_empty());
+        assert!(state.diagnostics.iter().any(|d| d.contains("Unequipped Bow")));
 
         handle_play_key_input(&mut state, '\u{1b}', "", Path::new("")).unwrap();
         assert!(state.active_ready.is_none());
@@ -3049,7 +3053,9 @@
         assert!(state.active_ready.is_none());
         assert_eq!(state.equipment_stock[EQUIPMENT_ID_RING_INVISIBILITY], 0);
         assert_eq!(state.party_equipment[0][EQUIP_SLOT_RING], EQUIPMENT_EMPTY);
-        assert!(state.message.contains("vanished"));
+        // §5.2: "The ring vanish instead prints `\n\nRing vanishes!\n`".
+        assert!(state.message.contains("Ring vanishes!"));
+        assert!(state.diagnostics.iter().any(|d| d.contains("vanished")));
         assert!(!state.message.contains(READY_PICKER_ESCAPE_MESSAGE));
         assert_eq!(state.turn, 6);
     }
@@ -3116,10 +3122,11 @@
         assert!(!state.combat_actors[0].is_phase_suppressed());
         assert_eq!(state.active_objects[0].tile, 0x5c);
         assert!(state.visibility_dirty);
-        assert_eq!(
-            state.message,
-            "Unequipped Ring of Invisibility from party member 1; stock is 1."
-        );
+        // `inventory.md` §5.2: a successful unequip prints no result
+        // message; the detail is a diagnostic.
+        assert!(state.message.is_empty());
+        assert!(state.diagnostics.iter().any(|d| d
+            == "Unequipped Ring of Invisibility from party member 1; stock is 1."));
     }
 
     #[test]
@@ -4982,3 +4989,32 @@
         }
     }
 
+
+#[cfg(test)]
+mod ready_scenario_probe {
+    use crate::test_fixtures::*;
+    use crate::*;
+    use std::path::Path;
+
+    /// Diagnostic: replay `hut-ready-picker`'s key sequence and print every
+    /// logged row, to locate the doubled `Item:` the paired capture shows.
+    #[test]
+    #[ignore]
+    fn probe_hut_ready_picker_sequence() {
+        let mut state = test_state(open_grid(), 1, 1);
+        state.party_strengths = vec![1];
+        for id in [16usize, 5, 30, 26, 0, 9] {
+            state.equipment_stock[id] = 1;
+        }
+        let keys = ['r', '\r', 's', 's', 's', 's', '\r', 'r', '\r', 's', '\r', 'r', '\r'];
+        for key in keys {
+            let before = state.message_entries().len();
+            let _ = handle_play_key_input(&mut state, key, "", Path::new(""));
+            let added: Vec<_> = state.message_entries()[before..]
+                .iter()
+                .map(|e| e.text.clone())
+                .collect();
+            println!("key {key:?} -> {added:?}");
+        }
+    }
+}

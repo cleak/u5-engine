@@ -31,8 +31,8 @@ fn ring_vanish_plays_the_action_snap_after_the_mutation_and_narration() {
     );
 
     assert!(
-        state.message.ends_with("but it vanished."),
-        "expected the vanish narration, got {:?}",
+        state.message.contains("Ring vanishes!"),
+        "expected `inventory.md` §5.2's published vanish narration, got {:?}",
         state.message
     );
     assert_eq!(

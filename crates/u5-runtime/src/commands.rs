@@ -612,6 +612,10 @@ pub const READY_BOTH_HANDS_REFUSAL: &str = "Both hands must be free before thou 
 /// on its own; only an authored feed puts `handed!` on the next row. The
 /// soft-hyphen underscore of §8 is the *proportional* renderer's and does not
 /// reach this printer.
+/// `inventory.md` §5.2: "The ring vanish instead prints `\n\nRing
+/// vanishes!\n` and closes without `Done`."
+pub const READY_RING_VANISHES_MESSAGE: &str = "\n\nRing vanishes!\n";
+
 pub const READY_EMPTY_HANDED_REFUSAL: &str = "Thou art empty-\nhanded!";
 
 pub const READY_NOT_STRONG_ENOUGH_REFUSAL: &str = "Thou art not strong enough!";

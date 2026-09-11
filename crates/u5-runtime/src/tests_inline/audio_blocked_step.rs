@@ -291,7 +291,8 @@ fn the_two_ring_vanish_paths_share_the_snap_and_order_it_per_path() {
         }),
         MoveOutcome::Used
     );
-    assert!(ready.message.ends_with("but it vanished."));
+    // `inventory.md` §5.2: the vanish prints the published `Ring vanishes!`.
+    assert!(ready.message.contains("Ring vanishes!"));
     assert_eq!(
         ready.party_equipment[0][EQUIP_SLOT_RING], EQUIPMENT_EMPTY,
         "the Ready path destroys before it sounds"
