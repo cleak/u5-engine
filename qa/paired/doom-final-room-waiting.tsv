@@ -1,3 +1,12 @@
+# The roster panel is a lottery on this scenario. The party reaches the final
+# room by falling through a dungeon trap, and `dungeon-mode.md` Section 8 gives
+# that fall "a separate `1..8` HP-damage roll, roster flash and rumble for each
+# non-Dead active member in the first six slots", repeating per descent step.
+# The two sides never share a seed, so the `Avatar` HP row parts company on the
+# fall and stays parted for every later beat - measured 2026-09-10, where the
+# gap ran both ways across the four Doom scenarios. A panel-only difference on
+# that row has measured the roll, not the engine; the message window is what
+# these scenarios pin.
 # Variant of `doom-final-room-refusal` that answers **No** a second time, to
 # the explicit sandalwood question, and so reaches `endgame.md` §5's waiting
 # branch: the fixed `"I see...` lead-in, the forty-tick pause, `ENDMSG.DAT`

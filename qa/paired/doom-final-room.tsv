@@ -1,3 +1,12 @@
+# The roster panel is a lottery on this scenario. The party reaches the final
+# room by falling through a dungeon trap, and `dungeon-mode.md` Section 8 gives
+# that fall "a separate `1..8` HP-damage roll, roster flash and rumble for each
+# non-Dead active member in the first six slots", repeating per descent step.
+# The two sides never share a seed, so the `Avatar` HP row parts company on the
+# fall and stays parted for every later beat - measured 2026-09-10, where the
+# gap ran both ways across the four Doom scenarios. A panel-only difference on
+# that row has measured the roll, not the engine; the message window is what
+# these scenarios pin.
 # `endgame.md §2` steps 4-6: Doom's final room, the handoff that reaches the
 # terminal sequence. The room trigger sits at level seven `(5,7)` with three
 # wall neighbours, so a fall from the level above is the only way onto it -
