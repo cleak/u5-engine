@@ -2351,7 +2351,13 @@
             vec![0, 2, 1]
         );
         assert_eq!(state.turn, 1);
-        assert_eq!(state.message, "New order: party slots 2 and 3 swapped.");
+        // `commands.md` §6: the selector arms print the `Swap X` / `with Y!`
+        // exchange and "there is no additional unchanged-slot message", so the
+        // swap itself adds nothing to the window.
+        assert!(state
+            .diagnostics
+            .iter()
+            .any(|d| d == "New order: party slots 2 and 3 swapped."));
     }
 
     #[test]

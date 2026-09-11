@@ -4070,11 +4070,17 @@ impl PlayState {
         // commands.md §6: the command marks the turn as consumed after the
         // exchange.
         self.advance_turn();
-        self.message = format!(
+        // `commands.md` §6: after the `New Order` echo the command prints
+        // `\n\nSwap_`, the first name, `\nwith_`, the second name and `!\n` -
+        // and "An accepted second selection appends `!\n` even when it names
+        // the same nonzero slot twice; there is no additional unchanged-slot
+        // message." The selector arms already print that exchange, so this
+        // site adds nothing; the slot numbers are a diagnostic.
+        self.diagnostics.push(format!(
             "New order: party slots {} and {} swapped.",
             first + 1,
             second + 1
-        );
+        ));
         MoveOutcome::Used
     }
 
