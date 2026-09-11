@@ -507,13 +507,26 @@ pub struct PanelPickerRow {
 impl PanelPickerRow {
     /// `inventory.md §4.5` rendering of the 13 interior columns.
     pub fn text(&self) -> String {
+        // `inventory.md` §4.5: "Selector characters below the printable range
+        // are drawn from the **runic** font rather than the text font; the
+        // renderer switches fonts for that one cell and switches back." The
+        // painter performs that switch when it sees a private-use character,
+        // so a sub-`0x20` selector has to be wrapped rather than cast
+        // straight to a `char`. Measured 2026-09-10 (`ready-slots/twohander`):
+        // the original's readied-item cell is runic `0x0B` and this engine
+        // emitted the same code in the *text* font.
+        let selector = if self.selector < 0x20 {
+            panel_runic_char(self.selector)
+        } else {
+            self.selector as char
+        };
         let content = match self.quantity {
             None => self.name.clone(),
             Some(count) if self.zero_padded => {
-                format!("{count:02}{}{}", self.selector as char, self.name)
+                format!("{count:02}{selector}{}", self.name)
             }
-            Some(0) => format!("--{}{}", self.selector as char, self.name),
-            Some(count) => format!("{count:>2}{}{}", self.selector as char, self.name),
+            Some(0) => format!("--{selector}{}", self.name),
+            Some(count) => format!("{count:>2}{selector}{}", self.name),
         };
         format!(
             "{:<13}",
