@@ -489,6 +489,13 @@ pub fn combat_prompt_row_follows_history(state: &crate::PlayState) -> bool {
             )
         )
     )
+        // `view.md §3`'s death-vision view is the third producer that spends
+        // its own line feed: it prints `Strange vision!\n` and the view is
+        // "modal: the next accepted key dismisses it, is consumed by the
+        // view, and triggers the ordinary viewport redraw rather than another
+        // command". No fresh turn cycle runs, so no second feed is emitted
+        // and the key waits on the row the literal opened.
+        || (state.active_view_overlay.is_some() && state.view_overlay_row_opened_by_result)
 }
 
 /// Is the row an overlay is pausing on a continuation rather than a command row?
@@ -546,6 +553,13 @@ pub fn shop_pause_row_is_continuation(state: &crate::PlayState) -> bool {
             )
         )
     ) || sage_topic_row_is_continuation(state)
+        // `view.md §3`'s modal death-vision view reads its dismissing key
+        // outside any turn cycle, and `text-output.md §10.2` gives the
+        // end-cap triangle to the cycle - "before it reads the key". Measured
+        // 2026-09-12 (`qa/paired/town-death-vision.tsv`, beat `first`): the
+        // original's last row carries the barber pole in column 0 with no
+        // triangle, and this engine drew both.
+        || (state.active_view_overlay.is_some() && state.view_overlay_row_opened_by_result)
 }
 
 /// The sage's typed topic continues the row `You respond:` opened.

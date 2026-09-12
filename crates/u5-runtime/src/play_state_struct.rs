@@ -343,6 +343,14 @@ pub struct PlayState {
     /// its marker row takes §10.4's blank like any world-loop prompt.
     /// Never serialized: presentation position, not saved state.
     pub combat_prompt_row_opened_by_banner: bool,
+    /// `view.md §3`, the death-vision tile: the accepted branch prints
+    /// `Strange vision!\n` and the view it paints "is modal: the next
+    /// accepted key dismisses it, is consumed by the view, and triggers the
+    /// ordinary viewport redraw rather than another command". The literal's
+    /// own feed opens the row that key is read on, so `text-output.md §10.4`
+    /// spends no second one - the same shape as the arena banner and the arms
+    /// shop welcome. True only while that modal view is up.
+    pub view_overlay_row_opened_by_result: bool,
     /// `combat.md §8.2`: the live `A`-Attack attempt walk and its open
     /// targeting cursor. `A` "opens a second, separate input read, and
     /// it is not a one-shot direction key but an **interactive targeting

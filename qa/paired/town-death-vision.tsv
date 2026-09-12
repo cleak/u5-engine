@@ -1,23 +1,21 @@
-# **Known gap, diagnosed 2026-09-12: one trailing row.** The text agrees; the
-# engine's window sits one row lower because it draws a derived blank the
-# original does not.
-#
-# `DEATH_VISION_STRANGE_LINE` is `Strange vision!\n` - the feed closes its row
-# and opens the next - so the live command row lands on the row the result
-# already opened, and `text-output.md` Section 10.4's derived blank is not
-# spent. The arena has exactly this rule and a flag for it
-# (`combat_prompt_row_opened_by_banner`, fixed 2026-09-12); the surface has no
-# equivalent.
-#
-# Not applied as a general rule: ninety-two published literals in `commands.md`
-# end in a feed, including the potion results whose scenarios match today with
-# the blank present. Making a trailing feed suppress the blank everywhere would
-# change all of them at once, and one measurement is not enough to justify
-# that. The surface flag wants its own contract before it is written.
+# Fixed 2026-09-12. `view.md` Section 3: the accepted branch prints `Strange
+# vision!\n` and the view it paints "is modal: the next accepted key dismisses
+# it, is consumed by the view, and triggers the ordinary viewport redraw
+# rather than another command". No fresh turn cycle runs, so the literal's own
+# feed opens the row that key is read on and `text-output.md` Section 10.4
+# spends no second one - and Section 10.2's end-cap triangle, which belongs to
+# the turn cycle, is not drawn either. The engine had spent both.
 #
 # Look at the crystal-sphere tile (`view.md` section 3 entry-dispatch row 2):
 # the roll's two outcomes, with no party-member prompt on either path.
 # requires-seed: the party standing one cell east of a crystal-sphere tile
+#
+# The roll is a lottery and the `second` beat can measure nothing when the two
+# sides land on different sides of it. `view.md` Section 3 rolls `1..30`
+# against the acting member's Intelligence, so one side can print `Strange
+# vision!` where the other prints `Death vision!`; such a run must be re-run.
+# `prng.md` Section 3 seeds each side from the host clock, so the roll cannot
+# be made to agree.
 both	wait	9000
 both	key	space
 both	wait	4000

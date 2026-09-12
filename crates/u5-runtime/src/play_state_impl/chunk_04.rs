@@ -2791,6 +2791,7 @@ impl PlayState {
 
     pub fn clear_active_view_overlay(&mut self) {
         self.active_view_overlay = None;
+        self.view_overlay_row_opened_by_result = false;
         self.message.clear();
     }
 
@@ -3534,9 +3535,17 @@ impl PlayState {
                 mode: ViewOverlayMode::SurfaceLook,
             });
             self.message = DEATH_VISION_STRANGE_LINE.to_string();
+            // The literal's own feed opened the row the modal view reads its
+            // dismissing key on. Measured 2026-09-12
+            // (`qa/paired/town-death-vision.tsv`, beats `first` and `second`,
+            // both reading `offset+1`): the original's marker row sits
+            // directly under `Strange vision!`, and this engine spent §10.4's
+            // blank between them.
+            self.view_overlay_row_opened_by_result = true;
         } else {
             let _ = (x, y);
             self.active_view_overlay = None;
+            self.view_overlay_row_opened_by_result = false;
             self.message = DEATH_VISION_DEATH_LINE.to_string();
         }
         MoveOutcome::Observed
