@@ -4600,6 +4600,12 @@ impl PlayState {
                 let fate = self.apply_blackthorn_correct_answer_companion_fate();
                 self.push_diagnostic(format!("On acknowledgement: {fate}."));
             }
+            if let Some(victim) = self.pending_blackthorn_execution_victim.take() {
+                let report = self
+                    .execute_blackthorn_companion(victim)
+                    .unwrap_or_else(|| "no companion remains to punish".to_string());
+                self.push_diagnostic(format!("On acknowledgement: {report}."));
+            }
             if challenge.closing_epilogue_pending() {
                 // `blackthorn.md §5`: "After acknowledgement, record `6`
                 // supplies the quoted unfairness/treachery speech, including
@@ -4886,9 +4892,15 @@ impl PlayState {
                         let vm = self.run_blackthorn_cutscene_beat(
                             BlackthornCutsceneBeat::FailedChallengeReaction,
                         );
-                        let report = self
-                            .execute_blackthorn_companion(victim)
-                            .unwrap_or_else(|| "no companion remains to punish".to_string());
+                        // `blackthorn.md §5` step 5: the routine "wait[s] for
+                        // player acknowledgement before returning to the
+                        // caller branch", and measured
+                        // (`qa/paired/bt-escalate.tsv`, beat `ask5`) the
+                        // original's roster still carries the victim while the
+                        // pendulum narration is held. The name above is
+                        // already read, so only the lift waits.
+                        self.pending_blackthorn_execution_victim = Some(victim);
+                        let report = format!("companion in slot {victim} is owed the pendulum blade"); // audit: not a player-facing line
                         self.push_diagnostic(format!(
                             "Failed Blackthorn's prompt {}; expected {expected}; {report} by the pendulum blade; cutscene advanced {} world ticks.",
                             ordinal + 1,

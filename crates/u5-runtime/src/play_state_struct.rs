@@ -274,6 +274,9 @@ pub struct PlayState {
     /// the companion while that reaction is held - it drops on the
     /// acknowledgement, not on the answer.
     pub(crate) pending_blackthorn_merciful_death: bool,
+    /// The fourth-wrong-answer execution's victim, owed once the pendulum
+    /// narration is acknowledged. Same deferral, same reason.
+    pub(crate) pending_blackthorn_execution_victim: Option<usize>,
     pub active_effect_counter: u8,
     pub fortunes_of_war: u8,
     /// `rest-and-camp.md §5` camp cooldown counter. Armed at
