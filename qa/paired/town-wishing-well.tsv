@@ -1,3 +1,10 @@
+# **A panel-refresh timing difference, filed as `cleak/u5-spec#267`.** Every
+# message-window beat agrees. The counters row does not: `view.md` Section 3
+# spends the coin as the wish prompt opens, and this engine's panel shows
+# `G:149` from the `coin` beat while the original still reads `G:150` at both
+# `coin` and `wish`. The original repaints the panel at defined points rather
+# than every frame, and #267 asks for that cadence.
+#
 # Look at Paws' wishing well and make one of the six accepted wishes.
 # `view.md` section 3 publishes the flow - "prompt for a coin and a wish" - and
 # the accepted words, but none of its lines (cleak/u5-spec#225).
