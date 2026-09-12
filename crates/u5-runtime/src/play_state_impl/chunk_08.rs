@@ -1334,6 +1334,11 @@ impl PlayState {
             // free", and reaches this arm only through the `World` branch
             // below, so it is unaffected.
             if matches!(self.area, Area::Town { .. }) {
+                // The acted result has to cost the turn, or the town
+                // epilogue's own gate skips it and the contact pass never
+                // runs. `#261`: the refusal "reaches the eligible town
+                // epilogue despite making no transition or movement".
+                self.advance_turn();
                 return Ok(MoveOutcome::Used);
             }
             return Ok(MoveOutcome::Blocked);

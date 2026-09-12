@@ -25725,7 +25725,7 @@ fn top_down_lowercase_x_routes_to_vehicle_exit() {
 }
 
 #[test]
-fn town_enter_uses_stock_refusal_without_turn() {
+fn town_enter_uses_stock_refusal_and_spends_its_turn() {
     let mut state = test_state(open_grid(), 5, 5);
 
     assert!(
@@ -25735,7 +25735,11 @@ fn town_enter_uses_stock_refusal_without_turn() {
     );
 
     assert_eq!((state.player.x, state.player.y), (5, 5));
-    assert_eq!(state.turn, 0);
+    // `cleak/u5-spec#261`: the failed in-town `E` "is itself an acted
+    // command [...] and reaches the eligible town epilogue despite making no
+    // transition or movement", so it costs the turn even though nothing
+    // moved. This test's name asserted the withdrawn form.
+    assert_eq!(state.turn, 1);
     // cleak/u5-spec#194 capture: the refusal completes the `Enter ` echo.
     assert_eq!(
         transcript_texts(&state).last().map(String::as_str),
