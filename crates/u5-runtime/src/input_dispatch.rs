@@ -3398,7 +3398,7 @@ fn format_tavern_outcome(
         // **Measured** 2026-09-07 at The Cat's Lair in Paws
         // (`qa/paired/paws-tavern.tsv`): both lines are quoted, and they sit
         // on consecutive rows with no blank between them.
-        Declined => format!("\n\n\"Hrumph.\"{TAVERN_ANYTHING_ELSE_PROMPT}"),
+        Declined => format!("\n\n\"Hrumph.\"\n{TAVERN_ANYTHING_ELSE_PROMPT}"),
         RefusedShortFunds { .. } => TAVERN_AFFORDABILITY_REFUSAL_BARK.to_string(),
         // `shops.md §8.C` "No packs affordable, at least three food servings":
         // `\n\n"Thou hast\nneither gold nor\nneed! Out!"\nyells `, vendor name,
@@ -3546,7 +3546,11 @@ fn format_tavern_outcome_with_shoppe(
                         },
                     )
                     .ok()
-                    .map(|quote| format!("\"{quote}{TAVERN_PROVISION_QUANTITY_PROMPT}"))
+                    // The leading feed is the blank row the original leaves
+                    // between the accepted letter's echo and the offer, the
+                    // same one the round/secondary bill takes. Measured
+                    // 2026-09-11 (`paws-tavern/rations`).
+                    .map(|quote| format!("\n\"{quote}{TAVERN_PROVISION_QUANTITY_PROMPT}"))
             })
         }
         // `shops.md §8.5`: the charitable outcome "adds `1` to the food
