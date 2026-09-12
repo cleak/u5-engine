@@ -351,6 +351,13 @@ pub struct PlayState {
     /// spends no second one - the same shape as the arena banner and the arms
     /// shop welcome. True only while that modal view is up.
     pub view_overlay_row_opened_by_result: bool,
+    /// `karma.md §12`: the meditation's ask is `\nMantra:` - a **leading**
+    /// line feed - so the label's row is still open when an empty Return
+    /// closes the interaction. `text-output.md §10.4`'s next-cycle feed is
+    /// what closes it, and the marker row follows on the next row rather than
+    /// under a blank. One-shot: set when that Return closes the prompt,
+    /// consumed by the next command echo.
+    pub surface_command_row_follows_history: bool,
     /// `combat.md §8.2`: the live `A`-Attack attempt walk and its open
     /// targeting cursor. `A` "opens a second, separate input read, and
     /// it is not a one-shot direction key but an **interactive targeting

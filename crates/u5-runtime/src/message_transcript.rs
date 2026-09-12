@@ -593,7 +593,16 @@ impl PlayState {
     /// resident verb echo before the handler prompts or refuses.
     pub fn begin_command_echo(&mut self, echo: CommandEcho) {
         self.abort_command_echo();
-        self.push_message_entry(echo.text, true);
+        // A surface prompt dismissed while its own row was still open leaves
+        // that row for the turn loop's feed to close, so this echo continues
+        // the history rather than sitting under `text-output.md §10.4`'s
+        // blank - the same shape `emit_combat_command_echo_line` gives the
+        // arena banner. One-shot: the row after this echo is ordinary again.
+        let continues_open_row = std::mem::take(&mut self.surface_command_row_follows_history);
+        let text = echo.text.to_string();
+        let glyphs = ordinary_glyphs_from_engine_text(&text);
+        self.append_transcript_entry_on_row(text, glyphs, true, false, false, continues_open_row);
+        self.message_transcript_revision = self.message_transcript_revision.wrapping_add(1);
         self.pending_command_echo = Some(PendingCommandEcho {
             echo,
             message_at_entry: std::mem::take(&mut self.message),

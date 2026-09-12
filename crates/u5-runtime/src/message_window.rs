@@ -496,6 +496,10 @@ pub fn combat_prompt_row_follows_history(state: &crate::PlayState) -> bool {
         // command". No fresh turn cycle runs, so no second feed is emitted
         // and the key waits on the row the literal opened.
         || (state.active_view_overlay.is_some() && state.view_overlay_row_opened_by_result)
+        // A surface prompt that was dismissed while its own row was still
+        // open leaves that row for the turn loop's feed to close, so the
+        // marker row follows the history immediately.
+        || state.surface_command_row_follows_history
 }
 
 /// Is the row an overlay is pausing on a continuation rather than a command row?

@@ -1,6 +1,13 @@
 # The mantra prompt's other answers: a wrong mantra, the empty Return that
 # closes the prompt, and the command that follows it.
 # requires-seed: the party on the published Honesty shrine coordinate
+#
+# Fixed 2026-09-12. `karma.md` Section 12's ask is `\nMantra:` - a **leading**
+# line feed - so the label's row is still open when an empty Return closes the
+# meditation, and `text-output.md` Section 10.4's next-cycle feed is what
+# closes it. The marker row, and then the next command's echo, follow the
+# `Mantra:` row directly rather than under a blank. This engine had closed the
+# row itself and spent the blank as well.
 both	wait	9000
 both	key	space
 both	wait	4000

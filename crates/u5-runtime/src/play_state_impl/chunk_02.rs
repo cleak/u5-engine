@@ -1937,6 +1937,15 @@ impl PlayState {
             // Measured: Return on an empty mantra row closes the prompt and
             // hands the keyboard back to the world loop, printing nothing of
             // its own - the next command's echo follows on the next row.
+            //
+            // On the *next* row, not under a blank. `karma.md §12`'s ask is
+            // `\nMantra:`, a leading feed, so the label's row was still open
+            // when this Return arrived and `text-output.md §10.4`'s
+            // next-cycle feed is what closes it. Measured 2026-09-12
+            // (`qa/paired/shrine-mantra-close.tsv`, beat `closed`, reading
+            // `offset+1`): the original's marker row sits directly under
+            // `Mantra:` and this engine spent a blank between them.
+            self.surface_command_row_follows_history = true;
             return Ok(Some(MoveOutcome::PromptDeclined));
         }
         // `karma.md §12`: "Each mantra answer uses that same matcher against
