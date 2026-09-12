@@ -15,6 +15,20 @@
 # Talk command", so the first Pass beside the keeper opens the overlay and the
 # script drives it from there rather than issuing Talk.
 # requires-seed: profile `seed-shop-arms-sell-reseeded`, built by qa/tools/reseed.py
+#
+# Every text difference this scenario can show is a lottery draw, so only its
+# structure can be compared. `prng.md` Section 3 seeds the two sides from the
+# host clock, so they never draw alike. Two pools run here:
+#
+#   * the sell prompt, `shops.md` Section 1855 - a uniform 0..3 over `Which
+#     item wouldst thou like to sell?`, `What dost thou wish to sell?`,
+#     `Show me what ye got...` and `What dost thou have for me to buy?`;
+#   * the closing bark, Section 8.A's shared envelope over the arms row.
+#
+# Measured 2026-09-12: the greeting, the `Sell` echo and its row placement,
+# and the attribution row all agreed character for character on every beat;
+# every difference was one of the two pools, and their differing lengths then
+# shifted the rows beneath them.
 both	wait	9000
 both	key	space
 both	wait	4000
