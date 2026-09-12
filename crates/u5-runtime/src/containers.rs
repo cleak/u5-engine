@@ -217,19 +217,23 @@ pub const fn inventory_add_class(class_code: u8) -> InventoryAddClass {
     }
 }
 
-/// `containers.md §3`: active-object pickups use a visual filter
-/// before the separate inventory-add class byte is decoded. The
-/// loose item-art band occupies the item sprite window after tile-bank
-/// folding, and a few low-byte special markers are accepted by their
-/// owning pickup paths.
+/// The loose item-art band, after tile-bank folding, plus the two low-byte
+/// special markers.
+///
+/// *Withdrawn as a Get gate, 2026-09-12 (`RETRACTIONS.md` R476).* An earlier
+/// revision of `containers.md §3` had active-object pickups apply this as a
+/// visual filter ahead of the separate inventory-add class byte. "There is one
+/// byte. The record's inventory class byte is both the acceptance test and the
+/// grant dispatcher's selector". These ids remain useful for asking whether a
+/// tile *looks* like loose item art - the overworld pruning pass and the
+/// renderer both want that - but Get no longer consults them.
 pub const GETTABLE_LOOSE_OBJECT_VISUAL_FIRST: u8 = 0x80;
 pub const GETTABLE_LOOSE_OBJECT_VISUAL_LAST: u8 = 0xbf;
 pub const GETTABLE_MAGIC_CARPET_VISUAL: u8 = 0x1b;
 
-/// `containers.md §3`: returns true when an active-object tile is
-/// accepted by `G` Get's native object-table scan. The returned value
-/// says only that the visual is pickup-shaped; inventory identity is
-/// decoded from the object's separate class/subtype bytes.
+/// True when an active-object tile is drawn from the loose item-art band.
+/// This is a presentation question only: see the withdrawal note above for
+/// why `G` Get does not ask it.
 pub const fn gettable_object_visual(tile: u8) -> bool {
     tile == crate::FIRST_PLAYABLE_MOONSTONE_PICKUP_TILE
         || tile == crate::FIXED_HIDDEN_TREASURE_OBJECT_TILE

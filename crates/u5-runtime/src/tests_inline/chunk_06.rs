@@ -647,8 +647,14 @@
         let _ = fs::remove_dir_all(dir);
     }
 
+    /// `RETRACTIONS.md` R476: "There is one byte. The record's inventory
+    /// class byte is both the acceptance test and the grant dispatcher's
+    /// selector." The separate visual filter is withdrawn, so the handler
+    /// takes the record it finds at the cell and lets its class decide -
+    /// it does not look past a record whose class refuses to one underneath.
+    /// This test used to assert the opposite.
     #[test]
-    fn town_get_native_pickup_skips_non_gettable_object_at_same_cell() {
+    fn town_get_stops_at_the_first_record_whose_class_refuses() {
         let dir = debug_game_dir();
         let mut state = test_state(open_grid(), 1, 1);
         state.player.facing = Direction::East;
@@ -672,17 +678,20 @@
             aux1: 7,
             aux3: 0,
         });
+        let gold_before = state.gold;
 
         assert_eq!(
             state.get_facing_with_game_dir(&dir).unwrap(),
-            MoveOutcome::Got
+            MoveOutcome::Blocked
         );
 
+        // Class `0xc0` reaches the dispatcher's default arm, so nothing is
+        // consumed and nothing is credited - the gold under it stays put.
+        assert_eq!(state.message, GET_NOTHING_REFUSAL);
         assert!(!state.active_objects[1].is_empty());
-        assert!(state.active_objects[2].is_empty());
-        assert_eq!(state.gold, DEFAULT_GOLD_STOCK + 7);
-        assert_eq!(state.turn, 1);
-        assert_eq!(state.message, "\n7 gold!");
+        assert!(!state.active_objects[2].is_empty());
+        assert_eq!(state.gold, gold_before);
+        assert_eq!(state.turn, 0);
         let _ = fs::remove_dir_all(dir);
     }
 

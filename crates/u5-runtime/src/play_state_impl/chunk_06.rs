@@ -1620,7 +1620,13 @@ impl PlayState {
             .enumerate()
             .skip(1)
             .find(|(_, object)| {
-                self.object_occupies(*object, x, y) && gettable_object_visual(object.tile)
+                // `RETRACTIONS.md` R476: "There is one byte. The record's
+                // inventory class byte is both the acceptance test and the
+                // grant dispatcher's selector". The separate visual filter
+                // this used to apply first is withdrawn, so the handler takes
+                // the record at the cell and lets its class decide - including
+                // deciding to refuse.
+                self.object_occupies(*object, x, y)
             })?;
 
         let Some(grant) = native_object_pickup_grant(object) else {
@@ -1803,11 +1809,15 @@ impl PlayState {
         )? {
             return Ok(outcome);
         }
-        if let Some(outcome) = self.get_native_object_pickup_at(tx, ty) {
-            return Ok(outcome);
-        }
+        // The surface object chest is its own handler, reached before the
+        // class dispatcher: a chest record's class is the one the dispatcher
+        // would refuse with `Open it first!`, and the tile-class chest this
+        // finds is not that record.
         if self.surface_object_chest_slot_at(tx, ty).is_some() {
             return Ok(self.begin_surface_object_chest_interaction(tx, ty, SurfaceChestVerb::Get));
+        }
+        if let Some(outcome) = self.get_native_object_pickup_at(tx, ty) {
+            return Ok(outcome);
         }
         if self.world_object_at(tx, ty).is_some() {
             self.message = GET_NOTHING_REFUSAL.to_string();
@@ -1935,11 +1945,11 @@ impl PlayState {
         {
             return Ok(outcome);
         }
-        if let Some(outcome) = self.get_native_object_pickup_at(tx, ty) {
-            return Ok(outcome);
-        }
         if self.surface_object_chest_slot_at(tx, ty).is_some() {
             return Ok(self.begin_surface_object_chest_interaction(tx, ty, SurfaceChestVerb::Get));
+        }
+        if let Some(outcome) = self.get_native_object_pickup_at(tx, ty) {
+            return Ok(outcome);
         }
         if self.blocking_object_at(tx, ty).is_some() {
             self.message = GET_NOTHING_REFUSAL.to_string();
