@@ -1,3 +1,17 @@
+# A lottery on the stranger-introduction coin, like `castle-talk` and
+# `town-talk`. `conversation.md` Section 6: with the acquaintance bit clear,
+# "the engine makes one fresh host-clock read, assigns the transformed value as
+# the shared random-generator state, and immediately flips a fair coin. On one
+# outcome the conversation simply proceeds to the keyword prompt with nothing
+# said after the description. On the other the NPC introduces itself". The two
+# sides never share a host clock, so the `"I am called Ava"` row is a coin the
+# harness measured nothing about and the `talk` beat must be re-run rather than
+# read as a difference.
+#
+# Measured 2026-09-12: the stock side took silence and this engine took the
+# introduction, which is the coin and not a defect. The header was missing, so
+# the beat had been reported as an ordinary difference.
+#
 # A second conversation reached by walking in through the door: Cove, a
 # dialog-id 31 human NPC, using `CASTLE.TLK`. Companion to
 # `dwelling-talk-after-entry`, whose NPC is a creature - together they test
