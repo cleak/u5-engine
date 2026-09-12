@@ -1570,7 +1570,16 @@ impl PlayState {
     pub fn stonegate_entry_presentation_lines(&self) -> Vec<String> {
         (0..SHADOWLORD_COUNT)
             .rev()
-            .filter(|index| self.shadowlord_alive(*index))
+            // `town-mode.md §13`: "values with the vanquished marker are
+            // skipped, while any living value selects that Shadowlord's
+            // atmospheric row." The test is *not vanquished*, not the
+            // `1..8` hideout range that `shadowlord_alive` applies: a slot
+            // holding `0` means "not yet placed" and, per `time.md §7`, is
+            // "neither in a town nor vanquished". Measured 2026-09-11
+            // (`stonegate-trapdoor-audio/arrival`) on a save whose slots are
+            // all unplaced - the original prints all three rows, and the
+            // range test printed none.
+            .filter(|index| !self.shadowlord_vanquished(*index))
             .filter_map(Self::shadowlord_air_line_for_index)
             .collect()
     }

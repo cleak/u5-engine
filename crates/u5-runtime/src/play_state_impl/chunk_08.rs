@@ -2089,9 +2089,9 @@ impl PlayState {
         // is bottom-anchored from the very first frame") to a top anchor and
         // draws every entry block up to twelve rows too high.
         next.message_window_top_offset = self.message_window_top_offset;
-        if debug {
-            next.append_stonegate_entry_presentation_message();
-        }
+        // `load_town_scene` already runs the Stonegate entry presentation
+        // unconditionally, so this debug-only second call would print the
+        // rows twice when it fired.
         // `audio.md §2` keeps one serial speaker, and the frontend reads it
         // through a monotonic serial. A scene rebuild constructs `next` from
         // scratch, so its history is numbered from 1 and collides with this

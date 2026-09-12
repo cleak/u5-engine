@@ -1557,6 +1557,8 @@ fn stonegate_entry_presentation_uses_sceptre_and_living_shadowlord_slots() {
         floor: 0,
     };
     state.special_items[SPECIAL_ITEM_SCEPTRE_LB_INDEX] = SPECIAL_ITEM_OWNED_VALUE;
+    // Slot 2 holds `0` - unplaced, and so still not vanquished, which the
+    // measured presentation prints. Only the vanquished marker is skipped.
     state.shadowlord_hideouts = [1, SHADOWLORD_VANQUISHED, 0];
     state.message = "Entered KEEP:4.".to_string();
 
@@ -1572,7 +1574,7 @@ fn stonegate_entry_presentation_uses_sceptre_and_living_shadowlord_slots() {
     );
     assert!(state.message.contains("An air of\nfalsehood doth"));
     assert!(!state.message.contains("hatred doth"));
-    assert!(!state.message.contains("cowardice doth"));
+    assert!(state.message.contains("An air of\ncowardice doth"));
 
     state.area = Area::Town {
         scene: Scene::new(17).unwrap(),
