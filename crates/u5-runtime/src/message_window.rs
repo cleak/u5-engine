@@ -564,6 +564,15 @@ pub fn shop_pause_row_is_continuation(state: &crate::PlayState) -> bool {
         // original's last row carries the barber pole in column 0 with no
         // triangle, and this engine drew both.
         || (state.active_view_overlay.is_some() && state.view_overlay_row_opened_by_result)
+        // `karma.md §12`: after the altar's quest announcement the shrine
+        // "restore[s] the standing Avatar pose and wait[s] for a command
+        // key". That key is not a turn cycle either, and the quest record's
+        // own trailing feed opened the row it is read on. Measured 2026-09-12
+        // (`qa/paired/shrine-three-mantras.tsv`, beat `after`): the original's
+        // last row carries the barber pole in column 0 with no triangle.
+        || state.active_shrine.as_ref().is_some_and(|session| {
+            matches!(session.phase, crate::z_stats::ShrinePhase::AltarQuest)
+        })
 }
 
 /// The sage's typed topic continues the row `You respond:` opened.

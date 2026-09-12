@@ -1854,6 +1854,12 @@ impl PlayState {
                     // the row this record starts on, so its first newline is
                     // spent - the same split the announcement itself takes
                     // from the mantra row above it.
+                    // The quest record's own trailing feed opens the row the
+                    // next key is read on, so no `text-output.md §10.4` blank
+                    // is spent under it. Measured 2026-09-12
+                    // (`qa/paired/shrine-three-mantras.tsv`, beats `after`
+                    // and `after2`).
+                    self.surface_command_row_follows_history = true;
                     self.emit_shrine_misc_record_after_open_row(
                         game_dir,
                         MISCMSG_SHRINE_QUEST_SENTENCE,

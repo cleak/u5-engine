@@ -332,11 +332,17 @@ impl PlayState {
             // `offset+2`): the original's announcement is the window's last
             // row, and this engine spent the same blank and fresh command row
             // beneath it that the prompts above used to.
+            //
+            // The announcement only. Measured 2026-09-12
+            // (`shrine-three-mantras`, beat `after`, reading `offset-1`): the
+            // quest sentence that follows it *does* carry a row under it -
+            // that record's own trailing feed opens the row the next command
+            // key is read on - so `ShrinePhase::AltarQuest` keeps its live
+            // row and takes `surface_command_row_follows_history` instead.
             || self.active_shrine.as_ref().is_some_and(|session| {
                 matches!(
                     session.phase,
                     crate::z_stats::ShrinePhase::AltarAnnouncement
-                        | crate::z_stats::ShrinePhase::AltarQuest
                 )
             })
             // `blackthorn.md §4.1`'s acknowledgement reads a key with the
