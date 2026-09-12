@@ -1,0 +1,72 @@
+# G-Get and S-Search against the starting hut's table, reaching the
+# active-object pickup path.
+#
+# The decoded stock corpus shows no scenario getting or searching a *populated*
+# cell, which is how the invented `Got 3 gold from active-object tile 200 at
+# (5, 9) in Britain floor 0.` and its Search twin survived until the
+# crate-wide message inventory found them. Those lines are removed pending
+# `cleak/u5-spec#262`; this scenario exists to capture what the original prints
+# so the question can be answered from a measurement.
+#
+# Needs no seed: it creates the character and journeys onward like
+# `hut-commands`, then works the table east of the starting position.
+#
+# Measured 2026-09-12, clean. What it actually pins is the Search command's
+# conditional acting-member exchange - `commands.md` Section 5.8 gives
+# `Search-<dir>`, "then the conditional acting-member exchange below; after a
+# successful selection, an empty search prints ..." - and both sides show
+# `Player: Avatar` on its own row before `Thou dost find` / `nothing of note.`
+# No other scenario reached that exchange.
+#
+# The cell east of the party holds no active object, so `Get-East` answers
+# `Nothing to get!` and the *populated* pickup path is still unmeasured. That
+# needs a seed standing beside a gettable object.
+both	wait	9000
+both	key	space
+both	wait	4000
+both	key	c
+both	wait	2500
+both	type	Avatar
+both	key	Return
+both	wait	1500
+both	key	m
+both	wait	3000
+both	key	space
+both	wait	3000
+both	key	a
+both	wait	3000
+both	key	a
+both	wait	3000
+both	key	a
+both	wait	3000
+both	key	a
+both	wait	3000
+both	key	a
+both	wait	3000
+both	key	a
+both	wait	3000
+both	key	a
+both	wait	3000
+both	key	space
+both	wait	4000
+both	key	j
+both	wait	7000
+both	shot	start	Starting hut after Journey Onward
+both	key	Right
+both	wait	900
+both	key	Right
+both	wait	900
+both	shot	beside	Beside the table
+both	key	s
+both	wait	1200
+both	key	Right
+both	wait	2500
+both	shot	searched	Search the table
+both	key	Return
+both	wait	2500
+both	shot	searched-member	The acting member accepted
+both	key	g
+both	wait	1200
+both	key	Right
+both	wait	2500
+both	shot	got	Get from the table
