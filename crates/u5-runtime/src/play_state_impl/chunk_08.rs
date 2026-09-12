@@ -1324,6 +1324,18 @@ impl PlayState {
             if !self.complete_open_direction_echo("Enter ", ENTER_NOTHING_REFUSAL) {
                 self.message = format!("Enter {ENTER_NOTHING_REFUSAL}");
             }
+            // `cleak/u5-spec#261`: "The failed **in-town E is itself an acted
+            // command** [...] It prints `Enter what?`, preserves the normal
+            // acted result, and reaches the eligible town epilogue despite
+            // making no transition or movement." That epilogue is what runs
+            // the NPC contact pass, which is why the Blackthorn guard demand
+            // fires a command earlier in the original than it did here. The
+            // overworld refusal "has a different return contract and can be
+            // free", and reaches this arm only through the `World` branch
+            // below, so it is unaffected.
+            if matches!(self.area, Area::Town { .. }) {
+                return Ok(MoveOutcome::Used);
+            }
             return Ok(MoveOutcome::Blocked);
         };
 
