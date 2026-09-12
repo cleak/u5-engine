@@ -654,7 +654,7 @@
         assert_eq!(state.spell_charges[BLINK_SPELL_INDEX], 0);
         assert_eq!(state.party[0].mana, 0);
         assert_eq!(state.turn, 1);
-        assert_eq!(state.message, "Blinked East to (15, 1) in BRITANNIA.");
+        assert!(state.diagnostics.iter().any(|n| n.contains("blinked East to (15, 1) in BRITANNIA")), "{:?}", state.diagnostics);
     }
 
     #[test]
@@ -4206,10 +4206,8 @@
         assert_eq!(state.turn, 1);
         assert_eq!(state.clock, GameClock::new(12, 1).unwrap());
         assert!(state.visibility_dirty);
-        assert_eq!(
-            state.message,
-            "Safely opened dungeon chest at (1, 1) on DUNGEON:0 level 0; trap generator bypassed by An Sanct, marked visit-local open chest."
-        );
+        assert!(state.diagnostics.iter().any(|n| n.contains("An Sanct opened dungeon chest at (1, 1) on DUNGEON:0 level 0; trap generator bypassed, marked visit-local open chest")), "{:?}", state.diagnostics);
+        assert!(state.message.is_empty(), "message: {}", state.message);
     }
 
     #[test]
@@ -4242,8 +4240,9 @@
         assert_eq!(state.turn, 1);
         assert!(
             state
-                .message
-                .contains("trap generator bypassed by An Sanct")
+                .diagnostics
+                .iter()
+                .any(|note| note.contains("trap generator bypassed"))
         );
         assert!(!state.message.contains("authored chest grants"));
         let _ = fs::remove_dir_all(dir);
@@ -4565,7 +4564,7 @@
         assert_eq!(state.turn, 1);
         assert_eq!(state.clock, GameClock::new(12, 2).unwrap());
         assert!(state.visibility_dirty);
-        assert_eq!(state.message, "Blinked East to (15, 1) in BRITANNIA.");
+        assert!(state.diagnostics.iter().any(|n| n.contains("blinked East to (15, 1) in BRITANNIA")), "{:?}", state.diagnostics);
     }
 
     #[test]
@@ -4595,7 +4594,7 @@
         assert_eq!(state.spell_charges[BLINK_SPELL_INDEX], 0);
         assert_eq!(state.party[0].mana, 0);
         assert_eq!(state.turn, 1);
-        assert_eq!(state.message, "Blinked East to (15, 1) in BRITANNIA.");
+        assert!(state.diagnostics.iter().any(|n| n.contains("blinked East to (15, 1) in BRITANNIA")), "{:?}", state.diagnostics);
     }
 
     #[test]
@@ -4625,7 +4624,7 @@
         );
         assert_eq!(state.active_objects[0].tile, state.player.transport.save_marker());
         assert_eq!(state.turn, 1);
-        assert_eq!(state.message, "Blinked East to (15, 1) in BRITANNIA.");
+        assert!(state.diagnostics.iter().any(|n| n.contains("blinked East to (15, 1) in BRITANNIA")), "{:?}", state.diagnostics);
     }
 
     #[test]
@@ -4670,7 +4669,7 @@
         assert_eq!(state.party[0].mana, 0);
         assert_eq!(state.party[0].hp, DEFAULT_PARTY_HP);
         assert_eq!(state.turn, 1);
-        assert_eq!(state.message, "Blinked East to (15, 1) in BRITANNIA.");
+        assert!(state.diagnostics.iter().any(|n| n.contains("blinked East to (15, 1) in BRITANNIA")), "{:?}", state.diagnostics);
         let _ = fs::remove_dir_all(dir);
     }
 
@@ -4795,7 +4794,7 @@
         assert_eq!(state.turn, 1);
         assert_eq!(state.clock, GameClock::new(12, 2).unwrap());
         assert!(state.visibility_dirty);
-        assert_eq!(state.message, "Blinked to (3, 1).");
+        assert!(state.diagnostics.iter().any(|n| n.contains("blinked to (3, 1)")), "{:?}", state.diagnostics);
     }
 
     #[test]
@@ -4880,7 +4879,7 @@
         assert_eq!(result.0, MoveOutcome::Cast);
         assert_eq!(result.1, Some((0, false)));
         assert_eq!((state.combat_actors[0].x, state.combat_actors[0].y), (6, 5));
-        assert_eq!(state.message, "Blinked to (6, 5).");
+        assert!(state.diagnostics.iter().any(|n| n.contains("blinked to (6, 5)")), "{:?}", state.diagnostics);
     }
 
     #[test]
@@ -4904,7 +4903,7 @@
         assert_eq!(state.party[0].mana, 0);
         assert_eq!(state.turn, 1);
         assert_eq!(state.clock, GameClock::new(12, 1).unwrap());
-        assert_eq!(state.message, "Up! Changed to DUNGEON:0 (Deceit) level 3.");
+        assert!(state.diagnostics.iter().any(|n| n.contains("Up: changed to DUNGEON:0 (Deceit) level 3")), "{:?}", state.diagnostics);
     }
 
     #[test]
@@ -4928,10 +4927,8 @@
         assert_eq!(state.party[0].mana, 0);
         assert_eq!(state.turn, 1);
         assert_eq!(state.clock, GameClock::new(12, 1).unwrap());
-        assert_eq!(
-            state.message,
-            "Down! Changed to DUNGEON:0 (Deceit) level 5."
-        );
+        assert!(state.diagnostics.iter().any(|n| n.contains("Down: changed to DUNGEON:0 (Deceit) level 5")), "{:?}", state.diagnostics);
+        assert!(state.message.is_empty(), "message: {}", state.message);
     }
 
     #[test]
@@ -4989,7 +4986,15 @@
             assert_eq!(state.turn, 1);
             assert_eq!(state.clock, GameClock::new(12, 1).unwrap());
             assert!(state.visibility_dirty);
-            assert_eq!(state.message, expected_message);
+            // The placement line is unpublished (`cleak/u5-spec#262`).
+            assert!(state.message.is_empty(), "message: {}", state.message);
+            assert!(
+                state.diagnostics.iter().any(|note| {
+                    note.contains(expected_message.trim_end_matches('.'))
+                }),
+                "diagnostics: {:?}",
+                state.diagnostics
+            );
         }
     }
 

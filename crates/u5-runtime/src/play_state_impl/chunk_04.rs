@@ -2266,12 +2266,15 @@ impl PlayState {
             self.mark_visibility_dirty();
         }
         self.advance_turn();
-        self.message = format!(
-            "Buried Moonstone phase {} at {label} ({}, {}).",
+        // Unpublished (`cleak/u5-spec#262`). `magic.md §8` specifies the slot
+        // write but no text for the burial itself.
+        self.diagnostics.push(format!(
+            "buried Moonstone phase {} at {label} ({}, {})",
             slot_index + 1,
             self.player.x,
             self.player.y
-        );
+        ));
+        self.message.clear();
         MoveOutcome::Used
     }
 

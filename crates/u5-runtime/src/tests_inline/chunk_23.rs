@@ -10914,7 +10914,15 @@ fn combat_klimb_cardinal_suffix_moves_actor_inside_arena() {
         (state.active_objects[0].x, state.active_objects[0].y),
         (5, 4)
     );
-    assert_eq!(state.message, "Klimbed North to (5, 4).\nAvatar, armed with bare hands:\n");
+    // The Klimb result is unpublished (`cleak/u5-spec#262`); only the banner
+    // remains in the window.
+    assert_eq!(state.message, "\nAvatar, armed with bare hands:\n");
+    assert!(
+        state
+            .diagnostics
+            .iter()
+            .any(|n| n.contains("klimbed North to (5, 4)"))
+    );
     assert!(state.visibility_dirty);
     assert!(state.combat_active);
 }
@@ -10932,7 +10940,8 @@ fn combat_klimb_vertical_suffix_exits_from_ladder_tile() {
         PlayInputDisposition::Continue
     );
 
-    assert_eq!(state.message, "Klimbed up from combat.");
+    assert!(state.diagnostics.iter().any(|n| n.contains("klimbed up from combat")), "{:?}", state.diagnostics);
+        assert!(state.message.is_empty(), "message: {}", state.message);
     // `combat.md §5.3`, closing line: "the turn-clock advance run after
     // combat ends is itself a draw consumer, sitting between the encounter
     // and the next outdoor turn". That advance ages the timed effect a
@@ -10962,7 +10971,8 @@ fn combat_klimb_prompt_cancel_commits_but_blocked_direction_reprompts() {
         handle_play_key_input(&mut prompted, '>', "", game_dir).unwrap(),
         PlayInputDisposition::Continue
     );
-    assert_eq!(prompted.message, "Klimbed down from combat.");
+    assert!(prompted.diagnostics.iter().any(|n| n.contains("klimbed down from combat")), "{:?}", prompted.diagnostics);
+        assert!(prompted.message.is_empty(), "message: {}", prompted.message);
     assert!(!prompted.combat_active);
 
     let mut cancelled = combat_player_command_state(10, 10);

@@ -5331,12 +5331,17 @@ impl PlayState {
         self.grid[idx] = dungeon_open_chest_rewrite(tile);
         self.mark_visibility_dirty();
         self.advance_turn();
-        self.message = format!(
-            "Safely opened dungeon chest at ({}, {}) on {} level {level}; trap generator bypassed by An Sanct, marked visit-local open chest.",
+        // Unpublished (`cleak/u5-spec#262`). `dungeon-mode.md §8.1` gives the
+        // ordinary chest literals but none for the An Sanct trap bypass, so
+        // the engine records the outcome instead of inventing a sentence.
+        self.diagnostics.push(format!(
+            "An Sanct opened dungeon chest at ({}, {}) on {} level {level}; \
+             trap generator bypassed, marked visit-local open chest",
             self.player.x,
             self.player.y,
             scene.key()
-        );
+        ));
+        self.message.clear();
         // audio.md §6 qualifies variant 2 as `successful Open`, and audio.md
         // §8.3's only pre-success spell boundary is Vanish, so the cue follows
         // the chest test rather than the committed gate. The surface and
@@ -5403,12 +5408,14 @@ impl PlayState {
         self.setup_dungeon_active_monster_fresh();
         self.mark_visibility_dirty();
         self.advance_turn();
-        self.message = format!(
-            "{label}! Changed to {} ({}) level {}.",
+        // Unpublished (`cleak/u5-spec#262`).
+        self.diagnostics.push(format!(
+            "{label}: changed to {} ({}) level {}",
             scene.key(),
             scene.name(),
             dungeon_display_level(next_level)
-        );
+        ));
+        self.message.clear();
         Ok(MoveOutcome::Transition(
             AreaTransition::ChangedDungeonLevel {
                 scene,
@@ -5477,13 +5484,15 @@ impl PlayState {
         };
         self.mark_visibility_dirty();
         self.advance_turn();
-        self.message = format!(
-            "{label} placed {} at ({}, {}) on {} level {level}.",
+        // Unpublished (`cleak/u5-spec#262`).
+        self.diagnostics.push(format!(
+            "{label} placed {} at ({}, {}) on {} level {level}",
             direction.name(),
             tx,
             ty,
             scene.key()
-        );
+        ));
+        self.message.clear();
         MoveOutcome::Cast
     }
 
@@ -5635,13 +5644,17 @@ impl PlayState {
         self.sync_player_object();
         self.mark_visibility_dirty();
         self.advance_turn();
-        self.message = format!(
-            "Blinked {} to ({}, {}) in {}.",
+        // Unpublished (`cleak/u5-spec#262`). `magic.md §8` lists Blink among
+        // the utility effects with "a short narration message" but does not
+        // give it.
+        self.diagnostics.push(format!(
+            "blinked {} to ({}, {}) in {}",
             direction.name(),
             to_x,
             to_y,
             self.current_area_label()
-        );
+        ));
+        self.message.clear();
         Ok(MoveOutcome::Cast)
     }
 
@@ -5752,10 +5765,12 @@ impl PlayState {
             return MoveOutcome::Blocked;
         };
         self.mark_visibility_dirty();
-        self.message = format!(
-            "Blinked to ({}, {}).",
+        // Unpublished (`cleak/u5-spec#262`).
+        self.diagnostics.push(format!(
+            "blinked to ({}, {})",
             commit.actor_position_after.0, commit.actor_position_after.1
-        );
+        ));
+        self.message.clear();
         MoveOutcome::Cast
     }
 

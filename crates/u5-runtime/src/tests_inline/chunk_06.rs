@@ -1425,10 +1425,8 @@
         assert_eq!(state.moonstone_slots[3], MoonstoneGateSlot::invalid());
         assert_eq!(state.turn, 2);
         assert_eq!(state.clock, GameClock::new(12, 4).unwrap());
-        assert_eq!(
-            state.message,
-            "Recovered Moonstone phase 4; Gate Travel slot cleared."
-        );
+        assert!(state.diagnostics.iter().any(|n| n.contains("recovered Moonstone phase 4; Gate Travel slot cleared")), "{:?}", state.diagnostics);
+        assert!(state.message.is_empty(), "message: {}", state.message);
         let _ = fs::remove_dir_all(dir);
     }
 
@@ -1973,10 +1971,8 @@
         assert_eq!(state.moonstone_slots[0], MoonstoneGateSlot::invalid());
         assert_eq!(state.turn, 2);
         assert_eq!(state.clock, GameClock::new(12, 2).unwrap());
-        assert_eq!(
-            state.message,
-            "Recovered Moonstone phase 1; Gate Travel slot cleared."
-        );
+        assert!(state.diagnostics.iter().any(|n| n.contains("recovered Moonstone phase 1; Gate Travel slot cleared")), "{:?}", state.diagnostics);
+        assert!(state.message.is_empty(), "message: {}", state.message);
         let _ = fs::remove_dir_all(dir);
     }
 
@@ -2004,10 +2000,8 @@
         );
         assert_eq!(state.turn, 1);
         assert_eq!(state.clock, GameClock::new(12, 2).unwrap());
-        assert_eq!(
-            state.message,
-            "Buried Moonstone phase 3 at BRITANNIA (4, 5)."
-        );
+        assert!(state.diagnostics.iter().any(|n| n.contains("buried Moonstone phase 3 at BRITANNIA (4, 5)")), "{:?}", state.diagnostics);
+        assert!(state.message.is_empty(), "message: {}", state.message);
 
         state.player.x = 8;
         state.player.y = 9;
@@ -2455,10 +2449,8 @@
         assert!(state.visibility_dirty);
         assert_eq!(state.turn, 1);
         assert_eq!(state.clock, GameClock::new(12, 1).unwrap());
-        assert_eq!(
-            state.message,
-            "Buried Moonstone phase 8 at CASTLE:0 (1, 1)."
-        );
+        assert!(state.diagnostics.iter().any(|n| n.contains("buried Moonstone phase 8 at CASTLE:0 (1, 1)")), "{:?}", state.diagnostics);
+        assert!(state.message.is_empty(), "message: {}", state.message);
         let _ = fs::remove_dir_all(dir);
     }
 

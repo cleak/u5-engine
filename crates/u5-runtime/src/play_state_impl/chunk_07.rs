@@ -323,7 +323,9 @@ impl PlayState {
             ClimbIntent::Up => "up",
             ClimbIntent::Down => "down",
         };
-        self.message = format!("Klimbed {label} from combat.");
+        // Unpublished (`cleak/u5-spec#262`), like the town/overworld Klimb.
+        self.diagnostics.push(format!("klimbed {label} from combat"));
+        self.message.clear();
         // Successful vertical Klimb restores the suspended frame immediately,
         // so its committed-action maintenance must run while the acting
         // descriptor is still present.
@@ -383,12 +385,15 @@ impl PlayState {
             return MoveOutcome::Blocked;
         };
         self.mark_visibility_dirty();
-        self.message = format!(
-            "Klimbed {} to ({}, {}).",
+        // Unpublished (`cleak/u5-spec#262`). `commands.md §5.2` gives the
+        // dungeon Klimb forms; an applied town/overworld Klimb has none.
+        self.diagnostics.push(format!(
+            "klimbed {} to ({}, {})",
             direction.name(),
             commit.actor_position_after.0,
             commit.actor_position_after.1
-        );
+        ));
+        self.message.clear();
         MoveOutcome::Moved
     }
 
@@ -929,10 +934,12 @@ impl PlayState {
         self.moonstone_slots[slot_index] = MoonstoneGateSlot::invalid();
         self.mark_visibility_dirty();
         self.advance_turn();
-        self.message = format!(
-            "Recovered Moonstone phase {}; Gate Travel slot cleared.",
+        // Unpublished (`cleak/u5-spec#262`).
+        self.diagnostics.push(format!(
+            "recovered Moonstone phase {}; Gate Travel slot cleared",
             slot_index + 1
-        );
+        ));
+        self.message.clear();
         Some(MoveOutcome::Got)
     }
 
