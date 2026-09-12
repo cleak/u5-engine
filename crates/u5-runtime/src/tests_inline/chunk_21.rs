@@ -5669,7 +5669,10 @@ fn end_to_end_tavern_renders_state_menu_quote_and_follow_up_records() {
     )));
 
     handle_play_key_input(&mut state, 'Y', "", &dir).unwrap();
-    assert_eq!(state.message, "Asset tavern menu.");
+    // `shops.md §8`'s Tavern entry row: the state menu record is wrapped in
+    // an opening quote and "a separately emitted closing quote and space",
+    // the same shape as the follow-up record asserted below.
+    assert_eq!(state.message, "\"Asset tavern menu.\" ");
     handle_play_key_input(&mut state, 'R', "", &dir).unwrap();
     assert_eq!(state.message, "Asset pack costs 16 gold.");
     assert_eq!(state.prng_state, expected_prng_state);

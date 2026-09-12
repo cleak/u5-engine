@@ -3487,6 +3487,17 @@ fn format_tavern_outcome_with_shoppe(
 
     let renderer = crate::shoppe_bark::ShoppeTextRenderer::load_from_game_dir(game_dir).ok();
     let rendered = renderer.as_ref().and_then(|renderer| match outcome {
+        // `shops.md §8`'s entry table, the Tavern row: "`Yes\n\n"`, then the
+        // state menu record, then a separately emitted closing quote and
+        // space." The engine printed `Yes`, two feeds and the bare record -
+        // no opening quote, no closing quote, and no trailing space for the
+        // accepted letter to echo into. This is the same shape the
+        // `Continued` arm below already uses for the follow-up record.
+        //
+        // Measured 2026-09-11 (`paws-sage/menu` and `/ale`): the original's
+        // rows read `"What'll it` and `thy travels?" A`, this engine's read
+        // `What'll it be...` and `thy travels?A`. The missing quotes rewrap
+        // the record, which is what put the whole capture two rows out.
         EnteredMenu { tavern, .. } => renderer
             .render_record(
                 tavern_menu_record_id(tavern),
@@ -3495,7 +3506,8 @@ fn format_tavern_outcome_with_shoppe(
                     ..Default::default()
                 },
             )
-            .ok(),
+            .ok()
+            .map(|rendered| format!("\"{rendered}\" ")),
         PickProvisionQuantity { tavern, unit_price } => {
             provision_quote_record_id.and_then(|record_id| {
                 renderer
