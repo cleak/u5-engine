@@ -192,6 +192,26 @@ impl GameplayMessageLog {
         ) {
             return;
         }
+        // `text-output.md §10.4`: the blank row is *derived* from the next
+        // cycle's leading line feed, and only when the previous echo "ends in
+        // a newline [and] therefore leaves the cursor at column 0 of a fresh
+        // row". A row left open mid-line is the other case the same paragraph
+        // names: "Verbs whose echo ends in a hyphen or a trailing space rely
+        // on that same leading line feed to close their partially written
+        // line" - it closes the row instead of adding one.
+        //
+        // Measured 2026-09-11 (`bt-audience/ask3`): the Blackthorn punishment
+        // ends `thee!" ` with the cursor inline, and the original draws the
+        // next command echo on the row directly beneath it. This engine
+        // inserted a blank first and ran a row ahead for the rest of the
+        // capture.
+        if self
+            .lines
+            .last()
+            .is_some_and(|line| line.trailing_spaces > 0)
+        {
+            return;
+        }
         self.lines.push(MessageLogLine {
             text: String::new(),
             glyphs: Vec::new(),
