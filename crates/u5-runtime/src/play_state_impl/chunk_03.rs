@@ -324,6 +324,21 @@ impl PlayState {
                     crate::shop_runtime::InnkeeperState::ServiceMenu { .. }
                 ))
             )
+            // `karma.md §12`: after the altar's quest announcement the shrine
+            // "restore[s] the standing Avatar pose and wait[s] for a command
+            // key" - the announcement is on screen and the cursor waits after
+            // it. Measured 2026-09-12
+            // (`qa/paired/shrine-three-mantras.tsv`, beat `mantra3`, reading
+            // `offset+2`): the original's announcement is the window's last
+            // row, and this engine spent the same blank and fresh command row
+            // beneath it that the prompts above used to.
+            || self.active_shrine.as_ref().is_some_and(|session| {
+                matches!(
+                    session.phase,
+                    crate::z_stats::ShrinePhase::AltarAnnouncement
+                        | crate::z_stats::ShrinePhase::AltarQuest
+                )
+            })
             // `blackthorn.md §4.1`'s acknowledgement reads a key with the
             // reaction on screen; the cursor sits inline after it.
             || self.active_blackthorn.as_ref().is_some_and(|challenge| {
