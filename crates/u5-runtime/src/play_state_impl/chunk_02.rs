@@ -2022,17 +2022,24 @@ impl PlayState {
         let outcome = match (ordained, codex) {
             (false, false) => {
                 self.shrine_ordained_mask |= bit;
-                self.message = format!(
-                    "Meditated at the Shrine of {}; ordained for the Codex quest.",
+                // `karma.md §12`'s Codex-unread arm is the record `31`/`32`/
+                // `33` presentation, which the interactive session path above
+                // runs. This inline suffix form has no key waits to hang those
+                // records on, so it applies the state change and prints
+                // nothing rather than the summary sentence it used to invent.
+                self.diagnostics.push(format!(
+                    "meditated at the Shrine of {}; ordained for the Codex quest",
                     entry.virtue.name()
-                );
+                ));
+                self.message.clear();
                 MoveOutcome::Observed
             }
             (true, false) => {
-                self.message = format!(
-                    "Meditated at the Shrine of {}; seek the Codex.",
+                self.diagnostics.push(format!(
+                    "meditated at the Shrine of {}; already ordained, Codex unread",
                     entry.virtue.name()
-                );
+                ));
+                self.message.clear();
                 MoveOutcome::Observed
             }
             (true, true) => {

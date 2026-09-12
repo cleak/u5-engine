@@ -1567,8 +1567,18 @@ BRITANNIA 11 21
         assert_eq!(state.shrine_ordained_mask, ShrineVirtue::Honesty.bit());
         assert_eq!(state.shrine_codex_mask, 0);
         assert_eq!(state.turn, 0);
-        assert!(state.message.contains("Shrine of Honesty"));
-        assert!(state.message.contains("ordained"));
+        assert!(
+            state
+                .diagnostics
+                .iter()
+                .any(|note| note.contains("Shrine of Honesty"))
+        );
+        assert!(
+            state
+                .diagnostics
+                .iter()
+                .any(|note| note.contains("ordained"))
+        );
         let _ = fs::remove_dir_all(dir);
     }
 
@@ -1587,8 +1597,18 @@ BRITANNIA 11 21
         assert_eq!(state.shrine_ordained_mask, ShrineVirtue::Honesty.bit());
         assert_eq!(state.shrine_codex_mask, 0);
         assert_eq!(state.turn, 0);
-        assert!(state.message.contains("Shrine of Honesty"));
-        assert!(state.message.contains("ordained"));
+        assert!(
+            state
+                .diagnostics
+                .iter()
+                .any(|note| note.contains("Shrine of Honesty"))
+        );
+        assert!(
+            state
+                .diagnostics
+                .iter()
+                .any(|note| note.contains("ordained"))
+        );
         let _ = fs::remove_dir_all(dir);
     }
 
@@ -1651,7 +1671,12 @@ BRITANNIA 11 21
             state.shrine_ordained_mask & ShrineVirtue::Honesty.bit(),
             0
         );
-        assert!(state.message.contains("Shrine of Humility"));
+        assert!(
+            state
+                .diagnostics
+                .iter()
+                .any(|note| note.contains("Shrine of Humility"))
+        );
         let _ = fs::remove_dir_all(dir);
     }
 
