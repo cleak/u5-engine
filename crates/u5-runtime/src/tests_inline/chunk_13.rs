@@ -11696,6 +11696,104 @@ fn reagent_recipe_bits_match_spell_list_md_section_3() {
 }
 
 #[test]
+/// `commands.md §5.8` "Successful Get, Search and eat results": the counted
+/// stems, their singular test against one, and the two asymmetric label
+/// lookups.
+fn object_pickup_result_lines_follow_the_published_stems() {
+    use crate::world_tables::ObjectPickupKind as K;
+
+    // "The stems are `_gold!\n` and `_food!\n`, which carry their own
+    // terminator" - no plural form for either.
+    assert_eq!(K::Gold.pickup_result_line(3), "3 gold!");
+    assert_eq!(K::Gold.pickup_result_line(1), "1 gold!");
+    assert_eq!(K::Food.pickup_result_line(5), "5 food!");
+    assert_eq!(K::Food.pickup_result_line(1), "1 food!");
+
+    // "`_key`, `_odd_key`, `_gem` and `_torch` ... take `!\n` when the
+    // quantity byte is exactly one and `s!\n` - `es!\n` for torches -
+    // otherwise."
+    assert_eq!(K::Keys.pickup_result_line(1), "1 key!");
+    assert_eq!(K::Keys.pickup_result_line(4), "4 keys!");
+    assert_eq!(K::Gems.pickup_result_line(1), "1 gem!");
+    assert_eq!(K::Gems.pickup_result_line(7), "7 gems!");
+    assert_eq!(K::Torches.pickup_result_line(1), "1 torch!");
+    assert_eq!(K::Torches.pickup_result_line(3), "3 torches!");
+    assert_eq!(K::SkullKeys.pickup_result_line(1), "1 odd key!");
+    assert_eq!(K::SkullKeys.pickup_result_line(2), "2 odd keys!");
+
+    // "Singular is chosen by testing against one, so a quantity of zero takes
+    // the plural form."
+    assert_eq!(K::Keys.pickup_result_line(0), "0 keys!");
+    assert_eq!(K::Torches.pickup_result_line(0), "0 torches!");
+    assert_eq!(K::Gems.pickup_result_line(0), "0 gems!");
+    assert_eq!(K::SkullKeys.pickup_result_line(0), "0 odd keys!");
+
+    // Named pickups print one fixed sentence.
+    assert_eq!(K::Potion(0).pickup_result_line(1), "A blue potion!");
+    assert_eq!(K::Scroll(0).pickup_result_line(1), "A scroll: VL!");
+    assert_eq!(K::Scroll(7).pickup_result_line(1), "A scroll: AT!");
+    assert_eq!(K::SandalwoodBox.pickup_result_line(1), "A sandalwood box!");
+    assert_eq!(K::Moonstone(3).pickup_result_line(1), "A moonstone!");
+    assert_eq!(K::MagicCarpet.pickup_result_line(1), "A magic carpet!");
+    assert_eq!(
+        K::HmsCapePlans.pickup_result_line(1),
+        "The plans for the HMS Cape!"
+    );
+
+    // "or two rows for the shard and regalia kinds"
+    assert_eq!(
+        K::ShadowlordShard(0).pickup_result_line(1),
+        "The Shard of\nFalsehood!"
+    );
+    assert_eq!(
+        K::ShadowlordShard(1).pickup_result_line(1),
+        "The Shard of\nHatred!"
+    );
+    assert_eq!(
+        K::ShadowlordShard(2).pickup_result_line(1),
+        "The Shard of\nCowardice!"
+    );
+    assert_eq!(
+        K::CrownOfLordBritish.pickup_result_line(1),
+        "The Crown of Lord British!"
+    );
+    assert_eq!(
+        K::SceptreOfLordBritish.pickup_result_line(1),
+        "The Sceptre of Lord British!"
+    );
+    assert_eq!(
+        K::AmuletOfLordBritish.pickup_result_line(1),
+        "The Amulet of Lord British!"
+    );
+
+    // "the item's own row name from the shared equipment name table, then `!`"
+    assert_eq!(
+        K::Equipment(0).pickup_result_line(1),
+        format!("{}!", equipment_name(0))
+    );
+}
+
+#[test]
+/// `commands.md §5.8`: "The scroll mnemonic index is masked to three bits, so
+/// an out-of-range scroll sub-kind wraps inside the eight mnemonics; the potion
+/// colour index is used unmasked, so a potion record whose sub-kind is eight or
+/// more reads past the eight colour words into the adjoining mnemonic table and
+/// prints, for example, `A VL potion!`."
+fn the_potion_colour_lookup_is_unmasked_and_the_scroll_lookup_is_not() {
+    use crate::world_tables::ObjectPickupKind as K;
+
+    assert_eq!(potion_colour_display_word(0), "blue");
+    assert_eq!(potion_colour_display_word(7), "white");
+    assert_eq!(potion_colour_display_word(8), "VL");
+    assert_eq!(potion_colour_display_word(15), "AT");
+    assert_eq!(K::Potion(8).pickup_result_line(1), "A VL potion!");
+
+    // The scroll side wraps instead of walking off its table.
+    assert_eq!(K::Scroll(8).pickup_result_line(1), "A scroll: VL!");
+    assert_eq!(K::Scroll(15).pickup_result_line(1), "A scroll: AT!");
+}
+
+#[test]
 fn scroll_grant_label_id_masks_low_three_bits() {
     // catalogs/item-list.md §7.1
     assert_eq!(SCROLL_GRANT_LABEL_MASK, 0x07);

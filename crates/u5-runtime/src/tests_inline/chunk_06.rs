@@ -639,8 +639,7 @@
         assert_eq!(state.gems, DEFAULT_GEM_STOCK + 4);
         assert_eq!(state.turn, 1);
         assert!(state.visibility_dirty);
-        assert!(state.diagnostics.iter().any(|note| note.contains("Got 4 gems") || note.contains("got 4 gems")));
-        assert!(state.diagnostics.iter().any(|note| note.contains("active-object tile 130") || note.contains("active-object tile 130")));
+        assert_eq!(state.message, "\n4 gems!");
         let _ = fs::remove_dir_all(dir);
     }
 
@@ -679,7 +678,7 @@
         assert!(state.active_objects[2].is_empty());
         assert_eq!(state.gold, DEFAULT_GOLD_STOCK + 7);
         assert_eq!(state.turn, 1);
-        assert!(state.diagnostics.iter().any(|note| note.contains("Got 7 gold") || note.contains("got 7 gold")));
+        assert_eq!(state.message, "\n7 gold!");
         let _ = fs::remove_dir_all(dir);
     }
 
@@ -738,7 +737,7 @@
             SPECIAL_ITEM_OWNED_VALUE
         );
         assert_eq!(state.turn, 1);
-        assert!(state.diagnostics.iter().any(|note| note.contains("sandalwood box") || note.contains("sandalwood box")));
+        assert_eq!(state.message, "\nA sandalwood box!");
         let _ = fs::remove_dir_all(dir);
     }
 
@@ -2004,7 +2003,7 @@
         assert_eq!(state.turn, 1);
         assert_eq!(state.clock, GameClock::new(12, 2).unwrap());
         assert!(state.diagnostics.iter().any(|n| n.contains("buried Moonstone phase 3 at BRITANNIA (4, 5)")), "{:?}", state.diagnostics);
-        assert!(state.message.is_empty(), "message: {}", state.message);
+        assert_eq!(state.message, MOONSTONE_BURY_SUCCESS);
 
         state.player.x = 8;
         state.player.y = 9;
@@ -2453,7 +2452,7 @@
         assert_eq!(state.turn, 1);
         assert_eq!(state.clock, GameClock::new(12, 1).unwrap());
         assert!(state.diagnostics.iter().any(|n| n.contains("buried Moonstone phase 8 at CASTLE:0 (1, 1)")), "{:?}", state.diagnostics);
-        assert!(state.message.is_empty(), "message: {}", state.message);
+        assert_eq!(state.message, MOONSTONE_BURY_SUCCESS);
         let _ = fs::remove_dir_all(dir);
     }
 
@@ -2485,7 +2484,9 @@
             PlayInputDisposition::Continue
         );
         assert_eq!(dungeon.turn, 2);
-        assert_eq!(dungeon.message, "Not here!");
+        // `inventory.md §7.1`: the Moonstone branch has exactly one refusal
+        // literal, and the dungeon band is a scene outside `0x00..0x20`.
+        assert_eq!(dungeon.message, MOONSTONE_BURY_REFUSAL);
         let _ = fs::remove_dir_all(dir);
     }
 

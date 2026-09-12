@@ -1632,12 +1632,16 @@ impl PlayState {
             })?;
 
         let Some(grant) = native_object_pickup_grant(object) else {
-            // `containers.md §3` step 5: surface and town Get has exactly one
-            // refusal - "If no fallback applies, Get prints the standard
-            // nothing-to-get refusal". The must-open-first wording belongs to
-            // *dungeon* Get ("Door cells refuse until opened"), which is a
-            // different handler, and this branch was inventing a line for it.
-            self.message = GET_NOTHING_REFUSAL.to_string();
+            // `commands.md §5.8`: "Two class values are guards rather than
+            // grants. A container record prints `Open_it_first!\n` and changes
+            // nothing at all: no inventory, no slot clear, no dirty marking, no
+            // turn sentinel. A record whose class byte is zero reaches the
+            // class dispatcher's default arm and prints the ordinary
+            // `Nothing_to_get!\n`, also changing nothing."
+            self.message = match inventory_add_class(object.type_byte) {
+                InventoryAddClass::MustOpenFirst => GET_MUST_OPEN_FIRST_REFUSAL.to_string(),
+                _ => GET_NOTHING_REFUSAL.to_string(),
+            };
             return Some(MoveOutcome::Blocked);
         };
 
@@ -1646,14 +1650,12 @@ impl PlayState {
         self.cache_current_world_overlay();
         self.mark_visibility_dirty();
         self.advance_turn();
-        // Unpublished (`cleak/u5-spec#262`).
-        self.diagnostics.push(format!(
-            "got {} {} from active-object tile {} at ({x}, {y})",
-            grant.amount,
-            grant.kind.label(),
-            object.tile
-        ));
-        self.message.clear();
+        // `commands.md §5.8` "Successful Get, Search and eat results",
+        // published for `cleak/u5-spec#262`. The leading feed "is emitted
+        // before the handler looks at the target cell, so it precedes every
+        // line in this group, the refusal included".
+        let _ = (x, y);
+        self.message = format!("\n{}", grant.kind.pickup_result_line(grant.amount));
         Some(MoveOutcome::Got)
     }
 

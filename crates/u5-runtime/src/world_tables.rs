@@ -327,6 +327,65 @@ impl ObjectPickupKind {
             },
         }
     }
+
+    /// `commands.md §5.8` "Successful Get, Search and eat results": the rows a
+    /// granting Get prints after its leading line feed, which the caller
+    /// supplies. Counted pickups "print the quantity in plain decimal, with no
+    /// padding and no leading space, then a stem, then a terminator"; named
+    /// pickups "print one fixed sentence, or two rows for the shard and
+    /// regalia kinds".
+    pub fn pickup_result_line(self, amount: u8) -> String {
+        match self {
+            // "The stems are `_gold!\n` and `_food!\n`, which carry their own
+            // terminator" - neither takes a plural.
+            Self::Gold => format!("{amount} gold!"),
+            Self::Food => format!("{amount} food!"),
+            Self::Keys => format!("{amount} {}", pluralized_pickup_stem("key", amount)),
+            Self::SkullKeys => format!("{amount} {}", pluralized_pickup_stem("odd key", amount)),
+            Self::Gems => format!("{amount} {}", pluralized_pickup_stem("gem", amount)),
+            Self::Torches => format!("{amount} {}", pluralized_pickup_stem("torch", amount)),
+            Self::Potion(index) => {
+                format!("A {} potion!", potion_colour_display_word(index))
+            }
+            Self::Scroll(index) => format!(
+                "A scroll: {}!",
+                SCROLL_SPELL_LABELS
+                    .get(index & usize::from(SCROLL_GRANT_LABEL_MASK))
+                    .copied()
+                    .unwrap_or("VL")
+            ),
+            Self::HmsCapePlans => "The plans for the HMS Cape!".to_string(),
+            Self::SandalwoodBox => "A sandalwood box!".to_string(),
+            Self::Moonstone(_) => "A moonstone!".to_string(),
+            Self::MagicCarpet => "A magic carpet!".to_string(),
+            Self::Equipment(index) => format!("{}!", equipment_name(index)),
+            Self::CrownOfLordBritish => "The Crown of Lord British!".to_string(),
+            Self::SceptreOfLordBritish => "The Sceptre of Lord British!".to_string(),
+            Self::AmuletOfLordBritish => "The Amulet of Lord British!".to_string(),
+            Self::ShadowlordShard(index) => format!(
+                "The Shard of\n{}!",
+                match index {
+                    1 => "Hatred",
+                    2 => "Cowardice",
+                    _ => "Falsehood",
+                }
+            ),
+        }
+    }
+}
+
+/// `commands.md §5.8`: `_key`, `_odd_key`, `_gem` and `_torch` "do not [carry
+/// their own terminator]; those four take `!\n` when the quantity byte is
+/// exactly one and `s!\n` - `es!\n` for torches - otherwise. Singular is
+/// chosen by testing against one, so a quantity of zero takes the plural form."
+fn pluralized_pickup_stem(stem: &str, amount: u8) -> String {
+    if amount == 1 {
+        format!("{stem}!")
+    } else if stem == "torch" {
+        format!("{stem}es!")
+    } else {
+        format!("{stem}s!")
+    }
 }
 
 fn parse_indexed_pickup_key(key: &str, prefix: &str, limit: usize) -> Option<usize> {

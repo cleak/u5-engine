@@ -316,6 +316,13 @@ pub fn moonstone_bury_tile_allowed(tile: u8) -> bool {
     matches!(tile, 4..=10 | 44 | 45)
 }
 
+/// `inventory.md §7.1`: burial is refused for "a scene outside `0x00..0x20`".
+/// The overworld's own scene byte is zero, so both outdoor planes are inside
+/// the range; the dungeon band and combat are not.
+pub fn moonstone_bury_scene_allowed(scene: u8) -> bool {
+    (0x00..=0x20).contains(&scene)
+}
+
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum MoveOutcome {
     Moved,

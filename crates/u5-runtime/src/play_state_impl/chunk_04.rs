@@ -2245,12 +2245,18 @@ impl PlayState {
             self.message = use_prompt_message();
             return MoveOutcome::Blocked;
         };
+        // `inventory.md §7.1`: "`cannot be buried here!\n` answers every
+        // rejection cause there is - a scene outside `0x00..0x20`, and any
+        // underfoot tile outside the accepted ids `4..10`, `44` and `45`.
+        // There is no shipboard-specific message, because the branch never
+        // reads the party's transport marker". A scene with no underfoot cell
+        // at all - combat, the dungeon band - is outside the accepted scene
+        // range too, so it takes the same one literal rather than `Not here!`.
         let Some((scene, z, tile, label)) = self.current_moonstone_bury_context() else {
-            self.message = "Not here!".to_string();
+            self.message = MOONSTONE_BURY_REFUSAL.to_string();
             return MoveOutcome::Blocked;
         };
-        if !moonstone_bury_tile_allowed(tile) {
-            let _ = tile;
+        if !moonstone_bury_scene_allowed(scene) || !moonstone_bury_tile_allowed(tile) {
             self.message = MOONSTONE_BURY_REFUSAL.to_string();
             return MoveOutcome::Blocked;
         }
@@ -2266,15 +2272,19 @@ impl PlayState {
             self.mark_visibility_dirty();
         }
         self.advance_turn();
-        // Unpublished (`cleak/u5-spec#262`). `magic.md §8` specifies the slot
-        // write but no text for the burial itself.
+        // `inventory.md §7.1`, published for `cleak/u5-spec#262`: the label
+        // `Moonstone_` "is printed before any test, is exactly ten characters
+        // ending in a space, and carries no line feed; each completion line
+        // carries its own". The echoed picker row supplies the label, so this
+        // handler contributes only the completion, opening with the space that
+        // makes it continue that row.
         self.diagnostics.push(format!(
             "buried Moonstone phase {} at {label} ({}, {})",
             slot_index + 1,
             self.player.x,
             self.player.y
         ));
-        self.message.clear();
+        self.message = MOONSTONE_BURY_SUCCESS.to_string();
         MoveOutcome::Used
     }
 

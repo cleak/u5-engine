@@ -669,6 +669,11 @@ pub const USE_ITEM_ECHO_MOONSTONE: &str = "Moonstone";
 /// *continues* its `Item: ` row - `Item: Moonstone cannot be buried here!`
 /// is one wrapped sentence. The engine named the tile byte instead.
 pub const MOONSTONE_BURY_REFUSAL: &str = " cannot be buried here!";
+/// `inventory.md §7.1` (published for `cleak/u5-spec#262`): the accepted
+/// burial completes the same `Moonstone_` row with `buried!`. "Neither outcome
+/// is followed by the shared U-Use failure tail: this branch never sets the
+/// command's failure result, so `Failed!` cannot appear after either line."
+pub const MOONSTONE_BURY_SUCCESS: &str = " buried!";
 
 /// **Measured** 2026-09-07 with each item alone in the picker: the spyglass
 /// answers `No stars!` when there are none to read, the sextant answers
@@ -1247,6 +1252,10 @@ pub const TOWN_BED_REST_SLEEP_LINE: &str = "Zzzzzzz...";
 pub const USE_PICKER_NO_QUANTITY: u8 = 255;
 
 pub const GET_NOTHING_REFUSAL: &str = "\nNothing to get!";
+/// `commands.md §5.8` "Successful Get, Search and eat results": "A container
+/// record prints `Open_it_first!\n` and changes nothing at all: no inventory,
+/// no slot clear, no dirty marking, no turn sentinel."
+pub const GET_MUST_OPEN_FIRST_REFUSAL: &str = "\nOpen it first!";
 /// `cleak/u5-spec#194` (black-box): `Hole up- ` off an inn bed completes
 /// its echo line with this refusal.
 pub const HOLE_UP_NOT_IN_BED_REFUSAL: &str = "Only in bed!";

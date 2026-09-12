@@ -453,10 +453,32 @@ pub fn party_member_unavailable_message(party_len: usize) -> String {
 }
 
 pub fn potion_label(index: usize) -> &'static str {
-    const LABELS: [&str; POTION_COUNT] = [
-        "blue", "yellow", "red", "green", "orange", "purple", "black", "white",
-    ];
-    LABELS.get(index).copied().unwrap_or("unknown")
+    POTION_COLOUR_WORDS.get(index).copied().unwrap_or("unknown")
+}
+
+/// `inventory.md §7` potion colour words, in dispatch order.
+pub const POTION_COLOUR_WORDS: [&str; POTION_COUNT] = [
+    "blue", "yellow", "red", "green", "orange", "purple", "black", "white",
+];
+
+/// `commands.md §5.8`: "The two table lookups are **not** symmetric, and the
+/// asymmetry is visible in play. The scroll mnemonic index is masked to three
+/// bits, so an out-of-range scroll sub-kind wraps inside the eight mnemonics;
+/// the potion colour index is used unmasked, so a potion record whose sub-kind
+/// is eight or more reads past the eight colour words into the adjoining
+/// mnemonic table and prints, for example, `A VL potion!`."
+///
+/// The two word tables are adjacent, so the colour lookup walks off the end of
+/// the first into the second. Anything past both is outside what the original
+/// can reach from a one-byte sub-kind's low nibble.
+pub fn potion_colour_display_word(index: usize) -> &'static str {
+    match POTION_COLOUR_WORDS.get(index).copied() {
+        Some(word) => word,
+        None => SCROLL_SPELL_LABELS
+            .get(index - POTION_COUNT)
+            .copied()
+            .unwrap_or("unknown"),
+    }
 }
 
 /// `inventory.md §7` potion variation roll mask. The variation roll
