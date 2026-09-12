@@ -15,6 +15,28 @@
 # script drives the overlay from there rather than issuing Talk.
 # requires-seed: the party beside Britain's weaponsmith carrying equipment to
 # sell, built with `reseed.py shop-arms-menus --through arrived --beside 0x81`
+#
+# This scenario is a lottery in its prompt wording, and only its *structure*
+# can be compared. `prng.md` Section 3 seeds the two sides from the host clock
+# at the intro menu, so they never draw alike. Three uniform pools run here,
+# all published in `shops.md`:
+#
+#   * the stock introduction, Section 947 - `We have:`, `We stock:`,
+#     `Thou canst buy:`, `We've got:`;
+#   * the stock-call prompt after each listing, Section 801 - `What may I show
+#     thee?`, `Which wouldst thou like to see?`, `What is thine interest?`,
+#     `Which would ye see?`;
+#   * the buy confirmation, Section 795 - `Wouldst thou buy one?`, `Wilt thou
+#     take it?`, `Wish ye it?`, `May I get one for thee?`.
+#
+# Measured 2026-09-11: the listing rows themselves (`a...Dagger` through
+# `g...Magic Bow`) and the item description agreed character for character on
+# every beat; every difference was one of the three pools, and the differing
+# lengths then shifted the rows around them.
+#
+# What this scenario pins is the listing's own shape - the letter, the dot
+# leader, the name, the blank rows around the block - and the row the prompt
+# leaves open for the accepted letter to echo onto.
 both	wait	9000
 both	key	space
 both	wait	4000
