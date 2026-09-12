@@ -1,0 +1,78 @@
+# The **affirmative** ASK-WHO acknowledgement, which `cleak/u5-spec#266` asks
+# for and which `dwelling-talk-after-entry` cannot reach.
+#
+# `conversation.md` Section 7's `0x88` row: "On a match against a live party
+# member, **set the active scene's branch-flag bit for the NPC currently
+# speaking** and print the affirmative acknowledgement; on empty input or no
+# match, print the dismissive one." Neither literal is published.
+#
+# `dwelling-talk-after-entry` types `NAME`, which matches nobody, and measured
+# the dismissive line as `"If you say so...`. This scenario is the same route
+# and the same rat, answering with the party's own member instead. Section 7.6
+# publishes the match rule as "the first four characters of a member's name,
+# found at line start or immediately after a space"; the seed's roster panel
+# decodes to a single member, `Avatar`, so `AVATAR` matches.
+#
+# **Measured 2026-09-12.** The original answers `"A pleasure!` - one row, an
+# opening quote and no closing one, the same shape as the dismissive line. Red
+# on its first run, because the engine printed nothing on this arm; green once
+# the measured literal was read back into it.
+#
+# requires-seed: the party outside the hut, so the scenario can walk in through the door
+both	wait	9000
+both	key	space
+both	wait	4000
+both	key	j
+both	wait	8000
+both	key	e
+both	wait	4000
+both	shot	entered	Entered the hut through the door
+both	key	Up
+both	wait	450
+both	key	Up
+both	wait	450
+both	key	Up
+both	wait	450
+both	key	Up
+both	wait	450
+both	key	Up
+both	wait	450
+both	key	Up
+both	wait	450
+both	key	Up
+both	wait	450
+both	key	Up
+both	wait	450
+both	key	Up
+both	wait	450
+both	key	Up
+both	wait	450
+both	key	Up
+both	wait	450
+both	key	Up
+both	wait	450
+both	key	Up
+both	wait	450
+both	key	Up
+both	wait	450
+both	key	Left
+both	wait	450
+both	key	Up
+both	wait	450
+both	key	Up
+both	wait	450
+both	wait	2500
+both	key	l
+both	wait	1200
+both	key	Right
+both	wait	2500
+both	shot	look	Look east at the hut's NPC
+both	key	t
+both	wait	1200
+both	key	Right
+both	wait	3500
+both	shot	talk	Talk east after entering through the door
+both	type	AVATAR
+both	key	Return
+both	wait	3500
+both	shot	affirmative	The party member name accepted

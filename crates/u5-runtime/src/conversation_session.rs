@@ -350,19 +350,22 @@ impl ConversationSession {
                 // the stream, so the resumed run carries only the quote pair
                 // and this engine printed nothing.
                 //
-                // Measured (`qa/paired/dwelling-talk-after-entry.tsv`, beat
-                // `name`): the row reads `"If you say so...`, opening on a
-                // fresh row under the answer. The affirmative line is not
-                // measured yet, so a matched name keeps the resumed output
-                // alone rather than borrowing the dismissive wording
-                // (`cleak/u5-spec#266`).
-                if slot == 0 {
-                    let mut rendered =
-                        TlkRenderedText::plain(&format!("\n\"{TLK_ASK_WHO_DISMISSIVE_LINE}"));
-                    rendered.push_rendered(&out.rendered_text().trimmed_ask_who_quote_pair());
-                    out.text = rendered.text;
-                    out.rendered_glyphs = rendered.glyphs;
-                }
+                // Both measured 2026-09-12 and neither published
+                // (`cleak/u5-spec#266`): a matched member gives
+                // `"A pleasure!` (`qa/paired/dwelling-talk-askwho-match.tsv`)
+                // and anything else gives `"If you say so...`
+                // (`qa/paired/dwelling-talk-after-entry.tsv`, beat `name`).
+                // Each opens on a fresh row under the answer, with an opening
+                // quote and no closing one.
+                let acknowledgement = if slot == 0 {
+                    TLK_ASK_WHO_DISMISSIVE_LINE
+                } else {
+                    TLK_ASK_WHO_AFFIRMATIVE_LINE
+                };
+                let mut rendered = TlkRenderedText::plain(&format!("\n\"{acknowledgement}"));
+                rendered.push_rendered(&out.rendered_text().trimmed_ask_who_quote_pair());
+                out.text = rendered.text;
+                out.rendered_glyphs = rendered.glyphs;
                 out.asked_who = Some(slot);
                 return out;
             }
@@ -1137,7 +1140,12 @@ mod tests {
 
         let second = s.submit_keyword("my friend Iolo", &context);
         assert_eq!(second.asked_who, Some(2));
-        assert_eq!(second.text, " Done.");
+        // `conversation.md §7`: a matched member takes the affirmative
+        // acknowledgement, measured as `"A pleasure!` (`cleak/u5-spec#266`).
+        assert_eq!(
+            second.text,
+            format!("\n\"{}{}", crate::TLK_ASK_WHO_AFFIRMATIVE_LINE, " Done.")
+        );
         // §7.6: ASK-WHO is the in-stream setter for the bank `0x8C` tests,
         // and the bit is the speaking NPC's own roster slot.
         assert_eq!(second.branch_flags_set, 1u32 << 6);
@@ -1194,7 +1202,10 @@ mod tests {
 
         let second = s.submit_keyword("ABCDEFGHIJKLMNOEXTRA", &context);
         assert_eq!(second.asked_who, Some(1));
-        assert_eq!(second.text, " Done.");
+        assert_eq!(
+            second.text,
+            format!("\n\"{}{}", crate::TLK_ASK_WHO_AFFIRMATIVE_LINE, " Done.")
+        );
     }
 
     #[test]

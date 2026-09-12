@@ -36,6 +36,7 @@ dungeon-look	seed-dungeon-look	copied from the paired-dungeon-look run profile
 dungeon-chest-refusals	seed-dungeon-search	the dungeon-search seat: an ordinary Deceit corridor, so G and O both take their no-chest arm
 dungeon-search	seed-dungeon-search	copied from the paired-dungeon-search run profile
 dungeon-view	seed-dungeon-view	copied from the paired-dungeon-view run profile
+dwelling-talk-askwho-match	seed-dwelling-talk-after-entry-reseeded	the dwelling-talk-after-entry seat: the same walk-in route to the same rat
 dwelling-talk-after-entry	seed-dwelling-talk-after-entry-reseeded	re-written by reseed.py so the save carries a populated NPC band
 dwelling-talk-after-restore	seed-dwelling-talk-after-restore-reseeded	re-written by reseed.py so the save carries a populated NPC band
 magic-mix	seed-magic-mix	copied from the paired-magic-mix run profile

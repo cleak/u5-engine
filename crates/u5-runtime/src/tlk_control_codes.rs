@@ -657,6 +657,15 @@ pub const TLK_ASK_WHO_PROMPT_OPEN_LINE: &str = ":";
 /// The affirmative acknowledgement is still unmeasured: reaching it needs a
 /// party member's own name typed at the prompt.
 pub const TLK_ASK_WHO_DISMISSIVE_LINE: &str = "If you say so...";
+
+/// `conversation.md §7`'s `0x88` row: "On a match against a live party member
+/// ... print the affirmative acknowledgement".
+///
+/// **Measured, not published** (`cleak/u5-spec#266`). Measured 2026-09-12
+/// (`qa/paired/dwelling-talk-askwho-match.tsv`): answering the giant rat's
+/// prompt with the party's own member name gives `"A pleasure!` - the same
+/// shape as the dismissive line, an opening quote and no closing one.
+pub const TLK_ASK_WHO_AFFIRMATIVE_LINE: &str = "A pleasure!";
 pub const TLK_CODE_IF_ELSE: u8 = 0x8C;
 /// `conversation.md §7.6`: the reserved `0x8C` argument. Every other
 /// argument value names a branch target label; this one, on the set arm,
