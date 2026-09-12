@@ -1819,6 +1819,19 @@ fn handle_active_shop_key_input(
             // Read before the mutable borrows below; `shops.md §6.1` adjusts
             // the shipwright's base rows by the speaker's Intelligence.
             let speaker_intelligence = active_speaker_intelligence(state);
+            // `shops.md §8.B`: record `119` "carries its own leading spacing
+            // and prompt", and it ends on a trailing space, so the accepted
+            // `F`/`S` echoes onto that open row - the same placement the
+            // tavern's menu letter uses. Measured 2026-09-12
+            // (`bd-shipwright/frigate`), where the original reads
+            // `like to see?" F`.
+            let shipwright_letter_echo = matches!(*s, ShipBrokerState::Greeting { .. })
+                .then(|| match key_byte {
+                    b'F' | b'f' => Some('F'),
+                    b'S' | b's' => Some('S'),
+                    _ => None,
+                })
+                .flatten();
             // The pending delivery is scratch for the step function; the
             // durable copy is `pending_vehicle_save`, which
             // `sync_pending_vehicle_purchase_state` writes below and which the
@@ -1924,6 +1937,9 @@ fn handle_active_shop_key_input(
                 }
                 _ => None,
             };
+            if let Some(letter) = shipwright_letter_echo {
+                state.emit_message_line_continuing_row(letter.to_string());
+            }
             // `§8.A`: the no-sale closing bark is one of the four records on
             // the shipwright's own row, inside the quote/attribution envelope.
             let decline_record = matches!(outcome, ShipBrokerOutcome::Declined)
