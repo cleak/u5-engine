@@ -1,3 +1,18 @@
+# **Known gap, diagnosed 2026-09-12: the arena's blank row after a result.**
+# `combat.md` Section 8.1 has the turn handler emit its own line feed between
+# the banner and the command read, so the blank row the original shows between
+# a result and the next `Avatar, armed with...:` is only there when the result
+# closed its own row. The `invisibility` beat shows the original with a blank
+# under `None mixed!` and this engine without one, and the beats after it drift
+# because the two sides then read different keys.
+#
+# The sibling case - the `D`/`W` `What?` refusals - was fixed the same day by
+# giving those literals their own feed at the combat message site. This one is
+# not reached from there: the cast refusal is composed with the typed spell
+# row rather than being handed to the arena's result path, so it needs that
+# composition traced first. A speculative feed added to
+# `cast_spell_resource_gate` changed nothing here and was reverted.
+#
 # In the arena: Sanct Lor, and R-Ready on a body-armour row.
 # requires-seed: the party one step from a dungeon room trigger, with
 # spells, reagents, mana and equipment
