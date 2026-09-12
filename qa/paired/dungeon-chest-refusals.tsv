@@ -16,6 +16,12 @@
 # The party stands in an ordinary Deceit corridor, so both verbs take their
 # no-chest arm. The chest arms themselves still need a seat beside a chest.
 #
+# **Measured 2026-09-12.** Red on its first run and green on its second, having
+# caught one real defect: the engine printed `Get-Get`, because the shared
+# dispatcher was emitting `Get-` in the dungeon band too and the handler then
+# added the `Get` row of its own that Section 5.3 calls for. The Open beat
+# agreed on the first run.
+#
 # requires-seed: the party inside Deceit facing a wall-class cell, with a torch
 both	wait	9000
 both	key	space
