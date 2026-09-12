@@ -160,6 +160,45 @@ impl GameplayMessageLog {
         self.lines.clear();
     }
 
+    /// One eight-scanline upward scroll of the right-side text strip, driven
+    /// by a panel overflow rather than by message output.
+    ///
+    /// `display-driver-abi.md §9.5` "Message-panel fast path - left edge at
+    /// pixel column 192": the path "is hardwired and ignores both the rest of
+    /// the rectangle and the distance argument", scrolls "exactly eight
+    /// scanlines upward", and "the fixed strip includes the gameplay message
+    /// window at screen columns 24..39, rows 11..23". Crucially: "Selection of
+    /// this path depends only on the requested left edge, not on a window's
+    /// identity or vertical bounds. An upper inventory-panel overflow also has
+    /// left edge 192 and therefore moves this same message strip. **The text
+    /// layer clamps only the active panel cursor; the message cursor is
+    /// unchanged.**"
+    ///
+    /// So everything already drawn rises one row while the place the next row
+    /// will land does not move. In this log that is: lift the placed rows by
+    /// one, then append the row the cursor now sits past, which keeps the
+    /// write position where it was. `inventory.md §7.1` calls the result "the
+    /// resulting variable prompt gap", and `RETRACTIONS.md` R467 withdrew the
+    /// fixed-gap reading it replaces.
+    ///
+    /// The exposed band is deliberately not blanked by the driver, but what
+    /// lies below the strip is off-window, so the row that arrives is blank
+    /// here.
+    pub fn scroll_strip(&mut self) {
+        if self.top_offset > 0 {
+            self.top_offset -= 1;
+        } else if !self.lines.is_empty() {
+            self.lines.remove(0);
+        }
+        self.lines.push(MessageLogLine {
+            text: String::new(),
+            glyphs: Vec::new(),
+            kind: MessageLineKind::Blank,
+            centered: false,
+            trailing_spaces: 0,
+        });
+    }
+
     /// Append an echoed command line.
     pub fn push_command(&mut self, text: &str) {
         self.push_wrapped_plain(text, MessageLineKind::Command);
@@ -883,6 +922,55 @@ fn wrap_rendered_to_width(
 fn trim_trailing_spaces(glyphs: &mut Vec<crate::TlkRenderedGlyph>) {
     while glyphs.last().is_some_and(|glyph| glyph.byte == b' ') {
         glyphs.pop();
+    }
+}
+
+#[cfg(test)]
+mod strip_scroll_tests {
+    use super::*;
+
+    /// `display-driver-abi.md §9.5`: a panel overflow at left edge 192 scrolls
+    /// the whole right-side strip - the gameplay message window included - by
+    /// eight scanlines, and "the text layer clamps only the active panel
+    /// cursor; the message cursor is unchanged". So the placed rows rise by
+    /// one and the next write position does not move.
+    #[test]
+    fn a_panel_strip_scroll_lifts_the_rows_and_leaves_the_write_position() {
+        let mut log = GameplayMessageLog::new();
+        log.set_top_offset(3);
+        log.push_command("Use item");
+        log.push_output("Item:");
+        let placed = log.lines().len();
+
+        log.scroll_strip();
+
+        // The blank band above the first logged row absorbs the lift.
+        assert_eq!(log.top_offset(), 2);
+        // One row arrives at the bottom, so the row the cursor sits past is
+        // where it was: three rows down from the window top, as before.
+        assert_eq!(log.lines().len(), placed + 1);
+        assert!(matches!(
+            log.lines().last().map(|line| line.kind),
+            Some(MessageLineKind::Blank)
+        ));
+        assert_eq!(log.top_offset() + log.lines().len(), 3 + placed + 1 - 1);
+    }
+
+    /// With no blank band left above it, the lift takes the oldest row off the
+    /// top instead - the strip scroll is a pixel copy, not a window-aware one.
+    #[test]
+    fn a_strip_scroll_with_no_headroom_drops_the_oldest_row() {
+        let mut log = GameplayMessageLog::new();
+        log.set_top_offset(0);
+        log.push_command("Use item");
+        log.push_output("Item:");
+        let placed = log.lines().len();
+
+        log.scroll_strip();
+
+        assert_eq!(log.top_offset(), 0);
+        assert_eq!(log.lines().len(), placed);
+        assert_eq!(log.lines().first().map(|line| line.text.as_str()), Some("Item:"));
     }
 }
 
