@@ -18,21 +18,34 @@ fn dungeon_get_refuses_chest_room_trigger_or_unrelated_cell_without_turn() {
 
     assert_eq!(state.grid[dungeon_cell_index(0, 1, 1)], 0x42);
     assert_eq!(state.turn, 0);
-    assert_eq!(state.message, DUNGEON_CHEST_GET_MUST_OPEN_FIRST);
+    // `commands.md §5.3`: the dungeon handler opens with its own `Get\n`
+    // unconditionally, before it looks at anything.
+    assert_eq!(
+        state.message,
+        format!("{DUNGEON_CHEST_GET_ECHO}{DUNGEON_CHEST_GET_MUST_OPEN_FIRST}")
+    );
 
     state.grid[dungeon_cell_index(0, 1, 1)] = 0xf2;
     assert_eq!(state.get_dungeon_underfoot(scene, 0), MoveOutcome::Blocked);
 
     assert_eq!(state.grid[dungeon_cell_index(0, 1, 1)], 0xf2);
     assert_eq!(state.turn, 0);
-    assert_eq!(state.message, GET_NOTHING_REFUSAL);
+    // `commands.md §5.8`: "Get on a non-chest prints `Get\nNot here!\n`".
+    assert_eq!(
+        state.message,
+        format!("{DUNGEON_CHEST_GET_ECHO}{DUNGEON_CHEST_GET_NOT_HERE}")
+    );
 
     state.grid[dungeon_cell_index(0, 1, 1)] = 0x00;
     assert_eq!(state.get_dungeon_underfoot(scene, 0), MoveOutcome::Blocked);
 
     assert_eq!(state.grid[dungeon_cell_index(0, 1, 1)], 0x00);
     assert_eq!(state.turn, 0);
-    assert_eq!(state.message, GET_NOTHING_REFUSAL);
+    // `commands.md §5.8`: "Get on a non-chest prints `Get\nNot here!\n`".
+    assert_eq!(
+        state.message,
+        format!("{DUNGEON_CHEST_GET_ECHO}{DUNGEON_CHEST_GET_NOT_HERE}")
+    );
 }
 
 #[test]

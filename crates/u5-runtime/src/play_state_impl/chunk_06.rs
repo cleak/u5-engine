@@ -1475,11 +1475,15 @@ impl PlayState {
     ) -> MoveOutcome {
         let idx = dungeon_cell_index(level, self.player.x, self.player.y);
         let tile = self.grid[idx];
+        // `commands.md §5.3`: "The dispatcher emits `Get-` only outside the
+        // dungeon band; the dungeon handler opens with its own `Get\n`,
+        // unconditionally, before it looks at anything."
+        self.message = DUNGEON_CHEST_GET_ECHO.to_string();
         match tile >> 4 {
             0x4 => {
                 // `dungeon-mode.md §13`: the published dungeon-chest
                 // Get refusal, not a paraphrase of it.
-                self.message = DUNGEON_CHEST_GET_MUST_OPEN_FIRST.to_string();
+                self.message.push_str(DUNGEON_CHEST_GET_MUST_OPEN_FIRST);
                 MoveOutcome::Blocked
             }
             0x7 => self.consume_dungeon_chest(
@@ -1493,7 +1497,9 @@ impl PlayState {
                 "Got",
             ),
             _ => {
-                self.message = GET_NOTHING_REFUSAL.to_string();
+                // `commands.md §5.8`: "Get on a non-chest prints
+                // `Get\nNot here!\n`" - not the surface cascade's refusal.
+                self.message.push_str(DUNGEON_CHEST_GET_NOT_HERE);
                 MoveOutcome::Blocked
             }
         }

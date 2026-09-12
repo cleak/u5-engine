@@ -567,36 +567,13 @@ impl PlayState {
         } else {
             tile
         };
-        let note = self
-            .apply_dungeon_chest_content(entries, scene, level, x, y, content_tile)
-            .unwrap_or_else(|| self.generate_dungeon_chest_content(level, x, y, content_tile));
-        self.consume_dungeon_chest_with_note(scene, level, x, y, idx, tile, verb, &note)
-    }
-
-    pub fn apply_dungeon_chest_content(
-        &mut self,
-        entries: Option<&[DungeonChestContentEntry]>,
-        scene: DungeonScene,
-        level: u8,
-        x: usize,
-        y: usize,
-        tile: u8,
-    ) -> Option<String> {
-        let entry = entries?.iter().find(|entry| {
-            entry.scene == scene
-                && entry.level == level
-                && entry.x == x
-                && entry.y == y
-                && entry.expected_cell.map_or(true, |expected| {
-                    expected == tile || (tile >> 4 == 0x7 && expected == (0x40 | (tile & 0x0f)))
-                })
-        })?;
-        let mut parts = Vec::new();
-        for grant in &entry.grants {
-            self.apply_object_pickup(grant.kind, grant.amount);
-            parts.push(format!("{} {}", grant.amount, grant.kind.label()));
-        }
-        Some(format!("authored chest grants {}", parts.join(", ")))
+        // `containers.md §6`: "**The generator is the whole contract. There is
+        // no authored per-chest override.** ... An implementation carrying an
+        // authored per-chest content sidecar has no counterpart for it in the
+        // original and should retire it."
+        let _ = entries;
+        let rows = self.generate_dungeon_chest_content(level, x, y, content_tile);
+        self.consume_dungeon_chest_with_note(scene, level, x, y, idx, tile, verb, &rows)
     }
 
     /// `containers.md §6` dungeon-chest reward generator. Iterates the
@@ -636,27 +613,27 @@ impl PlayState {
                         u16::from(DUNGEON_CHEST_FOOD_MAX),
                     );
                     self.apply_object_pickup(ObjectPickupKind::Food, amount);
-                    parts.push(format!("{amount} food"));
+                    parts.push(ObjectPickupKind::Food.pickup_result_line(amount));
                 }
                 DungeonChestReward::Gold => {
                     let amount = self.dungeon_chest_gold_roll(level, x, y, tile);
                     self.apply_object_pickup(ObjectPickupKind::Gold, amount);
-                    parts.push(format!("{amount} gold"));
+                    parts.push(ObjectPickupKind::Gold.pickup_result_line(amount));
                 }
                 DungeonChestReward::Keys => {
                     let amount = self.dungeon_chest_small_roll(level, x, y, tile, row_index);
                     self.apply_object_pickup(ObjectPickupKind::Keys, amount);
-                    parts.push(format!("{amount} keys"));
+                    parts.push(ObjectPickupKind::Keys.pickup_result_line(amount));
                 }
                 DungeonChestReward::Gems => {
                     let amount = self.dungeon_chest_small_roll(level, x, y, tile, row_index);
                     self.apply_object_pickup(ObjectPickupKind::Gems, amount);
-                    parts.push(format!("{amount} gems"));
+                    parts.push(ObjectPickupKind::Gems.pickup_result_line(amount));
                 }
                 DungeonChestReward::Torches => {
                     let amount = self.dungeon_chest_small_roll(level, x, y, tile, row_index);
                     self.apply_object_pickup(ObjectPickupKind::Torches, amount);
-                    parts.push(format!("{amount} torches"));
+                    parts.push(ObjectPickupKind::Torches.pickup_result_line(amount));
                 }
                 DungeonChestReward::Potion => {
                     let subtype = self.dungeon_chest_zero_based_roll(
@@ -669,7 +646,7 @@ impl PlayState {
                         POTION_COUNT,
                     );
                     self.apply_object_pickup(ObjectPickupKind::Potion(subtype), 1);
-                    parts.push(format!("1 {} potion", potion_label(subtype)));
+                    parts.push(ObjectPickupKind::Potion(subtype).pickup_result_line(1));
                 }
                 DungeonChestReward::Scroll => {
                     let subtype = self.dungeon_chest_zero_based_roll(
@@ -682,16 +659,21 @@ impl PlayState {
                         SCROLL_COUNT,
                     );
                     self.apply_object_pickup(ObjectPickupKind::Scroll(subtype), 1);
-                    parts.push(format!("1 {} scroll", scroll_label(subtype)));
+                    parts.push(ObjectPickupKind::Scroll(subtype).pickup_result_line(1));
                 }
             }
         }
 
-        if parts.is_empty() {
+        // `containers.md §6` "What each row prints": "one row per row that
+        // fires, in the table's order". "**A chest whose rows all fail prints
+        // the preamble and nothing else.** There is no "empty" line on this
+        // path."
+        self.diagnostics.push(if parts.is_empty() {
             "generated chest grants nothing".to_string()
         } else {
             format!("generated chest grants {}", parts.join(", "))
-        }
+        });
+        parts.join("\n")
     }
 
     /// `containers.md §6`: the keys, gems, and torches rows all roll
@@ -808,17 +790,18 @@ impl PlayState {
         self.grid[idx] = tile & 0x08;
         self.mark_visibility_dirty();
         self.advance_turn();
-        // Unpublished (`cleak/u5-spec#262`). `dungeon-mode.md §8.1` gives
-        // the chest literals for Get and the must-open-first refusal, but
-        // none for the cleared-to-passage outcome.
         self.diagnostics.push(format!(
-            "{verb} dungeon chest at ({}, {}) on {} level {level}; {note}, \
+            "{verb} dungeon chest at ({}, {}) on {} level {level}, \
              marked visit-local passage",
             x,
             y,
             scene.key()
         ));
-        self.message.clear();
+        // `containers.md §6`: the open-chest arm prints the three-row preamble
+        // `contents` / `of chest` / `You find:` under the handler's own `Get`
+        // row, then one row per reward row that fired.
+        self.message.push_str(DUNGEON_CHEST_GET_CONTENTS);
+        self.message.push_str(note);
         MoveOutcome::ContainerOpened
     }
 
@@ -5808,13 +5791,3 @@ pub fn dungeon_monster_step_directions(seed: u8) -> [Direction; 4] {
     ORDERS[(seed as usize) & 0x03]
 }
 
-pub fn potion_label(index: usize) -> &'static str {
-    const LABELS: [&str; POTION_COUNT] = [
-        "blue", "yellow", "red", "green", "orange", "purple", "black", "white",
-    ];
-    LABELS.get(index).copied().unwrap_or("unknown")
-}
-
-pub fn scroll_label(index: usize) -> &'static str {
-    SCROLL_SPELL_LABELS.get(index).copied().unwrap_or("unknown")
-}

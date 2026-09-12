@@ -2267,12 +2267,28 @@ fn dungeon_get_chest_generated_rewards_follow_public_rows() {
     assert_eq!(state.turn, 1);
     assert!(state.diagnostics.iter().any(|note| note.contains("generated chest grants 11 food") || note.contains("generated chest grants 11 food")));
     assert!(state.diagnostics.iter().any(|note| note.contains("52 gold") || note.contains("52 gold")));
-    assert!(state.diagnostics.iter().any(|note| note.contains("1 white potion") || note.contains("1 white potion")));
-    assert!(state.diagnostics.iter().any(|note| note.contains("1 IMC scroll") || note.contains("1 IMC scroll")));
+    assert!(state.diagnostics.iter().any(|note| note.contains("A white potion!")));
+    assert!(state.diagnostics.iter().any(|note| note.contains("A scroll: IMC!")));
+    // `containers.md §6` "What each row prints": the handler's own `Get` row,
+    // the three-row preamble, then one row per reward row that fired, in the
+    // table's order.
+    assert_eq!(
+        state.message,
+        format!(
+            "{DUNGEON_CHEST_GET_ECHO}{DUNGEON_CHEST_GET_CONTENTS}\
+             11 food!\n52 gold!\n2 keys!\n1 gem!\n2 torches!\n\
+             A white potion!\nA scroll: IMC!"
+        )
+    );
 }
 
+/// `containers.md §6`: "**The generator is the whole contract. There is no
+/// authored per-chest override.** ... An implementation carrying an authored
+/// per-chest content sidecar has no counterpart for it in the original and
+/// should retire it." This test used to assert the sidecar overrode the
+/// generator.
 #[test]
-fn dungeon_get_chest_applies_clean_sidecar_grants() {
+fn dungeon_get_chest_ignores_an_authored_content_sidecar() {
     let dir = debug_game_dir();
     fs::write(
         dir.join(DUNGEON_CHEST_TABLE_FILE),
@@ -2295,20 +2311,21 @@ fn dungeon_get_chest_applies_clean_sidecar_grants() {
     );
 
     assert_eq!(state.grid[dungeon_cell_index(0, 1, 1)], 0x08);
-    assert_eq!(state.gold, 17);
-    assert_eq!(state.gems, 3);
-    assert_eq!(state.torches, 1);
     assert_eq!(state.turn, 1);
-    assert!(state.diagnostics.iter().any(|note| note.contains("Got dungeon chest") || note.contains("got dungeon chest")));
+    assert!(
+        !state
+            .diagnostics
+            .iter()
+            .any(|note| note.contains("authored chest grants"))
+    );
     assert!(
         state
             .diagnostics
             .iter()
-            .any(|note| note.contains("authored chest grants 7 gold, 2 gems, 1 torches"))
+            .any(|note| note.contains("generated chest grants"))
     );
     let _ = fs::remove_dir_all(dir);
 }
-
 #[test]
 fn dungeon_open_chest_does_not_apply_clean_sidecar_grants() {
     let dir = debug_game_dir();
