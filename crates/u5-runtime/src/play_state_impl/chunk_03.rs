@@ -463,6 +463,21 @@ impl PlayState {
         if let Some(session) = self.active_direction_prompt {
             return Self::direction_prompt_open_verb_echo(session.kind);
         }
+        // `commands.md §5.2`: the direction prompt's trailing hyphen leaves
+        // its row open, and `text-output.md §10.4` names that case -
+        // "Verbs whose echo ends in a hyphen or a trailing space rely on
+        // that same leading line feed to close their partially written
+        // line". So the cursor waits on the `Direction-` row and the chosen
+        // word completes it. Measured 2026-09-12
+        // (`cast-blink-overworld/submitted`), where the original reads
+        // `Direction-~` and this engine opened a fresh row beneath it.
+        if self
+            .active_cast_followup
+            .as_ref()
+            .is_some_and(|session| matches!(session.kind, CastFollowupKind::Direction { .. }))
+        {
+            return Some(SPELL_DIRECTION_PROMPT_PREFIX.to_string());
+        }
         // `magic.md §8`: the creature prompt is `Creature: ` with a
         // trailing space, and the arena cursor - not a message-window
         // line - shows the selected cell, so the row stays open under it.
@@ -1134,6 +1149,13 @@ impl PlayState {
                         continue;
                     };
                     let direction_key = cardinal_direction_key(direction);
+                    // `commands.md §5.2`: the chosen word completes the open
+                    // `Direction-` row - `Direction-North`. Measured
+                    // 2026-09-12 (`cast-blink-overworld/blinked`).
+                    let _ = self.complete_open_direction_echo(
+                        SPELL_DIRECTION_PROMPT_PREFIX,
+                        direction.name(),
+                    );
                     return self.finish_active_cast_followup(
                         session,
                         &direction_key.to_string(),
