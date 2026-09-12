@@ -5600,16 +5600,26 @@ impl PlayState {
         self.mark_town_rest_sleepers();
         if !self.advance_town_rest_initial_schedule_burst(entries.as_deref(), scene, floor) {
             let woke = self.wake_town_rest_sleepers();
-            self.message = format!(
-                "Rest interrupted; thrown out of the inn bed; woke {woke} asleep member(s)."
-            );
+            // `rest-and-camp.md §6`: "Town/inn rest can instead produce a
+            // local refusal or \"thrown out\" style result depending on the
+            // caller context" - the wording is not published, so the engine
+            // records what happened rather than inventing a sentence.
+            self.diagnostics.push(format!(
+                "town-bed rest interrupted; woke {woke} asleep member(s)"
+            ));
+            self.message.clear();
             return Ok(MoveOutcome::Blocked);
         }
         if !self.advance_town_rest_until_target_hour(hours, entries.as_deref(), scene, floor) {
             let woke = self.wake_town_rest_sleepers();
-            self.message = format!(
-                "Rest interrupted; thrown out of the inn bed; woke {woke} asleep member(s)."
-            );
+            // `rest-and-camp.md §6`: "Town/inn rest can instead produce a
+            // local refusal or \"thrown out\" style result depending on the
+            // caller context" - the wording is not published, so the engine
+            // records what happened rather than inventing a sentence.
+            self.diagnostics.push(format!(
+                "town-bed rest interrupted; woke {woke} asleep member(s)"
+            ));
+            self.message.clear();
             return Ok(MoveOutcome::Blocked);
         }
         let mut recovered_hp = 0;
@@ -5625,10 +5635,14 @@ impl PlayState {
         // and never reaches it.
         self.clear_and_replace_scheduled_npcs();
         let woke = self.wake_town_rest_sleepers();
-        self.message = format!(
-            "Rested {hours} hour{} at the inn bed; recovered {recovered_hp} HP and {recovered_mana} MP; woke {woke} asleep member(s).",
-            if hours == 1 { "" } else { "s" }
-        );
+        // `rest-and-camp.md §4`: the town-bed surface prints its own
+        // seven-z sleep line and nothing else. The hours and the recovery
+        // totals are engine bookkeeping.
+        self.diagnostics.push(format!(
+            "town-bed rest {hours}h; recovered {recovered_hp} HP and {recovered_mana} MP; \
+             woke {woke} asleep member(s)"
+        ));
+        self.message = crate::commands::TOWN_BED_REST_SLEEP_LINE.to_string();
         Ok(MoveOutcome::Rested)
     }
 

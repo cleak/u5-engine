@@ -1213,6 +1213,19 @@ pub const YELL_QUESTION: &str = "what?";
 /// U-Use, and ordinary positive quantities produce the counted layout."
 /// A row holding this value prints only its name, starting in window
 /// column 1 with all thirteen interior cells available.
+/// `rest-and-camp.md §4` "Sleep text is caller-specific": "Town-bed rest
+/// prints `Zzzzzzz...\n` (seven z characters, three dots)." The section names
+/// four surfaces with four different z-counts and says outright: "Do not apply
+/// one generic sleep sentence to all four surfaces."
+/// `shops.md §8.C`'s inn result table, "Sleep / morning": `Zzzzzz....\n\n` -
+/// four dots - "followed at morning by `Morning!\n`". `rest-and-camp.md §4`
+/// distinguishes this six-z/four-dot form from the town bed's seven-z form.
+pub const PAID_INN_REST_SLEEP_LINE: &str = "Zzzzzz....";
+/// See [`PAID_INN_REST_SLEEP_LINE`]: the morning line that follows it.
+pub const PAID_INN_REST_MORNING_LINE: &str = "Morning!";
+
+pub const TOWN_BED_REST_SLEEP_LINE: &str = "Zzzzzzz...";
+
 pub const USE_PICKER_NO_QUANTITY: u8 = 255;
 
 pub const GET_NOTHING_REFUSAL: &str = "\nNothing to get!";

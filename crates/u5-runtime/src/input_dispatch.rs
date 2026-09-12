@@ -2273,8 +2273,17 @@ fn apply_paid_inn_rest(state: &mut PlayState, inn: crate::shops::Inn, cost: u16)
     state.player.y = usize::from(wake_y);
     state.sync_player_object();
     state.mark_visibility_dirty();
+    // `shops.md §8.C`, "Sleep / morning": `Zzzzzz....\n\n` - four dots -
+    // "followed at morning by `Morning!\n`". The hours, the fee and the
+    // recovery totals are engine bookkeeping, not the original's text.
+    state.diagnostics.push(format!(
+        "paid inn rest {hours}h for {cost} gold; recovered {recovered_hp} HP and \
+         {recovered_mana} MP; cured {cured} poisoned member(s); woke {woke} asleep member(s)"
+    ));
     format!(
-        "Rested {hours} hours at the inn for {cost} gold; recovered {recovered_hp} HP and {recovered_mana} MP; cured {cured} poisoned member(s); woke {woke} asleep member(s)."
+        "{}\n\n{}",
+        crate::commands::PAID_INN_REST_SLEEP_LINE,
+        crate::commands::PAID_INN_REST_MORNING_LINE
     )
 }
 

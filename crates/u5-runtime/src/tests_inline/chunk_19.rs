@@ -492,7 +492,8 @@
         );
 
         assert_eq!(state.clock, GameClock::new(9, 0).unwrap());
-        assert!(state.message.contains("Rested 1 hour at the inn bed"));
+        assert_eq!(state.message, crate::commands::TOWN_BED_REST_SLEEP_LINE);
+        assert!(state.diagnostics.iter().any(|n| n.contains("town-bed rest 1h")));
         assert_eq!(
             state.turn,
             u64::from(TOWN_REST_INITIAL_SCHEDULE_BURST_TICKS)
@@ -539,7 +540,8 @@
         );
 
         assert_eq!(state.clock, GameClock::new(9, 0).unwrap());
-        assert!(state.message.contains("Rested 1 hour at the inn bed"));
+        assert_eq!(state.message, crate::commands::TOWN_BED_REST_SLEEP_LINE);
+        assert!(state.diagnostics.iter().any(|n| n.contains("town-bed rest 1h")));
         let _ = fs::remove_dir_all(dir);
     }
 
@@ -611,7 +613,8 @@
             (state.active_objects[1].x, state.active_objects[1].y),
             (4, 1)
         );
-        assert!(state.message.contains("Rested 2 hours"));
+        assert_eq!(state.message, crate::commands::TOWN_BED_REST_SLEEP_LINE);
+        assert!(state.diagnostics.iter().any(|n| n.contains("town-bed rest 2h")));
         let _ = fs::remove_dir_all(dir);
     }
 
@@ -649,8 +652,21 @@
         assert_eq!(state.party[0].status, b'G');
         assert_eq!(state.party[0].hp, 5);
         assert_eq!(state.party[0].mana, 0);
-        assert!(state.message.contains("thrown out"));
-        assert!(state.message.contains("woke 1 asleep member(s)"));
+        // The interruption wording is unpublished (`rest-and-camp.md §6`), so
+        // the engine records it rather than inventing a sentence.
+        assert!(state.message.is_empty());
+        assert!(
+            state
+                .diagnostics
+                .iter()
+                .any(|note| note.contains("town-bed rest interrupted"))
+        );
+        assert!(
+            state
+                .diagnostics
+                .iter()
+                .any(|note| note.contains("woke 1 asleep member(s)"))
+        );
         let _ = fs::remove_dir_all(dir);
     }
 
@@ -714,9 +730,24 @@
         assert_eq!(state.party[2].status, b'D');
         assert_eq!(state.party[2].hp, 0);
         assert_eq!(state.party[2].mana, 0);
-        assert!(state.message.contains("recovered 0 HP"));
-        assert!(state.message.contains("and 0 MP"));
-        assert!(state.message.contains("woke 2 asleep member(s)"));
+        assert!(
+            state
+                .diagnostics
+                .iter()
+                .any(|note| note.contains("recovered 0 HP"))
+        );
+        assert!(
+            state
+                .diagnostics
+                .iter()
+                .any(|note| note.contains("and 0 MP"))
+        );
+        assert!(
+            state
+                .diagnostics
+                .iter()
+                .any(|note| note.contains("woke 2 asleep member(s)"))
+        );
         let _ = fs::remove_dir_all(dir);
     }
 
@@ -762,7 +793,12 @@
         assert_eq!(state.party[0].status, b'D');
         assert_eq!(state.party[0].hp, 0);
         assert_eq!(state.party[0].mana, 90);
-        assert!(state.message.contains("recovered 0 HP"));
+        assert!(
+            state
+                .diagnostics
+                .iter()
+                .any(|note| note.contains("recovered 0 HP"))
+        );
         let _ = fs::remove_dir_all(dir);
     }
 
@@ -938,7 +974,7 @@
             u64::from(TOWN_REST_INITIAL_SCHEDULE_BURST_TICKS)
                 + u64::from(TOWN_REST_TICKS_PER_HOUR)
         );
-        assert!(state.message.contains("Rested 1 hour"));
+        assert_eq!(state.message, crate::commands::TOWN_BED_REST_SLEEP_LINE);
         let _ = fs::remove_dir_all(dir);
     }
 

@@ -4988,7 +4988,14 @@ fn end_to_end_innkeeper_session_through_input_dispatcher() {
     assert!(state.message.contains("room"));
     // 'Y' again to confirm.
     handle_play_key_input(&mut state, 'Y', "", Path::new("")).unwrap();
-    assert!(state.message.contains("Rested"));
+    assert_eq!(
+        state.message,
+        format!(
+            "{}\n\n{}",
+            crate::commands::PAID_INN_REST_SLEEP_LINE,
+            crate::commands::PAID_INN_REST_MORNING_LINE
+        )
+    );
     assert!(state.gold < 100);
 }
 
@@ -6653,7 +6660,14 @@ fn completed_inn_rest_sleeps_in_the_bed_cell_and_wakes_one_tile_east() {
 
     handle_play_key_input(&mut state, 'Y', "", Path::new("")).unwrap();
 
-    assert!(state.message.contains("Rested"), "{}", state.message);
+    assert_eq!(
+        state.message,
+        format!(
+            "{}\n\n{}",
+            crate::commands::PAID_INN_REST_SLEEP_LINE,
+            crate::commands::PAID_INN_REST_MORNING_LINE
+        )
+    );
     let (wake_x, wake_y) = inn.bed_wake_cell();
     assert_eq!(
         (state.player.x, state.player.y),
