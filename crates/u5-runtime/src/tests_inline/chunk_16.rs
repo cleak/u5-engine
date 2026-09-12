@@ -1808,8 +1808,29 @@ BRITANNIA 11 21
         );
         assert_eq!(state.party[0].climb_stat, 21);
         assert_eq!(state.turn, 0);
-        assert!(state.message.contains("Completed the Shrine of Justice"));
-        assert!(state.message.contains("DEX +1, INT +1"));
+        // `karma.md §12`: the visible text is the awarded attribute lines; the
+        // virtue and the standing award are recorded rather than narrated.
+        assert_eq!(
+            state.message,
+            format!(
+                "{}\n{}",
+                crate::commands::SHRINE_REWARD_DEXTERITY_LINE,
+                crate::commands::SHRINE_REWARD_INTELLIGENCE_LINE
+            )
+        );
+        assert!(
+            state
+                .diagnostics
+                .iter()
+                .any(|note| note.contains("shrine of Justice completed"))
+        );
+        // Already asserted above as the whole message, in the published
+        // `Dexterity +1` / `Intelligence +1` form and order.
+        assert!(
+            state
+                .message
+                .contains(crate::commands::SHRINE_REWARD_INTELLIGENCE_LINE)
+        );
         let _ = fs::remove_dir_all(dir);
     }
 
@@ -1953,7 +1974,12 @@ BRITANNIA 11 21
         );
 
         assert_eq!(state.moral_standing, 53);
-        assert!(state.message.contains("moral +3 to 53"));
+        assert!(
+            state
+                .diagnostics
+                .iter()
+                .any(|note| note.contains("moral +3 to 53"))
+        );
         let _ = fs::remove_dir_all(dir);
     }
 

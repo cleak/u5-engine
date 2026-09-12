@@ -2047,18 +2047,18 @@ impl PlayState {
                         self.add_moral_standing(ShrineVirtue::SHRINE_CODEX_TURN_IN_MORAL_INCREASE);
                     moral_gained = moral_gained.saturating_add(humility_moral);
                 }
-                let stat_note = if stat_notes.is_empty() {
-                    "no stat reward".to_string()
-                } else {
-                    stat_notes.join(", ")
-                };
-                self.message = format!(
-                    "Completed the Shrine of {}; moral +{} to {}; {}.",
+                // `karma.md §12`, "Ordained and Codex read": the awarded
+                // attribute lines are the whole of the added text - the
+                // standing award and the virtue name are state, not
+                // narration. The congratulatory record `36` that precedes
+                // them is emitted by the caller's record path.
+                self.diagnostics.push(format!(
+                    "shrine of {} completed; moral +{} to {}",
                     entry.virtue.name(),
                     moral_gained,
-                    self.moral_standing,
-                    stat_note
-                );
+                    self.moral_standing
+                ));
+                self.message = stat_notes.join("\n");
                 MoveOutcome::Observed
             }
             (false, true) => {
@@ -2433,23 +2433,25 @@ impl PlayState {
         notes
     }
 
+    // `karma.md §12`: the awarded attribute's line "still prints when the
+    // attribute is already at its cap", so the push is unconditional and only
+    // the stat write is capped. The engine used to gate the line on the
+    // increase succeeding, and to abbreviate it as `STR +1`.
     pub fn add_avatar_strength_reward(&mut self, notes: &mut Vec<String>) {
-        if self.avatar_stats.increase_strength() {
-            notes.push("STR +1".to_string());
-        }
+        let _ = self.avatar_stats.increase_strength();
+        notes.push(crate::commands::SHRINE_REWARD_STRENGTH_LINE.to_string());
     }
 
     pub fn add_avatar_dexterity_reward(&mut self, notes: &mut Vec<String>) {
         if self.avatar_stats.increase_dexterity() {
             self.sync_avatar_dexterity_to_party();
-            notes.push("DEX +1".to_string());
         }
+        notes.push(crate::commands::SHRINE_REWARD_DEXTERITY_LINE.to_string());
     }
 
     pub fn add_avatar_intelligence_reward(&mut self, notes: &mut Vec<String>) {
-        if self.avatar_stats.increase_intelligence() {
-            notes.push("INT +1".to_string());
-        }
+        let _ = self.avatar_stats.increase_intelligence();
+        notes.push(crate::commands::SHRINE_REWARD_INTELLIGENCE_LINE.to_string());
     }
 
     pub fn sync_avatar_dexterity_to_party(&mut self) {

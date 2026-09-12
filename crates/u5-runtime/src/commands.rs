@@ -1224,6 +1224,16 @@ pub const YELL_QUESTION: &str = "what?";
 /// ship's cannon at a door (or wall) prints `BOOOM!` with the cannon's hit
 /// narration; on a hit at a door cell, the engine rewrites the cell to the
 /// open-door tile (or rubble) and prints `Door destroyed!`."
+/// `karma.md §12`, the ordained-and-Codex-read shrine outcome: "Each
+/// applicable attribute prints `Strength +1\n`, `Dexterity +1\n`, or
+/// `Intelligence +1\n`, in that order; **the line still prints when the
+/// attribute is already at its cap**."
+pub const SHRINE_REWARD_STRENGTH_LINE: &str = "Strength +1";
+/// See [`SHRINE_REWARD_STRENGTH_LINE`].
+pub const SHRINE_REWARD_DEXTERITY_LINE: &str = "Dexterity +1";
+/// See [`SHRINE_REWARD_STRENGTH_LINE`].
+pub const SHRINE_REWARD_INTELLIGENCE_LINE: &str = "Intelligence +1";
+
 pub const CANNON_BOOOM_LINE: &str = "BOOOM!";
 /// See [`CANNON_BOOOM_LINE`]: the extra line a door hit adds.
 pub const CANNON_DOOR_DESTROYED_LINE: &str = "Door destroyed!";
