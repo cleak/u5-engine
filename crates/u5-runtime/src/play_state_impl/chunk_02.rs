@@ -1848,7 +1848,17 @@ impl PlayState {
                 // command key", then prints the quest sentence, then waits
                 // again before the closing instruction. Any key advances it.
                 ShrinePhase::AltarAnnouncement => {
-                    self.emit_shrine_misc_record(game_dir, MISCMSG_SHRINE_QUEST_SENTENCE)?;
+                    // Measured 2026-09-12: one blank row between
+                    // `ordained!` and the quest sentence, not two. The
+                    // announcement's own trailing newline has already opened
+                    // the row this record starts on, so its first newline is
+                    // spent - the same split the announcement itself takes
+                    // from the mantra row above it.
+                    self.emit_shrine_misc_record_after_open_row(
+                        game_dir,
+                        MISCMSG_SHRINE_QUEST_SENTENCE,
+                        true,
+                    )?;
                     // "then the virtue's record `12` through `19` in the
                     // virtue order above, then a closing double quote and one
                     // newline".

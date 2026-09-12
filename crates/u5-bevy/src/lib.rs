@@ -17040,7 +17040,19 @@ fn visual_line_prompt_active(state: &PlayState) -> bool {
         // is typed into the ask that follows - which is why the stock game's
         // `ask3` beat reads back `:UL` after `mul` was typed at `ask2`.
         || state.blackthorn_prompt_echo().is_some()
-        || state.active_shrine.is_some()
+        // `karma.md §12`: only the virtue answer and the mantra are typed.
+        // Once the altar has spoken the shrine "wait[s] for a command key" -
+        // an acknowledgement, not text - and routing that key into the line
+        // editor swallowed it: measured
+        // (`qa/paired/shrine-three-mantras.tsv`), two presses of Space after
+        // the announcement left the window unchanged where the original went
+        // on to the quest sentence and the closing instruction.
+        || state.active_shrine.as_ref().is_some_and(|session| {
+            matches!(
+                session.phase,
+                u5_runtime::ShrinePhase::Virtue | u5_runtime::ShrinePhase::Mantra
+            )
+        })
         || state.active_yell.is_some()
         || state.active_shrine_restoration.is_some()
         || state
