@@ -1983,7 +1983,18 @@ impl PlayState {
                 // altar's quest announcement. Restore the standing Avatar
                 // pose and wait for a command key."
                 self.shrine_ordained_mask |= bit;
-                self.emit_shrine_misc_record(game_dir, MISCMSG_SHRINE_ALTAR_ANNOUNCEMENT)?;
+                // Measured 2026-09-12 (`qa/paired/shrine-three-mantras.tsv`,
+                // beat `mantra3`): the announcement prints with the cursor
+                // still at the end of the accepted `Mantra:AHM` row, so the
+                // record's first newline closes that row and only its second
+                // leaves a blank - the same split record `30` takes below. The
+                // engine closed the row itself and then spent both, showing
+                // two blanks where the original shows one.
+                self.emit_shrine_misc_record_after_open_row(
+                    game_dir,
+                    MISCMSG_SHRINE_ALTAR_ANNOUNCEMENT,
+                    true,
+                )?;
                 session.phase = ShrinePhase::AltarAnnouncement;
                 self.active_shrine = Some(session);
                 return Ok(None);
