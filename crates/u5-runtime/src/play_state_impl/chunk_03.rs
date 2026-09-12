@@ -374,10 +374,16 @@ impl PlayState {
     /// beat `ask5`): the stock window's last row is `falls!` with the cell
     /// after it empty, while the typed `ask4` beat carries the barber pole
     /// after its `:` on both sides.
+    ///
+    /// Only the *closing* hold. The wrong-answer reaction of `§4.1` ends on
+    /// record `8`'s `` die!" `` - a trailing space - so `§10.6` keeps the
+    /// cursor on that row, and measured 2026-09-12 (`bt-escalate/ask2`) the
+    /// stock game draws the barber pole there. Suppressing both holds traded
+    /// one reading for the other.
     pub fn message_window_cursor_suppressed(&self) -> bool {
-        self.active_blackthorn.as_ref().is_some_and(|challenge| {
-            challenge.awaiting_acknowledgement() || challenge.awaiting_closing_acknowledgement()
-        })
+        self.active_blackthorn.as_ref().is_some_and(
+            crate::blackthorn_session::BlackthornChallenge::awaiting_closing_acknowledgement,
+        )
     }
 
     pub fn open_prompt_line(&self) -> Option<String> {
