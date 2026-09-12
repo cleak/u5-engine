@@ -3771,9 +3771,29 @@ impl PlayState {
         self.talk_direction_with_game_dir_and_keyword(self.player.facing, game_dir, keyword)
     }
 
-    /// `shops.md §2` open-for-business gate: both the keeper's **cached
-    /// reached** waypoint and the waypoint its schedule selects for the
-    /// current hour must be waypoint 1.
+    /// `shops.md §2`, in the published order: a **parity gate runs first**,
+    /// then the open-for-business gate.
+    ///
+    /// *Parity* (added 2026-09-12, issue #262, `RETRACTIONS.md` R479): "The
+    /// shared dispatcher reaches the shop path only when the NPC's cached
+    /// reached waypoint index is **odd**; at an even index it prints the
+    /// merchant brush-off below without consulting the open-for-business check
+    /// at all." `conversation.md §2` owns the same bit on the guard path.
+    ///
+    /// *Open for business*: "Both the NPC's cached reached waypoint and the
+    /// waypoint selected by the current world hour must be **waypoint 1**."
+    ///
+    /// "The two rules agree on shipped schedules, where the indices are `0`,
+    /// `1` and `2`, but an implementation that runs only the open-for-business
+    /// check will diverge on any higher index." They agree at *every* index
+    /// here, because both refusals are the same brush-off and the
+    /// open-for-business test is equality with an odd number: an even index
+    /// fails both, an odd index other than one passes the parity gate and
+    /// fails the equality. The parity clause is therefore stated rather than
+    /// coded, and this comment is the record of why. If the dispatcher ever
+    /// gains a side effect between the two - `conversation.md §2`'s
+    /// behaviour-4-to-1 waypoint rewrite is the candidate - the order becomes
+    /// observable and the gate has to be split.
     ///
     /// A slot this engine cannot resolve - no runtime NPC at the cell, which
     /// the harness fixtures produce - is treated as open, so unit fixtures
