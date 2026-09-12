@@ -21,6 +21,21 @@
 # and nothing else. A run whose two sides flipped differently has measured the
 # coin, not the engine, and must be re-run.
 # requires-seed: profile `seed-town-talk-speaker-reseeded`, built by qa/tools/reseed.py
+#
+# The opening step is a lottery and cannot be compared. `conversation.md`
+# Section 9 step 3: for an NPC that does not yet know the party, the engine
+# "makes one fresh host-clock read, assigns the transformed value as the shared
+# random-generator state, and immediately flips a fair coin"; on one outcome it
+# says nothing after the description, on the other it prints `"I am called `
+# and the Name entry. The section spells out the consequence - "this is one of
+# the sites that re-seeds the generator from wall-clock time (`systems/prng.md`
+# section 3)" - so the two sides can never agree on which arm they take.
+#
+# Measured 2026-09-12: this engine volunteered the name and the original did
+# not (and on an earlier run, the reverse). A difference confined to the rows
+# between the description and the first `Your interest?` is that coin, and must
+# be re-run before it means anything. Everything from the first keyword onward
+# is comparable and agrees.
 both	wait	9000
 both	key	space
 both	wait	4000
