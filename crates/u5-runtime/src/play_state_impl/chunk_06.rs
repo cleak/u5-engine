@@ -1896,10 +1896,11 @@ impl PlayState {
         // value, so the recompute has to run on the same turn the counter
         // is written - exactly as the I-Ignite writers do.
         self.recompute_daylight();
-        // Engine-authored narration: the borrow line's original wording is
-        // not published, so this states the observable effect only.
-        self.message.push_str(&format!(
-            " Borrowed a lit fixture; light counter is {BORROWED_FIXTURE_TORCH_DURATION}."
+        // Unpublished (`cleak/u5-spec#262`). The comment here used to admit
+        // "Engine-authored narration", which is the thing to remove rather
+        // than to label: the observable effect belongs in `diagnostics`.
+        self.diagnostics.push(format!(
+            "borrowed a lit fixture; light counter is {BORROWED_FIXTURE_TORCH_DURATION}"
         ));
     }
 

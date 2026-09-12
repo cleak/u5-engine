@@ -1,0 +1,36 @@
+# A *successful* Blink (`In Por`) on the Britannia overworld, to measure the
+# line the original prints.
+#
+# `magic.md` Section 8 lists Blink among the utility effects that have "a short
+# narration message" and does not give it, and Section 12 says the non-combat
+# cast "is direction-prompted and deterministic". Until tonight this engine
+# invented `Blinked North to (12, 7) in BRITANNIA.`; that is removed and the
+# site prints nothing pending `cleak/u5-spec#262`. This scenario captures what
+# the original says so the question can be answered from a measurement rather
+# than a guess.
+#
+# `cast-blink` reaches the same spell indoors and measures the `C/O` scene
+# refusal; this one reaches the success arm.
+#
+# requires-seed: the party on the Britannia overworld at 02:00 with spell
+# charges and mana (`seed_inventory <profile> spells=9 mana=99`)
+both	wait	9000
+both	key	space
+both	wait	4000
+both	key	j
+both	wait	8000
+both	shot	start	On the overworld
+both	key	c
+both	wait	1500
+both	key	Return
+both	wait	1200
+both	key	i
+both	wait	700
+both	key	p
+both	wait	1200
+both	key	Return
+both	wait	2000
+both	shot	submitted	The Blink spell name submitted
+both	key	Up
+both	wait	3500
+both	shot	blinked	After Blink north

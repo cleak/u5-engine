@@ -2475,7 +2475,12 @@ fn world_encounter_sidecar_spawns_one_actor_after_consumed_overworld_turn() {
         }
     );
     assert!(state.visibility_dirty);
-    assert!(state.message.contains("Wandering encounter spawned"));
+    assert!(
+        state
+            .diagnostics
+            .iter()
+            .any(|note| note.contains("wandering encounter spawned"))
+    );
 }
 
 #[test]
@@ -2504,7 +2509,12 @@ fn half_time_world_epilogue_alternates_encounter_probe() {
     );
     assert_eq!(state.turn, 2);
     assert_eq!(state.active_objects.len(), 2);
-    assert!(state.message.contains("Wandering encounter spawned"));
+    assert!(
+        state
+            .diagnostics
+            .iter()
+            .any(|note| note.contains("wandering encounter spawned"))
+    );
 }
 
 #[test]

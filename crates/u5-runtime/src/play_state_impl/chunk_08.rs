@@ -348,8 +348,10 @@ impl PlayState {
             camp_messages.success
         };
         if let Some(report) = last_world_damage {
-            self.message.push_str(&format!(
-                " Underfoot world damage triggered {world_damage_ticks} tick(s); last {report}."
+            // Unpublished (`cleak/u5-spec#262`): tick counts and the damage
+            // report are engine bookkeeping, not the camp result text.
+            self.diagnostics.push(format!(
+                "underfoot world damage triggered {world_damage_ticks} tick(s); last {report}"
             ));
         }
         self.append_pending_hourly_status_message();

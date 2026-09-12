@@ -3400,8 +3400,14 @@ impl PlayState {
         self.append_world_status_tile_message(plane);
         if object_epilogue_runs {
             if let Some(slot) = self.apply_world_encounter_probe(game_dir, plane)? {
-                self.message
-                    .push_str(&format!(" Wandering encounter spawned in slot {slot}."));
+                // The spawn is an engine-side event: `encounters.md §2.1`
+                // rolls it every overworld turn and the original prints
+                // nothing for it. Measured 2026-09-12
+                // (`cast-blink-overworld/blinked`), where this engine
+                // appended ` Wandering encounter spawned in slot 1.` to the
+                // command's own result row.
+                self.diagnostics
+                    .push(format!("wandering encounter spawned in slot {slot}"));
             }
         }
         Ok(nonterminal_outcome)

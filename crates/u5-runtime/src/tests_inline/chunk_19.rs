@@ -1140,11 +1140,22 @@
         assert!(state.party[0].hp < 50);
         assert!(
             state
-                .message
-                .contains("Underfoot world damage triggered 12 tick(s)")
+                .diagnostics
+                .iter()
+                .any(|note| note.contains("underfoot world damage triggered 12 tick(s)"))
         );
-        assert!(state.message.contains("drowning damage"));
-        assert!(state.message.contains("party slot 0"));
+        assert!(
+            state
+                .diagnostics
+                .iter()
+                .any(|note| note.contains("drowning damage"))
+        );
+        assert!(
+            state
+                .diagnostics
+                .iter()
+                .any(|note| note.contains("party slot 0"))
+        );
         let _ = fs::remove_dir_all(dir);
     }
 
