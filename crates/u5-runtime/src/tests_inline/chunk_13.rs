@@ -23559,30 +23559,6 @@ fn wrap_text_first_line_uses_remaining_width_after_cursor() {
 }
 
 #[test]
-fn wrap_text_breaks_when_a_word_ends_exactly_on_the_last_column() {
-    // text-output.md §6, the space arm: "If the count has just exceeded the
-    // available width, emit the buffer up to (but not including) the most
-    // recent remembered break". The available width is a last legal index,
-    // so a sixteen-column row is already full at sixteen characters and the
-    // following space cannot become a break point.
-    //
-    // Measured 2026-09-11 (`stonegate-trapdoor-audio/arrival`). `An air of
-    // hatred` is exactly sixteen characters; the original still breaks after
-    // `of`, and its two nine-letter siblings break identically.
-    assert_eq!(
-        wrap_text("An air of hatred doth surround thee...", 16, 0),
-        vec!["An air of", "hatred doth", "surround thee..."],
-    );
-    assert_eq!(
-        wrap_text("An air of cowardice doth surround thee...", 16, 0),
-        vec!["An air of", "cowardice doth", "surround thee..."],
-    );
-    // A word that ends on the last column with nothing after it still fills
-    // the row: the final flush has no space to test.
-    assert_eq!(wrap_text("An air of hatred", 16, 0), vec!["An air of hatred"]);
-}
-
-#[test]
 fn wrap_text_terminates_on_nul_and_handles_hard_newlines() {
     // §6: NUL stops reading; LF/CR force a line emit.
     let lines = wrap_text("line one\nline two\0HIDDEN", 40, 0);

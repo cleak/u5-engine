@@ -1541,11 +1541,20 @@ impl PlayState {
     /// Stonegate's separate entry presentation prints.
     ///
     /// Measured 2026-09-11 (`stonegate-trapdoor-audio/arrival`): the rows read
-    /// `An air of` / `cowardice doth` / `surround thee...`, so the sentence
+    /// `An air of` / `<virtue> doth` / `surround thee...`, so the sentence
     /// ends in a three-dot ellipsis rather than a full stop.
+    ///
+    /// **The row breaks are authored, not wrapped.** All three rows take the
+    /// same shape in the capture, including hatred's - and `An air of hatred`
+    /// is exactly sixteen characters, so a wrap would have kept it whole. The
+    /// original's own combat captures show it doing precisely that with
+    /// `Iolo, armed with` and `with Long Sword:`
+    /// (`result_lines_conformance.rs`), so the difference here cannot come
+    /// from the wrap rule. The breaks are carried as explicit newlines to
+    /// reproduce the authored layout.
     pub fn shadowlord_air_line_for_index(index: usize) -> Option<String> {
         Self::shadowlord_air_word_for_index(index)
-            .map(|word| format!("An air of {word} doth surround thee..."))
+            .map(|word| format!("An air of\n{word} doth\nsurround thee..."))
     }
 
     /// `town-mode.md §13`, Stonegate's separate entry presentation: it
@@ -1561,9 +1570,7 @@ impl PlayState {
     pub fn stonegate_entry_presentation_lines(&self) -> Vec<String> {
         (0..SHADOWLORD_COUNT)
             .rev()
-            .filter(|index| {
-                self.shadowlord_hideouts[*index] != crate::clock::SHADOWLORD_HIDEOUT_VANQUISHED
-            })
+            .filter(|index| self.shadowlord_alive(*index))
             .filter_map(Self::shadowlord_air_line_for_index)
             .collect()
     }
@@ -1898,6 +1905,16 @@ impl PlayState {
         true
     }
 
+    /// `town-mode.md §13`, Stonegate's separate entry presentation: after the
+    /// location is drawn it "walks the three Shadowlord runtime slots and,
+    /// for every Shadowlord that is still alive, prints the corresponding
+    /// \"air of\" virtue-opposition line", skipping the vanquished marker.
+    ///
+    /// This used to return an engine summary - `Stonegate entry: Sceptre
+    /// prelude; air of Hatred.` - which is a sentence the original never
+    /// prints. The rows themselves are the presentation; the Sceptre-gated
+    /// prelude row's *text* is not published, so it stays a diagnostic
+    /// rather than an invented line.
     pub fn stonegate_entry_presentation_message(&self) -> Option<String> {
         let Area::Town { scene, .. } = self.area else {
             return None;
@@ -1905,26 +1922,37 @@ impl PlayState {
         if scene.byte != STONEGATE_SCENE_BYTE {
             return None;
         }
-
-        let mut notes = Vec::new();
-        if self.special_items[SPECIAL_ITEM_SCEPTRE_LB_INDEX] != 0 {
-            notes.push("Sceptre prelude".to_string());
-        }
-        for index in 0..SHADOWLORD_COUNT {
-            if self.shadowlord_alive(index) {
-                let shadowlord = Self::shadowlord_title_for_index(index).unwrap_or("Shadowlord");
-                notes.push(format!("air of {shadowlord}"));
-            }
-        }
-        (!notes.is_empty()).then(|| format!("Stonegate entry: {}.", notes.join("; ")))
+        let lines = self.stonegate_entry_presentation_lines();
+        (!lines.is_empty()).then(|| lines.join("\n\n"))
     }
 
     pub fn append_stonegate_entry_presentation_message(&mut self) {
+        let Area::Town { scene, .. } = self.area else {
+            return;
+        };
+        if scene.byte != STONEGATE_SCENE_BYTE {
+            return;
+        }
+        if self.special_items[SPECIAL_ITEM_SCEPTRE_LB_INDEX] != 0 {
+            // §13: "the town setup path can play a Sceptre-gated prelude row
+            // when the party carries the Sceptre of Lord British". The row's
+            // text is not published, so this records that it was reached
+            // instead of inventing one.
+            self.diagnostics
+                .push("Stonegate Sceptre-gated prelude row reached".to_string());
+        }
+        for index in (0..SHADOWLORD_COUNT).rev() {
+            if self.shadowlord_alive(index) {
+                let title = Self::shadowlord_title_for_index(index).unwrap_or("Shadowlord");
+                self.diagnostics
+                    .push(format!("Stonegate entry: {title} still alive"));
+            }
+        }
         let Some(note) = self.stonegate_entry_presentation_message() else {
             return;
         };
         if !self.message.is_empty() {
-            self.message.push('\n');
+            self.message.push_str("\n\n");
         }
         self.message.push_str(&note);
     }

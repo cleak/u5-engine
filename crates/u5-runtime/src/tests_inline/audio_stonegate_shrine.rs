@@ -33,11 +33,14 @@ fn stonegate_entry_presentation_stays_silent() {
     let mut state = test_state(open_grid(), 1, 1);
     state.area = Area::Town { scene, floor: 0 };
     state.special_items[SPECIAL_ITEM_SCEPTRE_LB_INDEX] = 1;
+    // One Shadowlord alive, so the presentation actually has a row to print
+    // and the silence assertion below is about a run that produced output.
+    state.shadowlord_hideouts = [1, SHADOWLORD_VANQUISHED, SHADOWLORD_VANQUISHED];
     let serial = state.sound_effect_serial;
 
     state.append_stonegate_entry_presentation_message();
 
-    assert!(state.message.contains("Stonegate entry:"));
+    assert!(state.message.contains("doth\nsurround thee..."));
     assert!(state.sound_effects_after(serial).is_empty());
 }
 

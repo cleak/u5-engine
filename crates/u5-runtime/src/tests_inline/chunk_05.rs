@@ -1562,10 +1562,17 @@ fn stonegate_entry_presentation_uses_sceptre_and_living_shadowlord_slots() {
 
     state.append_stonegate_entry_presentation_message();
 
-    assert!(state.message.contains("Sceptre prelude"));
-    assert!(state.message.contains("air of Falsehood"));
-    assert!(!state.message.contains("air of Hatred"));
-    assert!(!state.message.contains("air of Cowardice"));
+    // The Sceptre-gated prelude row's text is not published, so reaching it
+    // is recorded as a diagnostic rather than printed.
+    assert!(
+        state
+            .diagnostics
+            .iter()
+            .any(|note| note.contains("Sceptre-gated prelude row reached"))
+    );
+    assert!(state.message.contains("An air of\nfalsehood doth"));
+    assert!(!state.message.contains("hatred doth"));
+    assert!(!state.message.contains("cowardice doth"));
 
     state.area = Area::Town {
         scene: Scene::new(17).unwrap(),

@@ -980,21 +980,6 @@ impl PlayState {
                 }
                 None => format!("{title} resident; actor rejected by the one-at-a-time gate"),
             });
-        } else if matches!(
-            state.area,
-            Area::Town { scene, .. } if scene.byte == STONEGATE_SCENE_BYTE
-        ) {
-            // `town-mode.md §13`: Stonegate's separate entry presentation
-            // "prints one such line per still-living Shadowlord regardless of
-            // where each is hiding". It is not the resident producer above -
-            // no hideout slot ever holds Stonegate's scene byte - so it runs
-            // on the arm where that producer selected nothing.
-            for line in state.stonegate_entry_presentation_lines() {
-                if !state.message.is_empty() {
-                    state.message.push_str("\n\n");
-                }
-                state.message.push_str(&line);
-            }
         }
         // `moons.md §3`, caller census: the town-family floor loader
         // repaints on "Every town-family scene entry **and every in-place
