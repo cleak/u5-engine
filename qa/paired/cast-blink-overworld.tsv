@@ -21,15 +21,12 @@ both	key	j
 both	wait	8000
 both	shot	start	On the overworld
 both	key	c
+both	wait	2500
+both	shot	cast	The cast prompt
+both	type	ip
 both	wait	1500
 both	key	Return
-both	wait	1200
-both	key	i
-both	wait	700
-both	key	p
-both	wait	1200
-both	key	Return
-both	wait	2000
+both	wait	3000
 both	shot	submitted	The Blink spell name submitted
 both	key	Up
 both	wait	3500

@@ -1052,12 +1052,19 @@ impl PlayState {
         self.active_cast_followup
             .as_ref()
             .map(|session| match session.kind {
+                // `commands.md §5.2`: the direction prompt is the bare
+                // `Direction-` echo, whose trailing hyphen leaves the row
+                // open for the chosen direction word - `Direction-North`.
+                // There is no help sentence: the engine added `Choose a
+                // cardinal direction; Space passes.` on the pass-allowed
+                // arm, which broke that row and cost the window four more.
+                //
+                // Measured 2026-09-12 (`cast-blink-overworld/submitted`),
+                // where the original shows `Direction-` with the cursor
+                // inline and this engine showed the help text beneath it.
                 CastFollowupKind::Direction { pass_allowed } => {
-                    if pass_allowed {
-                        format!("{SPELL_DIRECTION_PROMPT_PREFIX}\nChoose a cardinal direction; Space passes.")
-                    } else {
-                        SPELL_DIRECTION_PROMPT_PREFIX.to_string()
-                    }
+                    let _ = pass_allowed;
+                    SPELL_DIRECTION_PROMPT_PREFIX.to_string()
                 }
                 // Measured 2026-09-07: a party-target spell asks with the
                 // same `On who: ` prompt a potion does, and the chosen

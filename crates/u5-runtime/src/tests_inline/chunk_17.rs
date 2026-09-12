@@ -630,7 +630,9 @@
         assert!(state.active_cast.is_none());
         assert!(state.active_cast_followup.is_some());
         assert!(state.message.starts_with("Direction-"));
-        assert!(state.message.contains("Space passes"));
+        // `commands.md §5.2`: the prompt is the bare `Direction-` echo; the
+        // help sentence the engine used to append is gone.
+        assert_eq!(state.message, crate::SPELL_DIRECTION_PROMPT_PREFIX);
         assert_eq!(state.spell_charges[BLINK_SPELL_INDEX], 1);
         assert_eq!(state.party[0].mana, BLINK_COST);
         assert_eq!(state.turn, 0);
