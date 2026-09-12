@@ -1,0 +1,56 @@
+# Bury a Moonstone on the Britannia overworld - the success arm.
+#
+# `use-moonstone` reaches the same item aboard a frigate and measures the tile
+# refusal (`Moonstone` / `cannot be buried` / `here!`). Nothing reached the
+# *successful* burial, which is why this engine invented `Buried Moonstone
+# phase 3 at BRITANNIA (12, 7).` until the crate-wide message inventory found
+# it. That line is now removed pending `cleak/u5-spec#262`; this scenario
+# captures what the original prints so the question can be answered from a
+# measurement.
+#
+# `magic.md` Section 8: "Burying a Moonstone records the current valid location
+# into that slot when outside dungeon/combat scenes and on accepted world-tile
+# ids `4..10`, `44`, or `45`."
+#
+# **Measured 2026-09-12 and currently failing, which is the point of keeping
+# it.** Two findings:
+#
+#   * The engine lists the three Shadowlord shards - `Shard/Fals`,
+#     `Shard/Hatr`, `Shard/Cowr` - between the Sceptre and the Moonstones.
+#     The original lists none of them, going straight from Sceptre to
+#     `Moonstone [phase]`. That shifts every row beneath, so the same five
+#     Down presses select a Gem Shard here and a Moonstone there.
+#   * The engine also draws those shard rows with a ` 1 ` count, where
+#     `inventory.md` Section 4.5 puts "Three shards" in the no-quantity
+#     family.
+#
+# The seed stands on a tile the original refuses (`Moonstone` / `cannot be
+# buried` / `here!`), so the *successful* burial is still unmeasured; that
+# needs a seed on an accepted world-tile id.
+#
+# requires-seed: profile `seed-overworld-moonstone` - the night-cast overworld
+# party with every special-item counter stocked by
+# `seed_inventory <profile> specials=1`
+both	wait	9000
+both	key	space
+both	wait	4000
+both	key	j
+both	wait	8000
+both	shot	start	On the overworld carrying the specials
+both	key	u
+both	wait	2500
+both	shot	picker	The Use picker
+both	key	Down
+both	wait	400
+both	key	Down
+both	wait	400
+both	key	Down
+both	wait	400
+both	key	Down
+both	wait	400
+both	key	Down
+both	wait	600
+both	shot	highlighted	The first Moonstone row highlighted
+both	key	Return
+both	wait	3500
+both	shot	buried	After burying the Moonstone

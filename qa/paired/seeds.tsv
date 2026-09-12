@@ -119,3 +119,4 @@ shop-arms-seeded	seed-arms-counter	the shop-arms-after-entry walk, replayed once
 cast-blink	seed-cast-results	shares the cast-results caster: charges, reagents and mana on the overworld
 cast-blink-overworld	seed-night-cast	shares the night-cast caster: Britannia overworld with charges and mana
 overworld-verbs	seed-night-cast	shares the night-cast overworld party
+use-moonstone-bury	seed-overworld-moonstone	night-cast overworld party plus every special, via seed_inventory specials=1
