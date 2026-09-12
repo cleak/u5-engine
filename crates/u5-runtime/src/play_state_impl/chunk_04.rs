@@ -24,11 +24,12 @@ pub struct UseItemPickerRow {
 /// prompt, printed on the line after the `Use item` verb echo.
 pub const USE_ITEM_PROMPT_MESSAGE: &str = ITEM_SELECTION_PROMPT;
 
-/// `shops.md §2`: "If the party's transport marker is either of the two horse
-/// values, the dispatcher prints a fixed two-line refusal and returns without
-/// entering any shop". The two lines are published verbatim; the horse-trader
-/// trigger (`0x83`) is exempt. This is a fixed merchant refusal, not a
-/// per-shop-role line.
+/// `shops.md §2` "Transport gate": "After the schedule test passes, either
+/// horse transport marker causes the following fixed refusal, except for the
+/// horse-trader trigger". The two lines are published verbatim; the
+/// horse-trader trigger (`0x83`) is exempt. This is a fixed merchant refusal,
+/// not a per-shop-role line, and "the dispatcher does not reject other
+/// transport markers here; on foot and magic carpet pass".
 pub const SHOP_MOUNTED_REFUSAL: &str = "A merchant says:\n\"GET THAT HORSE OUT OF HERE!\"";
 
 /// `shops.md §2`: the fixed refusal a shop trigger prints when its keeper is
