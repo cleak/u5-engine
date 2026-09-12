@@ -2157,7 +2157,12 @@ fn overworld_special_underfoot_latch_forces_darkness_and_holds_valid_movement() 
     );
     assert_eq!((state.player.x, state.player.y), (5, 5));
     assert_eq!(state.turn, 1);
-    assert!(state.message.contains("special underfoot tile"));
+    assert!(
+        state
+            .diagnostics
+            .iter()
+            .any(|note| note.contains("special underfoot tile"))
+    );
 }
 
 #[test]

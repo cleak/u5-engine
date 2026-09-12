@@ -2003,8 +2003,12 @@ impl PlayState {
         self.area = Area::Town { scene, floor };
         self.sync_player_object();
         self.mark_visibility_dirty();
-        self.message =
-            format!("{event}; missing clean return-coordinate metadata, stayed in location.");
+        // An engine-side asset problem, not a game event. The original has
+        // no such condition and therefore no line for it.
+        self.diagnostics.push(format!(
+            "{event}: missing clean return-coordinate metadata, stayed in location"
+        ));
+        self.message.clear();
         MoveOutcome::Blocked
     }
 

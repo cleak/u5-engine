@@ -369,8 +369,11 @@ impl PlayState {
         self.area = Area::Dungeon { scene, level };
         self.sync_player_object();
         self.mark_visibility_dirty();
-        self.message =
-            format!("{event}; missing clean return-coordinate metadata, stayed in dungeon.");
+        // An engine-side asset problem, not a game event.
+        self.diagnostics.push(format!(
+            "{event}: missing clean return-coordinate metadata, stayed in dungeon"
+        ));
+        self.message.clear();
         MoveOutcome::Blocked
     }
 
@@ -915,10 +918,14 @@ impl PlayState {
 
         if underfoot_blackout_latched {
             self.advance_turn();
-            self.message = format!(
-                "Movement held by special underfoot tile at ({}, {}).",
+            // Unpublished (`cleak/u5-spec#262`): the latched underfoot
+            // blackout consumes the step, and the original prints nothing
+            // this engine has been able to capture.
+            self.diagnostics.push(format!(
+                "movement held by special underfoot tile at ({}, {})",
                 self.player.x, self.player.y
-            );
+            ));
+            self.message.clear();
             return Ok(MoveOutcome::Used);
         }
 

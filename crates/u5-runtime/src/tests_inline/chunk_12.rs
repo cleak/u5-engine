@@ -745,8 +745,9 @@ fn dungeon_fall_trap_chain_missing_return_metadata_stays_in_dungeon() {
     assert_eq!(state.turn, 1);
     assert!(
         state
-            .message
-            .contains("missing clean return-coordinate metadata")
+            .diagnostics
+            .iter()
+            .any(|note| note.contains("missing clean return-coordinate metadata"))
     );
 }
 
