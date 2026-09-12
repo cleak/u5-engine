@@ -2,6 +2,17 @@
 # `view.md` section 3 publishes the flow - "prompt for a coin and a wish" - and
 # the accepted words, but none of its lines (cleak/u5-spec#225).
 # requires-seed: the party standing south of the wishing well in Paws
+#
+# Known roster-panel difference, message window unaffected. `view.md` Section 3
+# says the well, "With gold, print `\nThy wish?\n`, spend one coin and open
+# the shared twelve-character text input", and this engine debits there. The
+# original's panel still reads the pre-wish gold at both the `coin` and `wish`
+# beats - measured 2026-09-11, engine `G:149` against the original's `G:150`
+# with the same starting purse.
+#
+# That is a repaint-cadence question rather than an arithmetic one: the debit
+# is specified, so what differs is when the panel is redrawn to show it. Do not
+#"fix" this by removing the debit.
 both	wait	9000
 both	key	space
 both	wait	4000
