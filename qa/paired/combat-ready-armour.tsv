@@ -1,10 +1,14 @@
-# **Known gap, diagnosed 2026-09-12: the arena's blank row after a result.**
+# **The arena's blank row after a cast refusal, fixed 2026-09-12.**
 # `combat.md` Section 8.1 has the turn handler emit its own line feed between
 # the banner and the command read, so the blank row the original shows between
 # a result and the next `Avatar, armed with...:` is only there when the result
-# closed its own row. The `invisibility` beat shows the original with a blank
-# under `None mixed!` and this engine without one, and the beats after it drift
-# because the two sides then read different keys.
+# closed its own row. The `invisibility` beat showed the original with a blank
+# under `None mixed!` and this engine without one, and the beats after it
+# drifted because the two sides then read different keys.
+#
+# A trailing newline on the message slot does not do it - the log trims one as
+# it wraps text into rows - so the row is asked for with an explicit blank
+# entry, the same way the Blackthorn closing pages ask for theirs.
 #
 # The sibling case - the `D`/`W` `What?` refusals - was fixed the same day by
 # giving those literals their own feed at the combat message site. This one is

@@ -2391,15 +2391,42 @@ impl PlayState {
             // behaviour; the spec does not settle whether `None mixed!`
             // advances the clock.
             CastGateOutcome::NotHere | CastGateOutcome::NoneMixed => {
-                self.message = outcome.message().to_string();
+                self.emit_cast_gate_refusal(outcome);
                 Some(MoveOutcome::Blocked)
             }
             CastGateOutcome::ManaTooLowChargeOnly | CastGateOutcome::LevelTooLowChargeAndMana => {
-                self.message = outcome.message().to_string();
+                self.emit_cast_gate_refusal(outcome);
                 self.advance_turn();
                 Some(MoveOutcome::Blocked)
             }
         }
+    }
+
+    /// Write a cast-gate rejection, with the blank row the arena needs after
+    /// it.
+    ///
+    /// `combat.md §8.1`: the turn handler "emits the line feed itself,
+    /// unconditionally, between printing the banner and reading the command
+    /// byte", so the blank row the original shows between a result and the
+    /// next `Avatar, armed with...:` banner is only there when the result
+    /// closed its own row. Outside combat the next command cycle's leading
+    /// feed supplies it, which is why the surface refusals need nothing.
+    ///
+    /// A trailing newline on the slot will not do it: the log trims one as it
+    /// wraps the text into rows, so the row has to be asked for.
+    ///
+    /// Measured 2026-09-12 (`qa/paired/combat-ready-armour.tsv`, beat
+    /// `invisibility`): the original has a blank row under `None mixed!` and
+    /// this engine ran the banner straight on, after which the two sides read
+    /// different keys and the rest of the scenario drifted.
+    fn emit_cast_gate_refusal(&mut self, outcome: CastGateOutcome) {
+        let text = outcome.message().to_string();
+        if self.combat_active {
+            self.emit_message_line(text);
+            self.push_explicit_blank_message_entry();
+            return;
+        }
+        self.message = text;
     }
 
     pub fn apply_gate_travel(
