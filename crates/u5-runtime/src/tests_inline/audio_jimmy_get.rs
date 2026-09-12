@@ -395,7 +395,7 @@
         );
 
         assert_eq!(town.grid[32 + 2], 16);
-        assert!(town.message.contains("Got tile 55"));
+        assert!(town.diagnostics.iter().any(|note| note.contains("Got tile 55")));
         assert_eq!(
             town.sound_effects_after(serial),
             vec![SoundEffect::ActionSnap]
@@ -437,7 +437,7 @@
         );
 
         assert_eq!(world.grid[world_cell_index(0, 0)], 5);
-        assert!(world.message.contains("Got world tile 55"));
+        assert!(world.diagnostics.iter().any(|note| note.contains("Got world tile 55")));
         assert_eq!(
             world.sound_effects_after(serial),
             vec![SoundEffect::ActionSnap]
@@ -473,7 +473,7 @@
         );
 
         assert_eq!(town_crop.moral_standing, 2);
-        assert!(town_crop.message.contains("added 1 food"));
+        assert!(town_crop.diagnostics.iter().any(|note| note.contains("added 1 food")));
         assert!(town_crop.sound_effects_after(serial).is_empty());
 
         fs::write(

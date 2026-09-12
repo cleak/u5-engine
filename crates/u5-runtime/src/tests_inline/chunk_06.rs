@@ -741,6 +741,96 @@
         let _ = fs::remove_dir_all(dir);
     }
 
+    /// `commands.md §5.8` "Eating and borrowing are Get cases, not movement
+    /// cases": the Get-tile cascade's two published granting arms and the
+    /// laden-table arms, each with the row it prints after the leading feed.
+    #[test]
+    fn the_published_get_tile_cascade_prints_its_own_rows() {
+        let dir = debug_game_dir();
+        fs::write(
+            dir.join(TOWN_GET_TILE_TABLE_FILE),
+            &format!(
+                "CASTLE:0 0 2 1 {} {} FOOD 1\nCASTLE:0 0 2 3 {} {}\n",
+                GET_TILE_CROPS_REPLACEMENT,
+                GET_TILE_CROPS_SOURCE,
+                GET_TILE_WALL_TORCH_REPLACEMENT,
+                GET_TILE_WALL_TORCH_SOURCE_FIRST,
+            ),
+        )
+        .unwrap();
+        let mut grid = open_grid();
+        grid[32 + 2] = GET_TILE_CROPS_SOURCE;
+        grid[32 * 3 + 2] = GET_TILE_WALL_TORCH_SOURCE_FIRST;
+
+        // | Crops `0x2D`, any direction | `Crops picked!` | `0x2C` |
+        let mut state = test_state(grid.clone(), 1, 1);
+        state.player.facing = Direction::East;
+        assert_eq!(
+            state.get_facing_with_game_dir(&dir).unwrap(),
+            MoveOutcome::Got
+        );
+        assert_eq!(state.message, GET_TILE_CROPS_PICKED_LINE);
+        assert_eq!(state.grid[32 + 2], GET_TILE_CROPS_REPLACEMENT);
+
+        // | Wall torch `0xB0` or `0xB1`, any direction | `Borrowed!` | `0x44` |
+        let mut state = test_state(grid, 1, 3);
+        state.player.facing = Direction::East;
+        assert_eq!(
+            state.get_facing_with_game_dir(&dir).unwrap(),
+            MoveOutcome::Got
+        );
+        assert_eq!(state.message, GET_TILE_BORROWED_LINE);
+        assert_eq!(state.grid[32 * 3 + 2], GET_TILE_WALL_TORCH_REPLACEMENT);
+
+        // | every other tile | `Nothing to get!` | unchanged |
+        let mut state = test_state(open_grid(), 1, 1);
+        state.player.facing = Direction::East;
+        assert_eq!(
+            state.get_facing_with_game_dir(&dir).unwrap(),
+            MoveOutcome::Blocked
+        );
+        assert_eq!(state.message, GET_NOTHING_REFUSAL);
+        let _ = fs::remove_dir_all(dir);
+    }
+
+    /// `commands.md §5.8`: the `0x9A` arm is the one eat arm that sets the turn
+    /// sentinel, and it is reached one step south.
+    #[test]
+    fn the_laden_table_south_arm_eats_and_charges_the_turn() {
+        let dir = debug_game_dir();
+        let mut grid = open_grid();
+        grid[32 * 3 + 2] = 0x9a;
+        let mut state = test_state(grid, 2, 2);
+        state.player.facing = Direction::South;
+        state.food = 12;
+
+        assert_eq!(
+            state.get_facing_with_game_dir(&dir).unwrap(),
+            MoveOutcome::Got
+        );
+        assert_eq!(state.message, GET_TABLE_EATEN_LINE);
+        assert_eq!(state.grid[32 * 3 + 2], 0x95);
+        assert_eq!(state.food, 13);
+        assert_eq!(state.turn, 1);
+
+        // "Laden table `0x9A`/`0x9B` from any other direction ... `Can't reach
+        // plate!` | unchanged"
+        let mut grid = open_grid();
+        grid[32 * 2 + 3] = 0x9a;
+        let mut state = test_state(grid, 2, 2);
+        state.player.facing = Direction::East;
+        state.food = 12;
+        assert_eq!(
+            state.get_facing_with_game_dir(&dir).unwrap(),
+            MoveOutcome::Blocked
+        );
+        assert_eq!(state.message, GET_TABLE_CANT_REACH_PLATE_LINE);
+        assert_eq!(state.grid[32 * 2 + 3], 0x9a);
+        assert_eq!(state.food, 12);
+        assert_eq!(state.turn, 0);
+        let _ = fs::remove_dir_all(dir);
+    }
+
     #[test]
     fn town_get_table_food_uses_directional_rewrite_without_sidecar() {
         let dir = debug_game_dir();
@@ -761,7 +851,11 @@
         assert_eq!(state.grid[32 + 2], 0x95);
         assert_eq!(state.food, 13);
         assert_eq!(state.moral_standing, 2);
-        assert_eq!(state.turn, 1);
+        // `commands.md §5.8`: the three eat arms share the grant tail "but
+        // **not** the turn sentinel: only the crop arm and the `0x9A` arm set
+        // it".
+        assert_eq!(state.turn, 0);
+        assert_eq!(state.message, GET_TABLE_EATEN_LINE);
         assert!(state.visibility_dirty);
         assert!(state.diagnostics.iter().any(|note| note.contains("Ate food from table tile 0x9B") || note.contains("ate food from table tile 0x9B")));
 
@@ -776,7 +870,8 @@
         assert_eq!(state.grid[32 * 3 + 4], 0x9b);
         assert_eq!(state.food, 14);
         assert_eq!(state.moral_standing, 1);
-        assert_eq!(state.turn, 2);
+        assert_eq!(state.turn, 0);
+        assert_eq!(state.message, GET_TABLE_EATEN_LINE);
         assert!(state.diagnostics.iter().any(|note| note.contains("Ate food from table tile 0x9C") || note.contains("ate food from table tile 0x9C")));
         let _ = fs::remove_dir_all(dir);
     }
@@ -799,7 +894,7 @@
         assert_eq!(state.grid[32 + 2], 0x95);
         assert_eq!(state.food, PARTY_FOOD_CAP);
         assert_eq!(state.moral_standing, 0);
-        assert_eq!(state.turn, 1);
+        assert_eq!(state.turn, 0);
         let _ = fs::remove_dir_all(dir);
     }
 
@@ -824,7 +919,7 @@
         assert_eq!(state.moral_standing, 3);
         assert_eq!(state.turn, 0);
         assert!(!state.visibility_dirty);
-        assert!(state.message.is_empty());
+        assert_eq!(state.message, GET_TABLE_CANT_REACH_PLATE_LINE);
         let _ = fs::remove_dir_all(dir);
     }
 
@@ -982,9 +1077,9 @@
         assert_eq!(state.gold, DEFAULT_GOLD_STOCK + 7);
         assert_eq!(state.turn, 1);
         assert!(state.visibility_dirty);
-        assert!(state.message.contains("Got world tile 55"));
-        assert!(state.message.contains("UNDERWORLD"));
-        assert!(state.message.contains("added 7 gold"));
+        assert!(state.diagnostics.iter().any(|note| note.contains("Got world tile 55")));
+        assert!(state.diagnostics.iter().any(|note| note.contains("UNDERWORLD")));
+        assert!(state.diagnostics.iter().any(|note| note.contains("added 7 gold")));
         let _ = fs::remove_dir_all(dir);
     }
 
@@ -1012,7 +1107,7 @@
         assert_eq!(state.food, 16);
         assert_eq!(state.moral_standing, 2);
         assert_eq!(state.turn, 1);
-        assert!(state.message.contains("added 4 food"));
+        assert!(state.diagnostics.iter().any(|note| note.contains("added 4 food")));
         let _ = fs::remove_dir_all(dir);
     }
 
@@ -1065,7 +1160,7 @@
 
         assert_eq!(state.grid[world_cell_index(0, 0)], 5);
         assert_eq!(state.turn, 1);
-        assert!(state.message.contains("Got world tile 55"));
+        assert!(state.diagnostics.iter().any(|note| note.contains("Got world tile 55")));
         let _ = fs::remove_dir_all(dir);
     }
 
@@ -1153,8 +1248,8 @@
         assert_eq!(state.keys, DEFAULT_KEY_STOCK + 2);
         assert_eq!(state.turn, 1);
         assert!(state.visibility_dirty);
-        assert!(state.message.contains("Got tile 55"));
-        assert!(state.message.contains("added 2 keys"));
+        assert!(state.diagnostics.iter().any(|note| note.contains("Got tile 55")));
+        assert!(state.diagnostics.iter().any(|note| note.contains("added 2 keys")));
         let _ = fs::remove_dir_all(dir);
     }
 
@@ -1182,7 +1277,7 @@
         assert_eq!(state.food, PARTY_FOOD_CAP);
         assert_eq!(state.moral_standing, 0);
         assert_eq!(state.turn, 1);
-        assert!(state.message.contains("added 1 food"));
+        assert!(state.diagnostics.iter().any(|note| note.contains("added 1 food")));
         let _ = fs::remove_dir_all(dir);
     }
 
@@ -1235,7 +1330,7 @@
 
         assert_eq!(state.grid[32 + 2], 16);
         assert_eq!(state.turn, 1);
-        assert!(state.message.contains("Got tile 55"));
+        assert!(state.diagnostics.iter().any(|note| note.contains("Got tile 55")));
         let _ = fs::remove_dir_all(dir);
     }
 

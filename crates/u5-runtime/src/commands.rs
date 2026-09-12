@@ -1256,6 +1256,21 @@ pub const GET_NOTHING_REFUSAL: &str = "\nNothing to get!";
 /// record prints `Open_it_first!\n` and changes nothing at all: no inventory,
 /// no slot clear, no dirty marking, no turn sentinel."
 pub const GET_MUST_OPEN_FIRST_REFUSAL: &str = "\nOpen it first!";
+
+/// `commands.md §5.8` "Eating and borrowing are Get cases, not movement
+/// cases". The leading feed belongs to the Get handler, which "is emitted
+/// before the handler looks at the target cell".
+pub const GET_TILE_CROPS_SOURCE: u8 = 0x2D;
+pub const GET_TILE_CROPS_REPLACEMENT: u8 = 0x2C;
+pub const GET_TILE_CROPS_PICKED_LINE: &str = "\nCrops picked!";
+pub const GET_TILE_WALL_TORCH_SOURCE_FIRST: u8 = 0xB0;
+pub const GET_TILE_WALL_TORCH_SOURCE_SECOND: u8 = 0xB1;
+pub const GET_TILE_WALL_TORCH_REPLACEMENT: u8 = 0x44;
+pub const GET_TILE_BORROWED_LINE: &str = "\nBorrowed!";
+/// The three laden-table arms. `Mmmmm...!\n` and `Can't_reach_plate!\n` "each
+/// exist as three byte-identical stored copies, one per dispatch site".
+pub const GET_TABLE_EATEN_LINE: &str = "\nMmmmm...!";
+pub const GET_TABLE_CANT_REACH_PLATE_LINE: &str = "\nCan\'t reach plate!";
 /// `cleak/u5-spec#194` (black-box): `Hole up- ` off an inn bed completes
 /// its echo line with this refusal.
 pub const HOLE_UP_NOT_IN_BED_REFUSAL: &str = "Only in bed!";

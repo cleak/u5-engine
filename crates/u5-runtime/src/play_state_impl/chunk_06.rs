@@ -1844,11 +1844,12 @@ impl PlayState {
         }
         self.mark_visibility_dirty();
         self.advance_turn();
-        self.message = tile_get_message(
+        self.diagnostics.push(tile_get_message(
             format!("Got world tile {tile} at ({tx}, {ty}) on {}", plane.key()),
             entry.replacement_tile,
             entry.grant,
-        );
+        ));
+        self.message = published_get_tile_line(tile).unwrap_or_default().to_string();
         self.apply_borrowed_lit_fixture_light(tile);
         // audio.md §8.1 borrowed fixed object: after the live tile is
         // rewritten and the borrowing line is printed, play the 40-update
@@ -1986,11 +1987,12 @@ impl PlayState {
         self.forget_revealed_town_secret_door(scene, floor, tx, ty);
         self.mark_visibility_dirty();
         self.advance_turn();
-        self.message = tile_get_message(
+        self.diagnostics.push(tile_get_message(
             format!("Got tile {tile} at ({tx}, {ty})"),
             entry.replacement_tile,
             entry.grant,
-        );
+        ));
+        self.message = published_get_tile_line(tile).unwrap_or_default().to_string();
         self.apply_borrowed_lit_fixture_light(tile);
         // audio.md §8.1 borrowed fixed object: after the live tile is
         // rewritten and the borrowing line is printed, play the 40-update
@@ -2015,12 +2017,20 @@ impl PlayState {
         dx: isize,
         dy: isize,
     ) -> Option<MoveOutcome> {
+        // `commands.md §5.8` "Eating and borrowing are Get cases, not
+        // movement cases", published for `cleak/u5-spec#262`:
+        //
+        // | Laden table `0x9A`, reached one step south | `Mmmmm...!` | `0x95` |
+        // | Laden table `0x9B`, reached one step north | `Mmmmm...!` | `0x95` |
+        // | Laden table `0x9C`, reached one step north or south | `Mmmmm...!` | `0x9A` or `0x9B`, keeping the food the party did not take |
+        // | Laden table `0x9A`/`0x9B` from any other direction, or `0x9C` from east or west | `Can't reach plate!` | unchanged |
         let replacement = match (tile, dx, dy) {
+            (0x9a, 0, 1) => 0x95,
             (0x9b, 0, -1) => 0x95,
             (0x9c, 0, -1) => 0x9a,
             (0x9c, 0, 1) => 0x9b,
-            (0x9b | 0x9c, _, _) => {
-                self.message.clear();
+            (0x9a | 0x9b | 0x9c, _, _) => {
+                self.message = GET_TABLE_CANT_REACH_PLATE_LINE.to_string();
                 return Some(MoveOutcome::Blocked);
             }
             _ => return None,
@@ -2030,13 +2040,18 @@ impl PlayState {
         self.food = self.food.saturating_add(1).min(PARTY_FOOD_CAP);
         self.debit_crop_or_table_food_moral();
         self.mark_visibility_dirty();
-        self.advance_turn();
-        // Unpublished (`cleak/u5-spec#262`).
+        // "The three eat arms and the crop arm share a grant tail - one food
+        // with the 9999 cap, the party-dirty bit, and the moral-standing debit
+        // when that byte is non-zero - but **not** the turn sentinel: only the
+        // crop arm and the `0x9A` arm set it."
+        if tile == 0x9a {
+            self.advance_turn();
+        }
         self.diagnostics.push(format!(
             "ate food from table tile 0x{tile:02X} at ({x}, {y}); replaced with tile \
              0x{replacement:02X}; added 1 food"
         ));
-        self.message.clear();
+        self.message = GET_TABLE_EATEN_LINE.to_string();
         Some(MoveOutcome::Got)
     }
 

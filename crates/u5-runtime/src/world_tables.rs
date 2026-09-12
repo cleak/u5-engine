@@ -407,6 +407,9 @@ pub struct ObjectPickupGrant {
     pub amount: u8,
 }
 
+/// Engine-internal detail for the Get-tile cascade. The player-visible row
+/// comes from [`published_get_tile_line`]; this string is only ever pushed to
+/// `diagnostics`.
 pub fn tile_get_message(
     prefix: String,
     replacement_tile: u8,
@@ -419,6 +422,26 @@ pub fn tile_get_message(
             grant.kind.label()
         ),
         None => format!("{prefix}; replaced with tile {replacement_tile}."),
+    }
+}
+
+/// `commands.md §5.8` "Eating and borrowing are Get cases, not movement
+/// cases": the Get-tile cascade's two published granting arms.
+///
+/// | Reached tile and direction | Rows after the leading feed | Live cell after |
+/// | Crops `0x2D`, any direction | `Crops picked!` | `0x2C` |
+/// | Wall torch `0xB0` or `0xB1`, any direction | `Borrowed!`, with the theft sound | `0x44` |
+/// | every other tile | `Nothing to get!` | unchanged |
+///
+/// A clean sidecar may carry extra rows as a QA fixture. Those tiles are
+/// outside the published cascade, so they have no published row of their own
+/// and their detail stays in `diagnostics`.
+pub fn published_get_tile_line(source_tile: u8) -> Option<&'static str> {
+    match source_tile {
+        crate::commands::GET_TILE_CROPS_SOURCE => Some(GET_TILE_CROPS_PICKED_LINE),
+        crate::commands::GET_TILE_WALL_TORCH_SOURCE_FIRST
+        | crate::commands::GET_TILE_WALL_TORCH_SOURCE_SECOND => Some(GET_TILE_BORROWED_LINE),
+        _ => None,
     }
 }
 
