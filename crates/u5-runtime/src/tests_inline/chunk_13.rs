@@ -9782,18 +9782,27 @@ fn inn_main_action_routes_r_l_p_exit_and_discard() {
     }
 }
 
+/// `shops.md §8.B`, the entry question's input row: "Wait for `B`, `S`, or
+/// Space; **ignore other keys without reprinting**."
+///
+/// This test used to assert that everything but `B` and `S` exited. Measured
+/// 2026-09-12 (`qa/paired/combat-town-attack-after-entry.tsv`, beat
+/// `conflict`): pressing `a` at Gwenneth's question leaves the original
+/// sitting on it, where this engine took the exit bark and then let the
+/// Attack through behind it.
 #[test]
-fn arms_shop_action_routes_b_s_and_exits_on_anything_else() {
-    // shops.md §8.1
+fn arms_shop_action_routes_b_s_and_space_and_ignores_the_rest() {
     assert_eq!(arms_shop_action(b'B'), ArmsShopAction::Buy);
     assert_eq!(arms_shop_action(b'b'), ArmsShopAction::Buy);
     assert_eq!(arms_shop_action(b'S'), ArmsShopAction::Sell);
     assert_eq!(arms_shop_action(b's'), ArmsShopAction::Sell);
-    // Anything else — Space, other letters, control bytes — exits.
-    for byte in [b' ', b'A', b'X', b'Y', b'N', b'\r', 0x00, 0x1B, 0xFF] {
+    // Space is the one key that leaves.
+    assert_eq!(arms_shop_action(b' '), ArmsShopAction::Exit);
+    // Everything else waits.
+    for byte in [b'A', b'a', b'X', b'Y', b'N', b'\r', 0x00, 0x1B, 0xFF] {
         assert_eq!(
             arms_shop_action(byte),
-            ArmsShopAction::Exit,
+            ArmsShopAction::Ignore,
             "byte {byte:#04x}"
         );
     }

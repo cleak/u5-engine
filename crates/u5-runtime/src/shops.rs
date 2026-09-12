@@ -204,8 +204,13 @@ pub enum ArmsShopAction {
     Buy,
     /// `S` (case-insensitive) — enter the Sell browser.
     Sell,
-    /// Space or any other key — exit with the randomised farewell.
+    /// Space — exit with the randomised farewell.
     Exit,
+    /// Any other key. `shops.md §8.B` gives the entry question's input rule
+    /// as "Wait for `B`, `S`, or Space; **ignore other keys without
+    /// reprinting**", so this is neither an answer nor an exit: the question
+    /// stays on screen and nothing is emitted.
+    Ignore,
 }
 
 /// `shops.md §8.1`: classify one keystroke for the arms-shop
@@ -216,7 +221,13 @@ pub const fn arms_shop_action(byte: u8) -> ArmsShopAction {
     match byte {
         b'B' | b'b' => ArmsShopAction::Buy,
         b'S' | b's' => ArmsShopAction::Sell,
-        _ => ArmsShopAction::Exit,
+        b' ' => ArmsShopAction::Exit,
+        // Measured 2026-09-12
+        // (`qa/paired/combat-town-attack-after-entry.tsv`, beat `conflict`):
+        // pressing `a` at Gwenneth's question leaves the original sitting on
+        // it, where this engine took the exit bark and let the Attack through
+        // behind it.
+        _ => ArmsShopAction::Ignore,
     }
 }
 

@@ -1,3 +1,10 @@
+# **The shop greeting is a lottery.** The route passes Iolo's Bows, and
+# `shops.md` Section 8.A draws the entry greeting from a `SHOPPE.DAT` pool that
+# `prng.md` Section 3 makes non-comparable - measured 2026-09-12 the stock drew
+# `"Hail, friend! Wouldst thou Buy or Sell "` and this engine
+# `"Greetings, traveller! ..."`. Beats carrying that greeting have measured
+# nothing about the attack this scenario is for.
+#
 # Town combat entry, reached by walking in rather than from a seeded save.
 # `combat-town-attack` seeds the party at the counter from an engine-written
 # save at 12:00, when the weaponsmith is seated: the stock game answers that

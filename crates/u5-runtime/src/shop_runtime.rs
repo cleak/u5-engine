@@ -372,6 +372,8 @@ pub fn step_arms_shop(
                 *state = ArmsShopState::Exited;
                 ArmsShopOutcome::Exited
             }
+            // The question stays up and nothing is printed.
+            ArmsShopAction::Ignore => ArmsShopOutcome::InvalidInput,
         },
         (ArmsShopState::BuyPickItem, ArmsShopInput::Item(item)) => {
             quote_arms_shop_buy_item(state, item, ctx, base_price_table)
