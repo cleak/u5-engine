@@ -403,7 +403,25 @@ impl PlayState {
         // it - which is what a capture of New Order shows.
         // `cleak/u5-engine#5`.
         if let Some(session) = self.active_party_selector.as_ref() {
-            return Some(session.target.prompt().to_string());
+            let prompt = session.target.prompt();
+            // The trailing space is what holds the cursor on the prompt's own
+            // row - it is the cell the answer echoes into. A prompt without
+            // one has already closed its row, so the selector's cursor waits
+            // at column 0 of the row beneath, and no end cap is drawn there
+            // because it is not a command row.
+            //
+            // `view.md §3`'s fountain is the one selector target whose prompt
+            // has no trailing space: it "print[s] `Who will drink?`" and then
+            // opens the selector. Measured 2026-09-11 (`town-fountain`), where
+            // the original draws `Who will drink?` on its own row with the
+            // cursor beneath it and this engine held the cursor inline.
+            if prompt.ends_with(' ') {
+                return Some(prompt.to_string());
+            }
+            // No open prompt: the cursor waits on the row beneath, which
+            // [`crate::selector_prompt_row_is_continuation`] keeps free of
+            // the command end cap.
+            return None;
         }
         if self.active_z_stats.is_some() {
             return Some(Z_STATS_STATUS_PROMPT.to_string());

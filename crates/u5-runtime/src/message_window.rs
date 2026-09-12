@@ -463,6 +463,22 @@ pub fn combat_prompt_row_follows_history(state: &crate::PlayState) -> bool {
 /// Measured 2026-09-09 (`qa/paired/shop-arms-menus.tsv`, beat `welcome`): the
 /// original's cursor is at column 0 of the pause row and this engine's was at
 /// column 1, one cell right, which is where an end-cap would have put it.
+/// A party selector whose prompt carries no trailing space has already
+/// closed its own row, so its cursor waits at column 0 of the row beneath -
+/// and that row is the selector's input row, not a fresh command row, so it
+/// takes neither the blank above nor the end cap.
+///
+/// `view.md §3`'s fountain is the one such target: it "print[s] `Who will
+/// drink?`" and then opens the shared selector. Measured 2026-09-11
+/// (`town-fountain/look-prompt`), where the original draws a bare cursor on
+/// the row under the question.
+pub fn selector_prompt_row_is_continuation(state: &crate::PlayState) -> bool {
+    state
+        .active_party_selector
+        .as_ref()
+        .is_some_and(|session| !session.target.prompt().ends_with(' '))
+}
+
 pub fn shop_pause_row_is_continuation(state: &crate::PlayState) -> bool {
     matches!(
         state.active_shop,
