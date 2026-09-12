@@ -5681,8 +5681,21 @@ fn end_to_end_tavern_renders_state_menu_quote_and_follow_up_records() {
     handle_play_key_input(&mut state, 'Y', "", &dir).unwrap();
     // `shops.md` §8.C: "Y prints `Yes\n\n\"`, the applicable follow-up
     // record, a closing quote and a space." The trailing space is the cell
-    // the next accepted menu letter echoes into.
-    assert_eq!(state.message, "Yes\n\n\"Asset tavern follow-up.\" ");
+    // the next accepted menu letter echoes into. The `Yes` and its blank row
+    // are echoed onto the previous question's open row rather than carried
+    // in the slot, so they appear in the transcript rather than here.
+    assert_eq!(state.message, "\"Asset tavern follow-up.\" ");
+    let tail: Vec<_> = state
+        .message_entries()
+        .iter()
+        .rev()
+        .take(3)
+        .map(|entry| entry.text.clone())
+        .collect();
+    assert!(
+        tail.contains(&"Yes".to_string()),
+        "continuation echo missing from the transcript: {tail:?}"
+    );
 
     let _ = fs::remove_dir_all(dir);
 }

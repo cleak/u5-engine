@@ -1546,6 +1546,16 @@ fn handle_active_shop_key_input(
                     state.emit_message_line_continuing_row(letter.to_string());
                 }
             }
+            // `shops.md §8.C`, "Tavern and sage continuation": "Y prints
+            // `Yes\n\n"`, the applicable follow-up record, a closing quote
+            // and a space." That `Yes` continues the row the previous
+            // record's closing quote and space left open - the same
+            // placement §8.B gives the entry answer - and the two feeds are
+            // the blank row beneath it.
+            if matches!(outcome, TavernOutcome::Continued { .. }) {
+                state.emit_message_line_continuing_row("Yes");
+                state.push_explicit_blank_message_entry();
+            }
             append_active_shop_surcharge(
                 format_tavern_outcome_with_shoppe(
                     outcome,
@@ -3564,7 +3574,13 @@ fn format_tavern_outcome_with_shoppe(
             // trailing space for the next accepted letter to echo into.
             // Measured 2026-09-10 (`paws-sage/lore`): the original's row
             // reads `Rations?" C`, this engine's read `Rations`.
-            .map(|rendered| format!("Yes\n\n\"{rendered}\" ")),
+            // The `Yes` is echoed onto the question's own open row by the
+            // caller, the same way the accepted menu letter is; §8.C's
+            // `Yes\n\n` is that echo plus the blank row, not a fresh row of
+            // its own. Measured 2026-09-11 (`paws-sage/again`): the
+            // original reads `for thee?" Yes`, this engine put `Yes` alone
+            // on the next row and ran one row ahead from there.
+            .map(|rendered| format!("\"{rendered}\" ")),
         // Measured: the closing bark is attributed to the tavern's own vendor
         // - `"What's wrong with ye? Can't hold thy liquor?"` over
         // `says Dr. Cat.` - using the §8.0 vendor-name row the engine already
