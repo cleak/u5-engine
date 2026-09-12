@@ -4594,6 +4594,12 @@ impl PlayState {
             crate::blackthorn_session::BlackthornChallenge::awaiting_closing_acknowledgement,
         ) {
             let challenge = self.active_blackthorn.take().expect("checked above");
+            // The merciful death owed by a correct answer lands here, with the
+            // reaction acknowledged (`blackthorn.md §5` step 5).
+            if std::mem::take(&mut self.pending_blackthorn_merciful_death) {
+                let fate = self.apply_blackthorn_correct_answer_companion_fate();
+                self.push_diagnostic(format!("On acknowledgement: {fate}."));
+            }
             if challenge.closing_epilogue_pending() {
                 // `blackthorn.md §5`: "After acknowledgement, record `6`
                 // supplies the quoted unfairness/treachery speech, including
@@ -4674,7 +4680,20 @@ impl PlayState {
                 // shrine ruin flag and the clamped five-point standing debit.
                 self.apply_blackthorn_correct_answer_consequences(shrine_index);
                 let standing = self.moral_standing;
-                let fate = self.apply_blackthorn_correct_answer_companion_fate();
+                // `blackthorn.md §5` step 5: the punishment routine ends by
+                // "wait[ing] for player acknowledgement before returning to
+                // the caller branch". Measured 2026-09-12
+                // (`qa/paired/bt-correct.tsv`): the original's roster still
+                // shows three members while the merciful-death reaction is
+                // held, and drops to two on the acknowledgement. This engine
+                // lifted the record as the answer was submitted, so the panel
+                // dropped a row a beat early.
+                //
+                // An earlier note here read the same scenario as dropping "on
+                // the same beat"; today's capture of both sides side by side
+                // says otherwise.
+                let fate = self.blackthorn_correct_answer_companion_fate_preview();
+                self.pending_blackthorn_merciful_death = true;
                 let vm = self
                     .run_blackthorn_cutscene_beat(BlackthornCutsceneBeat::PerQuestionIntermission);
                 // A correct answer resolves the interrogation; the
@@ -4710,7 +4729,11 @@ impl PlayState {
                 // setup", which is the count the fate branch itself uses, so
                 // it is read before the fate resolves.
                 let nondead = self.blackthorn_eligible_party_member_count();
-                let fate = self.apply_blackthorn_correct_answer_companion_fate();
+                // The same deferral as the first correct-answer arm above: the
+                // roster is not lifted until the reaction is acknowledged
+                // (`blackthorn.md §5` step 5).
+                let fate = self.blackthorn_correct_answer_companion_fate_preview();
+                self.pending_blackthorn_merciful_death = true;
                 let vm = self
                     .run_blackthorn_cutscene_beat(BlackthornCutsceneBeat::ConditionalThroneCleanup);
                 self.push_diagnostic(format!(
@@ -5040,6 +5063,30 @@ impl PlayState {
     /// result as "Durable and irreversible". The withdrawn reading
     /// substituted a per-member jail flag for the death, so the roster
     /// never shrank.
+    /// What [`Self::apply_blackthorn_correct_answer_companion_fate`] will do
+    /// when the acknowledgement lands, without doing it.
+    ///
+    /// The submit arm records the outcome for the harness while the reaction
+    /// is still on screen; the roster itself is not touched until the player
+    /// acknowledges (`blackthorn.md §5` step 5).
+    pub fn blackthorn_correct_answer_companion_fate_preview(&self) -> String {
+        let living_companions = self
+            .party
+            .iter()
+            .skip(1)
+            .filter(|member| member.living())
+            .count();
+        if living_companions <= 1 {
+            return "only one companion remains, so Blackthorn spares the player".to_string(); // audit: not a player-facing line
+        }
+        match self.blackthorn_failure_victim_index() {
+            Some(0) | None => {
+                "no companion remains to take the merciful death".to_string() // audit: not a player-facing line
+            }
+            Some(index) => format!("companion in slot {index} is owed a merciful death"), // audit: not a player-facing line
+        }
+    }
+
     pub fn apply_blackthorn_correct_answer_companion_fate(&mut self) -> String {
         let living_companions = self
             .party

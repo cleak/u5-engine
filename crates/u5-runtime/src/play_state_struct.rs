@@ -265,6 +265,15 @@ pub struct PlayState {
     pub wind_save_byte: u8,
     pub time_stop_counter: u8,
     pub active_effect_tag: Option<u8>,
+    /// A correct Blackthorn answer has been given and the companion's
+    /// "merciful death" is owed, but the reaction is still on screen.
+    ///
+    /// `blackthorn.md §5` step 5: the punishment routine ends by "wait[ing]
+    /// for player acknowledgement before returning to the caller branch", and
+    /// measured (`qa/paired/bt-correct.tsv`) the original's roster still shows
+    /// the companion while that reaction is held - it drops on the
+    /// acknowledgement, not on the answer.
+    pub(crate) pending_blackthorn_merciful_death: bool,
     pub active_effect_counter: u8,
     pub fortunes_of_war: u8,
     /// `rest-and-camp.md §5` camp cooldown counter. Armed at
