@@ -4959,6 +4959,21 @@ fn combat_player_command_message(action: &CombatPlayerCommandAction) -> String {
 
 fn combat_command_branch_message(branch: CombatCommandBranch) -> String {
     if let Some(label) = combat_command_branch_published_label(branch) {
+        // The two `What?` refusals close their own row, exactly as the
+        // scene-abort literals below do: `combat.md §8.1`'s banner then leaves
+        // the blank row the original shows between the refusal and the next
+        // `Avatar, armed with bare hands:`. Measured 2026-09-12
+        // (`qa/paired/combat-refusal-audio.tsv`, beat `silent`): the stock
+        // game has a blank row under ` D-What?` and this engine ran the banner
+        // straight on. The direction-prompt prefixes that share this label
+        // table must not gain the feed, so it is added here rather than to the
+        // label.
+        if matches!(
+            branch,
+            CombatCommandBranch::DWhatRefusal | CombatCommandBranch::WWhatRefusal
+        ) {
+            return format!("{label}\n");
+        }
         return label.to_string();
     }
 
