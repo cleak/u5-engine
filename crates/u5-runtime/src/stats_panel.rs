@@ -844,7 +844,15 @@ pub fn active_panel_picker(state: &PlayState) -> Option<PanelPickerView> {
         });
     }
     if let Some(session) = state.active_mix.as_ref() {
-        if session.phase != crate::MixPhase::Reagents {
+        // `magic.md §6` step 4 asks `How much? ` with the reagent list still
+        // owning the panel: measured 2026-09-12
+        // (`qa/paired/magic-mix-and-cast.tsv`, beat `quantity`), the original
+        // still shows `Reagents:` and the toggled Sulfur Ash while the digits
+        // are typed, where this engine had already fallen back to the roster.
+        if !matches!(
+            session.phase,
+            crate::MixPhase::Reagents | crate::MixPhase::Quantity
+        ) {
             return None;
         }
         let rows: Vec<PanelPickerRow> = state

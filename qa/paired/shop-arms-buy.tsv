@@ -1,3 +1,12 @@
+# **A lottery on the arms shop's barks.** `shops.md` Section 8.A's shared
+# closing envelope draws "one of four `SHOPPE.DAT` records from the current
+# shop-kind" row, and the entry greeting draws from its own pool the same way.
+# `prng.md` Section 3 seeds the two sides from the host clock, so which member
+# of a pool each side draws is not comparable and the beats that carry one have
+# measured nothing - they must be re-run rather than read as differences.
+# `shop-arms-menus` and `shop-arms-sell` already carry this note; measured
+# 2026-09-12 this scenario draws from the same pools and did not.
+#
 # The arms shop's Buy menu, reached by walking in at 10:00.
 # requires-seed: the party outside Britain on the overworld at 10:00
 #
