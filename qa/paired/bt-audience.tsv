@@ -22,6 +22,14 @@
 #
 # Check the first beat for `Your response?` before reading any result from
 # this scenario. A run without it is not evidence about the engine.
+#
+# Known gap, measured 2026-09-12: the `ask5` beat reads `offset-1` and nothing
+# else. The wording agrees; the original carries one row under the mixer's
+# `How much` prompt that this engine does not. `MixPhase::Quantity` is in
+# `message_window_live_row_suppressed` from an earlier `offset+2` reading of
+# the same prompt, and no scenario yet captures both sides of it - `magic-mix`
+# cancels before the quantity stage. The prompt needs its own measurement
+# before the suppression is narrowed.
 both	wait	9000
 both	key	space
 both	wait	4000
