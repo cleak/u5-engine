@@ -56,7 +56,16 @@ impl BlackthornGuardDemandPrompt {
             // thy gold to` / `charity!"`, a blank row, the shared
             // `Dost thou pay?` question, and the `:` answer row.
             Self::MinocCharity => {
-                "\"Thou wilt give half thy gold to charity!\"\n\nDost thou pay?\n\n:".to_string()
+                // `conversation.md §2` "The dispatcher's own lines": the branch
+                // lines "replace the ordinary description-and-greeting entry
+                // with a stored line, and **every one of them** follows the
+                // dispatcher's own leading line feed". The tribute branch
+                // below gained its feed earlier today from
+                // `qa/paired/town-talk-high-dialog-id.tsv`; measured
+                // 2026-09-12 (`qa/paired/minoc-tribute.tsv`, beat `talk`) this
+                // one needs the same - the original leaves a blank row between
+                // `a guard` and the demand.
+                "\n\"Thou wilt give half thy gold to charity!\"\n\nDost thou pay?\n\n:".to_string()
             }
             // Measured against the original (`cleak/u5-spec#198`): a
             // Moonglow tribute guard prints
