@@ -12,6 +12,12 @@
 # `cast-blink` reaches the same spell indoors and measures the `C/O` scene
 # refusal; this one reaches the success arm.
 #
+# **Measured 2026-09-12, and reported on `cleak/u5-spec#262`: a successful
+# Blink prints no narration at all.** The complete window after the cast is
+# `?Cast...` / `Spell name:` / `:IN P0R` / `Direction-North`, on both sides.
+# The direction word completes the open `Direction-` row and the party moves;
+# there is no result line after it.
+#
 # requires-seed: the party on the Britannia overworld at 02:00 with spell
 # charges and mana (`seed_inventory <profile> spells=9 mana=99`)
 both	wait	9000
