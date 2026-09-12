@@ -2636,7 +2636,16 @@ impl PlayState {
                 DirectionPromptKind::DungeonSearch { .. } => unreachable!(
                     "dungeon search prompt is handled before cardinal direction dispatch"
                 ),
-                DirectionPromptKind::Klimb => self.klimb_over_town_target(direction),
+                // `doors-and-z-transitions.md §9`: the town arm inspects the
+                // neighbour, and the overworld arm - which reaches this prompt
+                // only after both of its entry gates have passed - tests the
+                // target cell it names (`RETRACTIONS.md` R470).
+                DirectionPromptKind::Klimb => match self.area {
+                    Area::World { plane } => {
+                        self.climb_outdoors_direction(game_dir, plane, direction)?
+                    }
+                    _ => self.klimb_over_town_target(direction),
+                },
                 DirectionPromptKind::CombatKlimb { actor_slot } => {
                     self.klimb_combat_actor_direction(actor_slot, direction)
                 }

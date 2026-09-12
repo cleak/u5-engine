@@ -1701,7 +1701,7 @@
         state.player.facing = Direction::East;
 
         assert_eq!(
-            state.klimb_command(Path::new("")).unwrap(),
+            outdoor_klimb_toward(&mut state, Path::new(""), Direction::East),
             MoveOutcome::Blocked
         );
 
@@ -1719,7 +1719,7 @@
         state.player.facing = Direction::East;
 
         assert_eq!(
-            state.klimb_command(Path::new("")).unwrap(),
+            outdoor_klimb_toward(&mut state, Path::new(""), Direction::East),
             MoveOutcome::Blocked
         );
 
@@ -1745,7 +1745,7 @@
         state.climbing_gear = 1;
         state.player.facing = Direction::East;
 
-        assert_eq!(state.klimb_command(&dir).unwrap(), MoveOutcome::Blocked);
+        assert_eq!(outdoor_klimb_toward(&mut state, &dir, Direction::East), MoveOutcome::Blocked);
 
         assert_eq!(state.message, "Impassable!");
         assert_eq!((state.player.x, state.player.y), (10, 20));
@@ -1763,7 +1763,7 @@
         state.player.facing = Direction::East;
 
         assert_eq!(
-            state.klimb_command(Path::new("")).unwrap(),
+            outdoor_klimb_toward(&mut state, Path::new(""), Direction::East),
             MoveOutcome::Moved
         );
 
@@ -1793,7 +1793,7 @@
         state.player.facing = Direction::East;
 
         assert_eq!(
-            state.klimb_command(&dir).unwrap(),
+            outdoor_klimb_toward(&mut state, &dir, Direction::East),
             MoveOutcome::Transition(AreaTransition::ChangedWorldPlane {
                 from: WorldPlane::Britannia,
                 to: WorldPlane::Underworld,

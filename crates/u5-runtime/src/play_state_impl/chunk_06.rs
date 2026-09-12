@@ -21,7 +21,21 @@ impl PlayState {
             OverworldKlimbEntryGate::Proceed => {}
         }
 
-        let direction = self.player.facing;
+        // `doors-and-z-transitions.md §9`, corrected 2026-09-12 for issue #262
+        // (`RETRACTIONS.md` R470): "There is no facing to probe: that gate
+        // **is** the direction prompt, it echoes the chosen direction's name on
+        // the prefix row, and the pass key cancels the command outright." Both
+        // gates above run first - the gear refusal "ends the command
+        // **without ever asking for a direction**".
+        Ok(self.start_klimb_direction_prompt())
+    }
+
+    pub fn climb_outdoors_direction(
+        &mut self,
+        game_dir: &Path,
+        plane: WorldPlane,
+        direction: Direction,
+    ) -> io::Result<MoveOutcome> {
         let (dx, dy) = direction.delta();
         let nx = (self.player.x as isize + dx).rem_euclid(WORLD_SIDE as isize) as usize;
         let ny = (self.player.y as isize + dy).rem_euclid(WORLD_SIDE as isize) as usize;

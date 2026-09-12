@@ -1,3 +1,73 @@
+/// `doors-and-z-transitions.md §9`, corrected for issue #262
+/// (`RETRACTIONS.md` R470): outdoor K reaches its target through the shared
+/// direction prompt, not through the party's facing. Runs the command, checks
+/// that the prompt opened, and answers it with `direction`.
+fn outdoor_klimb_toward(
+    state: &mut PlayState,
+    game_dir: &Path,
+    direction: Direction,
+) -> MoveOutcome {
+    assert_eq!(
+        state.klimb_command(game_dir).unwrap(),
+        MoveOutcome::Observed
+    );
+    let Area::World { plane } = state.area else {
+        panic!("outdoor_klimb_toward needs a world state");
+    };
+    state.active_direction_prompt = None;
+    state
+        .climb_outdoors_direction(game_dir, plane, direction)
+        .unwrap()
+}
+
+#[test]
+/// `doors-and-z-transitions.md §9` "Overworld K", corrected 2026-09-12 for
+/// issue #262 (`RETRACTIONS.md` R470): the gear refusal "ends the command
+/// **without ever asking for a direction**", the transport refusal follows,
+/// and only then does the handler run the shared direction prompt, whose
+/// "chosen direction's name is appended to the prefix row".
+fn outdoor_klimb_gates_run_before_the_direction_prompt() {
+    let dir = debug_game_dir();
+    let mut grid = open_world_grid();
+    grid[world_cell_index(11, 20)] = 0x0c;
+
+    // No Grapple: no prompt at all.
+    let mut state = world_state(grid.clone(), 10, 20);
+    state.player.facing = Direction::East;
+    assert_eq!(
+        state.klimb_command(Path::new("")).unwrap(),
+        MoveOutcome::Blocked
+    );
+    assert_eq!(state.message, "With what?");
+    assert!(state.active_direction_prompt.is_none());
+
+    // With the Grapple, the prompt opens on the bare verb echo.
+    let mut state = world_state(grid, 10, 20);
+    state.climbing_gear = 1;
+    state.player.facing = Direction::East;
+    assert_eq!(
+        state.klimb_command(&dir).unwrap(),
+        MoveOutcome::Observed
+    );
+    assert_eq!(state.message, "Klimb-");
+    assert_eq!(
+        state.active_direction_prompt.map(|session| session.kind),
+        Some(DirectionPromptKind::Klimb)
+    );
+    assert_eq!(state.turn, 0);
+
+    // The chosen direction's name completes that row, and the climb commits
+    // toward the cell it names rather than toward the party's facing.
+    state.player.facing = Direction::North;
+    assert_eq!(
+        handle_play_key_input(&mut state, '6', "", &dir).unwrap(),
+        PlayInputDisposition::Continue
+    );
+    assert_eq!((state.player.x, state.player.y), (11, 20));
+    assert!(state.active_direction_prompt.is_none());
+    let _ = fs::remove_dir_all(dir);
+}
+
 #[test]
 fn routed_world_k_plane_transition_does_not_retrigger_reciprocal_landing_row() {
     let dir = debug_game_dir();
@@ -16,6 +86,11 @@ fn routed_world_k_plane_transition_does_not_retrigger_reciprocal_landing_row() {
         state
             .handle_top_down_key_with_inline('K', &dir, None, None, None, None)
             .unwrap()
+    );
+    // Outdoor K opens the shared direction prompt; `6` is East.
+    assert_eq!(
+        handle_play_key_input(&mut state, '6', "", &dir).unwrap(),
+        PlayInputDisposition::Continue
     );
 
     assert_eq!(
@@ -57,7 +132,7 @@ fn world_k_low_climb_stat_falls_but_still_moves() {
     let expected_damage = u5_prng_range_u16(&mut expected_prng, 1, 5) as u16;
 
     assert_eq!(
-        state.klimb_command(Path::new("")).unwrap(),
+        outdoor_klimb_toward(&mut state, Path::new(""), Direction::East),
         MoveOutcome::Moved
     );
 
@@ -101,7 +176,7 @@ fn world_k_skips_dead_or_ashes_members_for_fall_checks() {
     ];
 
     assert_eq!(
-        state.klimb_command(Path::new("")).unwrap(),
+        outdoor_klimb_toward(&mut state, Path::new(""), Direction::East),
         MoveOutcome::Moved
     );
 
@@ -811,7 +886,7 @@ fn world_k_dexterity_equal_to_roll_does_not_fall() {
     }];
 
     assert_eq!(
-        state.klimb_command(Path::new("")).unwrap(),
+        outdoor_klimb_toward(&mut state, Path::new(""), Direction::East),
         MoveOutcome::Moved
     );
 
