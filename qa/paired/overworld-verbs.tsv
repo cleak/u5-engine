@@ -1,0 +1,35 @@
+# K-Klimb, G-Get and S-Search on the Britannia overworld.
+#
+# The corpus of decoded stock captures shows no scenario reaching any of these
+# three verbs outdoors, which is how several invented engine lines survived
+# until the crate-wide message inventory found them. This walks the shared
+# overworld caster seed through all three in one run so whatever the original
+# prints - result or refusal - is on record.
+#
+# Measured 2026-09-12, clean at 4 of 4. `Klimb-With what?` is the gearless
+# overworld form of `commands.md` Section 5.2; `Get-North` / `Nothing to get!`
+# and `Search-North` / `Thou dost find` / `nothing of note.` are Section 5.8's
+# empty results. That Search pair is the first *measurement* of the row break
+# this engine was given from the section's prose alone in an earlier fix.
+#
+# requires-seed: the party on the Britannia overworld at 02:00 with spell
+# charges and mana (`seed_inventory <profile> spells=9 mana=99`)
+both	wait	9000
+both	key	space
+both	wait	4000
+both	key	j
+both	wait	8000
+both	shot	start	On the overworld
+both	key	k
+both	wait	2500
+both	shot	klimb	K-Klimb where nothing is climbable
+both	key	g
+both	wait	1500
+both	key	Up
+both	wait	2500
+both	shot	get	G-Get north
+both	key	s
+both	wait	1500
+both	key	Up
+both	wait	2500
+both	shot	search	S-Search north
