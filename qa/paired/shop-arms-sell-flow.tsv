@@ -1,3 +1,16 @@
+# **A lottery on the shop's barks.** `shops.md` Section 8.A's shared closing
+# envelope draws "one of four `SHOPPE.DAT` records from the current shop-kind"
+# row, and the entry greeting draws from its own pool the same way. `prng.md`
+# Section 3 seeds the two sides from the host clock, so which member of a pool
+# each side draws is not comparable - and because the greeting is the first
+# draw, one disagreement there carries through every later beat of the visit.
+# A beat the comparator classifies `variant` has measured nothing and must be
+# re-run rather than read as a difference.
+#
+# Measured 2026-09-12: every differing beat of this scenario classified
+# `variant`. Its siblings `shop-arms-buy`, `shop-arms-menus` and
+# `shop-arms-sell` already carried this note.
+#
 # The arms Sell flow: the browser, a step down it, an offer and its decline,
 # a second offer taken, and the exit (cleak/u5-spec#238). The header here used
 # to describe the Buy confirmation, which is `shop-arms-buy-confirm`.
