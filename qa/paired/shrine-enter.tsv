@@ -1,3 +1,17 @@
+# **Known gap, diagnosed 2026-09-12: the entry narration is not staged.**
+# `karma.md` Section 12's entry table paces the sequence in world ticks - the
+# approach record, the kneel record, then "After ten world ticks, record `29`:
+# the question asking which virtue", then six ticks after a nonblank virtue
+# answer and twelve after each nonblank mantra. This engine prints the whole
+# entry inside the one key handler, so the `early` and `mid` beats - which
+# sample during those pauses - show the original still on
+# `tranquil Shrine...` while the engine is already asking the virtue.
+#
+# The text itself agrees; `shrine-flow` and `shrine-unfocused` both match
+# because their beats fall outside the pauses. Closing this needs a
+# timed-narration stage the runtime does not have yet - the endgame's
+# per-frame operation queue is the nearest existing shape.
+#
 # The shrine entry narration, captured while it is still printing.
 # requires-seed: the party on the published Honesty shrine coordinate
 both	wait	9000
