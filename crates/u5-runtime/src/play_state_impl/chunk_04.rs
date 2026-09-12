@@ -3130,7 +3130,25 @@ impl PlayState {
         game_dir: &Path,
     ) -> io::Result<MoveOutcome> {
         let look_table = load_look_table(game_dir)?;
-        self.look_direction_with_resources(direction, Some(&look_table), Some(game_dir))
+        let outcome = self.look_direction_with_resources(direction, Some(&look_table), Some(game_dir))?;
+        self.charge_look_command_turn();
+        Ok(outcome)
+    }
+
+    /// `RETRACTIONS.md` R463 (`cleak/u5-spec#261`): "The incorrect premise was
+    /// **\"Look does not consume a turn.\"** The original resident dispatcher
+    /// returns acted for L-Look, including direction cancellation."
+    ///
+    /// The acted result is what reaches the ordinary town epilogue - "the
+    /// one-minute clock call, underfoot/status work, then the eligible
+    /// object/NPC passes and contact routing" - and that contact pass is why
+    /// the Minoc guard can raise its charity demand "after the first eligible
+    /// Look while the party remains stationary", which is the cadence
+    /// difference `#261` was filed for.
+    fn charge_look_command_turn(&mut self) {
+        if matches!(self.area, Area::Town { .. } | Area::World { .. }) {
+            self.advance_turn();
+        }
     }
 
     #[cfg(test)]

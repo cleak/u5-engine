@@ -295,7 +295,7 @@ fn town_look_routes_sign_object_classes_through_sign_records() {
     );
 
     assert_eq!(state.message, "Sign:\nPosted notice");
-    assert_eq!(state.turn, 0);
+    assert_eq!(state.turn, 1);
     let _ = fs::remove_dir_all(dir);
 }
 
@@ -485,8 +485,8 @@ fn town_look_uses_look2_description_when_available() {
     );
 
     assert!(state.message.contains("stone path"));
-    assert_eq!(state.turn, 0);
-    assert_eq!(state.clock, GameClock::default());
+    assert_eq!(state.turn, 1);
+    assert_eq!(state.clock, GameClock::new(12, 1).unwrap());
 }
 
 #[test]
@@ -840,7 +840,7 @@ fn signs_dat_bytes_for_test(records: &[(u8, u8, u8, u8, &[u8])]) -> Vec<u8> {
 }
 
 #[test]
-fn town_look_renders_matching_signs_dat_record_without_spending_turn() {
+fn town_look_renders_matching_signs_dat_record_and_spends_its_turn() {
     let dir = debug_game_dir();
     fs::write(dir.join(LOOK2_DAT_FILE), look2_bytes(&[(0x5a, "a sign")])).unwrap();
     fs::write(
@@ -859,8 +859,8 @@ fn town_look_renders_matching_signs_dat_record_without_spending_turn() {
     );
 
     assert_eq!(state.message, "Sign:\nNorth Road");
-    assert_eq!(state.turn, 0);
-    assert_eq!(state.clock, GameClock::default());
+    assert_eq!(state.turn, 1);
+    assert_eq!(state.clock, GameClock::new(12, 1).unwrap());
     let _ = fs::remove_dir_all(dir);
 }
 
@@ -897,15 +897,15 @@ fn world_look_telescope_routes_to_night_sky() {
     assert_eq!(viewport.cells_wide, SKY_VIEW_COLUMNS);
     assert_eq!(viewport.cells_high, SKY_VIEW_ROWS);
     assert!(viewport.pixels.iter().any(|pixel| *pixel != 0));
-    assert_eq!(state.turn, 0);
-    assert_eq!(state.clock, GameClock::new(20, 0).unwrap());
+    assert_eq!(state.turn, 1);
+    assert_eq!(state.clock, GameClock::new(20, 2).unwrap());
 
     assert_eq!(
         handle_play_key_input(&mut state, ' ', "", &dir).unwrap(),
         PlayInputDisposition::Continue
     );
     assert!(state.active_view_overlay.is_none());
-    assert_eq!(state.turn, 0);
+    assert_eq!(state.turn, 1);
     assert!(state.message.is_empty());
     let _ = fs::remove_dir_all(dir);
 }
@@ -922,7 +922,7 @@ fn world_look_telescope_daylight_shows_sun_and_applies_damage() {
     grid[world_cell_index(2, 1)] = TELESCOPE_LOOK_TRIGGER_TILE;
     let mut state = britannia_state(grid, 1, 1);
     state.player.facing = Direction::East;
-    state.clock = GameClock::new(12, 0).unwrap();
+    state.clock = GameClock::new(12, 2).unwrap();
     state.active_player = None;
     let hp_before = state.party[0].hp;
 
@@ -935,7 +935,7 @@ fn world_look_telescope_daylight_shows_sun_and_applies_damage() {
     assert_eq!(state.active_player, Some(0));
     assert_eq!(state.party[0].hp, hp_before - 1);
     assert!(state.active_view_overlay.is_none());
-    assert_eq!(state.turn, 0);
+    assert_eq!(state.turn, 1);
     let _ = fs::remove_dir_all(dir);
 }
 
@@ -972,7 +972,7 @@ fn town_look_telescope_enters_the_sky_renderer_instead_of_a_description() {
             .as_ref()
             .is_some_and(|overlay| matches!(overlay.kind, ViewOverlayKind::Sky(_)))
     );
-    assert_eq!(state.turn, 0);
+    assert_eq!(state.turn, 1);
     let _ = fs::remove_dir_all(dir);
 }
 
@@ -1154,8 +1154,8 @@ fn world_look_uses_look2_description_for_wrapped_object() {
 
     assert!(state.message.contains("object frigate"));
     assert!(!state.message.contains("terrain frigate"));
-    assert_eq!(state.turn, 0);
-    assert_eq!(state.clock, GameClock::default());
+    assert_eq!(state.turn, 1);
+    assert_eq!(state.clock, GameClock::new(12, 2).unwrap());
 }
 
 #[test]
@@ -1182,7 +1182,7 @@ fn world_look_dungeon_mouth_appends_clean_location_name() {
     );
 
     assert!(state.message.contains("a dungeon mouth (Wrong)"));
-    assert_eq!(state.turn, 0);
+    assert_eq!(state.turn, 1);
     let _ = fs::remove_dir_all(dir);
 }
 
@@ -1206,8 +1206,8 @@ fn world_look_shrine_table_appends_clean_virtue_name() {
     );
 
     assert!(state.message.contains("a shrine (Shrine of Compassion)"));
-    assert_eq!(state.turn, 0);
-    assert_eq!(state.clock, GameClock::default());
+    assert_eq!(state.turn, 1);
+    assert_eq!(state.clock, GameClock::new(12, 2).unwrap());
     let _ = fs::remove_dir_all(dir);
 }
 
@@ -1232,8 +1232,8 @@ fn world_look_shrine_altar_avoids_duplicate_virtue_context() {
 
     assert!(state.message.contains("an altar (Shrine of Honesty)"));
     assert_eq!(state.message.matches("Shrine of Honesty").count(), 1);
-    assert_eq!(state.turn, 0);
-    assert_eq!(state.clock, GameClock::default());
+    assert_eq!(state.turn, 1);
+    assert_eq!(state.clock, GameClock::new(12, 2).unwrap());
     let _ = fs::remove_dir_all(dir);
 }
 

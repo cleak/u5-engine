@@ -1193,7 +1193,7 @@
     }
 
     #[test]
-    fn active_direction_prompt_routes_top_down_look_without_spending_turn() {
+    fn active_direction_prompt_routes_top_down_look_and_spends_its_turn() {
         let dir = debug_game_dir();
         fs::write(
             dir.join(LOOK2_DAT_FILE),
@@ -1220,7 +1220,7 @@
         assert!(state.active_direction_prompt.is_none());
         assert_eq!(state.message, format!("{LOOK_RESULT_PREFIX}\neast road"));
         assert_eq!(state.player.facing, Direction::South);
-        assert_eq!(state.turn, 0);
+        assert_eq!(state.turn, 1);
 
         let _ = fs::remove_dir_all(dir);
     }
