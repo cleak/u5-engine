@@ -473,10 +473,23 @@ pub fn combat_prompt_row_follows_history(state: &crate::PlayState) -> bool {
 /// (`town-fountain/look-prompt`), where the original draws a bare cursor on
 /// the row under the question.
 pub fn selector_prompt_row_is_continuation(state: &crate::PlayState) -> bool {
-    state
+    if state
         .active_party_selector
         .as_ref()
         .is_some_and(|session| !session.target.prompt().ends_with(' '))
+    {
+        return true;
+    }
+    // `view.md §3`'s wishing well: "With gold, print `\nThy wish?\n`, spend
+    // one coin and open the shared twelve-character text input." The feed
+    // after the question closes its row, so the input waits at column 0
+    // beneath - a text-input row, not a command row. Measured 2026-09-11
+    // (`town-wishing-well/coin`), where the original draws a bare cursor there
+    // and this engine drew the command end cap.
+    state
+        .active_wishing_well
+        .as_ref()
+        .is_some_and(|session| session.coin_accepted)
 }
 
 pub fn shop_pause_row_is_continuation(state: &crate::PlayState) -> bool {
