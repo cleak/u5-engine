@@ -4034,12 +4034,6 @@ impl PlayState {
                 return MoveOutcome::Talked;
             }
         }
-        if dialog_id == BLACKTHORN_GUARD_DEMAND_DIALOG_ID {
-            return match self.begin_blackthorn_guard_demand(target_x, target_y, true, None) {
-                Ok(outcome) => outcome,
-                Err(_) => MoveOutcome::Blocked,
-            };
-        }
         // `conversation.md §2` step 5, corrected 2026-09-12 for issue #262
         // (`RETRACTIONS.md` R479): "if the NPC's live sprite is the guard
         // sprite, the NPC answers `The guard offers` on one row and
@@ -4064,6 +4058,19 @@ impl PlayState {
             self.message =
                 crate::talk_non_speaker_refusal_for_sprite(Some(crate::tlk_control_codes::TALK_GUARD_SPRITE));
             return self.consume_ordinary_town_talk();
+        }
+        // `conversation.md §2` step 5: the reserved regime index "enters the
+        // regime handler of `systems/blackthorn.md` Section 7a from both
+        // explicit Talk and automatic conversation contact, **subject to the
+        // gates above**" - so the guard gate runs first. Measured 2026-09-12
+        // (`qa/paired/blackthorn-palace-password.tsv`, beat `talk`): the
+        // original refuses the palace guard with `The guard offers` /
+        // `no response!` where this engine opened the password demand.
+        if dialog_id == BLACKTHORN_GUARD_DEMAND_DIALOG_ID {
+            return match self.begin_blackthorn_guard_demand(target_x, target_y, true, None) {
+                Ok(outcome) => outcome,
+                Err(_) => MoveOutcome::Blocked,
+            };
         }
         if matches!(
             npc_dialog_id_kind(dialog_id),
@@ -4247,6 +4254,33 @@ impl PlayState {
                 self.message = message;
                 return MoveOutcome::Talked;
             }
+        }
+        // `conversation.md §2` step 5 (`RETRACTIONS.md` R479), the same gate
+        // the string-backed path above applies: a guard-sprite NPC answers the
+        // two-row refusal unless its reached waypoint index is odd *and* its
+        // dialog index is non-zero, and step 5 has the reserved regime index
+        // enter Blackthorn's handler "**subject to the gates above**".
+        //
+        // This is the asset-backed path - the one the game and every paired
+        // run take - and it had no such gate at all, so R479 was only ever in
+        // force on the fallback. Measured 2026-09-12
+        // (`qa/paired/blackthorn-palace-password.tsv`, beat `talk`): the
+        // original refuses the palace guard where this engine opened the
+        // password demand.
+        if let Some(npc) = self.npc_at_current_floor(target_x, target_y)
+            && npc.type_byte == crate::tlk_control_codes::TALK_GUARD_SPRITE
+            && npc_ai_behavior(
+                npc.schedule
+                    .get(NPC_SCHEDULE_AI_OFFSET + npc.cached_wp)
+                    .copied()
+                    .unwrap_or_default(),
+            ) != Some(NpcAiBehavior::ApproachAndAttack)
+            && !crate::talk_guard_sprite_dispatches(npc.cached_wp, dialog_id as u8)
+        {
+            self.message = crate::talk_non_speaker_refusal_for_sprite(Some(
+                crate::tlk_control_codes::TALK_GUARD_SPRITE,
+            ));
+            return self.consume_ordinary_town_talk();
         }
         if dialog_id == BLACKTHORN_GUARD_DEMAND_DIALOG_ID {
             return match self.begin_blackthorn_guard_demand(target_x, target_y, true, None) {
