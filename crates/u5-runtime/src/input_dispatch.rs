@@ -852,7 +852,7 @@ fn handle_active_shop_key_input(
             match (*s, yes, no, inline_digit) {
                 (HealerShopState::Greeting, _, true, _) => {
                     *s = HealerShopState::Exited;
-                    "Farewell.".to_string()
+                    String::new()
                 }
                 (HealerShopState::Greeting, true, _, _) => {
                     *s = HealerShopState::PickService;
@@ -866,7 +866,7 @@ fn handle_active_shop_key_input(
                 }
                 (HealerShopState::Greeting, _, _, _) => {
                     *s = HealerShopState::Exited;
-                    "Farewell.".to_string()
+                    String::new()
                 }
                 (HealerShopState::PickService, _, _, _) => match healer_service_action(key_byte) {
                     HealerServiceAction::Treatment(treatment) => {
@@ -904,7 +904,7 @@ fn handle_active_shop_key_input(
                     }
                     HealerServiceAction::Exit => {
                         *s = HealerShopState::Exited;
-                        "Farewell.".to_string()
+                        String::new()
                     }
                     HealerServiceAction::Discard => healer_service_menu(healer_name),
                 },
@@ -998,7 +998,7 @@ fn handle_active_shop_key_input(
                     // continues on its own question.
                     format!("No{HEALER_CONTINUATION}")
                 }
-                (HealerShopState::Exited, _, _, _) => "Farewell.".to_string(),
+                (HealerShopState::Exited, _, _, _) => String::new(),
                 // `shops.md §8.B`/`§8.C`: every shop kind ignores a key it does
                 // not recognise - "letters outside the displayed stock count
                 // are ignored without a refusal bark", "unknown menu letters
@@ -1374,7 +1374,7 @@ fn handle_active_shop_key_input(
                     *s = InnkeeperState::ServiceMenu { inn };
                     "As you wish.".to_string()
                 }
-                (InnkeeperState::Exited, _, _, _) => "Farewell.".to_string(),
+                (InnkeeperState::Exited, _, _, _) => String::new(),
                 // `shops.md §8.B`/`§8.C`: every shop kind ignores a key it does
                 // not recognise - "letters outside the displayed stock count
                 // are ignored without a refusal bark", "unknown menu letters
@@ -3428,8 +3428,8 @@ fn format_tavern_outcome(
             "Yes\n{} continues with SHOPPE.DAT record {follow_up_record_id}.",
             tavern.display_name()
         ),
-        DeclinedContinuation => "No\nFarewell.".to_string(),
-        NoSaleExit => "Farewell.".to_string(),
+        DeclinedContinuation => "No".to_string(),
+        NoSaleExit => String::new(),
         IgnoredInput => String::new(),
         // **Measured** 2026-09-07 at The Cat's Lair in Paws
         // (`qa/paired/paws-tavern.tsv`): both lines are quoted, and they sit
@@ -3442,7 +3442,11 @@ fn format_tavern_outcome(
         // formatter's; this fallback prints the bark without the attribution
         // row rather than inventing a name.
         RefusedNoNeed => TAVERN_NO_GOLD_NO_NEED_BARK.to_string(),
-        Exited => "Farewell.".to_string(),
+        // `shops.md §8.A`: "There is no universal `Farewell.` or `As you
+        // wish.` line." A shop that closes on a bark renders it through the
+        // shared envelope; this arm is the silent outcome, which "omits this
+        // entire sequence and its random draw".
+        Exited => String::new(),
         // `shops.md §8.B`/`§8.C`: an unrecognised key waits; there is no
         // I-do-not-understand line anywhere in the shop family.
         InvalidInput => String::new(),
@@ -3676,11 +3680,15 @@ fn format_sage_outcome(outcome: crate::shop_runtime::SageOutcome) -> String {
             .trim_start()
             .to_string(),
         RumourFound { rendered, .. } => rendered,
-        Declined => "Farewell.".to_string(),
+        Declined => String::new(),
         RefusedShortFunds { .. } => TAVERN_AFFORDABILITY_REFUSAL_BARK.to_string(),
         InputTooLong { limit, .. } => format!("Ask in {limit} characters or fewer."),
         NoTopicMatch => "That, I cannot help thee with.".to_string(),
-        Exited => "Farewell.".to_string(),
+        // `shops.md §8.A`: "There is no universal `Farewell.` or `As you
+        // wish.` line." A shop that closes on a bark renders it through the
+        // shared envelope; this arm is the silent outcome, which "omits this
+        // entire sequence and its random draw".
+        Exited => String::new(),
         // `shops.md §8.B`/`§8.C`: an unrecognised key waits; there is no
         // I-do-not-understand line anywhere in the shop family.
         InvalidInput => String::new(),
@@ -3794,7 +3802,11 @@ fn format_reagent_outcome(
             Some(herbalist) => format_reagent_outcome(EnteredMenu { herbalist }, None),
             None => String::new(),
         },
-        Exited => "Farewell.".to_string(),
+        // `shops.md §8.A`: "There is no universal `Farewell.` or `As you
+        // wish.` line." A shop that closes on a bark renders it through the
+        // shared envelope; this arm is the silent outcome, which "omits this
+        // entire sequence and its random draw".
+        Exited => String::new(),
         // `shops.md §8.B`/`§8.C`: an unrecognised key waits; there is no
         // I-do-not-understand line anywhere in the shop family.
         InvalidInput => String::new(),
@@ -3819,7 +3831,7 @@ fn format_horse_trader_outcome(outcome: crate::shop_runtime::HorseTraderOutcome)
         // `There is no room for a horse here.` was invented.
         RefusedNoMarker { .. } => HORSE_TRADER_CLOSED_REFUSAL.to_string(),
         Declined => "As you wish.".to_string(),
-        Exited => "Farewell.".to_string(),
+        Exited => String::new(),
         // `shops.md §8.6`: the purchase loop is "Y/N driven" and other keys
         // wait; no refusal prints.
         InvalidInput => String::new(),
@@ -3888,7 +3900,11 @@ fn format_ship_broker_outcome(
             Some(name) => format!("\"Hmph! Landlubber!\"\nsays {name}."),
             None => "\"Hmph! Landlubber!\"".to_string(),
         },
-        Exited => "Farewell.".to_string(),
+        // `shops.md §8.A`: "There is no universal `Farewell.` or `As you
+        // wish.` line." A shop that closes on a bark renders it through the
+        // shared envelope; this arm is the silent outcome, which "omits this
+        // entire sequence and its random draw".
+        Exited => String::new(),
         // `shops.md §8.B`/`§8.C`: an unrecognised key waits; there is no
         // I-do-not-understand line anywhere in the shop family.
         InvalidInput => String::new(),
@@ -3966,7 +3982,11 @@ fn format_guild_outcome(outcome: crate::shop_runtime::GuildShopOutcome) -> Strin
             "{GUILD_MENU_AGAIN_HEADING}\n\n{}\n{GUILD_MENU_QUESTION}",
             guild_menu_rows()
         ),
-        Exited => "Farewell.".to_string(),
+        // `shops.md §8.A`: "There is no universal `Farewell.` or `As you
+        // wish.` line." A shop that closes on a bark renders it through the
+        // shared envelope; this arm is the silent outcome, which "omits this
+        // entire sequence and its random draw".
+        Exited => String::new(),
         // `shops.md §8.B`/`§8.C`: an unrecognised key waits; there is no
         // I-do-not-understand line anywhere in the shop family.
         InvalidInput => String::new(),
