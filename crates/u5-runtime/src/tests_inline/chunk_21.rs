@@ -2915,7 +2915,7 @@ fn town_talk_reserved_guard_dialog_opens_default_tribute_demand() {
         MoveOutcome::Talked
     );
 
-    assert_eq!(state.message, "A guard demands a 10 gp tribute to Blackthorn!\n\nDost thou pay?\n\n:");
+    assert_eq!(state.message, "\nA guard demands a 10 gp tribute to Blackthorn!\n\nDost thou pay?\n\n:");
     assert_eq!(state.turn, 1);
     assert!(matches!(
         state.active_blackthorn_guard_demand,
@@ -2997,7 +2997,7 @@ fn town_raw_tlk_reserved_guard_dialog_refusal_requests_arrest_cleanup() {
         MoveOutcome::Talked
     );
 
-    assert_eq!(state.message, "A guard demands a 10 gp tribute to Blackthorn!\n\nDost thou pay?\n\n:");
+    assert_eq!(state.message, "\nA guard demands a 10 gp tribute to Blackthorn!\n\nDost thou pay?\n\n:");
     assert_eq!(state.turn, 1);
     assert_eq!(
         state.resolve_blackthorn_guard_demand_input('Y', "", None),

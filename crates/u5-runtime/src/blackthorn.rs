@@ -84,8 +84,16 @@ impl BlackthornGuardDemandPrompt {
                 // shape `town-mode.md §1123` publishes for the arrest
                 // challenge, whose question is likewise followed by "a
                 // blank row, a `:` answer row".
+                // `conversation.md §2` "The dispatcher's own lines": the
+                // branch lines "replace the ordinary description-and-greeting
+                // entry with a stored line, and every one of them follows the
+                // dispatcher's own leading line feed". Measured
+                // (`qa/paired/town-talk-high-dialog-id.tsv`, beat `talk`): the
+                // original leaves a blank row between the `Enter what` refusal
+                // that triggered the contact and this line, where the engine
+                // ran them together.
                 format!(
-                    "A guard demands a {amount} gp tribute to Blackthorn!\n\nDost thou pay?\n\n:"
+                    "\nA guard demands a {amount} gp tribute to Blackthorn!\n\nDost thou pay?\n\n:"
                 )
             }
         }
