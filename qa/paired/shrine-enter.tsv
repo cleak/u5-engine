@@ -14,7 +14,7 @@
 # frontend consumes a staged delay about twice as fast as the wall clock, so
 # a 40-tick hold lands near 1.2 s instead of 2.2 s. Switching that advance
 # from the default clock to `Time<Real>` changed nothing, so it is not
-# virtual-time scaling. Tracked as `cleak/u5-engine#23`.
+# virtual-time scaling. Tracked as `cleak/u5-engine#27`.
 #
 # The text itself agrees; `shrine-flow` and `shrine-unfocused` both match
 # because their beats fall outside the pauses.
