@@ -3223,8 +3223,13 @@ fn tavern_bill_count_word(living_party: usize) -> &'static str {
 /// then adds `\nEnjoy!"`. §4 stresses that this "is resident text, not a
 /// resource record" and "has no `SHOPPE.DAT` record ordinal".
 fn tavern_bill_line(price: u16, living_party: usize, speaker_is_female: bool) -> String {
+    // The leading feeds are the blank row the original leaves between the
+    // accepted letter's echo and the bill. Measured 2026-09-11
+    // (`paws-sage/ale`): the original reads `thy travels?" A`, a blank row,
+    // then `"That will be 1`; this engine ran the bill straight onto the row
+    // below the echo. The lore branch already had this blank.
     format!(
-        "\"That will be {price} gold for the {} of ye,\n{}.\nEnjoy!\"",
+        "\n\n\"That will be {price} gold for the {} of ye,\n{}.\nEnjoy!\"",
         tavern_bill_count_word(living_party),
         tavern_honorific(speaker_is_female)
     )
