@@ -1,4 +1,19 @@
 # Skip the flourish, create a character on both sides with identical answers, Journey Onward, first moves, Z-stats.
+#
+# This scenario is a lottery in two places and measured nothing on those two
+# beats; they must be re-run only for the beats that are not.
+#
+# `menu`: the "Warriors of Destiny" flame is a running animation cycle, so the
+# two sides catch it in different phases. Measured 2026-09-12: rows 13-14 of
+# the decoded rect are the flame band and nothing else differs on that screen.
+#
+# `chargen-q1` and the questions after it: `chargen.md` "The pairing within
+# each round is randomised - chargen draws two virtues uniformly at random
+# from the still-eligible pool for each question." Measured 2026-09-12: the
+# stock side drew Honesty/Sacrifice (the bounty-hunter dilemma) where this
+# engine drew Spirituality/Humility (the apprentice dilemma). The question
+# text is a draw, so it is not comparable; the answer keys below still
+# exercise the A/B path on both sides.
 both	wait	9000
 both	key	space
 both	wait	4000
