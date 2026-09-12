@@ -363,6 +363,23 @@ impl PlayState {
             )
     }
 
+    /// Whether the message window draws no text cursor at all.
+    ///
+    /// `text-output.md §10.6` keeps the cursor inline on "a prompt that is
+    /// waiting for a key", and every such prompt in
+    /// [`Self::message_window_live_row_suppressed`] shows one. A held page is
+    /// not that: `blackthorn.md §4.1`/`§5` stop on "acknowledgement" with a
+    /// finished sentence on screen and no question, and the original draws
+    /// nothing after it. Measured 2026-09-12 (`qa/paired/bt-escalate.tsv`,
+    /// beat `ask5`): the stock window's last row is `falls!` with the cell
+    /// after it empty, while the typed `ask4` beat carries the barber pole
+    /// after its `:` on both sides.
+    pub fn message_window_cursor_suppressed(&self) -> bool {
+        self.active_blackthorn.as_ref().is_some_and(|challenge| {
+            challenge.awaiting_acknowledgement() || challenge.awaiting_closing_acknowledgement()
+        })
+    }
+
     pub fn open_prompt_line(&self) -> Option<String> {
         // `conversation.md §6`/`§9`: the keyword prompt is
         // `Your interest?`, a line feed, then `:` - and the `:` row is

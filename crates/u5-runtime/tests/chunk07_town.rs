@@ -392,4 +392,3 @@ fn blackthorn_merciful_death_runs_the_same_durable_execution() {
         "the merciful death parks the record with an unmatchable whereabouts",
     );
 }
-

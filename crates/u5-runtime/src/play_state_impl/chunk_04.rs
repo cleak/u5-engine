@@ -3175,7 +3175,8 @@ impl PlayState {
         game_dir: &Path,
     ) -> io::Result<MoveOutcome> {
         let look_table = load_look_table(game_dir)?;
-        let outcome = self.look_direction_with_resources(direction, Some(&look_table), Some(game_dir))?;
+        let outcome =
+            self.look_direction_with_resources(direction, Some(&look_table), Some(game_dir))?;
         self.charge_look_command_turn();
         Ok(outcome)
     }
@@ -4082,8 +4083,9 @@ impl PlayState {
             ) != Some(NpcAiBehavior::ApproachAndAttack)
             && !crate::talk_guard_sprite_dispatches(npc.cached_wp, dialog_id as u8)
         {
-            self.message =
-                crate::talk_non_speaker_refusal_for_sprite(Some(crate::tlk_control_codes::TALK_GUARD_SPRITE));
+            self.message = crate::talk_non_speaker_refusal_for_sprite(Some(
+                crate::tlk_control_codes::TALK_GUARD_SPRITE,
+            ));
             return self.consume_ordinary_town_talk();
         }
         // `conversation.md §2` step 5: the reserved regime index "enters the

@@ -324,7 +324,8 @@ impl PlayState {
             ClimbIntent::Down => "down",
         };
         // Unpublished (`cleak/u5-spec#262`), like the town/overworld Klimb.
-        self.diagnostics.push(format!("klimbed {label} from combat"));
+        self.diagnostics
+            .push(format!("klimbed {label} from combat"));
         self.message.clear();
         // Successful vertical Klimb restores the suspended frame immediately,
         // so its committed-action maintenance must run while the acting
@@ -4906,7 +4907,8 @@ impl PlayState {
                         // pendulum narration is held. The name above is
                         // already read, so only the lift waits.
                         self.pending_blackthorn_execution_victim = Some(victim);
-                        let report = format!("companion in slot {victim} is owed the pendulum blade"); // audit: not a player-facing line
+                        let report =
+                            format!("companion in slot {victim} is owed the pendulum blade"); // audit: not a player-facing line
                         self.push_diagnostic(format!(
                             "Failed Blackthorn's prompt {}; expected {expected}; {report} by the pendulum blade; cutscene advanced {} world ticks.",
                             ordinal + 1,
@@ -5867,4 +5869,3 @@ pub fn dungeon_monster_step_directions(seed: u8) -> [Direction; 4] {
     ];
     ORDERS[(seed as usize) & 0x03]
 }
-

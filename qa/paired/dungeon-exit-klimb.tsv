@@ -7,6 +7,15 @@
 # deterministic - no roll anywhere in it - so the two sides should agree cell
 # for cell rather than only in shape.
 # requires-seed: the party on Deceit's entrance level, with a torch to hand
+#
+# Known gap, `cleak/u5-spec#270`: `climbed` reads `offset-1` and `look` reads
+# `scroll`, and both are the same single row. Measured 2026-09-12: `arrival`
+# and `lit` are identical, and the Klimb scrolls the original one row further
+# than this engine - the original leaves **two** blank rows under `Exit to
+# Britannia!` where this engine leaves one. The exit line's own trailing feed
+# opens a row and `text-output.md` Section 10.4's next-cycle feed then adds
+# the blank; `emit_message_line` trims that trailing feed, so the engine spends
+# only one. The wording agrees on every beat.
 both	wait	9000
 both	key	space
 both	wait	4000

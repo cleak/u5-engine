@@ -1853,7 +1853,9 @@ impl PlayState {
             entry.replacement_tile,
             entry.grant,
         ));
-        self.message = published_get_tile_line(tile).unwrap_or_default().to_string();
+        self.message = published_get_tile_line(tile)
+            .unwrap_or_default()
+            .to_string();
         self.apply_borrowed_lit_fixture_light(tile);
         // audio.md §8.1 borrowed fixed object: after the live tile is
         // rewritten and the borrowing line is printed, play the 40-update
@@ -1996,7 +1998,9 @@ impl PlayState {
             entry.replacement_tile,
             entry.grant,
         ));
-        self.message = published_get_tile_line(tile).unwrap_or_default().to_string();
+        self.message = published_get_tile_line(tile)
+            .unwrap_or_default()
+            .to_string();
         self.apply_borrowed_lit_fixture_light(tile);
         // audio.md §8.1 borrowed fixed object: after the live tile is
         // rewritten and the borrowing line is printed, play the 40-update
@@ -2425,8 +2429,10 @@ impl PlayState {
         // `mandrake root!` or `nightshade!`".
         self.diagnostics
             .push(format!("Found {amount} sprigs of {}.", point.label));
-        self.message =
-            format!("{SEARCH_PREAMBLE}{amount}{SEARCH_REAGENT_SPRIGS_FRAGMENT}{}", point.line);
+        self.message = format!(
+            "{SEARCH_PREAMBLE}{amount}{SEARCH_REAGENT_SPRIGS_FRAGMENT}{}",
+            point.line
+        );
         Some(MoveOutcome::Searched)
     }
 

@@ -970,7 +970,10 @@ mod strip_scroll_tests {
 
         assert_eq!(log.top_offset(), 0);
         assert_eq!(log.lines().len(), placed);
-        assert_eq!(log.lines().first().map(|line| line.text.as_str()), Some("Item:"));
+        assert_eq!(
+            log.lines().first().map(|line| line.text.as_str()),
+            Some("Item:")
+        );
     }
 }
 

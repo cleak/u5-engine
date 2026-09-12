@@ -16869,15 +16869,14 @@ fn render_integrated_status_framebuffer(
         };
         // The spell-name colon line continues the block `For what
         // spell?` opened, so it carries no end cap (`LiveRowKind`).
-        let live_row_kind =
-            if spell_echo.is_some()
-                || u5_runtime::shop_pause_row_is_continuation(&display_state)
-                || u5_runtime::selector_prompt_row_is_continuation(&display_state)
-            {
-                u5_runtime::LiveRowKind::Continuation
-            } else {
-                u5_runtime::LiveRowKind::CommandRow
-            };
+        let live_row_kind = if spell_echo.is_some()
+            || u5_runtime::shop_pause_row_is_continuation(&display_state)
+            || u5_runtime::selector_prompt_row_is_continuation(&display_state)
+        {
+            u5_runtime::LiveRowKind::Continuation
+        } else {
+            u5_runtime::LiveRowKind::CommandRow
+        };
         let layout = u5_runtime::layout_message_window_with_continuation(
             &log,
             live_row,
@@ -16924,14 +16923,18 @@ fn render_integrated_status_framebuffer(
     // message window's now, and `shops.md §8.B`'s entry question carries
     // the cursor on the row its greeting left open - `:` with the barber
     // pole after it at Cove, which the engine drew as a bare `:`.
-    let cursor_cell = inline_prompt_cursor.or_else(|| {
-        message_rows.last().map(|live| {
-            (
-                (live.column + live.glyphs.len().min(15) as u8).min(MESSAGE_WINDOW_RIGHT),
-                live.row,
-            )
+    let cursor_cell = if display_state.message_window_cursor_suppressed() {
+        None
+    } else {
+        inline_prompt_cursor.or_else(|| {
+            message_rows.last().map(|live| {
+                (
+                    (live.column + live.glyphs.len().min(15) as u8).min(MESSAGE_WINDOW_RIGHT),
+                    live.row,
+                )
+            })
         })
-    });
+    };
     if let Some((column, row)) = cursor_cell {
         paint_fixed_cell_glyph(
             &mut rgba,
