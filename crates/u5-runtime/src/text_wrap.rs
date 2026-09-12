@@ -895,10 +895,41 @@ pub fn wrap_text_chunks(
         match byte {
             0x00 => break,
             b' ' => {
-                // `text-output.md §5`: a space is pure soft-break
-                // bookkeeping. The width test lives on the visible-byte
-                // path below, so that the *next* character — not the next
-                // space — is what forces the back-up to this break.
+                // `text-output.md §6`, the space arm: "if the count is still
+                // within the window's available width on the current line,
+                // remember this position as the most recent legal break point
+                // and continue. If the count has just exceeded the available
+                // width, emit the buffer up to (but not including) the most
+                // recent remembered break, then move the surplus to the front
+                // of the buffer and continue assembling."
+                //
+                // The available width is "a last legal index, not a count",
+                // and `line_width` here is the capacity, so the row is full
+                // once the buffer has reached it.
+                //
+                // This test used to live only on the visible-byte path below.
+                // A word that ends exactly on the last column then had its
+                // following space remembered as a break point *past* the row
+                // edge, and the next character backed up to that space
+                // instead of to the one before the word. Measured 2026-09-11
+                // (`stonegate-trapdoor-audio/arrival`): the original breaks
+                // `An air of` / `hatred doth`, where `An air of hatred` fills
+                // the sixteen-column window exactly; this engine kept the
+                // word and broke `An air of hatred` / `doth surround`.
+                if !buffer.is_empty()
+                    && buffer.len() >= line_width(emitted_any)
+                    && let Some(break_at) = last_break
+                {
+                    let surplus = buffer.split_off(break_at);
+                    let trimmed = buffer.trim_end_matches(' ').to_string();
+                    lines.push(WrapChunk {
+                        text: trimmed,
+                        row_filling: false,
+                    });
+                    emitted_any = true;
+                    buffer = surplus.trim_start_matches(' ').to_string();
+                    last_break = None;
+                }
                 buffer.push(' ');
                 last_break = Some(buffer.len() - 1);
             }

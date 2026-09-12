@@ -11,6 +11,17 @@
 # Talk command", so the first Pass beside the keeper opens the overlay and the
 # script drives it from there rather than issuing Talk.
 # requires-seed: profile `seed-nb-inn-reseeded`, built by qa/tools/reseed.py
+#
+# The entry greeting is a lottery. `shops.md` Section 8.A draws the innkeeper's
+# opening bark from a four-record pool, and `prng.md` Section 3 seeds the two
+# sides from the host clock at the intro menu, so they never draw the same row.
+# Measured 2026-09-11: the original opened with `...adventurer. My name is
+# Terbor, and I own this hostel. May I help thee?"` and this engine with
+# `Terbor, the innkeeper. Is there anything I can do for thee?" `. Every beat
+# from the greeting onward therefore compares unlike text in the rows above the
+# service question; the question itself and everything below it agree exactly.
+# A difference confined to those greeting rows must be re-run before it means
+# anything.
 both	wait	9000
 both	key	space
 both	wait	4000
