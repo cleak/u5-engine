@@ -4,29 +4,22 @@
 # refusal (`Moonstone` / `cannot be buried` / `here!`). Nothing reached the
 # *successful* burial, which is why this engine invented `Buried Moonstone
 # phase 3 at BRITANNIA (12, 7).` until the crate-wide message inventory found
-# it. That line is now removed pending `cleak/u5-spec#262`; this scenario
-# captures what the original prints so the question can be answered from a
-# measurement.
+# it.
 #
-# `magic.md` Section 8: "Burying a Moonstone records the current valid location
-# into that slot when outside dungeon/combat scenes and on accepted world-tile
-# ids `4..10`, `44`, or `45`."
+# **Clean 2026-09-12**, after `cleak/u5-spec#262` was answered. It was
+# committed red on 2026-09-11 and it caught one real defect, which is why it
+# was kept:
 #
-# **Measured 2026-09-12 and currently failing, which is the point of keeping
-# it.** Two findings:
+#   * The engine listed the three Shadowlord shards between the Sceptre and
+#     the Moonstones. `inventory.md` Section 7's enumeration order puts the
+#     eight moonstone phases first and the three shards after them, so every
+#     row beneath was shifted and the same five Down presses selected a Gem
+#     Shard here and a Moonstone there.
 #
-#   * The engine lists the three Shadowlord shards - `Shard/Fals`,
-#     `Shard/Hatr`, `Shard/Cowr` - between the Sceptre and the Moonstones.
-#     The original lists none of them, going straight from Sceptre to
-#     `Moonstone [phase]`. That shifts every row beneath, so the same five
-#     Down presses select a Gem Shard here and a Moonstone there.
-#   * The engine also draws those shard rows with a ` 1 ` count, where
-#     `inventory.md` Section 4.5 puts "Three shards" in the no-quantity
-#     family.
-#
-# The seed stands on a tile the original refuses (`Moonstone` / `cannot be
-# buried` / `here!`), so the *successful* burial is still unmeasured; that
-# needs a seed on an accepted world-tile id.
+# `inventory.md` Section 7.1 now publishes both outcome literals: the accepted
+# burial completes the `Moonstone ` row with `buried!`, and
+# `cannot be buried here!` answers every rejection cause there is - a scene
+# outside `0x00..0x20` and any underfoot tile outside `4..10`, `44`, `45`.
 #
 # requires-seed: profile `seed-overworld-moonstone` - the night-cast overworld
 # party with every special-item counter stocked by

@@ -1642,6 +1642,17 @@ pub const DUNGEON_CHEST_OPEN_ALREADY_OPEN: &str = "Already Open!\n";
 /// bits**, its lock/trap sub-type - not the low bit alone. A chest cell whose
 /// low nibble is 4 is trapped."
 pub const DUNGEON_CHEST_TRAP_SUBTYPE_MASK: u8 = 0x07;
+/// `magic.md §8` (`RETRACTIONS.md` R475): the An Sanct dungeon arm's disarm
+/// line "is gated on the lowest bit alone, while the O-Open **command's** trap
+/// test reads the low three bits, so a chest cell whose low nibble is 4 opens
+/// under the spell with no `Disarmed!` line even though the same cell would
+/// spring a trap under O-Open."
+pub const AN_SANCT_DISARM_BIT: u8 = 0x01;
+pub const AN_SANCT_DISARMED_LINE: &str = "Disarmed!\n";
+/// "`Chest opened!` is a **different** [literal from] the command's
+/// `Chest opened`, which has no exclamation mark and a leading line feed
+/// instead."
+pub const AN_SANCT_CHEST_OPENED_LINE: &str = "Chest opened!\n";
 
 /// `dungeon-mode.md §14`: what a dungeon monster's contact prints when the
 /// party already faces it. The direction-bearing form appends ` from the `,

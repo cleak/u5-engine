@@ -4218,8 +4218,14 @@
         assert_eq!(state.turn, 1);
         assert_eq!(state.clock, GameClock::new(12, 1).unwrap());
         assert!(state.visibility_dirty);
-        assert!(state.diagnostics.iter().any(|n| n.contains("An Sanct opened dungeon chest at (1, 1) on DUNGEON:0 level 0; trap generator bypassed, marked visit-local open chest")), "{:?}", state.diagnostics);
-        assert!(state.message.is_empty(), "message: {}", state.message);
+        assert!(state.diagnostics.iter().any(|n| n.contains("An Sanct opened dungeon chest at (1, 1) on DUNGEON:0 level 0; marked visit-local open chest")), "{:?}", state.diagnostics);
+        // `magic.md §8` (`RETRACTIONS.md` R475): cell `0x4b` has its lowest bit
+        // set, so the disarm line prints, then the spell's own
+        // `Chest opened!` - a different literal from the command's.
+        assert_eq!(
+            state.message,
+            format!("{AN_SANCT_DISARMED_LINE}{AN_SANCT_CHEST_OPENED_LINE}")
+        );
     }
 
     #[test]
@@ -4254,7 +4260,7 @@
             state
                 .diagnostics
                 .iter()
-                .any(|note| note.contains("trap generator bypassed"))
+                .any(|note| note.contains("An Sanct opened dungeon chest"))
         );
         assert!(!state.message.contains("authored chest grants"));
         let _ = fs::remove_dir_all(dir);

@@ -5358,28 +5358,48 @@ impl PlayState {
         let Area::Dungeon { scene, level } = self.area else {
             unreachable!("surface and combat Open return through the shared directed helper");
         };
-        let idx = dungeon_cell_index(level, self.player.x, self.player.y);
+        // `magic.md §8` (`RETRACTIONS.md` R475): the arm "selects a target: the
+        // party's own dungeon cell when that cell is a **closed-chest** cell,
+        // otherwise the cell one step along the party's **current facing**,
+        // wrapped on both axes of the eight-by-eight level. **It prompts for no
+        // direction**".
+        let (mut tx, mut ty) = (self.player.x, self.player.y);
+        let mut idx = dungeon_cell_index(level, tx, ty);
+        if self.grid[idx] >> 4 != 0x4 {
+            let (dx, dy) = self.player.facing.delta();
+            tx = (tx as isize + dx).rem_euclid(DUNGEON_SIDE as isize) as usize;
+            ty = (ty as isize + dy).rem_euclid(DUNGEON_SIDE as isize) as usize;
+            idx = dungeon_cell_index(level, tx, ty);
+        }
         let tile = self.grid[idx];
         if tile >> 4 != 0x4 {
+            // "If the selected cell is not a closed chest the spell fails and
+            // the shared epilogue supplies `Failed!` with the failure sound."
             self.advance_turn();
             self.fail_committed_spell_cast();
             return Ok(MoveOutcome::Blocked);
         }
 
+        // "On a closed chest it prints `Disarmed!` when the cell's **lowest
+        // bit** is set" - the lowest bit alone, where the O-Open command's trap
+        // test reads the low three bits.
+        let mut narration = String::new();
+        if tile & AN_SANCT_DISARM_BIT != 0 {
+            narration.push_str(AN_SANCT_DISARMED_LINE);
+        }
         self.grid[idx] = dungeon_open_chest_rewrite(tile);
         self.mark_visibility_dirty();
         self.advance_turn();
-        // Unpublished (`cleak/u5-spec#262`). `dungeon-mode.md §8.1` gives the
-        // ordinary chest literals but none for the An Sanct trap bypass, so
-        // the engine records the outcome instead of inventing a sentence.
         self.diagnostics.push(format!(
-            "An Sanct opened dungeon chest at ({}, {}) on {} level {level}; \
-             trap generator bypassed, marked visit-local open chest",
-            self.player.x,
-            self.player.y,
+            "An Sanct opened dungeon chest at ({tx}, {ty}) on {} level {level}; \
+             marked visit-local open chest",
             scene.key()
         ));
-        self.message.clear();
+        // "prints `Chest opened!` and returns handled-silently, so no
+        // `Success!` follows." Both lines carry a trailing exclamation mark,
+        // and this is a different literal from the command's `Chest opened`.
+        narration.push_str(AN_SANCT_CHEST_OPENED_LINE);
+        self.message = narration;
         // audio.md §6 qualifies variant 2 as `successful Open`, and audio.md
         // §8.3's only pre-success spell boundary is Vanish, so the cue follows
         // the chest test rather than the committed gate. The surface and
