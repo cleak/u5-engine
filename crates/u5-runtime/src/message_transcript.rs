@@ -287,13 +287,26 @@ impl PlayState {
         let first = segments.next().unwrap_or_default();
         if !first.is_empty() {
             let glyphs = ordinary_glyphs_from_engine_text(first);
+            // `combat.md §8.1`: the marker row follows the banner's last row
+            // immediately only when *that banner* opened it. A free re-prompt
+            // after a refusal "uses the short form and does **not** reprint
+            // the banner", so it spends no line feed of its own and keeps
+            // `text-output.md §10.4`'s derived blank.
+            // `combat_prompt_row_opened_by_banner` is which of the two this
+            // is; this emitter used to assert the banner case unconditionally.
+            //
+            // Measured 2026-09-12 (`qa/paired/combat-ready-armour.tsv`, beat
+            // `ready-row`): the original leaves a blank row under each
+            // `Blocked!` before the next ` South`, and this engine ran them
+            // together for the whole capture.
+            let continues_open_row = self.combat_prompt_row_opened_by_banner;
             self.append_transcript_entry_on_row(
                 first.to_string(),
                 glyphs,
                 true,
                 false,
                 false,
-                true,
+                continues_open_row,
             );
             self.message_transcript_revision = self.message_transcript_revision.wrapping_add(1);
         }

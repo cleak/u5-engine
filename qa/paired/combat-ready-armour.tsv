@@ -1,23 +1,11 @@
-# **The arena's blank row after a cast refusal, fixed 2026-09-12.**
-# `combat.md` Section 8.1 has the turn handler emit its own line feed between
-# the banner and the command read, so the blank row the original shows between
-# a result and the next `Avatar, armed with...:` is only there when the result
-# closed its own row. The `invisibility` beat showed the original with a blank
-# under `None mixed!` and this engine without one, and the beats after it
-# drifted because the two sides then read different keys.
+# **Green 2026-09-12**, after five linked fixes this scenario drove out: the
+# arena's Ready echo, the blank under `None mixed!`, the blank above the
+# empty-pack refusal, the round advance that reprints the banner under it, and
+# the derived blank a short re-prompt keeps. All five are one rule -
+# `combat.md` Section 8.1 gives the banner's line feed to the prompt row it
+# opens, and everything else takes `text-output.md` Section 10.4's derived
+# blank instead.
 #
-# A trailing newline on the message slot does not do it - the log trims one as
-# it wraps text into rows - so the row is asked for with an explicit blank
-# entry, the same way the Blackthorn closing pages ask for theirs.
-#
-# The sibling case - the `D`/`W` `What?` refusals - was fixed the same day by
-# giving those literals their own feed at the combat message site. This one is
-# not reached from there: the cast refusal is composed with the typed spell
-# row rather than being handed to the arena's result path, so it needs that
-# composition traced first. A speculative feed added to
-# `cast_spell_resource_gate` changed nothing here and was reverted.
-#
-# In the arena: Sanct Lor, and R-Ready on a body-armour row.
 # requires-seed: the party one step from a dungeon room trigger, with
 # spells, reagents, mana and equipment
 both	wait	9000
