@@ -3259,6 +3259,15 @@ impl PlayState {
             let refusal = std::mem::take(&mut self.message);
             self.push_explicit_blank_message_entry();
             self.emit_message_line(refusal);
+            // The refusal *is* the command's answer, so the picker never
+            // opens and `combat.md §8.1`'s turn loop reprints the banner
+            // under it. Measured 2026-09-12
+            // (`qa/paired/combat-ready-armour.tsv`, beat `ready-open`): the
+            // original's refusal is followed by
+            // `Avatar, armed with bare hands:` again, where this engine held
+            // an empty picker session open and printed no banner at all.
+            self.active_ready = None;
+            return MoveOutcome::Blocked;
         }
         outcome
     }

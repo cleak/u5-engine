@@ -4577,6 +4577,15 @@ fn handle_combat_multistage_command(
             // `Thou art empty-handed!`.
             state.begin_command_echo_for(Command::Ready);
             state.start_combat_ready_equipment(actor_slot);
+            if state.active_ready.is_none() {
+                // An empty pack answers `Thou art empty-handed!` and opens no
+                // picker, so this is not a multistage command: the caller
+                // advances the round, which is what reprints the banner the
+                // original shows under the refusal. `combat.md §8.1`'s
+                // no-banner short form is the *free re-prompt* case, and this
+                // arm charges its turn.
+                return false;
+            }
             state.pending_combat_actor_slot = Some(actor_slot);
             true
         }
@@ -5022,9 +5031,14 @@ fn combat_command_branch_message(branch: CombatCommandBranch) -> String {
         // The music toggle is a harness control, not a game command.
         CombatCommandBranch::ToggleMusic => String::new(),
         CombatCommandBranch::Invalid => "What?".to_string(),
+        // Ready has already written its own echo and, on an empty pack, its
+        // refusal; the round advance that follows must add nothing. Without
+        // this it fell to the debug-formatted arm below and printed a stray
+        // ` Ready.` row under the refusal
+        // (`qa/paired/combat-ready-armour.tsv`, beat `ready-open`).
+        CombatCommandBranch::Ready => String::new(),
         CombatCommandBranch::Attack
         | CombatCommandBranch::CastSpell
-        | CombatCommandBranch::Ready
         | CombatCommandBranch::UseItem
         | CombatCommandBranch::EscapeCleanup
         | CombatCommandBranch::Yell
