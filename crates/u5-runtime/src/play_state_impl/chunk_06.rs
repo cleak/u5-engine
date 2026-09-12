@@ -345,13 +345,18 @@ impl PlayState {
             0x4 => {
                 Ok(self.open_dungeon_chest(scene, level, self.player.x, self.player.y, idx, tile))
             }
+            // `dungeon-mode.md §8.1` chest-command table: "already-open cell:
+            // `Already Open!\n` - capital `O`, a **different** literal from
+            // Jimmy's; anything else: `What?\n`. Because those last two carry
+            // no leading line feed they render on the prefix's own row, as
+            // `Open-Already Open!` and `Open-What?`"
             0x7 => {
                 self.advance_turn();
-                self.message = "Chest opened".to_string();
+                self.message = DUNGEON_CHEST_OPEN_ALREADY_OPEN.to_string();
                 Ok(MoveOutcome::ContainerOpened)
             }
             _ => {
-                self.message = "What?".to_string();
+                self.message = DUNGEON_CHEST_OPEN_WHAT.to_string();
                 Ok(MoveOutcome::Blocked)
             }
         }

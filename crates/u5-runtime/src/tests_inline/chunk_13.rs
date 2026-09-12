@@ -25220,7 +25220,7 @@ fn dungeon_o_key_routes_to_underfoot_open() {
 
     assert_eq!(state.grid[dungeon_cell_index(0, 1, 1)], 0x78);
     assert_eq!(state.turn, 1);
-    assert!(state.message.contains("Opened dungeon chest"));
+    assert!(state.diagnostics.iter().any(|note| note.contains("Opened dungeon chest")));
 }
 
 #[test]

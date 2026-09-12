@@ -2114,13 +2114,21 @@ fn dungeon_open_chest_consumes_turn_and_marks_visit_local_open_chest() {
     assert_eq!(state.turn, 1);
     assert_eq!(state.door_tracker, None);
     assert!(state.visibility_dirty);
-    assert!(state.message.contains("Opened dungeon chest"));
+    assert!(state.diagnostics.iter().any(|note| note.contains("Opened dungeon chest")));
     assert!(
         state
-            .message
-            .contains("Acid trap hit party member 1 for 5 HP.")
+            .diagnostics
+            .iter()
+            .any(|note| note.contains("Acid trap hit party member 1 for 5 HP."))
     );
-    assert!(state.message.contains("marked visit-local open chest"));
+    assert!(
+        state
+            .diagnostics
+            .iter()
+            .any(|note| note.contains("marked visit-local open chest"))
+    );
+    // `dungeon-mode.md §8.1`: the trap word, then `\nChest opened\n`.
+    assert!(state.message.ends_with(DUNGEON_CHEST_OPENED));
     assert!(state.pending_map_viewport_dissolves.is_empty());
 }
 
@@ -2170,7 +2178,7 @@ fn dungeon_open_chest_prompts_and_uses_the_confirmed_member() {
             .iter()
             .any(|entry| entry.text == selected_name)
     );
-    assert!(state.message.contains("Acid trap hit party member 2"));
+    assert!(state.diagnostics.iter().any(|note| note.contains("Acid trap hit party member 2")));
 }
 
 #[test]
@@ -2351,7 +2359,7 @@ fn dungeon_open_chest_does_not_apply_clean_sidecar_grants() {
     assert_eq!(state.keys, 1);
     assert_eq!(state.food, 12);
     assert_eq!(state.turn, 1);
-    assert!(state.message.contains("Opened dungeon chest"));
+    assert!(state.diagnostics.iter().any(|note| note.contains("Opened dungeon chest")));
     assert!(!state.message.contains("authored chest grants"));
     let _ = fs::remove_dir_all(dir);
 }

@@ -456,18 +456,26 @@ impl PlayState {
         target_slot: usize,
     ) -> MoveOutcome {
         if self.grid.get(idx).copied() != Some(tile) || tile >> 4 != 0x4 {
-            self.message = "Nothing to open!".to_string();
+            self.message = DUNGEON_CHEST_OPEN_WHAT.to_string();
             return MoveOutcome::Blocked;
         }
-        let trap_note = if self.dungeon_chest_trap_detail(level, x, y, tile) == "no trap" {
-            None
-        } else {
+        // `dungeon-mode.md §8.1`, "The dungeon chest lifecycle, and what
+        // O-Open does and does not consult" (established 2026-09-12, issue
+        // #262): "**The trap condition is the cell's low three bits**, its
+        // lock/trap sub-type - not the low bit alone." There is no locked
+        // outcome and no lock-difficulty read; the detection roll this used to
+        // consult belongs to Search, not to Open.
+        let trap_note = if tile & DUNGEON_CHEST_TRAP_SUBTYPE_MASK != 0 {
+            // The resolver prints its own word; "The dungeon chest site prints
+            // no trap notice of its own."
             Some(self.apply_shared_trap_effect_to_slot(target_slot))
+        } else {
+            None
         };
         self.grid[idx] = dungeon_open_chest_rewrite(tile);
         self.mark_visibility_dirty();
         self.advance_turn();
-        self.message = match trap_note {
+        self.diagnostics.push(match trap_note {
             Some(trap) => format!(
                 "Opened dungeon chest at ({x}, {y}) on {} level {level}; {trap}, marked visit-local open chest.",
                 scene.key()
@@ -476,7 +484,10 @@ impl PlayState {
                 "Opened dungeon chest at ({x}, {y}) on {} level {level}; marked visit-local open chest.",
                 scene.key()
             ),
-        };
+        });
+        // "**The cell rewrite and the opened line happen identically whether
+        // or not a trap fired.** ... then `\nChest opened\n` prints."
+        self.message.push_str(DUNGEON_CHEST_OPENED);
         MoveOutcome::ContainerOpened
     }
 

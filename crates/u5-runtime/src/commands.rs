@@ -1638,6 +1638,10 @@ pub const DUNGEON_CHEST_OPENED: &str = "\nChest opened\n";
 /// Capital `O` — a **different** literal from Jimmy's, and it carries no
 /// leading line feed, so it renders on the prefix's own row.
 pub const DUNGEON_CHEST_OPEN_ALREADY_OPEN: &str = "Already Open!\n";
+/// `dungeon-mode.md §8.1`: "**The trap condition is the cell's low three
+/// bits**, its lock/trap sub-type - not the low bit alone. A chest cell whose
+/// low nibble is 4 is trapped."
+pub const DUNGEON_CHEST_TRAP_SUBTYPE_MASK: u8 = 0x07;
 
 /// `dungeon-mode.md §14`: what a dungeon monster's contact prints when the
 /// party already faces it. The direction-bearing form appends ` from the `,

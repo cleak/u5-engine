@@ -69,7 +69,7 @@ fn dungeon_open_unrelated_cell_is_not_a_turn() {
 
     assert_eq!(state.grid[dungeon_cell_index(0, 1, 1)], 0x00);
     assert_eq!(state.turn, 0);
-    assert_eq!(state.message, "What?");
+    assert_eq!(state.message, DUNGEON_CHEST_OPEN_WHAT);
 }
 
 #[test]
@@ -82,7 +82,7 @@ fn dungeon_open_preserves_room_trigger_without_turn() {
 
     assert_eq!(state.grid[dungeon_cell_index(0, 1, 1)], 0xf2);
     assert_eq!(state.turn, 0);
-    assert_eq!(state.message, "What?");
+    assert_eq!(state.message, DUNGEON_CHEST_OPEN_WHAT);
 }
 
 #[test]
@@ -95,7 +95,7 @@ fn dungeon_open_underfoot_passage_chest_variant_reports_chest_opened() {
 
     assert_eq!(state.grid[dungeon_cell_index(0, 1, 1)], 0x70);
     assert_eq!(state.turn, 1);
-    assert_eq!(state.message, "Chest opened");
+    assert_eq!(state.message, DUNGEON_CHEST_OPEN_ALREADY_OPEN);
 }
 
 #[test]
@@ -126,7 +126,7 @@ fn dungeon_e_cells_are_pass_through_visual_variants_not_openable_doors() {
     assert_eq!(open_state.open_facing(), MoveOutcome::Blocked);
     assert_eq!(open_state.grid[dungeon_cell_index(0, 1, 1)], 0xe2);
     assert_eq!(open_state.turn, 0);
-    assert_eq!(open_state.message, "What?");
+    assert_eq!(open_state.message, DUNGEON_CHEST_OPEN_WHAT);
 
     let mut jimmy_grid = open_dungeon_record();
     jimmy_grid[dungeon_cell_index(0, 1, 1)] = 0xe2;
@@ -192,7 +192,7 @@ fn dungeon_open_ignores_stale_f_room_trigger_sidecar_without_turn() {
     assert_eq!(state.turn, 0);
     assert_eq!(state.door_tracker, None);
     assert!(!state.visibility_dirty);
-    assert_eq!(state.message, "What?");
+    assert_eq!(state.message, DUNGEON_CHEST_OPEN_WHAT);
     assert_eq!(state.area, Area::Dungeon { scene, level: 0 });
     let _ = fs::remove_dir_all(dir);
 }
