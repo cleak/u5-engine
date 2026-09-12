@@ -12,6 +12,24 @@
 # Talk command", so the first Pass beside the keeper opens the overlay and the
 # script drives it from there rather than issuing Talk.
 # requires-seed: profile `seed-paws-sage-reseeded`, built by qa/tools/reseed.py
+#
+# Two lotteries run here, so a row-offset difference must be re-run before it
+# means anything.
+#
+# The entry greeting is one of four `SHOPPE.DAT` records (`shops.md` Section 8's
+# entry table, tavern rows 57..60) and the sage's rumour phrasing is another
+# pool. `prng.md` Section 3 seeds the two sides from the host clock at the
+# intro menu, so they never draw the same row. Measured 2026-09-11: the
+# original opened with `"Jolly good afternoon, mate! Welcome to The Cat's
+# Lair!..."` and this engine with `"Welcome to The Cat's Lair! My name is Dr.
+# Cat..."`. Those wrap to different row counts, which offsets every later beat
+# even when each beat's own structure agrees exactly - as it now does.
+#
+# The greeting's length is also what decides the entry prompt's punctuation.
+# Section 8.B makes the colon conditional on the finished greeting's column:
+# column 0 gives `\n:`, columns 1..11 a single space and no colon, columns
+# 12..15 `\n\n:`. A capture where one side shows `thee?" ` and the other `:`
+# is that rule applied to two different draws, not a defect.
 both	wait	9000
 both	key	space
 both	wait	4000

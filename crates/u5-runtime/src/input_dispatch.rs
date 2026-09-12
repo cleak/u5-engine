@@ -3229,7 +3229,7 @@ fn tavern_bill_line(price: u16, living_party: usize, speaker_is_female: bool) ->
     // then `"That will be 1`; this engine ran the bill straight onto the row
     // below the echo. The lore branch already had this blank.
     format!(
-        "\n\n\"That will be {price} gold for the {} of ye,\n{}.\nEnjoy!\"",
+        "\n\"That will be {price} gold for the {} of ye,\n{}.\nEnjoy!\"",
         tavern_bill_count_word(living_party),
         tavern_honorific(speaker_is_female)
     )
