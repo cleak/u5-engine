@@ -808,12 +808,17 @@ impl PlayState {
         self.grid[idx] = tile & 0x08;
         self.mark_visibility_dirty();
         self.advance_turn();
-        self.message = format!(
-            "{verb} dungeon chest at ({}, {}) on {} level {level}; {note}, marked visit-local passage.",
+        // Unpublished (`cleak/u5-spec#262`). `dungeon-mode.md §8.1` gives
+        // the chest literals for Get and the must-open-first refusal, but
+        // none for the cleared-to-passage outcome.
+        self.diagnostics.push(format!(
+            "{verb} dungeon chest at ({}, {}) on {} level {level}; {note}, \
+             marked visit-local passage",
             x,
             y,
             scene.key()
-        );
+        ));
+        self.message.clear();
         MoveOutcome::ContainerOpened
     }
 

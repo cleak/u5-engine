@@ -784,8 +784,8 @@ fn dungeon_fall_trap_chain_uses_underworld_and_ignores_location_row_plane() {
     assert_eq!((state.player.x, state.player.y), (2, 1));
     assert_eq!(state.active_objects[0].z, -1);
     assert_eq!(state.grid[world_cell_index(2, 1)], 5);
-    assert!(state.message.contains("cleared dungeon scene"));
-    assert!(state.message.contains("trap-chain coordinate (2, 1)"));
+    assert!(state.diagnostics.iter().any(|note| note.contains("cleared dungeon scene") || note.contains("cleared dungeon scene")));
+    assert!(state.diagnostics.iter().any(|note| note.contains("trap-chain coordinate (2, 1)") || note.contains("trap-chain coordinate (2, 1)")));
     let _ = fs::remove_dir_all(dir);
 }
 
@@ -877,7 +877,7 @@ fn dungeon_fall_trap_chain_restores_snapshot_grid_without_exterior_coordinate_re
     assert_eq!(state.active_objects[0].x, 2);
     assert_eq!(state.active_objects[0].y, 1);
     assert_eq!(state.turn, 1);
-    assert!(state.message.contains("trap-chain coordinate (2, 1)"));
+    assert!(state.diagnostics.iter().any(|note| note.contains("trap-chain coordinate (2, 1)") || note.contains("trap-chain coordinate (2, 1)")));
 }
 
 #[test]

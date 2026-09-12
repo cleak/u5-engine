@@ -524,8 +524,8 @@
         assert_eq!(state.gems, DEFAULT_GEM_STOCK + 2);
         assert_eq!(state.turn, 1);
         assert!(state.visibility_dirty);
-        assert!(state.message.contains("Got 2 gems"));
-        assert!(state.message.contains("active-object tile 210"));
+        assert!(state.diagnostics.iter().any(|note| note.contains("Got 2 gems") || note.contains("got 2 gems")));
+        assert!(state.diagnostics.iter().any(|note| note.contains("active-object tile 210") || note.contains("active-object tile 210")));
         let overlay = state.world_overlays.get(WorldPlane::Britannia).unwrap();
         assert!(overlay[0].is_empty());
         let _ = fs::remove_dir_all(dir);
@@ -562,8 +562,8 @@
         assert_eq!(state.keys, DEFAULT_KEY_STOCK + 1);
         assert_eq!(state.turn, 1);
         assert!(state.visibility_dirty);
-        assert!(state.message.contains("Got 1 keys"));
-        assert!(state.message.contains("CASTLE:0 floor 0"));
+        assert!(state.diagnostics.iter().any(|note| note.contains("Got 1 keys") || note.contains("got 1 keys")));
+        assert!(state.diagnostics.iter().any(|note| note.contains("CASTLE:0 floor 0") || note.contains("cASTLE:0 floor 0")));
         let _ = fs::remove_dir_all(dir);
     }
 
@@ -608,8 +608,8 @@
         assert_eq!(state.keys, DEFAULT_KEY_STOCK + 1);
         assert_eq!(state.turn, 1);
         assert!(state.visibility_dirty);
-        assert!(state.message.contains("Found 1 keys"));
-        assert!(state.message.contains("active-object tile 210"));
+        assert!(state.diagnostics.iter().any(|note| note.contains("Found 1 keys") || note.contains("found 1 keys")));
+        assert!(state.diagnostics.iter().any(|note| note.contains("active-object tile 210") || note.contains("active-object tile 210")));
         let _ = fs::remove_dir_all(dir);
     }
 
@@ -639,8 +639,8 @@
         assert_eq!(state.gems, DEFAULT_GEM_STOCK + 4);
         assert_eq!(state.turn, 1);
         assert!(state.visibility_dirty);
-        assert!(state.message.contains("Got 4 gems"));
-        assert!(state.message.contains("active-object tile 130"));
+        assert!(state.diagnostics.iter().any(|note| note.contains("Got 4 gems") || note.contains("got 4 gems")));
+        assert!(state.diagnostics.iter().any(|note| note.contains("active-object tile 130") || note.contains("active-object tile 130")));
         let _ = fs::remove_dir_all(dir);
     }
 
@@ -679,7 +679,7 @@
         assert!(state.active_objects[2].is_empty());
         assert_eq!(state.gold, DEFAULT_GOLD_STOCK + 7);
         assert_eq!(state.turn, 1);
-        assert!(state.message.contains("Got 7 gold"));
+        assert!(state.diagnostics.iter().any(|note| note.contains("Got 7 gold") || note.contains("got 7 gold")));
         let _ = fs::remove_dir_all(dir);
     }
 
@@ -738,7 +738,7 @@
             SPECIAL_ITEM_OWNED_VALUE
         );
         assert_eq!(state.turn, 1);
-        assert!(state.message.contains("sandalwood box"));
+        assert!(state.diagnostics.iter().any(|note| note.contains("sandalwood box") || note.contains("sandalwood box")));
         let _ = fs::remove_dir_all(dir);
     }
 
@@ -764,7 +764,7 @@
         assert_eq!(state.moral_standing, 2);
         assert_eq!(state.turn, 1);
         assert!(state.visibility_dirty);
-        assert!(state.message.contains("Ate food from table tile 0x9B"));
+        assert!(state.diagnostics.iter().any(|note| note.contains("Ate food from table tile 0x9B") || note.contains("ate food from table tile 0x9B")));
 
         state.player.x = 4;
         state.player.y = 2;
@@ -778,7 +778,7 @@
         assert_eq!(state.food, 14);
         assert_eq!(state.moral_standing, 1);
         assert_eq!(state.turn, 2);
-        assert!(state.message.contains("Ate food from table tile 0x9C"));
+        assert!(state.diagnostics.iter().any(|note| note.contains("Ate food from table tile 0x9C") || note.contains("ate food from table tile 0x9C")));
         let _ = fs::remove_dir_all(dir);
     }
 
@@ -899,7 +899,7 @@
         assert!(state.active_objects[1].is_empty());
         assert_eq!(state.torches, DEFAULT_TORCH_STOCK + 3);
         assert_eq!(state.turn, 1);
-        assert!(state.message.contains("Got 3 torches"));
+        assert!(state.diagnostics.iter().any(|note| note.contains("Got 3 torches") || note.contains("got 3 torches")));
         let _ = fs::remove_dir_all(dir);
     }
 
@@ -1338,9 +1338,12 @@
         assert_eq!(state.active_objects[1].aux1, 0x85);
         assert_eq!(state.grid[32 + 2], 0x4e);
         assert_eq!(state.turn, 1);
-        assert_eq!(
-            state.message,
-            "Searched active-object tile 64 at (2, 1); no trap."
+        assert!(state.message.is_empty(), "message: {}", state.message);
+        assert!(
+            state
+                .diagnostics
+                .iter()
+                .any(|note| note.contains("searched active-object tile 64 at (2, 1); no trap"))
         );
     }
 

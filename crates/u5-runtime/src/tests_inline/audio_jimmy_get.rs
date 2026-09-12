@@ -549,7 +549,7 @@
         );
 
         assert_eq!(state.keys, DEFAULT_KEY_STOCK + 1);
-        assert!(state.message.contains("Got 1 keys"));
+        assert!(state.diagnostics.iter().any(|note| note.contains("Got 1 keys") || note.contains("got 1 keys")));
         assert!(state.sound_effects_after(serial).is_empty());
 
         // GET_NOTHING_REFUSAL — no table entry matched, no tile rewrite.

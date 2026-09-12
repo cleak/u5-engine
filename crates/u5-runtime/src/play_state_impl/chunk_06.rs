@@ -1518,13 +1518,16 @@ impl PlayState {
         self.cache_current_world_overlay();
         self.mark_visibility_dirty();
         self.advance_turn();
-        self.message = format!(
-            "Got {} {} from active-object tile {tile} at ({x}, {y}) in {} floor {}.",
+        // Unpublished (`cleak/u5-spec#262`). `commands.md §5.8` gives the *empty* Get result;
+        // a successful pickup has no published line.
+        self.diagnostics.push(format!(
+            "got {} {} from active-object tile {tile} at ({x}, {y}) in {} floor {}",
             entry.amount,
             entry.kind.label(),
             target.key(),
             floor
-        );
+        ));
+        self.message.clear();
         Ok(Some(MoveOutcome::Got))
     }
 
@@ -1560,13 +1563,16 @@ impl PlayState {
         self.cache_current_world_overlay();
         self.mark_visibility_dirty();
         self.advance_turn();
-        self.message = format!(
-            "Found {} {} from active-object tile {tile} at ({x}, {y}) in {} floor {}.",
+        // Unpublished (`cleak/u5-spec#262`). `commands.md §5.8` gives the *empty* Search
+        // result; a successful one has no published line.
+        self.diagnostics.push(format!(
+            "found {} {} from active-object tile {tile} at ({x}, {y}) in {} floor {}",
             entry.amount,
             entry.kind.label(),
             target.key(),
             floor
-        );
+        ));
+        self.message.clear();
         Some(MoveOutcome::Searched)
     }
 
@@ -1592,11 +1598,13 @@ impl PlayState {
         let visibility = search_trap_visibility(trappable, difficulty, detection_bit);
 
         self.advance_turn();
-        self.message = format!(
-            "Searched active-object tile {} at ({x}, {y}); {}.",
+        // Unpublished (`cleak/u5-spec#262`).
+        self.diagnostics.push(format!(
+            "searched active-object tile {} at ({x}, {y}); {}",
             object.tile,
             surface_search_trap_visibility_label(visibility)
-        );
+        ));
+        self.message.clear();
         Some(MoveOutcome::Searched)
     }
 
@@ -1638,12 +1646,14 @@ impl PlayState {
         self.cache_current_world_overlay();
         self.mark_visibility_dirty();
         self.advance_turn();
-        self.message = format!(
-            "Got {} {} from active-object tile {} at ({x}, {y}).",
+        // Unpublished (`cleak/u5-spec#262`).
+        self.diagnostics.push(format!(
+            "got {} {} from active-object tile {} at ({x}, {y})",
             grant.amount,
             grant.kind.label(),
             object.tile
-        );
+        ));
+        self.message.clear();
         Some(MoveOutcome::Got)
     }
 
@@ -2018,9 +2028,12 @@ impl PlayState {
         self.debit_crop_or_table_food_moral();
         self.mark_visibility_dirty();
         self.advance_turn();
-        self.message = format!(
-            "Ate food from table tile 0x{tile:02X} at ({x}, {y}); replaced with tile 0x{replacement:02X}; added 1 food."
-        );
+        // Unpublished (`cleak/u5-spec#262`).
+        self.diagnostics.push(format!(
+            "ate food from table tile 0x{tile:02X} at ({x}, {y}); replaced with tile \
+             0x{replacement:02X}; added 1 food"
+        ));
+        self.message.clear();
         Some(MoveOutcome::Got)
     }
 

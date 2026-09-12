@@ -45,7 +45,7 @@ fn dungeon_g_key_routes_to_underfoot_get() {
 
     assert_eq!(state.grid[dungeon_cell_index(0, 1, 1)], 0x08);
     assert_eq!(state.turn, 1);
-    assert!(state.message.contains("Got dungeon chest"));
+    assert!(state.diagnostics.iter().any(|note| note.contains("Got dungeon chest") || note.contains("got dungeon chest")));
 }
 
 #[test]

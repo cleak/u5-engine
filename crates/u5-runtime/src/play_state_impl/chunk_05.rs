@@ -722,13 +722,19 @@ impl PlayState {
         let plane = WorldPlane::Underworld;
         if let Some(game_dir) = game_dir {
             self.restore_world_at(game_dir, plane, x, y)?;
-            self.message = format!(
-                "Fell out of {} ({}) past level {}; cleared dungeon scene at trap-chain coordinate ({x}, {y}) on {:?}.",
+            // Unpublished (`cleak/u5-spec#262`). The ordinary fall prints
+            // `dungeon-mode.md §8.1`'s three-line pit group, which this
+            // engine already emits; the off-bottom handoff below it has no
+            // published line of its own.
+            self.diagnostics.push(format!(
+                "fell out of {} ({}) past level {}; cleared dungeon scene at trap-chain \
+                 coordinate ({x}, {y}) on {:?}",
                 scene.key(),
                 scene.name(),
                 level + 1,
                 plane
-            );
+            ));
+            self.message.clear();
             return Ok(MoveOutcome::Transition(
                 AreaTransition::ExitedDungeonToWorldPlane { scene, plane },
             ));
@@ -772,13 +778,19 @@ impl PlayState {
             self.refresh_cached_moon_glyphs_at_scene_entry();
             self.mode_zero_cleanup();
             self.mark_visibility_dirty();
-            self.message = format!(
-                "Fell out of {} ({}) past level {}; cleared dungeon scene at trap-chain coordinate ({x}, {y}) on {:?}.",
+            // Unpublished (`cleak/u5-spec#262`). The ordinary fall prints
+            // `dungeon-mode.md §8.1`'s three-line pit group, which this
+            // engine already emits; the off-bottom handoff below it has no
+            // published line of its own.
+            self.diagnostics.push(format!(
+                "fell out of {} ({}) past level {}; cleared dungeon scene at trap-chain \
+                 coordinate ({x}, {y}) on {:?}",
                 scene.key(),
                 scene.name(),
                 level + 1,
                 plane
-            );
+            ));
+            self.message.clear();
             return Ok(MoveOutcome::Transition(
                 AreaTransition::ExitedDungeonToWorldPlane { scene, plane },
             ));

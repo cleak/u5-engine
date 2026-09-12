@@ -2235,8 +2235,8 @@ fn dungeon_get_chest_consumes_turn_and_marks_visit_local_passage() {
     assert_eq!(state.turn, 1);
     assert_eq!(state.door_tracker, None);
     assert!(state.visibility_dirty);
-    assert!(state.message.contains("Got dungeon chest"));
-    assert!(state.message.contains("generated chest grants"));
+    assert!(state.diagnostics.iter().any(|note| note.contains("Got dungeon chest") || note.contains("got dungeon chest")));
+    assert!(state.diagnostics.iter().any(|note| note.contains("generated chest grants") || note.contains("generated chest grants")));
 }
 
 #[test]
@@ -2265,10 +2265,10 @@ fn dungeon_get_chest_generated_rewards_follow_public_rows() {
     assert_eq!(state.potion_stock[7], 1);
     assert_eq!(state.scroll_stock[6], 1);
     assert_eq!(state.turn, 1);
-    assert!(state.message.contains("generated chest grants 11 food"));
-    assert!(state.message.contains("52 gold"));
-    assert!(state.message.contains("1 white potion"));
-    assert!(state.message.contains("1 IMC scroll"));
+    assert!(state.diagnostics.iter().any(|note| note.contains("generated chest grants 11 food") || note.contains("generated chest grants 11 food")));
+    assert!(state.diagnostics.iter().any(|note| note.contains("52 gold") || note.contains("52 gold")));
+    assert!(state.diagnostics.iter().any(|note| note.contains("1 white potion") || note.contains("1 white potion")));
+    assert!(state.diagnostics.iter().any(|note| note.contains("1 IMC scroll") || note.contains("1 IMC scroll")));
 }
 
 #[test]
@@ -2299,11 +2299,12 @@ fn dungeon_get_chest_applies_clean_sidecar_grants() {
     assert_eq!(state.gems, 3);
     assert_eq!(state.torches, 1);
     assert_eq!(state.turn, 1);
-    assert!(state.message.contains("Got dungeon chest"));
+    assert!(state.diagnostics.iter().any(|note| note.contains("Got dungeon chest") || note.contains("got dungeon chest")));
     assert!(
         state
-            .message
-            .contains("authored chest grants 7 gold, 2 gems, 1 torches")
+            .diagnostics
+            .iter()
+            .any(|note| note.contains("authored chest grants 7 gold, 2 gems, 1 torches"))
     );
     let _ = fs::remove_dir_all(dir);
 }
