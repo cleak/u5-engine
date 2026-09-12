@@ -5050,7 +5050,21 @@ fn combat_command_branch_message(branch: CombatCommandBranch) -> String {
         | CombatCommandBranch::Push
         | CombatCommandBranch::Search
         | CombatCommandBranch::DWhatRefusal
-        | CombatCommandBranch::WWhatRefusal => format!("{branch:?}."),
+        | CombatCommandBranch::WWhatRefusal => {
+            // Every branch here has already written whatever it prints - its
+            // own echo, its own refusal, or nothing at all - so the round
+            // advance that follows adds no line.
+            //
+            // This used to be `format!("{branch:?}.")`, which puts a Rust enum
+            // name in the message window for any branch that reaches it. It
+            // was invisible only because nothing did until the Ready arm above
+            // started letting the round advance, at which point the original's
+            // `Thou art empty-handed!` gained a ` Ready.` row underneath
+            // (`qa/paired/combat-ready-armour.tsv`, beat `ready-open`). A
+            // debug format is not a fallback the player should ever be able to
+            // see, so it is gone rather than special-cased further.
+            String::new()
+        }
     }
 }
 
