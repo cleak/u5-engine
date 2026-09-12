@@ -1,6 +1,17 @@
 # Aboard a frigate: the X-it arms and the Yell sail lines, which
 # `vehicles.md` and `commands.md` describe without quoting
 # (cleak/u5-spec#225).
+#
+# **A lottery in the roster panel, not in the message window.** Stepping off
+# the frigate onto deep water reaches the rough-seas trigger, and
+# `overworld.md` Section 6.2.4 gives every active non-Dead member its "own
+# **fresh, independent** uniform integer in the **closed interval `[1, 8]`".
+# `prng.md` Section 3 seeds the two sides from the host clock, so the two draws
+# are not comparable: measured 2026-09-12 the stock side took 2 and this engine
+# took 8, both legal, and the panel's hit-point cell then differs for the rest
+# of the run. Every message-window beat agrees; a panel difference confined to
+# that cell has measured nothing and must be re-run rather than read as a
+# difference.
 # requires-seed: the party aboard a frigate on deep water
 both	wait	9000
 both	key	space
