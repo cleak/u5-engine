@@ -1,0 +1,58 @@
+# Bound the shrine entry narration's pacing, which `karma.md` Section 12's
+# entry table does not give in full.
+#
+# The table paces the sequence in world ticks from the *virtue question*
+# onward - "After ten world ticks, record `29`", six ticks after a nonblank
+# virtue answer, twelve after each nonblank mantra - but says nothing about
+# the interval between record `45` (Approach) and record `28` (Kneel).
+# `shrine-enter` measured the original still on `Shrine...` two full seconds
+# after E-Enter, which is far longer than ten ~55 ms ticks, so something else
+# is holding there.
+#
+# This scenario samples that interval finely on both sides so the gap can be
+# quoted with numbers rather than "later than two seconds". It is a pacing
+# measurement, not a conformance target: the engine prints the whole entry
+# inside one key handler, so its rows are expected to be ahead throughout.
+# The reading wanted is which stock beat first shows `kneel before the` and
+# which first shows `Upon what virtue`.
+#
+# This scenario measures pacing only and must be read as such, not as a
+# wording result. It measured nothing about conformance and its differing
+# beats must not be counted as wording differences.
+#
+# Result, measured 2026-09-12 (stock side, times after the `E` keypress):
+#
+#   t0600  ...approach the / tranquil / Shrine...
+#   t1200  unchanged
+#   t1800  unchanged
+#   t2400  ...and thou dost / kneel before the / Altar.
+#   t3000  dost thou / meditate? / :
+#   t3600  unchanged through t5000
+#
+# Approach to Kneel is bounded to (1800, 2400] ms - about forty ~55 ms BIOS
+# ticks, not the ten the table gives the question. Kneel to the question is
+# bounded to (0, 600] ms, which fits the published ten world ticks. The
+# missing number is the one before it: `cleak/u5-spec#271`.
+# requires-seed: the party on the published Honesty shrine coordinate
+both	wait	9000
+both	key	space
+both	wait	4000
+both	key	j
+both	wait	8000
+both	key	e
+both	wait	600
+both	shot	t0600	600 ms after E-Enter
+both	wait	600
+both	shot	t1200	1200 ms
+both	wait	600
+both	shot	t1800	1800 ms
+both	wait	600
+both	shot	t2400	2400 ms
+both	wait	600
+both	shot	t3000	3000 ms
+both	wait	600
+both	shot	t3600	3600 ms
+both	wait	600
+both	shot	t4200	4200 ms
+both	wait	800
+both	shot	t5000	5000 ms

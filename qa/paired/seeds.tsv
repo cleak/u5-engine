@@ -79,6 +79,7 @@ shop-arms-sell-keys	seed-shop-arms-sell-keys-reseeded	the walk-up replayed once 
 shop-arms-sell-zero-price	seed-shop-arms-sell-zero-price-reseeded	the walk-up replayed once by reseed.py
 shop-inn-after-entry	seed-shop-inn-after-entry-reseeded	the walk-up replayed once by reseed.py
 shrine-enter	seed-shrine-enter	copied from the paired-shrine-enter run profile
+shrine-enter-pacing	seed-shrine-enter	shares shrine-enter's seed; samples the same entry at finer intervals
 shrine-flow	seed-shrine-flow	copied from the paired-shrine-flow run profile
 shrine-mantra-close	seed-shrine-mantra-close	copied from the paired-shrine-mantra-close run profile
 shrine-three-mantras	seed-shrine-three-mantras	copied from the paired-shrine-three-mantras run profile
