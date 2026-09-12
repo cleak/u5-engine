@@ -1016,7 +1016,18 @@ pub const fn command_echo(command: Command, mode: CommandEchoMode) -> Option<Com
             }
         }
         Command::Fire => ("Fire-", AwaitsDirection),
-        Command::Get => ("Get-", AwaitsDirection),
+        // §5.3: "The dispatcher emits `Get-` only outside the dungeon band;
+        // the dungeon handler opens with its own `Get\n`, unconditionally,
+        // before it looks at anything." Measured 2026-09-12
+        // (`qa/paired/dungeon-chest-refusals.tsv`): the original's row is a
+        // bare `Get`, where this engine rendered `Get-Get`.
+        Command::Get => {
+            if dungeon {
+                ("Get", Complete)
+            } else {
+                ("Get-", AwaitsDirection)
+            }
+        }
         Command::Jimmy => ("Jimmy-", AwaitsDirection),
         Command::Klimb => ("Klimb-", AwaitsDirection),
         Command::Open => ("Open-", AwaitsDirection),

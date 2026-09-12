@@ -1482,8 +1482,10 @@ impl PlayState {
         let tile = self.grid[idx];
         // `commands.md §5.3`: "The dispatcher emits `Get-` only outside the
         // dungeon band; the dungeon handler opens with its own `Get\n`,
-        // unconditionally, before it looks at anything."
-        self.message = DUNGEON_CHEST_GET_ECHO.to_string();
+        // unconditionally, before it looks at anything." The dungeon arm of
+        // the shared echo table is that `Get` row, so the handler contributes
+        // only what follows it - the same split dungeon Push uses.
+        self.message = String::new();
         match tile >> 4 {
             0x4 => {
                 // `dungeon-mode.md §13`: the published dungeon-chest

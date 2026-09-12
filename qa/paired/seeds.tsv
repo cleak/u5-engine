@@ -33,6 +33,7 @@ doom-final-room-waiting	seed-doom-final-room-waiting	copied from the paired-doom
 drowning-audio	seed-drowning-audio	copied from the paired-drowning-audio run profile
 dungeon-exit-klimb	seed-dungeon-exit-klimb	copied from the paired-dungeon-exit-klimb run profile
 dungeon-look	seed-dungeon-look	copied from the paired-dungeon-look run profile
+dungeon-chest-refusals	seed-dungeon-search	the dungeon-search seat: an ordinary Deceit corridor, so G and O both take their no-chest arm
 dungeon-search	seed-dungeon-search	copied from the paired-dungeon-search run profile
 dungeon-view	seed-dungeon-view	copied from the paired-dungeon-view run profile
 dwelling-talk-after-entry	seed-dwelling-talk-after-entry-reseeded	re-written by reseed.py so the save carries a populated NPC band

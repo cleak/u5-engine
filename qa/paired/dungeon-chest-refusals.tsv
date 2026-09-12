@@ -1,0 +1,33 @@
+# The dungeon `G` Get and `O` Open refusal arms, which `cleak/u5-spec#262`
+# published on 2026-09-12 and this engine had wrong in both cases.
+#
+# `commands.md` Section 5.3: "The dispatcher emits `Get-` only outside the
+# dungeon band; the dungeon handler opens with its own `Get\n`,
+# unconditionally, before it looks at anything." Section 5.8 adds that "Get on
+# a non-chest prints `Get\nNot here!\n`" - not the surface cascade's
+# `Nothing to get!`, which is what this engine printed.
+#
+# `dungeon-mode.md` Section 8.1's chest-command table gives Open's own arms:
+# the dispatcher prints `Open-` "in **every** scene including this one", and an
+# unrelated cell answers `What?\n`. "Because those last two carry no leading
+# line feed they render on the prefix's own row, as `Open-Already Open!` and
+# `Open-What?`"
+#
+# The party stands in an ordinary Deceit corridor, so both verbs take their
+# no-chest arm. The chest arms themselves still need a seat beside a chest.
+#
+# requires-seed: the party inside Deceit facing a wall-class cell, with a torch
+both	wait	9000
+both	key	space
+both	wait	4000
+both	key	j
+both	wait	9000
+both	key	i
+both	wait	2500
+both	shot	lit	Torch lit
+both	key	g
+both	wait	3000
+both	shot	get	Get on a corridor cell
+both	key	o
+both	wait	3000
+both	shot	open	Open on a corridor cell

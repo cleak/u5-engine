@@ -2283,7 +2283,7 @@ fn dungeon_get_chest_generated_rewards_follow_public_rows() {
     assert_eq!(
         state.message,
         format!(
-            "{DUNGEON_CHEST_GET_ECHO}{DUNGEON_CHEST_GET_CONTENTS}\
+            "{DUNGEON_CHEST_GET_CONTENTS}\
              11 food!\n52 gold!\n2 keys!\n1 gem!\n2 torches!\n\
              A white potion!\nA scroll: IMC!"
         )
