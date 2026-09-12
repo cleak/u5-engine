@@ -87,7 +87,15 @@ fn handle_play_key_input_inner(
         if matches!(input_byte_class(byte), InputByteClass::FunctionKey) {
             // Measured 2026-09-07: a function key is just an unassigned
             // key, and answers the resident `What?` like any other.
-            state.message = unassigned_refusal_echo(0).to_string();
+            //
+            // "Like any other" includes *how* the row is drawn.
+            // `commands.md §5.2` lists "any unmapped key | `What?\n`" in the
+            // verb-echo table, so the row carries the command end cap and the
+            // blank above it. Writing the slot directly made it an ordinary
+            // result line instead. Measured 2026-09-11 (`stray-keys/fkey`),
+            // where the original draws `?What?` and this engine drew a bare
+            // `What?` with no separating row.
+            state.emit_command_echo_line(unassigned_refusal_echo(0));
             return Ok(PlayInputDisposition::Continue);
         }
     }

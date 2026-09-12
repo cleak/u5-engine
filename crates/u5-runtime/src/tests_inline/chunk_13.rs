@@ -26902,3 +26902,23 @@ fn inn_bed_cells_are_the_published_per_inn_table() {
         );
     }
 }
+
+#[test]
+#[ignore]
+fn probe_stray_key_echo_kind() {
+    let mut state = test_state(open_grid(), 1, 1);
+    for (label, key) in [
+        ("F1", char::from(crate::INPUT_CODE_F1)),
+        ("percent", '%'),
+        ("tilde", '~'),
+    ] {
+        state.message_transcript.clear();
+        let _ = handle_play_key_input(&mut state, key, "", std::path::Path::new(""));
+        for entry in state.message_entries() {
+            println!(
+                "{label}: text={:?} command_echo={} blank={}",
+                entry.text, entry.is_command_echo, entry.explicit_blank
+            );
+        }
+    }
+}
