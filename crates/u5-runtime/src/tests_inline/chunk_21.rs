@@ -4007,7 +4007,7 @@ fn active_conversation_keeps_numeric_signal_separate_from_falsehood_theft() {
     assert!(ended);
     assert!(state.active_conversation.is_none());
     assert_eq!(state.conversation_signal_flags[5], 1);
-    assert_eq!(text, "BYE\n\n\"Farewell\"\n\n Stolen goods.");
+    assert_eq!(text, "\n\"Farewell\"\n\n Stolen goods.");
 }
 
 #[test]
@@ -4936,7 +4936,9 @@ fn submit_conversation_keyword_bye_ends_session() {
     ]);
     state.open_conversation_session(&dialogue, &raw);
     let (text, ended) = state.submit_active_conversation_keyword("bye");
-    assert!(text.starts_with(TLK_EMPTY_INPUT_BYE_MESSAGE));
+    // The header belongs to the empty-input shortcut; a typed `BYE` has
+    // already echoed onto the `:` row.
+    assert!(!text.starts_with(TLK_EMPTY_INPUT_BYE_MESSAGE));
     assert!(text.contains("Farewell"));
     assert!(ended);
     assert!(state.active_conversation.is_none());

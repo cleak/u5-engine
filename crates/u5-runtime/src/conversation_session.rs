@@ -388,11 +388,17 @@ impl ConversationSession {
             out.set_framed_text(TLK_NO_KEYWORD_MATCH_MESSAGE);
             return out;
         }
-        if matches!(
-            kind,
-            TlkPlayerInputKind::EmptyByeShortcut
-                | TlkPlayerInputKind::Reserved(ReservedKeywordEffect::ByePath),
-        ) {
+        // `conversation.md §5` step 3 and §7's result table both tie the
+        // printed header to the *empty-input* shortcut alone: "If the player
+        // pressed Enter on an empty line, the engine prints `BYE\n\n`" and
+        // "Empty input | Print `BYE` followed by two line feeds". It stands in
+        // for the echo the player never typed.
+        //
+        // A typed `BYE` has already echoed itself onto the `:` row, so
+        // printing the header there shows the word twice. Measured 2026-09-11
+        // (`town-talk/bye`): the original reads `:BYE` and then the response,
+        // this engine read `:BYE` / `BYE` / the response.
+        if matches!(kind, TlkPlayerInputKind::EmptyByeShortcut) {
             out.push_plain_text(TLK_EMPTY_INPUT_BYE_MESSAGE);
         }
         let response = self.run_field_from(field_idx, 0, ctx, 0);
@@ -1369,7 +1375,10 @@ mod tests {
         let mut s = baseline_session();
         s.present_greeting(&ctx());
         let out = s.submit_keyword("bye", &ctx());
-        assert!(out.text.starts_with(TLK_EMPTY_INPUT_BYE_MESSAGE));
+        // A *typed* `BYE` has already echoed itself; `conversation.md §5`
+        // step 3 gives the printed `BYE\n\n` header to the empty-input
+        // shortcut alone.
+        assert!(!out.text.starts_with(TLK_EMPTY_INPUT_BYE_MESSAGE));
         assert!(out.text.contains("Farewell"));
         assert!(out.ended);
         assert_eq!(s.phase, ConversationSessionPhase::PresentingBye);
