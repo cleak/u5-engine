@@ -4102,7 +4102,15 @@ impl PlayState {
         } else {
             let (greeting, actions) = talk_response_text_and_actions(greeting);
             self.apply_talk_action_grants(&actions);
-            self.message = format!("{description}\n\n{greeting}\n\nYour interest?");
+            // `conversation.md §9`, published for `cleak/u5-spec#262`: the
+            // entry is "A blank row, `You see_` plus the NPC's Description
+            // entry, a blank row, the Greeting in double quotes ..., a blank
+            // row, then `Your interest?\n:`". This string-backed fallback runs
+            // when a scene has no raw `.TLK` blobs; it printed the description
+            // bare, dropped the quote wrapper and stopped before the input row.
+            self.message = format!(
+                "\n{TLK_OPENING_DESCRIPTION_PREFIX}{description}\n\n\"{greeting}\"\n\n{TLK_KEYWORD_PROMPT}"
+            );
         }
         MoveOutcome::Talked
     }

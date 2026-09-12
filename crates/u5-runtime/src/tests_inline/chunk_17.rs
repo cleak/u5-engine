@@ -4904,7 +4904,7 @@
     fn cast_uus_por_moves_up_one_dungeon_level_without_ladder() {
         let scene = DungeonScene::new(33).unwrap();
         let mut grid = open_dungeon_record();
-        grid[dungeon_cell_index(2, 1, 1)] = 0x10;
+        grid[dungeon_cell_index(2, 1, 1)] = 0x00;
         let mut state = dungeon_state(grid, 3, 1, 1);
         state.spell_charges[UUS_POR_SPELL_INDEX] = 1;
         state.party[0].mana = 4;
@@ -4922,13 +4922,16 @@
         assert_eq!(state.turn, 1);
         assert_eq!(state.clock, GameClock::new(12, 1).unwrap());
         assert!(state.diagnostics.iter().any(|n| n.contains("Up: changed to DUNGEON:0 (Deceit) level 3")), "{:?}", state.diagnostics);
+        // `dungeon-mode.md §13.1`: the spell prints "the same `Up!\n` or
+        // `Down!\n`, and only that".
+        assert_eq!(state.message, DUNGEON_KLIMB_UP);
     }
 
     #[test]
     fn cast_des_por_moves_down_one_dungeon_level_without_ladder() {
         let scene = DungeonScene::new(33).unwrap();
         let mut grid = open_dungeon_record();
-        grid[dungeon_cell_index(4, 1, 1)] = 0x10;
+        grid[dungeon_cell_index(4, 1, 1)] = 0x00;
         let mut state = dungeon_state(grid, 3, 1, 1);
         state.spell_charges[DES_POR_SPELL_INDEX] = 1;
         state.party[0].mana = 4;
@@ -4946,7 +4949,7 @@
         assert_eq!(state.turn, 1);
         assert_eq!(state.clock, GameClock::new(12, 1).unwrap());
         assert!(state.diagnostics.iter().any(|n| n.contains("Down: changed to DUNGEON:0 (Deceit) level 5")), "{:?}", state.diagnostics);
-        assert!(state.message.is_empty(), "message: {}", state.message);
+        assert_eq!(state.message, DUNGEON_KLIMB_DOWN);
     }
 
     #[test]

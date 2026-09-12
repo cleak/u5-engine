@@ -5441,21 +5441,41 @@ impl PlayState {
             return Ok(MoveOutcome::Blocked);
         }
 
+        // `dungeon-mode.md §13.1` "What a level change prints": the Up and
+        // Down spells print "the same `Up!\n` or `Down!\n`, and only that -
+        // the casting framework adds no success line of its own on this
+        // route". "The climb word is printed **before** anything is tested,
+        // which is why a refused spell destination shows it first", and the
+        // edge check precedes the destination test.
+        let climb_word = if delta < 0 {
+            DUNGEON_KLIMB_UP
+        } else {
+            DUNGEON_KLIMB_DOWN
+        };
+        self.message = climb_word.to_string();
+
         let next_level = level as i8 + delta;
         if !(0..=7).contains(&next_level) {
-            return self.resolve_dungeon_surface_reset(
+            // "Any route that leaves the level stack | the climb word, then
+            // the shared exit line of Section 13.2".
+            let outcome = self.resolve_dungeon_surface_reset(
                 game_dir,
                 scene,
                 level,
                 format!("Cast {label} at the dungeon level edge"),
-            );
+            )?;
+            self.message.insert_str(0, climb_word);
+            return Ok(outcome);
         }
 
         let next_level = next_level as u8;
         let destination = self.dungeon_cell(next_level, self.player.x, self.player.y);
         if !dungeon_level_change_spell_destination_allowed(destination) {
+            // "the climb word (already printed), then `Failed!\n` with the
+            // error tone".
             self.advance_turn();
             self.fail_committed_spell_cast();
+            self.message.insert_str(0, climb_word);
             return Ok(MoveOutcome::Blocked);
         }
         self.area = Area::Dungeon {
@@ -5466,14 +5486,15 @@ impl PlayState {
         self.setup_dungeon_active_monster_fresh();
         self.mark_visibility_dirty();
         self.advance_turn();
-        // Unpublished (`cleak/u5-spec#262`).
+        // "**Nothing resembling a "Descend!" line and no dungeon-name or level
+        // announcement is ever written to the message window**, on any of
+        // these routes." The climb word set above is the whole of it.
         self.diagnostics.push(format!(
             "{label}: changed to {} ({}) level {}",
             scene.key(),
             scene.name(),
             dungeon_display_level(next_level)
         ));
-        self.message.clear();
         Ok(MoveOutcome::Transition(
             AreaTransition::ChangedDungeonLevel {
                 scene,

@@ -750,22 +750,31 @@
         assert_eq!(dungeon_ladder_delta(0x3F, ClimbIntent::Down), Some(1));
     }
 
+    /// `dungeon-mode.md §13.1`, corrected 2026-09-12 for `cleak/u5-spec#262`
+    /// (`RETRACTIONS.md` R472): the earlier reading was "exactly inverted. The
+    /// test accepts **only** the open-passage (base) class and refuses every
+    /// other class, ladders, chests, fountains, pits, fields, room states,
+    /// walls and door variants included. The low half of the cell byte is
+    /// ignored, so every variant within the accepted class passes."
     #[test]
-    fn level_change_spell_destination_test_is_not_shared_with_klimb() {
-        // dungeon-mode.md §13.1: the Up/Down spells refuse a destination in
-        // the base `0x0` class or the wall and door-presentation families
-        // `0xB?` through `0xE?`. A climb never inspects the cell it lands on,
-        // so this predicate has no caller on the K-Klimb path.
-        for tile in [0x00u8, 0x0F, 0xB0, 0xC7, 0xD0, 0xEF] {
-            assert!(
-                !dungeon_level_change_spell_destination_allowed(tile),
-                "{tile:#04x} is refused by the level-change spells"
-            );
-        }
-        for tile in [0x10u8, 0x20, 0x30, 0x60, 0x8F, 0x90, 0xA0, 0xF0] {
+    fn level_change_spell_destination_test_accepts_only_open_passage() {
+        // Every variant within the accepted class passes: the low nibble is
+        // ignored.
+        for tile in [0x00u8, 0x01, 0x07, 0x0F] {
             assert!(
                 dungeon_level_change_spell_destination_allowed(tile),
-                "{tile:#04x} is accepted by the level-change spells"
+                "{tile:#04x} is the open-passage class and is accepted"
+            );
+        }
+        // Every other class is refused - ladders, chests, fountains, pits,
+        // fields, room states, walls and door variants alike.
+        for tile in [
+            0x10u8, 0x20, 0x30, 0x40, 0x50, 0x60, 0x70, 0x80, 0x8F, 0x90, 0xA0, 0xB0, 0xC7, 0xD0,
+            0xEF, 0xF0,
+        ] {
+            assert!(
+                !dungeon_level_change_spell_destination_allowed(tile),
+                "{tile:#04x} is outside the open-passage class and is refused"
             );
         }
     }

@@ -434,16 +434,22 @@ pub fn dungeon_ladder_delta(tile: u8, intent: ClimbIntent) -> Option<i8> {
 
 /// `dungeon-mode.md §13.1`: the destination test belonging to the
 /// **level-change spells** (Up and Down, `catalogs/spell-list.md` ids
-/// 21 and 22), which refuse a destination cell in the base `0x0`
-/// class or in the wall and door-presentation families `0xB?` through
-/// `0xE?`.
+/// 21 and 22).
+///
+/// *Corrected 2026-09-12 for `cleak/u5-spec#262` (`RETRACTIONS.md` R472).*
+/// The earlier reading - refuse the base `0x0` class and the wall and
+/// door-presentation families `0xB?` through `0xE?` - was "exactly inverted.
+/// The test accepts **only** the open-passage (base) class and refuses every
+/// other class, ladders, chests, fountains, pits, fields, room states, walls
+/// and door variants included. The low half of the cell byte is ignored, so
+/// every variant within the accepted class passes."
 ///
 /// This test is *not* part of K-Klimb: a climb never inspects the cell
 /// it lands on, and the ladder or pit underfoot is treated as proof
 /// enough that the destination is reachable. An earlier spec revision
 /// applied this test to the climb route; that claim is withdrawn.
 pub const fn dungeon_level_change_spell_destination_allowed(tile: u8) -> bool {
-    !matches!(tile >> 4, 0x0 | 0x0b..=0x0e)
+    tile >> 4 == 0x0
 }
 
 pub fn render_glyph(tile: u8) -> char {

@@ -187,16 +187,22 @@
         assert_eq!(state.party[0].mana, 0);
         assert_eq!(state.turn, 1);
         assert_eq!(state.clock, GameClock::new(12, 1).unwrap());
+        // `dungeon-mode.md §13.1`: "Any route that leaves the level stack |
+        // the climb word, then the shared exit line of Section 13.2".
         assert_eq!(
             state.message,
-            DUNGEON_EXIT_TO_UNDERWORLD_NARRATION
+            format!("{DUNGEON_KLIMB_DOWN}{DUNGEON_EXIT_TO_UNDERWORLD_NARRATION}")
         );
         let _ = fs::remove_dir_all(dir);
     }
 
+    /// `dungeon-mode.md §13.1` (`RETRACTIONS.md` R472): the destination test
+    /// accepts only the open-passage class, so the ladder, chest, pit, wall
+    /// and door-presentation classes are all refused. The base `0x00` this
+    /// test used to list among the refusals is the one class that passes.
     #[test]
-    fn dungeon_level_spell_refuses_base_and_wall_destination_classes() {
-        for destination in [0x00, 0xb0, 0xc0, 0xd0, 0xe0] {
+    fn dungeon_level_spell_refuses_every_class_but_open_passage() {
+        for destination in [0x10, 0x40, 0x60, 0xb0, 0xc0, 0xd0, 0xe0] {
             let mut grid = open_dungeon_record();
             grid[dungeon_cell_index(2, 1, 1)] = destination;
             let mut state = dungeon_state(grid, 3, 1, 1);
@@ -218,7 +224,9 @@
             assert_eq!(state.spell_charges[UUS_POR_SPELL_INDEX], 0);
             assert_eq!(state.party[0].mana, 0);
             assert_eq!(state.turn, 1);
-            assert_eq!(state.message, "Failed!");
+            // "the climb word (already printed), then `Failed!\n` with the
+            // error tone".
+            assert_eq!(state.message, format!("{DUNGEON_KLIMB_UP}Failed!"));
         }
     }
 
