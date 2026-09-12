@@ -5010,7 +5010,15 @@ mod ready_scenario_probe {
         for id in [16usize, 5, 30, 26, 0, 9] {
             state.equipment_stock[id] = 1;
         }
-        let keys = ['r', '\r', 's', 's', 's', 's', '\r', 'r', '\r', 's', '\r', 'r', '\r'];
+        // `input.md §5`: the picker highlight moves on the direction codes,
+        // not on letters. `INPUT_CODE_SOUTH` is what the frontend sends for
+        // ArrowDown, which is what `hut-ready-picker.tsv` presses.
+        let down = char::from(crate::INPUT_CODE_SOUTH);
+        let keys = [
+            'r', '\r', down, down, down, down, down, '\r', // dagger beat
+            'r', '\r', down, '\r', // shield beat
+            'r', '\r', // reopened beat
+        ];
         for key in keys {
             let before = state.message_entries().len();
             let _ = handle_play_key_input(&mut state, key, "", Path::new(""));
@@ -5018,7 +5026,7 @@ mod ready_scenario_probe {
                 .iter()
                 .map(|e| e.text.clone())
                 .collect();
-            println!("key {key:?} -> {added:?}");
+            println!("key {key:?} -> {added:?} | slot {:?}", state.message);
         }
     }
 }

@@ -3190,6 +3190,22 @@ impl PlayState {
     /// selection surface and the item stage prints `Item: ` while the
     /// picker rows live in the panel (`§4.4`); the message window carries
     /// nothing else.
+    /// Refresh the picker's live `Item: ` row without logging a second one.
+    ///
+    /// `inventory.md §5`: moving the highlight redraws the *panel*. The
+    /// message window's prompt row is already open - a preceding refusal
+    /// block ends in its own `Item: ` - so assigning the slot here made the
+    /// next flush treat the prompt as a fresh emission. Measured 2026-09-11
+    /// (`hut-ready-picker/shield`): the original logs nothing when the
+    /// highlight moves, and this engine logged an extra `Item: ` on the
+    /// first movement after a refusal.
+    fn refresh_ready_prompt_slot(&mut self, rendered: String) {
+        if self.message.ends_with(&rendered) {
+            return;
+        }
+        self.message = rendered;
+    }
+
     pub fn render_ready_session(&self, session: &ReadySession) -> String {
         let Some(party_index) = session.selected_party_index else {
             return PARTY_SELECTION_PROMPT.to_string();
@@ -3331,22 +3347,26 @@ impl PlayState {
             }
             ReadyInputAction::NextItem => {
                 self.move_ready_cursor(&mut session, 1);
-                self.message = self.render_ready_session(&session);
+                let rendered = self.render_ready_session(&session);
+                self.refresh_ready_prompt_slot(rendered);
                 self.active_ready = Some(session);
             }
             ReadyInputAction::PreviousItem => {
                 self.move_ready_cursor(&mut session, -1);
-                self.message = self.render_ready_session(&session);
+                let rendered = self.render_ready_session(&session);
+                self.refresh_ready_prompt_slot(rendered);
                 self.active_ready = Some(session);
             }
             ReadyInputAction::PageNext => {
                 self.move_ready_cursor(&mut session, READY_PICKER_PAGE_STEP as isize);
-                self.message = self.render_ready_session(&session);
+                let rendered = self.render_ready_session(&session);
+                self.refresh_ready_prompt_slot(rendered);
                 self.active_ready = Some(session);
             }
             ReadyInputAction::PagePrevious => {
                 self.move_ready_cursor(&mut session, -(READY_PICKER_PAGE_STEP as isize));
-                self.message = self.render_ready_session(&session);
+                let rendered = self.render_ready_session(&session);
+                self.refresh_ready_prompt_slot(rendered);
                 self.active_ready = Some(session);
             }
             // `inventory.md §5` step 4: Home and End "select the first and
@@ -3354,12 +3374,14 @@ impl PlayState {
             // reaches by accident.
             ReadyInputAction::FirstItem => {
                 self.select_ready_endpoint(&mut session, false);
-                self.message = self.render_ready_session(&session);
+                let rendered = self.render_ready_session(&session);
+                self.refresh_ready_prompt_slot(rendered);
                 self.active_ready = Some(session);
             }
             ReadyInputAction::LastItem => {
                 self.select_ready_endpoint(&mut session, true);
-                self.message = self.render_ready_session(&session);
+                let rendered = self.render_ready_session(&session);
+                self.refresh_ready_prompt_slot(rendered);
                 self.active_ready = Some(session);
             }
             ReadyInputAction::Confirm => {
@@ -3388,7 +3410,7 @@ impl PlayState {
                 if ring_vanished {
                     return true;
                 }
-                let outcome_message = self.message.clone();
+                let outcome_message = std::mem::take(&mut self.message);
                 self.normalize_ready_cursor(&mut session);
                 // `inventory.md` §5.2: a voiced refusal prints "two line
                 // feeds, the listed message, then two line feeds and
@@ -3402,10 +3424,20 @@ impl PlayState {
                 // 2026-09-10 (`hut-ready-picker/shield`), where the original
                 // shows one `Item:` per cycle.
                 if !outcome_message.is_empty() {
-                    self.message = format!(
+                    // Emitted rather than assigned. The message slot drops a
+                    // value identical to the one it already flushed, and a
+                    // second refusal of the *same* still-highlighted item
+                    // composes byte-identical text - so readying a too-heavy
+                    // item twice in a row logged the block once. The original
+                    // logs it every time. Measured 2026-09-11
+                    // (`hut-ready-picker/shield`), where the original shows
+                    // two refusal cycles between the `dagger` and `shield`
+                    // beats and this engine showed one.
+                    let composed = format!(
                         "{outcome_message}\n\n{}",
                         self.render_ready_session(&session)
                     );
+                    self.emit_message_line(composed);
                 }
                 self.active_ready = Some(session);
             }
@@ -4317,16 +4349,11 @@ impl PlayState {
             return MoveOutcome::Blocked;
         }
 
-        let current_burden = ready_burden(&self.party_equipment[request.party_index]);
-        let next_burden = current_burden.saturating_add(EQUIPMENT_READY_BURDENS[item_id]);
-        let strength = self.party_strengths[request.party_index];
-        if next_burden > strength {
-            self.message = format!(
-                "Party member {} is not strong enough for {name} ({next_burden}>{strength}).",
-                request.party_index + 1
-            );
-            return MoveOutcome::Blocked;
-        }
+        // A second burden test used to sit here, printing `Party member N is
+        // not strong enough for <item> (B>S).` - engine arithmetic, not game
+        // text. It is also unreachable: `r_ready_burden_gate_accepts` above
+        // is exactly `current + candidate <= strength`, which is the same
+        // comparison, so the published refusal always fires first.
 
         self.party_equipment[request.party_index][slot] = item_id as u8;
         self.equipment_stock[item_id] = self.equipment_stock[item_id].saturating_sub(1);
