@@ -1642,9 +1642,19 @@
         // `inventory.md §4.5`'s published label table (cleak/u5-spec#255):
         // the picker row is the abbreviated `Shard/Falsehd`, while the Use
         // result sentence below still names the shard in full.
-        assert!(picker_row_names(&state)
+        // `inventory.md §7`: the shards follow the eight moonstone phases,
+        // so walk the highlight down to the shard's own row rather than
+        // assuming it is first.
+        let shard_row = picker_row_names(&state)
             .iter()
-            .any(|name| name.contains("Shard/Falsehd")));
+            .position(|name| name.contains("Shard/Falsehd"))
+            .expect("the carried shard has a picker row");
+        for _ in 0..shard_row {
+            assert_eq!(
+                handle_play_key_input(&mut state, char::from(INPUT_CODE_SOUTH), "", Path::new("")).unwrap(),
+                PlayInputDisposition::Continue
+            );
+        }
 
         assert_eq!(
             handle_play_key_input(&mut state, '\r', "", Path::new("")).unwrap(),
