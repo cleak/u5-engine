@@ -708,6 +708,18 @@ pub const CODEX_SHRINE_ENTER_ECHO_TAIL: &str = "the Shrine of the Codex!";
 /// ends in a single period.
 pub const SHRINE_APPROACH_NARRATION: &str = "Thou dost approach the tranquil Shrine...";
 pub const SHRINE_KNEEL_NARRATION: &str = "...and thou dost kneel before the Altar.";
+/// `karma.md §12`'s entry table gives no interval between the approach record
+/// and the kneel record. Measured 2026-09-12
+/// (`qa/paired/shrine-enter-pacing.tsv`): the original holds on the approach
+/// record through 1800 ms and has printed the kneel record by 2400 ms, so the
+/// wait is bounded to (1800, 2400] ms - about forty ~55 ms BIOS ticks
+/// (`timing.md §4`). This is the midpoint of that bound; the published figure
+/// is asked for in `cleak/u5-spec#271`.
+pub const SHRINE_KNEEL_HOLD_BIOS_TICKS: u16 = 40;
+/// `karma.md §12`: "After ten world ticks, record `29`: the question asking
+/// which virtue". Consistent with the same measurement, which shows the
+/// question within the 600 ms sample after the kneel record.
+pub const SHRINE_VIRTUE_QUESTION_HOLD_WORLD_TICKS: u16 = 10;
 /// **Measured** 2026-09-07 (`qa/paired/shrine-flow.tsv`): accepting the virtue
 /// leaves the question and the typed answer on screen, then opens this prompt
 /// a blank row below it. The typed mantra echoes on the same row as the label

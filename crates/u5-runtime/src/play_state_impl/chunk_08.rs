@@ -1363,12 +1363,32 @@ impl PlayState {
                 &format!("{SHRINE_ENTER_ECHO_PREFIX}{}", virtue.name()),
             );
             self.emit_message_line(format!("\n{SHRINE_APPROACH_NARRATION}"));
-            self.emit_message_line(format!("\n{SHRINE_KNEEL_NARRATION}"));
+            // `karma.md §12`'s entry table paces this: the kneel record, then
+            // "After ten world ticks, record `29`: the question asking which
+            // virtue". The engine used to print all three in this one call,
+            // so the window jumped straight to the question.
+            //
+            // The table gives no interval before the kneel record. Measured
+            // 2026-09-12 (`qa/paired/shrine-enter-pacing.tsv`, stock side,
+            // sampled every 600 ms after the `E` keypress): the approach
+            // record stands alone through `t1800` and the kneel record is up
+            // by `t2400`, so the hold is bounded to (1800, 2400] ms - about
+            // forty ~55 ms BIOS ticks. The question follows within the next
+            // 600 ms sample, which fits the published ten. Asked as
+            // `cleak/u5-spec#271`; forty is the midpoint of the measured
+            // bound, not a published figure.
+            self.staged_narration.push_ticks(
+                SHRINE_KNEEL_HOLD_BIOS_TICKS,
+                format!("\n{SHRINE_KNEEL_NARRATION}"),
+            );
             // The question is logged once, with the blank row the capture
             // shows beneath it; the answer row is the *live* row the shrine
             // session serves (`text-output.md` §10.6), so typing into it
             // edits one row instead of re-logging the question per letter.
-            self.emit_message_line(format!("\n{SHRINE_VIRTUE_PROMPT}\n\n"));
+            self.staged_narration.push_ticks(
+                SHRINE_VIRTUE_QUESTION_HOLD_WORLD_TICKS,
+                format!("\n{SHRINE_VIRTUE_PROMPT}\n\n"),
+            );
             self.active_shrine = Some(ShrineSession::entering(virtue));
             self.adopt_shrine_prompt_row();
             return Ok(MoveOutcome::Observed);

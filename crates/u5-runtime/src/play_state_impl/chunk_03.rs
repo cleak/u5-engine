@@ -268,7 +268,10 @@ impl PlayState {
         // the original does not - it wants `open_prompt_line`'s inline
         // treatment extended to carry a typed buffer, which is more than
         // a flag. Tracked, not bodged.
-        self.mix_reagent_selection_active()
+        // A staged presentation owns the screen and is not reading a key,
+        // so no live command row and no end cap belong under it.
+        self.staged_narration_active()
+            || self.mix_reagent_selection_active()
             || self.active_blackthorn_guard_demand.is_some()
             || self.pending_town_arrest.is_some()
             // `commands.md §5.6` / `inventory.md §4.3`: a U-Use item that asks
@@ -367,6 +370,33 @@ impl PlayState {
                     crate::shop_runtime::SageState::Confirm { .. }
                 ))
             )
+    }
+
+    /// Whether a staged presentation currently owns the screen.
+    ///
+    /// While it does the frontend runs no turn gate and reads no command
+    /// key: `main-loop.md §9` has presentations calling the world tick
+    /// directly, so the loop is inside the presentation, not waiting on the
+    /// player.
+    pub fn staged_narration_active(&self) -> bool {
+        !self.staged_narration.is_empty()
+    }
+
+    /// Advance the staged narration by one frame of real time, printing every
+    /// beat whose wait completed in it. Returns whether a presentation is
+    /// still holding the screen afterwards.
+    pub fn advance_staged_narration(&mut self, delta_secs: f32) -> bool {
+        for beat in self.staged_narration.advance(delta_secs) {
+            self.emit_message_line(beat.text);
+        }
+        self.staged_narration_active()
+    }
+
+    /// Print every remaining beat now. For frontends and tests with no pump.
+    pub fn flush_staged_narration(&mut self) {
+        for beat in self.staged_narration.drain_all() {
+            self.emit_message_line(beat.text);
+        }
     }
 
     /// Whether the message window draws no text cursor at all.

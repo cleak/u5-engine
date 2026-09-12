@@ -1,16 +1,23 @@
-# **Known gap, diagnosed 2026-09-12: the entry narration is not staged.**
-# `karma.md` Section 12's entry table paces the sequence in world ticks - the
-# approach record, the kneel record, then "After ten world ticks, record `29`:
-# the question asking which virtue", then six ticks after a nonblank virtue
-# answer and twelve after each nonblank mantra. This engine prints the whole
-# entry inside the one key handler, so the `early` and `mid` beats - which
-# sample during those pauses - show the original still on
-# `tranquil Shrine...` while the engine is already asking the virtue.
+# **Known gap, narrowed 2026-09-12: the entry narration is staged now, but
+# the frontend releases the beats early.**
+#
+# `karma.md` Section 12's entry table paces the sequence - the approach
+# record, the kneel record, then "After ten world ticks, record `29`: the
+# question asking which virtue". The engine used to print all three inside
+# the one key handler, so the window jumped straight to the question and both
+# sampled beats showed the original still on `tranquil Shrine...`.
+#
+# `crates/u5-runtime/src/narration.rs` now stages them, and the engine does
+# hold on the approach record: at 600 ms it reads `Shrine...` on both sides
+# where it used to read `:`. The remaining difference is rate. Measured
+# 2026-09-12 with two calibration runs (`shrine-enter-pacing`), the visual
+# frontend consumes a staged delay about twice as fast as the wall clock, so
+# a 40-tick hold lands near 1.2 s instead of 2.2 s. Switching that advance
+# from the default clock to `Time<Real>` changed nothing, so it is not
+# virtual-time scaling. Tracked as `cleak/u5-engine#23`.
 #
 # The text itself agrees; `shrine-flow` and `shrine-unfocused` both match
-# because their beats fall outside the pauses. Closing this needs a
-# timed-narration stage the runtime does not have yet - the endgame's
-# per-frame operation queue is the nearest existing shape.
+# because their beats fall outside the pauses.
 #
 # The shrine entry narration, captured while it is still printing.
 # requires-seed: the party on the published Honesty shrine coordinate

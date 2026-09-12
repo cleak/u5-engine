@@ -10455,6 +10455,11 @@ fn advance_gameplay_animation_pump(
 
 fn animate_static_tiles(
     time: Res<Time>,
+    // A staged presentation is paced against the wall clock, not the app's
+    // virtual clock: `timing.md §4`'s BIOS tick is real time. `Res<Time>`
+    // here is the default (virtual) clock, which the frame pacer can advance
+    // faster than real seconds.
+    real_time: Res<Time<bevy::prelude::Real>>,
     mut pump: ResMut<AnimationPump>,
     visual: Option<ResMut<VisualState>>,
     mut images: ResMut<Assets<Image>>,
@@ -10496,6 +10501,21 @@ fn animate_static_tiles(
         return;
     }
 
+    // A staged presentation owns the loop. `main-loop.md §9`: "presentations,
+    // cutscene beats and paced turn loops call [the world tick] directly", so
+    // while one is running this system is the presentation's own timer and no
+    // turn gate or idle wait frame runs behind it. Advanced with the real
+    // frame delta rather than on pump firings, so the published BIOS-tick
+    // counts land in wall-clock where the original puts them whatever rate
+    // the host renders at.
+    if visual.state.staged_narration_active() {
+        visual.state.advance_staged_narration(real_time.delta_secs());
+        visual.prompt_cursor_visible = false;
+        visual.prompt_cursor_frame = visual.prompt_cursor_frame.wrapping_add(1);
+        pump.accumulator = 0.0;
+        return;
+    }
+
     let mut advanced = false;
     let (sweep_active, interval) = visual_animation_pump_interval(&visual.state, pump.interval);
     if advance_gameplay_animation_pump(&mut pump, time.delta_secs(), interval, sweep_active) {
@@ -10503,6 +10523,10 @@ fn animate_static_tiles(
         // to `break` out of a catch-up loop; they now leave this block.
         'step: {
             let mut prompt_cursor_visible = visual.prompt_cursor_visible;
+            // A staged presentation owns the loop. `main-loop.md §9`:
+            // "presentations, cutscene beats and paced turn loops call [the
+            // world tick] directly", so this pump firing is the presentation's
+            // tick and no turn gate or idle wait frame runs behind it.
             if advance_paced_combat_pump_firing(&mut visual.state) {
                 visual.prompt_cursor_visible = false;
                 visual.prompt_cursor_frame = visual.prompt_cursor_frame.wrapping_add(1);
@@ -12268,6 +12292,12 @@ fn drive_visual(
         // The animation pump presents automatic actors one at a time. Do not
         // let a queued key become a player action before that walk reaches a
         // ready party slot.
+        return;
+    }
+    if visual.state.staged_narration_active() {
+        // A staged presentation is holding the loop, so there is nothing here
+        // reading a key. `main-loop.md §9`: the world tick the presentation
+        // calls is not the input pipeline's idle pump.
         return;
     }
     let mut handled = false;

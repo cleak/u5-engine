@@ -358,6 +358,11 @@ pub struct PlayState {
     /// under a blank. One-shot: set when that Return closes the prompt,
     /// consumed by the next command echo.
     pub surface_command_row_follows_history: bool,
+    /// Narration this presentation is printing on a timer rather than all at
+    /// once. `main-loop.md §9`: "presentations, cutscene beats and paced turn
+    /// loops call [the world tick] directly", so a handler with waits between
+    /// its records is holding the loop. See [`crate::narration`].
+    pub staged_narration: crate::narration::StagedNarration,
     /// `combat.md §8.2`: the live `A`-Attack attempt walk and its open
     /// targeting cursor. `A` "opens a second, separate input read, and
     /// it is not a one-shot direction key but an **interactive targeting

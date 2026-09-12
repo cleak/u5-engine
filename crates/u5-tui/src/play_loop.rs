@@ -48,6 +48,10 @@ pub fn run_play_loop(
     let mut input = String::new();
     let mut queued_input = VecDeque::new();
     loop {
+        // The terminal shell has no animation pump, so a staged presentation
+        // would never advance here. Print the rest of it at once rather than
+        // stall: this shell is a harness, not a pacing reference.
+        state.flush_staged_narration();
         if play_state_accepts_typeahead(&state) {
             match state.apply_exploration_turn_gate(game_dir)? {
                 ExplorationTurnGateOutcome::Ready { .. } => {}
@@ -118,6 +122,8 @@ pub fn run_play_script_commands(
             play_script_command_label(command)
         );
         let disposition = handle_play_script_command(state, command, game_dir)?;
+        // No pump in script mode either; see the interactive loop above.
+        state.flush_staged_narration();
         print_play_script_snapshot(state, tile_atlas)?;
         if disposition == PlayInputDisposition::Quit {
             break;
@@ -137,6 +143,7 @@ where
 {
     for (index, command) in commands.iter().enumerate() {
         let disposition = handle_play_script_command(state, command, game_dir)?;
+        state.flush_staged_narration();
         after_command(state, index, command)?;
         if disposition == PlayInputDisposition::Quit {
             break;
