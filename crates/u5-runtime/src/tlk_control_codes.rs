@@ -106,6 +106,39 @@ pub const TALK_NO_RESPONSE_SUFFIX: &str = " offers no response!";
 /// Falls back to the bare [`TALK_NO_RESPONSE_MESSAGE`] when no
 /// description is available, which is what a scene built without assets
 /// gets.
+/// `conversation.md §2`'s guard gate: "if the NPC's live sprite is the guard
+/// sprite, the NPC answers `The guard offers no response!` [...] This line is
+/// **one stored literal**; it is not composed from the NPC's Look description,
+/// and nothing else prints it."
+pub const TALK_GUARD_NO_RESPONSE_LINE: &str = "The guard offers no response!";
+
+/// The guard sprite the gate tests. `npc-schedules.md §9.2` names the same
+/// byte for the arrest route: "linked live sprite byte exactly `0x70`".
+pub const TALK_GUARD_SPRITE: u8 = 0x70;
+
+/// `conversation.md §2` step 5's non-speaker refusal.
+///
+/// The guard sprite gets the stored guard literal; every other non-speaker
+/// gets the bare `No response!`. The engine used to build the guard line by
+/// splicing the NPC's Look description into a suffix, on the strength of the
+/// single `The guard offers no response!` capture behind `cleak/u5-spec#198`.
+/// The answer published for that issue withdraws that reading: the line is
+/// stored whole and is reachable only through the sprite gate, so the composed
+/// form would have invented a sentence for every other description it met.
+/// The leading feed is the blank row the original leaves between the
+/// `Talk-<dir>` echo and the refusal, the same one
+/// [`crate::LOOK_RESULT_PREFIX`] carries for Look. Measured 2026-09-11
+/// (`town-talk-nonspeaker/talk`), where the original reads `?Talk-North`, a
+/// blank row, then the refusal, and this engine ran the two together.
+pub fn talk_non_speaker_refusal_for_sprite(sprite: Option<u8>) -> String {
+    let line = if sprite == Some(TALK_GUARD_SPRITE) {
+        TALK_GUARD_NO_RESPONSE_LINE
+    } else {
+        TALK_NO_RESPONSE_MESSAGE
+    };
+    format!("\n{line}")
+}
+
 pub fn talk_non_speaker_refusal(description: Option<&str>) -> String {
     let Some(description) = description.map(str::trim).filter(|text| !text.is_empty()) else {
         return TALK_NO_RESPONSE_MESSAGE.to_string();

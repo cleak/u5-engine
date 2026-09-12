@@ -3985,11 +3985,14 @@ impl PlayState {
             npc_dialog_id_kind(dialog_id),
             NpcDialogIdKind::NoDialogue | NpcDialogIdKind::HighSpecial
         ) {
-            // `conversation.md §2` step 5's non-speaker line is composed
-            // from the NPC's own Look description - measured as
-            // `The guard offers no response!` (`cleak/u5-spec#198`).
-            self.message = crate::talk_non_speaker_refusal(
-                self.talk_target_description(target_x, target_y).as_deref(),
+            // `conversation.md §2`'s guard gate: the guard sprite answers
+            // the stored `The guard offers no response!` literal and every
+            // other non-speaker answers the bare `No response!`. The line "is
+            // not composed from the NPC's Look description", which is what
+            // this engine used to do off a single guard capture.
+            self.message = crate::talk_non_speaker_refusal_for_sprite(
+                self.npc_at_current_floor(target_x, target_y)
+                    .map(|npc| npc.type_byte),
             );
             return self.consume_ordinary_town_talk();
         }
@@ -4163,11 +4166,14 @@ impl PlayState {
             npc_dialog_id_kind(dialog_id),
             NpcDialogIdKind::NoDialogue | NpcDialogIdKind::HighSpecial
         ) {
-            // `conversation.md §2` step 5's non-speaker line is composed
-            // from the NPC's own Look description - measured as
-            // `The guard offers no response!` (`cleak/u5-spec#198`).
-            self.message = crate::talk_non_speaker_refusal(
-                self.talk_target_description(target_x, target_y).as_deref(),
+            // `conversation.md §2`'s guard gate: the guard sprite answers
+            // the stored `The guard offers no response!` literal and every
+            // other non-speaker answers the bare `No response!`. The line "is
+            // not composed from the NPC's Look description", which is what
+            // this engine used to do off a single guard capture.
+            self.message = crate::talk_non_speaker_refusal_for_sprite(
+                self.npc_at_current_floor(target_x, target_y)
+                    .map(|npc| npc.type_byte),
             );
             return self.consume_ordinary_town_talk();
         }
