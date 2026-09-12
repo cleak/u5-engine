@@ -266,6 +266,23 @@ impl TlkRenderedText {
         self.glyphs.extend_from_slice(&rendered.glyphs);
     }
 
+    /// The resumed ASK-WHO run with the stream's leading quote removed.
+    ///
+    /// `conversation.md §7`: the bytes around `0x88` "carr[y] only the closing
+    /// and opening quotes". The first of the pair closes the question the
+    /// engine itself asked, whose literal already ends in one, so the resumed
+    /// run opens with a duplicate. Only that one character is dropped -
+    /// everything after it, the feeds and the next response's own opening
+    /// quote included, is real output.
+    pub fn trimmed_ask_who_quote_pair(&self) -> Self {
+        let rest = usize::from(self.glyphs.first().is_some_and(|glyph| glyph.byte == b'"'));
+        let glyphs = self.glyphs[rest..].to_vec();
+        Self {
+            text: glyphs.iter().map(|glyph| glyph.byte as char).collect(),
+            glyphs,
+        }
+    }
+
     pub fn trimmed(&self) -> Self {
         let first = self
             .glyphs

@@ -639,6 +639,24 @@ pub const TLK_CODE_ASK_WHO: u8 = 0x88;
 pub const TLK_ASK_WHO_PROMPT: &str = "\"What is thy name?\"\n\nYou respond-\n:";
 /// The row of [`TLK_ASK_WHO_PROMPT`] that stays open for input.
 pub const TLK_ASK_WHO_PROMPT_OPEN_LINE: &str = ":";
+
+/// `conversation.md §7`'s `0x88` row: "on empty input or no match, print the
+/// dismissive one" - the acknowledgement ASK-WHO speaks after the typed line.
+///
+/// **Measured, not published** (`cleak/u5-spec#266`). The section names the two
+/// acknowledgements without giving either literal, and since "the stream
+/// around it carries only the closing and opening quotes" there is nothing in
+/// the blob for them to come from, so this engine printed the stream's quote
+/// and then nothing at all.
+///
+/// Measured 2026-09-12 (`qa/paired/dwelling-talk-after-entry.tsv`, beat
+/// `name`): the giant rat answers a non-member's name with `"If you say` /
+/// `so...` - the opening quote the stream supplies, then this text, wrapping
+/// after `say`, with no closing quote.
+///
+/// The affirmative acknowledgement is still unmeasured: reaching it needs a
+/// party member's own name typed at the prompt.
+pub const TLK_ASK_WHO_DISMISSIVE_LINE: &str = "If you say so...";
 pub const TLK_CODE_IF_ELSE: u8 = 0x8C;
 /// `conversation.md §7.6`: the reserved `0x8C` argument. Every other
 /// argument value names a branch target label; this one, on the set arm,

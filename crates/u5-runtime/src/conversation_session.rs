@@ -343,6 +343,26 @@ impl ConversationSession {
                 if slot != 0 {
                     out.branch_flags_set |= self.npc_slot.map_or(0, talk_branch_flag_mask);
                 }
+                // `conversation.md §7`'s `0x88` row: the code prints an
+                // acknowledgement of its own after the typed line - the
+                // affirmative one on a match, "on empty input or no match ...
+                // the dismissive one". Neither is published and neither is in
+                // the stream, so the resumed run carries only the quote pair
+                // and this engine printed nothing.
+                //
+                // Measured (`qa/paired/dwelling-talk-after-entry.tsv`, beat
+                // `name`): the row reads `"If you say so...`, opening on a
+                // fresh row under the answer. The affirmative line is not
+                // measured yet, so a matched name keeps the resumed output
+                // alone rather than borrowing the dismissive wording
+                // (`cleak/u5-spec#266`).
+                if slot == 0 {
+                    let mut rendered =
+                        TlkRenderedText::plain(&format!("\n\"{TLK_ASK_WHO_DISMISSIVE_LINE}"));
+                    rendered.push_rendered(&out.rendered_text().trimmed_ask_who_quote_pair());
+                    out.text = rendered.text;
+                    out.rendered_glyphs = rendered.glyphs;
+                }
                 out.asked_who = Some(slot);
                 return out;
             }
