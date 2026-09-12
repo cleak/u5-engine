@@ -1951,10 +1951,17 @@ impl PlayState {
         let Some(note) = self.stonegate_entry_presentation_message() else {
             return;
         };
-        if !self.message.is_empty() {
-            self.message.push_str("\n\n");
-        }
-        self.message.push_str(&note);
+        // This has to go through the transcript, not the bare message slot.
+        // The gameplay window renders from `message_entries()`, so a line
+        // written straight into `self.message` during scene load never
+        // reached the window at all - which is why the `Stonegate entry:`
+        // summary this replaced was never visible in a capture despite
+        // having tests over it.
+        let composed = match self.message.is_empty() {
+            true => note,
+            false => format!("{}\n\n{note}", self.message),
+        };
+        self.emit_message_line(composed);
     }
 
     pub fn current_shadowlord_hideout_id(&self) -> Option<u8> {
