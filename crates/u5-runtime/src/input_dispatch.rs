@@ -3165,6 +3165,11 @@ const BLUE_BOAR_CHOICE_PROMPT: &str = "Thy choice?\"";
 /// window's text and cursor, and print[s] `"Anything else\nfor thee?" `" - one
 /// explicit line feed inside it and a trailing space, which is what leaves the
 /// cursor on the answer's row.
+/// `shops.md §8.C`, "Provision offer": the resident quantity question that
+/// follows the drawn quote record, carrying the offer's closing quote and the
+/// trailing space the typed number echoes into.
+const TAVERN_PROVISION_QUANTITY_PROMPT: &str = "\n\nHow many wouldst\nthou like?\" ";
+
 const TAVERN_ANYTHING_ELSE_PROMPT: &str = "\"Anything else\nfor thee?\" ";
 
 /// `shops.md §8.C`: "Tavern and sage honorifics address Avatar: `sir` for
@@ -3523,6 +3528,12 @@ fn format_tavern_outcome_with_shoppe(
             )
             .ok()
             .map(|rendered| format!("\"{rendered}\" ")),
+        // `shops.md §8.C`, "Provision offer": "Opening quote, one uniform
+        // record from `77..83`, then `\n\nHow many wouldst\nthou like?" `;
+        // typed number allows two digits." The engine rendered the quote
+        // record bare - no opening quote, and no resident quantity prompt at
+        // all, so the branch asked for a number without showing a question.
+        // Measured 2026-09-11 (`paws-tavern/rations`).
         PickProvisionQuantity { tavern, unit_price } => {
             provision_quote_record_id.and_then(|record_id| {
                 renderer
@@ -3535,6 +3546,7 @@ fn format_tavern_outcome_with_shoppe(
                         },
                     )
                     .ok()
+                    .map(|quote| format!("\"{quote}{TAVERN_PROVISION_QUANTITY_PROMPT}"))
             })
         }
         // `shops.md §8.5`: the charitable outcome "adds `1` to the food

@@ -5674,7 +5674,12 @@ fn end_to_end_tavern_renders_state_menu_quote_and_follow_up_records() {
     // the same shape as the follow-up record asserted below.
     assert_eq!(state.message, "\"Asset tavern menu.\" ");
     handle_play_key_input(&mut state, 'R', "", &dir).unwrap();
-    assert_eq!(state.message, "Asset pack costs 16 gold.");
+    // `shops.md §8.C`, "Provision offer": "Opening quote, one uniform record
+    // from `77..83`, then `\n\nHow many wouldst\nthou like?" `".
+    assert_eq!(
+        state.message,
+        "\"Asset pack costs 16 gold.\n\nHow many wouldst\nthou like?\" "
+    );
     assert_eq!(state.prng_state, expected_prng_state);
     handle_play_key_input(&mut state, '1', "", &dir).unwrap();
     assert_eq!(state.food, 25);
