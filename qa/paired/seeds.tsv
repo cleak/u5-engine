@@ -116,3 +116,4 @@ word-of-power-audio	seed-word-of-power-audio	copied from the paired-word-of-powe
 zstats-pages	seed-zstats-pages	copied from the paired-zstats-pages run profile
 codex-enter	codex-seed	seeded onto Britannia (233,233) at 09:15 with --write-seed
 shop-arms-seeded	seed-arms-counter	the shop-arms-after-entry walk, replayed once and saved beside the keeper
+cast-blink	seed-cast-results	shares the cast-results caster: charges, reagents and mana on the overworld

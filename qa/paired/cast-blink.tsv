@@ -1,0 +1,38 @@
+# Blink (`In Por`) reaching the scene gate, and the C-Cast prompt chain.
+#
+# `catalogs/spell-list.md` publishes Blink's allow-mask as `C/O`, so the
+# indoor seed this shares with `cast-results` refuses it. Both sides print
+# `Not here!` on the row under the submitted spell name, which is
+# `magic.md` Section 7's scene-gate result, and the `?North` echo after it
+# shows the refusal cost no direction prompt.
+#
+# This is deliberately the refusal rather than the success: no seed in the
+# suite stands on the overworld with mixed charges, so the *successful* Blink
+# line - which `magic.md` Section 8 describes as "a short narration message"
+# without giving it, and which this engine no longer invents pending
+# `cleak/u5-spec#262` - is still unmeasured. Reaching it needs an overworld
+# caster seed built with `qa/tools/reseed.py`.
+#
+# requires-seed: a caster with charges, reagents, mana and potions, built with
+# the `seed_inventory` example (`potions=3 spells=9 reagents=20 mana=99`)
+both	wait	9000
+both	key	space
+both	wait	4000
+both	key	j
+both	wait	7000
+both	shot	seeded	Journey Onward on the seeded cell
+both	key	c
+both	wait	1500
+both	key	Return
+both	wait	1200
+both	key	i
+both	wait	900
+both	key	p
+both	wait	1500
+both	shot	typed	The Blink spell code typed
+both	key	Return
+both	wait	2000
+both	shot	submitted	The spell name submitted
+both	key	Up
+both	wait	3000
+both	shot	blinked	After Blink north
