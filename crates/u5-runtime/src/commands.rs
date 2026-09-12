@@ -1220,6 +1220,14 @@ pub const YELL_QUESTION: &str = "what?";
 /// `shops.md §8.C`'s inn result table, "Sleep / morning": `Zzzzzz....\n\n` -
 /// four dots - "followed at morning by `Morning!\n`". `rest-and-camp.md §4`
 /// distinguishes this six-z/four-dot form from the town bed's seven-z form.
+/// `doors-and-z-transitions.md §6`: the cannon's hit narration. "Firing a
+/// ship's cannon at a door (or wall) prints `BOOOM!` with the cannon's hit
+/// narration; on a hit at a door cell, the engine rewrites the cell to the
+/// open-door tile (or rubble) and prints `Door destroyed!`."
+pub const CANNON_BOOOM_LINE: &str = "BOOOM!";
+/// See [`CANNON_BOOOM_LINE`]: the extra line a door hit adds.
+pub const CANNON_DOOR_DESTROYED_LINE: &str = "Door destroyed!";
+
 pub const PAID_INN_REST_SLEEP_LINE: &str = "Zzzzzz....";
 /// See [`PAID_INN_REST_SLEEP_LINE`]: the morning line that follows it.
 pub const PAID_INN_REST_MORNING_LINE: &str = "Morning!";

@@ -2500,15 +2500,17 @@ impl PlayState {
                 self.mark_visibility_dirty();
                 let moral_delta = self.decrease_moral_standing(TOWN_CANNON_HIT_KARMA_DEBIT);
                 self.advance_turn_without_door_tick();
-                self.message = format!(
-                    "BOOOM! Town fire source at ({}, {}) fired {} and hit object tile {} at ({}, {}); target removed and moral standing decreased by {moral_delta}.",
+                self.diagnostics.push(format!(
+                    "town cannon at ({}, {}) fired {} and hit object tile {} at ({}, {}); \
+                     target removed, moral standing -{moral_delta}",
                     source.x,
                     source.y,
                     source.direction.name(),
                     object.tile,
                     object.x,
                     object.y
-                );
+                ));
+                self.message = crate::commands::CANNON_BOOOM_LINE.to_string();
             }
             TownFireTarget::Door { x, y, tile } => {
                 self.grid[y * 32 + x] = TOWN_DOOR_CLEARED_TILE;
@@ -2518,32 +2520,37 @@ impl PlayState {
                 self.door_tracker_closed = false;
                 self.mark_visibility_dirty();
                 self.advance_turn_without_door_tick();
-                self.message = format!(
-                    "BOOOM! Door destroyed! Town fire source at ({}, {}) fired {} and destroyed door tile {} at ({x}, {y}).",
+                self.diagnostics.push(format!(
+                    "town cannon at ({}, {}) fired {} and destroyed door tile {tile} at ({x}, {y})",
                     source.x,
                     source.y,
                     source.direction.name(),
-                    tile
+                ));
+                self.message = format!(
+                    "{} {}",
+                    crate::commands::CANNON_BOOOM_LINE,
+                    crate::commands::CANNON_DOOR_DESTROYED_LINE
                 );
             }
             TownFireTarget::Wall { x, y, tile } => {
                 self.advance_turn_without_door_tick();
-                self.message = format!(
-                    "BOOOM! Town fire source at ({}, {}) fired {} and hit blocking tile {} at ({x}, {y}).",
+                self.diagnostics.push(format!(
+                    "town cannon at ({}, {}) fired {} and hit blocking tile {tile} at ({x}, {y})",
                     source.x,
                     source.y,
                     source.direction.name(),
-                    tile
-                );
+                ));
+                self.message = crate::commands::CANNON_BOOOM_LINE.to_string();
             }
             TownFireTarget::None => {
                 self.advance_turn_without_door_tick();
-                self.message = format!(
-                    "BOOOM! Town fire source at ({}, {}) fired {} with no target in range.",
+                self.diagnostics.push(format!(
+                    "town cannon at ({}, {}) fired {} with no target in range",
                     source.x,
                     source.y,
                     source.direction.name()
-                );
+                ));
+                self.message = crate::commands::CANNON_BOOOM_LINE.to_string();
             }
         }
         Ok(MoveOutcome::Fired)

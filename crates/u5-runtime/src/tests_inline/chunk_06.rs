@@ -23,7 +23,7 @@
         assert_eq!(state.door_tracker, None);
         assert!(state.is_recorded_open_town_door(Scene::new(17).unwrap(), 0, 3, 1));
         assert_eq!(state.turn, 1);
-        assert!(state.message.contains("destroyed door tile 184"));
+        assert!(state.diagnostics.iter().any(|note| note.contains("destroyed door tile 184")));
         let _ = fs::remove_dir_all(dir);
     }
 
@@ -67,7 +67,7 @@
             })
         );
         assert_eq!(state.turn, 1);
-        assert!(state.message.contains("object tile 192"));
+        assert!(state.diagnostics.iter().any(|note| note.contains("object tile 192")));
         let _ = fs::remove_dir_all(dir);
     }
 
@@ -100,7 +100,7 @@
         assert!(state.is_recorded_open_town_door(scene, 0, 3, 1));
         assert!(state.is_recorded_open_town_door(scene, 0, 5, 1));
         assert_eq!(state.turn, 1);
-        assert!(state.message.contains("destroyed door tile 184"));
+        assert!(state.diagnostics.iter().any(|note| note.contains("destroyed door tile 184")));
         let _ = fs::remove_dir_all(dir);
     }
 
@@ -134,8 +134,8 @@
         assert!(state.object_at_current_floor(2, 1).is_none());
         assert_eq!(state.moral_standing, 0);
         assert_eq!(state.turn, 1);
-        assert!(state.message.contains("object tile 192"));
-        assert!(state.message.contains("moral standing decreased by 3"));
+        assert!(state.diagnostics.iter().any(|note| note.contains("object tile 192")));
+        assert!(state.diagnostics.iter().any(|note| note.contains("moral standing -3")));
         assert!(!state.message.contains("out of scope"));
         let _ = fs::remove_dir_all(dir);
     }

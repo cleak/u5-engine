@@ -2390,8 +2390,8 @@ fn town_fire_uses_adjacent_static_cannon_without_sidecar() {
     assert_eq!(state.grid[32 + 3], TOWN_DOOR_CLEARED_TILE);
     assert_eq!(state.turn, 1);
     assert!(state.message.contains("BOOOM! Door destroyed!"));
-    assert!(state.message.contains("fired East"));
-    assert!(state.message.contains("destroyed door tile 184"));
+    assert!(state.diagnostics.iter().any(|note| note.contains("fired East")));
+    assert!(state.diagnostics.iter().any(|note| note.contains("destroyed door tile 184")));
     let _ = fs::remove_dir_all(dir);
 }
 
@@ -2413,7 +2413,7 @@ fn town_fire_sidecar_source_takes_priority_over_adjacent_static_cannon() {
 
     assert_eq!(state.grid[3], TOWN_DOOR_CLEARED_TILE);
     assert_eq!(state.grid[32 + 3], TOWN_DOOR_WINDOWED_UNLOCKED_TILE);
-    assert!(state.message.contains("fired East"));
+    assert!(state.diagnostics.iter().any(|note| note.contains("fired East")));
     let _ = fs::remove_dir_all(dir);
 }
 
@@ -2443,7 +2443,7 @@ fn town_fire_source_destroys_first_door_in_clean_trace() {
     assert_eq!(state.turn, 1);
     assert!(state.visibility_dirty);
     assert!(state.message.contains("BOOOM!"));
-    assert!(state.message.contains("destroyed door tile 184"));
+    assert!(state.diagnostics.iter().any(|note| note.contains("destroyed door tile 184")));
     let _ = fs::remove_dir_all(dir);
 }
 
@@ -2471,7 +2471,7 @@ fn town_fire_source_bypasses_magic_lock_sidecar_for_door_target() {
     assert!(state.is_recorded_open_town_door(scene, 0, 3, 1));
     assert_eq!(state.keys, DEFAULT_KEY_STOCK);
     assert_eq!(state.turn, 1);
-    assert!(state.message.contains("destroyed door tile 151"));
+    assert!(state.diagnostics.iter().any(|note| note.contains("destroyed door tile 151")));
     assert!(!state.message.contains("Magic lock"));
     let _ = fs::remove_dir_all(dir);
 }
