@@ -1,3 +1,8 @@
+# **Still open on this scenario:** after the empty-handed refusal the original
+# reprints the arena banner and this engine does not, because the refusal
+# leaves the picker session open. The rows themselves now agree; the scenario
+# is a vertical offset from that one missing reprint.
+#
 # **The arena's blank row after a cast refusal, fixed 2026-09-12.**
 # `combat.md` Section 8.1 has the turn handler emit its own line feed between
 # the banner and the command read, so the blank row the original shows between

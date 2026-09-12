@@ -4568,6 +4568,14 @@ fn handle_combat_multistage_command(
 
     match branch {
         CombatCommandBranch::Ready => {
+            // `commands.md §5.2` gives R the echo `Ready...`, and the arena
+            // uses the ordinary verb echoes - combat U right below this emits
+            // its own the same way. This branch emitted none, so the arena's
+            // Ready went straight to its result with no echo row at all.
+            // Measured 2026-09-12 (`qa/paired/combat-ready-armour.tsv`, beat
+            // `ready-open`): the original shows ` Ready...` above
+            // `Thou art empty-handed!`.
+            state.begin_command_echo_for(Command::Ready);
             state.start_combat_ready_equipment(actor_slot);
             state.pending_combat_actor_slot = Some(actor_slot);
             true

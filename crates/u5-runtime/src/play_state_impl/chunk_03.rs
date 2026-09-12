@@ -3247,7 +3247,20 @@ impl PlayState {
             self.message.clear();
             return MoveOutcome::Blocked;
         }
-        self.start_ready_equipment_for_party(actor_slot)
+        let outcome = self.start_ready_equipment_for_party(actor_slot);
+        // `commands.md §5.2`: "`Use item`, `Ready...` and `Mix Reagents` end
+        // in **two** newlines, leaving one blank row before their prompt." On
+        // the surface the picker frame follows and the blank is invisible; in
+        // the arena an empty pack answers immediately, so the row shows.
+        // Measured 2026-09-12 (`qa/paired/combat-ready-armour.tsv`, beat
+        // `ready-open`): the original has a blank row between ` Ready...` and
+        // `Thou art empty-handed!`.
+        if self.message == READY_EMPTY_HANDED_REFUSAL {
+            let refusal = std::mem::take(&mut self.message);
+            self.push_explicit_blank_message_entry();
+            self.emit_message_line(refusal);
+        }
+        outcome
     }
 
     pub fn render_active_ready(&self) -> String {
