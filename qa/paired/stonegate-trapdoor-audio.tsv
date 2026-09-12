@@ -11,6 +11,16 @@
 # stands in the middle, so one step in any direction lands on it. Each side is
 # driven separately, and each recording is preceded by a silence control.
 # requires-seed: the party inside Stonegate, standing in the trapdoor ring's centre cell
+#
+# Known gap, `cleak/u5-spec#269`: the `dosbox-fallen` beat reads `diverged`.
+# `town-mode.md` line 148's scripted death kills the party, and the capability
+# check then reaches `blackthorn.md` §7's rescue/refuge cinematic on both
+# sides. §7 and §7.1 name that cinematic's narrative beats by role only - the
+# unending-darkness beat, three refuge fragments, the thunder line, the
+# disorientation beat - and never say which file or record ordinals hold them,
+# so this engine runs the whole cinematic and prints only the `KARMA.DAT`
+# verdict record §7 step 5 does identify. The audio measurement this scenario
+# exists for is unaffected.
 both	wait	9000
 both	key	space
 both	wait	4000
