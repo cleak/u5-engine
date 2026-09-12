@@ -1584,6 +1584,7 @@ fn handle_active_shop_key_input(
             )
         }
         ActiveShopSession::Sage(s) => {
+            let mut sage_confirm_accepted = false;
             let outcome = match *s {
                 SageState::Prompt { .. } => {
                     let line = active_shop_text_line(key, suffix);
@@ -1608,6 +1609,7 @@ fn handle_active_shop_key_input(
                     step_sage(s, SageInput::Keyword(&line), &mut state.gold)
                 }
                 SageState::Confirm { quote, .. } if yes && state.gold >= quote.entry.fee => {
+                    sage_confirm_accepted = true;
                     let record_id = usize::from(state.random_range_u8(
                         SAGE_RUMOUR_SUCCESS_RECORD_FIRST as u8,
                         SAGE_RUMOUR_SUCCESS_RECORD_LAST as u8,
@@ -1621,14 +1623,17 @@ fn handle_active_shop_key_input(
                         &mut state.gold,
                     )
                 }
-                SageState::Confirm { .. } if yes => step_sage(
-                    s,
-                    SageInput::Confirm {
-                        accepted: true,
-                        record_id: SAGE_RUMOUR_SUCCESS_RECORD_FIRST,
-                    },
-                    &mut state.gold,
-                ),
+                SageState::Confirm { .. } if yes => {
+                    sage_confirm_accepted = true;
+                    step_sage(
+                        s,
+                        SageInput::Confirm {
+                            accepted: true,
+                            record_id: SAGE_RUMOUR_SUCCESS_RECORD_FIRST,
+                        },
+                        &mut state.gold,
+                    )
+                }
                 SageState::Confirm { .. } if no || key_byte == b' ' => step_sage(
                     s,
                     SageInput::Confirm {
@@ -1641,6 +1646,20 @@ fn handle_active_shop_key_input(
                 SageState::Exited => SageOutcome::Exited,
             };
             let paid = matches!(outcome, SageOutcome::RumourFound { .. });
+            // `shops.md §8.A`'s shared Y/N prompt primitive: the accepted
+            // answer echoes onto the row the question's own trailing space
+            // left open, and the two feeds that follow it are the blank row
+            // beneath. The sage's fee confirmation ends `Fair 'nuff?" `, so
+            // the `Yes` belongs on that row - the same placement the tavern's
+            // continuation and menu letter already use.
+            //
+            // Measured 2026-09-11 (`paws-sage/rumour`): the original reads
+            // `Fair 'nuff?" Yes` then a blank row; this engine printed no
+            // echo at all and ran two rows short from there.
+            if sage_confirm_accepted {
+                state.emit_message_line_continuing_row("Yes");
+                state.push_explicit_blank_message_entry();
+            }
             let mut message = format_sage_outcome_with_shoppe(outcome, game_dir);
             if paid {
                 // Measured 2026-09-08 at The Cat's Lair
