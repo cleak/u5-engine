@@ -6225,7 +6225,7 @@ fn end_to_end_shipwright_frigate_queues_published_dock_delivery() {
     use crate::shop_session::ActiveShopSession;
 
     let mut state = test_state(open_grid(), 3, 4);
-    state.gold = 700;
+    state.gold = 770;
     state.active_shop = Some(ActiveShopSession::ShipBroker(
         ShipBrokerState::for_shipwright(Shipwright::TheRustyBucket),
     ));
@@ -6250,7 +6250,9 @@ fn end_to_end_shipwright_frigate_queues_published_dock_delivery() {
     });
 
     handle_play_key_input(&mut state, 'F', "", Path::new("")).unwrap();
-    assert!(state.message.contains("700 gold"));
+    // `shops.md §6.1`: the base row is adjusted by the speaker's
+    // Intelligence before it is quoted.
+    assert!(state.message.contains("770 gold") || state.message.contains("770"));
     handle_play_key_input(&mut state, 'Y', "", Path::new("")).unwrap();
 
     assert_eq!(state.gold, 0);

@@ -1814,12 +1814,13 @@ pub fn step_ship_broker(
     input: ShipBrokerInput,
     gold: &mut u16,
     pending_vehicle: &mut Option<PendingVehicleAcquisition>,
+    speaker_intelligence: u8,
 ) -> ShipBrokerOutcome {
     match (*state, input) {
         (ShipBrokerState::Greeting { shipwright }, ShipBrokerInput::Key(b)) => {
             match shipwright_menu_action(b) {
                 ShipwrightMenuAction::Purchase(kind) => {
-                    let quote = quote_shipwright_purchase(shipwright, kind);
+                    let quote = quote_shipwright_purchase(shipwright, kind, speaker_intelligence);
                     let (delivery_x, delivery_y) = shipwright_delivery_coordinate(shipwright);
                     *state = ShipBrokerState::ConfirmPurchase {
                         quote,
@@ -1857,6 +1858,7 @@ pub fn step_ship_broker(
                 quote.kind,
                 delivery_x,
                 delivery_y,
+                speaker_intelligence,
             );
             *state = ShipBrokerState::Greeting { shipwright };
             match outcome {
@@ -3689,13 +3691,15 @@ mod tests {
     #[test]
     fn ship_broker_f_key_quotes_then_queues_frigate_delivery() {
         let mut state = ShipBrokerState::for_shipwright(Shipwright::TheRustyBucket);
-        let mut gold = 700u16;
+        let mut gold = 770u16;
         let mut pending = None;
         let quote = step_ship_broker(
             &mut state,
             ShipBrokerInput::Key(b'F'),
             &mut gold,
             &mut pending,
+            // The measured shipwright speaker's Intelligence (`§6.1`).
+            30,
         );
         assert!(matches!(
             quote,
@@ -3703,7 +3707,7 @@ mod tests {
                 quote: ShipwrightPurchaseQuote {
                     shipwright: Shipwright::TheRustyBucket,
                     kind: crate::shops::ShipwrightPurchaseKind::Frigate,
-                    price: 700,
+                    price: 770,
                 }
             }
         ));
@@ -3713,6 +3717,8 @@ mod tests {
             ShipBrokerInput::Confirm(true),
             &mut gold,
             &mut pending,
+            // The measured shipwright speaker's Intelligence (`§6.1`).
+            30,
         );
         assert!(matches!(
             outcome,
@@ -3748,12 +3754,16 @@ mod tests {
             ShipBrokerInput::Key(b'S'),
             &mut gold,
             &mut pending,
+            // The measured shipwright speaker's Intelligence (`§6.1`).
+            30,
         );
         let outcome = step_ship_broker(
             &mut state,
             ShipBrokerInput::Confirm(true),
             &mut gold,
             &mut pending,
+            // The measured shipwright speaker's Intelligence (`§6.1`).
+            30,
         );
         assert!(matches!(
             outcome,
@@ -3764,7 +3774,7 @@ mod tests {
                 }
             }
         ));
-        assert_eq!(gold, 75);
+        assert_eq!(gold, 63);
         assert_eq!(
             pending,
             Some(PendingVehicleAcquisition::Frigate {

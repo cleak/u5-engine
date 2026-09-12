@@ -1816,6 +1816,9 @@ fn handle_active_shop_key_input(
             append_active_shop_surcharge(message, surcharge)
         }
         ActiveShopSession::ShipBroker(s) => {
+            // Read before the mutable borrows below; `shops.md §6.1` adjusts
+            // the shipwright's base rows by the speaker's Intelligence.
+            let speaker_intelligence = active_speaker_intelligence(state);
             // The pending delivery is scratch for the step function; the
             // durable copy is `pending_vehicle_save`, which
             // `sync_pending_vehicle_purchase_state` writes below and which the
@@ -1841,18 +1844,21 @@ fn handle_active_shop_key_input(
                     ShipBrokerInput::Key(key_byte),
                     &mut state.gold,
                     &mut pending,
+                    speaker_intelligence,
                 ),
                 (ShipBrokerState::ConfirmPurchase { .. }, true, _) => step_ship_broker(
                     s,
                     ShipBrokerInput::Confirm(true),
                     &mut state.gold,
                     &mut pending,
+                    speaker_intelligence,
                 ),
                 (ShipBrokerState::ConfirmPurchase { .. }, _, true) => step_ship_broker(
                     s,
                     ShipBrokerInput::Confirm(false),
                     &mut state.gold,
                     &mut pending,
+                    speaker_intelligence,
                 ),
                 _ => ShipBrokerOutcome::InvalidInput,
             };
@@ -1897,8 +1903,29 @@ fn handle_active_shop_key_input(
                         .ok()
                 })
                 .filter(|text| !text.trim().is_empty());
+            // `§8.C`'s shipwright result table, "Ordinary offer": "Record
+            // `117` for Frigate or `118` for Skiff, then record `126`". The
+            // engine used to print its own `A frigate costs 700 gold.`
+            // sentence here, on the grounds that the record ids were
+            // unpublished; they are published now. Measured 2026-09-12
+            // (`bd-shipwright/frigate`), where the original renders the
+            // vessel's own body and its price differs from the engine's.
+            let offer_record = match &outcome {
+                ShipBrokerOutcome::QuotedPurchase { quote } => {
+                    let body = match quote.kind {
+                        crate::shops::ShipwrightPurchaseKind::Frigate => {
+                            crate::shops::SHOPPE_RECORD_SHIPWRIGHT_FRIGATE_OFFER
+                        }
+                        crate::shops::ShipwrightPurchaseKind::Skiff => {
+                            crate::shops::SHOPPE_RECORD_SHIPWRIGHT_SKIFF_OFFER
+                        }
+                    };
+                    render_shipwright_offer(game_dir, body, vendor_name, quote.price, state)
+                }
+                _ => None,
+            };
             append_active_shop_surcharge(
-                format_ship_broker_outcome(outcome, vendor_name, menu_record),
+                format_ship_broker_outcome(outcome, vendor_name, menu_record, offer_record),
                 surcharge,
             )
         }
@@ -3850,19 +3877,43 @@ const SHIPWRIGHT_STOCK_QUESTION: &str = "Which would ye like to see?\"";
 /// browser's `Deal?"`.
 const SHIPWRIGHT_CONFIRM_PROMPT: &str = "Wilt thou take it?\"";
 
+/// `shops.md §8.C`: the shipwright's ordinary offer is the vessel body record
+/// followed by the shared confirmation record `126`, which "owns the
+/// confirmation's text and spacing".
+fn render_shipwright_offer(
+    game_dir: &Path,
+    body_record: usize,
+    vendor_name: Option<&'static str>,
+    price: u16,
+    state: &PlayState,
+) -> Option<String> {
+    let renderer = crate::shoppe_bark::ShoppeTextRenderer::load_from_game_dir(game_dir).ok()?;
+    let context = crate::shoppe_bark::ShoppeBarkContext {
+        vendor_name: vendor_name.unwrap_or_default(),
+        hour: state.clock.hour,
+        gold: price,
+        ..Default::default()
+    };
+    let body = renderer.render_record(body_record, &context).ok()?;
+    let confirm = renderer
+        .render_record(crate::shops::SHOPPE_RECORD_SHIPWRIGHT_CONFIRM, &context)
+        .ok()?;
+    (!body.trim().is_empty()).then(|| format!("{body}{confirm}"))
+}
+
 fn format_ship_broker_outcome(
     outcome: crate::shop_runtime::ShipBrokerOutcome,
     vendor_name: Option<&'static str>,
     menu_record: Option<String>,
+    offer_record: Option<String>,
 ) -> String {
     use crate::shop_runtime::ShipBrokerOutcome::*;
     match outcome {
         EnteredMenu { .. } => menu_record
             .unwrap_or_else(|| format!("{SHIPWRIGHT_STOCK_LINE}\n\n{SHIPWRIGHT_STOCK_QUESTION}")),
-        QuotedPurchase { quote } => {
-            // The quote body is a `SHOPPE.DAT` record with the price
-            // substituted; until its record id is published this keeps the
-            // engine's own sentence and appends the measured prompt.
+        QuotedPurchase { quote } => offer_record.unwrap_or_else(|| {
+            // Fallback for a run without the asset: the engine's own
+            // sentence, kept only so a headless harness still has text.
             let item = match quote.kind {
                 crate::shops::ShipwrightPurchaseKind::Frigate => "frigate",
                 crate::shops::ShipwrightPurchaseKind::Skiff => "skiff",
@@ -3871,7 +3922,7 @@ fn format_ship_broker_outcome(
                 "A {item} costs {} gold.\n\n{SHIPWRIGHT_CONFIRM_PROMPT}",
                 quote.price
             )
-        }
+        }),
         PurchaseApplied { outcome } => match outcome.status {
             crate::shops::ShipwrightPurchaseStatus::QueuedFrigate => {
                 format!(

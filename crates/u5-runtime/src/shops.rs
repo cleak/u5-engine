@@ -356,6 +356,15 @@ pub const SHOPPE_RECORDS_SHIP_BROKER_LAST: usize = 126;
 /// added resident menu question; the record carries its own leading spacing
 /// and prompt."
 pub const SHOPPE_RECORD_SHIPWRIGHT_MENU: usize = 119;
+/// `shops.md §8.C`'s shipwright result table, "Ordinary offer": "Record `117`
+/// for Frigate or `118` for Skiff, then record `126`; confirmation Y/N only."
+/// `§8.7` adds that "The asset owns the confirmation's text and spacing."
+pub const SHOPPE_RECORD_SHIPWRIGHT_FRIGATE_OFFER: usize = 117;
+/// See [`SHOPPE_RECORD_SHIPWRIGHT_FRIGATE_OFFER`].
+pub const SHOPPE_RECORD_SHIPWRIGHT_SKIFF_OFFER: usize = 118;
+/// See [`SHOPPE_RECORD_SHIPWRIGHT_FRIGATE_OFFER`]: the shared confirmation
+/// that follows either offer body.
+pub const SHOPPE_RECORD_SHIPWRIGHT_CONFIRM: usize = 126;
 
 pub const SHOPPE_RECORDS_REAGENT_FIRST: usize = SHOPPE_RECORDS_SHIP_BROKER_LAST + 1;
 pub const SHOPPE_RECORDS_REAGENT_LAST: usize = 146;
@@ -2934,14 +2943,27 @@ pub const fn shipwright_delivery_coordinate(shipwright: Shipwright) -> (usize, u
     }
 }
 
+/// `shops.md §6.1`: the shipwright's rows "list base headline values **before
+/// any stat-sensitive quote adjustment** and before the random
+/// post-transaction surcharge", and §3 gives that adjustment as
+/// `adjusted(base, Intelligence) = base + trunc(base * (100 - 3 * Intelligence)
+/// / 100)`.
+///
+/// Measured 2026-09-12 (`bd-shipwright/frigate`): the original quotes 770 gold
+/// where this engine quoted the 700 base, which is the adjustment at the
+/// speaker's Intelligence of thirty.
 pub const fn quote_shipwright_purchase(
     shipwright: Shipwright,
     kind: ShipwrightPurchaseKind,
+    speaker_intelligence: u8,
 ) -> ShipwrightPurchaseQuote {
     ShipwrightPurchaseQuote {
         shipwright,
         kind,
-        price: shipwright_price(shipwright, kind),
+        price: shop_intelligence_adjusted_price(
+            shipwright_price(shipwright, kind),
+            speaker_intelligence,
+        ),
     }
 }
 
@@ -2952,8 +2974,10 @@ pub fn apply_shipwright_purchase(
     kind: ShipwrightPurchaseKind,
     delivery_x: usize,
     delivery_y: usize,
+    speaker_intelligence: u8,
 ) -> Result<ShipwrightPurchaseOutcome, ShipwrightPurchaseError> {
-    let quote = quote_shipwright_purchase(shipwright, kind);
+    // The debit must match the adjusted price the offer quoted.
+    let quote = quote_shipwright_purchase(shipwright, kind, speaker_intelligence);
     let pending_before = *pending_vehicle;
 
     let (status, pending_after) = match (kind, pending_before) {
@@ -3161,6 +3185,7 @@ impl PlayState {
         kind: ShipwrightPurchaseKind,
         delivery_x: usize,
         delivery_y: usize,
+        speaker_intelligence: u8,
     ) -> Result<ShipwrightPurchaseOutcome, ShipwrightPurchaseError> {
         let outcome = {
             let Some(return_world) = self.return_world.as_mut() else {
@@ -3173,6 +3198,7 @@ impl PlayState {
                 kind,
                 delivery_x,
                 delivery_y,
+                speaker_intelligence,
             )?
         };
         self.sync_pending_vehicle_purchase_state(outcome);

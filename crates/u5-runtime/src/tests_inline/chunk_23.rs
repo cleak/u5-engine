@@ -1024,11 +1024,12 @@ fn shipwright_purchase_queues_delivery_or_adds_skiff_cargo() {
         ShipwrightPurchaseKind::Frigate,
         12,
         21,
+        30,
     )
     .unwrap();
 
     assert_eq!(frigate.status, ShipwrightPurchaseStatus::QueuedFrigate);
-    assert_eq!(gold, 200);
+    assert_eq!(gold, 140);
     assert_eq!(
         pending,
         Some(PendingVehicleAcquisition::Frigate {
@@ -1045,6 +1046,7 @@ fn shipwright_purchase_queues_delivery_or_adds_skiff_cargo() {
         ShipwrightPurchaseKind::Skiff,
         99,
         99,
+        30,
     )
     .unwrap();
 
@@ -1052,7 +1054,7 @@ fn shipwright_purchase_queues_delivery_or_adds_skiff_cargo() {
         skiff.status,
         ShipwrightPurchaseStatus::AddedSkiffToPendingFrigate
     );
-    assert_eq!(gold, 100);
+    assert_eq!(gold, 30);
     assert_eq!(
         pending,
         Some(PendingVehicleAcquisition::Frigate {
@@ -1079,6 +1081,7 @@ fn queued_frigate_skiff_purchase_increments_the_whole_packed_class_byte() {
         ShipwrightPurchaseKind::Skiff,
         99,
         99,
+        30,
     )
     .unwrap();
 
@@ -1101,6 +1104,7 @@ fn queued_frigate_skiff_purchase_increments_the_whole_packed_class_byte() {
         ShipwrightPurchaseKind::Skiff,
         99,
         99,
+        30,
     )
     .unwrap();
     assert_eq!(pending, None);
@@ -1122,6 +1126,7 @@ fn shipwright_purchase_refusals_preserve_gold_and_pending_delivery() {
         ShipwrightPurchaseKind::Skiff,
         3,
         4,
+        30,
     )
     .unwrap();
 
@@ -1147,10 +1152,11 @@ fn shipwright_purchase_refusals_preserve_gold_and_pending_delivery() {
             ShipwrightPurchaseKind::Frigate,
             3,
             4,
+            30,
         ),
         Err(ShipwrightPurchaseError::InsufficientGold {
             available: 99,
-            required: 600,
+            required: 660,
         })
     );
     assert_eq!(gold, 99);
@@ -1167,7 +1173,7 @@ fn shipwright_purchase_refusals_preserve_gold_and_pending_delivery() {
 #[test]
 fn play_state_shipwright_purchase_restores_pending_delivery_to_world() {
     let mut state = test_state(open_grid(), 3, 4);
-    state.gold = 700;
+    state.gold = 770;
     state.return_world = Some(WorldReturn {
         plane: WorldPlane::Britannia,
         x: 10,
@@ -1194,6 +1200,7 @@ fn play_state_shipwright_purchase_restores_pending_delivery_to_world() {
             ShipwrightPurchaseKind::Frigate,
             12,
             21,
+            30,
         )
         .unwrap();
 
