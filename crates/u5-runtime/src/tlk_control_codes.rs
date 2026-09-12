@@ -130,6 +130,20 @@ pub const TALK_GUARD_SPRITE: u8 = 0x70;
 /// [`crate::LOOK_RESULT_PREFIX`] carries for Look. Measured 2026-09-11
 /// (`town-talk-nonspeaker/talk`), where the original reads `?Talk-North`, a
 /// blank row, then the refusal, and this engine ran the two together.
+/// `conversation.md §2` step 5, corrected 2026-09-12 for issue #262
+/// (`RETRACTIONS.md` R479): a guard-sprite NPC answers the two-row refusal
+/// "unless *both* its current waypoint index is **odd** *and* its dialog index
+/// is non-zero, in which case it dispatches normally".
+///
+/// "The test is on the **parity** of the current waypoint index, not equality
+/// with one: an even index always gives the guard refusal and an odd index with
+/// a non-zero dialogue index always dispatches. The two readings agree at the
+/// waypoint indices `0`, `1` and `2` that ordinary schedules use, and diverge
+/// at any higher index."
+pub const fn talk_guard_sprite_dispatches(reached_waypoint: usize, dialog_id: u8) -> bool {
+    reached_waypoint % 2 == 1 && dialog_id != 0
+}
+
 pub fn talk_non_speaker_refusal_for_sprite(sprite: Option<u8>) -> String {
     let line = if sprite == Some(TALK_GUARD_SPRITE) {
         TALK_GUARD_NO_RESPONSE_LINE

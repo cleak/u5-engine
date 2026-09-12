@@ -4019,6 +4019,31 @@ impl PlayState {
                 Err(_) => MoveOutcome::Blocked,
             };
         }
+        // `conversation.md §2` step 5, corrected 2026-09-12 for issue #262
+        // (`RETRACTIONS.md` R479): "if the NPC's live sprite is the guard
+        // sprite, the NPC answers `The guard offers` on one row and
+        // `no response!` on the next, unless *both* its current waypoint index
+        // is **odd** *and* its dialog index is non-zero, in which case it
+        // dispatches normally." The test is the parity of the reached waypoint
+        // index, not equality with waypoint one; the two agree at the indices
+        // `0..2` shipped schedules use and diverge above them.
+        //
+        // The approach-and-converse waypoint behaviour is checked first: that
+        // arm stands the guard down and dispatches on the dialog index instead.
+        if let Some(npc) = self.npc_at_current_floor(target_x, target_y)
+            && npc.type_byte == crate::tlk_control_codes::TALK_GUARD_SPRITE
+            && npc_ai_behavior(
+                npc.schedule
+                    .get(NPC_SCHEDULE_AI_OFFSET + npc.cached_wp)
+                    .copied()
+                    .unwrap_or_default(),
+            ) != Some(NpcAiBehavior::ApproachAndAttack)
+            && !crate::talk_guard_sprite_dispatches(npc.cached_wp, dialog_id as u8)
+        {
+            self.message =
+                crate::talk_non_speaker_refusal_for_sprite(Some(crate::tlk_control_codes::TALK_GUARD_SPRITE));
+            return self.consume_ordinary_town_talk();
+        }
         if matches!(
             npc_dialog_id_kind(dialog_id),
             NpcDialogIdKind::NoDialogue | NpcDialogIdKind::HighSpecial

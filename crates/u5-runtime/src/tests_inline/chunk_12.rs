@@ -1519,6 +1519,33 @@ fn endgame_elapsed_report_skips_every_zero_component() {
 }
 
 #[test]
+/// `conversation.md §2` step 5, corrected 2026-09-12 for issue #262
+/// (`RETRACTIONS.md` R479): the guard escape is a **parity** test on the
+/// reached waypoint index, not equality with waypoint one. "The two readings
+/// agree at the waypoint indices `0`, `1` and `2` that ordinary schedules use,
+/// and diverge at any higher index."
+fn the_guard_escape_tests_waypoint_parity_not_waypoint_one() {
+    // The three indices shipped schedules use, where the two readings agree.
+    assert!(!talk_guard_sprite_dispatches(0, 7));
+    assert!(talk_guard_sprite_dispatches(1, 7));
+    assert!(!talk_guard_sprite_dispatches(2, 7));
+
+    // Above them they diverge: every odd index dispatches, not just one.
+    assert!(talk_guard_sprite_dispatches(3, 7));
+    assert!(!talk_guard_sprite_dispatches(4, 7));
+    assert!(talk_guard_sprite_dispatches(5, 7));
+
+    // "unless *both* ... *and* its dialog index is non-zero" - a zero index
+    // is refused at every waypoint, odd ones included.
+    for waypoint in 0..6 {
+        assert!(
+            !talk_guard_sprite_dispatches(waypoint, 0),
+            "waypoint {waypoint} with a zero dialogue index must refuse"
+        );
+    }
+}
+
+#[test]
 fn talk_at_a_non_speaker_prints_the_no_response_line() {
     // `conversation.md §2` step 5: dialog index 0 means "no dialogue at
     // all (the NPC is a non-speaker - a guard, a child too young to talk
