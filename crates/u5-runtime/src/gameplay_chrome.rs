@@ -430,6 +430,25 @@ pub fn ribbon_cap_sprite(font: &FixedCellFont, direction: RibbonCapDirection) ->
     RibbonCapSprite { white, ribbon }
 }
 
+/// One glyph row of a bracket end-cap's chrome-filled body.
+///
+/// `display-driver.md §7`: the cap's "filled body" is the chrome pen and its
+/// "outline stroke" the accent, so the body is the source triangle minus the
+/// two strokes. Derived from [`ribbon_cap_strokes`] rather than from the font,
+/// because a caller that reaches the cap by *emitting its source glyph as
+/// text* - `stats-panel.md §8`'s timed-effect slot - has already resolved the
+/// triangle itself and needs only to know which of its pixels are body.
+pub fn ribbon_cap_body_row(direction: RibbonCapDirection, glyph_row: usize) -> u8 {
+    if glyph_row >= CH_CELL_SIDE {
+        return 0;
+    }
+    let mut strokes = [0u8; CH_CELL_SIDE];
+    for (start, end) in ribbon_cap_strokes(direction) {
+        stroke_cell_line(&mut strokes, start, end);
+    }
+    !strokes[glyph_row]
+}
+
 /// Rasterise one straight line into an 8x8 cell mask.
 fn stroke_cell_line(mask: &mut [u8; CH_CELL_SIDE], start: (i32, i32), end: (i32, i32)) {
     let (mut x, mut y) = start;

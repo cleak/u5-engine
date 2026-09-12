@@ -404,9 +404,27 @@ pub fn render_text_window_rgba_with_runes(
                 if cell.inverse {
                     row_bits = !row_bits;
                 }
+                // `display-driver.md §7` "The two chrome pens": a bracket
+                // end-cap is two-tone wherever it appears - "the filled body
+                // of every bracket end-cap" takes the chrome slot, "every
+                // end-cap outline stroke" the accent. `stats-panel.md §8`'s
+                // timed-effect slot reaches this rasteriser by *emitting the
+                // cap's source glyph as an ordinary character*, so without
+                // this split the solid triangle would come out entirely in the
+                // text pen.
+                //
+                // Measured 2026-09-12 (`qa/paired/hut-use-items.tsv`, beat
+                // `first`): the original's cap cell is eighteen chrome pixels
+                // and twelve accent; this engine's was thirty accent.
+                let cap_body = cap_body_mask(cell.byte & 0x7f, glyph_y);
                 for glyph_x in 0..CH_CELL_SIDE {
-                    let color = if row_bits & (1 << (7 - glyph_x)) != 0 {
-                        foreground
+                    let bit = 1 << (7 - glyph_x);
+                    let color = if row_bits & bit != 0 {
+                        if cap_body & bit != 0 {
+                            EGA_PALETTE_RGB[usize::from(crate::CHROME_RIBBON_INDEX)]
+                        } else {
+                            foreground
+                        }
                     } else {
                         background
                     };
@@ -696,4 +714,24 @@ impl ProportionalFont {
         code.checked_sub(self.first_code)
             .and_then(|slot| self.glyphs.get(slot as usize))
     }
+}
+
+/// The chrome-filled body of a bracket end-cap emitted as an ordinary
+/// character, one glyph row at a time.
+///
+/// `display-driver.md §7` splits the cap between the two chrome pens: the
+/// filled body takes the chrome slot and the outline stroke the accent. Any
+/// other glyph returns an empty mask and is painted in the caller's own
+/// foreground unchanged.
+fn cap_body_mask(code: u8, glyph_row: usize) -> u8 {
+    let direction = match code {
+        crate::gameplay_chrome::RIBBON_CAP_RIGHT_SOURCE_GLYPH => {
+            crate::gameplay_chrome::RibbonCapDirection::Right
+        }
+        crate::gameplay_chrome::RIBBON_CAP_LEFT_SOURCE_GLYPH => {
+            crate::gameplay_chrome::RibbonCapDirection::Left
+        }
+        _ => return 0,
+    };
+    crate::gameplay_chrome::ribbon_cap_body_row(direction, glyph_row)
 }
