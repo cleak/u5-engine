@@ -1958,13 +1958,7 @@ fn handle_active_shop_key_input(
                 })
                 .flatten();
             append_active_shop_surcharge(
-                format_ship_broker_outcome(
-                    outcome,
-                    vendor_name,
-                    menu_record,
-                    offer_record,
-                    decline_record,
-                ),
+                format_ship_broker_outcome(outcome, menu_record, offer_record, decline_record),
                 surcharge,
             )
         }
@@ -3942,7 +3936,6 @@ fn render_shipwright_offer(
 
 fn format_ship_broker_outcome(
     outcome: crate::shop_runtime::ShipBrokerOutcome,
-    vendor_name: Option<&'static str>,
     menu_record: Option<String>,
     offer_record: Option<String>,
     decline_record: Option<String>,
@@ -3993,10 +3986,12 @@ fn format_ship_broker_outcome(
         // Measured 2026-09-12 (`bd-shipwright/no`): the original drew
         // `"Thou wouldst probably get seasick, anyway."` over `says Jones.`
         // where this engine always says `"Hmph! Landlubber!"`.
-        Declined => decline_record.unwrap_or_else(|| match vendor_name {
-            Some(name) => format!("\"Hmph! Landlubber!\"\nsays {name}."),
-            None => "\"Hmph! Landlubber!\"".to_string(),
-        }),
+        // With no `SHOPPE.DAT` to draw from there is no record to render, and
+        // the original has no line of its own here - the bark *is* the record.
+        // The hard-coded stand-in was the last invented player line in the
+        // crate (`qa/tools/engine_message_audit.py`), so the no-assets path
+        // stays silent rather than speaking for the shipwright.
+        Declined => decline_record.unwrap_or_default(),
         // `shops.md §8.A`: "There is no universal `Farewell.` or `As you
         // wish.` line." A shop that closes on a bark renders it through the
         // shared envelope; this arm is the silent outcome, which "omits this
