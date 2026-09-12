@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Run the paired scenario suite and report which scenarios compared.
+"""Run the paired scenario suite and report how each scenario compared.
 
 `game-dev-u5-paired` runs **one** scenario and needs `--seed-save` for any
 scenario carrying a `# requires-seed:` header. Which profile holds that seed
@@ -10,6 +10,14 @@ in-town save's Talk refusals before I noticed.
 
 This resolves the seed from `qa/paired/seeds.tsv`, runs the scenarios named on
 the command line (or every scenario), and prints one line each.
+
+**The status word is the comparison, not the run.** An earlier version printed
+`ok` as soon as the run completed, and `ok` reads as "the two sides agree" - it
+does not mean that, and on 2026-09-12 a whole session of reports called
+scenarios clean on the strength of it. Each artifact is now handed to
+`paired_compare.py` and its classification is what gets printed: `match` when
+every beat agrees, `DIFFER` with the count when they do not, `RERUN` when the
+run measured nothing, and `FAIL` when the run itself did not produce frames.
 
 `seeds.tsv` is tab separated:
 
@@ -49,6 +57,29 @@ def seeds() -> dict[str, tuple[str, str]]:
 
 def needs_seed(path: pathlib.Path) -> bool:
     return "# requires-seed" in path.read_text()
+
+
+def compare(artifact: str) -> tuple[str, str]:
+    """Classify one artifact with `paired_compare.py`.
+
+    Returns the leading word of its summary line - `match`, `DIFFER` or
+    `RERUN` - and the counts that follow it. A comparison that cannot run at
+    all is reported rather than swallowed, because a silent pass here is the
+    exact failure this wrapper exists to prevent.
+    """
+    tool = pathlib.Path(__file__).resolve().parent / "paired_compare.py"
+    if not artifact:
+        return "RERUN", "no artifact directory"
+    result = subprocess.run(
+        [sys.executable, str(tool), artifact],
+        capture_output=True,
+        text=True,
+    )
+    for line in reversed(result.stdout.splitlines()):
+        for word in ("match", "DIFFER", "RERUN"):
+            if line.startswith(word):
+                return word, line.split(":", 1)[-1].strip()
+    return "RERUN", (result.stderr.strip().splitlines() or ["no summary line"])[-1]
 
 
 def main() -> None:
@@ -139,15 +170,21 @@ def main() -> None:
             pathlib.Path(artifact).glob("engine-*.png")
         )
         launched = result.returncode == 0 and (captured or not wanted_shots)
-        status = "ok  " if launched else "FAIL"
         if not launched:
             failures += 1
             if result.returncode == 0:
                 artifact = f"{artifact}\t(no engine capture; is the visual build current?)"
-        print(f"{status} {name}\t{artifact}", flush=True)
+            print(f"FAIL {name}\t{artifact}", flush=True)
+            continue
+        verdict, detail = compare(artifact)
+        if verdict != "match":
+            failures += 1
+        print(f"{verdict:<6} {name}\t{artifact}\t{detail}", flush=True)
     for name, why in blocked:
         print(f"skip {name}\t{why}", flush=True)
-    print(f"\n{len(runnable)} run, {failures} failed, {len(blocked)} blocked")
+    print(
+        f"\n{len(runnable)} run, {failures} not matching, {len(blocked)} blocked"
+    )
     sys.exit(1 if failures else 0)
 
 
