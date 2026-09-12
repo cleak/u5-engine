@@ -306,13 +306,27 @@ fn blackthorn_fourth_wrong_answer_executes_the_named_companion() {
     // `blackthorn.md §5`: "After the execution and roster removal, print
     // `\n\n`, the actual removed member's name, and ` is sliced in half! `.
     // After acknowledgement, record `6` supplies the quoted
-    // unfairness/treachery speech" - so this branch holds twice.
+    // unfairness/treachery speech" - three held pages, not two. Measured
+    // (`qa/paired/bt-escalate.tsv`, beat `ask5`): the original's beat ends on
+    // the pendulum narration's `falls!`, with the sliced line still to come.
     assert!(
         state
             .active_blackthorn
             .as_ref()
             .is_some_and(|challenge| challenge.closing_epilogue_pending())
     );
+    assert!(
+        state.message.contains("pendulum blade falls!"),
+        "{}",
+        state.message
+    );
+    assert!(
+        !state.message.contains(" is sliced in half! "),
+        "the sliced line is the next page: {}",
+        state.message
+    );
+
+    state.submit_blackthorn_audience_answer("", &dir).unwrap();
     assert!(
         state.message.contains(" is sliced in half! "),
         "{}",

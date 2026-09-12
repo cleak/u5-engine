@@ -4606,6 +4606,12 @@ impl PlayState {
                     .unwrap_or_else(|| "no companion remains to punish".to_string());
                 self.push_diagnostic(format!("On acknowledgement: {report}."));
             }
+            // §5: "After the execution and roster removal, print `\n\n`, the
+            // actual removed member's name, and ` is sliced in half! `." That
+            // is its own held page; record `6` follows the next key.
+            if let Some(page) = self.pending_blackthorn_closing_page.take() {
+                return self.hold_blackthorn_closing_page(challenge, page, false, true);
+            }
             if challenge.closing_epilogue_pending() {
                 // `blackthorn.md §5`: "After acknowledgement, record `6`
                 // supplies the quoted unfairness/treachery speech, including
@@ -4919,12 +4925,13 @@ impl PlayState {
                         // to the end of that helper, not to this page - which
                         // `bt-escalate`'s `ask5` beat shows, the stock game
                         // ending on `falls!` with no blank row under it.
-                        self.hold_blackthorn_closing_page(
-                            challenge,
-                            format!("{line}\n\n{victim_name} is sliced in half! "),
-                            false,
-                            true,
-                        )
+                        // §5 holds three pages here, not two: this narration,
+                        // then the removed member's line, then record `6`.
+                        // Measured (`qa/paired/bt-escalate.tsv`, beat `ask5`):
+                        // the original's beat ends on `falls!`.
+                        self.pending_blackthorn_closing_page =
+                            Some(format!("\n\n{victim_name} is sliced in half! "));
+                        self.hold_blackthorn_closing_page(challenge, line, false, true)
                     }
                 }
             }

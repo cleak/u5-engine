@@ -277,6 +277,15 @@ pub struct PlayState {
     /// The fourth-wrong-answer execution's victim, owed once the pendulum
     /// narration is acknowledged. Same deferral, same reason.
     pub(crate) pending_blackthorn_execution_victim: Option<usize>,
+    /// A closing page the Blackthorn interrogation still owes, printed on the
+    /// next acknowledgement.
+    ///
+    /// `blackthorn.md §5` gives the fourth-wrong-answer branch three held
+    /// pages, not two: the pendulum narration, then the removed member's
+    /// `is sliced in half!` line, then record `6`'s treachery speech. Measured
+    /// (`qa/paired/bt-escalate.tsv`, beat `ask5`): the original ends that beat
+    /// on `falls!`, with the sliced line still to come.
+    pub(crate) pending_blackthorn_closing_page: Option<String>,
     pub active_effect_counter: u8,
     pub fortunes_of_war: u8,
     /// `rest-and-camp.md §5` camp cooldown counter. Armed at
