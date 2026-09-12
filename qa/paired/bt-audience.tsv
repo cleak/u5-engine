@@ -11,6 +11,17 @@
 # Measured 2026-09-09: a seed taken at the `ask` beat reloads to CASTLE:1 on
 # foot with no interrogation pending.
 # requires-seed: the party on the Blackthorn palace tile at 12:00
+#
+# This scenario is flaky, and a run has to be checked before it is believed.
+# The audience triggers on walking up the approach, and the walk is scripted
+# with fixed waits, so a run whose timing drifts arrives with the trigger
+# unmet and simply walks past. Such a run shows `?North` movement echoes in
+# the message window instead of the interrogation, and every beat then
+# compares unrelated windows. Measured 2026-09-11: two runs minutes apart, one
+# with the audience and one without.
+#
+# Check the first beat for `Your response?` before reading any result from
+# this scenario. A run without it is not evidence about the engine.
 both	wait	9000
 both	key	space
 both	wait	4000
