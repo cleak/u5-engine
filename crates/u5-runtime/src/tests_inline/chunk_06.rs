@@ -1436,7 +1436,12 @@
         assert_eq!(state.active_objects[1].aux1, 0x85);
         assert_eq!(state.grid[32 + 2], 0x4e);
         assert_eq!(state.turn, 1);
-        assert!(state.message.is_empty(), "message: {}", state.message);
+        // `commands.md §5.8`: the container branch reports the assessed trap
+        // state under the shared preamble.
+        assert_eq!(
+            state.message,
+            format!("{SEARCH_PREAMBLE}{SEARCH_TRAP_NONE_LINE}")
+        );
         assert!(
             state
                 .diagnostics
@@ -1498,7 +1503,7 @@
         assert_eq!(state.turn, 1);
         assert_eq!(state.clock, GameClock::new(12, 2).unwrap());
         assert!(state.visibility_dirty);
-        assert_eq!(state.message, "Found a strange rock for Moonstone phase 4.");
+        assert_eq!(state.message, format!("{SEARCH_PREAMBLE}{SEARCH_STRANGE_ROCK_LINE}"));
         assert_eq!(state.active_objects.len(), 2);
         assert_eq!(
             state.active_objects[1],
@@ -1511,10 +1516,10 @@
         );
         assert_eq!(state.active_objects.len(), 2);
         assert_eq!(state.turn, 1);
-        assert_eq!(
-            state.message,
-            "Moonstone phase 4 is already surfaced as a strange rock."
-        );
+        // `commands.md §5.8`: "searching the same cell again before
+        // collecting prints `nothing_of_note.`, because the duplicate guard
+        // sees the staged object and creates no second one."
+        assert_eq!(state.message, SEARCH_NOTHING_FOUND);
 
         assert_eq!(
             state.get_facing_with_game_dir(&dir).unwrap(),
@@ -1569,7 +1574,7 @@
             MoveOutcome::Searched
         );
 
-        assert!(state.message.contains("sprigs of Mandrake Root"));
+        assert!(state.diagnostics.iter().any(|n| n.contains("sprigs of Mandrake Root")));
         assert_eq!(state.rare_reagent_harvest_days[0], 5);
         let _ = fs::remove_dir_all(dir);
     }
@@ -1600,7 +1605,11 @@
         assert_eq!(state.rare_reagent_harvest_days[0], 5);
         assert_eq!(state.prng_state, expected_prng);
         assert!(state.message.contains(&format!("{expected_amount} sprigs")));
-        assert!(state.message.contains("sprigs of Mandrake Root"));
+        assert!(state.diagnostics.iter().any(|n| n.contains("sprigs of Mandrake Root")));
+        assert_eq!(
+            state.message,
+            format!("{SEARCH_PREAMBLE}{expected_amount}{SEARCH_REAGENT_SPRIGS_FRAGMENT}{SEARCH_REAGENT_MANDRAKE_LINE}")
+        );
 
         assert_eq!(
             state.search_facing_with_game_dir(&dir).unwrap(),
@@ -1636,7 +1645,8 @@
 
         assert!((2..=15).contains(&state.reagents[REAGENT_NIGHTSHADE]));
         assert_eq!(state.rare_reagent_harvest_days[2], 5);
-        assert!(state.message.contains("sprigs of Nightshade"));
+        assert!(state.diagnostics.iter().any(|n| n.contains("sprigs of Nightshade")));
+        assert!(state.message.ends_with(SEARCH_REAGENT_NIGHTSHADE_LINE));
         let _ = fs::remove_dir_all(dir);
     }
 
@@ -2061,7 +2071,7 @@
             state.active_objects[1],
             ActiveObject::moonstone_pickup(0, 2, 1, 0)
         );
-        assert_eq!(state.message, "Found a strange rock for Moonstone phase 1.");
+        assert_eq!(state.message, format!("{SEARCH_PREAMBLE}{SEARCH_STRANGE_ROCK_LINE}"));
 
         assert_eq!(
             state.get_facing_with_game_dir(&dir).unwrap(),

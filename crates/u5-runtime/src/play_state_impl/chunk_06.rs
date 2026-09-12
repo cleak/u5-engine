@@ -1582,13 +1582,21 @@ impl PlayState {
         let visibility = search_trap_visibility(trappable, difficulty, detection_bit);
 
         self.advance_turn();
-        // Unpublished (`cleak/u5-spec#262`).
         self.diagnostics.push(format!(
             "searched active-object tile {} at ({x}, {y}); {}",
             object.tile,
             surface_search_trap_visibility_label(visibility)
         ));
-        self.message.clear();
+        // `commands.md §5.8`: "Container object at the cell | `[blank]` then
+        // `Thou dost find` then one of `no trap!`, `a simple trap!`,
+        // `a complex trap!`, `a trap!`". `RETRACTIONS.md` R477 adds that this
+        // branch "contains no inventory grant at all", and that the assessed
+        // state "is wrong in both directions when the Intelligence roll
+        // fails" - the roll above is that assessment, not the truth.
+        self.message = format!(
+            "{SEARCH_PREAMBLE}{}",
+            surface_search_trap_visibility_line(visibility)
+        );
         Some(MoveOutcome::Searched)
     }
 
@@ -2343,10 +2351,14 @@ impl PlayState {
         };
 
         if self.moonstone_pickup_exists(slot_index) {
-            self.message = format!(
+            // `commands.md §5.8`: "searching the same cell again before
+            // collecting prints `nothing_of_note.\n`, because the duplicate
+            // guard sees the staged object and creates no second one."
+            self.diagnostics.push(format!(
                 "Moonstone phase {} is already surfaced as a strange rock.",
                 slot_index + 1
-            );
+            ));
+            self.message = SEARCH_NOTHING_FOUND.to_string();
             return Some(MoveOutcome::Blocked);
         }
 
@@ -2363,10 +2375,14 @@ impl PlayState {
 
         self.mark_visibility_dirty();
         self.advance_turn();
-        self.message = format!(
+        // `commands.md §5.8`: "Buried Moonstone | `[blank]` then
+        // `Thou dost find` then `a strange rock!`, staging the stone on the
+        // cell". "Search alone grants nothing - it only stages the rock".
+        self.diagnostics.push(format!(
             "Found a strange rock for Moonstone phase {}.",
             slot_index + 1
-        );
+        ));
+        self.message = format!("{SEARCH_PREAMBLE}{SEARCH_STRANGE_ROCK_LINE}");
         Some(MoveOutcome::Searched)
     }
 
@@ -2392,7 +2408,13 @@ impl PlayState {
             .min(99);
         self.rare_reagent_harvest_days[point.index] = self.clock.day;
         self.advance_turn();
-        self.message = format!("Found {amount} sprigs of {}.", point.label);
+        // `commands.md §5.8`: "Rare reagent at the harvest hour | `[blank]`
+        // then `Thou dost find` then the rolled count, then `_sprigs_of` then
+        // `mandrake root!` or `nightshade!`".
+        self.diagnostics
+            .push(format!("Found {amount} sprigs of {}.", point.label));
+        self.message =
+            format!("{SEARCH_PREAMBLE}{amount}{SEARCH_REAGENT_SPRIGS_FRAGMENT}{}", point.line);
         Some(MoveOutcome::Searched)
     }
 
@@ -3259,13 +3281,29 @@ fn surface_search_trap_visibility_label(visibility: SearchTrapVisibility) -> &'s
     }
 }
 
+/// `commands.md §5.8`: the four published rows the container-object branch
+/// prints under the shared preamble. Distinct from the diagnostic label above,
+/// which names the same assessment for the engine's own record.
+fn surface_search_trap_visibility_line(visibility: SearchTrapVisibility) -> &'static str {
+    match visibility {
+        SearchTrapVisibility::NoTrap => SEARCH_TRAP_NONE_LINE,
+        SearchTrapVisibility::SimpleTrap => SEARCH_TRAP_SIMPLE_LINE,
+        SearchTrapVisibility::ComplexTrap => SEARCH_TRAP_COMPLEX_LINE,
+        SearchTrapVisibility::GenericTrap => SEARCH_TRAP_GENERIC_LINE,
+    }
+}
+
 #[derive(Clone, Copy)]
 pub struct RareReagentHarvestPoint {
     pub index: usize,
     pub x: usize,
     pub y: usize,
     pub reagent_index: usize,
+    /// The engine-side name used in `diagnostics`.
     pub label: &'static str,
+    /// `commands.md §5.8`: the published row this harvest prints after the
+    /// count and the `_sprigs_of` fragment.
+    pub line: &'static str,
 }
 
 pub const RARE_REAGENT_HARVEST_POINTS: [RareReagentHarvestPoint; RARE_REAGENT_HARVEST_POINT_COUNT] = [
@@ -3275,6 +3313,7 @@ pub const RARE_REAGENT_HARVEST_POINTS: [RareReagentHarvestPoint; RARE_REAGENT_HA
         y: 54,
         reagent_index: REAGENT_MANDRAKE,
         label: "Mandrake Root",
+        line: SEARCH_REAGENT_MANDRAKE_LINE,
     },
     RareReagentHarvestPoint {
         index: 1,
@@ -3282,6 +3321,7 @@ pub const RARE_REAGENT_HARVEST_POINTS: [RareReagentHarvestPoint; RARE_REAGENT_HA
         y: 165,
         reagent_index: REAGENT_MANDRAKE,
         label: "Mandrake Root",
+        line: SEARCH_REAGENT_MANDRAKE_LINE,
     },
     RareReagentHarvestPoint {
         index: 2,
@@ -3289,6 +3329,7 @@ pub const RARE_REAGENT_HARVEST_POINTS: [RareReagentHarvestPoint; RARE_REAGENT_HA
         y: 137,
         reagent_index: REAGENT_NIGHTSHADE,
         label: "Nightshade",
+        line: SEARCH_REAGENT_NIGHTSHADE_LINE,
     },
 ];
 

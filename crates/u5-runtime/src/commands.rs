@@ -1279,6 +1279,27 @@ pub const ENTER_NOTHING_REFUSAL: &str = "what?";
 /// `cleak/u5-spec#194` capture (town) and `dungeon-mode.md` (dungeon):
 /// the Search result when nothing is found.
 pub const SEARCH_NOTHING_FOUND: &str = "\nThou dost find\nnothing of note.";
+/// `commands.md §5.8` "Successful Get, Search and eat results": Search "has
+/// five successful shapes, all built on the same preamble
+/// `\nThou_dost_find\n`". A furniture or fixture cell replaces the preamble
+/// with its own prefix; every other tile uses this one.
+pub const SEARCH_PREAMBLE: &str = "\nThou dost find\n";
+/// The container-object branch: "`\nThou_dost_find\n` then `no trap!` /
+/// `a simple trap!` / `a complex trap!` / `a trap!`".
+pub const SEARCH_TRAP_NONE_LINE: &str = "no trap!";
+pub const SEARCH_TRAP_SIMPLE_LINE: &str = "a simple trap!";
+pub const SEARCH_TRAP_COMPLEX_LINE: &str = "a complex trap!";
+pub const SEARCH_TRAP_GENERIC_LINE: &str = "a trap!";
+/// The buried-Moonstone branch, which "stag[es] the stone on the cell".
+/// `commands.md §5.8`: "searching the same cell again before collecting prints
+/// `nothing_of_note.\n`, because the duplicate guard sees the staged object and
+/// creates no second one."
+pub const SEARCH_STRANGE_ROCK_LINE: &str = "a strange rock!";
+/// The rare-reagent harvest: "the rolled count, then `_sprigs_of` then
+/// `mandrake root!` or `nightshade!`".
+pub const SEARCH_REAGENT_SPRIGS_FRAGMENT: &str = " sprigs of\n";
+pub const SEARCH_REAGENT_MANDRAKE_LINE: &str = "mandrake root!";
+pub const SEARCH_REAGENT_NIGHTSHADE_LINE: &str = "nightshade!";
 pub const ITEM_SELECTION_PROMPT: &str = "Item: ";
 /// The cancel result appended to an open selection prompt line.
 pub const SELECTION_CANCELLED_LITERAL: &str = "None!";
