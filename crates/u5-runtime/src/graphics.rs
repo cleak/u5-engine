@@ -416,7 +416,18 @@ pub fn render_text_window_rgba_with_runes(
                 // Measured 2026-09-12 (`qa/paired/hut-use-items.tsv`, beat
                 // `first`): the original's cap cell is eighteen chrome pixels
                 // and twelve accent; this engine's was thirty accent.
-                let cap_body = cap_body_mask(cell.byte & 0x7f, glyph_y);
+                // Only a cell drawn from the *text* font can be a bracket
+                // end-cap. `RUNES.CH` reuses the same low codes for its own
+                // glyphs - `inventory.md §4.5`'s readied-helm marker is runic
+                // `0x01`, which is also the left cap's source code - so
+                // keying on the byte alone repainted that marker as chrome
+                // and lost it against the panel (`qa/paired/ready-two-handed`,
+                // beats `row` and `result`).
+                let cap_body = if cell.runic {
+                    0
+                } else {
+                    cap_body_mask(cell.byte & 0x7f, glyph_y)
+                };
                 for glyph_x in 0..CH_CELL_SIDE {
                     let bit = 1 << (7 - glyph_x);
                     let color = if row_bits & bit != 0 {
