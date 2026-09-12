@@ -11,6 +11,20 @@
 # Talk command", so the first Pass beside the keeper opens the overlay and the
 # script drives it from there rather than issuing Talk.
 # requires-seed: profile `seed-bd-shipwright-reseeded`, built by qa/tools/reseed.py
+#
+# The greeting and the decline bark are both lottery draws, so a text
+# difference in those rows must be checked against the pools before it counts.
+# `shops.md` Section 8's entry table gives the shipwright greeting as one of
+# records 105..108, and Section 8.A's shared closing envelope takes "one of
+# four `SHOPPE.DAT` records from the current shop-kind" row - 109..112 here.
+# `prng.md` Section 3 seeds the two sides from the host clock, so they never
+# draw alike. Measured 2026-09-12: the original declined with `"Thou wouldst
+# probably get seasick, anyway."` and this engine with another member of the
+# same pool.
+#
+# What this scenario pins is the offer itself: records 117/118 for the vessel
+# body and 126 for the confirmation, and the Intelligence-adjusted price
+# Section 6.1 requires.
 both	wait	9000
 both	key	space
 both	wait	4000

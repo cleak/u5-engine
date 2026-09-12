@@ -1924,8 +1924,31 @@ fn handle_active_shop_key_input(
                 }
                 _ => None,
             };
+            // `§8.A`: the no-sale closing bark is one of the four records on
+            // the shipwright's own row, inside the quote/attribution envelope.
+            let decline_record = matches!(outcome, ShipBrokerOutcome::Declined)
+                .then(|| {
+                    let roll = state.random_range_u8(0, 3);
+                    crate::shoppe_records::shared_shop_bark_record(
+                        SHOP_DIALOG_ID_SHIPWRIGHT,
+                        crate::shoppe_records::SharedShopBarkKind::InitialGreeting,
+                        roll,
+                    )
+                    .and_then(|record_id| render_shared_shoppe_flourish(game_dir, record_id))
+                    .map(|line| match vendor_name {
+                        Some(name) => format!("{line}\nsays {name}."),
+                        None => line,
+                    })
+                })
+                .flatten();
             append_active_shop_surcharge(
-                format_ship_broker_outcome(outcome, vendor_name, menu_record, offer_record),
+                format_ship_broker_outcome(
+                    outcome,
+                    vendor_name,
+                    menu_record,
+                    offer_record,
+                    decline_record,
+                ),
                 surcharge,
             )
         }
@@ -3906,6 +3929,7 @@ fn format_ship_broker_outcome(
     vendor_name: Option<&'static str>,
     menu_record: Option<String>,
     offer_record: Option<String>,
+    decline_record: Option<String>,
 ) -> String {
     use crate::shop_runtime::ShipBrokerOutcome::*;
     match outcome {
@@ -3945,12 +3969,18 @@ fn format_ship_broker_outcome(
             }
         },
         RefusedShortFunds { required, .. } => format!("Thou lackest the {required} gold."),
-        // Measured: declining the hull ends the visit on the shipwright's own
-        // quoted jeer, attributed like every other shop bark.
-        Declined => match vendor_name {
+        // The jeer is a *draw*, not a fixed line: `shops.md §8.A`'s shared
+        // closing envelope takes "one of four `SHOPPE.DAT` records from the
+        // current shop-kind" row, which for the shipwright is `109..112`.
+        // The engine hard-coded one member of that pool.
+        //
+        // Measured 2026-09-12 (`bd-shipwright/no`): the original drew
+        // `"Thou wouldst probably get seasick, anyway."` over `says Jones.`
+        // where this engine always says `"Hmph! Landlubber!"`.
+        Declined => decline_record.unwrap_or_else(|| match vendor_name {
             Some(name) => format!("\"Hmph! Landlubber!\"\nsays {name}."),
             None => "\"Hmph! Landlubber!\"".to_string(),
-        },
+        }),
         // `shops.md §8.A`: "There is no universal `Farewell.` or `As you
         // wish.` line." A shop that closes on a bark renders it through the
         // shared envelope; this arm is the silent outcome, which "omits this
