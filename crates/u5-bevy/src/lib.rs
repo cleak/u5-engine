@@ -17364,6 +17364,17 @@ fn key_code_to_input_byte(key: KeyCode, shift_pressed: bool, control_pressed: bo
         Digit7 if numpad_flag => input_typed_digit_direction_code(7, numpad_flag)?,
         Digit8 if numpad_flag => input_typed_digit_direction_code(8, numpad_flag)?,
         Digit9 if numpad_flag => input_typed_digit_direction_code(9, numpad_flag)?,
+        // `input.md §4`'s modified top-row rule covers "digit `1` through `9`
+        // while Shift or NumLock is held" and maps them to "the numpad layout
+        // above", where `5` is the centre cell and has no direction. So a
+        // modified `5` is not an ordinary digit either - the keyboard sends
+        // the shifted character, and the dispatcher answers the unmapped
+        // `What?`.
+        //
+        // Measured 2026-09-11 (`stray-keys/stray`): the original answers `%`
+        // with `?What?`, and this engine read it as a bare `5`, opened
+        // `Set Active Plr:` and answered `Invalid!` for a three-member party.
+        Digit5 if numpad_flag => b'%',
         Digit0 | Numpad0 => b'0',
         Digit1 => b'1',
         Digit2 => b'2',
