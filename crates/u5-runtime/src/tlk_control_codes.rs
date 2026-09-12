@@ -731,6 +731,10 @@ pub const TLK_OPENING_DESCRIPTION_PREFIX: &str = "You see ";
 /// empty line prints this line and runs the NPC's `Bye` entry; it
 /// is the most common way conversations end.
 pub const TLK_EMPTY_INPUT_BYE_MESSAGE: &str = "BYE\n\n";
+/// The word of [`TLK_EMPTY_INPUT_BYE_MESSAGE`] that lands on the keyword
+/// prompt's own row, the way any typed keyword does. The two feeds that
+/// follow it close that row and open the blank one under it.
+pub const TLK_EMPTY_INPUT_BYE_ECHO: &str = "BYE";
 
 /// `conversation.md §7.6`: exact fixed output for an unaffordable
 /// `0x85` demand. Quotes and both trailing line feeds are visible.

@@ -4999,14 +4999,41 @@ impl PlayState {
         // original keeps it there. Commit it before the response is
         // emitted, so the transcript reads `:JOB` and then the answer.
         let open_prompt = self.open_prompt_line();
+        // `conversation.md §6` empty-input shortcut: pressing Enter on an
+        // empty line "prints this line and runs the NPC's `Bye` entry". The
+        // line is `BYE\n\n`, and its lack of a leading feed puts the word on
+        // the prompt's own row - measured
+        // (`qa/paired/dwelling-talk-after-entry.tsv`, beat `bye`): the
+        // original reads `:BYE`, where this engine left the `:` row empty and
+        // opened a fresh row for the word.
+        let empty_line = line.trim().is_empty();
         if let Some(prompt) = open_prompt.as_deref() {
             // §6's capture shows the keyword echoed in capitals.
-            self.commit_typed_prompt_line(prompt, &line.trim().to_ascii_uppercase());
+            let echo = if empty_line {
+                TLK_EMPTY_INPUT_BYE_ECHO.to_string()
+            } else {
+                line.trim().to_ascii_uppercase()
+            };
+            self.commit_typed_prompt_line(prompt, &echo);
         }
         if let Some(session) = self.active_conversation.as_mut() {
             let output = session.submit_keyword(line, &ctx);
             text = output.text.clone();
             rendered = output.rendered_text();
+            if empty_line {
+                // The word itself is now on the prompt row above, and
+                // committing it there closed that row, so the first of the
+                // shortcut line's two feeds has already been spent. Only the
+                // second - the one that makes the blank row under it - is
+                // left to emit. Measured
+                // (`qa/paired/dwelling-talk-after-entry.tsv`, beat `bye`):
+                // one blank row between `:BYE` and the Bye entry, not two.
+                let spent = TLK_EMPTY_INPUT_BYE_ECHO.len() + 1;
+                if let Some(rest) = text.strip_prefix(TLK_EMPTY_INPUT_BYE_ECHO) {
+                    text = rest.strip_prefix('\n').unwrap_or(rest).to_string();
+                }
+                rendered = rendered.without_leading_bytes(spent);
+            }
             ended = output.ended;
             asked_party_name = output.asked_party_name;
             ask_party_name_prompted = session.awaiting_ask_party_name();

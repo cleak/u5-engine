@@ -266,6 +266,16 @@ impl TlkRenderedText {
         self.glyphs.extend_from_slice(&rendered.glyphs);
     }
 
+    /// This text with the first `count` bytes dropped, glyphs kept aligned.
+    pub fn without_leading_bytes(&self, count: usize) -> Self {
+        let count = count.min(self.glyphs.len());
+        let glyphs = self.glyphs[count..].to_vec();
+        Self {
+            text: glyphs.iter().map(|glyph| glyph.byte as char).collect(),
+            glyphs,
+        }
+    }
+
     /// The resumed ASK-WHO run with the stream's leading quote removed.
     ///
     /// `conversation.md §7`: the bytes around `0x88` "carr[y] only the closing

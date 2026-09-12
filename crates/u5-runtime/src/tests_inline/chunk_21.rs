@@ -2507,9 +2507,16 @@ fn play_input_conversation_empty_line_emits_bye_envelope_and_closes() {
         PlayInputDisposition::Continue
     );
 
-    assert_eq!(
-        state.message,
-        format!("{TLK_EMPTY_INPUT_BYE_MESSAGE}\"Farewell\"\n\n")
+    // `conversation.md §6`: the shortcut's word lands on the keyword prompt's
+    // own row - measured `:BYE` - so the slot carries only the two feeds that
+    // close that row and the Bye entry beneath it.
+    assert_eq!(state.message, "\n\"Farewell\"\n\n");
+    assert!(
+        state
+            .message_entries()
+            .iter()
+            .any(|entry| entry.text.ends_with(TLK_EMPTY_INPUT_BYE_ECHO)),
+        "the prompt row carries the echoed word"
     );
     assert!(state.active_conversation.is_none());
     assert_eq!(state.turn, 1);
