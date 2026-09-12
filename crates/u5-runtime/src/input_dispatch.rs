@@ -4852,7 +4852,20 @@ fn combat_command_branch_message(branch: CombatCommandBranch) -> String {
                 format!("{} what?\n", combat_scene_abort_verb_prefix(verb))
             }
             CombatSceneAbortTail::NotHere => {
-                format!("{}-Not here", combat_scene_abort_verb_prefix(verb))
+                // The trailing feed closes the refusal's row, which is what
+                // lets the next actor banner's own leading feed land as a
+                // blank row rather than merely closing this one -
+                // `combat.md §8.4`: "Combat's next full actor banner
+                // contributes its own leading feed, making the blank row
+                // after the result." The sibling `What` arm above already
+                // carries it.
+                //
+                // Measured 2026-09-11 (`combat-refusal-audio/refused`): the
+                // original reads `Look-Not here`, a blank row, then the
+                // banner; this engine ran the banner onto the row beneath
+                // the refusal and sat one row short for the rest of the
+                // capture.
+                format!("{}-Not here\n", combat_scene_abort_verb_prefix(verb))
             }
             CombatSceneAbortTail::FunnyNoResponse => {
                 format!(

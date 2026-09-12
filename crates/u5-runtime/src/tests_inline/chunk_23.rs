@@ -12231,7 +12231,7 @@ fn combat_input_dispatch_routes_play_keys_to_combat_parser() {
     // re-prompt (`RETRACTIONS.md` R380).
     assert_eq!(
         quit_state.message,
-        "Quit-Not here\nAvatar, armed with bare hands:\n"
+        "Quit-Not here\n\nAvatar, armed with bare hands:\n"
     );
     assert!(quit_state.combat_active);
     assert_eq!(quit_state.pending_combat_actor_slot, Some(0));
@@ -12248,7 +12248,9 @@ fn combat_input_dispatch_routes_play_keys_to_combat_parser() {
     for (key, expected) in [
         ('X', "X-it what?\n"),
         ('B', "Board what?\n"),
-        ('E', "Enter-Not here"),
+        // The refusal carries its own trailing feed, so the banner's
+        // leading feed lands as the blank row `combat.md §8.4` describes.
+        ('E', "Enter-Not here\n"),
         ('T', "Talk-Funny, no response!"),
     ] {
         assert_eq!(
@@ -13031,7 +13033,7 @@ fn combat_input_dispatch_quickness_never_consumes_the_ready_player() {
     // takes the banner-reprinting re-prompt (`RETRACTIONS.md` R380).
     assert_eq!(
         state.message,
-        "Quit-Not here\nAvatar, armed with bare hands:\n"
+        "Quit-Not here\n\nAvatar, armed with bare hands:\n"
     );
     assert!(state.combat_active);
     assert_eq!(state.pending_combat_actor_slot, Some(0));
