@@ -12,6 +12,28 @@
 # Talk command", so the first Pass beside the keeper opens the overlay and the
 # script drives it from there rather than issuing Talk.
 # requires-seed: profile `seed-paws-tavern-reseeded`, built by qa/tools/reseed.py
+#
+# Three record pools are drawn here, so this scenario is a lottery from the
+# greeting onward and any text difference has to be checked against them
+# before it counts as a defect. `prng.md` Section 3 seeds the two
+# sides from the host clock at the intro menu, so they never draw alike.
+#
+#   * the entry greeting, four records (`shops.md` Section 8's entry table,
+#     tavern rows 57..60);
+#   * the provision quote, a uniform draw over the seven records 77..83
+#     (Section 8.C, "one uniform record from `77..83`");
+#   * the closing no-sale bark.
+#
+# The pools' records differ in length, so a draw also shifts every later beat's
+# rows even when each beat's own structure agrees exactly. Measured 2026-09-11:
+# the original opened `"Hail, friend! Welcome to The Cat's Lair! I'm Dr. Cat,
+# the barkeep..."` and this engine `"Welcome to The Cat's Lair! My name is Dr.
+# Cat, thy host this afternoon..."`.
+#
+# The structure around the drawn text is what this scenario pins: the opening
+# and closing quotes, the blank row between the accepted letter and the offer,
+# the `How many wouldst` / `thou like?" ` question, and the row the typed
+# quantity echoes onto.
 both	wait	9000
 both	key	space
 both	wait	4000
