@@ -2446,14 +2446,16 @@ impl PlayState {
         };
         if self.fixed_hidden_treasure_pickup_exists(entry.record) {
             // A second Search of a cell whose pickup is already on the floor.
-            // The refusal literal is unpublished, and naming the pickup would
-            // tell the player what is there without their picking it up, so
-            // the harness gets the note and the window stays as it was.
+            // `commands.md §5.8` gives the shape for the Moonstone's identical
+            // duplicate guard - "searching the same cell again before
+            // collecting prints `nothing_of_note.\n`, because the duplicate
+            // guard sees the staged object and creates no second one" - and
+            // the treasure scan's own miss is that same lower-case row.
             self.push_diagnostic(format!(
                 "{} is already surfaced here.",
                 entry.pickup.label()
             ));
-            self.message.clear();
+            self.message = SEARCH_NOTHING_FOUND.to_string();
             return Some(MoveOutcome::Blocked);
         }
         let pickup = ActiveObject::fixed_hidden_treasure_pickup(entry.record, x, y, floor);
@@ -2466,7 +2468,12 @@ impl PlayState {
         self.mark_fixed_hidden_treasure_found(entry);
         self.mark_visibility_dirty();
         self.advance_turn();
-        self.message = format!("Found {}.", entry.pickup.label());
+        self.diagnostics
+            .push(format!("Found {}.", entry.pickup.label()));
+        // `commands.md §5.8`: "Fixed hidden treasure | `[blank]` then
+        // `Thou dost find` then the staged object's name from the found-object
+        // vocabulary in `systems/hidden-treasures.md`".
+        self.message = format!("{SEARCH_PREAMBLE}{}", entry.pickup.narrated_row());
         Some(MoveOutcome::Searched)
     }
 
@@ -3414,6 +3421,33 @@ fn fixed_hidden_treasure_pickup_code(pickup: HiddenTreasurePickup) -> u64 {
 }
 
 impl HiddenTreasurePickup {
+    /// `hidden-treasures.md §2.1` "What a found record prints": "A staged
+    /// record is narrated with one line from a fixed seventeen-name
+    /// vocabulary, selected by the record's pickup class, on the row after the
+    /// Search preamble of `systems/commands.md` Section 5.8."
+    ///
+    /// These thirteen are "the whole reachable set". The vocabulary's other
+    /// four - `a chest!`, `a shield!`, `a helm!` and its own copy of
+    /// `a strange rock!` - have no shipped record, and a class outside the
+    /// vocabulary prints the capitalised [`SEARCH_FOUND_NOTHING_OF_NOTE`].
+    pub fn narrated_row(self) -> &'static str {
+        match self {
+            Self::Armour => "some armour!",
+            Self::Weapon => "a weapon!",
+            Self::Scroll => "a scroll!",
+            Self::Potion => "a potion!",
+            Self::Gem => "a gem!",
+            Self::Food => "some food!",
+            Self::Torches => "some torches!",
+            Self::Ring => "a ring!",
+            Self::Amulet => "an amulet!",
+            Self::RingOfKeys => "a ring of keys!",
+            Self::SackOfGold => "a sack of gold!",
+            Self::MoldyCorpse => "a moldy corpse!",
+            Self::RottingBody => "a rotting body!",
+        }
+    }
+
     pub fn label(self) -> &'static str {
         match self {
             Self::Armour => "armour",

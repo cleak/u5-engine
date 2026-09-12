@@ -1668,7 +1668,7 @@
 
         assert_eq!(state.turn, 1);
         assert!(state.fixed_hidden_treasure_found(18));
-        assert_eq!(state.message, "Found gem.");
+        assert_eq!(state.message, format!("{SEARCH_PREAMBLE}a gem!"));
         assert_eq!(
             state.active_objects[1],
             ActiveObject::fixed_hidden_treasure_pickup(18, 5, 8, 0)
@@ -1738,7 +1738,7 @@
         );
         assert!(state.fixed_hidden_treasure_found(1));
         assert_eq!(state.active_objects[1].fixed_hidden_treasure_record(), Some(1));
-        assert_eq!(state.message, "Found weapon.");
+        assert_eq!(state.message, format!("{SEARCH_PREAMBLE}a weapon!"));
         let _ = fs::remove_dir_all(dir);
     }
 
@@ -1772,7 +1772,7 @@
             state.active_objects[1].fixed_hidden_treasure_record(),
             Some(112)
         );
-        assert_eq!(state.message, "Found scroll.");
+        assert_eq!(state.message, format!("{SEARCH_PREAMBLE}a scroll!"));
         let _ = fs::remove_dir_all(dir);
     }
 

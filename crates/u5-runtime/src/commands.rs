@@ -1295,6 +1295,12 @@ pub const SEARCH_TRAP_GENERIC_LINE: &str = "a trap!";
 /// `nothing_of_note.\n`, because the duplicate guard sees the staged object and
 /// creates no second one."
 pub const SEARCH_STRANGE_ROCK_LINE: &str = "a strange rock!";
+/// `hidden-treasures.md §2.1`: "A record whose class falls outside the
+/// vocabulary, or lands on one of its unused slots, prints the capitalised
+/// `Nothing of note.` - a different stored string from the treasure scan's own
+/// lower-case `nothing of note.`, and the only place the capitalised form
+/// appears on the surface path."
+pub const SEARCH_FOUND_NOTHING_OF_NOTE: &str = "Nothing of note.";
 /// The rare-reagent harvest: "the rolled count, then `_sprigs_of` then
 /// `mandrake root!` or `nightshade!`".
 pub const SEARCH_REAGENT_SPRIGS_FRAGMENT: &str = " sprigs of\n";
