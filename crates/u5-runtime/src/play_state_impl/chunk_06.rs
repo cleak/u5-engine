@@ -4,10 +4,13 @@ use std::path::Path;
 use crate::*;
 
 impl PlayState {
+    /// The outdoor K-Klimb entry gates. The target cell is not read here:
+    /// `RETRACTIONS.md` R470 withdrew the facing probe, so the command's own
+    /// gate is the direction prompt this opens.
     pub fn climb_outdoors(
         &mut self,
-        game_dir: &Path,
-        plane: WorldPlane,
+        _game_dir: &Path,
+        _plane: WorldPlane,
     ) -> io::Result<MoveOutcome> {
         match overworld_klimb_entry_gate(self.climbing_gear != 0, self.player.transport.is_foot()) {
             OverworldKlimbEntryGate::NoGrapple => {
@@ -1532,8 +1535,6 @@ impl PlayState {
         self.cache_current_world_overlay();
         self.mark_visibility_dirty();
         self.advance_turn();
-        // Unpublished (`cleak/u5-spec#262`). `commands.md §5.8` gives the *empty* Get result;
-        // a successful pickup has no published line.
         self.diagnostics.push(format!(
             "got {} {} from active-object tile {tile} at ({x}, {y}) in {} floor {}",
             entry.amount,
@@ -1541,53 +1542,11 @@ impl PlayState {
             target.key(),
             floor
         ));
-        self.message.clear();
+        // `commands.md §5.8` "Successful Get, Search and eat results": the same
+        // published rows the native class dispatcher prints, since a clean
+        // sidecar row stands in for the record's own class byte.
+        self.message = format!("\n{}", entry.kind.pickup_result_line(entry.amount));
         Ok(Some(MoveOutcome::Got))
-    }
-
-    pub fn search_object_pickup_at(
-        &mut self,
-        entries: Option<&[ObjectPickupEntry]>,
-        target: PlayTarget,
-        floor: i8,
-        x: usize,
-        y: usize,
-    ) -> Option<MoveOutcome> {
-        let entries = entries?;
-        let hit = self
-            .active_objects
-            .iter()
-            .copied()
-            .enumerate()
-            .skip(1)
-            .find_map(|(slot, object)| {
-                if !self.object_occupies(object, x, y) {
-                    return None;
-                }
-                let entry = entries
-                    .iter()
-                    .copied()
-                    .find(|entry| object_pickup_matches(*entry, target, floor, x, y, object))?;
-                Some((slot, object.tile, entry))
-            });
-        let (slot, tile, entry) = hit?;
-
-        self.clear_consumed_active_object_slot(slot);
-        self.apply_object_pickup(entry.kind, entry.amount);
-        self.cache_current_world_overlay();
-        self.mark_visibility_dirty();
-        self.advance_turn();
-        // Unpublished (`cleak/u5-spec#262`). `commands.md §5.8` gives the *empty* Search
-        // result; a successful one has no published line.
-        self.diagnostics.push(format!(
-            "found {} {} from active-object tile {tile} at ({x}, {y}) in {} floor {}",
-            entry.amount,
-            entry.kind.label(),
-            target.key(),
-            floor
-        ));
-        self.message.clear();
-        Some(MoveOutcome::Searched)
     }
 
     pub fn search_surface_object_trap_at(&mut self, x: usize, y: usize) -> Option<MoveOutcome> {
@@ -2080,13 +2039,7 @@ impl PlayState {
     ) -> io::Result<MoveOutcome> {
         let entries = load_secret_door_entries(game_dir)?.unwrap_or_default();
         let chest_entries = load_dungeon_chest_content_entries(game_dir)?;
-        let object_pickup_entries = load_object_pickup_entries(game_dir)?;
-        Ok(self.search_direction_secret_with_object_pickups(
-            direction,
-            &entries,
-            chest_entries.as_deref(),
-            object_pickup_entries.as_deref(),
-        ))
+        Ok(self.search_direction_secret(direction, &entries, chest_entries.as_deref()))
     }
 
     pub fn search_facing_secret(
@@ -2103,32 +2056,14 @@ impl PlayState {
         entries: &[SecretDoorEntry],
         chest_entries: Option<&[DungeonChestContentEntry]>,
     ) -> MoveOutcome {
-        self.search_direction_secret_with_object_pickups(direction, entries, chest_entries, None)
-    }
-
-    pub fn search_direction_secret_with_object_pickups(
-        &mut self,
-        direction: Direction,
-        entries: &[SecretDoorEntry],
-        chest_entries: Option<&[DungeonChestContentEntry]>,
-        object_pickup_entries: Option<&[ObjectPickupEntry]>,
-    ) -> MoveOutcome {
         match self.area {
-            Area::Town { scene, floor } => self.search_town_secret_direction_with_object_pickups(
-                entries,
-                scene,
-                floor,
-                direction,
-                object_pickup_entries,
-            ),
+            Area::Town { scene, floor } => {
+                self.search_town_secret_direction(entries, scene, floor, direction)
+            }
             Area::Dungeon { scene, level } => {
                 self.search_dungeon_secret(entries, chest_entries, scene, level)
             }
-            Area::World { plane } => self.search_world_moonstone_direction_with_object_pickups(
-                plane,
-                direction,
-                object_pickup_entries,
-            ),
+            Area::World { plane } => self.search_world_moonstone_direction(plane, direction),
         }
     }
 
@@ -2141,27 +2076,9 @@ impl PlayState {
         plane: WorldPlane,
         direction: Direction,
     ) -> MoveOutcome {
-        self.search_world_moonstone_direction_with_object_pickups(plane, direction, None)
-    }
-
-    pub fn search_world_moonstone_direction_with_object_pickups(
-        &mut self,
-        plane: WorldPlane,
-        direction: Direction,
-        object_pickup_entries: Option<&[ObjectPickupEntry]>,
-    ) -> MoveOutcome {
         let (dx, dy) = direction.delta();
         let tx = (self.player.x as isize + dx).rem_euclid(WORLD_SIDE as isize) as usize;
         let ty = (self.player.y as isize + dy).rem_euclid(WORLD_SIDE as isize) as usize;
-        if let Some(outcome) = self.search_object_pickup_at(
-            object_pickup_entries,
-            PlayTarget::World(plane),
-            plane.save_floor(),
-            tx,
-            ty,
-        ) {
-            return outcome;
-        }
         if let Some(outcome) = self.search_active_object_treasure_marker_at(tx, ty) {
             return outcome;
         }
@@ -2189,8 +2106,9 @@ impl PlayState {
             return outcome;
         }
         if skip_moonstone_scan {
-            self.message =
-                "Searched a generic find marker; no Moonstone scan was attempted.".to_string();
+            self.diagnostics
+                .push("searched a generic find marker; no Moonstone scan ran".to_string());
+            self.message = SEARCH_NOTHING_FOUND.to_string();
             return MoveOutcome::Blocked;
         }
         self.message = SEARCH_NOTHING_FOUND.to_string();
@@ -2213,19 +2131,6 @@ impl PlayState {
         floor: i8,
         direction: Direction,
     ) -> MoveOutcome {
-        self.search_town_secret_direction_with_object_pickups(
-            entries, scene, floor, direction, None,
-        )
-    }
-
-    pub fn search_town_secret_direction_with_object_pickups(
-        &mut self,
-        entries: &[SecretDoorEntry],
-        scene: Scene,
-        floor: i8,
-        direction: Direction,
-        object_pickup_entries: Option<&[ObjectPickupEntry]>,
-    ) -> MoveOutcome {
         let (dx, dy) = direction.delta();
         let tx = self.player.x as isize + dx;
         let ty = self.player.y as isize + dy;
@@ -2237,15 +2142,6 @@ impl PlayState {
         let ty = ty as usize;
         let idx = ty * 32 + tx;
         let tile = self.grid[idx];
-        if let Some(outcome) = self.search_object_pickup_at(
-            object_pickup_entries,
-            PlayTarget::Town(scene),
-            floor,
-            tx,
-            ty,
-        ) {
-            return outcome;
-        }
         if let Some(outcome) = self.search_active_object_treasure_marker_at(tx, ty) {
             return outcome;
         }
@@ -2308,8 +2204,15 @@ impl PlayState {
                 ) {
                     return outcome;
                 }
-                self.message =
-                    "Searched a generic find marker; no Moonstone scan was attempted.".to_string();
+                // `commands.md §5.8`: a Search that finds nothing prints the
+                // treasure scan's own miss, the lower-case `nothing of note.`,
+                // under whichever preamble the cell's prefix selects. Skipping
+                // the Moonstone scan is engine detail, not a row.
+                self.diagnostics
+                    .push("searched a generic find marker; no Moonstone scan ran".to_string());
+                self.message = town_search_live_tile_miss_message(tile)
+                    .unwrap_or(SEARCH_NOTHING_FOUND)
+                    .to_string();
                 return MoveOutcome::Blocked;
             }
             let miss_message =
@@ -2340,8 +2243,15 @@ impl PlayState {
                 ) {
                     return outcome;
                 }
-                self.message =
-                    "Searched a generic find marker; no Moonstone scan was attempted.".to_string();
+                // `commands.md §5.8`: a Search that finds nothing prints the
+                // treasure scan's own miss, the lower-case `nothing of note.`,
+                // under whichever preamble the cell's prefix selects. Skipping
+                // the Moonstone scan is engine detail, not a row.
+                self.diagnostics
+                    .push("searched a generic find marker; no Moonstone scan ran".to_string());
+                self.message = town_search_live_tile_miss_message(tile)
+                    .unwrap_or(SEARCH_NOTHING_FOUND)
+                    .to_string();
                 return MoveOutcome::Blocked;
             }
             let miss_message =

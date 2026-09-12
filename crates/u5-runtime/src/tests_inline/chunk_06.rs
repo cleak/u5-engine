@@ -567,8 +567,13 @@
         let _ = fs::remove_dir_all(dir);
     }
 
+    /// `RETRACTIONS.md` R477: "Surface Search's object branch accepts **only**
+    /// the container class and hands it to the trap narrator, which contains no
+    /// inventory grant at all. Search grants nothing from the object table."
+    /// This test used to assert the opposite - that Search consumed the record
+    /// and credited the stock ahead of the live-tile scans.
     #[test]
-    fn town_search_consumes_clean_object_pickup_before_live_tile_scans() {
+    fn town_search_grants_nothing_from_the_object_table() {
         let dir = debug_game_dir();
         fs::write(
             dir.join(OBJECT_PICKUP_TABLE_FILE),
@@ -579,7 +584,6 @@
         grid[32 + 2] = 0x4e;
         let mut state = test_state(grid, 1, 1);
         state.player.facing = Direction::East;
-        state.visibility_dirty = false;
         state.active_objects.push(ActiveObject {
             type_byte: 210,
             tile: 210,
@@ -590,26 +594,26 @@
             aux1: 0,
             aux3: 0x78,
         });
+        let keys_before = state.keys;
 
+        // The container class reaches the trap narrator, which grants nothing.
         assert_eq!(
             state.search_facing_with_game_dir(&dir).unwrap(),
             MoveOutcome::Searched
         );
 
-        assert_eq!(state.active_objects[1].type_byte, 0);
-        assert_eq!(state.active_objects[1].tile, 0);
-        assert_eq!(state.active_objects[1].x, 0);
-        assert_eq!(state.active_objects[1].y, 0);
-        assert_eq!(state.active_objects[1].z, 0);
-        assert_eq!(state.active_objects[1].aux1, 0);
-        assert_eq!(state.active_objects[1].phase, 0x34);
-        assert_eq!(state.active_objects[1].aux3, 0x78);
-        assert_eq!(state.grid[32 + 2], 0x4e);
-        assert_eq!(state.keys, DEFAULT_KEY_STOCK + 1);
-        assert_eq!(state.turn, 1);
-        assert!(state.visibility_dirty);
-        assert!(state.diagnostics.iter().any(|note| note.contains("Found 1 keys") || note.contains("found 1 keys")));
-        assert!(state.diagnostics.iter().any(|note| note.contains("active-object tile 210") || note.contains("active-object tile 210")));
+        // The record is untouched and nothing is credited.
+        assert_eq!(state.active_objects[1].type_byte, 210);
+        assert_eq!(state.active_objects[1].tile, 210);
+        assert_eq!(state.keys, keys_before);
+
+        // A following Get is what grants, and it is the Get path that prints.
+        assert_eq!(
+            state.get_facing_with_game_dir(&dir).unwrap(),
+            MoveOutcome::Got
+        );
+        assert_eq!(state.keys, keys_before + 1);
+        assert_eq!(state.message, "\n1 key!");
         let _ = fs::remove_dir_all(dir);
     }
 
@@ -1372,7 +1376,7 @@
         assert_eq!(state.active_objects.len(), 1);
         assert_eq!(
             state.message,
-            "Searched a generic find marker; no Moonstone scan was attempted."
+            SEARCH_NOTHING_FOUND
         );
     }
 
@@ -1550,7 +1554,7 @@
         assert_eq!(state.active_objects.len(), 1);
         assert_eq!(
             state.message,
-            "Searched a generic find marker; no Moonstone scan was attempted."
+            SEARCH_NOTHING_FOUND
         );
 
         state.player.x = 181;
