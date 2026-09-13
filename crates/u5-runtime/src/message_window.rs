@@ -500,6 +500,18 @@ pub fn combat_prompt_row_follows_history(state: &crate::PlayState) -> bool {
         // open leaves that row for the turn loop's feed to close, so the
         // marker row follows the history immediately.
         || state.surface_command_row_follows_history
+        // The mixer's quantity row. `magic.md §6` step 4 has the handler
+        // print `How much? ` and the digit "echo immediately on that same
+        // row", which reads as no row of its own at all - and that is what
+        // this engine did, suppressing it. Measured 2026-09-12
+        // (`bt-audience/ask5`): the original draws a row under `How much?`
+        // carrying both the end-cap triangle and the cursor, and no blank
+        // above it. So the row exists and is an ordinary marker row; only
+        // the derived blank is missing.
+        || state
+            .active_mix
+            .as_ref()
+            .is_some_and(|session| matches!(session.phase, crate::z_stats::MixPhase::Quantity))
 }
 
 /// Is the row an overlay is pausing on a continuation rather than a command row?
@@ -573,6 +585,7 @@ pub fn shop_pause_row_is_continuation(state: &crate::PlayState) -> bool {
         || state.active_shrine.as_ref().is_some_and(|session| {
             matches!(session.phase, crate::z_stats::ShrinePhase::AltarQuest)
         })
+
         // A staged presentation is not a turn cycle either, so the row under
         // it carries no end-cap triangle. It does carry the cursor: measured
         // 2026-09-12 (`qa/paired/shrine-enter.tsv`, beats `early` and `mid`),

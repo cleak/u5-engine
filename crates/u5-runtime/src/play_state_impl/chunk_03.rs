@@ -311,10 +311,6 @@ impl PlayState {
                 .active_wishing_well
                 .as_ref()
                 .is_some_and(|session| !session.coin_accepted)
-            || self
-                .active_mix
-                .as_ref()
-                .is_some_and(|session| matches!(session.phase, crate::z_stats::MixPhase::Quantity))
             // The inn's service question ends `night?" ` - a closing quote and
             // one space - so `text-output.md` §10.6 keeps the cursor on that
             // row and no fresh live row is drawn. This engine spent a blank
