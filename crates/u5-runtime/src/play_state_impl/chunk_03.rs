@@ -268,10 +268,7 @@ impl PlayState {
         // the original does not - it wants `open_prompt_line`'s inline
         // treatment extended to carry a typed buffer, which is more than
         // a flag. Tracked, not bodged.
-        // A staged presentation owns the screen and is not reading a key,
-        // so no live command row and no end cap belong under it.
-        self.staged_narration_active()
-            || self.mix_reagent_selection_active()
+        self.mix_reagent_selection_active()
             || self.active_blackthorn_guard_demand.is_some()
             || self.pending_town_arrest.is_some()
             // `commands.md §5.6` / `inventory.md §4.3`: a U-Use item that asks
@@ -382,11 +379,21 @@ impl PlayState {
         !self.staged_narration.is_empty()
     }
 
-    /// Advance the staged narration by one frame of real time, printing every
-    /// beat whose wait completed in it. Returns whether a presentation is
+    /// Advance the staged narration to an absolute clock reading, printing
+    /// every beat whose wait has completed. Returns whether a presentation is
     /// still holding the screen afterwards.
-    pub fn advance_staged_narration(&mut self, delta_secs: f32) -> bool {
-        for beat in self.staged_narration.advance(delta_secs) {
+    ///
+    /// `now_secs` only has to be monotonic. Taking a reading rather than a
+    /// delta is deliberate: the visual shell fed one frame's delta in twice
+    /// and doubled the pace (`cleak/u5-engine#27`).
+    pub fn advance_staged_narration_to(&mut self, now_secs: f64) -> bool {
+        for beat in self.staged_narration.advance_to(now_secs) {
+            // An empty beat is a pure hold - a wait with nothing to print,
+            // such as `karma.md §12`'s closing "ten world ticks". Emitting it
+            // would spend a blank row the original does not.
+            if beat.text.is_empty() {
+                continue;
+            }
             self.emit_message_line(beat.text);
         }
         self.staged_narration_active()
@@ -417,9 +424,15 @@ impl PlayState {
     /// stock game draws the barber pole there. Suppressing both holds traded
     /// one reading for the other.
     pub fn message_window_cursor_suppressed(&self) -> bool {
-        self.active_blackthorn.as_ref().is_some_and(
-            crate::blackthorn_session::BlackthornChallenge::awaiting_closing_acknowledgement,
-        )
+        // A staged presentation is the same shape: text on screen, no
+        // question, nothing reading a key. Measured 2026-09-12
+        // (`qa/paired/shrine-enter.tsv`, beats `early` and `mid`): the
+        // original's held row is empty where this engine drew the barber
+        // pole.
+        self.staged_narration_active()
+            || self.active_blackthorn.as_ref().is_some_and(
+                crate::blackthorn_session::BlackthornChallenge::awaiting_closing_acknowledgement,
+            )
     }
 
     pub fn open_prompt_line(&self) -> Option<String> {

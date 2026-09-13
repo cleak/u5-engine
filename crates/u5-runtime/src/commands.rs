@@ -709,13 +709,20 @@ pub const CODEX_SHRINE_ENTER_ECHO_TAIL: &str = "the Shrine of the Codex!";
 pub const SHRINE_APPROACH_NARRATION: &str = "Thou dost approach the tranquil Shrine...";
 pub const SHRINE_KNEEL_NARRATION: &str = "...and thou dost kneel before the Altar.";
 /// `karma.md §12`'s entry table gives no interval between the approach record
-/// and the kneel record. Measured 2026-09-12
-/// (`qa/paired/shrine-enter-pacing.tsv`): the original holds on the approach
-/// record through 1800 ms and has printed the kneel record by 2400 ms, so the
-/// wait is bounded to (1800, 2400] ms - about forty ~55 ms BIOS ticks
-/// (`timing.md §4`). This is the midpoint of that bound; the published figure
-/// is asked for in `cleak/u5-spec#271`.
-pub const SHRINE_KNEEL_HOLD_BIOS_TICKS: u16 = 40;
+/// and the kneel record - only the ten world ticks before the question after
+/// it. Measured 2026-09-12 (`qa/paired/shrine-enter-pacing.tsv`, which samples
+/// the entry eight times and reads which sample first shows each record) and
+/// bracketed by four runs: at 40 ticks the kneel lands two samples early, at
+/// 80 one sample late, and 72 puts it in the same sample as the original.
+///
+/// Read the bracket in *samples*, not in absolute milliseconds: the harness's
+/// nominal 600 ms step is not wall-clock, because each beat also pays for two
+/// screenshots. An earlier note here quoted the nominal times as if they were
+/// and made the hold look half as long as it is.
+///
+/// `cleak/u5-spec#271` asks for the published figure. Until it lands this is
+/// a measured constant, like the rest of the paced presentation timings.
+pub const SHRINE_KNEEL_HOLD_BIOS_TICKS: u16 = 72;
 /// `karma.md §12`: "After ten world ticks, record `29`: the question asking
 /// which virtue". Consistent with the same measurement, which shows the
 /// question within the 600 ms sample after the kneel record.

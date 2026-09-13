@@ -4,6 +4,14 @@
 # on record.
 # requires-seed: the party on the published Honesty shrine coordinate
 # (`--scene BRITANNIA --at 233,66`), the same seed `shrine-flow` uses
+#
+# Known gap: `after2` differs by one row and nothing else. `karma.md` Section
+# 12 ends the meditation with "the shrine's sound sequence and ten world
+# ticks", and the engine now stages that as a real hold rather than ten
+# instant animator steps - but ten ticks is about 0.55 s and the original is
+# still inside the hold 2.5 s after the key, with no command row on screen.
+# The sound sequence is presumably what fills the rest, and its length is not
+# published. Asked on `cleak/u5-spec#271`.
 both	wait	9000
 both	key	space
 both	wait	4000

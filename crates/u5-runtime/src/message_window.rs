@@ -573,6 +573,12 @@ pub fn shop_pause_row_is_continuation(state: &crate::PlayState) -> bool {
         || state.active_shrine.as_ref().is_some_and(|session| {
             matches!(session.phase, crate::z_stats::ShrinePhase::AltarQuest)
         })
+        // A staged presentation is not a turn cycle either, so the row under
+        // it carries no end-cap triangle. It does carry the cursor: measured
+        // 2026-09-12 (`qa/paired/shrine-enter.tsv`, beats `early` and `mid`),
+        // the original holds two rows under the approach record - the
+        // record's own trailing blank and this one.
+        || state.staged_narration_active()
 }
 
 /// The sage's typed topic continues the row `You respond:` opened.

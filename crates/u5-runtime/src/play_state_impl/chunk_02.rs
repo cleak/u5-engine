@@ -1754,6 +1754,15 @@ impl PlayState {
     /// `:` row below the question, and the mantra is typed onto the
     /// `Mantra:` label's own row.
     pub fn shrine_prompt_echo(&self) -> Option<String> {
+        // The session exists from the `E` keypress so the state is right, but
+        // `karma.md §12` does not put its question on screen until the staged
+        // entry reaches it - and the answer row belongs to the question.
+        // Measured 2026-09-12 (`qa/paired/shrine-enter.tsv`, beats `early`
+        // and `mid`): the original's row under the approach record is empty
+        // where this engine had already drawn the `:`.
+        if self.staged_narration_active() {
+            return None;
+        }
         self.active_shrine
             .as_ref()
             .and_then(|session| self.shrine_prompt_echo_for(session))
@@ -1882,10 +1891,17 @@ impl PlayState {
                     self.emit_shrine_misc_record(game_dir, MISCMSG_SHRINE_RETURN_INSTRUCTION)?;
                     // "Finish with the shrine's sound sequence and ten world
                     // ticks." The sound sequence is not published as events
-                    // this runtime carries; the pause is.
+                    // this runtime carries; the pause is, and it is a real
+                    // hold rather than ten instant animator steps. Measured
+                    // 2026-09-12 (`qa/paired/shrine-three-mantras.tsv`, beat
+                    // `after2`): the original is still inside it - no command
+                    // row on screen - where this engine had already returned
+                    // to play. An empty beat prints nothing and only waits.
                     for _ in 0..SHRINE_OFFERING_RESULT_WORLD_TICKS {
                         self.animation.tick_static_tiles();
                     }
+                    self.staged_narration
+                        .push_ticks(SHRINE_OFFERING_RESULT_WORLD_TICKS as u16, String::new());
                     return Ok(Some(MoveOutcome::Observed));
                 }
                 ShrinePhase::Offering => {

@@ -10509,7 +10509,9 @@ fn animate_static_tiles(
     // counts land in wall-clock where the original puts them whatever rate
     // the host renders at.
     if visual.state.staged_narration_active() {
-        visual.state.advance_staged_narration(real_time.delta_secs());
+        visual
+            .state
+            .advance_staged_narration_to(real_time.elapsed_secs_f64());
         visual.prompt_cursor_visible = false;
         visual.prompt_cursor_frame = visual.prompt_cursor_frame.wrapping_add(1);
         pump.accumulator = 0.0;

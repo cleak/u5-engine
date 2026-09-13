@@ -1,25 +1,23 @@
-# **Known gap, narrowed 2026-09-12: the entry narration is staged now, but
-# the frontend releases the beats early.**
-#
-# `karma.md` Section 12's entry table paces the sequence - the approach
-# record, the kneel record, then "After ten world ticks, record `29`: the
-# question asking which virtue". The engine used to print all three inside
-# the one key handler, so the window jumped straight to the question and both
-# sampled beats showed the original still on `tranquil Shrine...`.
-#
-# `crates/u5-runtime/src/narration.rs` now stages them, and the engine does
-# hold on the approach record: at 600 ms it reads `Shrine...` on both sides
-# where it used to read `:`. The remaining difference is rate. Measured
-# 2026-09-12 with two calibration runs (`shrine-enter-pacing`), the visual
-# frontend consumes a staged delay about twice as fast as the wall clock, so
-# a 40-tick hold lands near 1.2 s instead of 2.2 s. Switching that advance
-# from the default clock to `Time<Real>` changed nothing, so it is not
-# virtual-time scaling. Tracked as `cleak/u5-engine#27`.
-#
-# The text itself agrees; `shrine-flow` and `shrine-unfocused` both match
-# because their beats fall outside the pauses.
-#
 # The shrine entry narration, captured while it is still printing.
+#
+# **Fixed 2026-09-12.** `karma.md` Section 12's entry table paces this - the
+# approach record, the kneel record, then "After ten world ticks, record `29`:
+# the question asking which virtue". The engine used to print all three inside
+# the one key handler, so both sampled beats showed the original still on
+# `tranquil Shrine...` while the engine was already asking the virtue.
+#
+# `crates/u5-runtime/src/narration.rs` stages them now. Four things had to be
+# right together, and each was measured:
+#
+#   - the hold before the kneel record, which Section 12 does not give
+#     (bracketed to 72 BIOS ticks by `shrine-enter-pacing`);
+#   - record `45`'s own trailing blank row, which Section 12 does specify and
+#     the engine was not printing;
+#   - no leading feed on the kneel record, since that trailing blank is
+#     already the separator;
+#   - and no answer row, no end cap and no cursor while the hold runs - the
+#     question has not been asked yet, and a held page reads no key.
+#
 # requires-seed: the party on the published Honesty shrine coordinate
 both	wait	9000
 both	key	space

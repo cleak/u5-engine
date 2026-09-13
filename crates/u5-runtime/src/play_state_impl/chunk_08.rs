@@ -1362,7 +1362,13 @@ impl PlayState {
                 "Enter ",
                 &format!("{SHRINE_ENTER_ECHO_PREFIX}{}", virtue.name()),
             );
-            self.emit_message_line(format!("\n{SHRINE_APPROACH_NARRATION}"));
+            // `karma.md §12`: "Record `45`, including its leading newline
+            // **and trailing blank row**". The engine printed the leading one
+            // and not the trailing one, which only showed once the narration
+            // was staged and the record stood alone on screen - measured
+            // 2026-09-12 (`qa/paired/shrine-enter.tsv`, beats `early` and
+            // `mid`, reading `offset-2`).
+            self.emit_message_line(format!("\n{SHRINE_APPROACH_NARRATION}\n\n"));
             // `karma.md §12`'s entry table paces this: the kneel record, then
             // "After ten world ticks, record `29`: the question asking which
             // virtue". The engine used to print all three in this one call,
@@ -1379,7 +1385,12 @@ impl PlayState {
             // bound, not a published figure.
             self.staged_narration.push_ticks(
                 SHRINE_KNEEL_HOLD_BIOS_TICKS,
-                format!("\n{SHRINE_KNEEL_NARRATION}"),
+                // No leading feed of its own: the approach record's trailing
+                // blank row above is already the separator, and adding one
+                // here put a second blank between them once that blank was
+                // being printed. Measured 2026-09-12 (`shrine-enter/full`
+                // and `shrine-flow`, both a row adrift with it).
+                SHRINE_KNEEL_NARRATION.to_string(),
             );
             // The question is logged once, with the blank row the capture
             // shows beneath it; the answer row is the *live* row the shrine
