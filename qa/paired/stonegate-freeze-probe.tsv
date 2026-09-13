@@ -1,0 +1,32 @@
+# Does the engine window resume updating when a key arrives?
+#
+# `cleak/u5-engine#28`: after Stonegate's scripted death the engine's window
+# freezes. Instrumentation has established that the main schedule keeps
+# running at sixty frames a second, the rescue cinematic runs correctly and
+# emits every beat into the transcript, and fresh RGBA is written into the
+# image asset every frame - and the window's pixels never change.
+#
+# The one hypothesis that explains all of that is that presentation is
+# event-driven: with no keystrokes arriving after the trapdoor step, nothing
+# wakes the window. This tests it directly. `t20` is twenty seconds of silence
+# after the death; `poke` is the same window one key later.
+#
+# If `poke` shows the rescue narration that `t20` does not, presentation is
+# the fault and the game state was right all along.
+#
+# A probe, not a conformance target.
+# requires-seed: the party inside Stonegate, standing in the trapdoor ring's centre cell
+both	wait	9000
+both	key	space
+both	wait	4000
+both	key	j
+both	wait	9000
+engine	key	Up
+both	wait	20000
+both	shot	t20	Twenty seconds after the death, no keys sent
+engine	key	space
+both	wait	2500
+both	shot	poke	The same window, one keystroke later
+engine	key	space
+both	wait	2500
+both	shot	poke2	And another
