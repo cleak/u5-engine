@@ -10556,16 +10556,64 @@ fn animate_static_tiles(
     }
 
     let mut advanced = false;
+
+    // A staged presentation owns the loop. `main-loop.md §9`: "presentations,
+    // cutscene beats and paced turn loops call [the world tick] directly", so
+    // while one is running this system is the presentation's own timer and no
+    // turn gate or idle wait frame runs behind it.
+    //
+    // Deliberately ahead of the animation pump rather than inside it. The
+    // pump's interval is the visibility sweep's when a sweep is live, and the
+    // Blackthorn rescue starts from a party wipe that has just rewritten the
+    // whole grid - so its first act leaves a sweep pending, the pump stops
+    // firing, and a cinematic driven from inside the pump never advances. The
+    // rescue played entirely invisibly that way: the state machine ran, and
+    // the screen kept `A TRAPDOOR!` for the whole forty seconds.
+    //
+    // `advanced` is set so the frame still reaches the renderer below.
+    //
+    // Advanced to an absolute reading of the wall clock rather than by frame
+    // deltas, so the published BIOS-tick counts land where the original puts
+    // them however often this system runs.
+    let cinematic_active = visual.state.staged_narration_active()
+        || visual.state.pending_blackthorn_audience_exit
+        || visual.state.pending_blackthorn_rescue.is_some();
+    if cinematic_active {
+        if visual.state.staged_narration_active() {
+            visual
+                .state
+                .advance_staged_narration_to(real_time.elapsed_secs_f64());
+        } else {
+            let game_dir = visual.game_dir.clone();
+            // `blackthorn.md §4.2`'s audience exit beat and §7's rescue
+            // cinematic each end in a handoff the queue cannot carry.
+            if let Err(err) = visual.state.step_blackthorn_audience_exit(&game_dir) {
+                visual
+                    .state
+                    .push_diagnostic(format!("Audience exit beat error: {err}"));
+                visual.state.pending_blackthorn_audience_exit = false;
+            }
+            if let Err(err) = visual.state.step_blackthorn_rescue(&game_dir, false) {
+                visual
+                    .state
+                    .push_diagnostic(format!("Rescue cinematic error: {err}"));
+                visual.state.pending_blackthorn_rescue = None;
+            }
+        }
+        visual.prompt_cursor_visible = false;
+        visual.prompt_cursor_frame = visual.prompt_cursor_frame.wrapping_add(1);
+        pump.accumulator = 0.0;
+        advanced = true;
+    }
+
     let (sweep_active, interval) = visual_animation_pump_interval(&visual.state, pump.interval);
-    if advance_gameplay_animation_pump(&mut pump, time.delta_secs(), interval, sweep_active) {
+    if !cinematic_active
+        && advance_gameplay_animation_pump(&mut pump, time.delta_secs(), interval, sweep_active)
+    {
         // One pump firing is one logical step. The early exits below used
         // to `break` out of a catch-up loop; they now leave this block.
         'step: {
             let mut prompt_cursor_visible = visual.prompt_cursor_visible;
-            // A staged presentation owns the loop. `main-loop.md §9`:
-            // "presentations, cutscene beats and paced turn loops call [the
-            // world tick] directly", so this pump firing is the presentation's
-            // tick and no turn gate or idle wait frame runs behind it.
             if advance_paced_combat_pump_firing(&mut visual.state) {
                 visual.prompt_cursor_visible = false;
                 visual.prompt_cursor_frame = visual.prompt_cursor_frame.wrapping_add(1);
