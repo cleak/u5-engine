@@ -102,6 +102,13 @@ fn handle_play_key_input_inner(
     if state.endgame.is_some() {
         return handle_endgame_key_input(state, key, suffix, game_dir);
     }
+    // `blackthorn.md §4.2`: the audience exit beat's animation "consumes no
+    // input - the script language has no input command, the repeated pause
+    // polls no keyboard, and there is no abort path - so it cannot be
+    // skipped" (`cleak/u5-spec#268`).
+    if state.pending_blackthorn_audience_exit {
+        return Ok(PlayInputDisposition::Continue);
+    }
     // `blackthorn.md §7` step 19, the rescue cinematic's only blocking key
     // read: "any key satisfies it, no typed character is echoed, and the
     // returned key is discarded rather than interpreted as a command".

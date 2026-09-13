@@ -364,6 +364,14 @@ fn blackthorn_capture_chain_leaves_the_party_without_its_keys() {
             .is_some_and(|challenge| challenge.awaiting_closing_acknowledgement())
     );
     state.submit_blackthorn_audience_answer("", &dir).unwrap();
+    // `blackthorn.md §4.2`: that key starts the audience exit beat, and the
+    // captive-cell handoff - which is where §8's debit rides - is at the end
+    // of it, not on the key.
+    assert!(state.pending_blackthorn_audience_exit);
+    state
+        .run_blackthorn_audience_exit_to_handoff(&dir)
+        .unwrap()
+        .expect("the exit beat ends in the captive-cell handoff");
 
     assert!(state.active_blackthorn.is_none());
     assert_eq!(state.keys, 0);

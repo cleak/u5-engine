@@ -4625,7 +4625,23 @@ impl PlayState {
                 )?;
                 return self.hold_blackthorn_closing_page(challenge, speech, true, false);
             }
-            return self.apply_blackthorn_captive_cell_handoff(game_dir, "");
+            // `blackthorn.md §4.2`, the audience exit beat. This key is the
+            // acknowledgement *and* the beat's own trigger
+            // (`cleak/u5-spec#268`: "One, and it *is* the acknowledgement.
+            // The record is printed and the very next instruction is the
+            // beat's key wait"), and the animation after it "consumes no
+            // input ... so it cannot be skipped". The window is untouched
+            // across it, so the hold prints nothing.
+            if std::mem::take(&mut self.blackthorn_audience_punished) {
+                // The punishing branches skip the beat and hand off directly.
+                return self.apply_blackthorn_captive_cell_handoff(game_dir, "");
+            }
+            self.staged_narration.push_ticks(
+                crate::blackthorn::BLACKTHORN_AUDIENCE_EXIT_BEAT_BIOS_TICKS,
+                String::new(),
+            );
+            self.pending_blackthorn_audience_exit = true;
+            return Ok(MoveOutcome::Observed);
         }
 
         // `blackthorn.md §4.1`: the wrong-answer reaction is followed by
@@ -4907,6 +4923,9 @@ impl PlayState {
                         // pendulum narration is held. The name above is
                         // already read, so only the lift waits.
                         self.pending_blackthorn_execution_victim = Some(victim);
+                        // This is the punishing branch, so no §4.2 exit beat
+                        // follows its acknowledgement (`cleak/u5-spec#268`).
+                        self.blackthorn_audience_punished = true;
                         let report =
                             format!("companion in slot {victim} is owed the pendulum blade"); // audit: not a player-facing line
                         self.push_diagnostic(format!(
@@ -5473,6 +5492,35 @@ impl PlayState {
                 self.apply_blackthorn_rescue_handoff(game_dir).map(Some)
             }
         }
+    }
+
+    /// Finish `blackthorn.md §4.2`'s audience exit beat once its hold has
+    /// run out, performing the captive-cell handoff it precedes.
+    ///
+    /// Returns the transition on the frame the beat ends, and `None`
+    /// otherwise.
+    pub fn step_blackthorn_audience_exit(
+        &mut self,
+        game_dir: &Path,
+    ) -> io::Result<Option<MoveOutcome>> {
+        if !self.pending_blackthorn_audience_exit || self.staged_narration_active() {
+            return Ok(None);
+        }
+        self.pending_blackthorn_audience_exit = false;
+        self.apply_blackthorn_captive_cell_handoff(game_dir, "")
+            .map(Some)
+    }
+
+    /// Run the exit beat straight through, for shells with no pump.
+    pub fn run_blackthorn_audience_exit_to_handoff(
+        &mut self,
+        game_dir: &Path,
+    ) -> io::Result<Option<MoveOutcome>> {
+        if !self.pending_blackthorn_audience_exit {
+            return Ok(None);
+        }
+        self.flush_staged_narration();
+        self.step_blackthorn_audience_exit(game_dir)
     }
 
     /// Run a rescue cinematic straight through to its handoff.

@@ -10521,6 +10521,22 @@ fn animate_static_tiles(
     // queue above prints them, and this moves the cinematic from one phase to
     // the next when the queue drains. Only step 19 waits on the player, and
     // that key arrives through the input driver rather than here.
+    // `blackthorn.md §4.2`'s audience exit beat: a viewport-only hold with
+    // the captive-cell handoff at the end of it.
+    if visual.state.pending_blackthorn_audience_exit {
+        let game_dir = visual.game_dir.clone();
+        if let Err(err) = visual.state.step_blackthorn_audience_exit(&game_dir) {
+            visual
+                .state
+                .push_diagnostic(format!("Audience exit beat error: {err}"));
+            visual.state.pending_blackthorn_audience_exit = false;
+        }
+        if visual.state.pending_blackthorn_audience_exit {
+            visual.prompt_cursor_frame = visual.prompt_cursor_frame.wrapping_add(1);
+            pump.accumulator = 0.0;
+            return;
+        }
+    }
     if visual.state.pending_blackthorn_rescue.is_some() {
         let game_dir = visual.game_dir.clone();
         match visual.state.step_blackthorn_rescue(&game_dir, false) {

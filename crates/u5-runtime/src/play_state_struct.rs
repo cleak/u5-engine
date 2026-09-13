@@ -368,6 +368,17 @@ pub struct PlayState {
     /// carry - the one blocking key read in the middle, and the durable
     /// handoff at the end.
     pub pending_blackthorn_rescue: Option<crate::blackthorn::BlackthornRescuePhase>,
+    /// `blackthorn.md §4.2`'s audience exit beat is running, and the
+    /// captive-cell handoff is owed when its hold ends.
+    pub pending_blackthorn_audience_exit: bool,
+    /// The interrogation ended on a *punishing* wrong-answer branch.
+    ///
+    /// `cleak/u5-spec#268`: "The punishing wrong-answer branches never run
+    /// the beat, and that is why only they reach §6.3's conditional
+    /// Blackthorn-tableau cleanup: the beat clears the tableau slot that
+    /// cleanup's test reads." The correct-answer branch with two or more
+    /// nondead members does run it, after the merciful-death execution.
+    pub blackthorn_audience_punished: bool,
     /// `combat.md §8.2`: the live `A`-Attack attempt walk and its open
     /// targeting cursor. `A` "opens a second, separate input read, and
     /// it is not a one-shot direction key but an **interactive targeting

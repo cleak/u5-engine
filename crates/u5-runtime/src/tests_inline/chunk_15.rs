@@ -2197,6 +2197,13 @@
             PlayInputDisposition::Continue
         );
         assert!(state.active_blackthorn.is_none());
+        // `blackthorn.md §4.2`: the captive-cell handoff is at the end of the
+        // audience exit beat that key starts, not on the key itself.
+        assert!(state.pending_blackthorn_audience_exit);
+        state
+            .run_blackthorn_audience_exit_to_handoff(&dir)
+            .unwrap()
+            .expect("the exit beat ends in the captive-cell handoff");
         // blackthorn.md §8: "Roster removal of an executed companion |
         // Durable and irreversible: record lifted from the party, party
         // count decremented". §5: "The victim is the second living party

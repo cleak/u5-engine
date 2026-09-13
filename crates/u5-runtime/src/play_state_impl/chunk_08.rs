@@ -1306,11 +1306,19 @@ impl PlayState {
         // so the world-mode two-minute cadence is not applied retroactively.
         self.advance_turn();
         self.restore_world_at(game_dir, plane, entry.x, entry.y)?;
-        self.message = match plane {
+        // `cleak/u5-spec#270`: "The stored exit line is `Britannia!` followed
+        // by **two** line feeds (and `Underworld!` likewise). The first feed
+        // closes the row, the second spends a blank row, and the next poll's
+        // leading feed spends the second blank you measured." Both feeds are
+        // in the literal; assigning it to the compatibility slot lost one on
+        // the way to the transcript, so it is emitted directly. Measured
+        // 2026-09-12 (`qa/paired/dungeon-exit-klimb.tsv`, beats `climbed` and
+        // `look`): the original carries two blank rows under `Britannia!`
+        // where this engine carried one.
+        self.emit_message_line(match plane {
             WorldPlane::Britannia => DUNGEON_EXIT_TO_BRITANNIA_NARRATION,
             WorldPlane::Underworld => DUNGEON_EXIT_TO_UNDERWORLD_NARRATION,
-        }
-        .to_string();
+        });
         Ok(MoveOutcome::Transition(
             AreaTransition::ExitedDungeonToWorldPlane { scene, plane },
         ))
@@ -1390,7 +1398,13 @@ impl PlayState {
                 // here put a second blank between them once that blank was
                 // being printed. Measured 2026-09-12 (`shrine-enter/full`
                 // and `shrine-flow`, both a row adrift with it).
-                SHRINE_KNEEL_NARRATION.to_string(),
+                // `cleak/u5-spec#271`, checked against the shipped file:
+                // "record 45 begins with a newline and ends with two; record
+                // 28 begins with its text ... and ends with two newlines;
+                // record 29 likewise has no leading feed. The blank between
+                // Approach and Kneel is record 45's trailing blank row
+                // alone."
+                format!("{SHRINE_KNEEL_NARRATION}\n\n"),
             );
             // The question is logged once, with the blank row the capture
             // shows beneath it; the answer row is the *live* row the shrine
@@ -1398,7 +1412,7 @@ impl PlayState {
             // edits one row instead of re-logging the question per letter.
             self.staged_narration.push_ticks(
                 SHRINE_VIRTUE_QUESTION_HOLD_WORLD_TICKS,
-                format!("\n{SHRINE_VIRTUE_PROMPT}\n\n"),
+                format!("{SHRINE_VIRTUE_PROMPT}\n\n"),
             );
             self.active_shrine = Some(ShrineSession::entering(virtue));
             self.adopt_shrine_prompt_row();

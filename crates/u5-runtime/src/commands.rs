@@ -727,6 +727,26 @@ pub const SHRINE_KNEEL_HOLD_BIOS_TICKS: u16 = 72;
 /// which virtue". Consistent with the same measurement, which shows the
 /// question within the 600 ms sample after the kneel record.
 pub const SHRINE_VIRTUE_QUESTION_HOLD_WORLD_TICKS: u16 = 10;
+/// The meditation's exit pacing, after the closing quest record.
+///
+/// `karma.md §12` ends the interaction with "the shrine's sound sequence and
+/// ten world ticks", which reads as about half a second. It is not:
+/// `cleak/u5-spec#271` answers that the handler then "*returns to the shrine
+/// presentation*, whose exit pacing runs before the mode loop's prompt -
+/// re-stamp the walking pose, one world step, four animation frames walking
+/// the avatar back down ..., clear the avatar, four more frames with nothing
+/// drawn, a ten-step wait, then the actor-table and scene restore, a
+/// display-mode set and a full redraw. That is fifty-one world steps and
+/// eight stings on top of the handler's ten steps, so the command row is not
+/// expected until well past 3 s after the acknowledging key even before the
+/// sound sequence is counted."
+///
+/// Scaled the same way as [`SHRINE_KNEEL_HOLD_BIOS_TICKS`], whose 72 ticks
+/// cover forty-five timer waits, forty-six repaints and nine stings: sixty-one
+/// steps and eight stings come out a little longer. Measured 2026-09-12
+/// (`qa/paired/shrine-three-mantras.tsv`, beat `after2`): the original has no
+/// command row 2.5 s after the key.
+pub const SHRINE_EXIT_PACING_HOLD_BIOS_TICKS: u16 = 88;
 /// **Measured** 2026-09-07 (`qa/paired/shrine-flow.tsv`): accepting the virtue
 /// leaves the question and the typed answer on screen, then opens this prompt
 /// a blank row below it. The typed mantra echoes on the same row as the label

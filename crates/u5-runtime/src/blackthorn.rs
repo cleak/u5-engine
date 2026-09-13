@@ -1174,6 +1174,22 @@ pub const BLACKTHORN_RESCUE_WAIT_BEFORE_THUNDER: u16 = 6 + 4 + 4;
 pub const BLACKTHORN_RESCUE_WAIT_AFTER_INTONED: u16 = 4;
 pub const BLACKTHORN_RESCUE_WAIT_AFTER_VERTIGO: u16 = 4;
 
+/// `blackthorn.md §4.2`, the audience exit beat.
+///
+/// `cleak/u5-spec#268`: the beat is "one blocking key wait followed by the
+/// cutscene vector §6.3 already published", and it "is viewport-only: it
+/// draws no text and holds no existing page frozen, it repaints the viewport
+/// 73 times. It is simultaneously a timed hold: 36 two-part stings, 72
+/// one-BIOS-tick delay requests and those 73 world ticks give a **floor of
+/// about five seconds**, and that floor excludes the cost of the 73 viewport
+/// rebuilds, so treat it as a lower bound."
+///
+/// Held as a wait with nothing to print, so the message window carries the
+/// record across it untouched - the answer's question 3: "No window
+/// selection, no clear, no cursor write, no string print and no character
+/// output occurs between the record and the end of the captive-cell handoff."
+pub const BLACKTHORN_AUDIENCE_EXIT_BEAT_BIOS_TICKS: u16 = 92;
+
 /// Where a rescue cinematic has got to.
 ///
 /// `blackthorn.md §7`: step 19 "is the cinematic's only blocking key read,

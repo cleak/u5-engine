@@ -1901,7 +1901,7 @@ impl PlayState {
                         self.animation.tick_static_tiles();
                     }
                     self.staged_narration
-                        .push_ticks(SHRINE_OFFERING_RESULT_WORLD_TICKS as u16, String::new());
+                        .push_ticks(SHRINE_EXIT_PACING_HOLD_BIOS_TICKS, String::new());
                     return Ok(Some(MoveOutcome::Observed));
                 }
                 ShrinePhase::Offering => {
