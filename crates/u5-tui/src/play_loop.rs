@@ -56,6 +56,9 @@ pub fn run_play_loop(
         // handoff, and this shell has no pump to walk it there.
         state.run_blackthorn_rescue_to_handoff(game_dir)?;
         state.run_blackthorn_audience_exit_to_handoff(game_dir)?;
+        // Anything typed while a hold owned the loop is replayed now.
+        while u5_runtime::input_dispatch::drain_buffered_hold_key(&mut state, game_dir)?.is_some() {
+        }
         if play_state_accepts_typeahead(&state) {
             match state.apply_exploration_turn_gate(game_dir)? {
                 ExplorationTurnGateOutcome::Ready { .. } => {}

@@ -102,18 +102,20 @@ fn handle_play_key_input_inner(
     if state.endgame.is_some() {
         return handle_endgame_key_input(state, key, suffix, game_dir);
     }
-    // `blackthorn.md §4.2`: the audience exit beat's animation "consumes no
-    // input - the script language has no input command, the repeated pause
-    // polls no keyboard, and there is no abort path - so it cannot be
-    // skipped" (`cleak/u5-spec#268`).
-    if state.pending_blackthorn_audience_exit {
-        return Ok(PlayInputDisposition::Continue);
-    }
     // `blackthorn.md §7` step 19, the rescue cinematic's only blocking key
     // read: "any key satisfies it, no typed character is echoed, and the
     // returned key is discarded rather than interpreted as a command".
-    if state.pending_blackthorn_rescue.is_some() {
+    if state.blackthorn_rescue_awaiting_acknowledgement() {
         let _ = state.step_blackthorn_rescue(game_dir, true)?;
+        return Ok(PlayInputDisposition::Continue);
+    }
+    // Every other cinematic phase is a hold that polls no keyboard. What is
+    // typed during one is not lost - see
+    // [`PlayState::keys_buffered_during_hold`].
+    if state.cinematic_hold_owns_input() {
+        state
+            .keys_buffered_during_hold
+            .push_back((key, suffix.to_string()));
         return Ok(PlayInputDisposition::Continue);
     }
     if state.active_blackthorn.is_some() {
@@ -4133,6 +4135,24 @@ fn handle_active_conversation_key_input(
         }
     }
     PlayInputDisposition::Continue
+}
+
+/// Replay one key that was typed while a cinematic hold owned the loop.
+///
+/// Called by the shell once the hold is over. One per call, so a buffered
+/// burst is dispatched at the same one-command-per-frame cadence a player's
+/// own typing would be.
+pub fn drain_buffered_hold_key(
+    state: &mut PlayState,
+    game_dir: &Path,
+) -> io::Result<Option<PlayInputDisposition>> {
+    if state.cinematic_hold_owns_input() {
+        return Ok(None);
+    }
+    let Some((key, suffix)) = state.keys_buffered_during_hold.pop_front() else {
+        return Ok(None);
+    };
+    handle_play_key_input(state, key, &suffix, game_dir).map(Some)
 }
 
 fn handle_active_blackthorn_key_input(

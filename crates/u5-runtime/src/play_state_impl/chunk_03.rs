@@ -372,6 +372,14 @@ impl PlayState {
             )
     }
 
+    /// Whether a cinematic hold owns the loop, so a key belongs in the
+    /// buffer rather than to a command.
+    pub fn cinematic_hold_owns_input(&self) -> bool {
+        self.staged_narration_active()
+            || self.pending_blackthorn_audience_exit
+            || self.pending_blackthorn_rescue.is_some()
+    }
+
     /// Whether a staged presentation currently owns the screen.
     ///
     /// While it does the frontend runs no turn gate and reads no command

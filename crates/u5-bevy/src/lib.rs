@@ -10575,9 +10575,7 @@ fn animate_static_tiles(
     // Advanced to an absolute reading of the wall clock rather than by frame
     // deltas, so the published BIOS-tick counts land where the original puts
     // them however often this system runs.
-    let cinematic_active = visual.state.staged_narration_active()
-        || visual.state.pending_blackthorn_audience_exit
-        || visual.state.pending_blackthorn_rescue.is_some();
+    let cinematic_active = visual.state.cinematic_hold_owns_input();
     if cinematic_active {
         if visual.state.staged_narration_active() {
             visual
@@ -10601,6 +10599,23 @@ fn animate_static_tiles(
             }
         }
         visual.prompt_cursor_visible = false;
+        visual.prompt_cursor_frame = visual.prompt_cursor_frame.wrapping_add(1);
+        pump.accumulator = 0.0;
+        advanced = true;
+    } else if !visual.state.keys_buffered_during_hold.is_empty() {
+        // The hold is over. Anything typed during it was buffered rather
+        // than dropped, the way the BIOS buffer holds it for the next
+        // reader; replay one per frame.
+        let game_dir = visual.game_dir.clone();
+        match u5_runtime::input_dispatch::drain_buffered_hold_key(&mut visual.state, &game_dir) {
+            Ok(_) => {}
+            Err(err) => {
+                visual
+                    .state
+                    .push_diagnostic(format!("Buffered key error: {err}"));
+                visual.state.keys_buffered_during_hold.clear();
+            }
+        }
         visual.prompt_cursor_frame = visual.prompt_cursor_frame.wrapping_add(1);
         pump.accumulator = 0.0;
         advanced = true;
@@ -12381,12 +12396,10 @@ fn drive_visual(
         // ready party slot.
         return;
     }
-    if visual.state.staged_narration_active() {
-        // A staged presentation is holding the loop, so there is nothing here
-        // reading a key. `main-loop.md §9`: the world tick the presentation
-        // calls is not the input pipeline's idle pump.
-        return;
-    }
+    // A cinematic hold is not returned from here: it polls no keyboard, but
+    // what is typed during it is buffered rather than dropped, and the
+    // buffering happens in the runtime's own dispatcher so every frontend
+    // gets it. See `PlayState::keys_buffered_during_hold`.
     let mut handled = false;
     let shift_pressed =
         keyboard.pressed(KeyCode::ShiftLeft) || keyboard.pressed(KeyCode::ShiftRight);
@@ -25207,6 +25220,12 @@ mod tests {
         // Measured: the shrine is *entered*, and the virtue question comes
         // before the mantra row (`qa/paired/shrine-flow.tsv`).
         handle_play_key_input(&mut state, 'E', "", &dir).unwrap();
+        // `karma.md §12` stages the entry narration, and the virtue question
+        // is its third beat; this shell has no pump, so print it now. Until
+        // it is on screen the prompt is not open and a key is buffered
+        // rather than typed.
+        assert!(state.staged_narration_active());
+        state.flush_staged_narration();
         assert!(visual_line_prompt_active(&state));
         handle_play_key_input(&mut state, 'H', "ONESTY\r", &dir).unwrap();
         assert_eq!(state.message, u5_runtime::SHRINE_MANTRA_PROMPT);

@@ -1714,6 +1714,10 @@ BRITANNIA 11 21
             handle_play_key_input(&mut state, 'E', "", &dir).unwrap(),
             PlayInputDisposition::Continue
         );
+        // `karma.md §12` stages the entry narration; the virtue question is
+        // its third beat. With no pump in these tests, print it now - until
+        // it is on screen the prompt is not open and keys are buffered.
+        state.flush_staged_narration();
         assert!(state.active_shrine.is_some());
         assert!(state.active_mix.is_none());
         assert!(state.message.contains(SHRINE_VIRTUE_PROMPT) || state.message == ":");
@@ -1759,6 +1763,10 @@ BRITANNIA 11 21
         let mut state = britannia_state(grid, 10, 20);
 
         handle_play_key_input(&mut state, 'E', "", &dir).unwrap();
+        // `karma.md §12` stages the entry narration; the virtue question is
+        // its third beat. With no pump in these tests, print it now - until
+        // it is on screen the prompt is not open and keys are buffered.
+        state.flush_staged_narration();
         handle_play_key_input(&mut state, 'H', "ONESTY\r", &dir).unwrap();
         assert_eq!(
             handle_play_key_input(&mut state, '\r', "", &dir).unwrap(),
@@ -1917,6 +1925,10 @@ BRITANNIA 11 21
         // Measured: the shrine is entered with `E` and answers a virtue
         // question before the mantra row (`qa/paired/shrine-flow.tsv`).
         handle_play_key_input(&mut state, 'E', "", &dir).unwrap();
+        // `karma.md §12` stages the entry narration; the virtue question is
+        // its third beat. With no pump in these tests, print it now - until
+        // it is on screen the prompt is not open and keys are buffered.
+        state.flush_staged_narration();
         handle_play_key_input(&mut state, 'C', "OMPASSION\r", &dir).unwrap();
         for _ in 0..3 {
             assert_eq!(
@@ -1954,6 +1966,10 @@ BRITANNIA 11 21
         state.gold = 100;
 
         handle_play_key_input(&mut state, 'E', "", &dir).unwrap();
+        // `karma.md §12` stages the entry narration; the virtue question is
+        // its third beat. With no pump in these tests, print it now - until
+        // it is on screen the prompt is not open and keys are buffered.
+        state.flush_staged_narration();
         handle_play_key_input(&mut state, 'C', "OMPASSION\r", &dir).unwrap();
         for _ in 0..3 {
             handle_play_key_input(&mut state, 'M', "u\r", &dir).unwrap();

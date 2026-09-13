@@ -403,6 +403,18 @@ pub struct PlayState {
     /// All three were measured 2026-09-12 and disagreed with each other under
     /// any rule that did not look at the trailing byte.
     pub message_row_open_mid_line: bool,
+    /// Keys pressed while a cinematic hold owned the loop.
+    ///
+    /// `cleak/u5-spec#268` on `blackthorn.md §4.2`: the beat's animation
+    /// "consumes no input - the script language has no input command, the
+    /// repeated pause polls no keyboard, and there is no abort path - so it
+    /// cannot be skipped". Not polling the keyboard is not the same as
+    /// discarding what is typed: the keys sit in the BIOS buffer and the next
+    /// reader takes them. Measured 2026-09-12 (`bt-audience/ask3`), where the
+    /// original acknowledges the record with the `m` of a typed `mul`, holds
+    /// through the beat, and then reads the `u` as U-Use - this engine had
+    /// dropped it.
+    pub keys_buffered_during_hold: std::collections::VecDeque<(char, String)>,
     /// `combat.md §8.2`: the live `A`-Attack attempt walk and its open
     /// targeting cursor. `A` "opens a second, separate input read, and
     /// it is not a one-shot direction key but an **interactive targeting
