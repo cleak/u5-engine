@@ -12,9 +12,11 @@ from `MISCMAPS.DAT` record 1, walk an avatar up it over nine animation frames
 and kneel; this engine leaves the overworld on screen throughout, and
 `shrine-three-mantras` still reported a clean match because the text agreed.
 
-The comparison is a pixel fraction over the normalised viewport, with a
-tolerance that absorbs sprite animation phase and torch flicker while still
-catching "this is a different picture".
+Each viewport tile cell is reduced to a colour histogram, and a cell counts
+as different when its histograms are far enough apart. That is blind to
+animation phase - open water rearranges about half the viewport's pixels
+between frames while keeping the same colours - and still catches a
+different picture.
 
 Usage: viewport_audit.py <artifact-dir>...
 """
@@ -29,20 +31,25 @@ from paired_compare import frame_rect
 
 VIEWPORT_LEFT, VIEWPORT_TOP = 8, 8
 VIEWPORT_SIZE = 176
-# A beat differs when this fraction of the viewport's pixels do. Sprite
-# animation phase, a torch flicker or a one-cell sprite offset move a few per
-# cent; a different picture moves tens.
-PIXEL_TOLERANCE = 0.08
+CELL = 16
+CELLS = VIEWPORT_SIZE // CELL
+# Per-cell colour-histogram distance above which that cell is called
+# different, as a fraction of the cell's pixels.
+CELL_DISTANCE = 0.35
+# Cells that must differ before the beat is called different. One moving
+# sprite occupies one or two.
+CELL_TOLERANCE = 3
 
 
-def viewport_pixels(path: pathlib.Path) -> list[tuple[int, int, int]] | None:
-    """The viewport, normalised to its logical 176x176 pixels.
+def viewport_cell_histograms(path: pathlib.Path) -> list[dict] | None:
+    """One colour histogram per viewport tile cell.
 
-    An earlier revision reduced each of the eleven-by-eleven tile cells to its
-    most common colour. That was too crude: a cell split about evenly between
-    white stone and black tie-breaks either way, so identical pictures scored
-    four differing cells and the audit reported 499 differing beats where the
-    real figure is a fraction of that.
+    Comparing pixels directly does not work here: animated terrain is the
+    same picture at a different phase, and the wave tiles of open water move
+    about half the viewport's pixels between frames. A histogram is blind to
+    that rearrangement - animated water keeps the same two colours in the
+    same proportions - while a genuinely different picture, such as the
+    overworld where the shrine's own grid belongs, does not.
     """
     try:
         image = Image.open(path).convert("RGB")
@@ -56,15 +63,32 @@ def viewport_pixels(path: pathlib.Path) -> list[tuple[int, int, int]] | None:
         int(origin_y + (VIEWPORT_TOP + VIEWPORT_SIZE) * scale_y),
     )
     patch = image.crop(box).resize((VIEWPORT_SIZE, VIEWPORT_SIZE), Image.NEAREST)
-    return list(patch.getdata())
+    pixels = patch.load()
+    histograms = []
+    for row in range(CELLS):
+        for col in range(CELLS):
+            counts: collections.Counter = collections.Counter()
+            for y in range(row * CELL, (row + 1) * CELL):
+                for x in range(col * CELL, (col + 1) * CELL):
+                    counts[pixels[x, y]] += 1
+            histograms.append(counts)
+    return histograms
 
 
-def compare_beat(stock: pathlib.Path, engine: pathlib.Path) -> float | None:
-    left, right = viewport_pixels(stock), viewport_pixels(engine)
+def histogram_distance(left: dict, right: dict) -> float:
+    total = CELL * CELL
+    keys = set(left) | set(right)
+    return sum(abs(left.get(k, 0) - right.get(k, 0)) for k in keys) / (2 * total)
+
+
+def compare_beat(stock: pathlib.Path, engine: pathlib.Path) -> int | None:
+    left = viewport_cell_histograms(stock)
+    right = viewport_cell_histograms(engine)
     if left is None or right is None:
         return None
-    differing = sum(1 for a, b in zip(left, right) if a != b)
-    return differing / len(left)
+    return sum(
+        1 for a, b in zip(left, right) if histogram_distance(a, b) > CELL_DISTANCE
+    )
 
 
 def main() -> int:
@@ -83,12 +107,12 @@ def main() -> int:
             if differing is None:
                 continue
             total_beats += 1
-            if differing > PIXEL_TOLERANCE:
+            if differing > CELL_TOLERANCE:
                 total_differ += 1
                 worst.append((differing, beat))
         worst.sort(reverse=True)
         flag = "VIEWPORT" if worst else "ok      "
-        detail = " ".join(f"{beat}:{n:.0%}" for n, beat in worst[:4])
+        detail = " ".join(f"{beat}:{n}" for n, beat in worst[:4])
         print(f"{flag} {artifact.name}  {detail}")
     print(f"\n{total_beats} beat(s) compared, {total_differ} differ in the viewport")
     return 0
