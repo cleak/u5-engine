@@ -1090,6 +1090,59 @@ pub fn paint_z_stats_page_text_window(system: &mut TextWindowSystem, state: &Pla
     true
 }
 
+/// The panel body as it was at the last refresh.
+///
+/// `stats-panel.md §2.2`: the original has two refresh mechanisms and picks
+/// between them per call site - either the routine that changed the state
+/// repaints the whole panel itself, or it raises a one-byte request that a
+/// mode loop's command prompt drains (§2.3). "Nothing refreshes the panel at
+/// a turn boundary ... and no idle world tick and no per-frame sprite
+/// animator refreshes it at all."
+///
+/// So the panel is frequently *stale*, and painting it from live state - as
+/// this engine did - is "one prompt early for every deferred site and
+/// unboundedly early for the sites that never refresh". The wishing well is
+/// the measured case: it "never repaints and never files a request on any
+/// arm", so its coin debit stays invisible for the rest of the run.
+///
+/// Only the body is snapshotted. The selector highlight and the active-player
+/// marker are not part of a refresh - `stats-panel.md §9` has member
+/// selection "leave the body alone" - and are injected live at paint time.
+#[derive(Clone, Debug, Default, PartialEq, Eq)]
+pub struct StatsPanelSnapshot {
+    /// One entry per roster row, already reduced to the panel's fixed width.
+    pub rows: Vec<String>,
+    /// Each row's status byte, kept raw (`RETRACTIONS.md` R280).
+    pub statuses: Vec<Option<u8>>,
+    pub counter_row: String,
+    pub date_row: String,
+    pub effect_tag: Option<u8>,
+}
+
+/// Rebuild the snapshot from live state: one full-panel repaint.
+pub fn stats_panel_snapshot_of(state: &PlayState) -> StatsPanelSnapshot {
+    let mut rows = Vec::with_capacity(STATS_PANEL_PARTY_ROWS);
+    let mut statuses = Vec::with_capacity(STATS_PANEL_PARTY_ROWS);
+    for index in 0..STATS_PANEL_PARTY_ROWS {
+        // `active_cursor` is `None` here on purpose: the marker cell is
+        // overwritten at paint time from live selector state.
+        let (line, overlay) = stats_panel_party_row(state, None, index);
+        rows.push(line);
+        statuses.push(
+            overlay
+                .status_override
+                .or_else(|| state.party.get(index).copied().map(|member| member.status)),
+        );
+    }
+    StatsPanelSnapshot {
+        rows,
+        statuses,
+        counter_row: render_stats_panel_counter_row(state),
+        date_row: render_stats_panel_date_row(&state.clock),
+        effect_tag: state.active_effect_tag.filter(|effect| *effect != 0),
+    }
+}
+
 pub fn paint_stats_panel_text_window(
     system: &mut TextWindowSystem,
     state: &PlayState,
@@ -1124,8 +1177,8 @@ pub fn paint_stats_panel_text_window(
     let counter_row = STATS_COUNTER_TOP - STATS_PANEL_TEXT_TOP;
     let date_row = STATS_COUNTER_BOTTOM - STATS_PANEL_TEXT_TOP;
     for (row, line) in [
-        (counter_row, render_stats_panel_counter_row(state)),
-        (date_row, render_stats_panel_date_row(&state.clock)),
+        (counter_row, state.stats_panel.counter_row.clone()),
+        (date_row, state.stats_panel.date_row.clone()),
     ] {
         system.set_active_cursor(0, row);
         for byte in line.trim_end().bytes().take(STATS_PANEL_WIDTH) {
@@ -1140,7 +1193,7 @@ pub fn paint_stats_panel_text_window(
         STATS_PANEL_TIMED_EFFECT_LOCAL_COLUMN,
         STATS_PANEL_TIMED_EFFECT_LOCAL_ROW,
     );
-    if let Some(effect) = state.active_effect_tag.filter(|effect| *effect != 0) {
+    if let Some(effect) = state.stats_panel.effect_tag {
         system.emit_byte(crate::gameplay_chrome::RIBBON_CAP_RIGHT_SOURCE_GLYPH);
         system.emit_byte(effect);
         system.emit_byte(crate::gameplay_chrome::RIBBON_CAP_LEFT_SOURCE_GLYPH);
@@ -1271,10 +1324,24 @@ fn paint_stats_panel_party_row(
     active_cursor: Option<usize>,
     index: usize,
 ) {
-    let (line, overlay) = stats_panel_party_row(state, active_cursor, index);
-    let status = overlay
-        .status_override
-        .or_else(|| state.party.get(index).copied().map(|member| member.status));
+    // The body comes from the last refresh, not from live state - see
+    // [`StatsPanelSnapshot`]. The marker cell and the highlight below are the
+    // exception: `stats-panel.md §9` has member selection "leave the body
+    // alone", so they are read live and injected here.
+    let (line, overlay) = match state.stats_panel.rows.get(index) {
+        Some(line) => (line.clone(), stats_panel_combat_row_overlay(state, index)),
+        None => stats_panel_party_row(state, active_cursor, index),
+    };
+    let status = state
+        .stats_panel
+        .statuses
+        .get(index)
+        .copied()
+        .unwrap_or_else(|| {
+            overlay
+                .status_override
+                .or_else(|| state.party.get(index).copied().map(|member| member.status))
+        });
     // `inventory.md §4.3`: while the shared party-member selector is
     // live, "the currently indicated member is shown by **inverting a
     // rectangle covering the full fifteen content cells of that row**",

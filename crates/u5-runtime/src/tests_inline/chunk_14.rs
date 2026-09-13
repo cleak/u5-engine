@@ -2784,6 +2784,11 @@
     fn stats_refresh_emits_timed_effect_through_stats_window_then_reselects_message() {
         let mut state = test_state(open_grid(), 1, 1);
         state.active_effect_tag = Some(b'P');
+        // `stats-panel.md §2.2`: the panel shows what the last refresh
+        // captured, so a change is invisible until some site repaints or a
+        // prompt drains the request. Without this the effect tag is set and
+        // the panel legitimately does not show it.
+        state.repaint_stats_panel();
         let mut system = TextWindowSystem::new();
         configure_play_text_windows(&mut system);
         let message_cursor = system

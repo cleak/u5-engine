@@ -415,6 +415,16 @@ pub struct PlayState {
     /// through the beat, and then reads the `u` as U-Use - this engine had
     /// dropped it.
     pub keys_buffered_during_hold: std::collections::VecDeque<(char, String)>,
+    /// The roster panel as it was at the last refresh. See
+    /// [`crate::stats_panel::StatsPanelSnapshot`] for why the panel is not
+    /// painted from live state.
+    pub stats_panel: crate::stats_panel::StatsPanelSnapshot,
+    /// `stats-panel.md §2.2`'s one-byte panel refresh request: "a plain
+    /// boolean ... written only 'set' or 'clear', ... no second value, no
+    /// bitmask, no priority and no partial-refresh encoding". Raised by a
+    /// site that changed a displayed number and chose not to repaint, and
+    /// consumed at one of §2.3's four command-prompt heads.
+    pub stats_panel_refresh_requested: bool,
     /// `combat.md §8.2`: the live `A`-Attack attempt walk and its open
     /// targeting cursor. `A` "opens a second, separate input read, and
     /// it is not a one-shot direction key but an **interactive targeting

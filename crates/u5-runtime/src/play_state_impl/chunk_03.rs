@@ -368,6 +368,29 @@ impl PlayState {
             )
     }
 
+    /// A full-panel repaint: `stats-panel.md §2.2`'s immediate mechanism.
+    ///
+    /// Call it from the routine that changed the state, where that routine is
+    /// one of the seventy-four the census puts on the immediate side.
+    pub fn repaint_stats_panel(&mut self) {
+        self.stats_panel = crate::stats_panel::stats_panel_snapshot_of(self);
+    }
+
+    /// Raise §2.2's deferred request. A raise "does not depend on the change
+    /// surviving" - it is never lowered by a rollback.
+    pub fn request_stats_panel_refresh(&mut self) {
+        self.stats_panel_refresh_requested = true;
+    }
+
+    /// §2.3's consumption: "test the request, refresh the whole panel if it
+    /// is set, clear it", at the head of a mode loop's command prompt.
+    pub fn drain_stats_panel_refresh(&mut self) {
+        if !std::mem::take(&mut self.stats_panel_refresh_requested) {
+            return;
+        }
+        self.repaint_stats_panel();
+    }
+
     /// Whether a cinematic hold owns the loop, so a key belongs in the
     /// buffer rather than to a command.
     pub fn cinematic_hold_owns_input(&self) -> bool {

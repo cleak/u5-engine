@@ -358,6 +358,9 @@ fn a_live_page_replaces_the_whole_panel_and_the_divider_band() {
     let mut state = test_state(open_grid(), 5, 5);
     state.food = 63;
     state.gold = 150;
+    // `stats-panel.md §2.2`: the panel shows the last refresh, so these two
+    // writes are not on it until something repaints.
+    state.repaint_stats_panel();
 
     let mut system = TextWindowSystem::new();
     configure_play_text_windows(&mut system);
