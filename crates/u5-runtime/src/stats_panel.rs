@@ -1090,6 +1090,24 @@ pub fn paint_z_stats_page_text_window(system: &mut TextWindowSystem, state: &Pla
     true
 }
 
+/// Which of `stats-panel.md §2.2`'s mechanisms a command leaves behind.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+pub enum PanelRefreshMode {
+    /// The command repaints the panel itself. The census's majority case, so
+    /// the default: seventy-four of the ninety-seven sites that touch the
+    /// panel at all.
+    #[default]
+    Immediate,
+    /// The command raises the one-byte request instead, and the change
+    /// becomes visible one prompt later (§2.3). The healing helper and the
+    /// troll-bridge toll are the two worked examples.
+    Deferred,
+    /// The command neither paints nor raises, so the change stays invisible
+    /// until something unrelated repaints. The wishing well is the measured
+    /// case: it "never repaints and never files a request on any arm".
+    None,
+}
+
 /// The panel body as it was at the last refresh.
 ///
 /// `stats-panel.md §2.2`: the original has two refresh mechanisms and picks

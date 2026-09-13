@@ -425,6 +425,25 @@ pub struct PlayState {
     /// site that changed a displayed number and chose not to repaint, and
     /// consumed at one of §2.3's four command-prompt heads.
     pub stats_panel_refresh_requested: bool,
+    /// How the command now running will leave the panel.
+    ///
+    /// `stats-panel.md §2.2` chooses per call site, and the census puts
+    /// seventy-four sites on the immediate side against twenty-three
+    /// deferred - so [`crate::stats_panel::PanelRefreshMode::Immediate`] is
+    /// the default and only the exceptions annotate themselves. Reset at the
+    /// head of each command.
+    pub stats_panel_command_refresh: crate::stats_panel::PanelRefreshMode,
+    /// The panel body as it stood when the current command began.
+    ///
+    /// A site refreshes the panel *because it changed a displayed number*.
+    /// A command that changes none of them paints nothing and raises
+    /// nothing - which is why, in `cleak/u5-spec#267`'s measured case, the
+    /// wishing well's stale gold "survives the whole scenario and every
+    /// following prompt until something unrelated repaints the panel".
+    ///
+    /// Comparing against this at the end of the command is what distinguishes
+    /// the two, without having to classify all ~148 counter writes by hand.
+    pub stats_panel_command_baseline: crate::stats_panel::StatsPanelSnapshot,
     /// `combat.md §8.2`: the live `A`-Attack attempt walk and its open
     /// targeting cursor. `A` "opens a second, separate input read, and
     /// it is not a one-shot direction key but an **interactive targeting

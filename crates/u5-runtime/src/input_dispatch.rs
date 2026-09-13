@@ -23,6 +23,13 @@ pub fn handle_play_key_input(
     suffix: &str,
     game_dir: &Path,
 ) -> io::Result<PlayInputDisposition> {
+    // `stats-panel.md §2.2`: every site that changes a displayed number
+    // either repaints the panel itself or raises the deferred request, and
+    // which one is a property of the site. Immediate is the default because
+    // the census makes it the majority; a handler that is one of the
+    // exceptions sets its own mode while it runs.
+    state.stats_panel_command_refresh = crate::stats_panel::PanelRefreshMode::Immediate;
+    state.stats_panel_command_baseline = crate::stats_panel::stats_panel_snapshot_of(state);
     let mut result = handle_play_key_input_inner(state, key, suffix, game_dir);
     // A generic adjacent terrain combat suspends the high-to-low outdoor
     // reaction walk. As soon as the combat frame returns, continue the
@@ -56,6 +63,26 @@ pub fn handle_play_key_input(
     // the original would already have printed, so record it before the
     // next key can overwrite it.
     state.flush_message_slot();
+    // The command's own panel mechanism, applied where the command ends.
+    //
+    // Not where the *change* happened, which is where §2.2's immediate sites
+    // paint. That distinction is only observable to a capture taken between
+    // the change and the end of the command - which means inside a hold, and
+    // the holds that matter are named in the section. Those get their own
+    // explicit `repaint_stats_panel()` at the right step rather than relying
+    // on this.
+    // A command that changed none of the panel's numbers touches the panel
+    // at all: the sites in `stats-panel.md §2.2`'s census are sites that
+    // *changed* something. Without this test every command would refresh,
+    // and the wishing well's debit - which its own arm declines to paint -
+    // would appear on the panel at the very next command anyway.
+    if crate::stats_panel::stats_panel_snapshot_of(state) != state.stats_panel_command_baseline {
+        match state.stats_panel_command_refresh {
+            crate::stats_panel::PanelRefreshMode::Immediate => state.repaint_stats_panel(),
+            crate::stats_panel::PanelRefreshMode::Deferred => state.request_stats_panel_refresh(),
+            crate::stats_panel::PanelRefreshMode::None => {}
+        }
+    }
     result
 }
 

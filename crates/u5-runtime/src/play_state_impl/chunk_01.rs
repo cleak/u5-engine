@@ -877,6 +877,8 @@ impl PlayState {
             keys_buffered_during_hold: Default::default(),
             stats_panel: Default::default(),
             stats_panel_refresh_requested: false,
+            stats_panel_command_refresh: Default::default(),
+            stats_panel_command_baseline: Default::default(),
             pending_cast_argument: None,
             active_combat_targeting: None,
             combat_remembered_targets: [None; COMBAT_ACTOR_SLOTS],
@@ -1006,6 +1008,10 @@ impl PlayState {
         state.mode_zero_cleanup();
         state.mark_visibility_dirty();
         state.append_stonegate_entry_presentation_message();
+        // `stats-panel.md §2.2`'s boot-time first paint: one of the eighty
+        // direct painter calls, and the reason the panel is correct before
+        // any command has run.
+        state.repaint_stats_panel();
         Ok(state)
     }
 
@@ -1259,6 +1265,8 @@ impl PlayState {
             keys_buffered_during_hold: Default::default(),
             stats_panel: Default::default(),
             stats_panel_refresh_requested: false,
+            stats_panel_command_refresh: Default::default(),
+            stats_panel_command_baseline: Default::default(),
             pending_cast_argument: None,
             active_combat_targeting: None,
             combat_remembered_targets: [None; COMBAT_ACTOR_SLOTS],
@@ -1353,6 +1361,10 @@ impl PlayState {
         };
         state.mode_zero_cleanup();
         state.mark_visibility_dirty();
+        // `stats-panel.md §2.2`'s boot-time first paint: one of the eighty
+        // direct painter calls, and the reason the panel is correct before
+        // any command has run.
+        state.repaint_stats_panel();
         Ok(state)
     }
 
@@ -1654,6 +1666,8 @@ impl PlayState {
             keys_buffered_during_hold: Default::default(),
             stats_panel: Default::default(),
             stats_panel_refresh_requested: false,
+            stats_panel_command_refresh: Default::default(),
+            stats_panel_command_baseline: Default::default(),
             pending_cast_argument: None,
             active_combat_targeting: None,
             combat_remembered_targets: [None; COMBAT_ACTOR_SLOTS],
@@ -1754,6 +1768,10 @@ impl PlayState {
         state.refresh_cached_moon_glyphs_at_scene_entry();
         state.mode_zero_cleanup();
         state.mark_visibility_dirty();
+        // `stats-panel.md §2.2`'s boot-time first paint: one of the eighty
+        // direct painter calls, and the reason the panel is correct before
+        // any command has run.
+        state.repaint_stats_panel();
         Ok(state)
     }
 

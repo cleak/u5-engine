@@ -29,6 +29,11 @@ impl PlayState {
         &mut self,
         game_dir: &std::path::Path,
     ) -> std::io::Result<ExplorationTurnGateOutcome> {
+        // `stats-panel.md §2.3`: the deferred request is consumed at "the
+        // head of that loop's command prompt, not at the end of a turn" -
+        // test, refresh if set, clear. This gate is that position for the
+        // three exploration modes.
+        self.drain_stats_panel_refresh();
         // A rescue cinematic is already running for this defeat. The roster
         // stays Defeated until its restoration loop (`blackthorn.md §7` step
         // 22), so without this the gate would start a second rescue on every

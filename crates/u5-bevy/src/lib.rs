@@ -15759,19 +15759,6 @@ fn render_visual_play_frame_with_input_and_cursor(
     default_message: &str,
     prompt_cursor_visible: bool,
 ) -> Vec<u8> {
-    // STAGE 1 of `cleak/u5-engine#29`. The panel body now comes from
-    // `PlayState::stats_panel` rather than from live state, and this call is
-    // what keeps the two identical for now: refreshing every frame reproduces
-    // exactly the behaviour this engine had before the snapshot existed, so
-    // landing the mechanism changes nothing measurable.
-    //
-    // Stage 2 deletes this line. From then on the panel is only correct where
-    // a site repainted it or a prompt drained the request, which is what
-    // `stats-panel.md §2.2`/§2.3 describe - and the ~148 sites in this engine
-    // that write a displayed counter have to be classified one at a time,
-    // in measured batches, because each reclassification moves that site's
-    // panel by exactly one prompt.
-    state.repaint_stats_panel();
     let rgba = if state.endgame.is_some() {
         render_endgame_framebuffer(state, atlas, input_line, default_message, ctx)
     } else {

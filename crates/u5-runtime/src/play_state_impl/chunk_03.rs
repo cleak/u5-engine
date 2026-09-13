@@ -2270,6 +2270,16 @@ impl PlayState {
                             return Some(MoveOutcome::Observed);
                         }
                         self.gold = self.gold.saturating_sub(1);
+                        // `stats-panel.md §2.2` / `cleak/u5-spec#267`: the
+                        // well "never repaints and never files a request on
+                        // any arm - coin accepted, declined, no gold, empty
+                        // wish, unmatched wish, matching wish alike", so the
+                        // debited gold stays off the panel "until something
+                        // unrelated repaints" it. Measured: the stale figure
+                        // survives the rest of the scenario and every prompt
+                        // in it.
+                        self.stats_panel_command_refresh =
+                            crate::stats_panel::PanelRefreshMode::None;
                         session.coin_accepted = true;
                         self.active_wishing_well = Some(session);
                         // Measured: the answer completes the prompt's own
