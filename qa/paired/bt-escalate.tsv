@@ -11,6 +11,25 @@
 # Measured 2026-09-09: a seed taken at the `ask` beat reloads to CASTLE:1 on
 # foot with no interrogation pending.
 # requires-seed: the party on the Blackthorn palace tile at 12:00
+#
+# **Walk-up, and therefore timing-sensitive.** This scenario cannot be
+# reseeded (see above), so both sides walk to the guard while the resident
+# walks its own schedule. Whether the contact fires depends on where that
+# resident is when the party arrives, and that depends on real elapsed time
+# since launch - which differs between a solo run and a suite run.
+#
+# The failure mode is unmistakable and is **not** a wording difference: the
+# stock side's window shows only the walk (` North` / ` East` echoes) with no
+# demand, while the engine's shows the audience. Measured 2026-09-12, this
+# scenario matched twice in isolation and then read `0 beat(s) agree` from
+# inside a full-suite run on the same binary, with DOSBox never reaching the
+# audience. A run like that has measured nothing; re-run it on its own before
+# reading anything into it.
+#
+# Not marked as a lottery in the header, deliberately: that would make
+# `qa/tools/paired_compare.py` classify every difference here as a re-run and
+# stop the suite reporting real regressions in a scenario group that took a
+# day to bring to a match.
 both	wait	9000
 both	key	space
 both	wait	4000
