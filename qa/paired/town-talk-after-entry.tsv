@@ -1,3 +1,23 @@
+# **Not a pacing problem, and not a passability one.** Its `arrived`, `look`
+# and `talk` beats differ in a way that reads exactly like a passability bug:
+# the original refusing four westward steps with `Blocked!` while this engine
+# walks them. I twice attributed that to the step rate and raised the waits -
+# 450 to 700 to 1100 ms - and it matched once at 700 and then desynchronised
+# again. The rate is back at 700 ms because none of it was the cause.
+#
+# `qa/paired/town-entry-walk-probe.tsv` shoots after every one of the
+# thirty-nine steps. The two sides are identical - message window *and*
+# viewport - through step 13, and diverge at step 14, where the original
+# prints `Blocked!` and this engine walks on. The map is not the reason: the
+# entry column is cobble `0x44` from row 30 up to row 16 at every hour, and
+# the first blocking tile is `0xd8` at row 15.
+#
+# The reason is in the picture. At step 14 the original has a townsperson
+# standing directly north of the party; this engine's is elsewhere. It is an
+# NPC schedule divergence, which is what this scenario's own note about the
+# resident walking its schedule always warned about - a walk this long
+# through an inhabited town cannot be made deterministic by slowing it down.
+#
 # Does a town's dialogue table load on scene *entry* rather than on save
 # restore? Every earlier Talk capture reached its NPC by Journey Onward from a
 # save written inside the town, and the stock game refused all of them. This
@@ -9,15 +29,22 @@
 # so schedule drift is accounted for. Filed against cleak/u5-spec#198.
 # requires-seed: the party outside the town, so the scenario can walk in through the door
 #
-# Step pacing raised from 450 ms to 700 ms on 2026-09-13. At 450 ms the two
-# sides desynchronised somewhere in the twenty-one-step walk and arrived in
-# different cells, which showed up as the original refusing four westward
-# steps with `Blocked!` while this engine walked them - three beats differing
-# in a way that reads exactly like a passability bug.
+# Step pacing raised from 450 ms to 1100 ms, in two goes on 2026-09-13. The
+# two sides desynchronise somewhere in the twenty-one-step walk and arrive in
+# different cells, which shows up as the original refusing four westward steps
+# with `Blocked!` while this engine walks them - three beats differing in a
+# way that reads exactly like a passability bug.
 #
 # It is not one. `qa/paired/town-entry-walk-probe.tsv` repeats the identical
-# walk with a shot after every step at 700 ms and agrees on all twenty-two,
-# with no `Blocked!` on either side. The walk is sound; the step rate was not.
+# walk with a shot after every step and agrees on all twenty-two, with no
+# `Blocked!` on either side. The walk is sound; the step rate was not.
+#
+# 700 ms was not enough - it matched once and then desynchronised twice more.
+# The probe's own steps are nominally 700 ms but each also pays for two
+# screenshots, so its effective rate is about 1100 ms, and that is the number
+# that actually held. Read this as evidence about the harness rather than the
+# engine: a scripted walk of this length needs a step rate with real margin,
+# and any scenario that walks far is a candidate for the same treatment.
 both	wait	9000
 both	key	space
 both	wait	4000

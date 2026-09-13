@@ -1,14 +1,22 @@
 # Bisect where the Britain entry walk of `town-talk-after-entry` diverges.
 #
 # That scenario enters Britain through the door - both sides agree at the
-# `entered` beat - and then walks north. By its `arrived` beat the original is
-# refusing four westward steps with `Blocked!` while this engine walks them,
-# so the two are standing in different cells and some earlier step resolved
-# differently. Which one is not visible from three shots.
+# entry beat - and then walks a thirty-nine-step path. By its `arrived` beat
+# the original is refusing four westward steps with `Blocked!` while this
+# engine walks them, so the two are standing in different cells and some
+# earlier step resolved differently. Which one is not visible from three
+# shots.
 #
-# This repeats the same walk with a shot after every step. The reading wanted
+# This repeats the same path with a shot after every step. The reading wanted
 # is the first index at which the two sides' `Blocked!` lines disagree: that
 # step's target cell is the one whose passability differs.
+#
+# The first revision of this probe stopped at step twenty-one and reported the
+# walk sound. It was only sound that far: the real path continues with a
+# `Right`, two more norths and thirteen wests, and the `Blocked!` beats come
+# from those wests. Raising the scenario's step rate to 700 ms and then to
+# 1100 ms on the strength of that partial reading did not fix it, which is
+# what sent me back to check the sequence.
 #
 # A probe, not a conformance target. Its own differing beats establish nothing
 # about wording.
@@ -84,3 +92,57 @@ both	shot	s20	step 20: Up
 both	key	Up
 both	wait	700
 both	shot	s21	step 21: Up
+both	key	Up
+both	wait	700
+both	shot	s22	step 22: Up
+both	key	Up
+both	wait	700
+both	shot	s23	step 23: Up
+both	key	Right
+both	wait	700
+both	shot	s24	step 24: Right
+both	key	Up
+both	wait	700
+both	shot	s25	step 25: Up
+both	key	Up
+both	wait	700
+both	shot	s26	step 26: Up
+both	key	Left
+both	wait	700
+both	shot	s27	step 27: Left
+both	key	Left
+both	wait	700
+both	shot	s28	step 28: Left
+both	key	Left
+both	wait	700
+both	shot	s29	step 29: Left
+both	key	Left
+both	wait	700
+both	shot	s30	step 30: Left
+both	key	Left
+both	wait	700
+both	shot	s31	step 31: Left
+both	key	Left
+both	wait	700
+both	shot	s32	step 32: Left
+both	key	Left
+both	wait	700
+both	shot	s33	step 33: Left
+both	key	Left
+both	wait	700
+both	shot	s34	step 34: Left
+both	key	Left
+both	wait	700
+both	shot	s35	step 35: Left
+both	key	Left
+both	wait	700
+both	shot	s36	step 36: Left
+both	key	Left
+both	wait	700
+both	shot	s37	step 37: Left
+both	key	Left
+both	wait	700
+both	shot	s38	step 38: Left
+both	key	Left
+both	wait	700
+both	shot	s39	step 39: Left
