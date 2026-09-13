@@ -78,6 +78,14 @@ def frame_rect(size: tuple[int, int]) -> tuple[int, int, float, float]:
 # "matches" this tool has ever reported meant *the message window* matched.
 PANEL_TOP, PANEL_ROWS = 0, 11
 
+# The map viewport, which neither of the two decoders above touches. Until
+# 2026-09-13 every "match" this tool reported meant the two *text* regions
+# agreed, and the largest thing on screen was never compared - which hid the
+# whole shrine presentation of `karma.md §7`, and hides any run where the two
+# sides walk to different cells while their command echoes still line up.
+# Imported lazily inside `compare`: `viewport_audit` takes `frame_rect` from
+# this module, so a top-level import here closes a cycle.
+
 
 def decode(path: pathlib.Path) -> list[list[str]] | None:
     return decode_region(path, LEFT, TOP, COLS, ROWS)
@@ -641,7 +649,7 @@ def compare_cached(artifact: pathlib.Path, cache: dict) -> tuple:
 
 
 # Bump when a classifier change would alter a cached verdict.
-CACHE_VERSION = 19
+CACHE_VERSION = 20
 
 
 # Some scenarios are explicitly a lottery: their own headers say so. The night
@@ -665,7 +673,7 @@ def is_lottery(scenario: str) -> bool:
 def compare(artifact: pathlib.Path) -> tuple[int, int, int, int, int]:
     record = json.loads((artifact / "record.json").read_text())
     scenario = record.get("scenario", artifact.name)
-    same = differ = skipped = idle = panel = 0
+    same = differ = skipped = idle = panel = viewport = 0
     labels = {capture.get("label") for capture in record.get("captures", [])}
     for capture in record.get("captures", []):
         label = capture.get("label")
@@ -706,6 +714,19 @@ def compare(artifact: pathlib.Path) -> tuple[int, int, int, int, int]:
             if panel_rows:
                 panel += 1
                 print(f"  panel  {scenario}/{label}: rows {panel_rows}")
+        from viewport_audit import CELL_TOLERANCE as VIEWPORT_CELL_TOLERANCE
+        from viewport_audit import compare_beat as compare_viewport_beat
+
+        viewport_cells_differing = compare_viewport_beat(stock, engine)
+        if (
+            viewport_cells_differing is not None
+            and viewport_cells_differing > VIEWPORT_CELL_TOLERANCE
+        ):
+            viewport += 1
+            print(
+                f"  view   {scenario}/{label}: "
+                f"{viewport_cells_differing} viewport cell(s)"
+            )
         rows = [
             index
             for index, (a, b) in enumerate(zip(left, right))
@@ -731,7 +752,7 @@ def compare(artifact: pathlib.Path) -> tuple[int, int, int, int, int]:
             )
         else:
             same += 1
-    return same, differ, skipped, idle, panel
+    return same, differ, skipped, idle, panel, viewport
 
 
 KINDS: dict[str, int] = {}
@@ -777,10 +798,12 @@ def main() -> None:
     args = sys.argv[1:]
     if args[0] == "--latest":
         args = [str(path) for path in latest_artifacts(args[1:])]
-    total = [0, 0, 0, 0, 0]
+    total = [0, 0, 0, 0, 0, 0]
     cache = _cache_load()
     for arg in args:
-        same, differ, skipped, idle, panel = compare_cached(pathlib.Path(arg), cache)
+        same, differ, skipped, idle, panel, viewport = compare_cached(
+            pathlib.Path(arg), cache
+        )
         # A run carrying idle beats is not a verdict either way: it needs
         # re-running before its differences mean anything.
         # A cached verdict replays totals but not the per-beat detail lines, so
@@ -792,23 +815,29 @@ def main() -> None:
         # counter, because `magic.md` gives Create Food "a uniform
         # food/provisions delta in `[1, 3]`". Gating this on the message-window
         # count alone reported that as a plain difference.
-        lottery = (differ or panel) and is_lottery(scenario)
+        lottery = (differ or panel or viewport) and is_lottery(scenario)
         status = (
             "RERUN"
             if idle or lottery
-            else ("match" if differ == 0 and panel == 0 else "DIFFER")
+            else (
+                "match"
+                if differ == 0 and panel == 0 and viewport == 0
+                else "DIFFER"
+            )
         )
         print(
             f"{status} {pathlib.Path(arg).name}: {same} beat(s) agree, "
-            f"{differ} differ, {skipped} skipped, {idle} idle, {panel} panel"
+            f"{differ} differ, {skipped} skipped, {idle} idle, {panel} panel, "
+            f"{viewport} viewport"
         )
-        for index, value in enumerate((same, differ, skipped, idle, panel)):
+        for index, value in enumerate((same, differ, skipped, idle, panel, viewport)):
             total[index] += value
     _cache_save(cache)
     print(
         f"\n{total[0]} beat(s) agree, {total[1]} differ, "
         f"{total[2]} skipped, {total[3]} idle (re-run); "
-        f"{total[4]} beat(s) differ in the roster panel"
+        f"{total[4]} beat(s) differ in the roster panel, "
+        f"{total[5]} in the map viewport"
     )
     if KINDS:
         # `stock-idle`/`engine-idle` are re-run candidates, `offset`/`cursor`
