@@ -42,13 +42,14 @@
 # demand, while the engine's shows the audience. Measured 2026-09-12, this
 # scenario matched twice in isolation and then read `0 beat(s) agree` from
 # inside a full-suite run on the same binary, with DOSBox never reaching the
-# audience. A run like that has measured nothing; re-run it on its own before
-# reading anything into it.
+# audience. Such a run establishes nothing either way; repeat it on its own
+# before reading anything into it.
 #
-# Not marked as a lottery in the header, deliberately: that would make
-# `qa/tools/paired_compare.py` classify every difference here as a re-run and
-# stop the suite reporting real regressions in a scenario group that took a
-# day to bring to a match.
+# This header deliberately avoids `qa/tools/paired_compare.py`'s re-run marker
+# phrases. Carrying one would make the tool classify *every* difference here
+# as a non-result and stop the suite reporting real regressions in a group
+# that took a day to bring to a match. The first revision of this note said
+# so and then tripped the marker in the very sentence saying it.
 both	wait	9000
 both	key	space
 both	wait	4000
