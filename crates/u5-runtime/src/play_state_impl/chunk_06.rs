@@ -44,31 +44,39 @@ impl PlayState {
         let ny = (self.player.y as isize + dy).rem_euclid(WORLD_SIDE as isize) as usize;
         let tile = self.grid[world_cell_index(nx, ny)];
 
-        if self.world_object_at(nx, ny).is_some() {
-            // `doors-and-z-transitions.md §9`: the blocked outdoor climb prints
-            // the bare refusal. The tile id and coordinate this used to name
-            // have no counterpart in the original (`commands.md §8.1`).
+        // `doors-and-z-transitions.md §9`, as answered on `cleak/u5-spec#265`:
+        // "After the direction prompt the handler reads the **map tile** at
+        // the party's cell plus the chosen step and goes straight into the two
+        // id compares." Two whole branches this engine had are removed by that
+        // sentence:
+        //
+        //   - the object test. "There is none ... It never scans the active
+        //     object table, so an object standing on a `0x0C` cell does not
+        //     stop the climb and an object on any other cell changes nothing
+        //     about the refusal."
+        //   - the world-damage and walkability tests. "Water, lava and every
+        //     other non-mountain id are simply 'not `0x0C`' and print `Not
+        //     climbable!`. No walkability, terrain-damage or sidecar
+        //     predicate is consulted anywhere in the handler."
+        //
+        // "The only things read before the id tests are the Grapple flag, the
+        // transport byte and the direction" - the two gates the caller has
+        // already run.
+        //
+        // The order is fixed: `0x0D` first, then `0x0C`.
+        if tile == OVERWORLD_KLIMB_PEAKS_TILE {
+            // "`0x0D` (the tile catalog's *peaks*) is the blocked variant and
+            // prints `Impassable!`."
             self.message = "Impassable!".to_string();
             return Ok(MoveOutcome::Blocked);
         }
-        if let Some(entry) = self.world_damage_tile_at(game_dir, plane, nx, ny, tile)? {
-            if !entry.effect.allows_transport(self.player.transport) {
-                self.message = "Impassable!".to_string();
-                return Ok(MoveOutcome::Blocked);
-            }
-        }
-        if !is_outdoor_climbable_tile(tile) {
-            self.message = if is_tile_walkable_for_transport(
-                tile,
-                self.passability.as_ref(),
-                TransportState::Foot,
-            ) {
-                "Not climbable!".to_string()
-            } else {
-                "Impassable!".to_string()
-            };
+        if tile != OVERWORLD_KLIMB_MOUNTAINS_TILE {
+            // "`0x0C` (*mountains*) is the one climbable identity. Every other
+            // id prints `Not climbable!`."
+            self.message = "Not climbable!".to_string();
             return Ok(MoveOutcome::Blocked);
         }
+        let _ = (game_dir, plane);
 
         let (_checked, falls) = self.apply_outdoor_climb_fall_checks();
         self.player.x = nx;

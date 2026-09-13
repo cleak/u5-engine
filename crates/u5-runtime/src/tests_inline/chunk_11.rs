@@ -1710,49 +1710,69 @@
         assert_eq!(state.turn, 0);
     }
 
+    /// `doors-and-z-transitions.md §9`, as answered on `cleak/u5-spec#265`:
+    /// "`0x0D` (the tile catalog's *peaks*) is the blocked variant and prints
+    /// `Impassable!`. `0x0C` (*mountains*) is the one climbable identity.
+    /// Every other id prints `Not climbable!`. The order is fixed: the `0x0D`
+    /// test runs first, then the `0x0C` test."
+    ///
+    /// This engine used to pick between the two refusals by walkability, so
+    /// an impassable non-mountain tile drew `Impassable!` and the peaks drew
+    /// `Not climbable!` - both backwards.
     #[test]
-    fn world_k_refuses_impassable_target_without_turn() {
-        let mut grid = open_world_grid();
-        grid[world_cell_index(11, 20)] = 0x2e;
-        let mut state = world_state(grid, 10, 20);
-        state.climbing_gear = 1;
-        state.player.facing = Direction::East;
+    fn world_k_prints_impassable_only_for_the_peaks_id() {
+        for (tile, expected) in [
+            (OVERWORLD_KLIMB_PEAKS_TILE, "Impassable!"),
+            // An impassable non-mountain id: still `Not climbable!`.
+            (0x2e, "Not climbable!"),
+            // A walkable non-mountain id: the same refusal.
+            (0x02, "Not climbable!"),
+        ] {
+            let mut grid = open_world_grid();
+            grid[world_cell_index(11, 20)] = tile;
+            let mut state = world_state(grid, 10, 20);
+            state.climbing_gear = 1;
+            state.player.facing = Direction::East;
 
-        assert_eq!(
-            outdoor_klimb_toward(&mut state, Path::new(""), Direction::East),
-            MoveOutcome::Blocked
-        );
-
-        assert_eq!(state.message, "Impassable!");
-        assert_eq!((state.player.x, state.player.y), (10, 20));
-        assert_eq!(state.turn, 0);
+            assert_eq!(
+                outdoor_klimb_toward(&mut state, Path::new(""), Direction::East),
+                MoveOutcome::Blocked,
+                "tile {tile:#04x}",
+            );
+            assert_eq!(state.message, expected, "tile {tile:#04x}");
+            assert_eq!((state.player.x, state.player.y), (10, 20));
+            assert_eq!(state.turn, 0);
+        }
     }
 
+    /// `cleak/u5-spec#265`: "No walkability, terrain-damage or sidecar
+    /// predicate is consulted anywhere in the handler; the only things read
+    /// before the id tests are the Grapple flag, the transport byte and the
+    /// direction." A damage-tile sidecar entry over a `0x0C` cell therefore
+    /// does not block the climb - this engine used to refuse it.
     #[test]
-    fn world_k_refuses_clean_lava_sidecar_target_without_turn() {
+    fn world_k_ignores_a_damage_tile_sidecar_over_the_mountains_id() {
         let dir = debug_game_dir();
-        // The damage-tile sidecar takes an optional expected_tile after
-        // the effect; 0x0c is "mountains" per LOOK2.DAT (was 10 when
-        // the old code treated 10..=15 as a single mountain band).
         fs::write(
             dir.join(WORLD_DAMAGE_TILE_TABLE_FILE),
             "BRITANNIA 11 20 LAVA 12\n",
         )
         .unwrap();
         let mut grid = open_world_grid();
-        grid[world_cell_index(11, 20)] = 0x0c;
+        grid[world_cell_index(11, 20)] = OVERWORLD_KLIMB_MOUNTAINS_TILE;
         let mut state = britannia_state(grid, 10, 20);
         state.climbing_gear = 1;
         state.player.facing = Direction::East;
 
-        assert_eq!(outdoor_klimb_toward(&mut state, &dir, Direction::East), MoveOutcome::Blocked);
-
-        assert_eq!(state.message, "Impassable!");
-        assert_eq!((state.player.x, state.player.y), (10, 20));
-        assert_eq!(state.turn, 0);
-        assert_eq!(state.party[0].hp, DEFAULT_PARTY_HP);
+        assert_eq!(
+            outdoor_klimb_toward(&mut state, &dir, Direction::East),
+            MoveOutcome::Moved
+        );
+        assert_eq!((state.player.x, state.player.y), (11, 20));
         let _ = fs::remove_dir_all(dir);
     }
+
+
 
     #[test]
     fn world_k_climbs_class_derived_mountain_family_with_gear() {

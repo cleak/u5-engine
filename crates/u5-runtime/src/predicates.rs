@@ -1216,8 +1216,18 @@ pub fn is_dense_forest_tile(tile: u8) -> bool {
     tile == 0x0a
 }
 
+/// `doors-and-z-transitions.md §9`: the one climbable overworld identity.
+///
+/// `cleak/u5-spec#265`: "`0x0C` (*mountains*) is the one climbable identity.
+/// Every other id prints `Not climbable!`" - including `0x0D`, the peaks,
+/// which is tested first and prints `Impassable!` instead. The two ids are
+/// one family for sight and passability but not for K-Klimb, which is why
+/// this is no longer [`is_mountain_tile`].
+pub const OVERWORLD_KLIMB_MOUNTAINS_TILE: u8 = 0x0c;
+pub const OVERWORLD_KLIMB_PEAKS_TILE: u8 = 0x0d;
+
 pub fn is_outdoor_climbable_tile(tile: u8) -> bool {
-    is_mountain_tile(tile)
+    tile == OVERWORLD_KLIMB_MOUNTAINS_TILE
 }
 
 pub fn is_mountain_or_lava(tile: u8) -> bool {
