@@ -268,7 +268,10 @@ impl PlayState {
         // the original does not - it wants `open_prompt_line`'s inline
         // treatment extended to carry a typed buffer, which is more than
         // a flag. Tracked, not bodged.
-        self.mix_reagent_selection_active()
+        // A staged presentation draws the row its own text opened, and
+        // nothing at all when the text stopped part-way along a row.
+        (self.staged_narration_active() && self.message_row_open_mid_line)
+            || self.mix_reagent_selection_active()
             || self.active_blackthorn_guard_demand.is_some()
             || self.pending_town_arrest.is_some()
             // `commands.md §5.6` / `inventory.md §4.3`: a U-Use item that asks
@@ -424,15 +427,24 @@ impl PlayState {
     /// stock game draws the barber pole there. Suppressing both holds traded
     /// one reading for the other.
     pub fn message_window_cursor_suppressed(&self) -> bool {
-        // A staged presentation is the same shape: text on screen, no
-        // question, nothing reading a key. Measured 2026-09-12
-        // (`qa/paired/shrine-enter.tsv`, beats `early` and `mid`): the
-        // original's held row is empty where this engine drew the barber
-        // pole.
-        self.staged_narration_active()
-            || self.active_blackthorn.as_ref().is_some_and(
-                crate::blackthorn_session::BlackthornChallenge::awaiting_closing_acknowledgement,
-            )
+        // A staged presentation is not reading a key at all, so it draws no
+        // text cursor whatever its last line ended with. Measured 2026-09-12
+        // (`bt-password/onward`): the original's record row keeps its text
+        // and loses its cursor the moment `blackthorn.md §4.2`'s exit beat
+        // starts.
+        if self.staged_narration_active() {
+            return true;
+        }
+        // A held page *is* reading a key, so the cursor sits wherever its
+        // text left it - inline after a line that stopped part-way along a
+        // row, and nowhere when the line opened a fresh one. See
+        // [`PlayState::message_row_open_mid_line`].
+        if self.message_row_open_mid_line {
+            return false;
+        }
+        self.active_blackthorn.as_ref().is_some_and(
+            crate::blackthorn_session::BlackthornChallenge::awaiting_closing_acknowledgement,
+        )
     }
 
     pub fn open_prompt_line(&self) -> Option<String> {

@@ -379,6 +379,30 @@ pub struct PlayState {
     /// cleanup's test reads." The correct-answer branch with two or more
     /// nondead members does run it, after the merciful-death execution.
     pub blackthorn_audience_punished: bool,
+    /// Whether the last emitted line left the cursor part-way along its own
+    /// row rather than opening a fresh one.
+    ///
+    /// `text-output.md §10.4`: a line feed "advances the row *and* returns
+    /// the column", so a string that ends in one leaves the cursor at column
+    /// 0 of a new row and a string that does not leaves it inline. While a
+    /// held page or a staged presentation is on screen - neither of which
+    /// runs a turn cycle - that distinction is the whole difference between
+    /// what the two draw:
+    ///
+    ///   - inline: the cursor sits one cell past the text and no extra row
+    ///     exists. `blackthorn.md §4.1`'s records 9 and 10 "end with a
+    ///     closing quote plus exactly one trailing space", and the original
+    ///     draws the barber pole after it (`bt-password/passed`).
+    ///   - fresh row: the opened row is drawn, empty, and carries no cursor.
+    ///     `karma.md §12`'s approach record ends with two feeds, and the
+    ///     original holds two blank rows under it (`shrine-enter/early`);
+    ///     `blackthorn.md §5`'s execution helper "finishes with one line
+    ///     feed" and the original draws no cursor after `falls!`
+    ///     (`bt-escalate/ask5`).
+    ///
+    /// All three were measured 2026-09-12 and disagreed with each other under
+    /// any rule that did not look at the trailing byte.
+    pub message_row_open_mid_line: bool,
     /// `combat.md §8.2`: the live `A`-Attack attempt walk and its open
     /// targeting cursor. `A` "opens a second, separate input read, and
     /// it is not a one-shot direction key but an **interactive targeting

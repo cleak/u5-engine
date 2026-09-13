@@ -1188,7 +1188,12 @@ pub const BLACKTHORN_RESCUE_WAIT_AFTER_VERTIGO: u16 = 4;
 /// record across it untouched - the answer's question 3: "No window
 /// selection, no clear, no cursor write, no string print and no character
 /// output occurs between the record and the end of the captive-cell handoff."
-pub const BLACKTHORN_AUDIENCE_EXIT_BEAT_BIOS_TICKS: u16 = 92;
+/// Ninety-two ticks is the published floor exactly, and measured 2026-09-12
+/// (`qa/paired/bt-correct.tsv`, beat `after`, sampled 4 s after the key) that
+/// is not enough: the beat had already ended and the engine had opened its
+/// command row while the original was still holding. The floor "excludes the
+/// cost of the 73 viewport rebuilds, so treat it as a lower bound".
+pub const BLACKTHORN_AUDIENCE_EXIT_BEAT_BIOS_TICKS: u16 = 130;
 
 /// Where a rescue cinematic has got to.
 ///

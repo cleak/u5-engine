@@ -4952,7 +4952,20 @@ impl PlayState {
                         // the original's beat ends on `falls!`.
                         self.pending_blackthorn_closing_page =
                             Some(format!("\n\n{victim_name} is sliced in half! "));
-                        self.hold_blackthorn_closing_page(challenge, line, false, true)
+                        // `blackthorn.md §5`: "The execution helper finishes
+                        // with one line feed." One, not two: no blank row
+                        // appears under `falls!` - the feed just closes its
+                        // row, which is why the original draws no cursor
+                        // after it while records 9 and 10, which end on a
+                        // trailing space instead, do carry one. Measured
+                        // 2026-09-12 (`bt-escalate/ask5` against
+                        // `bt-password/passed`).
+                        self.hold_blackthorn_closing_page(
+                            challenge,
+                            format!("{line}\n"),
+                            false,
+                            true,
+                        )
                     }
                 }
             }

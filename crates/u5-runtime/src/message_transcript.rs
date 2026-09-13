@@ -180,6 +180,9 @@ impl PlayState {
     }
 
     pub fn push_explicit_blank_message_entry(&mut self) {
+        // A completed blank row leaves the cursor at column 0 of the next
+        // one, the same as any other line feed.
+        self.message_row_open_mid_line = false;
         self.append_transcript_entry(String::new(), Vec::new(), false, false, true);
         self.message_transcript_revision = self.message_transcript_revision.wrapping_add(1);
     }
@@ -263,6 +266,11 @@ impl PlayState {
         // turn prints beneath" the first, never instead of it.
         self.flush_message_slot();
         self.push_message_transcript_lines(&text);
+        // Empty text prints nothing and moves no cursor, so it leaves the
+        // row state alone - a staged pure hold must not reset it.
+        if !text.is_empty() {
+            self.message_row_open_mid_line = !text.ends_with('\n');
+        }
         self.message = text.clone();
         self.message_flushed = text;
     }

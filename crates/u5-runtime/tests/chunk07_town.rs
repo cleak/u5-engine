@@ -392,3 +392,50 @@ fn blackthorn_merciful_death_runs_the_same_durable_execution() {
         "the merciful death parks the record with an unmatchable whereabouts",
     );
 }
+
+/// `blackthorn.md §4.2`, as answered on `cleak/u5-spec#268`: the correct-answer
+/// branch with at least two nondead members "runs this beat too, after the
+/// merciful-death execution", and the beat is what the captive-cell handoff
+/// waits behind.
+#[test]
+fn blackthorn_correct_answer_runs_the_audience_exit_beat() {
+    let dir = debug_game_dir();
+    let mut state = test_state(open_grid(), 5, 5);
+    push_companions(&mut state, 2);
+    let scene = Scene::new(BLACKTHORN_CAPTIVE_CELL_SCENE).unwrap();
+    state.area = Area::Town { scene, floor: 0 };
+    state.begin_blackthorn_audience_capture(&dir).unwrap();
+    let mantra = state
+        .active_blackthorn
+        .as_ref()
+        .map(|challenge| challenge.expected_mantra())
+        .expect("the audience is open");
+
+    state
+        .submit_blackthorn_audience_answer(mantra, &dir)
+        .unwrap();
+    assert!(
+        state
+            .active_blackthorn
+            .as_ref()
+            .is_some_and(|challenge| challenge.awaiting_closing_acknowledgement()),
+        "the merciful-death speech holds for an acknowledgement",
+    );
+
+    state.submit_blackthorn_audience_answer("", &dir).unwrap();
+    assert!(
+        state.pending_blackthorn_audience_exit,
+        "the acknowledgement starts the exit beat rather than handing off",
+    );
+    assert!(
+        state.staged_narration_active(),
+        "the beat is a hold with nothing to print",
+    );
+
+    assert!(matches!(
+        state.run_blackthorn_audience_exit_to_handoff(&dir).unwrap(),
+        Some(MoveOutcome::Transition(AreaTransition::EnteredLocation(_)))
+    ));
+    assert!(!state.pending_blackthorn_audience_exit);
+    let _ = fs::remove_dir_all(dir);
+}

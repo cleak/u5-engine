@@ -12,13 +12,9 @@
 # foot with no interrogation pending.
 # requires-seed: the Blackthorn palace tile at 12:00 with companions=3
 #
-# Known gap, `cleak/u5-spec#268`: the `after` beat differs only in row 23,
-# where this engine draws an empty command row and the original draws nothing.
-# `blackthorn.md` §4.1 ends the record-9/record-5 branch with "acknowledgement
-# and the closing scene beat" and says no more about that beat; this engine
-# runs the captive-cell handoff on the acknowledgement key and returns to
-# command mode, while the original is still holding. Same cause as
-# `bt-password`'s `onward`. The wording agrees on every beat.
+# Fixed 2026-09-12 with `bt-password`, from the `cleak/u5-spec#268` answer.
+# The correct-answer branch with two or more nondead members runs
+# `blackthorn.md` §4.2's exit beat too, after the merciful-death execution.
 both	wait	9000
 both	key	space
 both	wait	4000
