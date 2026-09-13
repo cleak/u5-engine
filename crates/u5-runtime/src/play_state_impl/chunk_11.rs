@@ -34,6 +34,14 @@ impl PlayState {
         // test, refresh if set, clear. This gate is that position for the
         // three exploration modes.
         self.drain_stats_panel_refresh();
+        // `karma.md §7`: the shrine display outlives the meditation handler -
+        // the exit pacing "re-stamps the walking pose, spends one world step"
+        // and walks the avatar back down before the mode loop's prompt. So it
+        // is released once the session has ended *and* that staged hold has
+        // run out, not on the handler's return.
+        if self.active_shrine.is_none() && !self.staged_narration_active() {
+            self.shrine_presentation_map = None;
+        }
         // A rescue cinematic is already running for this defeat. The roster
         // stays Defeated until its restoration loop (`blackthorn.md §7` step
         // 22), so without this the gate would start a second rescue on every

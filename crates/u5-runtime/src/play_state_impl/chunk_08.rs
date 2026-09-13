@@ -1376,6 +1376,23 @@ impl PlayState {
             // was staged and the record stood alone on screen - measured
             // 2026-09-12 (`qa/paired/shrine-enter.tsv`, beats `early` and
             // `mid`, reading `offset-2`).
+            // `karma.md §7` "Entry pacing", before any of the narration: the
+            // presentation "copies the whole active-object table aside and
+            // clears every slot's **type** byte ... The compositor skips any
+            // slot whose type byte is zero, so for the duration of the
+            // presentation the party and every nearby actor are invisible
+            // while their records survive intact." Then it "loads the
+            // shrine's eleven-by-eleven display grid - record `1` of
+            // `MISCMAPS.DAT`".
+            //
+            // The approach walk that follows is not implemented: §7 gives its
+            // frame shape and cell path but not the two pose tiles, which are
+            // asked for in `cleak/u5-spec#273`. The backdrop and the
+            // suspension are what is published, and they are the bulk of the
+            // difference - this engine showed the overworld map, party sprite
+            // and all, for the whole meditation.
+            self.shrine_presentation_map =
+                load_miscmaps_cutscene_map(game_dir, SHRINE_PRESENTATION_CUTSCENE_MAP_RECORD)?;
             self.emit_message_line(format!("\n{SHRINE_APPROACH_NARRATION}\n\n"));
             // `karma.md §12`'s entry table paces this: the kneel record, then
             // "After ten world ticks, record `29`: the question asking which

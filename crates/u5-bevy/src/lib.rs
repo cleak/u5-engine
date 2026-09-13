@@ -16396,6 +16396,45 @@ fn render_blackthorn_audience_viewport(
     Ok(Some(viewport))
 }
 
+/// `karma.md §7` "Entry pacing": while the shrine presentation is up, the
+/// gameplay viewport is the shrine's own eleven-by-eleven grid - record `1`
+/// of `MISCMAPS.DAT` - and not the overworld map. The presentation clears
+/// every active-object slot's type byte for its duration, so no actor is
+/// drawn over it, including the party.
+///
+/// The approach walk's avatar is absent here: §7 gives its frames and cell
+/// path but not the walking and kneeling pose tiles, which are asked for in
+/// `cleak/u5-spec#273`. Frames 1-4 of the published walk draw "no avatar and
+/// no other actor at all", so a bare backdrop is what that part of the
+/// sequence should look like either way.
+fn render_shrine_presentation_viewport(
+    state: &PlayState,
+    atlas: &TileAtlas,
+) -> io::Result<Option<TileViewport>> {
+    let Some(map) = state.shrine_presentation_map.as_ref() else {
+        return Ok(None);
+    };
+    let cells = u5_runtime::MISCMAPS_CUTSCENE_VISIBLE_COLUMNS;
+    let rows = u5_runtime::MISCMAPS_CUTSCENE_ROWS;
+    let width = cells * TILE_ATLAS_SIDE;
+    let height = rows * TILE_ATLAS_SIDE;
+    let mut viewport = TileViewport {
+        depth: atlas.depth,
+        cells_wide: cells,
+        cells_high: rows,
+        width,
+        height,
+        pixels: vec![0; width * height],
+    };
+    for y in 0..rows {
+        for x in 0..cells {
+            let tile = map.tile(x, y).unwrap_or(0);
+            blit_tile_id_to_viewport(&mut viewport, atlas, usize::from(tile), x, y)?;
+        }
+    }
+    Ok(Some(viewport))
+}
+
 /// `blackthorn.md §7.1` step 6: the second rescue dissolve publishes a black
 /// viewport with exactly the full party-on-foot tile `0x11C` at `(5,5)`.
 /// Preserve that completed blocking-call result for the first frontend frame;
@@ -16712,6 +16751,11 @@ fn render_framebuffer(state: &mut PlayState, atlas: &TileAtlas) -> Vec<u8> {
     {
         return tile_viewport_to_visual_rgba(&viewport);
     }
+    if let Some(viewport) = render_shrine_presentation_viewport(state, atlas)
+        .unwrap_or_else(|err| panic!("shrine presentation render failed: {err}"))
+    {
+        return tile_viewport_to_visual_rgba(&viewport);
+    }
     match state.render_top_down_frame(VIEWPORT_RADIUS, atlas) {
         Ok(Some(viewport)) => {
             let rgba = tile_viewport_to_visual_rgba(&viewport);
@@ -16741,6 +16785,11 @@ fn render_base_framebuffer(state: &mut PlayState, atlas: &TileAtlas) -> Vec<u8> 
     }
     if let Some(viewport) = render_blackthorn_audience_viewport(state, atlas)
         .unwrap_or_else(|err| panic!("Blackthorn audience render failed: {err}"))
+    {
+        return tile_viewport_to_visual_rgba(&viewport);
+    }
+    if let Some(viewport) = render_shrine_presentation_viewport(state, atlas)
+        .unwrap_or_else(|err| panic!("shrine presentation render failed: {err}"))
     {
         return tile_viewport_to_visual_rgba(&viewport);
     }

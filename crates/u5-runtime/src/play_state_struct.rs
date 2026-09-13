@@ -680,6 +680,19 @@ pub struct PlayState {
     pub diagnostics: Vec<String>,
     pub active_blackthorn: Option<crate::blackthorn_session::BlackthornChallenge>,
     pub blackthorn_audience_map: Option<MiscmapsCutsceneMap>,
+    /// `karma.md §7` "Entry pacing": the shrine presentation's own display.
+    ///
+    /// Meditation does not happen on the overworld map. The presentation
+    /// "copies the whole active-object table aside and clears every slot's
+    /// **type** byte", so "the party and every nearby actor are invisible
+    /// while their records survive intact", raises the scene byte to its
+    /// suspended sentinel, and loads "the shrine's eleven-by-eleven display
+    /// grid - record `1` of `MISCMAPS.DAT`". This engine used to leave the
+    /// overworld on screen for the whole meditation; measured 2026-09-13 with
+    /// `qa/tools/viewport_audit.py`, that was 35% of the viewport's pixels
+    /// across four beats of `qa/paired/shrine-three-mantras.tsv`, and the
+    /// paired harness never saw it because it compared only text.
+    pub shrine_presentation_map: Option<MiscmapsCutsceneMap>,
     pub active_shop: Option<crate::shop_session::ActiveShopSession>,
     /// `shops.md §8.1`: the arms post-item prompt closes with `sir?`/`milady?`
     /// once a transaction has completed in this visit and with `then?` before
