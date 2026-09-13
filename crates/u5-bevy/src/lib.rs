@@ -10517,6 +10517,27 @@ fn animate_static_tiles(
         pump.accumulator = 0.0;
         return;
     }
+    // `blackthorn.md §7`'s rescue cinematic drives itself between beats: the
+    // queue above prints them, and this moves the cinematic from one phase to
+    // the next when the queue drains. Only step 19 waits on the player, and
+    // that key arrives through the input driver rather than here.
+    if visual.state.pending_blackthorn_rescue.is_some() {
+        let game_dir = visual.game_dir.clone();
+        match visual.state.step_blackthorn_rescue(&game_dir, false) {
+            Ok(_) => {}
+            Err(err) => {
+                visual
+                    .state
+                    .push_diagnostic(format!("Rescue cinematic error: {err}"));
+                visual.state.pending_blackthorn_rescue = None;
+            }
+        }
+        if visual.state.pending_blackthorn_rescue.is_some() {
+            visual.prompt_cursor_frame = visual.prompt_cursor_frame.wrapping_add(1);
+            pump.accumulator = 0.0;
+            return;
+        }
+    }
 
     let mut advanced = false;
     let (sweep_active, interval) = visual_animation_pump_interval(&visual.state, pump.interval);

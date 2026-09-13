@@ -217,6 +217,127 @@ fn world_defeat_gate_persists_the_unmaintained_table_before_rescue() {
     let _ = fs::remove_dir_all(dir);
 }
 
+/// Drive `blackthorn.md §7`'s rescue cinematic from the gate's start to its
+/// handoff, the way a shell without a pump does.
+fn run_blackthorn_rescue_to_handoff(state: &mut PlayState, dir: &std::path::Path) -> MoveOutcome {
+    state
+        .run_blackthorn_rescue_to_handoff(dir)
+        .unwrap()
+        .expect("the cinematic reaches its handoff")
+}
+
+/// `blackthorn.md §7`'s "complete print-and-wait order": "Every emission and
+/// every BIOS-tick wait of a run, in execution order". The section is explicit
+/// that this order is unconditional - it "does not vary with moral standing,
+/// roster size, member status, provisions, the incoming scene value or the
+/// clock state" - so the whole sequence is one assertion.
+///
+/// The engine used to print the `KARMA.DAT` verdict and nothing else, because
+/// §7's contract list names the beats only by role. The literals are in the
+/// section's beat table, which also states that none of them is a data-file
+/// record: an implementation "has to carry them".
+#[test]
+fn blackthorn_rescue_prints_every_published_beat_in_order() {
+    let dir = debug_game_dir();
+    let mut state = test_state(open_grid(), 1, 1);
+    state.party[0].status = b'D';
+    state.party[0].hp = 0;
+
+    state.apply_blackthorn_rescue_refuge(&dir).unwrap();
+    state.run_blackthorn_rescue_to_handoff(&dir).unwrap();
+
+    let printed: Vec<String> = state
+        .message_entries()
+        .iter()
+        .map(|entry| entry.text.clone())
+        .filter(|text| !text.is_empty())
+        .collect();
+    let position = |needle: &str| {
+        printed
+            .iter()
+            .position(|line| line.contains(needle))
+            .unwrap_or_else(|| panic!("{needle:?} never printed, got {printed:?}"))
+    };
+
+    // Beats 1 to 9, in the order of the section's numbered list. Beat 5 is
+    // one literal whose line break falls inside it, so its two rows are
+    // checked separately and must stay adjacent in this order.
+    let order = [
+        "An unending darkness engulfs thee...",
+        "Thou hast found refuge.",
+        "No evil lives here, only peace and darkness.",
+        "But thy slumber is disturbed!",
+        "Someone shouts",
+        "FORTIS FORTUNA",
+        "AVENTARI",
+        "There is a peal of thunder!",
+        "Strange words are intoned.",
+        "Vertigo...",
+    ];
+    let mut previous = 0;
+    for needle in order {
+        let index = position(needle);
+        assert!(
+            index >= previous,
+            "{needle:?} is out of order at {index} (previous {previous}) in {printed:?}",
+        );
+        previous = index;
+    }
+
+    // Beat 8a is conditional and this roster is all-Dead, which §7 says is
+    // exactly the case that never reaches it: "Beat 8a is unreachable in an
+    // unedited shipped save, because the cinematic's own entry condition ...
+    // leaves an all-Dead roster."
+    assert!(
+        !printed.iter().any(|line| line.contains("Not dead!")),
+        "an all-Dead roster prints no beat 8a: {printed:?}",
+    );
+    let _ = fs::remove_dir_all(dir);
+}
+
+/// The other side of that condition. A roster that cannot act but is not Dead
+/// - `blackthorn.md §7`: "It is reachable for a roster carrying a preserved
+/// legacy Ashes status" - prints one beat 8a per such slot, in slot order.
+#[test]
+fn blackthorn_rescue_prints_one_not_dead_line_per_undead_slot() {
+    let dir = debug_game_dir();
+    let mut state = test_state(open_grid(), 1, 1);
+    for _ in 0..2 {
+        let slot = state.party.len() as u8;
+        state.party.push(PartyMember {
+            slot,
+            class_byte: b'F',
+            status: b'G',
+            climb_stat: 20,
+            mana: 0,
+            hp: 40,
+            max_hp: 40,
+            level: 3,
+        });
+    }
+    for member in &mut state.party {
+        member.status = b'A';
+        member.hp = 0;
+    }
+    assert_eq!(state.party_capability(), PartyCapability::Defeated);
+
+    state.apply_blackthorn_rescue_refuge(&dir).unwrap();
+    state.run_blackthorn_rescue_to_handoff(&dir).unwrap();
+
+    let lines = state
+        .message_entries()
+        .iter()
+        .filter(|entry| entry.text.contains("Not dead!"))
+        .count();
+    assert_eq!(lines, 3, "one line per non-Dead in-party slot");
+    // §7 contract step 6: every member comes back able-bodied at full HP.
+    for member in &state.party {
+        assert_eq!(member.status, b'G');
+        assert_eq!(member.hp, member.max_hp);
+    }
+    let _ = fs::remove_dir_all(dir);
+}
+
 #[test]
 fn defeated_gate_enters_the_same_rescue_from_all_exploration_modes() {
     let dir = debug_game_dir();
@@ -231,9 +352,12 @@ fn defeated_gate_enters_the_same_rescue_from_all_exploration_modes() {
         state.party[0].hp = 0;
         assert!(matches!(
             state.apply_exploration_turn_gate(&dir).unwrap(),
-            ExplorationTurnGateOutcome::Rescued {
-                transition: MoveOutcome::Transition(AreaTransition::EnteredLocation(scene))
-            } if scene.byte == BLACKTHORN_RESCUE_HANDOFF_SCENE
+            ExplorationTurnGateOutcome::Rescued { transition: None }
+        ));
+        assert!(matches!(
+            run_blackthorn_rescue_to_handoff(state, &dir),
+            MoveOutcome::Transition(AreaTransition::EnteredLocation(scene))
+                if scene.byte == BLACKTHORN_RESCUE_HANDOFF_SCENE
         ));
         assert_eq!(state.party[0].status, b'G');
         assert_eq!(state.party[0].hp, state.party[0].max_hp);
@@ -256,9 +380,12 @@ fn stonegate_scripted_death_reaches_rescue_on_the_next_gate() {
     assert_eq!(state.party_capability(), PartyCapability::Defeated);
     assert!(matches!(
         state.apply_exploration_turn_gate(&dir).unwrap(),
-        ExplorationTurnGateOutcome::Rescued {
-            transition: MoveOutcome::Transition(AreaTransition::EnteredLocation(scene))
-        } if scene.byte == BLACKTHORN_RESCUE_HANDOFF_SCENE
+        ExplorationTurnGateOutcome::Rescued { transition: None }
+    ));
+    assert!(matches!(
+        run_blackthorn_rescue_to_handoff(&mut state, &dir),
+        MoveOutcome::Transition(AreaTransition::EnteredLocation(scene))
+            if scene.byte == BLACKTHORN_RESCUE_HANDOFF_SCENE
     ));
     assert_eq!(state.party[0].status, b'G');
     assert_eq!(state.party[0].hp, state.party[0].max_hp);

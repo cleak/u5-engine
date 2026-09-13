@@ -1131,6 +1131,65 @@ pub const KARMA_DAT_BAND_WIDTH: u8 = 20;
 /// returns the matching record index `0..=4`. The shipped sixth record
 /// is not selected by this rescue/refuge table; values `>= 100` clamp
 /// to the top band, since the moral-standing selector caps at 99.
+/// `blackthorn.md §7`'s rescue narration, beat by beat.
+///
+/// The section is explicit that these are not data-file records: "none of
+/// this narration is a `MISCMSG.DAT` record and none of it has a record
+/// ordinal ... An implementation cannot read these strings out of the user's
+/// data files; it has to carry them." Each constant is the exact string from
+/// the beat table, including its own leading and trailing line feeds.
+pub const BLACKTHORN_RESCUE_DARKNESS: &str = "\nAn unending darkness engulfs thee...";
+pub const BLACKTHORN_RESCUE_REFUGE_FIRST: &str = "\n\nThou hast found refuge.";
+pub const BLACKTHORN_RESCUE_REFUGE_SECOND: &str =
+    "\n\nNo evil lives here, only peace and darkness.";
+pub const BLACKTHORN_RESCUE_REFUGE_THIRD: &str = "\n\nBut thy slumber is disturbed!";
+/// Beat 5 is **one** literal: "`Someone shouts` carries no ellipsis, and the
+/// two quotation marks, the blank row before the phrase and the line break
+/// inside it all belong to that same string".
+pub const BLACKTHORN_RESCUE_SHOUT: &str = "\n\nSomeone shouts\n\n\"FORTIS FORTUNA\nAVENTARI\"";
+pub const BLACKTHORN_RESCUE_THUNDER: &str = "\n\nThere is a peal of thunder!\n";
+/// Beat 7 frames the `KARMA.DAT` record: `\n"`, the record, then one `"`.
+pub const BLACKTHORN_RESCUE_VERDICT_OPEN: &str = "\n\"";
+pub const BLACKTHORN_RESCUE_VERDICT_CLOSE: &str = "\"";
+/// Beat 8 has "**no** trailing line feed, so when beat 8a fires the first
+/// `Not dead!` runs straight on from `intoned.` on the same row".
+pub const BLACKTHORN_RESCUE_INTONED: &str = "\n\nStrange words are intoned.";
+/// Beat 8a, printed by the restoration loop once per non-Dead in-party slot.
+pub const BLACKTHORN_RESCUE_NOT_DEAD: &str = "Not dead!\n";
+pub const BLACKTHORN_RESCUE_VERTIGO: &str = "\n\nVertigo...\n";
+
+/// `blackthorn.md §7`'s "complete print-and-wait order", as BIOS-tick waits
+/// that precede each print. Steps with no wait of their own carry zero.
+pub const BLACKTHORN_RESCUE_WAIT_BEFORE_DARKNESS: u16 = 10;
+/// Steps 5 and 7: fourteen ticks between refuge fragments one and two,
+/// twenty-eight between two and three. With the ten above this is §7.1's
+/// "**52 BIOS ticks** before the audio sequence".
+pub const BLACKTHORN_RESCUE_WAIT_BEFORE_REFUGE_SECOND: u16 = 14;
+pub const BLACKTHORN_RESCUE_WAIT_BEFORE_REFUGE_THIRD: u16 = 28;
+/// Steps 11 to 13: six ticks after the shout, then four after each Guardian
+/// reveal, all before the thunder line.
+pub const BLACKTHORN_RESCUE_WAIT_BEFORE_THUNDER: u16 = 6 + 4 + 4;
+/// Steps 21 and 24: four ticks after the intoned beat before the restoration
+/// loop, and four after the vertigo beat before the handoff.
+pub const BLACKTHORN_RESCUE_WAIT_AFTER_INTONED: u16 = 4;
+pub const BLACKTHORN_RESCUE_WAIT_AFTER_VERTIGO: u16 = 4;
+
+/// Where a rescue cinematic has got to.
+///
+/// `blackthorn.md §7`: step 19 "is the cinematic's only blocking key read,
+/// and it is on none of the narrative beats: it sits between the verdict's
+/// closing quotation mark and `Strange words are intoned.`". Everything
+/// before it and everything after it "passes without input".
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum BlackthornRescuePhase {
+    /// Steps 1 to 18: the darkness, refuge, shout, thunder and verdict beats.
+    Narration,
+    /// Step 19, the one blocking key read.
+    AwaitingAcknowledgement,
+    /// Steps 20 to 24, after which the handoff of steps 10 to 12 runs.
+    Restoration,
+}
+
 pub const fn blackthorn_rescue_verdict_record(standing: u8) -> u8 {
     match standing {
         0..=19 => 0,

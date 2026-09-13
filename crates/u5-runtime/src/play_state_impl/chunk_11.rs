@@ -2,9 +2,19 @@ use crate::*;
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum ExplorationTurnGateOutcome {
-    Ready { member_index: usize },
-    Slept { transition: Option<MoveOutcome> },
-    Rescued { transition: MoveOutcome },
+    Ready {
+        member_index: usize,
+    },
+    Slept {
+        transition: Option<MoveOutcome>,
+    },
+    /// A rescue cinematic is running. `blackthorn.md §7` puts its handoff at
+    /// the *end*, after nine beats and a blocking key, so the transition
+    /// arrives from `step_blackthorn_rescue` rather than from this gate and
+    /// is `None` here.
+    Rescued {
+        transition: Option<MoveOutcome>,
+    },
 }
 
 impl PlayState {
@@ -19,6 +29,13 @@ impl PlayState {
         &mut self,
         game_dir: &std::path::Path,
     ) -> std::io::Result<ExplorationTurnGateOutcome> {
+        // A rescue cinematic is already running for this defeat. The roster
+        // stays Defeated until its restoration loop (`blackthorn.md §7` step
+        // 22), so without this the gate would start a second rescue on every
+        // frame of the first one.
+        if self.pending_blackthorn_rescue.is_some() {
+            return Ok(ExplorationTurnGateOutcome::Rescued { transition: None });
+        }
         match self.party_capability() {
             PartyCapability::CanAct { member_index } => {
                 // The gate reports who can act; it does not *select* anybody.
@@ -82,8 +99,12 @@ impl PlayState {
                     }
                     Area::Town { .. } => {}
                 }
-                let transition = self.apply_blackthorn_rescue_refuge(game_dir)?;
-                Ok(ExplorationTurnGateOutcome::Rescued { transition })
+                // The transition is the cinematic's *last* step, not its
+                // first: `blackthorn.md §7` runs nine narrative beats and a
+                // blocking key read before the handoff. `step_blackthorn_rescue`
+                // reports it when it gets there.
+                let _ = self.apply_blackthorn_rescue_refuge(game_dir)?;
+                Ok(ExplorationTurnGateOutcome::Rescued { transition: None })
             }
         }
     }

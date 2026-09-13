@@ -2483,9 +2483,12 @@
         let prng_before = state.prng_state;
         let sound_serial_before = state.sound_effect_serial;
 
+        state.apply_blackthorn_rescue_refuge(&dir).unwrap();
+        // `blackthorn.md §7` puts the handoff at the end of the cinematic,
+        // after nine beats and one blocking key.
         assert!(matches!(
-            state.apply_blackthorn_rescue_refuge(&dir).unwrap(),
-            MoveOutcome::Transition(AreaTransition::EnteredLocation(scene))
+            state.run_blackthorn_rescue_to_handoff(&dir).unwrap(),
+            Some(MoveOutcome::Transition(AreaTransition::EnteredLocation(scene)))
                 if scene.byte == BLACKTHORN_RESCUE_HANDOFF_SCENE
         ));
 
@@ -2564,7 +2567,29 @@
                 BLACKTHORN_RESCUE_HANDOFF_Y as usize
             )
         );
-        assert_eq!(state.message, "strayed");
+        // The verdict is beat 7 of nine, so the compatibility slot no longer
+        // holds it once the cinematic has finished; the transcript does.
+        assert!(
+            state
+                .message_entries()
+                .iter()
+                .any(|entry| entry.text.contains("strayed")),
+            "the selected KARMA.DAT record is printed",
+        );
+        assert!(
+            state
+                .message_entries()
+                .iter()
+                .any(|entry| entry.text.contains("An unending darkness engulfs thee...")),
+            "`blackthorn.md §7` beat 1",
+        );
+        assert!(
+            state
+                .message_entries()
+                .iter()
+                .any(|entry| entry.text.contains("Vertigo...")),
+            "`blackthorn.md §7` beat 9",
+        );
         let _ = fs::remove_dir_all(dir);
     }
 
@@ -2587,15 +2612,34 @@
         state.moral_standing = 99;
         state.food = 0x0100;
 
+        state.apply_blackthorn_rescue_refuge(&dir).unwrap();
+        // `blackthorn.md §7` puts the handoff at the end of the cinematic,
+        // after nine beats and one blocking key.
         assert!(matches!(
-            state.apply_blackthorn_rescue_refuge(&dir).unwrap(),
-            MoveOutcome::Transition(AreaTransition::EnteredLocation(scene))
+            state.run_blackthorn_rescue_to_handoff(&dir).unwrap(),
+            Some(MoveOutcome::Transition(AreaTransition::EnteredLocation(scene)))
                 if scene.byte == BLACKTHORN_RESCUE_HANDOFF_SCENE
         ));
 
         assert_eq!(state.moral_standing, 99);
         assert_eq!(state.food, 0x0100, "every nonzero Food word is preserved");
-        assert_eq!(state.message, "destiny");
+        // The verdict is beat 7 of nine; the window's last line when the
+        // cinematic finishes is beat 9. The record still has to have been
+        // printed, framed by §7's quotation marks.
+        assert!(
+            state
+                .message_entries()
+                .iter()
+                .any(|entry| entry.text.contains("destiny")),
+            "the selected KARMA.DAT record is printed",
+        );
+        assert!(
+            state
+                .message_entries()
+                .iter()
+                .any(|entry| entry.text.contains("Vertigo...")),
+            "`blackthorn.md §7` beat 9",
+        );
         let _ = fs::remove_dir_all(dir);
     }
 

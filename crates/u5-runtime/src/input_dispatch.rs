@@ -102,6 +102,13 @@ fn handle_play_key_input_inner(
     if state.endgame.is_some() {
         return handle_endgame_key_input(state, key, suffix, game_dir);
     }
+    // `blackthorn.md §7` step 19, the rescue cinematic's only blocking key
+    // read: "any key satisfies it, no typed character is echoed, and the
+    // returned key is discarded rather than interpreted as a command".
+    if state.pending_blackthorn_rescue.is_some() {
+        let _ = state.step_blackthorn_rescue(game_dir, true)?;
+        return Ok(PlayInputDisposition::Continue);
+    }
     if state.active_blackthorn.is_some() {
         return handle_active_blackthorn_key_input(state, key, suffix, game_dir);
     }

@@ -52,6 +52,9 @@ pub fn run_play_loop(
         // would never advance here. Print the rest of it at once rather than
         // stall: this shell is a harness, not a pacing reference.
         state.flush_staged_narration();
+        // `blackthorn.md §7`'s rescue cinematic still has to reach its
+        // handoff, and this shell has no pump to walk it there.
+        state.run_blackthorn_rescue_to_handoff(game_dir)?;
         if play_state_accepts_typeahead(&state) {
             match state.apply_exploration_turn_gate(game_dir)? {
                 ExplorationTurnGateOutcome::Ready { .. } => {}

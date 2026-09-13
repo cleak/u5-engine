@@ -363,6 +363,11 @@ pub struct PlayState {
     /// loops call [the world tick] directly", so a handler with waits between
     /// its records is holding the loop. See [`crate::narration`].
     pub staged_narration: crate::narration::StagedNarration,
+    /// Where `blackthorn.md §7`'s rescue cinematic has got to, if one is
+    /// running. Its narration is staged; this is the part the queue cannot
+    /// carry - the one blocking key read in the middle, and the durable
+    /// handoff at the end.
+    pub pending_blackthorn_rescue: Option<crate::blackthorn::BlackthornRescuePhase>,
     /// `combat.md §8.2`: the live `A`-Attack attempt walk and its open
     /// targeting cursor. `A` "opens a second, separate input read, and
     /// it is not a one-shot direction key but an **interactive targeting

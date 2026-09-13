@@ -5313,43 +5313,207 @@ impl PlayState {
         )))
     }
 
+    /// `blackthorn.md §7`'s rescue cinematic, steps 1 to 18.
+    ///
+    /// The narration is staged rather than printed in one call: §7's
+    /// "complete print-and-wait order" interleaves nine beats with BIOS-tick
+    /// waits, and step 19 is "the cinematic's only blocking key read". This
+    /// call runs everything up to that key; [`Self::step_blackthorn_rescue`]
+    /// owns the rest.
+    ///
+    /// The engine used to print the `KARMA.DAT` verdict and nothing else,
+    /// because §7's contract list names the beats only by role. The literals
+    /// are published in the section's beat table, which also states that none
+    /// of them is a data-file record: "An implementation cannot read these
+    /// strings out of the user's data files; it has to carry them."
     pub fn apply_blackthorn_rescue_refuge(&mut self, game_dir: &Path) -> io::Result<MoveOutcome> {
         let verdict = blackthorn_rescue_verdict_record(self.moral_standing);
         let verdict_message = self.blackthorn_rescue_verdict_message(game_dir, verdict as usize)?;
 
-        // `blackthorn.md §7` (public spec b34ae69): after the
-        // unending-darkness line, the first blocking call publishes a hidden
-        // viewport containing colour zero only. It precedes scratch-state
-        // clearing, tableau construction, and every durable handoff write.
+        // Step 1-2: "Wait ten BIOS ticks. Print beat 1."
+        self.staged_narration.push_ticks(
+            crate::blackthorn::BLACKTHORN_RESCUE_WAIT_BEFORE_DARKNESS,
+            crate::blackthorn::BLACKTHORN_RESCUE_DARKNESS,
+        );
+
+        // Step 3: "Dissolve the map viewport out to black; clear the
+        // cinematic scratch state." `blackthorn.md §7` puts this before
+        // scratch clearing, tableau construction and every durable write.
         self.run_map_viewport_dissolve(MapViewportDissolveSource::BlackthornRescueBlack);
 
-        // `blackthorn.md §7.1`: the temporary refuge tableau is presented
-        // between the two dissolves. Its three direct cell reveals all use
-        // the shared 256-pixel LFSR order and 31 checkpoints. The thunder
-        // beat invokes the shared major flash twice and therefore consumes
-        // 3,712 gameplay-PRNG draws even when sound is muted.
+        // Steps 4-8: the three refuge fragments, fourteen then twenty-eight
+        // ticks apart.
+        self.staged_narration
+            .push_ticks(0, crate::blackthorn::BLACKTHORN_RESCUE_REFUGE_FIRST);
+        self.staged_narration.push_ticks(
+            crate::blackthorn::BLACKTHORN_RESCUE_WAIT_BEFORE_REFUGE_SECOND,
+            crate::blackthorn::BLACKTHORN_RESCUE_REFUGE_SECOND,
+        );
+        self.staged_narration.push_ticks(
+            crate::blackthorn::BLACKTHORN_RESCUE_WAIT_BEFORE_REFUGE_THIRD,
+            crate::blackthorn::BLACKTHORN_RESCUE_REFUGE_THIRD,
+        );
+
+        // Step 9: "Install the party-on-foot actor at the viewport centre and
+        // redraw; run the six-row envelope sequence of Section 7.1."
+        //
+        // `blackthorn.md §7.1`: the three direct cell reveals all use the
+        // shared 256-pixel LFSR order and 31 checkpoints, and the thunder
+        // beat invokes the shared major flash twice, consuming 3,712
+        // gameplay-PRNG draws even when sound is muted.
         self.pending_blackthorn_rescue_playbacks
             .push(blackthorn_rescue_playback());
         // `audio.md §8.6.2`: after the refuge tableau first redraws the party
         // actor, run six independent envelope programs back-to-back. No visual
         // operation or intentional hold occurs between rows.
         self.emit_sound_effect(SoundEffect::BlackthornRescueEnvelopes);
+
+        // Steps 10-14: the shout, then six plus four plus four ticks across
+        // the two Guardian reveals, then the thunder line.
+        self.staged_narration
+            .push_ticks(0, crate::blackthorn::BLACKTHORN_RESCUE_SHOUT);
+        self.staged_narration.push_ticks(
+            crate::blackthorn::BLACKTHORN_RESCUE_WAIT_BEFORE_THUNDER,
+            crate::blackthorn::BLACKTHORN_RESCUE_THUNDER,
+        );
+        // Step 15: the paired viewport flash.
         self.emit_major_flash();
         self.emit_major_flash();
 
-        for member in &mut self.party {
-            member.status = b'G';
-            member.hp = member.max_hp.max(1);
+        // Steps 16-18: `\n"`, the record, one `"`. One emission, because the
+        // frame and the record share a row.
+        self.staged_narration.push_ticks(
+            0,
+            format!(
+                "{}{verdict_message}{}",
+                crate::blackthorn::BLACKTHORN_RESCUE_VERDICT_OPEN,
+                crate::blackthorn::BLACKTHORN_RESCUE_VERDICT_CLOSE,
+            ),
+        );
+
+        self.pending_blackthorn_rescue = Some(crate::blackthorn::BlackthornRescuePhase::Narration);
+        Ok(MoveOutcome::Observed)
+    }
+
+    /// Whether the rescue is at step 19, its one blocking key read.
+    pub fn blackthorn_rescue_awaiting_acknowledgement(&self) -> bool {
+        self.pending_blackthorn_rescue
+            == Some(crate::blackthorn::BlackthornRescuePhase::AwaitingAcknowledgement)
+    }
+
+    /// Drive the rescue past whatever it is waiting on.
+    ///
+    /// Called once per frame by the shell. Returns the transition when the
+    /// cinematic reaches its handoff, and `None` every other time.
+    pub fn step_blackthorn_rescue(
+        &mut self,
+        game_dir: &Path,
+        key_pressed: bool,
+    ) -> io::Result<Option<MoveOutcome>> {
+        use crate::blackthorn::BlackthornRescuePhase;
+        match self.pending_blackthorn_rescue {
+            None => Ok(None),
+            // The staged queue is still printing; nothing to do until it
+            // drains. §7: every beat before step 19 "passes without input".
+            Some(BlackthornRescuePhase::Narration) if self.staged_narration_active() => Ok(None),
+            Some(BlackthornRescuePhase::Narration) => {
+                self.pending_blackthorn_rescue =
+                    Some(BlackthornRescuePhase::AwaitingAcknowledgement);
+                Ok(None)
+            }
+            // Step 19: "any key satisfies it, no typed character is echoed,
+            // and the returned key is discarded rather than interpreted as a
+            // command".
+            Some(BlackthornRescuePhase::AwaitingAcknowledgement) => {
+                if !key_pressed {
+                    return Ok(None);
+                }
+                // Step 20: beat 8, which carries no trailing feed.
+                self.staged_narration
+                    .push_ticks(0, crate::blackthorn::BLACKTHORN_RESCUE_INTONED);
+                // Steps 21-22: four ticks, then the restoration loop, which
+                // "prints beat 8a once per non-Dead in-party slot". The status
+                // read is the pre-restoration one - §7 notes the beat is
+                // unreachable on an all-Dead roster, which is what the
+                // cinematic's own entry condition normally leaves.
+                let not_dead = self
+                    .party
+                    .iter()
+                    .filter(|member| member.status != b'D')
+                    .count();
+                let mut wait = crate::blackthorn::BLACKTHORN_RESCUE_WAIT_AFTER_INTONED;
+                for _ in 0..not_dead {
+                    self.staged_narration
+                        .push_ticks(wait, crate::blackthorn::BLACKTHORN_RESCUE_NOT_DEAD);
+                    wait = 0;
+                }
+                // Step 23: beat 9. If no `Not dead!` line fired, the
+                // four-tick wait of step 21 still precedes it.
+                self.staged_narration
+                    .push_ticks(wait, crate::blackthorn::BLACKTHORN_RESCUE_VERTIGO);
+                // Step 24: four ticks before the handoff, with nothing to
+                // print - an empty beat is a pure hold.
+                self.staged_narration.push_ticks(
+                    crate::blackthorn::BLACKTHORN_RESCUE_WAIT_AFTER_VERTIGO,
+                    String::new(),
+                );
+                // Step 22's durable half. §7 contract step 6: "the member's
+                // status is reset to able-bodied and their current hit points
+                // are set to their maximum".
+                for member in &mut self.party {
+                    member.status = b'G';
+                    member.hp = member.max_hp.max(1);
+                }
+                self.pending_blackthorn_rescue = Some(BlackthornRescuePhase::Restoration);
+                Ok(None)
+            }
+            Some(BlackthornRescuePhase::Restoration) if self.staged_narration_active() => Ok(None),
+            Some(BlackthornRescuePhase::Restoration) => {
+                self.pending_blackthorn_rescue = None;
+                self.apply_blackthorn_rescue_handoff(game_dir).map(Some)
+            }
         }
+    }
 
-        // The verdict and party restoration precede the second call. Its
-        // hidden viewport is black except for the on-foot party tile at the
-        // centre cell; the castle view is not this dissolve's source.
+    /// Run a rescue cinematic straight through to its handoff.
+    ///
+    /// For frontends with no animation pump - the terminal shell and the
+    /// headless harness - and for tests. The staged beats are printed at
+    /// once and step 19's blocking key is treated as already pressed, so
+    /// every durable effect of `blackthorn.md §7` lands in one call.
+    pub fn run_blackthorn_rescue_to_handoff(
+        &mut self,
+        game_dir: &Path,
+    ) -> io::Result<Option<MoveOutcome>> {
+        // One iteration per phase transition, with a bound so a future phase
+        // that forgets to advance fails loudly instead of hanging a shell.
+        for _ in 0..16 {
+            if self.pending_blackthorn_rescue.is_none() {
+                return Ok(None);
+            }
+            self.flush_staged_narration();
+            let key = self.blackthorn_rescue_awaiting_acknowledgement();
+            if let Some(outcome) = self.step_blackthorn_rescue(game_dir, key)? {
+                return Ok(Some(outcome));
+            }
+        }
+        Err(io::Error::other(
+            "the Blackthorn rescue cinematic did not reach its handoff",
+        ))
+    }
+
+    /// Step 25 and contract steps 9 to 12: the second dissolve, then every
+    /// durable write. `blackthorn.md §7`: "The moral-standing floor,
+    /// destination scene/floor/position writes, timed-effect clear, advance
+    /// to 06:00, and light-counter clears all occur only after the second
+    /// dissolve has completed."
+    fn apply_blackthorn_rescue_handoff(&mut self, game_dir: &Path) -> io::Result<MoveOutcome> {
+        // Its hidden viewport is black except for the on-foot party tile at
+        // the centre cell; the castle view is not this dissolve's source.
         self.run_map_viewport_dissolve(MapViewportDissolveSource::BlackthornRescuePartyOnBlack {
             cell: BLACKTHORN_RESCUE_PARTY_CELL,
         });
 
-        // All handoff state follows completion of that second blocking call.
         self.moral_standing = blackthorn_rescue_post_print_standing(self.moral_standing);
         self.clear_active_effect_slot();
         self.torch_counter = 0;
@@ -5385,10 +5549,14 @@ impl PlayState {
         let _ = self.restore_resident_shadowlord_after_floor_reload();
         self.sync_player_object();
         self.mark_visibility_dirty();
-        // The message window belongs to the original verdict record. Scene,
-        // coordinate, standing and restoration details are runtime state, not
-        // player-facing prose from the game data.
-        self.message = verdict_message;
+        // Scene, coordinate, standing and restoration details are runtime
+        // state, not player-facing prose.
+        self.push_diagnostic(format!(
+            "Rescued to {} at ({}, {}).",
+            scene.key(),
+            self.player.x,
+            self.player.y
+        ));
         Ok(MoveOutcome::Transition(AreaTransition::EnteredLocation(
             scene,
         )))
