@@ -99,6 +99,7 @@ town-look-npc-cell	seed-town-look-npc-cell	copied from the paired-town-look-npc-
 town-night-schedule	seed-town-night-schedule	copied from the paired-town-night-schedule run profile
 town-talk	seed-town-talk-reseeded	the walk-up replayed once by reseed.py
 town-talk-after-entry	seed-town-talk-after-entry	copied from the paired-town-talk-after-entry run profile
+town-entry-walk-probe	seed-town-talk-after-entry	shares town-talk-after-entry's seed; bisects the same walk
 town-talk-high-dialog-id	seed-town-talk-high-dialog-id-reseeded	re-written by reseed.py so the save carries a populated NPC band
 town-talk-nonspeaker	seed-town-talk-nonspeaker-reseeded	re-written by reseed.py so the save carries a populated NPC band
 town-talk-second-npc	seed-town-talk-second-npc	copied from the paired-town-talk-second-npc run profile

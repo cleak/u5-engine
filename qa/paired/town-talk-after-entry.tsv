@@ -8,6 +8,16 @@
 # `talk_gate_probe` breadth-first search, re-derived after simulating the walk
 # so schedule drift is accounted for. Filed against cleak/u5-spec#198.
 # requires-seed: the party outside the town, so the scenario can walk in through the door
+#
+# Step pacing raised from 450 ms to 700 ms on 2026-09-13. At 450 ms the two
+# sides desynchronised somewhere in the twenty-one-step walk and arrived in
+# different cells, which showed up as the original refusing four westward
+# steps with `Blocked!` while this engine walked them - three beats differing
+# in a way that reads exactly like a passability bug.
+#
+# It is not one. `qa/paired/town-entry-walk-probe.tsv` repeats the identical
+# walk with a shot after every step at 700 ms and agrees on all twenty-two,
+# with no `Blocked!` on either side. The walk is sound; the step rate was not.
 both	wait	9000
 both	key	space
 both	wait	4000
@@ -18,83 +28,83 @@ both	key	e
 both	wait	4000
 both	shot	entered	Entered Britain through the door
 both	key	Up
-both	wait	450
+both	wait	700
 both	key	Up
-both	wait	450
+both	wait	700
 both	key	Up
-both	wait	450
+both	wait	700
 both	key	Up
-both	wait	450
+both	wait	700
 both	key	Up
-both	wait	450
+both	wait	700
 both	key	Up
-both	wait	450
+both	wait	700
 both	key	Up
-both	wait	450
+both	wait	700
 both	key	Up
-both	wait	450
+both	wait	700
 both	key	Up
-both	wait	450
+both	wait	700
 both	key	Up
-both	wait	450
+both	wait	700
 both	key	Up
-both	wait	450
+both	wait	700
 both	key	Up
-both	wait	450
+both	wait	700
 both	key	Up
-both	wait	450
+both	wait	700
 both	key	Up
-both	wait	450
+both	wait	700
 both	key	Left
-both	wait	450
+both	wait	700
 both	key	Up
-both	wait	450
+both	wait	700
 both	key	Up
-both	wait	450
+both	wait	700
 both	key	Up
-both	wait	450
+both	wait	700
 both	key	Up
-both	wait	450
+both	wait	700
 both	key	Up
-both	wait	450
+both	wait	700
 both	key	Up
-both	wait	450
+both	wait	700
 both	key	Up
-both	wait	450
+both	wait	700
 both	key	Up
-both	wait	450
+both	wait	700
 both	key	Right
-both	wait	450
+both	wait	700
 both	key	Up
-both	wait	450
+both	wait	700
 both	key	Up
-both	wait	450
+both	wait	700
 both	key	Left
-both	wait	450
+both	wait	700
 both	key	Left
-both	wait	450
+both	wait	700
 both	key	Left
-both	wait	450
+both	wait	700
 both	key	Left
-both	wait	450
+both	wait	700
 both	key	Left
-both	wait	450
+both	wait	700
 both	key	Left
-both	wait	450
+both	wait	700
 both	key	Left
-both	wait	450
+both	wait	700
 both	key	Left
-both	wait	450
+both	wait	700
 both	key	Left
-both	wait	450
+both	wait	700
 both	key	Left
-both	wait	450
+both	wait	700
 both	key	Left
-both	wait	450
+both	wait	700
 both	key	Left
-both	wait	450
+both	wait	700
 both	key	Left
-both	wait	450
+both	wait	700
 both	wait	2500
 both	shot	arrived	Arrived beside the NPC
 both	key	l

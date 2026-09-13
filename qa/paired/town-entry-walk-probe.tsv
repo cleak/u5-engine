@@ -1,0 +1,86 @@
+# Bisect where the Britain entry walk of `town-talk-after-entry` diverges.
+#
+# That scenario enters Britain through the door - both sides agree at the
+# `entered` beat - and then walks north. By its `arrived` beat the original is
+# refusing four westward steps with `Blocked!` while this engine walks them,
+# so the two are standing in different cells and some earlier step resolved
+# differently. Which one is not visible from three shots.
+#
+# This repeats the same walk with a shot after every step. The reading wanted
+# is the first index at which the two sides' `Blocked!` lines disagree: that
+# step's target cell is the one whose passability differs.
+#
+# A probe, not a conformance target. Its own differing beats establish nothing
+# about wording.
+# requires-seed: the party outside the town, so the scenario can walk in through the door
+both	wait	9000
+both	key	space
+both	wait	4000
+both	key	j
+both	wait	8000
+both	key	e
+both	wait	4000
+both	shot	s00	Entered Britain through the door
+both	key	Up
+both	wait	700
+both	shot	s01	step 1: Up
+both	key	Up
+both	wait	700
+both	shot	s02	step 2: Up
+both	key	Up
+both	wait	700
+both	shot	s03	step 3: Up
+both	key	Up
+both	wait	700
+both	shot	s04	step 4: Up
+both	key	Up
+both	wait	700
+both	shot	s05	step 5: Up
+both	key	Up
+both	wait	700
+both	shot	s06	step 6: Up
+both	key	Up
+both	wait	700
+both	shot	s07	step 7: Up
+both	key	Up
+both	wait	700
+both	shot	s08	step 8: Up
+both	key	Up
+both	wait	700
+both	shot	s09	step 9: Up
+both	key	Up
+both	wait	700
+both	shot	s10	step 10: Up
+both	key	Up
+both	wait	700
+both	shot	s11	step 11: Up
+both	key	Up
+both	wait	700
+both	shot	s12	step 12: Up
+both	key	Up
+both	wait	700
+both	shot	s13	step 13: Up
+both	key	Up
+both	wait	700
+both	shot	s14	step 14: Up
+both	key	Left
+both	wait	700
+both	shot	s15	step 15: Left
+both	key	Up
+both	wait	700
+both	shot	s16	step 16: Up
+both	key	Up
+both	wait	700
+both	shot	s17	step 17: Up
+both	key	Up
+both	wait	700
+both	shot	s18	step 18: Up
+both	key	Up
+both	wait	700
+both	shot	s19	step 19: Up
+both	key	Up
+both	wait	700
+both	shot	s20	step 20: Up
+both	key	Up
+both	wait	700
+both	shot	s21	step 21: Up
