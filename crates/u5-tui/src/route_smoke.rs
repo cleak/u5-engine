@@ -34,7 +34,7 @@ use std::path::{Path, PathBuf};
 use std::time::{SystemTime, UNIX_EPOCH};
 
 use u5_runtime::{
-    AWAKEN_COST, AWAKEN_SPELL_INDEX, ActiveObject, Area, ArmsShop, BLACKTHORN_CAPTIVE_CELL_SCENE,
+    AN_SANCT_CHEST_OPENED_LINE, AWAKEN_COST, AWAKEN_SPELL_INDEX, DUNGEON_CHEST_OPENED, ActiveObject, Area, ArmsShop, BLACKTHORN_CAPTIVE_CELL_SCENE,
     BLACKTHORN_RESCUE_HANDOFF_SCENE, BLINK_COST, BLINK_SPELL_INDEX, BRIT_DAT_FILENAME,
     BRIT_OOL_FILENAME, CODEX_URN_TABLE_FILE, COMBAT_ACTOR_FLAG_FLEEING,
     COMBAT_ACTOR_FLAG_PHASE_BLINK_FILTER, COMBAT_ACTOR_FLAG_SELECTABLE_80, COMBAT_ACTOR_SLOTS,
@@ -6031,10 +6031,34 @@ fn validate_route_smoke_case_state(
                 || state.player.y != 124
                 || state.spell_charges[BLINK_SPELL_INDEX] != 0
                 || state.party.first().is_none_or(|member| member.mana != 0)
-                || !state.message.contains("Blinked East")
+                // The `Blinked East` clause that stood here was withdrawn with
+                // the prose itself: `1828d278` stopped printing engine prose on
+                // the paths whose text the spec does not publish, and Blink's
+                // completion line was one of them. The case asserted a literal
+                // no longer produced anywhere in the tree and has failed since
+                // 2026-09-11, taking the whole route suite down with it - the
+                // suite aborts on the first case. What Blink *is* specified to
+                // do is the displacement, the spent charge and the spent mana,
+                // which is what the surviving clauses check.
+                //
+                // No message clause replaces it. `magic.md §5.1`'s In Por row
+                // says "a successful non-combat landing adds no completion
+                // line at all, so the direction word is the last row
+                // printed", and this route ends with `state.message` empty -
+                // but that field is the *current* message, not the window's
+                // last row, and the direction echo is printed earlier in the
+                // cast. Whether the row survives to the end is a message
+                // window question, which the paired harness answers and this
+                // one cannot.
             {
                 return Err(io::Error::other(format!(
-                    "route smoke `{case_name}` did not apply the public Blink ray rule"
+                    "route smoke `{case_name}` did not apply the public Blink ray rule; \
+                     at ({}, {}), charge {}, caster mana {:?}, message {:?}",
+                    state.player.x,
+                    state.player.y,
+                    state.spell_charges[BLINK_SPELL_INDEX],
+                    state.party.first().map(|member| member.mana),
+                    state.message,
                 )));
             }
         }
@@ -6096,10 +6120,33 @@ fn validate_route_smoke_case_state(
                 || state.party.get(3).is_none_or(|member| {
                     member.status != b'G' || member.hp != 1 || member.max_hp == 0
                 })
-                || !state.message.starts_with("Resurrected party member 4")
+                // `magic.md §5.1`'s census row lists In Mani Corp among the
+                // spells that print `Success!` after the successful effect.
+                // This clause asserted the engine prose `Resurrected party
+                // member 4 (1/N)` that the spell path no longer prints.
+                || state.message != "Success!"
             {
+                // Reporting the values, not just the verdict: this arm tests
+                // eleven conditions at once and said only that one of them
+                // failed, which is no use when the route suite aborts on it.
                 return Err(io::Error::other(format!(
-                    "route smoke `{case_name}` did not complete the restore spell suite"
+                    "route smoke `{case_name}` did not complete the restore spell suite; \
+                     charges awaken/cure/heal/great/resurrect {}/{}/{}/{}/{}, \
+                     caster mana {:?}, slots 2-4 {:?}, message {:?}",
+                    state.spell_charges[AWAKEN_SPELL_INDEX],
+                    state.spell_charges[CURE_SPELL_INDEX],
+                    state.spell_charges[HEAL_SPELL_INDEX],
+                    state.spell_charges[GREAT_HEAL_SPELL_INDEX],
+                    state.spell_charges[RESURRECT_SPELL_INDEX],
+                    state.party.first().map(|member| member.mana),
+                    state
+                        .party
+                        .iter()
+                        .skip(1)
+                        .take(3)
+                        .map(|member| (member.status as char, member.hp, member.max_hp))
+                        .collect::<Vec<_>>(),
+                    state.message,
                 )));
             }
         }
@@ -6338,20 +6385,33 @@ fn validate_route_smoke_case_state(
             if state.grid.get(current).copied() != Some(0x78)
                 || state.spell_charges[OPEN_SPELL_INDEX] != 0
                 || state.party.first().is_none_or(|member| member.mana != 0)
-                || !state.message.contains("Safely opened dungeon chest")
+                || !state.message.contains(AN_SANCT_CHEST_OPENED_LINE.trim())
             {
                 return Err(io::Error::other(format!(
-                    "route smoke `{case_name}` did not open the dungeon chest by spell"
+                    "route smoke `{case_name}` did not open the dungeon chest by spell; \
+                     cell {:?}, charge {}, caster mana {:?}, message {:?}",
+                    state.grid.get(current).copied(),
+                    state.spell_charges[OPEN_SPELL_INDEX],
+                    state.party.first().map(|member| member.mana),
+                    state.message,
                 )));
             }
         }
         "dungeon-open-chest-command" => {
             let current = dungeon_cell_index(0, state.player.x, state.player.y);
             if state.grid.get(current).copied() != Some(0x78)
-                || !state.message.contains("Opened dungeon chest")
+                // `commands.md`: the command's chest line is `Chest opened`,
+                // with no exclamation mark, distinct from An Sanct's `Chest
+                // opened!`. The clause here asserted the engine diagnostic
+                // `Opened dungeon chest at (x, y) ...`, which is still
+                // produced but on `diagnostics`, not `message`.
+                || !state.message.contains(DUNGEON_CHEST_OPENED.trim())
             {
                 return Err(io::Error::other(format!(
-                    "route smoke `{case_name}` did not clear dungeon chest trap/subtype bits while preserving the visit marker"
+                    "route smoke `{case_name}` did not clear dungeon chest trap/subtype bits \
+                     while preserving the visit marker; cell {:?}, message {:?}",
+                    state.grid.get(current).copied(),
+                    state.message,
                 )));
             }
         }

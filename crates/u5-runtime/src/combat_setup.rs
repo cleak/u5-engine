@@ -1204,6 +1204,21 @@ impl PlayState {
             instance.actors,
             setup_terrain,
         )?;
+        // `combat.md §14`, Escape's first branch: "If such a party-side
+        // descriptor exists and the encounter mode's high bit is set, append
+        // `-Not here!`". Which entry modes set that bit is not published -
+        // §4 gives the dispatch order over the mode byte but no values - so
+        // the measurement is what places it. Measured 2026-09-13
+        // (`qa/paired/combat-escape-refusal.tsv`, beats `first` and
+        // `second`): walking onto a dungeon room trigger and pressing Escape
+        // with the whole party alive reads `Escape-Not here!` twice on the
+        // original, where this engine took the ordinary-mode arm and read
+        // `Escape-Not yet!`. So the room-encounter entry mode carries the
+        // bit. `cleak/u5-spec#276` asks for the mode byte's published values
+        // so the other entries can be placed rather than left at `false`.
+        if let Some(snapshot) = &mut self.combat_frame_snapshot {
+            snapshot.encounter_mode_high_bit = true;
+        }
         if !enter_endgame_after_successful_absorbable_combat {
             if let Some(snapshot) = &mut self.combat_frame_snapshot {
                 snapshot.dungeon_room_clear_on_success =
