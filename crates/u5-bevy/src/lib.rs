@@ -3153,6 +3153,14 @@ fn seed_visual_combat_gallery_party(state: &mut PlayState) {
     state.party_intelligence = default_party_intelligence(COMBAT_PARTY_ACTOR_SLOTS);
     state.party_equipment = default_party_equipment(COMBAT_PARTY_ACTOR_SLOTS);
     state.party_roster = default_party_roster(COMBAT_PARTY_ACTOR_SLOTS);
+    // The roster panel is a snapshot refreshed at named points
+    // (`stats-panel.md §2.2`-`§2.4`), and the scene loader's own repaint has
+    // already happened by the time this fixture rewrites the party. Without
+    // this the whole 113-frame arena gallery drew the pre-seed roster - one
+    // Avatar row where the fixture had put six - which is a gallery ordering
+    // artifact, not an engine defect: nothing in play mutates the roster
+    // outside those refresh points.
+    state.repaint_stats_panel();
 }
 
 fn validate_visual_outdoor_combat_gallery_state(
