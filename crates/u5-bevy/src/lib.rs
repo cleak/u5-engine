@@ -12383,8 +12383,27 @@ fn drive_visual(
             // character being prompted.
             PartyCapability::CanAct { .. } => {}
             // The animation pump owns these automatic branches at its paced
-            // cadence. Input is rejected until it makes the roster ready.
-            PartyCapability::Sleeping | PartyCapability::Defeated => return,
+            // cadence. Input is rejected until it makes the roster ready -
+            // except for the one key the rescue cinematic itself is blocked
+            // on.
+            //
+            // `blackthorn.md §7` step 19 is "the cinematic's only blocking key
+            // read", and it sits at step 19 of twenty-five: the roster is
+            // still all-Dead there, because the restoration is step 22. So
+            // the party is Defeated at exactly the moment the cinematic needs
+            // a key, and rejecting input here deadlocked it - the cinematic
+            // waited for a key the shell would not deliver, and the window
+            // sat on its last frame forever because nothing else changed.
+            //
+            // That is `cleak/u5-engine#28`. It looked like a hang and is not
+            // one: measured 2026-09-13, both this system and the animation
+            // pump keep ticking to the end of the run.
+            PartyCapability::Sleeping | PartyCapability::Defeated
+                if !visual.state.blackthorn_rescue_awaiting_acknowledgement() =>
+            {
+                return;
+            }
+            PartyCapability::Sleeping | PartyCapability::Defeated => {}
         }
     }
     if visual.state.combat_active
