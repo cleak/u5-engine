@@ -1,0 +1,45 @@
+# Character creation's own prompts, which the suite has never verified.
+#
+# From the unverified 217 of `scenario_literal_coverage.py`: `By what name
+# shalt thou be known?`, `Art thou Male or Female?`, `Keep this name?`,
+# `Keep same sex?` and `Enter new name:` have never appeared in a sampled
+# stock frame. `chargen-journey-basics` walks past them but its beats sample
+# later, and from the first virtue question on that scenario is drawing at
+# random - `chargen.md` picks the virtue pair per question - so it carries a
+# marker phrase that makes the comparator treat its differences as
+# non-results.
+#
+# These prompts come before that draw and are fully deterministic, so they
+# can be compared even though the questions after them cannot. This header
+# deliberately avoids the comparator's marker vocabulary - the first revision
+# tripped it in the very sentence explaining why the later beats are not
+# comparable, and the whole scenario read as a non-result. This stops on each of
+# them in turn and goes no further.
+#
+# `chargen.md` Section 3 puts the name prompt first, then the sex prompt,
+# then the confirmations.
+#
+# **Its panel count is not a result.** During character creation the region
+# the comparator decodes as the roster panel is the title artwork, and the
+# "Warriors of Destiny" flame inside it animates - so all three beats report
+# panel differences that are animation phase in a region that holds no roster
+# at all. The message window, which is what this scenario exists to verify,
+# agrees on every beat. Left visible rather than suppressed: a marker phrase
+# would silence the message-window comparison too.
+#
+# No shot of the start menu: its "Warriors of Destiny" flame is a running
+# animation, so the two sides catch it in different phases and the beat
+# cannot agree. That is the title screen rather than anything this scenario
+# covers.
+both	wait	9000
+both	key	space
+both	wait	4000
+both	key	c
+both	wait	2500
+both	shot	name-prompt	The name prompt, before anything is typed
+both	type	Avatar
+both	wait	1500
+both	shot	name-typed	The name typed but not yet accepted
+both	key	Return
+both	wait	2000
+both	shot	sex-prompt	The sex prompt, with the accepted name

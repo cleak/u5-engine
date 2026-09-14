@@ -1,0 +1,20 @@
+# The G-Get and S-Search refusals on ordinary ground.
+#
+# From the unverified 217: `Not here!`, `Nothing to search!` and the other
+# empty-handed refusals of `commands.md` Section 5.8 have never appeared in a
+# sampled stock frame outside the dungeon.
+# requires-seed: a save placed beside Britain's fountain
+both	wait	9000
+both	key	space
+both	wait	4000
+both	key	j
+both	wait	8000
+both	shot	arrival	Journey Onward inside Britain
+both	key	g
+both	wait	2500
+both	shot	get	G-Get on ordinary ground
+both	key	space
+both	wait	1500
+both	key	s
+both	wait	2500
+both	shot	search	S-Search on ordinary ground
