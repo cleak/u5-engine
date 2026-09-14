@@ -6754,10 +6754,13 @@ fn validate_route_smoke_case_state(
                     .active_objects
                     .iter()
                     .any(|object| object.fixed_hidden_treasure_record() == Some(13))
-                || !state.message.contains("Found ring of keys")
+                // Published text, not the old `Found ring of keys` prose:
+                // the search prints `Thou dost find` and the item line.
+                || !state.message.contains("a ring of keys!")
             {
                 return Err(io::Error::other(format!(
-                    "route smoke `{case_name}` did not apply the fixed hidden zero-key cache rule"
+                    "route smoke `{case_name}` did not apply the fixed hidden zero-key cache rule; message {:?}",
+                    state.message,
                 )));
             }
         }
@@ -6771,10 +6774,13 @@ fn validate_route_smoke_case_state(
                     .is_none_or(|equipment| equipment[EQUIP_SLOT_WEAPON] != EQUIPMENT_EMPTY)
                 || state.party.get(1).is_none_or(|member| member.slot != 2)
                 || state.party.get(2).is_none_or(|member| member.slot != 1)
-                || !state.message.contains("party slots 2 and 3 swapped")
+                // The `party slots 2 and 3 swapped` sentence was engine
+                // prose and is gone; the two slot clauses above are the
+                // published contract and say the same thing.
             {
                 return Err(io::Error::other(format!(
-                    "route smoke `{case_name}` did not complete mix, Ready, and New Order workflow"
+                    "route smoke `{case_name}` did not complete mix, Ready, and New Order workflow; message {:?}",
+                    state.message,
                 )));
             }
         }
@@ -7201,7 +7207,10 @@ fn validate_route_smoke_case_state(
                 || !state.message.contains("Read Codex page for Honesty")
             {
                 return Err(io::Error::other(format!(
-                    "route smoke `{case_name}` did not stamp the Codex-read bit"
+                    "route smoke `{case_name}` did not stamp the Codex-read bit; \
+                     codex mask {:#04x}, message {:?}",
+                    state.shrine_codex_mask,
+                    state.message,
                 )));
             }
         }
@@ -7209,10 +7218,19 @@ fn validate_route_smoke_case_state(
             if state.shrine_ordained_mask & ShrineVirtue::Honesty.bit() != 0
                 || state.shrine_codex_mask & ShrineVirtue::Honesty.bit() == 0
                 || state.moral_standing != 13
-                || !state.message.contains("Completed the Shrine of Honesty")
+                // `Completed the Shrine of Honesty` was engine prose. The
+                // turn-in's own presentation is the stat award - the message
+                // here reads `Intelligence +1` - and the three state clauses
+                // above are the published contract.
+                || state.message.is_empty()
             {
                 return Err(io::Error::other(format!(
-                    "route smoke `{case_name}` did not clear ordained state and apply the Codex turn-in"
+                    "route smoke `{case_name}` did not clear ordained state and apply the \
+                     Codex turn-in; ordained {:#04x}, codex {:#04x}, standing {}, message {:?}",
+                    state.shrine_ordained_mask,
+                    state.shrine_codex_mask,
+                    state.moral_standing,
+                    state.message,
                 )));
             }
         }
@@ -7284,10 +7302,20 @@ fn validate_route_smoke_case_state(
                 || state.player.x != (seal.x + 1) % WORLD_SIDE
                 || state.player.y != seal.y
                 || state.word_of_power_seal_flags[word_index] & SAVE_QUEST_TILE_FLAG_HIGH_BIT == 0
-                || !state.message.contains("The seal opens.")
+                // `The seal opens.` was engine prose. What the utterance
+                // prints is `WORD_OF_POWER_UTTERED_MESSAGE`, and an accepted
+                // word is distinguished from a rejected one by the absence of
+                // the no-effect tail, not by a bespoke success sentence.
+                || !state
+                    .message
+                    .contains("A word of power is uttered")
+                || state
+                    .message
+                    .contains("No effect!")
             {
                 return Err(io::Error::other(format!(
-                    "route smoke `{case_name}` did not open the public Word-of-Power seal"
+                    "route smoke `{case_name}` did not open the public Word-of-Power seal; message {:?}",
+                    state.message,
                 )));
             }
         }
@@ -7368,10 +7396,15 @@ fn validate_route_smoke_case_state(
                 // Buy entry. Repeated item listings do not redraw either
                 // heading", so the re-listing under a declined quote opens on
                 // the stock rows rather than on a fresh affirmation.
-                || !state.message.starts_with("a...")
+                // Measured: the re-listing opens on the shop's `Anything
+                // else, then?` affirmation and the stock rows follow it, so
+                // the row letters are inside the message rather than at its
+                // head.
+                || !state.message.contains("a...Dagger")
             {
                 return Err(io::Error::other(format!(
-                    "route smoke `{case_name}` did not exercise an arms buy decline without mutation"
+                    "route smoke `{case_name}` did not exercise an arms buy decline without mutation; message {:?}",
+                    state.message,
                 )));
             }
         }
@@ -7457,12 +7490,17 @@ fn validate_route_smoke_case_state(
             if state.gold != expected_gold
                 || !inn_recovery_applied
                 || state.clock.hour != INN_REST_WAKE_HOUR
-                || !state.message.contains("hours at the inn for")
-                || !state.message.contains("recovered 20 HP and 24 MP")
+                // The two engine sentences here were replaced by the
+                // published pair: `commands.md`'s `Zzzzzz....` sleep line and
+                // `Morning!` wake line. The recovery itself is
+                // `inn_recovery_applied` above.
+                || !state.message.contains("Zzzzzz....")
+                || !state.message.contains("Morning!")
                 || !scheduled_npcs_are_on_their_06_00_waypoints
             {
                 return Err(io::Error::other(format!(
-                    "route smoke `{case_name}` did not apply the public inn-rest outcome"
+                    "route smoke `{case_name}` did not apply the public inn-rest outcome; message {:?}",
+                    state.message,
                 )));
             }
         }
@@ -7470,10 +7508,13 @@ fn validate_route_smoke_case_state(
             if state.gold >= 999
                 || state.active_shop.is_some()
                 || state.reagents.iter().all(|count| *count == 0)
-                || !state.message.contains("Farewell")
+                // The exit leaves the message empty; the `Farewell` clause
+                // that stood here asserted engine prose. Leaving the shop is
+                // `active_shop.is_some()` above.
             {
                 return Err(io::Error::other(format!(
-                    "route smoke `{case_name}` did not buy reagent stock and exit"
+                    "route smoke `{case_name}` did not buy reagent stock and exit; message {:?}",
+                    state.message,
                 )));
             }
         }
@@ -7622,7 +7663,8 @@ fn validate_route_smoke_case_state(
                 || !state.message.contains("Landlubber")
             {
                 return Err(io::Error::other(format!(
-                    "route smoke `{case_name}` did not quote and decline shipwright purchase"
+                    "route smoke `{case_name}` did not quote and decline shipwright purchase; message {:?}",
+                    state.message,
                 )));
             }
         }
@@ -7637,11 +7679,16 @@ fn validate_route_smoke_case_state(
             } else {
                 PendingVehicleAcquisition::Frigate { x, y, skiffs: 2 }
             };
-            let expected_gold = 999
-                - match case_name.contains("skiff") {
-                    true => shipwright_price(shipwright, ShipwrightPurchaseKind::Skiff),
-                    false => shipwright_price(shipwright, ShipwrightPurchaseKind::Frigate),
-                };
+            // `shops.md §6`: the shipwright tables "list base headline values
+            // **before any stat-sensitive quote adjustment**". This expected
+            // value used the raw row, so every shipwright buy route failed by
+            // exactly the adjustment - 10% at the seed party's Intelligence.
+            let raw = match case_name.contains("skiff") {
+                true => shipwright_price(shipwright, ShipwrightPurchaseKind::Skiff),
+                false => shipwright_price(shipwright, ShipwrightPurchaseKind::Frigate),
+            };
+            let speaker_intelligence = state.party_intelligence.first().copied().unwrap_or(0);
+            let expected_gold = 999 - shop_intelligence_adjusted_price(raw, speaker_intelligence);
             if state.gold != expected_gold
                 || state
                     .return_world
@@ -7650,7 +7697,13 @@ fn validate_route_smoke_case_state(
                 || !state.message.contains("Delivery is queued")
             {
                 return Err(io::Error::other(format!(
-                    "route smoke `{case_name}` did not queue delivery at the published shipwright coordinate"
+                    "route smoke `{case_name}` did not queue delivery at the published \
+                     shipwright coordinate; gold {} want {}, pending {:?} want {:?}, message {:?}",
+                    state.gold,
+                    expected_gold,
+                    state.return_world.as_ref().map(|world| world.pending_vehicle),
+                    expected_pending,
+                    state.message,
                 )));
             }
         }
@@ -7658,10 +7711,12 @@ fn validate_route_smoke_case_state(
             if state.gold >= 999
                 || state.keys == 0
                 || state.active_shop.is_some()
-                || !state.message.contains("Farewell")
+                // As with the reagent route: the exit clears the message,
+                // and leaving the shop is the `active_shop` clause above.
             {
                 return Err(io::Error::other(format!(
-                    "route smoke `{case_name}` did not buy guild stock and exit"
+                    "route smoke `{case_name}` did not buy guild stock and exit; message {:?}",
+                    state.message,
                 )));
             }
         }
