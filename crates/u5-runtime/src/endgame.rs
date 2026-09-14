@@ -1400,6 +1400,20 @@ impl PlayState {
             // feed lands on a fresh row and leaves one blank row between
             // the echo and the absorption. `cleak/u5-engine#11`.
             self.emit_message_line(format!("\n{}", crate::COMBAT_ABSORBED_MESSAGE));
+            // `audio.md §8.7` step 2: "The accepted absorption effect prints
+            // its actor/narration, **then** plays the action snap: forty
+            // frequency updates from 1200 through 1980 Hz in 20 Hz
+            // increments, one calibrated unit per update, followed by a
+            // speaker stop." That is `SoundEffect::ActionSnap` exactly -
+            // `action_snap()` is `glissando(40, 1, 2000, 1200)`.
+            //
+            // The whole endgame emitted two cues before this, both of them
+            // later beats, so the absorption itself was silent. Measured
+            // 2026-09-13 (`qa/tools/audio_compare.py` on
+            // `qa/paired/doom-endgame-audio.tsv`): the original sounds for
+            // 6.5 s of the nine-second capture after the absorbing step and
+            // this engine sounded for none of it.
+            self.emit_sound_effect(SoundEffect::ActionSnap);
         }
         let Some(endgame) = self.endgame.as_ref() else {
             return false;
