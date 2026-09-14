@@ -5122,6 +5122,17 @@ impl PlayState {
 
         let amount = self.heal_spell_amount();
         let healed = self.party[target_index].heal_by(amount);
+        // `stats-panel.md §2.2`'s first worked case: "the shared healing
+        // helper's hit-point gain" files a deferred request rather than
+        // repainting, while "the shared party-damage path" repaints as its
+        // last act. The same counter goes both ways, "so an implementation
+        // must carry the mechanism per caller rather than derive it".
+        //
+        // Observably, the restored hit points reach the panel one prompt
+        // late: §2.3's consumers sit "at the head of that loop's command
+        // prompt", so the spell's own `Success!` prints against the stale
+        // figure.
+        self.stats_panel_command_refresh = crate::stats_panel::PanelRefreshMode::Deferred;
         let hp = self.party[target_index].hp;
         let max_hp = self.party[target_index].max_hp;
         self.advance_turn();
