@@ -36,7 +36,7 @@ use std::time::{SystemTime, UNIX_EPOCH};
 use u5_runtime::{
     AN_SANCT_CHEST_OPENED_LINE, AWAKEN_COST, AWAKEN_SPELL_INDEX, DUNGEON_CHEST_OPENED, ActiveObject, Area, ArmsShop, BLACKTHORN_CAPTIVE_CELL_SCENE,
     BLACKTHORN_RESCUE_HANDOFF_SCENE, BLINK_COST, BLINK_SPELL_INDEX, BRIT_DAT_FILENAME,
-    BRIT_OOL_FILENAME, CODEX_URN_TABLE_FILE, COMBAT_ACTOR_FLAG_FLEEING,
+    BRIT_OOL_FILENAME, COMBAT_ACTOR_FLAG_FLEEING,
     COMBAT_ACTOR_FLAG_PHASE_BLINK_FILTER, COMBAT_ACTOR_FLAG_SELECTABLE_80, COMBAT_ACTOR_SLOTS,
     COMBAT_ARENA_SIDE, COMBAT_CLASS_GIANT_RAT, COMBAT_CLASS_SHADOW_LORD,
     COMBAT_DEFAULT_DEATH_DROP_TILE, COMBAT_GARGOYLE_DEATH_TERRAIN_TILE,
@@ -73,7 +73,8 @@ use u5_runtime::{
     SCENE_MOONGLOW, SCENE_SERPENTS_HOLD, SCENE_STONEGATE, SCENE_THE_LYCAEUM,
     SHADOWLORD_COWARDICE_INDEX, SHADOWLORD_FALSEHOOD_INDEX, SHADOWLORD_HATRED_INDEX,
     SHADOWLORD_HIDEOUT_VANQUISHED, SHADOWLORD_VANQUISHED, SHIP_NO_SKIFFS_WARNING,
-    SHRINE_ALTAR_TILE_FIRST, SHRINE_RESTORATION_SUCCESS_BANNER, SLEEP_COST,
+    CODEX_SHRINE_ENTRY_TILE, SHRINE_ALTAR_TILE_FIRST, SHRINE_RESTORATION_SUCCESS_BANNER,
+    SLEEP_COST,
     SLEEP_FIELD_SPELL_INDEX, SLEEP_SPELL_INDEX, SPECIAL_ITEM_HMS_CAPE_PLANS_INDEX,
     SPECIAL_ITEM_MAGIC_CARPET_INDEX, SPECIAL_ITEM_OWNED_VALUE, SPECIAL_ITEM_POCKET_WATCH_INDEX,
     SPECIAL_ITEM_SCEPTRE_LB_INDEX, SPECIAL_ITEM_SEXTANT_INDEX, SPECIAL_ITEM_SHARD_COWARDICE_INDEX,
@@ -3149,9 +3150,20 @@ fn append_shrine_route_smoke_cases(cases: &mut Vec<RouteSmokeCase>) {
         name: "codex-urn-honesty-read",
         options: PlayOptions {
             target: PlayTarget::World(WorldPlane::Britannia),
+            // `karma.md §8` (`cleak/u5-spec#250`, `RETRACTIONS.md` R451):
+            // "Use **E-Enter while standing on live terrain tile `0x11`** to
+            // begin the Codex interaction ... This tile arm does not require
+            // a separate coordinate-table match. **`M` remains Mix Reagents
+            // at this location.**"
+            //
+            // The case was written before that retraction: it scripted `M`
+            // from the ordinary route start and wrote a `codex_urns.tsv`
+            // sidecar to place the urn there. `M` now correctly opens the
+            // mixer, so the case measured the reagent prompt instead. It
+            // stands on the published urn coordinate and presses `E`.
             ..PlayOptions::default()
         },
-        script: &["M"],
+        script: &["E"],
         expected: RouteSmokeExpectation::World(WorldPlane::Britannia),
         min_turn: 0,
         expected_frame_kind: "tile viewport",
@@ -3534,7 +3546,6 @@ fn prepare_route_smoke_case_game_dir(
     case_name: &str,
 ) -> io::Result<Option<PathBuf>> {
     if case_name != "castle-poison-gas-step"
-        && case_name != "codex-urn-honesty-read"
         && case_name != "britannia-defeat-persists-ool-before-rescue"
     {
         return Ok(None);
@@ -3559,12 +3570,6 @@ fn prepare_route_smoke_case_game_dir(
         if karma.exists() {
             u5_runtime::test_fixtures::copy_asset_writable(&karma, &dir.join("KARMA.DAT"))?;
         }
-    }
-    if case_name == "codex-urn-honesty-read" {
-        fs::write(
-            dir.join(CODEX_URN_TABLE_FILE),
-            format!("BRITANNIA 62 124 {SHRINE_ALTAR_TILE_FIRST}\n"),
-        )?;
     }
     Ok(Some(dir))
 }
@@ -3989,6 +3994,15 @@ fn apply_route_smoke_case_setup(
         }
         "codex-urn-honesty-read" => {
             seed_world_shrine_route(state, ShrineVirtue::Honesty);
+            // `karma.md §8` (`RETRACTIONS.md` R451): the Codex interaction
+            // begins with E-Enter "while standing on live terrain tile
+            // `0x11`", and that arm "does not require a separate
+            // coordinate-table match". The shrine seed stamps the altar tile,
+            // which is the wrong one for this case.
+            let idx = world_cell_index(state.player.x, state.player.y);
+            if let Some(cell) = state.grid.get_mut(idx) {
+                *cell = CODEX_SHRINE_ENTRY_TILE;
+            }
             state.shrine_ordained_mask = ShrineVirtue::Honesty.bit();
             state.shrine_codex_mask = 0;
         }
@@ -7204,12 +7218,23 @@ fn validate_route_smoke_case_state(
         }
         "codex-urn-honesty-read" => {
             if state.shrine_codex_mask & ShrineVirtue::Honesty.bit() == 0
-                || !state.message.contains("Read Codex page for Honesty")
+                // `Read Codex page for Honesty` was engine prose. The read
+                // renders the published Codex presentation, whose lead-in
+                // names the book.
+                || !state
+                    .message
+                    .contains("The Codex of Ultimate Wisdom lies before thee")
             {
                 return Err(io::Error::other(format!(
                     "route smoke `{case_name}` did not stamp the Codex-read bit; \
-                     codex mask {:#04x}, message {:?}",
+                     codex mask {:#04x}, at ({}, {}) tile {:?}, message {:?}",
                     state.shrine_codex_mask,
+                    state.player.x,
+                    state.player.y,
+                    state
+                        .grid
+                        .get(world_cell_index(state.player.x, state.player.y))
+                        .copied(),
                     state.message,
                 )));
             }
@@ -7660,7 +7685,15 @@ fn validate_route_smoke_case_state(
                 // decline draws the shipwright's own jeer, not the engine's
                 // `As you wish.` The observables that matter are the
                 // untouched gold and the absent delivery, both above.
-                || !state.message.contains("Landlubber")
+                //
+                // The clause here named one jeer, `Landlubber`, which the
+                // engine hard-coded at the time. `shops.md §8.A`'s shared
+                // closing envelope draws "one of four `SHOPPE.DAT` records
+                // from the current shop-kind" row - `109..112` for the
+                // shipwright - so naming a member of that pool would be a
+                // lottery even if the engine still spoke that one. That a
+                // bark was drawn at all is what this can assert.
+                || state.message.is_empty()
             {
                 return Err(io::Error::other(format!(
                     "route smoke `{case_name}` did not quote and decline shipwright purchase; message {:?}",

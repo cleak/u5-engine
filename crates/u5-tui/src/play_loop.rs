@@ -151,6 +151,14 @@ where
     for (index, command) in commands.iter().enumerate() {
         let disposition = handle_play_script_command(state, command, game_dir)?;
         state.flush_staged_narration();
+        // The cinematics need walking to their handoff here as well as in the
+        // idle gate. The gate only runs while `play_state_accepts_typeahead`,
+        // which is false for the whole of a Blackthorn audience, so a script
+        // that finished an audience never reached the exit handoff and ended
+        // in the throne room instead of the destination scene -
+        // `blackthorn-audience-correct` and `-wrong`.
+        state.run_blackthorn_rescue_to_handoff(game_dir)?;
+        state.run_blackthorn_audience_exit_to_handoff(game_dir)?;
         after_command(state, index, command)?;
         if disposition == PlayInputDisposition::Quit {
             break;
