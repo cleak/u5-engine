@@ -3230,19 +3230,55 @@ pub fn run_route_smoke(
     let baseline_under_ool = fs::read(game_dir.join(UNDER_OOL_FILENAME))?;
     println!("Route smoke: {} case(s).", cases.len());
     let mut reports = Vec::with_capacity(cases.len());
+    // Every case runs, and the failures are reported together at the end.
+    //
+    // This used to return the first case's error, which is how the suite
+    // stayed broken for 114 commits without anybody seeing more than one
+    // line of it: `1828d278` stopped printing engine prose on the paths
+    // whose text the spec does not publish, eight cases still asserted the
+    // deleted literals, and the run died on the first of them - so the other
+    // seven, and the 500-odd cases behind them, were never reached to be
+    // counted as passing or failing either. One failure hid the state of the
+    // whole suite.
+    let mut failures = Vec::new();
     for case in &cases {
         fs::write(game_dir.join(BRIT_OOL_FILENAME), &baseline_brit_ool)?;
         fs::write(game_dir.join(UNDER_OOL_FILENAME), &baseline_under_ool)?;
-        let report = run_route_smoke_case(game_dir, &atlas, case)?;
-        println!(
-            "route-smoke {}: {} command(s), {}",
-            report.name, report.commands_run, report.final_state_line
-        );
-        println!("{}", report.final_raster_line);
-        reports.push(report);
+        match run_route_smoke_case(game_dir, &atlas, case) {
+            Ok(report) => {
+                println!(
+                    "route-smoke {}: {} command(s), {}",
+                    report.name, report.commands_run, report.final_state_line
+                );
+                println!("{}", report.final_raster_line);
+                reports.push(report);
+            }
+            Err(error) => {
+                println!("route-smoke {}: FAILED", case.name);
+                failures.push(format!("{}: {error}", case.name));
+            }
+        }
     }
     fs::write(game_dir.join(BRIT_OOL_FILENAME), &baseline_brit_ool)?;
     fs::write(game_dir.join(UNDER_OOL_FILENAME), &baseline_under_ool)?;
+    if !failures.is_empty() {
+        println!(
+            "\nRoute smoke: {} of {} case(s) failed.",
+            failures.len(),
+            cases.len()
+        );
+        for failure in &failures {
+            println!("  {failure}");
+        }
+        // The manifest is a hash over every case's final state, so it is only
+        // meaningful when every case produced one. Writing a short manifest
+        // would rebaseline the suite to its own broken state.
+        return Err(io::Error::other(format!(
+            "{} of {} route smoke case(s) failed",
+            failures.len(),
+            cases.len()
+        )));
+    }
     if let Some(path) = manifest_path {
         write_route_smoke_manifest(path, &reports)?;
         println!("Saved route smoke manifest: {}.", path.display());
