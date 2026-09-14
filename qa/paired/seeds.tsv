@@ -18,6 +18,7 @@ castle-talk-after-entry	seed-castle-talk-after-entry-reseeded	the walk-up replay
 combat-cast	seed-combat-cast	copied from the paired-combat-cast run profile
 combat-commands	seed-combat-commands	copied from paired-combat-dungeon-room: the dungeon-room seed `combat-dungeon-room` uses
 combat-dungeon-room	seed-combat-dungeon-room	copied from the paired-combat-dungeon-room run profile
+combat-enter-refusal	seed-combat-dungeon-room	shares the dungeon-room seed; E inside the arena
 combat-ready-armour	seed-combat-ready-armour	copied from paired-combat-dungeon-room: the same dungeon-room seed
 combat-refusal-audio	seed-combat-refusal-audio	copied from the paired-combat-refusal-audio run profile
 combat-rounds	seed-combat-rounds	copied from the paired-combat-rounds run profile
