@@ -1,0 +1,63 @@
+# Escape in an ordinary-mode encounter, which is the other two branches of
+# `combat.md` Section 14.
+#
+# `combat-escape-refusal` covers the first branch from the dungeon-room seat:
+# that encounter mode has the high bit set, so Escape there answers
+# `Escape-Not here!`. The remaining two branches need a mode without that bit,
+# and the town attack is one -
+#
+#   - "If such a descriptor exists **in an ordinary mode** and the one-shot
+#     exit announcement has not yet happened, append `-Not yet!`"
+#   - "If the ordinary-mode exit announcement has already happened, or if no
+#     qualifying party-side descriptor exists, accept cleanup. Append the
+#     single character `!`, producing `Escape!`"
+#
+# so the first press should read `Escape-Not yet!`, and a press after the
+# party has reached the arena edge and been announced out should read
+# `Escape!`. Both are in the unverified set.
+#
+# Section 3 owns the edge walk: a party-side actor at the boundary "stores the
+# cardinal direction", prints `Leave!` with no foes or `Escape!` with foes,
+# and that is the announcement Section 14's third branch reads.
+#
+# Measured 2026-09-13, first run. The first three beats agree: `Escape-Not
+# yet!` reads identically on both sides, which is Section 14's second branch
+# verified. The edge walk then reaches `Escape!` and `BATTLE IS LOST!` on
+# both sides - all three were in the unverified set.
+#
+# The last three beats differ, and for one reason: this engine prints
+# `BATTLE IS LOST!` **twice** where the original prints it once. That is
+# `cleak/u5-engine#35`. Everything after the duplicate is shifted a row, so
+# those beats are reporting the one defect rather than three.
+# requires-seed: the party beside the weaponsmith in a town
+both	wait	9000
+both	key	space
+both	wait	4000
+both	key	j
+both	wait	9000
+both	key	a
+both	wait	1500
+both	key	Up
+both	wait	6000
+both	shot	arena	The arena after entry
+both	key	Escape
+both	wait	2500
+both	shot	first	Escape before any exit announcement
+both	key	Escape
+both	wait	2500
+both	shot	second	Escape again
+both	key	Down
+both	wait	2500
+both	key	Down
+both	wait	2500
+both	key	Down
+both	wait	2500
+both	key	Down
+both	wait	2500
+both	shot	edge	Walking to the southern edge
+both	key	Down
+both	wait	3000
+both	shot	stepped-out	The edge step
+both	key	Escape
+both	wait	2500
+both	shot	after	Escape after the edge step

@@ -23,6 +23,7 @@ combat-enter-refusal	seed-combat-dungeon-room	shares the dungeon-room seed; the 
 combat-ready-armour	seed-combat-ready-armour	copied from paired-combat-dungeon-room: the same dungeon-room seed
 combat-refusal-audio	seed-combat-refusal-audio	copied from the paired-combat-refusal-audio run profile
 combat-rounds	seed-combat-rounds	copied from the paired-combat-rounds run profile
+combat-escape-ordinary	seed-combat-town-attack-reseeded	shares the town-attack seed; its encounter mode has no high bit
 combat-damage-narration	seed-combat-town-attack-reseeded	shares the town-attack seed; the dungeon room is empty, this arena is not
 combat-town-attack	seed-combat-town-attack-reseeded	re-written by reseed.py so the save carries a populated NPC band
 combat-town-attack-after-entry	seed-combat-town-attack-after-entry-reseeded	the walk-up replayed once by reseed.py
