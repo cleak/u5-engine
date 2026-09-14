@@ -95,6 +95,7 @@ swamp-walk	seed-swamp-walk	copied from the paired-swamp-walk run profile
 town-britain-seeded	seed-town-britain-seeded	copied from the paired-town-britain-seeded run profile
 town-death-vision	seed-town-death-vision-reseeded	re-written by reseed.py so the save carries a populated NPC band
 town-fountain	seed-town-fountain-reseeded	re-written by reseed.py so the save carries a populated NPC band
+zstats-field-labels	seed-town-fountain-reseeded	shares town-fountain's seed; stops on the character page
 town-klimb-vocabulary	seed-town-fountain-reseeded	shares town-fountain's seed; exercises the town K vocabulary
 town-hidden-door	seed-town-hidden-door	copied from the paired-town-hidden-door run profile
 town-look-npc-cell	seed-town-look-npc-cell	copied from the paired-town-look-npc-cell run profile

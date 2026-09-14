@@ -1,0 +1,30 @@
+# The Z-stats attribute page's own field labels.
+#
+# From the unverified 217 of `scenario_literal_coverage.py`: `HP:`, `HM:`,
+# `INT:`, `DEX:`, `Exp:`, `Ex:`, `Level:`, `Class:`, `Items:`, `Found:` and
+# the rest of the character page have never appeared in a sampled stock
+# frame. `zstats-pages` walks the pages but samples the roster panel and
+# message window, not the page body, so the labels themselves are unchecked.
+#
+# `inventory.md` Section 4.7 has the attribute page clear the whole panel and
+# own that window, so these land in the panel region the comparator already
+# decodes - they just needed a scenario that stops on the page.
+# requires-seed: a save placed beside Britain's fountain
+both	wait	9000
+both	key	space
+both	wait	4000
+both	key	j
+both	wait	8000
+both	shot	arrival	Journey Onward inside Britain
+both	key	z
+both	wait	2500
+both	shot	zstats-open	Z-stats, first page
+both	key	space
+both	wait	2000
+both	shot	zstats-p2	Second page
+both	key	space
+both	wait	2000
+both	shot	zstats-p3	Third page
+both	key	space
+both	wait	2000
+both	shot	zstats-p4	Fourth page
