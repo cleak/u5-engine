@@ -16891,7 +16891,7 @@ fn render_base_framebuffer(state: &mut PlayState, atlas: &TileAtlas) -> Vec<u8> 
     {
         return tile_viewport_to_visual_rgba(&viewport);
     }
-    match state.render_top_down_base_frame(VIEWPORT_RADIUS, atlas) {
+    let mut rgba = match state.render_top_down_base_frame(VIEWPORT_RADIUS, atlas) {
         Ok(Some(viewport)) => {
             let rgba = tile_viewport_to_visual_rgba(&viewport);
             if viewport.width as u32 == VIEWPORT_SIZE_PX
@@ -16909,8 +16909,109 @@ fn render_base_framebuffer(state: &mut PlayState, atlas: &TileAtlas) -> Vec<u8> 
         )
         .unwrap_or_else(|err| panic!("visual base text panel render failed: {err}")),
         Err(err) => panic!("visual base top-down frame render failed: {err}"),
-    }
+    };
+    paint_combat_overlays_rgba(&mut rgba, state);
+    rgba
 }
+
+/// `combat.md §7`'s two combat overlays: the turn-cursor box and the aim
+/// marker.
+///
+/// The runtime has modelled both since the section was published -
+/// `PlayState::combat_overlay_draw_cells` returns the two cells for the
+/// current blink state - and **nothing drew them**. The report had no
+/// consumer outside its own tests, so the arena showed no indication of
+/// whose turn it was and no aim marker under an open targeting cursor.
+///
+/// Measured 2026-09-13 (`qa/paired/combat-escape-refusal.tsv`, all three
+/// beats): the original's arena carries a two-pixel white ring around the
+/// acting party member's cell in every sampled frame, and this engine's
+/// carries none. Reading the cell out of the capture at 320x200 gives
+/// exactly §7's table - rows 0, 1, 14, 15 full width and columns 0, 1, 14,
+/// 15 full height - which is what this draws.
+///
+/// §7's raster contract puts each cell's origin at `(8 + 16*x, 8 + 16*y)` in
+/// *screen* space; the viewport is blitted at `(8, 8)`, so within this
+/// framebuffer the origin is `(16*x, 16*y)`.
+///
+/// Composition order is §7's: "the full eleven-by-eleven base viewport
+/// repaint (terrain and composited actors), the cursor, then the secondary
+/// marker. Consequently a secondary-marker stroke wins wherever the two
+/// overlays coincide." Both are solid replacement writes, "not XOR or
+/// inversion".
+fn paint_combat_overlays_rgba(rgba: &mut [u8], state: &PlayState) {
+    let report = state.combat_overlay_draw_cells();
+    let Some((cursor_x, cursor_y)) = report.cursor_draw_cell else {
+        return;
+    };
+    let white = EGA_PALETTE_RGB[15];
+    let black = EGA_PALETTE_RGB[0];
+    let side = VIEWPORT_SIZE_PX as usize;
+    fn put(rgba: &mut [u8], side: usize, x: usize, y: usize, rgb: [u8; 3]) {
+        // "Ordinary display clipping still applies."
+        if x >= side || y >= side {
+            return;
+        }
+        let offset = (y * side + x) * 4;
+        if let Some(pixel) = rgba.get_mut(offset..offset + 4) {
+            pixel.copy_from_slice(&[rgb[0], rgb[1], rgb[2], 0xff]);
+        }
+    }
+    let origin = |cell: u8| usize::from(cell) * COMBAT_OVERLAY_CELL_PX;
+
+    // The cursor: "the complete two-pixel outer ring of its cell".
+    let (cx, cy) = (origin(cursor_x), origin(cursor_y));
+    for row in [0usize, 1, 14, 15] {
+        for column in 0..COMBAT_OVERLAY_CELL_PX {
+            put(rgba, side, cx + column, cy + row, white);
+        }
+    }
+    for column in [0usize, 1, 14, 15] {
+        for row in 0..COMBAT_OVERLAY_CELL_PX {
+            put(rgba, side, cx + column, cy + row, white);
+        }
+    }
+
+    let Some((marker_x, marker_y)) = report.secondary_marker_cell else {
+        return;
+    };
+    let (mx, my) = (origin(marker_x), origin(marker_y));
+    let mut horizontal = |rgba: &mut [u8], row: usize, from: usize, to: usize, rgb: [u8; 3]| {
+        for column in from..=to {
+            put(rgba, side, mx + column, my + row, rgb);
+        }
+    };
+    let mut vertical = |rgba: &mut [u8], column: usize, from: usize, to: usize, rgb: [u8; 3]| {
+        for row in from..=to {
+            put(rgba, side, mx + column, my + row, rgb);
+        }
+    };
+    // §7's four draw groups, in the table's order, horizontal before
+    // vertical within each.
+    horizontal(rgba, 6, 2, 6, white);
+    vertical(rgba, 6, 2, 6, white);
+    horizontal(rgba, 5, 2, 5, black);
+    vertical(rgba, 5, 2, 5, black);
+    horizontal(rgba, 7, 2, 6, black);
+    vertical(rgba, 7, 2, 6, black);
+    horizontal(rgba, 5, 10, 13, black);
+    vertical(rgba, 10, 2, 5, black);
+    horizontal(rgba, 7, 9, 13, black);
+    vertical(rgba, 8, 2, 6, black);
+    horizontal(rgba, 9, 2, 6, white);
+    vertical(rgba, 6, 9, 13, white);
+    horizontal(rgba, 10, 2, 5, black);
+    vertical(rgba, 5, 10, 13, black);
+    horizontal(rgba, 8, 2, 6, black);
+    vertical(rgba, 7, 9, 13, black);
+    horizontal(rgba, 10, 10, 13, black);
+    vertical(rgba, 10, 10, 13, black);
+    horizontal(rgba, 8, 9, 13, black);
+    vertical(rgba, 8, 9, 13, black);
+}
+
+/// `combat.md §7`'s overlay cell is the ordinary sixteen-pixel screen cell.
+const COMBAT_OVERLAY_CELL_PX: usize = 16;
 
 fn tile_viewport_to_visual_rgba(viewport: &TileViewport) -> Vec<u8> {
     let palette: &[[u8; 3]] = match viewport.depth {
