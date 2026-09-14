@@ -1,0 +1,51 @@
+# The town K-Klimb vocabulary, which nothing has ever put on screen.
+#
+# `qa/tools/scenario_literal_coverage.py` reports that the suite verifies 84
+# of 301 published lines, and the whole town Klimb vocabulary is in the
+# unverified 217: `Klimb-Up!`, `Klimb-Down!`, `Klimb-What?` and
+# `Klimb--On foot!` have never appeared in a sampled stock frame.
+#
+# That matters beyond coverage. `cleak/u5-spec#265` says the town handler's
+# complete vocabulary is "`Klimb-`, `-On foot!`, `Up!`, `Down!`, the four
+# direction names, `Pass` and `What?`" and that "it has no `Not climbable!`
+# literal" - and this engine prints `Not climbable!` there. I declined to
+# change that on the answer alone because no scenario could measure it. This
+# is that scenario.
+#
+# Measured 2026-09-13: a `k` on ordinary ground leaves ` Klimb-` open on both
+# sides and waits, so the town arm does read a further key even though
+# `cleak/u5-spec#265` says its up and down arms "are selected by the exact
+# tile underfoot". What that key does is the part still unverified, so the
+# beats below feed it a direction, the pass key and a letter in turn.
+# requires-seed: a save placed beside Britain's fountain
+both	wait	9000
+both	key	space
+both	wait	4000
+both	key	j
+both	wait	8000
+both	shot	arrival	Journey Onward inside Britain
+both	key	k
+both	wait	2500
+both	shot	klimb-flat	K on ordinary ground: the echo completes itself
+both	key	space
+both	wait	1500
+both	key	k
+both	wait	2500
+both	shot	klimb-again	The same again, to show it is not a one-off prompt state
+both	key	Up
+both	wait	2500
+both	shot	klimb-up	A direction after the open echo
+both	key	space
+both	wait	1500
+both	key	k
+both	wait	1500
+both	key	space
+both	wait	2500
+both	shot	klimb-pass	The pass key after the open echo
+both	key	space
+both	wait	1500
+both	key	k
+both	wait	1500
+both	key	z
+both	wait	2500
+both	shot	klimb-letter	An unrelated letter after the open echo
