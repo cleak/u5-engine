@@ -1,0 +1,57 @@
+# The three magic refusals the suite has never put on a stock screen.
+#
+# From `scenario_literal_coverage.py`'s unverified set: `None mixed!`,
+# `Nothing to mix!` and `Insufficient reagents!`. `magic.md` Section 7's
+# result table publishes all three, and `magic-mix-and-cast` establishes the
+# input vocabulary that reaches them - the mixer commits on a second `m`, and
+# a cast is `c`, the caster confirm, the spell code, and Return.
+#
+# Each of the three is a different gate, taken in the order the spec lists
+# them: a cast with no charge, a commit with no reagent toggled, and a commit
+# whose quantity exceeds what the party carries.
+#
+# Vas Mani is the vehicle. It is not the spell the seed carries mixed - that
+# is In Lor - so its charge counter starts at zero, and its reagent set
+# includes ginseng and spider silk in quantities the shipped party does not
+# have nine of.
+# requires-seed: the party standing on the Britannia overworld
+both	wait	9000
+both	key	space
+both	wait	4000
+both	key	j
+both	wait	8000
+both	shot	arrival	Journey Onward
+both	key	c
+both	wait	2000
+both	key	Return
+both	wait	2000
+both	type	VM
+both	wait	1500
+both	key	Return
+both	wait	3000
+both	shot	uncharged	Casting a spell with no charge mixed
+both	key	m
+both	wait	2500
+both	type	VM
+both	wait	1200
+both	key	Return
+both	wait	2500
+both	shot	reagents	The reagent surface with nothing toggled
+both	key	m
+both	wait	2500
+both	shot	nothing	Committing with no reagent selected
+both	key	m
+both	wait	2500
+both	type	VM
+both	wait	1200
+both	key	Return
+both	wait	2000
+both	key	Return
+both	wait	1200
+both	key	m
+both	wait	2000
+both	key	9
+both	wait	1200
+both	key	Return
+both	wait	3000
+both	shot	insufficient	Committing nine of a reagent the party lacks

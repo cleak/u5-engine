@@ -2419,7 +2419,7 @@ impl PlayState {
     /// `invisibility`): the original has a blank row under `None mixed!` and
     /// this engine ran the banner straight on, after which the two sides read
     /// different keys and the rest of the scenario drifted.
-    fn emit_cast_gate_refusal(&mut self, outcome: CastGateOutcome) {
+    pub(crate) fn emit_cast_gate_refusal(&mut self, outcome: CastGateOutcome) {
         let text = outcome.message().to_string();
         if self.combat_active {
             self.emit_message_line(text);

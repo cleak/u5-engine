@@ -1,0 +1,83 @@
+# Combat's damage vocabulary. `combat.md` Section 11 publishes the resolution
+# words - the miss, the graze, the hit, the wound grades and the two overkill
+# descriptions - and `scenario_literal_coverage.py` reports that not one of
+# them has ever appeared in a sampled stock frame.
+#
+# This is a lottery by construction and is marked as one so the comparator
+# does not score the dice: the two sides roll independently, so the word one
+# prints on a given swing is not the word the other prints. What it is for is
+# the *vocabulary* - which words the original draws from, in what shape, and
+# on which row - which a run of swings surfaces on both sides even when no
+# single swing agrees.
+#
+# The seat is the town attack, not the dungeon room: the room the dungeon
+# seed enters is empty, so every swing there answers `Attack-Aim!` and
+# `Nothing!` and no damage word is reachable at all. Attacking the
+# weaponsmith opens an arena that actually has a foe in it.
+#
+# The foe is not adjacent on entry - it stands four cells north - and bare
+# hands are `combat.md §8.2`'s zero-reach arm, whose cursor cannot leave the
+# cells within range. So the party walks north first and only then swings;
+# the earlier form of this scenario pressed `a` from the entry cell and
+# collected six `Nothing!` answers instead. Those answers did earn their
+# keep: they found the missing line feeds around `Nothing!`, which is fixed.
+# requires-seed: the party beside the weaponsmith in a town
+both	wait	9000
+both	key	space
+both	wait	4000
+both	key	j
+both	wait	9000
+both	key	a
+both	wait	1500
+both	key	Up
+both	wait	6000
+both	shot	arena	The arena after entry, the merchant four cells north
+both	key	Up
+both	wait	2500
+both	key	Up
+both	wait	2500
+both	key	Up
+both	wait	2500
+both	shot	closed	After walking north
+both	key	a
+both	wait	1200
+both	key	Up
+both	wait	800
+both	key	Return
+both	wait	3000
+both	shot	swing1	Swing 1
+both	key	a
+both	wait	1200
+both	key	Up
+both	wait	800
+both	key	Return
+both	wait	3000
+both	shot	swing2	Swing 2
+both	key	a
+both	wait	1200
+both	key	Up
+both	wait	800
+both	key	Return
+both	wait	3000
+both	shot	swing3	Swing 3
+both	key	a
+both	wait	1200
+both	key	Up
+both	wait	800
+both	key	Return
+both	wait	3000
+both	shot	swing4	Swing 4
+both	key	a
+both	wait	1200
+both	key	Up
+both	wait	800
+both	key	Return
+both	wait	3000
+both	shot	swing5	Swing 5
+both	key	a
+both	wait	1200
+both	key	Up
+both	wait	800
+both	key	Return
+both	wait	3000
+both	shot	swing6	Swing 6

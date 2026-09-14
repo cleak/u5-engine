@@ -718,6 +718,32 @@ impl PlayState {
             self.message = "Not here!".to_string();
             return Ok(MoveOutcome::Blocked);
         }
+        // `magic.md §5` **step 4** is the charges gate - "If the counter is
+        // zero, the dispatcher prints `None mixed!` and aborts" - and **step
+        // 7** is "dispatch to the effect handler". The target and direction
+        // prompts belong to the handler, so the charge counter is read
+        // before any of them, exactly as the scene gate above is.
+        //
+        // Measured 2026-09-13 (`qa/paired/magic-refusal-vocabulary.tsv`,
+        // beat `uncharged`): casting Vas Mani with no charge, the original
+        // answers `None mixed!` under the committed `:VAS MANI` row, and
+        // this engine opened `On who: ` and asked for a target first. The
+        // gate it eventually reached - `cast_spell_resource_gate`, whose own
+        // ordering is right - sat behind the prompt.
+        //
+        // This arm only *refuses*; the decrement stays where it was. §5 also
+        // says the charge is spent "immediately, before any further checks",
+        // which for a prompting spell means before its prompt rather than
+        // after the answer, and that is a second divergence this does not
+        // address - `cleak/u5-spec#277`.
+        if let (Some(spell_index), Some(caster_index)) =
+            (spell_index, parse_inline_party_index(suffix))
+            && self.party.get(caster_index).is_some()
+            && self.spell_charges[spell_index] == 0
+        {
+            self.emit_cast_gate_refusal(crate::magic::CastGateOutcome::NoneMixed);
+            return Ok(MoveOutcome::Blocked);
+        }
         match spell_code.as_str() {
             "AG" => {
                 let Some(caster_index) = parse_inline_party_index(suffix) else {
