@@ -1642,7 +1642,13 @@ pub fn visual_route_suite(
     let baseline_brit_ool = std::fs::read(game_dir.join(BRIT_OOL_FILENAME))?;
     let baseline_under_ool = std::fs::read(game_dir.join(UNDER_OOL_FILENAME))?;
 
+    // Every case runs, and the failures are reported together at the end -
+    // the same repair `run_route_smoke` needed, for the same reason: this
+    // returned the first case's error, so one failing case hid the state of
+    // the other 89.
+    let mut failures: Vec<String> = Vec::new();
     for case in visual_route_suite_cases() {
+        let mut run_case = || -> io::Result<()> {
         std::fs::write(game_dir.join(BRIT_OOL_FILENAME), &baseline_brit_ool)?;
         std::fs::write(game_dir.join(UNDER_OOL_FILENAME), &baseline_under_ool)?;
         let route_game_dir = prepare_visual_route_case_game_dir(game_dir, case.label)?;
@@ -1725,10 +1731,31 @@ pub fn visual_route_suite(
         if let Some(dir) = &route_game_dir {
             let _ = std::fs::remove_dir_all(dir);
         }
+        Ok(())
+        };
+        if let Err(error) = run_case() {
+            println!("visual-route {}: FAILED", case.label);
+            failures.push(format!("{}: {error}", case.label));
+        }
     }
     std::fs::write(game_dir.join(BRIT_OOL_FILENAME), &baseline_brit_ool)?;
     std::fs::write(game_dir.join(UNDER_OOL_FILENAME), &baseline_under_ool)?;
     push_visual_key_route_reports(game_dir, out_dir, &atlas, ctx, &mut reports)?;
+    if !failures.is_empty() {
+        println!(
+            "\nVisual route: {} case(s) failed.",
+            failures.len()
+        );
+        for failure in &failures {
+            println!("  {failure}");
+        }
+        // As in `run_route_smoke`: the manifest hashes every frame, so a
+        // short one would rebaseline the suite to its own broken state.
+        return Err(io::Error::other(format!(
+            "{} visual route case(s) failed",
+            failures.len()
+        )));
+    }
 
     for report in &reports {
         if report.nonblack_pixels == 0 && !visual_route_frame_is_intentionally_black(&report.label)
@@ -1877,12 +1904,23 @@ fn validate_visual_route_final_state(
                 state.player.x,
                 state.player.y,
             );
+            // The two engine sentences these read - `Safely opened dungeon
+            // chest` and `Opened dungeon chest at (x, y) ...` - are gone and
+            // demoted to a diagnostic respectively. The published lines are
+            // An Sanct's `Chest opened!` and the command's `Chest opened`,
+            // which `commands.md` keeps deliberately distinct: "`Chest
+            // opened!` is a **different** literal from the command's `Chest
+            // opened`, which has no exclamation mark".
             let expected_message = if label == "route-dungeon-open-chest-spell" {
                 state.spell_charges[OPEN_SPELL_INDEX] == 0
                     && state.party.first().is_some_and(|member| member.mana == 0)
-                    && state.message.contains("Safely opened dungeon chest")
+                    && state
+                        .message
+                        .contains(u5_runtime::AN_SANCT_CHEST_OPENED_LINE.trim())
             } else {
-                state.message.contains("Opened dungeon chest")
+                state
+                    .message
+                    .contains(u5_runtime::DUNGEON_CHEST_OPENED.trim())
             };
             if state.turn != 1 || state.grid[index] != 0x78 || !expected_message {
                 return Err(io::Error::other(format!(
@@ -9111,6 +9149,14 @@ fn apply_visual_route_command(
             member.status = b'D';
             member.hp = 0;
         }
+        // The roster panel is a snapshot refreshed at named points
+        // (`stats-panel.md §2.2`-`§2.4`), and a setup step writing the party
+        // records directly is not one of them - so the frame after this
+        // showed the party alive and repeated the previous one byte for
+        // byte. Real defeat arrives through combat, whose exit repaints, so
+        // repainting here is what makes the fixture stand for the thing it
+        // is standing in for.
+        state.repaint_stats_panel();
         return Ok(PlayInputDisposition::Continue);
     }
     if lower == "setup:whirlpool-engagement" {
@@ -9238,6 +9284,16 @@ fn handle_empty_visual_route_input(state: &mut PlayState, game_dir: &Path) -> io
 
 fn settle_visual_route_exploration_gate(state: &mut PlayState, game_dir: &Path) -> io::Result<()> {
     for _ in 0..PLAY_SCRIPT_MAX_IDLE_TICKS {
+        // The route replay has no animation pump of its own - the live app's
+        // cinematic driver runs on the frame clock, and this suite steps
+        // command by command - so the staged presentation never advances and
+        // the rescue cinematic never reaches its handoff. Without these the
+        // gate saw `pending_blackthorn_rescue` still set on all 1024 passes.
+        // `play_loop::settle_play_script_exploration_gate` carries the same
+        // three lines for the same reason.
+        state.flush_staged_narration();
+        state.run_blackthorn_rescue_to_handoff(game_dir)?;
+        state.run_blackthorn_audience_exit_to_handoff(game_dir)?;
         match state.apply_exploration_turn_gate(game_dir)? {
             ExplorationTurnGateOutcome::Ready { .. } => return Ok(()),
             ExplorationTurnGateOutcome::Slept { .. }
@@ -9324,6 +9380,21 @@ fn visual_route_allows_unchanged_step(route_label: &str, step: usize) -> bool {
         || (route_label.starts_with("route-shop-arms-")
             && route_label.ends_with("-terminator-refusal")
             && (1..=3).contains(&step))
+        // The reagent and guild purchases end on a key that pays, stocks the
+        // item and leaves. None of that reaches the drawn frame on the step
+        // that does it. `shops.md §8.A`: there is "no universal `Farewell.`
+        // or `As you wish.` line", and the silent outcome "omits this entire
+        // sequence and its random draw" - so the message window keeps what
+        // it had. The gold the purchase spends is in the roster panel, and
+        // that panel is a snapshot whose deferred refresh drains at the head
+        // of the *next* command prompt (`stats-panel.md §2.3`), which a
+        // final step never reaches. Both halves are the specified
+        // behaviour, so the frame is allowed to repeat exactly.
+        || ((route_label == "route-shop-reagent-buy"
+            || route_label == "route-shop-reagent-buy-route"
+            || route_label == "route-shop-guild-buy"
+            || route_label == "route-shop-guild-buy-route")
+            && step == 3)
 }
 
 fn run_visual_intro_menu_app(
