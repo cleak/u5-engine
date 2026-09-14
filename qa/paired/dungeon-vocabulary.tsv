@@ -1,0 +1,36 @@
+# The dungeon command vocabulary, which the suite has never seen.
+#
+# From the unverified 217: `A pit!`, `Disarmed!`, `Chest opened!`,
+# `Must open first!` and the dungeon's own refusals have never appeared in a
+# sampled stock frame. `dungeon-search` and `dungeon-chest-refusals` work the
+# same save but stop on different lines.
+#
+# Walks the dungeon's own verbs in turn from the search save: open with
+# nothing there, get with nothing there, then klimb.
+#
+# Measured 2026-09-13: it covers ` 0pen-What`, ` Get` / `Not here!` and
+# ` Klimb-Up!`, and its `klimb` beat reproduces the row difference that
+# `dungeon-exit-klimb` has carried since `cleak/u5-spec#270` - the original
+# holds three blank rows under `Exit to Britannia!` and this engine holds
+# two. This is the smaller repro: five keys from the seed rather than a
+# torch, a klimb and a look.
+# requires-seed: the dungeon-search save, on a dungeon level
+both	wait	9000
+both	key	space
+both	wait	4000
+both	key	j
+both	wait	9000
+both	shot	arrival	Journey Onward on the dungeon level
+both	key	o
+both	wait	2500
+both	shot	open	O-Open with nothing to open
+both	key	space
+both	wait	1500
+both	key	g
+both	wait	2500
+both	shot	get	G-Get with nothing to get
+both	key	space
+both	wait	1500
+both	key	k
+both	wait	2500
+both	shot	klimb	K-Klimb in the dungeon
