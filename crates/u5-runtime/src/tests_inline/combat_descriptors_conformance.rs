@@ -1296,7 +1296,7 @@
         let walk = escaped
             .apply_combat_targeting_cursor_key('\u{1b}')
             .expect("the cursor is open");
-        assert!(walk.text.starts_with(COMBAT_TARGETING_NOTHING_LINE));
+        assert!(walk.text.starts_with(COMBAT_TARGETING_NOTHING_MESSAGE));
         assert!(!walk.cursor_open, "the turn is spent");
 
         // Space on the attacker's own cell.
@@ -1305,7 +1305,7 @@
         let walk = spaced
             .apply_combat_targeting_cursor_key(' ')
             .expect("the cursor is open");
-        assert!(walk.text.starts_with(COMBAT_TARGETING_NOTHING_LINE));
+        assert!(walk.text.starts_with(COMBAT_TARGETING_NOTHING_MESSAGE));
 
         // A confirm on an in-range cell holding nobody the lookup accepts.
         let mut confirmed = combat_player_command_state(8, 5);
@@ -1322,7 +1322,7 @@
         let walk = confirmed
             .apply_combat_targeting_cursor_key('\r')
             .expect("the cursor is open");
-        assert!(walk.text.starts_with(COMBAT_TARGETING_NOTHING_LINE));
+        assert!(walk.text.starts_with(COMBAT_TARGETING_NOTHING_MESSAGE));
         assert!(!walk.cursor_open, "the confirm still spends the turn");
 
         // "Enter and `A` on the attacker's own cell ... nothing at all".

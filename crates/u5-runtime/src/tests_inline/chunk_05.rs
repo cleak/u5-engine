@@ -1922,13 +1922,21 @@ fn a_attack_guard_like_town_npc_raises_alarm_and_opens_an_eight_monster_arena() 
         .take_while(|line| !line.contains(COMBAT_TURN_BANNER_ARMED_WITH))
         .filter(|line| !line.is_empty())
         .collect::<Vec<_>>();
-    assert_eq!(result_lines.first().copied(), Some("Attack-Aim! Nothing!"));
+    // `Nothing!` carries a leading line feed of its own, so it no longer
+    // shares the prompt's row. Measured 2026-09-13
+    // (`qa/paired/combat-damage-narration.tsv`).
+    assert_eq!(result_lines.first().copied(), Some("Attack-Aim! "));
     assert!(result_lines.len() > 1);
     assert!(
         result_lines
             .iter()
             .skip(1)
-            .all(|line| *line == "Guard missed!" || *line == "Avatar hit!")
+            // `Nothing!` is its own row now rather than a tail on the
+            // prompt's, so a swing that finds nobody contributes a result
+            // line here where it used to contribute none.
+            .all(|line| *line == "Guard missed!"
+                || *line == "Avatar hit!"
+                || *line == "Nothing!")
     );
     assert!(!state
         .message_entries()

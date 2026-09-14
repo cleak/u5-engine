@@ -11385,7 +11385,7 @@ fn combat_targeting_cursor_reports_nothing_and_still_ends_the_walk() {
     let confirmed = state
         .apply_combat_targeting_cursor_key_with_inputs('\r', None)
         .unwrap();
-    assert_eq!(confirmed.text, "Nothing!");
+    assert_eq!(confirmed.text, "\nNothing!\n");
     assert!(!confirmed.cursor_open);
     assert!(confirmed.attack.is_none());
 
@@ -11405,7 +11405,7 @@ fn combat_targeting_cursor_reports_nothing_and_still_ends_the_walk() {
     let melee_cancel = state
         .apply_combat_targeting_cursor_key_with_inputs('\u{1b}', None)
         .unwrap();
-    assert_eq!(melee_cancel.text, "Nothing!");
+    assert_eq!(melee_cancel.text, "\nNothing!\n");
     assert!(!melee_cancel.cursor_open);
     assert!(state.active_combat_targeting.is_none());
 }
@@ -11540,7 +11540,7 @@ fn combat_attack_walks_one_cursor_per_qualifying_readied_item() {
     let second = state
         .apply_combat_targeting_cursor_key_with_inputs('\u{1b}', None)
         .unwrap();
-    assert_eq!(second.text, "Nothing!\nBow:\nAttack-Aim! ");
+    assert_eq!(second.text, "\nNothing!\n\nBow:\nAttack-Aim! ");
     assert!(second.cursor_open);
     assert_eq!(state.active_combat_targeting.as_ref().unwrap().index, 1);
     assert_eq!(state.active_combat_targeting.as_ref().unwrap().max_range, 7);
@@ -12229,7 +12229,7 @@ fn combat_input_dispatch_routes_play_keys_to_combat_parser() {
     // banner, and the Giant Rat's reply sits ahead of it.
     assert_eq!(
         attack_state.message,
-        "Attack-Aim! \nGiant Rat missed!\n\nAvatar is poisoned!\n\nAvatar, armed with bare hands:\n"
+        "Attack-Aim! \n\nGiant Rat missed!\n\nAvatar is poisoned!\n\nAvatar, armed with bare hands:\n"
     );
     assert_eq!(attack_state.combat_actors[8].hp_or_wound, 10);
     assert_eq!(attack_state.party_experience[0], 0);
@@ -12342,7 +12342,7 @@ fn combat_input_dispatch_reports_weapon_hit_damage_and_xp() {
     // the poison branch returns before the ordinary roller's defence draw.
     assert_eq!(
         state.message,
-        "Attack-Aim! \nGiant Rat barely wounded!\n\nAvatar is poisoned!\n\nAvatar, armed with Dagger:\n"
+        "Attack-Aim! \n\nGiant Rat barely wounded!\n\nAvatar is poisoned!\n\nAvatar, armed with Dagger:\n"
     );
     assert_eq!(state.combat_actors[8].hp_or_wound, 10 - expected_damage);
     assert_eq!(state.party_experience[0], u16::from(expected_damage));
@@ -12382,7 +12382,7 @@ fn combat_input_dispatch_reports_weapon_kill_and_keeps_victory_cleanup_live() {
     assert_eq!(
         state.message,
         format!(
-            "Attack-Aim! \nGiant Rat killed!\n{COMBAT_VICTORY_LINE}\nAvatar, armed with Dagger:\n"
+            "Attack-Aim! \n\nGiant Rat killed!\n{COMBAT_VICTORY_LINE}\nAvatar, armed with Dagger:\n"
         )
     );
     assert_eq!(state.party_experience[0], 3);
@@ -13030,7 +13030,7 @@ fn combat_input_dispatch_attack_cursor_owns_the_next_keystrokes() {
         PlayInputDisposition::Continue
     );
     assert!(state.active_combat_targeting.is_none());
-    assert!(state.message.starts_with("Attack-Aim! Nothing!"));
+    assert!(state.message.starts_with("Attack-Aim! \nNothing!\n"));
 }
 
 #[test]
