@@ -119,6 +119,7 @@ impl PlayState {
     ) {
         self.message_transcript.push(MessageEntry {
             text,
+            producer_blank: false,
             glyphs,
             is_command_echo,
             continues_open_row,
@@ -179,6 +180,21 @@ impl PlayState {
         self.message_transcript_revision = self.message_transcript_revision.wrapping_add(1);
     }
 
+    /// A blank row a producer's own embedded line feed wrote.
+    ///
+    /// Identical on screen to [`Self::push_explicit_blank_message_entry`] and
+    /// not the same thing: `text-output.md §10.4`'s derived blank is still
+    /// owed after one of these, because the producer's feed and the next
+    /// cycle's feed are two separate advances.
+    pub fn push_producer_blank_message_entry(&mut self) {
+        self.message_row_open_mid_line = false;
+        self.append_transcript_entry(String::new(), Vec::new(), false, false, true);
+        if let Some(entry) = self.message_transcript.last_mut() {
+            entry.producer_blank = true;
+        }
+        self.message_transcript_revision = self.message_transcript_revision.wrapping_add(1);
+    }
+
     pub fn push_explicit_blank_message_entry(&mut self) {
         // A completed blank row leaves the cursor at column 0 of the next
         // one, the same as any other line feed.
@@ -208,7 +224,7 @@ impl PlayState {
             let is_last = segments.peek().is_none();
             if line.is_empty() {
                 if !is_last {
-                    self.push_explicit_blank_message_entry();
+                    self.push_producer_blank_message_entry();
                 }
                 continue;
             }

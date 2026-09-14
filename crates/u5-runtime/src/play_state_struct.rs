@@ -864,6 +864,10 @@ pub struct WorldReturn {
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct MessageEntry {
     pub text: String,
+    /// Set when this entry is a blank row a *producer* wrote, from a line
+    /// feed embedded in its own text, rather than the blank that closes a
+    /// command turn. See [`crate::MessageLineKind::ProducerBlank`].
+    pub producer_blank: bool,
     /// Fixed-font choice for each byte in `text`. Plain engine messages use
     /// the ordinary font; TLK `0x8E` spans retain their runic selection here.
     pub glyphs: Vec<TlkRenderedGlyph>,

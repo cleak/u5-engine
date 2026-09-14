@@ -58,8 +58,21 @@ pub enum MessageLineKind {
     Command,
     /// Handler output: unprefixed, from column 24.
     Output,
-    /// The blank row that closes a command turn.
+    /// The blank row that closes a command turn. `text-output.md §10.4`
+    /// derives it from "the next cycle's leading line feed", so a log that
+    /// already carries one does not get a second when the prompt row is
+    /// placed.
     Blank,
+    /// A blank row a *producer* wrote, from a line feed embedded in its own
+    /// text. It looks identical and is not the same thing: §10.4's derived
+    /// blank is still owed after it, because the producer's feed and the next
+    /// cycle's feed are two separate advances.
+    ///
+    /// Conflating the two cost a row wherever a literal ends in two feeds.
+    /// Measured 2026-09-13 (`qa/paired/dungeon-vocabulary.tsv`, beat
+    /// `klimb`): the original holds three blank rows under `Exit to
+    /// Britannia!` and this engine held two.
+    ProducerBlank,
 }
 
 impl MessageLineKind {
@@ -227,7 +240,7 @@ impl GameplayMessageLog {
         }
         if matches!(
             self.lines.last().map(|line| line.kind),
-            Some(MessageLineKind::Blank)
+            Some(MessageLineKind::Blank | MessageLineKind::ProducerBlank)
         ) {
             return;
         }
@@ -399,7 +412,11 @@ pub fn message_log_from_entries<'a>(
             log.lines.push(MessageLogLine {
                 text: String::new(),
                 glyphs: Vec::new(),
-                kind: MessageLineKind::Blank,
+                kind: if entry.producer_blank {
+                    MessageLineKind::ProducerBlank
+                } else {
+                    MessageLineKind::Blank
+                },
                 centered: false,
                 trailing_spaces: 0,
             });
@@ -748,6 +765,7 @@ fn layout_message_window_inner(
         .lines()
         .last()
         .is_some_and(|line| matches!(line.kind, MessageLineKind::Blank));
+    // Deliberately not `ProducerBlank`: see its doc comment.
     // `combat.md §8.1`: the arena prompt's line feed was the banner's
     // own, so its marker row follows the history with no blank between.
     // A continuation row needs no separating blank either: the block it
@@ -779,7 +797,10 @@ fn layout_message_window_inner(
     let live_row_index = (first_row + placed.len() + usize::from(live_blank_row))
         .min(MESSAGE_WINDOW_BOTTOM as usize) as u8;
     for (offset, line) in placed.iter().enumerate() {
-        if matches!(line.kind, MessageLineKind::Blank) {
+        if matches!(
+            line.kind,
+            MessageLineKind::Blank | MessageLineKind::ProducerBlank
+        ) {
             continue;
         }
         let prefixed = line.kind.prefixed();
