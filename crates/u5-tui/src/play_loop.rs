@@ -523,6 +523,18 @@ fn settle_play_script_exploration_gate(state: &mut PlayState, game_dir: &Path) -
         return Ok(());
     }
     for _ in 0..PLAY_SCRIPT_MAX_IDLE_TICKS {
+        // The same three lines the interactive loop above runs before its own
+        // gate call, for the same reason: a script has no animation pump, so
+        // a staged presentation never advances and the rescue cinematic never
+        // reaches its handoff. Without them the gate sees
+        // `pending_blackthorn_rescue` still set on every one of its 1024
+        // passes and reports the party as never becoming command-ready -
+        // which is what `blackthorn-rescue-refuge`,
+        // `britannia-defeat-persists-ool-before-rescue` and
+        // `stonegate-trapdoor-rescue` were failing with.
+        state.flush_staged_narration();
+        state.run_blackthorn_rescue_to_handoff(game_dir)?;
+        state.run_blackthorn_audience_exit_to_handoff(game_dir)?;
         match state.apply_exploration_turn_gate(game_dir)? {
             ExplorationTurnGateOutcome::Ready { .. } => return Ok(()),
             ExplorationTurnGateOutcome::Slept { .. }

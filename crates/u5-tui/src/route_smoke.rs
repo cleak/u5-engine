@@ -7176,10 +7176,19 @@ fn validate_route_smoke_case_state(
         }
         _ if shrine_route_virtue(case_name).is_some() => {
             let virtue = shrine_route_virtue(case_name).expect("shrine route virtue is known");
+            // The ordained summary is a diagnostic, not a message.
+            // `karma.md §12`'s Codex-unread arm is the record `31`/`32`/`33`
+            // presentation, and the inline suffix form this route drives "has
+            // no key waits to hang those records on, so it applies the state
+            // change and prints nothing rather than the summary sentence it
+            // used to invent" - it clears `message` on purpose. These clauses
+            // still read `message` and so failed for all eight virtues.
+            let ordained_note = state.diagnostics.iter().any(|note| {
+                note.contains("ordained") && note.contains(virtue.name())
+            });
             if state.shrine_ordained_mask & virtue.bit() == 0
                 || state.shrine_codex_mask != 0
-                || !state.message.contains("ordained")
-                || !state.message.contains(virtue.name())
+                || !ordained_note
             {
                 return Err(io::Error::other(format!(
                     "route smoke `{case_name}` did not complete native shrine meditation for {}",
