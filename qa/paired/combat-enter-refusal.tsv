@@ -1,17 +1,19 @@
-# E-Enter inside the arena: the original says `Enter what`, this engine says
-# `Enter Not here!`.
+# E-Enter underground. The seed is the dungeon-room save, and the beats land
+# in the first-person dungeon view, not in the arena: `L1` and `Dir: North`
+# frame both sides, and Space answers `Pass` on both.
 #
-# Written to reach the E-Escape refusals of the unverified 217 - `Escape!`,
-# `Escape-Not here!`, `Escape-Not yet!`, `All must use the same exit!` - on
-# the assumption that `e` is the arena's exit key. It is not: `e` is Enter,
-# and both sides answer it as Enter. So the scenario does not cover what it
-# was written for, and covers a difference instead.
+# Written to reach the Escape refusals of the unverified published lines -
+# `Escape!`, `Escape-Not here!`, `Escape-Not yet!`, `All must use the same
+# exit!` - on the assumption that `e` is the arena's exit key. It is not: `e`
+# is Enter. So the scenario does not cover what it was written for, and
+# covers a dungeon difference instead, which is worth keeping.
 #
 # `commands.md` Section 5.3: "`Enter ` is an operand-follows echo; with
 # nothing to enter the line completes with `what?`". The original does that
-# even inside the arena. This engine's combat command table answers the same
-# key with `Not here!` - `enter_current_location` would give `what?`, so the
-# combat path is not reaching it.
+# underground; this engine answered the same open echo with `Not here!`.
+# `dungeon-mode.md` Section 10 lists `E` among the letters that "print
+# \"What?\" or a stock refusal" without saying which of the two, so the
+# capture is what settles it.
 #
 # Kept under its true name rather than the one it was written under.
 # requires-seed: the combat dungeon-room save, mid-fight

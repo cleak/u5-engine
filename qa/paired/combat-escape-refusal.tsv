@@ -1,0 +1,28 @@
+# The arena Escape key. `combat.md` Section 14: "The Escape key uses a
+# distinct cleanup handler and always prints the bare prefix `Escape` first",
+# and its three branches produce `Escape-Not here!`, `Escape-Not yet!` and
+# `Escape!`. The key is the real Escape keysym, not the `X` letter - Section 8
+# routes `X` to the refusal responder, which answers `X-it what?`.
+#
+# The seat is the dungeon-room arena `combat-dungeon-room` reaches: ignite,
+# step onto the room trigger, and the framer opens the arena. An ordinary
+# encounter mode with the party alive and no exit announcement yet is the
+# second branch, so the first press should read `Escape-Not yet!`.
+#
+# requires-seed: the party one step from a dungeon room trigger, with a torch to hand
+both	wait	9000
+both	key	space
+both	wait	4000
+both	key	j
+both	wait	9000
+both	key	i
+both	wait	2500
+both	key	Up
+both	wait	6000
+both	shot	arena	The combat arena
+both	key	Escape
+both	wait	2500
+both	shot	first	Escape on the first round
+both	key	Escape
+both	wait	2500
+both	shot	second	Escape again

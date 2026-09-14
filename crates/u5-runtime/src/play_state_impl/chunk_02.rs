@@ -209,8 +209,22 @@ impl PlayState {
                 self.message = "Funny, no response!".to_string();
                 handled!();
             }
-            'b' | 'e' | 'x' => {
+            'b' | 'x' => {
                 self.message = "Not here!".to_string();
+                handled!();
+            }
+            // `commands.md §5.3`: "`Enter ` is an operand-follows echo; with
+            // nothing to enter the line completes with `what?`". The original
+            // does that underground too - measured 2026-09-13
+            // (`qa/paired/combat-enter-refusal.tsv`, beats `enter` and
+            // `enter-again`): it reads `Enter what?` where this engine
+            // completed the same open echo with `Not here!`.
+            // `dungeon-mode.md §10` files `E` under the letters that "print
+            // \"What?\" or a stock refusal" without saying which, so the
+            // shared handler - whose non-`World` arm is written for exactly
+            // this case - is what answers it.
+            'e' => {
+                let _ = self.enter_current_location(game_dir)?;
                 handled!();
             }
             'f' => {
