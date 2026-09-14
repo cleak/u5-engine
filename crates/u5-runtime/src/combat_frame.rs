@@ -8952,7 +8952,7 @@ impl PlayState {
             CombatTargetingCursorAction::Cancelled => {
                 let mut walk = self.close_combat_attack_attempt(&session);
                 if session.melee_arm {
-                    walk.text.insert_str(0, COMBAT_TARGETING_NOTHING_LINE);
+                    walk.text.insert_str(0, COMBAT_TARGETING_NOTHING_MESSAGE);
                 }
                 Some(walk)
             }
@@ -9045,7 +9045,7 @@ impl PlayState {
                     // that is in range but holds nobody the lookup accepts. The
                     // third is not a cancellation ... but it reaches the same
                     // line and ends the turn the same way."
-                    None => walk.text.insert_str(0, COMBAT_TARGETING_NOTHING_LINE),
+                    None => walk.text.insert_str(0, COMBAT_TARGETING_NOTHING_MESSAGE),
                 }
                 Some(walk)
             }

@@ -41,6 +41,33 @@ pub const COMBAT_INTERFERES_TAIL: &str = " interferes!";
 /// confirmation that finds no eligible occupant.
 pub const COMBAT_TARGETING_NOTHING_LINE: &str = "Nothing!";
 
+/// [`COMBAT_TARGETING_NOTHING_LINE`] with the two line feeds the original
+/// puts around it.
+///
+/// `combat.md §8.2` names the literal but not its boundary - the
+/// "Messages that leave a row open" table in §11.1 lists blink, vanish,
+/// teleport and the arena exit, and not this one. **Measured** 2026-09-13
+/// (`qa/paired/combat-damage-narration.tsv`, beats `swing1` and `swing3`):
+/// the original reads
+///
+/// ```text
+///  Attack-Aim!
+/// Nothing!
+///
+/// Avatar, armed
+/// ```
+///
+/// - the leading feed closes the `Aim! ` row, so `Nothing!` starts at
+/// column zero instead of inheriting that prompt's trailing space, and the
+/// trailing feed closes its own row so that `§8.4`'s "next full actor
+/// banner contributes its own leading feed, making the blank row after the
+/// result" lands as a blank rather than merely closing this one. This
+/// engine printed ` Nothing!` wrapped onto the prompt's row and ran the
+/// banner straight underneath, and sat a row high for the rest of the
+/// capture - the same shape the `-Not here` refusal had before its feed was
+/// added.
+pub const COMBAT_TARGETING_NOTHING_MESSAGE: &str = "\nNothing!\n";
+
 /// `combat.md §8.2` separator between an item-name line and its colon, for
 /// the two- or three-qualifying-item case: "each attempt additionally prints
 /// a newline, that item's name, and a colon on its own line before its
