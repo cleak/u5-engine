@@ -4399,11 +4399,36 @@ fn finish_combat_attack_walk(
     if let Some((target_slot, attack)) = walk.attack
         && let Some(line) = combat_weapon_attack_narrated_result_message(state, target_slot, attack)
     {
-        // `combat.md §11.1`: the party melee arm emitted step 3's newline
-        // "before the roll", which is the same one leading this print; the
-        // cursor was left mid-row by `Aim! `, so it closes that row instead
-        // of blanking one.
-        state.emit_combat_print(&format!("\n{line}\n"));
+        // Two leading feeds, not one.
+        //
+        // `combat.md §11.1`'s census gives the party melee swing "**a
+        // newline, unconditionally, before the roll**", and the miss and hit
+        // rows both say the result line follows "the newline already printed
+        // before the roll". That accounts for one. The other closes the
+        // `Aim! ` row, which the confirmed cursor leaves open.
+        //
+        // The comment that stood here said the opposite - that the pre-roll
+        // newline *was* the one closing the `Aim! ` row, "so it closes that
+        // row instead of blanking one". Measured 2026-09-13
+        // (`qa/paired/combat-damage-narration.tsv`, every swing of fourteen):
+        // the original reads
+        //
+        // ```text
+        //  Attack-Aim!
+        //
+        // Merchant barely
+        // wounded!
+        // ```
+        //
+        // with a blank row between them, on the miss rows and on all four
+        // wound grades alike, and this engine ran the result straight under
+        // the prompt every time.
+        //
+        // The `Nothing!` routes of `§8.2` keep their single feed and are
+        // right to: no roll happens on them, so `§11.1`'s pre-roll newline
+        // is never emitted, and the original shows no blank there. That
+        // asymmetry is what makes this two rather than a wrapping artifact.
+        state.emit_combat_print(&format!("\n\n{line}\n"));
     }
     if !walk.text.is_empty() {
         // `combat.md §8.2`: `Attack-` and `Aim! ` are what `A` adds on top

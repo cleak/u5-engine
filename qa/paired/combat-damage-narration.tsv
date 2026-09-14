@@ -21,6 +21,11 @@
 # the earlier form of this scenario pressed `a` from the entry cell and
 # collected six `Nothing!` answers instead. Those answers did earn their
 # keep: they found the missing line feeds around `Nothing!`, which is fixed.
+#
+# Fourteen swings rather than six, because the wound ladder is climbed one
+# rung at a time: six reached `missed!`, `barely wounded!` and `lightly
+# wounded!` on the stock side, and the grades above those need the merchant
+# worn further down.
 # requires-seed: the party beside the weaponsmith in a town
 both	wait	9000
 both	key	space
@@ -40,44 +45,100 @@ both	key	Up
 both	wait	2500
 both	shot	closed	After walking north
 both	key	a
-both	wait	1200
+both	wait	1000
 both	key	Up
-both	wait	800
+both	wait	700
 both	key	Return
-both	wait	3000
+both	wait	2600
 both	shot	swing1	Swing 1
 both	key	a
-both	wait	1200
+both	wait	1000
 both	key	Up
-both	wait	800
+both	wait	700
 both	key	Return
-both	wait	3000
+both	wait	2600
 both	shot	swing2	Swing 2
 both	key	a
-both	wait	1200
+both	wait	1000
 both	key	Up
-both	wait	800
+both	wait	700
 both	key	Return
-both	wait	3000
+both	wait	2600
 both	shot	swing3	Swing 3
 both	key	a
-both	wait	1200
+both	wait	1000
 both	key	Up
-both	wait	800
+both	wait	700
 both	key	Return
-both	wait	3000
+both	wait	2600
 both	shot	swing4	Swing 4
 both	key	a
-both	wait	1200
+both	wait	1000
 both	key	Up
-both	wait	800
+both	wait	700
 both	key	Return
-both	wait	3000
+both	wait	2600
 both	shot	swing5	Swing 5
 both	key	a
-both	wait	1200
+both	wait	1000
 both	key	Up
-both	wait	800
+both	wait	700
 both	key	Return
-both	wait	3000
+both	wait	2600
 both	shot	swing6	Swing 6
+both	key	a
+both	wait	1000
+both	key	Up
+both	wait	700
+both	key	Return
+both	wait	2600
+both	shot	swing7	Swing 7
+both	key	a
+both	wait	1000
+both	key	Up
+both	wait	700
+both	key	Return
+both	wait	2600
+both	shot	swing8	Swing 8
+both	key	a
+both	wait	1000
+both	key	Up
+both	wait	700
+both	key	Return
+both	wait	2600
+both	shot	swing9	Swing 9
+both	key	a
+both	wait	1000
+both	key	Up
+both	wait	700
+both	key	Return
+both	wait	2600
+both	shot	swing10	Swing 10
+both	key	a
+both	wait	1000
+both	key	Up
+both	wait	700
+both	key	Return
+both	wait	2600
+both	shot	swing11	Swing 11
+both	key	a
+both	wait	1000
+both	key	Up
+both	wait	700
+both	key	Return
+both	wait	2600
+both	shot	swing12	Swing 12
+both	key	a
+both	wait	1000
+both	key	Up
+both	wait	700
+both	key	Return
+both	wait	2600
+both	shot	swing13	Swing 13
+both	key	a
+both	wait	1000
+both	key	Up
+both	wait	700
+both	key	Return
+both	wait	2600
+both	shot	swing14	Swing 14
