@@ -1,0 +1,21 @@
+# The ship sail vocabulary, which the suite has never seen.
+#
+# From the unverified 217: `HOIST!`, `FURL!` and `Abandon ship!` have never
+# appeared in a sampled stock frame, though `ship-commands` sails the same
+# save past them. Y-Yell is the sail command; `commands.md` Section 5 gives
+# the two echoes it alternates between.
+# requires-seed: the ship-commands save, aboard a frigate
+both	wait	9000
+both	key	space
+both	wait	4000
+both	key	j
+both	wait	9000
+both	shot	aboard	Journey Onward aboard the ship
+both	key	y
+both	wait	2500
+both	shot	yell-first	Y-Yell once
+both	key	space
+both	wait	1500
+both	key	y
+both	wait	2500
+both	shot	yell-second	Y-Yell again, for the other arm

@@ -1,0 +1,31 @@
+# The C-Cast refusals, which the suite has never seen.
+#
+# From the unverified 217 of `scenario_literal_coverage.py`: `M.P. too low!`,
+# `Insufficient reagents!`, `Nobody can cast!` and `Failed!` have never
+# appeared in a sampled stock frame. `magic.md` Section 4 publishes them as
+# the ordinary refusal path, so they are reachable by casting a spell the
+# party cannot pay for.
+#
+# Measured 2026-09-13: this reaches `Spell name:` and `No effect!`, not the
+# cost refusals it was aimed at. The typed word arrives as `REL EX LOR` - the
+# spell prompt's own parsing of what was sent - and an unrecognised word is
+# answered before any cost check. Renaming it would overstate it; the two
+# lines it does cover were both in the unverified set, and drawing
+# `M.P. too low!` and `Insufficient reagents!` needs a save whose caster is
+# short of mana rather than a word the parser rejects.
+# requires-seed: the magic-mix save, which carries a caster and a known reagent stock
+both	wait	9000
+both	key	space
+both	wait	4000
+both	key	j
+both	wait	9000
+both	shot	arrival	Journey Onward with the mixer's save
+both	key	c
+both	wait	2500
+both	shot	cast-prompt	The C-Cast spell prompt
+both	type	vas rel por
+both	wait	2000
+both	shot	cast-typed	An expensive word typed
+both	key	Return
+both	wait	3000
+both	shot	cast-result	What the cast refuses with
