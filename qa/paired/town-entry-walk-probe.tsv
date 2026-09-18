@@ -20,6 +20,23 @@
 #
 # A probe, not a conformance target. Its own differing beats establish nothing
 # about wording.
+#
+# **Answered 2026-09-18, and the answer is not passability.** The first
+# disagreement is step 14, and it is this engine that refuses: the original
+# walks it and this engine prints `Blocked!`. Driving the identical walk
+# headlessly from the same seed - `--play-script "e;w;w;..."` - completes all
+# fourteen steps, (15,20) through (15,16), with no refusal anywhere. Same
+# map, same cells, same code, so the cell is passable and what differed was
+# **occupancy**: a resident was standing in it at that moment in the windowed
+# run.
+#
+# That is the divergence this probe was written to find, and it closes the
+# passability hypothesis rather than confirming it. It also explains
+# `town-talk-after-entry`: the two sides are in different cells by the
+# `arrived` beat because one of them walked around a resident the other had
+# to wait for, which is the walk-up timing sensitivity both headers already
+# carry. Neither scenario can be made deterministic without a seed that
+# places the residents.
 # requires-seed: the party outside the town, so the scenario can walk in through the door
 both	wait	9000
 both	key	space
