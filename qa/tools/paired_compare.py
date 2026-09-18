@@ -428,7 +428,16 @@ def _canonical(text: str) -> str:
     for index, group in enumerate(VARIANT_GROUPS):
         for member in sorted(group, key=len, reverse=True):
             text = text.replace(member, f"<v{index}>")
-    return text
+    # A member that ends in `?` leaves a blank cell behind it: the decoder
+    # drops the cell the font renders as `?`, which is why the entries above
+    # stop short of it. The program-emitted `" ` that follows then reads as
+    # `<v> "` where a member ending in `...` reads as `<v>"`. That gap is the
+    # dropped glyph, not a space either side actually printed, so it is not a
+    # difference between the two windows. `shop-arms-sell-zero-price/browser`
+    # read `scroll` on it: the original drew `What dost thou wish to sell?"`
+    # and this engine `Show me what ye got..."`, with the whole window
+    # otherwise identical.
+    return re.sub(r"(<v\d+>) (?=\")", r"\1", text)
 
 
 def variant_only(stock: list[str], engine: list[str]) -> bool:
@@ -705,7 +714,7 @@ def compare_cached(artifact: pathlib.Path, cache: dict) -> tuple:
 
 
 # Bump when a classifier change would alter a cached verdict.
-CACHE_VERSION = 24
+CACHE_VERSION = 25
 
 
 # Some scenarios are explicitly a lottery: their own headers say so. The night
