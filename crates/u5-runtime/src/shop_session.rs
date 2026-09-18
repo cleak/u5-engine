@@ -47,6 +47,26 @@ impl ActiveShopSession {
         if self.awaiting_entry_answer() {
             return true;
         }
+        // `shops.md` §8's tavern continuation: after a branch returns, the
+        // tavern "retain[s] the message window's text and cursor, and
+        // print[s] `\"Anything else\\nfor thee?\" `" - a closing quote and one
+        // space - then waits for `Y` or `N`. `Y` "prints `Yes\\n\\n\"`, the
+        // applicable follow-up record, a closing quote and a space" and
+        // returns to the post-list key wait, so that row ends the same way.
+        // `text-output.md` §10.6 keeps the cursor on a row a prompt left open
+        // like that, and no fresh command row is drawn beneath it.
+        //
+        // Measured 2026-09-18 (`paws-sage`, beats `ale` and `again`, both
+        // reading `offset+2`): the original's question is the window's last
+        // row and this engine spent a blank and a command row under it, which
+        // put every later beat of the visit two rows ahead. The same shape and
+        // the same measurement as the inn's service question above.
+        if matches!(
+            self,
+            Self::Tavern(TavernState::AnythingElse { .. } | TavernState::PostListWait { .. })
+        ) {
+            return true;
+        }
         matches!(
             self,
             Self::Arms(
