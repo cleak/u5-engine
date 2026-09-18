@@ -36,6 +36,30 @@ fn main() {
         state.message_window_cursor_suppressed(),
         state.message_window_live_row_suppressed()
     );
+    println!(
+        "sessions: party_selector={} z_stats={} ready={} use={} cast={} cast_followup={} rest={} \
+jimmy={} surface_chest={} mix={} new_order={} wishing_well={} direction={} yes_no={} shop={} \
+town_arrest={} endgame={} rescue={} conversation={}",
+        state.active_party_selector.is_some(),
+        state.active_z_stats.is_some(),
+        state.active_ready.is_some(),
+        state.active_use.is_some(),
+        state.active_cast.is_some(),
+        state.active_cast_followup.is_some(),
+        state.active_rest.is_some(),
+        state.active_jimmy.is_some(),
+        state.active_surface_chest.is_some(),
+        state.active_mix.is_some(),
+        state.active_new_order.is_some(),
+        state.active_wishing_well.is_some(),
+        state.active_direction_prompt.is_some(),
+        state.active_yes_no_prompt.is_some(),
+        state.active_shop.is_some(),
+        state.pending_town_arrest.is_some(),
+        state.endgame.is_some(),
+        state.pending_blackthorn_rescue.is_some(),
+        state.active_conversation.is_some(),
+    );
     let mut log = message_log_from_entries(state.message_entries(), keep);
     log.set_top_offset(usize::from(state.message_window_top_offset()));
     if let Some(text) = state
