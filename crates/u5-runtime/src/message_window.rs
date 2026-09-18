@@ -269,9 +269,23 @@ impl GameplayMessageLog {
         if self.lines.is_empty() {
             return;
         }
+        // Only `Blank`. A `ProducerBlank` does **not** satisfy the derived
+        // blank, for the reason its own doc comment gives: "§10.4's derived
+        // blank is still owed after it, because the producer's feed and the
+        // next cycle's feed are two separate advances." The layout's
+        // `history_ends_blank` has always matched only `Blank` and says so;
+        // this test matched both, so the two disagreed and a literal ending
+        // in two feeds lost a row whenever a command echo followed it.
+        //
+        // Measured 2026-09-18 (`qa/paired/dungeon-exit-klimb.tsv`, beat
+        // `look`): the original carries two blank rows between
+        // `Exit to Britannia!` and the next `Look-North` echo, and this
+        // engine carried one. `cleak/u5-spec#270` published the arithmetic -
+        // "the second spends a blank row, and the next poll's leading feed
+        // spends the second blank you measured".
         if matches!(
             self.lines.last().map(|line| line.kind),
-            Some(MessageLineKind::Blank | MessageLineKind::ProducerBlank)
+            Some(MessageLineKind::Blank)
         ) {
             return;
         }

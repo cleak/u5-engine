@@ -27,6 +27,7 @@
 # onto the trapdoor, so the two windows are showing different things by
 # construction and the comparator will always report every beat as differing.
 # It is a probe, not a comparison.
+# requires-seed: the party inside Stonegate, standing in the trapdoor ring's centre cell
 both	wait	9000
 both	key	space
 both	wait	4000
