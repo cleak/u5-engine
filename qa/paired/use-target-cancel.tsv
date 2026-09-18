@@ -6,6 +6,19 @@
 # every later beat compared unrelated windows (`cleak/u5-engine#22`).
 # `qa/tools/reseed.py` replayed that walk once into the seed named below.
 # requires-seed: profile `seed-use-target-cancel-reseeded`, built by qa/tools/reseed.py
+#
+# The potion's *effect* is a lottery and must be re-run before a difference
+# in it means anything. `inventory.md` Section 7 publishes a variation roll on
+# every consumed potion: "a variation roll gives one chance in sixteen to
+# force the Orange sleep effect and one chance in sixteen to replace the
+# effect with a random potion row". Two in sixteen swings say the word on the
+# result row is not the selected bottle's.
+#
+# Measured 2026-09-18, beat `space`: the two sides agreed on all thirteen rows
+# except the last printed one, where the original read `Slept!` and this
+# engine `Healed!` - the original had rolled the forced-Orange override on a
+# yellow potion. Every other row, including `Item: Potion` and `0n who:
+# Avatar`, was identical.
 both	wait	9000
 both	key	space
 both	wait	4000
