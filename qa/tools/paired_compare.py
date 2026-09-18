@@ -500,7 +500,18 @@ def classify(left: list[list[str]], right: list[list[str]], rows: list[int]) -> 
     # of the window is unchecked, so counting it as agreement could mask a
     # real wording difference sitting beside the draw.
     if _same_pool_different_record(_flatten(stock), _flatten(engine)):
-        return "record"
+        # How much the beat proves depends on where the disagreement sits.
+        # A record that differs in one contiguous band with agreeing rows
+        # *below* it has been shown to have printed in the right place and
+        # to have left everything printed after it alone - including its
+        # own wrap, since a member of a different length would have shifted
+        # that tail. That is `record`, and it counts as agreement.
+        #
+        # A band running to the bottom row proves the weaker thing: both
+        # sides drew from this pool and drew differently, with nothing else
+        # in the window checked. `record-wide` stays a difference.
+        band = rows[-1] - rows[0] + 1 == len(rows)
+        return "record" if band and rows[-1] < len(stock) - 1 else "record-wide"
     # The window is `ROWS` tall, so a transcript that is out of step can be
     # adrift by almost all of it - an 8-row shift turned up in the arms shop,
     # and probing only +-3 reported it as a wording difference. Nearest shifts
@@ -664,7 +675,7 @@ def compare_cached(artifact: pathlib.Path, cache: dict) -> tuple:
 
 
 # Bump when a classifier change would alter a cached verdict.
-CACHE_VERSION = 22
+CACHE_VERSION = 23
 
 
 # Some scenarios are explicitly a lottery: their own headers say so. The night
@@ -777,9 +788,9 @@ def compare(artifact: pathlib.Path) -> tuple[int, int, int, int, int]:
             #
             # A draw that *wraps* differently is not this: those reach the
             # shift search below and come back `scroll`.
-            if kind == "variant":
+            if kind in ("variant", "record"):
                 same += 1
-                print(f"  variant {scenario}/{label}: legal pool draw, counted as agreeing")
+                print(f"  {kind:7}{scenario}/{label}: legal pool draw, counted as agreeing")
                 continue
             differ += 1
             print(
