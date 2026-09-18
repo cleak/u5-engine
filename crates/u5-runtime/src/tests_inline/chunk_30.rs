@@ -652,26 +652,36 @@ mod moongate_transit_transition {
     }
 
     #[test]
-    fn stage_a_draws_the_party_as_the_scratch_tile_id() {
-        // `§9.2`: "The party sprite is switched to tile `0x116`" - the
-        // very id `§9.1` composes its gate frames into.
-        assert_eq!(MOONGATE_TRANSIT_PARTY_VANISH_TILE, 0x116);
-        assert_eq!(
-            MOONGATE_TRANSIT_PARTY_VANISH_TILE, MOONGATE_PHASE_SCRATCH_TILE,
-            "`§9.1`: the same id doubles as the party-vanishing sprite"
+    fn the_two_stages_suppress_the_party_in_two_different_ways() {
+        // `§9.2` stage A: the marker is "the **actor byte** `0x16`, the
+        // paint-nothing value: the party's slot stays live and the
+        // compositor still stamps it, but the rasteriser tests for exactly
+        // that byte and paints nothing". Stage B: "The marker is then set to
+        // **zero**, which is a different suppression from Stage A's".
+        //
+        // This test asserted stage A draws tile `0x116` until 2026-09-18.
+        // `RETRACTIONS.md` R507 withdrew that reading - it "reads a marker
+        // byte as an atlas index" - and the scratch tile `0x116` is a
+        // different thing that merely appears in the same presentation.
+        assert_eq!(MOONGATE_TRANSIT_PARTY_PAINT_NOTHING_MARKER, 0x16);
+        assert_eq!(MOONGATE_TRANSIT_PARTY_EMPTY_SLOT_MARKER, 0x00);
+        assert_ne!(
+            MOONGATE_TRANSIT_PARTY_PAINT_NOTHING_MARKER as usize, MOONGATE_PHASE_SCRATCH_TILE,
+            "the marker byte is not the scratch tile id"
         );
         for step in moongate_transit_steps().unwrap() {
             match step {
                 MoongateTransitStep::StageAClearCell { .. }
                 | MoongateTransitStep::StageAPlotPixel { .. } => assert_eq!(
                     step.party_sprite(),
-                    MoongateTransitPartySprite::Tile(MOONGATE_PHASE_SCRATCH_TILE)
+                    MoongateTransitPartySprite::PaintNothing,
+                    "stage A leaves the dissolved cell alone"
                 ),
                 MoongateTransitStep::StageBPhase { .. }
                 | MoongateTransitStep::ClearGateCell { .. } => assert_eq!(
                     step.party_sprite(),
-                    MoongateTransitPartySprite::Suppressed,
-                    "stage B suppresses the party sprite entirely"
+                    MoongateTransitPartySprite::EmptySlot,
+                    "stage B empties the slot so terrain shows through"
                 ),
                 MoongateTransitStep::OpeningPause { .. } => {
                     assert_eq!(step.party_sprite(), MoongateTransitPartySprite::Party);
@@ -875,12 +885,12 @@ mod moongate_transit_transition {
             }
             assert_eq!(
                 frame.party_sprite,
-                MoongateTransitPartySprite::Tile(MOONGATE_PHASE_SCRATCH_TILE)
+                MoongateTransitPartySprite::PaintNothing
             );
             assert_eq!(
-                frame.party_pixels.as_deref(),
-                Some(shipped.as_slice()),
-                "the vanishing party is drawn from the shipped `0x116` artwork"
+                frame.party_pixels, None,
+                "stage A paints no party sprite at all, so nothing repaints \
+                 over the cell it is dissolving"
             );
             party_frames += 1;
         }

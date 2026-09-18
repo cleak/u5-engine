@@ -61,8 +61,10 @@
 use std::io;
 
 use crate::{
-    DissolveVisitOrder, MOONGATE_PHASE_SCRATCH_TILE, NATURAL_MOONGATE_RESTORED_TERRAIN_TILE,
-    TILE_ATLAS_TILE_PIXELS, moongate_phase_gate_tile, with_moongate_phase_scratch_tile,
+    ACTOR_TILE_TRANSPARENT_BYTE, DissolveVisitOrder, MOONGATE_PHASE_SCRATCH_TILE,
+    NATURAL_MOONGATE_RESTORED_TERRAIN_TILE, TILE_ATLAS_TILE_PIXELS,
+    TRANSPORT_MARKER_SPRITE_SUPPRESSED, moongate_phase_gate_tile,
+    with_moongate_phase_scratch_tile,
 };
 
 /// `overworld.md §9.2`: the transition is **blocking** and runs to
@@ -104,10 +106,26 @@ pub const MOONGATE_TRANSIT_STAGE_A_WORLD_TICKS: usize =
 /// step 4 repaints the cell.
 pub const MOONGATE_TRANSIT_CLEAR_COLOUR: u8 = 0;
 
-/// `overworld.md §9.2` stage A: "The party sprite is switched to tile
-/// `0x116`" - the same id `§9.1` uses as its composition scratch, which is
-/// exactly why that composition saves and restores the slot.
-pub const MOONGATE_TRANSIT_PARTY_VANISH_TILE: usize = MOONGATE_PHASE_SCRATCH_TILE;
+/// `overworld.md §9.2` stage A: "The party's transport marker is switched to
+/// the **actor byte** `0x16`, the paint-nothing value: the party's slot stays
+/// live and the compositor still stamps it, but the rasteriser tests for
+/// exactly that byte and paints nothing, leaving whatever is already in the
+/// party's cell untouched while the world keeps ticking."
+///
+/// This read `0x116` until 2026-09-18, following the step's own earlier
+/// wording. `RETRACTIONS.md` R507 withdraws that: it "reads a **marker
+/// byte** as an **atlas index**", and tile `0x116` "is a different thing
+/// that happens to appear in the same presentation - the scratch tile the
+/// gate composition builds its frames in - which is exactly why the two must
+/// not be conflated". Drawing `0x116`'s artwork at the party's cell would
+/// repaint over the dissolve this stage exists to show.
+pub const MOONGATE_TRANSIT_PARTY_PAINT_NOTHING_MARKER: u8 = ACTOR_TILE_TRANSPARENT_BYTE;
+
+/// `overworld.md §9.2` stage B: "The marker is then set to **zero**, which is
+/// a different suppression from Stage A's: zero empties the player's slot, so
+/// the compositor skips it altogether and the terrain shows through, where
+/// `0x16` left the slot live and merely unpainted."
+pub const MOONGATE_TRANSIT_PARTY_EMPTY_SLOT_MARKER: u8 = TRANSPORT_MARKER_SPRITE_SUPPRESSED;
 
 /// `overworld.md §9.2` stage B: "The frame counts are `15` for stage B".
 pub const MOONGATE_TRANSIT_STAGE_B_STEPS: usize = 15;
@@ -144,10 +162,14 @@ pub const MOONGATE_TRANSIT_CLEARED_TERRAIN: u8 = NATURAL_MOONGATE_RESTORED_TERRA
 pub enum MoongateTransitPartySprite {
     /// Before the sequence proper, the party is still its ordinary sprite.
     Party,
-    /// Stage A: "The party sprite is switched to tile `0x116`."
-    Tile(usize),
-    /// Stage B: "the party sprite is suppressed entirely".
-    Suppressed,
+    /// Stage A: the marker is the paint-nothing actor byte `0x16`. The slot
+    /// stays live and is still stamped; the rasteriser paints nothing, so the
+    /// cell keeps the pixels the dissolve has put there.
+    PaintNothing,
+    /// Stage B: the marker is zero, which empties the slot instead, so the
+    /// compositor skips it and terrain shows through. `overworld.md §9.2`
+    /// is explicit that the two are "a different suppression".
+    EmptySlot,
 }
 
 /// `overworld.md §9.2`: one dispatch step of the blocking transit.
@@ -174,15 +196,16 @@ pub enum MoongateTransitStep {
 
 impl MoongateTransitStep {
     /// `overworld.md §9.2`: how the party is drawn while this step is on
-    /// screen - tile `0x116` through stage A, suppressed through stage B.
+    /// screen - the paint-nothing marker through stage A, the empty-slot
+    /// marker through stage B.
     pub const fn party_sprite(self) -> MoongateTransitPartySprite {
         match self {
             Self::OpeningPause { .. } => MoongateTransitPartySprite::Party,
             Self::StageAClearCell { .. } | Self::StageAPlotPixel { .. } => {
-                MoongateTransitPartySprite::Tile(MOONGATE_TRANSIT_PARTY_VANISH_TILE)
+                MoongateTransitPartySprite::PaintNothing
             }
             Self::StageBPhase { .. } | Self::ClearGateCell { .. } => {
-                MoongateTransitPartySprite::Suppressed
+                MoongateTransitPartySprite::EmptySlot
             }
         }
     }
@@ -425,8 +448,14 @@ pub struct MoongateTransitFrame<'a> {
     /// through stage B, the ground plate once step 4 has repainted it.
     pub cell: &'a [u8],
     /// The pixels the party sprite is drawn from, when one is drawn.
-    /// Through stage A that is the `0x116` slot - and it holds the shipped
-    /// artwork, because every `§9.1` composition restores the slot.
+    ///
+    /// Always `None` once the sequence proper begins. `RETRACTIONS.md` R507
+    /// withdrew the reading that stage A draws the party as tile `0x116`:
+    /// the marker is the actor byte `0x16`, which the rasteriser paints as
+    /// nothing, and the whole point of that value here is that "the cell is
+    /// being dissolved pixel by pixel and the party's slot must not repaint
+    /// over it" (`overworld.md §9.2`). Stage B's zero marker empties the
+    /// slot outright.
     pub party_pixels: Option<&'a [u8]>,
 }
 
@@ -472,7 +501,9 @@ pub fn run_moongate_transit_presentation(
 
     let mut cell = vec![MOONGATE_TRANSIT_CLEAR_COLOUR; TILE_ATLAS_TILE_PIXELS];
     run_moongate_transit(counter, &mut |step, _phase| {
-        let mut party_slot = None;
+        // No step of the sequence proper draws a party sprite; see
+        // `MoongateTransitFrame::party_pixels`.
+        let party_slot: Option<std::ops::Range<usize>> = None;
         match step {
             MoongateTransitStep::OpeningPause { .. } => {
                 // The gate is still whole and the party still itself; the
@@ -481,7 +512,6 @@ pub fn run_moongate_transit_presentation(
             }
             MoongateTransitStep::StageAClearCell { colour } => {
                 cell.fill(colour);
-                party_slot = Some(scratch_start..scratch_end);
             }
             MoongateTransitStep::StageAPlotPixel { pixel, .. } => {
                 let source = gate.get(pixel).copied().ok_or_else(|| {
@@ -491,7 +521,6 @@ pub fn run_moongate_transit_presentation(
                     ))
                 })?;
                 cell[pixel] = source;
-                party_slot = Some(scratch_start..scratch_end);
             }
             MoongateTransitStep::StageBPhase { phase, .. } => {
                 // `§9.1`'s composition, into the real scratch slot and out
