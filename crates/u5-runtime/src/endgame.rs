@@ -1562,7 +1562,7 @@ impl PlayState {
     /// `endgame.md §5`'s prompts come from `ENDMSG.DAT` and end
     /// `You reply: `, so the answer continues that row rather than
     /// opening a new one.
-    pub fn endgame_open_prompt_line(&self) -> Option<String> {
+    pub fn endgame_prompt_last_line(&self) -> Option<String> {
         let endgame = self.endgame.as_ref()?;
         if endgame.is_terminal() {
             return None;
@@ -1571,6 +1571,26 @@ impl PlayState {
             .rsplit('\n')
             .find(|line| !line.trim().is_empty())
             .map(str::to_string)
+    }
+
+    /// The row of that prompt that is still *open* - waiting with the
+    /// cursor on it rather than having closed itself.
+    ///
+    /// The authored trailing space is what keeps the cursor there:
+    /// `You reply: ` ends in one, and `text-output.md` §10.6 puts the
+    /// cursor in the cell after it. A line without one has closed its own
+    /// row, and the key that follows is read on a fresh row below the
+    /// turn-closing blank.
+    ///
+    /// The distinction did not exist: every line the endgame had on screen
+    /// counted, which made the greeting a prompt it is not. Measured
+    /// 2026-09-18 (`doom-final-room`, `-refusal` and `-waiting`, beat
+    /// `settled`, all reading `cursor`): the original closes `"Well met,
+    /// Avatar!"` and waits at column 0 two rows down, where this engine
+    /// held the cursor against the closing quote.
+    pub fn endgame_open_prompt_line(&self) -> Option<String> {
+        self.endgame_prompt_last_line()
+            .filter(|line| line.ends_with(' '))
     }
 
     fn append_endgame_first_prompt(&mut self) {
@@ -2291,7 +2311,11 @@ impl PlayState {
             // `You reply: ` **with a trailing space**, so
             // `commands.md §5.3` keeps the echo on that row - measured:
             // the original reads `You reply: Yes`.
-            if let Some(prompt) = self.endgame_open_prompt_line() {
+            // The echo is committed against the prompt's last line whether
+            // or not that line stayed open - `commit_typed_prompt_line`
+            // decides where it lands. Only the *cursor* cares about the
+            // trailing space, which is why this takes the unfiltered line.
+            if let Some(prompt) = self.endgame_prompt_last_line() {
                 // The prompt may still be in the message slot; the shell
                 // flushes per turn but a direct caller does not.
                 self.flush_message_slot();

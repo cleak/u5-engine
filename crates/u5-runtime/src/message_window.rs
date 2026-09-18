@@ -623,6 +623,30 @@ pub fn selector_prompt_row_is_continuation(state: &crate::PlayState) -> bool {
         .is_some_and(|session| session.coin_accepted)
 }
 
+/// The endgame's page wait takes §10.2's blank but not its end cap.
+///
+/// `endgame.md` §5 runs the audience as a sequence of pages, each blocking
+/// on a keystroke. That key is an acknowledgement, not a world command, so
+/// only the first half of `text-output.md` §10.2's cycle applies: the line
+/// feed that leaves the separating blank is emitted, but the
+/// right-pointing bracket end-cap that marks a command read is not, and
+/// the cursor waits bare in column 24.
+///
+/// Measured 2026-09-18 (`doom-final-room`, `-refusal`, `-waiting` and
+/// `doom-endgame-audio`, beat `settled` and the two absorption beats, all
+/// reading `cursor` on row 23): the original draws a bare cursor in column
+/// 24 and this engine drew the end-cap triangle there with the cursor
+/// pushed one cell right.
+///
+/// A page that left its own row open - `You reply: ` - is not this: it has
+/// an `open_prompt_line` and draws no live row at all.
+pub fn endgame_page_row_is_key_wait(state: &crate::PlayState) -> bool {
+    state
+        .endgame
+        .as_ref()
+        .is_some_and(|endgame| !endgame.is_terminal())
+}
+
 pub fn shop_pause_row_is_continuation(state: &crate::PlayState) -> bool {
     matches!(
         state.active_shop,
@@ -752,6 +776,16 @@ pub enum LiveRowKind {
     CommandRow,
     /// A continuation of the block above: no blank row, no end cap.
     Continuation,
+    /// A key wait that is not a command: blank row above it, no end cap.
+    ///
+    /// The blank and the end cap come from different halves of
+    /// `text-output.md` §10.2's cycle - "emit a line feed", then "draw the
+    /// right-pointing bracket end-cap" - and a page that blocks on an
+    /// acknowledgement takes the first without the second. Measured
+    /// 2026-09-18 (`doom-final-room`, beat `settled`): the original's
+    /// greeting is followed by a blank row and then a bare cursor in
+    /// column 24.
+    KeyWaitRow,
 }
 
 /// Place a log whose live row continues the block above it rather than
@@ -802,6 +836,9 @@ fn layout_message_window_inner(
     live_row: LiveRowKind,
 ) -> MessageWindowLayout {
     let live_row_prefixed = live_row == LiveRowKind::CommandRow;
+    // Only a continuation gives up the separating blank. A key-wait row is
+    // unprefixed but still sits under one.
+    let live_row_takes_blank = live_row != LiveRowKind::Continuation;
     let open_prompt = open_prompt.filter(|prompt| {
         log.lines()
             .last()
@@ -857,7 +894,7 @@ fn layout_message_window_inner(
             if history_ends_blank
                 || history_row_left_open
                 || live_row_follows_history
-                || !live_row_prefixed =>
+                || !live_row_takes_blank =>
         {
             1
         }
