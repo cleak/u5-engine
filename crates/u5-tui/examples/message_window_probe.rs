@@ -69,8 +69,8 @@ fn main() {
     println!("log ({} lines):", log.lines().len());
     for (index, line) in log.lines().iter().enumerate() {
         println!(
-            "  {index:>2} {:?} {:?} trailing={}",
-            line.kind, line.text, line.trailing_spaces
+            "  {index:>2} {:?} {:?} trailing={} open={}",
+            line.kind, line.text, line.trailing_spaces, line.row_left_open
         );
     }
     let layout = layout_message_window_with_continuation(

@@ -117,12 +117,18 @@ impl PlayState {
         explicit_blank: bool,
         continues_open_row: bool,
     ) {
+        // A blank row is not the row the producer left open - the mixer's
+        // prompt arrives as `\nHow much? `, whose leading feed becomes its
+        // own blank entry first - so the flag waits for the text entry.
+        let leaves_row_open =
+            !explicit_blank && std::mem::take(&mut self.pending_entry_leaves_row_open);
         self.message_transcript.push(MessageEntry {
             text,
             producer_blank: false,
             glyphs,
             is_command_echo,
             continues_open_row,
+            leaves_row_open,
             centered,
             explicit_blank,
         });

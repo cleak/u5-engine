@@ -255,6 +255,16 @@ impl GameplayMessageLog {
 
     /// Close a command turn with the single blank row the original
     /// leaves between turns. Consecutive blanks collapse.
+    /// Record whether the line just pushed leaves its row open.
+    ///
+    /// Only the last line's value is ever read, so a line pushed afterwards
+    /// ends the suppression without anything having to clear this.
+    pub fn mark_last_row_left_open(&mut self, open: bool) {
+        if let Some(line) = self.lines.last_mut() {
+            line.row_left_open = open;
+        }
+    }
+
     pub fn end_turn(&mut self) {
         if self.lines.is_empty() {
             return;
@@ -475,6 +485,9 @@ pub fn message_log_from_entries<'a>(
         } else {
             log.push_output(&text);
         }
+        // The flag belongs to the row this entry wrote, whichever push
+        // produced it, and only the last line's value is ever read.
+        log.mark_last_row_left_open(entry.leaves_row_open);
     }
     log
 }

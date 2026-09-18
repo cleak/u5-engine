@@ -403,6 +403,14 @@ pub struct PlayState {
     /// All three were measured 2026-09-12 and disagreed with each other under
     /// any rule that did not look at the trailing byte.
     pub message_row_open_mid_line: bool,
+    /// Armed by a producer that is about to write a row and leave it open;
+    /// consumed by the next transcript entry, which carries it as
+    /// [`MessageEntry::leaves_row_open`].
+    ///
+    /// One-shot, but consumed at *entry creation* rather than at the next
+    /// command echo, so it cannot drift onto a later producer the way
+    /// `surface_command_row_follows_history` can. `cleak/u5-engine#36`.
+    pub pending_entry_leaves_row_open: bool,
     /// Keys pressed while a cinematic hold owned the loop.
     ///
     /// `cleak/u5-spec#268` on `blackthorn.md §4.2`: the beat's animation
@@ -884,6 +892,15 @@ pub struct MessageEntry {
     /// marker is drawn on the row the banner's own newline opened and no
     /// second line feed - and therefore no derived blank row - precedes it.
     pub continues_open_row: bool,
+    /// Whether this entry leaves its row open: written without a closing
+    /// line feed, so the next cycle's leading feed closes the row rather
+    /// than deriving `text-output.md §10.4`'s blank under it.
+    ///
+    /// Carried to [`crate::MessageLogLine::row_left_open`], which the layout
+    /// reads from the **last** line only - so an entry appended afterwards
+    /// ends the suppression by construction, with no flag to go stale.
+    /// `cleak/u5-engine#36`.
+    pub leaves_row_open: bool,
     /// Center this output line in the sixteen-cell message window. Cursor
     /// centering is presentation state, not ASCII padding in `text`.
     pub centered: bool,

@@ -1899,6 +1899,13 @@ impl PlayState {
                 'M' | 'm' => {
                     session.phase = MixPhase::Quantity;
                     session.quantity_buffer.clear();
+                    // The prompt this opens leaves its row open: `magic.md
+                    // §6` step 4 gives the literal "no line feed of its own
+                    // at either end", and the reader after it "prints
+                    // nothing of its own". So the next cycle's leading feed
+                    // closes that row instead of deriving `text-output.md
+                    // §10.4`'s blank under it. `cleak/u5-engine#36`.
+                    self.pending_entry_leaves_row_open = true;
                     None
                 }
                 // `magic.md §6` step 3: "The selection cursor moves with
