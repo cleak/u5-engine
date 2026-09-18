@@ -112,6 +112,26 @@ pub struct MessageLogLine {
     /// How the row is drawn.
     pub kind: MessageLineKind,
     pub centered: bool,
+    /// Whether this row is still the open cursor row: written without a
+    /// closing line feed, and nothing since has closed it.
+    ///
+    /// `text-output.md §10.4` derives the blank row between command turns
+    /// from the next cycle's leading line feed, "and only when the previous
+    /// echo ends in a newline [and] therefore leaves the cursor at column 0
+    /// of a fresh row". The other case it names beside that one - "verbs
+    /// whose echo ends in a hyphen or a trailing space rely on that same
+    /// leading line feed to close their partially written line" - spends the
+    /// feed on closing the row instead, so no blank is derived.
+    ///
+    /// This is deliberately **not** `trailing_spaces > 0`. A row can be
+    /// written open and then closed by its own producer before anything else
+    /// prints, and it still ends in a trailing space afterwards: the mixer's
+    /// `:IN LOR ` echo is exactly that, and it takes the derived blank, while
+    /// its `How much? ` prompt is written open and left open and does not.
+    /// Two attempts at `cleak/u5-engine#36` keyed on the trailing space and
+    /// on a one-shot state flag, and each satisfied one of the three measured
+    /// beats while breaking another; the issue records both.
+    pub row_left_open: bool,
     /// Spaces the wrap trimmed from this row's end.
     ///
     /// A *trailing* space is authored - `shops.md §8.B` ends the arms entry
@@ -208,6 +228,7 @@ impl GameplayMessageLog {
             glyphs: Vec::new(),
             kind: MessageLineKind::Blank,
             centered: false,
+            row_left_open: false,
             trailing_spaces: 0,
         });
     }
@@ -269,6 +290,7 @@ impl GameplayMessageLog {
             glyphs: Vec::new(),
             kind: MessageLineKind::Blank,
             centered: false,
+            row_left_open: false,
             trailing_spaces: 0,
         });
         self.trim();
@@ -312,6 +334,7 @@ impl GameplayMessageLog {
                     kind.continuation()
                 },
                 centered: false,
+                row_left_open: false,
                 trailing_spaces: if index == last { trailing } else { 0 },
             });
         }
@@ -418,6 +441,7 @@ pub fn message_log_from_entries<'a>(
                     MessageLineKind::Blank
                 },
                 centered: false,
+                row_left_open: false,
                 trailing_spaces: 0,
             });
             log.trim();
@@ -442,6 +466,7 @@ pub fn message_log_from_entries<'a>(
                 glyphs,
                 kind: MessageLineKind::Output,
                 centered: true,
+                row_left_open: false,
                 trailing_spaces: 0,
             });
             log.trim();
@@ -766,13 +791,29 @@ fn layout_message_window_inner(
         .last()
         .is_some_and(|line| matches!(line.kind, MessageLineKind::Blank));
     // Deliberately not `ProducerBlank`: see its doc comment.
+    // A history whose last row is still the open cursor row takes no blank
+    // either: the next cycle's leading line feed closes that row instead of
+    // deriving one. See [`MessageLogLine::row_left_open`], which is the
+    // per-line state this needs and which no writer sets yet - so this arm
+    // is inert until one does (`cleak/u5-engine#36`).
+    let history_row_left_open = log
+        .lines()
+        .last()
+        .is_some_and(|line| line.row_left_open);
     // `combat.md §8.1`: the arena prompt's line feed was the banner's
     // own, so its marker row follows the history with no blank between.
     // A continuation row needs no separating blank either: the block it
     // continues is still open. An open prompt keeps its *own* line
     // (§10.6), so no line feed has been emitted yet.
     let live_rows = match live_input {
-        Some(_) if history_ends_blank || live_row_follows_history || !live_row_prefixed => 1,
+        Some(_)
+            if history_ends_blank
+                || history_row_left_open
+                || live_row_follows_history
+                || !live_row_prefixed =>
+        {
+            1
+        }
         Some(_) => 2,
         None => 0,
     };
@@ -1073,5 +1114,83 @@ mod font_tests {
                 .iter()
                 .all(|glyph| glyph.font == TlkGlyphFont::Runic)
         );
+    }
+}
+
+#[cfg(test)]
+mod open_row_layout_tests {
+    use super::*;
+
+    /// The three beats `cleak/u5-engine#36` has to satisfy at once, as a
+    /// layout-level specification of [`MessageLogLine::row_left_open`].
+    ///
+    /// Each is a measured capture shape, named here so a future attempt can
+    /// be checked without a display. Two earlier attempts each satisfied one
+    /// and broke another: keying on `trailing_spaces > 0` broke the second,
+    /// and a one-shot state flag broke the third.
+    fn log_ending_with(text: &str, trailing_spaces: u8, row_left_open: bool) -> GameplayMessageLog {
+        let mut log = GameplayMessageLog::default();
+        log.push_output("Type M to mix:");
+        log.lines.push(MessageLogLine {
+            text: text.to_string(),
+            glyphs: crate::ordinary_glyphs_from_engine_text(text),
+            kind: MessageLineKind::Output,
+            centered: false,
+            row_left_open,
+            trailing_spaces,
+        });
+        log
+    }
+
+    fn rows_between_history_and_live(log: &GameplayMessageLog) -> usize {
+        let layout = layout_message_window_with_continuation(
+            log,
+            Some(""),
+            None,
+            false,
+            LiveRowKind::CommandRow,
+        );
+        let last_history = layout
+            .rows
+            .iter()
+            .filter(|row| !row.text.is_empty())
+            .map(|row| row.row)
+            .max()
+            .expect("the history has a row");
+        let live = layout
+            .rows
+            .iter()
+            .map(|row| row.row)
+            .max()
+            .expect("the live row is placed");
+        usize::from(live - last_history) - 1
+    }
+
+    #[test]
+    fn a_row_left_open_takes_no_derived_blank() {
+        // `bt-audience/ask5`: the mixer's `How much? ` prompt returns with
+        // its row never closed, so the next command's leading feed closes it
+        // and the marker row follows immediately.
+        let log = log_ending_with("How much?", 1, true);
+        assert_eq!(rows_between_history_and_live(&log), 0);
+    }
+
+    #[test]
+    fn a_closed_row_takes_the_derived_blank_even_ending_in_a_space() {
+        // `magic-mix-and-cast/cast`: `:IN LOR ` ends in a trailing space too,
+        // but its own command closed the row on the way out, so the next
+        // feed has nothing to close and derives the blank.
+        let log = log_ending_with(":IN LOR", 1, false);
+        assert_eq!(rows_between_history_and_live(&log), 1);
+    }
+
+    #[test]
+    fn output_after_an_open_row_restores_the_derived_blank() {
+        // `magic-refusal-vocabulary/insufficient`: a producer printed after
+        // the prompt returned, so whatever it left behind owns the question
+        // and the suppression must not survive to a later command.
+        let mut log = log_ending_with("How much?", 1, true);
+        log.push_output(" What");
+        assert_eq!(rows_between_history_and_live(&log), 1);
     }
 }
