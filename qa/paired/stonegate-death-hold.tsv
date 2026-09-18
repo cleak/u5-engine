@@ -55,3 +55,5 @@ both	wait	10000
 both	shot	t10	Ten seconds after the step, inside the sweep
 both	wait	22000
 both	shot	t32	Thirty-two seconds in, after the sweep has finished
+both	wait	18000
+both	shot	t50	Fifty seconds in, past the thunder beat and its paired flash

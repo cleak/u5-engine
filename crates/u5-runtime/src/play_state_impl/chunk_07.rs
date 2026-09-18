@@ -5426,8 +5426,12 @@ impl PlayState {
 
         // Steps 16-18: `\n"`, the record, one `"`. One emission, because the
         // frame and the record share a row.
+        //
+        // Held for the paired flash above, which `audio.md §8.4` measures at
+        // about 0.86 s per invocation on this harness's own emulator. See
+        // [`crate::BLACKTHORN_RESCUE_WAIT_PAIRED_FLASH`].
         self.staged_narration.push_ticks(
-            0,
+            crate::blackthorn::BLACKTHORN_RESCUE_WAIT_PAIRED_FLASH,
             format!(
                 "{}{verdict_message}{}",
                 crate::blackthorn::BLACKTHORN_RESCUE_VERDICT_OPEN,

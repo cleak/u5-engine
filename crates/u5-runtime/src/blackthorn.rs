@@ -1188,6 +1188,28 @@ pub const BLACKTHORN_RESCUE_WAIT_BEFORE_REFUGE_THIRD: u16 = 28;
 /// 11.18 s at `narration::BIOS_TICK_SECS` is 204 ticks. The muted figure is
 /// 8.67 s; this takes the audible one, which is what a capture with sound
 /// records. The dissolve, the two Guardian cell reveals and the twice-run
+/// How long `§7` step 15's paired viewport flash holds the cinematic.
+///
+/// `§7.1`: the thunder beat is followed by "the shared full-viewport
+/// flash/low-rumble effect twice consecutively". `audio.md §8.4` reports a
+/// measurement for one invocation - two DOSBox Staging 0.82.2 recordings at
+/// **0.859 and 0.860 seconds**, "approximately 0.86 seconds per invocation
+/// ... an observed target for that emulator setup" - and the paired harness
+/// runs that same emulator, so the pair is about 1.72 s.
+///
+/// 1.72 s at `narration::BIOS_TICK_SECS` is 31 ticks.
+///
+/// Measured 2026-09-18 (`qa/paired/stonegate-death-hold.tsv`, beat `t50`):
+/// fifty seconds after the step the original is still printing the verdict
+/// speech and this engine had finished it two rows earlier. The flash sits
+/// between the thunder beat and that speech, which is where the time was
+/// missing. `cleak/u5-engine#38`.
+///
+/// Unlike the tick waits beside it this is an *observed* figure rather than
+/// a published count, and `audio.md §8.4` is explicit that it "is not a
+/// measurement on period reference hardware".
+pub const BLACKTHORN_RESCUE_WAIT_PAIRED_FLASH: u16 = 31;
+
 /// viewport flash are still unmodelled, and are the rest of that issue.
 pub const BLACKTHORN_RESCUE_WAIT_ENVELOPE_SEQUENCE: u16 = 204;
 

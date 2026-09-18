@@ -194,3 +194,66 @@ mod tests {
         assert!(staged.is_empty());
     }
 }
+
+#[cfg(test)]
+mod rescue_pacing_tests {
+    use super::*;
+
+    /// `blackthorn.md §7`'s rescue holds, as arithmetic over the queue.
+    ///
+    /// The paired scenarios cannot see every one of these individually: a
+    /// capture only shows a difference when a hold is long enough to move a
+    /// beat across the sample. `stonegate-death-hold` sees the 26.5 s death
+    /// sweep at `t10` and the 11.18 s envelope sequence at `t32`, and cannot
+    /// see the 1.72 s paired flash at `t50` at all. This asserts the queue
+    /// does what those constants say, which is a different question from
+    /// whether the total matches the original.
+    #[test]
+    fn a_queued_hold_delays_every_beat_behind_it() {
+        let mut queue = StagedNarration::default();
+        queue.push_ticks(10, "first");
+        queue.push_ticks(31, "second");
+
+        // Nothing is due before the first wait completes. The first look sets
+        // the epoch the head's wait runs from.
+        assert!(queue.advance_to(0.0).is_empty());
+        let first_due = bios_ticks_secs(10);
+        assert!(queue.advance_to(first_due - 0.001).is_empty());
+
+        let released = queue.advance_to(first_due);
+        assert_eq!(released.len(), 1);
+        assert_eq!(released[0].text, "first");
+
+        // The second beat's own wait starts from when the first was *due*,
+        // so a hold in front of it delays it by exactly its own ticks.
+        let second_due = first_due + bios_ticks_secs(31);
+        assert!(queue.advance_to(second_due - 0.001).is_empty());
+        let released = queue.advance_to(second_due);
+        assert_eq!(released.len(), 1);
+        assert_eq!(released[0].text, "second");
+        assert!(queue.is_empty());
+    }
+
+    /// A pure hold carries no text and still spends its time, which is how
+    /// the death sweep and the envelope sequence are staged: both are
+    /// durations with nothing to print.
+    #[test]
+    fn a_pure_hold_spends_its_time_without_printing() {
+        let mut queue = StagedNarration::default();
+        queue.push_ticks(483, "");
+        queue.push_ticks(0, "after the sweep");
+
+        // The head's wait starts at the frontend's *first* look, not at zero:
+        // `due_at_secs` is filled in on the first `advance_to`. That is the
+        // absolute-clock design - a queue staged during one frame must not
+        // lose the time before the next one asks.
+        let epoch = 100.0;
+        assert!(queue.advance_to(epoch).is_empty());
+        let hold = epoch + bios_ticks_secs(483);
+        assert!(queue.advance_to(hold - 0.001).is_empty());
+        let released = queue.advance_to(hold);
+        assert_eq!(released.len(), 2);
+        assert_eq!(released[0].text, "");
+        assert_eq!(released[1].text, "after the sweep");
+    }
+}
