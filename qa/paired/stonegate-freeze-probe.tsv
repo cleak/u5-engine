@@ -1,21 +1,32 @@
 # Does the engine window resume updating when a key arrives?
 #
 # `cleak/u5-engine#28`: after Stonegate's scripted death the engine's window
-# freezes. Instrumentation has established that the main schedule keeps
-# running at sixty frames a second, the rescue cinematic runs correctly and
-# emits every beat into the transcript, and fresh RGBA is written into the
-# image asset every frame - and the window's pixels never change.
+# froze. Instrumentation had established that the main schedule keeps running
+# at sixty frames a second, the rescue cinematic runs correctly and emits
+# every beat into the transcript, and the window's pixels never changed.
 #
-# The one hypothesis that explains all of that is that presentation is
-# event-driven: with no keystrokes arriving after the trapdoor step, nothing
-# wakes the window. This tests it directly. `t20` is twenty seconds of silence
-# after the death; `poke` is the same window one key later.
+# The hypothesis this was written to test - that presentation is event-driven,
+# so with no keystrokes arriving nothing wakes the window - was close, and
+# wrong in one word. Nothing *composed* a frame, rather than nothing waking:
+# the three cinematic arms of `animate_static_tiles` advanced their state and
+# returned without calling the renderer, while the sweep-idle arm beside them
+# always had. `354d0e70`.
 #
-# If `poke` shows the rescue narration that `t20` does not, presentation is
-# the fault and the game state was right all along.
+# **Answered 2026-09-18, and the probe answers it by passing.** `t20` is
+# twenty seconds after the death with no keys sent, and it now carries the
+# rescue narration on its own:
 #
-# A probe, not a conformance target.
-# requires-seed: the party inside Stonegate, standing in the trapdoor ring's centre cell
+#     "Thou hast strayed far from the path of the Avatar. Seek now to renew
+#     a life of Virtue, lest thy soul pass finally beyond my reach!"
+#
+# `poke` then advances to `Strange words are intoned.` and `Vertigo...`,
+# because that keystroke is `blackthorn.md` Section 7 step 19's
+# acknowledgement rather than the thing that unfreezes the window.
+#
+# **Read this scenario's beats, not its verdict.** Only the engine side steps
+# onto the trapdoor, so the two windows are showing different things by
+# construction and the comparator will always report every beat as differing.
+# It is a probe, not a comparison.
 both	wait	9000
 both	key	space
 both	wait	4000
