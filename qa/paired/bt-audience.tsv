@@ -35,18 +35,18 @@
 # the cursor inline, and "no end-cap is emitted anywhere in the mix command,
 # on any of its exits". `MixPhase::Quantity` is now in
 # `message_window_live_row_suppressed` for that reason rather than by
-# analogy, and this beat is a result again - and it still differs, by one
-# row, for a reason the same answer names.
+# analogy.
 #
-# This beat samples *after* the prompt has returned, which is the later of
-# the two states answer 2 disentangles. The original then reads `How much`
-# with the next command prompt's marker row directly beneath it; this engine
-# puts a blank between them. The returning command's leading feed should
-# merely close the prompt's open row - `text-output.md` Section 10.4 - and
-# this engine spends a blank with it. `cleak/u5-engine#36`.
+# The beat then differed by one row for a second reason the same answer
+# names: it samples *after* the prompt has returned, the later of the two
+# states answer 2 disentangles, where the original reads `How much` with the
+# next command's marker row directly beneath it and this engine put a blank
+# between them. `cleak/u5-engine#36` closed that on 2026-09-18 by carrying
+# "this row is still open" on the log line rather than on the window, and
+# all five beats now agree.
 #
-# `magic-refusal-vocabulary` samples the earlier state, where the prompt is
-# still waiting, and agrees on all five beats.
+# The three viewport differences this scenario still reports are the
+# audience tableau's own animation, not a wording question.
 #
 # **Walk-up, and therefore timing-sensitive.** This scenario cannot be
 # reseeded (see above), so both sides walk to the guard while the resident
