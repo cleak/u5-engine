@@ -23,6 +23,8 @@
 # because that keystroke is `blackthorn.md` Section 7 step 19's
 # acknowledgement rather than the thing that unfreezes the window.
 #
+# not-a-comparison: only the engine side steps onto the trapdoor
+#
 # **Read this scenario's beats, not its verdict.** Only the engine side steps
 # onto the trapdoor, so the two windows are showing different things by
 # construction and the comparator will always report every beat as differing.

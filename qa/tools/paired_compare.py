@@ -726,13 +726,33 @@ LOTTERY_MARKERS = ("lottery", "measured nothing", "must be re-run")
 
 
 def is_lottery(scenario: str) -> bool:
+    return any(marker in _scenario_header(scenario) for marker in LOTTERY_MARKERS)
+
+
+def _scenario_header(scenario: str) -> str:
     path = SCENARIOS / f"{scenario}.tsv"
     try:
         header = [l for l in path.read_text().splitlines() if l.startswith("#")]
     except OSError:
-        return False
-    text = " ".join(header).lower()
-    return any(marker in text for marker in LOTTERY_MARKERS)
+        return ""
+    return " ".join(header).lower()
+
+
+def is_probe(scenario: str) -> bool:
+    """Is this scenario a probe rather than a comparison?
+
+    A handful of scenarios drive only one side on purpose. `#28`'s
+    `stonegate-freeze-probe` steps the engine onto the trapdoor and leaves
+    the original standing, because the question it asks - does the window
+    resume composing frames with no keys arriving - is about one side. The
+    two windows are then showing different things by construction and every
+    beat differs, which is not a finding about conformance.
+
+    That is not a lottery: re-running it changes nothing. It is declared in
+    the scenario's own header with `# not-a-comparison:` and reported as
+    `PROBE`, so it neither counts as a difference nor pretends to be a match.
+    """
+    return "# not-a-comparison:" in _scenario_header(scenario)
 
 
 def compare(artifact: pathlib.Path) -> tuple[int, int, int, int, int]:
@@ -902,7 +922,9 @@ def main() -> None:
         # count alone reported that as a plain difference.
         lottery = (differ or panel or viewport) and is_lottery(scenario)
         status = (
-            "RERUN"
+            "PROBE"
+            if is_probe(scenario)
+            else "RERUN"
             if idle or lottery
             else (
                 "match"
