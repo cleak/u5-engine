@@ -17202,6 +17202,10 @@ fn render_integrated_status_framebuffer(
     let message = display_state.message.clone();
     let message_rows;
     let inline_prompt_cursor;
+    // Whether the message-window layout placed a live row of its own. The
+    // shop prompt window below paints one too, and when both do the row is
+    // drawn twice.
+    let layout_placed_live_row;
     // `shops.md §8`: a shop's screen is the ordinary append-and-scroll
     // transcript, carrying the entry greeting, the echoed answer and the
     // service text in the order they printed. This branch used to replace
@@ -17289,6 +17293,11 @@ fn render_integrated_status_framebuffer(
         // The spell-name colon line continues the block `For what
         // spell?` opened, so it carries no end cap (`LiveRowKind`).
         let live_row_kind = if spell_echo.is_some()
+            // `shops.md` §8.5: the sage's typed topic is echoed *below* the
+            // `You respond:` prompt, continuing the block that prompt opened.
+            // Measured 2026-09-18 (`paws-sage/topic`): the original's `SPIR`
+            // starts in column 24, the end-cap column, so no cap is drawn.
+            || u5_runtime::sage_topic_row_is_continuation(&display_state)
             || u5_runtime::shop_pause_row_is_continuation(&display_state)
             || u5_runtime::selector_prompt_row_is_continuation(&display_state)
         {
@@ -17304,6 +17313,7 @@ fn render_integrated_status_framebuffer(
             live_row_kind,
         );
         inline_prompt_cursor = layout.inline_cursor;
+        layout_placed_live_row = live_row.is_some();
         message_rows = layout.rows;
     }
     paint_stats_panel_text_window(&mut system, &display_state, active_cursor);
@@ -17313,7 +17323,17 @@ fn render_integrated_status_framebuffer(
         // Shop line prompts keep their own prompt window on the message
         // window's bottom row; the non-shop live line is placed by the
         // message-window layout instead.
-        if let Some(input_echo) = input_echo {
+        //
+        // Only when the layout did not already place one, though. When both
+        // draw the row the glyphs are painted over each other, and the two
+        // copies are not the same text: the layout upper-cases the sage's
+        // topic (`typed_prompt_echo_uppercases`) and this painter takes the
+        // shell's buffer as typed. `paws-sage/topic` read `S` and four cells
+        // that matched no glyph in either font - `SPIR` overprinted with
+        // `spir` - where the original reads `SPIR` (`cleak/u5-engine#26`).
+        // A quantity prompt hid the same double paint because digits are
+        // unchanged by the fold, so the two copies landed identically.
+        if let Some(input_echo) = input_echo.filter(|_| !layout_placed_live_row) {
             let cursor_glyph = prompt_cursor_visible.then_some(PROMPT_CURSOR_GLYPH);
             paint_prompt_text_window_with_cursor(&mut system, input_echo, cursor_glyph);
         }
@@ -25296,6 +25316,34 @@ mod tests {
             assert_eq!(submitted, Some(PlayInputDisposition::Continue));
             assert!(input_line.is_empty());
         }
+    }
+
+    /// `cleak/u5-engine#26`: `paws-sage`'s `topic` beat types `spir` at the
+    /// sage's `You respond:` prompt and the original echoes `SPIR`, where
+    /// this engine's capture showed one character. Whether the shell's
+    /// buffer holds one letter or four at that moment was the open question
+    /// the issue could not answer, because `u5-tui` renders the window
+    /// through another path. It is a shell question, so it is answerable
+    /// here: drive the four keys through the same routine the Bevy
+    /// dispatcher calls and look at the buffer.
+    #[test]
+    fn visual_line_input_buffers_the_sage_topic_until_enter() {
+        let mut state = test_state(open_grid(), 1, 1);
+        state.active_shop = Some(ActiveShopSession::Sage(SageState::default()));
+        assert!(visual_line_prompt_active(&state));
+
+        let mut input_line = String::new();
+        for key in [KeyCode::KeyS, KeyCode::KeyP, KeyCode::KeyI, KeyCode::KeyR] {
+            let typed =
+                handle_visual_line_key(&mut state, &mut input_line, key, false, false, Path::new(""))
+                    .unwrap();
+            assert_eq!(typed, Some(PlayInputDisposition::Continue));
+        }
+        assert_eq!(input_line, "spir");
+        assert!(
+            state.typed_prompt_echo_uppercases(),
+            "the sage topic row echoes upper-cased"
+        );
     }
 
     #[test]
