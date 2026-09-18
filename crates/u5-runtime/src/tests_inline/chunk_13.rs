@@ -8576,9 +8576,27 @@ fn numeric_prompt_accumulates_digits_and_pops_on_backspace() {
     assert_eq!(numeric_prompt_action(0x08), Pop);
     assert_eq!(numeric_prompt_action(b'\r'), Submit);
     assert_eq!(numeric_prompt_action(b'\n'), Submit);
-    assert_eq!(numeric_prompt_action(0x1B), Discard);
+    // `input.md §8`'s executed key table, published 2026-09-13 for
+    // `cleak/u5-spec#272`. Three of these arms were `Discard` here, because
+    // the section had not yet said what the reader does with them.
+    assert_eq!(
+        numeric_prompt_action(0x1B),
+        ClearEcho,
+        "Escape erases the whole echo without cancelling the prompt"
+    );
+    assert_eq!(
+        numeric_prompt_action(crate::INPUT_CODE_WEST),
+        Pop,
+        "the west direction code erases one digit, exactly as backspace does"
+    );
+    assert_eq!(numeric_prompt_action(b'+'), AppendSign(false));
+    assert_eq!(numeric_prompt_action(b'-'), AppendSign(true));
     assert_eq!(numeric_prompt_action(b' '), Discard);
     assert_eq!(numeric_prompt_action(b'a'), Discard);
+    assert_eq!(numeric_prompt_action(b'.'), Discard);
+    // A `u16` accumulator carries no sign, so the caller keeps a buffer.
+    assert_eq!(numeric_prompt_apply(12, AppendSign(true)), 12);
+    assert_eq!(numeric_prompt_apply(12, ClearEcho), 0);
 
     // Building "1234" digit by digit.
     let mut v = 0u16;

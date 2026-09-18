@@ -442,23 +442,47 @@ pub const fn free_text_input_action(byte: u8) -> FreeTextInputAction {
     }
 }
 
-/// `input.md §8` numeric-prompt apply step. The shared numeric
-/// reader accumulates digits as `value = value * 10 + digit`,
-/// treats Backspace as `value = value / 10`, terminates on Enter,
-/// and silently discards anything else. The caller still owns the
-/// saturating cap on the accumulator (so a numeric prompt for a
-/// byte-sized counter can clamp at 255).
+/// `input.md §8`, "The typed-number reader, as executed" (published
+/// 2026-09-13 for `cleak/u5-spec#272`). The reader "prints nothing of its
+/// own before or while it waits - no line feed, no prompt marker, no cursor
+/// repositioning", and its only output is the echo.
+///
+/// Its published key table has five arms, two of which this enum did not
+/// carry: the west direction code erases like Backspace, and Escape erases
+/// the whole echo **without cancelling the prompt**. Both used to fall into
+/// `Discard`.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum NumericPromptAction {
     /// Decimal digit `0..=9` — multiply the accumulator by ten and
-    /// add the digit. Carries the digit value (`0..=9`).
+    /// add the digit. Carries the digit value (`0..=9`). "A digit past the
+    /// cap is dropped", and the cap is the caller's.
     AppendDigit(u8),
-    /// Backspace — integer-divide the accumulator by ten.
+    /// A leading `+` or `-`, which the reader "accepts only in the first
+    /// position". Carries `true` for `-`.
+    ///
+    /// Position is the caller's to enforce, because this classifier sees one
+    /// byte and not the buffer. What the sign *means* is also the caller's:
+    /// `magic.md §6` step 4 has the mixer compare it against unsigned
+    /// counters, "so a negative quantity is always too large and always
+    /// retries".
+    AppendSign(bool),
+    /// Backspace, or the west direction code — erase one echoed digit in
+    /// place.
+    ///
+    /// "The west direction code erases a digit exactly as backspace does,
+    /// and that code is what the left-arrow key, the unmodified numpad west
+    /// key and the modifier-held top-row `4` all deliver." A control byte
+    /// *typed* at the console cannot reach this arm: the input layer biases
+    /// typed control values below the direction block into its high
+    /// pseudo-code range before the prompt sees them.
     Pop,
-    /// Enter — terminate the prompt and return the accumulator.
+    /// Escape — erase the whole echo and leave the cursor at the first echo
+    /// cell. **Not** a cancellation: "the prompt keeps waiting".
+    ClearEcho,
+    /// Enter — "the only exit", and "an empty buffer submits as zero".
     Submit,
-    /// Any other byte (escape, function keys, direction codes) — the
-    /// shared numeric reader silently discards the byte and re-polls.
+    /// "Anything else - space, letter, punctuation - is discarded: no echo,
+    /// no other effect, prompt still waiting."
     Discard,
 }
 
@@ -468,7 +492,10 @@ pub enum NumericPromptAction {
 pub const fn numeric_prompt_action(byte: u8) -> NumericPromptAction {
     match byte {
         b'0'..=b'9' => NumericPromptAction::AppendDigit(byte - b'0'),
-        0x08 => NumericPromptAction::Pop,
+        b'+' => NumericPromptAction::AppendSign(false),
+        b'-' => NumericPromptAction::AppendSign(true),
+        0x08 | INPUT_CODE_WEST => NumericPromptAction::Pop,
+        0x1B => NumericPromptAction::ClearEcho,
         0x0A | 0x0D => NumericPromptAction::Submit,
         _ => NumericPromptAction::Discard,
     }
@@ -484,6 +511,10 @@ pub const fn numeric_prompt_apply(value: u16, action: NumericPromptAction) -> u1
             value.saturating_mul(10).saturating_add(digit as u16)
         }
         NumericPromptAction::Pop => value / 10,
+        // A `u16` accumulator cannot carry a sign, so a caller that wants
+        // one keeps a buffer instead - as the mixer does.
+        NumericPromptAction::AppendSign(_) => value,
+        NumericPromptAction::ClearEcho => 0,
         NumericPromptAction::Submit | NumericPromptAction::Discard => value,
     }
 }

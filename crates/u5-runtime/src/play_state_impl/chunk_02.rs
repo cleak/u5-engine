@@ -1410,8 +1410,18 @@ impl PlayState {
                 return MoveOutcome::Blocked;
             }
         };
+        // `magic.md §6` step 4 (published 2026-09-13 for
+        // `cleak/u5-spec#272`): "A zero quantity, typed or as a bare Return,
+        // prints nothing further and is tested **before** the empty-selection
+        // test, so `Nothing to mix!` needs both an empty selection and a
+        // positive quantity."
+        //
+        // The ordering here was already right; the text was not. This arm
+        // printed `None!`, which the section's older "Zero cancels through
+        // the cleanup path" wording was read as licensing. Nothing is
+        // printed.
         if request.amount == 0 {
-            self.message = "None!".to_string();
+            self.message.clear();
             return MoveOutcome::PromptDeclined;
         }
         if request.reagent_mask == 0 {
@@ -1460,17 +1470,27 @@ impl PlayState {
                 MoveOutcome::Cast
             }
             Some(spell_index) => {
-                let base = format!(
-                    "Mixed wrong reagents for {}; no spell charges added.",
-                    SPELL_CODES[spell_index]
-                );
-                self.message = self.wrong_mix_trap_message(base);
+                // `magic.md §6` step 7 gives the wrong-recipe branch no line
+                // of its own: "the selected reagents are already spent and no
+                // spell charges are added. The wrong-mix branch then emits a
+                // line break, scans the travelling party for the first member
+                // whose status is Good or Poisoned, and invokes the shared
+                // trap-effect resolver". A line break and the resolver's own
+                // text, and nothing else.
+                //
+                // `Mixed wrong reagents for {code}; no spell charges added.`
+                // stood here - this engine's own composition, and one that
+                // told the player which recipe they had missed. It is the
+                // same class of invented text `1828d278` cleared off nine
+                // other paths.
+                let _ = spell_index;
+                self.message = self.wrong_mix_trap_message();
                 MoveOutcome::Blocked
             }
             None => {
-                let base =
-                    "Mixed wrong reagents for unknown spell; no spell charges added.".to_string();
-                self.message = self.wrong_mix_trap_message(base);
+                // An unrecognised spell code reaches the same branch and, for
+                // the same reason, contributes no line of its own.
+                self.message = self.wrong_mix_trap_message();
                 MoveOutcome::Blocked
             }
         }
@@ -1479,7 +1499,7 @@ impl PlayState {
     /// `magic.md §6` Step 6/7: the `Mixing...` beat is printed before the
     /// recipe comparison, so it stays on the wrong-mix line too, ahead of
     /// the trap resolver's own text.
-    pub fn wrong_mix_trap_message(&mut self, base: String) -> String {
+    pub fn wrong_mix_trap_message(&mut self) -> String {
         // A normally dispatched Mix always finds a Good-or-Poisoned member.
         // For a forced/corrupt state, use an out-of-range value only as the
         // resolver's deterministic selector seed. Acid and Poison already
@@ -1487,7 +1507,9 @@ impl PlayState {
         // party-wide Bomb and Gas families retain their published effects.
         let target_slot = self.mixer_trap_target_slot().unwrap_or(usize::MAX);
         let trap = self.apply_shared_trap_effect_to_slot(target_slot);
-        format!("{MMIX_MIXING_MESSAGE}\n{base}\n{trap}")
+        // "emits a line break, [then] ... invokes the shared trap-effect
+        // resolver" - the break is the branch's whole contribution.
+        format!("{MMIX_MIXING_MESSAGE}\n{trap}")
     }
 
     /// `traps.md §4` (M-Mix): the mixer supplies its own victim slot and
@@ -2680,13 +2702,17 @@ mod movement_magic_karma_traps_spec_tests {
             MoveOutcome::Blocked
         );
 
+        // `§6` step 6 prints `Mixing...` before step 7 compares the recipe,
+        // so it is on the wrong-recipe path too. What follows it is the trap
+        // resolver's own text and nothing between: step 7 gives the branch
+        // "a line break" and no line of its own.
         let mut lines = state.message.lines();
         assert_eq!(lines.next(), Some(MMIX_MIXING_MESSAGE));
         assert!(
             lines
                 .next()
-                .is_some_and(|line| line.starts_with("Mixed wrong reagents")),
-            "wrong-mix body missing from {:?}",
+                .is_some_and(|line| !line.is_empty() && !line.starts_with("Mixed")),
+            "the trap line should follow `Mixing...` directly in {:?}",
             state.message
         );
         assert_eq!(state.reagents[REAGENT_SULFUR_ASH], 0);

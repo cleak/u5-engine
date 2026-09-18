@@ -1173,7 +1173,10 @@ BRITANNIA 11 21
         assert_eq!(state.spell_charges[OPEN_SPELL_INDEX], 0);
         assert_eq!(
             state.message,
-            "Mixing...\nMixed wrong reagents for AS; no spell charges added.\nAcid trap hit party member 1 for 5 HP."
+            // `magic.md §6` step 7 gives the wrong-recipe branch "a line
+            // break" and the trap resolver, and no line of its own. The
+            // sentence between these two was this engine's composition.
+            "Mixing...\nAcid trap hit party member 1 for 5 HP."
         );
         assert_eq!(state.party[0].hp, DEFAULT_PARTY_HP - 5);
     }
@@ -1359,7 +1362,7 @@ BRITANNIA 11 21
             .map(u64::from)
             .unwrap();
         let before = state.party.clone();
-        let message = state.wrong_mix_trap_message("wrong".to_string());
+        let message = state.wrong_mix_trap_message();
         assert!(message.contains("Acid trap found no party member"));
         assert_eq!(state.party, before);
     }
@@ -1383,7 +1386,9 @@ BRITANNIA 11 21
             MoveOutcome::PromptDeclined
         );
         assert_eq!(state.reagents[REAGENT_SULFUR_ASH], 1);
-        assert_eq!(state.message, "None!");
+        // `magic.md §6` step 4: "A zero quantity, typed or as a bare Return,
+        // prints nothing further". This asserted `None!` until 2026-09-18.
+        assert_eq!(state.message, "");
 
         assert_eq!(
             state.mix_reagents_from_suffix("IL/0/1"),

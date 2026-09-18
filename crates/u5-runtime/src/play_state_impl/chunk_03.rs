@@ -1904,40 +1904,60 @@ impl PlayState {
                 }
                 _ => None,
             },
-            MixPhase::Quantity => match ch {
-                '\u{1b}' => {
-                    self.message = "None!".to_string();
-                    Some(MoveOutcome::PromptDeclined)
+            // `input.md §8`, "The typed-number reader, as executed", and
+            // `magic.md §6` step 4's key table. The quantity prompt is the
+            // shared two-digit reader, so its keys are classified by
+            // [`numeric_prompt_action`] rather than by a second table here -
+            // which is also how the west direction code and Escape get their
+            // published behaviour.
+            //
+            // Three arms changed on 2026-09-13's answer to
+            // `cleak/u5-spec#272`:
+            //
+            // - Escape "erases the whole echo and leaves the cursor back at
+            //   the first echo cell. It does **not** cancel the prompt, which
+            //   keeps waiting." This engine printed `None!` and declined.
+            // - "Return is the only exit. An empty buffer submits as zero."
+            //   This engine waited on a bare Return and treated Space as an
+            //   exit. The wait was a repair for a real measurement
+            //   (`bt-audience/ask5`, where the original's row still reads
+            //   `How much` where this engine had printed `None!`) - but a
+            //   single frame cannot tell "still waiting" from "exited in
+            //   silence", and the published table says which it is. The
+            //   `None!` half of that diagnosis was right; the fix was not.
+            // - "A third digit is discarded. The cap is two digits." This
+            //   engine submitted on the second digit instead, so a player
+            //   could never see `How much? 12` and then change their mind.
+            MixPhase::Quantity => match numeric_prompt_action(ch as u8) {
+                NumericPromptAction::Submit => self.complete_mix_session(session),
+                NumericPromptAction::ClearEcho => {
+                    session.quantity_buffer.clear();
+                    self.redraw_mix_quantity_row(session);
+                    None
                 }
-                // `magic.md` §6 step 4: the prompt "reads a two-digit
-                // unsigned quantity", and of the cancels it names only one -
-                // "Zero cancels through the cleanup path". An accept key with
-                // nothing typed is not a zero, and the original keeps waiting
-                // on it. This engine completed on the bare key, which took
-                // the empty buffer as zero and answered `None!`. Measured
-                // 2026-09-11 (`bt-audience/ask5`): the original's row reads
-                // `How much` with the prompt still open where this engine had
-                // already printed `None!`.
-                '\r' | '\n' | ' ' if session.quantity_buffer.is_empty() => None,
-                '\r' | '\n' | ' ' => self.complete_mix_session(session),
-                '\u{8}' | '\u{7f}' => {
+                NumericPromptAction::Pop => {
                     session.quantity_buffer.pop();
                     self.redraw_mix_quantity_row(session);
                     None
                 }
-                ch if ch.is_ascii_digit()
-                    && session.quantity_buffer.len() < MMIX_QUANTITY_PROMPT_DIGITS =>
+                NumericPromptAction::AppendDigit(_)
+                    if session.quantity_buffer.len() < MMIX_QUANTITY_PROMPT_DIGITS =>
                 {
-                    session.quantity_buffer.push(ch);
                     // The digits are typed into the row `How much? `
                     // already occupies, not under it.
+                    session.quantity_buffer.push(ch);
                     self.redraw_mix_quantity_row(session);
-                    if session.quantity_buffer.len() >= MMIX_QUANTITY_PROMPT_DIGITS {
-                        return self.complete_mix_session(session);
-                    }
                     None
                 }
-                _ => None,
+                // "Accepted only in the first position."
+                NumericPromptAction::AppendSign(_) if session.quantity_buffer.is_empty() => {
+                    session.quantity_buffer.push(ch);
+                    self.redraw_mix_quantity_row(session);
+                    None
+                }
+                NumericPromptAction::AppendDigit(_)
+                | NumericPromptAction::AppendSign(_)
+                | NumericPromptAction::Discard => None,
             },
         }
     }
