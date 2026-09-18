@@ -4033,12 +4033,18 @@
             PlayInputDisposition::Continue
         );
 
-        assert_eq!(state.party_experience[1], 400);
+        // `RETRACTIONS.md` R499: the rescale is `experience * standing / 100`,
+        // a penalty, not the withdrawn `* 100 / standing`. 300 at a standing
+        // of 75 is 225, which recomputes through the published halving ladder
+        // to level 3 and a maximum of 90. This assertion used to read 400,
+        // 4 and 120 - the withdrawn direction, which pays the member *more*
+        // experience than they died with.
+        assert_eq!(state.party_experience[1], 225);
         assert_eq!(state.party[1].status, b'G');
         assert_eq!(state.party[1].hp, 1);
         assert_eq!(state.party[1].mana, 21);
-        assert_eq!(state.party[1].level, 4);
-        assert_eq!(state.party[1].max_hp, 120);
+        assert_eq!(state.party[1].level, 3);
+        assert_eq!(state.party[1].max_hp, 90);
         assert_eq!(state.message, crate::commands::SPELL_SUCCESS_LINE);
     }
 

@@ -3993,6 +3993,30 @@ fn resurrection_penalty_percent_divisor_matches_spec() {
         resurrection_adjusted_experience(1234, RESURRECTION_PENALTY_SKIP_THRESHOLD),
         1234,
     );
+    // `RETRACTIONS.md` R499 withdrew the `xp * 100 / standing` direction and
+    // published the values it executed against the shipped overlay: "for a
+    // member holding 800 experience the helper yields 0, 200, 400 and 776 at
+    // standings 0, 25, 50 and 97, each of which recomputes through the same
+    // published halving ladder to levels 1, 3, 4 and 4 and maxima of 30, 90,
+    // 120 and 120".
+    //
+    // The skip-threshold assertion above is the only one this path used to
+    // carry, and both directions agree there, which is why the wrong one
+    // survived. These do not agree: the withdrawn direction returns 3200 at
+    // standing 25 - a bonus - and at standing 0 divided by zero.
+    for (standing, expected_xp, expected_level, expected_max_hp) in
+        [(0u8, 0u16, 1u8, 30u16), (25, 200, 3, 90), (50, 400, 4, 120), (97, 776, 4, 120)]
+    {
+        let xp = resurrection_adjusted_experience(800, standing);
+        assert_eq!(xp, expected_xp, "standing {standing} experience");
+        let level = recompute_level_from_experience(xp);
+        assert_eq!(level, expected_level, "standing {standing} level");
+        assert_eq!(
+            resurrection_max_hp_for_level(level),
+            expected_max_hp,
+            "standing {standing} maximum hit points"
+        );
+    }
 }
 
 #[test]
@@ -23061,20 +23085,22 @@ fn chargen_virtue_stat_deltas_match_spec_table() {
 }
 
 #[test]
-fn class_refreshed_mana_covers_default_branch_per_magic_md_section_eight() {
-    // magic.md §8 Resurrection: Avatar (A), Mage (M), and the default
-    // class branch receive mana equal to Intelligence; Bard (B)
-    // receives half Intelligence.
+fn class_refreshed_mana_writes_only_the_three_published_class_letters() {
+    // `magic.md §8` Resurrection: Avatar (A) and Mage (M) receive mana equal
+    // to Intelligence, Bard (B) half of it.
     assert_eq!(class_refreshed_mana(b'A', 24), Some(24));
     assert_eq!(class_refreshed_mana(b'M', 24), Some(24));
     assert_eq!(class_refreshed_mana(b'B', 24), Some(12));
-    // Default branch — every other class letter receives full INT.
-    assert_eq!(class_refreshed_mana(b'F', 24), Some(24));
-    assert_eq!(class_refreshed_mana(b'P', 24), Some(24));
-    assert_eq!(class_refreshed_mana(b'R', 24), Some(24));
-    assert_eq!(class_refreshed_mana(b'T', 24), Some(24));
-    assert_eq!(class_refreshed_mana(b'D', 24), Some(24));
-    assert_eq!(class_refreshed_mana(b'S', 24), Some(24));
+    // `RETRACTIONS.md` R500: there is no default branch. Every class letter
+    // outside the three keeps the magic points its record already held, so
+    // the helper declines to write rather than handing a Fighter the
+    // Intelligence value. These five asserted the withdrawn sentence.
+    assert_eq!(class_refreshed_mana(b'F', 24), None);
+    assert_eq!(class_refreshed_mana(b'P', 24), None);
+    assert_eq!(class_refreshed_mana(b'R', 24), None);
+    assert_eq!(class_refreshed_mana(b'T', 24), None);
+    assert_eq!(class_refreshed_mana(b'D', 24), None);
+    assert_eq!(class_refreshed_mana(b'S', 24), None);
 }
 
 #[test]

@@ -357,18 +357,29 @@ pub fn recompute_level_from_experience(experience: u16) -> u8 {
     level
 }
 
-/// `magic.md §8` Resurrection class-refresh table: Avatar (A), Mage (M),
-/// and the default class branch receive mana equal to Intelligence; Bard
-/// (B) receives half Intelligence. Returns `None` only when the spec asks
-/// the caller to leave the existing MP value alone, which the current
-/// trace does not promote — every U5 class letter resolves through this
-/// table.
+/// `magic.md §8` Resurrection class-refresh table: Avatar (A) and Mage
+/// (M) receive mana equal to Intelligence, Bard (B) half of it, and
+/// **every other class letter is left alone**.
+///
+/// There is no default branch. `magic.md §8` used to publish one -
+/// "Avatar, Mage, and the default class branch receive mana equal to
+/// Intelligence" - and `RETRACTIONS.md` R500 withdraws it: "the helper
+/// tests the class letter three ways and writes magic points only for
+/// Avatar, Mage and Bard ... every other class letter falls past the
+/// write entirely and keeps whatever magic points the record already
+/// held. An implementation built on the withdrawn sentence hands a
+/// Fighter the Intelligence value as mana on every resurrection."
+///
+/// R500 notes this is the same three-way rule already published for the
+/// long-camp recovery block (`magic.md` §11, `rest-and-camp.md` §5), so
+/// the discrepancy was a transcription error rather than a disputed
+/// reading. `None` is the "leave the existing value alone" answer the
+/// signature always had and that nothing ever returned.
 pub fn class_refreshed_mana(class_byte: u8, intelligence: u8) -> Option<u8> {
     match class_byte {
+        b'A' | b'M' => Some(intelligence),
         b'B' => Some(intelligence / 2),
-        // Avatar, Mage, and any other class fall through to the default
-        // full-Intelligence branch per spec.
-        _ => Some(intelligence),
+        _ => None,
     }
 }
 
@@ -415,22 +426,26 @@ pub const fn resurrection_max_hp_for_level(level: u8) -> u16 {
 }
 
 /// `magic.md §8` / `karma.md §5`: revived member's experience after
-/// the resurrection rescale. Per `magic.md §8`, when the moral-
-/// standing selector is below 98 the helper "rescales the target's
-/// experience by multiplying by 100 and dividing by the selector
-/// before recomputing level"; selector `>= 98` skips the rescale.
-/// The `magic.md` wording is the explicit mathematical formula and
-/// is preserved here; the `karma.md §5` "scaled down by the
-/// selector percentage" phrasing is the narrative summary and
-/// resolves to the same expression.
+/// the resurrection rescale.
+///
+/// One expression, in [`crate::resurrection_scaled_xp`]. This wrapper
+/// used to carry a second one, and the two had **opposite signs**:
+/// `magic.md §8` said the helper "rescales the target's experience by
+/// multiplying by 100 and dividing by the selector", and that sentence
+/// is withdrawn by `RETRACTIONS.md` R499 - "the two operands are the
+/// other way round ... the rescale is a **penalty** scaled by karma and
+/// never a bonus". The withdrawn direction rewarded a low standing with
+/// more experience than the member died with, and at a standing of zero
+/// divided by zero (this engine's `.max(1)` guard turned that into a
+/// hundredfold bonus; the original scales to zero and returns the member
+/// at level one).
+///
+/// `karma.rs` already carried the published direction and the repository
+/// therefore disagreed with itself, which is R499's own observation about
+/// the two spec documents. Nothing caught it: the only test on this path
+/// asserted the skip-threshold case, where both directions agree.
 pub fn resurrection_adjusted_experience(experience: u16, moral_standing: u8) -> u16 {
-    if moral_standing >= crate::RESURRECTION_PENALTY_SKIP_THRESHOLD {
-        return experience;
-    }
-
-    let divisor = u32::from(moral_standing.max(1));
-    ((u32::from(experience) * crate::RESURRECTION_PENALTY_PERCENT_DIVISOR) / divisor)
-        .min(u32::from(u16::MAX)) as u16
+    crate::resurrection_scaled_xp(moral_standing, experience)
 }
 
 pub fn party_status_name(status: u8) -> &'static str {
