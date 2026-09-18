@@ -36,9 +36,13 @@
 # 13, and the two viewport flashes at step 15. In the original those take
 # real time; here they are instantaneous. `cleak/u5-engine#38`.
 #
-# `t10` also reads `offset-1`: the two windows hold the same rows but the
-# original has scrolled one further. That is a separate question from the
-# hold and is not what this probe is for.
+# `t10` also reads `offset-1`, and that is now the scenario's only remaining
+# difference. The two windows hold the same rows and the original has one
+# more: a row under `A TRAPDOOR!`. `town-mode.md` Section 7.1 names that
+# literal without publishing its line-feed framing, so `cleak/u5-spec#279`
+# asks whether it carries a trailing feed - and whether `Burning!` and
+# `Poisoned!`, the other two town underfoot lines it sits beside in the
+# string pool, are framed the same way.
 # requires-seed: the party inside Stonegate, standing in the trapdoor ring's centre cell
 both	wait	9000
 both	key	space
