@@ -14803,16 +14803,20 @@ fn active_object_composite_dispatches_companion_and_guard_branches() {
 }
 
 #[test]
-fn player_slot_survives_the_terrain_aware_suppress_rows() {
+fn player_slot_takes_the_terrain_aware_suppress_rows() {
     // `visibility.md §8` lists "current terrain `0xEC` or `0x0A` -> suppress
-    // the active-object stamp" with no effective-tile qualifier, and
-    // `visibility.md §6` names `0x0A` "tropical forest". The shipped
-    // passability bitset marks that terrain walkable, so applying the row to
-    // slot zero leaves the bare forest tile on screen and the party sprite
-    // nowhere - the avatar renders *behind* the forest. `active-objects.md §5`
-    // gives slot zero the opposite contract: the table is walked "from slot
-    // thirty-one down so slot zero paints on top". Every other slot keeps the
-    // published row.
+    // the active-object stamp" with no effective-tile qualifier, and it
+    // reaches slot zero like every other slot.
+    //
+    // This engine exempted slot zero until 2026-09-18, reasoning that
+    // `active-objects.md §5`'s "slot zero paints on top" was the stronger
+    // contract and that a walkable terrain hiding the party read like a
+    // table written for NPCs. `cleak/u5-spec#273` settles it the other way
+    // and in so many words: "On dense forest ... and on the standard of
+    // Britannia (`0xEC`) nothing is drawn at all, so the party disappears
+    // into the terrain - and dense forest is ordinary walkable overworld
+    // ground, not a corner case". Painting on top is about draw order among
+    // slots, not about surviving the table.
     for terrain in [0x0A, 0xEC] {
         assert_eq!(
             active_object_composite(
@@ -14854,17 +14858,32 @@ fn player_slot_survives_the_terrain_aware_suppress_rows() {
                 5,
                 0
             ),
-            ActiveObjectCompositeResult::Companion(PLAYER_TILE),
-            "slot zero still stamps the party sprite on terrain {terrain:#04x}"
+            ActiveObjectCompositeResult::Suppress,
+            "slot zero takes the suppress row on terrain {terrain:#04x}"
         );
     }
 
-    // The `0x6A`/`0x6B` suppress row is qualified by effective tile, so it
-    // never reached the walking party in the first place; the exemption does
-    // not change what a monster frame does there.
+    // The `0x6A`/`0x6B` suppress row *is* qualified by effective tile, and
+    // that qualifier is what the tile catalogue means by "a bridge suppresses
+    // the skiff family only": the skiff markers are inside it and the on-foot
+    // marker is not.
     assert_eq!(
         active_object_composite(0x80, 0x84, VISIBILITY_CLEAR, 0x6A, None, None, 5, 0),
         ActiveObjectCompositeResult::Suppress
+    );
+    assert_eq!(
+        composite_active_object_slot(
+            true, 0x28, 0x28, VISIBILITY_CLEAR, 0x6A, None, None, 5, 0
+        ),
+        ActiveObjectCompositeResult::Suppress,
+        "a party in a skiff is not drawn under a bridge"
+    );
+    assert_eq!(
+        composite_active_object_slot(
+            true, PLAYER_TILE, PLAYER_TILE, VISIBILITY_CLEAR, 0x6A, None, None, 5, 0
+        ),
+        ActiveObjectCompositeResult::Companion(PLAYER_TILE),
+        "a party on foot still draws on a bridge"
     );
 
     // `visibility.md §8` step 3: the two cell-state guards run before any class
@@ -14905,10 +14924,17 @@ fn player_slot_survives_the_terrain_aware_suppress_rows() {
 }
 
 #[test]
-fn party_sprite_is_composited_onto_dense_forest_terrain() {
+fn party_sprite_is_suppressed_on_dense_forest_terrain() {
     // End-to-end through the visibility buffers the renderer actually reads:
-    // standing on `0x0A` must leave the companion band holding the party's
-    // actor byte, not the forest terrain byte.
+    // standing on `0x0A` leaves the cell alone, so the companion band keeps
+    // the forest terrain byte and the party is not drawn.
+    //
+    // This test asserted the opposite until 2026-09-18, when this engine
+    // exempted slot zero from the terrain-aware table's suppression rows.
+    // `cleak/u5-spec#273` settles it: "On dense forest ... and on the
+    // standard of Britannia (`0xEC`) nothing is drawn at all, so the party
+    // disappears into the terrain - and dense forest is ordinary walkable
+    // overworld ground, not a corner case".
     const DENSE_FOREST_TILE: u8 = 0x0A;
     let mut grid = open_grid();
     grid[5 * TOWN_GRID_SIDE + 5] = DENSE_FOREST_TILE;
@@ -14920,11 +14946,11 @@ fn party_sprite_is_composited_onto_dense_forest_terrain() {
         visibility_grid_active_index(VIEWPORT_PLAYER_ROW, VIEWPORT_PLAYER_COL).unwrap();
     let center_terrain =
         terrain_band_active_index(VIEWPORT_PLAYER_ROW, VIEWPORT_PLAYER_COL).unwrap();
-    assert_eq!(state.visibility_grid[center_grid], VISIBILITY_USE_COMPANION);
-    assert_eq!(
+    assert_ne!(
         state.terrain_band[center_terrain], PLAYER_TILE,
-        "the party sprite must draw on top of the forest cell it occupies"
+        "the party sprite must not draw on the forest cell it occupies"
     );
+    let _ = center_grid;
 }
 
 #[test]

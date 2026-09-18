@@ -484,9 +484,9 @@ pub const fn active_object_composite_step(
 /// and on ordinary floor."
 ///
 /// This answers (b) and (c) for a slot that already survived (a). Slot zero
-/// takes the same answer: the slot-zero contract of
-/// [`active_object_composite_for_player`] only rewrites a `Suppress` result
-/// after the fact, and no `Suppress` arm selects.
+/// takes the same answer, and now for the plainer reason that it takes the
+/// same table: [`active_object_composite_for_player`] no longer rewrites a
+/// `Suppress` result, and no `Suppress` arm selects either way.
 pub const fn composite_active_object_slot_draws_variant(
     type_byte: u8,
     frame_byte: u8,
@@ -559,15 +559,29 @@ pub const fn active_object_composite(
 /// the party can never satisfy the type-byte test of the single-sprite-family
 /// seated branch above".
 ///
-/// Deviation note: `visibility.md §8`'s terrain-aware table row "current
-/// terrain `0xEC` or `0x0A` - suppress the active-object stamp" carries no
-/// effective-tile qualifier, unlike the `0x6A`/`0x6B` row beside it, and the
-/// spec never carves slot zero out of the table. Taken literally it makes the
-/// party vanish on dense-forest terrain `0x0A` (`visibility.md §6` names it
-/// "tropical forest"), which the shipped passability bitset marks walkable, so
-/// the party walks onto it in ordinary play. The published text does not
-/// settle whether the row was meant to reach slot zero; this engine keeps the
-/// row for every other slot and exempts the player.
+/// The terrain-aware table reaches slot zero like any other slot, including
+/// its suppression rows.
+///
+/// This carried a deviation note until 2026-09-18. The row "current terrain
+/// `0xEC` or `0x0A` - suppress the active-object stamp" has no effective-tile
+/// qualifier and the spec never carved slot zero out of the table, so taken
+/// literally it made the party vanish on dense forest - which the shipped
+/// passability bitset marks walkable, so the party walks onto it in ordinary
+/// play. That read like a table written for NPCs, and this engine exempted
+/// the player rather than draw a conclusion the text did not state.
+///
+/// `cleak/u5-spec#273` settles it the other way, and says so in the tile
+/// catalogue's own words: "On dense forest (`0x0A`, which parts of this spec
+/// set call tropical forest) and on the standard of Britannia (`0xEC`)
+/// nothing is drawn at all, so the party disappears into the terrain - and
+/// dense forest is ordinary walkable overworld ground, not a corner case".
+/// The exemption is removed.
+///
+/// Removing it also implements the sentence beside that one - "a bridge
+/// suppresses the skiff family only" - for free: the `0x6A`/`0x6B` row does
+/// carry an effective-tile qualifier, and the skiff markers `0x28..0x2B` are
+/// in it while the on-foot marker `0x1C` is not. A party on foot crossing a
+/// bridge still draws; a party in a skiff under one does not.
 pub const fn active_object_composite_for_player(
     type_byte: u8,
     frame_byte: u8,
@@ -581,7 +595,7 @@ pub const fn active_object_composite_for_player(
     if current_grid_byte == VISIBILITY_HIDDEN || current_grid_byte == VISIBILITY_ALREADY_RENDERED {
         return ActiveObjectCompositeResult::Suppress;
     }
-    match active_object_composite(
+    active_object_composite(
         type_byte,
         frame_byte,
         current_grid_byte,
@@ -590,10 +604,7 @@ pub const fn active_object_composite_for_player(
         next_row_terrain,
         viewport_row,
         variant,
-    ) {
-        ActiveObjectCompositeResult::Suppress => ActiveObjectCompositeResult::Companion(frame_byte),
-        other => other,
-    }
+    )
 }
 
 /// `visibility.md §8`: composite one active-object slot, choosing the slot-zero
