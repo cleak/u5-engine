@@ -30,6 +30,12 @@ fn main() {
         replay_play_script_commands(&mut state, dir, &commands, |_, _, _| Ok(())).expect("replay");
     }
 
+    println!(
+        "row_open_mid_line {} cursor_suppressed {} live_row_suppressed {}",
+        state.message_row_open_mid_line,
+        state.message_window_cursor_suppressed(),
+        state.message_window_live_row_suppressed()
+    );
     let mut log = message_log_from_entries(state.message_entries(), keep);
     log.set_top_offset(usize::from(state.message_window_top_offset()));
     if let Some(text) = state
@@ -62,7 +68,10 @@ fn main() {
     );
     println!("log ({} lines):", log.lines().len());
     for (index, line) in log.lines().iter().enumerate() {
-        println!("  {index:>2} {:?} {:?}", line.kind, line.text);
+        println!(
+            "  {index:>2} {:?} {:?} trailing={}",
+            line.kind, line.text, line.trailing_spaces
+        );
     }
     let layout = layout_message_window_with_continuation(
         &log,
