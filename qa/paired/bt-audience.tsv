@@ -23,13 +23,19 @@
 # Check the first beat for `Your response?` before reading any result from
 # this scenario. A run without it is not evidence about the engine.
 #
-# Known gap, measured 2026-09-12: the `ask5` beat reads `offset-1` and nothing
-# else. The wording agrees; the original carries one row under the mixer's
-# `How much` prompt that this engine does not. `MixPhase::Quantity` is in
-# `message_window_live_row_suppressed` from an earlier `offset+2` reading of
-# the same prompt, and no scenario yet captures both sides of it - `magic-mix`
-# cancels before the quantity stage. The prompt needs its own measurement
-# before the suppression is narrowed.
+# Closed 2026-09-18, and it was closed by being read the other way round.
+# The `ask5` beat read `offset-1`, and the note here concluded that "the
+# original carries one row under the mixer's `How much` prompt that this
+# engine does not". `cleak/u5-spec#272` answer 2 refutes that: the capture
+# showing an end-cap-and-cursor row beneath the prompt "is one beat later -
+# the quantity prompt has returned and the next command prompt's
+# feed-and-marker pair has been emitted, which scrolled everything up one and
+# put the marker on the new bottom row". The marker belongs to the following
+# command. While the prompt waits it owns the window's last row and carries
+# the cursor inline, and "no end-cap is emitted anywhere in the mix command,
+# on any of its exits". `MixPhase::Quantity` is now in
+# `message_window_live_row_suppressed` for that reason rather than by
+# analogy, and this beat is a result again.
 #
 # **Walk-up, and therefore timing-sensitive.** This scenario cannot be
 # reseeded (see above), so both sides walk to the guard while the resident

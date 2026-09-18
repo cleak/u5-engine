@@ -272,6 +272,35 @@ impl PlayState {
         // nothing at all when the text stopped part-way along a row.
         (self.staged_narration_active() && self.message_row_open_mid_line)
             || self.mix_reagent_selection_active()
+            // The mixer's quantity prompt, for the same reason as `On who: `
+            // below: the literal is `How much? `, "nine characters and a
+            // trailing space, ten cells, with no line feed of its own at
+            // either end", and the animated cursor waits "in the cell
+            // immediately after the trailing space - column 10 ... with the
+            // cursor advance suppressed" (`magic.md §6` step 4, published
+            // 2026-09-13 for `cleak/u5-spec#272`).
+            //
+            // So the prompt owns the window's last row and nothing opens a
+            // row beneath it: "no end-cap is emitted anywhere in the mix
+            // command, on any of its exits". Measured 2026-09-18
+            // (`qa/paired/bt-audience.tsv`, beat `ask5`, and
+            // `magic-refusal-vocabulary`, beat `nothing`): the original keeps
+            // `How much` as its last row and this engine opened an empty
+            // command row under it.
+            //
+            // `bt-audience`'s header carried this as a known gap with the
+            // opposite sign - a 2026-09-12 reading of `offset-1` concluded
+            // "the original draws a row under `How much?` carrying both the
+            // end-cap triangle and the cursor". `#272` answer 2 refutes that
+            // directly: that capture "is one beat later - the quantity prompt
+            // has returned and the **next** command prompt's feed-and-marker
+            // pair has been emitted, which scrolled everything up one and put
+            // the marker on the new bottom row". The marker seen under the
+            // prompt belongs to the command after it.
+            || self
+                .active_mix
+                .as_ref()
+                .is_some_and(|session| session.phase == MixPhase::Quantity)
             || self.active_blackthorn_guard_demand.is_some()
             || self.pending_town_arrest.is_some()
             // `commands.md §5.6` / `inventory.md §4.3`: a U-Use item that asks
@@ -2000,6 +2029,23 @@ impl PlayState {
 
     fn complete_mix_session(&mut self, session: &mut MixSession) -> Option<MoveOutcome> {
         let amount = session.quantity_buffer.parse::<u8>().unwrap_or(0);
+        // `magic.md §6` step 4: a zero quantity "prints nothing further".
+        // For the interactive prompt that is stronger than printing an empty
+        // message - the prompt's own row is still open, with the cursor in
+        // the cell after its trailing space, and `§272`'s prompt-text note is
+        // explicit that the literal has "no line feed of its own at either
+        // end". Handing this to the suffix path cleared the message, which
+        // closed that row and spent one: measured 2026-09-18
+        // (`qa/paired/bt-audience.tsv`, beat `ask5`), the original keeps
+        // `How much` as its last row and this engine gained a blank under it.
+        //
+        // The marker row that appears beneath it a beat later belongs to the
+        // *next* command prompt, not to this one - which is exactly what
+        // `cleak/u5-spec#272` answer 2 had to disentangle from two captures
+        // that looked contradictory.
+        if amount == 0 {
+            return Some(MoveOutcome::PromptDeclined);
+        }
         if amount > 0 {
             for index in selected_reagent_indices(session.reagent_mask) {
                 if self.reagents[index] < amount {
