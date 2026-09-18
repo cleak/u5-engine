@@ -2774,12 +2774,19 @@ fn handle_arms_shop_key_input(
 /// `"What dost thou wish to sell?"` both came back with an opening and a
 /// closing double quote. The other two lines of the pool did not draw in
 /// either capture and take the same shape.
+/// `shops.md` §8.1: nonempty Sell entry "inherits its opening double quote
+/// from `Sell\n\n"` in Section 8.B and appends `" ` after the selected initial
+/// question" - a closing quote **and one space**. The wrap trims that space
+/// from the drawn row and records it, and `text-output.md` §10.6 puts the
+/// cursor in the cell after it. Without it the cursor sat on the quote.
+/// Measured 2026-09-18 (`shop-arms-sell-flow`, beats `browser` and `down`,
+/// both reading `cursor`): the original's cursor is one cell further right.
 fn arms_sell_entry_prompt(roll: u8) -> String {
     [
-        "\"Which item wouldst thou like to sell?\"",
-        "\"What dost thou wish to sell?\"",
-        "\"Show me what ye got...\"",
-        "\"What dost thou have for me to buy?\"",
+        "\"Which item wouldst thou like to sell?\" ",
+        "\"What dost thou wish to sell?\" ",
+        "\"Show me what ye got...\" ",
+        "\"What dost thou have for me to buy?\" ",
     ][usize::from(roll) % 4]
         .to_string()
 }
@@ -2787,11 +2794,13 @@ fn arms_sell_entry_prompt(roll: u8) -> String {
 /// **Measured** 2026-09-07 (`qa/paired/shop-arms-sell-flow.tsv`): quoted, like
 /// the entry pool - `"What else hath ye to sell?"` drew twice in one visit.
 fn arms_sell_continuation_prompt(roll: u8) -> String {
+    // §8.1: "A continuation prints `\n\n"`, its selected continuation
+    // question, and `" `" - the same closing quote and space as the entry.
     [
-        "\"What else can ye offer me?\"",
-        "\"What else hath ye to sell?\"",
-        "\"What else doth thou wish to sell?\"",
-        "\"What other arms wilt thou sell?\"",
+        "\"What else can ye offer me?\" ",
+        "\"What else hath ye to sell?\" ",
+        "\"What else doth thou wish to sell?\" ",
+        "\"What other arms wilt thou sell?\" ",
     ][usize::from(roll) % 4]
         .to_string()
 }
