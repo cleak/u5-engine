@@ -10532,6 +10532,44 @@ fn advance_gameplay_animation_pump(
     true
 }
 
+/// Compose and present one frame.
+///
+/// The cinematic arms of [`animate_static_tiles`] advance their own state and
+/// return, and until 2026-09-18 none of them did this - so while one owned the
+/// loop the window was never recomposed and the player saw the frame from
+/// whenever something else last painted.
+///
+/// Measured (`qa/paired/stonegate-trapdoor-audio.tsv`): instrumenting the
+/// render showed it called twice in the whole run, the second time with
+/// `A TRAPDOOR!` as the last transcript entry. The rescue's nine beats emit
+/// forty seconds later and never reached a frame, which is why the capture
+/// looks like a stalled cinematic when the cinematic is in fact running.
+/// `cleak/u5-engine#38`.
+fn repaint_visual_frame(
+    visual: &mut VisualState,
+    images: &mut Assets<Image>,
+    reason: &'static str,
+) {
+    let input_line = visual.input_line.clone();
+    let prompt_cursor_visible = visual.prompt_cursor_visible;
+    let cursor_frame = visual.prompt_cursor_frame;
+    let ctx = PlayFrameContext {
+        ibm: &visual.text_font,
+        runes: &visual.rune_font,
+        game_dir: &visual.game_dir,
+        cursor_frame,
+    };
+    let rgba = render_visual_play_frame_with_input_and_cursor(
+        &mut visual.state,
+        &visual.atlas,
+        ctx,
+        &input_line,
+        "",
+        prompt_cursor_visible,
+    );
+    replace_visual_image_data(images, &visual.image_handle, rgba, reason);
+}
+
 fn animate_static_tiles(
     time: Res<Time>,
     // A staged presentation is paced against the wall clock, not the app's
@@ -10593,6 +10631,7 @@ fn animate_static_tiles(
             .advance_staged_narration_to(real_time.elapsed_secs_f64());
         visual.prompt_cursor_visible = false;
         visual.prompt_cursor_frame = visual.prompt_cursor_frame.wrapping_add(1);
+        repaint_visual_frame(&mut visual, &mut images, "staged narration");
         pump.accumulator = 0.0;
         return;
     }
@@ -10612,6 +10651,7 @@ fn animate_static_tiles(
         }
         if visual.state.pending_blackthorn_audience_exit {
             visual.prompt_cursor_frame = visual.prompt_cursor_frame.wrapping_add(1);
+            repaint_visual_frame(&mut visual, &mut images, "audience exit beat");
             pump.accumulator = 0.0;
             return;
         }
@@ -10629,6 +10669,7 @@ fn animate_static_tiles(
         }
         if visual.state.pending_blackthorn_rescue.is_some() {
             visual.prompt_cursor_frame = visual.prompt_cursor_frame.wrapping_add(1);
+            repaint_visual_frame(&mut visual, &mut images, "rescue cinematic");
             pump.accumulator = 0.0;
             return;
         }
