@@ -1167,6 +1167,30 @@ pub const BLACKTHORN_RESCUE_WAIT_BEFORE_DARKNESS: u16 = 10;
 pub const BLACKTHORN_RESCUE_WAIT_BEFORE_REFUGE_SECOND: u16 = 14;
 pub const BLACKTHORN_RESCUE_WAIT_BEFORE_REFUGE_THIRD: u16 = 28;
 /// Steps 11 to 13: six ticks after the shout, then four after each Guardian
+/// How long `§7.1`'s six software envelopes hold the cinematic.
+///
+/// `§7` step 9 runs them between beat 4 and beat 5, and `§7.1` publishes each
+/// row's duration: 2.15 s, 2.15 s, 2.15 s, 1.29 s, 1.72 s and 1.72 s audible,
+/// **11.18 s** in total. "The sequence has no explicit delay, world tick,
+/// draw, or text operation between rows", so the whole of it sits between
+/// those two beats.
+///
+/// They are "PC-speaker audio only and change no pixels", which is exactly
+/// why this engine had no hold here: the sound is emitted and the beats ran
+/// straight on. `§7.1` is explicit that the tick schedule is not the whole
+/// clock - its 52 ticks before the audio sequence are "nominally about 2.86
+/// seconds **plus viewport-dissolve, text and redraw work**".
+///
+/// Measured 2026-09-18 (`qa/paired/stonegate-death-hold.tsv`, beat `t32`):
+/// thirty-two seconds after the step the original is at beats 1 to 4 and this
+/// engine was already at the verdict speech. `cleak/u5-engine#38`.
+///
+/// 11.18 s at `narration::BIOS_TICK_SECS` is 204 ticks. The muted figure is
+/// 8.67 s; this takes the audible one, which is what a capture with sound
+/// records. The dissolve, the two Guardian cell reveals and the twice-run
+/// viewport flash are still unmodelled, and are the rest of that issue.
+pub const BLACKTHORN_RESCUE_WAIT_ENVELOPE_SEQUENCE: u16 = 204;
+
 /// reveal, all before the thunder line.
 pub const BLACKTHORN_RESCUE_WAIT_BEFORE_THUNDER: u16 = 6 + 4 + 4;
 /// Steps 21 and 24: four ticks after the intoned beat before the restoration

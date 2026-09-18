@@ -5412,7 +5412,10 @@ impl PlayState {
         // Steps 10-14: the shout, then six plus four plus four ticks across
         // the two Guardian reveals, then the thunder line.
         self.staged_narration
-            .push_ticks(0, crate::blackthorn::BLACKTHORN_RESCUE_SHOUT);
+            .push_ticks(
+                crate::blackthorn::BLACKTHORN_RESCUE_WAIT_ENVELOPE_SEQUENCE,
+                crate::blackthorn::BLACKTHORN_RESCUE_SHOUT,
+            );
         self.staged_narration.push_ticks(
             crate::blackthorn::BLACKTHORN_RESCUE_WAIT_BEFORE_THUNDER,
             crate::blackthorn::BLACKTHORN_RESCUE_THUNDER,
