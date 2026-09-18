@@ -724,6 +724,34 @@ pub fn shop_quantity_prompt_row_is_open(state: &crate::PlayState) -> bool {
     )
 }
 
+/// A row already in the log that is still open, waiting with the cursor on
+/// it, and has no prompt literal of its own for the layout to match.
+///
+/// The shop quantity prompt and the rescue's acknowledgement are both this
+/// shape: the text is in the transcript, wrapped, and what is wanted is for
+/// the layout to treat its final row as the open prompt so the cursor waits
+/// there and no live row - and no blank above one - is drawn.
+pub fn open_row_owns_the_cursor(state: &crate::PlayState) -> bool {
+    shop_quantity_prompt_row_is_open(state) || blackthorn_rescue_row_is_open(state)
+}
+
+/// `blackthorn.md` §7 step 19: the rescue's "only blocking key read ... sits
+/// between the verdict's closing quotation mark and `Strange words are
+/// intoned.`".
+///
+/// The verdict is emitted with no trailing feed
+/// (`BLACKTHORN_RESCUE_VERDICT_CLOSE` is a bare `"`), so that row is still
+/// open and the key is read with the cursor on it. It is an acknowledgement,
+/// not a command, so §10.2's blank-and-end-cap pair is not drawn either.
+///
+/// Measured 2026-09-18 (`qa/paired/stonegate-rescue-pacing.tsv`, beats `t48`
+/// through `t64`, all reading `offset+2`): the original holds the cursor in
+/// the cell immediately after `my reach!"` and this engine spent a blank row
+/// and a fresh command row beneath it, with the end-cap drawn.
+pub fn blackthorn_rescue_row_is_open(state: &crate::PlayState) -> bool {
+    state.blackthorn_rescue_awaiting_acknowledgement()
+}
+
 /// Place a log — and optionally the live input line — into the window.
 ///
 /// History is bottom-anchored just above the live input row, so the

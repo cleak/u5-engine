@@ -3628,12 +3628,51 @@ impl PlayState {
                 let pre_effect_message = self.message.clone();
                 self.apply_town_trapdoor_party_damage();
                 if scene.byte == STONEGATE_SCENE_BYTE {
+                    // `town-mode.md §7.1` orders the script: the black fill
+                    // and the 750-tone speaker sweep come first, and only
+                    // after them does the death loop run - `audio.md §8.2`
+                    // puts "one 75-update 100..500 Hz rumble per party member,
+                    // as that member is killed and the stats panel is
+                    // repainted" *inside* that loop.
+                    //
+                    // So the panel the player looks at during the sweep still
+                    // carries the fall's damage and not the deaths. Measured
+                    // 2026-09-18 (`qa/paired/stonegate-rescue-pacing.tsv`,
+                    // samples `t04` through `t24`): the original's roster row
+                    // reads `Avatar 54G` for the whole sweep - damaged from
+                    // 60, not dead - and only reads `0D` from `t28`, once the
+                    // sweep is over. This engine applied the deaths and
+                    // repainted at the end of the step, so it read `0D`
+                    // throughout.
+                    //
+                    // Paint the damage here, where the sweep sees it, and
+                    // decline the command's own end-of-step refresh so the
+                    // deaths stay off until the rescue takes over. That is
+                    // what the dispatcher's note asks a named hold to do.
+                    self.repaint_stats_panel();
+                    self.stats_panel_command_refresh =
+                        crate::stats_panel::PanelRefreshMode::None;
                     self.apply_stonegate_trapdoor_script(floor);
                     self.message = if pre_effect_message.is_empty() {
                         "A TRAPDOOR!".to_string()
                     } else {
                         format!("{pre_effect_message} A TRAPDOOR!")
                     };
+                    // The line closes its own row. `text-output.md` §10.4
+                    // then has the rescue's first beat spend its leading feed
+                    // deriving the blank beneath rather than closing a row
+                    // this one already closed.
+                    //
+                    // Measured 2026-09-18
+                    // (`qa/paired/stonegate-rescue-pacing.tsv`): the original
+                    // holds a blank row under `A TRAPDOOR!` across six
+                    // consecutive samples of the death sweep, and at `t28`
+                    // keeps it between `A TRAPDOOR!` and `An unending
+                    // darkness engulfs thee...`. This engine ran the two
+                    // together and sat one row high from there on.
+                    // `cleak/u5-spec#279` asks for the published framing;
+                    // this is the capture.
+                    self.close_message_row();
                     return Ok(Some(MoveOutcome::Used));
                 }
                 let outcome =
@@ -5368,6 +5407,17 @@ impl PlayState {
     /// of them is a data-file record: "An implementation cannot read these
     /// strings out of the user's data files; it has to carry them."
     pub fn apply_blackthorn_rescue_refuge(&mut self, game_dir: &Path) -> io::Result<MoveOutcome> {
+        // The deaths that brought the party here have not reached the panel
+        // on every route into this cinematic: Stonegate's script declines the
+        // step's own refresh so its 750-tone sweep runs with the pre-death
+        // roster still on screen (`audio.md §8.2`, and the note in the
+        // trapdoor arm). This is the other side of that - the sweep is over,
+        // the rescue owns the screen, and the roster is repainted.
+        //
+        // Measured 2026-09-18 (`qa/paired/stonegate-rescue-pacing.tsv`): the
+        // original's roster row turns to `0D` at `t28`, the first sample
+        // after the sweep, which is this beat.
+        self.repaint_stats_panel();
         let verdict = blackthorn_rescue_verdict_record(self.moral_standing);
         let verdict_message = self.blackthorn_rescue_verdict_message(game_dir, verdict as usize)?;
 

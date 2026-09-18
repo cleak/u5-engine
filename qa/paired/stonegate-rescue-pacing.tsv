@@ -14,8 +14,6 @@
 # shows each narration beat on each side; the gap between the two columns is
 # the unmodelled time.
 #
-# not-a-comparison: a pacing measurement, read its beats and not its verdict
-#
 # Result, measured 2026-09-18. Each cell is the window's last non-blank row.
 #
 #   sample   stock                 engine
@@ -43,6 +41,26 @@
 # Section 6.3 gives for a dissolve and flags unverified. Read the bracket in
 # samples rather than milliseconds: the nominal 4000 ms step is not wall clock,
 # because every beat also pays for two screenshots.
+#
+# The roster panel is a lottery on this scenario. The fall runs
+# `town-mode.md`'s shared mass-damage pass - one `1..8` roll per member - and
+# the two sides never share a seed, so the `Avatar` HP row parts company on
+# the fall and stays parted until the deaths land. Measured 2026-09-18: the
+# original rolled 7 and this engine 5. A panel-only difference on that row has
+# measured the roll, not the engine, and must be re-run before it means
+# anything.
+#
+# What the panel *does* pin here is the timing, and that is not a lottery: the
+# row must show a damaged living member for the whole sweep and turn to `0D`
+# only after it. See the trapdoor arm of `apply_town_underfoot_effects`.
+#
+# **It is now a comparison, and it passes.** Measured 2026-09-18 after the
+# holds below and the `A TRAPDOOR!` framing landed: all seventeen samples
+# agree row for row, so the whole rescue - death sweep, three refuge
+# fragments, shout, thunder, verdict and the acknowledgement cursor - tracks
+# the original across a full minute. It was declared `not-a-comparison` while
+# it was a measurement; that declaration is withdrawn rather than left to
+# excuse a scenario that no longer needs excusing.
 #
 # Closed 2026-09-18. Bracketed over four runs at 15, 30, 45 and 60 ticks for
 # each hold; 60 puts every one of the seventeen samples on the same narration

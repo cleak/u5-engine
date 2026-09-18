@@ -2118,6 +2118,9 @@ impl PlayState {
         advance_turn: bool,
     ) -> io::Result<MoveOutcome> {
         self.message = "A TRAPDOOR!".to_string();
+        // The line closes its own row; see the Stonegate arm of
+        // `apply_town_underfoot_effects`, where this was measured.
+        self.close_message_row();
         self.reload_town_floor(game_dir, scene, entry.to_floor)?;
         if advance_turn {
             self.advance_turn();

@@ -614,3 +614,32 @@ fn a_party_target_reads_the_flat_hit_line_at_every_wound_level() {
         );
     }
 }
+
+/// `cleak/u5-spec#279` / `text-output.md §10.4`: `A TRAPDOOR!` closes its
+/// own row, so the rescue's first beat spends its leading feed deriving the
+/// blank beneath rather than closing an open row.
+///
+/// Measured 2026-09-18 (`qa/paired/stonegate-rescue-pacing.tsv`, beat `t28`):
+/// the original keeps one blank row between `A TRAPDOOR!` and `An unending
+/// darkness engulfs thee...`, and this engine ran them together.
+#[test]
+fn the_trapdoor_line_leaves_one_blank_row_before_the_rescue() {
+    let mut state = test_state(open_grid(), 1, 1);
+    state.message_transcript.clear();
+    state.emit_message_line("A TRAPDOOR!\n");
+    state.emit_message_line(crate::blackthorn::BLACKTHORN_RESCUE_DARKNESS);
+    let rows = state
+        .message_entries()
+        .iter()
+        .map(|entry| entry.text.clone())
+        .collect::<Vec<_>>();
+    assert_eq!(
+        rows,
+        vec![
+            "A TRAPDOOR!".to_string(),
+            String::new(),
+            "An unending darkness engulfs thee...".to_string(),
+        ],
+        "one blank row, not none and not two"
+    );
+}

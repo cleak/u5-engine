@@ -201,6 +201,19 @@ impl PlayState {
         self.message_transcript_revision = self.message_transcript_revision.wrapping_add(1);
     }
 
+    /// Record that the slot's text ends with a line feed of its own, so the
+    /// row it wrote is closed and the cursor is at column 0 of the next one.
+    ///
+    /// [`Self::flush_message_slot`] cannot work this out: it takes the slot
+    /// verbatim and never touches the flag, which is why a handler that
+    /// assigns `message` directly - rather than going through
+    /// [`Self::emit_message_line`] - has to say so. `text-output.md` §10.4
+    /// then has the *next* print's leading feed derive the blank beneath,
+    /// instead of spending it closing a row this one already closed.
+    pub fn close_message_row(&mut self) {
+        self.message_row_open_mid_line = false;
+    }
+
     pub fn push_explicit_blank_message_entry(&mut self) {
         // A completed blank row leaves the cursor at column 0 of the next
         // one, the same as any other line feed.

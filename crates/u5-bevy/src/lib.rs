@@ -17255,12 +17255,12 @@ fn render_integrated_status_framebuffer(
             // the layout the same open-prompt row every other typed prompt
             // hands it, so the digits echo on the question's row and no live
             // row - and no blank above it - is drawn.
-            if !u5_runtime::shop_quantity_prompt_row_is_open(&display_state) {
+            if !u5_runtime::open_row_owns_the_cursor(&display_state) {
                 return None;
             }
             log.lines()
                 .last()
-                .filter(|line| line.trailing_spaces > 0 && !line.text.is_empty())
+                .filter(|line| !line.text.is_empty())
                 .map(|line| format!("{}{}", line.text, " ".repeat(line.trailing_spaces as usize)))
         });
         // The spell-name colon line is a live row whose text comes from

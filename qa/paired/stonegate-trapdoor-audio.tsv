@@ -10,6 +10,21 @@
 # The trapdoor is a ring of eight cells around Stonegate's centre; the seed
 # stands in the middle, so one step in any direction lands on it. Each side is
 # driven separately, and each recording is preceded by a silence control.
+# not-a-comparison: the two sides step onto the trapdoor forty seconds apart
+#
+# This is an audio scenario, and its structure is the A/B stagger: the engine
+# steps, forty seconds are captured, and only then does DOSBox step and get
+# its own forty. That is right for a sound capture and wrong for the message
+# window, because the step starts a minute-long cinematic. At `dosbox-fallen`
+# the DOSBox side is forty seconds into its rescue and the engine side is
+# eighty seconds into one it has already finished, so the two windows are
+# never at the same beat and the comparator's staggered-beat rule - which
+# assumes the second shot of a pair has both sides in the same state - does
+# not hold here.
+#
+# The window is compared by `stonegate-rescue-pacing`, which steps both sides
+# together and agrees on all seventeen samples.
+#
 # requires-seed: the party inside Stonegate, standing in the trapdoor ring's centre cell
 #
 # Fixed 2026-09-12. `town-mode.md` line 148's scripted death kills the party,
