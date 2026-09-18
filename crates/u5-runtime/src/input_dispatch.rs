@@ -4591,11 +4591,27 @@ fn handle_combat_key_input(state: &mut PlayState, key: char, suffix: &str) -> Pl
             && application.out_of_arena_leave.is_some_and(|edge| {
                 matches!(edge.outcome, CombatOutOfArenaLeaveOutcome::Accepted { .. })
             });
-        state.apply_combat_round_loop_exit(exit);
+        // `apply_combat_round_loop_exit` writes `COMBAT_DEFEAT_LINE` into
+        // `message` for the ordinary defeat exit, and that reaches the
+        // transcript. On the edge-exit path the line is printed explicitly
+        // instead, so that it lands on the row below the edge echo - and with
+        // both producers live the original's single `BATTLE IS LOST!` came
+        // out twice, with a blank between (`cleak/u5-engine#35`).
+        //
+        // Clearing `message` after the call does not help: by then it has
+        // already been flushed. The assignment has to not happen, so the edge
+        // path takes the variant that leaves the line to its caller.
+        //
+        // Established with the probe rather than by reading: tagging the
+        // explicit print showed the first copy comes from the assignment and
+        // the second from the print, in that order.
         if edge_defeat {
+            state.apply_combat_round_loop_exit_without_result_line(exit);
             // The edge-exit echo is already on the transcript, so the defeat
             // line is its own print on the row below it.
             state.emit_combat_print("\nBATTLE IS LOST!");
+        } else {
+            state.apply_combat_round_loop_exit(exit);
         }
     } else if matches!(
         application.action,

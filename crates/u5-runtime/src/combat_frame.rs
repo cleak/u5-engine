@@ -4267,10 +4267,36 @@ impl PlayState {
         self.mark_visibility_dirty();
     }
 
+    /// [`Self::apply_combat_round_loop_exit`] for a caller that prints the
+    /// exit's own result line itself.
+    ///
+    /// The arena-edge defeat is the one such caller: `combat.md §3`'s edge
+    /// helper has already echoed the direction and `Escape!`, so the defeat
+    /// line belongs on the row below that rather than in the message slot.
+    /// With both producers live the original's single `BATTLE IS LOST!` came
+    /// out twice - `cleak/u5-engine#35`.
+    pub fn apply_combat_round_loop_exit_without_result_line(
+        &mut self,
+        exit: CombatRoundLoopExit,
+    ) -> CombatRoundLoopExitApplication {
+        self.apply_combat_round_loop_exit_inner(exit, false)
+    }
+
     pub fn apply_combat_round_loop_exit(
         &mut self,
         exit: CombatRoundLoopExit,
     ) -> CombatRoundLoopExitApplication {
+        self.apply_combat_round_loop_exit_inner(exit, true)
+    }
+
+    fn apply_combat_round_loop_exit_inner(
+        &mut self,
+        exit: CombatRoundLoopExit,
+        writes_result_line: bool,
+    ) -> CombatRoundLoopExitApplication {
+        if !writes_result_line {
+            // Fall through to the shared tail with the message untouched.
+        } else {
         match exit {
             CombatRoundLoopExit::Defeat => self.message = COMBAT_DEFEAT_LINE.to_string(),
             // `combat.md §7`/`§14`: `VICTORY!` is printed by the round loop
@@ -4282,6 +4308,7 @@ impl PlayState {
             // without another announcement."
             CombatRoundLoopExit::Victory => self.message.clear(),
             CombatRoundLoopExit::LeaveCombat => {}
+        }
         }
         let result_code = exit.result_code();
         let body_retrieval_exit =
