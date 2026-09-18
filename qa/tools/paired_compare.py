@@ -446,7 +446,37 @@ def variant_only(stock: list[str], engine: list[str]) -> bool:
     canon_left, canon_right = _canonical(left), _canonical(right)
     # Both sides must actually carry a variant token, or two unrelated windows
     # that happen to canonicalise alike would be excused.
-    return canon_left == canon_right and "<v" in canon_left
+    if canon_left == canon_right and "<v" in canon_left:
+        return True
+    return _same_after_scrolling(canon_left, canon_right)
+
+
+def _same_after_scrolling(left: str, right: str) -> bool:
+    """Do the two canonical windows agree on everything both still show?
+
+    The window is bottom-anchored, so a draw that wraps to one more row than
+    the other pushes one more row off the top - and the shorter side's text
+    is then a *suffix* of the longer's. `shop-arms-buy-confirm/menu` is the
+    shape: the two stock-call draws are three rows and two, so the original's
+    affirmation had scrolled away while this engine's was still on screen,
+    and every row both sides still carried was identical once tokenised.
+
+    Demanding whole-window equality reported that as `scroll` - a row
+    accounting difference - when the row accounting is what the published
+    pool made different.
+    """
+    short, long = sorted((left, right), key=len)
+    if not short or "<v" not in short or not long.endswith(short):
+        return False
+    # The suffix must start on a word boundary, or a tail that merely happens
+    # to align mid-token would pass.
+    head = long[: len(long) - len(short)]
+    if head and not head.endswith(" "):
+        return False
+    # And it must be most of the window. A couple of rows can scroll away; a
+    # window that shares only its last line shares nothing worth calling
+    # agreement.
+    return len(short) * 2 >= len(long)
 
 
 def classify(left: list[list[str]], right: list[list[str]], rows: list[int]) -> str:
@@ -675,7 +705,7 @@ def compare_cached(artifact: pathlib.Path, cache: dict) -> tuple:
 
 
 # Bump when a classifier change would alter a cached verdict.
-CACHE_VERSION = 23
+CACHE_VERSION = 24
 
 
 # Some scenarios are explicitly a lottery: their own headers say so. The night
@@ -790,7 +820,7 @@ def compare(artifact: pathlib.Path) -> tuple[int, int, int, int, int]:
             # shift search below and come back `scroll`.
             if kind in ("variant", "record"):
                 same += 1
-                print(f"  {kind:7}{scenario}/{label}: legal pool draw, counted as agreeing")
+                print(f"  {kind:8}{scenario}/{label}: legal pool draw, counted as agreeing")
                 continue
             differ += 1
             print(
