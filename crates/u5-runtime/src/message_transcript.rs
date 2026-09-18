@@ -225,11 +225,30 @@ impl PlayState {
     /// nothing. Emitting an ordinary empty entry for a leading `\n` lost
     /// the blank row, because the window's log drops empty output lines.
     pub fn push_message_transcript_lines(&mut self, text: &str) {
+        // `text-output.md §10.4`: a line feed arriving while a row is open
+        // *closes* that row; it only spends a blank when the cursor is
+        // already at column 0 of a fresh one. So the **first** segment of a
+        // text beginning with a feed is a close, not a blank - which is the
+        // rule `emit_combat_print` has always applied through its own
+        // `row_open`, and this path did not.
+        //
+        // Measured 2026-09-18 (`qa/paired/stonegate-death-hold.tsv`, beat
+        // `t32`): `blackthorn.md §7`'s rescue beats are published with
+        // leading feeds and no trailing feed - `\n\nThou hast found refuge.`
+        // after `\nAn unending darkness engulfs thee...` - so each pair
+        // should spend one blank between them. This engine spent two,
+        // because the first feed blanked a row instead of closing the one
+        // the previous beat had left open. Those beats only became visible
+        // at all with `354d0e70`, which is why this went unmeasured.
+        let row_open = self.message_row_open_mid_line;
         let mut segments = text.split('\n').peekable();
+        let mut first = true;
         while let Some(line) = segments.next() {
             let is_last = segments.peek().is_none();
+            let closes_open_row = first && row_open;
+            first = false;
             if line.is_empty() {
-                if !is_last {
+                if !is_last && !closes_open_row {
                     self.push_producer_blank_message_entry();
                 }
                 continue;
