@@ -1161,6 +1161,26 @@ pub const BLACKTHORN_RESCUE_ENVELOPES: [EnvelopeSegment; 6] = [
     EnvelopeSegment::new(-1, 40_100, 40_000, 1, 3300),
 ];
 
+/// `audio.md §8.6.2` / `RETRACTIONS.md` R494: the rescue's **second**
+/// envelope site, one note per in-party slot.
+///
+/// The census row used to name the six-row sequence as the whole of the
+/// cinematic's envelope content. R494 contradicts it: "its party-restoration
+/// step plays one further envelope **per in-party slot**, in ascending slot
+/// order, immediately before that slot's restore dispatch, at phase increment
+/// `36400 / (slot + 7)` - 5200, 4550, 4044, 3640, 3309 and 3033 for slots
+/// zero to five - with idle count 1, 30,000 iterations, initial comparison
+/// 2000 and comparison delta +2. An empty roster produces no notes; the note
+/// count always equals the party count."
+pub const BLACKTHORN_RESCUE_RESTORATION_PHASE_NUMERATOR: u16 = 36_400;
+pub const BLACKTHORN_RESCUE_RESTORATION_SLOT_OFFSET: u16 = 7;
+
+pub const fn blackthorn_rescue_restoration_envelope(slot: usize) -> EnvelopeSegment {
+    let period = BLACKTHORN_RESCUE_RESTORATION_PHASE_NUMERATOR
+        / (slot as u16 + BLACKTHORN_RESCUE_RESTORATION_SLOT_OFFSET);
+    EnvelopeSegment::new(2, 2000, 30_000, 1, period)
+}
+
 fn envelope_program(segment: EnvelopeSegment) -> SpeakerProgram {
     SpeakerProgram::new(vec![SpeakerOp::Envelope(segment), SpeakerOp::Stop])
 }
@@ -1680,6 +1700,8 @@ pub enum SoundEffect {
     BlackthornMovementStinger,
     /// `§8.6.2` fixed six-envelope Blackthorn rescue sequence.
     BlackthornRescueEnvelopes,
+    /// R494's per-slot restoration note, carrying the slot it precedes.
+    BlackthornRescueRestoration(usize),
     /// `containers.md §9` moldy-corpse Plague consequence.
     CorpsePlagueRumble,
     /// `§7.1` one admitted subtitle-ignition burst.
@@ -1765,6 +1787,9 @@ impl SoundEffect {
             }
             SoundEffect::BlackthornMovementStinger => two_part_sting(jitter),
             SoundEffect::BlackthornRescueEnvelopes => blackthorn_rescue_envelope_program(),
+            SoundEffect::BlackthornRescueRestoration(slot) => {
+                envelope_program(blackthorn_rescue_restoration_envelope(*slot))
+            }
             SoundEffect::CorpsePlagueRumble => trap_rumble(jitter),
             SoundEffect::SubtitleIgnitionBurst { pitches } => ignition_burst_program(pitches),
             // `audio.md §8.6.1`: "the speaker's square wave runs continuously

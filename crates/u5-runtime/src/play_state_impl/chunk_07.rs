@@ -5563,11 +5563,45 @@ impl PlayState {
                     crate::blackthorn::BLACKTHORN_RESCUE_WAIT_AFTER_VERTIGO,
                     String::new(),
                 );
-                // Step 22's durable half. §7 contract step 6: "the member's
-                // status is reset to able-bodied and their current hit points
-                // are set to their maximum".
+                // Step 22's durable half. `RETRACTIONS.md` R493 withdraws
+                // **both halves** of the sentence this used to quote - "the
+                // member's status is reset to able-bodied and their current
+                // hit points are set to their maximum" - and the loop that
+                // implemented it: "the restore is neither unconditional nor
+                // lossless".
+                //
+                // What it is: "the cinematic dispatches the shared revive
+                // routine per in-party slot, and that routine acts **only** on
+                // a slot whose stored status is Dead", setting able-bodied,
+                // one hit point, mana from the class letter, and - below a
+                // moral standing of ninety-eight - a rescaled experience, a
+                // recomputed level and a recomputed maximum. "Only then does
+                // the cinematic copy that newly recomputed maximum into
+                // current hit points."
+                //
+                // So a party wipe **costs experience in proportion to the
+                // party's karma**, and members can return at a lower level
+                // with a lower maximum than they had before dying. An engine
+                // built on the old sentence silently preserves progression the
+                // original destroys.
+                //
+                // A slot that is not Dead "is left entirely alone by the
+                // revive routine and prints `Not dead!` instead, though the
+                // cinematic's own current-equals-maximum copy still heals it
+                // to full" - which is why that copy runs over every slot below
+                // and the revive dispatch does not.
+                for slot in 0..self.party.len() {
+                    // `audio.md §8.6.2` / R494: one envelope per in-party
+                    // slot, in ascending slot order, immediately before that
+                    // slot's restore dispatch.
+                    self.emit_sound_effect(crate::audio::SoundEffect::BlackthornRescueRestoration(
+                        slot,
+                    ));
+                    if self.party[slot].status == b'D' {
+                        self.resurrect_party_member_to_hp(slot, 1);
+                    }
+                }
                 for member in &mut self.party {
-                    member.status = b'G';
                     member.hp = member.max_hp.max(1);
                 }
                 self.pending_blackthorn_rescue = Some(BlackthornRescuePhase::Restoration);

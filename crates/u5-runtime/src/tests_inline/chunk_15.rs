@@ -2553,16 +2553,46 @@
         let _ = audio::draw_major_flash_bands(&mut expected_prng);
         assert_eq!(state.prng_state, expected_prng.state());
         let effects = state.sound_effects_after(sound_serial_before);
-        assert_eq!(effects.len(), 3);
+        // `RETRACTIONS.md` R494: the cinematic has **two** envelope sites,
+        // not one. Besides the six-row sequence its restoration step plays
+        // "one further envelope per in-party slot, in ascending slot order,
+        // immediately before that slot's restore dispatch", and "the note
+        // count always equals the party count". The census row that named the
+        // six-row sequence as the whole of the cinematic's envelope content is
+        // contradicted rather than extended, so this assertion - which counted
+        // exactly three effects - was asserting the withdrawn row.
+        let party_slots = state.party.len();
+        assert_eq!(effects.len(), 3 + party_slots);
         assert_eq!(effects[0], SoundEffect::BlackthornRescueEnvelopes);
-        assert!(effects[1..]
+        assert!(effects[1..3]
             .iter()
             .all(|effect| matches!(effect, SoundEffect::MajorFlash { .. })));
+        for (slot, effect) in effects[3..].iter().enumerate() {
+            assert_eq!(
+                *effect,
+                SoundEffect::BlackthornRescueRestoration(slot),
+                "restoration note {slot} in ascending slot order"
+            );
+        }
 
         assert_eq!(state.moral_standing, BLACKTHORN_RESCUE_STANDING_FLOOR);
         assert_eq!(state.food, 63);
         assert_eq!(state.party[1].status, b'G');
-        assert_eq!(state.party[1].hp, 42);
+        // `RETRACTIONS.md` R493: the restore is not lossless. Slot 1 died a
+        // level-3 Fighter with a maximum of 42; the shared revive routine
+        // rescales its experience by the standing, recomputes the level from
+        // the result and recomputes the maximum as thirty times that level, and
+        // only then does the cinematic copy the new maximum into current. With
+        // no experience banked that is level 1 and a maximum of 30, so the
+        // member comes back **weaker than it died** - "an engine built on the
+        // old sentence silently preserves progression the original destroys".
+        //
+        // The rescale reads the standing from before §7 step 10's floor raise,
+        // which the handoff applies afterwards; the assertion above is that
+        // raised value.
+        assert_eq!(state.party[1].level, 1);
+        assert_eq!(state.party[1].max_hp, 30);
+        assert_eq!(state.party[1].hp, 30);
         assert_eq!(state.active_effect_tag, None);
         assert_eq!(state.active_effect_counter, 0);
         assert_eq!(state.torch_counter, 0);

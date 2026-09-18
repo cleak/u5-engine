@@ -330,9 +330,17 @@ fn blackthorn_rescue_prints_one_not_dead_line_per_undead_slot() {
         .filter(|entry| entry.text.contains("Not dead!"))
         .count();
     assert_eq!(lines, 3, "one line per non-Dead in-party slot");
-    // §7 contract step 6: every member comes back able-bodied at full HP.
+    // `RETRACTIONS.md` R493: the restore is "neither unconditional nor
+    // lossless". The shared revive routine "acts **only** on a slot whose
+    // stored status is Dead"; every member here is Ashes, so none of them is
+    // revived and all three keep that status - which is the same fact the
+    // `Not dead!` count above is measuring. This used to assert that "every
+    // member comes back able-bodied", the withdrawn sentence.
+    //
+    // The healing is not conditional: "the cinematic's own
+    // current-equals-maximum copy still heals it to full".
     for member in &state.party {
-        assert_eq!(member.status, b'G');
+        assert_eq!(member.status, b'A');
         assert_eq!(member.hp, member.max_hp);
     }
     let _ = fs::remove_dir_all(dir);
