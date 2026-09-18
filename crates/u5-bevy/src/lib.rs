@@ -17247,7 +17247,22 @@ fn render_integrated_status_framebuffer(
         // `text-output.md §10.6`: a prompt that is waiting for a key
         // keeps its own line open and carries the cursor inline, so no
         // fresh live row (and no end-cap triangle) is drawn for it.
-        let open_prompt = display_state.open_prompt_line();
+        let open_prompt = display_state.open_prompt_line().or_else(|| {
+            // A shop's typed quantity prompt has no literal of its own to
+            // match: its question is already in the log, wrapped, with the
+            // authored trailing space trimmed off the last row and recorded
+            // as `trailing_spaces`. Rebuilding that row plus its space gives
+            // the layout the same open-prompt row every other typed prompt
+            // hands it, so the digits echo on the question's row and no live
+            // row - and no blank above it - is drawn.
+            if !u5_runtime::shop_quantity_prompt_row_is_open(&display_state) {
+                return None;
+            }
+            log.lines()
+                .last()
+                .filter(|line| line.trailing_spaces > 0 && !line.text.is_empty())
+                .map(|line| format!("{}{}", line.text, " ".repeat(line.trailing_spaces as usize)))
+        });
         // The spell-name colon line is a live row whose text comes from
         // the cast/mix session rather than the shell's own input buffer.
         let spell_echo = display_state.typed_prompt_echo();

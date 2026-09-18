@@ -680,6 +680,26 @@ pub fn sage_topic_row_is_continuation(state: &crate::PlayState) -> bool {
     )
 }
 
+/// A shop's typed quantity prompt whose question left its own row open.
+///
+/// `shops.md` §8's provision offer prints `\n\nHow many wouldst\nthou like?" `
+/// - a closing quote and one space - and then "typed number allows two
+/// digits". The space is what `text-output.md` §10.6 keeps the cursor on, so
+/// the digits echo on that row rather than on a fresh one below it.
+///
+/// Measured 2026-09-18 (`paws-tavern`, beat `rations`, reading `offset+2`):
+/// the original's `thou like "` is the window's last row and this engine
+/// spent a blank and a command row under it, which put the rest of the visit
+/// two rows ahead.
+pub fn shop_quantity_prompt_row_is_open(state: &crate::PlayState) -> bool {
+    matches!(
+        state.active_shop,
+        Some(crate::shop_session::ActiveShopSession::Tavern(
+            crate::shop_runtime::TavernState::PickProvisionQuantity { .. }
+        ))
+    )
+}
+
 /// Place a log — and optionally the live input line — into the window.
 ///
 /// History is bottom-anchored just above the live input row, so the
