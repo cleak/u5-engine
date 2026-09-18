@@ -1,0 +1,53 @@
+# Does the scripted death hold the screen before the rescue narration starts?
+#
+# `audio.md` Section 8.2 gives Stonegate's trapdoor death "every integer
+# frequency from 1000 down through 251 Hz, 750 tones total, holding each for
+# 40 calibrated units", and Section 10.5's table totals that at **about 26.5
+# seconds**. Section 4 establishes these are blocking tones - "a blocking tone
+# still performs its calibrated hold" - so nothing after the death runs until
+# the sweep has finished. Section 10 flags the figure as derived and
+# unverified; `cleak/u5-spec#274` carries the capture that confirms it.
+#
+# `stonegate-trapdoor-audio` cannot settle this. Both of its shots land forty
+# seconds after their own side's step, by which time this engine's beats have
+# run their published waits - 10, 14, 28, 6+4+4, 4, 4 BIOS ticks, about four
+# seconds in total - and reached the verdict speech either way. The sampling
+# cannot tell a held start from an unheld one.
+#
+# This shoots at ten seconds instead, which is inside the sweep. If the death
+# holds, the window still ends at `A TRAPDOOR!` on both sides. If it does not,
+# this engine is already several beats into the refuge narration while the
+# original is still sweeping.
+#
+# Both sides step, so unlike the two probes beside it this one is an ordinary
+# comparison and its verdict means what it says.
+#
+# **Measured 2026-09-18.** `t10` establishes the hold: both windows end at
+# `A TRAPDOOR!` with no narration under it. Before the hold this engine was
+# already several beats into the refuge text there.
+#
+# `t32` then shows what is left. The original is at beats 1 to 4 - "An
+# unending darkness engulfs thee..." through "But thy slumber is disturbed!"
+# - and this engine is at the verdict speech. The beat *waits* match
+# `blackthorn.md` Section 7's published order exactly; what is not modelled
+# is the duration of the presentation steps between them, which that order
+# interleaves with the prints: the viewport dissolve at step 3, Section
+# 7.1's six-row envelope at step 9, the two Guardian reveals at steps 12 and
+# 13, and the two viewport flashes at step 15. In the original those take
+# real time; here they are instantaneous. `cleak/u5-engine#38`.
+#
+# `t10` also reads `offset-1`: the two windows hold the same rows but the
+# original has scrolled one further. That is a separate question from the
+# hold and is not what this probe is for.
+# requires-seed: the party inside Stonegate, standing in the trapdoor ring's centre cell
+both	wait	9000
+both	key	space
+both	wait	4000
+both	key	j
+both	wait	9000
+both	shot	arrival	Inside Stonegate, in the trapdoor ring's centre cell
+both	key	Up
+both	wait	10000
+both	shot	t10	Ten seconds after the step, inside the sweep
+both	wait	22000
+both	shot	t32	Thirty-two seconds in, after the sweep has finished

@@ -3801,6 +3801,15 @@ impl PlayState {
     pub fn apply_stonegate_trapdoor_script(&mut self, floor: i8) {
         self.pending_stonegate_trapdoor_playback =
             Some(StonegateTrapdoorPlayback::complete(self.party.len()));
+        // The sweep is blocking, so nothing after the death runs until it has
+        // finished. Staged as a pure hold - no text - which the rescue's own
+        // beats then queue behind.
+        // [`crate::STONEGATE_TRAPDOOR_DEATH_HOLD_BIOS_TICKS`] carries the
+        // published duration and why it is that number.
+        self.staged_narration.push_ticks(
+            crate::STONEGATE_TRAPDOOR_DEATH_HOLD_BIOS_TICKS,
+            String::new(),
+        );
 
         // `town-mode.md §7.1` fixes the order of this script precisely, and
         // `audio.md §8.2` places the descent inside it. Step 1 is the direct

@@ -26,6 +26,29 @@ pub const STONEGATE_TRAPDOOR_RUMBLE_BUDGET_UNITS: u16 = 3_000;
 /// The original sequence has no resumable state and advances no gameplay
 /// time. Frontends without a PC-speaker backend can still reproduce the exact
 /// viewport clear and acknowledge the two published sound envelopes.
+/// How long the scripted death holds the screen before anything else runs.
+///
+/// `audio.md §8.2`: the sweep is "every integer frequency from 1000 down
+/// through 251 Hz, 750 tones total, holding each for 40 calibrated units",
+/// and §10.5's table totals that at **about 26.5 seconds**. §4 establishes
+/// that these are blocking tones - "a blocking tone still performs its
+/// calibrated hold" - so nothing after the death starts until the sweep has
+/// finished.
+///
+/// The figure is flagged derived-and-unverified in §10, and
+/// `cleak/u5-spec#274` carries the capture that confirms it.
+///
+/// Expressed in BIOS ticks so the staged narration can hold on it, which is
+/// the only clock this crate paces presentations against. 26.5 s at
+/// `narration::BIOS_TICK_SECS` is 483 ticks; the per-member rumbles that
+/// follow the sweep add about 66 ms each and are not modelled here.
+///
+/// Measured 2026-09-18 (`qa/paired/stonegate-trapdoor-audio.tsv`, beat
+/// `dosbox-fallen`): without this hold the rescue narration starts while the
+/// original is still sweeping, so the two windows show the same beats at
+/// different times. `cleak/u5-engine#38`.
+pub const STONEGATE_TRAPDOOR_DEATH_HOLD_BIOS_TICKS: u16 = 483;
+
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub struct StonegateTrapdoorPlayback {
     pub viewport_rect: DisplayPixelRect,
