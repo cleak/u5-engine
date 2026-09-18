@@ -2320,6 +2320,15 @@ impl PlayState {
                 // flushes per turn but a direct caller does not.
                 self.flush_message_slot();
                 self.commit_typed_prompt_line(&prompt, yes_no_word(answer));
+                // §5.2: the answer is echoed "as the literal `Yes` or `No`
+                // followed by a blank line, and only then does the next
+                // record print". The echo closes the reply row and the
+                // blank is its own. Measured 2026-09-18
+                // (`doom-final-room`, beat `answered`, reading `scroll`):
+                // the original has a blank row between `You reply: Yes` and
+                // `"I see...` and this engine ran them together, which put
+                // the rest of the exchange one row high.
+                self.push_producer_blank_message_entry();
             }
             // `endgame.md §5` step 4 does not run when the claim is
             // false. A paired capture of the Doom final room shows the
