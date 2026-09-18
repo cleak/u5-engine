@@ -432,12 +432,17 @@ def _canonical(text: str) -> str:
 
 
 def variant_only(stock: list[str], engine: list[str]) -> bool:
-    """Do the two sides differ only by which published variants were drawn?"""
+    """Do the two sides differ only by which published variants were drawn?
+
+    Strict: after every pool member is replaced by a token for its pool the
+    two windows must be *identical*. Nothing else in the window may differ,
+    so a beat this excuses cannot be hiding a wording difference elsewhere -
+    which is what lets the caller count it as agreement rather than as
+    something to re-run.
+    """
     left, right = _flatten(stock), _flatten(engine)
     if left == right:
         return False
-    if _same_pool_different_record(left, right):
-        return True
     canon_left, canon_right = _canonical(left), _canonical(right)
     # Both sides must actually carry a variant token, or two unrelated windows
     # that happen to canonicalise alike would be excused.
@@ -486,6 +491,16 @@ def classify(left: list[list[str]], right: list[list[str]], rows: list[int]) -> 
     # drawing different records from the published shipwright band.
     if variant_only(stock, engine):
         return "variant"
+    # A pool whose members are *records* - `bd-shipwright`'s shipwright band -
+    # cannot be tokenised the same way: a record printed a beat ago is often
+    # half off the top of the scrolling window, so demanding the remainder
+    # match would fail exactly when the record is oldest. `record` therefore
+    # says only "both sides drew from this pool and drew differently", which
+    # is weaker than `variant` and stays a difference to be re-run: the rest
+    # of the window is unchecked, so counting it as agreement could mask a
+    # real wording difference sitting beside the draw.
+    if _same_pool_different_record(_flatten(stock), _flatten(engine)):
+        return "record"
     # The window is `ROWS` tall, so a transcript that is out of step can be
     # adrift by almost all of it - an 8-row shift turned up in the arms shop,
     # and probing only +-3 reported it as a wording difference. Nearest shifts
@@ -649,7 +664,7 @@ def compare_cached(artifact: pathlib.Path, cache: dict) -> tuple:
 
 
 # Bump when a classifier change would alter a cached verdict.
-CACHE_VERSION = 20
+CACHE_VERSION = 22
 
 
 # Some scenarios are explicitly a lottery: their own headers say so. The night
@@ -745,6 +760,26 @@ def compare(artifact: pathlib.Path) -> tuple[int, int, int, int, int]:
             if kind in IDLE_KINDS:
                 idle += 1
                 print(f"  idle   {scenario}/{label}: {kind}, re-run needed")
+                continue
+            # A `variant` beat agrees. `classify` reaches that verdict only
+            # after tokenising every published pool and finding the two
+            # windows identical apart from which member each side drew, so
+            # the engine printed a legal line from the right pool in the
+            # right place - which is the whole of what conformance can mean
+            # for a line `prng.md §3` has the game choose at random.
+            #
+            # This block counted it as a difference, which is what the
+            # comment on `VARIANT_GROUPS` already says it is not: "a beat
+            # that differs only by which member was selected is not a
+            # conformance failure". Eleven `shop-arms-*` scenarios reported
+            # `RERUN` on that basis, so the suite said it had measured
+            # nothing where it had in fact proved the draw legal.
+            #
+            # A draw that *wraps* differently is not this: those reach the
+            # shift search below and come back `scroll`.
+            if kind == "variant":
+                same += 1
+                print(f"  variant {scenario}/{label}: legal pool draw, counted as agreeing")
                 continue
             differ += 1
             print(
