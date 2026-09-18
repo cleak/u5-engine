@@ -397,6 +397,32 @@ impl PlayState {
             )
     }
 
+    /// `blackthorn.md §7`: "Nobody can act and nobody is asleep" is "the only
+    /// entry condition" for the rescue cinematic, and "town, overworld, and
+    /// dungeon mode all use the identical check and the identical result
+    /// mapping". A defeated party is never offered a command prompt - the
+    /// loop's next turn hands it to the cinematic - so the row it waits on
+    /// carries no command end-cap.
+    ///
+    /// The row itself stays. Measured 2026-09-18
+    /// (`qa/paired/stonegate-rescue-pacing.tsv`): through the death sweep the
+    /// original holds one row under `A TRAPDOOR!` and this engine matched it,
+    /// and at `t24` - sweep over, cinematic not yet begun - the engine drew
+    /// the end-cap and cursor on that row where the original draws nothing.
+    /// Suppressing the row outright instead took the sweep's own row away and
+    /// put all six of its samples one row short, which is how this came to be
+    /// about the cap rather than the row.
+    ///
+    /// Only until the cinematic starts: from there `staged_narration_active`
+    /// owns the row.
+    pub fn defeated_party_row_is_continuation(&self) -> bool {
+        self.pending_blackthorn_rescue.is_none()
+            && matches!(
+                self.party_capability(),
+                crate::main_loop::PartyCapability::Defeated
+            )
+    }
+
     /// A full-panel repaint: `stats-panel.md §2.2`'s immediate mechanism.
     ///
     /// Call it from the routine that changed the state, where that routine is
