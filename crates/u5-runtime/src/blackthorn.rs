@@ -1220,6 +1220,48 @@ pub const BLACKTHORN_RESCUE_WAIT_BEFORE_THUNDER: u16 = 6 + 4 + 4;
 pub const BLACKTHORN_RESCUE_WAIT_AFTER_INTONED: u16 = 4;
 pub const BLACKTHORN_RESCUE_WAIT_AFTER_VERTIGO: u16 = 4;
 
+/// `blackthorn.md §7` step 2's dissolve of the map viewport out to black,
+/// as a hold.
+///
+/// The dissolve is modelled as a pixel walk that costs no time, so the
+/// refuge fragments followed the darkness beat immediately. §6.3 gives the
+/// shared rectangle dissolve as "roughly 8 to 14 s" and flags that figure
+/// **unverified**, which is not a number to implement from.
+///
+/// Measured instead, 2026-09-18 (`qa/paired/stonegate-rescue-pacing.tsv`,
+/// which steps both sides onto the trapdoor together and shoots every four
+/// seconds): the original reaches the slumber beat one sample after this
+/// engine does, with both sides agreeing on every sample either side of it.
+/// One sample, not eight to fourteen seconds.
+///
+/// Bracketed over four runs, at 15, 30, 45 and 60 ticks for this hold and
+/// [`BLACKTHORN_RESCUE_WAIT_CELL_REVEALS`] together. Sixty puts every one of
+/// the scenario's seventeen samples on the same narration beat as the
+/// original; 15, 30 and 45 each leave the engine one or two beats ahead.
+///
+/// Read the bracket in *samples*: the harness's nominal 4000 ms step is not
+/// wall clock, because each beat also pays for two screenshots, and
+/// `StagedNarration` only advances when the frontend looks. There is no
+/// reliable tick-to-millisecond conversion to reason from here.
+pub const BLACKTHORN_RESCUE_WAIT_VIEWPORT_DISSOLVE: u16 = 60;
+
+/// `blackthorn.md §7` step 4's "three cell reveals", as a hold.
+///
+/// §6.2 publishes them as 31 checkpoints of one world tick each, "blocking
+/// and cannot be skipped", rather than as a duration; the engine records the
+/// reveals in its playback list and spends no time on them.
+///
+/// Measured the same way and in the same run: this engine reaches the
+/// verdict *two* samples before the original, having already been one ahead
+/// at the slumber beat, so a second sample's worth is lost between them.
+/// The envelope sequence and the paired flash that bracket the reveals are
+/// already modelled, which leaves the reveals.
+///
+/// Bracketed with [`BLACKTHORN_RESCUE_WAIT_VIEWPORT_DISSOLVE`] over the same
+/// four runs; the two were raised together, so what is measured is their sum.
+/// Splitting it evenly is a choice the capture cannot decide between.
+pub const BLACKTHORN_RESCUE_WAIT_CELL_REVEALS: u16 = 60;
+
 /// `blackthorn.md §4.2`, the audience exit beat.
 ///
 /// `cleak/u5-spec#268`: the beat is "one blocking key wait followed by the

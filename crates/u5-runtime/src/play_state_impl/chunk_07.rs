@@ -5384,8 +5384,13 @@ impl PlayState {
 
         // Steps 4-8: the three refuge fragments, fourteen then twenty-eight
         // ticks apart.
-        self.staged_narration
-            .push_ticks(0, crate::blackthorn::BLACKTHORN_RESCUE_REFUGE_FIRST);
+        // The dissolve above costs no time in the model, so the refuge
+        // fragments used to follow the darkness beat immediately. See
+        // [`crate::BLACKTHORN_RESCUE_WAIT_VIEWPORT_DISSOLVE`].
+        self.staged_narration.push_ticks(
+            crate::blackthorn::BLACKTHORN_RESCUE_WAIT_VIEWPORT_DISSOLVE,
+            crate::blackthorn::BLACKTHORN_RESCUE_REFUGE_FIRST,
+        );
         self.staged_narration.push_ticks(
             crate::blackthorn::BLACKTHORN_RESCUE_WAIT_BEFORE_REFUGE_SECOND,
             crate::blackthorn::BLACKTHORN_RESCUE_REFUGE_SECOND,
@@ -5416,8 +5421,11 @@ impl PlayState {
                 crate::blackthorn::BLACKTHORN_RESCUE_WAIT_ENVELOPE_SEQUENCE,
                 crate::blackthorn::BLACKTHORN_RESCUE_SHOUT,
             );
+        // The two Guardian reveals and the third are blocking in the original
+        // and free here. See [`crate::BLACKTHORN_RESCUE_WAIT_CELL_REVEALS`].
         self.staged_narration.push_ticks(
-            crate::blackthorn::BLACKTHORN_RESCUE_WAIT_BEFORE_THUNDER,
+            crate::blackthorn::BLACKTHORN_RESCUE_WAIT_BEFORE_THUNDER
+                + crate::blackthorn::BLACKTHORN_RESCUE_WAIT_CELL_REVEALS,
             crate::blackthorn::BLACKTHORN_RESCUE_THUNDER,
         );
         // Step 15: the paired viewport flash.

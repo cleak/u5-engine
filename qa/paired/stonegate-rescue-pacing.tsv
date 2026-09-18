@@ -44,11 +44,21 @@
 # samples rather than milliseconds: the nominal 4000 ms step is not wall clock,
 # because every beat also pays for two screenshots.
 #
-# The engine is expected to be ahead throughout until the dissolves are
-# modelled. Measured 2026-09-18 (`stonegate-trapdoor-audio`, beat
-# `dosbox-fallen`): forty seconds after the step the original is still on
-# `But thy slumber is disturbed!` while this engine has already printed the
-# whole `KARMA.DAT` verdict.
+# Closed 2026-09-18. Bracketed over four runs at 15, 30, 45 and 60 ticks for
+# each hold; 60 puts every one of the seventeen samples on the same narration
+# beat as the original, and the three smaller values each leave the engine one
+# or two beats ahead. `BLACKTHORN_RESCUE_WAIT_VIEWPORT_DISSOLVE` and
+# `BLACKTHORN_RESCUE_WAIT_CELL_REVEALS` carry the figure.
+#
+# Read the *beats*, not the last row of the window. A scrolling window's last
+# non-blank row is not a monotonic progress marker - it moves backwards when
+# the window scrolls - and reading it that way made the 30-tick and 45-tick
+# runs look like noise when they were in fact ordered.
+#
+# What is left after the pacing is row accounting, and one row of it is
+# `cleak/u5-spec#279`: through t24 the original keeps a blank row under
+# `A TRAPDOOR!` and this engine does not, which is that issue's question
+# exactly. The samples from t48 read `offset+2` the other way.
 # requires-seed: the party inside Stonegate, standing in the trapdoor ring's centre cell
 both	wait	9000
 both	key	space
