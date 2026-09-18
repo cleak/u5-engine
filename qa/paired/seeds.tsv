@@ -97,6 +97,7 @@ slow-terrain	seed-slow-terrain	copied from the paired-slow-terrain run profile
 stonegate-trapdoor-audio	seed-stonegate-trapdoor-audio	copied from the paired-stonegate-trapdoor-audio run profile
 stonegate-death-hold	seed-stonegate-trapdoor-audio	shares the trapdoor seed; shoots inside the sweep
 stonegate-freeze-probe	seed-stonegate-trapdoor-audio	shares stonegate-trapdoor-audio's seed; tests cleak/u5-engine#28
+stonegate-rescue-pacing	seed-stonegate-trapdoor-audio	shares the trapdoor seed; samples the rescue every four seconds
 stray-keys	seed-stray-keys	copied from useitems: a party carrying scrolls and potions
 swamp-long	seed-swamp-long-reseeded	the walk-up replayed once by reseed.py
 swamp-step	seed-swamp-step	copied from paired-swamp: the grass cell south of the swamp at (64,14)

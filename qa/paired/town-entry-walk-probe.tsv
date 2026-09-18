@@ -18,6 +18,10 @@
 # 1100 ms on the strength of that partial reading did not fix it, which is
 # what sent me back to check the sequence.
 #
+# not-a-comparison: a bisection probe whose beats are step positions, and
+# whose own answer below is that the walk is not deterministic between the
+# two sides
+#
 # A probe, not a conformance target. Its own differing beats establish nothing
 # about wording.
 #

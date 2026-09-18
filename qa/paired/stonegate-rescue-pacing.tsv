@@ -1,0 +1,91 @@
+# Bound the Stonegate rescue cinematic's pacing on both sides, so the beats
+# `blackthorn.md` Section 7 leaves untimed can be quoted with numbers.
+#
+# `cleak/u5-engine#38` closed the part of this that was a defect - the
+# cinematic used to render nothing at all - and left the rest: two whole
+# viewport rectangle dissolves and three 256-pixel cell reveals are still
+# unmodelled. Section 7 publishes the dissolves as "roughly 8 to 14 s" and
+# flags that figure **unverified**, and publishes the reveals as "31
+# checkpoints" of one world tick rather than as a duration. Neither is a
+# number an implementation can be written from.
+#
+# So measure them. Both sides step onto the trapdoor at the same moment and
+# both are shot every four seconds. The reading wanted is which sample first
+# shows each narration beat on each side; the gap between the two columns is
+# the unmodelled time.
+#
+# not-a-comparison: a pacing measurement, read its beats and not its verdict
+#
+# Result, measured 2026-09-18. Each cell is the window's last non-blank row.
+#
+#   sample   stock                 engine
+#   t04-t24  A TRAPDOOR!           A TRAPDOOR!
+#   t28      refuge.               is disturbed!
+#   t32-t36  is disturbed!         is disturbed!
+#   t40      is disturbed!         my reach!"
+#   t44      AVENTARI"             my reach!"
+#   t48-t64  my reach!"            my reach!"
+#
+# Two gaps, one sample each, and both sides agree either side of them:
+#
+# 1. The trapdoor hold matches exactly - both hold `A TRAPDOOR!` through t24,
+#    so `STONEGATE_TRAPDOOR_DEATH_HOLD_BIOS_TICKS` is right.
+# 2. This engine reaches the slumber beat one sample before the original.
+#    That is Section 7 step 2: "print the unending-darkness beat, then
+#    dissolve the map viewport out to black", which runs before the refuge
+#    fragments.
+# 3. It then reaches the verdict two samples before the original, so a second
+#    sample's worth is lost between the slumber beat and the verdict. That is
+#    step 4's "three cell reveals" - the paired flash and the audio-envelope
+#    sequence around them are already modelled.
+#
+# So each unmodelled hold is about one sample, not the "roughly 8 to 14 s"
+# Section 6.3 gives for a dissolve and flags unverified. Read the bracket in
+# samples rather than milliseconds: the nominal 4000 ms step is not wall clock,
+# because every beat also pays for two screenshots.
+#
+# The engine is expected to be ahead throughout until the dissolves are
+# modelled. Measured 2026-09-18 (`stonegate-trapdoor-audio`, beat
+# `dosbox-fallen`): forty seconds after the step the original is still on
+# `But thy slumber is disturbed!` while this engine has already printed the
+# whole `KARMA.DAT` verdict.
+# requires-seed: the party inside Stonegate, standing in the trapdoor ring's centre cell
+both	wait	9000
+both	key	space
+both	wait	4000
+both	key	j
+both	wait	9000
+both	shot	seeded	Inside Stonegate, in the middle of the trapdoor ring
+both	key	Up
+both	wait	4000
+both	shot	t04	4 s after the step onto the trapdoor
+both	wait	4000
+both	shot	t08	8 s after the step onto the trapdoor
+both	wait	4000
+both	shot	t12	12 s after the step onto the trapdoor
+both	wait	4000
+both	shot	t16	16 s after the step onto the trapdoor
+both	wait	4000
+both	shot	t20	20 s after the step onto the trapdoor
+both	wait	4000
+both	shot	t24	24 s after the step onto the trapdoor
+both	wait	4000
+both	shot	t28	28 s after the step onto the trapdoor
+both	wait	4000
+both	shot	t32	32 s after the step onto the trapdoor
+both	wait	4000
+both	shot	t36	36 s after the step onto the trapdoor
+both	wait	4000
+both	shot	t40	40 s after the step onto the trapdoor
+both	wait	4000
+both	shot	t44	44 s after the step onto the trapdoor
+both	wait	4000
+both	shot	t48	48 s after the step onto the trapdoor
+both	wait	4000
+both	shot	t52	52 s after the step onto the trapdoor
+both	wait	4000
+both	shot	t56	56 s after the step onto the trapdoor
+both	wait	4000
+both	shot	t60	60 s after the step onto the trapdoor
+both	wait	4000
+both	shot	t64	64 s after the step onto the trapdoor
