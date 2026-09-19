@@ -699,13 +699,22 @@ impl PlayState {
                 self.active_effect_counter,
             )
         {
-            // UNSOURCED (u5-spec#260). `magic.md §7` and `combat.md §8`
-            // both say only that the `N`-tag cast is "absorbed" before
-            // the shared dispatcher; neither publishes a literal. This
-            // string was copied from the castle gate back when that gate
-            // also used it, and R462 has since replaced the castle gate's
-            // label with `Absorbed!`. Awaiting a measured string.
-            self.message = "Magic absorbed!".to_string();
+            // `audio.md §6.1` publishes it, which answers the note this
+            // site used to carry: "Combat Negate Magic absorption prints
+            // `Cast...\nAbsorbed!\n` before invoking that same manual
+            // envelope: phase increment 9800, idle count 1, 28000
+            // iterations, initial comparison 1000 and comparison
+            // increment 2."
+            //
+            // The engine printed `Magic absorbed!` - the label R462
+            // withdrew from the castle gate, copied here when that gate
+            // still used it - and played nothing. `§6.1` also settles the
+            // tail: "this path has no failure glissando or `Failed!`
+            // tail. It completes the action without opening spell
+            // selection or spending a charge or MP."
+            self.message =
+                format!("{COMBAT_CAST_COMMAND_LABEL}\n{SCENE_ABSORBED_CAST_MESSAGE}\n");
+            self.emit_sound_effect(SoundEffect::MagicAbsorbed);
             return Ok(MoveOutcome::Blocked);
         }
         // `magic.md §5` step 3: the context gate runs before the handler,

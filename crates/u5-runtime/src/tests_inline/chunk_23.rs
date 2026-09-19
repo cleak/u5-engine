@@ -16174,7 +16174,11 @@ fn combat_cast_active_target_spell_gates_target_and_negate_magic_before_resource
     assert_eq!(absorbed.spell_charges[spell_index], 1);
     assert_eq!(absorbed.party[0].mana, 1);
     assert_eq!(absorbed.turn, 0);
-    assert_eq!(absorbed.message, "Magic absorbed!");
+    // `audio.md §6.1`: combat Negate Magic absorption "prints
+    // `Cast...\nAbsorbed!\n` before invoking that same manual
+    // envelope". The engine printed `Magic absorbed!`, the label
+    // `RETRACTIONS.md` R462 withdrew from the castle gate.
+    assert_eq!(absorbed.message, "Cast...\nAbsorbed!\n");
 
     absorbed.active_effect_counter = 0;
     assert_eq!(
