@@ -2191,6 +2191,19 @@ impl PlayState {
                         self.add_moral_standing(ShrineVirtue::SHRINE_CODEX_TURN_IN_MORAL_INCREASE);
                     moral_gained = moral_gained.saturating_add(humility_moral);
                 }
+                // `karma.md §7.2`'s Codex-turn-in arm: the envelope
+                // generator run 920 times in one sweep at phase increment
+                // 3100, 150 iterations a run - "one slow swell and decay
+                // at one pitch", about 5.93 s. §7.2 also has this arm
+                // alone run the shared flash/rumble helper, and "it runs
+                // **after** the swell rather than instead of it", so the
+                // two are ordered rather than exclusive.
+                //
+                // Not implemented from §7.2, as on the offering arm: the
+                // unrestored exclusive-or inversion of the gameplay
+                // viewport that precedes the swell.
+                self.emit_sound_effect(SoundEffect::ShrineTurnInSwell);
+                self.emit_major_flash();
                 // `karma.md §12`, "Ordained and Codex read": the awarded
                 // attribute lines are the whole of the added text - the
                 // standing award and the virtue name are state, not
