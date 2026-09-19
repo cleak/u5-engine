@@ -1,0 +1,23 @@
+# `overworld.md §8.1`, the falls chain. Standing directly north of a
+# waterfall tile, any turn-consuming command runs it: `F-A-L-L-S!!!`,
+# two forced steps south, the descending sweep, the hidden party
+# marker, and - only when the landing cell is Britannia `(54, 138)` -
+# `Falling into underworld!!`. Both lines are on the coverage backlog,
+# and this is the one waterfall of the three on the map whose landing
+# cell gates the second one.
+#
+# Seeded with `seed_position <profile> plane=britannia x=54 y=136`;
+# `find_tile` reads `(54, 137)` as the waterfall and `(54, 136)` as the
+# cell above it.
+# requires-seed: the party on Britannia directly north of the falls
+both	wait	9000
+both	key	space
+both	wait	4000
+both	key	j
+both	wait	9000
+both	shot	before	The party above the falls
+both	key	space
+both	wait	6000
+both	shot	falls	F-A-L-L-S!!! and the descent
+both	wait	6000
+both	shot	underworld	Falling into underworld!!

@@ -23,7 +23,17 @@ fn main() {
     // cure fountain came back empty everywhere and meant nothing - the
     // control byte was absent too.
     let histogram = wanted == "all";
-    let wanted = if histogram {
+    // `at=<x>,<y>` is the inverse question: not "where is this tile" but
+    // "what is on this cell", which is what checking a candidate seed
+    // coordinate needs.
+    let at = wanted.strip_prefix("at=").map(|pair| {
+        let (x, y) = pair.split_once(',').expect("at= takes <x>,<y>");
+        (
+            x.trim().parse::<usize>().expect("x is a number"),
+            y.trim().parse::<usize>().expect("y is a number"),
+        )
+    });
+    let wanted = if histogram || at.is_some() {
         0
     } else {
         u8::from_str_radix(wanted.trim_start_matches("0x"), 16).expect("tile byte")
@@ -31,10 +41,23 @@ fn main() {
     let dir = Path::new(&dir);
     let options = load_play_options_from_save(dir).expect("profile must hold a save");
     let state = PlayState::load_scene(dir, options).expect("scene must load");
-    if histogram {
-        println!("scene {:?}, tile histogram", state.area);
+    if histogram || at.is_some() {
+        println!("scene {:?}", state.area);
     } else {
         println!("scene {:?}, looking for 0x{wanted:02x}", state.area);
+    }
+    if let Some((x, y)) = at {
+        let side = match state.area {
+            Area::World { .. } => WORLD_SIDE,
+            Area::Dungeon { .. } => DUNGEON_SIDE,
+            _ => TOWN_GRID_SIDE,
+        };
+        let tile = match state.area {
+            Area::Dungeon { level, .. } => state.dungeon_cell(level, x, y),
+            _ => state.grid[y * side + x],
+        };
+        println!("  ({x}, {y})  0x{tile:02x}");
+        return;
     }
     let mut found = 0;
     let mut counts = std::collections::BTreeMap::<u8, usize>::new();
@@ -56,9 +79,18 @@ fn main() {
             }
         }
     } else {
-        for y in 0..TOWN_GRID_SIDE {
-            for x in 0..TOWN_GRID_SIDE {
-                let tile = state.grid[y * TOWN_GRID_SIDE + x];
+        // The world map is `WORLD_SIDE` square, not `TOWN_GRID_SIDE`.
+        // Scanning it as a town grid reads the top-left thirty-two cells
+        // of each of the first thirty-two rows and reports "0 cell(s)"
+        // for everything else in the world - which is what a waterfall
+        // hunt at `(54, 136)` came back with.
+        let side = match state.area {
+            Area::World { .. } => WORLD_SIDE,
+            _ => TOWN_GRID_SIDE,
+        };
+        for y in 0..side {
+            for x in 0..side {
+                let tile = state.grid[y * side + x];
                 if histogram {
                     *counts.entry(tile).or_default() += 1;
                 } else if tile == wanted {
