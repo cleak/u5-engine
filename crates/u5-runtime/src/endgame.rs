@@ -1199,6 +1199,16 @@ pub const ENDGAME_TABLEAU_STING_LEADING_TICKS: usize = 2;
 /// See [`ENDGAME_TABLEAU_STING_LEADING_TICKS`].
 pub const ENDGAME_TABLEAU_STING_TRAILING_TICKS: usize = 3;
 
+/// The same five ticks as wall clock. `audio.md §8.7` gives the spacing
+/// only as a comparison with its own capture - "roughly 275 ms spacing
+/// and occasional roughly 55 ms extension ... consistent with five tick
+/// pauses per step and the extra member-placement tick", explicitly "not
+/// a new wall-clock measurement or a universal fixed interval" - so the
+/// five ticks are taken at their published count and paid at one BIOS
+/// tick each, which is 274.5 ms.
+pub const ENDGAME_TABLEAU_STING_HOLD_BIOS_TICKS: u16 =
+    (ENDGAME_TABLEAU_STING_LEADING_TICKS + ENDGAME_TABLEAU_STING_TRAILING_TICKS) as u16;
+
 pub fn endgame_tableau_cell_walkable_fallback(x: usize, y: usize) -> bool {
     x > 0
         && x + 1 < ENDGAME_TABLEAU_WIDTH
@@ -1898,6 +1908,23 @@ impl PlayState {
             for _ in 0..ENDGAME_TABLEAU_STING_TRAILING_TICKS {
                 self.animation.tick_static_tiles();
             }
+            // Those five are **tick pauses**, not instant animator steps.
+            // §8.7 reads the spacing off its capture as "roughly 275 ms ...
+            // consistent with five tick pauses per step", and five BIOS
+            // ticks is 274.5 ms. An empty staged beat is a pure hold - a
+            // wait with nothing to print - and the frontend's staged-
+            // narration gate owns the loop while one is pending, so this
+            // is what turns the train from a burst into a walk.
+            //
+            // **Measured** 2026-09-19 (`qa/tools/audio_burst_spacing.py`
+            // over `doom-endgame-audio`, beat `absorption`): the original
+            // fires 17 bursts from 1.23 s to 7.66 s at a median 250 ms
+            // apart, and this engine fired 19 from 1.29 s to 2.00 s at a
+            // median 30 ms - the stings present and the pacing absent.
+            // Seventeen is also §8.7's own count for a three-member party,
+            // which is what that save carries.
+            self.staged_narration
+                .push_ticks(ENDGAME_TABLEAU_STING_HOLD_BIOS_TICKS, String::new());
         } else {
             self.animation.tick_static_tiles();
         }
