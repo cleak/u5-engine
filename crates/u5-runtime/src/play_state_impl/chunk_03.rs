@@ -302,6 +302,18 @@ impl PlayState {
                 .as_ref()
                 .is_some_and(|session| session.phase == MixPhase::Quantity)
             || self.active_blackthorn_guard_demand.is_some()
+            // `dungeon-mode.md §12` step 6: the fountain's drink question
+            // waits for `Y` or `N` with the question on screen. Measured
+            // 2026-09-19 (`qa/paired/dungeon-fountain-heal.tsv`, beat
+            // `prompt`, reading `offset+1`): the original's
+            // `Will you drink?` is the window's last written row and this
+            // engine opened a command row beneath it. One row rather than
+            // the two the `On who: ` family shows, because this literal
+            // carries its own trailing feed and the blank is already spent.
+            || matches!(
+                self.active_yes_no_prompt.as_ref().map(|session| session.kind),
+                Some(YesNoPromptKind::DungeonFountainDrink { .. })
+            )
             || self.pending_town_arrest.is_some()
             // `commands.md §5.6` / `inventory.md §4.3`: a U-Use item that asks
             // for a target ends its question with a trailing space -
