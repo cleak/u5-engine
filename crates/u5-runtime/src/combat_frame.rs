@@ -1614,8 +1614,33 @@ impl PlayState {
     /// slot is not opened.
     pub(crate) fn emit_combat_turn_banner_before_status_early_out(&mut self, slot: usize) {
         if let Some(banner) = self.combat_turn_banner_for_actor(slot) {
+            self.close_combat_result_row_before_banner();
             self.emit_combat_print(&banner);
         }
+    }
+
+    /// `combat.md §8`'s spacing rule around a combat result: "its trailing
+    /// newline closes the last result row. The next full actor banner
+    /// begins with its own newline, **leaving a blank row after the
+    /// result**. X-it likewise closes its refusal row before the next full
+    /// banner's leading newline."
+    ///
+    /// The engine's results did not close their row, so the banner's own
+    /// leading newline was spent closing it and the banner landed directly
+    /// under the result. Measured 2026-09-10
+    /// (`qa/paired/combat-ready-armour.tsv`, beat `invisibility`): the
+    /// original reads `None mixed!` / blank / `Avatar, armed`, and this
+    /// engine had no blank. `cleak/u5-engine#24`.
+    ///
+    /// The close is applied here, at the combat banner boundary, rather
+    /// than by appending a feed to each result literal. §8's rule is
+    /// combat-scoped and those literals are shared with the town and
+    /// dungeon paths - `CastGateOutcome::message`, `GET_NOTHING_REFUSAL`,
+    /// `SEARCH_NOTHING_FOUND` - whose spacing nothing has measured.
+    /// Closing the row is the same rendered result without reaching into
+    /// paths the section does not cover.
+    fn close_combat_result_row_before_banner(&mut self) {
+        self.close_message_row();
     }
 
     pub(crate) fn open_pending_combat_player_turn(&mut self, slot: Option<usize>) {
@@ -1623,6 +1648,10 @@ impl PlayState {
         let banner = slot.and_then(|slot| self.combat_turn_banner_for_actor(slot));
         self.combat_prompt_row_opened_by_banner = banner.is_some();
         if let Some(banner) = banner.as_deref() {
+            // `combat.md §8`: the result before this one closes its own row,
+            // so the banner's leading newline leaves a blank rather than
+            // being spent. See `close_combat_result_row_before_banner`.
+            self.close_combat_result_row_before_banner();
             // `combat.md §8.1`: the banner is "a newline, the actor's name,
             // ... a colon **and then a newline**". `combat_turn_banner`
             // carries both, and its trailing one is the line feed that opens
