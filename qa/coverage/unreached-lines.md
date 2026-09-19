@@ -14,6 +14,31 @@ backlog, not a defect list - some are unreachable from any seed, some
 need a game state no seed carries, and a few are prose the extractor
 mistook for a game line.
 
+## Every one of them is already implemented
+
+Cross-referencing this list against the engine's sources, 2026-09-19:
+
+| | count |
+|---|---:|
+| unreached lines | 279 |
+| of those, present in the engine | **247** |
+| absent but already explained in `spec_literal_coverage.VERIFIED_BENIGN` or `AWAITING_SPEC` | 32 |
+| **absent and unexplained** | **0** |
+
+So this file is a **coverage** backlog and nothing else. Every published
+line is either in the engine or carries a recorded reason for not being -
+a composed form, a string the asset supplies at run time, or the one
+entry waiting on `cleak/u5-spec#287`.
+
+That separates the two halves of the question cleanly, and they are
+easy to conflate:
+
+- **Implementation of the published text: complete.**
+  `spec_literal_coverage.py` reads 0 unexplained of 704, and
+  `engine_message_audit.py` reads 0 absent of 250 the other way.
+- **Verification of it against the original: about a third.** 144 of 425
+  lines have ever been on screen in a sampled stock frame.
+
 ## Twenty-eight of them cannot be reached at all
 
 A line containing `?` can never match, and twenty-eight of the entries
