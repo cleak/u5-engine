@@ -1,0 +1,24 @@
+# `dungeon-mode.md §8.1`, the bomb row: stepping onto `0x62` prints
+# `Bomb Trap!` then `KABOOM!!`, marks the cell `0x6A`, and damages the
+# party. Both lines are on the coverage backlog.
+#
+# The seed stands at Despise level 7 `(5, 0)` facing North, and the trap
+# is at `(5, 7)` - the step is north across the level's wrap, which is
+# the published movement behaviour ("the floor wraps in the eight-by-
+# eight coordinate plane"). Every other approach to a shipped `0x62`
+# cell is walled or crosses an electric field first.
+#
+# The trap damages the party, so a roster difference here is a
+# PRNG-parity result and not a text one.
+# requires-seed: the party one wrapped step from a bomb trap, with a torch
+both	wait	9000
+both	key	space
+both	wait	4000
+both	key	j
+both	wait	9000
+both	key	i
+both	wait	2500
+both	shot	lit	Torch lit
+both	key	Up
+both	wait	4000
+both	shot	kaboom	Bomb Trap! / KABOOM!!
