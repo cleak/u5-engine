@@ -835,8 +835,11 @@
         let rows: Vec<_> = overlay.text_map.lines().collect();
         assert_eq!(rows.len(), 32);
         assert!(rows.iter().all(|row| row.chars().count() == 32));
-        assert_eq!(rows[16].chars().nth(16), Some('@'));
-        assert_eq!(rows[16].chars().nth(17), Some('3'));
+        // The overlay is the floor, so the marker is at the party's own cell
+        // and the object beside it at its own. These read row 16 column 16
+        // while the overlay was centred on the party.
+        assert_eq!(rows[5].chars().nth(5), Some('@'));
+        assert_eq!(rows[5].chars().nth(6), Some('3'));
         let atlas = TileAtlas {
             depth: TileGraphicsDepth::Ega16,
             pixels: Vec::new(),
@@ -850,7 +853,10 @@
             viewport.width,
             LOCAL_VIEW_OVERLAY_SIDE * LOCAL_VIEW_CELL_PIXEL_SCALE
         );
-        assert_eq!(viewport.pixel(66, 64), Some(15));
+        // The marker's cross is drawn at the party's cell: row 5, column 5,
+        // at four pixels per cell, so its horizontal stroke runs y = 22,
+        // x = 20..23.
+        assert_eq!(viewport.pixel(20, 22), Some(15));
     }
 
     #[test]
@@ -1061,9 +1067,13 @@
             ViewOverlayMode::GemView,
         );
         let scale = LOCAL_VIEW_CELL_PIXEL_SCALE;
-        let center = LOCAL_VIEW_OVERLAY_SIDE / 2;
+        // `view.md §4`: a town floor is thirty-two by thirty-two and the
+        // overlay is the floor, so a cell is drawn at its own map coordinate.
+        // The fixture writes its tiles at row 5, columns 6..8, beside the
+        // party at (5, 5); this used to sample beside the overlay's centre.
+        let (party_x, party_y) = (5usize, 5usize);
         let sample = |dx: usize, lx: usize, ly: usize| {
-            viewport.pixel((center + dx) * scale + lx, center * scale + ly)
+            viewport.pixel((party_x + dx) * scale + lx, party_y * scale + ly)
         };
 
         assert_eq!(sample(1, 0, 0), Some(3));
@@ -1089,8 +1099,10 @@
             TileGraphicsDepth::Ega16,
             ViewOverlayMode::XRaySpell,
         );
-        let cell_x = LOCAL_VIEW_OVERLAY_SIDE / 2 + 1;
-        let cell_y = LOCAL_VIEW_OVERLAY_SIDE / 2;
+        // Same reason as above: the water cell the fixture writes sits beside
+        // the party's own map cell, not beside the overlay's centre.
+        let cell_x = 5 + 1;
+        let cell_y = 5;
         let px = cell_x * LOCAL_VIEW_CELL_PIXEL_SCALE;
         let py = cell_y * LOCAL_VIEW_CELL_PIXEL_SCALE;
 

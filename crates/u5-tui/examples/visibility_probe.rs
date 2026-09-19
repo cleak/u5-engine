@@ -54,6 +54,7 @@ fn main() {
         }
     }
     println!("area           {:?}", state.area);
+    println!("party          ({}, {})", state.player.x, state.player.y);
     println!("ambient_light  {}", state.ambient_light);
     println!("threshold      {threshold}");
     println!("pitch dark     {pitch_dark}");

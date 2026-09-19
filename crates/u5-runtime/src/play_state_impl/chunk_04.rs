@@ -2846,7 +2846,17 @@ impl PlayState {
                 );
             }
         }
-        draw_surface_view_cell(&mut viewport, cells / 2, cells / 2, scale, 0, 0, true, mode);
+        // The party marker goes where the party is. On the overworld window
+        // that is the centre cell by construction; on a town floor, whose
+        // overlay is the floor itself, it is the party's own coordinate.
+        let (marker_x, marker_y) = match self.area {
+            Area::Town { .. } => (
+                (self.player.x).min(cells - 1),
+                (self.player.y).min(cells - 1),
+            ),
+            _ => (cells / 2, cells / 2),
+        };
+        draw_surface_view_cell(&mut viewport, marker_x, marker_y, scale, 0, 0, true, mode);
         viewport
     }
 
@@ -2870,6 +2880,23 @@ impl PlayState {
         viewport
     }
 
+    /// The cell of the map a local-view overlay cell samples.
+    ///
+    /// A town floor **is** thirty-two by thirty-two, so `view.md` §4's
+    /// "thirty-two-by-thirty-two local-area overlay" is the whole floor and
+    /// the overlay cell is the map cell. Centring it on the party instead
+    /// walks off the map whenever the party is not at `(16, 16)`, and the
+    /// off-map cells draw nothing.
+    ///
+    /// Measured 2026-09-18 (`qa/paired/town-death-vision.tsv`, beats `first`
+    /// and `second`): the original's overlay content fills `(32,32)..
+    /// (159,159)` - the published rectangle, 128 by 128 - and this engine's
+    /// filled `(60,60)..(159,159)`, exactly 28 pixels short on each leading
+    /// edge. The party was at `(9, 9)`, so seven cells of the window fell off
+    /// the left and top at four pixels each: 28.
+    ///
+    /// The overworld keeps the window. It is 256 by 256, so a local view of
+    /// it is a window by necessity, and the party is at its centre.
     fn surface_view_tile_at(&self, cell_x: usize, cell_y: usize) -> u8 {
         let px = self.player.x as isize;
         let py = self.player.y as isize;
@@ -2878,6 +2905,7 @@ impl PlayState {
         let y = py - side / 2 + cell_y as isize;
         match self.area {
             Area::Town { .. } => {
+                let (x, y) = (cell_x as isize, cell_y as isize);
                 if !(0..32).contains(&x) || !(0..32).contains(&y) {
                     return 0;
                 }
@@ -3115,6 +3143,10 @@ impl PlayState {
         let origin_y = py - side / 2;
         match self.area {
             Area::Town { .. } => {
+                // The floor is thirty-two by thirty-two, so the overlay is
+                // the floor. See `surface_view_tile_at`, where centring this
+                // on the party walked off the map.
+                let (origin_x, origin_y) = (0isize, 0isize);
                 for y in origin_y..origin_y + side {
                     for x in origin_x..origin_x + side {
                         if x == px && y == py {
