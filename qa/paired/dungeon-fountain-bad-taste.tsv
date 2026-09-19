@@ -1,0 +1,21 @@
+# `dungeon-mode.md §8` fountain sub-types 3 and up, Bad taste: the drink
+# rolls `0..7` damage on the selected member. The message is fixed; the
+# roster's hit points are not, so this scenario's value is the message
+# beat - a panel difference here is a PRNG-parity result, not a text one.
+# Seeded with `seed_position <profile> dungeon=33 level=2 x=3 y=1`.
+# requires-seed: the party standing on a bad-taste fountain, with a torch
+both	wait	9000
+both	key	space
+both	wait	4000
+both	key	j
+both	wait	9000
+both	key	i
+both	wait	2500
+both	key	l
+both	wait	1500
+both	key	Down
+both	wait	3000
+both	shot	prompt	You see: a fountain / Will you drink?
+both	key	y
+both	wait	3000
+both	shot	bad-taste	Yes.  Gulp! / Bad taste.

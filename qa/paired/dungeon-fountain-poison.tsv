@@ -1,0 +1,19 @@
+# `dungeon-mode.md §8` fountain sub-type 2, Poison: the drink sets the
+# selected member's status to `P`, which the roster panel shows.
+# Seeded with `seed_position <profile> dungeon=36 level=4 x=4 y=3`.
+# requires-seed: the party standing on a poison fountain, with a torch
+both	wait	9000
+both	key	space
+both	wait	4000
+both	key	j
+both	wait	9000
+both	key	i
+both	wait	2500
+both	key	l
+both	wait	1500
+both	key	Down
+both	wait	3000
+both	shot	prompt	You see: a fountain / Will you drink?
+both	key	y
+both	wait	3000
+both	shot	poisoned	Yes.  Gulp! / Poisoned!

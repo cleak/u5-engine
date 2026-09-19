@@ -1,0 +1,28 @@
+# `dungeon-mode.md §8` fountains. L-Look on a fountain cell prints
+# `You see:\na fountain.\n`, then `Will you drink?`, and Y applies the
+# low nibble's effect to the selected member. Sub-type 1 is Heal.
+#
+# The party stands *on* the fountain, so the relative chooser's Down key
+# (`Dir-Here`) reads the party's own cell and facing cannot matter.
+# The seed is `seed-dungeon-look` re-placed with
+#
+#   seed_position <profile> dungeon=36 level=7 x=1 y=1
+#
+# which `dungeon_class_scan` reports as the only `0x51` cell in the
+# shipped file outside Deceit.
+# requires-seed: the party standing on a heal fountain, with a torch
+both	wait	9000
+both	key	space
+both	wait	4000
+both	key	j
+both	wait	9000
+both	key	i
+both	wait	2500
+both	key	l
+both	wait	1500
+both	key	Down
+both	wait	3000
+both	shot	prompt	You see: a fountain / Will you drink?
+both	key	y
+both	wait	3000
+both	shot	healed	Yes.  Gulp! / Healed!

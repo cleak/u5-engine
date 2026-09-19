@@ -68,6 +68,15 @@ different dungeons read back byte-identical grids. `find_tile all`,
 which reports a level's whole tile histogram instead of answering one
 tile id per run, is what made that visible.
 
+**Unreachable in stock data.** `dungeon_class_scan` reads every
+`DUNGEON.DAT` cell of all eight records: 21 fountains, of sub-types 1, 2
+and 3 only. Sub-type 0 - the Cure fountain - does not occur, and
+`Cured!` is the fountain's only emitter in the engine, so no scenario
+can show that line from a shipped dungeon. It stays on this list as
+unverifiable rather than as work owed. The other three are now
+scenarios: `dungeon-fountain-heal`, `-poison` and `-bad-taste`, each
+seeded onto its cell and looking `Dir-Here` so facing cannot matter.
+
 **Behind a contested surface.** The U-Use picker's results - `Removed!`,
 `Resurrection!`, `Not dead!` and the rest - are reachable today, but
 every scenario through that picker inherits `cleak/u5-engine#42`'s panel
