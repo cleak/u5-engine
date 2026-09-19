@@ -469,7 +469,20 @@ impl PlayState {
         let trap_note = if tile & DUNGEON_CHEST_TRAP_SUBTYPE_MASK != 0 {
             // The resolver prints its own word; "The dungeon chest site prints
             // no trap notice of its own."
-            Some(self.apply_shared_trap_effect_to_slot(target_slot))
+            // Only when the row the word would join is the dispatcher's
+            // own `Open-` echo. A chest opened through the acting-member
+            // picker has that member's name on the last row instead, and
+            // the word must not complete *that* - it is the row the
+            // picker's echo owns.
+            let joins_open_echo = self
+                .message_transcript
+                .last()
+                .is_some_and(|entry| entry.text == DUNGEON_CHEST_OPEN_ECHO);
+            Some(if joins_open_echo {
+                self.apply_shared_trap_effect_to_slot_continuing_row(target_slot)
+            } else {
+                self.apply_shared_trap_effect_to_slot(target_slot)
+            })
         } else {
             None
         };
@@ -488,7 +501,13 @@ impl PlayState {
         });
         // "**The cell rewrite and the opened line happen identically whether
         // or not a trap fired.** ... then `\nChest opened\n` prints."
-        self.message.push_str(DUNGEON_CHEST_OPENED);
+        //
+        // Emitted rather than appended: `emit_message_line` leaves the word
+        // it printed in the compatibility slot as well as the transcript, so
+        // appending to that slot printed the trap word a second time.
+        // Measured 2026-09-19 (`qa/paired/dungeon-chest.tsv`, beat
+        // `opened`), where this engine read `ACID!` / `ACID!`.
+        self.emit_message_line(DUNGEON_CHEST_OPENED);
         MoveOutcome::ContainerOpened
     }
 

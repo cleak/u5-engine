@@ -1835,6 +1835,13 @@ pub const DUNGEON_CHEST_JIMMY_UNLOCKED: &str = "\nChest unlocked\n";
 pub const DUNGEON_CHEST_JIMMY_ALREADY_OPEN: &str = "\nAlready open!\n";
 pub const DUNGEON_CHEST_JIMMY_WHAT: &str = "\nWhat?\n";
 pub const DUNGEON_CHEST_OPENED: &str = "\nChest opened\n";
+
+/// The dispatcher's `O`-Open echo, which `commands.md §5.3` prints "in
+/// **every** scene including this one" and which leaves its row for the
+/// result. `dungeon-mode.md §8.1` has `Already Open!` and `What?` render
+/// on it; measured 2026-09-19 (`qa/paired/dungeon-chest.tsv`), so does a
+/// trap word.
+pub const DUNGEON_CHEST_OPEN_ECHO: &str = "Open-";
 /// Capital `O` — a **different** literal from Jimmy's, and it carries no
 /// leading line feed, so it renders on the prefix's own row.
 pub const DUNGEON_CHEST_OPEN_ALREADY_OPEN: &str = "Already Open!\n";

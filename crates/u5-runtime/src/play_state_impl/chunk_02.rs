@@ -1633,13 +1633,41 @@ impl PlayState {
     /// apart; this match is exhaustive over [`TrapEffect`] rather than
     /// falling through a catch-all arm.
     pub fn apply_shared_trap_effect_to_slot(&mut self, triggering_slot: usize) -> String {
+        self.apply_shared_trap_effect_to_slot_on_row(triggering_slot, false)
+    }
+
+    /// The same resolver, with its word written onto the row the caller's
+    /// verb echo left open.
+    ///
+    /// `dungeon-mode.md §8.1`: the dungeon chest site "prints no trap
+    /// notice of its own", and the `Open-` prefix leaves its row open, so
+    /// the resolver's word completes it. Measured 2026-09-19
+    /// (`qa/paired/dungeon-chest.tsv`, beat `opened`): the original reads
+    /// `Open-BOMB!` on one row, where this engine put the word on a row of
+    /// its own beneath the prefix.
+    pub fn apply_shared_trap_effect_to_slot_continuing_row(
+        &mut self,
+        triggering_slot: usize,
+    ) -> String {
+        self.apply_shared_trap_effect_to_slot_on_row(triggering_slot, true)
+    }
+
+    fn apply_shared_trap_effect_to_slot_on_row(
+        &mut self,
+        triggering_slot: usize,
+        continues_row: bool,
+    ) -> String {
         self.emit_sound_effect(SoundEffect::TrapRumble);
         // `traps.md §3`: the resolver "prints exactly one of `ACID!`,
         // `POISON!`, `BOMB!` or `GAS!` **before** its effect", and
         // `dungeon-mode.md §8.1` notes the dungeon chest site adds no notice
         // of its own, so the word lands directly after that command's prefix.
         let family = self.shared_trap_effect_family(triggering_slot);
-        self.emit_message_line(trap_effect_message(family));
+        if continues_row {
+            self.emit_message_line_continuing_row(trap_effect_message(family));
+        } else {
+            self.emit_message_line(trap_effect_message(family));
+        }
         match family {
             TrapEffect::Acid => self.apply_acid_trap_effect(triggering_slot),
             TrapEffect::Poison => self.apply_poison_trap_effect(triggering_slot),
