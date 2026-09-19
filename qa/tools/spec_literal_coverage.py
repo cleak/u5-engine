@@ -19,6 +19,14 @@ import pathlib
 import re
 import sys
 
+# Documents that quote text without publishing it.
+NON_CONTRACT_DOCUMENTS = {
+    "RETRACTIONS.md",
+    "NEXT-STEPS.md",
+    "EXTRACTION.md",
+    "OPEN-QUESTIONS.md",
+}
+
 SPAN = re.compile(r"`([^`\n]{3,48})`")
 # A published line looks like text: letters and spaces, and it ends in
 # punctuation or carries at least one space.
@@ -166,6 +174,15 @@ def main() -> None:
     total = 0
     missing_total = 0
     for document in sorted(spec_dir.rglob("*.md")):
+        # A withdrawn wording is not a published line. `RETRACTIONS.md`
+        # quotes both sides of every correction, and the other three are
+        # process documents rather than contracts, so a literal found
+        # *only* there is one the original does not print - `Beat it!`
+        # against the surviving `BEAT IT!`, and the four wound words the
+        # combat contract no longer carries. Counting them made the engine
+        # owe text the spec had already taken back.
+        if document.name in NON_CONTRACT_DOCUMENTS:
+            continue
         found = candidates(document.read_text(errors="replace"))
         missing = sorted(
             literal
