@@ -1,3 +1,7 @@
+# A run of this scenario must be re-run before a difference in it means
+# anything: the walk is a lottery on the residents' schedules, as the note
+# below establishes. It is not a wording result.
+#
 # **Not a pacing problem, and not a passability one.** Its `arrived`, `look`
 # and `talk` beats differ in a way that reads exactly like a passability bug:
 # the original refusing four westward steps with `Blocked!` while this engine
