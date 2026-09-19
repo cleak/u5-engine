@@ -2505,7 +2505,12 @@ impl PlayState {
                 self.emit_message_line(line);
                 self.diagnostics.push(report);
             }
-            None => self.append_result_sentence(&format!("{report}.")),
+            // No published line for this effect - and an engineering
+            // report is not one. `DROWNING!!!` belongs to the
+            // ship-sinking ladder of `overworld.md §6.2.4`, not to an
+            // underfoot damage tile, so the window gets nothing and the
+            // accounting goes where the lava accounting goes.
+            None => self.diagnostics.push(report),
         }
         Ok(())
     }

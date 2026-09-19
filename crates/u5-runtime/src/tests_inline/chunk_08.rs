@@ -247,9 +247,25 @@
         assert_eq!(state.turn, 1);
         assert!(state.party[0].hp < 12);
         assert_eq!(state.party[1].hp, 9);
-        assert!(state.message.contains("drowning damage"));
-        assert!(state.message.contains("party slot 0"));
-        assert!(!state.message.contains("party slot 1"));
+        assert!(
+            state
+                .diagnostics
+                .iter()
+                .any(|note| note.contains("drowning damage")),
+            "the accounting is a diagnostic, not a game line"
+        );
+        assert!(
+            state
+                .diagnostics
+                .iter()
+                .any(|note| note.contains("party slot 0"))
+        );
+        assert!(
+            !state
+                .diagnostics
+                .iter()
+                .any(|note| note.contains("party slot 1"))
+        );
         let _ = fs::remove_dir_all(dir);
     }
 
@@ -281,8 +297,19 @@
         assert_eq!((state.player.x, state.player.y), (1, 0));
         assert_eq!(state.turn, 1);
         assert!(state.party[0].hp < 12);
-        assert!(state.message.contains("drowning damage"));
-        assert!(state.message.contains("party slot 0"));
+        assert!(
+            state
+                .diagnostics
+                .iter()
+                .any(|note| note.contains("drowning damage")),
+            "the accounting is a diagnostic, not a game line"
+        );
+        assert!(
+            state
+                .diagnostics
+                .iter()
+                .any(|note| note.contains("party slot 0"))
+        );
         let _ = fs::remove_dir_all(dir);
     }
 
@@ -394,7 +421,12 @@
 
         assert_eq!((state.player.x, state.player.y), (1, 0));
         assert_eq!(state.party[0].hp, 12);
-        assert!(!state.message.contains("drowning damage"));
+        assert!(
+            !state
+                .diagnostics
+                .iter()
+                .any(|note| note.contains("drowning damage"))
+        );
         let _ = fs::remove_dir_all(dir);
     }
 
@@ -662,8 +694,19 @@
         assert_eq!(state.turn, 1);
         assert!(state.party[0].hp < 12);
         assert!(state.torch_counter > 0, "torch ignited");
-        assert!(state.message.contains("drowning damage"));
-        assert!(state.message.contains("party slot 0"));
+        assert!(
+            state
+                .diagnostics
+                .iter()
+                .any(|note| note.contains("drowning damage")),
+            "the accounting is a diagnostic, not a game line"
+        );
+        assert!(
+            state
+                .diagnostics
+                .iter()
+                .any(|note| note.contains("party slot 0"))
+        );
         let _ = fs::remove_dir_all(dir);
     }
 
@@ -695,7 +738,12 @@
         // swallowed before the dispatcher.
         assert!(state.message.contains("What?"));
         assert_eq!(state.party[0].hp, 12);
-        assert!(!state.message.contains("drowning damage"));
+        assert!(
+            !state
+                .diagnostics
+                .iter()
+                .any(|note| note.contains("drowning damage"))
+        );
         let _ = fs::remove_dir_all(dir);
     }
 
@@ -726,7 +774,14 @@
         assert_eq!(routed.turn, direct.turn);
         assert_eq!((routed.player.x, routed.player.y), (1, 0));
         assert_eq!(routed.party[0].hp, direct.party[0].hp);
-        assert_eq!(routed.message.matches("drowning damage").count(), 1);
+        assert_eq!(
+            routed
+                .diagnostics
+                .iter()
+                .filter(|note| note.contains("drowning damage"))
+                .count(),
+            1
+        );
         let _ = fs::remove_dir_all(dir);
     }
 
