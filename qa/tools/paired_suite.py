@@ -31,13 +31,62 @@ Usage: paired_suite.py [--engine-dir DIR] [--list] [scenario...]
 """
 
 import argparse
+import os
 import pathlib
 import re
+import signal
 import subprocess
 import sys
 
 ROOT = pathlib.Path(__file__).resolve().parents[1] / "paired"
 PROFILES = pathlib.Path.home() / ".local/share/u5/engine"
+
+
+def run_scenario(cmd: list[str]) -> subprocess.CompletedProcess:
+    """Run one scenario in its own process group, and take the group down
+    with us.
+
+    `game-dev-u5-paired` spawns a screenshot loop that grabs a frame twice
+    a second and a DOSBox alongside it. Killing the suite left all three
+    running: measured 2026-09-19, two loops from runs that had ended the
+    previous day were still writing, 8 GB between them, and a third was
+    left behind by a run stopped earlier the same night.
+
+    A new session makes the children killable as a unit, and the handlers
+    make sure they are killed on the two signals a stopped suite actually
+    receives - including a `KeyboardInterrupt`, which reaches the parent
+    before `subprocess.run` can propagate anything.
+    """
+    process = subprocess.Popen(
+        cmd,
+        stdout=subprocess.PIPE,
+        stderr=subprocess.PIPE,
+        text=True,
+        start_new_session=True,
+    )
+
+    def stop(_signum=None, _frame=None):
+        try:
+            os.killpg(process.pid, signal.SIGTERM)
+        except ProcessLookupError:
+            pass
+
+    previous = {
+        number: signal.signal(number, lambda s, f: (stop(), sys.exit(128 + s)))
+        for number in (signal.SIGINT, signal.SIGTERM)
+    }
+    try:
+        stdout, stderr = process.communicate()
+    except BaseException:
+        stop()
+        raise
+    finally:
+        for number, handler in previous.items():
+            signal.signal(number, handler)
+        # A scenario that returned still leaves the loop and the emulator
+        # behind if the harness itself died mid-run.
+        stop()
+    return subprocess.CompletedProcess(cmd, process.returncode, stdout, stderr)
 
 
 def seeds() -> dict[str, tuple[str, str]]:
@@ -181,7 +230,7 @@ def main() -> None:
         if profile is not None:
             cmd += ["--seed-save", str(profile)]
         cmd.append(str(ROOT / f"{name}.tsv"))
-        result = subprocess.run(cmd, capture_output=True, text=True)
+        result = run_scenario(cmd)
         artifact_of = lambda out: (
             re.findall(r"/[\w./-]*artifacts/u5/paired/[\w.-]+", out) or [""]
         )[-1]
@@ -189,7 +238,7 @@ def main() -> None:
         # `captures_are_usable`.
         if result.returncode == 0 and not captures_are_usable(artifact_of(result.stdout)):
             print(f"recap {name}\tcaptures were not the game frame; re-running", flush=True)
-            result = subprocess.run(cmd, capture_output=True, text=True)
+            result = run_scenario(cmd)
         # The harness prints its artifact directory among a JSON tail; take
         # the last path under the artifact root rather than the last line.
         paths = re.findall(r"/[\w./-]*artifacts/u5/paired/[\w.-]+", result.stdout)
