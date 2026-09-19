@@ -43,6 +43,17 @@ pub enum ConversationSessionPhase {
     /// A TLK `0x88` ASK-WHO prompt is waiting for a free-text party-member
     /// name, then resumes the response at `cursor`.
     AwaitingAskWho { field_idx: usize, cursor: usize },
+    /// `conversation.md §7.3` pause codes: the response has stopped at a
+    /// `0x83` PAUSE or a `0x8F` WAIT-KEY and is "blocked for one
+    /// keystroke", resuming the same field at `cursor` afterwards.
+    /// `redraw` separates the two: §7.3 gives `0x83` a world-view redraw
+    /// before the wait and a party-panel redraw for every member after
+    /// the key, where `0x8F` does "no redraw work" at all.
+    AwaitingPageKey {
+        field_idx: usize,
+        cursor: usize,
+        redraw: bool,
+    },
     /// `conversation.md §7.6`: an unaffordable `0x85` demand has stopped
     /// its response and entered the routine's nested ordinary keyword loop.
     /// Nonterminating turns reprompt inside the loop; every path that returns
@@ -475,6 +486,9 @@ impl ConversationSession {
                 crate::TLK_ASK_WHO_PROMPT.to_string()
             }
             ConversationSessionPhase::AwaitingGoldRefusalKeyword => TLK_KEYWORD_PROMPT.to_string(),
+            // §7.3 gives the pause codes no prompt text of their own:
+            // both simply "block for one keystroke".
+            ConversationSessionPhase::AwaitingPageKey { .. } => String::new(),
             ConversationSessionPhase::Opened => TLK_KEYWORD_PROMPT.to_string(),
             ConversationSessionPhase::PresentingBye | ConversationSessionPhase::Closed => {
                 String::new()
@@ -486,6 +500,37 @@ impl ConversationSession {
     /// session.
     pub fn acknowledge_close(&mut self) {
         self.phase = ConversationSessionPhase::Closed;
+    }
+
+    /// `conversation.md §7.3`: the response is blocked on one keystroke.
+    pub fn awaiting_page_key(&self) -> bool {
+        matches!(self.phase, ConversationSessionPhase::AwaitingPageKey { .. })
+    }
+
+    /// `conversation.md §7.3`: `true` while the wait is a `0x83` PAUSE,
+    /// which redraws the world view before it and every member's party
+    /// panel after it. A `0x8F` WAIT-KEY does no redraw work.
+    pub fn page_key_redraws(&self) -> bool {
+        matches!(
+            self.phase,
+            ConversationSessionPhase::AwaitingPageKey { redraw: true, .. }
+        )
+    }
+
+    /// The player pressed the key the §7.3 pause was blocked on. Resume
+    /// the same field just past the control byte.
+    pub fn resume_after_page_key(
+        &mut self,
+        ctx: &ConversationContext<'_>,
+    ) -> ConversationSessionOutput {
+        let ConversationSessionPhase::AwaitingPageKey {
+            field_idx, cursor, ..
+        } = self.phase
+        else {
+            return ConversationSessionOutput::default();
+        };
+        self.phase = ConversationSessionPhase::AwaitingKeyword;
+        self.run_field_from(field_idx, cursor, ctx, 0)
     }
 
     /// Returns `true` when the session is closed and may be dropped.
@@ -624,6 +669,20 @@ impl ConversationSession {
         match run.stop {
             TlkRunStop::AskingWho(cursor) => {
                 self.phase = ConversationSessionPhase::AwaitingAskWho { field_idx, cursor };
+            }
+            TlkRunStop::PausedAt(cursor) => {
+                self.phase = ConversationSessionPhase::AwaitingPageKey {
+                    field_idx,
+                    cursor,
+                    redraw: true,
+                };
+            }
+            TlkRunStop::WaitingKey(cursor) => {
+                self.phase = ConversationSessionPhase::AwaitingPageKey {
+                    field_idx,
+                    cursor,
+                    redraw: false,
+                };
             }
             TlkRunStop::GoldPaymentRefused { .. } => {
                 self.phase = ConversationSessionPhase::AwaitingGoldRefusalKeyword;
@@ -856,7 +915,14 @@ fn make_inputs<'a>(
         gold_available: ctx.gold_available,
         npc_slot,
         ask_who_response,
-        yield_on_pause: false,
+        // `conversation.md §7.3`: the two pause codes are how a long
+        // response is "chunk[ed] into reader-friendly pages", so the
+        // runner must stop at them and let the session wait for a key.
+        // 240 of the 4593 shipped conversation fields carry one
+        // (`cargo run -p u5-tui --example tlk_pause_census`), so running
+        // them as no-ops scrolled a sixteenth of the game's dialogue past
+        // the player.
+        yield_on_pause: true,
         yield_on_ask: true,
     }
 }
