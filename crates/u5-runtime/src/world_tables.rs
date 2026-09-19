@@ -456,6 +456,11 @@ pub struct ObjectPickupEntry {
     pub expected_tile: Option<u8>,
 }
 
+/// `catalogs/tile-catalog.md §6`: the stored line the burning family
+/// prints. The same string `town-mode.md §10` gives the indoor arm; see
+/// [`WorldDamageEffect::published_line`].
+pub const WORLD_BURNING_LINE: &str = "Burning!";
+
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum WorldDamageEffect {
     Lava,
@@ -469,6 +474,29 @@ impl WorldDamageEffect {
             "LAVA" => Some(Self::Lava),
             "DROWNING" | "WATER" => Some(Self::Drowning),
             _ => None,
+        }
+    }
+
+    /// The published line the effect prints, where one is known.
+    ///
+    /// `catalogs/tile-catalog.md §6`: molten lava `0x8F` is one of the two
+    /// ids of the **burning family**, "whose handler prints the stored line
+    /// `Burning!`". The catalog scopes the family to town mode, but the
+    /// tile is a world tile too, and the original prints the same line for
+    /// it outdoors: measured 2026-09-19
+    /// (`qa/paired/hidden-treasure-search.tsv`, beat `again`), standing on
+    /// Underworld `(233, 233)`, which `find_tile at=233,233` reads as
+    /// `0x8f`. This engine printed an engineering report there instead -
+    /// `lava damage: party slot 0 took 2 HP (58 HP left).` - so the fix is
+    /// the line, not the damage, which already matched the family's
+    /// `1..8` roll. Asked on the spec side as `cleak/u5-spec#294`.
+    ///
+    /// `Drowning` keeps no line: `DROWNING!!!` belongs to the ship-sinking
+    /// ladder of `overworld.md §6.2.4`, not to an underfoot damage tile.
+    pub fn published_line(self) -> Option<&'static str> {
+        match self {
+            Self::Lava | Self::NativeLava => Some(WORLD_BURNING_LINE),
+            Self::Drowning => None,
         }
     }
 

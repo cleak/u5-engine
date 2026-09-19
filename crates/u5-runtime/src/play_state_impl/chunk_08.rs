@@ -265,7 +265,7 @@ impl PlayState {
                 self.advance_wilderness_camp_tick(minutes_per_tick);
                 let _ = self.apply_rest_with_watch_recovery_tick();
                 if let Area::World { plane } = self.area {
-                    if let Some(report) =
+                    if let Some((_effect, report)) =
                         self.apply_world_underfoot_damage(Some(game_dir), plane)?
                     {
                         world_damage_ticks += 1;
@@ -2485,8 +2485,19 @@ impl PlayState {
         game_dir: Option<&Path>,
         plane: WorldPlane,
     ) -> io::Result<()> {
-        if let Some(report) = self.apply_world_underfoot_damage(game_dir, plane)? {
-            self.append_result_sentence(&format!("{report}."));
+        let Some((effect, report)) = self.apply_world_underfoot_damage(game_dir, plane)? else {
+            return Ok(());
+        };
+        // The per-member accounting is engine work, not a game line. Where
+        // the effect has a published line - the burning family's `Burning!`
+        // - that is what the window gets, and the accounting goes to the
+        // diagnostics. See [`WorldDamageEffect::published_line`].
+        match effect.published_line() {
+            Some(line) => {
+                self.append_result_sentence(line);
+                self.diagnostics.push(report);
+            }
+            None => self.append_result_sentence(&format!("{report}.")),
         }
         Ok(())
     }
@@ -2563,7 +2574,7 @@ impl PlayState {
         &mut self,
         game_dir: Option<&Path>,
         plane: WorldPlane,
-    ) -> io::Result<Option<String>> {
+    ) -> io::Result<Option<(WorldDamageEffect, String)>> {
         let tile = self.grid[world_cell_index(self.player.x, self.player.y)];
         let entry = if let Some(game_dir) = game_dir {
             self.world_damage_tile_at(game_dir, plane, self.player.x, self.player.y, tile)?
@@ -2572,7 +2583,7 @@ impl PlayState {
         };
         let Some(entry) = entry else { return Ok(None) };
         if entry.effect.damages_transport(self.player.transport) {
-            Ok(Some(self.apply_world_damage_tile(entry)))
+            Ok(Some((entry.effect, self.apply_world_damage_tile(entry))))
         } else {
             Ok(None)
         }

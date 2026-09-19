@@ -82,9 +82,17 @@
         assert_eq!(state.turn, 1);
         assert!(state.party[0].hp < 12);
         assert_eq!(state.party[1].hp, 9);
-        assert!(state.message.contains("lava damage"));
-        assert!(state.message.contains("party slot 0"));
-        assert!(!state.message.contains("party slot 1"));
+        // Same rule as the native tile: the published line in the window,
+        // the accounting in the diagnostics.
+        assert!(state.message.contains(WORLD_BURNING_LINE));
+        assert!(!state.message.contains("lava damage"));
+        let report = state
+            .diagnostics
+            .iter()
+            .find(|note| note.contains("lava damage"))
+            .expect("the accounting is kept as a diagnostic");
+        assert!(report.contains("party slot 0"));
+        assert!(!report.contains("party slot 1"));
         let _ = fs::remove_dir_all(dir);
     }
 
@@ -122,9 +130,21 @@
         assert_eq!(state.turn, 1);
         assert!(state.party[0].hp < 12);
         assert_eq!(state.party[1].hp, 9);
-        assert!(state.message.contains("lava damage"));
-        assert!(state.message.contains("party slot 0"));
-        assert!(!state.message.contains("party slot 1"));
+        // The window gets the burning family's published line; the
+        // per-member accounting is a diagnostic. Measured 2026-09-19
+        // (`qa/paired/hidden-treasure-search.tsv`), where the original
+        // answered a turn on Underworld `(233, 233)` with `Burning!` and
+        // this engine wrote `lava damage: party slot 0 took 2 HP (58 HP
+        // left).` into the message window.
+        assert!(state.message.contains(WORLD_BURNING_LINE));
+        assert!(!state.message.contains("lava damage"));
+        let report = state
+            .diagnostics
+            .iter()
+            .find(|note| note.contains("lava damage"))
+            .expect("the accounting is kept as a diagnostic");
+        assert!(report.contains("party slot 0"));
+        assert!(!report.contains("party slot 1"));
     }
 
     #[test]
