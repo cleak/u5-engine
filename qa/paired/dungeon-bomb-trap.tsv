@@ -8,6 +8,12 @@
 # eight coordinate plane"). Every other approach to a shipped `0x62`
 # cell is walled or crosses an electric field first.
 #
+# One viewport difference is open and tracked as `cleak/u5-spec#295`:
+# after the bomb fires, the cell is `0x6A`, and `dungeon-mode.md §6.6`
+# gives "any raw cell below class 9 whose bit `0x08` is set" a rising
+# pit-family overlay. The original draws no such sprite here. The engine
+# follows the published rule until the spec answers.
+#
 # The trap damages the party off the shared generator, so the roster
 # panel is a **roster lottery** - the comparator reports its rows and
 # does not count them. The message window is fixed text, and it is what
