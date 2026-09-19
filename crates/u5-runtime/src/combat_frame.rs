@@ -4537,6 +4537,14 @@ impl PlayState {
     /// `§9.1` on the class extra: "For class 47, Shadow Lord, that
     /// departure additionally frees one controlled party member", which
     /// is `§6.3`'s control-faint scan.
+    ///
+    /// [`Self::emit_message_line`] opens a row before it prints, which is
+    /// the leading feed this producer wants - unlike the teleport line
+    /// directly above it in `§11.1`'s table, which has "no leading
+    /// newline of its own" and reaches the same helper. The two are the
+    /// same residue the blink lines carry: this engine cannot mark a line
+    /// as leaving the cursor mid-row for a later producer, so it prints
+    /// the boundary that is right for this row.
     fn apply_combat_arena_exit(&mut self, actor_slot: usize, class: u8) {
         let name = crate::input_dispatch::combat_actor_display_name(self, actor_slot);
         self.emit_message_line(format!("{name}{COMBAT_ARENA_EXIT_ESCAPES_LINE}"));
