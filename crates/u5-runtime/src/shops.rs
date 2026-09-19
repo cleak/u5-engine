@@ -625,10 +625,18 @@ pub enum ShipwrightPurchaseKind {
     Skiff,
 }
 
-/// `shops.md §8.7` shipwright entry menu outcome. The Talk-triggered
-/// vehicle-sale flow opens with a small letter menu: `F` offers
-/// Frigates, `S` offers Skiffs, while Space or Escape exits. Any
-/// other key silently re-prompts.
+/// `shops.md §8.7` shipwright selection outcome: `F` offers Frigates, `S`
+/// offers Skiffs, while Space or Escape exits, and any other key silently
+/// re-prompts.
+///
+/// It is not what the flow *opens* with. `RETRACTIONS.md` R405 withdraws
+/// "opens with a small letter menu" along with "clears the inherited
+/// conversation text window": the shipwright "appends a shared greeting,
+/// accepts Yes/No (Space means No), then renders asset record `119` for
+/// Frigate/Skiff selection without an entry clear". That is the flow this
+/// engine runs - `ShipBrokerState::Greeting` is in `awaiting_entry_answer`
+/// and the selection is `SHOPPE_RECORD_SHIPWRIGHT_MENU` - so this is the
+/// citation going stale rather than the behaviour.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum ShipwrightMenuAction {
     /// `F` (case-insensitive) — Frigate purchase quote.

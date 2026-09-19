@@ -643,11 +643,16 @@ pub const TLK_ASK_WHO_PROMPT_OPEN_LINE: &str = ":";
 /// `conversation.md §7`'s `0x88` row: "on empty input or no match, print the
 /// dismissive one" - the acknowledgement ASK-WHO speaks after the typed line.
 ///
-/// **Measured, not published** (`cleak/u5-spec#266`). The section names the two
-/// acknowledgements without giving either literal, and since "the stream
-/// around it carries only the closing and opening quotes" there is nothing in
-/// the blob for them to come from, so this engine printed the stream's quote
-/// and then nothing at all.
+/// **Measured, not published** (`cleak/u5-spec#266`). The section names the
+/// two acknowledgements without giving either literal, and there is nothing
+/// in the blob for them to come from, so this engine printed the stream's
+/// quote and then nothing at all.
+///
+/// The reason given here used to be that "the stream around it carries only
+/// the closing and opening quotes", which `RETRACTIONS.md` R487 withdraws.
+/// §7.6 now owns what the stream supplies; the measurement below is
+/// unaffected either way, since it is a capture of what the original prints
+/// rather than an inference from the stream.
 ///
 /// Measured 2026-09-12 (`qa/paired/dwelling-talk-after-entry.tsv`, beat
 /// `name`): the giant rat answers a non-member's name with `"If you say` /
@@ -658,8 +663,14 @@ pub const TLK_ASK_WHO_PROMPT_OPEN_LINE: &str = ":";
 /// party member's own name typed at the prompt.
 pub const TLK_ASK_WHO_DISMISSIVE_LINE: &str = "If you say so...";
 
-/// `conversation.md §7`'s `0x88` row: "On a match against a live party member
-/// ... print the affirmative acknowledgement".
+/// `conversation.md §7`'s `0x88` row: on a match "against a roster slot
+/// within the current party count", set the speaking NPC's branch-flag bit
+/// and print the affirmative acknowledgement.
+///
+/// **Not** "a live party member": `RETRACTIONS.md` R486 withdraws that
+/// qualifier. The scan is over the roster slots the party count covers,
+/// whatever their status, which is what `party_member_names` carries -
+/// `self.party_names.iter().take(self.party.len())`, with no status filter.
 ///
 /// **Measured, not published** (`cleak/u5-spec#266`). Measured 2026-09-12
 /// (`qa/paired/dwelling-talk-askwho-match.tsv`): answering the giant rat's

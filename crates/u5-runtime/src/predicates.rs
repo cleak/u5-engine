@@ -934,10 +934,22 @@ pub const TRANSPORT_MARKER_FOOT_DEFAULT: u8 = 0x1C;
 /// byte in this band identifies the party as on foot.
 ///
 /// Only `0x1C` is ever written: it is the clean seed and the single
-/// persistent on-foot value. The adjacent `0x1D` is the second frame
-/// of the on-foot sprite pair and is accepted by the two "party is on
-/// foot" predicates as defensive breadth, but nothing produces it, and
-/// `0x1E`/`0x1F` are outside the published set entirely.
+/// persistent on-foot value. The adjacent `0x1D` is accepted by the two
+/// "party is on foot" predicates as defensive breadth, but nothing
+/// produces it, and `0x1E`/`0x1F` are outside the published set entirely.
+///
+/// `0x1D` is **not** a second frame of an on-foot sprite pair.
+/// `RETRACTIONS.md` R508 withdraws that: "The shipped art does not
+/// support it: tile `285` differs from the on-foot sprite `284` in more
+/// than one hundred and fifty of 256 pixels and their non-black palettes
+/// are disjoint, `285` being drawn entirely in blues and cyans. An engine
+/// must not animate the party on foot between the two tiles." What `0x1D`
+/// depicts, and why the predicates admit it, are open questions rather
+/// than answered ones.
+///
+/// Nothing here animates between them - the party's on-foot sprite is the
+/// single tile `0x11C` (`catalogs/tile-catalog.md` §10, R505) - so this is
+/// the citation going stale rather than the behaviour.
 pub const TRANSPORT_MARKER_FOOT_FIRST: u8 = 0x1C;
 pub const TRANSPORT_MARKER_FOOT_LAST: u8 =
     TRANSPORT_MARKER_FOOT_FIRST + TRANSPORT_TWO_FRAME_WEST_BIAS;

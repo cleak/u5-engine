@@ -1236,10 +1236,14 @@ fn horse_object_and_transport_bands_chain_through_boarding_bias() {
 #[test]
 fn transport_marker_foot_band_is_two_frames_wide() {
     // vehicles.md §2: the on-foot family persists exactly 0x1C.
-    // 0x1D is the second frame of the on-foot sprite pair, accepted
-    // by the two "party is on foot" predicates as defensive breadth
-    // but never written; 0x1E and 0x1F are outside the published
-    // set entirely, so the band is two markers wide, not four.
+    // 0x1D is accepted by the two "party is on foot" predicates as
+    // defensive breadth but never written; 0x1E and 0x1F are outside the
+    // published set entirely, so the band is two markers wide, not four.
+    //
+    // 0x1D is *not* a second frame of an on-foot sprite pair -
+    // `RETRACTIONS.md` R508 withdraws that, on the shipped art: tile 285
+    // and the on-foot sprite 284 differ in more than 150 of 256 pixels and
+    // their non-black palettes are disjoint. What it depicts is open.
     assert_eq!(
         TRANSPORT_MARKER_FOOT_LAST,
         TRANSPORT_MARKER_FOOT_FIRST + TRANSPORT_TWO_FRAME_WEST_BIAS,

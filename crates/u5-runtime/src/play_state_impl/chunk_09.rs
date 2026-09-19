@@ -989,10 +989,17 @@ impl PlayState {
     /// Two sweeps. The forward sweep runs band 0 (the party's own cell)
     /// through band 3, running the forward test at each band and then
     /// painting the two side cells, stopping at the first band whose
-    /// forward test reports blocked. Every image is drawn twice, once
-    /// at `96 - hw[b]` and once mirrored at `192 - x_left - width`, so
-    /// the two halves of a forward billboard meet exactly on the centre
-    /// line. There is no projection arithmetic and no depth buffer.
+    /// forward test reports blocked. Every image is drawn twice, once at
+    /// `96 - hw[b]` and once mirrored through
+    /// [`crate::dungeon_view::dungeon_billboard_right_x`]. There is no
+    /// projection arithmetic and no depth buffer.
+    ///
+    /// The mirror is `191 - x_left - width`, reflecting about `x = 95`, and
+    /// the two halves **overlap in column 95**. `RETRACTIONS.md` R394
+    /// withdrew the `192 - x_left - width` form this comment carried, along
+    /// with "a mirrored right half beginning at the centre line" - from a
+    /// pixel-exact capture of the shipped corridor. The helper has always
+    /// had the corrected span; only this citation was stale.
     ///
     fn draw_dungeon_corridor(
         &mut self,
@@ -1422,9 +1429,10 @@ impl PlayState {
         // A rising sprite is the stored art turned upside down; see
         // `blit_dungeon_sprite_oriented`.
         blit_dungeon_sprite_oriented(viewport, sprite, left_x, y, false, rising);
-        // Same reflection as the corridor images (`dungeon-mode.md §6.6`:
-        // "a mirrored right half beginning at the centre line"), taken
-        // through the shared helper so the two families cannot drift.
+        // Same reflection as the corridor images, taken through the shared
+        // helper so the two families cannot drift. `dungeon-mode.md §6.6`'s
+        // "a mirrored right half beginning at the centre line" is withdrawn
+        // by `RETRACTIONS.md` R394: the halves overlap in column 95.
         let right_x = dungeon_billboard_right_x(left_x, sprite.image.width as i32);
         blit_dungeon_sprite_oriented(viewport, sprite, right_x, y, true, rising);
     }
