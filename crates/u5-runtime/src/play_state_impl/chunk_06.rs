@@ -719,6 +719,26 @@ impl PlayState {
         member_index: Option<usize>,
     ) -> io::Result<MoveOutcome> {
         if let Area::Dungeon { scene, level } = self.area {
+            // `dungeon-mode.md §11`: "Dungeon L-Look, Search, Jimmy and
+            // Open all run the shared" acting-member selection, which
+            // picks silently when only one member can act and prompts
+            // only when the choice is real. This arm opened the picker
+            // unconditionally: measured 2026-09-19
+            // (`qa/paired/dungeon-chest-jimmy.tsv`, beat `jimmy`), where
+            // the original answers a one-member party with `Jimmy-` /
+            // `Chest unlocked` and this engine printed `Jimmy-Player:`.
+            let member_index = match member_index {
+                Some(index) => Some(index),
+                None => match self.dungeon_container_acting_member() {
+                    ActingMemberSelection::Selected(slot) => Some(slot),
+                    ActingMemberSelection::Prompt => None,
+                    ActingMemberSelection::NoneAble => {
+                        self.advance_turn();
+                        self.message.clear(); // audit: not a player-facing line
+                        return Ok(MoveOutcome::Blocked);
+                    }
+                },
+            };
             let Some(member_index) = member_index else {
                 return Ok(self.start_jimmy_party_prompt(direction));
             };

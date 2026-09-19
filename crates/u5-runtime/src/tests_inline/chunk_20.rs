@@ -1280,6 +1280,20 @@ fn active_dungeon_jimmy_picker_preserves_prompt_before_key_check() {
     let mut grid = open_dungeon_record();
     grid[dungeon_cell_index(0, 1, 1)] = 0x4b;
     let mut state = dungeon_state(grid, 0, 1, 1);
+        // Two conscious members, so the shared acting-member selection
+        // is a real choice and opens the picker. With one it picks
+        // silently - see `jimmy_direction_with_game_dir_and_member`.
+        state.party.push(PartyMember {
+            slot: 1,
+            class_byte: b'A',
+            status: b'G',
+            climb_stat: DEFAULT_CLIMB_STAT,
+            mana: 8,
+            hp: DEFAULT_PARTY_HP,
+            max_hp: DEFAULT_PARTY_MAX_HP,
+            level: 8,
+        });
+
     state.keys = 0;
 
     assert_eq!(
@@ -1308,6 +1322,20 @@ fn active_dungeon_jimmy_cancel_commits_one_action() {
     let mut grid = open_dungeon_record();
     grid[dungeon_cell_index(0, 1, 1)] = 0x4b;
     let mut state = dungeon_state(grid, 0, 1, 1);
+        // Two conscious members, so the shared acting-member selection
+        // is a real choice and opens the picker. With one it picks
+        // silently - see `jimmy_direction_with_game_dir_and_member`.
+        state.party.push(PartyMember {
+            slot: 1,
+            class_byte: b'A',
+            status: b'G',
+            climb_stat: DEFAULT_CLIMB_STAT,
+            mana: 8,
+            hp: DEFAULT_PARTY_HP,
+            max_hp: DEFAULT_PARTY_MAX_HP,
+            level: 8,
+        });
+
     state.keys = 2;
     state.prng_state = 0x1234;
 
