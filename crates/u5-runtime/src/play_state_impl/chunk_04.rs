@@ -2052,9 +2052,8 @@ impl PlayState {
                     self.mark_visibility_dirty();
                 }
                 self.advance_turn();
-                // The combat-only presentations are not measured; the
-                // engine prints nothing rather than inventing a sentence.
-                self.message.clear();
+                // `inventory.md §7.2`: "Purple in combat | `Poof!\n`".
+                self.message = POTION_RESULT_POOF.to_string();
                 if applied {
                     MoveOutcome::Used
                 } else {
@@ -2069,7 +2068,8 @@ impl PlayState {
                 }
                 self.advance_turn();
                 let applied = self.apply_combat_party_invisibility_potion(target_index);
-                self.message.clear();
+                // `inventory.md §7.2`: "Black in combat | `Invisible!\n`".
+                self.message = POTION_RESULT_INVISIBLE.to_string();
                 if applied {
                     MoveOutcome::Used
                 } else {

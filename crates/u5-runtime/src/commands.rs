@@ -856,12 +856,24 @@ pub const SCROLL_RESURRECTION_RESULT: &str = "Resurrection!";
 /// - the two combat-only colours used outside combat:
 ///   [`POTION_RESULT_NO_NOTICEABLE_EFFECT`], which opens with a blank row;
 /// - the white visibility repaint: **no line**.
+///
+/// The two colours' *in-combat* lines were the one gap this capture could
+/// not fill, and the engine printed nothing rather than invent them.
+/// `inventory.md §7.2` now publishes both, in its results table:
+/// "Purple in combat | `Poof!\n`" and "Black in combat |
+/// `Invisible!\n`". They are [`POTION_RESULT_POOF`] and
+/// [`POTION_RESULT_INVISIBLE`].
 pub const POTION_RESULT_FAILED: &str = "Failed!\n";
 pub const POTION_RESULT_HEALED: &str = "Healed!\n";
 pub const POTION_RESULT_POISON_CURED: &str = "Poison cured!\n";
 pub const POTION_RESULT_POISONED: &str = "POISONED!\n";
 pub const POTION_RESULT_SLEPT: &str = "Slept!\n";
 pub const POTION_RESULT_NO_NOTICEABLE_EFFECT: &str = "\nNo noticeable effect now!\n";
+/// `inventory.md §7.2`, Purple in combat. Distinct from
+/// [`WISHING_WELL_GRANT_LINE`], which happens to read the same.
+pub const POTION_RESULT_POOF: &str = "Poof!\n";
+/// `inventory.md §7.2`, Black in combat.
+pub const POTION_RESULT_INVISIBLE: &str = "Invisible!\n";
 
 /// `inventory.md §4.4`, the U-Use reference sequence: "refuse with
 /// `No_usable_items!\n` if nothing is usable". The engine had

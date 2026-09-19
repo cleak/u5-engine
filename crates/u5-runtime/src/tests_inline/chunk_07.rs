@@ -671,7 +671,9 @@ fn potion_combat_and_white_visibility_effects_use_scene_gates() {
         combat.active_objects[1].tile,
         COMBAT_HIDDEN_ACTIVE_OBJECT_TILE
     );
-    assert_eq!(combat.message, "");
+    // `inventory.md §7.2`: "Black in combat | `Invisible!\n`". The engine
+    // printed nothing here while the line was unpublished.
+    assert_eq!(combat.message, POTION_RESULT_INVISIBLE);
 }
 
 #[test]
@@ -725,7 +727,8 @@ fn combat_potions_mark_and_clear_linked_presentation_state() {
         potion_flash_playback(POTION_PURPLE_INDEX)
     );
     assert!(combat.visibility_dirty);
-    assert_eq!(combat.message, "");
+    // `inventory.md §7.2`: "Purple in combat | `Poof!\n`".
+    assert_eq!(combat.message, POTION_RESULT_POOF);
 }
 
 #[test]

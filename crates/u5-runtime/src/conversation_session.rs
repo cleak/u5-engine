@@ -519,6 +519,13 @@ impl ConversationSession {
 
     /// The player pressed the key the §7.3 pause was blocked on. Resume
     /// the same field just past the control byte.
+    ///
+    /// Any key resumes. §7.3's `0x83` row also gives a "designated
+    /// cancel key" that terminates the stream instead, but it does not
+    /// name the key and neither does `systems/input.md`, so that arm is
+    /// deliberately absent - `cleak/u5-spec#284` asks which key it is,
+    /// whether it ends the response or the conversation, and whether
+    /// `0x8F` shares it.
     pub fn resume_after_page_key(
         &mut self,
         ctx: &ConversationContext<'_>,
