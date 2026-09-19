@@ -1824,7 +1824,13 @@
         assert_eq!(state.turn, 1);
         assert_eq!(
             state.message,
-            "Thou dost hold above thee the evil Shard of Falsehood...\n\n...and cast it into the Flame of Truth!\n\nFAULINEI is vanquished! Cleared 1 encounter(s)."
+            // `inventory.md §7.1`: the destruction "adds `\nThe doom of the
+            // Shadowlord_`, the matching name Faulinei, Astaroth or
+            // Nosfentor, then `_is wrought!\n`". The cast line already
+            // ends in a feed, so the two make the blank row between them.
+            // This engine read `FAULINEI is vanquished! Cleared 1
+            // encounter(s).`, which is a diagnostic, not a game line.
+            "Thou dost hold above thee the evil Shard of Falsehood...\n\n...and cast it into the Flame of Truth!\n\nThe doom of the Shadowlord FAULINEI is wrought!\n"
         );
     }
 
@@ -1840,7 +1846,13 @@
                 15,
                 9,
                 EternalFlame::Truth,
-                "Thou dost hold above thee the evil Shard of Falsehood...\n\n...and cast it into the Flame of Truth!\n\nFAULINEI is vanquished! Cleared 1 encounter(s).",
+                // `inventory.md §7.1`: the destruction "adds `\nThe doom of the
+            // Shadowlord_`, the matching name Faulinei, Astaroth or
+            // Nosfentor, then `_is wrought!\n`". The cast line already
+            // ends in a feed, so the two make the blank row between them.
+            // This engine read `FAULINEI is vanquished! Cleared 1
+            // encounter(s).`, which is a diagnostic, not a game line.
+            "Thou dost hold above thee the evil Shard of Falsehood...\n\n...and cast it into the Flame of Truth!\n\nThe doom of the Shadowlord FAULINEI is wrought!\n",
             ),
             (
                 SHADOWLORD_HATRED_INDEX,
@@ -1850,7 +1862,7 @@
                 15,
                 3,
                 EternalFlame::Love,
-                "Thou dost hold above thee the evil Shard of Hatred...\n\n...and cast it into the Flame of Love!\n\nASTAROTH is vanquished! Cleared 1 encounter(s).",
+                "Thou dost hold above thee the evil Shard of Hatred...\n\n...and cast it into the Flame of Love!\n\nThe doom of the Shadowlord ASTAROTH is wrought!\n",
             ),
             (
                 SHADOWLORD_COWARDICE_INDEX,
@@ -1860,7 +1872,7 @@
                 15,
                 16,
                 EternalFlame::Courage,
-                "Thou dost hold above thee the evil Shard of Cowardice...\n\n...and cast it into the Flame of Courage!\n\nNOSFENTOR is vanquished! Cleared 1 encounter(s).",
+                "Thou dost hold above thee the evil Shard of Cowardice...\n\n...and cast it into the Flame of Courage!\n\nThe doom of the Shadowlord NOSFENTOR is wrought!\n",
             ),
         ];
 

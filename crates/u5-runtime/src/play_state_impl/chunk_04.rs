@@ -1234,11 +1234,20 @@ impl PlayState {
         let cleared = self.clear_shadowlord_name_encounters(index);
         self.mark_visibility_dirty();
         self.advance_turn();
-        // Phase 6 closes with a line naming the destroyed Shadowlord.
-        self.message.push_str(&format!(
-            "\n{} is vanquished! Cleared {cleared} encounter(s).",
-            shadowlord_name_for_slot(index).unwrap_or("The Shadowlord")
-        ));
+        // Phase 6 closes with `inventory.md §7.1`'s published line: "The
+        // later actual Shadowlord destruction adds `\nThe doom of the
+        // Shadowlord_`, the matching name Faulinei, Astaroth or
+        // Nosfentor, then `_is wrought!\n`."
+        //
+        // The engine wrote `<name> is vanquished! Cleared N encounter(s).`
+        // here, which is an engine diagnostic wearing a game line's
+        // clothes. The count keeps its value as bookkeeping and goes where
+        // the rest of this engine's bookkeeping goes.
+        let name = shadowlord_name_for_slot(index).unwrap_or("The Shadowlord");
+        self.message
+            .push_str(&format!("{USE_SHARD_DOOM_PREFIX}{name}{USE_SHARD_DOOM_SUFFIX}"));
+        self.diagnostics
+            .push(format!("shard destruction cleared {cleared} encounter(s)"));
         Ok(MoveOutcome::Used)
     }
 

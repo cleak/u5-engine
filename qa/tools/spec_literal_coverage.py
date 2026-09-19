@@ -22,7 +22,14 @@ import sys
 SPAN = re.compile(r"`([^`\n]{3,48})`")
 # A published line looks like text: letters and spaces, and it ends in
 # punctuation or carries at least one space.
-TEXTY = re.compile(r"^[A-Za-z][A-Za-z0-9 '.,!?:;()\-/]*$")
+# A published line looks like text, and the specification writes its own
+# line feeds as `\n` escapes inside the span - exactly as Rust source
+# does, so the escape is matched rather than normalised away. Without the
+# backslash here every literal written that way was skipped in silence:
+# `\nNo land nearby!\n` and `\nNo skiffs on board!\n`
+# (`vehicles.md §5.1`) were both absent from the engine and neither was
+# reported until 2026-09-19.
+TEXTY = re.compile(r"^[\\A-Za-z][\\A-Za-z0-9 'n.,!?:;()\-/]*$")
 SKIP_TOKENS = (
     "u5-decomp",
     "systems/",
@@ -82,6 +89,18 @@ def candidates(text: str) -> set[str]:
     found = set()
     for span in SPAN.findall(text):
         literal = span.replace("_", " ").strip()
+        # A published line carries its own feeds, and the specification
+        # writes them as `\n` escapes inside the span - exactly as Rust
+        # source does. Strip only the leading and trailing ones: the
+        # filters below test the line's own text, and an interior escape
+        # is part of it (`Klimb-\nWith What?`).
+        #
+        # Without this every line written with its feeds was skipped in
+        # silence, because the `endswith` test below saw the escape rather
+        # than the punctuation. `\nNo land nearby!\n` and
+        # `\nNo skiffs on board!\n` (`vehicles.md §5.1`) were both absent
+        # from the engine and neither was reported until 2026-09-19.
+        literal = re.sub(r"^(?:\\[nr])+|(?:\\[nr])+$", "", literal).strip()
         if any(token in span for token in SKIP_TOKENS):
             continue
         if not TEXTY.match(literal):

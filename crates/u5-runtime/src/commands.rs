@@ -871,6 +871,18 @@ pub const USE_REGALIA_REMOVED: &str = "Removed!";
 /// thee the evil Shard of Falsehood`.
 pub const USE_SHARD_ALOFT_PREFIX: &str = "Thou dost hold above thee the evil ";
 
+/// `inventory.md §7.1`, the Shadowlord destruction: "The later actual
+/// Shadowlord destruction adds `\nThe doom of the Shadowlord_`, the
+/// matching name Faulinei, Astaroth or Nosfentor, then `_is wrought!\n`."
+///
+/// The engine closed this beat with `<name> is vanquished! Cleared N
+/// encounter(s).` - an engine diagnostic, not a line the game prints. The
+/// cleared-encounter count is bookkeeping and now goes to
+/// `PlayState::diagnostics` where the rest of it lives.
+pub const USE_SHARD_DOOM_PREFIX: &str = "\nThe doom of the Shadowlord ";
+/// See [`USE_SHARD_DOOM_PREFIX`].
+pub const USE_SHARD_DOOM_SUFFIX: &str = " is wrought!\n";
+
 pub const SCROLL_WIND_CHANGE_RESULT: &str = "Wind change!";
 pub const SCROLL_RESURRECTION_RESULT: &str = "Resurrection!";
 
