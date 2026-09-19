@@ -1181,8 +1181,86 @@ pub const fn blackthorn_rescue_restoration_envelope(slot: usize) -> EnvelopeSegm
     EnvelopeSegment::new(2, 2000, 30_000, 1, period)
 }
 
+/// `karma.md §7.2`, the ordination arm: "After record `33` the handler
+/// runs the generator once per row of a seven-row parameter list, with no
+/// pause, no text and no input between rows. There are seven rows, not
+/// eight, and every row that exists is played."
+///
+/// "The five parameters and the counts are exact." Thirty-three thousand
+/// iterations in all - about 1.42 s audible, band 1.33 to 1.59 s. Each
+/// note's comparison climbs across its own length, so its duty cycle
+/// falls from about 98 per cent to between 2 and 7, which by §5.4.6's
+/// amplitude rule makes "seven bell-like strikes and not seven flat
+/// tones". The largest comparison anywhere in the chime is 64,492, so
+/// the 16-bit wrap `audio.md §8.3`'s summon cue shows does not occur.
+///
+/// `audio.md §5.4.7` owns these rows and any later correction to them.
+pub const SHRINE_ORDINATION_CHIME: [EnvelopeSegment; 7] = [
+    EnvelopeSegment::new(9, 1000, 7_000, 1, 3300),
+    EnvelopeSegment::new(10, 1000, 6_000, 1, 3925),
+    EnvelopeSegment::new(21, 1000, 3_000, 1, 3925),
+    EnvelopeSegment::new(21, 1000, 3_000, 1, 3925),
+    EnvelopeSegment::new(21, 1000, 3_000, 1, 3925),
+    EnvelopeSegment::new(21, 1000, 3_000, 1, 3700),
+    EnvelopeSegment::new(8, 500, 8_000, 1, 3925),
+];
+
+/// `karma.md §7.2`, the offering and Codex-turn-in arms: each "runs the
+/// envelope generator **920 times** in one sweep".
+pub const SHRINE_SWELL_RUNS: u32 = 920;
+/// Half the sweep: "rises 2000, 2050 ... 24950 across 460 runs, then
+/// resets to 25000 and falls 25000, 24950 ... 2050 across 460 more".
+pub const SHRINE_SWELL_RUNS_PER_LIMB: u32 = SHRINE_SWELL_RUNS / 2;
+pub const SHRINE_SWELL_COMPARISON_STEP: u16 = 50;
+pub const SHRINE_SWELL_RISING_FIRST_COMPARISON: u16 = 2000;
+pub const SHRINE_SWELL_FALLING_FIRST_COMPARISON: u16 = 25_000;
+/// §7.2's per-arm row: phase increment and iterations per run. "Every run
+/// uses comparison delta 0, idle count 1 and the arm's single fixed phase
+/// increment, so the pitch never moves; what sweeps is duty cycle, from
+/// about 97 per cent down to about 62 per cent and back - one slow swell
+/// and decay at one pitch."
+pub const SHRINE_OFFERING_SWELL_PERIOD: u16 = 2700;
+pub const SHRINE_OFFERING_SWELL_ITERATIONS: u32 = 200;
+pub const SHRINE_TURN_IN_SWELL_PERIOD: u16 = 3100;
+pub const SHRINE_TURN_IN_SWELL_ITERATIONS: u32 = 150;
+
+/// One run of the §7.2 swell, `run` counted from zero across all 920.
+pub const fn shrine_swell_segment(run: u32, period: u16, iterations: u32) -> EnvelopeSegment {
+    let comparison = if run < SHRINE_SWELL_RUNS_PER_LIMB {
+        SHRINE_SWELL_RISING_FIRST_COMPARISON + SHRINE_SWELL_COMPARISON_STEP * run as u16
+    } else {
+        SHRINE_SWELL_FALLING_FIRST_COMPARISON
+            - SHRINE_SWELL_COMPARISON_STEP * (run - SHRINE_SWELL_RUNS_PER_LIMB) as u16
+    };
+    EnvelopeSegment::new(0, comparison, iterations, 1, period)
+}
+
 fn envelope_program(segment: EnvelopeSegment) -> SpeakerProgram {
     SpeakerProgram::new(vec![SpeakerOp::Envelope(segment), SpeakerOp::Stop])
+}
+
+/// `karma.md §7.2`'s ordination chime as one blocking program. "No
+/// envelope run reads the keyboard. Keys typed during it are still queued
+/// when it ends, and there is no abort-on-key path anywhere in it."
+pub fn shrine_ordination_chime_program() -> SpeakerProgram {
+    let mut ops = Vec::with_capacity(SHRINE_ORDINATION_CHIME.len() * 2);
+    for segment in SHRINE_ORDINATION_CHIME {
+        ops.push(SpeakerOp::Envelope(segment));
+        ops.push(SpeakerOp::Stop);
+    }
+    SpeakerProgram::new(ops)
+}
+
+/// `karma.md §7.2`'s 920-run swell for one arm.
+pub fn shrine_swell_program(period: u16, iterations: u32) -> SpeakerProgram {
+    let mut ops = Vec::with_capacity(SHRINE_SWELL_RUNS as usize * 2);
+    for run in 0..SHRINE_SWELL_RUNS {
+        ops.push(SpeakerOp::Envelope(shrine_swell_segment(
+            run, period, iterations,
+        )));
+        ops.push(SpeakerOp::Stop);
+    }
+    SpeakerProgram::new(ops)
 }
 
 pub fn blackthorn_rescue_envelope_program() -> SpeakerProgram {
@@ -1700,6 +1778,13 @@ pub enum SoundEffect {
     BlackthornMovementStinger,
     /// `§8.6.2` fixed six-envelope Blackthorn rescue sequence.
     BlackthornRescueEnvelopes,
+    /// `karma.md §7.2`, the ordination arm's seven-note chime.
+    ShrineOrdinationChime,
+    /// `karma.md §7.2`, the accepted-offering arm's 920-run swell.
+    ShrineOfferingSwell,
+    /// `karma.md §7.2`, the Codex-turn-in arm's 920-run swell. The
+    /// shared flash/rumble helper runs **after** this, not instead of it.
+    ShrineTurnInSwell,
     /// R494's per-slot restoration note, carrying the slot it precedes.
     BlackthornRescueRestoration(usize),
     /// `containers.md §9` moldy-corpse Plague consequence.
@@ -1787,6 +1872,15 @@ impl SoundEffect {
             }
             SoundEffect::BlackthornMovementStinger => two_part_sting(jitter),
             SoundEffect::BlackthornRescueEnvelopes => blackthorn_rescue_envelope_program(),
+            SoundEffect::ShrineOrdinationChime => shrine_ordination_chime_program(),
+            SoundEffect::ShrineOfferingSwell => shrine_swell_program(
+                SHRINE_OFFERING_SWELL_PERIOD,
+                SHRINE_OFFERING_SWELL_ITERATIONS,
+            ),
+            SoundEffect::ShrineTurnInSwell => shrine_swell_program(
+                SHRINE_TURN_IN_SWELL_PERIOD,
+                SHRINE_TURN_IN_SWELL_ITERATIONS,
+            ),
             SoundEffect::BlackthornRescueRestoration(slot) => {
                 envelope_program(blackthorn_rescue_restoration_envelope(*slot))
             }

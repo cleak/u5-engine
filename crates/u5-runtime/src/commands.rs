@@ -749,6 +749,21 @@ pub const SHRINE_VIRTUE_QUESTION_HOLD_WORLD_TICKS: u16 = 10;
 /// steps and eight stings come out a little longer. Measured 2026-09-12
 /// (`qa/paired/shrine-three-mantras.tsv`, beat `after2`): the original has no
 /// command row 2.5 s after the key.
+///
+/// `karma.md §7.2` (2026-09-13) now prices the whole key-to-prompt window
+/// arithmetically, and the measurement sits the right side of it. The
+/// section decomposes the ordination arm's sixty-one world steps as "**ten**
+/// (the handler's own closing wait) **plus one** (the exit's re-stamp step)
+/// **plus forty** (eight exit animation frames at five steps each) **plus
+/// ten** (the exit's closing wait)", which is the split this constant was
+/// written to. Its fifty-one steps and eight stings price at 51 x 55 ms plus
+/// 8 x 27 ms, about 3.0 s, against this constant's 88 ticks, about 4.8 s.
+///
+/// §7.2 is explicit that its rows are "a floor, not an estimate": they "add
+/// **nothing** for the full viewport rebuild each of those steps also
+/// performs, which is unpriced". A measured hold above the floor is what the
+/// section predicts, so the constant stands as measured rather than being
+/// replaced by the arithmetic.
 pub const SHRINE_EXIT_PACING_HOLD_BIOS_TICKS: u16 = 88;
 /// **Measured** 2026-09-07 (`qa/paired/shrine-flow.tsv`): accepting the virtue
 /// leaves the question and the typed answer on screen, then opens this prompt

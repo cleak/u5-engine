@@ -1952,8 +1952,18 @@ impl PlayState {
                 ShrinePhase::AltarQuest => {
                     self.emit_shrine_misc_record(game_dir, MISCMSG_SHRINE_RETURN_INSTRUCTION)?;
                     // "Finish with the shrine's sound sequence and ten world
-                    // ticks." The sound sequence is not published as events
-                    // this runtime carries; the pause is, and it is a real
+                    // ticks." `karma.md §7.2` fills in what that sequence is
+                    // on this arm: seven envelope runs from a fixed parameter
+                    // list, "with no pause, no text and no input between
+                    // rows", about 1.42 s audible. It "costs no timer tick
+                    // and no repaint", so it sits beside the hold below
+                    // rather than inside it.
+                    //
+                    // Not implemented from §7.2: this arm needs none of the
+                    // viewport inversion, which the section gives to the
+                    // offering and turn-in arms only.
+                    self.emit_sound_effect(SoundEffect::ShrineOrdinationChime);
+                    // the pause is, and it is a real
                     // hold rather than ten instant animator steps. Measured
                     // 2026-09-12 (`qa/paired/shrine-three-mantras.tsv`, beat
                     // `after2`): the original is still inside it - no command
@@ -2451,6 +2461,17 @@ impl PlayState {
         self.push_runic_message_entry("ALAKAZAM");
         self.emit_message_line_continuing_row("!\n");
         self.adopt_flushed_message("ALAKAZAM!");
+        // `karma.md §7.2` names §12's "local viewport/sound effect" on this
+        // arm: the envelope generator run 920 times in one sweep at a fixed
+        // pitch, "one slow swell and decay", about 7.91 s.
+        //
+        // Not implemented from §7.2: the arm also "issues a single rectangle
+        // fill over the gameplay viewport with the driver's exclusive-or
+        // mode selected", once and never undone. That is a viewport write
+        // whose interaction with the following world steps this engine has
+        // no capture of, and getting it wrong shows on every beat after it,
+        // so it waits for a measurement rather than a reading.
+        self.emit_sound_effect(SoundEffect::ShrineOfferingSwell);
         // The ten-tick result pause. `animation.md §13.5`: a blocking
         // presentation pumps the sprite animator while it waits.
         for _ in 0..SHRINE_OFFERING_RESULT_WORLD_TICKS {

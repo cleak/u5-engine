@@ -266,3 +266,71 @@ fn stonegate_scripted_death_sounds_the_descent_before_the_grid_rewrite() {
         "step 5 still kills every in-party slot",
     );
 }
+
+/// `karma.md §7.2`: the ordination arm's chime is seven rows, "not eight,
+/// and every row that exists is played", 33,000 iterations in all, and
+/// "the largest comparison value anywhere in the chime is 64,492" so no
+/// note reaches the 16-bit wrap.
+#[test]
+fn the_shrine_ordination_chime_matches_its_published_parameter_list() {
+    use crate::audio::*;
+
+    assert_eq!(SHRINE_ORDINATION_CHIME.len(), 7);
+    let iterations: u32 = SHRINE_ORDINATION_CHIME.iter().map(|s| s.iterations).sum();
+    assert_eq!(iterations, 33_000);
+
+    // §7.2's figure: "one lower opening note, the same higher note four
+    // times, one dip in sixth place and a longer final note."
+    let periods: Vec<u16> = SHRINE_ORDINATION_CHIME.iter().map(|s| s.period).collect();
+    assert_eq!(periods, vec![3300, 3925, 3925, 3925, 3925, 3700, 3925]);
+    assert!(SHRINE_ORDINATION_CHIME.iter().all(|s| s.idle == 1));
+
+    // Each note's comparison climbs across its own length, and the peak
+    // is the row's initial value plus its delta over its iterations.
+    let peak = SHRINE_ORDINATION_CHIME
+        .iter()
+        .map(|s| s.initial_comparison as i64 + s.delta as i64 * (s.iterations as i64 - 1))
+        .max()
+        .unwrap();
+    assert_eq!(peak, 64_492);
+    assert!(peak < 65_536, "no note reaches the 16-bit wrap");
+}
+
+/// `karma.md §7.2`: the offering and turn-in arms run the generator 920
+/// times, the comparison rising "2000, 2050 ... 24950 across 460 runs,
+/// then reset[ting] to 25000 and fall[ing] 25000, 24950 ... 2050 across
+/// 460 more", with "comparison delta 0, idle count 1 and the arm's single
+/// fixed phase increment, so the pitch never moves".
+#[test]
+fn the_shrine_swell_sweeps_duty_cycle_and_never_moves_pitch() {
+    use crate::audio::*;
+
+    assert_eq!(SHRINE_SWELL_RUNS, 920);
+    let runs: Vec<EnvelopeSegment> = (0..SHRINE_SWELL_RUNS)
+        .map(|run| {
+            shrine_swell_segment(
+                run,
+                SHRINE_OFFERING_SWELL_PERIOD,
+                SHRINE_OFFERING_SWELL_ITERATIONS,
+            )
+        })
+        .collect();
+
+    assert_eq!(runs[0].initial_comparison, 2000);
+    assert_eq!(runs[459].initial_comparison, 24_950);
+    assert_eq!(runs[460].initial_comparison, 25_000);
+    assert_eq!(runs[919].initial_comparison, 2050);
+    assert!(runs.iter().all(|s| s.delta == 0 && s.idle == 1));
+    assert!(runs.iter().all(|s| s.period == SHRINE_OFFERING_SWELL_PERIOD));
+
+    // §7.2's per-arm totals.
+    let offering: u32 = runs.iter().map(|s| s.iterations).sum();
+    assert_eq!(offering, 184_000);
+    let turn_in: u32 = (0..SHRINE_SWELL_RUNS)
+        .map(|run| {
+            shrine_swell_segment(run, SHRINE_TURN_IN_SWELL_PERIOD, SHRINE_TURN_IN_SWELL_ITERATIONS)
+                .iterations
+        })
+        .sum();
+    assert_eq!(turn_in, 138_000);
+}
