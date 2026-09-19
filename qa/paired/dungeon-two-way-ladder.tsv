@@ -1,0 +1,38 @@
+# `dungeon-mode.md §8.1`'s Klimb row for a two-way ladder, whose three
+# literals had no reader until today: `Klimb-U/D-` "when both directions
+# are available (it blocks until up or down is chosen, and Space answers
+# `Pass\n\n` and climbs nothing)", then `Up!` or `Down!` printed "first,
+# before any test".
+#
+# The party stands on the Deceit two-way ladder at level 3, seeded with
+#
+#   seed_position <profile> dungeon=33 level=3 x=1 y=1
+#
+# In order: K and Space (the pass, which climbs nothing), K and Down, and
+# then K and Up to come back. The level label in the viewport's top border
+# is the independent check that the two climbs went where they say.
+# requires-seed: the party standing on a Deceit two-way ladder, with a torch
+both	wait	9000
+both	key	space
+both	wait	4000
+both	key	j
+both	wait	9000
+both	key	i
+both	wait	2500
+both	shot	lit	Torch lit, standing on the ladder
+both	key	k
+both	wait	2000
+both	shot	prompt	The Klimb-U/D- prompt
+both	key	space
+both	wait	2500
+both	shot	pass	Pass, and no level change
+both	key	k
+both	wait	1500
+both	key	Down
+both	wait	3000
+both	shot	down	Down! one level
+both	key	k
+both	wait	1500
+both	key	Up
+both	wait	3000
+both	shot	up	Up! and back
