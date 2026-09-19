@@ -21,6 +21,10 @@ neighbouring section's citation. Every hit needs a read.
 Documents are fetched from spec HEAD, never from the local checkout,
 which is `cleak/u5-engine#2`'s own process lesson.
 
+Bare `§8.2` citations are attributed to the last document named in the
+same file, which is how this repository writes them once a nearby
+comment has already given the path.
+
 Usage: spec_section_coverage.py [--doc systems/combat.md] [--all]
 """
 
@@ -34,6 +38,11 @@ SPEC_REPO = "cleak/u5-spec"
 HEADING = re.compile(r"^(#{2,4})\s+(?:Section\s+)?(\d+(?:\.\d+)*)[.)]?\s+(.*)$")
 # `combat.md §14`, `systems/combat.md Section 14`, `combat.md 14.1`
 CITE = re.compile(r"([A-Za-z0-9-]+)\.md[`\s]*(?:§|Section\s+|\s)\s*(\d+(?:\.\d+)*)")
+# A bare `§8.2` or `Section 8.2`, which this repository writes once a
+# nearby comment has already named the document. Attributed to the last
+# document mentioned in the same file, which is how they read.
+BARE = re.compile(r"(?:§|Section\s+)\s*(\d+(?:\.\d+)*)")
+DOC = re.compile(r"([A-Za-z0-9-]+)\.md")
 
 
 def spec_tree():
@@ -58,13 +67,29 @@ def fetch(path):
 
 def engine_citations(root):
     cited = set()
-    for rs in root.rglob("*.rs"):
-        for stem, number in CITE.findall(rs.read_text(errors="replace")):
+
+    def record(stem, number):
+        cited.add((stem, number))
+        # A citation of 14.1 is evidence for 14 as well.
+        while "." in number:
+            number = number.rsplit(".", 1)[0]
             cited.add((stem, number))
-            # A citation of 14.1 is evidence for 14 as well.
-            while "." in number:
-                number = number.rsplit(".", 1)[0]
-                cited.add((stem, number))
+
+    for rs in root.rglob("*.rs"):
+        text = rs.read_text(errors="replace")
+        for stem, number in CITE.findall(text):
+            record(stem, number)
+        # Walk the file once, carrying the last document named, so a bare
+        # `§8.2` two lines under `conversation.md §8.1` counts for
+        # `conversation.md`. Only ever attributed within one file.
+        current = None
+        for line in text.splitlines():
+            for match in DOC.finditer(line):
+                current = match.group(1)
+            if current is None:
+                continue
+            for number in BARE.findall(line):
+                record(current, number)
     return cited
 
 
