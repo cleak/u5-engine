@@ -25,6 +25,47 @@ this file alone.
 
 Last known verification state:
 
+**2026-09-19, `work/audio-scenario`.** One uninterrupted pass over every
+scenario in `qa/paired/`: **149 run, 110 match, 37 `RERUN`, 2 `DIFFER`**;
+708 beats agree and 99 differ, and **89 of those 99 are inside `RERUN`
+scenarios**, which is what `RERUN` means - a pool draw, a coin or a
+one-sided probe measured the harness, not the engine.
+
+Both differences were then chased down. `bt-correct` re-ran to a clean
+four of four; `bt-password` re-ran to nine of nine after reading one of
+nine in the pass; `town-talk-after-entry` re-ran to five of five after
+sixty-one differing viewport cells. Those three, with
+`town-entry-walk-probe` and `town-talk-second-npc`, are walk-in town
+routes whose scheduled NPCs move while the scripted steps run, so whoever
+meets traffic is blocked and the two sides arrive in different cells.
+Their headers carry no lottery marker, so the comparator reports them as
+differences. **That is the next harness fix** and it is the difference
+between "110 of 149" and a number that reproduces.
+
+`use-specials` is the one real difference, on two surfaces and two
+issues: its message row is `cleak/u5-spec#278`, its panel is
+`cleak/u5-engine#42`.
+
+Fixed and verified this pass: the NPC-start-marker bridge tiles
+(`bt-password` 8 of 9 viewport-failing beats to zero), the shrine
+presentation (`cleak/u5-engine#30`, closed - three scenarios, zero
+differing viewport cells), the shrine virtue-question hold
+(`shrine-enter-pacing` seven of eight to eight of eight), `shops.md
+§6.2`'s silent surcharge, `inventory.md §7.2`'s `Poof!`/`Invisible!`,
+and `combat.md §9.1`'s self-acting arena exit - which the engine had none
+of, so no fleeing monster could ever leave a fight.
+
+Two coverage tools now make `cleak/u5-engine#2`'s lost finding set
+enumerable again: `qa/tools/spec_section_coverage.py` (1342 published
+sections, 253 contract-bearing and uncited) and
+`qa/tools/spec_literal_coverage.py` (**0 unexplained of 491**).
+
+Open upstream: `cleak/u5-spec#274`-`#285`, including `#284` (the `§7.3`
+pause codes, whose literal implementation cost three matching beats and
+was reverted) and `#285` (the draw order in `§9.1`'s fleeing pre-step
+block).
+
+
 2026-08-24, current worktree after the audit-and-repair pass through public
 issue `#116`, the corrected telescope/Spyglass sky renderer, the shared
 item-picker audit, and the shared exploration party-capability gate. The gate
