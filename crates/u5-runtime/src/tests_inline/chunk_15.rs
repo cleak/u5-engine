@@ -443,6 +443,67 @@
         }
     }
 
+    /// `dungeon-mode.md §8.1`, the both-directions Klimb row: "the up key
+    /// or the **up-direction key** gives `Up!\n`, the down key or the
+    /// **down-direction key** gives `Down!\n` ... and any other key is
+    /// re-read."
+    ///
+    /// Measured 2026-09-19 (`qa/paired/dungeon-two-way-ladder.tsv`): only
+    /// `<` and `>` were accepted, so the arrow keys left the prompt open
+    /// where the original climbs.
+    #[test]
+    fn dungeon_two_way_ladder_takes_the_direction_keys_as_well() {
+        let scene = DungeonScene::new(33).unwrap();
+        let mut grid = open_dungeon_record();
+        grid[dungeon_cell_index(2, 1, 1)] = 0x30;
+
+        let mut down = dungeon_state(grid.clone(), 2, 1, 1);
+        assert!(down.handle_dungeon_key('k', Path::new("")).unwrap());
+        assert_eq!(
+            handle_play_key_input(
+                &mut down,
+                char::from(crate::INPUT_CODE_SOUTH),
+                "",
+                Path::new("")
+            )
+            .unwrap(),
+            PlayInputDisposition::Continue
+        );
+        assert_eq!(down.area, Area::Dungeon { scene, level: 3 });
+        assert!(down.active_direction_prompt.is_none());
+
+        let mut up = dungeon_state(grid.clone(), 2, 1, 1);
+        assert!(up.handle_dungeon_key('k', Path::new("")).unwrap());
+        assert_eq!(
+            handle_play_key_input(
+                &mut up,
+                char::from(crate::INPUT_CODE_NORTH),
+                "",
+                Path::new("")
+            )
+            .unwrap(),
+            PlayInputDisposition::Continue
+        );
+        assert_eq!(up.area, Area::Dungeon { scene, level: 1 });
+
+        // "any other key is re-read": the prompt stays open and nothing
+        // moves.
+        let mut sideways = dungeon_state(grid, 2, 1, 1);
+        assert!(sideways.handle_dungeon_key('k', Path::new("")).unwrap());
+        assert_eq!(
+            handle_play_key_input(
+                &mut sideways,
+                char::from(crate::INPUT_CODE_EAST),
+                "",
+                Path::new("")
+            )
+            .unwrap(),
+            PlayInputDisposition::Continue
+        );
+        assert_eq!(sideways.area, Area::Dungeon { scene, level: 2 });
+        assert!(sideways.active_direction_prompt.is_some());
+    }
+
     /// `dungeon-mode.md §8.1`, the both-directions Klimb row: "the pass
     /// key gives `Pass\n\n` and changes no level". The word completes the
     /// open `Klimb-U/D-` row and the second feed leaves a blank under it.

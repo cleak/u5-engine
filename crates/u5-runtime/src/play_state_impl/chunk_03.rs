@@ -2848,7 +2848,27 @@ impl PlayState {
                 match ch {
                     '<' => return self.climb(game_dir, ClimbIntent::Up).map(Some),
                     '>' => return self.climb(game_dir, ClimbIntent::Down).map(Some),
-                    _ if matches!(self.area, Area::Dungeon { .. }) => continue,
+                    // `dungeon-mode.md §8.1`, the both-directions Klimb
+                    // row: "the up key or the **up-direction key** gives
+                    // `Up!\n`, the down key or the **down-direction key**
+                    // gives `Down!\n` ... and any other key is re-read."
+                    // Only `<` and `>` were accepted, so the arrows the
+                    // player reaches for left the prompt open. Measured
+                    // 2026-09-19 (`qa/paired/dungeon-two-way-ladder.tsv`,
+                    // beats `down` and `up`), where the original climbs and
+                    // this engine sat on the prompt.
+                    _ if matches!(self.area, Area::Dungeon { .. }) => {
+                        match Direction::from_play_key(ch) {
+                            Some(Direction::North) => {
+                                return self.climb(game_dir, ClimbIntent::Up).map(Some);
+                            }
+                            Some(Direction::South) => {
+                                return self.climb(game_dir, ClimbIntent::Down).map(Some);
+                            }
+                            // "any other key is re-read"
+                            _ => continue,
+                        }
+                    }
                     _ => {}
                 }
             }
