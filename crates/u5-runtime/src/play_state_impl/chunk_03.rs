@@ -2761,6 +2761,32 @@ impl PlayState {
                 if matches!(session.kind, DirectionPromptKind::Klimb) {
                     self.advance_turn();
                 }
+                // `commands.md §3`: the dispatcher's status is `Acted` by
+                // default and `0` has a closed list of producers - "Unknown
+                // input, the two stock-refusal letters `D` and `W`, the save
+                // route `Q`, the typeahead toggle, dungeon `P`, and any
+                // forwarded handler that refused". A cancelled Search is on
+                // none of them, so the epilogue runs and the turn's
+                // underfoot work happens.
+                //
+                // Measured 2026-09-19
+                // (`qa/paired/hidden-treasure-search.tsv`, beat `again`):
+                // the party stands on Underworld molten lava, presses `S`
+                // and cancels with Space, and the original answers
+                // ` Search-Pass` / `Burning!` - the burning family's
+                // underfoot line for that turn. This engine printed the
+                // echo alone, because its cancel took no turn and the
+                // epilogue never ran.
+                //
+                // The same shape as the Klimb arm above and the Push arm
+                // below, both of which were added from their own captures.
+                if matches!(session.kind, DirectionPromptKind::Search) {
+                    match self.area {
+                        Area::World { .. } => self.advance_turn(),
+                        Area::Town { .. } => self.advance_turn_without_door_tick(),
+                        Area::Dungeon { .. } => {}
+                    }
+                }
                 // `commands.md §5.4`: `Space` prints `Pass` on the
                 // open verb line, "the same word the Pass command
                 // echoes" - "A cancelled Look therefore renders as the

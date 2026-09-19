@@ -96,6 +96,44 @@
         let _ = fs::remove_dir_all(dir);
     }
 
+    /// `commands.md §3`: the dispatcher's status is `Acted` by default and
+    /// `0` has a closed list of producers, none of which is a cancelled
+    /// Search - so the turn's epilogue runs and its underfoot work
+    /// happens.
+    ///
+    /// Measured 2026-09-19 (`qa/paired/hidden-treasure-search.tsv`, beat
+    /// `again`): standing on molten lava, `S` cancelled with Space
+    /// answers ` Search-Pass` / `Burning!` on the original, where this
+    /// engine printed the echo alone.
+    #[test]
+    fn a_cancelled_outdoor_search_still_costs_its_turn() {
+        let dir = debug_game_dir();
+        let mut grid = open_world_grid();
+        grid[world_cell_index(1, 1)] = 0x8f;
+        let mut state = world_state(grid, 1, 1);
+        let turn_before = state.turn;
+
+        handle_play_key_input(&mut state, 'S', "", &dir).unwrap();
+        assert!(state.active_direction_prompt.is_some());
+        assert_eq!(state.turn, turn_before);
+
+        handle_play_key_input(&mut state, ' ', "", &dir).unwrap();
+
+        assert!(state.active_direction_prompt.is_none());
+        assert_eq!(state.turn, turn_before + 1, "the cancel costs its turn");
+        let transcript = state
+            .message_transcript
+            .iter()
+            .map(|entry| entry.text.clone())
+            .collect::<Vec<_>>()
+            .join("|");
+        assert!(
+            transcript.contains(WORLD_BURNING_LINE),
+            "the turn's underfoot line is printed: {transcript}"
+        );
+        let _ = fs::remove_dir_all(dir);
+    }
+
     #[test]
     fn foot_steps_on_native_molten_lava_and_takes_damage() {
         let mut grid = open_world_grid();
