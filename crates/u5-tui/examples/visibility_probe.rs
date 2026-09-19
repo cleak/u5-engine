@@ -94,10 +94,16 @@ fn main() {
         let mut tiles = String::new();
         for dx in -radius..=radius {
             let (x, y) = (px + dx, py + dy);
-            let tile = if (0..32).contains(&x) && (0..32).contains(&y) {
-                state.grid[(y as usize) * 32 + (x as usize)]
+            let tile = if town {
+                if (0..32).contains(&x) && (0..32).contains(&y) {
+                    state.grid[(y as usize) * 32 + (x as usize)]
+                } else {
+                    0
+                }
             } else {
-                0
+                let wx = x.rem_euclid(WORLD_SIDE as isize) as usize;
+                let wy = y.rem_euclid(WORLD_SIDE as isize) as usize;
+                state.world_live_tile_at(wx, wy)
             };
             tiles.push_str(&format!("{tile:02x} "));
         }
