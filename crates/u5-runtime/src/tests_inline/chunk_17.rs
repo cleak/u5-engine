@@ -5163,3 +5163,40 @@ fn the_picker_page_is_filled_by_display_line_not_by_entry() {
     // Six entries on seven lines: indices 0 through 5.
     assert_eq!(lines.last().unwrap().0, 5);
 }
+
+/// `combat.md §8.4`: the combat active-player digit answers with
+/// `Set active plr:\n` and then `None!` for digit zero, the selected
+/// actor's name for a valid digit, or `Invalid!`. This engine answered
+/// `Active player selected.` for all three - published nowhere, and
+/// silent about which member is now active.
+#[test]
+fn the_combat_active_player_digit_answers_with_its_published_three_forms() {
+    use crate::*;
+
+    assert_eq!(COMBAT_SET_ACTIVE_PLAYER_LABEL, "Set active plr:\n");
+    assert_eq!(COMBAT_SET_ACTIVE_PLAYER_NONE, "None!");
+    assert_eq!(COMBAT_SET_ACTIVE_PLAYER_INVALID, "Invalid!");
+
+    // §8.4's digit table, read back through the resolver that classifies
+    // the key: zero clears, `1`..`6` select, anything else is invalid.
+    assert_eq!(
+        resolve_combat_active_player_digit('0'),
+        CombatActivePlayerSelectionOutcome::Clear
+    );
+    assert_eq!(
+        resolve_combat_active_player_digit('1'),
+        CombatActivePlayerSelectionOutcome::SelectPartySlot(0)
+    );
+    assert_eq!(
+        resolve_combat_active_player_digit('6'),
+        CombatActivePlayerSelectionOutcome::SelectPartySlot(5)
+    );
+    assert_eq!(
+        resolve_combat_active_player_digit('7'),
+        CombatActivePlayerSelectionOutcome::Invalid
+    );
+
+    // The label carries its own feed, so every answer lands on the row
+    // beneath it rather than beside it.
+    assert!(COMBAT_SET_ACTIVE_PLAYER_LABEL.ends_with('\n'));
+}

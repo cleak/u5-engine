@@ -5041,11 +5041,35 @@ fn combat_player_command_input_from_key(key: char) -> CombatPlayerCommandInput {
     CombatPlayerCommandInput::Key(key.to_ascii_uppercase())
 }
 
-fn combat_player_command_message(action: &CombatPlayerCommandAction) -> String {
+fn combat_player_command_message(
+    state: &PlayState,
+    action: &CombatPlayerCommandAction,
+) -> String {
     match action {
         CombatPlayerCommandAction::QuicknessSkipped => "Quickness!".to_string(),
-        CombatPlayerCommandAction::ActivePlayerSelection(_) => {
-            "Active player selected.".to_string()
+        // `combat.md §8.4`: the digit answers with `Set active plr:\n` and
+        // then `None!`, the selected actor's name, or `Invalid!`. This
+        // engine answered `Active player selected.` for all three, which
+        // is published nowhere and says nothing about which member is now
+        // active.
+        CombatPlayerCommandAction::ActivePlayerSelection(outcome) => {
+            let answer = match outcome {
+                CombatActivePlayerSelectionOutcome::Clear => {
+                    COMBAT_SET_ACTIVE_PLAYER_NONE.to_string()
+                }
+                // §8.4's "selected actor name" is the same name the rest
+                // of combat prints for a party-side slot, which is what
+                // `combat_actor_display_name` serves.
+                CombatActivePlayerSelectionOutcome::SelectPartySlot(slot) => state
+                    .party_names
+                    .get(*slot)
+                    .and_then(|name| crate::party_name_to_string(name))
+                    .unwrap_or_else(|| COMBAT_SET_ACTIVE_PLAYER_INVALID.to_string()),
+                CombatActivePlayerSelectionOutcome::Invalid => {
+                    COMBAT_SET_ACTIVE_PLAYER_INVALID.to_string()
+                }
+            };
+            format!("{COMBAT_SET_ACTIVE_PLAYER_LABEL}{answer}\n")
         }
         // `text-output.md §10.3`, the representative-literal table:
         // "`Pass` + newline | complete". The word carries no full stop,
@@ -5202,7 +5226,7 @@ fn combat_player_command_application_message(
             application.weapon_attack,
         ),
         _ => combat_magic_ring_pass_message(application.ring_pass)
-            .unwrap_or_else(|| combat_player_command_message(&application.action)),
+            .unwrap_or_else(|| combat_player_command_message(state, &application.action)),
     };
     if application.victory_announced {
         // `combat.md §7`/`§14`: once the post-action side recount finds no

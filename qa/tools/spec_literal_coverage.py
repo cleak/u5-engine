@@ -82,6 +82,41 @@ VERIFIED_BENIGN = {
     "Hey!! What's going on here???": "dungeon-mode.md: must never occur",
     # An example of a prompt, not a prompt.
     "Y/N?": "input.md example of a prompt character",
+    # --- Read 2026-09-19, once the escape handling above was fixed. ---
+    # A command echo plus its own completion: the echo is the direction or
+    # the verb, and the engine holds the two apart because the row is
+    # completed rather than reprinted.
+    "East\\nEscape!": "combat.md, direction echo plus `Escape!`",
+    "West\\nLeave!": "combat.md, direction echo plus `Leave!`",
+    "West\\n\\nStay with ship!": "combat.md, direction echo plus the refusal",
+    "East\\n\\nAll must use the same exit!": "combat.md, echo plus refusal",
+    "Enter cave\\nAttacked at entrance!": "commands.md, echo plus refusal",
+    "Push\\nNot here!": "commands.md/dungeon-mode.md, echo plus refusal",
+    "You find:\\nA hidden door!": "dungeon-mode.md, Search preamble plus find",
+    "X-it \\nUnder sail!": "vehicles.md, X-it echo plus the refusal",
+    "a well.\\n\\nDrop a coin?": "view.md, the Look description plus the prompt",
+    "Cast...\\nAbsorbed!": "combat/magic/audio, the cast echo plus the result",
+    # `<class name>` plus a stored line. `combat.md §11.1` is explicit that
+    # the stored part is " escapes!" alone and the name comes from the
+    # shared actor-name printer.
+    "Orc escapes!": "combat.md §11.1, class name plus ` escapes!`",
+    "Shadow Lord escapes!": "combat.md §11.1, class name plus ` escapes!`",
+    # `<vehicle kind>!`, composed from the transport's own name.
+    "skiff!": "vehicles.md §5.1, the vehicle kind plus `!`",
+    # Read from the asset at run time, not stored in the engine: the camp
+    # result messages come out of the shipped data through
+    # `rest_camp::load_camp_result_messages`.
+    "Party rested!": "rest-and-camp.md, loaded from the asset at run time",
+    # Present, in `graphics.rs`, as part of a larger string.
+    "REGISTER:": "shops.md, present in the engine",
+}
+
+# Published lines the engine does **not** have and cannot yet implement,
+# each with the upstream question blocking it. These stay out of
+# `VERIFIED_BENIGN` deliberately: they are real gaps, not false hits, and
+# the count below keeps them in view.
+AWAITING_SPEC = {
+    "Field dissolved!": "cleak/u5-spec#287 - what is the Sceptre's fallback helper?",
 }
 
 
@@ -135,7 +170,9 @@ def main() -> None:
         missing = sorted(
             literal
             for literal in found
-            if literal not in haystack and literal not in VERIFIED_BENIGN
+            if literal not in haystack
+            and literal not in VERIFIED_BENIGN
+            and literal not in AWAITING_SPEC
         )
         total += len(found)
         missing_total += len(missing)
@@ -145,8 +182,11 @@ def main() -> None:
                 print(f"    {literal!r}")
     print(
         f"\n{missing_total} unexplained of {total} candidate literals "
-        f"({len(VERIFIED_BENIGN)} previously read and explained)"
+        f"({len(VERIFIED_BENIGN)} previously read and explained, "
+        f"{len(AWAITING_SPEC)} awaiting a spec answer)"
     )
+    for literal, why in sorted(AWAITING_SPEC.items()):
+        print(f"  blocked: {literal!r} - {why}")
 
 
 if __name__ == "__main__":

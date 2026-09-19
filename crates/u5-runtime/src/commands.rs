@@ -1571,6 +1571,23 @@ pub const HOLE_UP_SAILS_MUST_BE_LOWERED: &str = "Sails must be\nlowered!";
 /// echo is a sea form and cannot be the right prefix here.
 pub const HOLE_UP_ON_LAND_OR_SHIP_REFUSAL: &str = "On land or ship!";
 
+/// `combat.md §8.4`'s active-player digit, which this engine answered
+/// with an invented `Active player selected.` for all three cases:
+///
+/// | Input | Output |
+/// |---|---|
+/// | Digit 0 | `Set active plr:\nNone!\n` |
+/// | Valid digit 1-6 | `Set active plr:\n`, selected actor name, `\n` |
+/// | Invalid digit | `Set active plr:\nInvalid!\n` |
+///
+/// The label carries its own feed, so the answer always lands on the row
+/// beneath it.
+pub const COMBAT_SET_ACTIVE_PLAYER_LABEL: &str = "Set active plr:\n";
+/// See [`COMBAT_SET_ACTIVE_PLAYER_LABEL`]: the digit-zero answer.
+pub const COMBAT_SET_ACTIVE_PLAYER_NONE: &str = "None!";
+/// See [`COMBAT_SET_ACTIVE_PLAYER_LABEL`]: the unusable-digit answer.
+pub const COMBAT_SET_ACTIVE_PLAYER_INVALID: &str = "Invalid!";
+
 pub const HOLE_UP_CAMP_ECHO: CommandEcho = CommandEcho {
     text: "Hole up & camp!",
     join: CommandEchoJoin::Complete,
