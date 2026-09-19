@@ -14,6 +14,27 @@ backlog, not a defect list - some are unreachable from any seed, some
 need a game state no seed carries, and a few are prose the extractor
 mistook for a game line.
 
+## Twenty-eight of them cannot be reached at all
+
+A line containing `?` can never match, and twenty-eight of the entries
+below contain one. `paired_compare.decode` uses `?` as its *unmatched
+cell* marker - a cell scoring under 60 against the font tables decodes as
+`?` - and `row_text` then drops it along with the window's blank, which
+the `VARIANT_GROUPS` comment already records: "Decoded rows drop the cell
+the font renders as `?`, so the entries below end where the capture
+does."
+
+Measured 2026-09-19: **zero of 162 stock frames decoded a `?`**, across
+captures that certainly showed one - `Drop a coin?`, `Anything else for
+thee?`, and the shrine's `Upon what virtue dost thou meditate?`, whose
+row reads `meditate` on both sides while the engine's own constant
+carries the mark.
+
+So the reached figure is a floor for a second reason. The comparator
+drops the character on *both* sides, so it produces no false difference -
+only a blind spot of one character wide, and one that cannot be closed
+without teaching the font matcher that glyph.
+
 - A VL potion!
 - A bomb trap!
 - A magic carpet!
