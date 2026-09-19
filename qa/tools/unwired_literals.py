@@ -52,12 +52,66 @@ EXPLAINED = {
     ),
     "DUNGEON_CHEST_GET_ECHO": (
         "The dungeon `Get` echo comes from `command_echo`'s own table, which "
-        "gives `('Get', Complete)` underground. This is the same text as a "
-        "standalone literal."
+        "gives `('Get', Complete)` underground."
     ),
     "DIRECTION_PROMPT_CANCEL_LITERAL": (
         "Superseded by `DIRECTION_PROMPT_LABEL_PASS`, which carries the "
         "row-completion rule with it."
+    ),
+    "DUNGEON_KLIMB_PASS": (
+        "`dungeon-mode.md §8.1`'s `Pass\\n\\n` is produced by the shared "
+        "direction-prompt cancel: the word completes the open `Klimb-U/D-` "
+        "row and the dungeon arm adds the blank its second feed makes."
+    ),
+    "DUNGEON_FACING_LABEL_PREFIX": (
+        "A duplicate of `gameplay_chrome::DUNGEON_FACING_LABEL`, which is "
+        "the one the frame painter composes `Dir: North` from. Two names "
+        "for one published label; this is the unused twin."
+    ),
+    "UPMARKET_INN_AFFORDABILITY_REFUSAL_BARK": (
+        "A fragment of a longer composed literal: the inn refusal prints "
+        '`\"Highwaymen!\\nCheap, at that!\\nOUT!\" `, which the handler '
+        "holds whole."
+    ),
+    # Published spellings kept for conformance, with no handler that could
+    # read them: the engine does not open the original executables, and the
+    # no-save lines reach the player as the loader's composed error.
+    "ULTIMA_EXE_FILENAME": (
+        "An original executable this engine never opens; kept as the "
+        "published asset name."
+    ),
+    "INTRO_OVL_FILENAME": ("See `ULTIMA_EXE_FILENAME`."),
+    "ENDGAME_TITLE_STRIP_ARCHIVE": (
+        "The archive name the endgame's title strip comes from; the loader "
+        "composes its path from the story layout rather than this constant."
+    ),
+    "QUEST_PASSWORD_RESISTANCE": (
+        "The two Blackthorn passwords are recognised by the TLK control-code "
+        "comparison, which case-folds the typed word rather than comparing "
+        "against these names. They are the published spellings, asserted by "
+        "the conformance tests."
+    ),
+    "QUEST_PASSWORD_OPPRESSION": ("See `QUEST_PASSWORD_RESISTANCE`."),
+    "SAVE_PROMPT_NO_REPLY": (
+        "The declined save prints the shared `No.` line; this is the "
+        "published bare word beside it, asserted by the conformance tests."
+    ),
+    "LOAD_EMPTY_SAVE_LINE_1": (
+        "The three no-save lines reach the player as the loader's composed "
+        "error - `No active game. Please create a character or transfer one "
+        "from Ultima IV.` - rather than as three prints."
+    ),
+    "LOAD_EMPTY_SAVE_LINE_2": ("See `LOAD_EMPTY_SAVE_LINE_1`."),
+    "LOAD_EMPTY_SAVE_LINE_3": ("See `LOAD_EMPTY_SAVE_LINE_1`."),
+    # A real gap, tracked rather than explained away.
+    "VEHICLE_BROKER_PARTIAL_AFFORD_PREFIX": (
+        "GAP, `cleak/u5-engine#43`. `shops.md`'s tavern-provisions table "
+        "gives the partial-afford row as `\\n\\n\"Thou canst\\nafford only `, "
+        "the number served, `!\"\\n\\n` - and the constant's own doc "
+        "misattributes it to a vehicle broker. The tavern's provisions "
+        "outcomes render engineering prose instead (`sold 2/5 provision "
+        "packs for 10 gold; food +20`), so none of that row's four arms is "
+        "printed as published."
     ),
 }
 
