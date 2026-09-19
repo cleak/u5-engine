@@ -1,0 +1,37 @@
+# `dungeon-mode.md §8.1`'s `J` Jimmy row, which had no capture and, until
+# today, no reader in the engine either: the five results - `No keys!`,
+# `Key broke!`, `Chest unlocked`, `Already open!`, `What?` - each carry "a
+# bare `\n` first, so the result always starts on a new row".
+#
+# The party stands on the Shame chest, the second of the shipped file's
+# three `0x4?` cells, seeded with
+#
+#   seed_position <profile> dungeon=38 level=3 x=1 y=0
+#
+# In order: J on the locked chest (a roll - `Chest unlocked` or
+# `Key broke!`), O on whatever that left, and J again once the chest is
+# open (`Already open!`) or still shut.
+#
+# **A lottery below the row level**, like `dungeon-chest`: the pick is a
+# `1..30` roll against `(2Z - Dexterity + 30) / 2`, the trap word is the
+# shared resolver's draw, and the contents are `containers.md`'s gated
+# rows. The shape is what this measures - which literal lands on which
+# row, and whether the pick leaves the chest shut.
+# requires-seed: the party standing on the Shame wooden chest, with a torch
+both	wait	9000
+both	key	space
+both	wait	4000
+both	key	j
+both	wait	9000
+both	key	i
+both	wait	2500
+both	shot	lit	Torch lit, standing on the chest
+both	key	j
+both	wait	3000
+both	shot	jimmy	J on the locked chest
+both	key	o
+both	wait	3500
+both	shot	opened	O on whatever the pick left
+both	key	j
+both	wait	2500
+both	shot	again	J once more

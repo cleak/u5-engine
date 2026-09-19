@@ -57,3 +57,6 @@ both	shot	contents	Get on the open chest
 both	key	o
 both	wait	2500
 both	shot	already	Open-Already Open!
+both	key	j
+both	wait	2500
+both	shot	jimmy-gone	Jimmy on the consumed cell: What?
