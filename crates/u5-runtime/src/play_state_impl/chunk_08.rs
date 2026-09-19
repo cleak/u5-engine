@@ -2494,7 +2494,15 @@ impl PlayState {
         // diagnostics. See [`WorldDamageEffect::published_line`].
         match effect.published_line() {
             Some(line) => {
-                self.append_result_sentence(line);
+                // Its own row, not a sentence appended to the command's.
+                // `append_result_sentence` appends to the compatibility
+                // slot, and when that slot already holds a completed
+                // command echo - `Search-Pass`, say - flushing the
+                // combined string prints the echo a second time. Measured
+                // 2026-09-19 (`qa/paired/hidden-treasure-search.tsv`, beat
+                // `again`): the original reads ` Search-Pass` / `Burning!`
+                // on two rows, and this engine read the echo twice.
+                self.emit_message_line(line);
                 self.diagnostics.push(report);
             }
             None => self.append_result_sentence(&format!("{report}.")),
