@@ -564,6 +564,22 @@ impl PlayState {
             }
             self.push_message_entry(line, false);
         }
+        // Where this emission left the cursor, by the same rule
+        // [`Self::emit_message_line`] applies: a trailing feed closes the row,
+        // anything else leaves it open. This used to say nothing, so the flag
+        // kept whatever the *previous* emission had left and the next leading
+        // feed was spent against a stale answer.
+        //
+        // Measured 2026-09-18 (`qa/paired/shrine-three-mantras.tsv`, beat
+        // `after2`, reading `scroll`): the shrine's quest sentence ends with
+        // this call's `"\n`, closing its row, and the closing instruction's
+        // own leading feed should then derive `text-output.md` §10.4's blank.
+        // The flag still read "open" from the quest record before it, so that
+        // feed closed a row that was already closed and the original's blank
+        // row between the two never appeared.
+        if !text.is_empty() {
+            self.message_row_open_mid_line = !text.ends_with('\n');
+        }
         self.message = text.clone();
         self.message_flushed = text;
     }
