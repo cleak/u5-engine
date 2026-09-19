@@ -33,6 +33,50 @@ entry waiting on `cleak/u5-spec#287`.
 That separates the two halves of the question cleanly, and they are
 easy to conflate:
 
+- **Implementation of the published text: complete.**
+  `spec_literal_coverage.py` reads 0 unexplained of 633, and
+  `engine_message_audit.py` reads 0 absent of 250 the other way.
+- **Verification of it against the original: about a third.** 139 of 417
+  lines have ever been on screen in a sampled stock frame.
+
+## Triage: what each cluster costs
+
+Worked 2026-09-19. The list below is alphabetical, which says nothing
+about effort; these are the groups and what each needs.
+
+**Already written, waiting on a display.** Five scenarios added today
+cover the combat Shape B letters, four hut refusals, the arena's
+same-exit constraint, the mute contract and the hidden-treasure finds.
+All five need one run to trim their step counts - where a hut's geometry
+refuses and where an arena seats its second actor are things the capture
+tells you, not the specification.
+
+**Cheap, and the tools now exist.** `seed_inventory` stocks items,
+statuses and companions; `seed_position` places the party on either
+world plane, in a town, or - since `64ae6a23` - in a dungeon, scene and
+level and coordinate together. That unblocked the three clusters that had
+looked most expensive: the arena's second party actor, the Underworld
+treasure cell every published record sits on, and the dungeon fountain
+results (`Cured!`, `Healed!`, `Poisoned!`, `Bad taste.`). Anything keyed
+on *party state* or *world position* is now a one-line seed.
+
+The dungeon form needed a second pass to be true. Setting `state.area`
+alone relabelled the party without moving it, because a saved game
+carries the live dungeon working buffer and the loader prefers it over
+the `DUNGEON.DAT` record for the scene byte - two profiles seeded to two
+different dungeons read back byte-identical grids. `find_tile all`,
+which reports a level's whole tile histogram instead of answering one
+tile id per run, is what made that visible.
+
+**Behind a contested surface.** The U-Use picker's results - `Removed!`,
+`Resurrection!`, `Not dead!` and the rest - are reachable today, but
+every scenario through that picker inherits `cleak/u5-engine#42`'s panel
+residue and `cleak/u5-spec#278`'s message row. Worth doing *after* those
+close, not before, or the suite gains scenarios that report differences
+for reasons already tracked.
+
+## The backlog
+
 - A VL potion!
 - A bomb trap!
 - A magic carpet!
