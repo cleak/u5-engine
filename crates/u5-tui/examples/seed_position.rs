@@ -83,6 +83,18 @@ fn main() {
             other => panic!("unknown field `{other}`"),
         }
     }
+    // A saved game carries the live dungeon working buffer, and
+    // `load_dungeon_scene` prefers that buffer over the `DUNGEON.DAT`
+    // record for the scene byte. Setting `state.area` alone therefore
+    // moves the *label* into a dungeon while the reload keeps whichever
+    // map the profile already held - two different dungeon scene bytes
+    // read back byte-identical grids. Refresh the grid alongside the
+    // area so the seed is the dungeon it claims to be.
+    if let Area::Dungeon { scene, .. } = state.area {
+        let mut grid = load_dungeon_record(dir, scene).expect("DUNGEON.DAT must hold the record");
+        apply_dungeon_room_clear_bitmap(&mut grid, scene, &state.dungeon_room_clear_bitmap);
+        state.grid = grid;
+    }
     state.sync_player_object();
     state.write_save_files(dir).expect("save must write");
     println!(
