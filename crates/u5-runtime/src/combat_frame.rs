@@ -613,7 +613,7 @@ pub enum CombatAiTurnDraws<'a> {
         /// `combat.md §9`'s random-cardinal fallback attempts, in order.
         random_cardinal_direction_codes: &'a [u8],
         teleport_candidate: Option<(u8, u8)>,
-        horizontal_axis_first: bool,
+        offers_horizontal_axis: bool,
         monster_attack_inputs: Option<CombatMonsterAttackInputs>,
     },
 }
@@ -3262,7 +3262,7 @@ impl PlayState {
         mass_charm_roll: u8,
         fleeing: bool,
         teleport_candidate: Option<(u8, u8)>,
-        horizontal_axis_first: bool,
+        offers_horizontal_axis: bool,
         random_cardinal_direction_codes: &[u8],
         monster_attack_inputs: Option<CombatMonsterAttackInputs>,
     ) -> Option<CombatAiTurnApplication> {
@@ -3280,7 +3280,7 @@ impl PlayState {
             CombatAiTurnDraws::Fixed {
                 random_cardinal_direction_codes,
                 teleport_candidate,
-                horizontal_axis_first,
+                offers_horizontal_axis,
                 monster_attack_inputs,
             },
         )
@@ -3685,12 +3685,12 @@ impl PlayState {
         // one axis, with randomized axis priority": the coin belongs to the
         // stepping arm, below the attack path and below the teleport arm, so
         // in shared-PRNG mode it is drawn here and nowhere earlier.
-        let horizontal_axis_first = match draws {
-            CombatAiTurnDraws::SharedPrng => self.combat_ai_horizontal_axis_first(actor_slot),
+        let offers_horizontal_axis = match draws {
+            CombatAiTurnDraws::SharedPrng => self.combat_ai_offers_horizontal_axis(actor_slot),
             CombatAiTurnDraws::Fixed {
-                horizontal_axis_first,
+                offers_horizontal_axis,
                 ..
-            } => horizontal_axis_first,
+            } => offers_horizontal_axis,
         };
         // `combat.md §9` (`RETRACTIONS.md` R311): each fallback attempt is
         // its own draw, taken only when the previous one was rejected. With
@@ -3708,7 +3708,7 @@ impl PlayState {
                     step_vector,
                     teleport_capable,
                     teleport_candidate,
-                    horizontal_axis_first,
+                    offers_horizontal_axis,
                     &[],
                 ) == (CombatAiMovementOutcome::Blocked {
                     random_cardinal_attempts: 0,
@@ -3734,7 +3734,7 @@ impl PlayState {
             step_vector,
             teleport_capable,
             teleport_candidate,
-            horizontal_axis_first,
+            offers_horizontal_axis,
             match draws {
                 CombatAiTurnDraws::Fixed {
                     random_cardinal_direction_codes,
@@ -7570,7 +7570,7 @@ impl PlayState {
         mass_charm_roll: u8,
         fleeing: bool,
         teleport_candidate: Option<(u8, u8)>,
-        horizontal_axis_first: bool,
+        offers_horizontal_axis: bool,
         random_cardinal_direction_codes: &[u8],
         monster_attack_inputs_by_slot: &[(usize, CombatMonsterAttackInputs)],
     ) -> CombatActorSlotDispatchApplication {
@@ -7587,7 +7587,7 @@ impl PlayState {
             mass_charm_roll,
             fleeing,
             teleport_candidate,
-            horizontal_axis_first,
+            offers_horizontal_axis,
             random_cardinal_direction_codes,
             monster_attack_inputs_by_slot,
             false,
@@ -7704,7 +7704,7 @@ impl PlayState {
         mass_charm_roll: u8,
         fleeing: bool,
         teleport_candidate: Option<(u8, u8)>,
-        horizontal_axis_first: bool,
+        offers_horizontal_axis: bool,
         random_cardinal_direction_codes: &[u8],
         monster_attack_inputs_by_slot: &[(usize, CombatMonsterAttackInputs)],
         draw_ai_inputs_from_shared_prng: bool,
@@ -7940,7 +7940,7 @@ impl PlayState {
                     mass_charm_roll,
                     fleeing,
                     teleport_candidate,
-                    horizontal_axis_first,
+                    offers_horizontal_axis,
                     random_cardinal_direction_codes,
                     monster_attack_inputs,
                 )
@@ -8101,7 +8101,7 @@ impl PlayState {
         mass_charm_roll: u8,
         fleeing: bool,
         teleport_candidate: Option<(u8, u8)>,
-        horizontal_axis_first: bool,
+        offers_horizontal_axis: bool,
         random_cardinal_direction_codes: &[u8],
         monster_attack_inputs_by_slot: &[(usize, CombatMonsterAttackInputs)],
     ) -> CombatRoundWalkApplication {
@@ -8121,7 +8121,7 @@ impl PlayState {
                 mass_charm_roll,
                 fleeing,
                 teleport_candidate,
-                horizontal_axis_first,
+                offers_horizontal_axis,
                 random_cardinal_direction_codes,
                 monster_attack_inputs_by_slot,
             );
@@ -8396,7 +8396,7 @@ impl PlayState {
         self.random_mod_u8(20)
     }
 
-    pub fn combat_ai_horizontal_axis_first(&mut self, actor_slot: usize) -> bool {
+    pub fn combat_ai_offers_horizontal_axis(&mut self, actor_slot: usize) -> bool {
         let _ = actor_slot;
         self.random_mod_u8(2) == 0
     }

@@ -454,12 +454,52 @@
         );
     }
 
+    /// `RETRACTIONS.md` R480: the two direct axes are not symmetric. "Above
+    /// the midpoint the actor offers the X-displaced candidate and falls back
+    /// to the Y-displaced one if that is refused; at or below the midpoint it
+    /// offers **only** the Y-displaced candidate and never tries X."
+    ///
+    /// The withdrawn reading - both axes in a randomised order - "matches the
+    /// original on the high branch and diverges on the low one", so the low
+    /// branch is what this pins.
+    #[test]
+    fn the_low_axis_branch_offers_only_the_vertical_candidate() {
+        // Only the horizontal neighbour is open, and the actor wants to move
+        // diagonally. On the high branch it takes that neighbour.
+        let mut legal = [[false; COMBAT_ARENA_SIDE]; COMBAT_ARENA_SIDE];
+        legal[5][6] = true;
+        let step_vector = CombatStepVector { dx: 1, dy: 1 };
+
+        assert_eq!(
+            resolve_combat_ai_movement(&legal, 5, 5, step_vector, false, None, true, &[3, 3, 3, 3]),
+            CombatAiMovementOutcome::Step {
+                direction_code: 2,
+                x: 6,
+                y: 5,
+            },
+            "the high branch offers X first and the open cell is taken"
+        );
+
+        // On the low branch X is never offered, so the open horizontal
+        // neighbour is not reached by the direct axes at all and the actor
+        // spends its four fallback draws. Pinning those to North - blocked -
+        // keeps the fallback from finding it either.
+        assert_eq!(
+            resolve_combat_ai_movement(&legal, 5, 5, step_vector, false, None, false, &[3, 3, 3, 3]),
+            CombatAiMovementOutcome::Blocked {
+                random_cardinal_attempts: 4,
+                action_consumed: true,
+            },
+            "the low branch never tries X"
+        );
+    }
+
     #[test]
     fn exhausted_cardinal_fallback_is_not_consumed_when_the_last_draw_repeats_the_first() {
-        // `combat.md §9`: "When all four attempts fail, the routine still
-        // reports the action as consumed **unless the final draw happened to
-        // be the first direction tried**, and the committed displacement in
-        // that case is zero."
+        // `combat.md §9` as `RETRACTIONS.md` R482 corrects it: when all four
+        // attempts fail, whether the actor is reported as moved turns on
+        // which direction code the last draw produced - any cardinal but the
+        // first of the four commits a zero-length step and reports a move.
         let blocked = [[false; COMBAT_ARENA_SIDE]; COMBAT_ARENA_SIDE];
         let step_vector = CombatStepVector { dx: 1, dy: 0 };
 
@@ -481,6 +521,32 @@
         // exception.
         assert!(combat_ai_exhausted_fallback_consumes_action(&[1, 2, 1]));
         assert!(combat_ai_exhausted_fallback_consumes_action(&[]));
+
+        // `RETRACTIONS.md` R482: the discriminator is "the direction code the
+        // last draw produced", not its relationship to the first attempt. The
+        // two readings agree on `[1, 2, 3, 1]` above - the last draw is both
+        // the first code and the first attempt - which is why the withdrawn
+        // one survived here.
+        //
+        // R482 gives the case that separates them: "With every draw pinned to
+        // one direction - so that the final draw is always the first one
+        // tried - the two outcomes still diverge, which the withdrawn wording
+        // cannot express."
+        for pinned in [2u8, 3, 4] {
+            assert!(
+                combat_ai_exhausted_fallback_consumes_action(&[pinned; 4]),
+                "pinned to direction code {pinned}, which is not the first of \
+                 the four, so the actor is reported as moved"
+            );
+        }
+        assert!(
+            !combat_ai_exhausted_fallback_consumes_action(&[1; 4]),
+            "pinned to the first code, so the actor is reported as not moved"
+        );
+        // And the first *attempt* no longer matters: a last draw of the first
+        // code reports not-moved however the sequence opened.
+        assert!(!combat_ai_exhausted_fallback_consumes_action(&[3, 4, 2, 1]));
+        assert!(combat_ai_exhausted_fallback_consumes_action(&[1, 4, 2, 3]));
     }
 
     #[test]

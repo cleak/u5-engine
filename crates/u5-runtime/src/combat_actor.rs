@@ -1462,6 +1462,11 @@ pub const fn combat_direction_code_step(direction_code: u8) -> CombatStepVector 
     }
 }
 
+/// The first of the four cardinal direction codes, which `combat.md §9`'s
+/// exhausted-fallback rule compares the last draw against
+/// (`RETRACTIONS.md` R482).
+pub const COMBAT_AI_FIRST_CARDINAL_DIRECTION_CODE: u8 = 1;
+
 pub const fn combat_direction_code_is_cardinal(direction_code: u8) -> bool {
     matches!(direction_code, 1..=4)
 }
@@ -4575,7 +4580,7 @@ pub fn resolve_combat_ai_movement(
     step_vector: CombatStepVector,
     teleport_capable: bool,
     teleport_candidate: Option<(u8, u8)>,
-    horizontal_axis_first: bool,
+    offers_horizontal_axis: bool,
     random_cardinal_direction_codes: &[u8],
 ) -> CombatAiMovementOutcome {
     if teleport_capable {
@@ -4589,12 +4594,25 @@ pub fn resolve_combat_ai_movement(
     // No neighbour scan and no early "surrounded" exit here: `§9` withdrew
     // both (`RETRACTIONS.md` R311). A fully enclosed actor still runs the
     // direct axes and then spends its four fallback draws.
+    // `RETRACTIONS.md` R480: "The two axes are not symmetric. One per-turn
+    // draw over the inclusive range `0..255` selects the branch: above the
+    // midpoint the actor offers the X-displaced candidate and falls back to
+    // the Y-displaced one if that is refused; at or below the midpoint it
+    // offers **only** the Y-displaced candidate and never tries X."
+    //
+    // The withdrawn reading - both axes in a randomised order - "matches the
+    // original on the high branch and diverges on the low one", which is what
+    // this carried. `offers_horizontal_axis` is that draw's high branch.
+    //
+    // "A candidate whose displacement on the offered axis is zero is the
+    // actor's own cell and is always refused", which
+    // `combat_direction_code_for_step` reports as `None`.
     let horizontal = combat_direction_code_for_step(step_vector.dx, 0);
     let vertical = combat_direction_code_for_step(0, step_vector.dy);
-    let direct = if horizontal_axis_first {
+    let direct = if offers_horizontal_axis {
         [horizontal, vertical]
     } else {
-        [vertical, horizontal]
+        [vertical, None]
     };
 
     for direction_code in direct.into_iter().flatten() {
@@ -4638,9 +4656,26 @@ pub fn resolve_combat_ai_movement(
     }
 }
 
-/// `combat.md §9`: "When all four attempts fail, the routine still reports
-/// the action as consumed **unless the final draw happened to be the first
-/// direction tried**, and the committed displacement in that case is zero."
+/// `combat.md §9`: when all four random-cardinal attempts fail, whether the
+/// actor is reported as having moved turns on **which direction code the
+/// last draw produced**, not on its relationship to the first attempt.
+///
+/// `RETRACTIONS.md` R482 withdraws the reading this carried - "the routine
+/// still reports the action as consumed unless the final draw happened to be
+/// the first direction tried" - and gives the rule: "A last draw of any
+/// cardinal other than the first of the four direction codes commits a
+/// zero-length step, reports the actor as moved, and runs the post-step
+/// in-arena test on the unchanged position; a last draw of the first code
+/// reports that the actor did not move."
+///
+/// The first of the four codes is `1`, West
+/// ([`combat_direction_code_is_cardinal`] admits `1..=4`).
+///
+/// R482 also gives the case that separates the two readings, which the
+/// withdrawn wording cannot express: pin every draw to one direction, so the
+/// final draw is always the first one tried. The old test then always
+/// reported "did not move"; the published one reports "moved" for any pinned
+/// direction except West.
 ///
 /// `drawn` is the ordered cardinal-fallback draw sequence actually taken.
 /// The exception needs all four attempts spent, so a fallback that never ran
@@ -4650,7 +4685,7 @@ pub fn combat_ai_exhausted_fallback_consumes_action(drawn: &[u8]) -> bool {
     if drawn.len() < COMBAT_AI_RANDOM_CARDINAL_ATTEMPTS {
         return true;
     }
-    drawn[COMBAT_AI_RANDOM_CARDINAL_ATTEMPTS - 1] != drawn[0]
+    drawn[COMBAT_AI_RANDOM_CARDINAL_ATTEMPTS - 1] != COMBAT_AI_FIRST_CARDINAL_DIRECTION_CODE
 }
 
 pub fn resolve_combat_wound_morale(
