@@ -781,13 +781,31 @@ impl PlayState {
         let first = lines.next().unwrap_or_default();
 
         if first.is_empty() {
-            // The handler's text opens with a line feed, which asks for a
-            // blank row under the echo rather than for a continuation of
-            // it (`text-output.md §10.3` lists echoes that "emit one
-            // deliberately"). Pushing it as an ordinary empty entry would
-            // let the Bevy shell's `keep` filter drop the row, which is
-            // the same trap [`message_log_from_entries`] guards against.
-            self.push_explicit_blank_message_entry();
+            // The handler's text opens with a line feed. Against a
+            // *complete* echo - one already sitting on its own finished row
+            // - that asks for a blank row under it (`text-output.md §10.3`
+            // lists echoes that "emit one deliberately"). Against a
+            // **hyphen** echo it does not: `§10.4` says "Verbs whose echo
+            // ends in a hyphen or a trailing space rely on that same
+            // leading line feed to close their partially written line", so
+            // the feed is spent closing the row and the result lands
+            // directly beneath.
+            //
+            // Measured 2026-09-19 (`qa/paired/dungeon-chest-jimmy.tsv`,
+            // beat `jimmy`): the original reads ` Jimmy-` / `Chest
+            // unlocked` on adjacent rows, and this engine put a blank
+            // between them - `dungeon-mode.md §8.1` gives every Jimmy
+            // result "a bare `\n` first, so the result always starts on a
+            // new row", which is that close and not a blank.
+            //
+            // Pushing an ordinary empty entry would let the Bevy shell's
+            // `keep` filter drop the row, which is the same trap
+            // [`message_log_from_entries`] guards against.
+            let closes_hyphen_echo =
+                echo_is_last && (verb.ends_with('-') || verb.ends_with(' '));
+            if !closes_hyphen_echo {
+                self.push_explicit_blank_message_entry();
+            }
         } else if echo_is_last && first == verb {
             // The handler re-emitted exactly the verb; keep one copy.
             // `#81`: only an exact repeat folds — a refusal that merely
