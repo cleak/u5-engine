@@ -7,10 +7,17 @@
 #   - `No reagents owned!` / `Nothing to mix!` - M-Mix with an empty pouch
 #   - `Not in doorway!`   - the door-close refusal off a doorway
 #
-# Seedless on purpose. `hut-ready-refusals` shows the pattern: `c`, a typed
-# name and Return puts both sides in Iolo's hut with the shipped starting
-# party, which carries no reagents and stands on no ladder, so every refusal
-# above is reachable without a profile to keep in step.
+# Seedless on purpose: the whole chargen run is scripted, exactly as
+# `hut-commands` scripts it, and Journey Onward puts both sides in Iolo's
+# hut with the shipped starting party - which carries no reagents and
+# stands on no ladder, so every refusal above is reachable without a
+# profile to keep in step.
+#
+# The first run of this scenario stopped at `c`, a typed name and Return,
+# on the assumption that those three land in the hut. They do not: the
+# capture was still in chargen, on `By what name shalt thou be known?`
+# and the sex answer. The prologue below is `hut-commands`' own, through
+# Journey Onward.
 #
 # This asserts nothing about which line each key produces - that is what the
 # comparison is for. It puts both sides through the same keys and lets the
@@ -28,7 +35,29 @@ both	key	c
 both	wait	2500
 both	type	Avatar
 both	key	Return
-both	wait	6000
+both	wait	1500
+both	key	m
+both	wait	3000
+both	key	space
+both	wait	3000
+both	key	a
+both	wait	3000
+both	key	a
+both	wait	3000
+both	key	a
+both	wait	3000
+both	key	a
+both	wait	3000
+both	key	a
+both	wait	3000
+both	key	a
+both	wait	3000
+both	key	a
+both	wait	3000
+both	key	space
+both	wait	4000
+both	key	j
+both	wait	7000
 both	shot	hut	The shipped start, inside the hut
 both	key	j
 both	wait	1500
