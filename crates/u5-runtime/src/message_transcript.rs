@@ -201,6 +201,26 @@ impl PlayState {
         self.message_transcript_revision = self.message_transcript_revision.wrapping_add(1);
     }
 
+    /// Record that the row the picker is waiting on is still open.
+    ///
+    /// The counterpart of [`Self::close_message_row`], and needed for the
+    /// same reason: [`Self::flush_message_slot`] takes the slot verbatim, so
+    /// a handler that assigns `message` directly has to state the row state
+    /// its text is written against. A prompt whose cursor is sitting on its
+    /// own row - `Item: `, which `open_prompt_line` hands to the layout and
+    /// which an escape's reply appends to - is open by definition, and a
+    /// refusal printed under it must not have to guess.
+    ///
+    /// Measured 2026-09-18: the two R-Ready scenarios disagreed about this.
+    /// `hut-ready-refusals/first-weapon` reached the refusal with the row
+    /// closed and `hut-ready-picker/shield` with it open, so one leading feed
+    /// produced the published single blank row in the first and none in the
+    /// second, and two feeds produced one in the second and two in the first.
+    /// The row state was the inconsistency, not the literal.
+    pub fn open_message_row(&mut self) {
+        self.message_row_open_mid_line = true;
+    }
+
     /// Record that the slot's text ends with a line feed of its own, so the
     /// row it wrote is closed and the cursor is at column 0 of the next one.
     ///
