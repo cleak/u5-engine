@@ -143,10 +143,18 @@ def captures_are_usable(artifact: str) -> bool:
 def compare(artifact: str) -> tuple[str, str]:
     """Classify one artifact with `paired_compare.py`.
 
-    Returns the leading word of its summary line - `match`, `DIFFER` or
-    `RERUN` - and the counts that follow it. A comparison that cannot run at
-    all is reported rather than swallowed, because a silent pass here is the
-    exact failure this wrapper exists to prevent.
+    Returns the leading word of its summary line - `match`, `DIFFER`,
+    `RERUN` or `PROBE` - and the counts that follow it. A comparison that
+    cannot run at all is reported rather than swallowed, because a silent
+    pass here is the exact failure this wrapper exists to prevent.
+
+    `PROBE` has to be in that list. A scenario declaring
+    `# not-a-comparison:` drives one side on purpose, and
+    `paired_compare.is_probe` reports it as `PROBE` precisely so it
+    "neither counts as a difference nor pretends to be a match". This
+    wrapper did not know the word, so it fell through to the
+    no-summary-line arm and reported four such scenarios as `RERUN`
+    every pass - three of the 2026-09-19 pass's 28.
     """
     tool = pathlib.Path(__file__).resolve().parent / "paired_compare.py"
     if not artifact:
@@ -157,7 +165,7 @@ def compare(artifact: str) -> tuple[str, str]:
         text=True,
     )
     for line in reversed(result.stdout.splitlines()):
-        for word in ("match", "DIFFER", "RERUN"):
+        for word in ("match", "DIFFER", "RERUN", "PROBE"):
             if line.startswith(word):
                 return word, line.split(":", 1)[-1].strip()
     return "RERUN", (result.stderr.strip().splitlines() or ["no summary line"])[-1]
@@ -251,7 +259,11 @@ def main() -> None:
 
             if is_traffic_variable(name):
                 first, _counts = compare(artifact_of(result.stdout))
-                if first != "match":
+                # A probe never agrees by construction, so retrying one
+                # spends two minutes to reach the same non-verdict.
+                # `town-entry-walk-probe` is both traffic-variable and a
+                # probe, and was re-run every pass on that basis.
+                if first not in ("match", "PROBE"):
                     print(
                         f"retry {name}\tread {first} on a walk-in route; re-running",
                         flush=True,
@@ -292,7 +304,9 @@ def main() -> None:
             print(f"FAIL {name}\t{artifact}", flush=True)
             continue
         verdict, detail = compare(artifact)
-        if verdict != "match":
+        # A probe is not a verdict in either direction, so it is neither a
+        # failure nor a match.
+        if verdict not in ("match", "PROBE"):
             failures += 1
         print(f"{verdict:<6} {name}\t{artifact}\t{detail}", flush=True)
     for name, why in blocked:
