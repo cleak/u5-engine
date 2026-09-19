@@ -141,3 +141,4 @@ use-moonstone-bury	seed-overworld-moonstone	night-cast overworld party plus ever
 combat-same-exit	seed-combat-room-party	the dungeon-room seat grown to three members with seed_inventory companions=3
 stonegate-trapdoor-muted	seed-stonegate-trapdoor-audio	shares the sounded trapdoor seed; presses Ctrl-S first to measure the mute contract
 combat-refusal-letters	seed-combat-commands	shares the dungeon-room seat; presses the ten Shape B letters combat-commands does not
+hidden-treasure-search	seed-hidden-treasure	built with seed_position plane=underworld x=233 y=233, the cell every published record sits on

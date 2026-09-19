@@ -1,0 +1,44 @@
+# `hidden-treasures.md` Section 4's fixed records, which no capture has
+# ever shown. Ten of its `Thou dost find` results are in
+# `qa/coverage/unreached-lines.md` - `a chest!`, `a helm!`, `a moldy
+# corpse!`, `a potion!`, `a ring of keys!`, `a ring!`, `a rotting body!`,
+# `a sack of gold!`, `a scroll!`, `a shield!` - and every record in the
+# published table sits at one Underworld cell, `(233, 233)`.
+#
+# No seed in the suite stands anywhere near it, which is why the whole
+# family was unreachable. `seed_position` is what makes it a seed rather
+# than a scripted crossing of the underworld:
+#
+#   cargo run -p u5-tui --example seed_position -- \
+#       <profile> plane=underworld x=233 y=233
+#
+# Clean-room safe on the same terms as `seed_inventory`: the plane and the
+# coordinate come from the command line, not from any asset. Both come from
+# Section 4's published table.
+#
+# Section 2 gates several records on party state - record 13 stages only
+# with no keys owned, 15 only with a zero equipment counter, 14 once per
+# in-game day - so which of the ten a given search yields is a function of
+# the save, and the shipped starting party is the plainest state to ask
+# from. The scenario asserts nothing about which one appears; it searches
+# and lets the comparator say whether the two sides agree.
+#
+# A repeat search is included because Section 2's `One-shot` column says
+# the record closes behind itself, so the second answer should differ from
+# the first - on both sides.
+#
+# requires-seed: profile `seed-hidden-treasure`
+both	wait	9000
+both	key	space
+both	wait	4000
+both	key	j
+both	wait	9000
+both	shot	arrived	The underworld treasure cell
+both	key	s
+both	wait	3000
+both	shot	search	S-Search on the record cell
+both	key	space
+both	wait	1500
+both	key	s
+both	wait	3000
+both	shot	again	The same search once the record has closed
