@@ -39,6 +39,45 @@ SKIP_TOKENS = (
 )
 
 
+# Absences read and explained on 2026-09-19 against spec HEAD. Each one
+# is either prose the filter mistakes for a line, or a line the engine
+# composes at run time rather than storing whole. Listing them keeps the
+# report at "nothing unexplained" so a new absence stands out, which is
+# the only way a reading list stays useful once it has been read once.
+#
+# Re-check an entry rather than trusting it if the citing section moves.
+VERIFIED_BENIGN = {
+    # Prose fragments ending in a colon, not game lines.
+    "screen-panel graphics:": "formats/bit.md prose",
+    "alphabet is exactly five values:": "formats/npc.md prose",
+    "as a flat unsigned index:": "npc-schedules.md prose",
+    "lore conflict:": "shops.md prose",
+    "refusal is another stationary acted case:": "town-mode.md prose",
+    # Composed from a prompt prefix plus a refusal, never stored whole.
+    # `commands.md §5` gives `Klimb-` as the prompt; the refusals are
+    # `-On foot!`, `On foot!` and `Down!`.
+    "Klimb-Down!": "commands.md, prompt prefix plus refusal",
+    "Klimb-On foot!": "commands.md, prompt prefix plus refusal",
+    "Klimb--On foot!": "town-mode.md, the refusal carries its own hyphen",
+    # combat.md §14 uses this one to say the engine must *not* do it.
+    "Klimb-What?": "combat.md negative statement",
+    # `<equipment name>!`, composed from the shared name table.
+    "Leather Armour!": "commands.md example of the composed form",
+    # `No <item>!`, composed the same way.
+    "No Potion!": "inventory.md example of the composed form",
+    "No Sceptre!": "inventory.md example of the composed form",
+    "No Skull Keys!": "inventory.md example of the composed form",
+    # `Attacked` plus an optional ` from the <compass>` plus `!`.
+    "Attacked from the north!": "dungeon-mode.md composed form",
+    # Sections that name a line in order to deny it.
+    "Invisibility!": "magic.md: Sanct Lor prints no such banner",
+    "Nobody can cast!": "magic.md: no such sentence is printed",
+    "Hey!! What's going on here???": "dungeon-mode.md: must never occur",
+    # An example of a prompt, not a prompt.
+    "Y/N?": "input.md example of a prompt character",
+}
+
+
 def candidates(text: str) -> set[str]:
     found = set()
     for span in SPAN.findall(text):
@@ -74,14 +113,21 @@ def main() -> None:
     missing_total = 0
     for document in sorted(spec_dir.rglob("*.md")):
         found = candidates(document.read_text(errors="replace"))
-        missing = sorted(literal for literal in found if literal not in haystack)
+        missing = sorted(
+            literal
+            for literal in found
+            if literal not in haystack and literal not in VERIFIED_BENIGN
+        )
         total += len(found)
         missing_total += len(missing)
         if missing:
             print(f"{document.relative_to(spec_dir)}: {len(missing)}/{len(found)} absent")
             for literal in missing:
                 print(f"    {literal!r}")
-    print(f"\n{missing_total} absent of {total} candidate literals")
+    print(
+        f"\n{missing_total} unexplained of {total} candidate literals "
+        f"({len(VERIFIED_BENIGN)} previously read and explained)"
+    )
 
 
 if __name__ == "__main__":
