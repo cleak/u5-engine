@@ -5,6 +5,11 @@
 //! something a clean workspace may transcribe. This asks the loaded
 //! grid instead: give it a profile and a tile byte, and it prints the
 //! coordinates, which is enough to build the seed with `--at`.
+//!
+//! `find_world_tile` sweeps both world planes and `find_tile_everywhere`
+//! sweeps the town family; this one answers for the single scene a
+//! profile is standing in, which is also how it checks a seed after
+//! `seed_position` has written one.
 
 use std::path::Path;
 use u5_runtime::*;
