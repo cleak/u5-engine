@@ -539,10 +539,58 @@ impl PanelPickerRow {
             Some(0) => format!("--{selector}{}", self.name),
             Some(count) => format!("{count:>2}{selector}{}", self.name),
         };
-        format!(
-            "{:<13}",
-            truncate_ascii_chars(&content, PANEL_PICKER_CONTENT_COLUMNS)
-        )
+        format!("{:<13}", truncate_ascii_chars(&content, PANEL_PICKER_CONTENT_COLUMNS))
+    }
+
+    /// The display lines this entry occupies, in order.
+    ///
+    /// `inventory.md §4.5`: the picker "does not derive labels by
+    /// truncating long item names, and it does not clip one at run time
+    /// either: the shared word-wrapping printer moves a label that will
+    /// not fit the rest of the display line onto the next line whole
+    /// (`systems/text-output.md` Section 6), so a counted row with a long
+    /// label occupies **two display lines**."
+    ///
+    /// `RETRACTIONS.md` R481 withdrew the reading this engine carried -
+    /// "the name has ten cells in columns 4 through 13" - as "the
+    /// `Magic Crpt` row's geometry generalised into a rule".
+    ///
+    /// The width comes from `§4.4`: the thirteen interior columns are
+    /// "the drawn frame's interior, **not the writable width of the text
+    /// window behind it**: that window is sixteen cells wide, and a row
+    /// can legally emit through window column 15 - screen column 39,
+    /// outside the frame entirely". The painter opens a row at window
+    /// column 1, so the row has fifteen cells and a counted row's name
+    /// has the twelve left after its quantity and selector. The wrapped
+    /// line starts at window column 0, which is where the window's next
+    /// line begins - over the frame's left rule.
+    ///
+    /// Measured 2026-09-19 (`qa/paired/use-specials.tsv`, beat
+    /// `crownrow`, byte-identical across two runs): the original writes
+    /// `Shard/Hatred` - twelve cells - straight through the right rule,
+    /// and puts `Shard/Falsehd` - thirteen - on a line of its own
+    /// starting at the left rule. `cleak/u5-engine#42`.
+    pub fn lines(&self) -> Vec<String> {
+        let selector = if self.selector_runic {
+            panel_runic_char(self.selector)
+        } else {
+            self.selector as char
+        };
+        let prefix = match self.quantity {
+            None => String::new(),
+            Some(count) if self.zero_padded => format!("{count:02}{selector}"),
+            Some(0) => format!("--{selector}"),
+            Some(count) => format!("{count:>2}{selector}"),
+        };
+        let fits = prefix.chars().count() + self.name.chars().count()
+            <= PANEL_PICKER_ROW_CELLS;
+        if fits {
+            vec![format!("{prefix}{}", self.name)]
+        } else {
+            // "onto the next line **whole**" - the label moves entire, and
+            // the quantity and selector keep the line they were on.
+            vec![prefix, self.name.clone()]
+        }
     }
 }
 
@@ -662,6 +710,14 @@ pub fn z_stats_page_is_framed(page: crate::ZStatsPage) -> bool {
 
 /// `inventory.md §4.4`: seven interior item rows, thirteen content columns.
 pub const PANEL_PICKER_ROWS: usize = 7;
+
+/// `inventory.md §4.4`: the picker's text window "is sixteen cells wide,
+/// and a row can legally emit through window column 15 - screen column
+/// 39, outside the frame entirely". The painter opens a row at window
+/// column 1, so a row has fifteen writable cells - three more than the
+/// drawn frame's interior, and the reason a twelve-cell name runs
+/// straight through the right rule.
+pub const PANEL_PICKER_ROW_CELLS: usize = 15;
 pub const PANEL_PICKER_CONTENT_COLUMNS: usize = 13;
 /// Selector cell placeholder while `cleak/u5-spec#195` is open.
 pub const PANEL_PICKER_SELECTOR_BLANK: u8 = b' ';
@@ -749,6 +805,33 @@ impl PanelPickerView {
         let start = self.page_start().min(self.rows.len());
         let end = (start + PANEL_PICKER_ROWS).min(self.rows.len());
         &self.rows[start..end]
+    }
+
+    /// The page as display lines, which is what the painter draws.
+    ///
+    /// `inventory.md §4.4`'s row table: a page "shows seven **entries**
+    /// only when no entry takes two display lines", and `§4.5` makes an
+    /// entry take two whenever its label will not fit the rest of its
+    /// line. So the page is filled by line, not by entry, and an entry
+    /// whose second line would not fit is not started.
+    ///
+    /// Each item is `(entry index, window column, text)`. The first line
+    /// of an entry opens at column 1, inside the frame's left rule; a
+    /// wrapped label opens at column 0, over it.
+    pub fn visible_lines(&self) -> Vec<(usize, u8, String)> {
+        let start = self.page_start().min(self.rows.len());
+        let mut out: Vec<(usize, u8, String)> = Vec::with_capacity(PANEL_PICKER_ROWS);
+        for (offset, row) in self.rows[start..].iter().enumerate() {
+            let lines = row.lines();
+            if out.len() + lines.len() > PANEL_PICKER_ROWS {
+                break;
+            }
+            for (line_index, text) in lines.into_iter().enumerate() {
+                let column = if line_index == 0 { 1 } else { 0 };
+                out.push((start + offset, column, text));
+            }
+        }
+        out
     }
 
     /// Divider-band page badge, using the arms browser's published glyphs
@@ -943,14 +1026,17 @@ pub fn paint_panel_picker_text_window(system: &mut TextWindowSystem, state: &Pla
     if picker.ornamental_frame {
         paint_panel_picker_frame(system);
     }
-    let start = picker.page_start();
-    for (offset, row) in picker.visible_rows().iter().enumerate() {
-        let selected = start + offset == picker.selected;
+    for (line, (entry, line_column, text)) in picker.visible_lines().iter().enumerate() {
+        let selected = *entry == picker.selected;
         // Without the frame there are no side rules to leave clear, so
         // the highlight starts in window column 0 and the text is padded
         // into columns 1..=13 instead of being cursored there.
-        let column = if picker.ornamental_frame { 1 } else { 0 };
-        system.set_active_cursor(column, (offset + 1) as u8);
+        let column = if picker.ornamental_frame {
+            *line_column
+        } else {
+            0
+        };
+        system.set_active_cursor(column, (line + 1) as u8);
         if selected {
             system.emit_byte(TEXT_CTRL_INVERSE_TOGGLE);
         }
@@ -962,7 +1048,11 @@ pub fn paint_panel_picker_text_window(system: &mut TextWindowSystem, state: &Pla
         // renderer switches fonts for that one cell and switches back." The
         // same switch serves the decorated-name glyphs, which the row carries
         // in the private-use range.
-        for ch in row.text().chars().take(PANEL_PICKER_CONTENT_COLUMNS) {
+        // `§4.4`: the row may "legally emit through window column 15 ...
+        // outside the frame entirely", so the cap is the window's width
+        // from this line's own start column, not the frame's interior.
+        let cells = PANEL_PICKER_ROW_CELLS + 1 - usize::from(column);
+        for ch in text.chars().take(cells) {
             match panel_runic_code(ch) {
                 Some(code) => {
                     system.set_runic_output(true);

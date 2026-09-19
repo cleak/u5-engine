@@ -5066,3 +5066,88 @@ mod ready_scenario_probe {
     }
 }
 
+
+/// `inventory.md §4.5`: the picker "does not derive labels by truncating
+/// long item names, and it does not clip one at run time either ... so a
+/// counted row with a long label occupies **two display lines**."
+/// `RETRACTIONS.md` R481 withdrew the ten-cell name field this engine had,
+/// which showed the Shadowlord shards as `Shard/Fals` and `Shard/Cowr`.
+#[test]
+fn a_picker_label_that_does_not_fit_wraps_whole_instead_of_being_clipped() {
+    use crate::stats_panel::*;
+
+    let row = |name: &str| PanelPickerRow {
+        quantity: Some(1),
+        selector: b' ',
+        selector_runic: false,
+        name: name.to_string(),
+        zero_padded: false,
+    };
+
+    // §4.4: the row opens at window column 1 and the window is sixteen
+    // cells, so a counted row's name has the twelve left after its
+    // two-cell quantity and its selector. Twelve fits - and runs straight
+    // through the frame's right rule at column 14, which is what the
+    // original does with `Shard/Hatred`.
+    assert_eq!(row("Shard/Hatred").lines(), vec![" 1 Shard/Hatred".to_string()]);
+    assert_eq!(row("Magic Crpt").lines(), vec![" 1 Magic Crpt".to_string()]);
+
+    // Thirteen does not, so the label moves to the next line whole. The
+    // quantity and selector keep the line they were on.
+    assert_eq!(
+        row("Shard/Falsehd").lines(),
+        vec![" 1 ".to_string(), "Shard/Falsehd".to_string()]
+    );
+    assert_eq!(
+        row("Shard/Cowrdce").lines(),
+        vec![" 1 ".to_string(), "Shard/Cowrdce".to_string()]
+    );
+
+    // Nothing is ever shortened: every label survives in full.
+    for name in ["Shard/Falsehd", "Shard/Hatred", "Shard/Cowrdce"] {
+        assert!(
+            row(name).lines().iter().any(|line| line.contains(name)),
+            "{name} was clipped"
+        );
+    }
+}
+
+/// `inventory.md §4.4`: a page "shows seven **entries** only when no entry
+/// takes two display lines". The page is therefore filled by line, and an
+/// entry whose second line would not fit is not started.
+#[test]
+fn the_picker_page_is_filled_by_display_line_not_by_entry() {
+    use crate::stats_panel::*;
+
+    let row = |name: &str| PanelPickerRow {
+        quantity: Some(1),
+        selector: b' ',
+        selector_runic: false,
+        name: name.to_string(),
+        zero_padded: false,
+    };
+    let view = |rows: Vec<PanelPickerRow>| PanelPickerView {
+        label: "Items:".to_string(),
+        rows,
+        selected: 0,
+        ornamental_frame: true,
+    };
+
+    // Seven short entries fill the seven rows, each on one line, each
+    // opening at window column 1 inside the left rule.
+    let short = view((0..7).map(|_| row("Amulet")).collect());
+    let lines = short.visible_lines();
+    assert_eq!(lines.len(), PANEL_PICKER_ROWS);
+    assert!(lines.iter().all(|(_, column, _)| *column == 1));
+
+    // One long label costs a second line, so only six entries fit - and
+    // the wrapped line opens at column 0, over the left rule.
+    let mut mixed: Vec<PanelPickerRow> = (0..6).map(|_| row("Amulet")).collect();
+    mixed.insert(0, row("Shard/Falsehd"));
+    let lines = view(mixed).visible_lines();
+    assert_eq!(lines.len(), PANEL_PICKER_ROWS);
+    assert_eq!(lines[0], (0, 1, " 1 ".to_string()));
+    assert_eq!(lines[1], (0, 0, "Shard/Falsehd".to_string()));
+    // Six entries on seven lines: indices 0 through 5.
+    assert_eq!(lines.last().unwrap().0, 5);
+}
