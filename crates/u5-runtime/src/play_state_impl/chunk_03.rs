@@ -492,6 +492,19 @@ impl PlayState {
         {
             walk.kneel();
         }
+        // `blackthorn.md §7` step 4 runs "the audio-envelope sequence, three
+        // cell reveals, and paired viewport flash between" the shout and the
+        // thunder line. Measured 2026-09-18
+        // (`qa/paired/stonegate-rescue-pacing.tsv`): the original has the two
+        // Guardians on screen by the shout's own sample and the spectral
+        // figure by the thunder's, and this engine drew none of the three.
+        for beat in &released {
+            if beat.text == crate::blackthorn::BLACKTHORN_RESCUE_SHOUT {
+                self.blackthorn_rescue_reveals_shown = 2;
+            } else if beat.text == crate::blackthorn::BLACKTHORN_RESCUE_THUNDER {
+                self.blackthorn_rescue_reveals_shown = 3;
+            }
+        }
         for beat in released {
             // An empty beat is a pure hold - a wait with nothing to print,
             // such as `karma.md §12`'s closing "ten world ticks". Emitting it

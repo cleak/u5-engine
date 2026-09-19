@@ -3861,6 +3861,15 @@ impl PlayState {
 
         self.grid.fill(STONEGATE_TRAPDOOR_GRID_TILE);
         self.mark_visibility_dirty();
+        // Step 1's black viewport fill is a direct-screen operation and holds
+        // until the rescue hands off - the live grid underneath it is the
+        // `0x8f` fill above, which the player never sees. Measured 2026-09-18
+        // (`qa/paired/stonegate-rescue-pacing.tsv`, every sample from `t04`):
+        // the original's viewport is entirely black through the sweep, and
+        // this engine drew the `0x8f` fill with the party standing on it,
+        // because the black fill was a one-shot playback the frontend drained
+        // after a single frame.
+        self.cutscene_black_viewport = true;
 
         self.active_objects = vec![ActiveObject::empty(); OOL_SLOTS];
 
@@ -5502,6 +5511,11 @@ impl PlayState {
     }
 
     /// Whether the rescue is at step 19, its one blocking key read.
+    /// Whether `blackthorn.md §7`'s rescue cinematic owns the viewport.
+    pub fn blackthorn_rescue_active(&self) -> bool {
+        self.pending_blackthorn_rescue.is_some()
+    }
+
     pub fn blackthorn_rescue_awaiting_acknowledgement(&self) -> bool {
         self.pending_blackthorn_rescue
             == Some(crate::blackthorn::BlackthornRescuePhase::AwaitingAcknowledgement)
@@ -5683,6 +5697,9 @@ impl PlayState {
             cell: BLACKTHORN_RESCUE_PARTY_CELL,
         });
 
+        // The cinematic is over; the handoff's own scene is an ordinary map.
+        self.cutscene_black_viewport = false;
+        self.blackthorn_rescue_reveals_shown = 0;
         self.moral_standing = blackthorn_rescue_post_print_standing(self.moral_standing);
         self.clear_active_effect_slot();
         self.torch_counter = 0;

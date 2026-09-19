@@ -700,6 +700,14 @@ pub struct PlayState {
     /// `qa/tools/viewport_audit.py`, that was 35% of the viewport's pixels
     /// across four beats of `qa/paired/shrine-three-mantras.tsv`, and the
     /// paired harness never saw it because it compared only text.
+    /// `town-mode.md §7.1` step 1's direct black viewport fill, held for as
+    /// long as the original holds it: from the Stonegate trapdoor script
+    /// until the rescue hands off. `blackthorn.md §7` step 3 dissolves to the
+    /// same black and step 9 draws the party on it.
+    pub cutscene_black_viewport: bool,
+    /// How many of `blackthorn.md §7` step 4's three cell reveals are on
+    /// screen: the two Guardians, then the spectral figure.
+    pub blackthorn_rescue_reveals_shown: u8,
     pub shrine_presentation_map: Option<MiscmapsCutsceneMap>,
     /// `karma.md §7`'s approach walk, while the shrine presentation is up.
     pub shrine_approach_walk: Option<crate::shrine_presentation::ShrineApproachWalk>,

@@ -16591,8 +16591,25 @@ fn render_pending_blackthorn_rescue_viewport(
     state: &PlayState,
     atlas: &TileAtlas,
 ) -> io::Result<Option<TileViewport>> {
-    let Some(playback) = state.pending_blackthorn_rescue_playbacks.first() else {
-        return Ok(None);
+    // The playback is a one-shot record of a completed blocking call and the
+    // frontend drains it after presenting one frame. The *screen state* it
+    // describes is not one-shot: `town-mode.md §7.1` step 1's black fill holds
+    // from the trapdoor until the rescue hands off, and `blackthorn.md §7`
+    // step 9 draws the party on that black for the rest of the cinematic.
+    //
+    // Measured 2026-09-18 (`qa/paired/stonegate-rescue-pacing.tsv`): the
+    // original's viewport is black through the sweep and black-plus-party
+    // through the narration, all 121 cells of it, and this engine showed the
+    // trapdoor script's `0x8f` grid fill with the party standing on it from
+    // the second frame onward.
+    let held = state.cutscene_black_viewport || state.blackthorn_rescue_active();
+    let playback = match state.pending_blackthorn_rescue_playbacks.first() {
+        Some(playback) => Some(playback.clone()),
+        None if state.blackthorn_rescue_active() => {
+            Some(u5_runtime::blackthorn::blackthorn_rescue_playback())
+        }
+        None if held => None,
+        None => return Ok(None),
     };
     let cells = u5_runtime::MISCMAPS_CUTSCENE_VISIBLE_COLUMNS;
     let rows = u5_runtime::MISCMAPS_CUTSCENE_ROWS;
@@ -16606,13 +16623,39 @@ fn render_pending_blackthorn_rescue_viewport(
         height,
         pixels: vec![0; width * height],
     };
-    blit_tile_id_to_viewport(
-        &mut viewport,
-        atlas,
-        usize::from(playback.party_atlas_index),
-        usize::from(playback.party_cell.0),
-        usize::from(playback.party_cell.1),
-    )?;
+    if let Some(playback) = playback {
+        blit_tile_id_to_viewport(
+            &mut viewport,
+            atlas,
+            usize::from(playback.party_atlas_index),
+            usize::from(playback.party_cell.0),
+            usize::from(playback.party_cell.1),
+        )?;
+        // §7 step 4's three cell reveals, in the order the playback lists
+        // them: the two Guardians, then the spectral figure. Each stays on
+        // screen once revealed - the playback's own `persistent_terrain` and
+        // `persistent_actors` are the commits that keep them there.
+        let shown = usize::from(state.blackthorn_rescue_reveals_shown);
+        for reveal in playback.guardian_reveals.iter().take(shown) {
+            blit_tile_id_to_viewport(
+                &mut viewport,
+                atlas,
+                usize::from(reveal.atlas_index),
+                usize::from(reveal.cell.0),
+                usize::from(reveal.cell.1),
+            )?;
+        }
+        if shown >= playback.guardian_reveals.len() + 1 {
+            let reveal = &playback.spectral_reveal;
+            blit_tile_id_to_viewport(
+                &mut viewport,
+                atlas,
+                usize::from(reveal.atlas_index),
+                usize::from(reveal.cell.0),
+                usize::from(reveal.cell.1),
+            )?;
+        }
+    }
     Ok(Some(viewport))
 }
 

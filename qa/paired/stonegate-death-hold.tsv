@@ -44,6 +44,14 @@
 # `Poisoned!`, the other two town underfoot lines it sits beside in the
 # string pool, are framed the same way.
 # requires-seed: the party inside Stonegate, standing in the trapdoor ring's centre cell
+# The roster panel is a lottery here, as it is on `stonegate-rescue-pacing`:
+# the fall runs `town-mode.md`'s shared mass-damage pass, one `1..8` roll per
+# member, and the two sides never share a seed. A panel-only difference on the
+# `Avatar` row has measured the roll and must be re-run before it means
+# anything. The row's *timing* - a damaged living member for the whole sweep,
+# `0D` only after it - is not a lottery and is pinned by the trapdoor arm of
+# `apply_town_underfoot_effects`.
+#
 both	wait	9000
 both	key	space
 both	wait	4000
