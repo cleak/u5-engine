@@ -1,0 +1,52 @@
+# `audio.md` Section 3's mute contract, which nothing has measured: "Ctrl-S
+# must suppress output only; calibrated holds, glissando steps, envelope
+# iterations, viewport operations, final stops, and required random-state
+# advances must still occur" (`cleak/u5-engine#1`'s acceptance list).
+#
+# The claim is about *timing*, so the way to test it is a cue long enough
+# that a skipped hold shows up as a visible drift. The Stonegate trapdoor
+# sweep is the longest published one: `audio.md` Section 8.2 gives it "every
+# integer frequency from 1000 down through 251 Hz, 750 tones total", and
+# `stonegate-trapdoor-audio` measures it at 40.1 s on the original against
+# 40.0 s here, with the descending span at 26.5 s against 26.6 s.
+#
+# So: press Ctrl-S first, then take the same step. Two things should hold.
+#
+#   - **Both recordings are silent.** Section 3 suppresses output, and
+#     `audio_compare.py` reports "both silent" when they are.
+#   - **The window still lands where it lands.** The `fallen` beats are taken
+#     at the same offsets as the sounded scenario's, so an engine that
+#     skipped the holds while muted would print the landing text earlier and
+#     the two sides would disagree.
+#
+# An engine that muted by *not running* the sweep would pass the first test
+# and fail the second, which is the whole point of pairing them.
+#
+# Shares the sounded scenario's seed: the party stands in the middle of the
+# trapdoor ring inside Stonegate.
+#
+# requires-seed: profile `seed-stonegate-trapdoor-audio`
+both	wait	9000
+both	key	space
+both	wait	4000
+both	key	j
+both	wait	9000
+both	key	ctrl+s
+both	wait	2000
+both	shot	muted	Sound off, before the step
+both	audio-start	dosbox-control	DOSBox: four seconds of nothing, muted
+both	wait	4000
+both	audio-stop		DOSBox control
+both	audio-start	engine-control	Engine: the same control
+both	wait	4000
+both	audio-stop		Engine control
+both	audio-start	engine-trapdoor	Engine: one step north onto the trapdoor, muted
+engine	key	Up
+both	wait	40000
+both	audio-stop		Engine muted trapdoor capture
+both	shot	engine-fallen	Engine after the muted trapdoor
+both	audio-start	dosbox-trapdoor	DOSBox: the same step, muted
+dosbox	key	Up
+both	wait	40000
+both	audio-stop		DOSBox muted trapdoor capture
+both	shot	dosbox-fallen	DOSBox after the muted trapdoor
