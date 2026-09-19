@@ -1582,6 +1582,19 @@ pub const HOLE_UP_ON_LAND_OR_SHIP_REFUSAL: &str = "On land or ship!";
 ///
 /// The label carries its own feed, so the answer always lands on the row
 /// beneath it.
+///
+/// **Provisional on its capitalisation.** `commands.md`'s world `0` row
+/// gives the same command `Set_Active_Plr:\n` - title case - and that
+/// form is measured: `qa/paired/hut-resident-commands.tsv` agrees with
+/// the original on all eleven beats and its window reads
+/// `Set Active Plr:` / `None!`. §8.4's combat table writes it lowercase.
+///
+/// The two documents are describing one shipped label with two different
+/// cases, so one of them is a transcription slip - and this engine now
+/// prints both, title case through [`Command::SetActivePlayer`]'s echo
+/// and lowercase here. Each follows its own document, which is
+/// reversible; guessing that they are one string and flipping this to
+/// match the measured sibling would not be. `cleak/u5-spec#293`.
 pub const COMBAT_SET_ACTIVE_PLAYER_LABEL: &str = "Set active plr:\n";
 /// See [`COMBAT_SET_ACTIVE_PLAYER_LABEL`]: the digit-zero answer.
 pub const COMBAT_SET_ACTIVE_PLAYER_NONE: &str = "None!";
