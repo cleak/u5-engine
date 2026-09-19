@@ -1,0 +1,64 @@
+# `combat.md` Section 8's Shape B responder, letter by letter. Ten of its
+# twelve have never been on screen in any capture, which
+# `qa/coverage/unreached-lines.md` is what showed.
+#
+# §8 assigns them three exact tails:
+#
+#   > The tails contain no newline of their own: `" what?"` (including its
+#   > leading space), `"-Not here"` (no exclamation point), and
+#   > `"-Funny, no response!"`. Twelve letters use it: `B` Board and `X` X-it
+#   > take the first tail ...; `E` Enter, `F` Fire, `H` Hole up, `I` Ignite,
+#   > `L` Look, `M` Mix, `N` New order, `Q` Quit and `V` View take the
+#   > second; `T` Talk takes the third. ... `D` and `W` bypass it and print
+#   > their own `D-What?` / `W-What?`.
+#
+# Two of the twelve are already measured and they do **not** agree with each
+# other about that assignment. `combat-refusal-audio` shows `L` reading
+# `Look-Not here` exactly as published, and `combat-enter-refusal` shows `E`
+# reading `Enter what` - the *first* tail, where §8 puts it in the second
+# (`cleak/u5-spec#289`). So the remaining letters are worth capturing rather
+# than assumed, and this asserts nothing about which tail each takes.
+#
+# Shares the dungeon-room seat `combat-commands` uses. Space clears the
+# prompt between letters, as that scenario does. `G`, `S`, `K`, `X` and `C`
+# are already covered there and are not repeated.
+#
+# The beats are grouped rather than one-per-letter: the window holds
+# thirteen rows, so three refusals and their banners fit in one shot and the
+# whole set needs four rather than ten.
+#
+# requires-seed: the party one step from a dungeon room trigger, with a torch
+both	wait	9000
+both	key	space
+both	wait	4000
+both	key	j
+both	wait	9000
+both	key	i
+both	wait	2500
+both	key	Up
+both	wait	6000
+both	shot	arena	The arena after entry
+both	key	b
+both	wait	1800
+both	key	f
+both	wait	1800
+both	key	h
+both	wait	1800
+both	shot	bfh	B-Board, F-Fire, H-Hole up
+both	key	m
+both	wait	1800
+both	key	n
+both	wait	1800
+both	key	q
+both	wait	1800
+both	shot	mnq	M-Mix, N-New order, Q-Quit
+both	key	t
+both	wait	1800
+both	key	v
+both	wait	1800
+both	shot	tv	T-Talk, V-View
+both	key	d
+both	wait	1800
+both	key	w
+both	wait	1800
+both	shot	dw	D and W, which bypass the responder
