@@ -25250,7 +25250,11 @@ fn dungeon_l_key_relative_focus_prompt_uses_selected_party_member() {
     );
     assert_eq!(state.party[1].status, b'G');
     assert!(state.message.contains("Cured!"));
-    assert_eq!(state.turn, 0);
+    // `dungeon-mode.md §12`: "L-Look retains the resident dispatcher's
+    // acted result ... Look has no special time exemption", so the drink
+    // bumps the action counter and the turn's upkeep runs behind it.
+    // Measured 2026-09-19 (`qa/paired/dungeon-fountain-poison.tsv`).
+    assert_eq!(state.turn, 1);
 }
 
 #[test]

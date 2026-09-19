@@ -2737,6 +2737,17 @@ impl PlayState {
             .apply_dungeon_fountain_effect(party_index, tile)
             .unwrap_or_default();
         self.message = format!("{DUNGEON_FOUNTAIN_ACCEPTED}{effect}");
+        // `dungeon-mode.md §12`: "L-Look retains the resident dispatcher's
+        // acted result ... Look has no special time exemption." An acted
+        // command bumps the action counter, and the turn's upkeep - the
+        // `time.md §5` one-point poison tick among it - runs behind it.
+        //
+        // Measured 2026-09-19 (`qa/paired/dungeon-fountain-poison.tsv`,
+        // beat `poisoned`): the member the poison fountain has just
+        // poisoned reads one hit point lower on the original than here,
+        // in the same frame that prints `Poisoned!`. That point is the
+        // drink's own turn.
+        self.advance_turn();
         MoveOutcome::Observed
     }
 
