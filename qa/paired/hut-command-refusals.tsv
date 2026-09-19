@@ -1,0 +1,50 @@
+# Published refusals that no capture has ever shown, taken from
+# `qa/coverage/unreached-lines.md`. Each is one keypress from a fresh
+# start, which makes them the cheapest coverage in the backlog:
+#
+#   - `No lock!`          - J-Jimmy with nothing lockable in front
+#   - `Not climbable!`    - K-Klimb where nothing climbs
+#   - `No reagents owned!` / `Nothing to mix!` - M-Mix with an empty pouch
+#   - `Not in doorway!`   - the door-close refusal off a doorway
+#
+# Seedless on purpose. `hut-ready-refusals` shows the pattern: `c`, a typed
+# name and Return puts both sides in Iolo's hut with the shipped starting
+# party, which carries no reagents and stands on no ladder, so every refusal
+# above is reachable without a profile to keep in step.
+#
+# This asserts nothing about which line each key produces - that is what the
+# comparison is for. It puts both sides through the same keys and lets the
+# comparator say whether they agree, which is the only way an unreached line
+# becomes a verified one.
+#
+# The direction answers are a first pass: `commands.md` Section 5.3 makes
+# Jimmy and Klimb operand-follows echoes, and whether the hut's geometry
+# refuses before or after the direction is what the capture will show. Expect
+# to trim once it has run.
+both	wait	9000
+both	key	space
+both	wait	4000
+both	key	c
+both	wait	2500
+both	type	Avatar
+both	key	Return
+both	wait	6000
+both	shot	hut	The shipped start, inside the hut
+both	key	j
+both	wait	1500
+both	key	Up
+both	wait	2500
+both	shot	jimmy	J-Jimmy with nothing lockable
+both	key	k
+both	wait	2500
+both	shot	klimb	K-Klimb where nothing climbs
+both	key	m
+both	wait	2500
+both	shot	mix	M-Mix with an empty pouch
+both	key	space
+both	wait	1500
+both	key	o
+both	wait	1500
+both	key	Up
+both	wait	2500
+both	shot	open	O-Open with nothing openable
