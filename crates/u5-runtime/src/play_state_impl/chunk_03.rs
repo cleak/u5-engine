@@ -3046,7 +3046,7 @@ impl PlayState {
                 'Y' => {
                     return match session.kind {
                         YesNoPromptKind::DungeonFountainDrink { party_index, focus } => {
-                            self.look_dungeon_with_focus(Some(true), Some(party_index), focus);
+                            self.answer_dungeon_fountain_drink_prompt(true, party_index, focus);
                             Ok(Some(PlayInputDisposition::Continue))
                         }
                         YesNoPromptKind::TownExit { scene, floor } => {
@@ -3068,7 +3068,7 @@ impl PlayState {
                     if let YesNoPromptKind::DungeonFountainDrink { party_index, focus } =
                         session.kind
                     {
-                        self.look_dungeon_with_focus(Some(false), Some(party_index), focus);
+                        self.answer_dungeon_fountain_drink_prompt(false, party_index, focus);
                     } else if matches!(session.kind, YesNoPromptKind::TownExit { .. }) {
                         let turn_before = self.turn;
                         // Section 12.1, declined arm: "`No` and nothing else",

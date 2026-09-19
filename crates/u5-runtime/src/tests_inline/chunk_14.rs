@@ -615,6 +615,42 @@
         assert!(state.message.contains("Bad taste."));
     }
 
+    /// Measured 2026-09-19 (`qa/paired/dungeon-fountain-heal.tsv`): the
+    /// answer to an open `Will you drink?` prints `Yes.  Gulp!` and the
+    /// effect line only. The look line and the question are already on
+    /// screen, and this engine printed them a second time above the
+    /// answer.
+    #[test]
+    fn dungeon_fountain_prompt_answer_prints_no_second_look_block() {
+        let mut grid = open_dungeon_record();
+        grid[dungeon_cell_index(0, 1, 1)] = 0x51;
+        let mut state = dungeon_state(grid, 0, 1, 1);
+        state.torch_counter = 5;
+
+        assert_eq!(
+            state.start_dungeon_fountain_drink_prompt(0, DungeonLookFocus::Here),
+            MoveOutcome::Observed
+        );
+        assert_eq!(state.message, DUNGEON_FOUNTAIN_DRINK_PROMPT);
+
+        assert_eq!(
+            state.answer_dungeon_fountain_drink_prompt(true, 0, DungeonLookFocus::Here),
+            MoveOutcome::Observed
+        );
+        assert_eq!(
+            state.message,
+            format!("{DUNGEON_FOUNTAIN_ACCEPTED}{DUNGEON_FOUNTAIN_HEALED}")
+        );
+        assert!(!state.message.contains(DUNGEON_LOOK_PREAMBLE));
+        assert!(!state.message.contains(DUNGEON_FOUNTAIN_DRINK_PROMPT));
+
+        assert_eq!(
+            state.answer_dungeon_fountain_drink_prompt(false, 0, DungeonLookFocus::Here),
+            MoveOutcome::PromptDeclined
+        );
+        assert_eq!(state.message, DUNGEON_FOUNTAIN_DECLINED);
+    }
+
     #[test]
     fn dungeon_fountain_decline_and_invalid_member_do_not_mutate_party() {
         let mut grid = open_dungeon_record();

@@ -2704,6 +2704,42 @@ impl PlayState {
         MoveOutcome::Observed
     }
 
+    /// Answer a fountain's drink prompt that is already on screen.
+    ///
+    /// [`Self::look_dungeon_with_focus`] composes the whole block - the
+    /// look line, the question and the answer - because the `L` command
+    /// can carry its drink answer inline, and then all three are printed
+    /// by one call. The prompt path is not that: `You see:`,
+    /// `a fountain.` and `Will you drink?` are already in the transcript
+    /// when the `Y` or `N` arrives, so re-composing the block prints them
+    /// a second time. Measured 2026-09-19
+    /// (`qa/paired/dungeon-fountain-heal.tsv`): the original answers with
+    /// `Yes.  Gulp!` and the effect line alone, on the rows below the open
+    /// question, where this engine printed the look line and the question
+    /// again above them.
+    pub fn answer_dungeon_fountain_drink_prompt(
+        &mut self,
+        drink: bool,
+        party_index: usize,
+        focus: DungeonLookFocus,
+    ) -> MoveOutcome {
+        let Area::Dungeon { level, .. } = self.area else {
+            self.message.clear();
+            return MoveOutcome::Blocked;
+        };
+        if !drink {
+            self.message = DUNGEON_FOUNTAIN_DECLINED.to_string();
+            return MoveOutcome::PromptDeclined;
+        }
+        let (x, y) = self.dungeon_look_focus_coord(focus);
+        let tile = self.dungeon_cell(level, x, y);
+        let effect = self
+            .apply_dungeon_fountain_effect(party_index, tile)
+            .unwrap_or_default();
+        self.message = format!("{DUNGEON_FOUNTAIN_ACCEPTED}{effect}");
+        MoveOutcome::Observed
+    }
+
     pub fn dungeon_look_focus_coord(&self, focus: DungeonLookFocus) -> (usize, usize) {
         let direction = match focus {
             DungeonLookFocus::Ahead => Some(self.player.facing),
