@@ -772,7 +772,7 @@ def compare_cached(artifact: pathlib.Path, cache: dict) -> tuple:
 
 
 # Bump when a classifier change would alter a cached verdict.
-CACHE_VERSION = 30
+CACHE_VERSION = 31
 
 
 # Some scenarios are explicitly a lottery: their own headers say so. The night
@@ -885,6 +885,26 @@ def compare(artifact: pathlib.Path) -> tuple[int, int, int, int, int]:
         if left is None or right is None:
             skipped += 1
             continue
+        from viewport_audit import one_sided_beats as _one_sided_beats
+
+        # A beat the scenario reaches with the two sides deliberately apart
+        # is one-sided in *every* window, not just the viewport.
+        #
+        # `stonegate-trapdoor-muted` is the case that showed it. It steps
+        # the engine onto the trapdoor, waits forty seconds, captures, and
+        # only then steps DOSBox and waits forty more - so at
+        # `dosbox-fallen` the stock is forty seconds past its step and the
+        # engine is eighty past its own. Scoring that as a message-window
+        # difference read `diverged` on twelve rows. The scenario's real
+        # result is a cross-beat one, and it agrees: the engine's window at
+        # `engine-fallen` and the stock's at `dosbox-fallen` are the same
+        # four-part narration, row for row - `An unending darkness engulfs
+        # thee...`, `Thou hast found refuge.`, `No evil lives here, only
+        # peace and darkness.`, `But thy slumber is disturbed!`
+        if label in _one_sided_beats(scenario):
+            skipped += 1
+            print(f"  onesided {scenario}/{label}: the sides are apart by design")
+            continue
         # The roster panel above the message window is compared too, and
         # counted on its own: it is a different window with its own contract,
         # and folding it into the message-window total would make two years of
@@ -904,18 +924,7 @@ def compare(artifact: pathlib.Path) -> tuple[int, int, int, int, int]:
                 print(f"  panel  {scenario}/{label}: rows {panel_rows}")
         from viewport_audit import CELL_TOLERANCE as VIEWPORT_CELL_TOLERANCE
         from viewport_audit import compare_beat as compare_viewport_beat
-        from viewport_audit import one_sided_beats
-
-        # A scenario that drives one side at a time puts the two viewports
-        # deliberately out of step. `hut-audio` walks the engine five steps
-        # into a hut wall, captures, and only then walks DOSBox the same
-        # five - so that beat's 62 differing cells are the scenario, not
-        # the engine. See `viewport_audit.one_sided_beats`.
-        viewport_cells_differing = (
-            None
-            if label in one_sided_beats(scenario)
-            else compare_viewport_beat(stock, engine)
-        )
+        viewport_cells_differing = compare_viewport_beat(stock, engine)
         if (
             viewport_cells_differing is not None
             and viewport_cells_differing > VIEWPORT_CELL_TOLERANCE

@@ -22,6 +22,17 @@
 # An engine that muted by *not running* the sweep would pass the first test
 # and fail the second, which is the whole point of pairing them.
 #
+# The second test is a **cross-beat** reading, and the comparator cannot
+# make it: each side steps forty seconds apart, so by `dosbox-fallen` the
+# engine is eighty seconds past its own step and the two windows are
+# one-sided by construction. Read by hand 2026-09-19 on both this
+# scenario and the sounded one: the engine's window at `engine-fallen`
+# and the stock's at `dosbox-fallen` carry the same four-part narration,
+# row for row - `An unending darkness engulfs thee...`, `Thou hast found
+# refuge.`, `No evil lives here, only peace and darkness.`, `But thy
+# slumber is disturbed!` Forty seconds after its own step each side is in
+# the same place, which is the drift test passing.
+#
 # Shares the sounded scenario's seed: the party stands in the middle of the
 # trapdoor ring inside Stonegate.
 #
