@@ -727,9 +727,29 @@ pub const SHRINE_KNEEL_NARRATION: &str = "...and thou dost kneel before the Alta
 /// a measured constant, like the rest of the paced presentation timings.
 pub const SHRINE_KNEEL_HOLD_BIOS_TICKS: u16 = 72;
 /// `karma.md §12`: "After ten world ticks, record `29`: the question asking
-/// which virtue". Consistent with the same measurement, which shows the
-/// question within the 600 ms sample after the kneel record.
-pub const SHRINE_VIRTUE_QUESTION_HOLD_WORLD_TICKS: u16 = 10;
+/// which virtue."
+///
+/// Ten is the published *step* count, not a duration, and a world step is
+/// not one BIOS tick. `karma.md §7.2` prices a step at "the 55 ms of one
+/// stock timer tick" and then says the figure is "a floor, not an
+/// estimate", because it adds "**nothing** for the full viewport rebuild
+/// each of those steps also performs, which is unpriced". The sibling
+/// [`SHRINE_KNEEL_HOLD_BIOS_TICKS`] is the measured version of that same
+/// gap: 72 ticks for forty-five steps, a little over 1.6 ticks a step.
+/// Ten steps at that rate is sixteen.
+///
+/// **Measured** 2026-09-19 (`qa/paired/shrine-enter-pacing.tsv`, which
+/// samples the entry every 600 ms on both sides). Both sides put the Kneel
+/// record in the same window, `t1800`..`t2400`; the original's virtue
+/// question is **not** up at `t2400` and is by `t3000`, while this engine
+/// printed it inside the kneel record's own window. Ten BIOS ticks is
+/// 0.55 s and left the two records in one sample; sixteen is 0.88 s and
+/// separates them the way the capture does.
+///
+/// `cleak/u5-spec#271` asks for the published interval; until it lands
+/// this is a measured constant scaled from its measured sibling, like the
+/// rest of the paced presentation timings.
+pub const SHRINE_VIRTUE_QUESTION_HOLD_WORLD_TICKS: u16 = 16;
 /// The meditation's exit pacing, after the closing quest record.
 ///
 /// `karma.md §12` ends the interaction with "the shrine's sound sequence and
