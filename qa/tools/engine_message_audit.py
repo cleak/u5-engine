@@ -95,6 +95,7 @@ def main() -> None:
         raise SystemExit(__doc__)
     spec = spec_text(pathlib.Path(sys.argv[1]))
     seen: dict[str, tuple[str, int]] = {}
+    scanned = 0
     for source in sys.argv[2:]:
         for path, number, literal in literals(pathlib.Path(source)):
             # Compare on the longest run of fixed text in the template, so a
@@ -116,12 +117,18 @@ def main() -> None:
             longest = longest.replace('\\"', '"').replace("\\\\", "\\")
             if len(longest) < 5:
                 continue
+            scanned += 1
             if longest in spec:
                 continue
             seen.setdefault(literal, (str(path), number))
     for literal, (path, number) in sorted(seen.items(), key=lambda item: item[1]):
         print(f"{path}:{number}: {literal!r}")
-    print(f"\n{len(seen)} message literal(s) absent from the specification")
+    # The denominator matters: a bare "0 absent" reads the same whether the
+    # engine prints only published text or the scan matched nothing at all.
+    print(
+        f"\n{len(seen)} message literal(s) absent from the specification, "
+        f"of {scanned} scanned"
+    )
 
 
 if __name__ == "__main__":
