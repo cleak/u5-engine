@@ -14,7 +14,15 @@
 //! the coordinate come from the command line, not from any asset.
 //!
 //! Usage:
-//!     seed_position <PROFILE_DIR> [plane=britannia|underworld] [x=<N>] [y=<N>]
+//!     seed_position <PROFILE_DIR> [plane=britannia|underworld]
+//!                                 [dungeon=<scene byte> level=<N>]
+//!                                 [town=<scene byte> floor=<N>]
+//!                                 [x=<N>] [y=<N>]
+//!
+//! `plane`, `dungeon` and `town` are alternatives; the last one given
+//! wins. The dungeon form is what the fountain results want - `Cured!`,
+//! `Healed!`, `Poisoned!`, `Bad taste.` all need a party standing on a
+//! specific dungeon cell, and none of them has ever been captured.
 
 use std::path::Path;
 use u5_runtime::*;
@@ -37,6 +45,38 @@ fn main() {
                     other => panic!("plane is britannia or underworld, got `{other}`"),
                 };
                 state.area = Area::World { plane };
+            }
+            "dungeon" => {
+                let byte: u8 = value.parse().expect("dungeon is a scene byte");
+                let scene = DungeonScene::new(byte).expect("dungeon scene byte must resolve");
+                let level = match state.area {
+                    Area::Dungeon { level, .. } => level,
+                    _ => 0,
+                };
+                state.area = Area::Dungeon { scene, level };
+            }
+            "town" => {
+                let byte: u8 = value.parse().expect("town is a scene byte");
+                let scene = Scene::new(byte).expect("town scene byte must resolve");
+                let floor = match state.area {
+                    Area::Town { floor, .. } => floor,
+                    _ => 0,
+                };
+                state.area = Area::Town { scene, floor };
+            }
+            "level" => {
+                let level: u8 = value.parse().expect("level is a number");
+                match state.area {
+                    Area::Dungeon { scene, .. } => state.area = Area::Dungeon { scene, level },
+                    _ => panic!("`level` needs `dungeon` first"),
+                }
+            }
+            "floor" => {
+                let floor: i8 = value.parse().expect("floor is a number");
+                match state.area {
+                    Area::Town { scene, .. } => state.area = Area::Town { scene, floor },
+                    _ => panic!("`floor` needs `town` first"),
+                }
             }
             "x" => state.player.x = value.parse().expect("x is a number"),
             "y" => state.player.y = value.parse().expect("y is a number"),
