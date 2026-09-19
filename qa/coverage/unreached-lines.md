@@ -39,6 +39,44 @@ easy to conflate:
 - **Verification of it against the original: about a third.** 144 of 425
   lines have ever been on screen in a sampled stock frame.
 
+## Triage: what each cluster costs
+
+Worked 2026-09-19. The list is alphabetical, which says nothing about
+effort; these are the groups and what each needs.
+
+**Already written, waiting on a display.** Five scenarios added today
+cover the combat Shape B letters, four hut refusals, the arena's
+same-exit constraint, the mute contract and the hidden-treasure finds.
+All five need one run to trim their step counts - where a hut's geometry
+refuses and where an arena seats its second actor are things the capture
+tells you, not the specification.
+
+**Cheap, and the tools now exist.** `seed_inventory` stocks items,
+statuses and companions; `seed_position` places the party anywhere on
+either world plane. Between them they unblocked the two clusters that had
+looked most expensive - the arena's second party actor and the Underworld
+treasure cell every published record sits on. Anything else keyed on
+*party state* or *world position* is now a one-line seed.
+
+**Needs a tool that does not exist yet.** `seed_position` sets
+`Area::World` only. The dungeon fountain results - `Cured!`, `Healed!`,
+`Poisoned!`, `Bad taste.` - want a party on a specific dungeon cell,
+which means scene, level and coordinate. That is the next seed tool
+worth writing.
+
+**Behind a contested surface.** The U-Use picker's results - `Removed!`,
+`Resurrection!`, `Not dead!` and the rest - are reachable today, but
+every scenario through that picker inherits `cleak/u5-engine#42`'s panel
+residue and `cleak/u5-spec#278`'s message row. Worth doing *after* those
+close, not before, or the suite gains scenarios that report differences
+for reasons already tracked.
+
+**Probably unreachable by paired capture.** Combat narration that turns
+on a roll - `Bat missed!`, the wound words, damage totals - is
+PRNG-gated, and `prng.md §3` makes the two sides' streams
+non-comparable. `combat-rounds` matches five of five precisely because
+its beats avoid them. These lines want unit tests, not scenarios.
+
 ## Twenty-eight of them cannot be reached at all
 
 A line containing `?` can never match, and twenty-eight of the entries
