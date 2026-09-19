@@ -59,6 +59,38 @@ def needs_seed(path: pathlib.Path) -> bool:
     return "# requires-seed" in path.read_text()
 
 
+def captures_are_usable(artifact: str) -> bool:
+    """Did this run capture the game frame, or something else?
+
+    DOSBox is normally captured at its native 640x400, frame-filling. Some
+    runs catch the window before it has taken that mode and produce a
+    1920x1080 desktop shot with the frame in a small off-centre region.
+    Every cell then decodes from the wrong pixels, and the result is not an
+    error but a finding: blank message windows that score as `stock-idle`
+    and a viewport that differs by the same large count on every beat.
+
+    Measured 2026-09-18: four scenarios in one full pass and six in the
+    next, each with *every* beat unusable. Two false defect reports were
+    filed off the first batch before the cause was found
+    (`cleak/u5-engine#39`).
+
+    `paired_compare` refuses to decode them, which is the right floor, but a
+    scenario that decodes nothing has measured nothing - so the suite retries
+    it once rather than reporting a verdict it does not have.
+    """
+    if not artifact:
+        return False
+    sys.path.insert(0, str(pathlib.Path(__file__).resolve().parent))
+    from PIL import Image
+
+    from paired_compare import capture_is_frame_filling
+
+    shots = sorted(pathlib.Path(artifact).glob("dosbox-*.png"))
+    if not shots:
+        return True
+    return all(capture_is_frame_filling(Image.open(shot)) for shot in shots)
+
+
 def compare(artifact: str) -> tuple[str, str]:
     """Classify one artifact with `paired_compare.py`.
 
@@ -150,6 +182,14 @@ def main() -> None:
             cmd += ["--seed-save", str(profile)]
         cmd.append(str(ROOT / f"{name}.tsv"))
         result = subprocess.run(cmd, capture_output=True, text=True)
+        artifact_of = lambda out: (
+            re.findall(r"/[\w./-]*artifacts/u5/paired/[\w.-]+", out) or [""]
+        )[-1]
+        # One retry for a run whose captures were not the game frame. See
+        # `captures_are_usable`.
+        if result.returncode == 0 and not captures_are_usable(artifact_of(result.stdout)):
+            print(f"recap {name}\tcaptures were not the game frame; re-running", flush=True)
+            result = subprocess.run(cmd, capture_output=True, text=True)
         # The harness prints its artifact directory among a JSON tail; take
         # the last path under the artifact root rather than the last line.
         paths = re.findall(r"/[\w./-]*artifacts/u5/paired/[\w.-]+", result.stdout)
@@ -170,6 +210,14 @@ def main() -> None:
             pathlib.Path(artifact).glob("engine-*.png")
         )
         launched = result.returncode == 0 and (captured or not wanted_shots)
+        if launched and wanted_shots and not captures_are_usable(artifact):
+            failures += 1
+            print(
+                f"BADCAP {name}\t{artifact}\tcaptures were not the game frame twice; "
+                "measured nothing",
+                flush=True,
+            )
+            continue
         if not launched:
             failures += 1
             if result.returncode == 0:
