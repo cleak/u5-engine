@@ -896,7 +896,14 @@
         assert_eq!(state.party[0].mana, 1);
         assert_eq!(state.turn, 1);
         assert_eq!(state.clock, GameClock::new(12, 2).unwrap());
-        assert_eq!(state.message, "Gate Travel phase 2 -> BRITANNIA at (6, 7).");
+        // `commands.md §8.1` keeps the scene key and the cell out of the
+        // message window; they are a diagnostic now.
+        assert!(
+            state
+                .diagnostics
+                .join(" ")
+                .contains("Gate Travel phase 2 -> BRITANNIA at (6, 7).")
+        );
         let _ = fs::remove_dir_all(dir);
     }
 
@@ -932,7 +939,14 @@
         );
         assert_eq!((state.player.x, state.player.y), (6, 7));
         assert_eq!(state.turn, 1);
-        assert_eq!(state.message, "Gate Travel phase 2 -> BRITANNIA at (6, 7).");
+        // `commands.md §8.1` keeps the scene key and the cell out of the
+        // message window; they are a diagnostic now.
+        assert!(
+            state
+                .diagnostics
+                .join(" ")
+                .contains("Gate Travel phase 2 -> BRITANNIA at (6, 7).")
+        );
         assert!(!state.message.contains("F-A-L-L-S"));
         let _ = fs::remove_dir_all(dir);
     }
@@ -987,7 +1001,14 @@
         assert_eq!(state.party[0].mana, 1);
         assert_eq!(state.turn, 1);
         assert_eq!(state.clock, GameClock::new(12, 1).unwrap());
-        assert_eq!(state.message, "Gate Travel phase 2 -> BRITANNIA at (6, 7).");
+        // `commands.md §8.1` keeps the scene key and the cell out of the
+        // message window; they are a diagnostic now.
+        assert!(
+            state
+                .diagnostics
+                .join(" ")
+                .contains("Gate Travel phase 2 -> BRITANNIA at (6, 7).")
+        );
         let _ = fs::remove_dir_all(dir);
     }
 
@@ -1022,7 +1043,14 @@
         assert_eq!(state.party[0].mana, 1);
         assert_eq!(state.turn, 1);
         assert_eq!(state.clock, GameClock::new(12, 1).unwrap());
-        assert_eq!(state.message, "Gate Travel phase 2 -> BRITANNIA at (6, 7).");
+        // `commands.md §8.1` keeps the scene key and the cell out of the
+        // message window; they are a diagnostic now.
+        assert!(
+            state
+                .diagnostics
+                .join(" ")
+                .contains("Gate Travel phase 2 -> BRITANNIA at (6, 7).")
+        );
         let _ = fs::remove_dir_all(dir);
     }
 

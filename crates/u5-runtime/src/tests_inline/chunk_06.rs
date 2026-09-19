@@ -2137,7 +2137,13 @@
         assert_eq!(state.party[0].mana, 1);
         assert_eq!(state.turn, 2);
         assert_eq!(state.clock, GameClock::new(12, 4).unwrap());
-        assert_eq!(state.message, "Gate Travel phase 3 -> BRITANNIA at (4, 5).");
+        // `commands.md §8.1`: the scene key and the cell are a diagnostic.
+        assert!(
+            state
+                .diagnostics
+                .join(" ")
+                .contains("Gate Travel phase 3 -> BRITANNIA at (4, 5).")
+        );
         let _ = fs::remove_dir_all(dir);
     }
 
@@ -2298,7 +2304,13 @@
         assert_eq!(state.turn, 0);
         assert_eq!(state.clock, GameClock::new(11, 58).unwrap());
         assert_eq!(state.grid[origin_idx], NATURAL_MOONGATE_RESTORED_TERRAIN_TILE);
-        assert_eq!(state.message, "Gate Travel phase 2 -> BRITANNIA at (6, 7).");
+        // `commands.md §8.1`: the scene key and the cell are a diagnostic.
+        assert!(
+            state
+                .diagnostics
+                .join(" ")
+                .contains("Gate Travel phase 2 -> BRITANNIA at (6, 7).")
+        );
         let _ = fs::remove_dir_all(dir);
     }
 
@@ -2333,7 +2345,13 @@
         assert_eq!(state.turn, 0);
         assert_eq!(state.clock, GameClock::new(12, 0).unwrap());
         assert_eq!(state.grid[origin_idx], NATURAL_MOONGATE_RESTORED_TERRAIN_TILE);
-        assert_eq!(state.message, "Gate Travel phase 3 -> BRITANNIA at (8, 9).");
+        // `commands.md §8.1`: the scene key and the cell are a diagnostic.
+        assert!(
+            state
+                .diagnostics
+                .join(" ")
+                .contains("Gate Travel phase 3 -> BRITANNIA at (8, 9).")
+        );
         let _ = fs::remove_dir_all(dir);
     }
 

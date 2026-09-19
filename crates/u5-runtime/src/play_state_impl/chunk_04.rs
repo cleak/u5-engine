@@ -2562,12 +2562,19 @@ impl PlayState {
         next.sync_player_object();
         next.pending_town_arrest = None;
         next.active_blackthorn = None;
-        next.message = format!(
+        // `commands.md §8.1`: a command "never prints tile ids,
+        // coordinates, active-object slot numbers, terrain-class names".
+        // This named a scene key and a cell, which is three of the four.
+        // Nothing in `overworld.md`'s Gate Travel contract gives the
+        // transit a line of its own - `audio.md §8.3` gives it a *cue*,
+        // and the arrival is what the player sees - so the slot is left
+        // as the caller set it.
+        next.push_diagnostic(format!(
             "Gate Travel phase {phase} -> {} at ({}, {}).",
             target.key(),
             start.0,
             start.1
-        );
+        ));
         // `audio.md §2` keeps one serial speaker, and the frontend reads it
         // through a monotonic serial. A scene rebuild constructs `next` from
         // scratch, so its history is numbered from 1 and collides with this

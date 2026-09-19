@@ -25980,9 +25980,11 @@ fn dungeon_post_turn_active_monster_greedy_steps_toward_party() {
         object.phase,
         active_object_phase_from_direction(Direction::West, 0)
     );
+    // A monster's step prints nothing; the note is a diagnostic.
     assert!(
         state
-            .message
+            .diagnostics
+            .join(" ")
             .contains("Dungeon monster tile 192 moved West to (2, 1)")
     );
 }

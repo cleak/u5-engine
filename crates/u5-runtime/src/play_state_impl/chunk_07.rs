@@ -5933,11 +5933,12 @@ impl PlayState {
             step.y,
             scene.key()
         );
-        self.message = if self.message.is_empty() {
-            move_message
-        } else {
-            format!("{} {move_message}", self.message)
-        };
+        // A monster taking its step prints nothing: `commands.md §8.1`
+        // rules out the tile id, the cell and the scene name this carried,
+        // and no section gives an ordinary dungeon monster move a line at
+        // all. It was also *appending* to whatever the player's own
+        // command had just printed.
+        self.push_diagnostic(move_message);
         Ok(None)
     }
 
