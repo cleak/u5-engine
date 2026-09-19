@@ -1192,6 +1192,13 @@ pub fn endgame_tableau_actor_placements(
     placements
 }
 
+/// `audio.md §8.7` step 3's tick pauses either side of the tableau
+/// movement sting: "two shared world-animation ticks, the short two-part
+/// sting from Section 5.3, then three more".
+pub const ENDGAME_TABLEAU_STING_LEADING_TICKS: usize = 2;
+/// See [`ENDGAME_TABLEAU_STING_LEADING_TICKS`].
+pub const ENDGAME_TABLEAU_STING_TRAILING_TICKS: usize = 3;
+
 pub fn endgame_tableau_cell_walkable_fallback(x: usize, y: usize) -> bool {
     x > 0
         && x + 1 < ENDGAME_TABLEAU_WIDTH
@@ -1437,7 +1444,7 @@ impl PlayState {
                 .as_ref()
                 .is_some_and(|endgame| endgame.entry_lord_british_pending)
             {
-                if self.step_endgame_tableau_slot_once_to_target(
+                if self.step_endgame_tableau_slot_once_with_sting(
                     ENDGAME_TABLEAU_LORD_BRITISH_SLOT,
                     ENDGAME_TABLEAU_LORD_BRITISH_THRONE_TARGET,
                 ) {
@@ -1525,7 +1532,7 @@ impl PlayState {
                 continue;
             }
 
-            let moved = self.step_endgame_tableau_slot_once_to_target(slot, placement.target);
+            let moved = self.step_endgame_tableau_slot_once_with_sting(slot, placement.target);
             let now_at_target = self
                 .active_objects
                 .get(slot)
@@ -1827,6 +1834,26 @@ impl PlayState {
         slot: usize,
         target: (usize, usize),
     ) -> bool {
+        self.step_endgame_tableau_slot_once(slot, target, false)
+    }
+
+    /// [`Self::step_endgame_tableau_slot_once_to_target`] with
+    /// `audio.md §8.7` step 3's movement cue, for the walks the section
+    /// gives it to.
+    fn step_endgame_tableau_slot_once_with_sting(
+        &mut self,
+        slot: usize,
+        target: (usize, usize),
+    ) -> bool {
+        self.step_endgame_tableau_slot_once(slot, target, true)
+    }
+
+    fn step_endgame_tableau_slot_once(
+        &mut self,
+        slot: usize,
+        target: (usize, usize),
+        sting: bool,
+    ) -> bool {
         let Some(object) = self.active_objects.get_mut(slot) else {
             return false;
         };
@@ -1841,7 +1868,39 @@ impl PlayState {
         }
         object.x = next.0 as usize;
         object.y = next.1 as usize;
-        self.animation.tick_static_tiles();
+        // `audio.md §8.7` step 3: "Each actual one-cell movement toward an
+        // endgame tableau target runs two shared world-animation ticks,
+        // the short two-part sting from Section 5.3, then three more
+        // shared world-animation ticks. An empty slot or an actor already
+        // at its target emits no movement sting and requests none of these
+        // five ticks."
+        //
+        // Both early returns above are those two cases, so reaching here
+        // is exactly "an actual one-cell movement". The engine ran one
+        // tick and no sting, which is why the original's absorption span
+        // carries 6.5 s of the introductory train - §8.7 counts "9, 13,
+        // 17, 21, 23 or 27 stings for party sizes 1 through 6" - and this
+        // engine's carried 0.2 s, the action snap alone. Measured
+        // 2026-09-19 (`qa/paired/doom-endgame-audio.tsv`, beat
+        // `absorption`, via `qa/tools/audio_compare.py`).
+        //
+        // `sting` is what scopes it. §8.7 gives the cue to movement
+        // "toward an endgame tableau target" and to the "later
+        // target-directed walks", and says outright that "the final
+        // random-jitter loop does not use the movement sting" - so a
+        // movement phase without the cue is a shape the section has. The
+        // exit walks are left without it rather than assumed into it.
+        if sting {
+            for _ in 0..ENDGAME_TABLEAU_STING_LEADING_TICKS {
+                self.animation.tick_static_tiles();
+            }
+            self.emit_sound_effect(SoundEffect::EndgameTableauMovementSting);
+            for _ in 0..ENDGAME_TABLEAU_STING_TRAILING_TICKS {
+                self.animation.tick_static_tiles();
+            }
+        } else {
+            self.animation.tick_static_tiles();
+        }
         true
     }
 

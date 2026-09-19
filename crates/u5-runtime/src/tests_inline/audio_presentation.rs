@@ -374,18 +374,35 @@ fn endgame_restoration_sounds_once_per_restored_dead_member_and_nowhere_else() {
     state.enter_endgame();
     let serial = state.sound_effect_serial;
 
-    // Lord British's walk-in and slot zero's walk are ordinary movement
-    // beats: audio.md §8.7 names no cue for them.
+    // `audio.md §8.7` step 3 does name a cue for them: "Each actual
+    // one-cell movement toward an endgame tableau target runs two shared
+    // world-animation ticks, the short two-part sting from Section 5.3,
+    // then three more", and the same paragraph counts the introductory
+    // train at "9, 13, 17, 21, 23 or 27 stings for party sizes 1 through
+    // 6". Lord British's five steps and the party walks *are* that train.
+    // This test previously read the section as naming no cue for them.
     for _ in 0..9 {
         assert!(state.advance_endgame_entry_presentation());
     }
-    assert!(state.sound_effects_after(serial).is_empty());
+    let train = state.sound_effects_after(serial);
+    assert!(!train.is_empty(), "the introductory train has stings");
+    assert!(
+        train
+            .iter()
+            .all(|effect| *effect == SoundEffect::EndgameTableauMovementSting),
+        "and nothing else yet: {train:?}",
+    );
 
     // The restoration beat: the announcement, then the flourish.
     assert!(state.advance_endgame_entry_presentation());
     assert!(state.message.ends_with("\nIOLO lives!\n"));
+    // The restoration flourish is the one non-movement cue so far.
     assert_eq!(
-        state.sound_effects_after(serial),
+        state
+            .sound_effects_after(serial)
+            .into_iter()
+            .filter(|effect| *effect != SoundEffect::EndgameTableauMovementSting)
+            .collect::<Vec<_>>(),
         vec![SoundEffect::EndgameRestoration]
     );
 
@@ -397,8 +414,12 @@ fn endgame_restoration_sounds_once_per_restored_dead_member_and_nowhere_else() {
         }
     }
     assert!(
-        state.sound_effects_after(after_restoration).is_empty(),
-        "only a Dead member's restoration flourishes",
+        state
+            .sound_effects_after(after_restoration)
+            .into_iter()
+            .all(|effect| effect == SoundEffect::EndgameTableauMovementSting),
+        "only a Dead member's restoration flourishes; the rest is §8.7's \
+         movement train",
     );
 }
 

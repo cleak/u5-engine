@@ -1801,6 +1801,13 @@ pub enum SoundEffect {
     BlackthornRescueEnvelopes,
     /// `audio.md §6.1`'s absorb cue. See [`MAGIC_ABSORBED_ENVELOPE`].
     MagicAbsorbed,
+    /// `audio.md §8.7` step 3: the endgame tableau's per-movement cue.
+    /// "Each actual one-cell movement toward an endgame tableau target
+    /// runs two shared world-animation ticks, the short two-part sting
+    /// from Section 5.3, then three more shared world-animation ticks."
+    /// The same recipe as [`SoundEffect::BlackthornMovementStinger`];
+    /// named separately because the two callers' tick pauses differ.
+    EndgameTableauMovementSting,
     /// `karma.md §7.2`, the ordination arm's seven-note chime.
     ShrineOrdinationChime,
     /// `karma.md §7.2`, the accepted-offering arm's 920-run swell.
@@ -1893,7 +1900,8 @@ impl SoundEffect {
                     None => SpeakerProgram::new(vec![SpeakerOp::Stop]),
                 }
             }
-            SoundEffect::BlackthornMovementStinger => two_part_sting(jitter),
+            SoundEffect::BlackthornMovementStinger
+            | SoundEffect::EndgameTableauMovementSting => two_part_sting(jitter),
             SoundEffect::BlackthornRescueEnvelopes => blackthorn_rescue_envelope_program(),
             SoundEffect::MagicAbsorbed => envelope_program(MAGIC_ABSORBED_ENVELOPE),
             SoundEffect::ShrineOrdinationChime => shrine_ordination_chime_program(),
