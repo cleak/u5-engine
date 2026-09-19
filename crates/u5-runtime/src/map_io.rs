@@ -417,7 +417,19 @@ pub fn load_town_runtime_floor_with_beacon_sources(
 }
 
 pub fn normalize_town_runtime_floor(grid: &mut [u8], hour: u8) {
-    scrub_location_npc_start_markers(grid);
+    // The NPC start markers are **not** scrubbed. `catalogs/tile-catalog.md`
+    // §3 gives `0x48..0x49` as the **bridge** pair, so the marker bytes are
+    // ordinary terrain that the loader also harvests:
+    // `formats/location-dat.md` §6 has the walk "re-read the tile byte
+    // (yielding the marker itself, since the byte is not yet overwritten)",
+    // records the coordinate, and moves on. Only "selected marker cells" are
+    // rewritten in the runtime buffer, and these are not among them.
+    //
+    // This used to overwrite them with `LOCATION_MARKER_CLEANUP_TILE`, which
+    // is `16` - the overworld's **hut marker**. Measured 2026-09-19
+    // (`qa/paired/blackthorn-palace-password.tsv`, all three beats, 6 of 121
+    // viewport cells): the original draws the castle's drawbridge at
+    // `(14..16, 28..29)` and this engine drew six hut markers on the moat.
     if is_town_night_hour(hour) {
         apply_dawn_dusk_substitution(grid);
     }

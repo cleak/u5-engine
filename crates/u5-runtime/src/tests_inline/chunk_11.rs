@@ -22,16 +22,22 @@
         );
 
         assert_eq!(state.grid[0], BEACON_BRIGHT_LIGHT_TILE);
-        assert_eq!(state.grid[1], LOCATION_MARKER_CLEANUP_TILE);
-        assert_eq!(state.grid[2], LOCATION_MARKER_CLEANUP_TILE);
+        // `catalogs/tile-catalog.md` §3: `0x48..0x49` is the bridge pair, so
+        // the marker is terrain the loader harvests and leaves in place.
+        // These used to assert the hut marker it was overwritten with.
+        assert_eq!(state.grid[1] & 0xfe, 0x48);
+        assert_eq!(state.grid[2] & 0xfe, 0x48);
         assert_eq!(state.grid[3], 0xc8);
         assert_eq!(
             state.light_beacon.sources,
             [Some((0, 0)), None],
             "the floor reached by stairs harvests its beacon source"
         );
+        // Still harvestable: the loader records the coordinate and leaves
+        // the bridge tile in place (`formats/location-dat.md` §6). This used
+        // to assert that the markers had been overwritten.
         assert!(
-            harvest_location_npc_start_markers(&state.grid)
+            !harvest_location_npc_start_markers(&state.grid)
                 .npc_markers
                 .is_empty()
         );
@@ -337,16 +343,22 @@
         );
 
         assert_eq!(state.grid[0], BEACON_BRIGHT_LIGHT_TILE);
-        assert_eq!(state.grid[1], LOCATION_MARKER_CLEANUP_TILE);
-        assert_eq!(state.grid[2], LOCATION_MARKER_CLEANUP_TILE);
+        // `catalogs/tile-catalog.md` §3: `0x48..0x49` is the bridge pair, so
+        // the marker is terrain the loader harvests and leaves in place.
+        // These used to assert the hut marker it was overwritten with.
+        assert_eq!(state.grid[1] & 0xfe, 0x48);
+        assert_eq!(state.grid[2] & 0xfe, 0x48);
         assert_eq!(state.grid[3], 0xc9);
         assert_eq!(
             state.light_beacon.sources,
             [Some((0, 0)), None],
             "the floor reached by trapdoor harvests its beacon source"
         );
+        // Still harvestable: the loader records the coordinate and leaves
+        // the bridge tile in place (`formats/location-dat.md` §6). This used
+        // to assert that the markers had been overwritten.
         assert!(
-            harvest_location_npc_start_markers(&state.grid)
+            !harvest_location_npc_start_markers(&state.grid)
                 .npc_markers
                 .is_empty()
         );

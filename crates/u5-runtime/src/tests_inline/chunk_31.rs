@@ -1014,7 +1014,9 @@ mod light_beacon_floor_transition_harvest {
         let _ = fs::remove_dir_all(&dir);
 
         assert_eq!(sources, [Some((5, 7)), None]);
-        assert_eq!(grid[8 * 32 + 6], LOCATION_MARKER_CLEANUP_TILE);
+        // `0x48..0x49` is the bridge pair and stays in the runtime buffer;
+        // the loader harvests the coordinate without overwriting the cell.
+        assert_eq!(grid[8 * 32 + 6] & 0xfe, 0x48);
     }
 }
 

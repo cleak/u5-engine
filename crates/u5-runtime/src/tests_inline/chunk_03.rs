@@ -2952,13 +2952,19 @@ fn load_town_scene_scrubs_npc_markers_and_keeps_the_beacon_source() {
     // floor-zero town-family entry uses the fixed (15, 30) cell.
     assert_eq!((state.player.x, state.player.y), (15, 30));
     assert_eq!(state.grid[1 * 32 + 2], BEACON_BRIGHT_LIGHT_TILE);
-    assert_eq!(state.grid[2 * 32 + 4], LOCATION_MARKER_CLEANUP_TILE);
-    assert_eq!(state.grid[3 * 32 + 5], LOCATION_MARKER_CLEANUP_TILE);
+    // `catalogs/tile-catalog.md` §3: `0x48..0x49` is the **bridge**
+    // pair, so the marker is ordinary terrain the loader harvests and
+    // leaves in place. It used to be overwritten with the hut marker.
+    assert_eq!(state.grid[2 * 32 + 4], 0x48);
+    assert_eq!(state.grid[3 * 32 + 5], 0x49);
     assert_eq!(state.light_beacon.sources, [Some((2, 1)), None]);
-    assert!(
-        harvest_location_npc_start_markers(&state.grid)
-            .npc_markers
-            .is_empty()
+    // And they are still harvestable from the runtime buffer, because the
+    // loader does not overwrite them. `formats/location-dat.md` §6 has the
+    // walk "re-read the tile byte (yielding the marker itself, since the
+    // byte is not yet overwritten)"; this used to assert the opposite.
+    assert_eq!(
+        harvest_location_npc_start_markers(&state.grid).npc_markers,
+        vec![(4, 2), (5, 3)]
     );
     let _ = fs::remove_dir_all(dir);
 }
