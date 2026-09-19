@@ -145,3 +145,4 @@ hidden-treasure-search	seed-hidden-treasure	built with seed_position plane=under
 dungeon-fountain-heal	seed-dungeon-fountain-heal	the dungeon-look party re-placed on the one heal fountain outside Deceit
 dungeon-fountain-poison	seed-dungeon-fountain-poison	the dungeon-look party re-placed on the shipped poison fountain
 dungeon-fountain-bad-taste	seed-dungeon-fountain-bad-taste	the dungeon-look party re-placed on a bad-taste fountain in Deceit
+dungeon-search-pit	seed-dungeon-search-pit	the dungeon-look party re-placed on a 0x61 secret pit

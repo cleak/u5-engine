@@ -1,0 +1,28 @@
+# `dungeon-mode.md §8`, the `0x61` row as corrected by `RETRACTIONS.md`
+# R322: Search on exact `0x61` reports `A pit!` and rewrites the cell to
+# `0x60`, so the same cell searched again reports
+# `Nothing hidden\nin the pit.` Both lines are on the coverage backlog.
+#
+# The party stands on the pit and searches `Dir-Here`, so facing cannot
+# choose the cell. Seeded with
+# `seed_position <profile> dungeon=33 level=0 x=3 y=0`, which
+# `dungeon_class_scan` reports as a `0x61` cell.
+# requires-seed: the party standing on a secret pit in Deceit, with a torch
+both	wait	9000
+both	key	space
+both	wait	4000
+both	key	j
+both	wait	9000
+both	key	i
+both	wait	2500
+both	shot	lit	Torch lit
+both	key	s
+both	wait	1500
+both	key	Down
+both	wait	3000
+both	shot	pit	A pit!
+both	key	s
+both	wait	1500
+both	key	Down
+both	wait	3000
+both	shot	again	Nothing hidden in the pit.
