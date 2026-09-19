@@ -3675,7 +3675,7 @@ impl PlayState {
         // when Negate Magic or the Crown suppresses the arm."
         let teleport_candidate = match draws {
             CombatAiTurnDraws::SharedPrng => teleport_capable
-                .then(|| self.combat_ai_teleport_arm(&legal_cells, actor.x, actor.y))
+                .then(|| self.combat_ai_teleport_arm(&legal_cells, actor.x, actor.y, fleeing))
                 .flatten(),
             CombatAiTurnDraws::Fixed {
                 teleport_candidate, ..
@@ -3706,6 +3706,7 @@ impl PlayState {
                     actor.x,
                     actor.y,
                     step_vector,
+                    fleeing,
                     teleport_capable,
                     teleport_candidate,
                     offers_horizontal_axis,
@@ -3719,7 +3720,12 @@ impl PlayState {
                         codes.push(code);
                         let destination =
                             crate::resolve_combat_step_destination(actor.x, actor.y, code);
-                        if crate::combat_ai_legal_cell(&legal_cells, destination.x, destination.y) {
+                        if crate::combat_ai_legal_cell_for_actor(
+                            &legal_cells,
+                            destination.x,
+                            destination.y,
+                            fleeing,
+                        ) {
                             break;
                         }
                     }
@@ -3732,6 +3738,7 @@ impl PlayState {
             actor.x,
             actor.y,
             step_vector,
+            fleeing,
             teleport_capable,
             teleport_candidate,
             offers_horizontal_axis,
@@ -3762,8 +3769,15 @@ impl PlayState {
             }
             let _ = self.apply_combat_ambush_reveal_for_actor_position(actor_slot);
         }
+        // `combat.md §9.1`: the exit arm fires after the step has been
+        // written, so the actor did take a direction. The release, the
+        // side recount and the class extra are `§14`; the line is `§11.1`.
+        if let CombatAiMovementOutcome::ArenaExit { .. } = movement {
+            self.apply_combat_arena_exit(actor_slot, class);
+        }
         let movement_direction_code = match movement {
-            CombatAiMovementOutcome::Step { direction_code, .. } => Some(direction_code),
+            CombatAiMovementOutcome::Step { direction_code, .. }
+            | CombatAiMovementOutcome::ArenaExit { direction_code } => Some(direction_code),
             CombatAiMovementOutcome::Teleport { .. } | CombatAiMovementOutcome::Blocked { .. } => {
                 None
             }
@@ -4489,6 +4503,32 @@ impl PlayState {
 
     pub fn take_pending_combat_terrain_reveals(&mut self) -> Vec<CombatTerrainRevealPlayback> {
         std::mem::take(&mut self.pending_combat_terrain_reveals)
+    }
+
+    /// `combat.md §9.1`'s self-acting arena exit, once the exit predicate
+    /// has fired.
+    ///
+    /// `§11.1`'s producer table gives the text boundary as
+    /// `\n<monster> escapes!\n`, "one leading **and** one trailing line
+    /// feed of its own", and the section splits the pieces: the leading
+    /// feed "is not part of the stored string", and "the **stored** line
+    /// is exactly one leading space, the word `escapes`, an exclamation
+    /// mark and one line feed". The name comes from the shared actor-name
+    /// printer, which reads the descriptor "while that descriptor is
+    /// still intact, because the slot release happens afterwards".
+    ///
+    /// `§9.1` on the class extra: "For class 47, Shadow Lord, that
+    /// departure additionally frees one controlled party member", which
+    /// is `§6.3`'s control-faint scan.
+    fn apply_combat_arena_exit(&mut self, actor_slot: usize, class: u8) {
+        let name = crate::input_dispatch::combat_actor_display_name(self, actor_slot);
+        self.emit_message_line(format!("{name}{COMBAT_ARENA_EXIT_ESCAPES_LINE}"));
+        if class == COMBAT_CLASS_SHADOW_LORD {
+            let _ = self.apply_combat_party_control_faint_scan();
+        }
+        if self.release_combat_actor_slot_negative(actor_slot) {
+            self.mark_visibility_dirty();
+        }
     }
 
     /// Negative-form release used by vanished, incorporeal, terrain-rejected,
@@ -8345,8 +8385,9 @@ impl PlayState {
         legal_cells: &[[bool; COMBAT_ARENA_SIDE]; COMBAT_ARENA_SIDE],
         x: u8,
         y: u8,
+        fleeing: bool,
     ) -> Option<(u8, u8)> {
-        let proceed = combat_ai_cardinal_neighbours_blocked(legal_cells, x, y)
+        let proceed = combat_ai_cardinal_neighbours_blocked(legal_cells, x, y, fleeing)
             || combat_ai_teleport_chance_accepts(self.combat_ai_teleport_chance_roll());
         proceed
             .then(|| self.combat_ai_teleport_probe_draws())
@@ -8358,7 +8399,7 @@ impl PlayState {
     pub fn combat_ai_teleport_candidate(&mut self, actor_slot: usize) -> Option<(u8, u8)> {
         let actor = *self.combat_actors.get(actor_slot)?;
         let legal_cells = self.combat_legal_cell_mask();
-        self.combat_ai_teleport_arm(&legal_cells, actor.x, actor.y)
+        self.combat_ai_teleport_arm(&legal_cells, actor.x, actor.y, actor.is_fleeing())
     }
 
     /// `combat.md §11`: "the roll happens inside the shared to-hit helper,

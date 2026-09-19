@@ -361,6 +361,14 @@ pub const COMBAT_CLASS_TROLL: u8 = 41;
 /// (38) consecutively. Anchor DRAGON to DAEMON + 1.
 pub const COMBAT_CLASS_DRAGON: u8 = COMBAT_CLASS_DAEMON + 1;
 pub const COMBAT_CLASS_SHADOW_LORD: u8 = 47;
+
+/// `combat.md §11.1`, the self-acting arena exit line: "the **stored**
+/// line is exactly one leading space, the word `escapes`, an exclamation
+/// mark and one line feed - no carriage return and no trailing space. It
+/// occurs exactly once in the shipped data image." The acting creature's
+/// name is printed before it, and the arm's own leading line feed before
+/// that.
+pub const COMBAT_ARENA_EXIT_ESCAPES_LINE: &str = " escapes!\n";
 /// `combat.md §6.1a` writer 3: "**Conjure and Swarm placement** set the
 /// bit on each freshly placed creature, and **Summon** sets it on its
 /// placed Daemon whenever its caster self-check succeeds ... They are
@@ -451,6 +459,21 @@ pub enum CombatAiMovementOutcome {
         direction_code: u8,
         x: u8,
         y: u8,
+    },
+    /// `combat.md §9.1`, the self-acting arena exit: the accepted step
+    /// left the eleven-by-eleven grid, which only a fleeing actor's
+    /// candidate can do. "The exit predicate is the step the actor
+    /// actually took" - after the step is written the primitive asks the
+    /// in-arena predicate again and stores the out-of-arena code, and
+    /// "that test is the whole arena-exit arm. There is no separate
+    /// escape roll, and no fleeing test at this point."
+    ///
+    /// The destination is deliberately not carried: the actor leaves the
+    /// fight, so there is no cell to commit it to. What the arm does next
+    /// - the release, the side recount and the class-specific extra - is
+    /// `§14`, and the line it prints is `§11.1`.
+    ArenaExit {
+        direction_code: u8,
     },
     /// `combat.md §9`: every direct axis and all four random-cardinal
     /// attempts were rejected. `random_cardinal_attempts` is how many
@@ -4412,6 +4435,34 @@ pub fn combat_ai_legal_cell(
     combat_arena_coordinate_in_bounds(x, y) && legal_cells[y as usize][x as usize]
 }
 
+/// `combat.md §9.1`: "The step-validity test splits on geometry before
+/// occupancy." One shared helper vets every candidate the AI offers, and
+/// its first question is whether both coordinates lie in `0..10`:
+///
+/// - inside the grid, the candidate "goes on to the ordinary occupancy
+///   probe", which is [`combat_ai_legal_cell`];
+/// - outside it, the candidate "skips the occupancy probe entirely and is
+///   accepted **only when the acting actor's fleeing bit is set**. For
+///   every other actor an off-grid candidate is refused exactly as a wall
+///   is."
+///
+/// "The fleeing flag is therefore not the exit predicate. It is what
+/// makes an off-grid destination legal in the first place." The exit
+/// itself is the step actually taken - see
+/// [`CombatAiMovementOutcome::ArenaExit`].
+pub fn combat_ai_legal_cell_for_actor(
+    legal_cells: &[[bool; COMBAT_ARENA_SIDE]; COMBAT_ARENA_SIDE],
+    x: i16,
+    y: i16,
+    fleeing: bool,
+) -> bool {
+    if combat_arena_coordinate_in_bounds(x, y) {
+        legal_cells[y as usize][x as usize]
+    } else {
+        fleeing
+    }
+}
+
 pub const fn combat_actor_occupies_arena_cell(actor: CombatActorDescriptor, x: u8, y: u8) -> bool {
     (combat_actor_is_present_not_dead(actor) || combat_actor_is_passive_placement(actor))
         && actor.x == x
@@ -4486,6 +4537,10 @@ pub fn commit_combat_ai_movement_outcome(
         CombatAiMovementOutcome::Teleport { x, y } | CombatAiMovementOutcome::Step { x, y, .. } => {
             commit_combat_actor_linked_position(actor, active_objects, x, y)
         }
+        // `§9.1`: the departing actor has no cell to be committed to. The
+        // release, recount and class extra are `§14` and belong to the
+        // frame, which owns the slot table and the message window.
+        CombatAiMovementOutcome::ArenaExit { .. } => None,
         CombatAiMovementOutcome::Blocked { .. } => None,
     }
 }
@@ -4507,14 +4562,23 @@ pub fn combat_ai_cardinal_neighbours_blocked(
     legal_cells: &[[bool; COMBAT_ARENA_SIDE]; COMBAT_ARENA_SIDE],
     actor_x: u8,
     actor_y: u8,
+    fleeing: bool,
 ) -> bool {
+    // `combat.md §9.1`: "The surrounded predicate is flee-sensitive." It
+    // "builds the four cardinal neighbours of the actor's own cell, asks
+    // the step-validity helper above about each, and reports true only
+    // when all four are refused. Because that helper accepts an off-grid
+    // cell for a fleeing actor, a **fleeing actor standing on an edge is
+    // never reported surrounded**, while a non-fleeing actor in the same
+    // cell can be. Interior actors are unaffected by the flag."
     [(1i16, 0i16), (-1, 0), (0, 1), (0, -1)]
         .into_iter()
         .all(|(dx, dy)| {
-            !combat_ai_legal_cell(
+            !combat_ai_legal_cell_for_actor(
                 legal_cells,
                 i16::from(actor_x) + dx,
                 i16::from(actor_y) + dy,
+                fleeing,
             )
         })
 }
@@ -4578,6 +4642,7 @@ pub fn resolve_combat_ai_movement(
     actor_x: u8,
     actor_y: u8,
     step_vector: CombatStepVector,
+    fleeing: bool,
     teleport_capable: bool,
     teleport_candidate: Option<(u8, u8)>,
     offers_horizontal_axis: bool,
@@ -4617,7 +4682,15 @@ pub fn resolve_combat_ai_movement(
 
     for direction_code in direct.into_iter().flatten() {
         let destination = resolve_combat_step_destination(actor_x, actor_y, direction_code);
-        if combat_ai_legal_cell(legal_cells, destination.x, destination.y) {
+        if combat_ai_legal_cell_for_actor(legal_cells, destination.x, destination.y, fleeing) {
+            // `§9.1`, the first of the two producers of an off-grid step:
+            // "An **axis attempt** whose displacement carries the actor
+            // over an edge. A fleeing actor's step vector is negated, so
+            // a fleeing actor on an edge is usually stepping outward
+            // already."
+            if !combat_arena_coordinate_in_bounds(destination.x, destination.y) {
+                return CombatAiMovementOutcome::ArenaExit { direction_code };
+            }
             return CombatAiMovementOutcome::Step {
                 direction_code,
                 x: destination.x as u8,
@@ -4639,7 +4712,15 @@ pub fn resolve_combat_ai_movement(
             continue;
         }
         let destination = resolve_combat_step_destination(actor_x, actor_y, direction_code);
-        if combat_ai_legal_cell(legal_cells, destination.x, destination.y) {
+        if combat_ai_legal_cell_for_actor(legal_cells, destination.x, destination.y, fleeing) {
+            // `§9.1`, the second producer: "The **random-cardinal
+            // fallback**, whose up-to-four attempts are tested with the
+            // same flee-sensitive helper. A fleeing actor on an edge can
+            // therefore leave in a direction unrelated to its flee
+            // vector."
+            if !combat_arena_coordinate_in_bounds(destination.x, destination.y) {
+                return CombatAiMovementOutcome::ArenaExit { direction_code };
+            }
             return CombatAiMovementOutcome::Step {
                 direction_code,
                 x: destination.x as u8,

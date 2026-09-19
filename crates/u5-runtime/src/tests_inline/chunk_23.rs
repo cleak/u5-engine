@@ -10231,22 +10231,27 @@ fn crown_bypasses_enemy_teleport_arm_and_continues_ordinary_step() {
         application.attack_route,
         Some(CombatAiAttackRoute::OutOfRange)
     );
+    // The Crown bypass is the subject here, and it still holds: the
+    // movement is not a `Teleport`. What it is instead changed with
+    // `combat.md §9.1`. This fixture's monster classifies as fleeing on
+    // the wound-score bucket, and it stands in the arena's far corner, so
+    // the first offered axis carries it over the edge - a candidate the
+    // step-validity helper now accepts "**only when the acting actor's
+    // fleeing bit is set**". It leaves the fight rather than stepping to
+    // `(9, 10)`, which is what the engine did while off-grid candidates
+    // were refused for every actor.
     assert_eq!(
         application.movement,
-        Some(CombatAiMovementOutcome::Step {
-            direction_code: 1,
-            x: 9,
-            y: 10,
-        })
+        Some(CombatAiMovementOutcome::ArenaExit { direction_code: 2 })
     );
-    assert_eq!(
-        (state.combat_actors[8].x, state.combat_actors[8].y),
-        (9, 10)
-    );
-    assert_eq!(
-        (state.active_objects[8].x, state.active_objects[8].y),
-        (9, 10)
-    );
+    // `§9.1`: "What the exit arm does once it fires - the release, the
+    // side recount and the class-specific extra - is in Section 14." The
+    // descriptor is released and the linked object record cleared, so the
+    // slot no longer holds arena coordinates at all.
+    assert!(!combat_actor_is_active_not_dead(state.combat_actors[8]));
+    // `§11.1`: `\n<monster> escapes!\n`, named by the shared actor-name
+    // printer while the descriptor is still intact.
+    assert!(state.message.contains(COMBAT_ARENA_EXIT_ESCAPES_LINE.trim_end()));
 }
 
 #[test]
@@ -14462,6 +14467,7 @@ fn combat_ai_movement_accepts_legal_teleport_before_ordinary_step() {
             5,
             5,
             CombatStepVector { dx: 1, dy: 0 },
+            false,
             true,
             Some((9, 9)),
             true,
@@ -14477,6 +14483,7 @@ fn combat_ai_movement_accepts_legal_teleport_before_ordinary_step() {
             5,
             5,
             CombatStepVector { dx: 1, dy: 0 },
+            false,
             true,
             Some((9, 9)),
             true,
@@ -14568,6 +14575,7 @@ fn combat_ai_movement_uses_axis_priority_then_random_cardinal_fallback() {
             5,
             CombatStepVector { dx: 1, dy: -1 },
             false,
+            false,
             Some((4, 4)),
             true,
             &[4, 1, 3, 2],
@@ -14585,6 +14593,7 @@ fn combat_ai_movement_uses_axis_priority_then_random_cardinal_fallback() {
             5,
             5,
             CombatStepVector { dx: 1, dy: -1 },
+            false,
             false,
             Some((4, 4)),
             false,
@@ -14606,6 +14615,7 @@ fn combat_ai_movement_uses_axis_priority_then_random_cardinal_fallback() {
             5,
             5,
             CombatStepVector { dx: 1, dy: -1 },
+            false,
             false,
             None,
             true,
@@ -14759,6 +14769,7 @@ fn combat_ai_random_cardinal_fallback_is_four_independent_draws() {
             0,
             CombatStepVector { dx: -1, dy: -1 },
             false,
+            false,
             None,
             true,
             &[1, 3],
@@ -14777,6 +14788,7 @@ fn combat_ai_random_cardinal_fallback_is_four_independent_draws() {
             0,
             0,
             CombatStepVector { dx: -1, dy: -1 },
+            false,
             false,
             None,
             true,
@@ -14798,6 +14810,7 @@ fn combat_ai_random_cardinal_fallback_is_four_independent_draws() {
             0,
             0,
             CombatStepVector { dx: -1, dy: -1 },
+            false,
             false,
             None,
             true,

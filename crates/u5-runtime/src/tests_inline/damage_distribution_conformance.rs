@@ -378,12 +378,12 @@
         // cardinal neighbours of the actor are blocked". Diagonals are outside
         // the test, and an off-arena neighbour counts as blocked.
         let mut legal = [[true; COMBAT_ARENA_SIDE]; COMBAT_ARENA_SIDE];
-        assert!(!combat_ai_cardinal_neighbours_blocked(&legal, 5, 5));
+        assert!(!combat_ai_cardinal_neighbours_blocked(&legal, 5, 5, false));
 
         for (x, y) in [(4usize, 5usize), (6, 5), (5, 4), (5, 6)] {
             legal[y][x] = false;
         }
-        assert!(combat_ai_cardinal_neighbours_blocked(&legal, 5, 5));
+        assert!(combat_ai_cardinal_neighbours_blocked(&legal, 5, 5, false));
 
         // Diagonals stay open and must not change the verdict.
         assert!(legal[4][4] && legal[6][6]);

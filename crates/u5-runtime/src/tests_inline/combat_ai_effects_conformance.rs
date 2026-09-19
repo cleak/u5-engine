@@ -471,7 +471,7 @@
         let step_vector = CombatStepVector { dx: 1, dy: 1 };
 
         assert_eq!(
-            resolve_combat_ai_movement(&legal, 5, 5, step_vector, false, None, true, &[3, 3, 3, 3]),
+            resolve_combat_ai_movement(&legal, 5, 5, step_vector, false, false, None, true, &[3, 3, 3, 3]),
             CombatAiMovementOutcome::Step {
                 direction_code: 2,
                 x: 6,
@@ -485,7 +485,7 @@
         // spends its four fallback draws. Pinning those to North - blocked -
         // keeps the fallback from finding it either.
         assert_eq!(
-            resolve_combat_ai_movement(&legal, 5, 5, step_vector, false, None, false, &[3, 3, 3, 3]),
+            resolve_combat_ai_movement(&legal, 5, 5, step_vector, false, false, None, false, &[3, 3, 3, 3]),
             CombatAiMovementOutcome::Blocked {
                 random_cardinal_attempts: 4,
                 action_consumed: true,
@@ -504,14 +504,14 @@
         let step_vector = CombatStepVector { dx: 1, dy: 0 };
 
         assert_eq!(
-            resolve_combat_ai_movement(&blocked, 5, 5, step_vector, false, None, true, &[1, 2, 3, 4]),
+            resolve_combat_ai_movement(&blocked, 5, 5, step_vector, false, false, None, true, &[1, 2, 3, 4]),
             CombatAiMovementOutcome::Blocked {
                 random_cardinal_attempts: 4,
                 action_consumed: true,
             }
         );
         assert_eq!(
-            resolve_combat_ai_movement(&blocked, 5, 5, step_vector, false, None, true, &[1, 2, 3, 1]),
+            resolve_combat_ai_movement(&blocked, 5, 5, step_vector, false, false, None, true, &[1, 2, 3, 1]),
             CombatAiMovementOutcome::Blocked {
                 random_cardinal_attempts: 4,
                 action_consumed: false,
@@ -1112,3 +1112,92 @@
             "both arms of the allowance die must be exercised"
         );
     }
+
+/// `combat.md §9.1`: the step-validity test "splits on geometry before
+/// occupancy". A candidate outside the eleven-by-eleven grid "skips the
+/// occupancy probe entirely and is accepted **only when the acting
+/// actor's fleeing bit is set**. For every other actor an off-grid
+/// candidate is refused exactly as a wall is."
+#[test]
+fn off_grid_candidates_are_legal_only_for_a_fleeing_actor() {
+    let legal = [[true; COMBAT_ARENA_SIDE]; COMBAT_ARENA_SIDE];
+
+    // Interior cells are unaffected by the flag.
+    for fleeing in [false, true] {
+        assert!(combat_ai_legal_cell_for_actor(&legal, 5, 5, fleeing));
+    }
+
+    for (x, y) in [(-1i16, 5i16), (11, 5), (5, -1), (5, 11), (11, 11)] {
+        assert!(!combat_ai_legal_cell_for_actor(&legal, x, y, false));
+        assert!(combat_ai_legal_cell_for_actor(&legal, x, y, true));
+    }
+
+    // "an engine whose occupancy test ignores that marker reproduces
+    // neither this test nor the surrounded predicate": inside the grid the
+    // mask still decides, fleeing or not.
+    let mut blocked = legal;
+    blocked[5][6] = false;
+    assert!(!combat_ai_legal_cell_for_actor(&blocked, 6, 5, true));
+}
+
+/// `combat.md §9.1`, the two producers of an off-grid step: an axis
+/// attempt carried over the edge, and the random-cardinal fallback, "whose
+/// up-to-four attempts are tested with the same flee-sensitive helper. A
+/// fleeing actor on an edge can therefore leave in a direction unrelated
+/// to its flee vector."
+#[test]
+fn a_fleeing_actor_on_an_edge_leaves_the_arena() {
+    let legal = [[true; COMBAT_ARENA_SIDE]; COMBAT_ARENA_SIDE];
+    let outward = CombatStepVector { dx: 1, dy: 0 };
+
+    // Producer one: the axis attempt. East out of column ten.
+    assert!(matches!(
+        resolve_combat_ai_movement(
+            &legal, 10, 5, outward, true, false, None, true, &[1, 2, 3, 4]
+        ),
+        CombatAiMovementOutcome::ArenaExit { .. }
+    ));
+    // The same actor not fleeing is refused exactly as by a wall, and
+    // falls through to the random-cardinal draws.
+    assert!(!matches!(
+        resolve_combat_ai_movement(
+            &legal, 10, 5, outward, false, false, None, true, &[1, 2, 3, 4]
+        ),
+        CombatAiMovementOutcome::ArenaExit { .. }
+    ));
+
+    // Producer two: the fallback. The direct axes are refused (a zero
+    // displacement is the actor's own cell), so the draws decide, and the
+    // first cardinal one carries it off the north edge.
+    let inward = CombatStepVector { dx: 0, dy: 0 };
+    assert!(matches!(
+        resolve_combat_ai_movement(
+            &legal, 5, 0, inward, true, false, None, true, &[3]
+        ),
+        CombatAiMovementOutcome::ArenaExit { .. }
+    ));
+}
+
+/// `combat.md §9.1`: "a **fleeing actor standing on an edge is never
+/// reported surrounded**, while a non-fleeing actor in the same cell can
+/// be. Interior actors are unaffected by the flag."
+#[test]
+fn the_surrounded_predicate_is_flee_sensitive_on_an_edge() {
+    let mut legal = [[true; COMBAT_ARENA_SIDE]; COMBAT_ARENA_SIDE];
+    // Wall in the three in-grid neighbours of the west-edge cell (0, 5).
+    legal[4][0] = false;
+    legal[6][0] = false;
+    legal[5][1] = false;
+
+    assert!(combat_ai_cardinal_neighbours_blocked(&legal, 0, 5, false));
+    assert!(!combat_ai_cardinal_neighbours_blocked(&legal, 0, 5, true));
+
+    // Interior: all four neighbours walled, and the flag changes nothing.
+    let mut interior = [[true; COMBAT_ARENA_SIDE]; COMBAT_ARENA_SIDE];
+    for (x, y) in [(4usize, 5usize), (6, 5), (5, 4), (5, 6)] {
+        interior[y][x] = false;
+    }
+    for fleeing in [false, true] {
+        assert!(combat_ai_cardinal_neighbours_blocked(&interior, 5, 5, fleeing));
+    }
+}
