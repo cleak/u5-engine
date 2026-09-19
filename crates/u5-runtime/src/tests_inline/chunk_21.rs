@@ -108,7 +108,7 @@ fn dungeon_jimmy_preserves_room_trigger_and_commits_one_action() {
     assert_eq!(state.grid[dungeon_cell_index(0, 1, 1)], 0xf2);
     assert_eq!(state.keys, DEFAULT_KEY_STOCK);
     assert_eq!(state.turn, 1);
-    assert_eq!(state.message, "No lock!");
+    assert_eq!(state.message, DUNGEON_CHEST_JIMMY_WHAT);
 }
 
 #[test]
@@ -134,7 +134,7 @@ fn dungeon_e_cells_are_pass_through_visual_variants_not_openable_doors() {
     assert_eq!(jimmy_state.grid[dungeon_cell_index(0, 1, 1)], 0xe2);
     assert_eq!(jimmy_state.turn, 1);
     assert_eq!(jimmy_state.keys, DEFAULT_KEY_STOCK);
-    assert_eq!(jimmy_state.message, "No lock!");
+    assert_eq!(jimmy_state.message, DUNGEON_CHEST_JIMMY_WHAT);
 
     let mut step_grid = open_dungeon_record();
     step_grid[dungeon_cell_index(0, 2, 1)] = 0xe2;

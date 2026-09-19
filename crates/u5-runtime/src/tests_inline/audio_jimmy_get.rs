@@ -212,7 +212,7 @@
             MoveOutcome::LockTried
         );
 
-        assert_eq!(state.message, "Key broke!");
+        assert_eq!(state.message, DUNGEON_CHEST_JIMMY_KEY_BROKE);
         assert_eq!(state.keys, 1);
         assert_eq!(
             state.sound_effects_after(serial),
@@ -234,7 +234,7 @@
             MoveOutcome::LockTried
         );
 
-        assert_eq!(state.message, "Key broke!");
+        assert_eq!(state.message, DUNGEON_CHEST_JIMMY_KEY_BROKE);
         assert_eq!(state.keys, 1);
         assert_eq!(
             state.sound_effects_after(serial),
@@ -294,7 +294,7 @@
             MoveOutcome::LockTried
         );
 
-        assert_eq!(chest.message, "Unlocked!");
+        assert_eq!(chest.message, DUNGEON_CHEST_JIMMY_UNLOCKED);
         assert!(chest.sound_effects_after(serial).is_empty());
     }
 

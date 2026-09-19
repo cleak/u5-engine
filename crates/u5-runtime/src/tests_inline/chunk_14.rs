@@ -69,8 +69,11 @@
         assert_eq!((state.player.x, state.player.y), (1, 1));
         assert_eq!(state.turn, 1);
         assert_eq!(state.keys, DEFAULT_KEY_STOCK);
-        assert_eq!(state.grid[dungeon_cell_index(0, 1, 1)], 0x78);
-        assert_eq!(state.message, "Unlocked!");
+        // `dungeon-mode.md §8`: a successful pick leaves the **closed**
+        // chest class with its visit bit, lock/trap sub-type cleared - the
+        // chest still has to be opened.
+        assert_eq!(state.grid[dungeon_cell_index(0, 1, 1)], 0x48);
+        assert_eq!(state.message, DUNGEON_CHEST_JIMMY_UNLOCKED);
         assert!(!state.message.contains("Dungeon movement"));
     }
 
@@ -109,7 +112,7 @@
         assert_eq!(state.grid[dungeon_cell_index(0, 1, 1)], 0x40);
         assert_eq!(state.keys, 1);
         assert_eq!(state.turn, 1);
-        assert_eq!(state.message, "Key broke!");
+        assert_eq!(state.message, DUNGEON_CHEST_JIMMY_KEY_BROKE);
     }
 
     #[test]
@@ -129,11 +132,14 @@
         );
 
         assert_eq!(state.prng_state, expected_prng_state);
-        assert_eq!(state.grid[dungeon_cell_index(0, 1, 1)], 0x78);
+        // `dungeon-mode.md §8`: a successful pick leaves the **closed**
+        // chest class with its visit bit, lock/trap sub-type cleared - the
+        // chest still has to be opened.
+        assert_eq!(state.grid[dungeon_cell_index(0, 1, 1)], 0x48);
         assert_eq!(state.keys, 2);
         assert_eq!(state.turn, 1);
         assert!(state.visibility_dirty);
-        assert_eq!(state.message, "Unlocked!");
+        assert_eq!(state.message, DUNGEON_CHEST_JIMMY_UNLOCKED);
     }
 
     #[test]
@@ -155,7 +161,7 @@
         assert_eq!(state.grid[dungeon_cell_index(0, 1, 1)], 0x4b);
         assert_eq!(state.keys, 1);
         assert_eq!(state.turn, 1);
-        assert_eq!(state.message, "Key broke!");
+        assert_eq!(state.message, DUNGEON_CHEST_JIMMY_KEY_BROKE);
     }
 
     #[test]
@@ -176,7 +182,7 @@
         assert_eq!(state.turn, 1);
         assert_eq!(state.prng_state, 0x1234);
         assert_eq!(state.grid[dungeon_cell_index(0, 1, 1)], 0x4b);
-        assert_eq!(state.message, "No keys!");
+        assert_eq!(state.message, DUNGEON_CHEST_JIMMY_NO_KEYS);
     }
 
     #[test]
@@ -195,7 +201,7 @@
         assert_eq!(state.turn, 1);
         assert_eq!(state.keys, 2);
         assert_eq!(state.prng_state, 0x1234);
-        assert_eq!(state.message, "No lock!");
+        assert_eq!(state.message, DUNGEON_CHEST_JIMMY_WHAT);
     }
 
     #[test]

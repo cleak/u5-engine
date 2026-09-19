@@ -100,6 +100,19 @@ pub const fn dungeon_open_chest_rewrite(tile: u8) -> u8 {
     DUNGEON_OPEN_CHEST_CLASS | (tile & DUNGEON_VISIT_MARKER_BIT)
 }
 
+/// `dungeon-mode.md §8`: "A successful dungeon Jimmy rewrites a locked
+/// chest cell to the variant bit plus the **closed**-chest class, which
+/// clears the lock/trap sub-type."
+///
+/// Jimmy does not open the chest: the following O-Open does, and "prints
+/// exactly what an untrapped chest prints", because the sub-type the trap
+/// lives in is gone. The engine used to rewrite to the open class here,
+/// which skipped Open entirely.
+pub const DUNGEON_CLOSED_CHEST_CLASS: u8 = 0x40;
+pub const fn dungeon_jimmy_chest_rewrite(tile: u8) -> u8 {
+    DUNGEON_CLOSED_CHEST_CLASS | (tile & DUNGEON_VISIT_MARKER_BIT)
+}
+
 pub const fn jimmy_locked_door_rewrite(tile: u8) -> Option<u8> {
     match tile {
         TOWN_DOOR_PLAIN_LOCKED_TILE => Some(TOWN_DOOR_PLAIN_UNLOCKED_TILE),

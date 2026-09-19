@@ -1298,7 +1298,7 @@ fn active_dungeon_jimmy_picker_preserves_prompt_before_key_check() {
     );
 
     assert!(state.active_jimmy.is_none());
-    assert_eq!(state.message, "No keys!");
+    assert_eq!(state.message, DUNGEON_CHEST_JIMMY_NO_KEYS);
     assert_eq!(state.turn, 1);
     assert_eq!(state.keys, 0);
 }

@@ -1403,16 +1403,22 @@ impl PlayState {
     ) -> io::Result<MoveOutcome> {
         let idx = dungeon_cell_index(level, self.player.x, self.player.y);
         let tile = self.grid[idx];
+        // `dungeon-mode.md §8.1`'s chest-command table: Jimmy's results are
+        // five published literals, each with "a bare `\n` first, so the
+        // result always starts on a new row". They had no reader - this
+        // handler rendered the engine's own prose, and three of the five
+        // were different words: `Unlocked!` for `Chest unlocked`,
+        // `It's open!` for `Already open!`, and `No lock!` for `What?`.
         Ok(match tile >> 4 {
             0x4 => {
                 if self.keys == 0 {
                     self.advance_turn();
-                    self.message = "No keys!".to_string();
+                    self.message = DUNGEON_CHEST_JIMMY_NO_KEYS.to_string();
                     return Ok(MoveOutcome::Blocked);
                 }
                 if Self::is_plain_closed_dungeon_chest(tile) {
                     self.advance_turn();
-                    self.message = "Key broke!".to_string();
+                    self.message = DUNGEON_CHEST_JIMMY_KEY_BROKE.to_string();
                     // audio.md §8.1 Jimmy key breaks: failure only — the break line,
                     // then the 40-update action snap, then the key decrement.
                     self.emit_sound_effect(SoundEffect::ActionSnap);
@@ -1429,7 +1435,7 @@ impl PlayState {
                 let roll = self.random_range_u8(JIMMY_OBJECT_DIE_LOW, JIMMY_OBJECT_DIE_HIGH);
                 if !dungeon_chest_jimmy_succeeds(threshold, roll) {
                     self.advance_turn();
-                    self.message = "Key broke!".to_string();
+                    self.message = DUNGEON_CHEST_JIMMY_KEY_BROKE.to_string();
                     // audio.md §8.1 Jimmy key breaks: failure only — the break line,
                     // then the 40-update action snap, then the key decrement.
                     self.emit_sound_effect(SoundEffect::ActionSnap);
@@ -1437,20 +1443,25 @@ impl PlayState {
                     return Ok(MoveOutcome::LockTried);
                 }
 
-                self.grid[idx] = dungeon_open_chest_rewrite(tile);
+                // `§8`: the successful pick leaves a *closed* chest whose
+                // lock/trap sub-type is cleared - "a successful dungeon
+                // Jimmy clears those bits, and the same O-Open then prints
+                // exactly what an untrapped chest prints". Rewriting to the
+                // open class here skipped Open altogether.
+                self.grid[idx] = dungeon_jimmy_chest_rewrite(tile);
                 self.mark_visibility_dirty();
                 self.advance_turn();
-                self.message = "Unlocked!".to_string();
+                self.message = DUNGEON_CHEST_JIMMY_UNLOCKED.to_string();
                 MoveOutcome::LockTried
             }
             0x7 => {
                 self.advance_turn();
-                self.message = "It's open!".to_string();
+                self.message = DUNGEON_CHEST_JIMMY_ALREADY_OPEN.to_string();
                 MoveOutcome::LockTried
             }
             _ => {
                 self.advance_turn();
-                self.message = "No lock!".to_string();
+                self.message = DUNGEON_CHEST_JIMMY_WHAT.to_string();
                 MoveOutcome::Blocked
             }
         })
