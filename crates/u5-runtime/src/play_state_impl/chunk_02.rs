@@ -2405,6 +2405,20 @@ impl PlayState {
     /// original shows one blank row between the last mantra and the result;
     /// this engine closed the row itself and then spent both newlines, so it
     /// showed two.
+    ///
+    /// The record is passed through whole. Stripping its first newline was
+    /// this function's original job, back when a leading feed always blanked
+    /// a row: with the row open the record's two feeds would have produced
+    /// two blanks, so one was removed. `425f69bf` moved that rule into
+    /// `push_message_transcript_lines` itself - "a leading feed closes an
+    /// open row rather than blanking one" - and the strip became a second
+    /// deduction of the same feed, leaving no blank at all.
+    ///
+    /// Measured again 2026-09-18 (`shrine-unfocused/mantra3`, reading
+    /// `scroll`): the original keeps its blank row between the last
+    /// `Mantra:AHM` and `Thine thoughts are unfocused.` and this engine ran
+    /// them together. `row_open` is now only a statement of the row state,
+    /// which is what the transcript layer needs to apply the rule.
     fn emit_shrine_misc_record_after_open_row(
         &mut self,
         game_dir: &Path,
@@ -2416,10 +2430,9 @@ impl PlayState {
                 .record(index)
                 .map(|record| record.replace('\r', "\n"))
         }) {
-            let text = match row_open {
-                true => text.strip_prefix('\n').map(str::to_string).unwrap_or(text),
-                false => text,
-            };
+            if row_open {
+                self.open_message_row();
+            }
             self.emit_message_line(text);
         }
         Ok(())
