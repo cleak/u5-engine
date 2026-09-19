@@ -39,7 +39,10 @@ from engine_message_audit import FIXTURE_OPT_OUT, skipped_lines
 
 # `message = format!("...")` and the emit helpers taking a `format!`.
 FORMATTED = re.compile(
-    r"""(?:message\s*=\s*|emit_message_line\(|emit_combat_print\(|"""
+    # `\b` matters: without it `message\s*=` also matches the tail of
+    # `let move_message = format!(...)`, which is a local the caller may
+    # well be routing to `diagnostics`.
+    r"""(?:(?<![\w.])(?:self\.)?message\s*=\s*|emit_message_line\(|emit_combat_print\(|"""
     r"""emit_message_line_continuing_row\(|emit_centered_message_line\(|"""
     r"""emit_command_echo_line\()\s*&?format!\(\s*"((?:[^"\\]|\\.){4,200})\"""",
     re.S,
