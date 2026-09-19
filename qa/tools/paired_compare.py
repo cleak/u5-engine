@@ -772,7 +772,7 @@ def compare_cached(artifact: pathlib.Path, cache: dict) -> tuple:
 
 
 # Bump when a classifier change would alter a cached verdict.
-CACHE_VERSION = 29
+CACHE_VERSION = 30
 
 
 # Some scenarios are explicitly a lottery: their own headers say so. The night
@@ -785,6 +785,33 @@ LOTTERY_MARKERS = ("lottery", "measured nothing", "must be re-run")
 
 def is_lottery(scenario: str) -> bool:
     return any(marker in _scenario_header(scenario) for marker in LOTTERY_MARKERS)
+
+
+# A scenario that walks the party in through a town passes NPCs walking
+# their own schedules, and whichever side meets one is refused the step.
+# The two then arrive in different cells and everything after diverges.
+# Both sides vary: the *stock* side of `town-talk-second-npc` printed
+# `Blocked!` twice on one run and not at all on the next.
+TRAFFIC_MARKER = "npc traffic"
+
+
+def is_traffic_variable(scenario: str) -> bool:
+    """Does this scenario's walk-up pass scheduled NPCs?
+
+    Measured 2026-09-19, three scenarios over two runs each:
+    `bt-password` read nine of nine beats agreeing, then one of nine, then
+    nine of nine again, with no relevant commit between;
+    `town-talk-after-entry` read zero differing viewport cells, then
+    sixty-one, then zero; `bt-correct` read zero of four beats agreeing
+    and then four of four.
+
+    This is not a lottery in the `LOTTERY_MARKERS` sense - those scenarios
+    can never agree, because a pool draw or a coin decides what prints,
+    and reporting them as matches would be false. A traffic-variable
+    scenario agrees most of the time and is worth re-running, which is
+    what `paired_suite` does with this.
+    """
+    return TRAFFIC_MARKER in _scenario_header(scenario)
 
 
 def _scenario_header(scenario: str) -> str:

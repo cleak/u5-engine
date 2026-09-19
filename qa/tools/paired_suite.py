@@ -239,6 +239,24 @@ def main() -> None:
         if result.returncode == 0 and not captures_are_usable(artifact_of(result.stdout)):
             print(f"recap {name}\tcaptures were not the game frame; re-running", flush=True)
             result = run_scenario(cmd)
+        # A walk-in town scenario that disagreed may have met NPC traffic
+        # rather than a defect: whichever side is refused a step arrives in
+        # a different cell and everything after it diverges. Those agree
+        # most of the time, so one retry turns a false difference back into
+        # the match it is, and a real one survives both runs. See
+        # `paired_compare.is_traffic_variable`.
+        if result.returncode == 0:
+            sys.path.insert(0, str(pathlib.Path(__file__).resolve().parent))
+            from paired_compare import is_traffic_variable
+
+            if is_traffic_variable(name):
+                first, _counts = compare(artifact_of(result.stdout))
+                if first != "match":
+                    print(
+                        f"retry {name}\tread {first} on a walk-in route; re-running",
+                        flush=True,
+                    )
+                    result = run_scenario(cmd)
         # The harness prints its artifact directory among a JSON tail; take
         # the last path under the artifact root rather than the last line.
         paths = re.findall(r"/[\w./-]*artifacts/u5/paired/[\w.-]+", result.stdout)

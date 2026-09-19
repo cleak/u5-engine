@@ -1,3 +1,11 @@
+# **This route walks in past NPC traffic.** Scheduled NPCs walk while the
+# scripted steps run, so whichever side is refused a step arrives in a
+# different cell and everything after it diverges - both sides vary, not
+# just ours. Measured 2026-09-19: this scenario and its siblings each read
+# a clean match, then a wholesale difference, then a clean match again,
+# with no relevant commit between. `paired_suite` re-runs a disagreeing
+# walk-in once for this reason (`paired_compare.is_traffic_variable`).
+#
 # Blackthorn's audience answered correctly: the mantra of the shrine the
 # interrogation selected (`blackthorn.md` §4).
 #
