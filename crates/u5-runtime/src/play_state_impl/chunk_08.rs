@@ -1201,7 +1201,15 @@ impl PlayState {
             ClimbIntent::Up => DUNGEON_KLIMB_UP,
             ClimbIntent::Down => DUNGEON_KLIMB_DOWN,
         };
-        if !self.complete_open_direction_echo(DUNGEON_KLIMB_PROMPT_ONE, word.trim_end()) {
+        // Either prompt form can be the open row: `Klimb-` when one
+        // direction was offered, `Klimb-U/D-` when both were
+        // (`dungeon-mode.md §8.1`). Measured 2026-09-19
+        // (`qa/paired/dungeon-two-way-ladder.tsv`, beat `down`): the
+        // original reads `Klimb-U/D-Down!` on one row, and this engine -
+        // trying only the one-direction prefix - wrapped after the hyphen.
+        if !self.complete_open_direction_echo(DUNGEON_KLIMB_PROMPT_BOTH, word.trim_end())
+            && !self.complete_open_direction_echo(DUNGEON_KLIMB_PROMPT_ONE, word.trim_end())
+        {
             self.emit_message_line(word);
         }
         let Some(delta) = dungeon_ladder_delta(tile, intent) else {
