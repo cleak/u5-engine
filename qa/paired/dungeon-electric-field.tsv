@@ -9,8 +9,10 @@
 # with `seed_position <profile> dungeon=37 level=3 x=1 y=6`, the ladder
 # cell directly below the `0x83` that `dungeon_class_scan` reports.
 #
-# The field damages the party, so a roster difference here is a
-# PRNG-parity result and not a text one.
+# The field damages the party off the shared generator, so the roster
+# panel is a **roster lottery** - the comparator reports its rows and
+# does not count them. The message window is fixed text, and it is what
+# this scenario measures.
 # requires-seed: the party one cell from an electric field, with a torch
 both	wait	9000
 both	key	space

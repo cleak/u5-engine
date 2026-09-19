@@ -1,7 +1,8 @@
 # `dungeon-mode.md §8` fountain sub-types 3 and up, Bad taste: the drink
 # rolls `0..7` damage on the selected member. The message is fixed; the
-# roster's hit points are not, so this scenario's value is the message
-# beat - a panel difference here is a PRNG-parity result, not a text one.
+# roster's hit points are not, so the panel is a **roster lottery** - the
+# comparator reports its rows and does not count them, and the message
+# beat is what this scenario measures.
 # Seeded with `seed_position <profile> dungeon=33 level=2 x=3 y=1`.
 # requires-seed: the party standing on a bad-taste fountain, with a torch
 both	wait	9000

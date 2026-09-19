@@ -772,7 +772,24 @@ def compare_cached(artifact: pathlib.Path, cache: dict) -> tuple:
 
 
 # Bump when a classifier change would alter a cached verdict.
-CACHE_VERSION = 31
+CACHE_VERSION = 32
+
+
+# A scenario whose *roster panel* is a lottery and whose message window is
+# not. The damage scenarios are the case: `dungeon-bomb-trap`,
+# `dungeon-electric-field` and `dungeon-fountain-bad-taste` each roll
+# damage off the shared generator, so the hit points in the panel cannot
+# agree, while every published line they exist to measure is fixed text.
+#
+# `LOTTERY_MARKERS` would excuse the message window too, which is exactly
+# what those scenarios must not have excused. This marker excuses the
+# panel alone: panel rows are still reported, and a text or viewport
+# difference still decides the verdict.
+ROSTER_LOTTERY_MARKER = "roster lottery"
+
+
+def has_roster_lottery(scenario: str) -> bool:
+    return ROSTER_LOTTERY_MARKER in _scenario_header(scenario)
 
 
 # Some scenarios are explicitly a lottery: their own headers say so. The night
@@ -784,7 +801,11 @@ LOTTERY_MARKERS = ("lottery", "measured nothing", "must be re-run")
 
 
 def is_lottery(scenario: str) -> bool:
-    return any(marker in _scenario_header(scenario) for marker in LOTTERY_MARKERS)
+    # `roster lottery` is a different, narrower marker and contains the
+    # word: left in, it would excuse the message window of every scenario
+    # that only meant to excuse its hit points.
+    header = _scenario_header(scenario).replace(ROSTER_LOTTERY_MARKER, "")
+    return any(marker in header for marker in LOTTERY_MARKERS)
 
 
 # A scenario that walks the party in through a town passes NPCs walking
@@ -812,6 +833,7 @@ def is_traffic_variable(scenario: str) -> bool:
     what `paired_suite` does with this.
     """
     return TRAFFIC_MARKER in _scenario_header(scenario)
+
 
 
 def _scenario_header(scenario: str) -> str:
@@ -920,8 +942,14 @@ def compare(artifact: pathlib.Path) -> tuple[int, int, int, int, int]:
                 if row_text(a) != row_text(b)
             ]
             if panel_rows:
-                panel += 1
-                print(f"  panel  {scenario}/{label}: rows {panel_rows}")
+                if has_roster_lottery(scenario):
+                    print(
+                        f"  roll   {scenario}/{label}: rows {panel_rows}, "
+                        "a published damage roll, not counted"
+                    )
+                else:
+                    panel += 1
+                    print(f"  panel  {scenario}/{label}: rows {panel_rows}")
         from viewport_audit import CELL_TOLERANCE as VIEWPORT_CELL_TOLERANCE
         from viewport_audit import compare_beat as compare_viewport_beat
         viewport_cells_differing = compare_viewport_beat(stock, engine)
