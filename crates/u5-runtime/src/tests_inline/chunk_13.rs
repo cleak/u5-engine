@@ -16163,11 +16163,14 @@ fn monster_wound_classifier_matches_spec_thresholds() {
     // Critical band always sets fleeing.
     assert!(monster_wound_sets_fleeing(0, 100, 0));
     assert!(monster_wound_sets_fleeing(0, 100, 255));
-    // Wounded band: fleeing on rolls 0..=251 (252 outcomes), clear on 252..=255.
-    assert!(monster_wound_sets_fleeing(30, 100, 0));
-    assert!(monster_wound_sets_fleeing(30, 100, 251));
-    assert!(!monster_wound_sets_fleeing(30, 100, 252));
-    assert!(!monster_wound_sets_fleeing(30, 100, 255));
+    // Wounded band, `RETRACTIONS.md` R483: "a roll of 251 or less commits
+    // with the fleeing bit cleared; only a roll of 252 or more (4 of 256)
+    // sets it". These four assertions read the other way round, which is the
+    // reading R483 calls inverted.
+    assert!(!monster_wound_sets_fleeing(30, 100, 0));
+    assert!(!monster_wound_sets_fleeing(30, 100, 251));
+    assert!(monster_wound_sets_fleeing(30, 100, 252));
+    assert!(monster_wound_sets_fleeing(30, 100, 255));
     // Lightly wounded / healthy: never fleeing.
     assert!(!monster_wound_sets_fleeing(50, 100, 0));
     assert!(!monster_wound_sets_fleeing(80, 100, 251));

@@ -9708,7 +9708,13 @@ fn combat_ai_turn_moves_toward_out_of_range_target_and_updates_linked_object() {
 #[test]
 fn combat_ai_turn_uses_wound_morale_to_flee_from_target() {
     let mut state = combat_ai_turn_state(8, 5);
-    state.combat_actors[8].hp_or_wound = 2;
+    // Below one quarter of the class maximum, where `combat.md §9`'s
+    // classifier "always sets fleeing" whatever the roll. This used to sit at
+    // 2 - inside the morale-roll band - and relied on that band fleeing on
+    // 252 of 256 rolls, which `RETRACTIONS.md` R483 inverts to four of 256.
+    // The certain flee is below one quarter, so that is where a test of
+    // fleeing belongs.
+    state.combat_actors[8].hp_or_wound = 1;
 
     let application = state
         .apply_combat_ai_turn_with_inputs(
@@ -14832,10 +14838,11 @@ fn combat_wound_morale_uses_truncated_quarter_thresholds_and_documented_roll_rat
         );
     }
 
-    // 9's morale rule over the same buckets: "below one quarter sets fleeing,
+    // 9's morale rule over the same buckets: below one quarter sets fleeing;
     // one-quarter through just under one-half rolls a morale check that sets
-    // fleeing on 252 of 256 possible random-byte results, and one-half or
-    // higher clears fleeing."
+    // fleeing only on a roll of 252 or more - four of 256, per
+    // `RETRACTIONS.md` R483, which withdrew the inverted "252 of 256"
+    // reading these assertions carried; one-half or higher clears fleeing.
     assert_eq!(
         resolve_combat_wound_morale(23, 99, 255),
         CombatWoundMorale {
@@ -14847,14 +14854,14 @@ fn combat_wound_morale_uses_truncated_quarter_thresholds_and_documented_roll_rat
         resolve_combat_wound_morale(24, 99, 251),
         CombatWoundMorale {
             bucket: CombatWoundScoreBucket::OneQuarterToUnderHalf,
-            fleeing: true,
+            fleeing: false,
         }
     );
     assert_eq!(
         resolve_combat_wound_morale(47, 99, 252),
         CombatWoundMorale {
             bucket: CombatWoundScoreBucket::OneQuarterToUnderHalf,
-            fleeing: false,
+            fleeing: true,
         }
     );
     assert_eq!(
@@ -14878,18 +14885,19 @@ fn combat_wound_morale_can_resolve_class_max_hp() {
     // Class 32's maximum is 10, so the truncated quarter is 2 and the
     // thresholds are 2, 4 and 6 (`combat.md` 11.1). HP 2 is the first value in
     // the morale-roll band; HP 4 is already out of it.
+    // R483 again: a roll of 0 clears the bit and one of 252 sets it.
     assert_eq!(
         resolve_combat_wound_morale_for_class(2, 32, 0).unwrap(),
         CombatWoundMorale {
             bucket: CombatWoundScoreBucket::OneQuarterToUnderHalf,
-            fleeing: true,
+            fleeing: false,
         }
     );
     assert_eq!(
         resolve_combat_wound_morale_for_class(2, 32, 252).unwrap(),
         CombatWoundMorale {
             bucket: CombatWoundScoreBucket::OneQuarterToUnderHalf,
-            fleeing: false,
+            fleeing: true,
         }
     );
     assert_eq!(
