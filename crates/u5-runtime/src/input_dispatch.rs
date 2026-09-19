@@ -4158,21 +4158,6 @@ fn handle_active_conversation_key_input(
         line.push(key);
     }
     line.push_str(suffix);
-    // `conversation.md §7.3`: while a `0x83` PAUSE or `0x8F` WAIT-KEY is
-    // blocking, the response owns the keyboard. Any key resumes it, and
-    // nothing is typed onto a prompt row - the codes carry no prompt.
-    if state.active_conversation_awaiting_page_key() {
-        let (_text, ended) = state.resume_active_conversation_page();
-        if !ended {
-            if let Some(session) = state.active_conversation.as_ref() {
-                let prompt = session.prompt_message();
-                if !prompt.is_empty() {
-                    state.message = prompt;
-                }
-            }
-        }
-        return PlayInputDisposition::Continue;
-    }
     let line = line.trim().to_string();
     let (_text, ended) = state.submit_active_conversation_keyword(&line);
     if !ended {
