@@ -5162,8 +5162,17 @@ fn combat_command_branch_message(branch: CombatCommandBranch) -> String {
                 format!("{}-Not here\n", combat_scene_abort_verb_prefix(verb))
             }
             CombatSceneAbortTail::FunnyNoResponse => {
+                // With its trailing newline, exactly as the `-Not here`
+                // tail above carries one: `combat.md §8`'s rule is that a
+                // result's "trailing newline closes the last result row.
+                // The next full actor banner begins with its own newline,
+                // **leaving a blank row after the result**." Measured
+                // 2026-09-19 (`qa/paired/combat-refusal-letters.tsv`, beat
+                // `tv`): the original reads `Talk-Funny, no` / `response!`
+                // / blank / `Avatar, armed`, and without the feed this
+                // engine ran the banner onto the row beneath the refusal.
                 format!(
-                    "{}-Funny, no response!",
+                    "{}-Funny, no response!\n",
                     combat_scene_abort_verb_prefix(verb)
                 )
             }

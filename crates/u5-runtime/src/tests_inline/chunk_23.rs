@@ -12279,7 +12279,10 @@ fn combat_input_dispatch_routes_play_keys_to_combat_parser() {
         // The refusal carries its own trailing feed, so the banner's
         // leading feed lands as the blank row `combat.md §8.4` describes.
         ('E', "Enter-Not here\n"),
-        ('T', "Talk-Funny, no response!"),
+        // Measured 2026-09-19 (`combat-refusal-letters/tv`): this tail
+        // carries its own trailing feed, like `-Not here` above, so the
+        // banner's leading newline leaves the blank row `§8` describes.
+        ('T', "Talk-Funny, no response!\n"),
     ] {
         assert_eq!(
             handle_play_key_input(&mut quit_state, key, "", game_dir).unwrap(),

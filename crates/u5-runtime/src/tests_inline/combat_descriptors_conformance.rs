@@ -1455,41 +1455,52 @@
     /// result row. The next full actor banner begins with its own newline,
     /// **leaving a blank row after the result**."
     ///
-    /// The close has to reach both row-open flags. `close_message_row`
-    /// moves the handler-message cursor; `emit_combat_print` reads
-    /// `combat_transcript_row_open`, and with that one still set the
-    /// banner's leading newline was spent closing the result row instead
-    /// of leaving the blank. Measured 2026-09-19
-    /// (`qa/paired/combat-refusal-letters.tsv`, beat `tv`): the original
-    /// reads `response!` / blank / `Avatar, armed`.
+    /// The blank is the *result's* to earn, by carrying that feed. A row
+    /// the handler left open on purpose - `Aim! ` - must not get one:
+    /// there the banner's leading newline is spent closing the open row,
+    /// which is what `combat-cast` measures.
+    ///
+    /// Measured 2026-09-19 (`qa/paired/combat-refusal-letters.tsv`, beat
+    /// `tv`): the original reads `response!` / blank / `Avatar, armed`.
     #[test]
-    fn a_result_that_ends_mid_row_still_gets_its_blank_before_the_banner() {
-        let mut state = combat_player_command_state(8, 5);
-        // A refusal with no trailing feed - the shape `Talk-Funny, no
-        // response!` and `View-Not here` share.
-        state.emit_combat_print("Talk-Funny, no response!");
-        assert!(state.combat_transcript_row_open);
+    fn a_result_earns_its_blank_before_the_banner_by_carrying_its_feed() {
+        let rows = |text: &str| {
+            let mut state = combat_player_command_state(8, 5);
+            state.emit_combat_print(text);
+            state.open_pending_combat_player_turn(Some(0));
+            state
+                .message_transcript
+                .iter()
+                .map(|entry| entry.text.clone())
+                .collect::<Vec<_>>()
+        };
 
-        state.open_pending_combat_player_turn(Some(0));
-
-        let rows: Vec<String> = state
-            .message_transcript
-            .iter()
-            .map(|entry| entry.text.clone())
-            .collect();
-        let refusal = rows
+        let closed = rows("Talk-Funny, no response!\n");
+        let refusal = closed
             .iter()
             .position(|row| row.contains("response!"))
             .expect("the refusal is in the transcript");
         assert_eq!(
-            rows.get(refusal + 1).map(String::as_str),
+            closed.get(refusal + 1).map(String::as_str),
             Some(""),
-            "a blank row separates the result from the banner: {rows:?}"
+            "a closed result gets its blank: {closed:?}"
         );
         assert!(
-            rows.get(refusal + 2)
+            closed
+                .get(refusal + 2)
                 .is_some_and(|row| row.contains("armed")),
-            "the banner follows the blank: {rows:?}"
+            "the banner follows the blank: {closed:?}"
+        );
+
+        let open = rows("Aim! ");
+        let prompt = open
+            .iter()
+            .position(|row| row.contains("Aim!"))
+            .expect("the prompt is in the transcript");
+        assert!(
+            open.get(prompt + 1)
+                .is_some_and(|row| row.contains("armed")),
+            "an open row spends the banner's newline instead: {open:?}"
         );
     }
 
