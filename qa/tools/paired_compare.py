@@ -32,6 +32,7 @@ silently.
 
 import builtins
 import json
+import hashlib
 import pathlib
 import re
 import sys
@@ -738,11 +739,30 @@ def _stamp(artifact: pathlib.Path) -> str:
     return f"{newest:.0f}"
 
 
+def _scenario_header_stamp(scenario: str) -> str:
+    """A digest of the scenario's header, for the cache key.
+
+    The header is an input to the verdict: `is_lottery`,
+    `has_roster_lottery`, `is_traffic_variable`, `is_probe` and
+    `has_no_roster_panel` all read it. Keying only on the artifact meant
+    that adding `roster lottery` to `hidden-treasure-search` changed
+    nothing until `CACHE_VERSION` was bumped by hand - a stale verdict
+    that looks exactly like the marker not working.
+    """
+    return hashlib.sha256(_scenario_header(scenario).encode()).hexdigest()[:16]
+
+
 def compare_cached(artifact: pathlib.Path, cache: dict) -> tuple:
     key = artifact.name
     stamp = _stamp(artifact)
+    header = _scenario_header_stamp(re.sub(r"-\d{8}-\d{6}$", "", artifact.name))
     hit = cache.get(key)
-    if hit and hit.get("stamp") == stamp and hit.get("version") == CACHE_VERSION:
+    if (
+        hit
+        and hit.get("stamp") == stamp
+        and hit.get("version") == CACHE_VERSION
+        and hit.get("header") == header
+    ):
         for kind, count in hit["kinds"].items():
             KINDS[kind] = KINDS.get(kind, 0) + count
         # Replay the per-beat lines too. Without them a cached pass cannot be
@@ -767,7 +787,7 @@ def compare_cached(artifact: pathlib.Path, cache: dict) -> tuple:
         builtins.print = real_print
     kinds = {k: KINDS[k] - before.get(k, 0) for k in KINDS if KINDS[k] - before.get(k, 0)}
     cache[key] = {"stamp": stamp, "totals": list(totals), "kinds": kinds,
-                  "lines": buffer, "version": CACHE_VERSION}
+                  "lines": buffer, "version": CACHE_VERSION, "header": header}
     return totals
 
 

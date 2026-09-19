@@ -27,6 +27,12 @@
 # the record closes behind itself, so the second answer should differ from
 # the first - on both sides.
 #
+# The cell is molten lava, so every turn spent on it costs the party an
+# independently rolled `1..8` (`catalogs/tile-catalog.md §6`, the burning
+# family). That makes the roster panel a **roster lottery** - its rows are
+# reported and not counted - while the message window, which is what this
+# scenario measures, is fixed text.
+#
 # requires-seed: profile `seed-hidden-treasure`
 both	wait	9000
 both	key	space
