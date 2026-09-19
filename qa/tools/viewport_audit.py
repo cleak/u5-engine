@@ -86,6 +86,47 @@ def histogram_distance(left: dict, right: dict) -> float:
     return sum(abs(left.get(k, 0) - right.get(k, 0)) for k in keys) / (2 * total)
 
 
+SCENARIOS = pathlib.Path(__file__).resolve().parents[1] / "paired"
+
+
+def one_sided_beats(scenario_name: str) -> set[str]:
+    """Beats a scenario reaches with the two sides deliberately apart.
+
+    Some scenarios drive one side at a time on purpose. `hut-audio` walks
+    the engine five steps west into a hut wall, captures, and only then
+    walks DOSBox the same five steps - so at the beat between them the two
+    viewports *must* differ, and its 62 differing cells are the scenario
+    working, not a defect. Counting them put three audio scenarios in the
+    viewport offender list on 2026-09-18.
+
+    A row whose first field is `engine` or `dosbox` puts the sides out of
+    step, and nothing in the format puts them back, so every `shot` from
+    the first such row onward is excluded.
+    """
+    path = SCENARIOS / f"{scenario_name}.tsv"
+    if not path.is_file():
+        return set()
+    excluded, apart = set(), False
+    for line in path.read_text(errors="replace").splitlines():
+        if not line.strip() or line.startswith("#"):
+            continue
+        fields = line.split("\t")
+        if fields[0] in ("engine", "dosbox"):
+            apart = True
+        elif apart and len(fields) > 2 and fields[1] == "shot":
+            excluded.add(fields[2])
+    return excluded
+
+
+def scenario_name_of(artifact: pathlib.Path) -> str:
+    """`hut-audio-20260918-201713` -> `hut-audio`."""
+    name = artifact.name
+    parts = name.rsplit("-", 2)
+    if len(parts) == 3 and parts[1].isdigit() and parts[2].isdigit():
+        return parts[0]
+    return name
+
+
 def compare_beat(stock: pathlib.Path, engine: pathlib.Path) -> int | None:
     left = viewport_cell_histograms(stock)
     right = viewport_cell_histograms(engine)
@@ -104,8 +145,11 @@ def main() -> int:
             p.name[len("dosbox-") : -len(".png")]
             for p in artifact.glob("dosbox-*.png")
         )
+        excluded = one_sided_beats(scenario_name_of(artifact))
         worst = []
         for beat in beats:
+            if beat in excluded:
+                continue
             differing = compare_beat(
                 artifact / f"dosbox-{beat}.png", artifact / f"engine-{beat}.png"
             )
@@ -118,6 +162,8 @@ def main() -> int:
         worst.sort(reverse=True)
         flag = "VIEWPORT" if worst else "ok      "
         detail = " ".join(f"{beat}:{n}" for n, beat in worst[:4])
+        if excluded:
+            detail += f"  (skipped {len(excluded)} one-sided beat(s))"
         print(f"{flag} {artifact.name}  {detail}")
     print(f"\n{total_beats} beat(s) compared, {total_differ} differ in the viewport")
     return 0

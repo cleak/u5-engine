@@ -772,7 +772,7 @@ def compare_cached(artifact: pathlib.Path, cache: dict) -> tuple:
 
 
 # Bump when a classifier change would alter a cached verdict.
-CACHE_VERSION = 28
+CACHE_VERSION = 29
 
 
 # Some scenarios are explicitly a lottery: their own headers say so. The night
@@ -877,8 +877,18 @@ def compare(artifact: pathlib.Path) -> tuple[int, int, int, int, int]:
                 print(f"  panel  {scenario}/{label}: rows {panel_rows}")
         from viewport_audit import CELL_TOLERANCE as VIEWPORT_CELL_TOLERANCE
         from viewport_audit import compare_beat as compare_viewport_beat
+        from viewport_audit import one_sided_beats
 
-        viewport_cells_differing = compare_viewport_beat(stock, engine)
+        # A scenario that drives one side at a time puts the two viewports
+        # deliberately out of step. `hut-audio` walks the engine five steps
+        # into a hut wall, captures, and only then walks DOSBox the same
+        # five - so that beat's 62 differing cells are the scenario, not
+        # the engine. See `viewport_audit.one_sided_beats`.
+        viewport_cells_differing = (
+            None
+            if label in one_sided_beats(scenario)
+            else compare_viewport_beat(stock, engine)
+        )
         if (
             viewport_cells_differing is not None
             and viewport_cells_differing > VIEWPORT_CELL_TOLERANCE
