@@ -16,9 +16,26 @@
 #   G on an open chest    `Get\n` then `contents\nof chest\nYou find:\n`
 #   O on an open cell     `Open-Already Open!` on the prefix's own row
 #
-# The trap word is one of `ACID!`, `POISON!`, `BOMB!` or `GAS!` and comes
-# off the shared trap resolver, so the `opened` beat may be a draw rather
-# than a fixed line; the first run is what says which.
+# **This scenario is a lottery below the row level, and a structural
+# measurement above it.** Measured 2026-09-19: the trap word is one of
+# `ACID!`, `POISON!`, `BOMB!` or `GAS!` off the shared resolver, and
+# `containers.md §?`'s contents table gates each of its seven rows on a
+# threshold roll and rolls each quantity - so which rows fire and what
+# they say is a draw on both sides. The original drew food, gold, keys,
+# gems and torches; this engine drew those plus a potion and a scroll,
+# and different counts. Both are legal.
+#
+# What the run does establish, and what three fixes came out of:
+#
+#   - `Get` / `Must open first!` on a closed chest: identical.
+#   - `Open-<trap word>` on one row, then a blank, then `Chest opened`:
+#     this engine had the word on its own row and printed it twice.
+#   - the `contents` / `of chest` / `You find:` preamble and the table's
+#     row order: identical.
+#   - `Open-What` once Get has consumed the open chest: identical.
+#
+# Re-running it changes the draw, not the shape, so its verdict is a
+# lottery and its value is the shape.
 # requires-seed: the party standing on the Deceit wooden chest, with a torch
 both	wait	9000
 both	key	space
