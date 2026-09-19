@@ -1641,6 +1641,17 @@ impl PlayState {
     /// paths the section does not cover.
     fn close_combat_result_row_before_banner(&mut self) {
         self.close_message_row();
+        // `close_message_row` moves the handler-message cursor only.
+        // `emit_combat_print` reads a **second** flag for the same question
+        // - `combat_transcript_row_open`, set whenever a combat print did
+        // not end on a line feed - and spends the next print's leading
+        // newline closing that row instead of leaving a blank. Measured
+        // 2026-09-19 (`qa/paired/combat-refusal-letters.tsv`, beat `tv`):
+        // the original reads `response!` / blank / `Avatar, armed`, and
+        // this engine had the banner directly under the refusal because
+        // the refusal did not end on a feed and only one of the two flags
+        // was being cleared here.
+        self.combat_transcript_row_open = false;
     }
 
     pub(crate) fn open_pending_combat_player_turn(&mut self, slot: Option<usize>) {
