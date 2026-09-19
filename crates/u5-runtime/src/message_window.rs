@@ -623,6 +623,22 @@ pub fn selector_prompt_row_is_continuation(state: &crate::PlayState) -> bool {
         .is_some_and(|session| session.coin_accepted)
 }
 
+/// `dungeon-mode.md §8`'s fountain question waits for `Y` or `N` on the
+/// row directly below itself, with neither the command row's separating
+/// blank nor its end cap.
+///
+/// Measured 2026-09-19 (`qa/paired/dungeon-fountain-heal.tsv`, beat
+/// `prompt`): the original's `Will you drink?` is the second-to-last row
+/// and the last is empty. This engine spent a blank between them and
+/// drew a cap, which put the question two rows above the bottom and
+/// everything before it one row higher than the original.
+pub fn dungeon_fountain_prompt_row_is_continuation(state: &crate::PlayState) -> bool {
+    matches!(
+        state.active_yes_no_prompt.as_ref().map(|session| session.kind),
+        Some(crate::z_stats::YesNoPromptKind::DungeonFountainDrink { .. })
+    )
+}
+
 /// The endgame's page wait takes §10.2's blank but not its end cap.
 ///
 /// `endgame.md` §5 runs the audience as a sequence of pages, each blocking

@@ -76,7 +76,9 @@ town_arrest={} endgame={} rescue={} conversation={}",
     } else {
         Some(spell_echo.as_deref().unwrap_or(""))
     };
-    let live_row_kind = if spell_echo.is_some() {
+    let live_row_kind = if spell_echo.is_some()
+        || dungeon_fountain_prompt_row_is_continuation(&state)
+    {
         LiveRowKind::Continuation
     } else {
         LiveRowKind::CommandRow

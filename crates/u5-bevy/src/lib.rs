@@ -17366,6 +17366,7 @@ fn render_integrated_status_framebuffer(
             || u5_runtime::sage_topic_row_is_continuation(&display_state)
             || u5_runtime::shop_pause_row_is_continuation(&display_state)
             || u5_runtime::selector_prompt_row_is_continuation(&display_state)
+            || u5_runtime::dungeon_fountain_prompt_row_is_continuation(&display_state)
             || display_state.defeated_party_row_is_continuation()
         {
             u5_runtime::LiveRowKind::Continuation

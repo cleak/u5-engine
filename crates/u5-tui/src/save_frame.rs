@@ -900,7 +900,9 @@ pub fn compose_gameplay_screen(
     } else {
         Some(spell_echo.as_deref().unwrap_or(""))
     };
-    let live_row_kind = if spell_echo.is_some() {
+    let live_row_kind = if spell_echo.is_some()
+        || u5_runtime::dungeon_fountain_prompt_row_is_continuation(state)
+    {
         u5_runtime::LiveRowKind::Continuation
     } else {
         u5_runtime::LiveRowKind::CommandRow
