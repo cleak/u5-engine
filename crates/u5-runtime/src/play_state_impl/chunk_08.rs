@@ -39,6 +39,13 @@ impl PlayState {
             self.message = format!("{HOLE_UP_REPAIR_BODY}\n{HOLE_UP_HULL_NOW_PREFIX}{repaired}!");
             return MoveOutcome::Rested;
         }
+        // `commands.md §5.5`'s other Hole-up refusal. Camping wants the
+        // party on land or aboard a ship; a horse, carpet or skiff is
+        // neither, and this engine offered all three the hours prompt.
+        if !self.player.transport.is_foot() {
+            self.message = HOLE_UP_ON_LAND_OR_SHIP_REFUSAL.to_string();
+            return MoveOutcome::Blocked;
+        }
         let land_camp = !matches!(self.area, Area::Town { .. });
         if land_camp {
             self.replace_command_echo(HOLE_UP_CAMP_ECHO);

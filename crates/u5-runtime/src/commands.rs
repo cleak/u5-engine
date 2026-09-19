@@ -1557,6 +1557,20 @@ pub const SHIP_HULL_REPAIR_CAP: u8 = 99;
 /// sea refusal, printed under the repair echo. Measured.
 pub const HOLE_UP_SAILS_MUST_BE_LOWERED: &str = "Sails must be\nlowered!";
 
+/// `commands.md §5.5` lists the H-Hole-up family's two refusals together:
+/// "`Sails_must_be\n` plus `lowered!\n\n` **and** `On_land_or_ship!\n\n`
+/// for its refusals". The second is the one the literal names - camping
+/// wants the party on land or aboard a ship, and a horse, carpet or skiff
+/// is neither.
+///
+/// This engine had no such refusal: every non-ship transport fell into
+/// the land-camp branch and was offered the hours prompt.
+///
+/// §5.5 does not say which echo precedes it, so the refusal is emitted on
+/// its own rather than completing one - the sails refusal's `repair...`
+/// echo is a sea form and cannot be the right prefix here.
+pub const HOLE_UP_ON_LAND_OR_SHIP_REFUSAL: &str = "On land or ship!";
+
 pub const HOLE_UP_CAMP_ECHO: CommandEcho = CommandEcho {
     text: "Hole up & camp!",
     join: CommandEchoJoin::Complete,

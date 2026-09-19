@@ -1384,6 +1384,25 @@ impl PlayState {
 
         let dissolved = self.dissolve_sceptre_barriers_near_party();
         if dissolved == 0 {
+            // `inventory.md §7`'s Use table gives the fallback three
+            // outcomes, and this engine implements two of them:
+            // "Sceptre fallback reports no effect | `No effect!\n`" and
+            // "Sceptre fallback returns its other result | No additional
+            // result". The third - "Sceptre fallback reports a dissolved
+            // field | `Field dissolved!\n`" - is not implemented, because
+            // §7 never says what the fallback *is*.
+            //
+            // §7's own prose calls it only "the alternate helper result",
+            // after the nearby-square scan "rewrites accepted cells to
+            // ordinary open ground ... counts dissolved cells, and
+            // otherwise reports no effect or the alternate helper result".
+            // Which helper, and which of its outcomes dissolves a field
+            // rather than reporting nothing, would both be guesses -
+            // and `Field dissolved!` is a different line from
+            // `magic.md §5.1`'s An Grav `Field destroyed!`, so they are
+            // not the same helper wearing two names.
+            //
+            // Asked as `cleak/u5-spec#287`.
             self.message = format!("{USE_SCEPTRE_WIELDED}\nNo effect!");
             return MoveOutcome::Blocked;
         }
