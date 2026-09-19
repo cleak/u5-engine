@@ -871,6 +871,23 @@ pub const USE_REGALIA_REMOVED: &str = "Removed!";
 /// thee the evil Shard of Falsehood`.
 pub const USE_SHARD_ALOFT_PREFIX: &str = "Thou dost hold above thee the evil ";
 
+/// `vehicles.md §5.1`'s X-it transcript, the two refusals this engine did
+/// not have.
+///
+/// "Carpet or skiff has no landing support | `\nNo land nearby!\n`" -
+/// the general no-landing case. The engine answered `Not here!` here,
+/// which §5.1 reserves for the narrower "Skiff refused over the bridge
+/// pair" row, so the two were collapsed into the wrong one.
+pub const XIT_NO_LAND_NEARBY_REFUSAL: &str = "\nNo land nearby!\n";
+/// See [`XIT_NO_LAND_NEARBY_REFUSAL`]. §5.1 on the furled ship: "If all
+/// three options fail, append `\nNo skiffs on board!\n` after `ship!\n`,
+/// leaving a blank row before the refusal."
+///
+/// This is **not** [`crate::SHIP_NO_SKIFFS_WARNING`], which is the
+/// all-capitals boarding warning; the engine printed that one here, in
+/// place of the completed `X-it ship!` row and its refusal.
+pub const XIT_NO_SKIFFS_REFUSAL: &str = "\nNo skiffs on board!\n";
+
 /// `inventory.md §7.1`, the Shadowlord destruction: "The later actual
 /// Shadowlord destruction adds `\nThe doom of the Shadowlord_`, the
 /// matching name Faulinei, Astaroth or Nosfentor, then `_is wrought!\n`."

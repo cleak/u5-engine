@@ -280,7 +280,12 @@ fn exit_vehicle_refuses_furled_ship_with_no_landing_and_no_skiffs() {
     );
     assert_eq!((state.player.x, state.player.y), (5, 5));
     assert_eq!(state.active_objects.len(), 1);
-    assert_eq!(state.message, SHIP_NO_SKIFFS_WARNING);
+    // `vehicles.md §5.1`: the furled ship answers `ship!\n` "before
+    // checking land/skiff/carpet availability", and "if all three
+    // options fail, append `\nNo skiffs on board!\n` after `ship!\n`,
+    // leaving a blank row before the refusal". The engine printed the
+    // all-capitals *boarding* warning here instead of the echo.
+    assert_eq!(state.message, "X-it ship!\n\nNo skiffs on board!\n");
     assert_eq!(state.turn, 0);
 }
 
@@ -352,7 +357,9 @@ fn exit_vehicle_skiff_rejects_a_bridge_tile_underfoot_even_with_support() {
     );
     assert_eq!((state.player.x, state.player.y), (5, 5));
     assert_eq!(state.active_objects.len(), 1);
-    assert_eq!(state.message, "Not here!");
+    // `vehicles.md §5.1`: "Skiff refused over the bridge pair |
+    // `\nNot here!\n`" - with its own feeds, which the engine dropped.
+    assert_eq!(state.message, "\nNot here!\n");
     assert_eq!(state.turn, 0);
 }
 

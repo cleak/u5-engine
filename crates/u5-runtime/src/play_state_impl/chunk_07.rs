@@ -1158,15 +1158,46 @@ impl PlayState {
                     self.commit_prompt_reply("X-it ", XIT_SHIP_ARGUMENT);
                     return Ok(MoveOutcome::ExitedVehicle);
                 }
-                // `vehicles.md §5` / `doors-and-z-transitions.md §11`: once
-                // the furled-ship branch has established that no nearby
-                // landing, carried skiff, or stowed carpet is available,
-                // this is the no-skiffs refusal.
-                self.message = SHIP_NO_SKIFFS_WARNING.to_string();
+                // `vehicles.md §5.1`: "Furled ship, any exit attempt |
+                // `ship!\n`, before checking land/skiff/carpet
+                // availability", and "If all three options fail, append
+                // `\nNo skiffs on board!\n` after `ship!\n`, leaving a
+                // blank row before the refusal."
+                //
+                // So the echo completes first and the refusal follows it.
+                // The engine replaced the whole line with
+                // `SHIP_NO_SKIFFS_WARNING`, which is the all-capitals
+                // *boarding* warning and belongs to a different beat.
+                if !self.complete_open_direction_echo("X-it ", XIT_SHIP_ARGUMENT) {
+                    self.message = format!("X-it {XIT_SHIP_ARGUMENT}");
+                }
+                // `ship!\n` carries its own feed and the refusal opens with
+                // another, which is §5.1's "leaving a blank row before the
+                // refusal".
+                self.message.push('\n');
+                self.message.push_str(XIT_NO_SKIFFS_REFUSAL);
                 return Ok(MoveOutcome::Blocked);
             }
-            // Every non-ship family retains its location-specific refusal.
-            self.message = "Not here!".to_string();
+            // `vehicles.md §5.1` gives the non-ship families two different
+            // refusals, and this engine had collapsed them into the
+            // narrower one: "Carpet or skiff has no landing support |
+            // `\nNo land nearby!\n`" is the general case, and
+            // "Skiff refused over the bridge pair | `\nNot here!\n`" is
+            // only the skiff standing on the bridge pair that
+            // `catalogs/tile-catalog.md §3` gives as `0x48..0x49`.
+            // The skiff's rejected pair is `0x6A/0x6B`, which this engine
+            // already names - not the `0x48/0x49` pair a town's NPC start
+            // markers use.
+            let over_the_bridge_pair = matches!(transport, TransportState::Skiff { .. })
+                && self.current_surface_tile().is_some_and(|tile| {
+                    tile == SKIFF_XIT_REJECTED_BRIDGE_FIRST
+                        || tile == SKIFF_XIT_REJECTED_BRIDGE_FIRST + 1
+                });
+            self.message = if over_the_bridge_pair {
+                "\nNot here!\n".to_string()
+            } else {
+                XIT_NO_LAND_NEARBY_REFUSAL.to_string()
+            };
             return Ok(MoveOutcome::Blocked);
         }
 
