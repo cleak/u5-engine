@@ -714,7 +714,7 @@ def compare_cached(artifact: pathlib.Path, cache: dict) -> tuple:
 
 
 # Bump when a classifier change would alter a cached verdict.
-CACHE_VERSION = 25
+CACHE_VERSION = 26
 
 
 # Some scenarios are explicitly a lottery: their own headers say so. The night
@@ -736,6 +736,21 @@ def _scenario_header(scenario: str) -> str:
     except OSError:
         return ""
     return " ".join(header).lower()
+
+
+def has_no_roster_panel(scenario: str) -> bool:
+    """Does this scenario run on a screen with no roster panel on it?
+
+    `decode_panel` reads the right-hand strip as text, which is what it is
+    during gameplay. Character creation puts `chargen.md` §6's gypsy artwork
+    there instead, so decoding it yields whatever glyph the art happens to
+    resemble - `chargen-prompts` read `    {` against the engine's blank on
+    all three of its prompt beats - and comparing that says nothing about
+    either side.
+
+    Declared in the scenario's own header with `# no-roster-panel:`.
+    """
+    return "# no-roster-panel:" in _scenario_header(scenario)
 
 
 def is_probe(scenario: str) -> bool:
@@ -789,7 +804,10 @@ def compare(artifact: pathlib.Path) -> tuple[int, int, int, int, int]:
         # counted on its own: it is a different window with its own contract,
         # and folding it into the message-window total would make two years of
         # earlier numbers incomparable.
-        panel_left, panel_right = decode_panel(stock), decode_panel(engine)
+        panel_left, panel_right = (None, None) if has_no_roster_panel(scenario) else (
+            decode_panel(stock),
+            decode_panel(engine),
+        )
         if panel_left is not None and panel_right is not None:
             panel_rows = [
                 index + PANEL_TOP

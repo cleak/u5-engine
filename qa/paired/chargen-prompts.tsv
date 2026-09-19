@@ -31,6 +31,9 @@
 # animation, so the two sides catch it in different phases and the beat
 # cannot agree. That is the title screen rather than anything this scenario
 # covers.
+# no-roster-panel: character creation draws gypsy artwork in the right-hand
+# strip, so decoding it as the roster panel compares art against blank
+#
 both	wait	9000
 both	key	space
 both	wait	4000
