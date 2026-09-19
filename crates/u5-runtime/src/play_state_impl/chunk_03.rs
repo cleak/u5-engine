@@ -675,7 +675,7 @@ impl PlayState {
         // echo *is* the prompt", so the cursor waits in the cell the
         // direction word will be printed into.
         if let Some(session) = self.active_direction_prompt {
-            return Self::direction_prompt_open_verb_echo(session.kind);
+            return self.open_verb_echo_for(session.kind);
         }
         // `commands.md §5.2`: the direction prompt's trailing hyphen leaves
         // its row open, and `text-output.md §10.4` names that case -
@@ -2560,6 +2560,26 @@ impl PlayState {
     /// before waiting. The hyphen at the end of the verb echo *is* the
     /// prompt." So the direction word — or `Pass` — must land on the
     /// line the verb opened, not on a fresh one.
+    /// [`Self::direction_prompt_open_verb_echo`] with the one form that
+    /// depends on where the party is standing.
+    ///
+    /// `dungeon-mode.md §8.1`: underground the Klimb prompt is
+    /// `Klimb-U/D-` "when both directions are available (it blocks until
+    /// up or down is chosen, and Space answers `Pass\n\n` and climbs
+    /// nothing)", and "the dungeon handler owns all four forms; the
+    /// resident dispatcher prints no `Klimb-` of its own in a dungeon
+    /// scene." The two-way ladder is the only cell that opens it, so in a
+    /// dungeon this prompt is always the both-directions one. Above
+    /// ground the town and overworld arms keep the plain `Klimb-`.
+    pub fn open_verb_echo_for(&self, kind: DirectionPromptKind) -> Option<String> {
+        if matches!(kind, DirectionPromptKind::Klimb)
+            && matches!(self.area, Area::Dungeon { .. })
+        {
+            return Some(DUNGEON_KLIMB_PROMPT_BOTH.to_string());
+        }
+        Self::direction_prompt_open_verb_echo(kind)
+    }
+
     pub fn direction_prompt_open_verb_echo(kind: DirectionPromptKind) -> Option<String> {
         let echo = match kind {
             DirectionPromptKind::Attack => "Attack-".to_string(),
@@ -2639,6 +2659,11 @@ impl PlayState {
                     crate::commands::FOUNTAIN_DRINK_PROMPT.to_string()
                 }
                 DirectionPromptKind::DungeonSearch { .. } => DUNGEON_DIRECTION_PROMPT.to_string(),
+                // The dungeon's both-directions form; see
+                // [`Self::open_verb_echo_for`].
+                DirectionPromptKind::Klimb if matches!(self.area, Area::Dungeon { .. }) => {
+                    DUNGEON_KLIMB_PROMPT_BOTH.to_string()
+                }
                 DirectionPromptKind::Klimb => "Klimb-".to_string(),
                 DirectionPromptKind::CombatKlimb { .. } => "Klimb-".to_string(),
                 DirectionPromptKind::CombatPush { .. } => "Push-".to_string(),
@@ -2749,6 +2774,12 @@ impl PlayState {
                 if matches!(session.kind, DirectionPromptKind::Klimb) {
                     self.advance_turn();
                 }
+                // `dungeon-mode.md §8.1`: underground "the pass key gives
+                // `Pass\n\n` and changes no level". The word lands on the
+                // open `Klimb-U/D-` row like every other cancel; what the
+                // second feed adds is the blank row under it.
+                let dungeon_klimb_pass = matches!(session.kind, DirectionPromptKind::Klimb)
+                    && matches!(self.area, Area::Dungeon { .. });
                 // `commands.md §3`: the dispatcher's status is `Acted` by
                 // default and `0` has a closed list of producers - "Unknown
                 // input, the two stock-refusal letters `D` and `W`, the save
@@ -2782,7 +2813,7 @@ impl PlayState {
                 // Whether that landed decides the fall-through below: a
                 // second bare `Pass` in the message slot renders a loose
                 // row of its own under the completed `Verb-Pass` one.
-                let completed_on_verb_row = Self::direction_prompt_open_verb_echo(session.kind)
+                let completed_on_verb_row = self.open_verb_echo_for(session.kind)
                     .is_some_and(|verb| {
                         self.complete_open_direction_echo(&verb, DIRECTION_PROMPT_LABEL_PASS)
                     });
@@ -2807,6 +2838,9 @@ impl PlayState {
                 // successful completion doubles the word onto a second row.
                 if !completed_on_verb_row {
                     self.message = DIRECTION_PROMPT_LABEL_PASS.to_string();
+                }
+                if dungeon_klimb_pass {
+                    self.push_explicit_blank_message_entry();
                 }
                 return Ok(Some(MoveOutcome::PromptDeclined));
             }
@@ -2913,7 +2947,7 @@ impl PlayState {
             // runs, so its own output starts on the next row. Push keeps
             // its post-dispatch completion because a dungeon Push
             // refusal replaces the echo entirely (`commands.md §5.2`).
-            if !push_prompt && let Some(verb) = Self::direction_prompt_open_verb_echo(session.kind)
+            if !push_prompt && let Some(verb) = self.open_verb_echo_for(session.kind)
             {
                 let _ = self.complete_open_direction_echo(&verb, direction.name());
             }

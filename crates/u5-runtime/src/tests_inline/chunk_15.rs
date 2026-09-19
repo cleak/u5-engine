@@ -443,6 +443,45 @@
         }
     }
 
+    /// `dungeon-mode.md §8.1`, the both-directions Klimb row: "the pass
+    /// key gives `Pass\n\n` and changes no level". The word completes the
+    /// open `Klimb-U/D-` row and the second feed leaves a blank under it.
+    #[test]
+    fn dungeon_two_way_ladder_pass_leaves_a_blank_row_and_no_level_change() {
+        let scene = DungeonScene::new(33).unwrap();
+        let mut grid = open_dungeon_record();
+        grid[dungeon_cell_index(2, 1, 1)] = 0x30;
+        let mut state = dungeon_state(grid, 2, 1, 1);
+
+        assert!(state.handle_dungeon_key('k', Path::new("")).unwrap());
+        assert_eq!(state.message, DUNGEON_KLIMB_PROMPT_BOTH);
+
+        assert_eq!(
+            handle_play_key_input(&mut state, ' ', "", Path::new("")).unwrap(),
+            PlayInputDisposition::Continue
+        );
+
+        assert_eq!(state.area, Area::Dungeon { scene, level: 2 });
+        let rows: Vec<String> = state
+            .message_transcript
+            .iter()
+            .map(|entry| entry.text.clone())
+            .collect();
+        let prompt = rows
+            .iter()
+            .position(|row| row.starts_with(DUNGEON_KLIMB_PROMPT_BOTH))
+            .expect("the prompt row is in the transcript");
+        assert!(
+            rows[prompt].ends_with(DIRECTION_PROMPT_LABEL_PASS),
+            "the cancel word completes the prompt row: {rows:?}"
+        );
+        assert_eq!(
+            rows.get(prompt + 1).map(String::as_str),
+            Some(""),
+            "and the second feed leaves a blank under it: {rows:?}"
+        );
+    }
+
     #[test]
     fn dungeon_two_way_ladder_keys_choose_up_or_down() {
         let scene = DungeonScene::new(33).unwrap();
@@ -454,7 +493,9 @@
         assert!(up.handle_dungeon_key('k', Path::new("")).unwrap());
         assert_eq!(up.area, Area::Dungeon { scene, level: 2 });
         assert_eq!(up.turn, 0);
-        assert_eq!(up.message, "Klimb-");
+        // `dungeon-mode.md §8.1`: underground the both-directions prompt is
+        // `Klimb-U/D-`, and the dungeon handler owns it.
+        assert_eq!(up.message, DUNGEON_KLIMB_PROMPT_BOTH);
         assert_eq!(
             up.active_direction_prompt.map(|session| session.kind),
             Some(DirectionPromptKind::Klimb)
