@@ -385,6 +385,32 @@ impl PlayState {
         is_waterfall_tile(south).then_some(south)
     }
 
+    /// The underfoot half of [`Self::world_falls_trigger_tile`].
+    ///
+    /// `overworld.md §8` splits the chain's two entry points by which cell
+    /// carries the waterfall: "That is the arm a waterfall directly south
+    /// of the party takes; the post-action arm is the one a waterfall
+    /// underfoot takes." The post-action pass gates on this one.
+    pub fn world_falls_underfoot_trigger_tile(&self) -> Option<u8> {
+        if !matches!(self.area, Area::World { .. }) {
+            return None;
+        }
+        let underfoot = self.grid[world_cell_index(self.player.x, self.player.y)];
+        is_waterfall_tile(underfoot).then_some(underfoot)
+    }
+
+    /// The directly-south half of [`Self::world_falls_trigger_tile`], which
+    /// the input helper gates on - see
+    /// [`Self::world_falls_underfoot_trigger_tile`].
+    pub fn world_falls_south_trigger_tile(&self) -> Option<u8> {
+        if !matches!(self.area, Area::World { .. }) {
+            return None;
+        }
+        let south_y = (self.player.y + 1) % WORLD_SIDE;
+        let south = self.grid[world_cell_index(self.player.x, south_y)];
+        is_waterfall_tile(south).then_some(south)
+    }
+
     /// `overworld.md` Section 8.1 "Exact result lines: the falls chain", in
     /// print order. The chain is unconditional on both planes; only the
     /// landing coordinate decides whether the plane is also written.
@@ -3998,6 +4024,28 @@ impl PlayState {
     /// Every other caller gets the ordinary single step-and-wait and then
     /// enters the command wait, exactly as before.
     pub fn idle_wait_pass(&mut self, game_dir: Option<&Path>) -> io::Result<IdleWaitPass> {
+        // `overworld.md §8`: the falls chain "has a **second, earlier**
+        // entry point: the same handler is also reached from the top of the
+        // input helper, before that turn's key is read". That arm is the one
+        // "a waterfall directly south of the party takes".
+        //
+        // Measured 2026-09-19 (`qa/paired/overworld-falls.tsv`): a party
+        // standing north of the falls sees the banner and the underworld
+        // line with **no key pressed at all**, where this engine waited for
+        // a turn to be consumed and printed the chain after the next
+        // command's echo.
+        if let (Area::World { plane }, Some(game_dir)) = (self.area, game_dir) {
+            if self.world_falls_south_trigger_tile().is_some() {
+                let _ = self.apply_world_falls_chain(game_dir, plane)?;
+                // The chain spends visual ticks of its own - the descending
+                // sweep, the hidden marker, the restore - so this pass is
+                // already paid for. Adding the idle wait's own tick on top
+                // would animate the destination plane's objects one frame
+                // further than the chain left them.
+                self.under_sail_wait_cursor_poll_pending = false;
+                return Ok(IdleWaitPass::CommandWait);
+            }
+        }
         if !self.under_sail_wait_pass_applies() {
             self.under_sail_wait_cursor_poll_pending = false;
             self.advance_visual_tick();

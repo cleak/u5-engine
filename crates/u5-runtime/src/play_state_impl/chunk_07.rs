@@ -3369,8 +3369,16 @@ impl PlayState {
         // both trigger cells (`RETRACTIONS.md` R320). It runs ahead of the
         // sidecar-driven plane transitions because the chain owns its own
         // plane write.
-        if let Some(transition) = self.apply_world_falls_chain(game_dir, plane)? {
-            return Ok(Some(MoveOutcome::Transition(transition)));
+        // Underfoot only. `overworld.md §8` gives the chain two entry
+        // points and splits them by trigger cell: "That is the arm a
+        // waterfall directly south of the party takes; the post-action arm
+        // is the one a waterfall underfoot takes." The directly-south arm
+        // runs at the top of the input helper, in
+        // [`PlayState::idle_wait_pass`], before the turn's key is read.
+        if self.world_falls_underfoot_trigger_tile().is_some() {
+            if let Some(transition) = self.apply_world_falls_chain(game_dir, plane)? {
+                return Ok(Some(MoveOutcome::Transition(transition)));
+            }
         }
         if let Some(transition) = self.apply_world_underfoot_plane_transition(game_dir, plane)? {
             let transition_message = self.message.clone();

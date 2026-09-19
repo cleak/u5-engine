@@ -190,13 +190,15 @@ fn falls_chain_fires_on_a_waterfall_south_of_the_party_and_gates_the_plane() {
     state.active_objects[0].z = WorldPlane::Britannia.save_floor();
     state.sync_player_object();
 
-    assert_eq!(
-        state.pass_turn_with_game_dir(Some(&dir)).unwrap(),
-        MoveOutcome::Transition(AreaTransition::ChangedWorldPlane {
-            from: WorldPlane::Britannia,
-            to: WorldPlane::Underworld
-        })
-    );
+    // `overworld.md §8`: a waterfall **directly south** takes the chain's
+    // earlier entry point, "the top of the input helper, before that turn's
+    // key is read". No command is passed here, and none is needed: the idle
+    // wait is that entry point. Measured 2026-09-19
+    // (`qa/paired/overworld-falls.tsv`), where the original printed both
+    // lines before any key reached it.
+    let turn_before = state.turn;
+    state.idle_wait_pass(Some(&dir)).unwrap();
+    assert_eq!(state.turn, turn_before);
 
     assert_eq!(
         state.area,

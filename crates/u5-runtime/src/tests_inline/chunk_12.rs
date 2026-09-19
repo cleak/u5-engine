@@ -755,12 +755,18 @@ fn the_dungeon_floor_traps_damage_every_living_member() {
         "a Dead slot is skipped by the sweep"
     );
 
-    // The bomb cell is the same helper on its own row.
+    // The bomb cell is the same helper on its own row - reached from the
+    // post-action pass, which is the only place `dungeon-mode.md §8.1`
+    // gives it. See `dungeon_bomb_trap_marks_cell_in_the_post_action_pass`.
+    let bomb_dir = debug_game_dir();
     let mut grid = vec![0x90; DUNGEON_RECORD_LEN];
     grid[dungeon_cell_index(0, 2, 1)] = 0x62;
     let mut bomb = dungeon_state(grid, 0, 1, 1);
     let before = bomb.party[0].hp;
+    let turn_before = bomb.turn;
     assert_eq!(bomb.step(Direction::East), MoveOutcome::Moved);
+    bomb.apply_dungeon_post_turn_effects_after_turn(turn_before, &bomb_dir)
+        .unwrap();
     let taken = before - bomb.party[0].hp;
     assert!(
         (1..=8).contains(&taken),
@@ -955,12 +961,21 @@ fn dungeon_fall_trap_chain_restores_snapshot_grid_without_exterior_coordinate_re
     assert!(state.diagnostics.iter().any(|note| note.contains("trap-chain coordinate (2, 1)") || note.contains("trap-chain coordinate (2, 1)")));
 }
 
+/// The bomb belongs to the post-action underfoot pass, not to the step:
+/// `dungeon-mode.md §8.1` heads its table "Post-action underfoot
+/// consequences". The step used to resolve it as well, so both fired and
+/// the original's one `Bomb Trap!` / `KABOOM!!` pair came out twice
+/// (measured by `qa/paired/dungeon-bomb-trap.tsv`, 2026-09-19). The step
+/// therefore moves the party and marks nothing; the pass that follows it
+/// on the same turn marks the cell and prints the pair.
 #[test]
-fn dungeon_bomb_trap_marks_cell_without_level_change() {
+fn dungeon_bomb_trap_marks_cell_in_the_post_action_pass() {
+    let dir = debug_game_dir();
     let mut grid = open_dungeon_record();
     grid[dungeon_cell_index(0, 2, 1)] = 0x62;
     let mut state = dungeon_state(grid, 0, 1, 1);
 
+    let turn_before = state.turn;
     assert_eq!(state.step(Direction::East), MoveOutcome::Moved);
 
     assert_eq!((state.player.x, state.player.y), (2, 1));
@@ -971,8 +986,28 @@ fn dungeon_bomb_trap_marks_cell_without_level_change() {
             level: 0,
         }
     );
-    assert_eq!(state.grid[dungeon_cell_index(0, 2, 1)], 0x6a);
+    assert_eq!(state.grid[dungeon_cell_index(0, 2, 1)], 0x62);
     assert_eq!(state.turn, 1);
+
+    state
+        .apply_dungeon_post_turn_effects_after_turn(turn_before, &dir)
+        .unwrap();
+
+    assert_eq!(state.grid[dungeon_cell_index(0, 2, 1)], 0x6a);
+    let pairs = state
+        .message_transcript
+        .iter()
+        .filter(|entry| entry.text.contains("Bomb Trap!"))
+        .count();
+    assert_eq!(pairs, 1);
+    assert_eq!(
+        state
+            .message_transcript
+            .iter()
+            .filter(|entry| entry.text.contains("KABOOM!!"))
+            .count(),
+        1
+    );
 }
 
 #[test]

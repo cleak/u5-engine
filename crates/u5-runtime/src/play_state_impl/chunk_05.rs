@@ -123,17 +123,16 @@ impl PlayState {
         if is_dungeon_fall_trap(tile) {
             return self.resolve_dungeon_fall_trap(scene, level, nx, ny, game_dir);
         }
-        if is_dungeon_bomb_trap(tile) {
-            self.grid[dungeon_cell_index(level, nx, ny)] |= 0x08;
-            self.advance_turn();
-            // `dungeon-mode.md` Section 8.1, bomb trap `0x62`/`0x6A`.
-            self.emit_message_line(DUNGEON_BOMB_TRAP_LINE);
-            self.message = DUNGEON_KABOOM_LINE.to_string();
-            // Section 8.1's bomb row carries the same damage helper as the
-            // pit row.
-            self.apply_dungeon_floor_trap_damage();
-            return Ok(MoveOutcome::Moved);
-        }
+        // The bomb trap is **not** resolved here. `dungeon-mode.md §8.1`
+        // heads its table "Post-action underfoot consequences", and the
+        // post-action pass already carries a `0x62`/`0x6A` arm. Resolving
+        // it on the step as well fired both: measured 2026-09-19
+        // (`qa/paired/dungeon-bomb-trap.tsv`), where the original answered
+        // the step with one `Bomb Trap!` / `KABOOM!!` pair and this engine
+        // printed two, took two damage sweeps and drew twice from the
+        // shared generator. The step leaves the party on the cell, so the
+        // underfoot pass sees it on the same turn and prints the pair in
+        // the same place the original does.
         if let Some(field) = dungeon_field_effect(tile) {
             // Section 8.1: "Both field lines print **before** their per-member
             // rolls, so the line appears even when nobody is affected."

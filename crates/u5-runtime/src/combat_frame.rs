@@ -1665,13 +1665,24 @@ impl PlayState {
             self.emit_combat_print(banner);
             // `commands.md §5.1`: "Every mode's turn loop opens its input line
             // with the same two steps: emit a newline into the message window,
-            // then draw that one triangle." That newline is the turn loop's,
-            // not the banner's - §8.1 already spent the banner's own on
-            // ending its line, "whatever the player types next is announced on
-            // a fresh row" - so there is one blank row between the colon row
-            // and the echo. The stock arena shows exactly that:
-            // `with bare hands:` / blank / ` Pass`.
-            self.push_explicit_blank_message_entry();
+            // then draw that one triangle."
+            //
+            // That newline costs a row only when the banner's last row was
+            // already full. `combat.md §8.1`: "These separate emissions still
+            // cost a row when the preceding text has exactly filled a row."
+            // `Avatar, armed with bare hands:` wraps to `with bare hands:`,
+            // exactly sixteen columns, so the wrap consumed the banner's own
+            // trailing newline and the loop's newline is what opens the fresh
+            // row - `with bare hands:` / blank / ` Pass`, which is what the
+            // stock arena shows. A banner ending short of the width does not
+            // get that blank: measured 2026-09-19
+            // (`qa/paired/combat-same-exit.tsv`), where the original reads
+            // `Short Sword:` / ` South` and this engine had a blank between
+            // them.
+            let banner_tail = banner.trim_end_matches('\n');
+            if crate::wrapped_final_row_columns(banner_tail) == crate::MESSAGE_WINDOW_WIDTH {
+                self.push_explicit_blank_message_entry();
+            }
         }
     }
 
