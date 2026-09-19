@@ -28,6 +28,9 @@ from audio_compare import load_mono
 
 WINDOW_SECS = 0.010
 SOUND_FRACTION = 0.10
+# Two bursts closer together than this are the two halves of one short
+# two-part sting rather than two separate stings.
+STING_CLUSTER_SECS = 0.10
 
 
 def bursts(path: pathlib.Path) -> tuple[list[float], float] | None:
@@ -71,7 +74,16 @@ def main() -> int:
             if not onsets:
                 print(f"   {side}: silent over {total:.1f}s")
                 continue
-            gaps = [b - a for a, b in zip(onsets, onsets[1:])]
+            # `audio.md §5.3`'s short two-part sting is two runs of tone
+            # with a calibrated silent hold between them, so one sting
+            # shows up as two bursts about 20-30 ms apart. Cluster those
+            # back together before measuring the spacing, or the median
+            # reports the gap *inside* a sting rather than between two.
+            stings = [onsets[0]]
+            for onset in onsets[1:]:
+                if onset - stings[-1] > STING_CLUSTER_SECS:
+                    stings.append(onset)
+            gaps = [b - a for a, b in zip(stings, stings[1:])]
             spacing = (
                 f"gaps {min(gaps) * 1000:.0f}..{max(gaps) * 1000:.0f} ms, "
                 f"median {sorted(gaps)[len(gaps) // 2] * 1000:.0f} ms"
@@ -79,8 +91,9 @@ def main() -> int:
                 else "one burst"
             )
             print(
-                f"   {side}: {len(onsets)} burst(s) over {total:.1f}s, "
-                f"first at {onsets[0]:.2f}s, last at {onsets[-1]:.2f}s; {spacing}"
+                f"   {side}: {len(onsets)} burst(s) in {len(stings)} sting(s) "
+                f"over {total:.1f}s, first at {onsets[0]:.2f}s, "
+                f"last at {onsets[-1]:.2f}s; {spacing}"
             )
     return 0
 
