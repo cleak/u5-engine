@@ -114,19 +114,32 @@ def main():
             body = fetch(path)
         except subprocess.CalledProcessError:
             continue
-        missing = []
+        missing, under_parent = [], []
         for line in body.splitlines():
             m = HEADING.match(line)
             if not m:
                 continue
             number, title = m.group(2), m.group(3).strip()
             total += 1
-            if (stem, number) not in cited:
-                uncited += 1
+            if (stem, number) in cited:
+                continue
+            uncited += 1
+            # A section whose *parent* is cited is usually implemented
+            # under the parent's citation - `sky_view.rs` says
+            # `view.md §4.2` and implements §4.2.3's row table in full.
+            # Those are separated out rather than dropped, because a real
+            # gap can hide under a cited parent too.
+            parent = number.rsplit(".", 1)[0] if "." in number else None
+            if parent and (stem, parent) in cited:
+                under_parent.append(f"    §{number} {title}")
+            else:
                 missing.append(f"    §{number} {title}")
-        if missing and (verbose or not only):
+        if (missing or under_parent) and (verbose or not only):
             report.append(f"{path}  ({len(missing)} uncited)")
             report.extend(missing)
+            if under_parent:
+                report.append(f"      ({len(under_parent)} with only the parent cited)")
+                report.extend(f"  {line}" for line in under_parent)
     print("\n".join(report))
     print(f"\nnumbered sections: {total}, uncited by the engine: {uncited}")
 
