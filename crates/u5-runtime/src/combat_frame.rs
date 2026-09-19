@@ -1744,6 +1744,20 @@ impl PlayState {
         self.random_range_u8(0, u8::MAX)
     }
 
+    /// `combat.md §9.1`: "The fleeing flag is re-evaluated at the head of
+    /// every fleeing turn … the classifier both sets **and clears** the
+    /// bit: a fleeing actor healed back above the classifier's clear
+    /// threshold stops fleeing and can no longer leave the arena." That is
+    /// what this does, so the flag is not latched.
+    ///
+    /// Not implemented: §9.1's other half - "The same pre-step block also
+    /// rolls a one-in-four chance to restore one point of that actor's
+    /// health." The section does not say where that draw sits relative to
+    /// the conditional morale roll below, and the two orderings put a
+    /// different number of draws in front of the step's own random-cardinal
+    /// draws on exactly the turns a fleeing actor takes them.
+    /// `cleak/u5-spec#285` asks; adding it on a reading would move the
+    /// shared PRNG stream for every fleeing turn in the game.
     fn combat_ai_actor_fleeing(&mut self, actor_slot: usize) -> bool {
         let Some(actor) = self.combat_actors.get(actor_slot).copied() else {
             return false;
