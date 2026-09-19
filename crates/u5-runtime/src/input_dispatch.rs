@@ -1019,7 +1019,7 @@ fn handle_active_shop_key_input(
                                     } else {
                                         None
                                     };
-                                append_active_shop_surcharge(
+                                shop_message_ignoring_surcharge(
                                     format_healer_treatment_outcome(outcome),
                                     surcharge,
                                 )
@@ -1206,7 +1206,7 @@ fn handle_active_shop_key_input(
                                             "\"That will be {bill} gold, please.\"{death_note}\n\n{INN_STAY_ENJOYABLE_LINE}\n\n{INN_ANYTHING_MORE_PROMPT}"
                                         ),
                                     };
-                                    append_active_shop_surcharge(message, surcharge)
+                                    shop_message_ignoring_surcharge(message, surcharge)
                                 }
                                 Err(err) => format_inn_error(err, speaker_is_female),
                             }
@@ -1262,7 +1262,7 @@ fn handle_active_shop_key_input(
                             let message =
                                 apply_paid_inn_rest(state, inn, outcome.quote.total_price);
                             let surcharge = apply_active_shop_surcharge(state);
-                            append_active_shop_surcharge(message, surcharge)
+                            shop_message_ignoring_surcharge(message, surcharge)
                         }
                         Err(err) => format_inn_error(err, speaker_is_female),
                     }
@@ -1320,7 +1320,7 @@ fn handle_active_shop_key_input(
                                 None => format!("{INN_THANKS_LINE}\n\n{INN_ANYTHING_MORE_PROMPT}"),
                             };
                             let surcharge = apply_active_shop_surcharge(state);
-                            append_active_shop_surcharge(message, surcharge)
+                            shop_message_ignoring_surcharge(message, surcharge)
                         }
                         Err(err) => format_inn_error(err, speaker_is_female),
                     }
@@ -1399,7 +1399,7 @@ fn handle_active_shop_key_input(
                                 outcome.bill
                             );
                             let surcharge = apply_active_shop_surcharge(state);
-                            append_active_shop_surcharge(message, surcharge)
+                            shop_message_ignoring_surcharge(message, surcharge)
                         }
                         Ok(outcome) => {
                             let message = format!(
@@ -1408,7 +1408,7 @@ fn handle_active_shop_key_input(
                                 outcome.bill
                             );
                             let surcharge = apply_active_shop_surcharge(state);
-                            append_active_shop_surcharge(message, surcharge)
+                            shop_message_ignoring_surcharge(message, surcharge)
                         }
                         Err(err) => format_inn_error(err, speaker_is_female),
                     }
@@ -1607,7 +1607,7 @@ fn handle_active_shop_key_input(
                 state.emit_message_line_continuing_row("Yes");
                 state.push_explicit_blank_message_entry();
             }
-            append_active_shop_surcharge(
+            shop_message_ignoring_surcharge(
                 format_tavern_outcome_with_shoppe(
                     outcome,
                     provision_quote_record_id,
@@ -1742,7 +1742,7 @@ fn handle_active_shop_key_input(
             } else {
                 None
             };
-            append_active_shop_surcharge(message, surcharge)
+            shop_message_ignoring_surcharge(message, surcharge)
         }
         ActiveShopSession::Reagent(s) => {
             // The declined-quote arm redraws this herbalist's list, so the
@@ -1856,7 +1856,7 @@ fn handle_active_shop_key_input(
                 }
                 outcome => format_horse_trader_outcome(outcome),
             };
-            append_active_shop_surcharge(message, surcharge)
+            shop_message_ignoring_surcharge(message, surcharge)
         }
         ActiveShopSession::ShipBroker(s) => {
             // Read before the mutable borrows below; `shops.md §6.1` adjusts
@@ -2000,7 +2000,7 @@ fn handle_active_shop_key_input(
                     })
                 })
                 .flatten();
-            append_active_shop_surcharge(
+            shop_message_ignoring_surcharge(
                 format_ship_broker_outcome(outcome, menu_record, offer_record, decline_record),
                 surcharge,
             )
@@ -2304,13 +2304,19 @@ fn apply_active_shop_surcharge(state: &mut PlayState) -> Option<ShopSurchargeOut
     outcome.applied.then_some(outcome)
 }
 
-fn append_active_shop_surcharge(
-    mut message: String,
-    surcharge: Option<ShopSurchargeOutcome>,
+/// `shops.md §6.2`: the Falsehood surcharge "is a gold-side effect only; it
+/// does not change shop stock, item quantities, or the quoted record text."
+/// The player sees and confirms the displayed price and then simply has less
+/// gold, which is what makes Faulinei's presence something to deduce rather
+/// than something the window announces.
+///
+/// So the outcome is deliberately dropped here rather than rendered. The
+/// parameter stays because every paid branch must still *run* the gate at its
+/// §6.2 point, and threading the result to this one place keeps that visible.
+fn shop_message_ignoring_surcharge(
+    message: String,
+    _surcharge: Option<ShopSurchargeOutcome>,
 ) -> String {
-    if let Some(outcome) = surcharge {
-        message.push_str(&format!(" Surcharge {} gold.", outcome.surcharge));
-    }
     message
 }
 
@@ -2765,7 +2771,7 @@ fn handle_arms_shop_key_input(
             speech,
         ),
     };
-    append_active_shop_surcharge(message, surcharge)
+    shop_message_ignoring_surcharge(message, surcharge)
 }
 
 /// **Measured** 2026-09-07 (`qa/paired/shop-arms-menus.tsv`,

@@ -5385,7 +5385,11 @@ fn active_shop_surcharge_applies_only_for_zero_shadowlord_sentinel() {
     // `shops.md` §8.C's published bill, resident text with no record.
     assert!(state.message.contains("\"That will be 3 gold for the"));
     assert!(state.message.contains("of ye,"));
-    assert!(state.message.contains("Surcharge 19 gold"));
+    // `shops.md` §6.2: the surcharge "is a gold-side effect only; it does not
+    // change shop stock, item quantities, or the quoted record text." The
+    // gold assertion above is the whole of the evidence it ran - 100 less the
+    // 3-gold bill less the 19-gold draw - and the window says nothing.
+    assert!(!state.message.contains("Surcharge"));
 }
 
 #[test]
