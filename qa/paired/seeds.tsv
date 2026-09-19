@@ -138,3 +138,4 @@ cast-blink	seed-cast-results	shares the cast-results caster: charges, reagents a
 cast-blink-overworld	seed-night-cast	shares the night-cast caster: Britannia overworld with charges and mana
 overworld-verbs	seed-night-cast	shares the night-cast overworld party
 use-moonstone-bury	seed-overworld-moonstone	night-cast overworld party plus every special, via seed_inventory specials=1
+combat-same-exit	seed-combat-room-party	the dungeon-room seat grown to three members with seed_inventory companions=3

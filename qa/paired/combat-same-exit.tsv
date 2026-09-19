@@ -1,0 +1,64 @@
+# `combat.md` Section 3 rule 2, the one published edge-helper line no
+# scenario has reached: "The first such actor attempting an edge stores the
+# cardinal direction if the shared byte is zero. In an encounter whose mode
+# has the high bit set, a later party actor choosing a different direction
+# is refused with a leading newline, `All must use the same exit!`, a
+# trailing newline, and the same 165 Hz bump tone."
+#
+# Three things have to hold at once, which is why nothing reached it:
+#
+#   - the encounter mode must carry the **high bit**. Only the dungeon-room
+#     entry is known to (`cleak/u5-spec#276` asks for the mode byte's
+#     published values), so this uses the dungeon-room seat that
+#     `combat-escape-refusal` uses;
+#   - there must be **two party-side actors**, one to seed the direction and
+#     one to be refused. Every combat and dungeon seed in the suite carried a
+#     solo party, so this one is seeded with companions;
+#   - the second actor must be **party-side**: Section 3 and Section 8's `K`
+#     row both say "a monster acting under player control is never refused
+#     with `All must use the same exit!`".
+#
+# The seed is `seed-combat-dungeon-room` grown to three members with
+# `cargo run -p u5-tui --example seed_inventory -- <profile> companions=3`,
+# which copies the Avatar's record and renames the copies. Clean-room safe:
+# the count comes from the command line, not from any asset.
+#
+# The step counts below are a first pass and are expected to need trimming
+# once the arena geometry is read off the capture - the Avatar's walk to an
+# edge and the second actor's walk to a *different* edge both depend on where
+# the room seats them, which `combat.md` Section 5.4 leaves to the arena
+# record.
+#
+# requires-seed: profile `seed-combat-room-party`
+both	wait	9000
+both	key	space
+both	wait	4000
+both	key	j
+both	wait	9000
+both	key	i
+both	wait	2500
+both	key	Up
+both	wait	6000
+both	shot	arena	The arena, with a three-member party
+both	key	Down
+both	wait	2000
+both	key	Down
+both	wait	2000
+both	key	Down
+both	wait	2000
+both	key	Down
+both	wait	2000
+both	key	Down
+both	wait	2500
+both	shot	first-out	The first actor walks south and off the edge
+both	key	Right
+both	wait	2000
+both	key	Right
+both	wait	2000
+both	key	Right
+both	wait	2000
+both	key	Right
+both	wait	2000
+both	key	Right
+both	wait	2500
+both	shot	second-east	The second actor tries the eastern edge instead
