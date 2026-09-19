@@ -701,6 +701,8 @@ pub struct PlayState {
     /// across four beats of `qa/paired/shrine-three-mantras.tsv`, and the
     /// paired harness never saw it because it compared only text.
     pub shrine_presentation_map: Option<MiscmapsCutsceneMap>,
+    /// `karma.md §7`'s approach walk, while the shrine presentation is up.
+    pub shrine_approach_walk: Option<crate::shrine_presentation::ShrineApproachWalk>,
     pub active_shop: Option<crate::shop_session::ActiveShopSession>,
     /// `shops.md §8.1`: the arms post-item prompt closes with `sir?`/`milady?`
     /// once a transaction has completed in this visit and with `then?` before

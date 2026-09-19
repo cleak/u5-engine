@@ -472,7 +472,27 @@ impl PlayState {
     /// delta is deliberate: the visual shell fed one frame's delta in twice
     /// and doubled the pace (`cleak/u5-engine#27`).
     pub fn advance_staged_narration_to(&mut self, now_secs: f64) -> bool {
-        for beat in self.staged_narration.advance_to(now_secs) {
+        // `karma.md §7`'s approach walk runs on the same clock, across the
+        // Approach-to-Kneel interval the staged hold below carries.
+        if let Some(walk) = self.shrine_approach_walk.as_mut() {
+            walk.advance_to(
+                now_secs,
+                crate::narration::bios_ticks_secs(crate::SHRINE_KNEEL_HOLD_BIOS_TICKS),
+            );
+        }
+        let released = self.staged_narration.advance_to(now_secs);
+        // §7: the meditation handler's "own first act is to replace the
+        // walking pose with the kneeling pose and repaint once", and "the
+        // Kneel record prints immediately after it". The approach record is
+        // emitted directly, so the first staged beat released while the
+        // presentation is up is that record.
+        if !released.is_empty()
+            && self.shrine_presentation_map.is_some()
+            && let Some(walk) = self.shrine_approach_walk.as_mut()
+        {
+            walk.kneel();
+        }
+        for beat in released {
             // An empty beat is a pure hold - a wait with nothing to print,
             // such as `karma.md §12`'s closing "ten world ticks". Emitting it
             // would spend a blank row the original does not.

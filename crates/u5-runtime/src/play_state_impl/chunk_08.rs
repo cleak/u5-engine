@@ -1385,14 +1385,18 @@ impl PlayState {
             // shrine's eleven-by-eleven display grid - record `1` of
             // `MISCMAPS.DAT`".
             //
-            // The approach walk that follows is not implemented: §7 gives its
-            // frame shape and cell path but not the two pose tiles, which are
-            // asked for in `cleak/u5-spec#273`. The backdrop and the
-            // suspension are what is published, and they are the bulk of the
-            // difference - this engine showed the overworld map, party sprite
-            // and all, for the whole meditation.
+            // The approach walk follows. It was unimplemented while §7 gave
+            // its frame shape and cell path but not the two pose tiles;
+            // `cleak/u5-spec#273` published both, and §7's "The two poses,
+            // exactly" table now carries their atlas indices and every cell
+            // of the path. See `crate::shrine_presentation`.
             self.shrine_presentation_map =
                 load_miscmaps_cutscene_map(game_dir, SHRINE_PRESENTATION_CUTSCENE_MAP_RECORD)?;
+            // §7's approach walk, which `cleak/u5-spec#273` unblocked by
+            // publishing the two pose tiles. It runs across the
+            // Approach-to-Kneel interval below.
+            self.shrine_approach_walk =
+                Some(crate::shrine_presentation::ShrineApproachWalk::new());
             self.emit_message_line(format!("\n{SHRINE_APPROACH_NARRATION}\n\n"));
             // `karma.md §12`'s entry table paces this: the kneel record, then
             // "After ten world ticks, record `29`: the question asking which

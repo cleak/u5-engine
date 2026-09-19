@@ -1,6 +1,18 @@
 # Use each of the three items the shipped party carries, to measure the
 # result lines `inventory.md` sections 6 and 7 describe but do not quote
 # (cleak/u5-spec#225).
+# The potion's effect is a lottery and a difference in it must be re-run
+# before it means anything. `inventory.md` Section 7 publishes a variation roll
+# on every consumed potion: "a variation roll gives one chance in sixteen to
+# force the Orange sleep effect and one chance in sixteen to replace the effect
+# with a random potion row". Two swings in sixteen print a word that is not the
+# selected bottle's, and this engine implements the roll
+# (`potion_effect_index`).
+#
+# Measured 2026-09-18, beat `third`: the two sides agreed on all thirteen rows
+# except the result word, where the original read `Failed!` and this engine
+# `Healed!` - the same shape `use-target-cancel` carries.
+#
 both	wait	9000
 both	key	space
 both	wait	4000

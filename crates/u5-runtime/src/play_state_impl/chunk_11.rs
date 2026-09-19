@@ -41,6 +41,7 @@ impl PlayState {
         // run out, not on the handler's return.
         if self.active_shrine.is_none() && !self.staged_narration_active() {
             self.shrine_presentation_map = None;
+            self.shrine_approach_walk = None;
         }
         // A rescue cinematic is already running for this defeat. The roster
         // stays Defeated until its restoration loop (`blackthorn.md §7` step

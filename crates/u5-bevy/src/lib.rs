@@ -16541,11 +16541,12 @@ fn render_blackthorn_audience_viewport(
 /// every active-object slot's type byte for its duration, so no actor is
 /// drawn over it, including the party.
 ///
-/// The approach walk's avatar is absent here: §7 gives its frames and cell
-/// path but not the walking and kneeling pose tiles, which are asked for in
-/// `cleak/u5-spec#273`. Frames 1-4 of the published walk draw "no avatar and
-/// no other actor at all", so a bare backdrop is what that part of the
-/// sequence should look like either way.
+/// The approach walk is drawn over it. §7's "The two poses, exactly" table
+/// gives the walking pose as the party's own on-foot sprite "stamped at
+/// `(5, 10)` on frame 5, stepping to `(5, 9)`, `(5, 8)`, `(5, 7)` and
+/// `(5, 6)`", and the kneeling pose at that last cell. Frames 1-4 draw "no
+/// avatar and no other actor at all", which is the bare backdrop.
+/// `cleak/u5-engine#30`; the tiles come from `cleak/u5-spec#273`.
 fn render_shrine_presentation_viewport(
     state: &PlayState,
     atlas: &TileAtlas,
@@ -16570,6 +16571,13 @@ fn render_shrine_presentation_viewport(
             let tile = map.tile(x, y).unwrap_or(0);
             blit_tile_id_to_viewport(&mut viewport, atlas, usize::from(tile), x, y)?;
         }
+    }
+    if let Some((tile, column, row)) = state
+        .shrine_approach_walk
+        .as_ref()
+        .and_then(|walk| walk.pose_tile())
+    {
+        blit_tile_id_to_viewport(&mut viewport, atlas, usize::from(tile), column, row)?;
     }
     Ok(Some(viewport))
 }
