@@ -828,10 +828,13 @@ fn town_open_object_chest_consumes_slot_trap_and_public_reward_pools() {
     assert_eq!(state.moral_standing, 6);
     assert!(state.visibility_dirty);
     assert_eq!(state.turn, 1);
-    assert!(state.message.contains("Opened object chest at (2, 1)"));
+    assert!(state.diagnostics.join(" ").contains("Opened object chest at (2, 1)"));
+    // The resolver's own `ACID!` went to the transcript; this engine note
+    // naming the slot and the damage is a diagnostic.
     assert!(
         state
-            .message
+            .diagnostics
+            .join(" ")
             .contains("Acid trap hit party member 2 for 20 HP.")
     );
     assert_eq!(state.party[1].hp, DEFAULT_PARTY_HP - 20);
@@ -881,7 +884,7 @@ fn town_get_object_chest_uses_chest_helper_before_blocking_object_refusal() {
     assert!(state.active_objects[1].is_empty());
     assert_eq!(state.grid[32 + 2], 16);
     assert_eq!(state.turn, 1);
-    assert!(state.message.contains("Got object chest at (2, 1)"));
+    assert!(state.diagnostics.join(" ").contains("Got object chest at (2, 1)"));
     assert!(state.message.contains("chest grants"));
 }
 
@@ -1114,7 +1117,10 @@ fn trapped_town_container_cannot_spring_twice() {
     });
 
     assert_eq!(state.open_facing(), MoveOutcome::ContainerOpened);
-    assert!(state.message.contains("trap"));
+    // The trap fired: `traps.md §3`'s own word went to the
+    // transcript through the resolver, and the engine note naming
+    // the slot and the damage went to `diagnostics`.
+    assert!(state.diagnostics.join(" ").to_lowercase().contains("trap"));
 
     // Every field the clear covers is zeroed, the trap flag included.
     let record = state.active_objects[1];

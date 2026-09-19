@@ -1117,12 +1117,36 @@ impl PlayState {
         }
         self.mark_visibility_dirty();
         self.advance_turn();
-        self.message = match trap_note {
-            Some(trap) => {
-                format!("{verb} object chest at ({x}, {y}); {trap}; {content_note}.")
-            }
-            None => format!("{verb} object chest at ({x}, {y}); {content_note}."),
-        };
+        // `commands.md §8.1`: a command "never prints tile ids, coordinates,
+        // active-object slot numbers, terrain-class names". This line did -
+        // `Opened object chest at (12, 7); ...` - which is an engine
+        // diagnostic in the message window, the same leak the Sceptre's
+        // dissolved-cell count was moved out of.
+        //
+        // What stays is the part the player is meant to read: `traps.md §4`
+        // has "the surface/town site prints its own trapped notice before
+        // the resolver runs", and the contents follow it. The verb and the
+        // cell go where the rest of this engine's bookkeeping goes.
+        //
+        // The surface chest's exact published transcript is a separate
+        // question - `containers.md §12`'s rendered-row table is the
+        // *dungeon* Get path, and §6 says only that the surface pools are
+        // "below" - so this keeps the engine's own wording for the two
+        // notes rather than inventing a shape. Asked as
+        // `cleak/u5-spec#292`.
+        // The resolver already printed the player's line -
+        // `traps.md §3`'s `ACID!`, `POISON!`, `BOMB!` or `GAS!` - through
+        // `emit_message_line`. What it *returns* is an engine note naming
+        // the slot and the damage, which the dungeon chest sibling in
+        // `finish_open_dungeon_chest` already routes to `diagnostics` with
+        // the same reasoning. This site put it in the message window.
+        match trap_note {
+            Some(trap) => self.push_diagnostic(format!(
+                "{verb} object chest at ({x}, {y}); {trap}"
+            )),
+            None => self.push_diagnostic(format!("{verb} object chest at ({x}, {y}).")),
+        }
+        self.message = format!("{content_note}.");
         Some(MoveOutcome::ContainerOpened)
     }
 

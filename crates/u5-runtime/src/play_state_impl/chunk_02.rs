@@ -1519,10 +1519,22 @@ impl PlayState {
         // bounds-check that value and therefore become safe no-ops, while the
         // party-wide Bomb and Gas families retain their published effects.
         let target_slot = self.mixer_trap_target_slot().unwrap_or(usize::MAX);
+        // `Mixing...` is printed *before* the resolver runs, because §6 step
+        // 6 prints it before step 7 compares the recipe and the resolver
+        // prints its own word through `emit_message_line`. Returning it
+        // instead would assign it to the slot after the resolver had already
+        // pushed `ACID!` to the transcript, inverting the two.
+        self.emit_message_line(format!("{MMIX_MIXING_MESSAGE}\n"));
+        // What the resolver *returns* is an engine note naming the slot and
+        // the damage; `finish_open_dungeon_chest` routes that to
+        // `diagnostics` and so does this. It was being appended to the
+        // mixer's player-facing line.
         let trap = self.apply_shared_trap_effect_to_slot(target_slot);
+        self.push_diagnostic(trap);
         // "emits a line break, [then] ... invokes the shared trap-effect
-        // resolver" - the break is the branch's whole contribution.
-        format!("{MMIX_MIXING_MESSAGE}\n{trap}")
+        // resolver" - the break is the branch's whole contribution, and the
+        // resolver's own line is the last thing printed.
+        String::new()
     }
 
     /// `traps.md §4` (M-Mix): the mixer supplies its own victim slot and
@@ -2766,14 +2778,33 @@ mod movement_magic_karma_traps_spec_tests {
         // so it is on the wrong-recipe path too. What follows it is the trap
         // resolver's own text and nothing between: step 7 gives the branch
         // "a line break" and no line of its own.
-        let mut lines = state.message.lines();
-        assert_eq!(lines.next(), Some(MMIX_MIXING_MESSAGE));
+        //
+        // Both are transcript rows rather than the message slot. They have
+        // to be: the resolver prints its own published word through
+        // `emit_message_line`, so a `Mixing...` *returned* to the slot would
+        // be assigned after `ACID!` had already been pushed and the two
+        // would come out in the wrong order.
+        let rows: Vec<String> = state
+            .message_entries()
+            .iter()
+            .rev()
+            .take(4)
+            .map(|entry| entry.text.clone())
+            .filter(|text| !text.is_empty())
+            .collect();
+        let mixing = rows
+            .iter()
+            .position(|text| text == MMIX_MIXING_MESSAGE)
+            .unwrap_or_else(|| panic!("`Mixing...` is not in the transcript tail: {rows:?}"));
+        // `rows` is reversed, so the trap word sits *before* `Mixing...`.
         assert!(
-            lines
-                .next()
-                .is_some_and(|line| !line.is_empty() && !line.starts_with("Mixed")),
-            "the trap line should follow `Mixing...` directly in {:?}",
-            state.message
+            mixing > 0,
+            "the trap line should follow `Mixing...` directly in {rows:?}",
+        );
+        let trap_line = &rows[mixing - 1];
+        assert!(
+            matches!(trap_line.as_str(), "ACID!" | "POISON!" | "BOMB!" | "GAS!"),
+            "`traps.md §3` prints exactly one of the four words, got {trap_line:?}",
         );
         assert_eq!(state.reagents[REAGENT_SULFUR_ASH], 0);
     }

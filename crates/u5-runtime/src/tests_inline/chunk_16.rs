@@ -1176,7 +1176,10 @@ BRITANNIA 11 21
             // `magic.md §6` step 7 gives the wrong-recipe branch "a line
             // break" and the trap resolver, and no line of its own. The
             // sentence between these two was this engine's composition.
-            "Mixing...\nAcid trap hit party member 1 for 5 HP."
+            // `traps.md §3`: the resolver prints its own word through
+        // `emit_message_line`, and what it returns is an engine note. The
+        // mixer's slot carries neither once both are where they belong.
+        ""
         );
         assert_eq!(state.party[0].hp, DEFAULT_PARTY_HP - 5);
     }
@@ -1362,8 +1365,16 @@ BRITANNIA 11 21
             .map(u64::from)
             .unwrap();
         let before = state.party.clone();
-        let message = state.wrong_mix_trap_message();
-        assert!(message.contains("Acid trap found no party member"));
+        let _ = state.wrong_mix_trap_message();
+        // The out-of-range guard's note is a diagnostic, not a line the
+        // mixer prints: `traps.md §3` gives the resolver exactly one of
+        // `ACID!`, `POISON!`, `BOMB!` and `GAS!` to print.
+        assert!(
+            state
+                .diagnostics
+                .join(" ")
+                .contains("Acid trap found no party member")
+        );
         assert_eq!(state.party, before);
     }
 
