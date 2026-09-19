@@ -19,7 +19,10 @@ fn main() {
     let dir = Path::new(&dir);
     let options = load_play_options_from_save(dir).expect("profile must hold a save");
     let state = PlayState::load_scene(dir, options).expect("scene must load");
-    println!("{:?}: party at ({}, {})", state.area, state.player.x, state.player.y);
+    println!(
+        "{:?}: party at ({}, {}) facing {:?}",
+        state.area, state.player.x, state.player.y, state.player.facing
+    );
     println!("party members: {}", state.party.len());
     for (index, member) in state.party.iter().enumerate() {
         let name = state

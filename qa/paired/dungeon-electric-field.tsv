@@ -1,0 +1,25 @@
+# `dungeon-mode.md §8.1`, electric contact: the step into an `0x83` cell
+# prints `Ouch!` then `Electric field!` before any destination test,
+# flashes, and pushes the party back to the cell it stepped from. Both
+# lines are on the coverage backlog.
+#
+# The seed stands one cell south of the field in Covetous facing North,
+# so a single Advance is the whole approach - `party_probe` reads the
+# facing out of the save rather than the scenario guessing it. Seeded
+# with `seed_position <profile> dungeon=37 level=3 x=1 y=6`, the ladder
+# cell directly below the `0x83` that `dungeon_class_scan` reports.
+#
+# The field damages the party, so a roster difference here is a
+# PRNG-parity result and not a text one.
+# requires-seed: the party one cell from an electric field, with a torch
+both	wait	9000
+both	key	space
+both	wait	4000
+both	key	j
+both	wait	9000
+both	key	i
+both	wait	2500
+both	shot	lit	Torch lit
+both	key	Up
+both	wait	4000
+both	shot	shock	Ouch! / Electric field!
