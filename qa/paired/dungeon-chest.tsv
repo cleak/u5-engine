@@ -1,0 +1,42 @@
+# The dungeon chest arms of `dungeon-mode.md §8.1`'s chest-command table,
+# which `dungeon-chest-refusals` could only take the *no-chest* half of:
+# its header says so - "the chest arms themselves still need a seat beside
+# a chest."
+#
+# The shipped file has three `0x4?` cells and every neighbour of all three
+# is a wall, which is why no seed ever sat on one. `dungeon_class_scan`
+# finds them and `seed_position` puts the party on the Deceit one:
+#
+#   seed_position <profile> dungeon=33 level=7 x=5 y=5
+#
+# The table's arms, in the order this scenario takes them:
+#
+#   G on a closed chest   `Get\n` then `Must open first!\n`
+#   O on a trapped chest  `Open-`, one trap word, then `\nChest opened\n`
+#   G on an open chest    `Get\n` then `contents\nof chest\nYou find:\n`
+#   O on an open cell     `Open-Already Open!` on the prefix's own row
+#
+# The trap word is one of `ACID!`, `POISON!`, `BOMB!` or `GAS!` and comes
+# off the shared trap resolver, so the `opened` beat may be a draw rather
+# than a fixed line; the first run is what says which.
+# requires-seed: the party standing on the Deceit wooden chest, with a torch
+both	wait	9000
+both	key	space
+both	wait	4000
+both	key	j
+both	wait	9000
+both	key	i
+both	wait	2500
+both	shot	lit	Torch lit, standing on the chest
+both	key	g
+both	wait	2500
+both	shot	closed	Get on a closed chest
+both	key	o
+both	wait	3500
+both	shot	opened	Open: the trap word and Chest opened
+both	key	g
+both	wait	3000
+both	shot	contents	Get on the open chest
+both	key	o
+both	wait	2500
+both	shot	already	Open-Already Open!
