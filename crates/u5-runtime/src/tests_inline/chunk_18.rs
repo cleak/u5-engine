@@ -761,7 +761,10 @@
         assert_eq!(stonegate.turn, 0);
         assert_eq!(stonegate.active_effect_tag, None);
         assert_eq!(stonegate.active_effect_counter, 0);
-        assert_eq!(stonegate.message, "Magic absorbed!");
+        // `audio.md §6.1` / `RETRACTIONS.md` R462: "The text is
+        // `Absorbed!` with a trailing newline." The earlier
+        // `Magic absorbed!` label is withdrawn.
+        assert_eq!(stonegate.message, SCENE_ABSORBED_CAST_MESSAGE);
 
         let mut blackthorn = test_state(open_grid(), 5, 5);
         blackthorn.area = Area::Town {
@@ -778,7 +781,7 @@
         assert_eq!(blackthorn.turn, 0);
         assert_eq!(blackthorn.active_effect_tag, None);
         assert_eq!(blackthorn.active_effect_counter, 0);
-        assert_eq!(blackthorn.message, "Magic absorbed!");
+        assert_eq!(blackthorn.message, SCENE_ABSORBED_CAST_MESSAGE);
     }
 
     #[test]

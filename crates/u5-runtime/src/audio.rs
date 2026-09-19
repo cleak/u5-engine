@@ -1142,6 +1142,27 @@ pub const PLAYER_SUMMON_ENVELOPE: EnvelopeSegment = EnvelopeSegment::new(5, 500,
 /// `audio.md §8.3` accepted moongate transit.
 pub const MOONGATE_TRANSIT_ENVELOPE: EnvelopeSegment =
     EnvelopeSegment::new(2, 2000, 30_000, 1, 5900);
+/// `audio.md §6.1`'s absorb cue, the manual envelope every absorbed cast
+/// plays: "phase increment 9800, idle count 1, 28000 iterations, initial
+/// comparison 1000 and comparison increment 2."
+///
+/// §6.1 gives it to the combat Negate Magic absorption, which "prints
+/// `Cast...\nAbsorbed!\n` before invoking that same manual envelope", and
+/// to the scene absorbers: "Stonegate always absorbs casts; Lord
+/// Blackthorn's Castle absorbs them while the Crown of Lord British is
+/// absent. Before a charge or mana is spent, this prints `Absorbed!\n`
+/// and plays a manual envelope cue (the same recipe as Negate Time's
+/// absorb branch)."
+///
+/// "Sound enablement controls audibility; this path has no failure
+/// glissando or `Failed!` tail."
+///
+/// The engine printed the line and played nothing. Measured 2026-09-19
+/// (`qa/paired/doom-endgame-audio.tsv`, beat `absorption`, via
+/// `qa/tools/audio_compare.py`): the original's span carries 6.5 s of
+/// tone and this engine's 0.2 s.
+pub const MAGIC_ABSORBED_ENVELOPE: EnvelopeSegment = EnvelopeSegment::new(2, 1000, 28_000, 1, 9800);
+
 /// `audio.md §8.7` endgame Dead-member restoration flourish.
 pub const ENDGAME_RESTORATION_ENVELOPE: EnvelopeSegment =
     EnvelopeSegment::new(1, 5000, 40_000, 1, 8800);
@@ -1778,6 +1799,8 @@ pub enum SoundEffect {
     BlackthornMovementStinger,
     /// `§8.6.2` fixed six-envelope Blackthorn rescue sequence.
     BlackthornRescueEnvelopes,
+    /// `audio.md §6.1`'s absorb cue. See [`MAGIC_ABSORBED_ENVELOPE`].
+    MagicAbsorbed,
     /// `karma.md §7.2`, the ordination arm's seven-note chime.
     ShrineOrdinationChime,
     /// `karma.md §7.2`, the accepted-offering arm's 920-run swell.
@@ -1872,6 +1895,7 @@ impl SoundEffect {
             }
             SoundEffect::BlackthornMovementStinger => two_part_sting(jitter),
             SoundEffect::BlackthornRescueEnvelopes => blackthorn_rescue_envelope_program(),
+            SoundEffect::MagicAbsorbed => envelope_program(MAGIC_ABSORBED_ENVELOPE),
             SoundEffect::ShrineOrdinationChime => shrine_ordination_chime_program(),
             SoundEffect::ShrineOfferingSwell => shrine_swell_program(
                 SHRINE_OFFERING_SWELL_PERIOD,

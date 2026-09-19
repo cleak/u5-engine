@@ -63,6 +63,14 @@ pub const DUNGEON_ROOM_ABSORBABLE_FIELD_SOURCE: u8 = 0x3c;
 /// not yet settled - the character in the capture is named Avatar.
 pub const COMBAT_ABSORBED_MESSAGE: &str = "Avatar is absorbed!";
 
+/// `audio.md §6.1`'s label for a cast an absorbing scene swallows -
+/// Stonegate always, Blackthorn's Castle while the Crown is absent.
+///
+/// The earlier `Magic absorbed!` is **withdrawn** (`RETRACTIONS.md`
+/// R462, quoted in §6.1), and this engine still printed it from
+/// `cast_time_stop`.
+pub const SCENE_ABSORBED_CAST_MESSAGE: &str = "Absorbed!";
+
 /// `display-driver-abi.md §10`: the tiles the driver's **red/green
 /// plane-swap** mode covers - "`0x05`, `0x1E`, `0x1F`, `0x4C`, `0xCA`,
 /// `0x20..0x26`, `0x30..0x37` and `0x60..0x6F`".

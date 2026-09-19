@@ -684,7 +684,11 @@ impl PlayState {
             && spell_index != Some(TIME_STOP_SPELL_INDEX)
             && self.current_scene_absorbs_casts()
         {
-            self.message = "Absorbed!".to_string();
+            self.message = SCENE_ABSORBED_CAST_MESSAGE.to_string();
+            // `audio.md §6.1`: an absorbing scene "prints `Absorbed!\n`
+            // **and plays a manual envelope cue**". The engine printed the
+            // line and played nothing.
+            self.emit_sound_effect(SoundEffect::MagicAbsorbed);
             return Ok(MoveOutcome::Blocked);
         }
         if spell_index.is_some()

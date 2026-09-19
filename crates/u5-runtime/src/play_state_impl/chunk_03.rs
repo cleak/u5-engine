@@ -5970,7 +5970,16 @@ impl PlayState {
 
     pub fn cast_time_stop(&mut self, caster_index: usize) -> MoveOutcome {
         if self.current_scene_absorbs_casts() {
-            self.message = "Magic absorbed!".to_string();
+            // `audio.md §6.1`, corrected 2026-09-10: "*the earlier `Magic
+            // absorbed!` label and set-flag reading of the castle gate are
+            // withdrawn*" (`RETRACTIONS.md` R462). The published label is
+            // `Absorbed!`, the same one every other absorbing scene
+            // prints, and this engine still carried the withdrawn one.
+            self.message = SCENE_ABSORBED_CAST_MESSAGE.to_string();
+            // §6.1: the absorbing scene "prints `Absorbed!\n` and plays a
+            // manual envelope cue (the same recipe as Negate Time's absorb
+            // branch)" - before a charge or mana is spent.
+            self.emit_sound_effect(SoundEffect::MagicAbsorbed);
             return MoveOutcome::Blocked;
         }
         if let Some(outcome) =
