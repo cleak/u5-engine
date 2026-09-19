@@ -930,6 +930,29 @@ pub const BLACKTHORN_CAPTIVE_CELL_SCENE: u8 = crate::SCENE_LORD_BLACKTHORNS_CAST
 pub const BLACKTHORN_CAPTIVE_CELL_X: u8 = 10;
 pub const BLACKTHORN_CAPTIVE_CELL_Y: u8 = 7;
 
+/// The floor `(10, 7)` is on.
+///
+/// `blackthorn.md §3` gives the handoff as "scene byte eighteen ... with
+/// local position `(10, 7)`" and calls the scene and position "the complete
+/// persistent handoff" - it never names a floor, which is asked as
+/// `cleak/u5-spec#281`. This engine read the omission as floor zero.
+///
+/// Measured from the shipped map instead. At `(10, 7)`:
+///
+/// - **floor -1** has `4b bb 4b 4f 4b bb 4b` one row below it - window,
+///   window-barred door, window, repeating - under a row carrying the
+///   torches `0xb0` and `0xb1`. That is a cell block.
+/// - **floor 0** has the castle's yard, which is what this engine drew: a
+///   fully lit outdoor scene with a wind banner along the bottom edge.
+///
+/// Measured 2026-09-19 (`qa/paired/bt-audience.tsv`, beats `ask3`..`ask5`,
+/// reading 72 of 121 viewport cells): the original shows a small lit
+/// interior with guards and chests where this engine showed stables and
+/// horses, while agreeing on every message-window beat. The basement is
+/// the floor that matches. `npc-schedules.md` calls the basement floor byte
+/// `0xFF`, which is this value.
+pub const BLACKTHORN_CAPTIVE_CELL_FLOOR: i8 = -1;
+
 /// `blackthorn.md §3` setup step 1's capture narration, measured 2026-09-09
 /// (`qa/paired/bt-correct.tsv`, beat `after`). Two sentences, two rows apart:
 ///

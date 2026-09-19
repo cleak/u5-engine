@@ -5354,7 +5354,7 @@ impl PlayState {
         prefix: &str,
     ) -> io::Result<MoveOutcome> {
         let scene = Scene::new(BLACKTHORN_CAPTIVE_CELL_SCENE)?;
-        let floor = 0i8;
+        let floor = crate::blackthorn::BLACKTHORN_CAPTIVE_CELL_FLOOR;
         let (grid, beacon_sources) =
             load_town_runtime_floor_with_beacon_sources(game_dir, scene, floor, self.clock.hour)?;
         self.grid = grid;

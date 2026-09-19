@@ -2231,11 +2231,16 @@
         // blackthorn.md §4: "A correct answer ruins that shrine and
         // costs five points of moral standing."
         assert_ne!(state.shrine_ruin_flags[0], 0);
+        // The captive cell is in the basement. `blackthorn.md §3` gives the
+        // scene and `(10, 7)` and never names a floor
+        // (`cleak/u5-spec#281`); floor -1 is the one whose map holds a cell
+        // block at that position, and floor 0 is the castle yard this used
+        // to assert. See `BLACKTHORN_CAPTIVE_CELL_FLOOR`.
         assert_eq!(
             state.area,
             Area::Town {
                 scene,
-                floor: 0
+                floor: crate::blackthorn::BLACKTHORN_CAPTIVE_CELL_FLOOR
             }
         );
         assert_eq!(
