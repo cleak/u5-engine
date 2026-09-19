@@ -1186,12 +1186,15 @@ pub const fn combat_default_death_drop_gate_accepts_inclusive(
     roll_1_to_30 <= drop_cap
 }
 
-/// `combat.md §5` monster placement: a placed monster's base-step is the
-/// class speed seed randomised by a uniform `[-4, +3]` adjustment,
-/// reverted to the unadjusted seed whenever the adjusted value would
-/// exceed thirty. The published rule only names the upper revert; an
-/// adjustment that would drive the value below zero is reverted the same
-/// way rather than wrapping.
+/// `combat.md §5.2` monster placement: a placed monster's base-step is
+/// the class speed seed randomised by a uniform `[-4, +3]` adjustment,
+/// "reverted to the class's unmodified speed rating" whenever the result
+/// exceeds thirty - "it does not clamp to the boundary".
+///
+/// The underflow arm was this engine's own reading while §5 named only
+/// the upper revert. §5.2 now publishes it, and from the same cause: "A
+/// very slow class is protected from wrapping below zero by the same
+/// revert, because an eight-bit underflow also fails the unsigned test."
 pub const fn combat_placement_base_step(speed_seed: u8, adjust_roll_0_to_7: u8) -> u8 {
     let adjusted = speed_seed as i16 + (adjust_roll_0_to_7 % 8) as i16 - 4;
     if adjusted > COMBAT_PLACEMENT_BASE_STEP_MAX as i16 || adjusted < 0 {
