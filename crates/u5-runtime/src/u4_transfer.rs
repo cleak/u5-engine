@@ -288,12 +288,12 @@ pub fn commit_u4_transfer_save(
         &game_dir.join(U4_TRANSFER_U5_SEED_GAM_FILENAME),
         U4_TRANSFER_U5_SEED_GAM_FILENAME,
     )?;
-    let brit_ool = read_brit_ool_plane(game_dir)?;
+    let underworld_plane = read_u5_seed_underworld_plane(game_dir)?;
     let avatar = apply_u4_transfer_to_save(&mut save, source, overrides)
         .map_err(|err| io::Error::new(io::ErrorKind::InvalidData, err))?;
 
     let mut saved_ool = vec![0; SAVED_OOL_LEN];
-    saved_ool[OOL_PLANE_LEN..].copy_from_slice(&brit_ool);
+    saved_ool[OOL_PLANE_LEN..].copy_from_slice(&underworld_plane);
     write_disk_file(&game_dir.join(SAVED_OOL_FILENAME), saved_ool)?;
     write_disk_file(&game_dir.join(SAVED_GAM_FILENAME), save)?;
 
@@ -334,7 +334,19 @@ fn normalize_u4_transfer_name(
     Ok(name)
 }
 
-fn read_brit_ool_plane(game_dir: &Path) -> io::Result<Vec<u8>> {
+/// `u4-transfer.md §8`'s commit step 1: "Compose the object-overlay
+/// companion by zeroing the first 256-byte half - the surface table - and
+/// leaving the loaded `INIT.OOL` seed in the second 256-byte half, which
+/// is the underworld table."
+///
+/// So the plane this reads is `INIT.OOL`'s, and it lands in the *second*
+/// half. It was called `read_brit_ool_plane`, which names the file §8
+/// goes out of its way to say is **not** involved: "the shipped surface
+/// seed `BRIT.OOL` is empty, so a blank first half followed by" the
+/// `INIT.OOL` bytes "is the normal surface-first interpretation specified
+/// in `formats/ool.md`". A reader checking the commit against §8 was
+/// being pointed at the wrong file by the name alone.
+fn read_u5_seed_underworld_plane(game_dir: &Path) -> io::Result<Vec<u8>> {
     let bytes = read_disk_file(&game_dir.join(U4_TRANSFER_U5_SEED_OOL_FILENAME))?;
     if bytes.len() != OOL_PLANE_LEN {
         return Err(io::Error::new(
