@@ -3,11 +3,15 @@
 # `0x60`, so the same cell searched again reports
 # `Nothing hidden\nin the pit.` Both lines are on the coverage backlog.
 #
-# The party stands on the pit and searches `Dir-Here`, so facing cannot
-# choose the cell. Seeded with
-# `seed_position <profile> dungeon=33 level=0 x=3 y=0`, which
-# `dungeon_class_scan` reports as a `0x61` cell.
-# requires-seed: the party standing on a secret pit in Deceit, with a torch
+# The party stands one cell *south* of the pit and searches `Dir-Ahead`,
+# facing North. Standing on the cell does not work: `0x61` is also the
+# visible fall trap, and the underfoot pass drops the party to the level
+# below on the first turn - measured 2026-09-19, where both sides
+# answered the Ignite torch turn with `Pit Trap!` / `Falling...` /
+# `      ...splat!` and the search that followed was on another level.
+# Seeded with `seed_position <profile> dungeon=33 level=0 x=3 y=3`;
+# `find_tile at=3,2` reads the pit and `at=3,3` the floor below it.
+# requires-seed: the party one cell south of a secret pit in Deceit, with a torch
 both	wait	9000
 both	key	space
 both	wait	4000
@@ -18,11 +22,11 @@ both	wait	2500
 both	shot	lit	Torch lit
 both	key	s
 both	wait	1500
-both	key	Down
+both	key	Up
 both	wait	3000
 both	shot	pit	A pit!
 both	key	s
 both	wait	1500
-both	key	Down
+both	key	Up
 both	wait	3000
 both	shot	again	Nothing hidden in the pit.

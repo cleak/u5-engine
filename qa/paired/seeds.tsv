@@ -145,7 +145,7 @@ hidden-treasure-search	seed-hidden-treasure	built with seed_position plane=under
 dungeon-fountain-heal	seed-dungeon-fountain-heal	the dungeon-look party re-placed on the one heal fountain outside Deceit
 dungeon-fountain-poison	seed-dungeon-fountain-poison	the dungeon-look party re-placed on the shipped poison fountain
 dungeon-fountain-bad-taste	seed-dungeon-fountain-bad-taste	the dungeon-look party re-placed on a bad-taste fountain in Deceit
-dungeon-search-pit	seed-dungeon-search-pit	the dungeon-look party re-placed on a 0x61 secret pit
+dungeon-search-pit	seed-dungeon-search-pit	the dungeon-look party re-placed one cell south of a 0x61 secret pit
 dungeon-electric-field	seed-dungeon-electric-field	the dungeon-look party re-placed one cell south of a Covetous electric field
 dungeon-bomb-trap	seed-dungeon-bomb-trap	the dungeon-look party re-placed one wrapped step from a Despise bomb trap
 overworld-falls	seed-overworld-falls	built with seed_position plane=britannia x=54 y=136, one cell north of the falls
