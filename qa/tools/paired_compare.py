@@ -71,6 +71,60 @@ def frame_rect(size: tuple[int, int]) -> tuple[int, int, float, float]:
     return (width - frame_w) // 2, 0, frame_w / 320.0, height / 200.0
 
 
+# The two shapes a usable capture's content can have. A DOSBox capture is the
+# raw 320x200 frame scaled evenly, so its content carries the frame's own
+# pixel aspect of 1.6. The engine presents that frame at the 4:3 display
+# aspect (`DISPLAY_PIXEL_ASPECT`, 1.20), so its content carries 1.333. Both
+# are frames; neither tolerance alone admits the other, which is why this is
+# a pair rather than a single value.
+FRAME_CONTENT_ASPECTS = (320 / 200, 4 / 3)
+FRAME_ASPECT_TOLERANCE = 0.12
+
+
+def capture_is_frame_filling(image: "Image.Image") -> bool:
+    """Does this capture hold the game frame and nothing else?
+
+    `frame_rect` maps the frame through the capture's own rect, which is
+    right when the capture *is* the frame. It is silently wrong when it is
+    not: a window capture that caught the desktop, or a frame mid-resize,
+    samples every cell from the wrong pixels and decodes to blank text and a
+    shifted viewport. Both read as findings - a blank message window scores
+    as `stock-idle`, and a shifted viewport as a large constant difference on
+    every beat of the scenario.
+
+    Measured 2026-09-18: `use-specials`, `cove-herbalist`, `codex-enter` and
+    `town-talk-nonspeaker` all captured at 1920x1080 with the frame occupying
+    a 543x1037 portrait region. Their whole message windows decoded blank and
+    their viewports differed by 52, 31, 42 and 16 cells identically on every
+    beat, which is the signature of a fixed offset rather than of anything the
+    scenario does. `cleak/u5-engine#39` was filed on one of them, twice, with
+    two different confident diagnoses, before the lit-cell map caught it.
+
+    The test is the content's shape: the frame is 320x200 whatever it was
+    scaled to, so its bounding box carries that aspect. A capture whose
+    content is a different shape is not the frame.
+    """
+    width, height = image.size
+    if (width, height) == (640, 400):
+        return True
+    pixels = image.convert("RGB").load()
+    background = pixels[width - 1, height - 1]
+    min_x, min_y, max_x, max_y = width, height, -1, -1
+    step = max(1, min(width, height) // 200)
+    for y in range(0, height, step):
+        for x in range(0, width, step):
+            if pixels[x, y] != background:
+                min_x, max_x = min(min_x, x), max(max_x, x)
+                min_y, max_y = min(min_y, y), max(max_y, y)
+    if max_x < 0 or max_y <= min_y:
+        return False
+    aspect = (max_x - min_x + 1) / (max_y - min_y + 1)
+    return any(
+        abs(aspect - expected) <= FRAME_ASPECT_TOLERANCE
+        for expected in FRAME_CONTENT_ASPECTS
+    )
+
+
 # `text-output.md §10.1`: window 2 is the message window at `(24, 11)`-`(39,
 # 23)`. The panel above it, rows `0..10` of the same columns, is window 1 - the
 # party roster, the food/gold line and the date. It is as deterministic as the
@@ -101,6 +155,10 @@ def decode_region(
     image = Image.open(path).convert("RGB")
     width, height = image.size
     if width < 320 or height < 200:
+        return None
+    # A capture that is not the frame decodes to nonsense rather than to
+    # nothing, which is worse. See `capture_is_frame_filling`.
+    if not capture_is_frame_filling(image):
         return None
     origin_x, origin_y, scale_x, scale_y = frame_rect(image.size)
     pixels = image.load()
@@ -714,7 +772,7 @@ def compare_cached(artifact: pathlib.Path, cache: dict) -> tuple:
 
 
 # Bump when a classifier change would alter a cached verdict.
-CACHE_VERSION = 26
+CACHE_VERSION = 28
 
 
 # Some scenarios are explicitly a lottery: their own headers say so. The night
@@ -942,6 +1000,13 @@ def main() -> None:
         status = (
             "PROBE"
             if is_probe(scenario)
+            # Every beat unusable is a failed capture, not a clean run. A
+            # scenario whose captures were not the game frame has measured
+            # nothing and must be re-run; reporting it as a match because
+            # nothing differed is how `use-specials` read clean while its
+            # whole message window decoded blank.
+            else "RERUN"
+            if same == 0 and differ == 0 and skipped
             else "RERUN"
             if idle or lottery
             else (

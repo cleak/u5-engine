@@ -27,7 +27,7 @@ import sys
 
 from PIL import Image
 
-from paired_compare import frame_rect
+from paired_compare import capture_is_frame_filling, frame_rect
 
 VIEWPORT_LEFT, VIEWPORT_TOP = 8, 8
 VIEWPORT_SIZE = 176
@@ -54,6 +54,11 @@ def viewport_cell_histograms(path: pathlib.Path) -> list[dict] | None:
     try:
         image = Image.open(path).convert("RGB")
     except OSError:
+        return None
+    # Same guard as the text decoders: a capture that is not the frame
+    # samples every cell from the wrong pixels, and the viewport's version of
+    # that is a large constant difference on every beat.
+    if not capture_is_frame_filling(image):
         return None
     origin_x, origin_y, scale_x, scale_y = frame_rect(image.size)
     box = (
