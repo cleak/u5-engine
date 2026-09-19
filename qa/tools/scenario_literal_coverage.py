@@ -32,7 +32,7 @@ import re
 import sys
 
 from paired_compare import COLS, LEFT, decode, decode_panel, decode_region
-from spec_literal_coverage import candidates
+from spec_literal_coverage import NON_CONTRACT_DOCUMENTS, candidates
 
 WHITESPACE = re.compile(r"\s+")
 # The glyph matcher in `paired_compare.decode` cannot separate this font's
@@ -114,6 +114,13 @@ def main() -> int:
     spec_dir = pathlib.Path(sys.argv[1])
     published: set[str] = set()
     for path in spec_dir.rglob("*.md"):
+        # The same exclusion `spec_literal_coverage` applies: a wording
+        # quoted only in `RETRACTIONS.md` is one the specification has
+        # taken back, so the original does not print it and no capture
+        # can ever show it. Counting it here would put withdrawn text in
+        # the coverage backlog as though a scenario owed it.
+        if path.name in NON_CONTRACT_DOCUMENTS:
+            continue
         published |= candidates(path.read_text(errors="replace"))
 
     seen_text = []
