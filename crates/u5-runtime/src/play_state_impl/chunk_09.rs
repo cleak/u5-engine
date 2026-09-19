@@ -4306,6 +4306,12 @@ impl PlayState {
         // at the end, "whichever path was taken".
         let pass = static_tile_animation_pass(self.animation.frame);
         self.animation.tick_static_tiles();
+        // `karma.md §7` / `animation.md §5`: while the shrine presentation's
+        // kneeling pose is on screen the per-slot animator cycles its
+        // four-frame family. It rides the same tick as the §6 pass.
+        if let Some(walk) = self.shrine_approach_walk.as_mut() {
+            walk.tick_kneeling_frame();
+        }
         // `cleak/u5-spec#179`: the display driver's water animator advances
         // one step per world tick through sixteen phases, on one global
         // counter shared by its rotation and composite stages. It rides the same

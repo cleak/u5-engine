@@ -1395,8 +1395,9 @@ impl PlayState {
             // §7's approach walk, which `cleak/u5-spec#273` unblocked by
             // publishing the two pose tiles. It runs across the
             // Approach-to-Kneel interval below.
-            self.shrine_approach_walk =
-                Some(crate::shrine_presentation::ShrineApproachWalk::new());
+            let mut walk = crate::shrine_presentation::ShrineApproachWalk::new();
+            walk.seed_animator(self.prng_state);
+            self.shrine_approach_walk = Some(walk);
             self.emit_message_line(format!("\n{SHRINE_APPROACH_NARRATION}\n\n"));
             // `karma.md §12`'s entry table paces this: the kneel record, then
             // "After ten world ticks, record `29`: the question asking which

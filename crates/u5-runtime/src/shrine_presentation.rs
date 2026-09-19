@@ -39,6 +39,22 @@ pub const SHRINE_WALK_LAST_ROW: usize = 6;
 pub const SHRINE_KNEELING_POSE_TILE: u16 = 0x16C;
 pub const SHRINE_KNEELING_POSE_FAMILY: [u16; 4] = [0x16C, 0x16D, 0x16E, 0x16F];
 
+/// `animation.md §5`: "from the third the slot either returns to the base -
+/// on a one-in-four roll - and holds it for six ticks, or rewinds to the
+/// first and climbs again".
+pub const SHRINE_KNEELING_BASE_HOLD_TICKS: u8 = 6;
+
+/// §5's gate arithmetic, "exact rather than approximate: both rolls reduce a
+/// fifteen-bit generator value modulo 256, so the coin is a true one-in-two
+/// and the re-base a true one-in-four, with none of the modulo bias a
+/// narrower reduction would introduce". `U5Prng::next_range_u16(0, 255)` is
+/// that reduction exactly - it masks the state to fifteen bits and takes it
+/// modulo the width.
+///
+/// Which bits carry each decision is not published, only that the
+/// probabilities are exact; these take the low ones.
+pub const SHRINE_KNEELING_ROLL_HIGH: u16 = 255;
+
 /// §7 "The altar's own cell": tile `0xB2`, "the only cell of the record
 /// holding that tile", at `(5, 5)` - one row above the walk's last cell.
 pub const SHRINE_ALTAR_CELL: (usize, usize) = (SHRINE_WALK_COLUMN, 5);
@@ -73,6 +89,17 @@ pub struct ShrineApproachWalk {
     step: u8,
     /// Set once the meditation handler has replaced the pose.
     kneeling: bool,
+    /// Which member of the kneeling family is displayed: 0 is the base.
+    kneel_frame: u8,
+    /// Ticks still owed to §5's six-tick hold after a return to the base.
+    kneel_hold: u8,
+    /// The animator's own generator. `animation.md §5` gives the gate
+    /// arithmetic but not whether the animator shares the gameplay stream,
+    /// and spending gameplay draws on a presentation would shift every roll
+    /// the meditation makes afterwards. This is seeded from the gameplay
+    /// state once, at the moment the presentation starts, and advanced
+    /// independently - the published distribution without the side effect.
+    kneel_prng: u16,
 }
 
 impl ShrineApproachWalk {
@@ -103,6 +130,60 @@ impl ShrineApproachWalk {
     pub fn kneel(&mut self) {
         self.step = SHRINE_APPROACH_WALK_WORLD_STEPS;
         self.kneeling = true;
+    }
+
+    /// Seed the animator's generator. Called once, when the presentation
+    /// starts, from the gameplay state.
+    pub fn seed_animator(&mut self, seed: u16) {
+        self.kneel_prng = seed;
+    }
+
+    /// One animation tick of `animation.md §5`'s kneeling-family cycle.
+    ///
+    /// "The successors are emitted in ascending order, and from the third
+    /// the slot either returns to the base - on a one-in-four roll - and
+    /// holds it for six ticks, or rewinds to the first and climbs again.
+    /// Each decision point is additionally behind an exact fair coin, so a
+    /// frame changes on roughly half the eligible passes."
+    ///
+    /// Only the displayed frame moves; §7 is explicit that "its type value
+    /// reads the base for the whole meditation", which is why `pose` still
+    /// reports the kneeling pose and this only chooses the family member.
+    pub fn tick_kneeling_frame(&mut self) {
+        if !self.kneeling {
+            return;
+        }
+        if self.kneel_hold > 0 {
+            self.kneel_hold -= 1;
+            return;
+        }
+        let mut prng = crate::prng::U5Prng::new(self.kneel_prng);
+        let coin = prng.next_range_u16(0, SHRINE_KNEELING_ROLL_HIGH);
+        if coin % 2 != 0 {
+            // The fair coin decides whether this pass advances at all.
+            self.kneel_prng = prng.state();
+            return;
+        }
+        let last = (SHRINE_KNEELING_POSE_FAMILY.len() - 1) as u8;
+        if self.kneel_frame == last {
+            let rebase = prng.next_range_u16(0, SHRINE_KNEELING_ROLL_HIGH);
+            if rebase % 4 == 0 {
+                self.kneel_frame = 0;
+                self.kneel_hold = SHRINE_KNEELING_BASE_HOLD_TICKS;
+            } else {
+                // "rewinds to the first and climbs again" - the first
+                // successor, not the base. §5: "the base was never entered
+                // from anywhere but the third successor".
+                self.kneel_frame = 1;
+            }
+        } else {
+            self.kneel_frame += 1;
+        }
+        self.kneel_prng = prng.state();
+    }
+
+    pub fn kneeling_frame(&self) -> u8 {
+        self.kneel_frame
     }
 
     pub fn is_kneeling(&self) -> bool {
@@ -139,7 +220,12 @@ impl ShrineApproachWalk {
         match self.pose() {
             ShrinePose::None => None,
             ShrinePose::Walking { column, row } => Some((SHRINE_WALKING_POSE_TILE, column, row)),
-            ShrinePose::Kneeling { column, row } => Some((SHRINE_KNEELING_POSE_TILE, column, row)),
+            ShrinePose::Kneeling { column, row } => Some((
+                SHRINE_KNEELING_POSE_FAMILY[usize::from(self.kneel_frame)
+                    .min(SHRINE_KNEELING_POSE_FAMILY.len() - 1)],
+                column,
+                row,
+            )),
         }
     }
 }
@@ -147,6 +233,7 @@ impl ShrineApproachWalk {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use std::collections::BTreeSet;
 
     #[test]
     fn the_walk_draws_nothing_for_its_first_four_frames() {
@@ -206,6 +293,81 @@ mod tests {
                 column: SHRINE_WALK_COLUMN,
                 row: SHRINE_WALK_LAST_ROW
             }
+        );
+    }
+
+    /// `animation.md §5`, driven the way it says it drove the original:
+    /// "ten thousand ticks", checking the three claims it makes about the
+    /// result - the four values, the complete transition set, and that "the
+    /// base was never entered from anywhere but the third successor".
+    #[test]
+    fn the_kneeling_family_cycles_the_published_transition_set() {
+        let mut walk = ShrineApproachWalk::new();
+        walk.seed_animator(0x4321);
+        walk.kneel();
+        let mut seen = std::collections::BTreeSet::new();
+        let mut transitions = std::collections::BTreeSet::new();
+        let mut changes = 0usize;
+        let mut previous = walk.kneeling_frame();
+        seen.insert(previous);
+        for _ in 0..10_000 {
+            walk.tick_kneeling_frame();
+            let frame = walk.kneeling_frame();
+            seen.insert(frame);
+            if frame != previous {
+                transitions.insert((previous, frame));
+                changes += 1;
+            }
+            previous = frame;
+        }
+        assert_eq!(
+            seen,
+            BTreeSet::from([0, 1, 2, 3]),
+            "the displayed frame takes only those four values"
+        );
+        assert_eq!(
+            transitions,
+            BTreeSet::from([(0, 1), (1, 2), (2, 3), (3, 0), (3, 1)]),
+            "base to first, first to second, second to third, third to base              and third to first"
+        );
+        assert!(
+            transitions.iter().all(|(from, to)| *to != 0 || *from == 3),
+            "the base is only ever entered from the third successor"
+        );
+        // "a frame changes on roughly half the eligible passes" - the fair
+        // coin, blunted by the six-tick hold after each re-base.
+        assert!(
+            (2_000..6_000).contains(&changes),
+            "frame changed {changes} times in ten thousand ticks"
+        );
+    }
+
+    /// §5: from the third successor the slot "returns to the base - on a
+    /// one-in-four roll - and holds it for six ticks".
+    #[test]
+    fn a_return_to_the_base_holds_it() {
+        let mut walk = ShrineApproachWalk::new();
+        walk.seed_animator(0x1111);
+        walk.kneel();
+        let mut held = 0usize;
+        let mut run = 0usize;
+        let mut previous = walk.kneeling_frame();
+        for _ in 0..10_000 {
+            walk.tick_kneeling_frame();
+            let frame = walk.kneeling_frame();
+            if previous == 3 && frame == 0 {
+                run = 1;
+            } else if run > 0 && frame == 0 {
+                run += 1;
+            } else if run > 0 {
+                held = held.max(run);
+                run = 0;
+            }
+            previous = frame;
+        }
+        assert!(
+            held >= usize::from(SHRINE_KNEELING_BASE_HOLD_TICKS),
+            "the base was held for {held} ticks, fewer than the published six"
         );
     }
 
