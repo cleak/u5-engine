@@ -1358,10 +1358,21 @@ impl PlayState {
 
         self.message = if self.active_effect_tag == Some(effect_tag) {
             self.clear_active_effect_slot();
+            // `stats-panel.md §2.2.1` row 7: "U-Use of the Amulet, Crown or
+            // Black Badge while already worn (the shared toggle's removal
+            // arm)" is deferred for all three regalia.
+            self.stats_panel_command_refresh = crate::stats_panel::PanelRefreshMode::Deferred;
             remove_message.to_string()
         } else {
             self.active_effect_tag = Some(effect_tag);
             self.active_effect_counter = PERMANENT_ACTIVE_EFFECT_DURATION;
+            // Row 8: the Black Badge's install arm is deferred too, unlike
+            // the Amulet and Crown installs, which repaint inline (the
+            // shared set-timed-effect helper's immediate site in the
+            // seventy-four-site table).
+            if special_item_index == SPECIAL_ITEM_BLACK_BADGE_INDEX {
+                self.stats_panel_command_refresh = crate::stats_panel::PanelRefreshMode::Deferred;
+            }
             wear_message.to_string()
         };
         self.mark_visibility_dirty();

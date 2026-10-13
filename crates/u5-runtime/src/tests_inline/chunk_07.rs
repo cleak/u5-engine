@@ -1086,6 +1086,53 @@ fn worn_regalia_requires_owned_item_without_turn() {
     assert_eq!(town.message, "No Crown!");
 }
 
+/// `stats-panel.md §2.2.1`: the Amulet and Crown install arms repaint
+/// inline (the shared set-timed-effect helper's immediate site), but the
+/// Black Badge's install arm and every regalia's removal arm are deferred.
+#[test]
+fn worn_regalia_panel_refresh_matches_the_published_census() {
+    let mut town = test_state(open_grid(), 1, 1);
+    town.special_items[SPECIAL_ITEM_CROWN_LB_INDEX] = SPECIAL_ITEM_OWNED_VALUE;
+    town.use_worn_regalia(
+        SPECIAL_ITEM_CROWN_LB_INDEX,
+        CROWN_LB_ACTIVE_EFFECT_TAG,
+        "Crown",
+        "Thou dost don the Crown of Lord British...",
+        "Removed!",
+    );
+    assert_eq!(
+        town.stats_panel_command_refresh,
+        crate::stats_panel::PanelRefreshMode::Immediate
+    );
+
+    town.stats_panel_command_refresh = crate::stats_panel::PanelRefreshMode::Immediate;
+    town.use_worn_regalia(
+        SPECIAL_ITEM_CROWN_LB_INDEX,
+        CROWN_LB_ACTIVE_EFFECT_TAG,
+        "Crown",
+        "Thou dost don the Crown of Lord British...",
+        "Removed!",
+    );
+    assert_eq!(
+        town.stats_panel_command_refresh,
+        crate::stats_panel::PanelRefreshMode::Deferred
+    );
+
+    town.special_items[SPECIAL_ITEM_BLACK_BADGE_INDEX] = SPECIAL_ITEM_OWNED_VALUE;
+    town.stats_panel_command_refresh = crate::stats_panel::PanelRefreshMode::Immediate;
+    town.use_worn_regalia(
+        SPECIAL_ITEM_BLACK_BADGE_INDEX,
+        BLACK_BADGE_ACTIVE_EFFECT_TAG,
+        "Black Badge",
+        "Badge worn!",
+        "Removed!",
+    );
+    assert_eq!(
+        town.stats_panel_command_refresh,
+        crate::stats_panel::PanelRefreshMode::Deferred
+    );
+}
+
 #[test]
 fn hole_up_command_clears_the_shared_effect_before_prompting() {
     let mut town = test_state(open_grid(), 1, 1);
