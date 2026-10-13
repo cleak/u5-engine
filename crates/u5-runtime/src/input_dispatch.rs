@@ -1629,7 +1629,7 @@ fn handle_active_shop_key_input(
                 state.emit_message_line_continuing_row("Yes");
                 state.push_explicit_blank_message_entry();
             }
-            shop_message_ignoring_surcharge(
+            let tavern_message = shop_message_ignoring_surcharge(
                 format_tavern_outcome_with_shoppe(
                     outcome,
                     provision_quote_record_id,
@@ -1654,7 +1654,24 @@ fn handle_active_shop_key_input(
                     game_dir,
                 ),
                 surcharge,
-            )
+            );
+            // `tavern_quantity_echo`'s digit is the only one of this match
+            // arm's direct-assignment outcomes that a later key echoes onto
+            // (the continuation `Yes`/`No`). The row-open flag otherwise
+            // goes unmanaged here, same as every other direct `message =
+            // ...` assignment in the engine - but this one specific
+            // transition needs it accurate, so state it explicitly rather
+            // than inferring it for every tavern outcome's text, which
+            // regressed the mixer's own unrelated row accounting when tried
+            // generically (`cleak/u5-engine#41`).
+            if tavern_quantity_echo.is_some() {
+                if tavern_message.ends_with('\n') {
+                    state.close_message_row();
+                } else if !tavern_message.is_empty() {
+                    state.open_message_row();
+                }
+            }
+            tavern_message
         }
         ActiveShopSession::Sage(s) => {
             let mut sage_confirm_accepted = false;

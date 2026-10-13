@@ -684,18 +684,6 @@ impl PlayState {
         }
         let text = self.message.clone();
         self.push_message_transcript_lines(&text);
-        // A handler that assigns `message` directly (bypassing
-        // `emit_message_line`) leaves the row-open flag exactly where the
-        // *previous* print left it. `push_message_transcript_lines` does not
-        // update the flag itself, so without this the flag can still read
-        // "open" after flushing text that closed its own row - and a
-        // `emit_message_line_continuing_row` call right after this flush
-        // then appends onto the stale open entry instead of starting fresh.
-        // Measured: a tavern provision purchase assigns `message = "\n"`
-        // directly, closing the quantity prompt's row; the next key's `Yes`
-        // echo attached to that closed row instead of its own
-        // (`cleak/u5-engine#41`).
-        self.message_row_open_mid_line = !text.ends_with('\n');
         self.message_flushed = text;
         true
     }
