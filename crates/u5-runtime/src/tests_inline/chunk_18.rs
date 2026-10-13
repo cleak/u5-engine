@@ -694,7 +694,7 @@
         assert_eq!(state.wind, WindState::Calm);
         assert_eq!(state.party[0].mana, 3);
         assert_eq!(state.turn, 0);
-        assert_eq!(state.message, "None mixed!");
+        assert_eq!(state.message, "None mixed!\n");
     }
 
     #[test]
@@ -713,7 +713,7 @@
         assert_eq!(state.spell_charges[REL_HUR_SPELL_INDEX], 0);
         assert_eq!(state.party[0].mana, 1);
         assert_eq!(state.turn, 1);
-        assert_eq!(state.message, "M.P. too low!\nFailed!");
+        assert_eq!(state.message, "M.P. too low!\nFailed!\n");
     }
 
     #[test]

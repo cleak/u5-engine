@@ -1632,13 +1632,15 @@ impl PlayState {
     /// original reads `None mixed!` / blank / `Avatar, armed`, and this
     /// engine had no blank. `cleak/u5-engine#24`.
     ///
-    /// The close is applied here, at the combat banner boundary, rather
-    /// than by appending a feed to each result literal. §8's rule is
-    /// combat-scoped and those literals are shared with the town and
-    /// dungeon paths - `CastGateOutcome::message`, `GET_NOTHING_REFUSAL`,
-    /// `SEARCH_NOTHING_FOUND` - whose spacing nothing has measured.
-    /// Closing the row is the same rendered result without reaching into
-    /// paths the section does not cover.
+    /// `cleak/u5-spec#258` has since settled that these trailing feeds are a
+    /// property of the shared result text, not of this combat presentation:
+    /// `CastGateOutcome::message`, `GET_NOTHING_REFUSAL` and
+    /// `SEARCH_NOTHING_FOUND` now carry their own trailing newline and close
+    /// their row in every mode, town and dungeon included. This generic
+    /// close stays as the backstop for whatever other combat result text
+    /// does not yet carry one - calling it on an already-closed row is a
+    /// no-op (`close_message_row` only flips a flag), so it cannot double
+    /// the blank row those literals now produce on their own.
     fn close_combat_result_row_before_banner(&mut self) {
         self.close_message_row();
         // `combat_transcript_row_open` is deliberately **not** cleared

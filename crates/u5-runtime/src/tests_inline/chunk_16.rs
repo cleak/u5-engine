@@ -531,7 +531,7 @@ BRITANNIA 11 21
         assert_eq!(state.active_effect_tag, None);
         assert_eq!(state.active_effect_counter, 0);
         assert_eq!(state.turn, 1);
-        assert_eq!(state.message, "M.P. too low!\nFailed!");
+        assert_eq!(state.message, "M.P. too low!\nFailed!\n");
     }
 
     #[test]
@@ -1015,7 +1015,7 @@ BRITANNIA 11 21
 
         assert_eq!(state.food, 12);
         assert_eq!(state.turn, 0);
-        assert_eq!(state.message, "None mixed!");
+        assert_eq!(state.message, "None mixed!\n");
     }
 
     #[test]
@@ -1066,7 +1066,7 @@ BRITANNIA 11 21
 
         assert_eq!(state.gems, 0);
         assert_eq!(state.turn, 0);
-        assert_eq!(state.message, "None mixed!");
+        assert_eq!(state.message, "None mixed!\n");
         assert!(state.active_view_overlay.is_none());
     }
 

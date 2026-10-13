@@ -1039,7 +1039,7 @@
                 state.cast_spell_resource_gate(0, spell_index, DUNGEON_LEVEL_SPELL_COST);
 
             assert_eq!(outcome, Some(MoveOutcome::Blocked));
-            assert_eq!(state.message, "Not here!");
+            assert_eq!(state.message, "Not here!\n");
             // `magic.md §7`: the scene gate runs before charge consumption.
             assert_eq!(state.spell_charges[spell_index], 3);
             assert_eq!(state.party[0].mana, 20);
@@ -1075,7 +1075,7 @@
             let outcome = state.cast_spell_resource_gate(0, MAGIC_MISSILE_SPELL_INDEX, 1);
 
             assert_eq!(outcome, Some(MoveOutcome::Blocked));
-            assert_eq!(state.message, "Not here!");
+            assert_eq!(state.message, "Not here!\n");
             assert_eq!(state.spell_charges[MAGIC_MISSILE_SPELL_INDEX], 2);
             assert_eq!(state.party[0].mana, 9);
             assert_eq!(state.turn, 0);
@@ -1108,7 +1108,7 @@
             state.cast_spell_resource_gate(0, UUS_POR_SPELL_INDEX, DUNGEON_LEVEL_SPELL_COST),
             Some(MoveOutcome::Blocked)
         );
-        assert_eq!(state.message, "Not here!");
+        assert_eq!(state.message, "Not here!\n");
         assert_eq!(state.turn, 0);
     }
 
@@ -1134,7 +1134,7 @@
             Some(MoveOutcome::Blocked)
         );
         // R460: the level gate prints only the shared failure line.
-        assert_eq!(under_level.message, "Failed!");
+        assert_eq!(under_level.message, "Failed!\n");
         assert_eq!(under_level.spell_charges[GREAT_HEAL_SPELL_INDEX], 0);
         assert_eq!(under_level.party[0].mana, 9 - circle);
         assert_eq!(under_level.turn, 1);
@@ -1162,7 +1162,7 @@
             under_mana.cast_spell_resource_gate(0, GREAT_HEAL_SPELL_INDEX, GREAT_HEAL_COST),
             Some(MoveOutcome::Blocked)
         );
-        assert_eq!(under_mana.message, "M.P. too low!\nFailed!");
+        assert_eq!(under_mana.message, "M.P. too low!\nFailed!\n");
         assert_eq!(under_mana.spell_charges[GREAT_HEAL_SPELL_INDEX], 0);
         assert_eq!(under_mana.party[0].mana, circle - 1);
         assert_eq!(under_mana.turn, 1);

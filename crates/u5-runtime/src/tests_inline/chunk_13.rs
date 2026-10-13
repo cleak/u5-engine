@@ -21244,14 +21244,14 @@ fn cast_dispatcher_gate_matches_spec_order_and_messages() {
     assert_eq!(r, CastGateOutcome::NotHere);
     assert!(!r.consumed_charge());
     assert!(!r.consumed_mana());
-    assert_eq!(r.message(), "Not here!");
+    assert_eq!(r.message(), "Not here!\n");
 
     // No charges: None mixed!, no charge spent.
     let r = cast_dispatcher_gate(true, 0, 99, 8, 1);
     assert_eq!(r, CastGateOutcome::NoneMixed);
     assert!(!r.consumed_charge());
     assert!(!r.consumed_mana());
-    assert_eq!(r.message(), "None mixed!");
+    assert_eq!(r.message(), "None mixed!\n");
     // R461: the no-charge rejection is silent.
     assert!(!r.plays_failure_glissando());
 
@@ -21260,7 +21260,7 @@ fn cast_dispatcher_gate_matches_spec_order_and_messages() {
     assert_eq!(r, CastGateOutcome::ManaTooLowChargeOnly);
     assert!(r.consumed_charge());
     assert!(!r.consumed_mana());
-    assert_eq!(r.message(), "M.P. too low!\nFailed!");
+    assert_eq!(r.message(), "M.P. too low!\nFailed!\n");
     assert!(r.plays_failure_glissando());
 
     // Level too low: charge AND mana spent. R460: only the shared
@@ -21269,7 +21269,7 @@ fn cast_dispatcher_gate_matches_spec_order_and_messages() {
     assert_eq!(r, CastGateOutcome::LevelTooLowChargeAndMana);
     assert!(r.consumed_charge());
     assert!(r.consumed_mana());
-    assert_eq!(r.message(), "Failed!");
+    assert_eq!(r.message(), "Failed!\n");
     assert!(r.plays_failure_glissando());
 
     // All gates pass.

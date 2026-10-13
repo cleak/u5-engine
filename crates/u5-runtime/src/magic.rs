@@ -612,13 +612,20 @@ impl CastGateOutcome {
     /// earlier same-message claim: only the mana gate prints
     /// `M.P. too low!`, and it is followed by the shared `Failed!` line
     /// that the level gate prints on its own.
+    ///
+    /// The trailing newline on every non-empty arm is a property of this
+    /// text, not of the combat presentation that sometimes wraps it:
+    /// `cleak/u5-spec#258` settled that these results "have no leading
+    /// feed; the spell-input exchange has already closed its row" and
+    /// "their trailing feeds are present outside combat too"
+    /// (`cleak/u5-engine#24`).
     pub const fn message(self) -> &'static str {
         match self {
             CastGateOutcome::Cast => "",
-            CastGateOutcome::NotHere => "Not here!",
-            CastGateOutcome::NoneMixed => "None mixed!",
-            CastGateOutcome::ManaTooLowChargeOnly => "M.P. too low!\nFailed!",
-            CastGateOutcome::LevelTooLowChargeAndMana => "Failed!",
+            CastGateOutcome::NotHere => "Not here!\n",
+            CastGateOutcome::NoneMixed => "None mixed!\n",
+            CastGateOutcome::ManaTooLowChargeOnly => "M.P. too low!\nFailed!\n",
+            CastGateOutcome::LevelTooLowChargeAndMana => "Failed!\n",
         }
     }
 

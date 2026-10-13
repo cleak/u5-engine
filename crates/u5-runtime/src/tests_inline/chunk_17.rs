@@ -4349,7 +4349,7 @@
         assert_eq!(no_charge.spell_charges[OPEN_SPELL_INDEX], 0);
         assert_eq!(no_charge.party[0].mana, OPEN_SPELL_COST);
         assert_eq!(no_charge.turn, 0);
-        assert_eq!(no_charge.message, "None mixed!");
+        assert_eq!(no_charge.message, "None mixed!\n");
 
         let mut no_modeled_target = test_state(open_grid(), 1, 1);
         no_modeled_target.spell_charges[OPEN_SPELL_INDEX] = 1;

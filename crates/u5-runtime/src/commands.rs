@@ -1380,7 +1380,12 @@ pub const TOWN_BED_REST_SLEEP_LINE: &str = "Zzzzzzz...";
 
 pub const USE_PICKER_NO_QUANTITY: u8 = 255;
 
-pub const GET_NOTHING_REFUSAL: &str = "\nNothing to get!";
+/// `commands.md §5.8` / `cleak/u5-spec#258`: the trailing feed closes this
+/// result's own row in every mode (overworld, town and combat alike) - it
+/// is a property of the text, not of the combat presentation that
+/// sometimes wraps it (`cleak/u5-engine#24`). Dungeon exploration is a
+/// separate wording branch; see `DUNGEON_CHEST_GET_NOT_HERE`.
+pub const GET_NOTHING_REFUSAL: &str = "\nNothing to get!\n";
 /// `commands.md §5.8` "Successful Get, Search and eat results": "A container
 /// record prints `Open_it_first!\n` and changes nothing at all: no inventory,
 /// no slot clear, no dirty marking, no turn sentinel."
@@ -1407,7 +1412,11 @@ pub const HOLE_UP_NOT_IN_BED_REFUSAL: &str = "Only in bed!";
 pub const ENTER_NOTHING_REFUSAL: &str = "what?";
 /// `cleak/u5-spec#194` capture (town) and `dungeon-mode.md` (dungeon):
 /// the Search result when nothing is found.
-pub const SEARCH_NOTHING_FOUND: &str = "\nThou dost find\nnothing of note.";
+/// `cleak/u5-spec#258`: the trailing feed closes this result's own row in
+/// every mode, the same shared-text property `GET_NOTHING_REFUSAL`
+/// documents. Dungeon exploration uses the separate, capitalized
+/// `DUNGEON_SEARCH_NOTHING_OF_NOTE` wording instead.
+pub const SEARCH_NOTHING_FOUND: &str = "\nThou dost find\nnothing of note.\n";
 /// `commands.md §5.8` "Successful Get, Search and eat results": Search "has
 /// five successful shapes, all built on the same preamble
 /// `\nThou_dost_find\n`". A furniture or fixture cell replaces the preamble
