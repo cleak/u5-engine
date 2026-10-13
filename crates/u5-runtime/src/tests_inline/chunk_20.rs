@@ -846,7 +846,9 @@ fn town_open_object_chest_consumes_slot_trap_and_public_reward_pools() {
             .any(|entry| entry.text == selected_name),
         "a prompted pick echoes the selected member's name"
     );
-    assert!(state.message.contains("chest grants"));
+    // `containers.md §4.1`: the surface/town transcript is a `Found:`
+    // heading followed by one fixed family line per successful grant.
+    assert!(state.message.starts_with("Found:\n"), "{:?}", state.message);
     assert!(state.food > DEFAULT_FOOD_STOCK || state.gold > DEFAULT_GOLD_STOCK);
 }
 
@@ -885,7 +887,71 @@ fn town_get_object_chest_uses_chest_helper_before_blocking_object_refusal() {
     assert_eq!(state.grid[32 + 2], 16);
     assert_eq!(state.turn, 1);
     assert!(state.diagnostics.join(" ").contains("Got object chest at (2, 1)"));
-    assert!(state.message.contains("chest grants"));
+    assert!(state.message.starts_with("Found:\n"), "{:?}", state.message);
+}
+
+/// `containers.md §4.1`: "`Chest empty!` if nothing granted" - a chest class
+/// too low for any primary- or secondary-pool row to clear its threshold.
+#[test]
+fn town_open_object_chest_prints_chest_empty_when_nothing_grants() {
+    let mut grid = open_grid();
+    grid[32 + 2] = 0x4f;
+    let mut state = test_state(grid, 1, 1);
+    state.player.facing = Direction::East;
+    state.active_objects.push(ActiveObject {
+        type_byte: 0x4f,
+        tile: 0x4f,
+        x: 2,
+        y: 1,
+        z: 0,
+        phase: STEADY_PHASE,
+        aux1: 1,
+        aux3: 0,
+    });
+
+    assert_eq!(
+        state.consume_surface_object_chest_at(2, 1, 0, "Opened"),
+        Some(MoveOutcome::ContainerOpened)
+    );
+    assert_eq!(state.message, CHEST_TRANSCRIPT_EMPTY_LINE);
+}
+
+/// `containers.md §4.1`/`traps.md §4`: "print `Trapped!` plus one line feed
+/// - no leading feed, no member name, no trap-kind word" before the shared
+/// resolver's own line, independent of whether the chest itself grants
+/// anything.
+#[test]
+fn town_open_object_chest_prints_trapped_notice_before_resolver_line() {
+    let mut grid = open_grid();
+    grid[32 + 2] = 0x4f;
+    let mut state = test_state(grid, 1, 1);
+    state.player.facing = Direction::East;
+    state.active_objects.push(ActiveObject {
+        type_byte: 0x4f,
+        tile: 0x4f,
+        x: 2,
+        y: 1,
+        z: 0,
+        phase: STEADY_PHASE,
+        aux1: 0x81,
+        aux3: 0,
+    });
+
+    assert_eq!(
+        state.consume_surface_object_chest_at(2, 1, 0, "Opened"),
+        Some(MoveOutcome::ContainerOpened)
+    );
+    let entries: Vec<&str> = state
+        .message_entries()
+        .iter()
+        .map(|entry| entry.text.as_str())
+        .collect();
+    assert!(
+        entries.iter().any(|text| *text == "Trapped!"),
+        "{:?}",
+        entries
+    );
+    assert_eq!(state.message, CHEST_TRANSCRIPT_EMPTY_LINE);
 }
 
 #[test]

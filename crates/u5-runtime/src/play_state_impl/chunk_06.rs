@@ -1109,8 +1109,16 @@ impl PlayState {
         let (slot, object) = self.surface_object_chest_slot_at(x, y)?;
         let stat = Self::surface_object_chest_stat(object)?;
         let chest_class = stat & 0x7f;
-        let trap_note =
-            (stat & 0x80 != 0).then(|| self.apply_shared_trap_effect_to_slot(member_index));
+        let trapped = stat & 0x80 != 0;
+        // `containers.md §4.1`/`traps.md §4`: "print `Trapped!` plus one
+        // line feed - no leading feed, no member name, no trap-kind word -
+        // and then run the shared trap resolver, which prints its own
+        // word." Published 2026-10-12 (issue #292); this engine printed
+        // neither notice and invented its own content sentence instead.
+        if trapped {
+            self.emit_message_line(CHEST_TRANSCRIPT_TRAPPED_LINE);
+        }
+        let trap_note = trapped.then(|| self.apply_shared_trap_effect_to_slot(member_index));
         // `traps.md §4`: "The surface/town site alone performs a
         // combat-scene cleanup after the resolver returns: if the chosen
         // member is then Dead, it (a) finds that member's live combatant
@@ -1138,35 +1146,23 @@ impl PlayState {
         self.mark_visibility_dirty();
         self.advance_turn();
         // `commands.md §8.1`: a command "never prints tile ids, coordinates,
-        // active-object slot numbers, terrain-class names". This line did -
-        // `Opened object chest at (12, 7); ...` - which is an engine
-        // diagnostic in the message window, the same leak the Sceptre's
-        // dissolved-cell count was moved out of.
+        // active-object slot numbers, terrain-class names", so the verb and
+        // the cell go to diagnostics rather than the message window.
         //
-        // What stays is the part the player is meant to read: `traps.md §4`
-        // has "the surface/town site prints its own trapped notice before
-        // the resolver runs", and the contents follow it. The verb and the
-        // cell go where the rest of this engine's bookkeeping goes.
-        //
-        // The surface chest's exact published transcript is a separate
-        // question - `containers.md §12`'s rendered-row table is the
-        // *dungeon* Get path, and §6 says only that the surface pools are
-        // "below" - so this keeps the engine's own wording for the two
-        // notes rather than inventing a shape. Asked as
-        // `cleak/u5-spec#292`.
         // The resolver already printed the player's line -
         // `traps.md §3`'s `ACID!`, `POISON!`, `BOMB!` or `GAS!` - through
-        // `emit_message_line`. What it *returns* is an engine note naming
-        // the slot and the damage, which the dungeon chest sibling in
-        // `finish_open_dungeon_chest` already routes to `diagnostics` with
-        // the same reasoning. This site put it in the message window.
+        // `emit_message_line`, with `Trapped!` printed ahead of it above.
+        // What `apply_shared_trap_effect_to_slot` *returns* is an engine
+        // note naming the slot and the damage, which the dungeon chest
+        // sibling in `finish_open_dungeon_chest` already routes to
+        // `diagnostics` with the same reasoning.
         match trap_note {
             Some(trap) => self.push_diagnostic(format!(
                 "{verb} object chest at ({x}, {y}); {trap}"
             )),
             None => self.push_diagnostic(format!("{verb} object chest at ({x}, {y}).")),
         }
-        self.message = format!("{content_note}.");
+        self.message = content_note;
         Some(MoveOutcome::ContainerOpened)
     }
 
@@ -1231,6 +1227,13 @@ impl PlayState {
         }
     }
 
+    /// `containers.md §4.1`'s surface/town chest transcript: one fixed
+    /// line per successful grant naming only the family - never a count,
+    /// colour, rune word or equipment name - prefixed with a `Found:`
+    /// heading before the first line, or `Chest empty!` if nothing
+    /// granted. `cleak/u5-engine` found this printing invented
+    /// engineering prose instead; the roll sequence itself (which grants
+    /// succeed, and what each stages into inventory) is unchanged here.
     pub fn generate_surface_object_chest_content(
         &mut self,
         slot: usize,
@@ -1238,7 +1241,7 @@ impl PlayState {
         y: usize,
         chest_class: u8,
     ) -> String {
-        let mut parts = Vec::new();
+        let mut parts: Vec<&'static str> = Vec::new();
         for (row, threshold) in CHEST_PRIMARY_POOL_THRESHOLDS.iter().copied().enumerate() {
             let roll = self.surface_object_chest_roll(slot, x, y, chest_class, row, 0, 30);
             if !chest_primary_pool_row_succeeds(chest_class, threshold, roll) {
@@ -1248,22 +1251,22 @@ impl PlayState {
                 0 => {
                     let amount = self.surface_object_chest_roll(slot, x, y, chest_class, row, 1, 2);
                     self.apply_object_pickup(ObjectPickupKind::Food, amount);
-                    parts.push(format!("{amount} food"));
+                    parts.push(CHEST_TRANSCRIPT_FOOD_LINE);
                 }
                 1 => {
                     let amount = self.surface_object_chest_roll(slot, x, y, chest_class, row, 1, 2);
                     self.apply_object_pickup(ObjectPickupKind::Torches, amount);
-                    parts.push(format!("{amount} torches"));
+                    parts.push(CHEST_TRANSCRIPT_TORCHES_LINE);
                 }
                 2 => {
                     let amount = self.surface_object_chest_roll(slot, x, y, chest_class, row, 1, 2);
                     self.apply_object_pickup(ObjectPickupKind::Gems, amount);
-                    parts.push(format!("{amount} gems"));
+                    parts.push(CHEST_TRANSCRIPT_GEMS_LINE);
                 }
                 3 => {
                     let amount = self.surface_object_chest_roll(slot, x, y, chest_class, row, 1, 2);
                     self.apply_object_pickup(ObjectPickupKind::Keys, amount);
-                    parts.push(format!("{amount} keys"));
+                    parts.push(CHEST_TRANSCRIPT_KEYS_LINE);
                 }
                 4 => {
                     let subtype = self.surface_object_chest_zero_based_roll(
@@ -1275,9 +1278,8 @@ impl PlayState {
                         1,
                         8,
                     );
-                    let kind = ObjectPickupKind::Scroll(subtype);
-                    self.apply_object_pickup(kind, 1);
-                    parts.push(format!("1 {}", kind.label()));
+                    self.apply_object_pickup(ObjectPickupKind::Scroll(subtype), 1);
+                    parts.push(CHEST_TRANSCRIPT_SCROLL_LINE);
                 }
                 5 => {
                     let subtype = self.surface_object_chest_zero_based_roll(
@@ -1290,7 +1292,7 @@ impl PlayState {
                         8,
                     );
                     self.apply_object_pickup(ObjectPickupKind::Potion(subtype), 1);
-                    parts.push(format!("1 {} potion", potion_label(subtype)));
+                    parts.push(CHEST_TRANSCRIPT_POTION_LINE);
                 }
                 6 => {
                     let upper = chest_class.saturating_mul(3);
@@ -1298,11 +1300,15 @@ impl PlayState {
                         let amount =
                             self.surface_object_chest_roll(slot, x, y, chest_class, row, 1, upper);
                         self.apply_object_pickup(ObjectPickupKind::Gold, amount);
-                        parts.push(format!("{amount} gold"));
+                        parts.push(CHEST_TRANSCRIPT_GOLD_LINE);
                     }
                 }
                 7 => {
-                    let marker = self.surface_object_chest_roll(
+                    // `containers.md §4` row 8, "staged context value": not
+                    // yet published what this value feeds, so the roll is
+                    // kept exactly as before and only the printed line
+                    // changes here.
+                    let _marker = self.surface_object_chest_roll(
                         slot,
                         x,
                         y,
@@ -1311,7 +1317,7 @@ impl PlayState {
                         1,
                         chest_class,
                     );
-                    parts.push(format!("marker {marker}"));
+                    parts.push(CHEST_TRANSCRIPT_MARKER_LINE);
                 }
                 _ => {}
             }
@@ -1342,14 +1348,14 @@ impl PlayState {
             );
             if chest_primary_pool_row_succeeds(chest_class, threshold, roll) {
                 self.apply_object_pickup(ObjectPickupKind::Equipment(row), 1);
-                parts.push(format!("1 {}", equipment_name(row)));
+                parts.push(chest_secondary_pool_transcript_line(row));
             }
         }
 
         if parts.is_empty() {
-            "chest was empty".to_string()
+            CHEST_TRANSCRIPT_EMPTY_LINE.to_string()
         } else {
-            format!("chest grants {}", parts.join(", "))
+            format!("{CHEST_TRANSCRIPT_FOUND_HEADING}{}", parts.concat())
         }
     }
 

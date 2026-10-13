@@ -130,6 +130,50 @@ pub const fn chest_secondary_pool_threshold(row_index: usize) -> Option<u8> {
     CHEST_SECONDARY_POOL_THRESHOLDS[row_index]
 }
 
+/// `containers.md §4.1`'s published surface/town chest transcript: each
+/// successful grant prints one fixed line naming only the family, never a
+/// count, colour, rune word or equipment name.
+pub const CHEST_TRANSCRIPT_FOOD_LINE: &str = "some food!\n";
+pub const CHEST_TRANSCRIPT_TORCHES_LINE: &str = "some torches!\n";
+pub const CHEST_TRANSCRIPT_GEMS_LINE: &str = "a gem!\n";
+pub const CHEST_TRANSCRIPT_KEYS_LINE: &str = "a ring of keys!\n";
+pub const CHEST_TRANSCRIPT_SCROLL_LINE: &str = "a scroll!\n";
+pub const CHEST_TRANSCRIPT_POTION_LINE: &str = "a potion!\n";
+pub const CHEST_TRANSCRIPT_GOLD_LINE: &str = "a sack of gold!\n";
+pub const CHEST_TRANSCRIPT_MARKER_LINE: &str = "a chest!\n";
+pub const CHEST_TRANSCRIPT_HELM_LINE: &str = "a helm!\n";
+pub const CHEST_TRANSCRIPT_SHIELD_LINE: &str = "a shield!\n";
+pub const CHEST_TRANSCRIPT_ARMOUR_LINE: &str = "some armour!\n";
+pub const CHEST_TRANSCRIPT_WEAPON_LINE: &str = "a weapon!\n";
+pub const CHEST_TRANSCRIPT_RING_LINE: &str = "a ring!\n";
+pub const CHEST_TRANSCRIPT_AMULET_LINE: &str = "an amulet!\n";
+/// `containers.md §4.1`: the heading printed once, before the first
+/// successful grant, if any grant succeeds.
+pub const CHEST_TRANSCRIPT_FOUND_HEADING: &str = "Found:\n";
+/// `containers.md §4.1`: printed if no grant succeeded - nothing rolled,
+/// or every success was dropped for a full active-object table - even
+/// after a trapped opening.
+pub const CHEST_TRANSCRIPT_EMPTY_LINE: &str = "Chest empty!\n";
+/// `containers.md §4.1`/`traps.md §4`: "no leading feed, no member name,
+/// no trap-kind word" - printed before the shared trap resolver runs.
+pub const CHEST_TRANSCRIPT_TRAPPED_LINE: &str = "Trapped!\n";
+
+/// `containers.md §4`'s secondary pool is "the game's equipment array in
+/// save order": the published result family for one `0..=47` pool index,
+/// which this engine also uses as the `equipment_name`/inventory-add
+/// subtype. Row bands: 0..=3 Helm, 4..=8 Shield, 9..=15 Armour, 16..=41
+/// Weapon, 42..=44 Ring, 45..=47 Amulet.
+pub const fn chest_secondary_pool_transcript_line(row_index: usize) -> &'static str {
+    match row_index {
+        0..=3 => CHEST_TRANSCRIPT_HELM_LINE,
+        4..=8 => CHEST_TRANSCRIPT_SHIELD_LINE,
+        9..=15 => CHEST_TRANSCRIPT_ARMOUR_LINE,
+        16..=41 => CHEST_TRANSCRIPT_WEAPON_LINE,
+        42..=44 => CHEST_TRANSCRIPT_RING_LINE,
+        _ => CHEST_TRANSCRIPT_AMULET_LINE,
+    }
+}
+
 /// `containers.md §8` shared inventory-add result family classified
 /// from the found-item class code.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
