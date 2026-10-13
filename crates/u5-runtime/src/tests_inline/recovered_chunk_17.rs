@@ -442,8 +442,9 @@ fn z_stats_border_labels_and_placeholders_match_published_literals() {
         }
     }
 
-    // §4.7: "the attribute page, the equipment page, and four inventory pages"
-    // - so exactly two of the six carry no label and exactly four do.
+    // `RETRACTIONS.md` R457: the two character-specific screens
+    // (Attributes, Arms/Equipment) carry no border label; the five
+    // shared screens that follow them all do.
     let unlabelled = ZStatsPage::ORDERED
         .iter()
         .filter(|page| page.border_label().is_none())
@@ -471,25 +472,16 @@ fn z_stats_border_labels_and_placeholders_match_published_literals() {
     assert_eq!(Z_STATS_INVENTORY_PANEL_ROWS, 8);
 }
 
-/// `systems/inventory.md §4.7`: "There are **six** pages in all: the attribute
-/// page, the equipment page, and four inventory pages."
-///
-/// `§4`: "The first two pages are character-specific: page 1 is the primary stat
-/// page and page 2 is the equipment page. Later inventory pages walk shared
-/// counter bands for reagents, spell charges, special/use items, and the
-/// weapons/armour stash." That sentence is the published order of the four
-/// inventory pages.
-///
-/// `§4`: "The Z-stats page loop preserves a single page index. ... Direction-style
-/// navigation moves backward or forward through the visible page sequence".
+/// `ZStatsPage::ORDERED` is the published cycle only for a one-member
+/// party (`inventory.md §4.7`, `RETRACTIONS.md` R457: the real cycle is
+/// 2N+5 screens for N members - see `ZStatsSession::cycle_position` and
+/// its own tests for the general case). This pins that one-member order:
+/// a capture of the stock game pages through the counters half of the
+/// equipment page as a screen of its own, labelled `Equipment`, between
+/// `Arms` and Reagents, with reagents preceding spells and items
+/// preceding armaments. Reported as `cleak/u5-spec#202`.
 #[test]
 fn z_stats_direction_navigation_cycles_exactly_the_observed_pages() {
-    // §4.7 says "There are **six** pages in all", but a capture of the
-    // stock game pages through **seven** screens: the counters half of
-    // §4.7's "equipment page" is a screen of its own, labelled
-    // `Equipment`, between the `Arms` screen and Reagents. The order also
-    // differs - reagents precede spells and items precede armaments.
-    // Reported as `cleak/u5-spec#202`.
     assert_eq!(ZStatsPage::ORDERED.len(), 7);
 
     assert_eq!(

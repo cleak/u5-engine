@@ -50,17 +50,16 @@ pub enum ZStatsPage {
 }
 
 impl ZStatsPage {
-    /// The page cycle, in the order the direction keys walk it.
-    ///
-    /// `inventory.md §4.7`: "There are **seven** screens in the cycle,
-    /// walked in this order by the direction keys and wrapping from the
-    /// last back to the first" - attributes, Arms, Equipment, Reagents,
-    /// Spells, Items, Armaments. The engine reached that order from a
-    /// capture and reported it as `cleak/u5-spec#202`; the spec's
-    /// earlier six-page table, which folded the Arms and counters halves
-    /// into one page, is withdrawn by `RETRACTIONS.md` R392. The
-    /// engine-invented spell-book page is not among them and is
-    /// deliberately absent here.
+    /// This flat seven-entry order is the published cycle only for a
+    /// one-member party. `inventory.md §4.7` (`RETRACTIONS.md` R457)
+    /// withdrew the "universal seven-screen cycle" reading this array
+    /// once implemented: for **N** current members the real cycle is
+    /// **2N + 5** screens - each member's Attributes/Arms pair in
+    /// party-slot order, then the five shared screens below. The
+    /// party-aware navigation lives in [`ZStatsSession::cycle_position`],
+    /// [`ZStatsSession::seek`] and [`ZStatsSession::cycle_len`]; this
+    /// array and [`Self::next`]/[`Self::previous`] are unused by that
+    /// path and are kept only as the solo-party special case.
     pub const ORDERED: [Self; 7] = [
         Self::Stats,
         Self::Equipment,
