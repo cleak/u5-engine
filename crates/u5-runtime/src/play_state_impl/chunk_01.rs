@@ -61,6 +61,19 @@ impl PlayState {
         self.emit_sound_effect(SoundEffect::BlockedStep);
     }
 
+    /// `audio.md §7.5` "Movement stings": a town or overworld directional
+    /// command's foot or horse marker fires this at movement-dispatch
+    /// entry, "before direction processing and destination acceptance" -
+    /// success or refusal alike. Ships, skiffs, carpets and dungeon
+    /// movement select nothing here.
+    pub(crate) fn emit_top_down_movement_sting_if_applicable(&mut self) {
+        let selects = matches!(self.area, Area::Town { .. } | Area::World { .. })
+            && (self.player.transport.is_foot() || self.player.transport.is_horse());
+        if selects {
+            self.emit_sound_effect(SoundEffect::TopDownMovementSting);
+        }
+    }
+
     /// Run the `audio.md §8.4` shared major full-viewport flash.
     ///
     /// Eight rounds of four 58-band sweeps: 1,856 band draws and 1,856
@@ -1801,6 +1814,11 @@ impl PlayState {
         direction: Direction,
         game_dir: Option<&Path>,
     ) -> io::Result<MoveOutcome> {
+        // `audio.md §7.5`: the movement sting fires "at movement-dispatch
+        // entry, before direction processing and destination acceptance" -
+        // ahead of even the diagonal refusal below, since that refusal is
+        // itself part of "direction processing".
+        self.emit_top_down_movement_sting_if_applicable();
         // `movement.md §2`: "No mode steps diagonally." World and town
         // movement consume the four cardinal directions only, so a diagonal
         // is refused before the facing is written. The dungeon step keeps its

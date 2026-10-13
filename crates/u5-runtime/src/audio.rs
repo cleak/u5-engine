@@ -1797,6 +1797,13 @@ pub enum SoundEffect {
     ReturnToViewStrip3 { phase: u8 },
     /// `§8.6` live Blackthorn cinematic movement/stinger-pause recipe.
     BlackthornMovementStinger,
+    /// `audio.md §7.5` "Movement stings": the same two-part rumble, fired at
+    /// a town or overworld directional command's movement-dispatch entry -
+    /// "before direction processing and destination acceptance" - whether
+    /// the step is accepted or refused. "A blocked attempt still plays it
+    /// before the separate refusal beep." Ships, skiffs, carpets and
+    /// first-person dungeon movement do not select this.
+    TopDownMovementSting,
     /// `§8.6.2` fixed six-envelope Blackthorn rescue sequence.
     BlackthornRescueEnvelopes,
     /// `audio.md §6.1`'s absorb cue. See [`MAGIC_ABSORBED_ENVELOPE`].
@@ -1901,7 +1908,8 @@ impl SoundEffect {
                 }
             }
             SoundEffect::BlackthornMovementStinger
-            | SoundEffect::EndgameTableauMovementSting => two_part_sting(jitter),
+            | SoundEffect::EndgameTableauMovementSting
+            | SoundEffect::TopDownMovementSting => two_part_sting(jitter),
             SoundEffect::BlackthornRescueEnvelopes => blackthorn_rescue_envelope_program(),
             SoundEffect::MagicAbsorbed => envelope_program(MAGIC_ABSORBED_ENVELOPE),
             SoundEffect::ShrineOrdinationChime => shrine_ordination_chime_program(),

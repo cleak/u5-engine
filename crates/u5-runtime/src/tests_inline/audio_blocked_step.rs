@@ -100,8 +100,9 @@ fn a_refused_town_step_beeps_on_both_arms() {
     assert_eq!(tile_class_refusal.message, "Blocked!");
     assert_eq!(
         tile_class_refusal.sound_effects_after(serial),
-        vec![SoundEffect::BlockedStep],
-        "the tile-class refusal arm"
+        vec![SoundEffect::TopDownMovementSting, SoundEffect::BlockedStep],
+        "the tile-class refusal arm: audio.md §7.5's movement sting at \
+         dispatch entry, then the refusal beep"
     );
 
     let mut object_refusal = test_state(open_grid(), 4, 4);
@@ -124,18 +125,25 @@ fn a_refused_town_step_beeps_on_both_arms() {
     assert_eq!(object_refusal.message, "Blocked!");
     assert_eq!(
         object_refusal.sound_effects_after(serial),
-        vec![SoundEffect::BlockedStep],
-        "the object-occupancy refusal arm"
+        vec![SoundEffect::TopDownMovementSting, SoundEffect::BlockedStep],
+        "the object-occupancy refusal arm: audio.md §7.5's movement sting at \
+         dispatch entry, then the refusal beep"
     );
 }
 
 #[test]
-fn an_accepted_town_step_stays_silent() {
-    // audio.md §9: "successful top-down walking" has no acknowledgement sound.
+fn an_accepted_town_step_plays_the_movement_sting() {
+    // `audio.md §9`: "the earlier inclusion of successful top-down walking
+    // in this silence list is withdrawn; Section 7.5 specifies its movement
+    // stings (R407)." Replaces the retracted
+    // `an_accepted_town_step_stays_silent`.
     let mut state = test_state(open_grid(), 4, 4);
     let serial = state.sound_effect_serial;
     assert_eq!(state.step(Direction::East), MoveOutcome::Moved);
-    assert!(state.sound_effects_after(serial).is_empty());
+    assert_eq!(
+        state.sound_effects_after(serial),
+        vec![SoundEffect::TopDownMovementSting]
+    );
 }
 
 #[test]
