@@ -6926,9 +6926,15 @@ impl PlayState {
             for party_slot in eligible_wearers {
                 let regeneration_roll = self.combat_magic_ring_regeneration_roll(party_slot);
                 if regeneration_roll == 0 {
-                    outcome.regeneration_applied = outcome
-                        .regeneration_applied
-                        .saturating_add(self.party[party_slot].heal_by(1));
+                    let gained = self.party[party_slot].heal_by(1);
+                    if gained > 0 {
+                        // `stats-panel.md §2.2.1` row 2: combat's Ring of
+                        // Regeneration effect defers the panel too.
+                        self.stats_panel_command_refresh =
+                            crate::stats_panel::PanelRefreshMode::Deferred;
+                    }
+                    outcome.regeneration_applied =
+                        outcome.regeneration_applied.saturating_add(gained);
                 }
             }
         }

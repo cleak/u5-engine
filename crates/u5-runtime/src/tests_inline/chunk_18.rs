@@ -443,6 +443,39 @@
         assert_eq!(unlock_magic.message, "Success!");
     }
 
+    /// `stats-panel.md §2.2.1` row 2: combat's Ring of Regeneration effect
+    /// defers the panel, the same as the world-turn and camp-step passes.
+    #[test]
+    fn combat_ring_regeneration_defers_the_stats_panel() {
+        let mut base = britannia_state(open_world_grid(), 5, 5);
+        base.combat_active = true;
+        base.combat_actors[0] =
+            CombatActorDescriptor::from_row([20, 1, COMBAT_ACTOR_FLAG_SELECTABLE_80, 0, 0, 0, 5, 5]);
+        base.party_equipment[0][EQUIP_SLOT_RING] = EQUIPMENT_ID_RING_REGENERATION as u8;
+        base.party[0].hp = base.party[0].max_hp - 1;
+
+        let seed = (0u32..256)
+            .find(|&seed| {
+                let mut probe = base.clone();
+                probe.prng_state = seed as u16;
+                probe
+                    .apply_visible_combat_magic_ring_pass_to_slot(0)
+                    .is_some_and(|outcome| outcome.regeneration_applied > 0)
+            })
+            .expect("some seed rolls the one-in-eight regeneration tick");
+        let mut state = base;
+        state.prng_state = seed as u16;
+
+        let outcome = state.apply_visible_combat_magic_ring_pass_to_slot(0);
+
+        assert_eq!(outcome.map(|o| o.regeneration_applied), Some(1));
+        assert_eq!(state.party[0].hp, state.party[0].max_hp);
+        assert_eq!(
+            state.stats_panel_command_refresh,
+            crate::stats_panel::PanelRefreshMode::Deferred
+        );
+    }
+
     #[test]
     fn cast_magic_lock_non_magic_sidecar_consumes_cast_and_fails() {
         let dir = debug_game_dir();

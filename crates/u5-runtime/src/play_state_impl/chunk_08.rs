@@ -28,6 +28,10 @@ impl PlayState {
                 self.message = format!("{HOLE_UP_REPAIR_BODY}\n{HOLE_UP_SAILS_MUST_BE_LOWERED}");
                 return MoveOutcome::Blocked;
             }
+            // `stats-panel.md §2.2.1` row 1: the ship-repair branch defers
+            // the panel; "the ordinary rest path does not raise" (unlike
+            // this one).
+            self.stats_panel_command_refresh = crate::stats_panel::PanelRefreshMode::Deferred;
             // Measured: an inclusive `1..3` repair roll, reported after
             // the repair. See [`HOLE_UP_HULL_NOW_PREFIX`].
             let roll = self.random_range_u8(SHIP_HULL_REPAIR_ROLL_LOW, SHIP_HULL_REPAIR_ROLL_HIGH);

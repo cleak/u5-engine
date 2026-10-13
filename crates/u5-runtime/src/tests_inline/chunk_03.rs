@@ -2421,6 +2421,27 @@ fn hourly_poison_tick_can_kill_poisoned_living_member() {
     assert_eq!(state.party[1].status, b'G');
 }
 
+/// `stats-panel.md §2.2.1` row 1: the ship Hole-up repair branch defers
+/// the panel, unlike the ordinary land/bed rest path.
+#[test]
+fn ship_hole_up_repair_defers_the_stats_panel() {
+    let mut state = world_state(open_world_grid(), 10, 20);
+    state.player.transport = TransportState::Ship {
+        type_byte: 168,
+        tile: 168,
+        sails_hoisted: false,
+        hull: 10,
+        skiffs: 0,
+    };
+
+    assert_eq!(state.start_rest_prompt(), MoveOutcome::Rested);
+
+    assert_eq!(
+        state.stats_panel_command_refresh,
+        crate::stats_panel::PanelRefreshMode::Deferred
+    );
+}
+
 #[test]
 fn hourly_ring_regeneration_tick_uses_ring_slot_and_living_hp_cap() {
     let mut state = world_state(open_world_grid(), 10, 20);
@@ -2468,6 +2489,11 @@ fn hourly_ring_regeneration_tick_uses_ring_slot_and_living_hp_cap() {
     assert_eq!(state.party[0].mana, 8);
     assert_eq!(state.party[1].hp, 20);
     assert_eq!(state.party[2].hp, 0);
+    // `stats-panel.md §2.2.1` row 2: a ring heal defers the panel.
+    assert_eq!(
+        state.stats_panel_command_refresh,
+        crate::stats_panel::PanelRefreshMode::Deferred
+    );
 }
 
 #[test]

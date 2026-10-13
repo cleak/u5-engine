@@ -3345,7 +3345,15 @@ impl PlayState {
                 continue;
             }
             if u5_prng_range_u16(&mut self.prng_state, 0, 7) == 0 {
-                healed += member.heal_by(1);
+                let gained = member.heal_by(1);
+                if gained > 0 {
+                    // `stats-panel.md §2.2.1` row 2: the Ring of
+                    // Regeneration's world-turn damage-step pass defers
+                    // the panel.
+                    self.stats_panel_command_refresh =
+                        crate::stats_panel::PanelRefreshMode::Deferred;
+                }
+                healed += gained;
             }
         }
         healed
