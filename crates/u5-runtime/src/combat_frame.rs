@@ -5375,6 +5375,14 @@ impl PlayState {
                                 self.party.get_mut(slot)?,
                                 poison_damage_roll,
                             );
+                            if matches!(outcome, CombatPartyPoisonOutcome::PoisonedPartyMember { .. })
+                            {
+                                // `stats-panel.md §2.2.1` row 15: combat
+                                // poisoning of a Good member is deferred,
+                                // unlike the non-combat poison helper.
+                                self.stats_panel_command_refresh =
+                                    crate::stats_panel::PanelRefreshMode::Deferred;
+                            }
                             let fallback_damage_application = match outcome {
                                 CombatPartyPoisonOutcome::FallbackDamage { raw_damage } => {
                                     Some(self.apply_combat_weapon_damage_to_target(
@@ -5587,6 +5595,13 @@ impl PlayState {
                         };
                         if let Some(member) = self.party.get_mut(slot) {
                             let outcome = apply_combat_poison_to_party_target(member, damage_roll);
+                            if matches!(outcome, CombatPartyPoisonOutcome::PoisonedPartyMember { .. })
+                            {
+                                // `stats-panel.md §2.2.1` row 15: combat
+                                // poisoning of a Good member is deferred.
+                                self.stats_panel_command_refresh =
+                                    crate::stats_panel::PanelRefreshMode::Deferred;
+                            }
                             if let CombatPartyPoisonOutcome::FallbackDamage { raw_damage } = outcome
                             {
                                 if let Some(application) = self
@@ -6406,6 +6421,13 @@ impl PlayState {
                     // exit cascade" an earlier revision named
                     // (`RETRACTIONS.md` R358).
                     self.request_party_stats_panel_refresh();
+                    // `stats-panel.md §2.2.1` row 15: combat poisoning
+                    // (this is the monster poison-attack arm) is deferred
+                    // through the general §2.2/2.3 mechanism, which is the
+                    // one with a wired consumer - `request_party_stats_panel_refresh`
+                    // above feeds a separate, older latch whose two readers
+                    // both discard its result.
+                    self.stats_panel_command_refresh = crate::stats_panel::PanelRefreshMode::Deferred;
                     return Some(self.apply_combat_monster_attack_narrator_gate(
                         CombatMonsterAttackApplication {
                             attacker_slot,
@@ -7583,6 +7605,9 @@ impl PlayState {
         if decision != CombatEscapeCleanupDecision::Accepted {
             return CombatEscapeCleanupApplication::refused(decision);
         }
+        // `stats-panel.md §2.2.1` row 13: the Escape key's accepted
+        // outcome is a deferred site.
+        self.stats_panel_command_refresh = crate::stats_panel::PanelRefreshMode::Deferred;
 
         let mut cleared_descriptor_slots = 0u8;
         for slot in 0..COMBAT_ACTOR_SLOTS {
@@ -7954,6 +7979,9 @@ impl PlayState {
         {
             self.combat_actors[slot].flags |= COMBAT_ACTOR_FLAG_CONTROLLED;
             self.active_player = None;
+            // `stats-panel.md §2.2.1` row 14: the Sword of Chaos
+            // compulsion's active-player clear is deferred.
+            self.stats_panel_command_refresh = crate::stats_panel::PanelRefreshMode::Deferred;
         }
 
         // `combat.md §6.1a` "A dispatch input": the walker dispatches through

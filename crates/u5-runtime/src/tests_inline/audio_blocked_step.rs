@@ -253,6 +253,11 @@ fn an_accepted_combat_exit_snaps() {
         state.sound_effects_after(serial),
         vec![SoundEffect::ActionSnap]
     );
+    // `stats-panel.md §2.2.1` row 13: the accepted outcome is deferred.
+    assert_eq!(
+        state.stats_panel_command_refresh,
+        crate::stats_panel::PanelRefreshMode::Deferred
+    );
 }
 
 #[test]
@@ -276,6 +281,12 @@ fn a_refused_combat_exit_cleanup_stays_silent_here() {
     let application = state.apply_combat_escape_cleanup();
     assert_ne!(application.decision, CombatEscapeCleanupDecision::Accepted);
     assert!(state.sound_effects_after(serial).is_empty());
+    // `stats-panel.md §2.2.1` row 13: "nothing the panel shows changes on
+    // a refusal", so the classification stays at the default.
+    assert_eq!(
+        state.stats_panel_command_refresh,
+        crate::stats_panel::PanelRefreshMode::Immediate
+    );
 }
 
 #[test]
