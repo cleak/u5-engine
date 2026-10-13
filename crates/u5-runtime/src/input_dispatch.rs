@@ -1440,6 +1440,16 @@ fn handle_active_shop_key_input(
             )
             .then(|| tavern_accepted_menu_letter(*s, key_byte))
             .flatten();
+            // `shops.md` §8.C, "Provision offer": the quantity prompt ends
+            // `thou like?" `, a closing quote and a space, and
+            // `text-output.md` §10.6 keeps the cursor on that space while the
+            // digits are typed - the same open row the letter echo above
+            // continues. Measured 2026-09-19 (`paws-tavern/zero`): the
+            // original reads `thou like?" 0`, this engine `thou like?" `
+            // with no digit at all. `cleak/u5-engine#41`.
+            let tavern_quantity_echo =
+                matches!(*s, TavernState::PickProvisionQuantity { .. }).then_some(inline_quantity)
+                    .flatten();
             let outcome = match (*s, yes, no, inline_digit) {
                 (TavernState::Greeting { .. }, _, _, _) => step_tavern(
                     s,
@@ -1596,6 +1606,18 @@ fn handle_active_shop_key_input(
                 if !matches!(outcome, TavernOutcome::InvalidInput) {
                     state.emit_message_line_continuing_row(letter.to_string());
                 }
+            }
+            if let Some(quantity) = tavern_quantity_echo {
+                if !matches!(outcome, TavernOutcome::InvalidInput) {
+                    state.emit_message_line_continuing_row(quantity.to_string());
+                }
+            }
+            // `shops.md §8.C`: "N prints `No` and runs the ordinary quoted
+            // farewell with its `says $.\n` attribution" - no feeds of its
+            // own, so `No` continues the continuation question's open row
+            // the same way the sibling `Y` does below.
+            if matches!(outcome, TavernOutcome::DeclinedContinuation) {
+                state.emit_message_line_continuing_row("No");
             }
             // `shops.md §8.C`, "Tavern and sage continuation": "Y prints
             // `Yes\n\n"`, the applicable follow-up record, a closing quote
@@ -3783,20 +3805,17 @@ fn format_tavern_outcome_with_shoppe(
         // - `"What's wrong with ye? Can't hold thy liquor?"` over
         // `says Dr. Cat.` - using the §8.0 vendor-name row the engine already
         // keeps for the arms shops.
+        //
+        // `No` is echoed onto the continuation question's own open row by
+        // the caller, the same way `Yes` is - it is not part of this
+        // record's own text (`cleak/u5-engine#41`).
         DeclinedContinuation | NoSaleExit => no_sale_record_id.and_then(|record_id| {
             renderer
                 .render_record(record_id, &crate::shoppe_bark::ShoppeBarkContext::default())
                 .ok()
-                .map(|rendered| {
-                    let attributed = match tavern_vendor_name {
-                        Some(name) => format!("{rendered}\nsays {name}."),
-                        None => rendered,
-                    };
-                    if matches!(outcome, DeclinedContinuation) {
-                        format!("No\n{attributed}")
-                    } else {
-                        attributed
-                    }
+                .map(|rendered| match tavern_vendor_name {
+                    Some(name) => format!("{rendered}\nsays {name}."),
+                    None => rendered,
                 })
         }),
         _ => None,
