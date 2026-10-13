@@ -285,3 +285,34 @@ fn a_free_re_prompt_after_a_refusal_keeps_its_blank_row() {
         "the re-prompt keeps §10.4's blank row: {rows:?}"
     );
 }
+
+/// `stats-panel.md §2.3`'s fourth consumer: combat drains the deferred
+/// stats-panel request once per acting character, at the round walker's
+/// `AwaitingPlayer` boundary - not on a refused command's free re-prompt
+/// for the same actor.
+#[test]
+fn combat_drains_the_stats_panel_once_per_acting_character_not_per_reprompt() {
+    let game_dir = std::path::Path::new(".");
+    let mut state = combat_state_after_the_conflict_banner(8, 5);
+    state.pending_combat_actor_slot = None;
+    state.request_stats_panel_refresh();
+    assert!(state.stats_panel_refresh_requested);
+
+    // Reaching the first actor's prompt through the round walker drains it.
+    state.ensure_pending_combat_player_turn();
+    assert!(!state.stats_panel_refresh_requested);
+    assert_eq!(state.pending_combat_actor_slot, Some(0));
+
+    // A refusal's free re-prompt for the *same* actor must not drain again.
+    state.request_stats_panel_refresh();
+    state.combat_terrain[4][5] = 0x0c;
+    assert_eq!(
+        handle_play_key_input(&mut state, 'w', "", game_dir).unwrap(),
+        PlayInputDisposition::Continue
+    );
+    assert_eq!(state.pending_combat_actor_slot, Some(0));
+    assert!(
+        state.stats_panel_refresh_requested,
+        "a same-actor refusal re-prompt must not consume the deferred request"
+    );
+}

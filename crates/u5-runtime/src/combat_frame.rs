@@ -8551,6 +8551,14 @@ impl PlayState {
                 | CombatRoundWalkStopReason::Exit => application.next_slot,
             };
             if application.stop_reason == CombatRoundWalkStopReason::AwaitingPlayer {
+                // `stats-panel.md §2.3`'s fourth consumer: "combat at the
+                // top of a human-controlled actor's command prompt, so
+                // combat drains once per acting character rather than once
+                // per round". The round walker reaching `AwaitingPlayer` is
+                // exactly that boundary - a refused command's re-prompt
+                // calls `open_pending_combat_player_turn` directly, without
+                // passing back through here, so it does not drain again.
+                self.drain_stats_panel_refresh();
                 self.open_pending_combat_player_turn(ready_player_slot_from_round_walk(
                     &application,
                 ));
