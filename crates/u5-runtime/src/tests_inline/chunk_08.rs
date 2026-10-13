@@ -952,6 +952,12 @@
 
         assert_eq!(state.gold, 46);
         assert!(state.stats_panel_refresh_requested);
+        // `stats-panel.md §2.2.1` row 19: the toll's gold debit is one of
+        // the twenty-three deferred sites, not an immediate repaint.
+        assert_eq!(
+            state.stats_panel_command_refresh,
+            crate::stats_panel::PanelRefreshMode::Deferred
+        );
         assert!(!state.combat_active);
         let _ = fs::remove_dir_all(dir);
     }

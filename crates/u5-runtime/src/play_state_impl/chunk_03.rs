@@ -3219,7 +3219,15 @@ impl PlayState {
     /// raised ... and the event continues exactly as a refusal."
     pub fn resolve_troll_bridge_toll_payment(&mut self, toll: i16, game_dir: &Path) -> io::Result<()> {
         self.commit_prompt_reply(TROLL_BRIDGE_TOLL_QUESTION, "Y");
+        // `stats-panel.md §2.2.1` row 19: this is one of the twenty-three
+        // deferred sites. The direct raise below is what makes the request
+        // "never lowered by a rollback" - the generic end-of-command check
+        // in `input_dispatch::handle_play_key_input` only fires when the
+        // panel snapshot actually differs from the command's baseline, which
+        // a rolled-back debit does not - so the `Deferred` mode alone would
+        // silently drop the raise on the unaffordable path.
         self.request_stats_panel_refresh();
+        self.stats_panel_command_refresh = crate::stats_panel::PanelRefreshMode::Deferred;
         let after = i32::from(self.gold) - i32::from(toll);
         if after >= 0 {
             self.gold = after as u16;
