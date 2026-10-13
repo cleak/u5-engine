@@ -1414,6 +1414,48 @@ fn consumed_dungeon_action_on_field_applies_underfoot_field_after_turn() {
         .collect();
     assert!(lines.iter().any(|line| line.contains("Ignite torch")));
     assert!(lines.contains(&"Poison!"));
+    // `stats-panel.md §2.2.1` row 15's parenthetical: the non-combat
+    // poison helper repaints inline, unlike the sleep field (row 17).
+    assert_eq!(
+        state.stats_panel_command_refresh,
+        crate::stats_panel::PanelRefreshMode::Immediate
+    );
+}
+
+/// `stats-panel.md §2.2.1` row 20: a corpse search's plague arm defers the
+/// panel.
+#[test]
+fn corpse_search_plague_arm_defers_the_stats_panel() {
+    let mut base = dungeon_state(open_dungeon_record(), 0, 1, 1);
+    base.active_objects.push(ActiveObject {
+        type_byte: FIXED_HIDDEN_TREASURE_OBJECT_TILE,
+        tile: FIXED_HIDDEN_TREASURE_OBJECT_TILE,
+        x: 1,
+        y: 1,
+        z: 0,
+        phase: STEADY_PHASE,
+        aux1: 0,
+        aux3: 0,
+    });
+
+    let seed = (0u32..65536)
+        .find(|&seed| {
+            let mut probe = base.clone();
+            probe.prng_state = seed as u16;
+            probe.resolve_corpse_search(1, 0);
+            probe.party[0].status == b'P'
+        })
+        .expect("some seed takes the majority-plague arm");
+    let mut state = base;
+    state.prng_state = seed as u16;
+
+    state.resolve_corpse_search(1, 0);
+
+    assert_eq!(state.party[0].status, b'P');
+    assert_eq!(
+        state.stats_panel_command_refresh,
+        crate::stats_panel::PanelRefreshMode::Deferred
+    );
 }
 
 #[test]
@@ -1439,6 +1481,12 @@ fn consumed_dungeon_action_on_sleep_field_clears_underfoot_field_after_turn() {
         .collect();
     assert!(lines.iter().any(|line| line.contains("Ignite torch")));
     assert!(lines.contains(&"Sleep spell!"));
+    // `stats-panel.md §2.2.1` row 17: a dungeon sleep field defers the
+    // panel.
+    assert_eq!(
+        state.stats_panel_command_refresh,
+        crate::stats_panel::PanelRefreshMode::Deferred
+    );
 }
 
 #[test]

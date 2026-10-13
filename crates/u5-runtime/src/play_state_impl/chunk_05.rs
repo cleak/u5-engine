@@ -293,6 +293,15 @@ impl PlayState {
                 if dungeon_field_status_applies(self.party[index].climb_stat, roll) {
                     self.party[index].status = status;
                     affected += 1;
+                    // `stats-panel.md §2.2.1` row 17: a dungeon sleep
+                    // field's status change is deferred, per member that
+                    // falls asleep - unlike the non-combat poison field,
+                    // which "the non-combat poison helper" (row 15's
+                    // parenthetical) repaints inline.
+                    if field == DungeonFieldEffect::Sleep {
+                        self.stats_panel_command_refresh =
+                            crate::stats_panel::PanelRefreshMode::Deferred;
+                    }
                 }
             }
             return format!(

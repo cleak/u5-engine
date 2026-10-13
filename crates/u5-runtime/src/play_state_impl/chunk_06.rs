@@ -2941,6 +2941,11 @@ impl PlayState {
             if let Some(member) = self.party.get_mut(searching_member) {
                 member.status = b'P';
             }
+            // `stats-panel.md §2.2.1` row 20: the plague arm defers the
+            // panel; "its food and gold arms request nothing" - those stage
+            // an object for a later Get, which is already deferred on its
+            // own account through `apply_object_pickup`.
+            self.stats_panel_command_refresh = crate::stats_panel::PanelRefreshMode::Deferred;
             self.mark_visibility_dirty();
             return;
         }
