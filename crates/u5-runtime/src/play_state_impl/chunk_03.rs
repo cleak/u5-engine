@@ -5360,6 +5360,8 @@ impl PlayState {
             return MoveOutcome::Blocked;
         }
 
+        // `stats-panel.md §2.2.1` row 3: Awaken's status change is deferred.
+        self.stats_panel_command_refresh = crate::stats_panel::PanelRefreshMode::Deferred;
         self.party[target_index].status = b'G';
         self.advance_turn();
         // Measured: waking a sleeping member prints nothing, the same
@@ -5392,6 +5394,8 @@ impl PlayState {
             return MoveOutcome::Blocked;
         }
 
+        // `stats-panel.md §2.2.1` row 4: Cure's status change is deferred.
+        self.stats_panel_command_refresh = crate::stats_panel::PanelRefreshMode::Deferred;
         self.party[target_index].status = b'G';
         self.advance_turn();
         // The cure's success line is not measured; its sibling An Zu is
@@ -5530,6 +5534,9 @@ impl PlayState {
             variant: audio::spell_circle(GREAT_HEAL_SPELL_INDEX),
         });
 
+        // `stats-panel.md §2.2.1` row 6: Great Heal's HP restoration is
+        // deferred, the same as the shared healing helper above.
+        self.stats_panel_command_refresh = crate::stats_panel::PanelRefreshMode::Deferred;
         let before = self.party[target_index].hp;
         let (_, hp) = self.party[target_index].heal_to_max();
         let healed = hp.saturating_sub(before);
@@ -5690,6 +5697,8 @@ impl PlayState {
         // effect - here before the gameplay-PRNG grant roll.
         self.emit_sound_effect(SoundEffect::SharedVariant { variant: 2 });
 
+        // `stats-panel.md §2.2.1` row 5: Create Food's grant is deferred.
+        self.stats_panel_command_refresh = crate::stats_panel::PanelRefreshMode::Deferred;
         let before = self.food;
         // `cleak/u5-spec#49`: per-cast grant is uniform `1..=3`,
         // capped at [`PARTY_FOOD_CAP`].

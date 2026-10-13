@@ -257,6 +257,60 @@ fn committed_party_spells_play_their_published_variant_before_the_effect() {
     );
 }
 
+/// `stats-panel.md §2.2.1` rows 3-6: Awaken, Cure, Create Food and Great
+/// Heal all file the deferred request rather than repainting inline, the
+/// same mechanism row 9's shared Heal/Yellow-potion helper already uses.
+#[test]
+fn party_restore_spells_defer_the_stats_panel() {
+    let second_member = PartyMember {
+        slot: 1,
+        class_byte: b'B',
+        status: b'G',
+        climb_stat: DEFAULT_CLIMB_STAT,
+        mana: 0,
+        hp: DEFAULT_PARTY_HP,
+        max_hp: DEFAULT_PARTY_MAX_HP,
+        level: 8,
+    };
+
+    let mut awaken = world_state(open_world_grid(), 10, 20);
+    arm_spell(&mut awaken, AWAKEN_SPELL_INDEX);
+    awaken.party.push(second_member);
+    awaken.party[1].status = b'S';
+    assert_eq!(awaken.cast_awaken(0, 1), MoveOutcome::Cast);
+    assert_eq!(
+        awaken.stats_panel_command_refresh,
+        crate::stats_panel::PanelRefreshMode::Deferred
+    );
+
+    let mut cure = world_state(open_world_grid(), 10, 20);
+    arm_spell(&mut cure, CURE_SPELL_INDEX);
+    cure.party.push(second_member);
+    cure.party[1].status = b'P';
+    assert_eq!(cure.cast_cure(0, 1), MoveOutcome::Cast);
+    assert_eq!(
+        cure.stats_panel_command_refresh,
+        crate::stats_panel::PanelRefreshMode::Deferred
+    );
+
+    let mut food = world_state(open_world_grid(), 10, 20);
+    arm_spell(&mut food, CREATE_FOOD_SPELL_INDEX);
+    assert_eq!(food.cast_create_food(0), MoveOutcome::Cast);
+    assert_eq!(
+        food.stats_panel_command_refresh,
+        crate::stats_panel::PanelRefreshMode::Deferred
+    );
+
+    let mut great_heal = world_state(open_world_grid(), 10, 20);
+    arm_spell(&mut great_heal, GREAT_HEAL_SPELL_INDEX);
+    great_heal.party[0].hp = great_heal.party[0].max_hp - 1;
+    assert_eq!(great_heal.cast_great_heal(0, 0), MoveOutcome::Cast);
+    assert_eq!(
+        great_heal.stats_panel_command_refresh,
+        crate::stats_panel::PanelRefreshMode::Deferred
+    );
+}
+
 #[test]
 fn committed_utility_spells_play_their_published_variant() {
     // audio.md §6.1: "the variant is the tier index of the thing being used",
