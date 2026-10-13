@@ -1209,6 +1209,11 @@ pub const ENDGAME_TABLEAU_STING_TRAILING_TICKS: usize = 3;
 pub const ENDGAME_TABLEAU_STING_HOLD_BIOS_TICKS: u16 =
     (ENDGAME_TABLEAU_STING_LEADING_TICKS + ENDGAME_TABLEAU_STING_TRAILING_TICKS) as u16;
 
+/// `audio.md §8.7`: "plus ... the fixed 40-tick pause after Lord British
+/// appears" - paid once, when his walk to the throne target completes,
+/// before the party members' own walks begin.
+pub const ENDGAME_TABLEAU_LORD_BRITISH_ARRIVAL_HOLD_BIOS_TICKS: u16 = 40;
+
 pub fn endgame_tableau_cell_walkable_fallback(x: usize, y: usize) -> bool {
     x > 0
         && x + 1 < ENDGAME_TABLEAU_WIDTH
@@ -1466,6 +1471,13 @@ impl PlayState {
                         });
                     if arrived && let Some(endgame) = self.endgame.as_mut() {
                         endgame.entry_lord_british_pending = false;
+                        // `audio.md §8.7`: "the fixed 40-tick pause after
+                        // Lord British appears" - once, right after his
+                        // walk to the throne target completes.
+                        self.staged_narration.push_ticks(
+                            ENDGAME_TABLEAU_LORD_BRITISH_ARRIVAL_HOLD_BIOS_TICKS,
+                            String::new(),
+                        );
                     }
                     return true;
                 }
