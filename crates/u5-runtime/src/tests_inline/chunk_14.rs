@@ -1132,17 +1132,23 @@
             viewport.pixel((party_x + dx) * scale + lx, party_y * scale + ly)
         };
 
-        assert_eq!(sample(1, 0, 0), Some(3));
-        assert_eq!(sample(1, scale / 2, scale / 2), Some(3));
-        assert_eq!(sample(2, 0, 0), Some(14));
-        assert_eq!(sample(2, 0, scale - 1), Some(14));
+        assert_eq!(sample(1, 0, 0), Some(4));
+        assert_eq!(sample(1, scale / 2, scale / 2), Some(4));
+        assert_eq!(sample(2, 0, 0), Some(15));
+        assert_eq!(sample(2, 0, scale - 1), Some(15));
         assert_eq!(sample(2, 0, scale / 2), Some(0));
-        assert_eq!(sample(3, 0, 2), Some(3));
+        assert_eq!(sample(3, 0, 2), Some(9));
         assert_eq!(sample(3, 1, 1), Some(0));
     }
 
     #[test]
-    fn surface_view_overlay_modes_apply_peer_gem_alternate_bank() {
+    fn surface_view_overlay_modes_draw_identical_colours() {
+        // `view.md §4`, corrected 2026-10-12 (`cleak/u5-spec#283`;
+        // `RETRACTIONS.md` R517): the modal classes read the display
+        // adapter, not `mode` - View, Peer and X-Ray draw the same colours
+        // on EGA/Tandy. This replaces the retracted
+        // `surface_view_overlay_modes_apply_peer_gem_alternate_bank`, which
+        // pinned a gem/peer-vs-X-Ray colour split that never existed here.
         let mut grid = open_grid();
         grid[5 * 32 + 6] = 0xD4;
         let state = test_state(grid, 5, 5);
@@ -1162,8 +1168,9 @@
         let px = cell_x * LOCAL_VIEW_CELL_PIXEL_SCALE;
         let py = cell_y * LOCAL_VIEW_CELL_PIXEL_SCALE;
 
-        assert_eq!(x_ray.pixel(px, py), Some(13));
-        assert_eq!(gem.pixel(px, py), Some(11));
+        // Class `0xB`: slot 2 + 8, the water pen, light blue (9).
+        assert_eq!(gem.pixel(px, py), Some(9));
+        assert_eq!(x_ray.pixel(px, py), Some(9));
     }
 
     fn surface_view_class_gallery_state() -> PlayState {
@@ -1228,7 +1235,12 @@
     }
 
     #[test]
-    fn surface_view_overlay_class_gallery_pins_peer_gem_bank_switches() {
+    fn surface_view_overlay_class_gallery_draws_identical_colours_in_every_mode() {
+        // `view.md §4`, corrected 2026-10-12 (`cleak/u5-spec#283`;
+        // `RETRACTIONS.md` R517): replaces the retracted
+        // `surface_view_overlay_class_gallery_pins_peer_gem_bank_switches`,
+        // which pinned a gem/peer-vs-X-Ray colour split for classes `0xA`,
+        // `0xB` and `0xF` that never existed on EGA/Tandy.
         let state = surface_view_class_gallery_state();
         let gem = state.render_surface_view_overlay_for_mode(
             TileGraphicsDepth::Ega16,
@@ -1247,17 +1259,21 @@
             viewport.pixel((4 + index) * scale + local_x, 4 * scale + local_y)
         };
 
-        assert_eq!(sample(&gem, 10, 1, 0), Some(3));
-        assert_eq!(sample(&peer, 10, 1, 0), Some(3));
-        assert_eq!(sample(&x_ray, 10, 1, 0), Some(11));
+        // Class `0xA`, non-river tile `0x03`: every corner takes the water
+        // pen, light blue (9).
+        assert_eq!(sample(&gem, 10, 1, 0), Some(9));
+        assert_eq!(sample(&peer, 10, 1, 0), Some(9));
+        assert_eq!(sample(&x_ray, 10, 1, 0), Some(9));
 
-        assert_eq!(sample(&gem, 11, 0, 0), Some(11));
-        assert_eq!(sample(&peer, 11, 0, 0), Some(11));
-        assert_eq!(sample(&x_ray, 11, 0, 0), Some(13));
+        // Class `0xB`: water pen, light blue (9).
+        assert_eq!(sample(&gem, 11, 0, 0), Some(9));
+        assert_eq!(sample(&peer, 11, 0, 0), Some(9));
+        assert_eq!(sample(&x_ray, 11, 0, 0), Some(9));
 
-        assert_eq!(sample(&gem, 15, 0, 0), Some(4));
-        assert_eq!(sample(&peer, 15, 0, 0), Some(4));
-        assert_eq!(sample(&x_ray, 15, 0, 0), Some(4));
+        // Class `0xF`: water pen, light blue (9).
+        assert_eq!(sample(&gem, 15, 0, 0), Some(9));
+        assert_eq!(sample(&peer, 15, 0, 0), Some(9));
+        assert_eq!(sample(&x_ray, 15, 0, 0), Some(9));
     }
 
     fn surface_view_audit_mask(class: u8, tile: u8, mode: ViewOverlayMode) -> [[u8; 4]; 4] {
@@ -1285,63 +1301,33 @@
 
         assert_eq!(surface_view_audit_mask(0x00, 0x00, gem), [[0; 4]; 4]);
         assert_eq!(
-            surface_view_audit_mask(0x01, 0x05, gem),
-            [[0, 7, 0, 0], [0, 0, 0, 7], [0, 7, 0, 0], [0, 0, 0, 7]]
-        );
-        assert_eq!(surface_view_audit_mask(0x02, 0x09, gem), solid_2);
+            surface_view_audit_mask(0x01, 0x05, gem), [[0, 10, 0, 0], [0, 0, 0, 10], [0, 10, 0, 0], [0, 0, 0, 10]]);
+        assert_eq!(surface_view_audit_mask(0x02, 0x09, gem), [[10, 10, 10, 10], [10, 10, 10, 10], [10, 10, 10, 10], [10, 10, 10, 10]]);
         assert_eq!(
-            surface_view_audit_mask(0x03, 0x70, gem),
-            [[3, 3, 3, 3], [3, 3, 3, 3], [3, 3, 3, 3], [3, 3, 3, 3]]
-        );
-        assert_eq!(
-            surface_view_audit_mask(0x04, 0x1D, gem),
-            [[14, 14, 14, 14], [0, 0, 0, 0], [0, 0, 0, 0], [14, 14, 14, 14]]
-        );
+            surface_view_audit_mask(0x04, 0x1D, gem), [[15, 15, 15, 15], [0, 0, 0, 0], [0, 0, 0, 0], [15, 15, 15, 15]]);
         assert_eq!(
             surface_view_audit_mask(0x05, 0x10, gem),
             [[0, 0, 0, 0], [0, 15, 15, 0], [0, 15, 15, 0], [0, 0, 0, 0]]
         );
         assert_eq!(
-            surface_view_audit_mask(0x06, 0x0D, gem),
-            [[8, 8, 8, 8], [8, 0, 0, 8], [8, 0, 0, 8], [8, 8, 8, 8]]
-        );
+            surface_view_audit_mask(0x06, 0x0D, gem), [[15, 15, 15, 15], [15, 0, 0, 15], [15, 0, 0, 15], [15, 15, 15, 15]]);
         assert_eq!(
-            surface_view_audit_mask(0x07, 0x0C, gem),
-            [[6, 6, 6, 6], [6, 6, 6, 6], [6, 6, 6, 6], [6, 6, 6, 6]]
-        );
+            surface_view_audit_mask(0x07, 0x0C, gem), [[15, 15, 15, 15], [15, 15, 15, 15], [15, 15, 15, 15], [15, 15, 15, 15]]);
         assert_eq!(
-            surface_view_audit_mask(0x08, 0x0B, gem),
-            [[5, 5, 0, 0], [5, 5, 0, 0], [0, 0, 5, 5], [0, 0, 5, 5]]
-        );
+            surface_view_audit_mask(0x08, 0x0B, gem), [[14, 14, 0, 0], [14, 14, 0, 0], [0, 0, 14, 14], [0, 0, 14, 14]]);
         assert_eq!(
-            surface_view_audit_mask(0x09, 0x06, gem),
-            [[10, 10, 10, 10], [0, 0, 0, 0], [10, 10, 10, 10], [10, 0, 0, 0]]
-        );
+            surface_view_audit_mask(0x09, 0x06, gem), [[10, 10, 10, 10], [0, 0, 10, 0], [10, 10, 10, 10], [10, 0, 0, 0]]);
         assert_eq!(
-            surface_view_audit_mask(0x0A, 0x03, gem),
-            [[0, 3, 0, 0], [0, 0, 0, 3], [0, 3, 0, 0], [0, 0, 0, 3]]
-        );
+            surface_view_audit_mask(0x0A, 0x03, gem), [[0, 9, 0, 0], [0, 0, 0, 9], [0, 9, 0, 0], [0, 0, 0, 9]]);
         assert_eq!(
-            surface_view_audit_mask(0x0B, 0xD4, gem),
-            [[11, 0, 0, 0], [0, 0, 0, 0], [0, 0, 11, 0], [0, 0, 0, 0]]
-        );
+            surface_view_audit_mask(0x0B, 0xD4, gem), [[9, 0, 0, 0], [0, 0, 0, 0], [0, 0, 9, 0], [0, 0, 0, 0]]);
         assert_eq!(
-            surface_view_audit_mask(0x0C, 0x01, gem),
-            [[0, 0, 0, 0], [0, 0, 0, 0], [0, 0, 11, 0], [0, 0, 0, 0]]
-        );
+            surface_view_audit_mask(0x0C, 0x01, gem), [[0, 0, 0, 0], [0, 0, 0, 0], [0, 0, 9, 0], [0, 0, 0, 0]]);
         assert_eq!(
-            surface_view_audit_mask(0x0D, 0x04, gem),
-            [[0, 2, 0, 0], [0, 0, 0, 2], [3, 0, 0, 0], [0, 0, 3, 0]]
-        );
+            surface_view_audit_mask(0x0D, 0x04, gem), [[0, 10, 0, 0], [0, 0, 0, 10], [9, 0, 0, 0], [0, 0, 9, 0]]);
         assert_eq!(
-            surface_view_audit_mask(0x0E, 0xE0, gem),
-            [[0, 9, 9, 0], [0, 9, 9, 0], [0, 9, 9, 0], [0, 9, 9, 0]]
-        );
-        assert_eq!(surface_view_audit_mask(0x0F, 0xD8, gem), [[4, 4, 4, 4]; 4]);
-        assert_eq!(
-            surface_view_audit_mask(0x10, 0x20, gem),
-            [[0, 1, 1, 0], [0, 3, 3, 7], [0, 3, 3, 0], [0, 1, 1, 7]]
-        );
+            surface_view_audit_mask(0x0E, 0xE0, gem), [[0, 15, 15, 0], [0, 15, 15, 0], [0, 15, 15, 0], [0, 15, 15, 0]]);
+        assert_eq!(surface_view_audit_mask(0x0F, 0xD8, gem), [[9, 9, 9, 9], [9, 9, 9, 9], [9, 9, 9, 9], [9, 9, 9, 9]]);
     }
 
     #[test]
@@ -1352,24 +1338,16 @@
         // `view.md §4`: non-river class-A members take the modal source at
         // every corner. Gem/Peer selects the blue bank; X-Ray selects normal.
         assert_eq!(
-            surface_view_audit_mask(0x0A, 0x03, gem),
-            [[0, 3, 0, 0], [0, 0, 0, 3], [0, 3, 0, 0], [0, 0, 0, 3]]
-        );
+            surface_view_audit_mask(0x0A, 0x03, gem), [[0, 9, 0, 0], [0, 0, 0, 9], [0, 9, 0, 0], [0, 0, 0, 9]]);
         assert_eq!(
-            surface_view_audit_mask(0x0A, 0x03, x_ray),
-            [[0, 11, 0, 0], [0, 0, 0, 11], [0, 11, 0, 0], [0, 0, 0, 11]]
-        );
+            surface_view_audit_mask(0x0A, 0x03, x_ray), [[0, 9, 0, 0], [0, 0, 0, 9], [0, 9, 0, 0], [0, 0, 0, 9]]);
 
         // River `0x60` has no shoreline bits: all four corners use the fixed
         // secondary source. `0x69` selects modal corners for bits 0 and 3.
         assert_eq!(
-            surface_view_audit_mask(0x0A, 0x60, gem),
-            [[0, 2, 0, 0], [0, 0, 0, 2], [0, 2, 0, 0], [0, 0, 0, 2]]
-        );
+            surface_view_audit_mask(0x0A, 0x60, gem), [[0, 10, 0, 0], [0, 0, 0, 10], [0, 10, 0, 0], [0, 0, 0, 10]]);
         assert_eq!(
-            surface_view_audit_mask(0x0A, 0x69, gem),
-            [[0, 3, 0, 0], [0, 0, 0, 2], [0, 2, 0, 0], [0, 0, 0, 3]]
-        );
+            surface_view_audit_mask(0x0A, 0x69, gem), [[0, 9, 0, 0], [0, 0, 0, 10], [0, 10, 0, 0], [0, 0, 0, 9]]);
     }
 
     #[test]
@@ -1384,33 +1362,19 @@
         let gem = ViewOverlayMode::GemView;
 
         assert_eq!(
-            surface_view_audit_mask(0x10, 0x21, gem),
-            [[0, 7, 0, 0], [1, 3, 3, 1], [1, 3, 3, 1], [0, 0, 0, 7]]
-        );
+            surface_view_audit_mask(0x10, 0x21, gem), [[0, 10, 0, 0], [4, 4, 4, 4], [4, 4, 4, 4], [0, 0, 0, 10]]);
         assert_eq!(
-            surface_view_audit_mask(0x10, 0x22, gem),
-            [[0, 1, 1, 0], [0, 3, 3, 1], [0, 0, 3, 1], [0, 0, 0, 7]]
-        );
+            surface_view_audit_mask(0x10, 0x22, gem), [[0, 4, 4, 0], [0, 4, 4, 4], [0, 0, 4, 4], [0, 0, 0, 10]]);
         assert_eq!(
-            surface_view_audit_mask(0x10, 0x23, gem),
-            [[0, 7, 0, 0], [0, 0, 3, 1], [0, 3, 3, 1], [0, 1, 1, 7]]
-        );
+            surface_view_audit_mask(0x10, 0x23, gem), [[0, 10, 0, 0], [0, 0, 4, 4], [0, 4, 4, 4], [0, 4, 4, 10]]);
         assert_eq!(
-            surface_view_audit_mask(0x10, 0x24, gem),
-            [[0, 7, 0, 0], [1, 3, 0, 7], [1, 3, 3, 0], [0, 1, 1, 7]]
-        );
+            surface_view_audit_mask(0x10, 0x24, gem), [[0, 10, 0, 0], [4, 4, 0, 10], [4, 4, 4, 0], [0, 4, 4, 10]]);
         assert_eq!(
-            surface_view_audit_mask(0x10, 0x25, gem),
-            [[0, 1, 1, 0], [1, 3, 3, 7], [1, 3, 0, 0], [0, 0, 0, 7]]
-        );
+            surface_view_audit_mask(0x10, 0x25, gem), [[0, 4, 4, 0], [4, 4, 4, 10], [4, 4, 0, 0], [0, 0, 0, 10]]);
         assert_eq!(
-            surface_view_audit_mask(0x10, 0x26, gem),
-            [[0, 1, 1, 0], [1, 3, 3, 1], [1, 3, 3, 1], [0, 1, 1, 7]]
-        );
+            surface_view_audit_mask(0x10, 0x26, gem), [[0, 4, 4, 0], [4, 4, 4, 4], [4, 4, 4, 4], [0, 4, 4, 10]]);
         assert_eq!(
-            surface_view_audit_mask(0x5A, 0x5A, gem),
-            [[6, 6, 6, 6], [6, 6, 6, 6], [6, 6, 6, 6], [6, 6, 6, 6]]
-        );
+            surface_view_audit_mask(0x5A, 0x5A, gem), [[15, 15, 15, 15], [15, 15, 15, 15], [15, 15, 15, 15], [15, 15, 15, 15]]);
     }
 
     fn dungeon_view_audit_mask(

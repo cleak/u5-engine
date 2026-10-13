@@ -6061,7 +6061,9 @@ fn draw_surface_view_cell(
         0x09 => {
             draw_view_overlay_hline(viewport, cell_x, cell_y, scale, 0, color);
             draw_view_overlay_hline(viewport, cell_x, cell_y, scale, 2, color);
-            set_view_overlay_pixel(viewport, cell_x, cell_y, scale, 1, 2, color);
+            // `view.md §4` (corrected 2026-10-12, issue #283; `RETRACTIONS.md`
+            // R515): the first plot is `(2,1)`, not `(1,2)`.
+            set_view_overlay_pixel(viewport, cell_x, cell_y, scale, 2, 1, color);
             set_view_overlay_pixel(viewport, cell_x, cell_y, scale, 0, 3, color);
         }
         0x0A => {
@@ -6089,7 +6091,7 @@ fn draw_surface_view_cell(
                 set_view_overlay_pixel(viewport, cell_x, cell_y, scale, 2, y, color);
             }
         }
-        0x10 => draw_surface_view_road(viewport, cell_x, cell_y, scale, color, tile, mode),
+        0x10 => draw_surface_view_road(viewport, cell_x, cell_y, scale, tile, mode),
         0x5A => fill_view_overlay_cell(viewport, cell_x, cell_y, scale, color),
         _ => fill_view_overlay_cell(viewport, cell_x, cell_y, scale, color),
     }
@@ -6419,34 +6421,26 @@ fn draw_dungeon_door_glyph(
     draw_view_overlay_hline(viewport, cell_x, cell_y, scale, scale / 2, color);
 }
 
-fn surface_view_class_color(class: u8, mode: ViewOverlayMode) -> u8 {
-    if mode.uses_alternate_surface_view_bank() {
-        match class {
-            0x0A => return 3,
-            0x0B => return 11,
-            0x0C => return 11,
-            0x0D => return 3,
-            _ => {}
-        }
-    }
+/// `view.md §4`, corrected 2026-10-12 (`cleak/u5-spec#283`; `RETRACTIONS.md`
+/// R514/R517): there are no "source banks" and no mode-dependent pen swap.
+/// Every class selects one of `display-driver.md` §2's seven UI colour
+/// slots (some biased into the bright half of the EGA/Tandy palette by
+/// adding eight); the hand-written per-class EGA indices this used to carry
+/// had no citation, because at the time there was nothing to cite
+/// (`cleak/u5-engine#40`). The adapter, not `mode`, is the only thing that
+/// could vary this - and on EGA/Tandy, the v1 target, it never does: every
+/// caller (View, Peer, X-Ray, Look) draws the same colours. `mode` stays a
+/// parameter only because callers still pass one; it is not read here.
+fn surface_view_class_color(class: u8, _mode: ViewOverlayMode) -> u8 {
     match class {
-        0x01 => 7,
-        0x02 => 2,
-        0x03 => 3,
-        0x04 => 14,
-        0x05 => 15,
-        0x06 => 8,
-        0x07 => 6,
-        0x08 => 5,
-        0x09 => 10,
-        0x0A => 11,
-        0x0B => 13,
-        0x0C => 13,
-        0x0D => 12,
-        0x0E => 9,
-        0x0F => 4,
-        0x10 => 1,
-        0x5A => 6,
+        0x01 | 0x02 | 0x09 => 10, // slot 3 + 8, light green: secondary terrain
+        0x03 => 4,                // slot 0, dark red: frame fill
+        0x04..=0x07 | 0x0E | 0x5A => 15, // slot 1, white: frame line
+        0x08 => 14,               // slot 5, yellow: dedicated rough terrain
+        // slot 2 + 8, light blue: water pen. `0xA`/`0xD` also use the
+        // slot 3 + 8 secondary pen per corner/pair; see
+        // `draw_surface_view_water_corners` and the `0x0D` arm above.
+        0x0A..=0x0C | 0x0D | 0x0F => 9,
         _ => 7,
     }
 }
@@ -6554,12 +6548,14 @@ fn draw_surface_view_road(
     cell_x: usize,
     cell_y: usize,
     scale: usize,
-    color: u8,
     tile: u8,
     mode: ViewOverlayMode,
 ) {
     // `view.md §4`: the road opens with the class-1 secondary checker,
-    // then lays down the frame-fill centre body and connection stubs.
+    // then lays down the slot-0 (dark red) centre body and connection
+    // stubs. Corrected 2026-10-12 (issue #283; `RETRACTIONS.md` R516): the
+    // stubs are slot 0 too, not the frame-line pen - the body and every
+    // stub share one colour.
     draw_surface_view_sparse_checker(
         viewport,
         cell_x,
@@ -6576,20 +6572,20 @@ fn draw_surface_view_road(
 
     let mask = surface_view_road_connection_mask(tile);
     if mask & 0x1 != 0 {
-        set_view_overlay_pixel(viewport, cell_x, cell_y, scale, 1, 0, color);
-        set_view_overlay_pixel(viewport, cell_x, cell_y, scale, 2, 0, color);
+        set_view_overlay_pixel(viewport, cell_x, cell_y, scale, 1, 0, fill);
+        set_view_overlay_pixel(viewport, cell_x, cell_y, scale, 2, 0, fill);
     }
     if mask & 0x2 != 0 {
-        set_view_overlay_pixel(viewport, cell_x, cell_y, scale, 3, 1, color);
-        set_view_overlay_pixel(viewport, cell_x, cell_y, scale, 3, 2, color);
+        set_view_overlay_pixel(viewport, cell_x, cell_y, scale, 3, 1, fill);
+        set_view_overlay_pixel(viewport, cell_x, cell_y, scale, 3, 2, fill);
     }
     if mask & 0x4 != 0 {
-        set_view_overlay_pixel(viewport, cell_x, cell_y, scale, 1, 3, color);
-        set_view_overlay_pixel(viewport, cell_x, cell_y, scale, 2, 3, color);
+        set_view_overlay_pixel(viewport, cell_x, cell_y, scale, 1, 3, fill);
+        set_view_overlay_pixel(viewport, cell_x, cell_y, scale, 2, 3, fill);
     }
     if mask & 0x8 != 0 {
-        set_view_overlay_pixel(viewport, cell_x, cell_y, scale, 0, 1, color);
-        set_view_overlay_pixel(viewport, cell_x, cell_y, scale, 0, 2, color);
+        set_view_overlay_pixel(viewport, cell_x, cell_y, scale, 0, 1, fill);
+        set_view_overlay_pixel(viewport, cell_x, cell_y, scale, 0, 2, fill);
     }
 
     let blank_notch = match tile {

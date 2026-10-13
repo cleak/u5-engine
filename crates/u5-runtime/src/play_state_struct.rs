@@ -801,21 +801,15 @@ pub enum ViewOverlayMode {
     SkyView,
 }
 
-impl ViewOverlayMode {
-    /// `view.md §4`: the 32x32 LOOKOBJ overlay classes `0xA`/`0xB`/`0xC`/
-    /// `0xD`/`0xF` publish modal normal-vs-peer source families, so the
-    /// **surface** overlay does pick an alternate pen family in the gem and
-    /// peer-spell modes.
-    ///
-    /// This is a surface-only distinction. `view.md §6.3` and
-    /// `dungeon-mode.md §12.4` withdraw the matching dungeon reading: "the
-    /// value they were reading is the **display-adapter identifier**, not a
-    /// peer-spell flag ... V-View has no peer-spell branch of its own." The
-    /// dungeon minimap painters must therefore not call this.
-    pub const fn uses_alternate_surface_view_bank(self) -> bool {
-        matches!(self, Self::GemView | Self::PeerSpell)
-    }
-}
+// `view.md §4`, corrected 2026-10-12 (`cleak/u5-spec#283`; `RETRACTIONS.md`
+// R517): the local-view overlay classes `0xA`/`0xB`/`0xC`/`0xD`/`0xF` do
+// **not** pick an alternate pen in gem/peer-spell mode. The modal arm reads
+// the display-adapter identifier, the same word `view.md §6.3` and
+// `dungeon-mode.md §12.4` already withdrew the matching dungeon "peer tint
+// branch" reading for - and on EGA/Tandy, the v1 target, it is constant:
+// View, Peer, X-Ray and Look all draw the same colours. The surface-only
+// `uses_alternate_surface_view_bank` method this impl block used to carry
+// is withdrawn along with that reading.
 
 /// The shared spell/potion visibility sweep: the body of the White potion
 /// (`catalogs/item-list.md §7.2`) and of the sixth-circle X-Ray spell
