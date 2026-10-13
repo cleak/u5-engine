@@ -398,6 +398,11 @@ fn board_vehicle_uses_facing_active_object_and_clears_parked_slot() {
     assert!(state.world_object_at(1, 0).is_none());
     assert_eq!(state.turn, 1);
     assert_eq!(state.message, "Boarded ship.");
+    // `stats-panel.md §2.2.1` row 11: Board defers the panel refresh.
+    assert_eq!(
+        state.stats_panel_command_refresh,
+        crate::stats_panel::PanelRefreshMode::Deferred
+    );
 }
 
 #[test]

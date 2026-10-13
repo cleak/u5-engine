@@ -4598,6 +4598,9 @@ impl PlayState {
             return MoveOutcome::Used;
         }
 
+        // `stats-panel.md §2.2.1` row 12: New Order's marching-order change
+        // is deferred.
+        self.stats_panel_command_refresh = crate::stats_panel::PanelRefreshMode::Deferred;
         self.party.swap(first, second);
         if first < self.party_names.len() && second < self.party_names.len() {
             self.party_names.swap(first, second);

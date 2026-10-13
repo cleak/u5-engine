@@ -860,6 +860,9 @@ impl PlayState {
             return MoveOutcome::Blocked;
         }
 
+        // `stats-panel.md §2.2.1` row 11: Board's vehicle marker, hull and
+        // skiff/carpet-count changes are deferred.
+        self.stats_panel_command_refresh = crate::stats_panel::PanelRefreshMode::Deferred;
         self.free_active_object_slot(candidate.slot);
         if matches!(transport, TransportState::Ship { .. })
             && ship_boarding_stows_carpet(starting_transport_marker)

@@ -2385,6 +2385,13 @@
             .diagnostics
             .iter()
             .any(|d| d == "New order: party slots 2 and 3 swapped."));
+        // `stats-panel.md §2.2.1` row 12: the marching-order change is
+        // deferred, not an inline repaint.
+        assert_eq!(
+            state.stats_panel_command_refresh,
+            crate::stats_panel::PanelRefreshMode::Deferred
+        );
+        assert!(state.stats_panel_refresh_requested);
     }
 
     #[test]

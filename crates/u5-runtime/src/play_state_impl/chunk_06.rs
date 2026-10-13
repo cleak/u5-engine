@@ -1728,7 +1728,14 @@ impl PlayState {
         Some(MoveOutcome::Got)
     }
 
+    /// `stats-panel.md §2.2.1` row 21: "Any successful grant from Search,
+    /// Get, chest opening or hidden-treasure collection ... one shared
+    /// tail" is deferred; row 22 names the crop case (reached through
+    /// [`Self::apply_get_tile_grant`]) the same way. This is that tail -
+    /// every caller is one of those four families, and a refusal never
+    /// reaches it at all.
     pub fn apply_object_pickup(&mut self, kind: ObjectPickupKind, amount: u8) {
+        self.stats_panel_command_refresh = crate::stats_panel::PanelRefreshMode::Deferred;
         match kind {
             ObjectPickupKind::Food => {
                 self.food = self
