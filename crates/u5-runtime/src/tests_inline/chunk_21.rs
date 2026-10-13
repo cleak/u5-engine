@@ -5796,6 +5796,82 @@ fn end_to_end_unaffordable_provisions_grant_only_the_published_charity_case() {
     }
 }
 
+/// `shops.md §8.C`'s tavern provisions outcome table, the two arms
+/// `u5-engine#43` found unwired: a partial purchase and the no-gold/enough-
+/// food refusal. Both need a real `SHOPPE.DAT` for the vendor-name
+/// attribution row, so this is gated like
+/// `local_shoppe_dat_asset_renders_sanitized_audit_when_present`.
+#[test]
+fn end_to_end_tavern_provisions_print_the_published_partial_and_refusal_arms() {
+    use crate::shop_runtime::TavernState;
+    use crate::shop_session::ActiveShopSession;
+
+    let Some(game_dir) = crate::test_fixtures::configured_original_asset_dir() else {
+        return;
+    };
+    let game_dir = game_dir.as_path();
+    if !game_dir.join("SHOPPE.DAT").exists() {
+        return;
+    }
+
+    // Scene 22 (Paws) under tavern dialog id `0x82` is Dr. Cat's The Cat's
+    // Lair, the same pairing `shop_vendor_name_for_scene`'s own test table
+    // uses - unit price 20 per `tavern_provision_unit_price`.
+    let mut state = test_state(open_grid(), 1, 1);
+    state.area = Area::Town {
+        scene: Scene::new(22).unwrap(),
+        floor: 0,
+    };
+    state.gold = 45;
+    state.food = 10;
+    state.active_shop = Some(ActiveShopSession::Tavern(
+        TavernState::PickProvisionQuantity {
+            tavern: Tavern::TheCatsLair,
+            unit_price: 20,
+            continuation_ready: false,
+        },
+    ));
+
+    // Five packs requested at 20 gold each; 45 gold only affords two.
+    handle_play_key_input(&mut state, '5', "", game_dir).unwrap();
+
+    assert_eq!(state.gold, 5);
+    assert_eq!(state.food, 60);
+    assert!(
+        state.message.contains("\"Thou canst\nafford only 2!\"\n\n"),
+        "partial-afford text missing: {:?}",
+        state.message
+    );
+
+    let mut state = test_state(open_grid(), 1, 1);
+    state.area = Area::Town {
+        scene: Scene::new(22).unwrap(),
+        floor: 0,
+    };
+    state.gold = 0;
+    state.food = 10;
+    state.active_shop = Some(ActiveShopSession::Tavern(
+        TavernState::PickProvisionQuantity {
+            tavern: Tavern::TheCatsLair,
+            unit_price: 20,
+            continuation_ready: false,
+        },
+    ));
+
+    handle_play_key_input(&mut state, '1', "", game_dir).unwrap();
+
+    assert_eq!(state.gold, 0);
+    assert_eq!(state.food, 10);
+    assert!(
+        state
+            .message
+            .contains("\"Thou hast\nneither gold nor\nneed! Out!\"\nyells Dr. Cat.\n"),
+        "no-need refusal attribution missing: {:?}",
+        state.message
+    );
+    assert!(state.active_shop.is_none());
+}
+
 fn shoppe_dat_with_records(records: &[(usize, &[u8])]) -> Vec<u8> {
     assert!(!records.is_empty());
     let payload_len: usize = records.iter().map(|(_, record)| record.len()).sum();

@@ -1505,11 +1505,11 @@ pub const HEALER_UNMATCHED_ROW_RESURRECT_FEE: u16 = 270;
 /// change gold or inventory.
 pub const TAVERN_AFFORDABILITY_REFUSAL_BARK: &str = "Beat it!";
 pub const UPMARKET_INN_AFFORDABILITY_REFUSAL_BARK: &str = "Highwaymen!";
-/// `shops.md §6.1` vehicle-broker partial-afford prefix. Vehicle
-/// brokers (horse trader, shipwright) print
-/// `"Thou canst afford only "` followed by the affordable count;
-/// callers compose the trailing quantity at format time.
-pub const VEHICLE_BROKER_PARTIAL_AFFORD_PREFIX: &str = "Thou canst afford only ";
+/// `shops.md §8.C`'s tavern provisions outcome table, the "Some requested
+/// packs afforded" row: a partial purchase prints `"Thou canst\nafford
+/// only `, the actual number of packs served, `!"\n\n`. Callers compose the
+/// trailing quantity and punctuation at format time.
+pub const TAVERN_PARTIAL_AFFORD_PREFIX: &str = "Thou canst\nafford only ";
 
 /// Public issue `cleak/u5-spec#13`: the corrected sage flow uses one
 /// global resident topic table, not per-sage synthetic rows.

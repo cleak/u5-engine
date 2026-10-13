@@ -3726,14 +3726,33 @@ fn format_tavern_outcome_with_shoppe(
                 },
             )
             .ok(),
-        // `shops.md §8.5`, the outcome table: a fully served quantity prints
-        // a "blank-line tail" and then runs the surcharge - no sentence of
-        // its own. The partial line is resident text this spec does not
-        // quote, so that one still falls through to the placeholder below.
+        // `shops.md §8.C`'s outcome table: a fully served quantity (or one
+        // that only stopped because the 9999 food ceiling was hit) prints a
+        // blank-line tail and then runs the surcharge - no sentence of its
+        // own.
         ProvisionsPurchased {
             completion: crate::shops::ProvisionPurchaseCompletion::Completed,
             ..
         } => Some(String::from("\n")),
+        // `shops.md §8.C`, "Some requested packs afforded": gold ran out
+        // after at least one pack was served. `\n\n"Thou canst\nafford only
+        // `, the actual packs served, `!"\n\n` - resident text with no
+        // `SHOPPE.DAT` record, found unread by `qa/tools/unwired_literals.py`
+        // as `TAVERN_PARTIAL_AFFORD_PREFIX` (u5-engine#43).
+        ProvisionsPurchased {
+            completion: crate::shops::ProvisionPurchaseCompletion::GoldExhausted,
+            purchased_quantity,
+            ..
+        } => Some(format!(
+            "\n\n\"{}{purchased_quantity}!\"\n\n",
+            crate::shops::TAVERN_PARTIAL_AFFORD_PREFIX
+        )),
+        // `shops.md §8.C`, "No packs affordable, at least three food
+        // servings": `\n\n"Thou hast\nneither gold nor\nneed! Out!"\nyells `,
+        // vendor name, `.\n`; ends visit. The no-SHOPPE fallback prints the
+        // bare bark without this attribution row (u5-engine#43).
+        RefusedNoNeed => tavern_vendor_name
+            .map(|name| format!("{TAVERN_NO_GOLD_NO_NEED_BARK}\nyells {name}.\n")),
         Continued {
             tavern,
             follow_up_record_id,

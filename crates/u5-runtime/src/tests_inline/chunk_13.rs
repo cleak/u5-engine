@@ -7104,10 +7104,7 @@ fn shop_affordability_refusal_barks_match_spec_text() {
     // presentation only; gold and inventory are unchanged.
     assert_eq!(TAVERN_AFFORDABILITY_REFUSAL_BARK, "Beat it!");
     assert_eq!(UPMARKET_INN_AFFORDABILITY_REFUSAL_BARK, "Highwaymen!");
-    assert_eq!(
-        VEHICLE_BROKER_PARTIAL_AFFORD_PREFIX,
-        "Thou canst afford only "
-    );
+    assert_eq!(TAVERN_PARTIAL_AFFORD_PREFIX, "Thou canst\nafford only ");
 }
 
 #[test]
