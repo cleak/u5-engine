@@ -1894,7 +1894,7 @@ impl PlayState {
     }
 
     /// Mirror the live row into the compatibility slot without logging it.
-    pub(crate) fn adopt_shrine_prompt_row(&mut self) {
+    pub fn adopt_shrine_prompt_row(&mut self) {
         let row = self.render_active_shrine();
         self.adopt_flushed_message(row);
     }
@@ -1937,6 +1937,14 @@ impl PlayState {
                         // with a blank row under it, and the mantra label
                         // opens below as the next row to type into.
                         self.emit_message_line(format!(":{}\n\n", session.virtue_buffer));
+                        // `karma.md §12`: "wait six world ticks" before the
+                        // first `Mantra:` row opens. `shrine_prompt_echo`
+                        // already suppresses the live Mantra row while
+                        // staged narration is pending, so a pure hold here
+                        // is enough - nothing new needs printing once it
+                        // clears.
+                        self.staged_narration
+                            .push_ticks(SHRINE_MANTRA_FIRST_HOLD_BIOS_TICKS, String::new());
                     }
                     '\u{8}' | '\u{7f}' => {
                         session.virtue_buffer.pop();
@@ -2107,10 +2115,23 @@ impl PlayState {
             // own: their silence does not indicate that ordination has
             // occurred." A fresh `Mantra:` row simply opens beneath.
             session.mantra_buffer.clear();
+            // §12: "waiting twelve world ticks after each nonblank answer."
+            // Same pure-hold shape as the first ask's six-tick wait above.
+            self.staged_narration
+                .push_ticks(SHRINE_MANTRA_SUBSEQUENT_HOLD_BIOS_TICKS, String::new());
             self.active_shrine = Some(session);
             self.adopt_shrine_prompt_row();
             return Ok(None);
         }
+        // `karma.md §12`'s "Unfocused result" row times this third mantra's
+        // own twelve-tick wait as "the third mantra's twelve world steps",
+        // reached before whichever of the three branches below prints.
+        // Unlike the first two asks, nothing here is a pure hold followed by
+        // a live row the existing staged-narration gate already handles for
+        // free - each branch has to run its own fallible MISCMSG lookup
+        // once the wait ends, which the current `StagedNarration` queue has
+        // no hook for. Left unstaged pending that mechanism; tracked on
+        // `cleak/u5-engine#23`.
         if !session.answers_matched {
             // "Unfocused result | If the virtue answer or any of the three
             // mantra answers was wrong, render record `30` after the third

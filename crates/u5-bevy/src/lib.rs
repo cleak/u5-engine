@@ -25635,6 +25635,10 @@ mod tests {
         state.flush_staged_narration();
         assert!(visual_line_prompt_active(&state));
         handle_play_key_input(&mut state, 'H', "ONESTY\r", &dir).unwrap();
+        // `karma.md §12`: "wait six world ticks" before the `Mantra:` row
+        // opens. No pump here, so resync the same way the entry did.
+        state.flush_staged_narration();
+        state.adopt_shrine_prompt_row();
         assert_eq!(state.message, u5_runtime::SHRINE_MANTRA_PROMPT);
 
         let mut input_line = String::new();
@@ -25658,6 +25662,10 @@ mod tests {
             .unwrap();
             assert!(input_line.is_empty());
             if ask < 2 {
+                // §12: "waiting twelve world ticks after each nonblank
+                // answer." Same resync as above.
+                state.flush_staged_narration();
+                state.adopt_shrine_prompt_row();
                 assert_eq!(state.shrine_ordained_mask, 0);
                 assert_eq!(state.message, u5_runtime::SHRINE_MANTRA_PROMPT);
                 for key in [KeyCode::KeyA, KeyCode::KeyH, KeyCode::KeyM] {

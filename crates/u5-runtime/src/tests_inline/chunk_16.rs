@@ -1659,6 +1659,10 @@ BRITANNIA 11 21
                 handle_play_key_input(&mut state, 'L', "um\r", &dir).unwrap(),
                 PlayInputDisposition::Continue
             );
+            // §12: "waiting twelve world ticks after each nonblank answer."
+            // No pump here, so resync the same way production code does.
+            state.flush_staged_narration();
+            state.adopt_shrine_prompt_row();
         }
 
         // Measured: the third accepted mantra opens the altar announcement,
@@ -1742,6 +1746,13 @@ BRITANNIA 11 21
             handle_play_key_input(&mut state, 'H', "ONESTY\r", &dir).unwrap(),
             PlayInputDisposition::Continue
         );
+        // `karma.md §12`: "wait six world ticks" before the first `Mantra:`
+        // row opens. No pump here either, so flush it the same way the
+        // entry narration above was; the hold itself prints nothing, so
+        // `self.message` needs the same explicit resync production code
+        // gives it on entry (`adopt_shrine_prompt_row`).
+        state.flush_staged_narration();
+        state.adopt_shrine_prompt_row();
         assert_eq!(state.message, SHRINE_MANTRA_PROMPT);
 
         // `karma.md §12`: the session asks `Mantra:` three times, and only
@@ -1752,6 +1763,9 @@ BRITANNIA 11 21
                 handle_play_key_input(&mut state, 'A', "hm\r", &dir).unwrap(),
                 PlayInputDisposition::Continue
             );
+            // §12: "waiting twelve world ticks after each nonblank answer."
+            state.flush_staged_narration();
+            state.adopt_shrine_prompt_row();
             assert!(state.active_shrine.is_some());
             assert_eq!(state.shrine_ordained_mask, 0);
             assert_eq!(state.message, SHRINE_MANTRA_PROMPT);
@@ -1784,6 +1798,10 @@ BRITANNIA 11 21
         // it is on screen the prompt is not open and keys are buffered.
         state.flush_staged_narration();
         handle_play_key_input(&mut state, 'H', "ONESTY\r", &dir).unwrap();
+        // §12: "wait six world ticks" before the `Mantra:` row opens; until
+        // then the row is not live and a key would just buffer.
+        state.flush_staged_narration();
+        state.adopt_shrine_prompt_row();
         assert_eq!(
             handle_play_key_input(&mut state, '\r', "", &dir).unwrap(),
             PlayInputDisposition::Continue
@@ -1947,6 +1965,10 @@ BRITANNIA 11 21
         state.flush_staged_narration();
         handle_play_key_input(&mut state, 'C', "OMPASSION\r", &dir).unwrap();
         for _ in 0..3 {
+            // §12: holds six ticks before the first ask and twelve after
+            // each nonblank answer; resync the same way the entry did.
+            state.flush_staged_narration();
+            state.adopt_shrine_prompt_row();
             assert_eq!(
                 handle_play_key_input(&mut state, 'M', "u\r", &dir).unwrap(),
                 PlayInputDisposition::Continue
@@ -1988,6 +2010,10 @@ BRITANNIA 11 21
         state.flush_staged_narration();
         handle_play_key_input(&mut state, 'C', "OMPASSION\r", &dir).unwrap();
         for _ in 0..3 {
+            // §12: holds six ticks before the first ask and twelve after
+            // each nonblank answer; resync the same way the entry did.
+            state.flush_staged_narration();
+            state.adopt_shrine_prompt_row();
             handle_play_key_input(&mut state, 'M', "u\r", &dir).unwrap();
         }
         assert_eq!(

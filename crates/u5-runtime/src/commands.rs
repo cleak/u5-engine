@@ -792,6 +792,21 @@ pub const SHRINE_EXIT_PACING_HOLD_BIOS_TICKS: u16 = 88;
 /// `Shrine of <virtue> mantra? _` plus an instructional line.
 pub const SHRINE_MANTRA_PROMPT: &str = "Mantra:";
 
+/// `karma.md §12`'s mantra-questions row: "After a nonblank virtue answer,
+/// wait six world ticks and emit a newline." Converted at the same
+/// ~1.6-BIOS-ticks-per-world-step rate [`SHRINE_VIRTUE_QUESTION_HOLD_WORLD_TICKS`]
+/// measures (`72` ticks for `45` steps): six steps round to ten ticks.
+///
+/// **Measured constant, not yet independently calibrated** against its own
+/// paired capture - scaled from the sibling holds' rate like
+/// `cleak/u5-spec#271` already asks about for them. Re-check once that
+/// issue or a dedicated shrine-mantra-pacing capture answers it directly.
+pub const SHRINE_MANTRA_FIRST_HOLD_BIOS_TICKS: u16 = 10;
+/// `karma.md §12`: "waiting twelve world ticks after each nonblank answer."
+/// Twelve steps at the same rate round to nineteen ticks. Same calibration
+/// caveat as [`SHRINE_MANTRA_FIRST_HOLD_BIOS_TICKS`].
+pub const SHRINE_MANTRA_SUBSEQUENT_HOLD_BIOS_TICKS: u16 = 19;
+
 /// `karma.md §12`: an affordable offering finishes "with ten world ticks".
 pub const SHRINE_OFFERING_RESULT_WORLD_TICKS: usize = 10;
 /// The daylight refusal, measured aboard a ship at noon.
