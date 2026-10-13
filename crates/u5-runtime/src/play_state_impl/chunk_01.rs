@@ -2030,7 +2030,6 @@ impl PlayState {
         &mut self,
         game_dir: &Path,
         scene: Scene,
-        floor: i8,
     ) -> io::Result<MoveOutcome> {
         let entries = effective_world_location_entries(game_dir)?;
         let matches: Vec<_> = entries
@@ -2038,13 +2037,22 @@ impl PlayState {
             .copied()
             .filter(|entry| entry.target == PlayTarget::Town(scene))
             .collect();
-        let Some(entry) = matches.first().copied() else {
-            return Ok(self.block_missing_town_return(
-                scene,
-                floor,
-                format!("Accepted the boundary exit from {}", scene.key()),
-            ));
-        };
+        // `catalogs/gazetteer.md` §5.1 (`RETRACTIONS.md` R474): "No per-save
+        // return-coordinate datum exists... every legal scene byte has a
+        // populated row, so the branch is unreachable and any player-visible
+        // message on it has no original counterpart" - the engine's own
+        // `missing clean return-coordinate metadata` fallback is exactly that
+        // withdrawn branch, and the published/merged table
+        // (`effective_world_location_entries`) guarantees this `expect` never
+        // fires: all forty rows are present and distinct, and a sidecar can
+        // only replace a published row, never remove its coverage.
+        let entry = *matches.first().unwrap_or_else(|| {
+            panic!(
+                "catalogs/gazetteer.md §5.1: {} has no return-coordinate row, \
+                 which the published table guarantees cannot happen",
+                PlayTarget::Town(scene).key()
+            )
+        });
         if matches.len() > 1 {
             return Err(io::Error::new(
                 io::ErrorKind::InvalidData,
@@ -2082,24 +2090,6 @@ impl PlayState {
         Ok(MoveOutcome::Transition(AreaTransition::ExitedLocation(
             scene,
         )))
-    }
-
-    pub fn block_missing_town_return(
-        &mut self,
-        scene: Scene,
-        floor: i8,
-        event: String,
-    ) -> MoveOutcome {
-        self.area = Area::Town { scene, floor };
-        self.sync_player_object();
-        self.mark_visibility_dirty();
-        // An engine-side asset problem, not a game event. The original has
-        // no such condition and therefore no line for it.
-        self.diagnostics.push(format!(
-            "{event}: missing clean return-coordinate metadata, stayed in location"
-        ));
-        self.message.clear();
-        MoveOutcome::Blocked
     }
 
     pub fn town_trap_door_at(

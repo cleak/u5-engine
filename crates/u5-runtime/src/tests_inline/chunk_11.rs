@@ -617,7 +617,7 @@
 
         assert_eq!(
             state
-                .resolve_town_boundary_exit_transition(&dir, scene, 0)
+                .resolve_town_boundary_exit_transition(&dir, scene)
                 .unwrap(),
             MoveOutcome::Transition(AreaTransition::ExitedLocation(scene))
         );

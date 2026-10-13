@@ -3134,9 +3134,8 @@ impl PlayState {
                             self.answer_dungeon_fountain_drink_prompt(true, party_index, focus);
                             Ok(Some(PlayInputDisposition::Continue))
                         }
-                        YesNoPromptKind::TownExit { scene, floor } => {
-                            let _ =
-                                self.resolve_town_boundary_exit_transition(game_dir, scene, floor)?;
+                        YesNoPromptKind::TownExit { scene, .. } => {
+                            let _ = self.resolve_town_boundary_exit_transition(game_dir, scene)?;
                             Ok(Some(PlayInputDisposition::Continue))
                         }
                         YesNoPromptKind::SaveGame => {
@@ -5943,12 +5942,7 @@ impl PlayState {
         if !(0..=7).contains(&next_level) {
             // "Any route that leaves the level stack | the climb word, then
             // the shared exit line of Section 13.2".
-            let outcome = self.resolve_dungeon_surface_reset(
-                game_dir,
-                scene,
-                level,
-                format!("Cast {label} at the dungeon level edge"),
-            )?;
+            let outcome = self.resolve_dungeon_surface_reset(game_dir, scene, level)?;
             self.message.insert_str(0, climb_word);
             return Ok(outcome);
         }

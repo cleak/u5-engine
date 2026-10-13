@@ -1244,12 +1244,7 @@ impl PlayState {
             // zero". The down-ladder arm is symmetric at level seven.
             // Hitting either edge goes through the one shared surface-reset
             // contract of §13.2; there is no per-dungeon transition table.
-            return self.resolve_dungeon_surface_reset(
-                game_dir,
-                scene,
-                level,
-                format!("Klimbed out of {} ({})", scene.key(), scene.name()),
-            );
+            return self.resolve_dungeon_surface_reset(game_dir, scene, level);
         }
 
         // `dungeon-mode.md` §13.1: a climb **never inspects the cell it
@@ -1290,7 +1285,6 @@ impl PlayState {
         game_dir: &Path,
         scene: DungeonScene,
         level: u8,
-        event: String,
     ) -> io::Result<MoveOutcome> {
         let entries = effective_world_location_entries(game_dir)?;
         let matches: Vec<_> = entries
@@ -1298,9 +1292,19 @@ impl PlayState {
             .copied()
             .filter(|entry| entry.target == PlayTarget::Dungeon(scene))
             .collect();
-        let Some(entry) = matches.first().copied() else {
-            return Ok(self.block_missing_dungeon_return(scene, level, event));
-        };
+        // `catalogs/gazetteer.md` §5.1 (`RETRACTIONS.md` R474): see the
+        // identical reasoning at `resolve_town_boundary_exit_transition`.
+        // This klimb/cast-off exit arm reads the same published/merged
+        // table, which guarantees every dungeon scene has exactly one row -
+        // the `event` diagnostic text the withdrawn fallback used to carry
+        // has no remaining reader, so the parameter went with it.
+        let entry = *matches.first().unwrap_or_else(|| {
+            panic!(
+                "catalogs/gazetteer.md §5.1: {} has no return-coordinate row, \
+                 which the published table guarantees cannot happen",
+                PlayTarget::Dungeon(scene).key()
+            )
+        });
         if matches.len() > 1 {
             return Err(io::Error::new(
                 io::ErrorKind::InvalidData,
