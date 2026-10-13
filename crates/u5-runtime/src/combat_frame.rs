@@ -5832,6 +5832,11 @@ impl PlayState {
                 | CombatArenaFieldContactOutcome::PoisonedPartyMember { .. }
         ) {
             self.request_party_stats_panel_refresh();
+            // `stats-panel.md §2.2.1` rows 15 and 16: combat poisoning and
+            // the combat fire hazard both defer the panel through the
+            // general §2.2/2.3 mechanism - the wired one, unlike the older
+            // latch raised just above.
+            self.stats_panel_command_refresh = crate::stats_panel::PanelRefreshMode::Deferred;
         }
 
         let damage_application = match contact_outcome {

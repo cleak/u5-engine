@@ -18185,6 +18185,12 @@ fn arena_field_contact_application_applies_party_status_and_no_xp_fallback_damag
         })
     );
     assert_eq!(state.active_player, None);
+    // `stats-panel.md §2.2.1` row 16: combat fire-hazard damage defers
+    // the panel.
+    assert_eq!(
+        state.stats_panel_command_refresh,
+        crate::stats_panel::PanelRefreshMode::Deferred
+    );
 }
 
 #[test]

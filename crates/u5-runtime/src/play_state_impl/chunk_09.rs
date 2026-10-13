@@ -5159,6 +5159,11 @@ impl PlayState {
             // "The party abandons into a skiff, keeping the ship's current
             // facing, and the marker becomes the matching skiff value."
             ShipLossFallback::Skiff => {
+                // `stats-panel.md §2.2.1` row 18: continuing on a skiff or
+                // carpet after a ship is destroyed defers the panel; the
+                // 74-site table's total-loss arm (no skiff, no carpet)
+                // stays the Immediate default.
+                self.stats_panel_command_refresh = crate::stats_panel::PanelRefreshMode::Deferred;
                 self.push_impact_line(ABANDON_SHIP_MESSAGE);
                 let marker = TRANSPORT_MARKER_SKIFF_FIRST + facing;
                 self.player.transport = TransportState::Skiff {
@@ -5172,6 +5177,8 @@ impl PlayState {
             // carpet frames (chosen at random, since the frame is
             // cosmetic)."
             ShipLossFallback::Carpet => {
+                // `stats-panel.md §2.2.1` row 18: see the Skiff arm above.
+                self.stats_panel_command_refresh = crate::stats_panel::PanelRefreshMode::Deferred;
                 self.push_impact_line(ABANDON_SHIP_MESSAGE);
                 self.special_items[SPECIAL_ITEM_MAGIC_CARPET_INDEX] =
                     self.special_items[SPECIAL_ITEM_MAGIC_CARPET_INDEX].saturating_sub(1);
