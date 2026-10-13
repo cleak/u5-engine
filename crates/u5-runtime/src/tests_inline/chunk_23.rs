@@ -9316,6 +9316,30 @@ fn active_effect_aging_keeps_zero_and_255_inert() {
     );
 }
 
+/// `stats-panel.md §2.2.1` row 23: a timed-effect countdown reaching zero
+/// at the end of a completed combat action defers the panel.
+#[test]
+fn combat_committed_action_tail_defers_the_panel_only_on_expiry() {
+    let mut state = world_state(open_world_grid(), 10, 20);
+    state.combat_active = true;
+    state.active_effect_tag = Some(QUICKNESS_ACTIVE_EFFECT_TAG);
+    state.active_effect_counter = 2;
+
+    state.apply_combat_committed_action_tail(0);
+    assert_eq!(
+        state.stats_panel_command_refresh,
+        crate::stats_panel::PanelRefreshMode::Immediate,
+        "aging without expiry must not defer"
+    );
+
+    state.apply_combat_committed_action_tail(0);
+    assert_eq!(state.active_effect_tag, None);
+    assert_eq!(
+        state.stats_panel_command_refresh,
+        crate::stats_panel::PanelRefreshMode::Deferred
+    );
+}
+
 #[test]
 fn active_effect_state_wrapper_marks_redraw_only_on_expiry() {
     let mut state = world_state(open_world_grid(), 10, 20);

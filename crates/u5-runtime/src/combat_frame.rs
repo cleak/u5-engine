@@ -1757,7 +1757,13 @@ impl PlayState {
         let _ = self.apply_combat_post_dispatch_contact_for_actor_position(actor_slot);
         self.clear_combat_interference_for_completed_action(actor_slot);
         let ring_pass = self.apply_visible_combat_magic_ring_pass_to_slot(actor_slot);
-        let _ = self.age_active_effect();
+        let age_outcome = self.age_active_effect();
+        if age_outcome.expired {
+            // `stats-panel.md §2.2.1` row 23: a timed-effect countdown
+            // reaching zero at the end of a completed combat action is
+            // deferred; the world turn's same countdown repaints inline.
+            self.stats_panel_command_refresh = crate::stats_panel::PanelRefreshMode::Deferred;
+        }
         ring_pass
     }
 
@@ -7164,11 +7170,19 @@ impl PlayState {
                 let post_dispatch_contact =
                     self.apply_combat_post_dispatch_contact_for_actor_position(actor_slot);
                 self.clear_combat_interference_for_completed_action(actor_slot);
+                let ring_pass = self.apply_visible_combat_magic_ring_pass_to_slot(actor_slot);
+                let age_outcome = self.age_active_effect();
+                if age_outcome.expired {
+                    // `stats-panel.md §2.2.1` row 23: see the sibling site
+                    // in `apply_combat_committed_action_tail`.
+                    self.stats_panel_command_refresh =
+                        crate::stats_panel::PanelRefreshMode::Deferred;
+                }
                 (
                     absorbable_contact,
                     post_dispatch_contact,
-                    self.apply_visible_combat_magic_ring_pass_to_slot(actor_slot),
-                    Some(self.age_active_effect()),
+                    ring_pass,
+                    Some(age_outcome),
                 )
             };
         // `combat.md §7` step 7's "raises the leave-combat flag" for the
