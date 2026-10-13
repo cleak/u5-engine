@@ -117,6 +117,16 @@ VERIFIED_BENIGN = {
     "Party rested!": "rest-and-camp.md, loaded from the asset at run time",
     # Present, in `graphics.rs`, as part of a larger string.
     "REGISTER:": "shops.md, present in the engine",
+    # `endgame.md §5.1` record 0 is explicit this lead-in is "part of the
+    # record, not a program literal" - it comes out of `ENDMSG.DAT` at run
+    # time through `EndgameMessages::initial_greeting`, same as "Party
+    # rested!" above.
+    "Lord British says:": "endgame.md §5.1, loaded from ENDMSG.DAT at run time",
+    # `dungeon-mode.md §8.3` cites this only as an illustrative example of
+    # an arena's own announcement line inside an open, unreconciled issue
+    # (#210's two-row excess scrolling) - not a line this engine is asked
+    # to print for any specific monster.
+    "Wisp teleports!": "dungeon-mode.md §8.3, illustrative example in open issue #210 prose",
 }
 
 # Published lines the engine does **not** have and cannot yet implement,
