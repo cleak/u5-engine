@@ -462,6 +462,10 @@ pub enum YesNoPromptKind {
     },
     SaveGame,
     ExitToDos,
+    /// `overworld.md §7.1` step 3's "`Dost thou pay?`" toll demand. `toll`
+    /// is the already-rolled amount (step 4), signed per the spec's "signed
+    /// sixteen-bit" arithmetic.
+    TrollBridgeToll { toll: i16 },
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]

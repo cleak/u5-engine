@@ -3108,6 +3108,11 @@ impl PlayState {
                 // is `dungeon-mode.md §8`'s trailing-space form rather
                 // than §9's bare one. See [`EXIT_TO_DOS_PROMPT`].
                 YesNoPromptKind::ExitToDos => EXIT_TO_DOS_PROMPT.to_string(),
+                // `overworld.md §7.1` step 3: the whole "Caught!" demand
+                // is pushed to the transcript explicitly when the prompt
+                // first opens (so the toll figure lands in it); an ignored
+                // key just leaves the already-open question row standing.
+                YesNoPromptKind::TrollBridgeToll { .. } => TROLL_BRIDGE_TOLL_QUESTION.to_string(),
             })
             .unwrap_or_else(|| "Yes or no?".to_string())
     }
@@ -3142,8 +3147,16 @@ impl PlayState {
                             self.commit_prompt_reply(EXIT_TO_DOS_PROMPT, EXIT_TO_DOS_YES_REPLY);
                             Ok(Some(PlayInputDisposition::Quit))
                         }
+                        YesNoPromptKind::TrollBridgeToll { toll } => {
+                            self.resolve_troll_bridge_toll_payment(toll, game_dir)?;
+                            Ok(Some(PlayInputDisposition::Continue))
+                        }
                     };
                 }
+                // §7.1 step 3: "only `Y` and `N` are accepted and every
+                // other key is ignored (**there is no abort**)" - unlike
+                // every other kind here, Escape does not stand in for `N`.
+                '\u{1b}' if matches!(session.kind, YesNoPromptKind::TrollBridgeToll { .. }) => {}
                 'N' | '\u{1b}' => {
                     if let YesNoPromptKind::DungeonFountainDrink { party_index, focus } =
                         session.kind
@@ -3164,6 +3177,13 @@ impl PlayState {
                         // own decline is not measured and keeps the line
                         // it had.
                         self.commit_prompt_reply(EXIT_TO_DOS_PROMPT, EXIT_TO_DOS_NO_REPLY);
+                    } else if matches!(session.kind, YesNoPromptKind::TrollBridgeToll { .. }) {
+                        // §7.1 step 6: a plain `N` refuses and fights,
+                        // "never debits and never raises the panel
+                        // request" - unlike the unaffordable-Y route this
+                        // shares the combat entry with.
+                        self.commit_prompt_reply(TROLL_BRIDGE_TOLL_QUESTION, "N");
+                        self.enter_troll_bridge_ambush_combat(game_dir)?;
                     } else {
                         self.message = "No.".to_string();
                     }
@@ -3190,6 +3210,50 @@ impl PlayState {
         self.active_yes_no_prompt = Some(session);
         self.message = self.render_active_yes_no_prompt();
         Ok(None)
+    }
+
+    /// `overworld.md §7.1` step 5: "Reduce party gold by the toll and raise
+    /// the deferred panel request at once, **before** the affordability
+    /// test. If gold is still non-negative the toll is paid ... If gold
+    /// went negative, the debit is rolled back but the request stays
+    /// raised ... and the event continues exactly as a refusal."
+    pub fn resolve_troll_bridge_toll_payment(&mut self, toll: i16, game_dir: &Path) -> io::Result<()> {
+        self.commit_prompt_reply(TROLL_BRIDGE_TOLL_QUESTION, "Y");
+        self.request_stats_panel_refresh();
+        let after = i32::from(self.gold) - i32::from(toll);
+        if after >= 0 {
+            self.gold = after as u16;
+            // "nothing more prints: the event ends with no fight."
+            self.message = String::new();
+            return Ok(());
+        }
+        self.enter_troll_bridge_ambush_combat(game_dir)
+    }
+
+    /// §7.1 step 6: "Acquire a free active-object slot (no failure test),
+    /// initialise it as the first of the four Troll sprites ... frame
+    /// zero, on the party's own tile at z 0, and enter terrain combat with
+    /// it. The terrain under the troll is a bridge, so the bridge arena
+    /// applies ... There is no flee option and no further message."
+    pub fn enter_troll_bridge_ambush_combat(&mut self, game_dir: &Path) -> io::Result<()> {
+        let Area::World { plane } = self.area else {
+            return Ok(());
+        };
+        let object = ActiveObject {
+            type_byte: TROLL_BRIDGE_SPRITE_TILE,
+            tile: TROLL_BRIDGE_SPRITE_TILE,
+            x: self.player.x,
+            y: self.player.y,
+            z: 0,
+            phase: 0,
+            aux1: 0,
+            aux3: 0,
+        };
+        let Some(slot) = self.allocate_active_object_slot(object) else {
+            return Ok(());
+        };
+        let _report = self.enter_terrain_combat_from_world_object(game_dir, plane, slot, object)?;
+        Ok(())
     }
 
     pub fn render_stats_panel_view(&self) -> String {

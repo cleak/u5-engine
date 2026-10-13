@@ -817,3 +817,170 @@
         let _ = fs::remove_dir_all(dir);
     }
 
+    /// `overworld.md §7.1`: the four early exits - wrong plane, wrong
+    /// tile, the one-in-eight trigger draw, and a non-foot transport -
+    /// each "ends the check silently": no line, no prompt.
+    #[test]
+    fn troll_bridge_ambush_requires_britannia_bridge_tile_and_foot_transport() {
+        let mut grid = open_world_grid();
+        grid[world_cell_index(2, 1)] = TROLL_BRIDGE_TILE_FIRST;
+
+        // Wrong plane: the tiles "occur only on Britannia".
+        let mut underworld = world_state(grid.clone(), 2, 1);
+        underworld.apply_troll_bridge_ambush(WorldPlane::Underworld);
+        assert!(underworld.message.is_empty());
+        assert!(underworld.active_yes_no_prompt.is_none());
+
+        // Off the bridge tile entirely.
+        let mut off_tile = britannia_state(open_world_grid(), 1, 1);
+        off_tile.apply_troll_bridge_ambush(WorldPlane::Britannia);
+        assert!(off_tile.message.is_empty());
+        assert!(off_tile.active_yes_no_prompt.is_none());
+
+        // On the tile, on foot, but the trigger draw almost always misses
+        // ("any nonzero result ends the check, so one turn in eight
+        // proceeds"): a forced-nonzero seed must stay silent.
+        let mut on_foot = britannia_state(grid.clone(), 2, 1);
+        let seed = (0u32..4096)
+            .find(|&seed| {
+                let mut probe = on_foot.clone();
+                probe.prng_state = seed as u16;
+                probe.troll_bridge_trigger_roll() != 0
+            })
+            .expect("some seed misses the one-in-eight trigger");
+        on_foot.prng_state = seed as u16;
+        on_foot.apply_troll_bridge_ambush(WorldPlane::Britannia);
+        assert!(on_foot.message.is_empty());
+        assert!(on_foot.active_yes_no_prompt.is_none());
+
+        // Mounted: "the transport must be on foot ... ends the check
+        // silently" - forced through the one-in-eight gate this time.
+        let mut mounted = britannia_state(grid, 2, 1);
+        mounted.player.transport = TransportState::Horse {
+            type_byte: 160,
+            tile: 160,
+        };
+        let seed = (0u32..4096)
+            .find(|&seed| {
+                let mut probe = mounted.clone();
+                probe.prng_state = seed as u16;
+                probe.troll_bridge_trigger_roll() == 0
+            })
+            .expect("some seed hits the one-in-eight trigger");
+        mounted.prng_state = seed as u16;
+        mounted.apply_troll_bridge_ambush(WorldPlane::Britannia);
+        assert!(mounted.message.is_empty());
+        assert!(mounted.active_yes_no_prompt.is_none());
+    }
+
+    /// §7.1 step 2: "If nobody is caught ... print `Trolls evaded!` -
+    /// there is no toll and no fight."
+    #[test]
+    fn troll_bridge_ambush_evades_when_nobody_is_caught() {
+        let mut grid = open_world_grid();
+        grid[world_cell_index(2, 1)] = TROLL_BRIDGE_TILE_LAST;
+        let base = britannia_state(grid, 2, 1);
+        let seed = (0u32..8192)
+            .find(|&seed| {
+                let mut probe = base.clone();
+                probe.prng_state = seed as u16;
+                probe.apply_troll_bridge_ambush(WorldPlane::Britannia);
+                probe.message == TROLL_BRIDGE_EVADED_LINE
+            })
+            .expect("some seed evades the ambush entirely");
+        let mut state = base;
+        state.prng_state = seed as u16;
+        state.apply_troll_bridge_ambush(WorldPlane::Britannia);
+
+        assert_eq!(state.message, TROLL_BRIDGE_EVADED_LINE);
+        assert!(state.active_yes_no_prompt.is_none());
+        assert_eq!(state.gold, DEFAULT_GOLD_STOCK);
+        assert!(
+            state
+                .message_entries()
+                .iter()
+                .any(|entry| entry.text.contains("Thou spieth trolls under the bridge!"))
+        );
+    }
+
+    /// §7.1 steps 3-4: a caught member raises the `Dost thou pay?` prompt
+    /// with the toll computed from "the Strength of the first member able
+    /// to act".
+    #[test]
+    fn troll_bridge_ambush_demands_a_toll_when_a_member_is_caught() {
+        let mut grid = open_world_grid();
+        grid[world_cell_index(2, 1)] = TROLL_BRIDGE_TILE_FIRST;
+        let mut base = britannia_state(grid, 2, 1);
+        // Dexterity zero cannot save against any `1..30` roll, so the lone
+        // party member is caught on the first walked slot.
+        base.party[0].climb_stat = 0;
+        base.party_strengths[0] = 15;
+        let seed = (0u32..8192)
+            .find(|&seed| {
+                let mut probe = base.clone();
+                probe.prng_state = seed as u16;
+                probe.apply_troll_bridge_ambush(WorldPlane::Britannia);
+                probe.active_yes_no_prompt.is_some()
+            })
+            .expect("some seed hits the trigger and catches the only member");
+        let mut state = base;
+        state.prng_state = seed as u16;
+        state.apply_troll_bridge_ambush(WorldPlane::Britannia);
+
+        // Strength 15 gives 99 - 3*15 = 54, exactly the published example.
+        assert_eq!(
+            state.active_yes_no_prompt,
+            Some(YesNoPromptSession::new(YesNoPromptKind::TrollBridgeToll {
+                toll: 54
+            }))
+        );
+        assert_eq!(state.message, "Caught!\n\nThe trolls demand a 54 gp toll!\n\nDost thou pay?");
+    }
+
+    #[test]
+    fn troll_bridge_toll_payment_debits_gold_when_affordable() {
+        let mut state = britannia_state(open_world_grid(), 2, 1);
+        state.gold = 100;
+        state.active_yes_no_prompt = Some(YesNoPromptSession::new(
+            YesNoPromptKind::TrollBridgeToll { toll: 54 },
+        ));
+        let dir = debug_game_dir();
+
+        state
+            .resolve_troll_bridge_toll_payment(54, &dir)
+            .unwrap();
+
+        assert_eq!(state.gold, 46);
+        assert!(state.stats_panel_refresh_requested);
+        assert!(!state.combat_active);
+        let _ = fs::remove_dir_all(dir);
+    }
+
+    #[test]
+    fn troll_bridge_toll_payment_rolls_back_and_fights_when_unaffordable() {
+        let mut grid = open_world_grid();
+        grid[world_cell_index(2, 1)] = TROLL_BRIDGE_TILE_FIRST;
+        let mut state = britannia_state(grid, 2, 1);
+        state.gold = 10;
+        state.active_yes_no_prompt = Some(YesNoPromptSession::new(
+            YesNoPromptKind::TrollBridgeToll { toll: 54 },
+        ));
+        let dir = debug_game_dir();
+        fs::write(dir.join(BRIT_CBT_FILE), Vec::new()).ok();
+
+        let _ = state.resolve_troll_bridge_toll_payment(54, &dir);
+
+        // "the debit is rolled back but the request stays raised ... and
+        // the event continues exactly as a refusal."
+        assert_eq!(state.gold, 10);
+        assert!(state.stats_panel_refresh_requested);
+        let _ = fs::remove_dir_all(dir);
+    }
+
+    #[test]
+    fn troll_bridge_toll_for_strength_matches_the_published_example() {
+        assert_eq!(troll_bridge_toll_for_strength(15), 54);
+        assert_eq!(troll_bridge_toll_for_strength(30), 9);
+        assert_eq!(troll_bridge_toll_for_strength(33), 0);
+    }
+

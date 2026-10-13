@@ -3448,6 +3448,9 @@ impl PlayState {
         // that already changed mode returned above; an ordinary reaction does
         // not suppress this terrain/transport check.
         let _ = self.apply_rough_seas_if_eligible();
+        // `overworld.md §7.1`: "the first arm of the per-turn underfoot
+        // chain", ahead of the swamp and lava arms below.
+        self.apply_troll_bridge_ambush(plane);
         self.apply_fixed_narrative_gate_branch(plane);
         self.append_world_damage_tile_message(Some(game_dir), plane)?;
         self.append_world_status_tile_message(plane);

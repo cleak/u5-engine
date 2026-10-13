@@ -1794,6 +1794,46 @@ pub const OUTDOOR_SWAMP_POISON_ROLL_LOW: u8 = 1;
 pub const OUTDOOR_SWAMP_POISON_ROLL_HIGH: u8 = 30;
 pub const DUNGEON_FOUNTAIN_BAD_TASTE: &str = "Bad taste.\n";
 
+/// `overworld.md §7.1` (added 2026-10-12, issue #290): the Britannia bridge
+/// ambush and toll. "This is an overworld event on the two bridge tiles
+/// `0x6A` and `0x6B`, which occur only on Britannia" - "the first arm of the
+/// per-turn underfoot chain", so the swamp and lava arms never fire the
+/// same turn (the tiles are disjoint).
+pub const TROLL_BRIDGE_TILE_FIRST: u8 = 0x6A;
+pub const TROLL_BRIDGE_TILE_LAST: u8 = 0x6B;
+/// Step 1: "Draw `0..7` on every such turn, whatever the transport; any
+/// nonzero result ends the check, so one turn in eight proceeds."
+pub const TROLL_BRIDGE_TRIGGER_ROLL_LOW: u8 = 0;
+pub const TROLL_BRIDGE_TRIGGER_ROLL_HIGH: u8 = 7;
+/// Step 2's announcement, with its leading and trailing blank rows.
+pub const TROLL_BRIDGE_ANNOUNCE_LINE: &str = "\nThou spieth trolls under the bridge!\n\n";
+/// Step 2's per-member sneak-roll save, "inclusive `1..30`": "a Dexterity at
+/// or above the roll gets across".
+pub const TROLL_BRIDGE_SNEAK_ROLL_LOW: u8 = 1;
+pub const TROLL_BRIDGE_SNEAK_ROLL_HIGH: u8 = 30;
+pub const TROLL_BRIDGE_SNEAK_SUFFIX: &str = " sneaks across...\n\n";
+/// Step 2's no-one-caught outcome: "there is no toll and no fight."
+pub const TROLL_BRIDGE_EVADED_LINE: &str = "Trolls evaded!\n";
+/// Step 3's demand, printed with the toll amount spliced between the two
+/// halves, "no trailing feed" - the row stays open for the `Y`/`N` echo.
+pub const TROLL_BRIDGE_CAUGHT_HEADING: &str = "Caught!\n\nThe trolls demand a ";
+pub const TROLL_BRIDGE_TOLL_SUFFIX: &str = " gp toll!\n\n";
+pub const TROLL_BRIDGE_TOLL_QUESTION: &str = "Dost thou pay?";
+/// Step 4: "`99 - 3 x Strength`... Strength 15 gives 54; with the shrine cap
+/// of 30 the toll is never below 9."
+pub const TROLL_BRIDGE_TOLL_BASE: i16 = 99;
+pub const TROLL_BRIDGE_TOLL_STRENGTH_MULTIPLIER: i16 = 3;
+/// Step 6: "the first of the four Troll sprites (tile `0xE4`, bestiary
+/// class 41)".
+pub const TROLL_BRIDGE_SPRITE_TILE: u8 = 0xE4;
+
+/// §7.1 step 4: "The arithmetic is signed sixteen-bit: Strength 33 gives a
+/// free toll, and a larger Strength ... would give a negative toll that
+/// prints with a minus sign and credits gold on payment."
+pub const fn troll_bridge_toll_for_strength(strength: u8) -> i16 {
+    TROLL_BRIDGE_TOLL_BASE - TROLL_BRIDGE_TOLL_STRENGTH_MULTIPLIER * (strength as i16)
+}
+
 /// **PUBLISHED, UNWIRED - and the convention note for that marker.** A
 /// literal carrying this marker is transcribed from the spec and pinned by
 /// the conformance test, but has no reader in any handler, because the engine

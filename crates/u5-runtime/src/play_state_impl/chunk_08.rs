@@ -2591,6 +2591,81 @@ impl PlayState {
         )
     }
 
+    /// `overworld.md §7.1`: "the first arm of the per-turn underfoot
+    /// chain" - the Britannia bridge ambush and toll. See the full
+    /// citation at [`crate::TROLL_BRIDGE_TILE_FIRST`]. The resolution of a
+    /// caught member's toll prompt lives on
+    /// [`Self::resolve_troll_bridge_toll_payment`]; this covers only the
+    /// trigger draw, the announcement, and the per-member sneak walk.
+    pub fn apply_troll_bridge_ambush(&mut self, plane: WorldPlane) {
+        if plane != WorldPlane::Britannia {
+            return;
+        }
+        let tile = self.grid[world_cell_index(self.player.x, self.player.y)];
+        if !(TROLL_BRIDGE_TILE_FIRST..=TROLL_BRIDGE_TILE_LAST).contains(&tile) {
+            return;
+        }
+        if self.troll_bridge_trigger_roll() != 0 {
+            return;
+        }
+        if !self.player.transport.is_foot() {
+            return;
+        }
+        self.mark_visibility_dirty();
+        self.emit_message_line(TROLL_BRIDGE_ANNOUNCE_LINE);
+        self.animation.tick_static_tiles();
+        let mut caught = None;
+        for index in 0..self.party.len() {
+            let status = self.party[index].status;
+            // "A Dead or Asleep member is skipped" - `b'S'` is this save's
+            // "Asleep", the same status byte `main_loop::party_capability`
+            // treats as Sleeping.
+            if status == PARTY_STATUS_DEAD || status == b'S' {
+                continue;
+            }
+            let name = party_name_to_string(&self.party_names[index]).unwrap_or_default();
+            self.animation.tick_static_tiles();
+            self.emit_message_line(format!("{name}{TROLL_BRIDGE_SNEAK_SUFFIX}"));
+            let roll = self.troll_bridge_sneak_roll();
+            if self.party[index].climb_stat < roll {
+                caught = Some(index);
+                break;
+            }
+        }
+        let Some(_caught_index) = caught else {
+            self.emit_message_line(TROLL_BRIDGE_EVADED_LINE);
+            return;
+        };
+        // Step 4: "the Strength of the first member able to act ... found
+        // by re-running the party-capability scan at this moment".
+        let strength = match party_capability(&self.party) {
+            PartyCapability::CanAct { member_index } => self
+                .party_strengths
+                .get(member_index)
+                .copied()
+                .unwrap_or(0),
+            _ => 0,
+        };
+        let toll = troll_bridge_toll_for_strength(strength);
+        self.emit_message_line(format!(
+            "{TROLL_BRIDGE_CAUGHT_HEADING}{toll:>2}{TROLL_BRIDGE_TOLL_SUFFIX}{TROLL_BRIDGE_TOLL_QUESTION}"
+        ));
+        self.active_yes_no_prompt = Some(YesNoPromptSession::new(
+            YesNoPromptKind::TrollBridgeToll { toll },
+        ));
+    }
+
+    /// §7.1 step 1's trigger draw, "`0..7` ... any nonzero result ends the
+    /// check".
+    pub fn troll_bridge_trigger_roll(&mut self) -> u8 {
+        self.random_range_u8(TROLL_BRIDGE_TRIGGER_ROLL_LOW, TROLL_BRIDGE_TRIGGER_ROLL_HIGH)
+    }
+
+    /// §7.1 step 2's per-member save, "inclusive `1..30`".
+    pub fn troll_bridge_sneak_roll(&mut self) -> u8 {
+        self.random_range_u8(TROLL_BRIDGE_SNEAK_ROLL_LOW, TROLL_BRIDGE_SNEAK_ROLL_HIGH)
+    }
+
     pub fn apply_world_underfoot_damage(
         &mut self,
         game_dir: Option<&Path>,

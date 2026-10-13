@@ -1001,6 +1001,9 @@ impl PlayState {
         if let Some(step) = difficult {
             self.emit_message_line(step.line);
         }
+        // `overworld.md §7.1`: "the first arm of the per-turn underfoot
+        // chain", ahead of the swamp and lava arms below.
+        self.apply_troll_bridge_ambush(plane);
         self.apply_fixed_narrative_gate_branch(plane);
         self.append_world_damage_tile_message(game_dir, plane)?;
         self.append_world_status_tile_message(plane);
