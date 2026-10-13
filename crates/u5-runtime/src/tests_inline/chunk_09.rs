@@ -26,6 +26,58 @@ fn animation_tick_never_advances_the_gate_presence_counter() {
     assert_ne!(state.animation.frame, 0);
 }
 
+/// `stats-panel.md §2.2.1` row 18: continuing on a skiff or carpet after
+/// a ship is destroyed defers the panel; the 74-site table's total-loss
+/// (drown) arm is left at the Immediate default.
+#[test]
+fn ship_loss_ladder_defers_the_panel_only_on_skiff_or_carpet_fallback() {
+    let mut skiff_fallback = world_state(open_world_grid(), 10, 20);
+    skiff_fallback.player.transport = TransportState::Ship {
+        type_byte: 168,
+        tile: 168,
+        sails_hoisted: false,
+        hull: 0,
+        skiffs: 1,
+    };
+    let (fallback, _) = skiff_fallback.apply_ship_loss_ladder();
+    assert_eq!(fallback, ShipLossFallback::Skiff);
+    assert_eq!(
+        skiff_fallback.stats_panel_command_refresh,
+        crate::stats_panel::PanelRefreshMode::Deferred
+    );
+
+    let mut carpet_fallback = world_state(open_world_grid(), 10, 20);
+    carpet_fallback.player.transport = TransportState::Ship {
+        type_byte: 168,
+        tile: 168,
+        sails_hoisted: false,
+        hull: 0,
+        skiffs: 0,
+    };
+    carpet_fallback.special_items[SPECIAL_ITEM_MAGIC_CARPET_INDEX] = 1;
+    let (fallback, _) = carpet_fallback.apply_ship_loss_ladder();
+    assert_eq!(fallback, ShipLossFallback::Carpet);
+    assert_eq!(
+        carpet_fallback.stats_panel_command_refresh,
+        crate::stats_panel::PanelRefreshMode::Deferred
+    );
+
+    let mut drowns = world_state(open_world_grid(), 10, 20);
+    drowns.player.transport = TransportState::Ship {
+        type_byte: 168,
+        tile: 168,
+        sails_hoisted: false,
+        hull: 0,
+        skiffs: 0,
+    };
+    let (fallback, _) = drowns.apply_ship_loss_ladder();
+    assert_eq!(fallback, ShipLossFallback::Drown);
+    assert_eq!(
+        drowns.stats_panel_command_refresh,
+        crate::stats_panel::PanelRefreshMode::Immediate
+    );
+}
+
 /// The fall itself deals no damage — no "fall damage" line and no "party
 /// slot" report reaches the transcript.
 ///
