@@ -1214,6 +1214,10 @@ pub const ENDGAME_TABLEAU_STING_HOLD_BIOS_TICKS: u16 =
 /// before the party members' own walks begin.
 pub const ENDGAME_TABLEAU_LORD_BRITISH_ARRIVAL_HOLD_BIOS_TICKS: u16 = 40;
 
+/// `audio.md §8.7`: "Each member also has a separate one-tick placement
+/// pause before walking."
+pub const ENDGAME_TABLEAU_PLACEMENT_HOLD_BIOS_TICKS: u16 = 1;
+
 pub fn endgame_tableau_cell_walkable_fallback(x: usize, y: usize) -> bool {
     x > 0
         && x + 1 < ENDGAME_TABLEAU_WIDTH
@@ -1541,6 +1545,11 @@ impl PlayState {
                 });
             if !installed && let Some(object) = self.active_objects.get_mut(slot) {
                 write_endgame_tableau_placement(object, placement);
+                // `audio.md §8.7`: "Each member also has a separate
+                // one-tick placement pause before walking."
+                self.staged_narration
+                    .push_ticks(ENDGAME_TABLEAU_PLACEMENT_HOLD_BIOS_TICKS, String::new());
+                return true;
             }
 
             let at_target = self

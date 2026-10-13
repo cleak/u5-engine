@@ -24745,6 +24745,15 @@ fn endgame_entry_restores_announces_places_and_walks_each_member_in_slot_order()
         assert!(state.active_objects[0].is_empty());
     }
 
+    // `audio.md §8.7`: "Each member also has a separate one-tick placement
+    // pause before walking" - slot zero's first pumped frame places it at
+    // its start cell and queues that hold, one frame ahead of its walk.
+    assert!(state.advance_endgame_entry_presentation());
+    assert_eq!(
+        (state.active_objects[0].x, state.active_objects[0].y),
+        (5, 9)
+    );
+
     // Slot zero walks all four cells to (5,5) before slot one is touched.
     for expected_y in (5..=8).rev() {
         assert!(state.advance_endgame_entry_presentation());
@@ -24771,8 +24780,19 @@ fn endgame_entry_restores_announces_places_and_walks_each_member_in_slot_order()
         Some(0)
     );
 
-    // Only the following display frame places slot one and performs its first
-    // one-cell movement toward (4,6).
+    // The following display frame places slot one at its start cell.
+    // `audio.md §8.7`: "Each member also has a separate one-tick placement
+    // pause before walking", so the first movement step waits for that
+    // hold to clear rather than landing in this same frame.
+    assert!(state.advance_endgame_entry_presentation());
+    assert_eq!(
+        (state.active_objects[1].x, state.active_objects[1].y),
+        (5, 9)
+    );
+    assert!(state.message.ends_with("\nIOLO lives!\n"));
+
+    // The following frame takes slot one's first one-cell movement toward
+    // (4,6).
     assert!(state.advance_endgame_entry_presentation());
     assert_eq!(
         (state.active_objects[1].x, state.active_objects[1].y),

@@ -381,7 +381,11 @@ fn endgame_restoration_sounds_once_per_restored_dead_member_and_nowhere_else() {
     // train at "9, 13, 17, 21, 23 or 27 stings for party sizes 1 through
     // 6". Lord British's five steps and the party walks *are* that train.
     // This test previously read the section as naming no cue for them.
-    for _ in 0..9 {
+    //
+    // Ten frames, not nine: slot zero's own "separate one-tick placement
+    // pause before walking" (same section) now takes a pumped frame of
+    // its own, ahead of its four-step walk.
+    for _ in 0..10 {
         assert!(state.advance_endgame_entry_presentation());
     }
     let train = state.sound_effects_after(serial);
