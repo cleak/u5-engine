@@ -11,6 +11,20 @@
 # In order: K and Space (the pass, which climbs nothing), K and Down, and
 # then K and Up to come back. The level label in the viewport's top border
 # is the independent check that the two climbs went where they say.
+#
+# This is a lottery from the `pass` beat onward. `dungeon-mode.md`'s Wandering
+# monsters section: dungeon mode keeps a single active monster per level,
+# stepped toward the party by a "randomized greedy move" every turn, and a
+# step that lands it adjacent launches combat and prints `Attacked[ from the
+# <dir>]!` without an explicit Attack. The two sides never share that walk's
+# random stream, so a run long enough to hold several `wait`s can have the
+# original's active monster close and interrupt with its own combat transcript
+# while this engine's dungeon stays quiet (or the reverse) - measured
+# 2026-10-12, where the original was attacked mid-script and the two
+# viewports parted for the rest of the run. The `lit` and `prompt` beats,
+# which is what this scenario pins (the Klimb-U/D- literals), agreed on both
+# runs; a divergence from `pass` onward must be re-run before it means
+# anything.
 # requires-seed: the party standing on a Deceit two-way ladder, with a torch
 both	wait	9000
 both	key	space
