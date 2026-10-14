@@ -2741,6 +2741,21 @@ impl PlayState {
     /// `visibility.md §12.4`: rebuild the persistent local-light resource.
     /// Callers are restricted to the published Moonstone live-gate refresh,
     /// combat entry, and combat exit trigger points.
+    ///
+    /// `§12.5`: "Nothing in the traced trigger list is scene-specific", so
+    /// this runs unconditionally on dungeon combat entry/exit too, even
+    /// though [`Self::surface_visibility_tile`] reads `self.grid` with the
+    /// town/world flat `y*32+x` layout rather than
+    /// `dungeon_cell_index` - a dungeon's `self.grid` holds a different
+    /// record shape, so this samples the wrong bytes while `self.area` is
+    /// `Area::Dungeon`. That is harmless, not a bug: `§12.4` says the
+    /// rebuild exists because "the same scratch region is reused as combat
+    /// terrain storage while combat is running", not to produce a
+    /// dungeon-meaningful mask, and nothing in this engine's dungeon
+    /// first-person renderer ever reads [`Self::local_light_mask`] - only
+    /// [`Self::surface_visibility_carve_with_light_threshold`] does, which
+    /// is itself surface-only. Checked when this stood out as a candidate
+    /// gap in `cleak/u5-engine#2`'s 2026-10-13 triage pass.
     pub(crate) fn rebuild_surface_local_light_mask(&mut self) {
         let px = self.player.x as isize;
         let py = self.player.y as isize;
