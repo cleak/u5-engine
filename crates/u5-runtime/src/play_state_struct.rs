@@ -371,6 +371,14 @@ pub struct PlayState {
     /// `blackthorn.md §4.2`'s audience exit beat is running, and the
     /// captive-cell handoff is owed when its hold ends.
     pub pending_blackthorn_audience_exit: bool,
+    /// `karma.md §12`'s third mantra answer is in its own twelve-world-tick
+    /// hold (`cleak/u5-engine#23`). Unlike the first two asks, nothing
+    /// prints when the hold clears - each of the three closing branches runs
+    /// its own fallible `MISCMSG` lookup, so the session moves here rather
+    /// than staying in `active_shrine` while `staged_narration` carries the
+    /// wait, and [`PlayState::step_shrine_third_mantra_resolution`] runs the
+    /// branch once the hold drains.
+    pub pending_shrine_third_mantra: Option<crate::z_stats::ShrineSession>,
     /// The interrogation ended on a *punishing* wrong-answer branch.
     ///
     /// `cleak/u5-spec#268`: "The punishing wrong-answer branches never run

@@ -1664,6 +1664,11 @@ BRITANNIA 11 21
             state.flush_staged_narration();
             state.adopt_shrine_prompt_row();
         }
+        // `karma.md §12`: the third mantra answer has its own twelve-tick
+        // hold (`cleak/u5-engine#23`) before the closing branch runs.
+        state
+            .run_shrine_third_mantra_resolution_to_completion(&dir)
+            .unwrap();
 
         // Measured: the third accepted mantra opens the altar announcement,
         // which waits for a command key.
@@ -1774,6 +1779,13 @@ BRITANNIA 11 21
             handle_play_key_input(&mut state, 'A', "hm\r", &dir).unwrap(),
             PlayInputDisposition::Continue
         );
+        // `karma.md §12`: the third mantra answer has its own twelve-tick
+        // hold (`cleak/u5-engine#23`) before the closing branch runs; resync
+        // past it the same way the first two asks did above.
+        state.flush_staged_narration();
+        state
+            .run_shrine_third_mantra_resolution_to_completion(&dir)
+            .unwrap();
 
         // The third answer opens the altar's announcement, which waits for a
         // command key before the quest sentence.
@@ -1974,6 +1986,12 @@ BRITANNIA 11 21
                 PlayInputDisposition::Continue
             );
         }
+        // `karma.md §12`: the third mantra answer has its own twelve-tick
+        // hold (`cleak/u5-engine#23`) before the closing branch runs.
+        state.flush_staged_narration();
+        state
+            .run_shrine_third_mantra_resolution_to_completion(&dir)
+            .unwrap();
         assert!(state.active_shrine.is_some());
 
         assert_eq!(
@@ -2016,6 +2034,11 @@ BRITANNIA 11 21
             state.adopt_shrine_prompt_row();
             handle_play_key_input(&mut state, 'M', "u\r", &dir).unwrap();
         }
+        // `karma.md §12`: the third mantra answer has its own twelve-tick
+        // hold (`cleak/u5-engine#23`) before the closing branch runs.
+        state
+            .run_shrine_third_mantra_resolution_to_completion(&dir)
+            .unwrap();
         assert_eq!(
             handle_play_key_input(&mut state, '9', "", &dir).unwrap(),
             PlayInputDisposition::Continue

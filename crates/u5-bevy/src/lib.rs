@@ -10656,6 +10656,23 @@ fn animate_static_tiles(
             return;
         }
     }
+    // `karma.md §12`'s third mantra answer: a viewport-only hold with the
+    // closing branch's fallible MISCMSG lookup at the end of it.
+    if visual.state.pending_shrine_third_mantra.is_some() {
+        let game_dir = visual.game_dir.clone();
+        if let Err(err) = visual.state.step_shrine_third_mantra_resolution(&game_dir) {
+            visual
+                .state
+                .push_diagnostic(format!("Shrine third-mantra resolution error: {err}"));
+            visual.state.pending_shrine_third_mantra = None;
+        }
+        if visual.state.pending_shrine_third_mantra.is_some() {
+            visual.prompt_cursor_frame = visual.prompt_cursor_frame.wrapping_add(1);
+            repaint_visual_frame(&mut visual, &mut images, "shrine third-mantra hold");
+            pump.accumulator = 0.0;
+            return;
+        }
+    }
     if visual.state.pending_blackthorn_rescue.is_some() {
         let game_dir = visual.game_dir.clone();
         match visual.state.step_blackthorn_rescue(&game_dir, false) {
@@ -10716,6 +10733,12 @@ fn animate_static_tiles(
                     .state
                     .push_diagnostic(format!("Rescue cinematic error: {err}"));
                 visual.state.pending_blackthorn_rescue = None;
+            }
+            if let Err(err) = visual.state.step_shrine_third_mantra_resolution(&game_dir) {
+                visual
+                    .state
+                    .push_diagnostic(format!("Shrine third-mantra resolution error: {err}"));
+                visual.state.pending_shrine_third_mantra = None;
             }
         }
         visual.prompt_cursor_visible = false;
@@ -25675,6 +25698,13 @@ mod tests {
             }
         }
 
+        // `karma.md §12`'s third mantra answer has its own twelve-tick hold
+        // (`cleak/u5-engine#23`), and nothing prints while it runs; resync
+        // past it the same way the first two asks did above.
+        state.flush_staged_narration();
+        state
+            .run_shrine_third_mantra_resolution_to_completion(&dir)
+            .unwrap();
         assert_eq!(state.shrine_ordained_mask, ShrineVirtue::Honesty.bit());
         // **Measured** 2026-09-08 (`qa/paired/shrine-three-mantras.tsv`): the
         // third accepted mantra opens the altar's announcement, which waits

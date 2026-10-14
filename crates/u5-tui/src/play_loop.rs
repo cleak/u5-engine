@@ -56,6 +56,7 @@ pub fn run_play_loop(
         // handoff, and this shell has no pump to walk it there.
         state.run_blackthorn_rescue_to_handoff(game_dir)?;
         state.run_blackthorn_audience_exit_to_handoff(game_dir)?;
+        state.run_shrine_third_mantra_resolution_to_completion(game_dir)?;
         // Anything typed while a hold owned the loop is replayed now.
         while u5_runtime::input_dispatch::drain_buffered_hold_key(&mut state, game_dir)?.is_some() {
         }
@@ -159,6 +160,7 @@ where
         // `blackthorn-audience-correct` and `-wrong`.
         state.run_blackthorn_rescue_to_handoff(game_dir)?;
         state.run_blackthorn_audience_exit_to_handoff(game_dir)?;
+        state.run_shrine_third_mantra_resolution_to_completion(game_dir)?;
         after_command(state, index, command)?;
         if disposition == PlayInputDisposition::Quit {
             break;
@@ -543,6 +545,7 @@ fn settle_play_script_exploration_gate(state: &mut PlayState, game_dir: &Path) -
         state.flush_staged_narration();
         state.run_blackthorn_rescue_to_handoff(game_dir)?;
         state.run_blackthorn_audience_exit_to_handoff(game_dir)?;
+        state.run_shrine_third_mantra_resolution_to_completion(game_dir)?;
         match state.apply_exploration_turn_gate(game_dir)? {
             ExplorationTurnGateOutcome::Ready { .. } => return Ok(()),
             ExplorationTurnGateOutcome::Slept { .. }
@@ -569,6 +572,7 @@ pub fn play_state_accepts_typeahead(state: &PlayState) -> bool {
         && state.active_jimmy.is_none()
         && state.active_surface_chest.is_none()
         && state.active_shrine.is_none()
+        && state.pending_shrine_third_mantra.is_none()
         && state.active_mix.is_none()
         && state.active_new_order.is_none()
         && state.active_yell.is_none()

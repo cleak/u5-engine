@@ -452,6 +452,7 @@ impl PlayState {
         self.staged_narration_active()
             || self.pending_blackthorn_audience_exit
             || self.pending_blackthorn_rescue.is_some()
+            || self.pending_shrine_third_mantra.is_some()
     }
 
     /// Whether a staged presentation currently owns the screen.

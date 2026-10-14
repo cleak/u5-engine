@@ -1962,7 +1962,7 @@ impl PlayState {
                     // closes the prompt.
                     match ch {
                         '\r' | '\n' => {
-                            return self.complete_active_shrine_mantra(session, game_dir);
+                            return self.complete_active_shrine_mantra(session);
                         }
                         '\u{8}' | '\u{7f}' => {
                             session.mantra_buffer.pop();
@@ -2083,7 +2083,6 @@ impl PlayState {
     fn complete_active_shrine_mantra(
         &mut self,
         mut session: ShrineSession,
-        game_dir: &Path,
     ) -> io::Result<Option<MoveOutcome>> {
         // Submitting retires the live row, so log what was typed before the
         // outcome runs - the same rule the cast prompt follows.
@@ -2128,10 +2127,30 @@ impl PlayState {
         // reached before whichever of the three branches below prints.
         // Unlike the first two asks, nothing here is a pure hold followed by
         // a live row the existing staged-narration gate already handles for
-        // free - each branch has to run its own fallible MISCMSG lookup
-        // once the wait ends, which the current `StagedNarration` queue has
-        // no hook for. Left unstaged pending that mechanism; tracked on
-        // `cleak/u5-engine#23`.
+        // free - each branch runs its own fallible MISCMSG lookup once the
+        // wait ends. The session moves to `pending_shrine_third_mantra`
+        // rather than staying in `active_shrine`, the same shape
+        // `pending_blackthorn_audience_exit` uses for a hold whose end runs
+        // a handoff instead of printing queued text; a frontend's per-frame
+        // pump (or a headless shell's straight-through runner) calls
+        // [`Self::step_shrine_third_mantra_resolution`] once the hold drains.
+        self.staged_narration
+            .push_ticks(SHRINE_MANTRA_SUBSEQUENT_HOLD_BIOS_TICKS, String::new());
+        self.pending_shrine_third_mantra = Some(session);
+        Ok(Some(MoveOutcome::Observed))
+    }
+
+    /// Run `karma.md §12`'s third-mantra closing branch once its
+    /// twelve-tick hold has drained. A no-op while the hold is still
+    /// running, or when nothing is pending.
+    pub fn step_shrine_third_mantra_resolution(
+        &mut self,
+        game_dir: &Path,
+    ) -> io::Result<Option<MoveOutcome>> {
+        if self.pending_shrine_third_mantra.is_none() || self.staged_narration_active() {
+            return Ok(None);
+        }
+        let mut session = self.pending_shrine_third_mantra.take().expect("checked above");
         if !session.answers_matched {
             // "Unfocused result | If the virtue answer or any of the three
             // mantra answers was wrong, render record `30` after the third
@@ -2143,51 +2162,62 @@ impl PlayState {
             )?;
             return Ok(Some(MoveOutcome::PromptDeclined));
         }
-        {
-            let bit = session.virtue.bit();
-            let ordained = self.shrine_ordained_mask & bit != 0;
-            let codex = self.shrine_codex_mask & bit != 0;
-            if !ordained && codex {
-                // `karma.md §12`: the completed-quest arm "Runs the ordinary
-                // offering path", whose question is record 34.
-                session.phase = ShrinePhase::Offering;
-                self.emit_shrine_misc_record(game_dir, MISCMSG_SHRINE_OFFERING_PROMPT)?;
-                self.active_shrine = Some(session);
-                return Ok(None);
-            }
-            if !codex {
-                // `karma.md §12`, the first two quest-state rows: with the
-                // Codex unread the meditation "Sets the ordained bit. No gold
-                // prompt, stat increase, or standing increase is applied."
-                //
-                // Measured 2026-09-07 (`qa/paired/shrine-flow.tsv`): nothing
-                // prints - the engine used to invent a `Meditated at the
-                // Shrine of ...` line here. What the capture showed after the
-                // accepted mantra was a *fresh* `Mantra:` row, which is §12's
-                // second ask of three, not a fourth.
-                //
-                // §12: "Set/retain ordination before record `31`, the
-                // altar's quest announcement. Restore the standing Avatar
-                // pose and wait for a command key."
-                self.shrine_ordained_mask |= bit;
-                // Measured 2026-09-12 (`qa/paired/shrine-three-mantras.tsv`,
-                // beat `mantra3`): the announcement prints with the cursor
-                // still at the end of the accepted `Mantra:AHM` row, so the
-                // record's first newline closes that row and only its second
-                // leaves a blank - the same split record `30` takes below. The
-                // engine closed the row itself and then spent both, showing
-                // two blanks where the original shows one.
-                self.emit_shrine_misc_record_after_open_row(
-                    game_dir,
-                    MISCMSG_SHRINE_ALTAR_ANNOUNCEMENT,
-                    true,
-                )?;
-                session.phase = ShrinePhase::AltarAnnouncement;
-                self.active_shrine = Some(session);
-                return Ok(None);
-            }
-            self.meditate_shrine_from_suffix(&session.mantra_buffer, game_dir)
+        let bit = session.virtue.bit();
+        let ordained = self.shrine_ordained_mask & bit != 0;
+        let codex = self.shrine_codex_mask & bit != 0;
+        if !ordained && codex {
+            // `karma.md §12`: the completed-quest arm "Runs the ordinary
+            // offering path", whose question is record 34.
+            session.phase = ShrinePhase::Offering;
+            self.emit_shrine_misc_record(game_dir, MISCMSG_SHRINE_OFFERING_PROMPT)?;
+            self.active_shrine = Some(session);
+            return Ok(None);
         }
+        if !codex {
+            // `karma.md §12`, the first two quest-state rows: with the
+            // Codex unread the meditation "Sets the ordained bit. No gold
+            // prompt, stat increase, or standing increase is applied."
+            //
+            // Measured 2026-09-07 (`qa/paired/shrine-flow.tsv`): nothing
+            // prints - the engine used to invent a `Meditated at the
+            // Shrine of ...` line here. What the capture showed after the
+            // accepted mantra was a *fresh* `Mantra:` row, which is §12's
+            // second ask of three, not a fourth.
+            //
+            // §12: "Set/retain ordination before record `31`, the
+            // altar's quest announcement. Restore the standing Avatar
+            // pose and wait for a command key."
+            self.shrine_ordained_mask |= bit;
+            // Measured 2026-09-12 (`qa/paired/shrine-three-mantras.tsv`,
+            // beat `mantra3`): the announcement prints with the cursor
+            // still at the end of the accepted `Mantra:AHM` row, so the
+            // record's first newline closes that row and only its second
+            // leaves a blank - the same split record `30` takes below. The
+            // engine closed the row itself and then spent both, showing
+            // two blanks where the original shows one.
+            self.emit_shrine_misc_record_after_open_row(
+                game_dir,
+                MISCMSG_SHRINE_ALTAR_ANNOUNCEMENT,
+                true,
+            )?;
+            session.phase = ShrinePhase::AltarAnnouncement;
+            self.active_shrine = Some(session);
+            return Ok(None);
+        }
+        self.meditate_shrine_from_suffix(&session.mantra_buffer, game_dir)
+    }
+
+    /// Run the third-mantra resolution straight through, for shells with no
+    /// pump. Mirrors [`Self::run_blackthorn_audience_exit_to_handoff`].
+    pub fn run_shrine_third_mantra_resolution_to_completion(
+        &mut self,
+        game_dir: &Path,
+    ) -> io::Result<Option<MoveOutcome>> {
+        if self.pending_shrine_third_mantra.is_none() {
+            return Ok(None);
+        }
+        self.flush_staged_narration();
+        self.step_shrine_third_mantra_resolution(game_dir)
     }
 
     pub fn meditate_shrine_from_suffix(
