@@ -1284,6 +1284,24 @@ pub fn shrine_swell_program(period: u16, iterations: u32) -> SpeakerProgram {
     SpeakerProgram::new(ops)
 }
 
+/// `quest-graph.md §5` "Presentation order", step 2 of a Gem Shard use: "a
+/// rising pitch sweep, followed by a falling one, again unconditionally". No
+/// recipe is published; asked as `cleak/u5-spec#296`.
+///
+/// Measured pending u5-spec#296 (2026-10-14, `qa/paired/use-shard-sweep.tsv`,
+/// stock side, two runs): the sound is **not** a frequency glissando. Its
+/// fundamental holds at 891 Hz throughout, harmonics at 2x/3x/4x, while the
+/// pulse width widens from a few per cent to about 40 per cent and back -
+/// the same one-pitch duty swell shape as `karma.md §7.2`'s shrine arms, so
+/// it reuses [`shrine_swell_program`]. Rising limb about 4.15 s, falling limb
+/// about 4.12 s, no gap between them; 8.25 s and 8.27 s in all.
+///
+/// The period puts the gate at 891 Hz on [`ENVELOPE_ITERATION_NANOS`]
+/// (`2511 / 65536 / 43 µs`), and the iteration count makes 920 runs last
+/// the measured 8.27 s. Both are fitted to the capture, not published.
+pub const SHARD_SWELL_PERIOD: u16 = 2511;
+pub const SHARD_SWELL_ITERATIONS: u32 = 209;
+
 pub fn blackthorn_rescue_envelope_program() -> SpeakerProgram {
     let mut ops = Vec::with_capacity(BLACKTHORN_RESCUE_ENVELOPES.len() * 2);
     for segment in BLACKTHORN_RESCUE_ENVELOPES {
@@ -1822,6 +1840,9 @@ pub enum SoundEffect {
     /// `karma.md §7.2`, the Codex-turn-in arm's 920-run swell. The
     /// shared flash/rumble helper runs **after** this, not instead of it.
     ShrineTurnInSwell,
+    /// `quest-graph.md §5` step 2, the Gem Shard's rise-and-fall. Measured
+    /// pending u5-spec#296; see [`SHARD_SWELL_PERIOD`].
+    ShardSwell,
     /// R494's per-slot restoration note, carrying the slot it precedes.
     BlackthornRescueRestoration(usize),
     /// `containers.md §9` moldy-corpse Plague consequence.
@@ -1921,6 +1942,7 @@ impl SoundEffect {
                 SHRINE_TURN_IN_SWELL_PERIOD,
                 SHRINE_TURN_IN_SWELL_ITERATIONS,
             ),
+            SoundEffect::ShardSwell => shrine_swell_program(SHARD_SWELL_PERIOD, SHARD_SWELL_ITERATIONS),
             SoundEffect::BlackthornRescueRestoration(slot) => {
                 envelope_program(blackthorn_rescue_restoration_envelope(*slot))
             }

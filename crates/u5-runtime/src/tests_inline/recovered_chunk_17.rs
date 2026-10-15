@@ -199,7 +199,7 @@ fn use_shadowlord_shard_prints_the_prologue_then_the_shared_no_effect_result_off
         );
         assert_eq!(state.turn, 0, "{label}: no turn is consumed by a refusal");
 
-        let message = state.message.clone();
+        let message = message_with_staged(&state);
 
         // Phase 1 is unconditional and completes with the shard's own virtue
         // word, even though the position gate is about to refuse.

@@ -1,0 +1,229 @@
+# Measure the stock game's Gem Shard presentation (`catalogs/quest-graph.md`
+# §5 steps 1-3) away from any Eternal Flame: the step-1 lines, step 2's
+# rising-then-falling sweep, and the shared no-effect result.
+#
+# Step 2 has no published recipe (`cleak/u5-spec#296`), and
+# `use-specials`'s `sceptre` beat lands inside it. This replays that
+# scenario's picker sessions to the Gem Shard row, then records the DOSBox
+# side alone (the engine is muted with Ctrl-S right after Journey Onward,
+# because the capture sink mixes both processes) and takes a dense run of
+# shots after Return so the panel inversion and the no-effect line can be
+# timed. A black-box measurement, not a pairing: only the DOSBox column of
+# the `shard*` beats is read.
+# requires-seed: profile `seed-use-specials-reseeded`, shared with use-specials
+both	wait	9000
+both	key	space
+both	wait	4000
+both	key	j
+both	wait	9000
+both	shot	seeded	Journey Onward on the seeded cell
+both	key	Return
+both	wait	3000
+both	shot	carpet	The carpet result
+both	key	space
+both	wait	1200
+engine	key	ctrl+s
+both	wait	1500
+both	wait	1200
+both	key	u
+both	wait	2000
+both	key	Down
+both	wait	260
+both	key	Down
+both	wait	260
+both	key	Down
+both	wait	260
+both	key	Down
+both	wait	260
+both	key	Down
+both	wait	260
+both	key	Down
+both	wait	260
+both	key	Down
+both	wait	260
+both	key	Down
+both	wait	260
+both	key	Down
+both	wait	260
+both	key	Down
+both	wait	260
+both	key	Down
+both	wait	260
+both	key	Down
+both	wait	260
+both	key	Down
+both	wait	260
+both	key	Down
+both	wait	260
+both	key	Down
+both	wait	260
+both	key	Down
+both	wait	260
+both	key	Down
+both	wait	2500
+both	shot	skullkeysrow	The skullkeys row
+both	key	Return
+both	wait	3000
+both	shot	skullkeys	The skullkeys result
+both	key	space
+both	wait	1200
+both	key	u
+both	wait	2000
+both	key	Down
+both	wait	260
+both	key	Down
+both	wait	260
+both	key	Down
+both	wait	260
+both	key	Down
+both	wait	260
+both	key	Down
+both	wait	260
+both	key	Down
+both	wait	260
+both	key	Down
+both	wait	260
+both	key	Down
+both	wait	260
+both	key	Down
+both	wait	260
+both	key	Down
+both	wait	260
+both	key	Down
+both	wait	260
+both	key	Down
+both	wait	260
+both	key	Down
+both	wait	260
+both	key	Down
+both	wait	260
+both	key	Down
+both	wait	260
+both	key	Down
+both	wait	260
+both	key	Down
+both	wait	260
+both	key	Down
+both	wait	2500
+both	shot	amuletrow	The amulet row
+both	key	Return
+both	wait	3000
+both	shot	amulet	The amulet result
+both	key	space
+both	wait	1200
+both	key	u
+both	wait	2000
+both	key	Down
+both	wait	260
+both	key	Down
+both	wait	260
+both	key	Down
+both	wait	260
+both	key	Down
+both	wait	260
+both	key	Down
+both	wait	260
+both	key	Down
+both	wait	260
+both	key	Down
+both	wait	260
+both	key	Down
+both	wait	260
+both	key	Down
+both	wait	260
+both	key	Down
+both	wait	260
+both	key	Down
+both	wait	260
+both	key	Down
+both	wait	260
+both	key	Down
+both	wait	260
+both	key	Down
+both	wait	260
+both	key	Down
+both	wait	260
+both	key	Down
+both	wait	260
+both	key	Down
+both	wait	260
+both	key	Down
+both	wait	260
+both	key	Down
+both	wait	2500
+both	shot	crownrow	The crown row
+both	key	Return
+both	wait	3000
+both	shot	crown	The crown result
+both	key	space
+both	wait	1200
+both	key	u
+both	wait	2000
+both	key	Down
+both	wait	260
+both	key	Down
+both	wait	260
+both	key	Down
+both	wait	260
+both	key	Down
+both	wait	260
+both	key	Down
+both	wait	260
+both	key	Down
+both	wait	260
+both	key	Down
+both	wait	260
+both	key	Down
+both	wait	260
+both	key	Down
+both	wait	260
+both	key	Down
+both	wait	260
+both	key	Down
+both	wait	260
+both	key	Down
+both	wait	260
+both	key	Down
+both	wait	260
+both	key	Down
+both	wait	260
+both	key	Down
+both	wait	260
+both	key	Down
+both	wait	260
+both	key	Down
+both	wait	260
+both	key	Down
+both	wait	260
+both	key	Down
+both	wait	260
+both	key	Down
+both	wait	2500
+both	shot	sceptrerow	The sceptre row
+both	audio-start	dosbox-shard	DOSBox: the Gem Shard accepted away from any flame
+both	key	Return
+both	wait	250
+both	shot	shard01	Gem Shard presentation, early sample
+both	wait	6800
+both	shot	shard02	Gem Shard presentation, late sample 02
+both	wait	100
+both	shot	shard03	Gem Shard presentation, late sample 03
+both	wait	100
+both	shot	shard04	Gem Shard presentation, late sample 04
+both	wait	100
+both	shot	shard05	Gem Shard presentation, late sample 05
+both	wait	100
+both	shot	shard06	Gem Shard presentation, late sample 06
+both	wait	100
+both	shot	shard07	Gem Shard presentation, late sample 07
+both	wait	100
+both	shot	shard08	Gem Shard presentation, late sample 08
+both	wait	100
+both	shot	shard09	Gem Shard presentation, late sample 09
+both	wait	100
+both	wait	3000
+both	shot	shardend	Gem Shard presentation settled
+both	audio-stop		DOSBox shard capture
+both	key	space
+both	wait	1500
+both	shot	shardpass	One pass after the no-effect line

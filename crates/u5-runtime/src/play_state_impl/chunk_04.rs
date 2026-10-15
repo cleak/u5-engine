@@ -1247,7 +1247,35 @@ impl PlayState {
             // §7.1: "A wrong destruction position adds `\n\nNo effect!\n`" -
             // two line feeds, so a blank row stands between the aloft line and
             // the refusal. This engine spent one.
-            self.message.push_str("\n\nNo effect!\n");
+            //
+            // Phase 2, the unconditional rise-and-fall, stands between the
+            // aloft line and that refusal. Measured pending u5-spec#296
+            // (`qa/paired/use-shard-sweep.tsv`, stock side): the aloft line
+            // is up within ~0.1 s of Return, the swell runs 8.25-8.27 s, and
+            // `No effect!` is on screen by the first sample after it ends.
+            // The engine printed both at once (`use-specials/sceptre`, four
+            // rows apart, `cleak/u5-engine#25`). Both feeds wait out the
+            // swell with the refusal: the stock window ends on the aloft row
+            // itself during it (a feed spent now scrolled the engine one row
+            // ahead), and that row is still open when the refusal's first
+            // feed arrives to close it.
+            //
+            // Not reproduced: the stock side also draws the stats panel
+            // inverted from the aloft line onward, and it is still inverted
+            // after a following Pass. When it is restored is not measured,
+            // so this engine leaves the panel alone rather than guess.
+            //
+            // Only this branch is paced. On the destruction row the swell
+            // presumably precedes the cast line too, but that path has no
+            // capture, so it stays as it was.
+            self.emit_sound_effect(SoundEffect::ShardSwell);
+            self.staged_narration.push_secs_on_open_row(
+                SoundEffect::ShardSwell
+                    .program(&mut crate::audio::RumbleJitter::default())
+                    .duration(true)
+                    .as_secs_f64(),
+                "\n\nNo effect!\n",
+            );
             return Ok(MoveOutcome::Blocked);
         }
 

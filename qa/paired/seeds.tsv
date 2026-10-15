@@ -130,6 +130,7 @@ use-scrolls	seed-use-scrolls-reseeded	the walk-up replayed once by reseed.py
 use-single-item	seed-use-single-item	copied from useitems: the same
 use-skull-key	seed-use-skull-key-reseeded	the walk-up replayed once by reseed.py
 use-specials	seed-use-specials-reseeded	the walk-up replayed once by reseed.py
+use-shard-sweep	seed-use-specials-reseeded	shares the use-specials seed; replays its picker sessions to the Gem Shard
 use-target-cancel	seed-use-target-cancel-reseeded	the walk-up replayed once by reseed.py
 wb-blueboar	seed-wb-blueboar-reseeded	the walk-up replayed once by reseed.py
 word-of-power-audio	seed-word-of-power-audio	copied from the paired-word-of-power-audio run profile

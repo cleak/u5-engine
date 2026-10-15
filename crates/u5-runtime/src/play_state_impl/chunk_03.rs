@@ -270,7 +270,8 @@ impl PlayState {
         // a flag. Tracked, not bodged.
         // A staged presentation draws the row its own text opened, and
         // nothing at all when the text stopped part-way along a row.
-        (self.staged_narration_active() && self.message_row_open_mid_line)
+        (self.staged_narration_active()
+            && (self.message_row_open_mid_line || self.staged_narration.head_continues_open_row()))
             || self.mix_reagent_selection_active()
             // The mixer's quantity prompt, for the same reason as `On who: `
             // below: the literal is `How much? `, "nine characters and a
@@ -513,7 +514,7 @@ impl PlayState {
             if beat.text.is_empty() {
                 continue;
             }
-            self.emit_message_line(beat.text);
+            self.emit_staged_beat(beat);
         }
         self.staged_narration_active()
     }
@@ -521,8 +522,18 @@ impl PlayState {
     /// Print every remaining beat now. For frontends and tests with no pump.
     pub fn flush_staged_narration(&mut self) {
         for beat in self.staged_narration.drain_all() {
-            self.emit_message_line(beat.text);
+            self.emit_staged_beat(beat);
         }
+    }
+
+    fn emit_staged_beat(&mut self, beat: crate::narration::NarrationBeat) {
+        if beat.continues_open_row {
+            // Whatever the slot still holds is the open row's own text, so
+            // it prints first and the row is then stated open.
+            self.flush_message_slot();
+            self.open_message_row();
+        }
+        self.emit_message_line(beat.text);
     }
 
     /// Whether the message window draws no text cursor at all.

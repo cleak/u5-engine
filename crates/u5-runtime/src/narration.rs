@@ -38,6 +38,11 @@ pub struct NarrationBeat {
     /// The line, with its own leading and trailing feeds exactly as the
     /// producer would have passed them to `emit_message_line`.
     pub text: String,
+    /// The text is written against a row the previous print left open
+    /// mid-line, so its first feed closes that row rather than blanking a
+    /// fresh one, and no fresh row is drawn while it waits. Stated by the
+    /// producer: the row state is not inferable from the text.
+    pub continues_open_row: bool,
 }
 
 /// The queue plus how far into the current beat's wait we are.
@@ -55,11 +60,34 @@ impl StagedNarration {
         self.beats.is_empty()
     }
 
+    /// The queued beats, head first, without advancing anything.
+    pub fn beats(&self) -> impl Iterator<Item = &NarrationBeat> {
+        self.beats.iter()
+    }
+
     pub fn push_secs(&mut self, delay_secs: f64, text: impl Into<String>) {
         self.beats.push_back(NarrationBeat {
             delay_secs,
             text: text.into(),
+            continues_open_row: false,
         });
+    }
+
+    /// Push a beat written against a row the previous print left open; see
+    /// [`NarrationBeat::continues_open_row`].
+    pub fn push_secs_on_open_row(&mut self, delay_secs: f64, text: impl Into<String>) {
+        self.beats.push_back(NarrationBeat {
+            delay_secs,
+            text: text.into(),
+            continues_open_row: true,
+        });
+    }
+
+    /// Whether the next beat to print continues an open row.
+    pub fn head_continues_open_row(&self) -> bool {
+        self.beats
+            .front()
+            .is_some_and(|beat| beat.continues_open_row)
     }
 
     /// Push a beat whose delay is a published BIOS-tick count.

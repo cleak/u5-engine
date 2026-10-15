@@ -1026,3 +1026,13 @@ pub fn synthetic_beacon_bearing_stencils() -> BeaconBearingStencils {
     parse_beacon_bearing_stencils(&synthetic_beacon_stencil_table())
         .expect("the synthetic stencil table must satisfy the published record shape")
 }
+
+/// The message slot followed by every staged beat still queued, in order:
+/// what the window will read once a paced presentation has run out.
+pub fn message_with_staged(state: &PlayState) -> String {
+    let mut text = state.message.clone();
+    for beat in state.staged_narration.beats() {
+        text.push_str(&beat.text);
+    }
+    text
+}

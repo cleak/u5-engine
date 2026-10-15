@@ -1675,9 +1675,23 @@
         // per-gate refusal this test used to pin is one of the two divergences
         // §5 names explicitly.
         assert_eq!(
-            state.message,
+            message_with_staged(&state),
             "\nThou dost hold above thee the evil Shard of Falsehood...\n\nNo effect!\n"
         );
+
+        // Step 2's swell holds the refusal back (measured pending
+        // u5-spec#296). Meanwhile the window ends on the aloft row itself,
+        // still open, with no fresh row beneath it.
+        state.flush_message_slot();
+        assert!(state.staged_narration_active());
+        assert!(state.message_window_live_row_suppressed());
+        let rows_before = state.message_transcript.len();
+        state.flush_staged_narration();
+        let tail: Vec<&str> = state.message_transcript[rows_before..]
+            .iter()
+            .map(|entry| entry.text.as_str())
+            .collect();
+        assert_eq!(tail, ["", "No effect!"], "one blank row, then the refusal");
     }
 
     #[test]
@@ -1715,7 +1729,7 @@
             assert!(state.active_use.is_none());
             assert_eq!(state.special_items[item_index], 1);
             assert_eq!(state.turn, 1);
-            assert_eq!(state.message, expected_message);
+            assert_eq!(message_with_staged(&state), expected_message);
         }
     }
 
@@ -1993,7 +2007,7 @@
         // that "produces the shared no-effect result" - after the
         // unconditional heading and aloft line.
         assert_eq!(
-            state.message,
+            message_with_staged(&state),
             "Thou dost hold above thee the evil Shard of Falsehood...\n\nNo effect!\n"
         );
     }
@@ -2061,7 +2075,7 @@
         // that "produces the shared no-effect result" - after the
         // unconditional heading and aloft line.
         assert_eq!(
-            state.message,
+            message_with_staged(&state),
             "Thou dost hold above thee the evil Shard of Falsehood...\n\nNo effect!\n"
         );
     }
@@ -2098,7 +2112,7 @@
         // position mismatch, not a distinct mismatched-flame refusal. §5
         // publishes exactly one refusal result here.
         assert_eq!(
-            state.message,
+            message_with_staged(&state),
             "Thou dost hold above thee the evil Shard of Falsehood...\n\nNo effect!\n"
         );
     }

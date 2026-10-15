@@ -357,9 +357,15 @@ fn shadowlord_shard_refusals_never_flash() {
             .unwrap(),
         MoveOutcome::Blocked
     );
-    assert!(vanquished.sound_effects_after(serial).is_empty());
+    // Off any destruction row, so step 2's swell plays; no flash does.
+    assert_eq!(
+        vanquished.sound_effects_after(serial),
+        vec![SoundEffect::ShardSwell]
+    );
 
-    // Correct shard, live Shadowlord, but no Eternal Flame underfoot.
+    // Correct shard, live Shadowlord, but no Eternal Flame underfoot. The
+    // position gate's refusal follows `quest-graph.md §5` step 2's swell,
+    // which is unconditional; what must not play is the flash.
     let mut no_flame = test_state(open_grid(), 1, 1);
     no_flame.special_items[SPECIAL_ITEM_SHARD_FALSEHOOD_INDEX] = 1;
     no_flame.shadowlord_hideouts[SHADOWLORD_FALSEHOOD_INDEX] = 1;
@@ -370,7 +376,10 @@ fn shadowlord_shard_refusals_never_flash() {
             .unwrap(),
         MoveOutcome::Blocked
     );
-    assert!(no_flame.sound_effects_after(serial).is_empty());
+    assert_eq!(
+        no_flame.sound_effects_after(serial),
+        vec![SoundEffect::ShardSwell]
+    );
 
     // On the flame, but the Shadowlord is not present to the north.
     let mut absent = test_state(open_grid(), 15, 9);
@@ -394,4 +403,66 @@ fn shadowlord_shard_refusals_never_flash() {
     assert!(absent.sound_effects_after(serial).is_empty());
 
     let _ = fs::remove_dir_all(dir);
+}
+
+#[test]
+fn shard_swell_matches_the_measured_rise_and_fall() {
+    // Measured pending u5-spec#296 (`qa/paired/use-shard-sweep.tsv`): one
+    // pitch, 891 Hz, held while the duty swells and decays; 8.25-8.27 s in
+    // all, the two limbs about equal and back to back.
+    let program = SoundEffect::ShardSwell.program(&mut crate::audio::RumbleJitter::default());
+    let secs = program.duration(true).as_secs_f64();
+    assert!((8.2..=8.32).contains(&secs), "swell lasts {secs} s");
+    let first = audio::shrine_swell_segment(
+        0,
+        audio::SHARD_SWELL_PERIOD,
+        audio::SHARD_SWELL_ITERATIONS,
+    );
+    let hz = first.gate_frequency_hz(true);
+    assert!((885.0..=897.0).contains(&hz), "gate at {hz} Hz");
+    // Every run shares the one period: the pitch never moves.
+    let audio::SpeakerOp::Envelope(last) = program.ops[program.ops.len() - 2] else {
+        panic!("the swell ends on an envelope run and a stop");
+    };
+    assert_eq!(last.period, first.period);
+}
+
+#[test]
+fn off_position_shard_holds_no_effect_until_the_swell_ends() {
+    // `quest-graph.md §5` steps 1-3: the aloft line prints at once, the
+    // swell runs, and only then the position gate's `No effect!`. Measured
+    // (`use-specials/sceptre`): three seconds after Return the stock window
+    // still ends on the aloft line.
+    let mut state = test_state(open_grid(), 1, 1);
+    state.special_items[SPECIAL_ITEM_SHARD_FALSEHOOD_INDEX] = 1;
+    state.shadowlord_hideouts[SHADOWLORD_FALSEHOOD_INDEX] = 1;
+
+    assert_eq!(
+        state
+            .use_shadowlord_shard(SHADOWLORD_FALSEHOOD_INDEX, None)
+            .unwrap(),
+        MoveOutcome::Blocked
+    );
+    assert_eq!(
+        state.message,
+        "Thou dost hold above thee the evil Shard of Falsehood..."
+    );
+    assert!(state.staged_narration_active());
+
+    let swell = SoundEffect::ShardSwell
+        .program(&mut crate::audio::RumbleJitter::default())
+        .duration(true)
+        .as_secs_f64();
+    // The hold is measured from the first advance.
+    assert!(state.advance_staged_narration_to(100.0));
+    assert!(state.advance_staged_narration_to(100.0 + 3.0));
+    assert_eq!(
+        state.staged_narration.beats().count(),
+        1,
+        "the refusal is still waiting three seconds in"
+    );
+    assert!(!state.advance_staged_narration_to(100.0 + swell + 0.01));
+    assert_eq!(state.message, "\n\nNo effect!\n");
+    // The position-gate refusal still consumes nothing.
+    assert_eq!(state.special_items[SPECIAL_ITEM_SHARD_FALSEHOOD_INDEX], 1);
 }
