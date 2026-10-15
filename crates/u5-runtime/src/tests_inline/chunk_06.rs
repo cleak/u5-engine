@@ -3900,3 +3900,50 @@
         let mut state = world_state_with_walker(5, 5, 0x05, 8, 5);
         assert!(!state.outdoor_first_phase_ranged_attack(1));
     }
+
+    /// `inventory.md §7.1`: the worn regalia complete the `Item: ` row with
+    /// `Crown\n\n`, `Amulet\n\n` or `Badge\n\n`, so their result sits under
+    /// a blank row. The handler's turn used to flush the line before the
+    /// picker's join could open that row (`use-specials/crownrow`, `amulet`).
+    #[test]
+    fn u_use_worn_regalia_result_sits_under_a_blank_row() {
+        for (index, family) in [
+            (SPECIAL_ITEM_CROWN_LB_INDEX, "Crown"),
+            (SPECIAL_ITEM_AMULET_LB_INDEX, "Amulet"),
+            (SPECIAL_ITEM_BLACK_BADGE_INDEX, "Badge"),
+        ] {
+            let dir = debug_game_dir();
+            let mut state = britannia_state(open_world_grid(), 4, 5);
+            state.special_items[index] = 1;
+            // Every stone buried, so no Moonstone row precedes the Badge.
+            for slot in &mut state.moonstone_slots {
+                slot.scene = 0;
+            }
+            handle_play_key_input(&mut state, 'u', "", &dir).unwrap();
+            handle_play_key_input(&mut state, '\r', "", &dir).unwrap();
+            let rows = message_rows(&state);
+            let item = rows
+                .iter()
+                .position(|row| row == &format!("Item: {family}"))
+                .unwrap_or_else(|| panic!("{family}: {rows:?}"));
+            assert_eq!(rows[item + 1], "", "{family}: {rows:?}");
+            assert!(!rows[item + 2].is_empty(), "{family}: {rows:?}");
+            let _ = fs::remove_dir_all(dir);
+        }
+    }
+
+    /// The Sceptre already placed its line after the turn; the fix above must
+    /// not give it a second blank row.
+    #[test]
+    fn u_use_sceptre_result_keeps_a_single_blank_row() {
+        let dir = debug_game_dir();
+        let mut state = britannia_state(open_world_grid(), 4, 5);
+        state.special_items[SPECIAL_ITEM_SCEPTRE_LB_INDEX] = 1;
+        handle_play_key_input(&mut state, 'u', "", &dir).unwrap();
+        handle_play_key_input(&mut state, '\r', "", &dir).unwrap();
+        let rows = message_rows(&state);
+        let item = rows.iter().position(|row| row == "Item: Sceptre").expect("sceptre row");
+        assert_eq!(rows[item + 1], "", "{rows:?}");
+        assert_eq!(rows[item + 2], "Wielding the", "{rows:?}");
+        let _ = fs::remove_dir_all(dir);
+    }

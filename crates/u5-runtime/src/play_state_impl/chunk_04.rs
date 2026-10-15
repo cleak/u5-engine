@@ -1403,7 +1403,7 @@ impl PlayState {
             return MoveOutcome::Blocked;
         }
 
-        self.message = if self.active_effect_tag == Some(effect_tag) {
+        let message = if self.active_effect_tag == Some(effect_tag) {
             self.clear_active_effect_slot();
             // `stats-panel.md §2.2.1` row 7: "U-Use of the Amulet, Crown or
             // Black Badge while already worn (the shared toggle's removal
@@ -1424,6 +1424,12 @@ impl PlayState {
         };
         self.mark_visibility_dirty();
         self.advance_turn();
+        // The line is placed after the turn, as the pocket watch and the
+        // Sceptre place theirs: the turn flushes whatever the slot holds,
+        // and a line flushed there misses the picker's join, so it lost
+        // the blank row `inventory.md §7.1`'s `Crown\n\n`/`Amulet\n\n`
+        // completion leaves above it.
+        self.message = message;
         MoveOutcome::Used
     }
 
