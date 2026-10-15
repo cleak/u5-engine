@@ -642,13 +642,14 @@ pub struct PlayState {
     /// path - the same one an ordinary message-window overflow uses. That
     /// path lifts the whole right-hand band, including the message window,
     /// by one pixel row and loses whatever was on its top row outright; the
-    /// message cursor itself does not move. A fresh `GameplayMessageLog` is
-    /// rebuilt from the transcript on every render, so this count is what a
-    /// renderer replays against it (`GameplayMessageLog::scroll_strip`) to
-    /// keep that loss across frames instead of undoing it on the next
-    /// repaint. `PlayState::register_use_picker_render_scroll` is the only
-    /// writer today; `clear_message_window` resets it, since a cleared
-    /// window has nothing left for an old count to erode.
+    /// message cursor itself does not move.
+    ///
+    /// This counts those scrolls; nothing consumes it yet. Replaying it
+    /// against the end of the render-time log was tried and withdrawn: it
+    /// padded blanks after the open `Item: ` row (losing the retained
+    /// column-6 cursor) and kept padding every later frame. The gap belongs
+    /// between the prompt and its completion, in the transcript
+    /// (`cleak/u5-engine#25`). `clear_message_window` resets it.
     pub(crate) message_window_pending_strip_scrolls: u32,
     /// Bumped on every transcript push so callers can tell whether a
     /// dispatch already recorded its own output.

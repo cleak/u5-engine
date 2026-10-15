@@ -75,10 +75,8 @@ impl PlayState {
         &self.message_transcript
     }
 
-    /// Strip scrolls a panel overflow has charged the message window that a
-    /// renderer has not yet replayed. See
-    /// [`PlayState::message_window_pending_strip_scrolls`] and
-    /// [`crate::message_window::GameplayMessageLog::scroll_strip`].
+    /// Strip scrolls panel overflows have charged the message window since
+    /// it was last cleared. See [`PlayState::message_window_pending_strip_scrolls`].
     pub fn message_window_pending_strip_scrolls(&self) -> u32 {
         self.message_window_pending_strip_scrolls
     }

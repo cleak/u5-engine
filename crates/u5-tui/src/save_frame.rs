@@ -879,13 +879,6 @@ pub fn compose_gameplay_screen(
     }
     let mut log = message_log_from_entries(state.message_entries(), keep);
     log.set_top_offset(usize::from(state.message_window_top_offset()));
-    // `cleak/u5-engine#25`: replay the panel-overflow strip scrolls the
-    // same way the visual shell does, so a plain-text frame matches the
-    // same message-window row placement. See
-    // `PlayState::message_window_pending_strip_scrolls`.
-    for _ in 0..state.message_window_pending_strip_scrolls() {
-        log.scroll_strip();
-    }
     if let Some(text) = state
         .message_slot_needs_flush()
         .then(|| keep(&state.message))
