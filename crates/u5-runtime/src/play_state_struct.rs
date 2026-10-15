@@ -635,6 +635,21 @@ pub struct PlayState {
     /// row it had reached. This is that row, as an offset from the
     /// window's top. `cleak/u5-engine#11`.
     pub(crate) message_window_top_offset: u8,
+    /// `display-driver-abi.md §9.5` (`cleak/u5-spec#259`, published
+    /// `ed0f743`): a panel repaint whose last list row starts a
+    /// two-display-line entry steps the active window's cursor past its own
+    /// bottom row, which takes the driver's fixed left-edge-192 strip-scroll
+    /// path - the same one an ordinary message-window overflow uses. That
+    /// path lifts the whole right-hand band, including the message window,
+    /// by one pixel row and loses whatever was on its top row outright; the
+    /// message cursor itself does not move. A fresh `GameplayMessageLog` is
+    /// rebuilt from the transcript on every render, so this count is what a
+    /// renderer replays against it (`GameplayMessageLog::scroll_strip`) to
+    /// keep that loss across frames instead of undoing it on the next
+    /// repaint. `PlayState::register_use_picker_render_scroll` is the only
+    /// writer today; `clear_message_window` resets it, since a cleared
+    /// window has nothing left for an old count to erode.
+    pub(crate) message_window_pending_strip_scrolls: u32,
     /// Bumped on every transcript push so callers can tell whether a
     /// dispatch already recorded its own output.
     pub(crate) message_transcript_revision: u64,

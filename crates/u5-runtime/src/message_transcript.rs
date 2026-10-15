@@ -58,6 +58,7 @@ impl PlayState {
         // 2's redraw: both put their first line on row 12.
         // `cleak/u5-engine#11`.
         self.message_window_top_offset = 1;
+        self.message_window_pending_strip_scrolls = 0;
         self.message_transcript.clear();
         self.message_transcript_revision = self.message_transcript_revision.wrapping_add(1);
         self.message.clear();
@@ -72,6 +73,14 @@ impl PlayState {
 
     pub fn message_entries(&self) -> &[MessageEntry] {
         &self.message_transcript
+    }
+
+    /// Strip scrolls a panel overflow has charged the message window that a
+    /// renderer has not yet replayed. See
+    /// [`PlayState::message_window_pending_strip_scrolls`] and
+    /// [`crate::message_window::GameplayMessageLog::scroll_strip`].
+    pub fn message_window_pending_strip_scrolls(&self) -> u32 {
+        self.message_window_pending_strip_scrolls
     }
 
     /// Bumped on every transcript push. Callers use it to tell whether a

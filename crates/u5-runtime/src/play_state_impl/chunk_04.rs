@@ -410,6 +410,7 @@ impl PlayState {
             return MoveOutcome::Blocked;
         }
         self.active_use = Some(UseSession::new());
+        self.register_use_picker_render_scroll();
         // `text-output.md §10.4`: the prompt follows the `Use item` echo,
         // so its leading feed buys a blank row. A capture reads
         // `>Use item`, a blank row, then `Item: None!` on one row.
@@ -424,6 +425,28 @@ impl PlayState {
             .as_ref()
             .map(|session| self.render_use_session(session))
             .unwrap_or_else(use_prompt_message)
+    }
+
+    /// `cleak/u5-engine#25`/`cleak/u5-spec#259` (published `ed0f743`): every
+    /// repaint of the U-Use (or R-Ready) picker panel - the initial draw,
+    /// each navigation key, and a key the picker does not recognise - costs
+    /// the message window one upward strip scroll exactly when the entry
+    /// that begins the panel's last visible list row needs two display
+    /// lines, never more than one. Acceptance runs no further picker pass,
+    /// so it does not call this; cancellation prints its refusal into the
+    /// message window directly rather than repainting the panel, so it does
+    /// not either.
+    ///
+    /// Call this once `self.active_use` (or `self.active_ready`) already
+    /// reflects the session the panel is about to show, since
+    /// [`crate::stats_panel::active_panel_picker`] reads the live field
+    /// rather than taking a session argument.
+    fn register_use_picker_render_scroll(&mut self) {
+        if crate::stats_panel::active_panel_picker(self).is_some_and(|view| view.overflowed_last_row_entry())
+        {
+            self.message_window_pending_strip_scrolls =
+                self.message_window_pending_strip_scrolls.saturating_add(1);
+        }
     }
 
     pub fn render_use_session(&self, session: &UseSession) -> String {
@@ -474,21 +497,25 @@ impl PlayState {
                 self.move_use_cursor(&mut session, 1);
                 self.message = self.render_use_session(&session);
                 self.active_use = Some(session);
+                self.register_use_picker_render_scroll();
             }
             UseInputAction::PreviousItem => {
                 self.move_use_cursor(&mut session, -1);
                 self.message = self.render_use_session(&session);
                 self.active_use = Some(session);
+                self.register_use_picker_render_scroll();
             }
             UseInputAction::PageNext => {
                 self.move_use_cursor(&mut session, READY_PICKER_PAGE_STEP as isize);
                 self.message = self.render_use_session(&session);
                 self.active_use = Some(session);
+                self.register_use_picker_render_scroll();
             }
             UseInputAction::PagePrevious => {
                 self.move_use_cursor(&mut session, -(READY_PICKER_PAGE_STEP as isize));
                 self.message = self.render_use_session(&session);
                 self.active_use = Some(session);
+                self.register_use_picker_render_scroll();
             }
             // `inventory.md §4.7`: "Home selects the first item; End selects
             // the last." The shared picker's rules are §5's, so the U-Use
@@ -497,11 +524,13 @@ impl PlayState {
                 self.select_use_endpoint(&mut session, false);
                 self.message = self.render_use_session(&session);
                 self.active_use = Some(session);
+                self.register_use_picker_render_scroll();
             }
             UseInputAction::LastItem => {
                 self.select_use_endpoint(&mut session, true);
                 self.message = self.render_use_session(&session);
                 self.active_use = Some(session);
+                self.register_use_picker_render_scroll();
             }
             UseInputAction::Confirm => {
                 let turn_before = self.turn;
@@ -582,6 +611,7 @@ impl PlayState {
                 self.normalize_use_cursor(&mut session);
                 self.message = self.render_use_session(&session);
                 self.active_use = Some(session);
+                self.register_use_picker_render_scroll();
             }
         }
         Ok(true)

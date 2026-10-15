@@ -17311,6 +17311,14 @@ fn render_integrated_status_framebuffer(
         };
         let mut log = message_log_from_entries(display_state.message_entries(), keep);
         log.set_top_offset(usize::from(display_state.message_window_top_offset()));
+        // `cleak/u5-engine#25`: a fresh log is rebuilt from the transcript
+        // every render, so a panel overflow's strip scroll
+        // (`PlayState::message_window_pending_strip_scrolls`) has to be
+        // replayed here to stay lost across frames instead of reappearing
+        // on the next repaint.
+        for _ in 0..display_state.message_window_pending_strip_scrolls() {
+            log.scroll_strip();
+        }
         if let Some(text) = display_state
             .message_slot_needs_flush()
             .then(|| keep(&message))

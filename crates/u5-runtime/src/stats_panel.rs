@@ -834,6 +834,39 @@ impl PanelPickerView {
         out
     }
 
+    /// Whether this page's repaint tried to start an entry on the panel's
+    /// last list row that needs two display lines, with only that one row
+    /// free for it.
+    ///
+    /// `display-driver-abi.md §9.5`/`inventory.md §4.5` (`cleak/u5-spec#259`,
+    /// published `ed0f743`): "One re-render costs one strip scroll if and
+    /// only if the entry that begins on the panel's last list row takes two
+    /// display lines. Otherwise it costs none. Never two." The picker
+    /// re-renders its whole visible page on every key the player sends it -
+    /// recognised or not - so this is the per-repaint check that decides
+    /// whether that repaint owes the message window one upward scroll
+    /// (`PlayState::register_use_picker_render_scroll`).
+    ///
+    /// This mirrors [`Self::visible_lines`]'s own stopping rule exactly:
+    /// that method already does not start a row it cannot finish, which is
+    /// the same boundary the original's renderer finds by trying and
+    /// overflowing.
+    pub fn overflowed_last_row_entry(&self) -> bool {
+        let start = self.page_start().min(self.rows.len());
+        let mut filled = 0usize;
+        for row in &self.rows[start..] {
+            let needed = row.lines().len();
+            if filled + needed > PANEL_PICKER_ROWS {
+                return filled == PANEL_PICKER_ROWS - 1 && needed == 2;
+            }
+            filled += needed;
+            if filled == PANEL_PICKER_ROWS {
+                return false;
+            }
+        }
+        false
+    }
+
     /// Divider-band page badge, using the arms browser's published glyphs
     /// (`inventory.md §4.4` places the same `↓`/`↑` badge under the picker).
     pub fn page_indicator(&self) -> crate::shop_runtime::ArmsSellPageIndicator {

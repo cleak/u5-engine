@@ -5171,6 +5171,57 @@ fn the_picker_page_is_filled_by_display_line_not_by_entry() {
     assert_eq!(lines.last().unwrap().0, 5);
 }
 
+/// `cleak/u5-engine#25`/`cleak/u5-spec#259` (published `ed0f743`): "One
+/// re-render costs one strip scroll if and only if the entry that begins
+/// on the panel's last list row takes two display lines. Otherwise it
+/// costs none. Never two."
+#[test]
+fn panel_overflow_fires_only_when_the_last_row_entry_takes_two_lines() {
+    use crate::stats_panel::*;
+
+    let row = |name: &str| PanelPickerRow {
+        quantity: Some(1),
+        selector: b' ',
+        selector_runic: false,
+        name: name.to_string(),
+        zero_padded: false,
+    };
+    let view = |rows: Vec<PanelPickerRow>| PanelPickerView {
+        label: "Items:".to_string(),
+        rows,
+        selected: 0,
+        ornamental_frame: true,
+    };
+
+    // Seven short entries exactly fill the page - no overflow attempt.
+    let exact = view((0..7).map(|_| row("Amulet")).collect());
+    assert!(!exact.overflowed_last_row_entry());
+
+    // A short list with room to spare - no overflow either.
+    let short = view((0..3).map(|_| row("Amulet")).collect());
+    assert!(!short.overflowed_last_row_entry());
+
+    // Six short entries, then a two-line Shard as the seventh: it begins
+    // on the panel's last row and cannot finish there.
+    let mut six_then_shard: Vec<PanelPickerRow> = (0..6).map(|_| row("Amulet")).collect();
+    six_then_shard.push(row("Shard/Falsehd"));
+    assert!(view(six_then_shard).overflowed_last_row_entry());
+
+    // The same two-line entry earlier in the page - row two, not row
+    // seven - costs nothing: it has somewhere to put its second line.
+    let mut shard_then_five: Vec<PanelPickerRow> = vec![row("Shard/Falsehd")];
+    shard_then_five.extend((0..5).map(|_| row("Amulet")));
+    assert!(!view(shard_then_five).overflowed_last_row_entry());
+
+    // "Never two": two two-line entries plus three ordinary ones fill the
+    // page exactly (2 + 2 + 1 + 1 + 1 = 7) with nothing left to start on
+    // row seven, so this costs nothing either - not a double charge for
+    // the second two-line entry.
+    let mut two_shards: Vec<PanelPickerRow> = vec![row("Shard/Falsehd"), row("Shard/Cowrdce")];
+    two_shards.extend((0..3).map(|_| row("Amulet")));
+    assert!(!view(two_shards).overflowed_last_row_entry());
+}
+
 /// `combat.md §8.4`: the combat active-player digit answers with
 /// `Set active plr:\n` and then `None!` for digit zero, the selected
 /// actor's name for a valid digit, or `Invalid!`. This engine answered
