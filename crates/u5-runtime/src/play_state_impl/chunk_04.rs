@@ -410,13 +410,15 @@ impl PlayState {
             return MoveOutcome::Blocked;
         }
         self.active_use = Some(UseSession::new());
-        self.register_use_picker_render_scroll();
         // `text-output.md §10.4`: the prompt follows the `Use item` echo,
         // so its leading feed buys a blank row. A capture reads
         // `>Use item`, a blank row, then `Item: None!` on one row.
         // `cleak/u5-engine#5`.
         self.open_prompt_block();
         self.message = self.render_active_use();
+        // The picker's first draw is a repaint like any other (§9.5: "the
+        // initial draw costs 0 or 1"), and it comes after `Item:_` prints.
+        self.register_use_picker_render_scroll();
         MoveOutcome::Observed
     }
 
@@ -442,10 +444,23 @@ impl PlayState {
     /// [`crate::stats_panel::active_panel_picker`] reads the live field
     /// rather than taking a session argument.
     fn register_use_picker_render_scroll(&mut self) {
-        if crate::stats_panel::active_panel_picker(self).is_some_and(|view| view.overflowed_last_row_entry())
+        if !crate::stats_panel::active_panel_picker(self)
+            .is_some_and(|view| view.overflowed_last_row_entry())
         {
-            self.message_window_pending_strip_scrolls =
-                self.message_window_pending_strip_scrolls.saturating_add(1);
+            return;
+        }
+        let Some(prompt) = self
+            .active_use
+            .as_ref()
+            .filter(|session| session.pending.is_none())
+            .map(UseSession::item_prompt_literal)
+        else {
+            return;
+        };
+        if self.break_open_prompt_row_for_strip_scroll(&prompt).is_some()
+            && let Some(session) = self.active_use.as_mut()
+        {
+            session.strip_scrolls = session.strip_scrolls.saturating_add(1);
         }
     }
 
@@ -459,7 +474,7 @@ impl PlayState {
         // `inventory.md §4.4`: U-Use prints `Item:_` into the message
         // window and runs the picker in the panel; the rows are read from
         // `crate::active_panel_picker` by the panel painter.
-        USE_ITEM_PROMPT_MESSAGE.to_string()
+        session.item_prompt_literal()
     }
 
     pub(crate) fn use_picker_cursor(&self, session: &UseSession) -> usize {
@@ -484,8 +499,9 @@ impl PlayState {
         match use_input_action(key) {
             UseInputAction::Exit => {
                 let turn_before = self.turn;
-                // The reply lands on the prompt's own row: `Item: None!`.
-                self.commit_prompt_reply(ITEM_SELECTION_PROMPT, ITEM_PICKER_ESCAPE_MESSAGE);
+                // The reply lands on the prompt's own row: `Item: None!` -
+                // or at its column on the row a strip scroll left it on.
+                self.commit_prompt_reply(&session.item_prompt_literal(), ITEM_PICKER_ESCAPE_MESSAGE);
                 self.ensure_use_action_turn(turn_before);
                 self.apply_post_turn_effects_after_outcome(
                     turn_before,
@@ -546,8 +562,9 @@ impl PlayState {
                 };
                 // The accepted row completes the open `Item: ` line before
                 // the handler runs; see [`Self::use_item_echo_family`].
+                let prompt = session.item_prompt_literal();
                 let echoed = Self::use_item_echo_family(row.request).inspect(|family| {
-                    self.commit_prompt_reply(ITEM_SELECTION_PROMPT, family);
+                    self.commit_prompt_reply(&prompt, family);
                 });
                 if let Some(pending) = pending_action_for_use_request(row.request) {
                     // The potion and scroll rows debit their stock when the

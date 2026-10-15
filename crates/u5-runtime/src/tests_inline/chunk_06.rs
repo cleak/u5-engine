@@ -2671,6 +2671,149 @@
         let _ = fs::remove_dir_all(dir);
     }
 
+    /// The fixture's eight Moonstone rows, then `Shard/Falsehd` - a label
+    /// that takes two display lines. With the highlight on the sixth row the
+    /// page starts at the third Moonstone, so six one-line rows sit above the
+    /// Shard and it begins on the panel's last list row. The underfoot tile
+    /// refuses a burial, so accepting a Moonstone prints the §7.1 refusal.
+    fn use_picker_state_with_overflowing_last_row() -> PlayState {
+        let mut grid = open_world_grid();
+        grid[world_cell_index(4, 5)] = 16;
+        let mut state = britannia_state(grid, 4, 5);
+        state.special_items[SPECIAL_ITEM_SHARD_FALSEHOOD_INDEX] = 1;
+        state
+    }
+
+    fn message_rows(state: &PlayState) -> Vec<String> {
+        message_log_from_entries(state.message_entries(), |text| {
+            (!text.trim().is_empty()).then(|| text.to_string())
+        })
+        .lines()
+        .iter()
+        .map(|line| line.text.clone())
+        .collect()
+    }
+
+    #[test]
+    fn a_picker_overflow_lifts_item_and_leaves_the_cursor_at_its_column() {
+        // `cleak/u5-engine#25` (`cleak/u5-spec#259`, `ed0f743`): a repaint
+        // whose last list row starts a two-line entry scrolls the message
+        // strip up one row while the message cursor stays put. So `Item:`
+        // rises and the cursor waits at column six of the row beneath it -
+        // `amuletrow` in `qa/paired/use-specials.tsv`.
+        let dir = debug_game_dir();
+        let mut state = use_picker_state_with_overflowing_last_row();
+        handle_play_key_input(&mut state, 'u', "", &dir).unwrap();
+        for _ in 0..4 {
+            handle_play_key_input(&mut state, '\u{4}', "", &dir).unwrap();
+        }
+        assert_eq!(state.active_use.as_ref().unwrap().strip_scrolls, 0);
+        handle_play_key_input(&mut state, '\u{4}', "", &dir).unwrap();
+        assert_eq!(state.active_use.as_ref().unwrap().strip_scrolls, 1);
+        let rows = message_rows(&state);
+        assert_eq!(rows[rows.len() - 2..], ["Item:".to_string(), String::new()], "{rows:?}");
+        assert_eq!(state.open_prompt_line().as_deref(), Some("      "));
+
+        let log = message_log_from_entries(state.message_entries(), |text| {
+            (!text.trim().is_empty()).then(|| text.to_string())
+        });
+        let layout = layout_message_window_with_open_prompt(
+            &log,
+            Some(""),
+            state.open_prompt_line().as_deref(),
+        );
+        let item = layout.rows.iter().find(|row| row.text == "Item:").unwrap();
+        assert_eq!(
+            layout.inline_cursor,
+            Some((MESSAGE_WINDOW_LEFT + 6, item.row + 1)),
+            "the cursor keeps the prompt's column one row under it"
+        );
+
+        // A key the picker does not act on still repaints the same page, and
+        // that repaint overflows again: a blank opens between the prompt and
+        // the cursor (`crownrow`).
+        handle_play_key_input(&mut state, 'u', "", &dir).unwrap();
+        assert_eq!(state.active_use.as_ref().unwrap().strip_scrolls, 2);
+        let rows = message_rows(&state);
+        assert_eq!(
+            rows[rows.len() - 3..],
+            ["Item:".to_string(), String::new(), String::new()],
+            "{rows:?}"
+        );
+
+        // The completion is written at that cursor, and the Moonstone
+        // refusal continues it from there (`inventory.md §7.1`).
+        handle_play_key_input(&mut state, '\r', "", &dir).unwrap();
+        let rows = message_rows(&state);
+        let item = rows.iter().position(|row| row == "Item:").expect("prompt row");
+        assert_eq!(
+            rows[item + 1..item + 5],
+            [
+                String::new(),
+                "      Moonstone".to_string(),
+                "cannot be buried".to_string(),
+                "here!".to_string()
+            ],
+            "{rows:?}"
+        );
+        let _ = fs::remove_dir_all(dir);
+    }
+
+    #[test]
+    fn escape_after_a_picker_overflow_writes_none_at_the_cursor_column() {
+        let dir = debug_game_dir();
+        let mut state = use_picker_state_with_overflowing_last_row();
+        handle_play_key_input(&mut state, 'u', "", &dir).unwrap();
+        for _ in 0..5 {
+            handle_play_key_input(&mut state, '\u{4}', "", &dir).unwrap();
+        }
+        handle_play_key_input(&mut state, '\u{1b}', "", &dir).unwrap();
+        let rows = message_rows(&state);
+        let item = rows.iter().position(|row| row == "Item:").expect("prompt row");
+        assert_eq!(rows[item + 1], "      None!", "{rows:?}");
+        let _ = fs::remove_dir_all(dir);
+    }
+
+    #[test]
+    fn a_picker_with_no_overflow_keeps_the_completion_on_the_item_row() {
+        // N = 0: the `skullkeysrow` shape, `Item: Skull Key` on one row.
+        let dir = debug_game_dir();
+        let mut state = britannia_state(open_world_grid(), 4, 5);
+        state.scroll_stock[0] = 1;
+        handle_play_key_input(&mut state, 'u', "", &dir).unwrap();
+        assert_eq!(state.active_use.as_ref().unwrap().strip_scrolls, 0);
+        handle_play_key_input(&mut state, '\u{1b}', "", &dir).unwrap();
+        assert!(message_rows(&state).iter().any(|row| row == "Item: None!"));
+        let _ = fs::remove_dir_all(dir);
+    }
+
+    #[test]
+    fn a_continuation_after_a_strip_scroll_wraps_from_the_cursor_column() {
+        // The Moonstone refusal of `cleak/u5-engine#44` continues whatever
+        // row the completion was written on; after a scroll that row starts
+        // at column six, so `      Moonstone` fills it and the refusal wraps
+        // from the next row's column zero (`inventory.md §7.1`).
+        let mut state = britannia_state(open_world_grid(), 4, 5);
+        state.emit_message_line("Item: ");
+        let prompt = state
+            .break_open_prompt_row_for_strip_scroll("Item: ")
+            .expect("`Item: ` is the open row");
+        state.commit_prompt_reply(&prompt, USE_ITEM_ECHO_MOONSTONE);
+        state.open_message_row();
+        state.emit_message_line_continuing_row(MOONSTONE_BURY_REFUSAL);
+        let rows = message_rows(&state);
+        let item = rows.iter().position(|row| row == "Item:").expect("prompt row");
+        assert_eq!(
+            rows[item + 1..],
+            [
+                "      Moonstone".to_string(),
+                "cannot be buried".to_string(),
+                "here!".to_string()
+            ],
+            "{rows:?}"
+        );
+    }
+
 
     /// Places one outdoor walker slot on the default (Underworld) plane of a
     /// `world_state`, with a movable animation phase.

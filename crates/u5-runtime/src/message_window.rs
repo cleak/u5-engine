@@ -471,6 +471,22 @@ pub fn message_log_from_entries<'a>(
             log.trim();
             continue;
         }
+        // A strip scroll's open row (`MessageEntry::prompt_column_row`) is
+        // only spaces until something is written at the cursor, and every
+        // renderer drops blank text - but the cursor is drawn on it, so it is
+        // placed directly with its spaces kept as the cursor's column.
+        if entry.prompt_column_row && entry.text.trim().is_empty() {
+            log.lines.push(MessageLogLine {
+                text: String::new(),
+                glyphs: Vec::new(),
+                kind: MessageLineKind::Output,
+                centered: false,
+                row_left_open: true,
+                trailing_spaces: entry.text.len().min(u8::MAX as usize) as u8,
+            });
+            log.trim();
+            continue;
+        }
         let Some(text) = render(&entry.text) else {
             continue;
         };

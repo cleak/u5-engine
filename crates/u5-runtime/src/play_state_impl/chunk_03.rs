@@ -594,14 +594,17 @@ impl PlayState {
         // picker's cursor on it, and its reply continues that row: a
         // capture reads `Item: Done` and `Item: None!` on single rows.
         // `cleak/u5-engine#5`.
-        if self
+        if let Some(session) = self
             .active_use
             .as_ref()
-            .is_some_and(|session| session.pending.is_none())
-            || self
-                .active_ready
-                .as_ref()
-                .is_some_and(|session| session.selected_party_index.is_some())
+            .filter(|session| session.pending.is_none())
+        {
+            return Some(session.item_prompt_literal());
+        }
+        if self
+            .active_ready
+            .as_ref()
+            .is_some_and(|session| session.selected_party_index.is_some())
         {
             return Some(ITEM_SELECTION_PROMPT.to_string());
         }

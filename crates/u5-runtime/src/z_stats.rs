@@ -156,6 +156,12 @@ pub struct ReadySession {
 pub struct UseSession {
     pub cursor: usize,
     pub pending: Option<UsePendingAction>,
+    /// Message-window strip scrolls this picker session's panel repaints
+    /// have charged (`cleak/u5-engine#25`; `display-driver-abi.md §9.5`,
+    /// `inventory.md §7.1`). Each one lifts the painted `Item:` row while the
+    /// message cursor stays at its column, so after `n` of them the prompt
+    /// sits `n` rows above the row the completion is written on.
+    pub strip_scrolls: u8,
 }
 
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -517,6 +523,19 @@ impl UseSession {
         Self {
             cursor: 0,
             pending: None,
+            strip_scrolls: 0,
+        }
+    }
+
+    /// The open row the picker's cursor waits on: `Item: ` until a strip
+    /// scroll has lifted it, then that prompt's width in spaces, since the
+    /// cursor keeps the prompt's column on the row below
+    /// (`cleak/u5-engine#25`). The completion and `None!` are written there.
+    pub fn item_prompt_literal(&self) -> String {
+        if self.strip_scrolls == 0 {
+            crate::ITEM_SELECTION_PROMPT.to_string()
+        } else {
+            " ".repeat(crate::ITEM_SELECTION_PROMPT.chars().count())
         }
     }
 }

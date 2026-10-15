@@ -5105,10 +5105,15 @@ fn a_picker_label_that_does_not_fit_wraps_whole_instead_of_being_clipped() {
 
     // §4.4: the row opens at window column 1 and the window is sixteen
     // cells, so a counted row's name has the twelve left after its
-    // two-cell quantity and its selector. Twelve fits - and runs straight
-    // through the frame's right rule at column 14, which is what the
-    // original does with `Shard/Hatred`.
-    assert_eq!(row("Shard/Hatred").lines(), vec![" 1 Shard/Hatred".to_string()]);
+    // two-cell quantity and its selector. Twelve stays on the line - it runs
+    // straight through the frame's right rule, which is what the original
+    // does with `Shard/Hatred` - but its last cell lands on window column 15,
+    // so §4.5's rule ("on or past window column 15") gives it a second
+    // display line holding only the padding (`cleak/u5-engine#25`).
+    assert_eq!(
+        row("Shard/Hatred").lines(),
+        vec![" 1 Shard/Hatred".to_string(), String::new()]
+    );
     assert_eq!(row("Magic Crpt").lines(), vec![" 1 Magic Crpt".to_string()]);
 
     // Thirteen does not, so the label moves to the next line whole. The

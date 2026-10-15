@@ -635,22 +635,6 @@ pub struct PlayState {
     /// row it had reached. This is that row, as an offset from the
     /// window's top. `cleak/u5-engine#11`.
     pub(crate) message_window_top_offset: u8,
-    /// `display-driver-abi.md §9.5` (`cleak/u5-spec#259`, published
-    /// `ed0f743`): a panel repaint whose last list row starts a
-    /// two-display-line entry steps the active window's cursor past its own
-    /// bottom row, which takes the driver's fixed left-edge-192 strip-scroll
-    /// path - the same one an ordinary message-window overflow uses. That
-    /// path lifts the whole right-hand band, including the message window,
-    /// by one pixel row and loses whatever was on its top row outright; the
-    /// message cursor itself does not move.
-    ///
-    /// This counts those scrolls; nothing consumes it yet. Replaying it
-    /// against the end of the render-time log was tried and withdrawn: it
-    /// padded blanks after the open `Item: ` row (losing the retained
-    /// column-6 cursor) and kept padding every later frame. The gap belongs
-    /// between the prompt and its completion, in the transcript
-    /// (`cleak/u5-engine#25`). `clear_message_window` resets it.
-    pub(crate) message_window_pending_strip_scrolls: u32,
     /// Bumped on every transcript push so callers can tell whether a
     /// dispatch already recorded its own output.
     pub(crate) message_transcript_revision: u64,
@@ -934,6 +918,13 @@ pub struct MessageEntry {
     pub centered: bool,
     /// Preserve this empty output row instead of treating it as an empty slot.
     pub explicit_blank: bool,
+    /// The open row a strip scroll left under a U-Use `Item: ` prompt: the
+    /// message cursor stays at the prompt's column while the painted rows
+    /// rise (`cleak/u5-engine#25`, `display-driver-abi.md §9.5`), so the
+    /// row starts with that many spaces and the completion is appended to
+    /// it. While it is still only spaces it must survive renderers that
+    /// drop blank-text entries, because the cursor is drawn on it.
+    pub prompt_column_row: bool,
 }
 
 /// Bookkeeping for a verb echo that has been written to the transcript

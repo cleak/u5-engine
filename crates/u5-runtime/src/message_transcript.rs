@@ -58,7 +58,6 @@ impl PlayState {
         // 2's redraw: both put their first line on row 12.
         // `cleak/u5-engine#11`.
         self.message_window_top_offset = 1;
-        self.message_window_pending_strip_scrolls = 0;
         self.message_transcript.clear();
         self.message_transcript_revision = self.message_transcript_revision.wrapping_add(1);
         self.message.clear();
@@ -73,12 +72,6 @@ impl PlayState {
 
     pub fn message_entries(&self) -> &[MessageEntry] {
         &self.message_transcript
-    }
-
-    /// Strip scrolls panel overflows have charged the message window since
-    /// it was last cleared. See [`PlayState::message_window_pending_strip_scrolls`].
-    pub fn message_window_pending_strip_scrolls(&self) -> u32 {
-        self.message_window_pending_strip_scrolls
     }
 
     /// Bumped on every transcript push. Callers use it to tell whether a
@@ -138,6 +131,7 @@ impl PlayState {
             leaves_row_open,
             centered,
             explicit_blank,
+            prompt_column_row: false,
         });
         if self.message_transcript.len() > MESSAGE_TRANSCRIPT_CAPACITY {
             let excess = self.message_transcript.len() - MESSAGE_TRANSCRIPT_CAPACITY;
@@ -609,6 +603,59 @@ impl PlayState {
         let line = format!("{prompt}{reply}");
         self.message = line.clone();
         self.message_flushed = line;
+    }
+
+    /// One message-window strip scroll under the open prompt `prompt`, with
+    /// the cursor still on it. Returns the open row's new literal - the
+    /// prompt's width in spaces - or `None` when `prompt` is not the open
+    /// row, in which case nothing changes.
+    ///
+    /// `display-driver-abi.md §9.5` (`cleak/u5-spec#259`, `ed0f743`): the
+    /// scroll lifts every painted row by one and loses the top one, while
+    /// "the message cursor is unchanged". So the prompt's row closes, every
+    /// further scroll adds a blank between it and the cursor, and the cursor
+    /// waits on a row that starts at the prompt's column. Recording that in
+    /// the transcript, rather than replaying a count at render time, keeps
+    /// the gap between the prompt and whatever is written at the cursor -
+    /// which is where the original puts it (`cleak/u5-engine#25`).
+    pub(crate) fn break_open_prompt_row_for_strip_scroll(&mut self, prompt: &str) -> Option<String> {
+        self.flush_message_slot();
+        let indent = " ".repeat(prompt.chars().count());
+        let last = self.message_transcript.last_mut()?;
+        if last.prompt_column_row && last.text == indent {
+            *last = MessageEntry {
+                text: String::new(),
+                producer_blank: false,
+                glyphs: Vec::new(),
+                is_command_echo: false,
+                continues_open_row: false,
+                leaves_row_open: false,
+                centered: false,
+                explicit_blank: true,
+                prompt_column_row: false,
+            };
+        } else if last.explicit_blank || last.prompt_column_row || last.text != prompt {
+            return None;
+        }
+        self.message_transcript.push(MessageEntry {
+            text: indent.clone(),
+            producer_blank: false,
+            glyphs: ordinary_glyphs_from_engine_text(&indent),
+            is_command_echo: false,
+            continues_open_row: false,
+            leaves_row_open: false,
+            centered: false,
+            explicit_blank: false,
+            prompt_column_row: true,
+        });
+        if self.message_transcript.len() > MESSAGE_TRANSCRIPT_CAPACITY {
+            let excess = self.message_transcript.len() - MESSAGE_TRANSCRIPT_CAPACITY;
+            self.message_transcript.drain(0..excess);
+        }
+        self.message_transcript_revision = self.message_transcript_revision.wrapping_add(1);
+        self.message = indent.clone();
+        self.message_flushed = indent.clone();
+        Some(indent)
     }
 
     /// Redraw an open prompt row the player is still typing into.

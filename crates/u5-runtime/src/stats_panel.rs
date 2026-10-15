@@ -582,10 +582,20 @@ impl PanelPickerRow {
             Some(0) => format!("--{selector}"),
             Some(count) => format!("{count:>2}{selector}"),
         };
-        let fits = prefix.chars().count() + self.name.chars().count()
-            <= PANEL_PICKER_ROW_CELLS;
-        if fits {
+        let cells = prefix.chars().count() + self.name.chars().count();
+        if cells < PANEL_PICKER_ROW_CELLS {
             vec![format!("{prefix}{}", self.name)]
+        } else if cells == PANEL_PICKER_ROW_CELLS {
+            // `inventory.md §4.5`: "A row takes a second display line exactly
+            // when the label's last cell would fall on or past window column
+            // 15". A row that ends *on* column 15 keeps all its text on the
+            // first line - a counted `Shard/Hatred` "is emitted on one display
+            // line ... the cursor then wraps at the window edge, and the
+            // renderer's fourteen padding cells land on the following line".
+            // So its second line is only padding, but it is a line: it costs
+            // the page a row, and on the panel's last row it is the overflow
+            // that scrolls the message strip (`cleak/u5-engine#25`).
+            vec![format!("{prefix}{}", self.name), String::new()]
         } else {
             // "onto the next line **whole**" - the label moves entire, and
             // the quantity and selector keep the line they were on.
