@@ -2626,6 +2626,51 @@
         let _ = fs::remove_dir_all(dir);
     }
 
+    #[test]
+    fn use_moonstone_bury_refusal_continues_the_item_row_and_wraps_at_the_retained_column() {
+        // `cleak/u5-engine#44`: the refusal is written at the cursor the
+        // `Item: ` prompt left, "subject to normal wrapping"
+        // (`cleak/u5-spec#259`, published `ed0f743`), not as a fresh line
+        // wrapped from column zero. Measured (`qa/paired/use-moonstone-bury.tsv`,
+        // beat `buried`): the original breaks `Item: Moonstone cannot be
+        // buried here!` as `Item: Moonstone` / `cannot be buried` / `here!` -
+        // this engine used to wrap the continuation alone from column zero
+        // and broke after `cannot be` instead.
+        let dir = debug_game_dir();
+        let mut grid = open_world_grid();
+        grid[world_cell_index(4, 5)] = 16;
+        let mut state = britannia_state(grid, 4, 5);
+
+        // Drive the real picker, the same shape `qa/paired/use-moonstone-bury.tsv`
+        // does: `u` opens it, five `Down` presses reach the first Moonstone
+        // slot, `Return` accepts - the direct `U1` shortcut the test above
+        // uses does not go through the picker's `Item: ` echo at all.
+        handle_play_key_input(&mut state, 'u', "", &dir).unwrap();
+        for _ in 0..5 {
+            handle_play_key_input(&mut state, '\u{4}', "", &dir).unwrap();
+        }
+        assert_eq!(
+            handle_play_key_input(&mut state, '\r', "", &dir).unwrap(),
+            PlayInputDisposition::Continue
+        );
+        assert_eq!(state.message, MOONSTONE_BURY_REFUSAL);
+
+        let log = message_log_from_entries(state.message_entries(), |text| {
+            Some(text.to_string())
+        });
+        let rows: Vec<&str> = log.lines().iter().map(|line| line.text.as_str()).collect();
+        let item_row = rows
+            .iter()
+            .position(|text| *text == "Item: Moonstone")
+            .unwrap_or_else(|| panic!("no `Item: Moonstone` row in {rows:?}"));
+        assert_eq!(
+            rows.get(item_row + 1..item_row + 3),
+            Some(["cannot be buried", "here!"].as_slice()),
+            "rows: {rows:?}"
+        );
+        let _ = fs::remove_dir_all(dir);
+    }
+
 
     /// Places one outdoor walker slot on the default (Underworld) plane of a
     /// `world_state`, with a movable animation phase.

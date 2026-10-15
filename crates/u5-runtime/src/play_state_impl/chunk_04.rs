@@ -2300,11 +2300,24 @@ impl PlayState {
         // at all - combat, the dungeon band - is outside the accepted scene
         // range too, so it takes the same one literal rather than `Not here!`.
         let Some((scene, z, tile, label)) = self.current_moonstone_bury_context() else {
-            self.message = MOONSTONE_BURY_REFUSAL.to_string();
+            // `cleak/u5-engine#44`: this refusal continues the `Item: `
+            // prompt's own open row rather than starting a fresh one. A
+            // direct `self.message = ...` assignment wraps the literal
+            // alone from column zero, which is not where the original's
+            // cursor sits - `inventory.md §7.1`'s completion is written at
+            // the retained cursor column, "subject to normal wrapping"
+            // (`cleak/u5-spec#259`, published `ed0f743`). Routing it
+            // through the continuing-row append instead merges it onto the
+            // `Item: Moonstone` entry before wrapping, which reproduces the
+            // original's `cannot be buried` / `here!` break instead of this
+            // engine's previous ` cannot be` / `buried here!`.
+            self.open_message_row();
+            self.emit_message_line_continuing_row(MOONSTONE_BURY_REFUSAL);
             return MoveOutcome::Blocked;
         };
         if !moonstone_bury_scene_allowed(scene) || !moonstone_bury_tile_allowed(tile) {
-            self.message = MOONSTONE_BURY_REFUSAL.to_string();
+            self.open_message_row();
+            self.emit_message_line_continuing_row(MOONSTONE_BURY_REFUSAL);
             return MoveOutcome::Blocked;
         }
 
