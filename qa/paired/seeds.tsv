@@ -35,6 +35,7 @@ doom-final-room	seed-doom-final-room	copied from the paired-doom-final-room run 
 doom-final-room-refusal	seed-doom-final-room-refusal	copied from the paired-doom-final-room-refusal run profile
 doom-final-room-waiting	seed-doom-final-room-waiting	copied from the paired-doom-final-room-waiting run profile
 drowning-audio	seed-drowning-audio	copied from the paired-drowning-audio run profile
+drowning-collision	seed-drowning-collision	seed-drowning-audio-lowhull moved to the deep-water cell west of a coast, heading east, North wind
 drowning-audio-lowhull	seed-drowning-audio-lowhull	seed-drowning-audio with the frigate hull byte (SAVED.GAM 0x06B9) set to 1
 dungeon-exit-klimb	seed-dungeon-exit-klimb	copied from the paired-dungeon-exit-klimb run profile
 dungeon-look	seed-dungeon-look	copied from the paired-dungeon-look run profile

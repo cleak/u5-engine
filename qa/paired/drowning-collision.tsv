@@ -1,0 +1,64 @@
+# Hear `audio.md §8.9`'s long descent from a deterministic drowning.
+#
+# `drowning-audio` waited for an encounter to sink the frigate and never got
+# one: over 27 runs on 2026-10-14 nine encounters fired and every one boarded,
+# leaving the party in deck combat, and `drowning-audio-lowhull` then lost the
+# Avatar to a serpent on deck instead of drowning. This scenario uses the
+# other hull route `overworld.md §6.2.5` publishes: a frigate with sails
+# hoisted whose released movement is refused prints `COLLISION!` and runs the
+# frigate arm of `§6.2.4`'s absorption, one draw in the closed interval
+# `[1, 30]` against the hull.
+#
+# The seed differs from `seed-drowning-audio-lowhull` only in where the ship
+# is and how the wind blows: the furled frigate sits on the deep-water cell
+# west of a coast cell, heading east, with a North wind, so `weather.md §5`
+# makes east a crosswind and the movement releases on the first pass. Hull is
+# 1 (`formats/saved-gam.md §8.1`, the player record's `+0x05`), so every roll
+# destroys it; skiffs and the carpet stock (`0x020A`) are zero, so
+# `vehicles.md §6`'s ladder reaches its last rung: `Ship sunk!`, the long
+# descent, `DROWNING!!!`. The first `Right` after hoisting only sets the
+# cached sail direction (`weather.md §5`: a heading that differs from the
+# cache turns and does not move); the second releases into the coast.
+#
+# The two sides are driven separately, and the side not being recorded is
+# muted with Ctrl-S, because the capture sink mixes both processes: in the
+# first run the stock game sank on its own while the engine was being
+# recorded - after the hoist and one `Right` the original kept sailing on the
+# cached direction without another key (`weather.md §5`'s synthesized
+# repeats), where this engine waited for the second `Right`. Ctrl-S
+# suppresses output only (`audio.md §3`), so it changes no timing. The stock
+# game is only muted once its rescue cinematic (`blackthorn.md §7`) has run
+# and been acknowledged, since Ctrl-S is a command-loop key.
+# requires-seed: profile `seed-drowning-collision` (frigate, hull 1, no skiffs or carpet, west of a coast, North wind)
+both	wait	9000
+both	key	space
+both	wait	4000
+both	key	j
+both	wait	8000
+both	shot	start	Furled frigate west of the coast
+engine	key	ctrl+s
+both	wait	1500
+dosbox	key	y
+both	wait	1500
+both	audio-start	dosbox-collision	DOSBox: hoisted, one eastward key into the coast
+dosbox	key	Right
+both	wait	22000
+both	audio-stop		DOSBox collision capture
+both	shot	dosbox-drowned	DOSBox after the collision
+both	wait	40000
+dosbox	key	space
+both	wait	6000
+dosbox	key	ctrl+s
+both	wait	1500
+both	shot	dosbox-muted	DOSBox rescued and muted
+engine	key	ctrl+s
+both	wait	1500
+engine	key	y
+both	wait	1500
+engine	key	Right
+both	wait	1500
+both	audio-start	engine-collision	Engine: the released eastward movement into the coast
+engine	key	Right
+both	wait	22000
+both	audio-stop		Engine collision capture
+both	shot	engine-drowned	Engine after the collision
