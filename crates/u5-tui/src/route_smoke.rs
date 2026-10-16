@@ -73,7 +73,7 @@ use u5_runtime::{
     SCENE_MOONGLOW, SCENE_SERPENTS_HOLD, SCENE_STONEGATE, SCENE_THE_LYCAEUM,
     SHADOWLORD_COWARDICE_INDEX, SHADOWLORD_FALSEHOOD_INDEX, SHADOWLORD_HATRED_INDEX,
     SHADOWLORD_HIDEOUT_VANQUISHED, SHADOWLORD_VANQUISHED, SHIP_NO_SKIFFS_WARNING,
-    CODEX_SHRINE_ENTRY_TILE, SHRINE_ALTAR_TILE_FIRST, SHRINE_RESTORATION_SUCCESS_BANNER,
+    CODEX_SHRINE_ENTRY_TILE, SHRINE_MARKER_TILE, SHRINE_RESTORATION_SUCCESS_BANNER,
     SLEEP_COST,
     SLEEP_FIELD_SPELL_INDEX, SLEEP_SPELL_INDEX, SPECIAL_ITEM_HMS_CAPE_PLANS_INDEX,
     SPECIAL_ITEM_MAGIC_CARPET_INDEX, SPECIAL_ITEM_OWNED_VALUE, SPECIAL_ITEM_POCKET_WATCH_INDEX,
@@ -3137,8 +3137,11 @@ fn append_shrine_route_smoke_cases(cases: &mut Vec<RouteSmokeCase>) {
             )
             .into_boxed_str(),
         );
-        let command: &'static str = Box::leak(format!("M{}", virtue.mantra()).into_boxed_str());
-        let script: &'static [&'static str] = Box::leak(vec![command].into_boxed_slice());
+        // `karma.md §7`: "`M` always selects Mix Reagents, including at a
+        // shrine" (R411). Meditation is E-Enter, the virtue question, then
+        // the mantra three times; the ordaining arm then waits for a key
+        // before the quest sentence and again before the closing line.
+        let script = shrine_enter_route_script(virtue, &["return", "return"]);
         cases.push(RouteSmokeCase {
             name,
             options: PlayOptions {
@@ -3168,18 +3171,24 @@ fn append_shrine_route_smoke_cases(cases: &mut Vec<RouteSmokeCase>) {
             // stands on the published urn coordinate and presses `E`.
             ..PlayOptions::default()
         },
-        script: &["E"],
+        // `karma.md §8.2`: the reader advances one key at a time - records
+        // `37`, `38`, then the stamp and aphorism on the third key; with the
+        // read mask still incomplete the fourth key finishes.
+        script: &["E", "return", "return", "return", "return"],
         expected: RouteSmokeExpectation::World(WorldPlane::Britannia),
         min_turn: 0,
         expected_frame_kind: "tile viewport",
     });
+    // `karma.md §7`/§12: the turn-in and the completed-quest offering are
+    // arms of the same E-Enter meditation; `M` is Mix Reagents (R411), so
+    // the old `MAhm` / `MMu/1` inline forms measured the mixer instead.
     cases.push(RouteSmokeCase {
         name: "shrine-honesty-codex-turn-in",
         options: PlayOptions {
             target: PlayTarget::World(WorldPlane::Britannia),
             ..PlayOptions::default()
         },
-        script: &["MAhm"],
+        script: shrine_enter_route_script(ShrineVirtue::Honesty, &[]),
         expected: RouteSmokeExpectation::World(WorldPlane::Britannia),
         min_turn: 0,
         expected_frame_kind: "tile viewport",
@@ -3191,7 +3200,8 @@ fn append_shrine_route_smoke_cases(cases: &mut Vec<RouteSmokeCase>) {
             gold: 500,
             ..PlayOptions::default()
         },
-        script: &["MMu/1"],
+        // The offering chooser takes one digit: `1` is 100 gold.
+        script: shrine_enter_route_script(ShrineVirtue::Compassion, &["1"]),
         expected: RouteSmokeExpectation::World(WorldPlane::Britannia),
         min_turn: 0,
         expected_frame_kind: "tile viewport",
@@ -4540,20 +4550,46 @@ const OUTDOOR_RANGED_ATTACK_ROUTE_CLEAR_TILE: u8 = 0x03;
 /// `encounters.md §4` pirate-ship / water-creature facing frames.
 const OUTDOOR_RANGED_ATTACK_ROUTE_PIRATE_FRAME: u8 = 0x2C;
 
+/// Stand the party on the virtue's shrine, ready for `karma.md §7`'s E-Enter:
+/// "Ordinary shrine meditation begins with `E`-Enter while standing on the
+/// live mystic-shrine terrain tile `0x19`. Enter identifies the virtue from
+/// the coordinate table in `catalogs/gazetteer.md` Section 7". Spirituality's
+/// row is the `(0, 0)` sentinel, so it stands on a shrine tile no row names,
+/// which "resolves the meditation to **Spirituality**".
 fn seed_world_shrine_route(state: &mut PlayState, virtue: ShrineVirtue) {
     state.area = Area::World {
         plane: WorldPlane::Britannia,
     };
-    state.player.x = 62;
-    state.player.y = 124;
+    let (x, y) = u5_runtime::published_shrine_entries()
+        .into_iter()
+        .find(|entry| entry.virtue == virtue && (entry.x, entry.y) != (0, 0))
+        .map_or((62, 124), |entry| (entry.x, entry.y));
+    state.player.x = x;
+    state.player.y = y;
     state.player.facing = Direction::East;
-    let tile = SHRINE_ALTAR_TILE_FIRST + virtue.index() as u8;
+    let tile = SHRINE_MARKER_TILE;
     let idx = world_cell_index(state.player.x, state.player.y);
     if let Some(cell) = state.grid.get_mut(idx) {
         *cell = tile;
     }
     state.sync_player_object();
     state.mark_visibility_dirty();
+}
+
+/// `karma.md §7`'s E-Enter meditation as a route script: `E`, the virtue
+/// answer, then the mantra three times, each line submitted with Return, and
+/// then `tail`.
+fn shrine_enter_route_script(
+    virtue: ShrineVirtue,
+    tail: &[&'static str],
+) -> &'static [&'static str] {
+    let virtue_answer: &'static str = Box::leak(virtue.name().to_string().into_boxed_str());
+    let mut script = vec!["E", virtue_answer, "return"];
+    for _ in 0..3 {
+        script.extend([virtue.mantra(), "return"]);
+    }
+    script.extend_from_slice(tail);
+    Box::leak(script.into_boxed_slice())
 }
 
 fn shrine_route_virtue(case_name: &str) -> Option<ShrineVirtue> {
@@ -7196,23 +7232,23 @@ fn validate_route_smoke_case_state(
         }
         _ if shrine_route_virtue(case_name).is_some() => {
             let virtue = shrine_route_virtue(case_name).expect("shrine route virtue is known");
-            // The ordained summary is a diagnostic, not a message.
-            // `karma.md §12`'s Codex-unread arm is the record `31`/`32`/`33`
-            // presentation, and the inline suffix form this route drives "has
-            // no key waits to hang those records on, so it applies the state
-            // change and prints nothing rather than the summary sentence it
-            // used to invent" - it clears `message` on purpose. These clauses
-            // still read `message` and so failed for all eight virtues.
-            let ordained_note = state.diagnostics.iter().any(|note| {
-                note.contains("ordained") && note.contains(virtue.name())
-            });
+            // `karma.md §12`'s Codex-unread arm ordains the quest and prints
+            // records `31`/`32`/`33` across its two key waits; the route
+            // answers both, so the session has closed. The ordained bit is
+            // the published state change; the inline-suffix summary note
+            // this used to require belonged to the withdrawn M-Meditate form.
             if state.shrine_ordained_mask & virtue.bit() == 0
                 || state.shrine_codex_mask != 0
-                || !ordained_note
+                || state.active_shrine.is_some()
             {
                 return Err(io::Error::other(format!(
-                    "route smoke `{case_name}` did not complete native shrine meditation for {}",
-                    virtue.name()
+                    "route smoke `{case_name}` did not complete native shrine meditation for {}; \
+                     ordained {:#04x}, codex {:#04x}, shrine session open {}, message {:?}",
+                    virtue.name(),
+                    state.shrine_ordained_mask,
+                    state.shrine_codex_mask,
+                    state.active_shrine.is_some(),
+                    state.message,
                 )));
             }
         }
@@ -7220,10 +7256,13 @@ fn validate_route_smoke_case_state(
             if state.shrine_codex_mask & ShrineVirtue::Honesty.bit() == 0
                 // `Read Codex page for Honesty` was engine prose. The read
                 // renders the published Codex presentation, whose lead-in
-                // names the book.
-                || !state
-                    .message
-                    .contains("The Codex of Ultimate Wisdom lies before thee")
+                // names the book; the reader has run to its end, so the
+                // lead-in is read from the transcript.
+                || !state.message_entries().iter().any(|entry| {
+                    entry
+                        .text
+                        .contains("The Codex of Ultimate Wisdom lies before thee")
+                })
             {
                 return Err(io::Error::other(format!(
                     "route smoke `{case_name}` did not stamp the Codex-read bit; \
@@ -7264,11 +7303,26 @@ fn validate_route_smoke_case_state(
                 || state.shrine_codex_mask & ShrineVirtue::Compassion.bit() == 0
                 || state.moral_standing != 11
                 // `karma.md §12`: an affordable offering prints `ALAKAZAM`
-                // runic and appends `!` in the normal font.
-                || state.message != "ALAKAZAM!"
+                // runic and appends `!` in the normal font. The route then
+                // runs the shrine's closing presentation to its end, so the
+                // line is read from the transcript, not the live slot.
+                || !state
+                    .message_entries()
+                    .iter()
+                    .any(|entry| entry.text == "ALAKAZAM!")
             {
                 return Err(io::Error::other(format!(
-                    "route smoke `{case_name}` did not complete the completed-shrine offering"
+                    "route smoke `{case_name}` did not complete the completed-shrine offering; \
+                     gold {}, codex {:#04x}, standing {}, shrine session open {}, rows {:?}",
+                    state.gold,
+                    state.shrine_codex_mask,
+                    state.moral_standing,
+                    state.active_shrine.is_some(),
+                    state
+                        .message_entries()
+                        .iter()
+                        .map(|entry| entry.text.as_str())
+                        .collect::<Vec<_>>(),
                 )));
             }
         }
@@ -8539,5 +8593,34 @@ mod scratch_run {
             }
         }
         assert_eq!(failures, 0, "harpsichord routes failed");
+    }
+
+    /// The shrine and Codex routes, which drive `karma.md §7`/§8's E-Enter
+    /// sessions (`M` is always Mix Reagents, R411/R451).
+    #[test]
+    fn scratch_run_shrine_and_codex_routes() {
+        let Some(game_dir) = u5_runtime::test_fixtures::configured_original_asset_dir() else {
+            return;
+        };
+        let game_dir = game_dir.as_path();
+        if !game_dir.join("CASTLE.DAT").exists() {
+            println!("no assets");
+            return;
+        }
+        let atlas = load_tile_atlas(game_dir, TileGraphicsDepth::Ega16).unwrap();
+        let mut failures = 0;
+        for case in route_smoke_cases()
+            .iter()
+            .filter(|case| case.name.contains("shrine") || case.name.contains("codex"))
+        {
+            match run_route_smoke_case(game_dir, &atlas, case) {
+                Ok(report) => println!("OK   {}: {}", report.name, report.final_state_line),
+                Err(err) => {
+                    failures += 1;
+                    println!("FAIL {}: {err}", case.name);
+                }
+            }
+        }
+        assert_eq!(failures, 0, "shrine/codex routes failed");
     }
 }

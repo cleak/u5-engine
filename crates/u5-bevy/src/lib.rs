@@ -28,7 +28,7 @@ use u5_runtime::{
     BLINK_COST, BLINK_SPELL_INDEX, BRIT_CBT_RECORDS, BRIT_DAT_FILENAME, BRIT_OOL_FILENAME,
     BRITISH_PTH_PEN_ORIGINS, BritishPth, CBT_PLACEMENT_SLOT_COUNT, CGA_PALETTE_RGB, CH_CELL_SIDE,
     CHARGEN_GYPSY_PARAGRAPH_BOX, CHARGEN_QUESTION_PARAGRAPH_BOX, CHARGEN_RESULT_PARAGRAPH_BOX,
-    CODEX_URN_TABLE_FILE, COMBAT_ACTOR_FLAG_PHASE_BLINK_FILTER, COMBAT_ACTOR_FLAG_SELECTABLE_80,
+    COMBAT_ACTOR_FLAG_PHASE_BLINK_FILTER, COMBAT_ACTOR_FLAG_SELECTABLE_80,
     COMBAT_ACTOR_SLOTS, COMBAT_ARENA_SIDE, COMBAT_CLASS_GIANT_RAT, COMBAT_DEFAULT_DEATH_DROP_TILE,
     COMBAT_FIELD_KIND_ENERGY, COMBAT_FIELD_KIND_FIRE, COMBAT_FIELD_KIND_POISON,
     COMBAT_FIELD_KIND_SLEEP, COMBAT_GARGOYLE_DEATH_TERRAIN_TILE, COMBAT_GAZER_DEATH_MARKER_TILE,
@@ -83,7 +83,7 @@ use u5_runtime::{
     SCENE_SERPENTS_HOLD, SCENE_STONEGATE, SCENE_THE_LYCAEUM, SHADOWLORD_COWARDICE_INDEX,
     SHADOWLORD_FALSEHOOD_INDEX, SHADOWLORD_HATRED_INDEX, SHADOWLORD_HIDEOUT_VANQUISHED,
     SHADOWLORD_OBJECT_TILE_BASE, SHADOWLORD_VANQUISHED, SHIP_NO_SKIFFS_WARNING,
-    SHIPPED_PALETTE_REGISTERS, SHRINE_ALTAR_TILE_FIRST, SLEEP_COST, SLEEP_FIELD_SPELL_INDEX,
+    SHIPPED_PALETTE_REGISTERS, SLEEP_COST, SLEEP_FIELD_SPELL_INDEX,
     SLEEP_SPELL_INDEX, SPECIAL_ITEM_HMS_CAPE_PLANS_INDEX, SPECIAL_ITEM_MAGIC_CARPET_INDEX,
     SPECIAL_ITEM_OWNED_VALUE, SPECIAL_ITEM_POCKET_WATCH_INDEX, SPECIAL_ITEM_SCEPTRE_LB_INDEX,
     SPECIAL_ITEM_SEXTANT_INDEX, SPECIAL_ITEM_SHARD_COWARDICE_INDEX,
@@ -2123,6 +2123,12 @@ fn apply_visual_route_initial_setup(
         }
         "route-codex-urn-honesty-read" => {
             seed_visual_route_shrine(state, ShrineVirtue::Honesty);
+            // `karma.md §8` (R451): the Codex begins with E-Enter on live
+            // tile `0x11`, with no coordinate-table match.
+            let idx = u5_runtime::world_cell_index(state.player.x, state.player.y);
+            if let Some(cell) = state.grid.get_mut(idx) {
+                *cell = u5_runtime::CODEX_SHRINE_ENTRY_TILE;
+            }
             state.shrine_ordained_mask = ShrineVirtue::Honesty.bit();
             state.shrine_codex_mask = 0;
         }
@@ -2349,14 +2355,22 @@ fn visual_route_public_location_index(label: &str) -> Option<usize> {
         .then_some(row - 1)
 }
 
+/// Stand the party on the virtue's shrine for `karma.md §7`'s E-Enter: the
+/// live shrine tile `0x19` at its `catalogs/gazetteer.md` §7 coordinate.
+/// Spirituality's row is the `(0, 0)` sentinel, so it stands on a shrine tile
+/// no row names, which resolves to Spirituality.
 fn seed_visual_route_shrine(state: &mut PlayState, virtue: ShrineVirtue) {
     state.area = u5_runtime::Area::World {
         plane: WorldPlane::Britannia,
     };
-    state.player.x = 62;
-    state.player.y = 124;
+    let (x, y) = u5_runtime::published_shrine_entries()
+        .into_iter()
+        .find(|entry| entry.virtue == virtue && (entry.x, entry.y) != (0, 0))
+        .map_or((62, 124), |entry| (entry.x, entry.y));
+    state.player.x = x;
+    state.player.y = y;
     state.player.facing = Direction::East;
-    let tile = SHRINE_ALTAR_TILE_FIRST + virtue.index() as u8;
+    let tile = u5_runtime::SHRINE_MARKER_TILE;
     let idx = u5_runtime::world_cell_index(state.player.x, state.player.y);
     if let Some(cell) = state.grid.get_mut(idx) {
         *cell = tile;
@@ -2376,9 +2390,7 @@ fn prepare_visual_route_case_game_dir(
     game_dir: &Path,
     case_label: &str,
 ) -> io::Result<Option<PathBuf>> {
-    if case_label != "route-codex-urn-honesty-read"
-        && case_label != "route-world-defeat-persists-ool-before-rescue"
-    {
+    if case_label != "route-world-defeat-persists-ool-before-rescue" {
         return Ok(None);
     }
     let dir = visual_route_temp_dir(case_label, "case")?;
@@ -2393,12 +2405,6 @@ fn prepare_visual_route_case_game_dir(
         if karma.exists() {
             u5_runtime::test_fixtures::copy_asset_writable(&karma, &dir.join("KARMA.DAT"))?;
         }
-    }
-    if case_label == "route-codex-urn-honesty-read" {
-        std::fs::write(
-            dir.join(CODEX_URN_TABLE_FILE),
-            format!("BRITANNIA 62 124 {SHRINE_ALTAR_TILE_FIRST}\n"),
-        )?;
     }
     Ok(Some(dir))
 }
@@ -7157,6 +7163,22 @@ fn append_asset_backed_conversation_visual_route_cases(cases: &mut Vec<VisualRou
     }
 }
 
+/// `karma.md §7`'s E-Enter meditation as a visual-route script: `E`, the
+/// virtue answer, then the mantra three times, each line submitted with
+/// Return, then `tail`.
+fn visual_route_shrine_enter_script(
+    virtue: ShrineVirtue,
+    tail: &[&'static str],
+) -> &'static [&'static str] {
+    let virtue_answer: &'static str = Box::leak(virtue.name().to_string().into_boxed_str());
+    let mut script = vec!["E", virtue_answer, "return"];
+    for _ in 0..3 {
+        script.extend([virtue.mantra(), "return"]);
+    }
+    script.extend_from_slice(tail);
+    Box::leak(script.into_boxed_slice())
+}
+
 fn append_shrine_visual_route_cases(cases: &mut Vec<VisualRouteSuiteCase>) {
     for virtue in ShrineVirtue::ALL {
         let label: &'static str = Box::leak(
@@ -7166,8 +7188,10 @@ fn append_shrine_visual_route_cases(cases: &mut Vec<VisualRouteSuiteCase>) {
             )
             .into_boxed_str(),
         );
-        let command: &'static str = Box::leak(format!("M{}", virtue.mantra()).into_boxed_str());
-        let script: &'static [&'static str] = Box::leak(vec![command].into_boxed_slice());
+        // `karma.md §7`: "`M` always selects Mix Reagents, including at a
+        // shrine" (R411). Meditation is E-Enter, the virtue question and the
+        // mantra three times; the ordaining arm then waits for two keys.
+        let script = visual_route_shrine_enter_script(virtue, &["return", "return"]);
         cases.push(VisualRouteSuiteCase {
             label,
             frame_kind: "visual route world frame",
@@ -7186,7 +7210,9 @@ fn append_shrine_visual_route_cases(cases: &mut Vec<VisualRouteSuiteCase>) {
             target: PlayTarget::World(WorldPlane::Britannia),
             ..PlayOptions::default()
         },
-        script: &["M"],
+        // `karma.md §8` (R451): the Codex is E-Enter on tile `0x11`, and its
+        // reader advances one key at a time (§8.2).
+        script: &["E", "return", "return", "return", "return"],
         configure: None,
     });
     cases.push(VisualRouteSuiteCase {
@@ -7196,7 +7222,7 @@ fn append_shrine_visual_route_cases(cases: &mut Vec<VisualRouteSuiteCase>) {
             target: PlayTarget::World(WorldPlane::Britannia),
             ..PlayOptions::default()
         },
-        script: &["MAhm"],
+        script: visual_route_shrine_enter_script(ShrineVirtue::Honesty, &[]),
         configure: None,
     });
     cases.push(VisualRouteSuiteCase {
@@ -7207,7 +7233,8 @@ fn append_shrine_visual_route_cases(cases: &mut Vec<VisualRouteSuiteCase>) {
             gold: 500,
             ..PlayOptions::default()
         },
-        script: &["MMu/1"],
+        // The offering chooser takes one digit: `1` is 100 gold.
+        script: visual_route_shrine_enter_script(ShrineVirtue::Compassion, &["1"]),
         configure: None,
     });
 }
@@ -23947,11 +23974,11 @@ mod tests {
         assert!(manifest.contains("route-gate-travel-invalid-slot-refusal-01-c1prv4"));
         assert!(manifest.contains("route-stock-location-enter-01-01-e"));
         assert!(manifest.contains("route-stock-location-enter-40-01-e"));
-        assert!(manifest.contains("route-shrine-native-honesty-meditation-01-mahm"));
-        assert!(manifest.contains("route-shrine-native-humility-meditation-01-mlum"));
-        assert!(manifest.contains("route-codex-urn-honesty-read-01-m"));
-        assert!(manifest.contains("route-shrine-honesty-codex-turn-in-01-mahm"));
-        assert!(manifest.contains("route-shrine-compassion-completed-offering-01-mmu_1"));
+        assert!(manifest.contains("route-shrine-native-honesty-meditation-01-e"));
+        assert!(manifest.contains("route-shrine-native-humility-meditation-01-e"));
+        assert!(manifest.contains("route-codex-urn-honesty-read-01-e"));
+        assert!(manifest.contains("route-shrine-honesty-codex-turn-in-01-e"));
+        assert!(manifest.contains("route-shrine-compassion-completed-offering-01-e"));
         assert!(manifest.contains("route-gate-travel-shipboard-refusal-01-c1prv2"));
         assert!(manifest.contains("route-natural-moongate-trammel-gate-travel-01-idle_1"));
         assert!(manifest.contains("route-natural-moongate-empty-slot-clears-live-tile-01-idle_1"));
