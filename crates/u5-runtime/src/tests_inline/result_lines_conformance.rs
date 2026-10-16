@@ -412,7 +412,7 @@ fn an_ordinary_hostile_monsters_melee_miss_prints_nothing() {
         })
     ));
     assert_eq!(
-        crate::input_dispatch::combat_monster_attack_result_message(&state, application),
+        crate::input_dispatch::combat_monster_attack_result_message(&mut state, application),
         None
     );
 }
@@ -448,7 +448,7 @@ fn a_controlled_monsters_failed_roll_prints_the_target_named_miss_line() {
     // attacker.** ... `Bat missed!` ... reads *the Bat was missed*". The name
     // in this line is the party defender's, never the acting monster's.
     let line = crate::input_dispatch::combat_weapon_attack_result_message(
-        &state,
+        &mut state,
         application.target_slot,
         CombatWeaponAttackApplication {
             resolution,
@@ -485,7 +485,7 @@ fn a_landed_swing_netting_zero_or_below_grazes_on_both_sides_with_its_cue() {
             generic_chain_suppressed: false,
         };
         assert_eq!(
-            crate::input_dispatch::combat_monster_attack_result_message(&state, application)
+            crate::input_dispatch::combat_monster_attack_result_message(&mut state, application)
                 .as_deref(),
             Some("Avatar grazed!")
         );
@@ -503,7 +503,7 @@ fn a_landed_swing_netting_zero_or_below_grazes_on_both_sides_with_its_cue() {
             .unwrap();
         assert_eq!(
             crate::input_dispatch::combat_weapon_attack_result_message(
-                &state,
+                &mut state,
                 8,
                 CombatWeaponAttackApplication {
                     resolution: CombatWeaponAttackResolution::Hit {
@@ -548,7 +548,7 @@ fn an_ordinary_hit_on_a_monster_prints_the_published_graded_wound_line() {
         assert_eq!(state.combat_actors[8].hp_or_wound, starting_hp - 1);
         assert_eq!(
             crate::input_dispatch::combat_weapon_attack_result_message(
-                &state,
+                &mut state,
                 8,
                 CombatWeaponAttackApplication {
                     resolution: CombatWeaponAttackResolution::Hit {
@@ -607,7 +607,7 @@ fn a_party_target_reads_the_flat_hit_line_at_every_wound_level() {
             generic_chain_suppressed: false,
         };
         assert_eq!(
-            crate::input_dispatch::combat_monster_attack_result_message(&state, application)
+            crate::input_dispatch::combat_monster_attack_result_message(&mut state, application)
                 .as_deref(),
             Some("Avatar hit!"),
             "party HP {starting_hp}"

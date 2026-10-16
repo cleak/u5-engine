@@ -1828,6 +1828,26 @@ impl PlayState {
             actor.hp_or_wound = actor.hp_or_wound.wrapping_add(1);
             self.combat_actors[actor_slot].hp_or_wound = actor.hp_or_wound;
         }
+        self.apply_combat_wound_score_classifier(actor_slot)
+    }
+
+    /// `combat.md §9`'s monster wound-score classifier: "below one quarter
+    /// sets fleeing, one-quarter through just under one-half rolls a morale
+    /// check ... and otherwise clears it, and one-half or higher clears
+    /// fleeing". It "refuses a party record outright" (`§11.1`).
+    ///
+    /// Two consumers: the head of a fleeing turn
+    /// ([`Self::combat_ai_actor_fleeing`]) and `§11.1`'s graded wound line,
+    /// where "a score of 1 - and a score of 2 on the morale draw described
+    /// in Section 9 - also raises the target's fleeing bit as a side effect
+    /// of narrating the hit".
+    pub(crate) fn apply_combat_wound_score_classifier(&mut self, actor_slot: usize) -> bool {
+        let Some(actor) = self.combat_actors.get(actor_slot).copied() else {
+            return false;
+        };
+        if actor_slot < COMBAT_PARTY_ACTOR_SLOTS || !combat_actor_is_active_not_dead(actor) {
+            return false;
+        }
         let Some(stats) = combat_class_stats(actor.owner_target_class) else {
             return actor.is_fleeing();
         };

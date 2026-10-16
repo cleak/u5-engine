@@ -1059,7 +1059,7 @@
             .expect("the hostile still swings on its own driver turn");
         assert_eq!(
             crate::input_dispatch::combat_monster_attack_narrated_result_message(
-                &hostile,
+                &mut hostile,
                 hostile_attack,
                 crate::input_dispatch::CombatMonsterAttackNarration::SelfActingHostile,
             ),

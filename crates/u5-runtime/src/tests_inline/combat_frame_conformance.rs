@@ -1852,7 +1852,7 @@
             // attacker (Section 11.1 rule 1).
             assert_eq!(
                 crate::input_dispatch::combat_monster_attack_result_message(
-                    &state,
+                    &mut state,
                     CombatMonsterAttackApplication {
                         attacker_slot: COMBAT_PARTY_ACTOR_SLOTS,
                         target_slot: 0,
@@ -1876,10 +1876,10 @@
         // rounds: "To-hit fails | **monster melee** | **nothing at all**".
         // A failed roll is not a graze and not a line - "no newline, no
         // name, no line, no tone".
-        let state = worked_bat_arena(&[(6, 5)], 0);
+        let mut state = worked_bat_arena(&[(6, 5)], 0);
         assert_eq!(
             crate::input_dispatch::combat_monster_attack_result_message(
-                &state,
+                &mut state,
                 CombatMonsterAttackApplication {
                     attacker_slot: COMBAT_PARTY_ACTOR_SLOTS,
                     target_slot: 0,
@@ -1902,7 +1902,7 @@
         // member's failed swing **at** a Bat".
         assert_eq!(
             crate::input_dispatch::combat_weapon_attack_result_message(
-                &state,
+                &mut state,
                 COMBAT_PARTY_ACTOR_SLOTS,
                 CombatWeaponAttackApplication {
                     resolution: CombatWeaponAttackResolution::Miss {
@@ -1966,7 +1966,7 @@
                     let damage_application =
                         state.apply_combat_weapon_damage_to_target(None, 0, raw_damage, false);
                     let line = crate::input_dispatch::combat_monster_attack_result_message(
-                        &state,
+                        &mut state,
                         CombatMonsterAttackApplication {
                             attacker_slot: COMBAT_PARTY_ACTOR_SLOTS,
                             target_slot: 0,
@@ -1993,7 +1993,7 @@
                         false,
                     );
                     let line = crate::input_dispatch::combat_weapon_attack_result_message(
-                        &state,
+                        &mut state,
                         COMBAT_PARTY_ACTOR_SLOTS,
                         CombatWeaponAttackApplication {
                             resolution,
@@ -2090,7 +2090,7 @@
             state.combat_actors[target_slot].hp_or_wound = remaining_hp;
             assert_eq!(
                 crate::input_dispatch::combat_weapon_attack_result_message(
-                    &state,
+                    &mut state,
                     target_slot,
                     landed_monster_target_attack(target_slot, COMBAT_CLASS_CORPSER, None),
                 )
@@ -2139,7 +2139,7 @@
         );
         assert_eq!(
             crate::input_dispatch::combat_weapon_attack_result_message(
-                &state,
+                &mut state,
                 target_slot,
                 landed_monster_target_attack(
                     target_slot,
@@ -2166,7 +2166,7 @@
             state.combat_actors[attacker_slot].owner_target_class = attacker_class;
             assert_eq!(
                 crate::input_dispatch::combat_monster_attack_result_message(
-                    &state,
+                    &mut state,
                     CombatMonsterAttackApplication {
                         attacker_slot,
                         target_slot: 0,
@@ -2508,7 +2508,7 @@
         // that suppresses the kill line.
         assert_eq!(
             crate::input_dispatch::combat_weapon_attack_result_message(
-                &state,
+                &mut state,
                 target_slot,
                 application,
             )
@@ -2567,7 +2567,7 @@
         );
         assert_eq!(
             crate::input_dispatch::combat_weapon_attack_result_message(
-                &untouched,
+                &mut untouched,
                 COMBAT_PARTY_ACTOR_SLOTS,
                 jewelled,
             )
@@ -2647,7 +2647,7 @@
         // line is a prefix to the result line, not a replacement.
         assert_eq!(
             crate::input_dispatch::combat_weapon_attack_result_message(
-                &state,
+                &mut state,
                 target_slot,
                 application,
             )

@@ -5457,7 +5457,7 @@ pub(crate) fn combat_weapon_attack_narrated_result_message(
 /// dispatch" - and a round walk visits several slots before any transcript
 /// is assembled, so this stage only honours the verdict recorded then.
 pub(crate) fn combat_monster_attack_narrated_result_message(
-    state: &PlayState,
+    state: &mut PlayState,
     attack: CombatMonsterAttackApplication,
     narration: CombatMonsterAttackNarration,
 ) -> Option<String> {
@@ -5507,7 +5507,7 @@ pub(crate) enum CombatMonsterAttackNarration {
 /// rows call it directly.
 #[cfg(test)]
 pub(crate) fn combat_weapon_attack_result_message(
-    state: &PlayState,
+    state: &mut PlayState,
     target_slot: usize,
     attack: CombatWeaponAttackApplication,
 ) -> Option<String> {
@@ -5515,7 +5515,7 @@ pub(crate) fn combat_weapon_attack_result_message(
 }
 
 fn combat_attack_result_message(
-    state: &PlayState,
+    state: &mut PlayState,
     target_slot: usize,
     attacker_slot: Option<usize>,
     attack: CombatWeaponAttackApplication,
@@ -5557,7 +5557,7 @@ impl CombatAttackResultNarration {
 }
 
 fn combat_attack_result_narration(
-    state: &PlayState,
+    state: &mut PlayState,
     target_slot: usize,
     attacker_slot: Option<usize>,
     attack: CombatWeaponAttackApplication,
@@ -5615,7 +5615,7 @@ fn combat_attack_result_narration(
 /// (it "suppresses every later result line"), then the death arm, then
 /// the ordinary hit.
 pub(crate) fn combat_landed_damage_result_line(
-    state: &PlayState,
+    state: &mut PlayState,
     target_slot: usize,
     attacker_slot: Option<usize>,
     application: CombatWeaponDamageApplication,
@@ -5680,8 +5680,14 @@ pub(crate) fn combat_landed_damage_result_line(
             // only": the result line "is graded by the target's remaining
             // HP against its class maximum, using the same four-bucket
             // wound score the flee classifier of Section 9 computes".
-            let actor = state.combat_actors.get(target_slot)?;
+            //
+            // "Because this is the same classifier, a score of 1 - and a
+            // score of 2 on the morale draw described in Section 9 - also
+            // raises the target's fleeing bit as a side effect of narrating
+            // the hit": the classifier runs here, morale draw included.
             let max_hp = combat_class_stats(damage.class)?.max_hp;
+            let _ = state.apply_combat_wound_score_classifier(target_slot);
+            let actor = state.combat_actors.get(target_slot)?;
             let wound_line = combat_monster_wound_line_grade(actor.hp_or_wound, max_hp);
             Some(format!("{class_name} {wound_line}!"))
         }
@@ -5756,7 +5762,7 @@ fn combat_monster_attack_poison_line(
 /// attacker is a **Corpser** (class 45) | monster attacker | `<target>
 /// dragged under!` in place of `hit!`".
 fn combat_monster_attack_shared_result_message(
-    state: &PlayState,
+    state: &mut PlayState,
     attack: CombatMonsterAttackApplication,
 ) -> Option<String> {
     combat_attack_result_message(
@@ -5778,7 +5784,7 @@ fn combat_monster_attack_shared_result_message(
 /// layer it shares the impact presentation, the damage roller and the
 /// result narrator with the party side.
 pub(crate) fn combat_monster_attack_result_message(
-    state: &PlayState,
+    state: &mut PlayState,
     attack: CombatMonsterAttackApplication,
 ) -> Option<String> {
     // `combat.md §11` (`RETRACTIONS.md` R361), the Gremlin food-theft
@@ -5877,7 +5883,7 @@ pub(crate) fn combat_monster_attack_result_message(
 /// uses; §11.1 rule 1 then holds on every line this can emit, because that
 /// routine names the target and never the attacker.
 pub(crate) fn combat_controlled_monster_attack_result_message(
-    state: &PlayState,
+    state: &mut PlayState,
     attack: CombatMonsterAttackApplication,
 ) -> Option<String> {
     if let Some(line) = combat_monster_attack_poison_line(state, attack) {

@@ -308,3 +308,58 @@ fn fleeing_actor_that_did_not_move_falls_into_the_attack_routine() {
     assert_eq!(application.command_key, Some(COMBAT_AI_ATTACK_COMMAND_KEY));
     assert!(state.party[0].hp < 20);
 }
+
+#[test]
+fn narrating_a_graded_wound_line_runs_the_flee_classifier() {
+    // `combat.md §11.1`: "Because this is the same classifier, a score of 1
+    // - and a score of 2 on the morale draw described in Section 9 - also
+    // raises the target's fleeing bit as a side effect of narrating the
+    // hit."
+    let max_hp = combat_class_stats(COMBAT_CLASS_GIANT_RAT).unwrap().max_hp;
+    let rat = combat_class_stats(COMBAT_CLASS_GIANT_RAT).unwrap().name;
+
+    // Score 1: critical, fleeing raised, no draw.
+    let mut state = combat_ai_turn_state(6, 5);
+    state.combat_actors[8].hp_or_wound = 2;
+    let application = state
+        .apply_combat_weapon_damage_to_target(Some(0), 8, 1, true)
+        .unwrap();
+    assert_eq!(state.combat_actors[8].hp_or_wound, 1);
+    assert!(!state.combat_actors[8].is_fleeing());
+    let prng_before = state.prng_state;
+    let line = crate::input_dispatch::combat_landed_damage_result_line(
+        &mut state,
+        8,
+        Some(0),
+        application,
+    );
+    assert_eq!(line, Some(format!("{rat} critical!")));
+    assert!(state.combat_actors[8].is_fleeing());
+    assert_eq!(state.prng_state, prng_before);
+
+    // Score 2: the morale draw is taken at narration time, over `0..=256`.
+    let seed = (0..=u16::MAX)
+        .find(|&seed| {
+            let mut probe = seed;
+            u5_prng_range_u16(&mut probe, 0, 256) >= 252
+        })
+        .unwrap();
+    let mut state = combat_ai_turn_state(6, 5);
+    state.combat_actors[8].hp_or_wound = max_hp / 4 + 1;
+    let application = state
+        .apply_combat_weapon_damage_to_target(Some(0), 8, 1, true)
+        .unwrap();
+    assert_eq!(state.combat_actors[8].hp_or_wound, max_hp / 4);
+    state.prng_state = seed;
+    let mut expected_state = seed;
+    let _ = u5_prng_range_u16(&mut expected_state, 0, 256);
+    let line = crate::input_dispatch::combat_landed_damage_result_line(
+        &mut state,
+        8,
+        Some(0),
+        application,
+    );
+    assert_eq!(line, Some(format!("{rat} heavily wounded!")));
+    assert!(state.combat_actors[8].is_fleeing());
+    assert_eq!(state.prng_state, expected_state);
+}
