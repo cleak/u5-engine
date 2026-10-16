@@ -5254,7 +5254,6 @@ impl PlayState {
             )
         };
 
-        self.advance_turn();
         let succeeded = applied.is_some();
         // `combat.md §11.1`: "The two sides join below the announcement
         // layer ... Both then share the to-hit roll, the impact presentation,
@@ -5268,7 +5267,13 @@ impl PlayState {
         // exact case: "To-hit fails on a cast issued from the combat command
         // layer | party melee or ranged | `Failed!` - **with no name** -
         // replacing the miss line entirely".
-        self.message = match applied {
+        //
+        // The line is produced before the turn advance: `magic.md §8` runs
+        // "impact presentation, a newline, shared damage resolution and the
+        // shared target-result narrator" as one resolution, and the narrator
+        // can take `combat.md §9`'s morale draw (`§11.1`, graded wound
+        // lines), which must not land behind the turn advance's own draws.
+        let result_line = match applied {
             Some(application) => crate::input_dispatch::combat_landed_damage_result_line(
                 self,
                 target_slot,
@@ -5278,6 +5283,8 @@ impl PlayState {
             .unwrap_or_default(),
             None => "Failed!".to_string(),
         };
+        self.advance_turn();
+        self.message = result_line;
         if succeeded && audio::spell_shared_variant(spell_index).is_none() {
             // `audio.md §6.1` combat effect template: "On a resolved effect it
             // adds a **descending** glissando, 20 updates from 1300 Hz down
@@ -5778,29 +5785,37 @@ impl PlayState {
                 Some(affected)
             }
             CombatDirectedSpellEffect::FlameWind => {
-                let damage_rolls = target_slots
-                    .iter()
-                    .map(|_| {
-                        self.combat_spell_damage_roll_for_kind(CombatSpellDamageKind::FlameWind)
-                    })
-                    .collect::<Vec<_>>();
-                let application = self.apply_directed_combat_spell_damage(
-                    Some(caster_index),
-                    effect,
-                    &target_cells,
-                    &damage_rolls,
-                );
-                if let Some(application) = &application {
-                    for slot_application in &application.applications {
+                // `magic.md §8`: the per-effect branch "rolls raw damage in
+                // `[1, 30]` before the same damage/status path", and each
+                // accepted target then "reach[es] the shared result narrator
+                // after [its] effect" - the narrator reads the shared result
+                // field while it still describes that target. Roll, apply
+                // and narrate one target at a time, as Death Wind does: the
+                // narrator can take `combat.md §9`'s morale draw (`§11.1`), so
+                // batching every damage roll first would move it.
+                let mut affected = false;
+                for slot in target_slots.iter().copied() {
+                    let roll =
+                        self.combat_spell_damage_roll_for_kind(CombatSpellDamageKind::FlameWind);
+                    let Some(raw_damage) = resolve_directed_spell_raw_damage(effect, roll) else {
+                        continue;
+                    };
+                    if let Some(application) = self.apply_combat_weapon_damage_to_target(
+                        Some(caster_index),
+                        slot,
+                        raw_damage,
+                        true,
+                    ) {
+                        affected = true;
                         narration.extend(crate::input_dispatch::combat_landed_damage_result_line(
                             self,
-                            slot_application.target_slot,
+                            slot,
                             Some(caster_index),
-                            slot_application.damage_application,
+                            application,
                         ));
                     }
                 }
-                application.map(|application| !application.applications.is_empty())
+                Some(affected)
             }
         };
 

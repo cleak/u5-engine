@@ -403,3 +403,208 @@ fn active_player_digit_needs_an_eligible_party_actor_with_that_roster_slot() {
         assert_eq!(state.active_player, None);
     }
 }
+
+fn audit_g1_flame_wind_state(with_targets: bool) -> PlayState {
+    let spell = spell_index_from_code("FHI").unwrap();
+    let mut state = combat_ai_turn_state(5, 4);
+    state.party[0].status = b'G';
+    state.party[0].mana = 99;
+    state.party[0].level = 8;
+    state.party_intelligence = vec![31; state.party.len()];
+    state.spell_charges[spell] = 1;
+    state.combat_actors[8] = CombatActorDescriptor::empty();
+    state.active_objects[8] = ActiveObject::empty();
+    if with_targets {
+        let max_hp = combat_class_stats(COMBAT_CLASS_DRAGON).unwrap().max_hp;
+        for (slot, y) in [(8usize, 4u8), (9, 3)] {
+            state.active_objects[slot] = ActiveObject {
+                type_byte: 0x90,
+                tile: 0x90,
+                x: 5,
+                y: usize::from(y),
+                ..ActiveObject::empty()
+            };
+            state.combat_actors[slot] = CombatActorDescriptor::from_row([
+                10,
+                1,
+                COMBAT_ACTOR_FLAG_SELECTABLE_40,
+                COMBAT_CLASS_DRAGON,
+                slot as u8,
+                0,
+                5,
+                y,
+            ]);
+            state.combat_actors[slot].hp_or_wound = max_hp / 2 + 10;
+        }
+    }
+    state
+}
+
+/// The reference order: roll, apply and narrate each target in turn
+/// (`interleaved`), or every roll first (`!interleaved`, the old batching).
+fn audit_g1_flame_wind_model(seed: u16, interleaved: bool) -> PlayState {
+    let mut state = audit_g1_flame_wind_state(true);
+    state.prng_state = seed;
+    let cells = state
+        .directed_combat_spell_target_cells(0, Direction::North, CombatDirectedSpellEffect::FlameWind)
+        .unwrap();
+    let slots = collect_directed_spell_actor_slots(&state.combat_actors, &cells);
+    assert_eq!(slots.len(), 2);
+    let mut rolls = Vec::new();
+    if !interleaved {
+        for _ in &slots {
+            rolls.push(state.combat_spell_damage_roll_for_kind(CombatSpellDamageKind::FlameWind));
+        }
+    }
+    for (index, slot) in slots.iter().copied().enumerate() {
+        let roll = if interleaved {
+            state.combat_spell_damage_roll_for_kind(CombatSpellDamageKind::FlameWind)
+        } else {
+            rolls[index]
+        };
+        let raw = resolve_directed_spell_raw_damage(CombatDirectedSpellEffect::FlameWind, roll)
+            .unwrap();
+        let application = state
+            .apply_combat_weapon_damage_to_target(Some(0), slot, raw, true)
+            .unwrap();
+        let _ = crate::input_dispatch::combat_landed_damage_result_line(
+            &mut state,
+            slot,
+            Some(0),
+            application,
+        );
+    }
+    state
+}
+
+#[test]
+fn flame_wind_rolls_damage_and_narrates_one_target_at_a_time() {
+    // `magic.md §8`: Flame Wind's per-effect branch "rolls raw damage in
+    // `[1, 30]` before the same damage/status path", and each accepted target
+    // "reach[es] the shared result narrator after [its] effect". Since the
+    // graded wound line runs the flee classifier and its morale draw
+    // (`combat.md §11.1`), batching every damage roll ahead of the first
+    // narration would hand the second target a different roll.
+    let spell = spell_index_from_code("FHI").unwrap();
+
+    // Draws the cast takes outside the per-target loop, measured on an empty
+    // cone; the turn advance in this fixture takes none, so all of them come
+    // before the loop.
+    let mut probe = audit_g1_flame_wind_state(false);
+    let mut ticked = probe.clone();
+    ticked.advance_turn();
+    assert_eq!(ticked.prng_state, probe.prng_state);
+    probe.prng_state = 0x2468;
+    let _ = probe.cast_directed_combat_spell(
+        0,
+        spell,
+        CombatDirectedSpellEffect::FlameWind,
+        Some(Direction::North),
+    );
+    let mut outside_draws = 0usize;
+    let mut stepped = 0x2468u16;
+    while stepped != probe.prng_state {
+        stepped = u5_prng_advance_state(stepped);
+        outside_draws += 1;
+        assert!(outside_draws < 64);
+    }
+
+    let max_hp = combat_class_stats(COMBAT_CLASS_DRAGON).unwrap().max_hp;
+    let quarter = max_hp / 4;
+    let seed = (0..=u16::MAX)
+        .find(|&seed| {
+            let mut pre = seed;
+            for _ in 0..outside_draws {
+                pre = u5_prng_advance_state(pre);
+            }
+            let interleaved = audit_g1_flame_wind_model(pre, true);
+            let batched = audit_g1_flame_wind_model(pre, false);
+            let first_hp = interleaved.combat_actors[8].hp_or_wound;
+            // The first target lands in the morale band, so its narration
+            // draws between the two damage rolls.
+            (quarter..2 * quarter).contains(&first_hp)
+                && interleaved.combat_actors[9].hp_or_wound
+                    != batched.combat_actors[9].hp_or_wound
+        })
+        .expect("some seed separates the two orders");
+
+    let mut pre = seed;
+    for _ in 0..outside_draws {
+        pre = u5_prng_advance_state(pre);
+    }
+    let expected = audit_g1_flame_wind_model(pre, true);
+    let mut state = audit_g1_flame_wind_state(true);
+    state.prng_state = seed;
+    assert_eq!(
+        state.cast_directed_combat_spell(
+            0,
+            spell,
+            CombatDirectedSpellEffect::FlameWind,
+            Some(Direction::North),
+        ),
+        MoveOutcome::Cast
+    );
+    for slot in [8, 9] {
+        assert_eq!(
+            state.combat_actors[slot].hp_or_wound,
+            expected.combat_actors[slot].hp_or_wound,
+            "slot {slot}"
+        );
+        assert_eq!(
+            state.combat_actors[slot].is_fleeing(),
+            expected.combat_actors[slot].is_fleeing(),
+            "slot {slot}"
+        );
+    }
+    assert_eq!(state.prng_state, expected.prng_state);
+}
+
+#[test]
+fn an_active_target_spell_narrates_before_the_turn_advance() {
+    // `magic.md §8`: a resolved Magic Missile runs "impact presentation, a
+    // newline, shared damage resolution and the shared target-result
+    // narrator", and that narrator takes the morale draw (`combat.md §11.1`).
+    // The turn advance comes after the resolution, so a day rollover's own
+    // draws must not slide in front of the morale draw: the target's fate is
+    // the same whether or not the advance crosses midnight.
+    let spell = spell_index_from_code("GP").unwrap();
+    let max_hp = combat_class_stats(COMBAT_CLASS_DRAGON).unwrap().max_hp;
+    let run = |seed: u16, cross_midnight: bool| {
+        let mut state = audit_g1_flame_wind_state(true);
+        state.spell_charges[spell] = 1;
+        state.combat_actors[9] = CombatActorDescriptor::empty();
+        state.active_objects[9] = ActiveObject::empty();
+        // Every Magic Missile roll (at most 16) leaves the Dragon in the
+        // quarter-to-under-half band, where narration takes the morale draw.
+        state.combat_actors[8].hp_or_wound = max_hp / 4 + 16;
+        state.clock.day = 3;
+        (state.clock.hour, state.clock.minute) = if cross_midnight { (23, 59) } else { (12, 0) };
+        state.prng_state = seed;
+        let outcome = state.cast_active_target_combat_spell(
+            0,
+            spell,
+            CombatSpellDamageKind::MagicMissile,
+            8,
+        );
+        (
+            outcome,
+            state.combat_actors[8].hp_or_wound,
+            state.combat_actors[8].is_fleeing(),
+            state.prng_state,
+            state.clock.day,
+        )
+    };
+    let mut saw_flee = false;
+    let mut saw_extra_draws = false;
+    for seed in (0..=u16::MAX).step_by(97) {
+        let plain = run(seed, false);
+        let crossing = run(seed, true);
+        assert_eq!(plain.0, MoveOutcome::Cast);
+        assert_eq!(crossing.4, 4, "the advance crossed midnight");
+        assert_eq!((plain.1, plain.2), (crossing.1, crossing.2), "seed {seed}");
+        saw_flee |= plain.2;
+        saw_extra_draws |= plain.3 != crossing.3;
+    }
+    assert!(saw_flee, "some seed must take the fleeing morale result");
+    assert!(saw_extra_draws, "the day rollover must draw");
+}
