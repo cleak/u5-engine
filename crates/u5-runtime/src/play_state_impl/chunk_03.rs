@@ -5401,6 +5401,12 @@ impl PlayState {
         // `stats-panel.md §2.2.1` row 3: Awaken's status change is deferred.
         self.stats_panel_command_refresh = crate::stats_panel::PanelRefreshMode::Deferred;
         self.party[target_index].status = b'G';
+        // `magic.md §8` Healing effects: "In combat it also wakes the
+        // matching combat descriptor for that selected member" - the same
+        // wake the blue potion's combat arm performs.
+        if self.clear_combat_party_sleep_presentation(target_index) {
+            self.mark_visibility_dirty();
+        }
         self.advance_turn();
         // Measured: waking a sleeping member prints nothing, the same
         // way the blue potion's wake does.

@@ -3083,3 +3083,47 @@ fn malformed_retired_waterfall_sidecar_is_ignored_by_runtime_movement() {
     let _ = fs::remove_dir_all(dir);
 }
 
+/// `magic.md §8` Healing effects: Awaken "changes that member from Sleeping
+/// to Good [...] In combat it also wakes the matching combat descriptor for
+/// that selected member", so the arena actor takes its turns again.
+#[test]
+fn combat_awaken_also_wakes_the_selected_members_combat_descriptor() {
+    let mut combat = test_state(open_grid(), 1, 1);
+    combat.combat_active = true;
+    combat.party.push(PartyMember {
+        slot: 1,
+        class_byte: b'F',
+        status: b'S',
+        climb_stat: DEFAULT_CLIMB_STAT,
+        mana: 0,
+        hp: 20,
+        max_hp: 20,
+        level: 1,
+    });
+    combat.active_objects.push(ActiveObject {
+        type_byte: 0x81,
+        tile: 0x81,
+        x: 5,
+        y: 5,
+        ..ActiveObject::empty()
+    });
+    combat.combat_actors[1] = CombatActorDescriptor::from_row([
+        20,
+        0,
+        COMBAT_ACTOR_FLAG_SELECTABLE_80,
+        0,
+        1,
+        1,
+        5,
+        5,
+    ]);
+    assert!(combat.apply_combat_party_sleep_presentation(1));
+    assert!(combat.combat_actors[1].is_status_disabled());
+    // The dispatcher has already settled the charge and mana (`magic.md §5`).
+    combat.cast_resources_spent = true;
+
+    assert_eq!(combat.cast_awaken(0, 1), MoveOutcome::Cast);
+    assert_eq!(combat.party[1].status, b'G');
+    assert!(!combat.combat_actors[1].is_status_disabled());
+    assert_eq!(combat.active_objects[1].tile, 0x81);
+}
