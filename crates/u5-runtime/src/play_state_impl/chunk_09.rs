@@ -4540,6 +4540,11 @@ impl PlayState {
             let tick = self.active_objects[slot].tick_phase();
             match tick {
                 PhaseTick::Steady => {}
+                // The beggar family's countdown is its six-tick base hold
+                // (`animation.md §5`): its frame is the script's, not the
+                // phase's, so the countdown leaves the displayed tile alone.
+                PhaseTick::Countdown
+                    if is_beggar_frame_family(self.active_objects[slot].type_byte) => {}
                 PhaseTick::Countdown => {
                     if let Some(tile) = active_object_frame_tile(
                         self.active_objects[slot].type_byte,
@@ -4641,6 +4646,25 @@ impl PlayState {
             return;
         };
         if !self.active_object_animation_coin() {
+            return;
+        }
+        if is_beggar_frame_family(object.type_byte) {
+            // `animation.md §5`'s named family: ascending successors, then
+            // from the third a one-in-four re-base held for six ticks, else a
+            // rewind to the first. "Both rolls reduce a fifteen-bit generator
+            // value modulo 256", so the re-base is drawn from the same
+            // gameplay stream as the coin; the hold reseeds the phase
+            // counter's low nibble, which §5 says the decision "can" do.
+            let (tile, hold) = beggar_script_next_frame(object.tile, || {
+                self.random_range_u8(0, 255) % 4 == 0
+            });
+            if hold > 0 {
+                self.active_objects[slot].phase = (object.phase & 0xf0) | hold;
+            }
+            if self.active_objects[slot].tile != tile {
+                self.active_objects[slot].tile = tile;
+                self.mark_visibility_dirty();
+            }
             return;
         }
         if self.active_objects[slot].tile != next {

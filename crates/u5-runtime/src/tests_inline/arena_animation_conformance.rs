@@ -55,6 +55,55 @@ mod arena_animation_conformance {
         assert_eq!(active_object_next_frame_tile(PLAYER_TILE, PLAYER_TILE), None);
     }
 
+    /// `animation.md §5` "One family, named": the beggar run `0x6C..0x6F`
+    /// steps base -> first -> second -> third, and from the third either
+    /// re-bases (one in four) and holds the base six ticks, or rewinds to the
+    /// first. The base is never entered from anywhere but the third, and the
+    /// type byte reads the base throughout.
+    #[test]
+    fn the_beggar_family_runs_its_published_script() {
+        let mut state = arena_animation_state(&[(3, arena_record(0x6C, 4, 4, 0))]);
+        state.prng_state = 0x1234;
+        let mut transitions = std::collections::BTreeSet::new();
+        let mut base_runs = Vec::new();
+        let mut run = 0usize;
+        let mut previous = state.active_objects[3].tile;
+        let mut entered_base = false;
+        for _ in 0..10_000 {
+            state.animate_active_objects();
+            let tile = state.active_objects[3].tile;
+            assert_eq!(state.active_objects[3].type_byte, 0x6C);
+            assert!((0x6C..=0x6F).contains(&tile));
+            if tile != previous {
+                transitions.insert((previous, tile));
+                if entered_base {
+                    base_runs.push(run);
+                }
+                entered_base = tile == 0x6C;
+                run = 0;
+            }
+            run += 1;
+            previous = tile;
+        }
+        assert_eq!(
+            transitions.into_iter().collect::<Vec<_>>(),
+            vec![
+                (0x6C, 0x6D),
+                (0x6D, 0x6E),
+                (0x6E, 0x6F),
+                (0x6F, 0x6C),
+                (0x6F, 0x6D),
+            ]
+        );
+        // The six-tick hold, then the coin: the base is held at least seven
+        // passes (six held, then at least the deciding pass itself).
+        assert!(!base_runs.is_empty());
+        assert!(
+            base_runs.iter().all(|run| *run > usize::from(BEGGAR_BASE_HOLD_TICKS)),
+            "base runs {base_runs:?}"
+        );
+    }
+
     fn arena_animation_state(records: &[(usize, ActiveObject)]) -> PlayState {
         let mut state = world_state(open_world_grid(), 10, 20);
         state.combat_active = true;
