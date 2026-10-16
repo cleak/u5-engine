@@ -460,14 +460,12 @@ impl PlayState {
     /// the per-tick NPC walker skips every roster slot whose type byte is
     /// zero and the type array was never loaded".
     ///
-    /// The roster is still parsed here, because this engine's *load* path
-    /// does not yet consume the `0x07B4..0x105F` band that carries the
-    /// schedule table, the dialogue indices and the per-NPC runtime block
-    /// (`formats/saved-gam.md §12`); the save writer does emit it, through
-    /// [`crate::npc_band::write_npc_band`]. Matching the restored records
-    /// against the roster is how a resumed NPC keeps its schedule and its
-    /// conversation; the records themselves, not the hour, decide who is
-    /// present and where they stand.
+    /// A save load restores the `0x07B4..0x105F` band itself through
+    /// [`Self::restore_scheduled_npcs_from_save_band`]. This roster-pairing
+    /// path remains for a caller that hands over an active-object table
+    /// without an NPC band: matching the restored records
+    /// against the roster is how such a resumed NPC keeps its schedule and
+    /// its conversation.
     pub fn load_scheduled_npcs_from_existing_active_objects(&mut self, slots: &[NpcSlot]) {
         let removed = self.removed_town_npc_mask_for_current_scene();
         self.npcs = effective_npc_slots(slots)
@@ -505,6 +503,30 @@ impl PlayState {
             let floor_byte = floor as u8;
             self.npcs
                 .retain(|npc| npc.active_object.is_some() || npc.z != floor_byte);
+        }
+    }
+
+    /// `npc-schedules.md §13` / `town-mode.md §5`: a town-family scene
+    /// reached by loading a save "enters its setup pass in the preserving
+    /// entry mode, which skips the `.NPC` roster load, the runtime-state
+    /// initialisation from the hour, and the waypoint reseat alike". The
+    /// schedule table, runtime block, move queues, cursors and stuck
+    /// counters come from the save band "verbatim", so "the first scheduler
+    /// tick after the load continues the route it was on".
+    ///
+    /// The only repair is to a linked-object word that names no live record
+    /// in the restored table, which is dropped rather than left dangling;
+    /// the original's records "must agree with the saved NPC positions and
+    /// links" (`formats/saved-gam.md §12.3`).
+    pub fn restore_scheduled_npcs_from_save_band(&mut self, band: Vec<RuntimeNpc>) {
+        self.npcs = band;
+        let object_count = self.active_objects.len();
+        for npc in &mut self.npcs {
+            if let Some(slot) = npc.active_object
+                && (slot == 0 || slot >= object_count || self.active_objects[slot].is_empty())
+            {
+                npc.active_object = None;
+            }
         }
     }
 
@@ -574,10 +596,10 @@ impl PlayState {
     ///
     /// The pairing is by tile class and floor, taking roster slots in
     /// order. The original pairs them through the NPC's linked-slot field
-    /// inside the `0x07B4..0x105F` band (`formats/saved-gam.md §12`), which
-    /// this engine now writes but does not read back; until the load path
-    /// reads it, two roster slots of the same class on one floor can still
-    /// swap schedules across a save, which the original does not do.
+    /// inside the `0x07B4..0x105F` band (`formats/saved-gam.md §12`); a save
+    /// load reads that band through
+    /// [`Self::restore_scheduled_npcs_from_save_band`], so this class/floor
+    /// pairing only serves callers that supply objects without a band.
     ///
     /// The floor is compared in the save image's own signed encoding
     /// (`formats/saved-gam.md §6`, party Z: "`0x00` is the entry floor,

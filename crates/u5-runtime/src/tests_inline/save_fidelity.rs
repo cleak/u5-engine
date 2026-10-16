@@ -562,7 +562,7 @@ fn stored_ambient_light_above_the_sentinel_freezes_the_recompute() {
     let _ = fs::remove_dir_all(dir);
 }
 
-/// `RETRACTIONS.md` R341: a save taken inside a town "already carries its
+/// `RETRACTIONS.md` R341 / `npc-schedules.md §13`: a save taken inside a town "already carries its
 /// complete live cast", and the preserving entry "restores the cast
 /// **exactly as it stood at the save**, mid-route positions and queued
 /// paths included - it does not snap NPCs back to their scheduled
@@ -587,6 +587,30 @@ fn preserving_entry_resumes_the_cast_the_save_image_carried() {
             aux3: 0,
         },
     );
+    // `npc-schedules.md §13`: the schedule table, runtime block, move
+    // queue, cursor and stuck counter ride in the band after the table.
+    let mut schedule = [0u8; NPC_SCHEDULE_RECORD_LEN];
+    for wp in 0..NPC_SCHEDULE_WAYPOINT_COUNT {
+        schedule[NPC_SCHEDULE_AI_OFFSET + wp] = 1;
+        schedule[NPC_SCHEDULE_X_OFFSET + wp] = 12;
+        schedule[NPC_SCHEDULE_Y_OFFSET + wp] = 12;
+    }
+    let saved = RuntimeNpc {
+        slot: 2,
+        type_byte: TOWN_NPC_ORDINARY_TYPE_FIRST,
+        dialog_id: 2,
+        schedule,
+        state: 3,
+        x: 20,
+        y: 7,
+        z: 0,
+        cached_wp: 2,
+        move_queue: vec![NPC_PATH_DIR_SOUTH, NPC_PATH_DIR_EAST],
+        move_queue_pos: 0,
+        stuck_counter: 5,
+        active_object: Some(1),
+    };
+    write_npc_band(&mut template, std::slice::from_ref(&saved), 2).unwrap();
     fs::write(dir.join("SAVED.GAM"), template).unwrap();
     fs::write(dir.join(SAVED_OOL_FILENAME), vec![0; SAVED_OOL_LEN]).unwrap();
     write_empty_ool_mirrors(&dir);
@@ -598,5 +622,14 @@ fn preserving_entry_resumes_the_cast_the_save_image_carried() {
     assert_eq!(state.npcs.len(), 1, "one restored record, one live NPC");
     assert_eq!((state.npcs[0].x, state.npcs[0].y), (20, 7));
     assert_eq!(state.npcs[0].active_object, Some(1));
+    // Not recomputed from the hour: the saved state, waypoint, queued
+    // path and stuck counter come back verbatim.
+    assert_eq!(state.npcs[0].state, 3);
+    assert_eq!(state.npcs[0].cached_wp, 2);
+    assert_eq!(
+        state.npcs[0].move_queue,
+        vec![NPC_PATH_DIR_SOUTH, NPC_PATH_DIR_EAST]
+    );
+    assert_eq!(state.npcs[0].stuck_counter, 5);
     let _ = fs::remove_dir_all(dir);
 }

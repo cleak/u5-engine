@@ -81,6 +81,7 @@ fn world_load_from_save_applies_transport_marker_to_player_slot() {
         initial_britannia_overlay: None,
         debug_enter: None,
         saved_active_objects: Some(Vec::new()),
+        saved_npc_band: None,
         town_npc_mutations: Vec::new(),
         save_template_source: SaveTemplateSource::PreferSavedGame,
     };
@@ -174,6 +175,7 @@ fn world_load_consumes_pending_skiff_by_appending_slot() {
             class_byte: 0x55,
         },
         saved_active_objects: Some(Vec::new()),
+        saved_npc_band: None,
         ..PlayOptions::default()
     };
 
@@ -298,6 +300,7 @@ fn world_load_rejects_clean_lava_sidecar_start_for_foot() {
         start: Some((10, 20)),
         transport: TransportState::Foot,
         saved_active_objects: Some(Vec::new()),
+        saved_npc_band: None,
         ..PlayOptions::default()
     };
 
@@ -330,6 +333,7 @@ fn world_load_allows_clean_lava_sidecar_start_for_carpet() {
         start: Some((10, 20)),
         transport,
         saved_active_objects: Some(Vec::new()),
+        saved_npc_band: None,
         ..PlayOptions::default()
     };
 
@@ -360,6 +364,7 @@ fn world_load_allows_clean_drowning_sidecar_start_for_foot() {
         start: Some((10, 20)),
         transport: TransportState::Foot,
         saved_active_objects: Some(Vec::new()),
+        saved_npc_band: None,
         ..PlayOptions::default()
     };
 
@@ -385,6 +390,7 @@ fn world_load_fallback_skips_clean_lava_sidecar_for_foot() {
         start: None,
         transport: TransportState::Foot,
         saved_active_objects: Some(Vec::new()),
+        saved_npc_band: None,
         ..PlayOptions::default()
     };
 
@@ -410,6 +416,7 @@ fn world_load_fallback_skips_foot_damaging_sidecar_for_foot() {
         start: None,
         transport: TransportState::Foot,
         saved_active_objects: Some(Vec::new()),
+        saved_npc_band: None,
         ..PlayOptions::default()
     };
 
@@ -440,6 +447,7 @@ fn world_load_fallback_skips_transport_damaging_sidecar_for_carpet() {
         start: None,
         transport,
         saved_active_objects: Some(Vec::new()),
+        saved_npc_band: None,
         ..PlayOptions::default()
     };
 
@@ -1326,6 +1334,7 @@ fn retired_location_entry_y_table_does_not_override_fixed_entry() {
         initial_britannia_overlay: None,
         debug_enter: None,
         saved_active_objects: None,
+        saved_npc_band: None,
         town_npc_mutations: Vec::new(),
         save_template_source: SaveTemplateSource::PreferSavedGame,
     };

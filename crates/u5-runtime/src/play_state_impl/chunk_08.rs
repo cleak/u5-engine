@@ -2098,6 +2098,7 @@ impl PlayState {
             initial_britannia_overlay: None,
             debug_enter: self.debug_enter,
             saved_active_objects: None,
+            saved_npc_band: None,
             town_npc_mutations: self.town_npc_mutations.clone(),
             save_template_source: self.save_template_source,
         };

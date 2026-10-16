@@ -881,6 +881,7 @@ fn world_load_from_save_uses_live_active_object_table() {
             aux1: 0,
             aux3: 0,
         }]),
+        saved_npc_band: None,
         town_npc_mutations: Vec::new(),
         save_template_source: SaveTemplateSource::PreferSavedGame,
     };
@@ -990,6 +991,7 @@ fn world_load_reports_current_wind_status_through_the_banner_not_the_message() {
         initial_britannia_overlay: None,
         debug_enter: None,
         saved_active_objects: Some(Vec::new()),
+        saved_npc_band: None,
         town_npc_mutations: Vec::new(),
         save_template_source: SaveTemplateSource::PreferSavedGame,
     };

@@ -658,6 +658,7 @@ impl PlayState {
         };
         let saved_active_objects = options.saved_active_objects.clone();
         let has_saved_active_objects = saved_active_objects.is_some();
+        let saved_npc_band = options.saved_npc_band.clone();
         let saved_game_reload = options.save_template_source == SaveTemplateSource::SavedGame;
         let (x, y) = match options.start.or(default_entry) {
             Some(pos) => {
@@ -990,7 +991,9 @@ impl PlayState {
             conversation_signal_flags: [0; TLK_GENERIC_SIGNAL_COUNT],
             inn_registry: options.inn_registry,
         };
-        if has_saved_active_objects {
+        if let (true, Some(band)) = (has_saved_active_objects, saved_npc_band) {
+            state.restore_scheduled_npcs_from_save_band(band);
+        } else if has_saved_active_objects {
             state.load_scheduled_npcs_from_existing_active_objects(&npc_slots);
         } else {
             state.load_scheduled_npcs(&npc_slots);
