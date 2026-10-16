@@ -375,7 +375,7 @@ fn exit_vehicle_ship_can_use_nearby_vehicle_object_as_support_without_relocation
     };
     state.sync_player_object();
     state.active_objects.push(ActiveObject {
-        type_byte: FIRST_PLAYABLE_SKIFF_TILE,
+        type_byte: SKIFF_PARKED_FIRST,
         tile: FIRST_PLAYABLE_SKIFF_TILE,
         x: 6,
         y: 5,

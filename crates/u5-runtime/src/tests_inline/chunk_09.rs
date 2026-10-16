@@ -506,10 +506,11 @@ fn world_plane_transition_preserves_runtime_overlay_cache_between_planes() {
     let dir = debug_game_dir();
     let mut state = britannia_state(open_world_grid(), 10, 20);
     state.player.facing = Direction::East;
+    // `vehicles.md §4`: B-Board probes only the party's own cell.
     state.active_objects.push(ActiveObject {
-        type_byte: 168,
-        tile: 168,
-        x: 11,
+        type_byte: SHIP_PARKED_FIRST,
+        tile: FIRST_PLAYABLE_FRIGATE_TILE,
+        x: 10,
         y: 20,
         z: WorldPlane::Britannia.save_floor(),
         phase: STEADY_PHASE,

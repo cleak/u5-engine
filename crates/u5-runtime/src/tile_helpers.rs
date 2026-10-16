@@ -672,18 +672,32 @@ pub fn transport_from_vehicle_object(
         };
     }
 
+    // `vehicles.md §4`: only the object bytes in the boardable table are
+    // vehicles; "If the current object is not a boardable vehicle, B-Board
+    // prints the stock "What?" refusal". The record's tile byte is not a
+    // second classifier for B-Board or X-it support: the old `160..=187`
+    // fallback read a retracted terrain-half band and turned monster frames
+    // (slime `0xA0..0xA3`) into vehicles.
+    let _ = tile;
+    None
+}
+
+/// Save-marker decode only: the engine's legacy visual-tile encoding of a
+/// transport (`160..=187`) still round-trips through saves this engine
+/// wrote, so [`transport_from_save_marker`] keeps reading it. It is not an
+/// object classifier.
+fn legacy_transport_from_visual_tile(type_byte: u8, tile: u8) -> Option<TransportState> {
     match tile {
         160..=167 => Some(TransportState::Horse { type_byte, tile }),
         168..=175 => Some(TransportState::Ship {
             type_byte,
             tile,
             sails_hoisted: false,
-            hull: aux1,
-            skiffs: aux3,
+            hull: 0,
+            skiffs: 0,
         }),
         176..=183 => Some(TransportState::Skiff { type_byte, tile }),
         184..=187 => Some(TransportState::Carpet { type_byte, tile }),
-        188..=191 => None,
         _ => None,
     }
 }
@@ -697,7 +711,9 @@ pub fn transport_from_save_marker(marker: u8) -> TransportState {
     // ladder at runtime, and a save that carries it decodes as foot. See
     // the note on the asymmetry in `TransportState::SpriteSuppressed`.
     let Some(family) = transport_family(marker) else {
-        return transport_from_vehicle_object(marker, marker, 0, 0).unwrap_or_default();
+        return transport_from_vehicle_object(marker, marker, 0, 0)
+            .or_else(|| legacy_transport_from_visual_tile(marker, marker))
+            .unwrap_or_default();
     };
     match family {
         TransportFamily::MountedHorse => TransportState::Horse {
