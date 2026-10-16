@@ -1940,6 +1940,12 @@ impl PlayState {
             self.player.y = ny;
             self.sync_player_object();
             self.mark_visibility_dirty();
+            // `audio.md §7.5`: a mounted horse's "normal successful in-map
+            // step" plays "a second sting after the position changes";
+            // ordinary foot movement, exits and stair transitions do not.
+            if self.player.transport.is_horse() {
+                self.emit_sound_effect(SoundEffect::TopDownMovementSting);
+            }
             // `text-output.md §10.2`/§10.3: the direction echo is the whole
             // of an accepted step; there is no result line and no
             // coordinate narration (`commands.md §8.1`).

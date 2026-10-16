@@ -147,6 +147,45 @@ fn an_accepted_town_step_plays_the_movement_sting() {
 }
 
 #[test]
+fn an_accepted_mounted_step_plays_the_second_movement_sting() {
+    // `audio.md §7.5`: in town a mounted horse's "normal successful in-map
+    // step" adds "a second sting after the position changes"; on the
+    // overworld "a normal accepted horse step adds the second sting".
+    let horse = TransportState::Horse {
+        type_byte: FIRST_PLAYABLE_HORSE_TILE,
+        tile: FIRST_PLAYABLE_HORSE_TILE,
+    };
+    let mut town = test_state(open_grid(), 4, 4);
+    town.player.transport = horse;
+    town.sync_player_object();
+    let serial = town.sound_effect_serial;
+    assert_eq!(town.step(Direction::East), MoveOutcome::Moved);
+    assert_eq!(
+        town.sound_effects_after(serial),
+        vec![
+            SoundEffect::TopDownMovementSting,
+            SoundEffect::TopDownMovementSting,
+        ]
+    );
+
+    let mut world = world_state(open_world_grid(), 10, 20);
+    world.player.transport = horse;
+    world.sync_player_object();
+    let serial = world.sound_effect_serial;
+    assert_eq!(
+        world
+            .step_world(Direction::East, 11, 20, WorldPlane::Underworld, None)
+            .unwrap(),
+        MoveOutcome::Moved
+    );
+    assert_eq!(
+        world.sound_effects_after(serial),
+        vec![SoundEffect::TopDownMovementSting],
+        "step_world is past dispatch entry, so only the post-commit sting"
+    );
+}
+
+#[test]
 fn an_accepted_combat_step_plays_the_combat_movement_sting() {
     // `audio.md §7.5` combat row: "One sting after both actor-position
     // representations change ... A rejected step skips this success sting

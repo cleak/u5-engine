@@ -992,6 +992,13 @@ impl PlayState {
                 }));
             }
         }
+        // `audio.md §7.5` overworld row: "A normal accepted horse step adds
+        // the second sting when the pre-loop special-underfoot latch permits
+        // the ordinary post-step effects." A set latch returned above before
+        // the coordinate commit, so reaching here means it permits.
+        if self.player.transport.is_horse() {
+            self.emit_sound_effect(SoundEffect::TopDownMovementSting);
+        }
         // `text-output.md §10.2`/§10.3: an accepted step is complete at its
         // own direction echo - the mode loop has already drawn the prompt
         // marker and the direction word, and `commands.md §8.1` states of the
