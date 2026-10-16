@@ -1003,12 +1003,13 @@ pub fn dungeon_command_echo(key: char) -> Option<CommandEcho> {
         };
     }
     match key.to_ascii_lowercase() {
-        '8' | 'w' | '.' | '\r' | '\n' => Some(DungeonMovementEcho::Advance.echo()),
-        '2' | 's' => Some(DungeonMovementEcho::BackUp.echo()),
-        '4' | 'a' => Some(DungeonMovementEcho::TurnLeft.echo()),
-        '6' | 'd' => Some(DungeonMovementEcho::TurnRight.echo()),
-        // The rejected diagonals print the movement-family refusal.
-        '7' | '9' | '1' | '3' => None,
+        'w' | '.' | '\r' | '\n' => Some(DungeonMovementEcho::Advance.echo()),
+        's' => Some(DungeonMovementEcho::BackUp.echo()),
+        'a' => Some(DungeonMovementEcho::TurnLeft.echo()),
+        'd' => Some(DungeonMovementEcho::TurnRight.echo()),
+        // `dungeon-mode.md §10`: digits are the solo-member select, whose
+        // handler opens its own `Set_Active_Plr:` echo.
+        '0'..='9' => None,
         '<' | '>' => dungeon(Command::Klimb),
         other => command_for_letter(other as u8).and_then(unassigned_or(key, dungeon)),
     }

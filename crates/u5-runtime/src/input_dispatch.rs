@@ -433,8 +433,13 @@ fn handle_play_key_input_inner(
             }
         }
         SceneRoute::Dungeon => {
+            // `dungeon-mode.md §4` step 3: a byte the dungeon handler does
+            // not own goes to the resident dispatcher and "reports whatever
+            // the dispatcher decides"; for unknown input that is "no action"
+            // (`commands.md §3`). The sleep line belongs to the
+            // party-capability check, never to a keystroke, so nothing is
+            // printed here.
             state.advance_visual_tick();
-            state.message = "Zzzzzz...".to_string();
             return Ok(PlayInputDisposition::Continue);
         }
         SceneRoute::IntroOrPreview | SceneRoute::CombatTemporary => {

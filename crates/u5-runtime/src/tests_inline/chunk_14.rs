@@ -39,7 +39,9 @@
             PlayInputDisposition::Continue
         );
 
-        assert_eq!(state.message, "Zzzzzz...");
+        // `dungeon-mode.md §4`: the sleep line belongs to the
+        // party-capability check, not to an unknown key (audit A083).
+        assert_eq!(state.message, "");
         assert_eq!(state.turn, 0);
         assert_eq!(state.clock, GameClock::new(12, 35).unwrap());
         assert_eq!(state.torch_counter, 2);

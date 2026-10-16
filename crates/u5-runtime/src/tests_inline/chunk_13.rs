@@ -26278,13 +26278,35 @@ fn dungeon_command_letters_do_not_fall_through_to_diagonal_movement_refusal() {
         assert_eq!(state.turn, expected_turn, "{key} turn");
     }
 
-    let mut state = dungeon_state(open_dungeon_record(), 0, 1, 1);
+}
 
-    for key in ['7', '9', '1', '3'] {
+/// `dungeon-mode.md §4` step 3 and `§10` (audit A083): every digit goes to
+/// the solo-member selector and reports "no action"; none of them moves or
+/// turns the party underground.
+#[test]
+fn dungeon_digits_select_the_solo_member_and_never_move() {
+    for key in ['0', '1', '2', '3', '4', '5', '6', '7', '8', '9'] {
+        let mut state = dungeon_state(open_dungeon_record(), 0, 1, 1);
+        let facing = state.player.facing;
+
         assert!(state.handle_dungeon_key(key, Path::new("")).unwrap());
-        assert!(state.message.contains("forward, back, and turns only"));
-        assert_eq!((state.player.x, state.player.y), (1, 1));
-        assert_eq!(state.turn, 0);
+        assert_eq!((state.player.x, state.player.y), (1, 1), "{key} moved");
+        assert_eq!(state.player.facing, facing, "{key} turned");
+        assert_eq!(state.turn, 0, "{key} reports no action");
+        let expected = match key {
+            '0' => SET_ACTIVE_PLAYER_NONE_REPLY.to_string(),
+            '1' => state.party_member_display_name(0),
+            _ => SET_ACTIVE_PLAYER_INVALID_REPLY.to_string(),
+        };
+        assert!(
+            state.message_entries().iter().any(|entry| entry.text == expected)
+                || state.message == expected,
+            "{key} reported `{}`",
+            state.message
+        );
+        if key == '1' {
+            assert_eq!(state.active_player, Some(0));
+        }
     }
 }
 

@@ -151,11 +151,19 @@ impl PlayState {
                 }
             }
         }
+        // `dungeon-mode.md §4` step 3 and `§10`: digits go to the
+        // solo-member selector, "always reporting \"no action\"
+        // afterwards". They are never movement underground: only the four
+        // cardinal codes, Enter and `.` move the party.
+        if key.is_ascii_digit() {
+            let _ = self.set_active_player_command(key);
+            handled!();
+        }
         match key.to_ascii_lowercase() {
-            '8' | 'w' | '.' | '\r' | '\n' => {
+            'w' | '.' | '\r' | '\n' => {
                 handled!(self.step_with_game_dir(self.player.facing, Some(game_dir))?);
             }
-            '2' | 's' => {
+            's' => {
                 let facing = self.player.facing;
                 let outcome = if let Some(direction) = facing.opposite_cardinal() {
                     self.step_dungeon_back_with_game_dir(direction, Some(game_dir))?
@@ -167,10 +175,10 @@ impl PlayState {
                 self.player.facing = facing;
                 handled!(outcome);
             }
-            '4' | 'a' => {
+            'a' => {
                 handled!(self.turn_dungeon(false));
             }
-            '6' | 'd' => {
+            'd' => {
                 handled!(self.turn_dungeon(true));
             }
             'k' => {
@@ -264,11 +272,6 @@ impl PlayState {
             ' ' => {
                 self.pass_turn_with_game_dir(Some(game_dir))?;
                 Ok(true)
-            }
-            '7' | '9' | '1' | '3' => {
-                self.message =
-                    "Dungeon movement supports forward, back, and turns only.".to_string();
-                handled!();
             }
             'c' => {
                 handled!(self.start_cast_spell_prompt());
