@@ -351,6 +351,11 @@ pub fn play_options_from_save_bytes_named(
         } else {
             None
         },
+        // `formats/saved-gam.md §12.3`: a town-family scene reaches the
+        // preserving entry, whose NPC family "comes from the save image";
+        // `npc-schedules.md §13`: "loading resumes from there".
+        saved_npc_band: (include_active_objects && scene_byte_is_town_family(scene_byte))
+            .then(|| read_npc_band(bytes)),
         town_npc_mutations: Vec::new(),
         save_template_source: SaveTemplateSource::PreferSavedGame,
     })

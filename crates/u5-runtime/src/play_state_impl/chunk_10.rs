@@ -61,9 +61,13 @@ impl PlayState {
             Area::Dungeon { level, .. } => level as i8,
             Area::World { plane } => plane.save_floor(),
         };
-        let (aux1, aux3) = match self.player.transport {
-            TransportState::Ship { hull, skiffs, .. } => (hull, skiffs),
-            _ => (0, 0),
+        // `vehicles.md`: "The hull-condition byte is active-object byte `+5`
+        // of the party's vessel record", and boarding copies hull and skiffs
+        // into it. This engine keeps them in the ship transport state, so
+        // while aboard that state *is* the record's bytes 5 and 7.
+        let vessel_aux = match self.player.transport {
+            TransportState::Ship { hull, skiffs, .. } => Some((hull, skiffs)),
+            _ => None,
         };
         let marker = self.player.transport.save_marker();
         let player_object = ActiveObject {
@@ -73,8 +77,8 @@ impl PlayState {
             y: self.player.y,
             z,
             phase: PLAYER_ACTIVE_OBJECT_PHASE,
-            aux1,
-            aux3,
+            aux1: vessel_aux.map_or(0, |(hull, _)| hull),
+            aux3: vessel_aux.map_or(0, |(_, skiffs)| skiffs),
         };
         if self.active_objects.is_empty() {
             self.active_objects.push(player_object);
@@ -83,17 +87,20 @@ impl PlayState {
 
         // `active-objects.md §5`: index zero, not a magic type byte,
         // identifies the player. Refresh the five compositor-owned bytes
-        // while retaining the record's phase field. Transport-specific
-        // auxiliary bytes follow the live transport state during ordinary
-        // play; the town-exit mirror path performs its narrower byte-0..4
-        // synchronization directly so reloaded auxiliary bytes survive.
+        // and stop: "Bytes 5, 6 and 7 of slot zero are not part of that
+        // rebuild. The per-frame refresh writes bytes 0 through 4 and
+        // stops." Off a ship, bytes 5 and 7 therefore round-trip untouched
+        // (they are no longer zeroed every frame); aboard, they mirror the
+        // vessel state the engine keeps in the transport (see above).
         self.active_objects[0].type_byte = player_object.type_byte;
         self.active_objects[0].tile = player_object.tile;
         self.active_objects[0].x = player_object.x;
         self.active_objects[0].y = player_object.y;
         self.active_objects[0].z = player_object.z;
-        self.active_objects[0].aux1 = player_object.aux1;
-        self.active_objects[0].aux3 = player_object.aux3;
+        if vessel_aux.is_some() {
+            self.active_objects[0].aux1 = player_object.aux1;
+            self.active_objects[0].aux3 = player_object.aux3;
+        }
         // `overworld.md §8.1`: the falls chain hides the marker across its
         // damage pass and the whirlpool replaces it with the whirlpool
         // sprite, both restoring it before the state commit. Re-apply the
@@ -444,14 +451,12 @@ impl PlayState {
     /// the per-tick NPC walker skips every roster slot whose type byte is
     /// zero and the type array was never loaded".
     ///
-    /// The roster is still parsed here, because this engine's *load* path
-    /// does not yet consume the `0x07B4..0x105F` band that carries the
-    /// schedule table, the dialogue indices and the per-NPC runtime block
-    /// (`formats/saved-gam.md §12`); the save writer does emit it, through
-    /// [`crate::npc_band::write_npc_band`]. Matching the restored records
-    /// against the roster is how a resumed NPC keeps its schedule and its
-    /// conversation; the records themselves, not the hour, decide who is
-    /// present and where they stand.
+    /// A save load restores the `0x07B4..0x105F` band itself through
+    /// [`Self::restore_scheduled_npcs_from_save_band`]. This roster-pairing
+    /// path remains for a caller that hands over an active-object table
+    /// without an NPC band: matching the restored records
+    /// against the roster is how such a resumed NPC keeps its schedule and
+    /// its conversation.
     pub fn load_scheduled_npcs_from_existing_active_objects(&mut self, slots: &[NpcSlot]) {
         let removed = self.removed_town_npc_mask_for_current_scene();
         self.npcs = effective_npc_slots(slots)
@@ -489,6 +494,30 @@ impl PlayState {
             let floor_byte = floor as u8;
             self.npcs
                 .retain(|npc| npc.active_object.is_some() || npc.z != floor_byte);
+        }
+    }
+
+    /// `npc-schedules.md §13` / `town-mode.md §5`: a town-family scene
+    /// reached by loading a save "enters its setup pass in the preserving
+    /// entry mode, which skips the `.NPC` roster load, the runtime-state
+    /// initialisation from the hour, and the waypoint reseat alike". The
+    /// schedule table, runtime block, move queues, cursors and stuck
+    /// counters come from the save band "verbatim", so "the first scheduler
+    /// tick after the load continues the route it was on".
+    ///
+    /// The only repair is to a linked-object word that names no live record
+    /// in the restored table, which is dropped rather than left dangling;
+    /// the original's records "must agree with the saved NPC positions and
+    /// links" (`formats/saved-gam.md §12.3`).
+    pub fn restore_scheduled_npcs_from_save_band(&mut self, band: Vec<RuntimeNpc>) {
+        self.npcs = band;
+        let object_count = self.active_objects.len();
+        for npc in &mut self.npcs {
+            if let Some(slot) = npc.active_object
+                && (slot == 0 || slot >= object_count || self.active_objects[slot].is_empty())
+            {
+                npc.active_object = None;
+            }
         }
     }
 
@@ -558,10 +587,10 @@ impl PlayState {
     ///
     /// The pairing is by tile class and floor, taking roster slots in
     /// order. The original pairs them through the NPC's linked-slot field
-    /// inside the `0x07B4..0x105F` band (`formats/saved-gam.md §12`), which
-    /// this engine now writes but does not read back; until the load path
-    /// reads it, two roster slots of the same class on one floor can still
-    /// swap schedules across a save, which the original does not do.
+    /// inside the `0x07B4..0x105F` band (`formats/saved-gam.md §12`); a save
+    /// load reads that band through
+    /// [`Self::restore_scheduled_npcs_from_save_band`], so this class/floor
+    /// pairing only serves callers that supply objects without a band.
     ///
     /// The floor is compared in the save image's own signed encoding
     /// (`formats/saved-gam.md §6`, party Z: "`0x00` is the entry floor,
@@ -767,6 +796,9 @@ impl PlayState {
         };
         let floor = floor as u8;
         let mut moved = false;
+        // `npc-schedules.md §9.2`: "The schedule pass clears the shared event
+        // kind and NPC index, then visits roster slots 1 through 31."
+        self.pending_town_npc_contact = None;
         // npc-schedules.md §7: "At most one NPC per tick may start a fresh
         // search. The walker latches a 'someone already moved' flag on the
         // first slot that enters a search arm, and every later slot in the
@@ -822,9 +854,15 @@ impl PlayState {
                 let (ai_tx, ai_ty, _) = self.npcs[index].waypoint_position(ai_wp);
                 let raw_ai = self.npcs[index].schedule[NPC_SCHEDULE_AI_OFFSET + ai_wp];
                 let behavior = npc_ai_behavior(raw_ai);
+                // `npc-schedules.md §9` "The engagement step": "Values 3/6 use
+                // a Manhattan distance strictly below four from the NPC's
+                // current position to the party. Value 4 instead measures
+                // from its selected waypoint to the party, and at distance
+                // four or greater it wanders with cap three. Values 5/7
+                // engage without that distance gate."
                 if behavior == Some(NpcAiBehavior::Retreating)
                     && self.npcs[index].z == floor
-                    && self.town_npc_player_distance(index) <= TOWN_NPC_CHASE_RADIUS
+                    && self.town_npc_player_distance(index) < TOWN_NPC_ENGAGE_RADIUS
                 {
                     if let Some((nx, ny)) = self.town_npc_flee_step(index, floor) {
                         self.npcs[index].x = nx;
@@ -864,22 +902,39 @@ impl PlayState {
                                 self.sync_npc_active_object(index, floor);
                                 continue;
                             }
-                        } else if behavior.raises_contact_event() {
-                            // `npc-schedules.md §9` "The engagement step":
-                            // values 5/7 "engage without that distance gate".
-                            let unconditional_chase = behavior.engages_without_distance_gate();
-                            if !self.town_npc_adjacent_to_player(index)
-                                && (unconditional_chase
-                                    || self.town_npc_player_distance(index)
-                                        <= TOWN_NPC_CHASE_RADIUS)
+                        } else if behavior.raises_contact_event()
+                            && (behavior.engages_without_distance_gate()
+                                || behavior == NpcAiBehavior::ApproachAndAttack
+                                || self.town_npc_player_distance(index) < TOWN_NPC_ENGAGE_RADIUS)
+                        {
+                            // `npc-schedules.md §9`: "At the **start** of an
+                            // engagement invocation, orthogonal adjacency
+                            // produces the appropriate event and no movement:
+                            // values 4/5 require nonzero dialogue, whereas 6/7
+                            // do not. A zero-dialogue NPC in 4/5 continues to
+                            // step selection." §9.2: events "do not stop the
+                            // pass or form a queue: if more than one NPC
+                            // produces one during the pass, the last producer
+                            // visited supplies the event that town mode
+                            // handles." Because the event is taken here,
+                            // before this NPC steps, adjacency its own step
+                            // creates waits for a later invocation.
+                            if self.town_npc_adjacent_to_player(index)
+                                && town_npc_contact_dialogue_allows(
+                                    behavior,
+                                    self.npcs[index].dialog_id,
+                                )
                             {
-                                if let Some((nx, ny)) = self.town_npc_chase_step(index, floor) {
-                                    self.npcs[index].x = nx;
-                                    self.npcs[index].y = ny;
-                                    moved = true;
-                                    self.sync_npc_active_object(index, floor);
-                                    continue;
-                                }
+                                self.pending_town_npc_contact = Some(TownNpcContactEvent {
+                                    npc_slot: self.npcs[index].slot,
+                                    behavior,
+                                });
+                            } else if let Some((nx, ny)) = self.town_npc_chase_step(index, floor) {
+                                self.npcs[index].x = nx;
+                                self.npcs[index].y = ny;
+                                moved = true;
+                                self.sync_npc_active_object(index, floor);
+                                continue;
                             }
                         } else if behavior.is_wander() {
                             // §9 value `2`: "the same one-attempt-per-turn
@@ -1007,31 +1062,22 @@ impl PlayState {
             ));
         }
         if *searched {
-            // `npc-schedules.md §9.1`, "The same stepper is reached with the
-            // cap switched off": one of the two route-recovery entries is
-            // "the state-2/3 arm whose queue is exhausted and whose replan
-            // either failed or **was not attempted**". This is the
-            // not-attempted arm - §7's per-tick latch, "at most one NPC per
-            // tick may start a fresh search", has already spent the tick's
-            // one search. No draw is spent here and, per `RETRACTIONS.md`
-            // R367, the counter is untouched: "the recovery stepper never
-            // touches the counter table on any of its three rejection
-            // paths."
+            // `npc-schedules.md §7`: "At most one NPC per tick may start a
+            // fresh search ... every later slot in the same tick that would
+            // have searched is skipped until the next tick." §9.1 agrees that
+            // the spent budget is taken before the replan draw and the aging
+            // arm, and that "an NPC so diverted stands still *without*
+            // aging". The cap-zero recovery stepper is not this arm: §9.1
+            // reaches it only from a refused queued step or a replan that
+            // "either failed or was not attempted because a queue pointer was
+            // still live".
             //
-            // **Unresolved mapping, not a published equivalence.** This
-            // engine folds its spent per-tick search latch into this arm, but
-            // §9.1's own budget condition - "the tick's heavy-work budget must
-            // still be unspent (a spent budget diverts the walker to the
-            // cached-waypoint escape hatch instead)" - names a *different*
-            // published arm: §6's cheap arm, "which re-checks the floor and
-            // then enters the AI dispatch after all - using its **cached**
-            // waypoint index rather than the freshly resolved one". That is
-            // not this cap-zero recovery stepper, and `RETRACTIONS.md` R369
-            // sharpens the difference - "a diverted NPC stands still
-            // *without* aging", where this stepper can commit a move.
-            // Whether the two arms coincide in the original is unresolved, so
-            // do not read this call site as implementing the escape hatch.
-            return self.npc_route_recovery_wander(npc_index, floor, target_x, target_y);
+            // Open question (not modelled): §9.1 names the diversion target
+            // "the cached-waypoint escape hatch" (§6's cheap arm into the AI
+            // dispatch). Whether an in-flight state-2 NPC, unlike §6's settled
+            // boundary-hour NPC, takes that arm is not published; skipping is
+            // the reading §7 states outright.
+            return NpcScheduleStepOutcome::Stalled;
         }
         // `npc-schedules.md §9.1`, "The replan gate and the stuck counter's
         // three bands": the counter "does not gate movement; it gates
@@ -1214,8 +1260,12 @@ impl PlayState {
             return self.npc_route_recovery_wander(npc_index, floor, target_x, target_y);
         }
         self.npcs[npc_index].advance_move_queue_direction();
+        // A queued step moves within the displayed floor: an in-plane route
+        // has `target_z == floor`, and a route toward a floor link (§8.5
+        // states 6/7) must not carry the NPC to the waypoint's floor early.
+        let npc_z = self.npcs[npc_index].z;
         let moved = self.commit_npc_schedule_position(
-            npc_index, waypoint, target_x, target_y, target_z, floor, nx, ny, target_z,
+            npc_index, waypoint, target_x, target_y, target_z, floor, nx, ny, npc_z,
         );
         if (nx, ny) != (target_x, target_y) && !self.npcs[npc_index].move_queue.is_empty() {
             self.npcs[npc_index].state = NPC_STATE_REPLAY_QUEUE;
@@ -1262,23 +1312,18 @@ impl PlayState {
         npc.x.abs_diff(self.player.x) + npc.y.abs_diff(self.player.y)
     }
 
+    /// `npc-schedules.md §9` "The engagement step": "For an approaching
+    /// NPC, the chooser tests legal orthogonal neighbours in **east, north,
+    /// west, south** order and takes the first that strictly reduces
+    /// Manhattan distance to the party. No equally distant detour is
+    /// planned."
+    ///
+    /// Modes 5/7 "additionally have their random direction variation"; its
+    /// rate is not published, so this engine does not model it yet.
     pub fn town_npc_chase_step(&self, npc_index: usize, floor: u8) -> Option<(usize, usize)> {
-        let npc = &self.npcs[npc_index];
-        let dx = self.player.x as isize - npc.x as isize;
-        let dy = self.player.y as isize - npc.y as isize;
-        let primary = if dx.abs() >= dy.abs() {
-            cardinal_direction_from_sign(dx.signum(), 0)
-        } else {
-            cardinal_direction_from_sign(0, dy.signum())
-        };
-        let secondary = if dx.abs() >= dy.abs() {
-            cardinal_direction_from_sign(0, dy.signum())
-        } else {
-            cardinal_direction_from_sign(dx.signum(), 0)
-        };
-        [primary, secondary]
+        let distance = self.town_npc_player_distance(npc_index);
+        TOWN_NPC_APPROACH_DIRECTIONS
             .into_iter()
-            .flatten()
             .find_map(|direction| {
                 self.town_npc_step_in_direction_toward(
                     npc_index,
@@ -1287,6 +1332,9 @@ impl PlayState {
                     self.player.x,
                     self.player.y,
                 )
+                .filter(|(nx, ny)| {
+                    nx.abs_diff(self.player.x) + ny.abs_diff(self.player.y) < distance
+                })
             })
     }
 
@@ -1468,18 +1516,22 @@ impl PlayState {
         }
         let mut prev = vec![None::<(usize, usize)>; 1024];
         let mut seen = vec![false; 1024];
+        // `npc-schedules.md §8.2`/§8.4: each visited cell carries its
+        // inbound direction code, and the start cell is seeded "north".
+        let mut inbound = vec![NPC_PATH_DIR_NORTH; 1024];
         let mut q = VecDeque::new();
         q.push_back(start);
         seen[start.1 * 32 + start.0] = true;
         while let Some((x, y)) = q.pop_front() {
-            for (nx, ny) in neighbors(x, y) {
+            for (code, (nx, ny)) in npc_bfs_neighbors((x, y), inbound[y * 32 + x]) {
                 let idx = ny * 32 + nx;
                 if seen[idx]
-                    || !self.npc_can_step_toward(npc_index, nx, ny, floor, target.0, target.1)
+                    || !self.npc_workspace_cell_open(npc_index, nx, ny, floor, target.0, target.1)
                 {
                     continue;
                 }
                 seen[idx] = true;
+                inbound[idx] = code;
                 prev[idx] = Some((x, y));
                 if (nx, ny) == target {
                     let mut cells = vec![(nx, ny)];
@@ -1551,15 +1603,24 @@ impl PlayState {
                 return false;
             }
             *searched = true;
-            if let Some((nx, ny)) =
-                self.npc_path_step_to_floor_link(npc_index, marker, target_x, target_y, floor)
-            {
-                self.npcs[npc_index].x = nx;
-                self.npcs[npc_index].y = ny;
-                self.sync_npc_active_object(npc_index, floor);
-                self.npcs[npc_index].state = schedule_floor_state(npc_z, target_z, floor);
-                self.npcs[npc_index].stuck_counter = 0;
-                return true;
+            // npc-schedules.md §8.5: "When the gate refuses, the walker falls
+            // back to the tile-ID search for the matching marker, routes
+            // toward it and enters the queue-replay state, so the NPC walks
+            // onto the link and passes the gate on a later tick." The queue
+            // drain then re-enters 6/7 and ends the tick (§7).
+            if let Some(route) = self.npc_path_route_to_floor_link_marker(
+                npc_index,
+                current,
+                marker,
+                (target_x, target_y),
+                floor,
+            ) {
+                self.npcs[npc_index].set_move_queue(route);
+                return self
+                    .advance_npc_replay_queue_step(
+                        npc_index, waypoint, target_x, target_y, target_z, floor,
+                    )
+                    == NpcScheduleStepOutcome::Moved;
             }
             // `RETRACTIONS.md` R367: a failed floor-link search is not a
             // refused queued route step, so the counter stands.
@@ -1576,9 +1637,36 @@ impl PlayState {
                 return false;
             }
             *searched = true;
-            let Some((x, y)) = self.nearest_npc_floor_link_to(marker, target_x, target_y) else {
+            // npc-schedules.md §8.5, states 4/5: "The search runs first; if
+            // no link cell is reachable within the search budget the NPC does
+            // nothing this tick." Route selection is "nearest reachable cell
+            // carrying the selected marker, measured by the same
+            // breadth-first search used for ordinary movement", started, as
+            // that search always is, from the NPC's own runtime cell.
+            let start = (self.npcs[npc_index].x, self.npcs[npc_index].y);
+            let Some((x, y)) = self
+                .npc_path_route_to_floor_link_marker(
+                    npc_index,
+                    start,
+                    marker,
+                    (target_x, target_y),
+                    floor,
+                )
+                .and_then(|route| {
+                    route.into_iter().try_fold(start, |cell, code| {
+                        npc_step_from_direction_code(cell, code)
+                    })
+                })
+            else {
                 return false;
             };
+            // "... and then re-reads the live tile at the link cell. If that
+            // tile is the state's own marker, or any tile in the stairway
+            // family `0xC4..0xC7`, the NPC is placed on the displayed floor
+            // at that cell".
+            if !npc_floor_link_arrival_accepts(self.grid[y * 32 + x], marker) {
+                return false;
+            }
             self.npcs[npc_index].x = x;
             self.npcs[npc_index].y = y;
             self.npcs[npc_index].z = floor;
@@ -1631,11 +1719,14 @@ impl PlayState {
         }
         let mut prev = vec![None::<(usize, usize)>; 1024];
         let mut seen = vec![false; 1024];
+        // `npc-schedules.md §8.2`/§8.4: each visited cell carries its
+        // inbound direction code, and the start cell is seeded "north".
+        let mut inbound = vec![NPC_PATH_DIR_NORTH; 1024];
         let mut q = VecDeque::new();
         q.push_back(start);
         seen[start.1 * 32 + start.0] = true;
         while let Some((x, y)) = q.pop_front() {
-            for (nx, ny) in neighbors(x, y) {
+            for (code, (nx, ny)) in npc_bfs_neighbors((x, y), inbound[y * 32 + x]) {
                 let idx = ny * 32 + nx;
                 if seen[idx]
                     || !self.npc_can_step_toward_floor_link_marker(
@@ -1650,8 +1741,13 @@ impl PlayState {
                     continue;
                 }
                 seen[idx] = true;
+                inbound[idx] = code;
                 prev[idx] = Some((x, y));
-                if npc_floor_link_arrival_accepts(self.grid[idx], marker) {
+                // npc-schedules.md §8.3 phase 3: "every cell whose live tile
+                // equals the selected marker becomes a goal sentinel" - the
+                // stairway family is accepted only by the gate and the
+                // arrival re-read, never as a search goal.
+                if self.grid[idx] == marker {
                     let mut cells = vec![(nx, ny)];
                     let mut current = (nx, ny);
                     while let Some(parent) = prev[current.1 * 32 + current.0] {
@@ -1722,31 +1818,30 @@ impl PlayState {
             })
     }
 
-    pub fn nearest_npc_floor_link_to(
-        &self,
-        marker: u8,
-        target_x: usize,
-        target_y: usize,
-    ) -> Option<(usize, usize)> {
-        self.floor_link_marker_coordinates(marker)
-            .into_iter()
-            .min_by_key(|(x, y)| x.abs_diff(target_x) + y.abs_diff(target_y))
-    }
-
     pub fn floor_link_marker_coordinates(&self, marker: u8) -> Vec<(usize, usize)> {
         self.grid
             .chunks_exact(32)
             .enumerate()
             .flat_map(|(y, row)| {
-                row.iter().enumerate().filter_map(move |(x, tile)| {
-                    npc_floor_link_arrival_accepts(*tile, marker).then_some((x, y))
-                })
+                row.iter()
+                    .enumerate()
+                    .filter_map(move |(x, tile)| (*tile == marker).then_some((x, y)))
             })
             .collect()
     }
 }
 
-const TOWN_NPC_CHASE_RADIUS: usize = 8;
+/// `npc-schedules.md §9` "The engagement step": values 3/6 act only while
+/// the NPC-to-party Manhattan distance is "strictly below four".
+const TOWN_NPC_ENGAGE_RADIUS: usize = 4;
+/// `npc-schedules.md §9`: the approach chooser's "east, north, west, south"
+/// test order.
+const TOWN_NPC_APPROACH_DIRECTIONS: [Direction; 4] = [
+    Direction::East,
+    Direction::North,
+    Direction::West,
+    Direction::South,
+];
 /// `npc-schedules.md §9` value `1`: "an accepted step must leave the NPC
 /// within Manhattan distance **three** of the active waypoint", and value `4`
 /// (R317) "uses the **same constant cap of three**".
@@ -1775,14 +1870,31 @@ const TOWN_NPC_CARDINAL_DIRECTIONS: [Direction; 4] = [
     Direction::North,
 ];
 
-fn cardinal_direction_from_sign(dx: isize, dy: isize) -> Option<Direction> {
-    match (dx, dy) {
-        (-1, 0) => Some(Direction::West),
-        (1, 0) => Some(Direction::East),
-        (0, -1) => Some(Direction::North),
-        (0, 1) => Some(Direction::South),
-        _ => None,
+/// `npc-schedules.md §9.2`: "AI 4 or 5 | Zero live dialogue | No contact
+/// event; continue movement selection." Values 6/7 carry no dialogue
+/// requirement - §9 "values 4/5 require nonzero dialogue, whereas 6/7 do
+/// not".
+pub(crate) fn town_npc_contact_dialogue_allows(behavior: NpcAiBehavior, dialog_id: u8) -> bool {
+    if behavior.raises_conversation_contact() {
+        dialog_id != NPC_DIALOG_ID_NONE
+    } else {
+        behavior.raises_arrest_or_conflict_contact()
     }
+}
+
+/// `npc-schedules.md §8.4`: "For each of four cardinal directions in cyclic
+/// order" over the §8.2 codes `1` west, `2` south, `3` east, `4` north. The
+/// cycle starts at the dequeued cell's "current direction" - the inbound code
+/// in its high nibble (the start cell's seed is north).
+fn npc_bfs_neighbors(
+    cell: (usize, usize),
+    current: u8,
+) -> impl Iterator<Item = (u8, (usize, usize))> {
+    let first = current.clamp(NPC_PATH_DIR_WEST, NPC_PATH_DIR_NORTH) - 1;
+    (0..4u8).filter_map(move |k| {
+        let code = (first + k) % 4 + 1;
+        npc_step_from_direction_code(cell, code).map(|next| (code, next))
+    })
 }
 
 fn npc_direction_code_between(from: (usize, usize), to: (usize, usize)) -> Option<u8> {

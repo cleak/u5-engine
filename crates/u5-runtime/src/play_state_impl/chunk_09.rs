@@ -4766,7 +4766,9 @@ impl PlayState {
             // committed step - a two-turn pacing gate applied to every class,
             // which is exactly the "do I move at all" test the section
             // denies. The class pacing that survives is the ship wind cadence
-            // handled above and the whirlpool parity inside the committer.
+            // handled above. The whirlpool parity bit is not modelled: the
+            // spec does not publish which byte/bit holds it or how the clear
+            // turn chooses between the random and directed steps.
             //
             // What survives of the old phase test is only the steady marker.
             // §8's phase table gives the all-ones nibble as "Steady; do not
@@ -5532,6 +5534,28 @@ impl PlayState {
             return false;
         }
 
+        // `active-objects.md §8` `0xFC` proximity-mask branch: at a listed
+        // wrapped `(dy, dx)` cell the slot's first auxiliary byte is
+        // incremented as an age counter. Both exits of that branch reach
+        // the same directed step planner ("one branch's two exits were found
+        // to reach the same movement call with a dead argument, so no
+        // behavioural difference should be modelled between them beyond the
+        // counter byte one of them increments"), so the counter is the only
+        // effect modelled here; movement continues below either way.
+        if object.type_byte & 0xfc == 0xfc {
+            let (dx, dy) = wrapped_deltas_to_player(
+                object.x as u8,
+                object.y as u8,
+                self.player.x as u8,
+                self.player.y as u8,
+            );
+            // Wrapped deltas are at most half the 256-cell torus.
+            if fc_sprite_proximity_mask_hits(dy.unsigned_abs() as u8, dx.unsigned_abs() as u8) {
+                self.active_objects[slot].aux1 = object.aux1.wrapping_add(1);
+            }
+        }
+        let object = self.active_objects[slot];
+
         // `overworld.md §6.1` / `active-objects.md §8`: "Each turn the
         // creature flips a fair coin" from the shared generator to pick the
         // axis it attempts first.
@@ -5556,10 +5580,13 @@ impl PlayState {
             }
         }
 
-        // `overworld.md §6.1`: "If neither directed move is legal, the
-        // creature instead attempts one randomly chosen cardinal move" - the
-        // random four-direction walker of `active-objects.md §8`, which
-        // "rolls one cardinal direction and makes a single attempt at it".
+        // `active-objects.md §8`: "If neither directed axis can be accepted,
+        // the slot falls back to the random four-direction walker, which
+        // rolls one cardinal direction and makes a single attempt at it".
+        // Byte 6 "carries **no facing**" (§3, R340), so the fallback is a
+        // fresh shared-stream roll, not the slot's last step replayed. The
+        // spec does not publish the roll-to-direction order; one uniform
+        // draw over the four cardinals is used.
         let direction = OUTDOOR_RANDOM_WALK_DIRECTIONS[usize::from(self.random_range_u8(0, 3))];
         let (dx, dy) = direction.delta();
         self.try_step_outdoor_active_object(slot, object, dx, dy, direction, last_vacated)
@@ -5688,8 +5715,9 @@ impl PlayState {
             self.active_objects[slot].type_byte = facing;
             self.active_objects[slot].tile = facing;
         }
-        self.active_objects[slot].phase =
-            active_object_phase_from_direction(direction, object.phase & 0x0f);
+        // `active-objects.md §3`: byte 6 "carries **no facing**. ... a
+        // producer that writes a facing into it is not byte-compatible"
+        // (R340). The committed step leaves the phase byte alone.
         self.active_objects[slot].x = nx;
         self.active_objects[slot].y = ny;
         self.mark_visibility_dirty();
@@ -6213,13 +6241,21 @@ pub const fn merge_active_ship_cadence_phase(post_tick: u8, pre_tick: u8) -> u8 
     }
 }
 
+/// `active-objects.md §8`: the outdoor walker "applies only to the outdoor
+/// animated/monster predicate ... excluding the small environment-animation
+/// ranges", and terrain-combat classification "derives ... from the
+/// triggering slot's byte-0 type". The predicate therefore reads byte 0
+/// only; the per-frame tile byte (byte 1) does not qualify a slot.
 pub fn is_outdoor_active_object_walker(object: ActiveObject) -> bool {
     is_outdoor_active_object_walker_byte(object.type_byte)
-        || is_outdoor_active_object_walker_byte(object.tile)
 }
 
+/// `formats/tiles.md`: the outdoor classifier "returns true for
+/// `0x2C..0x2F` and for values at or above `0x80` generally, but **false**
+/// for `0xB4..0xB7`, false for `0xE8..0xEB`, and false for everything below
+/// `0x80`" (the excluded subfamilies of the `active-objects.md §8` table).
 pub const fn is_outdoor_active_object_walker_byte(byte: u8) -> bool {
-    matches!(byte, 0x2c..=0x2f | 0x80..=0xff)
+    matches!(byte, 0x2c..=0x2f | 0x80..=0xff) && !matches!(byte, 0xb4..=0xb7 | 0xe8..=0xeb)
 }
 
 pub fn town_active_object_step_accepts_tile(tile: u8) -> bool {

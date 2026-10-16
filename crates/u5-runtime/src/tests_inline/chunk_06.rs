@@ -3179,6 +3179,23 @@
     }
 
     #[test]
+    fn outdoor_walker_predicate_reads_byte_zero_and_excludes_environment_runs() {
+        // `formats/tiles.md`: the outdoor classifier is false for `0xB4..0xB7`
+        // and `0xE8..0xEB`; `active-objects.md §8` classifies by byte 0.
+        for type_byte in [0xb4, 0xb7, 0xe8, 0xeb] {
+            let state = world_state_with_walker(5, 5, type_byte, 6, 5);
+            assert!(!state.outdoor_active_object_is_adjacent(1), "{type_byte:#x}");
+        }
+        for type_byte in [0x2c, 0x80, 0xb3, 0xb8, 0xe7, 0xec, 0xff] {
+            let state = world_state_with_walker(5, 5, type_byte, 6, 5);
+            assert!(state.outdoor_active_object_is_adjacent(1), "{type_byte:#x}");
+        }
+        let mut state = world_state_with_walker(5, 5, 0x10, 6, 5);
+        state.active_objects[1].tile = 0x80;
+        assert!(!state.outdoor_active_object_is_adjacent(1));
+    }
+
+    #[test]
     fn outdoor_walker_reaction_suppresses_every_lower_slots_movement() {
         // The walk is high-to-low. Slot 2 fires first; the running reaction
         // total then suppresses slot 1's otherwise legal directed step.
@@ -3260,6 +3277,80 @@
             assert!(outdoor_active_object_step_accepts_tile(class, 0x64, None));
             assert!(!outdoor_active_object_step_accepts_tile(class, 0x90, None));
         }
+    }
+
+    #[test]
+    fn outdoor_walker_random_fallback_rolls_a_fresh_cardinal_and_writes_no_facing() {
+        // `active-objects.md §8`: with no acceptable directed axis the slot
+        // "rolls one cardinal direction and makes a single attempt at it";
+        // §3: byte 6 "carries **no facing**", so it is neither read for the
+        // fallback nor written by the step.
+        let directions = [
+            Direction::North,
+            Direction::East,
+            Direction::South,
+            Direction::West,
+        ];
+        for seed in 0..32u16 {
+            let mut state = world_state_with_walker(12, 10, 0x98, 10, 10);
+            // The only directed candidate (East) is occupied.
+            state.active_objects.push(ActiveObject {
+                type_byte: 0x05,
+                tile: 0x05,
+                x: 11,
+                y: 10,
+                z: WorldPlane::Underworld.save_floor(),
+                phase: STEADY_PHASE,
+                aux1: 0,
+                aux3: 0,
+            });
+            // A stored West "facing" must not be replayed.
+            state.active_objects[1].phase = 0x60;
+            state.prng_state = 0x1357 ^ seed.wrapping_mul(0x9e37);
+            let mut expected_prng = state.prng_state;
+            let roll = u5_prng_range_u16(&mut expected_prng, 0, 3) as usize;
+            let expected = directions[roll];
+
+            let moved = state.try_wander_active_object(1);
+
+            assert_eq!(state.prng_state, expected_prng, "exactly one draw");
+            assert_eq!(state.active_objects[1].phase, 0x60);
+            if expected == Direction::East {
+                assert!(!moved);
+                assert_eq!((state.active_objects[1].x, state.active_objects[1].y), (10, 10));
+            } else {
+                let (dx, dy) = expected.delta();
+                assert!(moved);
+                assert_eq!(
+                    (state.active_objects[1].x, state.active_objects[1].y),
+                    ((10 + dx) as usize, (10 + dy) as usize)
+                );
+            }
+        }
+    }
+
+    #[test]
+    fn outdoor_walker_shadowlord_proximity_mask_ages_its_first_aux_byte() {
+        // `active-objects.md §8`: a `0xFC` slot at a listed wrapped
+        // `(dy, dx)` cell increments its first auxiliary byte; unlisted
+        // cells fall through to ordinary directed movement untouched.
+        // Listed: (dy 0, dx 3), across the torus seam.
+        let mut state = world_state_with_walker(1, 40, 0xfc, 254, 40);
+        state.active_objects[1].aux1 = 4;
+        state.try_wander_active_object(1);
+        assert_eq!(state.active_objects[1].aux1, 5);
+        // Unlisted: (dy 0, dx 1) is adjacent, (dy 5, dx 0) is outside.
+        for (ox, oy) in [(2, 40), (1, 45)] {
+            let mut state = world_state_with_walker(1, 40, 0xfc, ox, oy);
+            state.active_objects[1].aux1 = 4;
+            state.try_wander_active_object(1);
+            assert_eq!(state.active_objects[1].aux1, 4, "({ox}, {oy})");
+        }
+        // Other classes never touch the byte.
+        let mut state = world_state_with_walker(1, 40, 0xf8, 254, 40);
+        state.active_objects[1].aux1 = 4;
+        state.try_wander_active_object(1);
+        assert_eq!(state.active_objects[1].aux1, 4);
     }
 
     #[test]

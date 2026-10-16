@@ -6612,7 +6612,7 @@ fn validate_route_smoke_case_state(
                     .party
                     .get(2)
                     .is_none_or(|member| member.status != b'P')
-                || !state.message.contains("is poisoned!")
+                || state.message.matches("Poisoned!").count() != 3
             {
                 return Err(io::Error::other(format!(
                     "route smoke `{case_name}` did not apply public #51 poison-gas roll semantics"

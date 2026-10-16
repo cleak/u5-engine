@@ -523,6 +523,12 @@ pub const TOWN_NPC_BRUSHOFF_DIALOG_ID: u8 = 0xFE;
 /// dispatcher line gets here (compare `TALK_NO_RESPONSE_MESSAGE`).
 pub const TOWN_NPC_COWERING_RESPONSE: &str = "\"Don't hurt me!\nPlease go away!\"";
 pub const TOWN_NPC_BRUSHOFF_RESPONSE: &str = "Begone, vermin!";
+/// `town-mode.md §14`: on the arrest/conflict contact's conflict outcome, "an
+/// actor byte at least `0x40` prints `Attacked!` and enters the NPC-conflict
+/// chain; a lower byte clears the NPC slot".
+pub const TOWN_NPC_CONTACT_CONFLICT_ACTOR_FIRST: u8 = 0x40;
+/// `town-mode.md §14`: the conflict outcome's printed line.
+pub const TOWN_NPC_CONTACT_ATTACKED_LINE: &str = "Attacked!";
 /// Slot zero of every sub-map is the unused-sentinel slot the schedule
 /// processor skips; effective capacity per sub-map is therefore 31.
 pub const NPC_SENTINEL_SLOT: usize = 0;
@@ -730,19 +736,15 @@ pub const fn npc_schedule_hour_at_boundary(time: [u8; 4], hour: u8) -> bool {
 }
 
 pub const fn npc_schedule_waypoint_for_hour(time: [u8; 4], hour: u8) -> u8 {
-    // Map (boundary -> waypoint) per the spec table.
+    // `formats/npc.md §5.1`: the boundary "whose unsigned eight-bit
+    // subtraction `current_hour - time[i]` is smallest", mapped through the
+    // segment table (the wraparound boundary time[3] selects waypoint 1).
     let waypoints: [u8; 4] = [0, 1, 2, 1];
-    // Score each segment's start by how recently it occurred (mod 24).
-    // Prefer the segment whose start has the smallest "hour - start"
-    // remainder. The wraparound boundary (time[3]) maps to waypoint 1,
-    // matching the night band that returns the NPC to the home/sleep
-    // waypoint until the next morning.
     let mut best_idx: usize = 0;
-    let mut best_recency: u8 = 24;
-    let mut i: usize = 0;
+    let mut best_recency: u8 = hour.wrapping_sub(time[0]);
+    let mut i: usize = 1;
     while i < 4 {
-        let start = time[i] % 24;
-        let recency = (hour + 24 - start) % 24;
+        let recency = hour.wrapping_sub(time[i]);
         if recency < best_recency {
             best_recency = recency;
             best_idx = i;

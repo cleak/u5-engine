@@ -487,6 +487,16 @@ impl NpcAiBehavior {
     }
 }
 
+/// `npc-schedules.md §9.2`: the engagement event the schedule pass records
+/// for town mode - the producer's roster index and the AI behaviour whose
+/// engagement step raised it (`formats/saved-gam.md §12` stores the pair as
+/// an event kind and an NPC index).
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct TownNpcContactEvent {
+    pub npc_slot: usize,
+    pub behavior: NpcAiBehavior,
+}
+
 /// `formats/npc.md §5.3`: classify the per-waypoint AI byte. Returns
 /// `None` for values above `7`, which the spec maps to the
 /// no-action/default case the dispatcher takes.

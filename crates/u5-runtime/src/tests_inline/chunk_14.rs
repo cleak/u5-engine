@@ -2631,8 +2631,9 @@
                 y: 5,
                 z: 0,
                 phase: 0x22,
-                aux1: 0,
-                aux3: 0,
+                // `active-objects.md §5`: bytes 5 and 7 round-trip on foot.
+                aux1: 7,
+                aux3: 8,
             }
         );
     }
@@ -3786,8 +3787,9 @@
                 y: 5,
                 z: 0,
                 phase: 0x22,
-                aux1: 0,
-                aux3: 0,
+                // `active-objects.md §5`: bytes 5 and 7 round-trip on foot.
+                aux1: 7,
+                aux3: 8,
             }
         );
     }

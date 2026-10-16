@@ -1001,7 +1001,9 @@
         );
 
         assert_eq!(state.party[0].status, b'P');
-        assert!(state.message.contains("Avatar is poisoned!"));
+        // `town-mode.md §10`: a bare `Poisoned!` with no name or lead-in.
+        assert!(state.message.contains("Poisoned!"));
+        assert!(!state.message.contains("Avatar"));
         assert_eq!(state.turn, 1);
     }
 
@@ -1114,7 +1116,7 @@
 
         assert_eq!(state.party[0].status, b'P');
         assert_eq!(state.party[1].status, b'P');
-        assert!(state.message.contains("Party member 1 is poisoned!"));
+        assert_eq!(state.message.matches("Poisoned!").count(), 1);
     }
 
     #[test]
@@ -1137,7 +1139,7 @@
             u5_prng_range_u16(&mut expected_prng, 0, TOWN_GAS_DOORWAY_RANGE_MAX);
         assert!(expected_roll > 0);
 
-        let report = state.apply_town_poison_gas(TownPoisonGasEntry {
+        let poisoned = state.apply_town_poison_gas(TownPoisonGasEntry {
             scene: Scene::new(17).unwrap(),
             floor: 0,
             x: 0,
@@ -1148,7 +1150,38 @@
         assert_eq!(state.party[0].status, b'P');
         assert_eq!(state.party[1].status, b'P');
         assert_eq!(state.prng_state, expected_prng);
-        assert_eq!(report, "Party member 1 is poisoned!");
+        assert_eq!(poisoned, 1);
+        assert_eq!(state.message, "Poisoned!");
+    }
+
+    /// `town-mode.md §10`: "Skipped members and successful saves add no
+    /// text", and a failed save repaints the stats panel for that member.
+    #[test]
+    fn town_poison_gas_prints_nothing_when_every_save_succeeds() {
+        let entry = TownPoisonGasEntry {
+            scene: Scene::new(17).unwrap(),
+            floor: 0,
+            x: 0,
+            y: 1,
+            expected_tile: None,
+        };
+        let mut state = test_state(open_grid(), 0, 1);
+        state.prng_state = poison_gas_first_poison_seed();
+        state.party[0].status = b'G';
+        state.party[0].climb_stat = 29;
+        assert_eq!(state.apply_town_poison_gas(entry), 0);
+        assert_eq!(state.party[0].status, b'G');
+        assert!(state.message.is_empty(), "{}", state.message);
+
+        let mut state = test_state(open_grid(), 0, 1);
+        state.prng_state = poison_gas_first_poison_seed();
+        state.party[0].status = b'G';
+        state.party[0].climb_stat = 0;
+        state.repaint_stats_panel();
+        let before = state.stats_panel.clone();
+        assert_eq!(state.apply_town_poison_gas(entry), 1);
+        assert_eq!(state.message, "Poisoned!");
+        assert_ne!(state.stats_panel, before, "the panel is repainted");
     }
 
     /// `town-mode.md §17` "Underfoot-effect cadence is fixed": "The underfoot
@@ -1234,7 +1267,7 @@
             "the passed turn consumed a save roll",
         );
         assert!(
-            state.message.contains("is poisoned!"),
+            state.message.contains("Poisoned!"),
             "the gas report is appended to the pass line: {}",
             state.message,
         );
@@ -1394,6 +1427,41 @@
         assert_eq!(state.party[1].hp, 7, "Dead slots are not rolled or damaged");
         assert_eq!(state.party[1].status, CharacterStatus::Dead.save_byte());
         assert!(state.message.contains("A TRAPDOOR!"));
+        let _ = fs::remove_dir_all(dir);
+    }
+
+    /// `town-mode.md §10`: after a floor change "the handler re-reads the
+    /// tile under the party's new position and applies that tile's effect
+    /// too, so chained effects within one turn are possible". A landing on
+    /// another trapdoor falls again in the same turn.
+    #[test]
+    fn town_trapdoor_landing_on_a_trapdoor_falls_again_in_the_same_turn() {
+        let dir = debug_game_dir();
+        let scene = Scene::new(17).unwrap();
+        // Base page 5 is floor 0, so floor -1 is page 4 and floor -2 page 3.
+        let mut pages = location_pages();
+        pages[4 * 1024 + 1] = TOWN_TRAPDOOR_LIVE_TILE;
+        fs::write(dir.join("CASTLE.DAT"), pages).unwrap();
+        fs::write(dir.join(LOCATION_FLOOR_TABLE_FILE), "CASTLE:0 5\n").unwrap();
+        let mut grid = open_grid();
+        grid[1] = TOWN_TRAPDOOR_LIVE_TILE;
+        let mut state = test_state(grid, 0, 0);
+        state.party[0].hp = 40;
+        state.party[0].max_hp = 40;
+
+        assert_eq!(
+            handle_play_key_input(&mut state, 'd', "", &dir).unwrap(),
+            PlayInputDisposition::Continue
+        );
+
+        assert_eq!(state.area, Area::Town { scene, floor: -2 });
+        assert_eq!(state.turn, 1, "the chain stays inside one turn");
+        assert!(
+            (24..=38).contains(&state.party[0].hp),
+            "two independent 1..8 rolls: {}",
+            state.party[0].hp
+        );
+        assert_eq!(state.message.matches("A TRAPDOOR!").count(), 2);
         let _ = fs::remove_dir_all(dir);
     }
 

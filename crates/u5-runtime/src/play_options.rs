@@ -113,6 +113,10 @@ pub struct PlayOptions {
     pub initial_britannia_overlay: Option<Vec<ActiveObject>>,
     pub debug_enter: Option<PlayTarget>,
     pub saved_active_objects: Option<Vec<ActiveObject>>,
+    /// `formats/saved-gam.md §12`: the live NPC family decoded from the
+    /// `0x07B4..0x105F` band of a town-family save, which the preserving
+    /// entry restores verbatim instead of re-initialising from the roster.
+    pub saved_npc_band: Option<Vec<RuntimeNpc>>,
     pub town_npc_mutations: Vec<TownNpcMutation>,
     pub save_template_source: SaveTemplateSource,
 }
@@ -196,6 +200,7 @@ impl Default for PlayOptions {
             initial_britannia_overlay: None,
             debug_enter: None,
             saved_active_objects: None,
+            saved_npc_band: None,
             town_npc_mutations: Vec::new(),
             save_template_source: SaveTemplateSource::PreferSavedGame,
         }

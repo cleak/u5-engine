@@ -22,8 +22,9 @@
             .find(|object| object.type_byte == 192)
             .unwrap();
         assert_eq!((object.x, object.y), (4, 5));
-        // `active-objects.md §8`: the walker's only record writes on a
-        // committed step are the position and the packed facing. The engine
+        // `active-objects.md §8`: the walker's only record write on a
+        // committed step is the position; byte 6 carries no facing (§3,
+        // R340). The engine
         // used to reseed the phase's low nibble to two here, which is the
         // "do I move at all" pacing the section denies outdoors; the
         // countdown nibble is the animator's and is left alone.
@@ -67,8 +68,9 @@
             (state.active_objects[2].x, state.active_objects[2].y),
             (6, 4)
         );
+        // `active-objects.md §3`: no facing is written into byte 6.
         assert_eq!(state.active_objects[1].phase, 0x60);
-        assert_eq!(state.active_objects[2].phase, 0x00);
+        assert_eq!(state.active_objects[2].phase, 0x20);
     }
 
     #[test]
@@ -228,7 +230,8 @@
             .find(|object| object.type_byte == 192)
             .unwrap();
         assert_eq!((object.x, object.y), (5, 4));
-        assert_eq!(object.phase, 0x00);
+        // `active-objects.md §3`: no facing is written into byte 6.
+        assert_eq!(object.phase, 0x60);
 
         let mut player_blocked = world_state(open_world_grid(), 4, 5);
         player_blocked.active_objects.push(ActiveObject {
