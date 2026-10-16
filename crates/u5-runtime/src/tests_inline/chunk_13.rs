@@ -25866,6 +25866,70 @@ fn direction_result_continues_the_echoed_verb_line() {
     assert!(entries[0].text.len() > "Open-".len());
 }
 
+/// `commands.md §3`/§7: `G`, `S`, `O` and `J` report the default "acted"
+/// after every exit, misses and refusals included, so the inline-direction
+/// form takes the same one turn the prompted form does - and the charge must
+/// not split the handler's result off the echoed verb row (audit A054).
+#[test]
+fn inline_direction_tile_commands_charge_the_acted_exit_turn() {
+    for key in ['G', 'J', 'O', 'S'] {
+        let mut state = test_state(open_grid(), 5, 5);
+        let turn_before = state.turn;
+        assert!(
+            state
+                .handle_top_down_key_with_inline(
+                    key,
+                    Path::new(""),
+                    Some(Direction::North),
+                    None,
+                    None,
+                    None,
+                )
+                .unwrap()
+        );
+        if state.active_jimmy.is_some() || state.active_party_selector.is_some() {
+            // A picker is still open; the charge belongs to its exit.
+            continue;
+        }
+        assert_eq!(
+            state.turn,
+            turn_before + 1,
+            "{key}: the inline form reports acted; transcript {:?}",
+            transcript_texts(&state)
+        );
+        let entries = state.message_entries();
+        assert!(entries[0].is_command_echo, "{key}: {:?}", transcript_texts(&state));
+    }
+
+    // When the charged turn's epilogue prints - here the town burning arm of
+    // `town-mode.md §10` - the handler's result must already sit on the
+    // echoed verb row, as `direction_result_continues_the_echoed_verb_line`
+    // pins, and the epilogue line follows on its own row.
+    let mut grid = open_grid();
+    grid[5 * 32 + 5] = PlayState::TOWN_BURNING_FIREPLACE_TILE;
+    let mut state = test_state(grid, 5, 5);
+    let turn_before = state.turn;
+    assert!(
+        state
+            .handle_top_down_key_with_inline(
+                'O',
+                Path::new(""),
+                Some(Direction::North),
+                None,
+                None,
+                None,
+            )
+            .unwrap()
+    );
+    assert_eq!(state.turn, turn_before + 1);
+    let rows = transcript_texts(&state);
+    assert!(
+        rows[0].starts_with("Open-") && rows[0].len() > "Open-".len(),
+        "the result stays on the echoed verb row: {rows:?}"
+    );
+    assert_eq!(rows.get(1).map(String::as_str), Some(PlayState::TOWN_BURNING_MESSAGE));
+}
+
 #[test]
 fn use_item_echo_puts_the_item_prompt_on_the_next_line() {
     // Observed: `>Use item` then `Item: <name>` on the following row.
