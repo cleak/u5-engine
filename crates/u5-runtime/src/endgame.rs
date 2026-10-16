@@ -213,6 +213,10 @@ pub struct EndgameState {
     /// `endgame.md §4`/`§7`: Lord British enters first, walking from
     /// `(5,8)` to `(5,3)` before party-slot placement begins.
     pub entry_lord_british_pending: bool,
+    /// `audio.md §8.7`'s "fixed 40-tick pause after Lord British appears",
+    /// still owed before his first step. See
+    /// [`ENDGAME_TABLEAU_LORD_BRITISH_ARRIVAL_HOLD_BIOS_TICKS`].
+    pub entry_lord_british_pause_owed: bool,
     /// `endgame.md §4`: next party slot owned by the entry setup loop.
     /// The loop fully restores (when needed), places, and walks one member
     /// before advancing to the next. [`ENDGAME_ENTRY_COMPLETE_SLOT`] means
@@ -367,6 +371,7 @@ impl EndgameState {
             final_narrative: None,
             entry_restoration_beats: 0,
             entry_lord_british_pending: false,
+            entry_lord_british_pause_owed: false,
             entry_party_slot: ENDGAME_ENTRY_COMPLETE_SLOT,
             victory_tableau_phase: EndgameVictoryTableauPhase::Inactive,
             greeting_page_pending: false,
@@ -392,6 +397,7 @@ impl EndgameState {
             final_narrative: None,
             entry_restoration_beats: 0,
             entry_lord_british_pending: false,
+            entry_lord_british_pause_owed: false,
             entry_party_slot: ENDGAME_ENTRY_COMPLETE_SLOT,
             victory_tableau_phase: EndgameVictoryTableauPhase::Inactive,
             greeting_page_pending: false,
@@ -430,6 +436,7 @@ impl EndgameState {
                 .flatten(),
             entry_restoration_beats: 0,
             entry_lord_british_pending: false,
+            entry_lord_british_pause_owed: false,
             entry_party_slot: ENDGAME_ENTRY_COMPLETE_SLOT,
             victory_tableau_phase: EndgameVictoryTableauPhase::Inactive,
             greeting_page_pending: false,
@@ -1210,8 +1217,8 @@ pub const ENDGAME_TABLEAU_STING_HOLD_BIOS_TICKS: u16 =
     (ENDGAME_TABLEAU_STING_LEADING_TICKS + ENDGAME_TABLEAU_STING_TRAILING_TICKS) as u16;
 
 /// `audio.md §8.7`: "plus ... the fixed 40-tick pause after Lord British
-/// appears" - paid once, when his walk to the throne target completes,
-/// before the party members' own walks begin.
+/// appears" - paid once, with him on stage at his starting cell and before
+/// his first step (measured; see `advance_endgame_entry_tableau_step`).
 pub const ENDGAME_TABLEAU_LORD_BRITISH_ARRIVAL_HOLD_BIOS_TICKS: u16 = 40;
 
 /// `audio.md §8.7`: "Each member also has a separate one-tick placement
@@ -1344,6 +1351,7 @@ impl PlayState {
             .min(u8::MAX as usize) as u8;
         endgame.entry_party_slot = 0;
         endgame.entry_lord_british_pending = true;
+        endgame.entry_lord_british_pause_owed = true;
         self.endgame = Some(endgame);
         self.message.clear();
         MoveOutcome::EndgameEntered
@@ -1463,6 +1471,25 @@ impl PlayState {
                 .as_ref()
                 .is_some_and(|endgame| endgame.entry_lord_british_pending)
             {
+                // `audio.md §8.7`: "the fixed 40-tick pause after Lord
+                // British appears" - once, on stage at his starting cell and
+                // before his first step. Measured 2026-10-16 over
+                // `doom-endgame-audio` (two runs, one-member party): the
+                // original goes silent for about 3.8-3.9 s after the
+                // absorption snap and then plays Lord British's five stings,
+                // the member's placement tick and the member's four stings
+                // as one unbroken train. This engine had paid the pause
+                // after his walk instead, splitting the train in two.
+                if let Some(endgame) = self.endgame.as_mut()
+                    && endgame.entry_lord_british_pause_owed
+                {
+                    endgame.entry_lord_british_pause_owed = false;
+                    self.staged_narration.push_ticks(
+                        ENDGAME_TABLEAU_LORD_BRITISH_ARRIVAL_HOLD_BIOS_TICKS,
+                        String::new(),
+                    );
+                    return true;
+                }
                 if self.step_endgame_tableau_slot_once_with_sting(
                     ENDGAME_TABLEAU_LORD_BRITISH_SLOT,
                     ENDGAME_TABLEAU_LORD_BRITISH_THRONE_TARGET,
@@ -1475,13 +1502,6 @@ impl PlayState {
                         });
                     if arrived && let Some(endgame) = self.endgame.as_mut() {
                         endgame.entry_lord_british_pending = false;
-                        // `audio.md §8.7`: "the fixed 40-tick pause after
-                        // Lord British appears" - once, right after his
-                        // walk to the throne target completes.
-                        self.staged_narration.push_ticks(
-                            ENDGAME_TABLEAU_LORD_BRITISH_ARRIVAL_HOLD_BIOS_TICKS,
-                            String::new(),
-                        );
                     }
                     return true;
                 }
@@ -1548,7 +1568,7 @@ impl PlayState {
                 // `audio.md §8.7`: "Each member also has a separate
                 // one-tick placement pause before walking."
                 self.staged_narration
-                    .push_ticks(ENDGAME_TABLEAU_PLACEMENT_HOLD_BIOS_TICKS, String::new());
+                    .push_ticks_chained(ENDGAME_TABLEAU_PLACEMENT_HOLD_BIOS_TICKS);
                 return true;
             }
 
@@ -1945,7 +1965,7 @@ impl PlayState {
             // Seventeen is also §8.7's own count for a three-member party,
             // which is what that save carries.
             self.staged_narration
-                .push_ticks(ENDGAME_TABLEAU_STING_HOLD_BIOS_TICKS, String::new());
+                .push_ticks_chained(ENDGAME_TABLEAU_STING_HOLD_BIOS_TICKS);
         } else {
             self.animation.tick_static_tiles();
         }

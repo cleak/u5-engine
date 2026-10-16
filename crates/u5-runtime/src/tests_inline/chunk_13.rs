@@ -19020,6 +19020,7 @@ fn doom_final_room_trigger_enters_endgame_without_room_rewrite() {
     assert_eq!(state.turn, 0);
     let mut expected = EndgameState::awaiting_first_confirmation();
     expected.entry_lord_british_pending = true;
+    expected.entry_lord_british_pause_owed = true;
     expected.entry_party_slot = 0;
     assert_eq!(state.endgame, Some(expected));
     assert!(state.message.is_empty());
@@ -19780,6 +19781,9 @@ fn enter_endgame_restores_dead_party_for_tableau() {
 
     assert_eq!(state.party[0].status, b'D');
     assert_eq!(state.party[0].hp, 0);
+    // `audio.md §8.7`'s forty-tick pause after Lord British appears takes
+    // the first pumped frame, before his first step.
+    assert!(state.advance_endgame_entry_presentation());
     for expected_y in (3..=7).rev() {
         assert!(state.advance_endgame_entry_presentation());
         assert_eq!(
@@ -24573,6 +24577,10 @@ fn enter_endgame_rebuilds_active_objects_as_terminal_tableau() {
     assert!(state.endgame_entry_presentation_pending());
     assert!(!state.endgame_tableau_is_settled());
     assert!(state.active_objects[0].is_empty());
+    // `audio.md §8.7`'s forty-tick pause after Lord British appears takes
+    // the first pumped frame, before his first step.
+    assert!(state.advance_endgame_entry_presentation());
+    assert!(state.active_objects[0].is_empty());
     assert!(state.advance_endgame_entry_presentation());
     assert!(state.active_objects[0].is_empty());
     assert_eq!(
@@ -24733,6 +24741,9 @@ fn endgame_entry_restores_announces_places_and_walks_each_member_in_slot_order()
     state.enter_endgame();
 
     // Lord British walks to the throne row before any party slot is placed.
+    // `audio.md §8.7`'s forty-tick pause after Lord British appears takes
+    // the first pumped frame, before his first step.
+    assert!(state.advance_endgame_entry_presentation());
     for expected_y in (3..=7).rev() {
         assert!(state.advance_endgame_entry_presentation());
         assert_eq!(

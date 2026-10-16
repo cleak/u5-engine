@@ -25,6 +25,13 @@ use std::collections::VecDeque;
 /// The ~55 ms BIOS tick of `timing.md §4`, as seconds.
 pub const BIOS_TICK_SECS: f64 = 65_536.0 / 1_193_182.0;
 
+/// The longest gap between one beat's release and a chained push's first
+/// look that still counts as the same presentation stepping on. A frontend
+/// handoff is a frame or two plus one world-tick pump interval (about 55 ms);
+/// a quarter second leaves room for a slow host frame and is still shorter
+/// than any gap a player could put between two presentations.
+pub const CHAIN_HANDOFF_LIMIT_SECS: f64 = 0.25;
+
 /// A published BIOS-tick count as a delay in seconds.
 pub fn bios_ticks_secs(ticks: u16) -> f64 {
     f64::from(ticks) * BIOS_TICK_SECS
@@ -43,6 +50,12 @@ pub struct NarrationBeat {
     /// fresh one, and no fresh row is drawn while it waits. Stated by the
     /// producer: the row state is not inferable from the text.
     pub continues_open_row: bool,
+    /// The wait runs from when the previous released beat was *due* rather
+    /// than from the frontend's first look at this one. For a presentation
+    /// loop whose step pushes its own next hold - the endgame tableau walk -
+    /// the frames between a release and the next push are not time the
+    /// original spends; see [`StagedNarration::push_ticks_chained`].
+    pub chained: bool,
 }
 
 /// The queue plus how far into the current beat's wait we are.
@@ -53,6 +66,9 @@ pub struct StagedNarration {
     /// advance after the head becomes current, which is what makes the queue
     /// start its wait from the frontend's clock rather than from zero.
     due_at_secs: Option<f64>,
+    /// When the most recently released beat was due, kept after the queue
+    /// empties so a [`NarrationBeat::chained`] push can continue from it.
+    last_due_secs: Option<f64>,
 }
 
 impl StagedNarration {
@@ -70,6 +86,7 @@ impl StagedNarration {
             delay_secs,
             text: text.into(),
             continues_open_row: false,
+            chained: false,
         });
     }
 
@@ -80,6 +97,7 @@ impl StagedNarration {
             delay_secs,
             text: text.into(),
             continues_open_row: true,
+            chained: false,
         });
     }
 
@@ -95,9 +113,37 @@ impl StagedNarration {
         self.push_secs(bios_ticks_secs(delay_bios_ticks), text);
     }
 
+    /// Push a pure hold of a published BIOS-tick count whose wait continues
+    /// from the previous beat's due time.
+    ///
+    /// `audio.md §8.7`: each tableau step is "two shared world-animation
+    /// ticks, the short two-part sting ..., then three more", and the next
+    /// step follows directly - the train's stepping time is "the sting count
+    /// times five BIOS ticks". The engine's step runs on a frame after the
+    /// previous hold releases, and an ordinary push would start its wait
+    /// from the first look after that, so every step paid the frontend's
+    /// handoff on top of its five ticks. Measured 2026-10-15 over
+    /// `doom-endgame-audio`: a 350 ms median sting spacing against the
+    /// original's 280 ms.
+    ///
+    /// The chain only holds across a handoff of at most
+    /// [`CHAIN_HANDOFF_LIMIT_SECS`]. A previous due time further back than
+    /// that belongs to some earlier sequence, and anchoring to it would
+    /// collapse the new hold into a catch-up burst, so the wait then starts
+    /// at the first look as usual.
+    pub fn push_ticks_chained(&mut self, delay_bios_ticks: u16) {
+        self.beats.push_back(NarrationBeat {
+            delay_secs: bios_ticks_secs(delay_bios_ticks),
+            text: String::new(),
+            continues_open_row: false,
+            chained: true,
+        });
+    }
+
     pub fn clear(&mut self) {
         self.beats.clear();
         self.due_at_secs = None;
+        self.last_due_secs = None;
     }
 
     /// Advance to an absolute clock reading and return every beat whose wait
@@ -110,9 +156,13 @@ impl StagedNarration {
     pub fn advance_to(&mut self, now_secs: f64) -> Vec<NarrationBeat> {
         let mut released = Vec::new();
         while let Some(beat) = self.beats.front() {
+            let anchor = match self.last_due_secs {
+                Some(last) if beat.chained && now_secs - last <= CHAIN_HANDOFF_LIMIT_SECS => last,
+                _ => now_secs,
+            };
             let due = *self
                 .due_at_secs
-                .get_or_insert_with(|| now_secs + beat.delay_secs);
+                .get_or_insert_with(|| anchor + beat.delay_secs);
             if now_secs < due {
                 break;
             }
@@ -121,6 +171,7 @@ impl StagedNarration {
             // the frontend noticed: a late frame must not stretch the
             // sequence beat by beat.
             self.due_at_secs = self.beats.front().map(|next| due + next.delay_secs);
+            self.last_due_secs = Some(due);
             released.push(beat);
         }
         released
@@ -131,6 +182,7 @@ impl StagedNarration {
     /// pump.
     pub fn drain_all(&mut self) -> Vec<NarrationBeat> {
         self.due_at_secs = None;
+        self.last_due_secs = None;
         self.beats.drain(..).collect()
     }
 }
@@ -283,5 +335,63 @@ mod rescue_pacing_tests {
         assert_eq!(released.len(), 2);
         assert_eq!(released[0].text, "");
         assert_eq!(released[1].text, "after the sweep");
+    }
+
+    /// A chained hold pushed a few frames after the previous one released
+    /// runs from that release's due time, so a presentation stepping on
+    /// frames keeps exact five-tick spacing.
+    #[test]
+    fn a_chained_hold_continues_from_the_previous_due_time() {
+        let mut queue = StagedNarration::default();
+        queue.push_ticks_chained(5);
+        assert!(queue.advance_to(10.0).is_empty());
+        let first_due = 10.0 + bios_ticks_secs(5);
+        assert_eq!(queue.advance_to(first_due).len(), 1);
+
+        // The frontend steps 75 ms later and only then pushes the next hold.
+        queue.push_ticks_chained(5);
+        let handoff = first_due + 0.075;
+        assert!(queue.advance_to(handoff).is_empty());
+        let second_due = first_due + bios_ticks_secs(5);
+        assert!(queue.advance_to(second_due - 0.001).is_empty());
+        assert_eq!(queue.advance_to(second_due).len(), 1);
+    }
+
+    /// A chain anchor older than the handoff limit is an earlier sequence's, not a
+    /// handoff; the hold then waits its full time from the first look.
+    #[test]
+    fn a_stale_chain_anchor_is_ignored() {
+        let mut queue = StagedNarration::default();
+        queue.push_ticks(1, "earlier");
+        assert!(queue.advance_to(0.0).is_empty());
+        assert_eq!(queue.advance_to(1.0).len(), 1);
+
+        queue.push_ticks_chained(5);
+        assert!(queue.advance_to(30.0).is_empty());
+        assert!(
+            queue
+                .advance_to(30.0 + bios_ticks_secs(5) - 0.001)
+                .is_empty()
+        );
+        assert_eq!(queue.advance_to(30.0 + bios_ticks_secs(5)).len(), 1);
+    }
+
+    /// An ordinary push never chains, however recent the last release.
+    #[test]
+    fn an_unchained_push_waits_from_the_first_look() {
+        let mut queue = StagedNarration::default();
+        queue.push_ticks(5, "");
+        assert!(queue.advance_to(0.0).is_empty());
+        let first_due = bios_ticks_secs(5);
+        assert_eq!(queue.advance_to(first_due).len(), 1);
+        queue.push_ticks(5, "");
+        let look = first_due + 0.075;
+        assert!(queue.advance_to(look).is_empty());
+        assert!(
+            queue
+                .advance_to(look + bios_ticks_secs(5) - 0.001)
+                .is_empty()
+        );
+        assert_eq!(queue.advance_to(look + bios_ticks_secs(5)).len(), 1);
     }
 }

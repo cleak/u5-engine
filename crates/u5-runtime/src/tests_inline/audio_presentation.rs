@@ -382,10 +382,10 @@ fn endgame_restoration_sounds_once_per_restored_dead_member_and_nowhere_else() {
     // 6". Lord British's five steps and the party walks *are* that train.
     // This test previously read the section as naming no cue for them.
     //
-    // Ten frames, not nine: slot zero's own "separate one-tick placement
-    // pause before walking" (same section) now takes a pumped frame of
-    // its own, ahead of its four-step walk.
-    for _ in 0..10 {
+    // Eleven frames: the forty-tick pause after Lord British appears, his
+    // five steps, slot zero's own "separate one-tick placement pause before
+    // walking" (same section), and its four-step walk.
+    for _ in 0..11 {
         assert!(state.advance_endgame_entry_presentation());
     }
     let train = state.sound_effects_after(serial);
@@ -505,4 +505,57 @@ fn endgame_orb_sting_lands_on_the_acknowledgement_not_on_the_box_to_orb_swap() {
         }
     }
     assert_eq!(state.sound_effects_after(after_tableau), Vec::new());
+}
+
+#[test]
+fn endgame_lord_british_pauses_forty_ticks_on_stage_before_his_first_step() {
+    // audio.md §8.7: "the fixed 40-tick pause after Lord British appears".
+    // Measured over `doom-endgame-audio`: the original is silent for the
+    // pause straight after the absorption snap, then plays his five stings,
+    // the placement tick and the party walk as one unbroken train.
+    let mut state = test_state(open_grid(), 5, 5);
+    state.enter_endgame();
+    let serial = state.sound_effect_serial;
+    let start = (
+        state.active_objects[ENDGAME_TABLEAU_LORD_BRITISH_SLOT].x,
+        state.active_objects[ENDGAME_TABLEAU_LORD_BRITISH_SLOT].y,
+    );
+
+    assert!(state.advance_endgame_entry_presentation());
+    let lord_british = state.active_objects[ENDGAME_TABLEAU_LORD_BRITISH_SLOT];
+    assert_eq!((lord_british.x, lord_british.y), start);
+    assert!(state.sound_effects_after(serial).is_empty());
+    let holds: Vec<_> = state.staged_narration.beats().cloned().collect();
+    assert_eq!(holds.len(), 1);
+    assert_eq!(
+        holds[0].delay_secs,
+        crate::narration::bios_ticks_secs(ENDGAME_TABLEAU_LORD_BRITISH_ARRIVAL_HOLD_BIOS_TICKS)
+    );
+    assert!(holds[0].text.is_empty());
+
+    // Once the pause has been paid he walks, one sting per step, and no
+    // second forty-tick pause follows his arrival.
+    state.staged_narration.drain_all();
+    for _ in 0..5 {
+        assert!(state.advance_endgame_entry_presentation());
+        let holds: Vec<_> = state.staged_narration.drain_all();
+        assert_eq!(holds.len(), 1);
+        assert_eq!(
+            holds[0].delay_secs,
+            crate::narration::bios_ticks_secs(ENDGAME_TABLEAU_STING_HOLD_BIOS_TICKS)
+        );
+    }
+    assert_eq!(
+        state
+            .sound_effects_after(serial)
+            .iter()
+            .filter(|effect| **effect == SoundEffect::EndgameTableauMovementSting)
+            .count(),
+        5
+    );
+    let lord_british = state.active_objects[ENDGAME_TABLEAU_LORD_BRITISH_SLOT];
+    assert_eq!(
+        (lord_british.x, lord_british.y),
+        ENDGAME_TABLEAU_LORD_BRITISH_THRONE_TARGET
+    );
 }
