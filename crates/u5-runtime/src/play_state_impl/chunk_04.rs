@@ -135,6 +135,22 @@ pub const fn shop_vendor_name_for_scene(dialog_id: u8, scene_byte: u8) -> Option
     None
 }
 
+/// `view.md §3` row 5c: "`58` Shame, `72` Destard, `91` Despise, `126`
+/// Wrong, `128` Doom, `156` Covetous, `239` Hythloth, `240` Deceit."
+fn sealed_dungeon_name_for_x(x: usize) -> Option<&'static str> {
+    Some(match x {
+        58 => "Shame",
+        72 => "Destard",
+        91 => "Despise",
+        126 => "Wrong",
+        128 => "Doom",
+        156 => "Covetous",
+        239 => "Hythloth",
+        240 => "Deceit",
+        _ => return None,
+    })
+}
+
 impl PlayState {
     /// Apply the primary tavern round's north-first table-setting rewrite.
     /// At either vertical edge the out-of-range lookup uses the town-grid
@@ -3529,7 +3545,7 @@ impl PlayState {
                 }
                 self.message = format!(
                     "{LOOK_RESULT_PREFIX}\n{}",
-                    self.look_description(tile, look_table)
+                    self.look_description(tile, look_table, x)
                 );
                 Ok(MoveOutcome::Observed)
             }
@@ -3589,8 +3605,7 @@ impl PlayState {
                 if surface_town_fountain_look_tile(tile) {
                     return Ok(self.start_surface_fountain_drink_prompt(direction));
                 }
-                let description =
-                    self.look_description_for_world_tile(tile, look_table, game_dir, plane, x, y)?;
+                let description = self.look_description(tile, look_table, x);
                 // `view.md §3`: "the shared \"thou dost see\" preamble is
                 // printed here" with the description on the next row, and
                 // `commands.md §8.1` has the look family never print "tile
@@ -3830,7 +3845,14 @@ impl PlayState {
         }
     }
 
-    pub fn look_description(&self, tile: u8, look_table: Option<&LookTable>) -> String {
+    /// `target_x` is the looked-at cell's map X, which selects the `0xDF`
+    /// dungeon name (`view.md §3` row 5c).
+    pub fn look_description(
+        &self,
+        tile: u8,
+        look_table: Option<&LookTable>,
+        target_x: usize,
+    ) -> String {
         let base = look_table
             .and_then(|table| {
                 table.description(tile as usize).filter(|description| {
@@ -3861,6 +3883,16 @@ impl PlayState {
             };
             match eternal_flame_word_for_scene(scene_byte) {
                 Some(word) => format!("{base} {word}"),
+                None => base,
+            }
+        } else if tile == WORD_OF_POWER_SEALED_TILE {
+            // `view.md §3` terrain-description row 5c: "Append a dungeon
+            // name chosen by the target cell's map X coordinate ... Any
+            // other X appends nothing." Keyed on X alone, in every
+            // surface/town scene; an appender row even when it appends
+            // nothing.
+            match sealed_dungeon_name_for_x(target_x) {
+                Some(name) => format!("{base} {name}"),
                 None => base,
             }
         } else {
@@ -3931,56 +3963,6 @@ impl PlayState {
             }
             Area::Dungeon { .. } => Ok(None),
         }
-    }
-
-    pub fn look_description_for_world_tile(
-        &self,
-        tile: u8,
-        look_table: Option<&LookTable>,
-        game_dir: Option<&Path>,
-        plane: WorldPlane,
-        x: usize,
-        y: usize,
-    ) -> io::Result<String> {
-        let base = self.look_description(tile, look_table);
-        if tile != 0xdf {
-            return Ok(base);
-        }
-        let Some(name) = self.world_dungeon_name_at(game_dir, plane, x, y, tile)? else {
-            return Ok(base);
-        };
-        Ok(format!("{base} ({name})"))
-    }
-
-    pub fn world_dungeon_name_at(
-        &self,
-        game_dir: Option<&Path>,
-        plane: WorldPlane,
-        x: usize,
-        y: usize,
-        tile: u8,
-    ) -> io::Result<Option<&'static str>> {
-        let Some(game_dir) = game_dir else {
-            return Ok(None);
-        };
-        Ok(effective_world_location_entries(game_dir)?
-            .into_iter()
-            .find_map(|entry| {
-                if entry.plane == plane
-                    && entry.x == x
-                    && entry.y == y
-                    && entry
-                        .expected_tile
-                        .map_or(true, |expected| expected == tile)
-                {
-                    match entry.target {
-                        PlayTarget::Dungeon(scene) => Some(scene.name()),
-                        _ => None,
-                    }
-                } else {
-                    None
-                }
-            }))
     }
 
     pub fn talk_facing_with_game_dir(&mut self, game_dir: &Path) -> io::Result<MoveOutcome> {

@@ -1025,19 +1025,19 @@ fn look_clock_tiles_append_twelve_hour_time_context() {
 
     state.clock = GameClock::new(0, 7).unwrap();
     assert_eq!(
-        state.look_description(0xfa, Some(&table)),
+        state.look_description(0xfa, Some(&table), 0),
         "a clock (12:07 AM)"
     );
 
     state.clock = GameClock::new(12, 0).unwrap();
     assert_eq!(
-        state.look_description(0xfa, Some(&table)),
+        state.look_description(0xfa, Some(&table), 0),
         "a clock (12:00 PM)"
     );
 
     state.clock = GameClock::new(23, 59).unwrap();
     assert_eq!(
-        state.look_description(0xfa, Some(&table)),
+        state.look_description(0xfa, Some(&table), 0),
         "a clock (11:59 PM)"
     );
 }
@@ -1057,20 +1057,14 @@ fn look_shrine_band_tiles_print_bare_description_without_shrine_appender() {
     let state = test_state(open_grid(), 1, 1);
 
     assert_eq!(
-        state.look_description(SHRINE_ALTAR_TILE_FIRST, Some(&table)),
+        state.look_description(SHRINE_ALTAR_TILE_FIRST, Some(&table), 0),
         "an altar"
     );
     assert_eq!(
-        state.look_description(SHRINE_ALTAR_TILE_LAST, Some(&table)),
+        state.look_description(SHRINE_ALTAR_TILE_LAST, Some(&table), 0),
         "an altar"
     );
-    let world = world_state(open_world_grid(), 0, 0);
-    assert_eq!(
-        world
-            .look_description_for_world_tile(0x19, Some(&table), None, WorldPlane::Britannia, 81, 207)
-            .unwrap(),
-        "a shrine"
-    );
+    assert_eq!(state.look_description(0x19, Some(&table), 81), "a shrine");
 }
 
 #[test]
@@ -1178,31 +1172,41 @@ fn world_look_uses_look2_description_for_wrapped_object() {
 }
 
 #[test]
-fn world_look_dungeon_mouth_appends_clean_location_name() {
-    let dir = debug_game_dir();
-    fs::write(
-        dir.join(LOOK2_DAT_FILE),
-        look2_bytes(&[(0xdf, "a dungeon mouth")]),
-    )
-    .unwrap();
-    fs::write(
-        dir.join(WORLD_LOCATION_TABLE_FILE),
-        "BRITANNIA 2 1 DUNGEON:3 0xdf\n",
-    )
-    .unwrap();
+fn world_look_dungeon_mouth_appends_name_keyed_on_target_x() {
+    // `view.md §3` row 5c (audit A008): the name is chosen by the target
+    // cell's X alone, with no location-table row and no game dir needed.
+    let table = parse_look2_dat(&look2_bytes(&[(0xdf, "a dungeon mouth")])).unwrap();
     let mut grid = open_world_grid();
-    grid[world_cell_index(2, 1)] = 0xdf;
-    let mut state = britannia_state(grid, 1, 1);
+    grid[world_cell_index(126, 1)] = 0xdf;
+    grid[world_cell_index(240, 1)] = 0xdf;
+    grid[world_cell_index(3, 1)] = 0xdf;
+
+    let mut state = britannia_state(grid.clone(), 125, 1);
     state.player.facing = Direction::East;
+    state
+        .look_direction_with_resources(Direction::East, Some(&table), None)
+        .unwrap();
+    assert!(state.message.ends_with("\na dungeon mouth Wrong"), "{:?}", state.message);
 
+    let mut state = britannia_state(grid.clone(), 239, 1);
+    state
+        .look_direction_with_resources(Direction::East, Some(&table), None)
+        .unwrap();
+    assert!(state.message.ends_with("\na dungeon mouth Deceit"), "{:?}", state.message);
+
+    let mut state = britannia_state(grid, 2, 1);
+    state
+        .look_direction_with_resources(Direction::East, Some(&table), None)
+        .unwrap();
+    assert!(state.message.ends_with("\na dungeon mouth"), "{:?}", state.message);
+
+    // The same arm serves town Look.
+    let state = test_state(open_grid(), 1, 1);
     assert_eq!(
-        state.look_facing_with_game_dir(&dir).unwrap(),
-        MoveOutcome::Observed
+        state.look_description(0xdf, Some(&table), 58),
+        "a dungeon mouth Shame"
     );
-
-    assert!(state.message.contains("a dungeon mouth (Wrong)"));
-    assert_eq!(state.turn, 1);
-    let _ = fs::remove_dir_all(dir);
+    assert_eq!(state.look_description(0xdf, Some(&table), 59), "a dungeon mouth");
 }
 
 #[test]
