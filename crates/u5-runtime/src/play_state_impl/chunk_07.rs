@@ -3518,7 +3518,7 @@ impl PlayState {
             }
 
             if self
-                .outdoor_first_phase_ranged_attack_detail(slot)
+                .outdoor_claimed_ranged_attack_detail(slot)
                 .is_some()
             {
                 reacted = true;
