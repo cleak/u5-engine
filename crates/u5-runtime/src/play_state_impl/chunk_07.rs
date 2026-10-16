@@ -4153,7 +4153,8 @@ impl PlayState {
         }
         // §9.2, first row: "AI 4 or 5 | Nonzero live dialogue | Enter the
         // shared conversation dispatcher for that NPC." The zero-dialogue
-        // case never reaches here - `town_adjacent_event_npc` drops it, as
+        // case never reaches here - the schedule pass records no event for
+        // it (`town_npc_contact_dialogue_allows`), as
         // §9.2's second row requires ("No contact event; continue movement
         // selection. This is not a fallback to combat").
         //
