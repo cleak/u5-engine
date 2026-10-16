@@ -811,6 +811,13 @@ pub fn find_label_position(bytes: &[u8], label: u8) -> Option<usize> {
     find_label_position_from(bytes, label, 0)
 }
 
+/// `conversation.md §7.7` / `formats/tlk.md §9`: a transfer to label `L`
+/// "rewinds to the start of the blob and scans forward for the byte `0x90`,
+/// checks whether the byte after it equals `L`, and resumes the stream
+/// immediately past `L` on a match". The bare label byte is not a
+/// declaration - it is also the GOTO code itself. The introducer's own
+/// argument span is skipped so an `0xFE` threshold byte of `0x90` cannot pair
+/// with its own target byte.
 fn find_label_position_excluding(
     bytes: &[u8],
     label: u8,
@@ -821,13 +828,13 @@ fn find_label_position_excluding(
         return None;
     }
     let mut pos = 0usize;
-    while pos < bytes.len() {
-        if pos >= exclude_start && pos < exclude_end {
+    while pos + 1 < bytes.len() {
+        if pos + 1 >= exclude_start && pos < exclude_end {
             pos = exclude_end;
             continue;
         }
-        if bytes[pos] == label {
-            return Some(pos + 1);
+        if bytes[pos] == TLK_CODE_LABEL_RECORD && bytes[pos + 1] == label {
+            return Some(pos + 2);
         }
         pos += 1;
     }
@@ -1085,6 +1092,8 @@ mod tests {
         let mut bytes = vec![TLK_CODE_IF_ELSE, target_label];
         bytes.extend_from_slice(&enc("then"));
         bytes.push(TLK_CODE_END_OF_RESPONSE);
+        // §7.7: the target is the `0x90 <label>` declaration.
+        bytes.push(TLK_CODE_LABEL_RECORD);
         bytes.push(0x91);
         bytes.extend_from_slice(&enc("else"));
         bytes.push(TLK_CODE_END_OF_RESPONSE);
@@ -1193,6 +1202,7 @@ mod tests {
         bytes.extend_from_slice(&enc("low"));
         bytes.push(TLK_CODE_END_OF_RESPONSE);
         let label_pos = bytes.len();
+        bytes.push(TLK_CODE_LABEL_RECORD);
         bytes.push(0x92);
         bytes.extend_from_slice(&enc("high"));
         bytes.push(TLK_CODE_END_OF_RESPONSE);
@@ -1212,6 +1222,7 @@ mod tests {
     #[test]
     fn label_transfer_lookup_uses_blob_start_not_current_cursor() {
         let bytes = [
+            TLK_CODE_LABEL_RECORD,
             0x92,
             b'e' | TLK_TEXT_XOR_MASK,
             b'a' | TLK_TEXT_XOR_MASK,
@@ -1223,11 +1234,41 @@ mod tests {
             0x01,
             0x92,
         ];
-        let branch_cursor = 10;
+        let branch_cursor = 11;
 
-        assert_eq!(find_label_position(&bytes, 0x92), Some(1));
-        assert_eq!(find_label_position_excluding(&bytes, 0x92, 8, 10), Some(1));
+        assert_eq!(find_label_position(&bytes, 0x92), Some(2));
+        assert_eq!(find_label_position_excluding(&bytes, 0x92, 9, 11), Some(2));
         assert_eq!(find_label_position_from(&bytes, 0x92, branch_cursor), None);
+    }
+
+    /// `conversation.md §7.7`: a transfer resumes past the `0x90 <label>`
+    /// declaration, never at a bare label byte - which is also the GOTO code
+    /// itself - and never pairs an `0xFE` threshold byte of `0x90` with the
+    /// introducer's own target byte.
+    #[test]
+    fn label_transfer_needs_the_0x90_declaration() {
+        let bytes = [0x92, TLK_CODE_IF_ELSE_ALT, TLK_CODE_LABEL_RECORD, 0x92];
+        assert_eq!(find_label_position_excluding(&bytes, 0x92, 2, 4), None);
+
+        let mut stream = vec![TLK_CODE_IF_ELSE, 0x93];
+        stream.extend_from_slice(&enc("then"));
+        stream.push(TLK_CODE_END_OF_RESPONSE);
+        stream.push(0x93);
+        stream.extend_from_slice(&enc("bare"));
+        stream.push(TLK_CODE_END_OF_RESPONSE);
+        stream.push(TLK_CODE_LABEL_RECORD);
+        stream.push(0x93);
+        stream.extend_from_slice(&enc("declared"));
+        stream.push(TLK_CODE_END_OF_RESPONSE);
+        let out = run_tlk_stream(
+            &stream,
+            &TlkRunInputs {
+                npc_slot: Some(1),
+                branch_flags: 1 << 1,
+                ..Default::default()
+            },
+        );
+        assert_eq!(out.text, "declared");
     }
 
     #[test]

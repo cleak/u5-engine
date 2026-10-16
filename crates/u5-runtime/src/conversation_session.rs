@@ -238,6 +238,9 @@ pub struct ConversationSession {
     /// Set for the duration of one step when a stream in it reached
     /// `0x84` RECRUIT-SPEAKER.
     recruit_speaker_pending: bool,
+    /// Labelled records currently executing after a GOTO, innermost last,
+    /// with the blob position each one was entered at.
+    label_records_running: Vec<(u8, usize)>,
 }
 
 impl ConversationSession {
@@ -251,6 +254,7 @@ impl ConversationSession {
             moral_standing: None,
             npc_slot: None,
             recruit_speaker_pending: false,
+            label_records_running: Vec::new(),
         }
     }
 
@@ -575,52 +579,145 @@ impl ConversationSession {
         ctx: &ConversationContext<'_>,
         ask_who_response: u8,
     ) -> ConversationSessionOutput {
+        let (_, field_starts) = self.blob_view();
+        let Some(&field_start) = field_starts.get(field_idx) else {
+            return ConversationSessionOutput::default();
+        };
+        self.run_blob_from(field_start + start, ctx, ask_who_response)
+    }
+
+    /// The loaded NPC blob as one byte string - the records joined by the
+    /// NUL terminators they were split at - and where each record starts.
+    ///
+    /// `conversation.md §7.7`: a label transfer "rewinds the stream pointer
+    /// to the start of the loaded NPC blob" and scans it for the `0x90
+    /// <label>` declaration, which shipped content always puts at the head
+    /// of a record. Running every stream against the whole blob is what lets
+    /// a transfer land in another record; each stream still ends at its own
+    /// NUL.
+    fn blob_view(&self) -> (Vec<u8>, Vec<usize>) {
+        let mut blob = Vec::new();
+        let mut starts = Vec::with_capacity(self.fields.len());
+        for (index, field) in self.fields.iter().enumerate() {
+            if index > 0 {
+                blob.push(0);
+            }
+            starts.push(blob.len());
+            blob.extend_from_slice(field);
+        }
+        (blob, starts)
+    }
+
+    /// The record holding blob position `pos`, and `pos` relative to it.
+    fn field_at(field_starts: &[usize], pos: usize) -> (usize, usize) {
+        let index = field_starts
+            .iter()
+            .rposition(|start| *start <= pos)
+            .unwrap_or(0);
+        (index, pos - field_starts.get(index).copied().unwrap_or(0))
+    }
+
+    fn run_blob_from(
+        &mut self,
+        start: usize,
+        ctx: &ConversationContext<'_>,
+        ask_who_response: u8,
+    ) -> ConversationSessionOutput {
+        let (blob, field_starts) = self.blob_view();
         let mut out = ConversationSessionOutput::default();
         let mut cursor = start;
-        while let Some(run) = self.fields.get(field_idx).map(|bytes| {
+        loop {
             let inputs = make_inputs(
                 ctx,
                 self.moral_standing.unwrap_or(ctx.moral_standing),
                 self.npc_slot,
                 ask_who_response,
             );
-            run_tlk_stream_from(bytes, cursor, &inputs)
-        }) {
-            self.absorb_run(field_idx, &run, ctx, &mut out);
-            let TlkRunStop::KeywordAlias(resume) = run.stop else {
-                break;
-            };
-
-            // `conversation.md §7.6`: `0x87` is positional. Skip the
-            // remainder of this record, any run of terminators, and the
-            // whole record that follows; run the record after that as a
-            // nested stream. Records arrive here already split, so the
-            // byte walk collapses to "two records on" — the blob's
-            // (keyword, response) pairing is what makes that land on the
-            // next keyword's response, which is the alias reading §7.6
-            // describes for shipped content.
-            let alias_target = field_idx + TLK_KEYWORD_ALIAS_RECORD_SKIP;
-            if alias_target < self.fields.len() {
-                let nested = self.run_field_from(alias_target, 0, ctx, 0);
-                // "If the nested stream signals stop, the outer stream
-                // stops too; otherwise the saved position is restored."
-                let nested_signalled_stop = nested.response_signalled_stop || nested.ended;
-                merge_session_output(&mut out, nested);
-                if nested_signalled_stop
-                    || !matches!(self.phase, ConversationSessionPhase::AwaitingKeyword)
-                {
+            let run = run_tlk_stream_from(&blob, cursor, &inputs);
+            self.absorb_run(&field_starts, &run, ctx, &mut out);
+            match run.stop {
+                TlkRunStop::KeywordAlias(resume) => {
+                    // `conversation.md §7.6`: `0x87` is positional. Skip the
+                    // remainder of this record, any run of terminators, and
+                    // the whole record that follows; run the record after
+                    // that as a nested stream. Records arrive here already
+                    // split, so the byte walk collapses to "two records on"
+                    // from the record the code sits in.
+                    let (alias_field, _) = Self::field_at(&field_starts, resume.saturating_sub(1));
+                    let alias_target = alias_field + TLK_KEYWORD_ALIAS_RECORD_SKIP;
+                    if alias_target < self.fields.len() {
+                        let nested = self.run_field_from(alias_target, 0, ctx, 0);
+                        // "If the nested stream signals stop, the outer
+                        // stream stops too; otherwise the saved position is
+                        // restored."
+                        let nested_signalled_stop = nested.response_signalled_stop || nested.ended;
+                        merge_session_output(&mut out, nested);
+                        if nested_signalled_stop
+                            || !matches!(self.phase, ConversationSessionPhase::AwaitingKeyword)
+                        {
+                            break;
+                        }
+                    }
+                    cursor = resume;
+                }
+                TlkRunStop::LabelTransfer(label) => {
+                    self.follow_label_transfer(&blob, label, run.consumed, ctx, &mut out);
                     break;
                 }
+                _ => break,
             }
-
-            cursor = resume;
         }
         out
     }
 
+    /// `conversation.md §7.7`: a `0x91..0x9F` byte "records the label byte,
+    /// rewinds the stream pointer to the start of the loaded NPC blob, and
+    /// enters the label handler", which finds the `0x90 <label>` declaration
+    /// and "resumes the stream immediately past the label byte". The record
+    /// found runs as an ordinary stream - §7.6's routing record, "Reached by
+    /// a GOTO from a keyword response", runs its own IF-ELSE, welcome line,
+    /// PAUSE and ASK-WHO - and only then can the labelled block's scoped
+    /// prompt open.
+    ///
+    /// `from` is the blob position just past the GOTO byte. A GOTO back to
+    /// the declaration whose record is executing is the block's own
+    /// sub-record separator ("inside labelled blocks, repeated label bytes
+    /// mark records and sub-records", `formats/tlk.md §9`), so the record
+    /// ends there rather than rewinding onto itself.
+    fn follow_label_transfer(
+        &mut self,
+        blob: &[u8],
+        label: u8,
+        from: usize,
+        ctx: &ConversationContext<'_>,
+        out: &mut ConversationSessionOutput,
+    ) {
+        let Some(resume) = find_label_declaration(blob, label) else {
+            return;
+        };
+        let entered_here = self
+            .label_records_running
+            .iter()
+            .any(|(running_label, entry)| *running_label == label && *entry <= from);
+        if !entered_here && self.label_records_running.len() < TLK_LABEL_TRANSFER_DEPTH_LIMIT {
+            let phase_before = self.phase;
+            self.label_records_running.push((label, resume));
+            let nested = self.run_blob_from(resume, ctx, 0);
+            self.label_records_running.pop();
+            let nested_signalled_stop = nested.response_signalled_stop || nested.ended;
+            merge_session_output(out, nested);
+            if nested_signalled_stop || self.phase != phase_before {
+                return;
+            }
+        }
+        if self.has_scoped_label_records(label) {
+            self.phase = ConversationSessionPhase::AwaitingScopedKeyword { label };
+        }
+    }
+
     fn absorb_run(
         &mut self,
-        field_idx: usize,
+        field_starts: &[usize],
         run: &TlkRunOutput,
         ctx: &ConversationContext<'_>,
         out: &mut ConversationSessionOutput,
@@ -642,18 +739,13 @@ impl ConversationSession {
         self.absorb_moral_standing(run, out);
         self.absorb_recruit_speaker(run, ctx, out);
         match run.stop {
-            TlkRunStop::AskingWho(cursor) => {
+            TlkRunStop::AskingWho(pos) => {
+                let (field_idx, cursor) = Self::field_at(field_starts, pos);
                 self.phase = ConversationSessionPhase::AwaitingAskWho { field_idx, cursor };
             }
             TlkRunStop::GoldPaymentRefused { .. } => {
                 self.phase = ConversationSessionPhase::AwaitingGoldRefusalKeyword;
             }
-            TlkRunStop::LabelTransfer(label) => {
-                if self.has_scoped_label_records(label) {
-                    self.phase = ConversationSessionPhase::AwaitingScopedKeyword { label };
-                }
-            }
-            TlkRunStop::EndOfStream | TlkRunStop::NulTerminator => {}
             _ => {}
         }
     }
@@ -759,8 +851,11 @@ impl ConversationSession {
         self.absorb_moral_standing(run, out);
         self.absorb_recruit_speaker(run, ctx, out);
         match run.stop {
-            TlkRunStop::LabelTransfer(label) if self.has_scoped_label_records(label) => {
-                self.phase = ConversationSessionPhase::AwaitingScopedKeyword { label };
+            TlkRunStop::LabelTransfer(label) => {
+                let (blob, _) = self.blob_view();
+                // A scoped response is not part of the blob, so no record
+                // it sits in can be the one being entered.
+                self.follow_label_transfer(&blob, label, 0, ctx, out);
             }
             TlkRunStop::GoldPaymentRefused { .. } => {
                 self.phase = ConversationSessionPhase::AwaitingGoldRefusalKeyword;
@@ -812,6 +907,23 @@ impl ConversationSession {
     }
 }
 
+/// Bound on nested label transfers inside one step. `conversation.md §7.7`
+/// allows fifteen labels per blob, so a deeper chain can only be a loop.
+const TLK_LABEL_TRANSFER_DEPTH_LIMIT: usize = 15;
+
+/// `conversation.md §7.7`: "the scan looks for `0x90`, checks whether the
+/// byte after it equals the active label, and on a match resumes the stream
+/// immediately past the label byte; otherwise it keeps scanning." Returns
+/// that resume position, scanning from the blob start.
+fn find_label_declaration(blob: &[u8], label: u8) -> Option<usize> {
+    if !is_tlk_label_byte(label) {
+        return None;
+    }
+    blob.windows(2)
+        .position(|pair| pair[0] == TLK_CODE_LABEL_RECORD && pair[1] == label)
+        .map(|pos| pos + 2)
+}
+
 fn merge_session_output(out: &mut ConversationSessionOutput, nested: ConversationSessionOutput) {
     out.text.push_str(&nested.text);
     out.rendered_glyphs.extend(nested.rendered_glyphs);
@@ -847,7 +959,11 @@ fn find_next_label_record(bytes: &[u8], label: u8, from: usize) -> Option<(usize
 }
 
 fn find_scoped_response_in_record(record: &[u8], label: u8, input_upper: &[u8]) -> Option<Vec<u8>> {
-    let mut segments = record
+    // The record's head - everything before its first repeated label byte -
+    // is the stream a GOTO runs (`follow_label_transfer`); the scoped
+    // keyword/response sub-records follow it.
+    let head_end = record.iter().position(|byte| *byte == label)?;
+    let mut segments = record[head_end + 1..]
         .split(|byte| *byte == label)
         .filter(|segment| !segment.is_empty());
     while let Some(keyword) = segments.next() {
@@ -1699,6 +1815,10 @@ mod tests {
         scoped.push(TLK_CODE_END_OF_RESPONSE);
         scoped.push(TLK_CODE_LABEL_RECORD);
         scoped.push(0x91);
+        // The record's head runs when the GOTO lands (§7.7); the repeated
+        // label then separates the scoped keyword sub-records.
+        scoped.extend_from_slice(&enc(" Pick one."));
+        scoped.push(0x91);
         scoped.extend_from_slice(&enc("APPLE"));
         scoped.push(0x91);
         scoped.extend_from_slice(&enc("Local answer."));
@@ -1725,7 +1845,7 @@ mod tests {
         s.present_greeting(&ctx());
 
         let first = s.submit_keyword("ask", &ctx());
-        assert_eq!(first.text, framed_response("Topic?"));
+        assert_eq!(first.text, framed_response("Topic? Pick one."));
         assert_eq!(
             s.phase,
             ConversationSessionPhase::AwaitingScopedKeyword { label: 0x91 }
@@ -1742,6 +1862,10 @@ mod tests {
         let mut scoped = enc("Topic?");
         scoped.push(0x91);
         scoped.push(TLK_CODE_LABEL_RECORD);
+        scoped.push(0x91);
+        // The record's head runs when the GOTO lands (§7.7); the repeated
+        // label then separates the scoped keyword sub-records.
+        scoped.extend_from_slice(&enc(" Pick one."));
         scoped.push(0x91);
         scoped.extend_from_slice(&enc("APPLE"));
         scoped.push(0x91);
@@ -1784,6 +1908,10 @@ mod tests {
         scoped.push(0x91);
         scoped.push(TLK_CODE_LABEL_RECORD);
         scoped.push(0x91);
+        // The record's head runs when the GOTO lands (§7.7); the repeated
+        // label then separates the scoped keyword sub-records.
+        scoped.extend_from_slice(&enc(" Pick one."));
+        scoped.push(0x91);
         scoped.extend_from_slice(&enc("APPLE"));
         scoped.push(0x91);
         scoped.extend_from_slice(&enc("Local answer."));
@@ -1823,6 +1951,10 @@ mod tests {
         scoped.push(0x91);
         scoped.push(TLK_CODE_LABEL_RECORD);
         scoped.push(0x91);
+        // The record's head runs when the GOTO lands (§7.7); the repeated
+        // label then separates the scoped keyword sub-records.
+        scoped.extend_from_slice(&enc(" Pick one."));
+        scoped.push(0x91);
         scoped.extend_from_slice(&enc("APPLE"));
         scoped.push(0x91);
         scoped.extend_from_slice(&enc("Local answer."));
@@ -1856,6 +1988,79 @@ mod tests {
         let fallback = s.submit_keyword("gran", &ctx());
         assert_eq!(fallback.text, "Top-level answer.");
         assert_eq!(s.phase, ConversationSessionPhase::AwaitingKeyword);
+    }
+
+    fn label_session(response: Vec<u8>, records: Vec<Vec<u8>>) -> ConversationSession {
+        let mut raw = vec![
+            enc("Ada"),
+            enc("a quiet smith"),
+            enc("Greetings."),
+            enc("I mend gear."),
+            enc("Farewell."),
+            enc("ASK"),
+            response,
+        ];
+        raw.extend(records);
+        let decoded = raw
+            .iter()
+            .map(|field| field.iter().map(|b| (b ^ TLK_TEXT_XOR_MASK) as char).collect())
+            .collect();
+        let mut s = ConversationSession::new(raw, decoded);
+        s.set_npc_slot(Some(3));
+        s.present_greeting(&ctx());
+        s
+    }
+
+    /// Audit A074. `conversation.md §7.6`/§7.7: a taken IF-ELSE "transfer[s]
+    /// to the labelled record named by its argument", found by rewinding to
+    /// the blob start and scanning for `0x90 <label>` - and shipped
+    /// declarations always open their own record, after a NUL.
+    #[test]
+    fn taken_if_else_lands_in_a_labelled_record_elsewhere_in_the_blob() {
+        let mut response = vec![TLK_CODE_IF_ELSE, 0x92];
+        response.extend(enc_with_stop("Who art thou?", TLK_CODE_END_OF_RESPONSE));
+        let mut record = vec![TLK_CODE_LABEL_RECORD, 0x92];
+        record.extend(enc_with_stop("Welcome back, friend.", TLK_CODE_END_OF_RESPONSE));
+        let mut s = label_session(response, vec![enc("OTHER"), record]);
+
+        let known = ConversationContext {
+            branch_flags: 1 << 3,
+            ..ctx()
+        };
+        let out = s.submit_keyword("ask", &known);
+        assert_eq!(out.text, framed_response("Welcome back, friend."));
+        assert_eq!(s.phase, ConversationSessionPhase::AwaitingKeyword);
+
+        let stranger = s.submit_keyword("ask", &ctx());
+        assert_eq!(stranger.text, framed_response("Who art thou?"));
+    }
+
+    /// Audit A074. §7.7: a GOTO "rewinds ... and enters the label handler",
+    /// which "resumes the stream immediately past the label byte". §7.6's
+    /// routing record is "Reached by a GOTO from a keyword response" and runs
+    /// its own welcome line and ASK-WHO, so the labelled record's bytes run.
+    #[test]
+    fn goto_runs_the_labelled_record_it_lands_on() {
+        let mut response = enc("Listen.");
+        response.push(0x93);
+        let mut record = vec![TLK_CODE_LABEL_RECORD, 0x93];
+        record.extend(enc(" Thou art welcome here."));
+        record.push(TLK_CODE_ASK_WHO);
+        record.extend(enc_with_stop("Good.", TLK_CODE_END_OF_RESPONSE));
+        let mut s = label_session(response, vec![enc("OTHER"), enc("x"), record]);
+
+        let out = s.submit_keyword("ask", &ctx());
+        assert!(
+            out.text.contains("Listen. Thou art welcome here."),
+            "{:?}",
+            out.text
+        );
+        let ConversationSessionPhase::AwaitingAskWho { field_idx, .. } = s.phase else {
+            panic!("the record's ASK-WHO is reached: {:?}", s.phase);
+        };
+        assert_eq!(field_idx, 9, "the prompt resumes inside the labelled record");
+        let answer = s.submit_keyword("", &ctx());
+        assert!(answer.text.contains("Good."), "{:?}", answer.text);
     }
 
     #[test]
