@@ -510,6 +510,48 @@ const INTRO_SUBTITLE_IGNITION_UNIT_SECS: f32 =
 /// line is held briefly before the attribution card replaces it. The
 /// capture in `cleak/u5-spec#78` shows an ~1 s eighteen-tick hold.
 const INTRO_PRESENTS_HOLD_BIOS_TICKS: u16 = 18;
+
+/// `systems/timing.md §5.1`: "a bounded poll of up to twenty BIOS ticks". The
+/// same bounded poll closes the `Presents` hold (after its eighteen
+/// unconditional ticks), holds the slot-8 ornament before the first signature
+/// stroke, and holds the finished composition. Each "returns as soon as a key
+/// arrives"; with no key it costs the full twenty ticks, about 1.1 s.
+const INTRO_TITLE_BOUNDED_POLL_BIOS_TICKS: u16 = 20;
+
+/// Visible phase 2 on an unskipped run: eighteen unconditional ticks, then
+/// the bounded poll — "about 2.1 s if the player does not press anything".
+const INTRO_PRESENTS_UNSKIPPED_HOLD_BIOS_TICKS: u16 =
+    INTRO_PRESENTS_HOLD_BIOS_TICKS + INTRO_TITLE_BOUNDED_POLL_BIOS_TICKS;
+
+/// `systems/timing.md §5.1`: "On a run where the flourish was aborted the
+/// hold is skipped entirely and the frame flashes past." One tick is the
+/// shortest interval that still presents the finished mark plus `Presents`
+/// once, which `intro.md §3` requires ("`Presents` is briefly visible either
+/// way").
+const INTRO_PRESENTS_SKIPPED_HOLD_BIOS_TICKS: u16 = 1;
+
+/// **Measured**, not published: the start/menu loader's step 1 (load the
+/// `ULTIMA` archive) runs while the finished composition is still on screen,
+/// because the visible page is only cleared at step 2. The spec gives the
+/// load no duration. Stock captures (forty paired runs, DOSBox at 3000
+/// cycles) show the composition for about 2.0 s from first appearance to the
+/// first dissolved logo pixel, against the 1.1 s of its bounded poll; this is
+/// the remaining ~0.9 s, rounded to whole BIOS ticks (16 x 54.9 ms = 0.88 s).
+/// Pending publication by the spec owner.
+const INTRO_START_MENU_ARCHIVE_LOAD_BIOS_TICKS: u16 = 16;
+
+/// Visible phase 5: the bounded poll, then the measured archive load.
+const INTRO_COMPOSITION_HOLD_BIOS_TICKS: u16 =
+    INTRO_TITLE_BOUNDED_POLL_BIOS_TICKS + INTRO_START_MENU_ARCHIVE_LOAD_BIOS_TICKS;
+
+/// Presentation slice of the animated gated logo reveal.
+///
+/// `display-driver-abi.md §9.6` lets a frontend animate successive prefixes of
+/// the dissolve as long as order and final raster are kept and no tick, input
+/// read or abort point is added; the slice length is a presentation choice.
+/// The duration is set by [`u5_runtime::GATED_DISSOLVE_MEASURED_CLICK_PERIOD_NANOS`],
+/// not by this slice: each slice publishes every checked visit due by its end.
+const INTRO_START_MENU_REVEAL_SLICE_NANOS: u64 = 20_000_000;
 /// Observation-derived (`cleak/u5-spec#70`): proportional text lines are 9
 /// pixel rows apart. Anchored to the runtime's measured stride.
 #[cfg(test)]
@@ -9654,6 +9696,7 @@ fn run_visual_intro_menu_app(
         title_signature_progress: 0,
         title_signature_complete: false,
         title_presents_hold_ticks: 0,
+        title_card_hold_ticks: 0,
         title_sequence_skipped: false,
         pending_auto_return_to_view: false,
         title_tick_frame: 0,
@@ -10145,6 +10188,13 @@ struct VisualIntroState {
     /// the finished mark plus the slot-7 "Presents" line, before the
     /// whole-page publish that starts the attribution card.
     title_presents_hold_ticks: u16,
+    /// `systems/intro.md §3` visible phases 3 and 5: BIOS ticks left in the
+    /// attribution card's bounded holds. While the signature is still
+    /// unfinished this is the slot-8 ornament hold before the first stroke;
+    /// once it is finished it is the finished-composition hold plus the
+    /// measured start/menu archive load before the logo reveal begins. Zero
+    /// on a skipped run, which leaves for the plain loader at the next tick.
+    title_card_hold_ticks: u16,
     /// `systems/intro.md §3` "player skipped the title sequence".
     /// Set by any keystroke during the flourish, the slot-7 hold, or
     /// the signature strokes. It selects the start/menu loader's
@@ -10222,6 +10272,10 @@ enum VisualIntroPanel {
         playback: u5_runtime::SubtitleIgnitionPlayback,
         publish_index: usize,
     },
+    /// `systems/intro.md §3` start/menu loader step 4 on the animated path:
+    /// the gated logo dissolve, presented as successive prefixes of its visit
+    /// order at the measured stock cadence before step 7's ignition.
+    StartMenuReveal(Box<StartMenuRevealState>),
     CharacterCreation {
         session: ChargenSession,
         input_line: String,
@@ -11369,8 +11423,14 @@ fn queue_start_menu_reveal_clicks(
     if pitches.is_empty() {
         return;
     }
+    // The carrier runs on between retunes, so each pitch sounds for the
+    // measured per-visit period and the run lasts exactly as long as the
+    // reveal is on screen.
     speaker.write(SpeakerEffect::always_audible_program(
-        u5_runtime::audio::dissolve_click_run(&pitches),
+        u5_runtime::audio::dissolve_click_run_at(
+            &pitches,
+            u5_runtime::GATED_DISSOLVE_MEASURED_CLICK_PERIOD_NANOS,
+        ),
     ));
 }
 
@@ -11512,6 +11572,9 @@ fn visual_intro_animation_interval(intro: &VisualIntroState) -> f32 {
             .expect("subtitle ignition interval requires a current publish");
         return subtitle_ignition_publish_interval(wait_units);
     }
+    if matches!(intro.panel, VisualIntroPanel::StartMenuReveal(_)) {
+        return INTRO_START_MENU_REVEAL_SLICE_NANOS as f32 / 1_000_000_000.0;
+    }
     let flourish_phase = matches!(intro.panel, VisualIntroPanel::Menu)
         && matches!(intro.dispatch.tick_title(), UnifiedMenuStep::PresentTitle)
         && !intro.title_flourish_complete;
@@ -11577,6 +11640,9 @@ fn advance_visual_intro_animation_tick(intro: &mut VisualIntroState) -> bool {
     if matches!(intro.panel, VisualIntroPanel::SubtitleIgnition { .. }) {
         return advance_visual_intro_subtitle_ignition(intro);
     }
+    if matches!(intro.panel, VisualIntroPanel::StartMenuReveal(_)) {
+        return advance_visual_intro_start_menu_reveal(intro);
+    }
     if matches!(intro.panel, VisualIntroPanel::Menu) {
         let mut advanced = false;
         let title_phase = matches!(intro.dispatch.tick_title(), UnifiedMenuStep::PresentTitle);
@@ -11624,21 +11690,34 @@ fn advance_visual_intro_animation_tick(intro: &mut VisualIntroState) -> bool {
             if next_step >= total_flourish_steps {
                 intro.title_flourish_complete = true;
                 // §3 step 2: hold the finished mark + "Presents"
-                // before the attribution card's whole-page publish.
-                intro.title_presents_hold_ticks = INTRO_PRESENTS_HOLD_BIOS_TICKS;
+                // before the attribution card's whole-page publish:
+                // eighteen unconditional ticks, then the bounded poll.
+                intro.title_presents_hold_ticks = INTRO_PRESENTS_UNSKIPPED_HOLD_BIOS_TICKS;
             } else {
                 intro.title_flourish_step = next_step;
             }
             advanced = true;
         } else if title_phase && visual_intro_presents_hold_active(intro) {
             intro.title_presents_hold_ticks -= 1;
-            if intro.title_presents_hold_ticks == 0 && intro.title_sequence_skipped {
-                // §3 step 2: on a skipped run the sequence ends here and
-                // the intro jumps straight to the start/menu load.
-                intro.title_signature_progress = 0;
-                intro.title_signature_complete = true;
-                finish_visual_intro_title_to_menu(intro, false);
+            if intro.title_presents_hold_ticks == 0 {
+                if intro.title_sequence_skipped {
+                    // §3 step 2: on a skipped run the sequence ends here and
+                    // the intro jumps straight to the start/menu load.
+                    intro.title_signature_progress = 0;
+                    intro.title_signature_complete = true;
+                    finish_visual_intro_title_to_menu(intro, false);
+                } else {
+                    // §3 step 3 publishes the slot-8 ornament alone, and
+                    // step 4 holds it with a bounded poll before the first
+                    // stroke (`timing.md §5.1`, visible phase 3).
+                    intro.title_card_hold_ticks = INTRO_TITLE_BOUNDED_POLL_BIOS_TICKS;
+                }
             }
+            advanced = true;
+        } else if title_phase && !intro.title_signature_complete && intro.title_card_hold_ticks > 0
+        {
+            // Visible phase 3: the ornament holds; no stroke advances.
+            intro.title_card_hold_ticks -= 1;
             advanced = true;
         } else if title_phase && !intro.title_signature_complete {
             let signature =
@@ -11655,12 +11734,21 @@ fn advance_visual_intro_animation_tick(intro: &mut VisualIntroState) -> bool {
             if next_progress >= total_steps {
                 intro.title_signature_progress = 0;
                 intro.title_signature_complete = true;
+                // §3 steps 5 and 6 publish the finished composition; visible
+                // phase 5 then holds it with a bounded poll, and the loader's
+                // archive load runs before the visible page is cleared.
+                intro.title_card_hold_ticks = INTRO_COMPOSITION_HOLD_BIOS_TICKS;
             } else {
                 intro.title_signature_progress = next_progress;
             }
             advanced = true;
         } else if title_phase && intro.title_signature_complete {
-            finish_visual_intro_title_to_menu(intro, false);
+            if intro.title_card_hold_ticks > 0 {
+                intro.title_card_hold_ticks -= 1;
+            }
+            if intro.title_card_hold_ticks == 0 {
+                begin_visual_intro_start_menu_loader(intro);
+            }
             advanced = true;
         }
         return advanced;
@@ -11805,22 +11893,19 @@ fn run_visual_intro_start_menu_loader(
     intro: &mut VisualIntroState,
     reveal_key_pending: bool,
 ) -> StartMenuLoaderOutcome {
-    const REVEAL_RECT: (u16, u16, u16, u16) = (0, 0, 319, 100);
-
     // Step 4. The animated call owns the driver's first-use abort gate. Its
     // status test is non-consuming, so a pending key first leaves exactly one
     // copied pixel. The loader then performs its ordinary consuming read,
     // downgrades only this by-value `animated` flag, and completes the same
     // rectangle with the plain copy. The caller's title skip flag is untouched.
-    let mut source = new_intro_display_buffer();
-    draw_visual_intro_start_menu_art_to_buffer(&mut source, &intro.game_dir, intro.raster_depth);
+    let source = visual_intro_start_menu_reveal_source(intro);
     let mut animated = !intro.title_sequence_skipped;
     let mut reveal_abort_key_consumed = false;
     let mut reveal_clicks: Vec<SoundEffect> = Vec::new();
     if animated {
         let report = intro.surface.dissolve_rect_from_with_pending_key(
             &source,
-            REVEAL_RECT,
+            u5_runtime::INTRO_START_MENU_REVEAL_RECT,
             u5_runtime::DissolveAbortGate::on_driver_load(),
             reveal_key_pending,
         );
@@ -11828,48 +11913,14 @@ fn run_visual_intro_start_menu_loader(
         if report.aborted_after.is_some() {
             reveal_abort_key_consumed = true;
             animated = false;
-            intro.surface.copy_rect_from(&source, REVEAL_RECT);
+            intro.surface.copy_rect_from(&source, u5_runtime::INTRO_START_MENU_REVEAL_RECT);
         }
     } else {
-        intro.surface.copy_rect_from(&source, REVEAL_RECT);
+        intro.surface.copy_rect_from(&source, u5_runtime::INTRO_START_MENU_REVEAL_RECT);
     }
 
     if animated {
-        // Step 7. `WD.BIT` is published (a raw 288x49 one-bit image,
-        // `formats/bit.md §4.3`) and the transition's mechanism is
-        // published too (`display-driver-abi.md`, dispatch `0x69`
-        // carry set: save the hidden surface, clear it, run a
-        // pseudo-random per-pixel reveal interleaved with idle-strip
-        // steps and a percussive effect, then restore the hidden
-        // surface). Public commits `12485b3` and `36780cb` fix the per-pass
-        // countdown, unpublished tails and corner fixups, draw-before-advance
-        // order, per-state keyboard polls, exact `0x3500` fourteen-bit walk,
-        // gate/publication vectors, burst totals, and 45/50-unit waits.
-        let lettering = u5_runtime::load_wd_bit(&intro.game_dir)
-            .unwrap_or_else(|err| panic!("intro animated start/menu path requires WD.BIT: {err}"));
-        assert_eq!(
-            (lettering.width, lettering.height),
-            (
-                u5_runtime::WD_BIT_LETTERING_COLUMNS as usize,
-                u5_runtime::WD_BIT_LETTERING_ROWS as usize
-            ),
-            "WD.BIT must be the published 288x49 lettering image"
-        );
-        let frames = ensure_title_tick_frames(intro).clone();
-        let playback = u5_runtime::build_subtitle_ignition_playback(
-            &frames,
-            &lettering,
-            intro.title_tick_frame,
-        )
-        .unwrap_or_else(|err| panic!("subtitle ignition could not be built: {err}"));
-        assert!(
-            !playback.publishes.is_empty(),
-            "subtitle ignition must publish at least one intermediate band"
-        );
-        intro.panel = VisualIntroPanel::SubtitleIgnition {
-            playback,
-            publish_index: 0,
-        };
+        begin_visual_intro_subtitle_ignition(intro);
     }
 
     StartMenuLoaderOutcome {
@@ -11879,11 +11930,175 @@ fn run_visual_intro_start_menu_loader(
     }
 }
 
+/// Loader step 3: the hidden surface carrying `ULTIMA` record 0 at `(0, 0)`,
+/// the source of step 4's transfer.
+fn visual_intro_start_menu_reveal_source(intro: &VisualIntroState) -> IntroDisplayBuffer {
+    let mut source = new_intro_display_buffer();
+    draw_visual_intro_start_menu_art_to_buffer(&mut source, &intro.game_dir, intro.raster_depth);
+    source
+}
+
+/// Loader step 7, animated path only.
+fn begin_visual_intro_subtitle_ignition(intro: &mut VisualIntroState) {
+    // `WD.BIT` is published (a raw 288x49 one-bit image, `formats/bit.md
+    // §4.3`) and the transition's mechanism is published too
+    // (`display-driver-abi.md`, dispatch `0x69` carry set: save the hidden
+    // surface, clear it, run a pseudo-random per-pixel reveal interleaved with
+    // idle-strip steps and a percussive effect, then restore the hidden
+    // surface). Public commits `12485b3` and `36780cb` fix the per-pass
+    // countdown, unpublished tails and corner fixups, draw-before-advance
+    // order, per-state keyboard polls, exact `0x3500` fourteen-bit walk,
+    // gate/publication vectors, burst totals, and 45/50-unit waits.
+    let lettering = u5_runtime::load_wd_bit(&intro.game_dir)
+        .unwrap_or_else(|err| panic!("intro animated start/menu path requires WD.BIT: {err}"));
+    assert_eq!(
+        (lettering.width, lettering.height),
+        (
+            u5_runtime::WD_BIT_LETTERING_COLUMNS as usize,
+            u5_runtime::WD_BIT_LETTERING_ROWS as usize
+        ),
+        "WD.BIT must be the published 288x49 lettering image"
+    );
+    let frames = ensure_title_tick_frames(intro).clone();
+    let playback =
+        u5_runtime::build_subtitle_ignition_playback(&frames, &lettering, intro.title_tick_frame)
+            .unwrap_or_else(|err| panic!("subtitle ignition could not be built: {err}"));
+    assert!(
+        !playback.publishes.is_empty(),
+        "subtitle ignition must publish at least one intermediate band"
+    );
+    intro.panel = VisualIntroPanel::SubtitleIgnition {
+        playback,
+        publish_index: 0,
+    };
+}
+
+/// The gated logo dissolve while it is on screen.
+///
+/// The original issues it as one blocking driver call that writes video
+/// memory as fast as the machine allows. `display-driver-abi.md §9.6` permits
+/// a frontend to present successive prefixes of the published visit order
+/// instead, provided order and final raster are kept and no tick, consuming
+/// read or abort point is added. The cadence is the measured stock one,
+/// [`u5_runtime::GATED_DISSOLVE_MEASURED_CLICK_PERIOD_NANOS`] per checked
+/// visit.
+#[derive(Debug)]
+struct StartMenuRevealState {
+    source: IntroDisplayBuffer,
+    order: u5_runtime::EgaDissolveState,
+    /// Presentation slices elapsed since the reveal began.
+    slices: u64,
+}
+
+impl StartMenuRevealState {
+    fn total_pixels(&self) -> usize {
+        self.order.total_pixels()
+    }
+
+    fn copied_pixels(&self) -> usize {
+        self.order.copied_pixels()
+    }
+
+    fn total_clicks(&self) -> u32 {
+        u5_runtime::gated_dissolve_click_count(self.total_pixels() as u32)
+    }
+
+    /// Copies the next pixel of the visit order onto `surface`.
+    fn copy_next(&mut self, surface: &mut IntroDisplayBuffer) -> bool {
+        let Some((x, y)) = self.order.next_pixel() else {
+            return false;
+        };
+        let index = y * surface.width + x;
+        surface.pixels[index] = self.source.pixels[index];
+        true
+    }
+}
+
+/// The start/menu loader as the title tick reaches it with the title sequence
+/// unskipped and no key pending: steps 1 to 3, then the animated step 4.
+/// A skipped run takes the plain loader at once.
+fn begin_visual_intro_start_menu_loader(intro: &mut VisualIntroState) {
+    if intro.title_sequence_skipped {
+        finish_visual_intro_title_to_menu(intro, false);
+        return;
+    }
+    intro.title_presents_hold_ticks = 0;
+    intro.title_card_hold_ticks = 0;
+    let source = visual_intro_start_menu_reveal_source(intro);
+    let (x0, y0, x1, y1) = u5_runtime::INTRO_START_MENU_REVEAL_RECT;
+    let order = u5_runtime::EgaDissolveState::new(u5_runtime::DisplayPixelRect {
+        x0: usize::from(x0),
+        y0: usize::from(y0),
+        x1: usize::from(x1),
+        y1: usize::from(y1),
+    });
+    // `audio.md §8.6.1`: the click run is fixed by driver-load state alone, so
+    // it is lowered once, as the one continuous program the voice needs, and
+    // sounds for as long as the reveal is on screen.
+    let mut gate = u5_runtime::DissolveAbortGate::on_driver_load();
+    for copied in 1..=order.total_pixels() as u32 {
+        if let Some(click) = gate.click_after_copy(copied) {
+            intro.pending_reveal_clicks.push(click);
+        }
+    }
+    // Step 2 clears the visible page; the dissolve then writes over black.
+    intro.surface.clear(0);
+    intro.panel = VisualIntroPanel::StartMenuReveal(Box::new(StartMenuRevealState {
+        source,
+        order,
+        slices: 0,
+    }));
+}
+
+/// One presentation slice of the gated logo dissolve: every checked visit due
+/// by the end of the slice is copied, with its unchecked partner.
+fn advance_visual_intro_start_menu_reveal(intro: &mut VisualIntroState) -> bool {
+    let VisualIntroPanel::StartMenuReveal(reveal) = &mut intro.panel else {
+        return false;
+    };
+    reveal.slices += 1;
+    let elapsed = reveal.slices.saturating_mul(INTRO_START_MENU_REVEAL_SLICE_NANOS);
+    let due_clicks = u5_runtime::gated_dissolve_clicks_due(elapsed, reveal.total_clicks());
+    let due_pixels = (due_clicks as usize * 2).min(reveal.total_pixels());
+    while reveal.copied_pixels() < due_pixels && reveal.copy_next(&mut intro.surface) {}
+    if reveal.copied_pixels() < reveal.total_pixels() {
+        return true;
+    }
+    intro.panel = VisualIntroPanel::Menu;
+    begin_visual_intro_subtitle_ignition(intro);
+    true
+}
+
+/// A key reaches the gated logo dissolve while it is on screen.
+///
+/// `display-driver-abi.md §9.6`: only checked visits (copies `1, 3, 5, ...`)
+/// test keyboard status, after their pixel is copied, so the transfer runs on
+/// to the next checked visit and stops there, partly transferred. The loader
+/// then consumes the key, completes the rectangle with the plain copy and
+/// skips ignition; the caller's skip flag is untouched, so the one automatic
+/// Return-to-View preview is still armed (`intro.md §3`).
+fn abort_visual_intro_start_menu_reveal(intro: &mut VisualIntroState) -> bool {
+    let VisualIntroPanel::StartMenuReveal(reveal) = &mut intro.panel else {
+        return false;
+    };
+    while reveal.copy_next(&mut intro.surface) {
+        if reveal.copied_pixels() % 2 == 1 {
+            break;
+        }
+    }
+    let source = reveal.source.clone();
+    intro.surface.copy_rect_from(&source, u5_runtime::INTRO_START_MENU_REVEAL_RECT);
+    intro.panel = VisualIntroPanel::Menu;
+    complete_visual_intro_start_menu_loader(intro);
+    true
+}
+
 fn finish_visual_intro_title_to_menu(
     intro: &mut VisualIntroState,
     reveal_key_pending: bool,
 ) -> StartMenuLoaderOutcome {
     intro.title_presents_hold_ticks = 0;
+    intro.title_card_hold_ticks = 0;
     let outcome = run_visual_intro_start_menu_loader(intro, reveal_key_pending);
     intro
         .pending_reveal_clicks
@@ -12211,6 +12426,12 @@ fn step_visual_intro(intro: &mut VisualIntroState, ch: char) -> bool {
             return false;
         }
     }
+    if matches!(intro.panel, VisualIntroPanel::StartMenuReveal(_)) {
+        // `systems/intro.md §3` step 4: the gated dissolve's status test
+        // finds the key, the loader's immediate read consumes it, and the
+        // rest of the loader runs plain. The key is spent here.
+        return abort_visual_intro_start_menu_reveal(intro);
+    }
     if !matches!(intro.panel, VisualIntroPanel::Menu) {
         return step_visual_intro_panel(intro, ch);
     }
@@ -12234,7 +12455,9 @@ fn step_visual_intro(intro: &mut VisualIntroState, ch: char) -> bool {
             // skipped.
             intro.title_flourish_step = title_flourish_total_steps() - 1;
             intro.title_flourish_complete = true;
-            intro.title_presents_hold_ticks = INTRO_PRESENTS_HOLD_BIOS_TICKS;
+            // `timing.md §5.1`: after an aborted flourish "the hold is
+            // skipped entirely and the frame flashes past".
+            intro.title_presents_hold_ticks = INTRO_PRESENTS_SKIPPED_HOLD_BIOS_TICKS;
             intro.title_sequence_skipped = true;
             return true;
         }
@@ -12252,12 +12475,13 @@ fn step_visual_intro(intro: &mut VisualIntroState, ch: char) -> bool {
             return true;
         }
         if !intro.title_signature_complete {
-            // A key during the strokes abandons the remaining segments
-            // but steps 5 and 6 still run, so the finished signature and
-            // the slot-9 line still appear.
+            // A key during the ornament hold or the strokes abandons the
+            // remaining segments but steps 5 and 6 still run, so the
+            // finished signature and the slot-9 line still appear.
             intro.title_sequence_skipped = true;
             intro.title_signature_progress = 0;
             intro.title_signature_complete = true;
+            intro.title_card_hold_ticks = 0;
             return true;
         }
         intro.title_tick_frame = 0;
@@ -12329,6 +12553,9 @@ fn step_visual_intro_panel(intro: &mut VisualIntroState, ch: char) -> bool {
         VisualIntroPanel::Menu => return false,
         VisualIntroPanel::SubtitleIgnition { .. } => {
             unreachable!("subtitle ignition input is handled before panel dispatch")
+        }
+        VisualIntroPanel::StartMenuReveal(_) => {
+            unreachable!("start/menu reveal input is handled before panel dispatch")
         }
         VisualIntroPanel::CharacterCreation {
             session,
@@ -12425,10 +12652,15 @@ fn cancel_visual_intro_panel(intro: &mut VisualIntroState) -> bool {
     // key, so the cell is blanked even though `Esc` is one of the keys
     // the menu's §6.2 dispatch ignores.
     intro.menu_cursor_blanked = true;
-    if matches!(intro.panel, VisualIntroPanel::SubtitleIgnition { .. }) {
+    if matches!(
+        intro.panel,
+        VisualIntroPanel::SubtitleIgnition { .. } | VisualIntroPanel::StartMenuReveal(_)
+    ) {
         // Escape reaches the same non-consuming ignition status poll as every
         // other key, so let the ordinary step finish the loader and offer the
         // byte to the menu rather than dropping it in this frontend shortcut.
+        // The logo reveal's status test is the same: Escape aborts it like
+        // any other key.
         return step_visual_intro(intro, '\x1b');
     }
     // `u4-transfer.md §6.5`: once the drive has been selected no key
@@ -12450,6 +12682,9 @@ fn cancel_visual_intro_panel(intro: &mut VisualIntroState) -> bool {
         VisualIntroPanel::Menu => None,
         VisualIntroPanel::SubtitleIgnition { .. } => {
             unreachable!("subtitle ignition Escape is handled above")
+        }
+        VisualIntroPanel::StartMenuReveal(_) => {
+            unreachable!("start/menu reveal Escape is handled above")
         }
         VisualIntroPanel::CharacterCreation { .. } => Some((
             IntroSubflow::CharacterCreation,
@@ -13003,6 +13238,13 @@ fn held_direction_repeat_command(
 fn summarize_intro(intro: &mut VisualIntroState) -> String {
     match &intro.panel {
         VisualIntroPanel::Menu => {}
+        VisualIntroPanel::StartMenuReveal(reveal) => {
+            return format!(
+                "Start/menu logo reveal: {} of {} pixels transferred.",
+                reveal.copied_pixels(),
+                reveal.total_pixels(),
+            );
+        }
         VisualIntroPanel::SubtitleIgnition {
             playback,
             publish_index,
@@ -13205,6 +13447,11 @@ fn format_story_art_line(file: &str, placement: IntroStoryArtPlacement) -> Strin
 fn render_intro_frame(intro: &mut VisualIntroState) -> Vec<u8> {
     if matches!(intro.panel, VisualIntroPanel::SubtitleIgnition { .. }) {
         return render_subtitle_ignition_intro_frame(intro);
+    }
+    if matches!(intro.panel, VisualIntroPanel::StartMenuReveal(_)) {
+        // The visible page itself: cleared at loader step 2 and carrying the
+        // dissolved prefix of the logo rectangle.
+        return intro.surface.to_rgba();
     }
     if matches!(intro.panel, VisualIntroPanel::ReturnToView { .. }) {
         return render_return_to_view_intro_frame(intro);
@@ -15964,6 +16211,7 @@ fn visual_intro_suite_state(
         title_signature_progress: 0,
         title_signature_complete: title_dismissed,
         title_presents_hold_ticks: 0,
+        title_card_hold_ticks: 0,
         title_sequence_skipped: false,
         pending_auto_return_to_view: false,
         title_tick_frame: 0,
@@ -19217,6 +19465,7 @@ mod tests {
             title_signature_progress: 0,
             title_signature_complete: false,
             title_presents_hold_ticks: 0,
+            title_card_hold_ticks: 0,
             title_sequence_skipped: false,
             pending_auto_return_to_view: false,
             title_tick_frame: 0,
@@ -19342,6 +19591,7 @@ mod tests {
             title_signature_progress: 0,
             title_signature_complete: true,
             title_presents_hold_ticks: 0,
+            title_card_hold_ticks: 0,
             title_sequence_skipped: false,
             pending_auto_return_to_view: false,
             title_tick_frame: 0,
@@ -19637,6 +19887,7 @@ mod tests {
             title_signature_progress: 0,
             title_signature_complete: false,
             title_presents_hold_ticks: 0,
+            title_card_hold_ticks: 0,
             title_sequence_skipped: false,
             pending_auto_return_to_view: false,
             title_tick_frame: 0,
@@ -19699,6 +19950,7 @@ mod tests {
             title_signature_progress: 0,
             title_signature_complete: false,
             title_presents_hold_ticks: 0,
+            title_card_hold_ticks: 0,
             title_sequence_skipped: false,
             pending_auto_return_to_view: false,
             title_tick_frame: 0,
@@ -20152,6 +20404,7 @@ mod tests {
             title_signature_progress: 0,
             title_signature_complete: true,
             title_presents_hold_ticks: 0,
+            title_card_hold_ticks: 0,
             title_sequence_skipped: false,
             pending_auto_return_to_view: false,
             title_tick_frame: 0,
@@ -20232,6 +20485,7 @@ mod tests {
             title_signature_progress: 0,
             title_signature_complete: true,
             title_presents_hold_ticks: 0,
+            title_card_hold_ticks: 0,
             title_sequence_skipped: false,
             pending_auto_return_to_view: false,
             title_tick_frame: 0,
@@ -20317,6 +20571,7 @@ mod tests {
             title_signature_progress: 0,
             title_signature_complete: false,
             title_presents_hold_ticks: 0,
+            title_card_hold_ticks: 0,
             title_sequence_skipped: false,
             pending_auto_return_to_view: false,
             title_tick_frame: 0,
@@ -20402,6 +20657,7 @@ mod tests {
             title_signature_progress: 0,
             title_signature_complete: true,
             title_presents_hold_ticks: 0,
+            title_card_hold_ticks: 0,
             title_sequence_skipped: false,
             pending_auto_return_to_view: false,
             title_tick_frame: 0,
@@ -20565,6 +20821,264 @@ mod tests {
         let _ = fs::remove_dir_all(dir);
     }
 
+    /// Drives the intro the way `drive_visual_intro` does - the phase's
+    /// interval, then the one-step-per-pump accumulator - at a fixed host
+    /// frame time, and returns the simulated seconds until `done` holds.
+    fn simulate_visual_intro_until(
+        intro: &mut VisualIntroState,
+        pump: &mut VisualIntroAnimationPump,
+        frame_secs: f32,
+        done: impl Fn(&VisualIntroState) -> bool,
+    ) -> f64 {
+        let mut elapsed = 0.0f64;
+        while !done(intro) {
+            pump.interval = visual_intro_animation_interval(intro);
+            if advance_intro_animation_pump(pump, frame_secs) {
+                advance_visual_intro_animation_tick(intro);
+            }
+            elapsed += f64::from(frame_secs);
+            assert!(elapsed < 120.0, "intro phase never ended: {}", summarize_intro(intro));
+        }
+        elapsed
+    }
+
+    /// `timing.md §5.1` phase by phase, from the flourish's first step to the
+    /// settled menu, on an unskipped run with no key. Published rates are
+    /// asserted exactly (to one host frame); the two measured constants are
+    /// asserted against their stock captures.
+    #[test]
+    #[cfg(feature = "original-asset-tests")]
+    fn unskipped_intro_phases_run_at_their_published_and_measured_rates() {
+        let dir = debug_game_dir();
+        let mut intro = visual_intro_state_with_panel(dir.clone(), VisualIntroPanel::Menu);
+        intro.dispatch = UnifiedMenuDispatch::new();
+        intro.title_flourish_step = 0;
+        intro.title_flourish_complete = false;
+        let mut pump = VisualIntroAnimationPump::default();
+        let frame = 1.0 / 1000.0;
+        let tick = f64::from(BIOS_USER_TICK_INTERVAL_SECS);
+        let close = |actual: f64, expected: f64, what: &str| {
+            assert!(
+                (actual - expected).abs() <= 0.002 + f64::from(frame),
+                "{what}: {actual:.3} s, expected {expected:.3} s"
+            );
+        };
+
+        let flourish =
+            simulate_visual_intro_until(&mut intro, &mut pump, frame, |i| i.title_flourish_complete);
+        // 85 presentation steps at the normative 14 ms.
+        close(flourish, 85.0 * 0.014, "flourish");
+
+        let presents = simulate_visual_intro_until(&mut intro, &mut pump, frame, |i| {
+            i.title_presents_hold_ticks == 0
+        });
+        // Eighteen unconditional ticks plus the twenty-tick bounded poll.
+        close(presents, 38.0 * tick, "Presents hold");
+        assert_eq!(intro.title_card_hold_ticks, INTRO_TITLE_BOUNDED_POLL_BIOS_TICKS);
+        assert_eq!(intro.title_signature_progress, 0);
+
+        let ornament = simulate_visual_intro_until(&mut intro, &mut pump, frame, |i| {
+            i.title_signature_progress > 0 || i.title_signature_complete
+        });
+        // The ornament's bounded poll, then the first stroke chunk's tick.
+        close(ornament, 21.0 * tick, "ornament hold");
+
+        let signature =
+            simulate_visual_intro_until(&mut intro, &mut pump, frame, |i| i.title_signature_complete);
+        let signature_ticks = (signature / tick).round();
+        close(signature, signature_ticks * tick, "signature");
+        assert!(signature_ticks > 0.0);
+
+        let composition = simulate_visual_intro_until(&mut intro, &mut pump, frame, |i| {
+            matches!(i.panel, VisualIntroPanel::StartMenuReveal(_))
+        });
+        // Bounded poll (20) plus the measured archive load (16).
+        close(composition, 36.0 * tick, "composition hold");
+        // Measured stock: about 2.0 s from the composition to the first
+        // dissolved logo pixel.
+        assert!((1.8..=2.2).contains(&composition));
+
+        let reveal = simulate_visual_intro_until(&mut intro, &mut pump, frame, |i| {
+            matches!(i.panel, VisualIntroPanel::SubtitleIgnition { .. })
+        });
+        // 16,160 checked visits at the measured cadence, in 20 ms slices.
+        close(reveal, 140.0 * 0.020, "logo reveal");
+        assert!((2.7..=2.9).contains(&reveal), "measured stock reveal is 2.7..2.9 s");
+        assert_eq!(intro.pending_reveal_clicks.len(), 16_160);
+
+        let expected_ignition: f64 = match &intro.panel {
+            VisualIntroPanel::SubtitleIgnition { playback, .. } => playback
+                .publishes
+                .iter()
+                .map(|publish| f64::from(subtitle_ignition_publish_interval(publish.wait_units)))
+                .sum(),
+            _ => unreachable!(),
+        };
+        let ignition = simulate_visual_intro_until(&mut intro, &mut pump, frame, |i| {
+            matches!(i.panel, VisualIntroPanel::Menu)
+                && !matches!(i.dispatch.tick_title(), UnifiedMenuStep::PresentTitle)
+        });
+        // One publication per 45- or 50-unit wait at the 0.92 ms driver unit.
+        assert!(
+            (ignition - expected_ignition).abs() <= 0.25,
+            "ignition: {ignition:.3} s, expected {expected_ignition:.3} s"
+        );
+
+        eprintln!(
+            "intro timeline: flourish {flourish:.3} s, Presents {presents:.3} s, \
+             ornament {ornament:.3} s, signature {signature:.3} s ({signature_ticks} ticks), \
+             composition {composition:.3} s, logo reveal {reveal:.3} s, \
+             ignition {ignition:.3} s"
+        );
+        let _ = fs::remove_dir_all(dir);
+    }
+
+    /// The gated logo reveal presents growing prefixes of the published visit
+    /// order, one 20 ms slice at a time at the measured per-visit cost, and
+    /// ends on the exact source raster before ignition.
+    #[test]
+    #[cfg(feature = "original-asset-tests")]
+    fn the_gated_logo_reveal_publishes_prefixes_at_the_measured_cadence() {
+        let dir = debug_game_dir();
+        let mut intro = visual_intro_state_with_panel(dir.clone(), VisualIntroPanel::Menu);
+        intro.dispatch = UnifiedMenuDispatch::new();
+        intro.title_signature_complete = true;
+        intro.title_card_hold_ticks = 1;
+        intro.surface.clear(5);
+
+        assert!(advance_visual_intro_animation_tick(&mut intro));
+        assert!(matches!(intro.panel, VisualIntroPanel::StartMenuReveal(_)));
+        // Loader step 2 cleared the visible page; nothing is transferred yet.
+        assert!(intro.surface.pixels.iter().all(|pixel| *pixel == 0));
+        assert_eq!(intro.pending_reveal_clicks.len(), 16_160);
+        let source = visual_intro_start_menu_reveal_source(&intro);
+
+        let mut slices = 0u64;
+        while let VisualIntroPanel::StartMenuReveal(reveal) = &intro.panel {
+            let expected = (2 * u5_runtime::gated_dissolve_clicks_due(
+                slices * INTRO_START_MENU_REVEAL_SLICE_NANOS,
+                16_160,
+            ) as usize)
+                .min(32_320);
+            assert_eq!(reveal.copied_pixels(), expected, "after {slices} slices");
+            assert!(advance_visual_intro_animation_tick(&mut intro));
+            slices += 1;
+        }
+        assert_eq!(slices, 140);
+        assert!(matches!(
+            intro.panel,
+            VisualIntroPanel::SubtitleIgnition { .. }
+        ));
+        for y in 0..=100usize {
+            let row = y * intro.surface.width;
+            assert_eq!(
+                intro.surface.pixels[row..row + 320],
+                source.pixels[row..row + 320],
+                "logo row {y}"
+            );
+        }
+        let _ = fs::remove_dir_all(dir);
+    }
+
+    /// A key while the logo reveal is on screen is found by the dissolve's
+    /// status test and consumed by the loader: the rectangle completes plain,
+    /// ignition is skipped, the caller's skip flag stays clear, and the key
+    /// never reaches the menu.
+    #[test]
+    #[cfg(feature = "original-asset-tests")]
+    fn a_key_during_the_logo_reveal_completes_it_plain_and_keeps_the_preview() {
+        let dir = debug_game_dir();
+        let mut intro = visual_intro_state_with_panel(dir.clone(), VisualIntroPanel::Menu);
+        intro.dispatch = UnifiedMenuDispatch::new();
+        intro.title_signature_complete = true;
+        intro.title_card_hold_ticks = 1;
+        assert!(advance_visual_intro_animation_tick(&mut intro));
+        for _ in 0..3 {
+            assert!(advance_visual_intro_animation_tick(&mut intro));
+        }
+        assert!(matches!(intro.panel, VisualIntroPanel::StartMenuReveal(_)));
+
+        assert!(step_visual_intro(
+            &mut intro,
+            char::from(u5_runtime::INPUT_CODE_SOUTH)
+        ));
+
+        assert!(matches!(intro.panel, VisualIntroPanel::Menu));
+        assert!(!matches!(
+            intro.dispatch.tick_title(),
+            UnifiedMenuStep::PresentTitle
+        ));
+        assert!(!intro.title_sequence_skipped);
+        assert!(intro.pending_auto_return_to_view);
+        assert_eq!(
+            visual_intro_menu_highlight(&intro),
+            IntroSubflow::JourneyOnward
+        );
+        let source = visual_intro_start_menu_reveal_source(&intro);
+        for y in 0..=100usize {
+            let row = y * intro.surface.width;
+            assert_eq!(
+                intro.surface.pixels[row..row + 320],
+                source.pixels[row..row + 320],
+                "logo row {y}"
+            );
+        }
+        let _ = fs::remove_dir_all(dir);
+    }
+
+    /// `intro.md §3` step 4: "A key during the hold, or during any segment,
+    /// abandons the remaining segments — but steps 5 and 6 still run".
+    #[test]
+    fn a_key_during_the_ornament_hold_abandons_the_strokes() {
+        let dir = debug_game_dir();
+        let mut intro = VisualIntroState {
+            game_dir: dir.clone(),
+            raster_depth: TileGraphicsDepth::Ega16,
+            dispatch: UnifiedMenuDispatch::new(),
+            title_flourish_step: intro_title_flourish_total_steps() - 1,
+            title_flourish_complete: true,
+            title_signature_progress: 0,
+            title_signature_complete: false,
+            title_presents_hold_ticks: 0,
+            title_card_hold_ticks: 7,
+            title_sequence_skipped: false,
+            pending_auto_return_to_view: false,
+            title_tick_frame: 0,
+            title_tick_visible_frame: 0,
+            surface: new_intro_display_buffer(),
+            modal_backing: None,
+            menu_idle_ticks: 0,
+            menu_idle_bios_ticks: 0,
+            menu_cursor_pass: 0,
+            menu_cursor_blanked: false,
+            message_waiting_for_key: false,
+            message: String::new(),
+            panel: VisualIntroPanel::Menu,
+            launch_result: Arc::new(Mutex::new(None)),
+            image_handle: None,
+            font_slots: None,
+            text_windows: TextWindowSystem::new(),
+            pending_pre_flourish_outcome: None,
+            title_tick_frames: None,
+            pending_reveal_clicks: Vec::new(),
+        };
+
+        assert!(step_visual_intro(&mut intro, 'x'));
+
+        assert!(intro.title_sequence_skipped);
+        assert!(intro.title_signature_complete);
+        assert_eq!(intro.title_signature_progress, 0);
+        assert_eq!(
+            intro.title_card_hold_ticks, 0,
+            "a skipped run leaves for the plain loader without the composition hold"
+        );
+        assert!(matches!(
+            intro.dispatch.tick_title(),
+            UnifiedMenuStep::PresentTitle
+        ));
+        let _ = fs::remove_dir_all(dir);
+    }
+
     #[test]
     fn intro_title_flourish_tick_rejects_unpublished_step() {
         let mut intro = VisualIntroState {
@@ -20576,6 +21090,7 @@ mod tests {
             title_signature_progress: 0,
             title_signature_complete: false,
             title_presents_hold_ticks: 0,
+            title_card_hold_ticks: 0,
             title_sequence_skipped: false,
             pending_auto_return_to_view: false,
             title_tick_frame: 0,
@@ -20639,6 +21154,7 @@ mod tests {
             title_signature_progress: 0,
             title_signature_complete: false,
             title_presents_hold_ticks: 0,
+            title_card_hold_ticks: 0,
             title_sequence_skipped: false,
             pending_auto_return_to_view: false,
             title_tick_frame: 0,
@@ -20678,6 +21194,12 @@ mod tests {
         );
         assert!(intro.title_sequence_skipped);
         assert!(visual_intro_presents_hold_active(&intro));
+        // `timing.md §5.1`: after an aborted flourish the hold "is skipped
+        // entirely and the frame flashes past".
+        assert_eq!(
+            intro.title_presents_hold_ticks,
+            INTRO_PRESENTS_SKIPPED_HOLD_BIOS_TICKS
+        );
         assert!(!intro.title_signature_complete);
         assert!(matches!(
             intro.dispatch.tick_title(),
@@ -20699,6 +21221,7 @@ mod tests {
             title_signature_progress: 0,
             title_signature_complete: false,
             title_presents_hold_ticks: 0,
+            title_card_hold_ticks: 0,
             title_sequence_skipped: false,
             pending_auto_return_to_view: false,
             title_tick_frame: 0,
@@ -20752,6 +21275,7 @@ mod tests {
             title_signature_progress: 42,
             title_signature_complete: false,
             title_presents_hold_ticks: 0,
+            title_card_hold_ticks: 0,
             title_sequence_skipped: false,
             pending_auto_return_to_view: false,
             title_tick_frame: 0,
@@ -20818,6 +21342,7 @@ mod tests {
             title_signature_progress: 0,
             title_signature_complete: false,
             title_presents_hold_ticks: 0,
+            title_card_hold_ticks: 0,
             title_sequence_skipped: false,
             pending_auto_return_to_view: false,
             title_tick_frame: 0,
@@ -20864,6 +21389,7 @@ mod tests {
             title_signature_progress: total_steps - 1,
             title_signature_complete: false,
             title_presents_hold_ticks: 0,
+            title_card_hold_ticks: 0,
             title_sequence_skipped: false,
             pending_auto_return_to_view: false,
             title_tick_frame: 0,
@@ -20905,7 +21431,29 @@ mod tests {
             visual_intro_title_art_buffer(&dir, None, None).to_rgba()
         );
 
+        // Visible phase 5 holds the finished composition for its bounded poll
+        // plus the measured archive load, then the loader clears the page and
+        // the gated logo reveal plays before ignition.
+        assert_eq!(
+            intro.title_card_hold_ticks,
+            INTRO_COMPOSITION_HOLD_BIOS_TICKS
+        );
+        for _ in 1..INTRO_COMPOSITION_HOLD_BIOS_TICKS {
+            assert!(advance_visual_intro_animation_tick(&mut intro));
+            assert_eq!(
+                render_intro_frame(&mut intro),
+                final_title,
+                "the composition stays on screen through its hold"
+            );
+        }
         assert!(advance_visual_intro_animation_tick(&mut intro));
+        assert!(matches!(
+            intro.panel,
+            VisualIntroPanel::StartMenuReveal(_)
+        ));
+        while matches!(intro.panel, VisualIntroPanel::StartMenuReveal(_)) {
+            assert!(advance_visual_intro_animation_tick(&mut intro));
+        }
 
         assert!(matches!(
             intro.dispatch.tick_title(),
@@ -20981,6 +21529,7 @@ mod tests {
             title_signature_progress: total_steps - 1,
             title_signature_complete: false,
             title_presents_hold_ticks: 0,
+            title_card_hold_ticks: 0,
             title_sequence_skipped: false,
             pending_auto_return_to_view: false,
             title_tick_frame: 0,
@@ -21025,6 +21574,7 @@ mod tests {
             title_signature_progress: 0,
             title_signature_complete: false,
             title_presents_hold_ticks: 0,
+            title_card_hold_ticks: 0,
             title_sequence_skipped: false,
             pending_auto_return_to_view: false,
             title_tick_frame: 0,
@@ -26228,6 +26778,7 @@ mod tests {
             title_signature_progress: 0,
             title_signature_complete: false,
             title_presents_hold_ticks: 0,
+            title_card_hold_ticks: 0,
             title_sequence_skipped: false,
             pending_auto_return_to_view: false,
             title_tick_frame: 0,
@@ -26566,6 +27117,7 @@ mod tests {
             title_signature_progress: 0,
             title_signature_complete: false,
             title_presents_hold_ticks: 0,
+            title_card_hold_ticks: 0,
             title_sequence_skipped: false,
             pending_auto_return_to_view: false,
             title_tick_frame: 0,
@@ -26633,6 +27185,7 @@ mod tests {
             title_signature_progress: 0,
             title_signature_complete: false,
             title_presents_hold_ticks: 0,
+            title_card_hold_ticks: 0,
             title_sequence_skipped: false,
             pending_auto_return_to_view: false,
             title_tick_frame: 0,
@@ -26674,6 +27227,7 @@ mod tests {
             title_signature_progress: 0,
             title_signature_complete: false,
             title_presents_hold_ticks: 0,
+            title_card_hold_ticks: 0,
             title_sequence_skipped: false,
             pending_auto_return_to_view: false,
             title_tick_frame: 0,
