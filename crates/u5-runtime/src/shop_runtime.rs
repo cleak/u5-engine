@@ -1266,6 +1266,11 @@ pub enum TavernOutcome {
         choice: BlueBoarDrinkChoice,
         cost: u16,
     },
+    BlueBoarRefusedShortFunds {
+        choice: BlueBoarDrinkChoice,
+        cost: u16,
+    },
+    BlueBoarListCancelled,
     PickProvisionQuantity {
         tavern: Tavern,
         unit_price: u16,
@@ -1370,7 +1375,10 @@ pub fn step_tavern(
                             cost: outcome.total_price,
                         }
                     }
+                    // `shops.md §8.C`: "Cannot afford that bill ... ends visit
+                    // without shared farewell".
                     Err(TavernDrinkError::InsufficientGold { required, .. }) => {
+                        *state = TavernState::Exited;
                         TavernOutcome::RefusedShortFunds { cost: required }
                     }
                 };
@@ -1477,6 +1485,16 @@ pub fn step_tavern(
             },
             TavernInput::Key(b),
         ) => {
+            // `shops.md §8.C`, "Blue Boar wine list cancelled": Space prints
+            // record `89` and returns to continuation without establishing a
+            // purchase; other non-A..F keys silently wait.
+            if b == b' ' {
+                *state = TavernState::AnythingElse {
+                    tavern,
+                    continuation_ready,
+                };
+                return TavernOutcome::BlueBoarListCancelled;
+            }
             let Some(choice) = blue_boar_choice_for_key(b) else {
                 return TavernOutcome::InvalidInput;
             };
@@ -1492,12 +1510,14 @@ pub fn step_tavern(
                         cost: outcome.total_price,
                     }
                 }
+                // `shops.md §8.C`: a Blue Boar wine short of funds "uses the
+                // same CAN'T PAY envelope", which ends the visit.
                 Err(TavernDrinkError::InsufficientGold { required, .. }) => {
-                    *state = TavernState::Menu {
-                        tavern,
-                        continuation_ready,
-                    };
-                    TavernOutcome::RefusedShortFunds { cost: required }
+                    *state = TavernState::Exited;
+                    TavernOutcome::BlueBoarRefusedShortFunds {
+                        choice,
+                        cost: required,
+                    }
                 }
             }
         }
@@ -1594,6 +1614,8 @@ pub enum SageOutcome {
         actual: usize,
     },
     NoTopicMatch,
+    /// Empty typed topic: back to the tavern's continuation question.
+    EmptyTopic,
     Exited,
     InvalidInput,
 }
@@ -1606,9 +1628,11 @@ pub fn step_sage(state: &mut SageState, input: SageInput<'_>, gold: &mut u16) ->
                     *state = SageState::Confirm { table, quote };
                     SageOutcome::QuotedFee { quote }
                 }
+                // `shops.md §8.C` sage result table: "empty input returns to
+                // tavern continuation without an extra farewell" (R436).
                 Err(SageRumourError::EmptyInput) => {
                     *state = SageState::Exited;
-                    SageOutcome::Exited
+                    SageOutcome::EmptyTopic
                 }
                 Err(SageRumourError::InputTooLong { limit, actual }) => {
                     SageOutcome::InputTooLong { limit, actual }
@@ -3261,6 +3285,63 @@ mod tests {
         assert_eq!(gold, 1);
     }
 
+    /// `shops.md §8.C` tavern result table: an unaffordable round or Blue
+    /// Boar wine "ends visit without shared farewell"; Space at the wine
+    /// list returns to continuation without establishing a purchase.
+    #[test]
+    fn tavern_short_funds_end_the_visit_and_blue_boar_space_returns_to_continuation() {
+        let ctx = ShopTransactionContext {
+            party_gold: 0,
+            speaker_intelligence: 0,
+            world_hour: 12,
+            party_size: 2,
+            living_party_members: 2,
+        };
+        let mut food = 0u16;
+        let mut gold = 0u16;
+        let tavern = Tavern::TheWayfarerTavern;
+        let mut state = TavernState::Menu {
+            tavern,
+            continuation_ready: true,
+        };
+        let round = tavern_menu_letters(tavern).round as u8;
+        let outcome = step_tavern(&mut state, TavernInput::Key(round), ctx, &mut gold, &mut food);
+        assert!(matches!(outcome, TavernOutcome::RefusedShortFunds { .. }));
+        assert_eq!(state, TavernState::Exited);
+
+        let tavern = Tavern::TheBlueBoarTavern;
+        let mut state = TavernState::BlueBoarDrinkList {
+            tavern,
+            continuation_ready: false,
+        };
+        let outcome = step_tavern(&mut state, TavernInput::Key(b'B'), ctx, &mut gold, &mut food);
+        assert!(matches!(
+            outcome,
+            TavernOutcome::BlueBoarRefusedShortFunds { .. }
+        ));
+        assert_eq!(state, TavernState::Exited);
+
+        let mut state = TavernState::BlueBoarDrinkList {
+            tavern,
+            continuation_ready: false,
+        };
+        assert_eq!(
+            step_tavern(&mut state, TavernInput::Key(b'Z'), ctx, &mut gold, &mut food),
+            TavernOutcome::InvalidInput
+        );
+        assert_eq!(
+            step_tavern(&mut state, TavernInput::Key(b' '), ctx, &mut gold, &mut food),
+            TavernOutcome::BlueBoarListCancelled
+        );
+        assert_eq!(
+            state,
+            TavernState::AnythingElse {
+                tavern,
+                continuation_ready: false,
+            }
+        );
+    }
+
     #[test]
     fn tavern_provisions_purchase_can_partially_fill_requested_quantity() {
         let mut state = TavernState::for_tavern(Tavern::TheWayfarerTavern);
@@ -3629,6 +3710,14 @@ mod tests {
         assert_eq!(
             step_sage(&mut state, SageInput::Keyword(" "), &mut gold),
             SageOutcome::Exited
+        );
+
+        // `shops.md §8.C`: an empty topic returns to the tavern
+        // continuation rather than silently ending the visit.
+        let mut state = SageState::default();
+        assert_eq!(
+            step_sage(&mut state, SageInput::Keyword(" "), &mut gold),
+            SageOutcome::EmptyTopic
         );
         assert_eq!(state, SageState::Exited);
     }

@@ -2144,6 +2144,9 @@ pub const TAVERN_PROVISION_QUOTE_RECORD_LAST: usize = 82;
 pub const TAVERN_NO_SALE_RECORD_FIRST: usize = 61;
 pub const TAVERN_NO_SALE_RECORD_LAST: usize = 64;
 pub const TAVERN_TABLE_SCRAPS_RECORD_ID: usize = 90;
+/// `shops.md §8.C` tavern result table, "Blue Boar wine list cancelled":
+/// Space prints `\n\n`, then this record, then returns to continuation.
+pub const BLUE_BOAR_WINE_LIST_CANCEL_RECORD_ID: usize = 89;
 pub const TAVERN_BARE_TABLE_SETTING_TILE: u8 = 0x95;
 pub const TAVERN_NORTH_FOOD_SETTING_TILE: u8 = 0x9B;
 pub const TAVERN_SOUTH_FOOD_SETTING_TILE: u8 = 0x9A;

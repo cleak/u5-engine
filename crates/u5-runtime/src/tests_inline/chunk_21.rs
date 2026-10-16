@@ -6829,3 +6829,76 @@ fn refused_or_unaffordable_inn_rest_never_moves_the_party() {
     );
     assert_eq!(broke.gold, 1);
 }
+
+/// `shops.md §8.C` sage result table: "empty input returns to tavern
+/// continuation without an extra farewell" and "decline returns to tavern
+/// continuation" (R436); only short funds ends the visit.
+#[test]
+fn sage_empty_topic_and_declined_fee_return_to_tavern_continuation() {
+    use crate::shop_runtime::{SageState, TavernState};
+    use crate::shop_session::ActiveShopSession;
+
+    for declined in [false, true] {
+        let mut state = test_state(open_grid(), 1, 1);
+        state.area = Area::Town {
+            scene: Scene::new(22).unwrap(),
+            floor: 0,
+        };
+        state.gold = 200;
+        state.active_shop = Some(ActiveShopSession::Sage(SageState::default()));
+
+        if declined {
+            handle_play_key_input(&mut state, 'H', "ONE", Path::new("")).unwrap();
+            handle_play_key_input(&mut state, 'N', "", Path::new("")).unwrap();
+        } else {
+            handle_play_key_input(&mut state, '\r', "", Path::new("")).unwrap();
+        }
+
+        assert_eq!(state.gold, 200);
+        assert!(
+            state.message.contains("Anything else\nfor thee?"),
+            "{:?}",
+            state.message
+        );
+        assert!(matches!(
+            state.active_shop,
+            Some(ActiveShopSession::Tavern(TavernState::AnythingElse {
+                tavern: Tavern::TheCatsLair,
+                continuation_ready: true,
+            }))
+        ));
+    }
+}
+
+/// `shops.md §8.C` tavern result table, "Cannot afford that bill": the bill,
+/// then `"\n\n"CAN'T PAY?\nBeat it!"\nyells `, vendor name, `.\n`; the visit
+/// ends without the shared farewell.
+#[test]
+fn tavern_unaffordable_round_prints_cant_pay_and_ends_the_visit() {
+    use crate::shop_runtime::TavernState;
+    use crate::shop_session::ActiveShopSession;
+
+    let mut state = test_state(open_grid(), 1, 1);
+    state.area = Area::Town {
+        scene: Scene::new(22).unwrap(),
+        floor: 0,
+    };
+    state.gold = 0;
+    state.active_shop = Some(ActiveShopSession::Tavern(TavernState::Menu {
+        tavern: Tavern::TheCatsLair,
+        continuation_ready: false,
+    }));
+    let round = crate::shops::tavern_menu_letters(Tavern::TheCatsLair).round;
+
+    handle_play_key_input(&mut state, round, "", Path::new("")).unwrap();
+
+    assert!(
+        state
+            .message
+            .ends_with("\"\n\n\"CAN'T PAY?\nBeat it!\"\nyells Dr. Cat.\n"),
+        "{:?}",
+        state.message
+    );
+    assert!(state.message.contains("\"That will be"));
+    assert!(state.active_shop.is_none());
+}

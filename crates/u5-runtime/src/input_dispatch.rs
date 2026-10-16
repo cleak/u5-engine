@@ -1736,6 +1736,16 @@ fn handle_active_shop_key_input(
                 SageState::Exited => SageOutcome::Exited,
             };
             let paid = matches!(outcome, SageOutcome::RumourFound { .. });
+            // `shops.md §8.C` sage result table: an empty topic and a
+            // declined fee both return to the tavern continuation, with the
+            // continuation retained (R436); only short funds ends the visit.
+            let declined = matches!(outcome, SageOutcome::Declined);
+            let returns_to_continuation =
+                paid || declined || matches!(outcome, SageOutcome::EmptyTopic);
+            if declined {
+                state.emit_message_line_continuing_row("No");
+                state.push_explicit_blank_message_entry();
+            }
             // `shops.md §8.A`'s shared Y/N prompt primitive: the accepted
             // answer echoes onto the row the question's own trailing space
             // left open, and the two feeds that follow it are the blank row
@@ -1764,17 +1774,21 @@ fn handle_active_shop_key_input(
                 if let Some(name) = tavern_vendor {
                     message.push_str(&format!("\nsays {name}."));
                 }
-                if let Some(tavern) =
+            }
+            if returns_to_continuation
+                && let Some(tavern) =
                     area_scene_byte.and_then(crate::shop_session::tavern_for_scene)
-                {
-                    message.push_str(&format!("\n\n{TAVERN_ANYTHING_ELSE_PROMPT}"));
-                    replacement_session = Some(ActiveShopSession::Tavern(
-                        crate::shop_runtime::TavernState::AnythingElse {
-                            tavern,
-                            continuation_ready: true,
-                        },
-                    ));
+            {
+                if paid {
+                    message.push_str("\n\n");
                 }
+                message.push_str(TAVERN_ANYTHING_ELSE_PROMPT);
+                replacement_session = Some(ActiveShopSession::Tavern(
+                    crate::shop_runtime::TavernState::AnythingElse {
+                        tavern,
+                        continuation_ready: true,
+                    },
+                ));
             }
             let surcharge = if paid {
                 apply_active_shop_surcharge(state)
@@ -3421,14 +3435,44 @@ fn tavern_bill_count_word(living_party: usize) -> &'static str {
 /// then adds `\nEnjoy!"`. §4 stresses that this "is resident text, not a
 /// resource record" and "has no `SHOPPE.DAT` record ordinal".
 fn tavern_bill_line(price: u16, living_party: usize, speaker_is_female: bool) -> String {
+    format!(
+        "{}\nEnjoy!\"",
+        tavern_bill_prefix(price, living_party, speaker_is_female)
+    )
+}
+
+/// The bill up to its honorific, before the paid `\nEnjoy!"` or the
+/// unaffordable CAN'T PAY envelope.
+fn tavern_bill_prefix(price: u16, living_party: usize, speaker_is_female: bool) -> String {
     // The leading feeds are the blank row the original leaves between the
     // accepted letter's echo and the bill. Measured 2026-09-11
     // (`paws-sage/ale`): the original reads `thy travels?" A`, a blank row,
     // then `"That will be 1`; this engine ran the bill straight onto the row
     // below the echo. The lore branch already had this blank.
     format!(
-        "\n\"That will be {price} gold for the {} of ye,\n{}.\nEnjoy!\"",
+        "\n\"That will be {price} gold for the {} of ye,\n{}.",
         tavern_bill_count_word(living_party),
+        tavern_honorific(speaker_is_female)
+    )
+}
+
+/// `shops.md §8.C` tavern result table, "Cannot afford that bill":
+/// `"\n\n"CAN'T PAY?\nBeat it!"\nyells `, vendor name, `.\n`; the visit
+/// ends without the shared farewell. The attribution row is dropped when the
+/// vendor name is unknown rather than invented.
+fn tavern_cant_pay_envelope(vendor_name: Option<&'static str>) -> String {
+    let mut text = String::from("\"\n\n\"CAN'T PAY?\nBeat it!\"");
+    if let Some(name) = vendor_name {
+        text.push_str(&format!("\nyells {name}.\n"));
+    }
+    text
+}
+
+/// `shops.md §8.C`, "Blue Boar wine selection accepted": the gendered
+/// fine-choice line that precedes either `Enjoy!` or the CAN'T PAY envelope.
+fn blue_boar_fine_choice_prefix(speaker_is_female: bool) -> String {
+    format!(
+        "\"Ah, a fine choice, {}.",
         tavern_honorific(speaker_is_female)
     )
 }
@@ -3555,6 +3599,13 @@ fn format_tavern_outcome(
                 if speaker_is_female { "milady" } else { "sir" }
             )
         }
+        BlueBoarRefusedShortFunds { .. } => format!(
+            "{}{}",
+            blue_boar_fine_choice_prefix(speaker_is_female),
+            tavern_cant_pay_envelope(None)
+        ),
+        // Without `SHOPPE.DAT` record `89` only the continuation remains.
+        BlueBoarListCancelled => format!("\n\n{TAVERN_ANYTHING_ELSE_PROMPT}"),
         PickProvisionQuantity { tavern, unit_price } => format!(
             "{} provisions cost {unit_price} gold each. Quantity?",
             tavern.display_name()
@@ -3592,7 +3643,11 @@ fn format_tavern_outcome(
         // (`qa/paired/paws-tavern.tsv`): both lines are quoted, and they sit
         // on consecutive rows with no blank between them.
         Declined => format!("\n\n\"Hrumph.\"\n{TAVERN_ANYTHING_ELSE_PROMPT}"),
-        RefusedShortFunds { .. } => TAVERN_AFFORDABILITY_REFUSAL_BARK.to_string(),
+        RefusedShortFunds { cost } => format!(
+            "{}{}",
+            tavern_bill_prefix(cost, living_party, speaker_is_female),
+            tavern_cant_pay_envelope(None)
+        ),
         // `shops.md §8.C` "No packs affordable, at least three food servings":
         // `\n\n"Thou hast\nneither gold nor\nneed! Out!"\nyells `, vendor name,
         // `.\n`; ends visit. The vendor-named form is the SHOPPE-backed
@@ -3702,8 +3757,40 @@ fn format_tavern_outcome_with_shoppe(
 ) -> String {
     use crate::shop_runtime::TavernOutcome::*;
 
+    // `shops.md §8.C` tavern result table: the CAN'T PAY envelope carries
+    // the vendor attribution, and the visit ends there.
+    match outcome {
+        RefusedShortFunds { cost } => {
+            return format!(
+                "{}{}",
+                tavern_bill_prefix(cost, living_party, speaker_is_female),
+                tavern_cant_pay_envelope(tavern_vendor_name)
+            );
+        }
+        BlueBoarRefusedShortFunds { .. } => {
+            return format!(
+                "{}{}",
+                blue_boar_fine_choice_prefix(speaker_is_female),
+                tavern_cant_pay_envelope(tavern_vendor_name)
+            );
+        }
+        _ => {}
+    }
+
     let renderer = crate::shoppe_bark::ShoppeTextRenderer::load_from_game_dir(game_dir).ok();
     let rendered = renderer.as_ref().and_then(|renderer| match outcome {
+        // `shops.md §8.C`, "Blue Boar wine list cancelled": "Space prints
+        // `\n\n`, then record `89`, then returns to continuation".
+        BlueBoarListCancelled => renderer
+            .render_record(
+                crate::shops::BLUE_BOAR_WINE_LIST_CANCEL_RECORD_ID,
+                &crate::shoppe_bark::ShoppeBarkContext::default(),
+            )
+            .ok()
+            .map(|record| {
+                let feed = if record.ends_with('\n') { "" } else { "\n" };
+                format!("\n\n{record}{feed}{TAVERN_ANYTHING_ELSE_PROMPT}")
+            }),
         // `shops.md §8`'s entry table, the Tavern row: "`Yes\n\n"`, then the
         // state menu record, then a separately emitted closing quote and
         // space." The engine printed `Yes`, two feeds and the bare record -
@@ -3857,6 +3944,8 @@ fn format_sage_outcome(outcome: crate::shop_runtime::SageOutcome) -> String {
         RefusedShortFunds { .. } => TAVERN_AFFORDABILITY_REFUSAL_BARK.to_string(),
         InputTooLong { limit, .. } => format!("Ask in {limit} characters or fewer."),
         NoTopicMatch => "That, I cannot help thee with.".to_string(),
+        // The tavern continuation question is appended by the caller.
+        EmptyTopic => String::new(),
         // `shops.md §8.A`: "There is no universal `Farewell.` or `As you
         // wish.` line." A shop that closes on a bark renders it through the
         // shared envelope; this arm is the silent outcome, which "omits this
