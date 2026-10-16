@@ -2587,3 +2587,53 @@ fn town_fire_destroyed_door_reverts_after_floor_reload() {
     assert_eq!(state.turn, 3);
     let _ = fs::remove_dir_all(dir);
 }
+
+#[test]
+fn vehicle_movement_echo_carries_the_vehicle_prefix() {
+    // `vehicles.md §6` "Movement Announcements And Facing Frames".
+    let text = |state: &PlayState, key: char| {
+        state
+            .vehicle_prefixed_movement_echo(key)
+            .map(|echo| echo.text)
+    };
+    let mut state = world_state(open_world_grid(), 5, 5);
+    assert_eq!(text(&state, 'w'), Some("North"));
+    assert_eq!(text(&state, 'W'), None);
+    state.player.transport = TransportState::Horse {
+        type_byte: HORSE_MOUNTED_FIRST,
+        tile: FIRST_PLAYABLE_HORSE_TILE,
+    };
+    assert_eq!(text(&state, 'd'), Some("Ride East"));
+    state.player.transport = TransportState::Carpet {
+        type_byte: CARPET_MOUNTED,
+        tile: FIRST_PLAYABLE_MAGIC_CARPET_TILE,
+    };
+    assert_eq!(text(&state, 's'), Some("Fly South"));
+    state.player.transport = TransportState::Skiff {
+        type_byte: SKIFF_PARKED_FIRST,
+        tile: FIRST_PLAYABLE_SKIFF_TILE,
+    };
+    assert_eq!(text(&state, 'a'), Some("Row West"));
+
+    // A furled frigate has no prefix; a hoisted one turning in place on the
+    // overworld announces `Head`, and one already on its cached heading
+    // does not.
+    state.player.transport = TransportState::Ship {
+        type_byte: SHIP_PARKED_FIRST,
+        tile: FIRST_PLAYABLE_FRIGATE_TILE,
+        sails_hoisted: false,
+        hull: 77,
+        skiffs: 2,
+    };
+    assert_eq!(text(&state, 'w'), Some("North"));
+    state.player.transport = TransportState::Ship {
+        type_byte: SHIP_TRANSPORT_HOISTED_FIRST,
+        tile: FIRST_PLAYABLE_FRIGATE_TILE,
+        sails_hoisted: true,
+        hull: 77,
+        skiffs: 2,
+    };
+    state.sail_cached_direction = Some(Direction::East);
+    assert_eq!(text(&state, 'w'), Some("Head North"));
+    assert_eq!(text(&state, 'd'), Some("East"));
+}

@@ -1946,6 +1946,56 @@ pub const DUNGEON_CHEST_GET_MUST_OPEN_FIRST: &str = "Must open first!\n";
 pub const DUNGEON_CHEST_GET_NOT_HERE: &str = "Not here!\n";
 pub const DUNGEON_CHEST_GET_CONTENTS: &str = "contents\nof chest\nYou find:\n";
 
+/// `vehicles.md §6` "Movement Announcements And Facing Frames": "Each
+/// announced directional step in a vehicle prints a vehicle prefix in front
+/// of the direction word" - `Ride` (horse), `Fly` (carpet), `Row` (skiff);
+/// a frigate has none, except that "on the overworld a frigate turning in
+/// place announces with "Head"". `movement.md §8.1` spells the prefix with
+/// its trailing space (`Ride `, `Fly `).
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum MovementEchoPrefix {
+    None,
+    Ride,
+    Fly,
+    Row,
+    Head,
+}
+
+/// [`movement_echo`] with the `vehicles.md §6` vehicle prefix.
+pub const fn vehicle_movement_echo(
+    direction: Direction,
+    prefix: MovementEchoPrefix,
+) -> Option<CommandEcho> {
+    use MovementEchoPrefix as P;
+    let text = match (prefix, direction) {
+        (P::None, _) => return movement_echo(direction),
+        (_, Direction::NorthEast)
+        | (_, Direction::NorthWest)
+        | (_, Direction::SouthEast)
+        | (_, Direction::SouthWest) => return None,
+        (P::Ride, Direction::North) => "Ride North",
+        (P::Ride, Direction::South) => "Ride South",
+        (P::Ride, Direction::East) => "Ride East",
+        (P::Ride, Direction::West) => "Ride West",
+        (P::Fly, Direction::North) => "Fly North",
+        (P::Fly, Direction::South) => "Fly South",
+        (P::Fly, Direction::East) => "Fly East",
+        (P::Fly, Direction::West) => "Fly West",
+        (P::Row, Direction::North) => "Row North",
+        (P::Row, Direction::South) => "Row South",
+        (P::Row, Direction::East) => "Row East",
+        (P::Row, Direction::West) => "Row West",
+        (P::Head, Direction::North) => "Head North",
+        (P::Head, Direction::South) => "Head South",
+        (P::Head, Direction::East) => "Head East",
+        (P::Head, Direction::West) => "Head West",
+    };
+    Some(CommandEcho {
+        text,
+        join: CommandEchoJoin::Complete,
+    })
+}
+
 /// `commands.md §5.2` (`cleak/u5-spec#81`): surface and town movement
 /// keys echo the direction's name plus a newline — the same four words
 /// the direction prompt appends. Diagonal steps are not part of that
