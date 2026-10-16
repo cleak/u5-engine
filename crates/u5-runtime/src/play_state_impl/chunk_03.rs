@@ -13,30 +13,32 @@ fn cardinal_direction_key(direction: Direction) -> char {
     }
 }
 
-/// `audio.md §8.3` commit-time shared variant for the directed utility route.
+/// `audio.md §8.3`/`§6.1` commit-time shared variant for the directed utility
+/// route.
 ///
-/// `§8.3` names exactly one pre-success spell boundary: Vanish "first runs
-/// variant 1 when direction input commits", which is why "a nonmatching tile
-/// retains the earlier variant-1 presentation, then reaches the common failure
-/// tail". No other spell on this route sounds before its own success test.
+/// Vanish "first runs variant 1 when direction input commits", which is why
+/// "a nonmatching tile retains the earlier variant-1 presentation, then
+/// reaches the common failure tail". `§6.1` ids 25/26 give Magic Lock variant
+/// 5 "on an accepted direction" and Unlock Magic variant 5 "whenever the
+/// direction prompt was accepted, whether or not a door was there".
 fn directed_utility_commit_variant(spell_index: usize) -> Option<u8> {
     match spell_index {
         VANISH_SPELL_INDEX => Some(1),
+        MAGIC_LOCK_SPELL_INDEX | UNLOCK_MAGIC_SPELL_INDEX => Some(5),
         _ => None,
     }
 }
 
-/// `audio.md §6` shared variant for the directed utility spells whose row the
-/// published table qualifies by success: `successful Open` is variant 2, and
-/// `Magic Lock, and successful unlock-door effects` are variant 5.
+/// `audio.md §6.1` id 6 shared variant for the one directed utility spell
+/// whose row is qualified by success: Open's surface/town/combat arm plays
+/// variant 2 "only on a successful door unlock or a successful actor-flag
+/// clear".
 ///
-/// Vanish is absent because `§8.3` already sounded its variant 1 at the commit
-/// and closes with the action snap instead. A spell the published table does
-/// not name gets no cue.
+/// Vanish, Magic Lock and Unlock Magic are absent because they sounded at the
+/// commit; Vanish closes with the action snap instead.
 fn directed_utility_success_variant(spell_index: usize) -> Option<u8> {
     match spell_index {
         OPEN_SPELL_INDEX => Some(2),
-        MAGIC_LOCK_SPELL_INDEX | UNLOCK_MAGIC_SPELL_INDEX => Some(5),
         _ => None,
     }
 }
@@ -5088,9 +5090,10 @@ impl PlayState {
         // audio.md §8.3: Vanish "first runs variant 1 when direction input
         // commits", before the tile is matched, so "a nonmatching tile retains
         // the earlier variant-1 presentation, then reaches the common failure
-        // tail". Open, Magic Lock and Unlock Magic carry audio.md §6 rows
-        // qualified by success, so they sound from the success arms below
-        // instead. The explicit pass returned above is silent for all four.
+        // tail". audio.md §6.1 gives Magic Lock and Unlock Magic the same
+        // accepted-direction boundary. Open's row is qualified by success, so
+        // it sounds from the success arms below instead. The explicit pass
+        // returned above is silent for all four.
         if let Some(variant) = directed_utility_commit_variant(spell_index) {
             self.emit_sound_effect(SoundEffect::SharedVariant { variant });
         }

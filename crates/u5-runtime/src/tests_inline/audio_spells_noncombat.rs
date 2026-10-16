@@ -736,15 +736,26 @@ fn combat_blink_cursor_and_caster_refusals_stay_silent() {
 
 #[test]
 fn failed_directed_utility_casts_sound_only_the_failure_tail() {
-    // audio.md §6 qualifies these rows by success - "successful Open" is
-    // variant 2, and variant 5 covers "Magic Lock, and successful
-    // unlock-door effects" - and audio.md §8.3's only pre-success spell
-    // boundary is Vanish. A failed attempt therefore reaches the §8.3
-    // failure tail with no shared variant ahead of it.
-    for spell_index in [
-        OPEN_SPELL_INDEX,
-        MAGIC_LOCK_SPELL_INDEX,
-        UNLOCK_MAGIC_SPELL_INDEX,
+    // audio.md §6.1 id 6 qualifies Open's surface arm by success, so a failed
+    // Open reaches the §8.3 failure tail with no shared variant ahead of it.
+    // Ids 25/26 instead sound variant 5 on any accepted direction, "whether
+    // or not a door was there", and then reach the same tail.
+    for (spell_index, expected) in [
+        (OPEN_SPELL_INDEX, vec![SoundEffect::CastFailure]),
+        (
+            MAGIC_LOCK_SPELL_INDEX,
+            vec![
+                SoundEffect::SharedVariant { variant: 5 },
+                SoundEffect::CastFailure,
+            ],
+        ),
+        (
+            UNLOCK_MAGIC_SPELL_INDEX,
+            vec![
+                SoundEffect::SharedVariant { variant: 5 },
+                SoundEffect::CastFailure,
+            ],
+        ),
     ] {
         // A tile the route has no rewrite for, and no chest under it.
         let mut nonmatching = test_state(open_grid(), 1, 1);
@@ -764,8 +775,8 @@ fn failed_directed_utility_casts_sound_only_the_failure_tail() {
         assert_eq!(nonmatching.message, "Failed!");
         assert_eq!(
             nonmatching.sound_effects_after(serial),
-            vec![SoundEffect::CastFailure],
-            "spell {spell_index} must not sound a success variant on a nonmatching tile"
+            expected,
+            "spell {spell_index} on a nonmatching tile"
         );
 
         // An off-map target never reaches a tile at all.
@@ -786,18 +797,18 @@ fn failed_directed_utility_casts_sound_only_the_failure_tail() {
         assert_eq!(off_map.message, "Failed!");
         assert_eq!(
             off_map.sound_effects_after(serial),
-            vec![SoundEffect::CastFailure],
-            "spell {spell_index} must not sound a success variant off the map"
+            expected,
+            "spell {spell_index} off the map"
         );
     }
 }
 
 #[test]
-fn vanish_is_the_only_directed_utility_spell_that_sounds_before_its_tile_test() {
+fn open_is_the_directed_utility_spell_that_waits_for_its_tile_test() {
     // audio.md §8.3: "Vanish first runs variant 1 when direction input
     // commits ... A nonmatching tile retains the earlier variant-1
-    // presentation, then reaches the common failure tail." No other row of
-    // the audio.md §6 table carries that pre-success boundary.
+    // presentation, then reaches the common failure tail." Open's surface arm
+    // instead sounds "only on a successful door unlock" (audio.md §6.1 id 6).
     let mut vanish = test_state(open_grid(), 1, 1);
     arm_spell(&mut vanish, VANISH_SPELL_INDEX);
     let serial = vanish.sound_effect_serial;
@@ -829,7 +840,7 @@ fn vanish_is_the_only_directed_utility_spell_that_sounds_before_its_tile_test() 
     assert_eq!(
         open.sound_effects_after(serial),
         vec![SoundEffect::CastFailure],
-        "only Vanish sounds ahead of the tile test"
+        "Open does not sound ahead of the tile test"
     );
 }
 
