@@ -205,7 +205,19 @@ fn handle_play_key_input_inner(
         return handle_active_use_key_input(state, key, suffix, game_dir);
     }
     if state.active_party_selector.is_some() {
+        let search_turn_before = state
+            .active_party_selector
+            .is_some_and(|session| matches!(session.target, PartySelectorTarget::Search { .. }))
+            .then_some(state.turn);
         state.step_active_party_selector_with_game_dir(key, suffix, game_dir);
+        // `commands.md §3`/§7: a Search that reached the acting-member
+        // picker reports "acted" whether the pick searched or cancelled.
+        if let Some(turn_before) = search_turn_before {
+            if state.active_party_selector.is_none() {
+                state.charge_tile_command_acted_exit(turn_before);
+                state.apply_top_down_post_turn_effects_after_turn(turn_before, game_dir)?;
+            }
+        }
         return Ok(PlayInputDisposition::Continue);
     }
     if state.active_z_stats.is_some() {
@@ -572,6 +584,8 @@ fn handle_active_jimmy_key_input(
 ) -> io::Result<PlayInputDisposition> {
     let turn_before = state.turn;
     if let Some(outcome) = state.step_active_jimmy(key, suffix, game_dir)? {
+        // `commands.md §7`: Jimmy reports "acted" after every exit.
+        state.charge_tile_command_acted_exit(turn_before);
         state.apply_post_turn_effects_after_outcome(turn_before, game_dir, outcome)?;
     }
     Ok(PlayInputDisposition::Continue)
@@ -585,6 +599,9 @@ fn handle_active_surface_chest_key_input(
 ) -> io::Result<PlayInputDisposition> {
     let turn_before = state.turn;
     if let Some(outcome) = state.step_active_surface_chest(key, suffix)? {
+        // `commands.md §3`/§7: the G/S/O/J letter that opened this picker
+        // reports "acted" on every exit.
+        state.charge_tile_command_acted_exit(turn_before);
         state.apply_post_turn_effects_after_outcome(turn_before, game_dir, outcome)?;
     }
     Ok(PlayInputDisposition::Continue)
@@ -700,7 +717,20 @@ fn handle_active_direction_prompt_key_input(
         .active_direction_prompt
         .as_ref()
         .is_some_and(|session| matches!(session.kind, DirectionPromptKind::CombatKlimb { .. }));
+    let tile_command = state.active_direction_prompt.as_ref().is_some_and(|session| {
+        matches!(
+            session.kind,
+            DirectionPromptKind::Get
+                | DirectionPromptKind::Jimmy
+                | DirectionPromptKind::Open
+                | DirectionPromptKind::Search
+        )
+    });
     if let Some(outcome) = state.step_active_direction_prompt(key, suffix, game_dir)? {
+        if tile_command {
+            // `commands.md §3`/§7: G/S/O/J report "acted" on every exit.
+            state.charge_tile_command_acted_exit(turn_before);
+        }
         if let Some(actor_slot) = combat_push_actor {
             if combat_klimb && matches!(outcome, MoveOutcome::Blocked) {
                 // `combat.md §8`: blocked Klimb is one of the parser's

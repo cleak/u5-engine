@@ -806,6 +806,88 @@
         let _ = fs::remove_dir_all(dir);
     }
 
+    /// `commands.md §5.8` / `containers.md §7` (audit A056): crops and the
+    /// wall-torch pair are native tile cases. They answer from any direction
+    /// on any map with no per-coordinate sidecar row present.
+    #[test]
+    fn crops_and_wall_torches_are_native_get_tile_cases() {
+        let dir = debug_game_dir();
+        let _ = fs::remove_file(dir.join(TOWN_GET_TILE_TABLE_FILE));
+        let mut grid = open_grid();
+        grid[32 + 2] = GET_TILE_CROPS_SOURCE;
+        grid[32 * 3 + 2] = GET_TILE_WALL_TORCH_SOURCE_SECOND;
+
+        let mut state = test_state(grid.clone(), 2, 2);
+        state.player.facing = Direction::North;
+        state.food = 9999;
+        state.moral_standing = 5;
+        assert_eq!(state.get_facing_with_game_dir(&dir).unwrap(), MoveOutcome::Got);
+        assert_eq!(state.message, GET_TILE_CROPS_PICKED_LINE);
+        assert_eq!(state.grid[32 + 2], GET_TILE_CROPS_REPLACEMENT);
+        assert_eq!(state.food, 9999, "the 9999 cap");
+        assert!(state.moral_standing < 5, "crop pick debits moral standing");
+
+        let mut state = test_state(grid, 2, 2);
+        state.player.facing = Direction::South;
+        state.moral_standing = 5;
+        assert_eq!(state.get_facing_with_game_dir(&dir).unwrap(), MoveOutcome::Got);
+        assert_eq!(state.message, GET_TILE_BORROWED_LINE);
+        assert_eq!(state.grid[32 * 3 + 2], GET_TILE_WALL_TORCH_REPLACEMENT);
+        assert_eq!(state.moral_standing, 5, "no debit for the borrow");
+        assert_eq!(state.torch_counter, BORROWED_FIXTURE_TORCH_DURATION);
+
+        let mut world_grid = open_world_grid();
+        world_grid[world_cell_index(6, 5)] = GET_TILE_CROPS_SOURCE;
+        let mut state = world_state(world_grid, 5, 5);
+        state.player.facing = Direction::East;
+        assert_eq!(state.get_facing_with_game_dir(&dir).unwrap(), MoveOutcome::Got);
+        assert_eq!(state.message, GET_TILE_CROPS_PICKED_LINE);
+        assert_eq!(state.grid[world_cell_index(6, 5)], GET_TILE_CROPS_REPLACEMENT);
+        let _ = fs::remove_dir_all(dir);
+    }
+
+    /// `commands.md §3` and §7 (audit A054): `G`, `S`, `O` and `J` report
+    /// the default "acted" on every exit - a miss and a cancel included -
+    /// so the per-turn epilogue runs.
+    #[test]
+    fn tile_commands_report_acted_on_misses_and_cancels() {
+        let dir = debug_game_dir();
+        for letter in ['G', 'O', 'J'] {
+            for second in ['6', ' '] {
+                let mut state = test_state(open_grid(), 5, 5);
+                state.keys = 1;
+                assert_eq!(
+                    handle_play_key_input(&mut state, letter, "", &dir).unwrap(),
+                    PlayInputDisposition::Continue
+                );
+                assert_eq!(state.turn, 0, "{letter} prompt is free");
+                assert!(state.active_direction_prompt.is_some(), "{letter} prompt");
+                assert_eq!(
+                    handle_play_key_input(&mut state, second, "", &dir).unwrap(),
+                    PlayInputDisposition::Continue
+                );
+                assert!(
+                    state.active_direction_prompt.is_none(),
+                    "{letter} then {second:?}: {:?}",
+                    state.message
+                );
+                assert_eq!(state.turn, 1, "{letter} then {second:?} must be acted");
+            }
+        }
+        let mut state = world_state(open_world_grid(), 5, 5);
+        assert_eq!(
+            handle_play_key_input(&mut state, 'G', "", &dir).unwrap(),
+            PlayInputDisposition::Continue
+        );
+        assert_eq!(
+            handle_play_key_input(&mut state, '6', "", &dir).unwrap(),
+            PlayInputDisposition::Continue
+        );
+        assert_eq!(state.message, GET_NOTHING_REFUSAL);
+        assert_eq!(state.turn, 1, "overworld Get miss is acted");
+        let _ = fs::remove_dir_all(dir);
+    }
+
     /// `commands.md §5.8`: the `0x9A` arm is the one eat arm that sets the turn
     /// sentinel, and it is reached one step south.
     #[test]

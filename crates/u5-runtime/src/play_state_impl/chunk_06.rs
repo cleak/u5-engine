@@ -1904,6 +1904,10 @@ impl PlayState {
 
         let idx = world_cell_index(tx, ty);
         let tile = self.grid[idx];
+        if let Some(outcome) = self.get_native_tile_case(idx, tile) {
+            self.rebuild_world_live_chunks_from_grid(plane)?;
+            return Ok(outcome);
+        }
         let Some(entries) = load_world_get_tile_entries(game_dir)? else {
             self.message = GET_NOTHING_REFUSAL.to_string();
             return Ok(MoveOutcome::Blocked);
@@ -2041,6 +2045,9 @@ impl PlayState {
         if let Some(outcome) = self.get_town_table_food(idx, tx, ty, tile, dx, dy) {
             return Ok(outcome);
         }
+        if let Some(outcome) = self.get_native_tile_case(idx, tile) {
+            return Ok(outcome);
+        }
         let Some(entries) = load_town_get_tile_entries(game_dir)? else {
             self.message = GET_NOTHING_REFUSAL.to_string();
             return Ok(MoveOutcome::Blocked);
@@ -2090,6 +2097,49 @@ impl PlayState {
             self.emit_sound_effect(SoundEffect::ActionSnap);
         }
         Ok(MoveOutcome::Got)
+    }
+
+    /// `commands.md §5.8` "Eating and borrowing are Get cases" and
+    /// `containers.md §7`: the crop and wall-torch rows are native tile
+    /// cases of Get's fallback cascade, reached on any map from any
+    /// direction - not per-coordinate rows.
+    ///
+    /// | Crops `0x2D`, any direction | `Crops picked!` | `0x2C` |
+    /// | Wall torch `0xB0` or `0xB1`, any direction | `Borrowed!`, with the theft sound | `0x44` |
+    pub fn get_native_tile_case(&mut self, idx: usize, tile: u8) -> Option<MoveOutcome> {
+        match tile {
+            GET_TILE_CROPS_SOURCE => {
+                // "one unit is credited to the shared party food word with
+                // the 9999 cap, the shared moral-standing selector is debited
+                // when nonzero, the party-dirty bit is set, and the turn
+                // sentinel is set."
+                self.grid[idx] = GET_TILE_CROPS_REPLACEMENT;
+                self.food = self.food.saturating_add(1).min(PARTY_FOOD_CAP);
+                self.debit_crop_or_table_food_moral();
+                self.mark_visibility_dirty();
+                self.advance_turn();
+                self.diagnostics
+                    .push("picked crops; added 1 food".to_string());
+                self.message = GET_TILE_CROPS_PICKED_LINE.to_string();
+                // `audio.md §8.1`: crop pickup takes no borrowing sound.
+                Some(MoveOutcome::Got)
+            }
+            GET_TILE_WALL_TORCH_SOURCE_FIRST | GET_TILE_WALL_TORCH_SOURCE_SECOND => {
+                // "The cell is rewritten to the plain floor tile `0x44` from
+                // any approach direction, the line `Borrowed!\n` is printed,
+                // the theft sound plays, and the party's torch counter is set
+                // to 100 counter units". No moral-standing debit.
+                self.grid[idx] = GET_TILE_WALL_TORCH_REPLACEMENT;
+                self.mark_visibility_dirty();
+                self.message = GET_TILE_BORROWED_LINE.to_string();
+                self.apply_borrowed_lit_fixture_light(tile);
+                // `audio.md §8.1`: the 40-update action snap after the
+                // rewrite and the line.
+                self.emit_sound_effect(SoundEffect::ActionSnap);
+                Some(MoveOutcome::Got)
+            }
+            _ => None,
+        }
     }
 
     pub fn get_town_table_food(

@@ -2486,6 +2486,32 @@ impl PlayState {
         MoveOutcome::Observed
     }
 
+    /// `commands.md §3` and §7: the `G`, `S`, `O` and `J` letters discard
+    /// their handler's result and report the default "acted", so the mode
+    /// loop runs its per-turn epilogue after every exit - refusals, misses
+    /// and cancels included ("the world-mode dispatcher reports the normal
+    /// committed-action result after every Jimmy exit"). Called once the
+    /// command has fully returned (no sub-prompt left open); charges the one
+    /// turn only when the handler did not already take it. The town arm
+    /// matches the measured cancelled-Search turn below. Dungeon loops are
+    /// excluded: they advance their own clock (`commands.md §3`).
+    pub fn charge_tile_command_acted_exit(&mut self, turn_before: u64) {
+        if self.turn != turn_before
+            || self.combat_active
+            || self.active_direction_prompt.is_some()
+            || self.active_party_selector.is_some()
+            || self.active_jimmy.is_some()
+            || self.active_surface_chest.is_some()
+        {
+            return;
+        }
+        match self.area {
+            Area::World { .. } => self.advance_turn(),
+            Area::Town { .. } => self.advance_turn_without_door_tick(),
+            Area::Dungeon { .. } => {}
+        }
+    }
+
     pub fn start_search_direction_prompt(&mut self) -> MoveOutcome {
         self.active_direction_prompt =
             Some(DirectionPromptSession::new(DirectionPromptKind::Search));
