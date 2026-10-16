@@ -953,6 +953,34 @@
         assert!(saw_companion, "some seed must roll the one-in-nine companion");
     }
 
+    /// The companion roll belongs to the terrain setup helper, which only the
+    /// **surface** camp ambush reaches (`combat.md §5`); a dungeon rest
+    /// interruption is set up by the room-combat helper, which takes one speed
+    /// draw per monster and no class check. Gated like the shuffle.
+    #[test]
+    fn a_dungeon_camp_ambush_rolls_no_companion_class() {
+        let base = sleep_ambush_monster_sprite(SleepAmbushMonster::Troll);
+        let base_class = combat_class_stats_for_sprite_byte(base).unwrap().class;
+        for seed in 0u16..400 {
+            let mut state = world_state(open_world_grid(), 10, 20);
+            state.area = Area::Dungeon {
+                scene: DungeonScene::from_record(1).unwrap(),
+                level: 0,
+            };
+            state.prng_state = seed.wrapping_mul(163);
+            state
+                .enter_sleep_ambush_combat(SleepAmbushMonster::Troll, 0, std::path::Path::new(""))
+                .unwrap();
+            for slot in COMBAT_PARTY_ACTOR_SLOTS..COMBAT_ACTOR_SLOTS {
+                let actor = state.combat_actors[slot];
+                if actor.is_empty() {
+                    continue;
+                }
+                assert_eq!(actor.owner_target_class, base_class, "seed {seed} slot {slot}");
+            }
+        }
+    }
+
     #[test]
     fn sleep_ambush_placement_seeds_base_step_and_phase_like_any_other_placement() {
         // `combat.md §5`: the alternate rest/camp entry modes seat the

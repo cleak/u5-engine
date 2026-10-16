@@ -1510,8 +1510,16 @@ impl PlayState {
             .min(placement_slots.len() as u8);
         // `combat.md §5` "Picking a class per monster": the camp route uses
         // the same terrain setup helper, so early spawn indexes roll the
-        // one-in-nine companion substitution too.
-        let companion_class = combat_class_companion(stats.class);
+        // one-in-nine companion substitution too. Only the **surface** camp
+        // ambush reaches that helper (`§5`); a dungeon rest interruption goes
+        // through the dungeon framer and the room-combat setup, whose
+        // placement takes one speed draw per monster and no class check, so
+        // it is gated on the same surface test as the shuffle and banner.
+        let companion_class = if surface_camp_ambush {
+            combat_class_companion(stats.class)
+        } else {
+            None
+        };
         let mut placed = 0u8;
         for spawn in 0..placement_count {
             // `active-objects.md §7`: descriptor from the monster-side
