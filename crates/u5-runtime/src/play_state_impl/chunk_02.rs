@@ -2381,6 +2381,7 @@ impl PlayState {
             // substituting engine prose.
             return Ok(MoveOutcome::Observed);
         };
+        let mut rendered = TlkRenderedText::default();
         let mut text = String::new();
         for index in [
             MISCMSG_CODEX_ENTRY_NARRATION,
@@ -2457,18 +2458,21 @@ impl PlayState {
                         text.push_str(&record.replace('\r', "\n"));
                     }
                     text.push_str(crate::miscmsg_io::CODEX_COMPLETION_READ_LEAD_IN);
+                    // `miscmsg-dat.md §4` (`RETRACTIONS.md` R453): records
+                    // `41`-`44` are printed by the ordinary fixed-window
+                    // message printer with the runic font selected - "Keep
+                    // the authored glyph stream and line separators intact" -
+                    // and the normal font restored afterwards. The pages are
+                    // carried as runic cells rather than expanded to prose.
+                    rendered.push_plain(&text);
+                    text.clear();
                     for index in crate::miscmsg_io::MISCMSG_CODEX_COMPLETION_PAGES {
                         if let Some(record) = messages.record(index) {
-                            // §3 (`RETRACTIONS.md` R453): these are printed by
-                            // "the ordinary fixed-window message printer" with
-                            // the runic font selected, not by a separate
-                            // sign-stream path. The glyph stream is expanded
-                            // here; selecting the runic font for the row is a
-                            // presentation detail the message log cannot carry
-                            // yet.
-                            text.push_str(&render_miscmsg_tile_glyph_text(
-                                &record.replace('\r', "\n"),
-                            ));
+                            let page = record.replace('\r', "\n");
+                            rendered.text.push_str(&page);
+                            rendered
+                                .glyphs
+                                .extend(glyphs_from_engine_text(&page, TlkGlyphFont::Runic));
                         }
                     }
                     crate::miscmsg_io::CODEX_PRESENTATION_KEY_STEPS_COMPLETION
@@ -2477,8 +2481,13 @@ impl PlayState {
                 }
             }
         };
-        if !text.is_empty() {
-            self.emit_message_line(text);
+        rendered.push_plain(&text);
+        if !rendered.glyphs.is_empty() {
+            // As `emit_message_line`, but keeping each cell's font.
+            self.flush_message_slot();
+            let ends_with_feed = rendered.text.ends_with('\n');
+            self.emit_tlk_message(rendered);
+            self.message_row_open_mid_line = !ends_with_feed;
         }
         // Measured: the original draws record `46` and then waits, and each
         // accepted key advances the presentation without reaching the command

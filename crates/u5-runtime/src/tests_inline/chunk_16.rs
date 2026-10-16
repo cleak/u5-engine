@@ -1496,6 +1496,59 @@ BRITANNIA 11 21
         let _ = fs::remove_dir_all(dir);
     }
 
+    /// `miscmsg-dat.md §4`: "For Codex records `41`-`44`, the caller selects
+    /// the runic font and uses the ordinary fixed-window message printer ...
+    /// Keep the authored glyph stream and line separators intact."
+    #[test]
+    fn codex_completion_pages_print_their_glyph_stream_in_the_runic_font() {
+        let dir = debug_game_dir();
+        let mut miscmsg = Vec::new();
+        for index in 0..MISCMSG_DAT_RECORDS {
+            if crate::miscmsg_io::MISCMSG_CODEX_COMPLETION_PAGES.contains(&index) {
+                miscmsg.extend_from_slice(format!("TRU[@_{index}").as_bytes());
+            } else {
+                miscmsg.extend_from_slice(format!("rec{index}\n").as_bytes());
+            }
+            miscmsg.push(0);
+        }
+        fs::write(dir.join(MISCMSG_DAT_FILE), miscmsg).unwrap();
+
+        let mut grid = open_world_grid();
+        grid[world_cell_index(10, 20)] = CODEX_SHRINE_ENTRY_TILE;
+        let mut state = britannia_state(grid, 10, 20);
+        state.shrine_ordained_mask = ShrineVirtue::Honesty.bit();
+        state.shrine_codex_mask = 0xFF & !ShrineVirtue::Honesty.bit();
+
+        assert_eq!(
+            handle_play_key_input(&mut state, 'E', "", &dir).unwrap(),
+            PlayInputDisposition::Continue
+        );
+
+        let page = state
+            .message_entries()
+            .iter()
+            .find(|entry| entry.text.contains("TRU[@_41"))
+            .unwrap_or_else(|| panic!("page 41 missing from {:?}", transcript_texts(&state)));
+        assert!(page
+            .glyphs
+            .iter()
+            .all(|glyph| glyph.font == TlkGlyphFont::Runic));
+        assert!(!transcript_texts(&state)
+            .iter()
+            .any(|row| row.contains("TRUTH ST")));
+        // The lead-in before the pages stays in the normal font.
+        let lead_in = state
+            .message_entries()
+            .iter()
+            .find(|entry| entry.text.contains("Thou dost read:"))
+            .unwrap();
+        assert!(lead_in
+            .glyphs
+            .iter()
+            .all(|glyph| glyph.font == TlkGlyphFont::Ordinary));
+        let _ = fs::remove_dir_all(dir);
+    }
+
     /// `karma.md §8` (`RETRACTIONS.md` R451): "`M` remains Mix Reagents at
     /// this location. The earlier statement that the M command owns Codex
     /// entry is retracted." So `M` on the Codex tile mixes and stamps nothing.
