@@ -234,10 +234,10 @@ pub fn apply_u4_transfer_to_save(
     } else {
         translated
     };
-    let name_bytes = overrides
-        .and_then(|overrides| overrides.name.as_deref())
-        .unwrap_or(&source.name);
-    let name = normalize_u4_transfer_name(name_bytes)?;
+    let name = match overrides.and_then(|overrides| overrides.name.as_deref()) {
+        Some(typed) => normalize_u4_transfer_name(typed, true)?,
+        None => normalize_u4_transfer_name(&source.name, false)?,
+    };
     let male = overrides
         .and_then(|overrides| overrides.male)
         .unwrap_or(source.male);
@@ -300,35 +300,25 @@ pub fn commit_u4_transfer_save(
     Ok(avatar)
 }
 
+/// `u4-transfer.md §5.2`/`§7`: the only check on the imported name is
+/// that each of the first eight bytes is NUL or at least `0x20`, so bytes
+/// at or above `0x7F` and a blank name are copied verbatim. Only a typed
+/// replacement (`§6.6` Name replace) refuses a blank name.
 fn normalize_u4_transfer_name(
     name_bytes: &[u8],
+    refuse_blank: bool,
 ) -> Result<[u8; SAVE_CHARACTER_NAME_LEN], U4TransferError> {
     let mut name = [0; SAVE_CHARACTER_NAME_LEN];
-    let mut copied = 0;
-    let mut has_non_space = false;
-    for &byte in name_bytes.iter().take(SAVE_CHARACTER_NAME_LEN - 1) {
-        if byte == 0 {
-            break;
-        }
-        if !(0x20..=0x7e).contains(&byte) {
-            return Err(U4TransferError::InvalidNameByte(byte));
-        }
-        if byte != b' ' {
-            has_non_space = true;
-        }
-        name[copied] = byte;
-        copied += 1;
+    let validated = &name_bytes[..name_bytes.len().min(SAVE_CHARACTER_NAME_LEN - 1)];
+    if let Some(&byte) = validated.iter().find(|&&byte| byte != 0 && byte < 0x20) {
+        return Err(U4TransferError::InvalidNameByte(byte));
     }
-    for &byte in name_bytes
+    let copied = validated
         .iter()
-        .take(SAVE_CHARACTER_NAME_LEN - 1)
-        .skip(copied)
-    {
-        if byte != 0 && !(0x20..=0x7e).contains(&byte) {
-            return Err(U4TransferError::InvalidNameByte(byte));
-        }
-    }
-    if !has_non_space {
+        .position(|&byte| byte == 0)
+        .unwrap_or(validated.len());
+    name[..copied].copy_from_slice(&validated[..copied]);
+    if refuse_blank && validated[..copied].iter().all(|&byte| byte == b' ') {
         return Err(U4TransferError::BlankName);
     }
     Ok(name)

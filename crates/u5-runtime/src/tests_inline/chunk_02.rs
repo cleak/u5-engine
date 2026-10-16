@@ -586,6 +586,54 @@ fn u4_transfer_all_zero_standings_are_accepted_and_latch_the_avatar_flag() {
 }
 
 #[test]
+fn u4_transfer_imports_high_and_blank_source_names_the_preview_accepts() {
+    // `u4-transfer.md §5.2`/`§7`: the only name check is "NUL or at least
+    // `0x20`" on the first eight bytes, so a byte at or above `0x7F` and a
+    // blank name both pass the gate and are copied verbatim at commit.
+    let name_at = U4_PREVIEW_RECORD_OFFSET + U4_PREVIEW_RECORD_NAME_OFFSET;
+    for raw in [
+        &[b'A', 0x7F, 0xC9, b'z', 0, 0, 0, 0][..],
+        &[b' ', b' ', 0, 0, 0, 0, 0, 0][..],
+        &[0; 8][..],
+    ] {
+        let mut bytes = synthetic_party_sav_fixture(&plain_u4_preview_source());
+        bytes[name_at..name_at + 8].copy_from_slice(raw);
+        let source = parse_u4_preview_source(&bytes).expect("§5.2 gate accepts");
+        let mut save = saved_game_seed_bytes(0, 0, 10, 20);
+        let avatar = apply_u4_transfer_to_save(&mut save, &source.to_transfer_source(), None)
+            .expect("commit accepts what the gate accepted");
+        let len = raw.iter().position(|&b| b == 0).unwrap_or(8);
+        assert_eq!(&avatar.name[..len], &raw[..len]);
+        assert!(avatar.name[len..].iter().all(|&b| b == 0));
+        assert_eq!(&save[SAVE_ROSTER_OFFSET..SAVE_ROSTER_OFFSET + 9], &avatar.name[..]);
+    }
+
+    // A control byte below `0x20` is still refused.
+    let source = U4TransferSource {
+        name: vec![b'A', 0x07],
+        ..plain_u4_preview_source().to_transfer_source()
+    };
+    let mut save = saved_game_seed_bytes(0, 0, 10, 20);
+    assert_eq!(
+        apply_u4_transfer_to_save(&mut save, &source, None),
+        Err(U4TransferError::InvalidNameByte(0x07))
+    );
+    // Only a typed replacement name refuses a blank (`§6.6` Name replace).
+    let overrides = U4TransferOverrides {
+        name: Some(b"   ".to_vec()),
+        male: None,
+    };
+    assert_eq!(
+        apply_u4_transfer_to_save(
+            &mut save,
+            &plain_u4_preview_source().to_transfer_source(),
+            Some(&overrides)
+        ),
+        Err(U4TransferError::BlankName)
+    );
+}
+
+#[test]
 fn u4_transfer_nonzero_standings_are_accepted_without_the_avatar_flag() {
     // `u4-transfer.md §5.3`: "Nothing about this test aborts or diverts
     // the transfer: both outcomes produce the normal preview." The test
