@@ -5,7 +5,7 @@
 //! `PlayInputDisposition`) stay in `u5-runtime`.
 
 use std::collections::VecDeque;
-use std::io::{self, Write};
+use std::io::{self, BufRead, Write};
 use std::path::Path;
 use std::time::Duration;
 
@@ -45,6 +45,59 @@ pub fn run_play_loop(
         println!("Script mode: {} command(s).", commands.len());
         return run_play_script_commands(&mut state, game_dir, &commands, tile_atlas.as_ref());
     }
+    run_interactive_play_loop(
+        &mut state,
+        game_dir,
+        tile_atlas.as_ref(),
+        &mut io::stdin().lock(),
+    )
+}
+
+/// Whether the terminal loop runs the input helper's idle wait before it
+/// reads the next key: the same test the visual shell's idle pump applies
+/// (`u5-bevy`'s `visual_idle_tick`), so a modal surface that owns the key
+/// wait - a picker, a line reader, the party selector - does not take the
+/// overworld helper's pass.
+pub fn play_state_runs_input_wait_pass(state: &PlayState) -> bool {
+    play_state_accepts_typeahead(state) && state.active_party_selector.is_none()
+}
+
+/// `overworld.md §8` (`RETRACTIONS.md` R320) and `timing.md §8.2`: the
+/// overworld input helper does work of its own "from the top of the input
+/// helper, before that turn's key is read" - a waterfall directly south of
+/// the party takes the falls chain there, with no key pressed - and "performs
+/// one world step when it is entered".
+///
+/// The visual shell pumps that pass every frame. The terminal shell blocks on
+/// a line read and has no timer pump, so it runs the pass exactly once per
+/// input-helper entry: once before each key it reads. That is every point at
+/// which the original's helper is entered; the further timer-paced passes of
+/// a long wait are pacing this harness does not reproduce.
+///
+/// Under sail the pass is the first half of the auto-advance (`timing.md
+/// §8.2`); a swallowed same-heading key completes it through
+/// [`PlayState::run_under_sail_advance_body`]. A key that is *not* swallowed
+/// "ends the loop and becomes that turn's command", so the next entry starts
+/// a fresh pass rather than resuming the half the command interrupted.
+///
+/// Returns whether a pass ran.
+pub fn run_terminal_input_wait_pass(state: &mut PlayState, game_dir: &Path) -> io::Result<bool> {
+    if !play_state_runs_input_wait_pass(state) {
+        return Ok(false);
+    }
+    state.under_sail_wait_cursor_poll_pending = false;
+    state.idle_wait_pass(Some(game_dir))?;
+    Ok(true)
+}
+
+/// The interactive terminal loop, reading one line per key from
+/// `input_reader` until it is exhausted or the player quits.
+pub fn run_interactive_play_loop<R: BufRead>(
+    state: &mut PlayState,
+    game_dir: &Path,
+    tile_atlas: Option<&TileAtlas>,
+    input_reader: &mut R,
+) -> io::Result<()> {
     let mut input = String::new();
     let mut queued_input = VecDeque::new();
     loop {
@@ -59,26 +112,28 @@ pub fn run_play_loop(
         state.run_blackthorn_audience_exit_to_handoff(game_dir)?;
         state.run_shrine_third_mantra_resolution_to_completion(game_dir)?;
         // Anything typed while a hold owned the loop is replayed now.
-        while u5_runtime::input_dispatch::drain_buffered_hold_key(&mut state, game_dir)?.is_some() {
-        }
-        if play_state_accepts_typeahead(&state) {
+        while u5_runtime::input_dispatch::drain_buffered_hold_key(state, game_dir)?.is_some() {}
+        if play_state_accepts_typeahead(state) {
             match state.apply_exploration_turn_gate(game_dir)? {
                 ExplorationTurnGateOutcome::Ready { .. } => {}
                 ExplorationTurnGateOutcome::Slept { .. } => {
-                    print_play_frame(&mut state, tile_atlas.as_ref())?;
+                    print_play_frame(state, tile_atlas)?;
                     // Host-side pacing only: the clean spec requires a brief
                     // pause but does not publish a duration for this shell.
                     std::thread::sleep(Duration::from_millis(100));
                     continue;
                 }
                 ExplorationTurnGateOutcome::Rescued { .. } => {
-                    print_play_frame(&mut state, tile_atlas.as_ref())?;
+                    print_play_frame(state, tile_atlas)?;
                     continue;
                 }
             }
         }
-        print_play_frame(&mut state, tile_atlas.as_ref())?;
-        if !play_state_honours_typeahead_queue(&state) {
+        // The input helper's own pass, before the key is read; see
+        // [`run_terminal_input_wait_pass`].
+        run_terminal_input_wait_pass(state, game_dir)?;
+        print_play_frame(state, tile_atlas)?;
+        if !play_state_honours_typeahead_queue(state) {
             queued_input.clear();
         }
         let (key, suffix) = if let Some(key) = queued_input.pop_front() {
@@ -87,10 +142,10 @@ pub fn run_play_loop(
             print!("> ");
             io::stdout().flush()?;
             input.clear();
-            if io::stdin().read_line(&mut input)? == 0 {
+            if input_reader.read_line(&mut input)? == 0 {
                 break;
             }
-            if play_state_typeahead_setting_in_force(&state) {
+            if play_state_typeahead_setting_in_force(state) {
                 if let Some(keys) = play_input_typeahead_chars(&input) {
                     let mut keys = keys.into_iter();
                     let key = keys.next().expect("typeahead input is non-empty");
@@ -99,18 +154,17 @@ pub fn run_play_loop(
                 } else if let Some((key, suffix)) = play_input_key_and_suffix(&input) {
                     (key, suffix)
                 } else {
-                    handle_empty_play_input(&mut state, game_dir)?;
+                    handle_empty_play_input(state, game_dir)?;
                     continue;
                 }
             } else if let Some((key, suffix)) = play_input_key_and_suffix(&input) {
                 (key, suffix)
             } else {
-                handle_empty_play_input(&mut state, game_dir)?;
+                handle_empty_play_input(state, game_dir)?;
                 continue;
             }
         };
-        if handle_play_key_input(&mut state, key, &suffix, game_dir)? == PlayInputDisposition::Quit
-        {
+        if handle_play_key_input(state, key, &suffix, game_dir)? == PlayInputDisposition::Quit {
             break;
         }
     }

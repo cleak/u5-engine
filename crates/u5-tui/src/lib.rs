@@ -27,7 +27,8 @@ pub use play_loop::{
     play_input_typeahead_chars, play_script_command_label, play_script_idle_tick_count,
     play_script_state_line, play_state_accepts_typeahead, print_play_frame,
     print_play_script_snapshot, raster_diagnostic_line, raster_frame_kind,
-    replay_play_script_commands, run_play_loop, run_play_script_commands,
+    play_state_runs_input_wait_pass, replay_play_script_commands, run_interactive_play_loop,
+    run_play_loop, run_play_script_commands, run_terminal_input_wait_pass,
     unclassified_escape_sequence,
 };
 pub use route_smoke::{

@@ -1632,3 +1632,52 @@ fn route_smoke_scripts_cover_every_published_spell_code() {
         assert!(covered[index], "route smoke scripts should cover {code}");
     }
 }
+
+/// `overworld.md §8` / `RETRACTIONS.md` R320: a waterfall directly south of
+/// the party takes the falls chain "from the top of the input helper, before
+/// that turn's key is read". The interactive terminal loop is that helper's
+/// caller, so the party falls before any key arrives - here the input is
+/// already exhausted, and the chain has still run.
+#[test]
+fn interactive_loop_runs_the_input_wait_pass_before_reading_a_key() {
+    let dir = debug_game_dir();
+    let (x, y) = (20, 20);
+    let mut grid = open_world_grid();
+    grid[world_cell_index(x, y + 1)] = WATERFALL_TILE_FIRST;
+    let mut state = world_state(grid, x, y);
+    state.party[0].hp = 30;
+    let turn_before = state.turn;
+
+    run_interactive_play_loop(
+        &mut state,
+        &dir,
+        None,
+        &mut std::io::Cursor::new(Vec::new()),
+    )
+    .unwrap();
+
+    // Two forced one-cell steps south, and no turn charged: no key was read.
+    assert_eq!((state.player.x, state.player.y), (x, y + 2));
+    assert_eq!(state.turn, turn_before);
+}
+
+/// The pass runs once per key the loop reads, and not while a modal surface
+/// owns the key wait - the same gate the visual shell's idle pump applies.
+#[test]
+fn terminal_input_wait_pass_runs_once_per_entry_and_skips_modal_prompts() {
+    let dir = debug_game_dir();
+    let (x, y) = (20, 20);
+    let mut grid = open_world_grid();
+    grid[world_cell_index(x, y + 1)] = WATERFALL_TILE_FIRST;
+
+    let mut modal = world_state(grid.clone(), x, y);
+    modal.start_look_direction_prompt();
+    assert!(!play_state_runs_input_wait_pass(&modal));
+    assert!(!run_terminal_input_wait_pass(&mut modal, &dir).unwrap());
+    assert_eq!((modal.player.x, modal.player.y), (x, y));
+
+    let mut idle = world_state(grid, x, y);
+    idle.party[0].hp = 30;
+    assert!(run_terminal_input_wait_pass(&mut idle, &dir).unwrap());
+    assert_eq!((idle.player.x, idle.player.y), (x, y + 2));
+}
