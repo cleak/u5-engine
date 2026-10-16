@@ -1786,3 +1786,48 @@ fn a_shipped_opening_can_carry_its_ask_who_in_the_description_field() {
     );
     assert!(!carries_ask_who(2), "the Greeting entry carries none");
 }
+
+/// `dungeon-mode.md §8.1`: the fire field plays "only the damage helper's
+/// flash and rumble, per damaged member", and `§8` routes the damage
+/// "through the ordinary party-damage rule", so a member killed by it also
+/// loses the active-member selection.
+#[test]
+fn dungeon_fire_field_damage_uses_shared_party_damage_presentation() {
+    let mut grid = open_dungeon_record();
+    grid[dungeon_cell_index(0, 1, 1)] = 0x82;
+    let mut state = dungeon_state(grid, 0, 1, 1);
+    state.party = vec![
+        PartyMember {
+            slot: 0,
+            class_byte: b'A',
+            status: b'G',
+            climb_stat: 30,
+            mana: 8,
+            hp: 1,
+            max_hp: 20,
+            level: 8,
+        },
+        PartyMember {
+            slot: 1,
+            class_byte: b'A',
+            status: b'G',
+            climb_stat: 30,
+            mana: 8,
+            hp: 20,
+            max_hp: 20,
+            level: 8,
+        },
+    ];
+    state.active_player = Some(0);
+
+    let _ = state.apply_dungeon_field_effect(DungeonFieldEffect::Fire);
+
+    let rumbles = state
+        .sound_effects_after(0)
+        .into_iter()
+        .filter(|effect| *effect == SoundEffect::DamageRumble)
+        .count();
+    assert_eq!(rumbles, 2);
+    assert_eq!(state.party[0].status, b'D');
+    assert_eq!(state.active_player, None);
+}

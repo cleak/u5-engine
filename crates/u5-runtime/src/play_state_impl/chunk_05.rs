@@ -313,7 +313,11 @@ impl PlayState {
                 }
                 let damage = self.dungeon_field_damage_roll();
                 let slot = self.party[index].slot;
-                let applied = self.party[index].apply_damage(damage);
+                // `dungeon-mode.md §8` / `§8.1`: fire and electric damage go
+                // "through the ordinary party-damage rule" - the damage
+                // helper's flash and rumble per damaged member, death at
+                // zero and the active-member clear.
+                let applied = self.apply_shared_party_damage(index, damage).applied;
                 reports.push(format!(
                     "slot {slot} took {applied} HP ({} HP left)",
                     self.party[index].hp
