@@ -12,12 +12,17 @@ impl PlayState {
         _game_dir: &Path,
         _plane: WorldPlane,
     ) -> io::Result<MoveOutcome> {
+        // `doors-and-z-transitions.md §13`: "the overworld handler's value is
+        // not forwarded at all, so its gear and on-foot refusals still report
+        // 'acted' and still cost the outdoor turn" (`commands.md §3`).
         match overworld_klimb_entry_gate(self.climbing_gear != 0, self.player.transport.is_foot()) {
             OverworldKlimbEntryGate::NoGrapple => {
+                self.advance_turn();
                 self.message = "With what?".to_string();
                 return Ok(MoveOutcome::Blocked);
             }
             OverworldKlimbEntryGate::NotOnFoot => {
+                self.advance_turn();
                 self.message = "On foot!".to_string();
                 return Ok(MoveOutcome::Blocked);
             }
@@ -66,13 +71,16 @@ impl PlayState {
         // The order is fixed: `0x0D` first, then `0x0C`.
         if tile == OVERWORLD_KLIMB_PEAKS_TILE {
             // "`0x0D` (the tile catalog's *peaks*) is the blocked variant and
-            // prints `Impassable!`."
+            // prints `Impassable!`." Not forwarded, so it costs the turn
+            // (§13).
+            self.advance_turn();
             self.message = "Impassable!".to_string();
             return Ok(MoveOutcome::Blocked);
         }
         if tile != OVERWORLD_KLIMB_MOUNTAINS_TILE {
             // "`0x0C` (*mountains*) is the one climbable identity. Every other
-            // id prints `Not climbable!`."
+            // id prints `Not climbable!`." Not forwarded either (§13).
+            self.advance_turn();
             self.message = "Not climbable!".to_string();
             return Ok(MoveOutcome::Blocked);
         }

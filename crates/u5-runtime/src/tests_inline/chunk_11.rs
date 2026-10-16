@@ -1677,7 +1677,9 @@
     }
 
     #[test]
-    fn world_k_requires_climbing_gear_without_turn() {
+    fn world_k_requires_climbing_gear_and_still_costs_the_turn() {
+        // `doors-and-z-transitions.md §13`: the overworld handler's value is
+        // not forwarded, so its refusals still cost the outdoor turn.
         let mut state = world_state(open_world_grid(), 10, 20);
 
         assert_eq!(
@@ -1687,7 +1689,7 @@
 
         assert_eq!(state.message, "With what?");
         assert_eq!((state.player.x, state.player.y), (10, 20));
-        assert_eq!(state.turn, 0);
+        assert_eq!(state.turn, 1);
     }
 
     #[test]
@@ -1703,11 +1705,11 @@
 
         assert_eq!(state.message, "On foot!");
         assert_eq!((state.player.x, state.player.y), (10, 20));
-        assert_eq!(state.turn, 0);
+        assert_eq!(state.turn, 1);
     }
 
     #[test]
-    fn world_k_refuses_non_climbable_target_without_turn() {
+    fn world_k_refuses_non_climbable_target_and_costs_the_turn() {
         let mut state = world_state(open_world_grid(), 10, 20);
         state.climbing_gear = 1;
         state.player.facing = Direction::East;
@@ -1719,7 +1721,7 @@
 
         assert_eq!(state.message, "Not climbable!");
         assert_eq!((state.player.x, state.player.y), (10, 20));
-        assert_eq!(state.turn, 0);
+        assert_eq!(state.turn, 1);
     }
 
     /// `doors-and-z-transitions.md §9`, as answered on `cleak/u5-spec#265`:
@@ -1753,7 +1755,7 @@
             );
             assert_eq!(state.message, expected, "tile {tile:#04x}");
             assert_eq!((state.player.x, state.player.y), (10, 20));
-            assert_eq!(state.turn, 0);
+            assert_eq!(state.turn, 1);
         }
     }
 
