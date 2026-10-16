@@ -10333,6 +10333,10 @@ fn negate_magic_silently_consumes_only_scene_resistant_ranged_effects() {
 
     let mut ordinary = combat_ai_turn_state(8, 5);
     ordinary.combat_actors[8].owner_target_class = COMBAT_CLASS_DRAGON;
+    // At full health, so the classifier leaves it attacking: a fleeing
+    // actor moves first (`combat.md §9.1`).
+    ordinary.combat_actors[8].hp_or_wound =
+        combat_class_stats(COMBAT_CLASS_DRAGON).unwrap().max_hp;
     ordinary.active_effect_tag = Some(NEGATE_MAGIC_ACTIVE_EFFECT_TAG);
     ordinary.active_effect_counter = 20;
     ordinary.party[0].status = b'G';
@@ -14836,8 +14840,33 @@ fn combat_ai_random_cardinal_fallback_is_four_independent_draws() {
         }
     );
 
-    // A fully enclosed actor is no longer short-circuited: it still spends
-    // its four attempts.
+    // An actor whose draws all miss its one open neighbour still spends its
+    // four attempts.
+    assert_eq!(
+        resolve_combat_ai_movement(
+            &legal,
+            0,
+            0,
+            CombatStepVector { dx: -1, dy: -1 },
+            false,
+            false,
+            None,
+            true,
+            &[1, 3, 4, 4],
+        ),
+        CombatAiMovementOutcome::Blocked {
+            random_cardinal_attempts: 4,
+            // `combat.md §9`: the final draw (`4`) is not the first code
+            // (`1`), so the exhausted fallback still reports the action
+            // consumed.
+            action_consumed: true,
+        }
+    );
+
+    // A fully enclosed actor is a different case: `combat.md §9.1`'s
+    // surrounded early return takes "no step at all" and reports that it
+    // did not move, before any axis attempt or fallback draw. That gate is
+    // not the neighbour scan R311 withdrew from inside the fallback.
     legal[0][1] = false;
     assert_eq!(
         resolve_combat_ai_movement(
@@ -14852,10 +14881,8 @@ fn combat_ai_random_cardinal_fallback_is_four_independent_draws() {
             &[1, 3, 2, 4],
         ),
         CombatAiMovementOutcome::Blocked {
-            random_cardinal_attempts: 4,
-            // `combat.md §9`: the final draw (`4`) is not the first (`1`), so
-            // the exhausted fallback still reports the action consumed.
-            action_consumed: true,
+            random_cardinal_attempts: 0,
+            action_consumed: false,
         }
     );
 }

@@ -500,11 +500,15 @@
         // attempts fail, whether the actor is reported as moved turns on
         // which direction code the last draw produced - any cardinal but the
         // first of the four commits a zero-length step and reports a move.
-        let blocked = [[false; COMBAT_ARENA_SIDE]; COMBAT_ARENA_SIDE];
+        // One open neighbour, south of the actor, which no draw lands on: a
+        // fully enclosed actor would take `§9.1`'s surrounded early return
+        // instead and never reach the fallback.
+        let mut blocked = [[false; COMBAT_ARENA_SIDE]; COMBAT_ARENA_SIDE];
+        blocked[6][5] = true;
         let step_vector = CombatStepVector { dx: 1, dy: 0 };
 
         assert_eq!(
-            resolve_combat_ai_movement(&blocked, 5, 5, step_vector, false, false, None, true, &[1, 2, 3, 4]),
+            resolve_combat_ai_movement(&blocked, 5, 5, step_vector, false, false, None, true, &[1, 2, 3, 3]),
             CombatAiMovementOutcome::Blocked {
                 random_cardinal_attempts: 4,
                 action_consumed: true,

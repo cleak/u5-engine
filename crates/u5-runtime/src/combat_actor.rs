@@ -490,9 +490,11 @@ pub enum CombatAiMovementOutcome {
     /// report; the committed displacement is zero on both arms.
     Blocked {
         random_cardinal_attempts: u8,
-        /// `combat.md §9`: `false` only for the published exception -
-        /// four exhausted attempts whose **final** draw repeated the
-        /// **first** direction tried.
+        /// `combat.md §9`: `false` when the primitive "reports that the
+        /// actor did not move" - four exhausted attempts whose **final**
+        /// draw was the first direction code, or `§9.1`'s surrounded early
+        /// return (zero attempts). A fleeing actor reporting `false` falls
+        /// into the ordinary attack/target routine (`§9.1`).
         action_consumed: bool,
     },
 }
@@ -4628,10 +4630,9 @@ pub const fn combat_ai_teleport_probe_cell(x_draw: u8, y_draw: u8) -> Option<(u8
 /// The `unless` clause is reported on
 /// [`CombatAiMovementOutcome::Blocked::action_consumed`]: it is `false`
 /// exactly when all four attempts were spent and the fourth draw repeated
-/// the first direction tried. **What a not-consumed report changes further
-/// up is not published** - `§9` states the report and stops - so this
-/// engine surfaces the published state and leaves the round walker's
-/// response to it unchanged. `random_cardinal_attempts` still records the
+/// the first direction tried. `§9.1` publishes what a not-consumed report
+/// changes further up: a fleeing actor that did not move is dispatched into
+/// the ordinary attack/target routine. `random_cardinal_attempts` still records the
 /// draw count, which is the part of `§9` the shared PRNG stream depends on.
 ///
 /// `random_cardinal_direction_codes` supplies those draws in order. At most
@@ -4659,9 +4660,21 @@ pub fn resolve_combat_ai_movement(
         }
     }
 
-    // No neighbour scan and no early "surrounded" exit here: `§9` withdrew
-    // both (`RETRACTIONS.md` R311). A fully enclosed actor still runs the
-    // direct axes and then spends its four fallback draws.
+    // `combat.md §9.1`: the surrounded predicate's second consumer, "an
+    // **early return** taken before target selection and before either
+    // axis attempt: a surrounded actor takes no step at all and the
+    // primitive reports that it did not move". A surrounded
+    // teleport-capable actor has already spent the teleport arm above.
+    //
+    // This is a different site from the one `RETRACTIONS.md` R311
+    // withdrew: the random-cardinal fallback below still performs no
+    // neighbour scan and is still four independent draws.
+    if combat_ai_cardinal_neighbours_blocked(legal_cells, actor_x, actor_y, fleeing) {
+        return CombatAiMovementOutcome::Blocked {
+            random_cardinal_attempts: 0,
+            action_consumed: false,
+        };
+    }
     // `RETRACTIONS.md` R480: "The two axes are not symmetric. One per-turn
     // draw over the inclusive range `0..255` selects the branch: above the
     // midpoint the actor offers the X-displaced candidate and falls back to

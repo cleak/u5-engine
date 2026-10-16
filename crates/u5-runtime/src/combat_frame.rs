@@ -3416,6 +3416,101 @@ impl PlayState {
         resolve_combat_ai_target_after_scan(&mut self.combat_actors, pick, cleanup_fallback_target)
     }
 
+    /// The ordinary attack/target routine of `combat.md §9`/`§11` for an
+    /// automatic actor whose chosen target is in attack range.
+    fn combat_ai_attack_route_attack(
+        &mut self,
+        actor_slot: usize,
+        target_slot: Option<usize>,
+        attack_route: Option<CombatAiAttackRoute>,
+        draws: CombatAiTurnDraws<'_>,
+    ) -> Option<CombatMonsterAttackApplication> {
+        // `magic.md §8`: only a scene-resistant, non-adjacent effect is
+        // aborted here. The outer attack driver still reports the action
+        // as handled, so the result is a silent consumed attack with no
+        // projectile, hit test, damage, or status path.
+        let resistant_ranged_effect_suppressed =
+            matches!(
+                attack_route,
+                Some(CombatAiAttackRoute::RangedEffect {
+                    scene_resistance: true,
+                    ..
+                })
+            ) && negate_magic_aura_active(self.active_effect_tag, self.active_effect_counter);
+        (!resistant_ranged_effect_suppressed)
+            .then_some(target_slot)
+            .flatten()
+            .and_then(|target_slot| {
+                let ranged_effect =
+                    matches!(attack_route, Some(CombatAiAttackRoute::RangedEffect { .. }));
+                // `combat.md §11` puts the Amulet/Turning byte in attack
+                // setup: "When such an actor targets a living party member
+                // who has Amulet/Turning readied in the amulet/neck
+                // equipment slot, attack setup rolls one byte in
+                // `[0, 255]`." Nothing published conditions that roll on
+                // whether a caller pre-supplied the attempt's other
+                // inputs, so the production arm below takes it at setup.
+                //
+                // The deterministic arm keeps the roll where it was, inside
+                // the input-supplied closure. Hoisting it there would have
+                // spent a draw on an attempt that has no inputs and so
+                // never resolves, which no section publishes; §11.1's
+                // ranged carve-out is about the scatter a **failed to-hit
+                // roll** causes and does not reach this gate.
+                match draws {
+                    CombatAiTurnDraws::SharedPrng => {
+                        if ranged_effect
+                            && self.combat_monster_amulet_turning_scatter_applies(
+                                actor_slot,
+                                target_slot,
+                            )
+                        {
+                            let hit_raw_roll_0_to_60 = self.combat_monster_hit_roll();
+                            let scatter_roll = self.combat_monster_scatter_cell_roll();
+                            self.resolve_and_apply_combat_monster_scattered_attack(
+                                actor_slot,
+                                target_slot,
+                                hit_raw_roll_0_to_60,
+                                scatter_roll,
+                            )
+                        } else {
+                            self.resolve_and_apply_combat_monster_attack_from_shared_prng(
+                                actor_slot,
+                                target_slot,
+                            )
+                        }
+                    }
+                    CombatAiTurnDraws::Fixed {
+                        monster_attack_inputs,
+                        ..
+                    } => monster_attack_inputs.and_then(|inputs| {
+                        if ranged_effect
+                            && self.combat_monster_amulet_turning_scatter_applies(
+                                actor_slot,
+                                target_slot,
+                            )
+                        {
+                            self.resolve_and_apply_combat_monster_scattered_attack(
+                                actor_slot,
+                                target_slot,
+                                inputs.hit_raw_roll_0_to_60,
+                                inputs.amulet_turning_scatter_roll,
+                            )
+                        } else {
+                            self.resolve_and_apply_combat_monster_attack(
+                                actor_slot,
+                                target_slot,
+                                inputs.hit_raw_roll_0_to_60,
+                                inputs.poison_gate_accepts,
+                                inputs.poison_damage_roll,
+                                inputs.forced_hit,
+                            )
+                        }
+                    }),
+                }
+            })
+    }
+
     /// `draws` selects between the production shared-PRNG mode and the
     /// deterministic-input mode; see [`CombatAiTurnDraws`].
     #[allow(clippy::too_many_arguments)]
@@ -3612,94 +3707,20 @@ impl PlayState {
                 movement_commit: None,
             });
         }
-        if matches!(
+        let attack_route_attacks = matches!(
             attack_route,
             Some(CombatAiAttackRoute::Melee | CombatAiAttackRoute::RangedEffect { .. })
-        ) {
-            // `magic.md §8`: only a scene-resistant, non-adjacent effect is
-            // aborted here. The outer attack driver still reports the action
-            // as handled, so the result is a silent consumed attack with no
-            // projectile, hit test, damage, or status path.
-            let resistant_ranged_effect_suppressed =
-                matches!(
-                    attack_route,
-                    Some(CombatAiAttackRoute::RangedEffect {
-                        scene_resistance: true,
-                        ..
-                    })
-                ) && negate_magic_aura_active(self.active_effect_tag, self.active_effect_counter);
-            let monster_attack = (!resistant_ranged_effect_suppressed)
-                .then_some(target_slot)
-                .flatten()
-                .and_then(|target_slot| {
-                    let ranged_effect =
-                        matches!(attack_route, Some(CombatAiAttackRoute::RangedEffect { .. }));
-                    // `combat.md §11` puts the Amulet/Turning byte in attack
-                    // setup: "When such an actor targets a living party member
-                    // who has Amulet/Turning readied in the amulet/neck
-                    // equipment slot, attack setup rolls one byte in
-                    // `[0, 255]`." Nothing published conditions that roll on
-                    // whether a caller pre-supplied the attempt's other
-                    // inputs, so the production arm below takes it at setup.
-                    //
-                    // The deterministic arm keeps the roll where it was, inside
-                    // the input-supplied closure. Hoisting it there would have
-                    // spent a draw on an attempt that has no inputs and so
-                    // never resolves, which no section publishes; §11.1's
-                    // ranged carve-out is about the scatter a **failed to-hit
-                    // roll** causes and does not reach this gate.
-                    match draws {
-                        CombatAiTurnDraws::SharedPrng => {
-                            if ranged_effect
-                                && self.combat_monster_amulet_turning_scatter_applies(
-                                    actor_slot,
-                                    target_slot,
-                                )
-                            {
-                                let hit_raw_roll_0_to_60 = self.combat_monster_hit_roll();
-                                let scatter_roll = self.combat_monster_scatter_cell_roll();
-                                self.resolve_and_apply_combat_monster_scattered_attack(
-                                    actor_slot,
-                                    target_slot,
-                                    hit_raw_roll_0_to_60,
-                                    scatter_roll,
-                                )
-                            } else {
-                                self.resolve_and_apply_combat_monster_attack_from_shared_prng(
-                                    actor_slot,
-                                    target_slot,
-                                )
-                            }
-                        }
-                        CombatAiTurnDraws::Fixed {
-                            monster_attack_inputs,
-                            ..
-                        } => monster_attack_inputs.and_then(|inputs| {
-                            if ranged_effect
-                                && self.combat_monster_amulet_turning_scatter_applies(
-                                    actor_slot,
-                                    target_slot,
-                                )
-                            {
-                                self.resolve_and_apply_combat_monster_scattered_attack(
-                                    actor_slot,
-                                    target_slot,
-                                    inputs.hit_raw_roll_0_to_60,
-                                    inputs.amulet_turning_scatter_roll,
-                                )
-                            } else {
-                                self.resolve_and_apply_combat_monster_attack(
-                                    actor_slot,
-                                    target_slot,
-                                    inputs.hit_raw_roll_0_to_60,
-                                    inputs.poison_gate_accepts,
-                                    inputs.poison_damage_roll,
-                                    inputs.forced_hit,
-                                )
-                            }
-                        }),
-                    }
-                });
+        );
+        // `combat.md §9.1`: a fleeing actor runs the movement primitive
+        // first, and only "when the primitive reports that it did not move
+        // and the fleeing bit is still set" does the driver dispatch it into
+        // the ordinary attack/target routine - below, after the movement.
+        // The Reaper and the Mimic never reach the primitive's step arm
+        // (`§9`), and what the refusal reports is not published, so they
+        // keep the attack-first order.
+        if attack_route_attacks && (!fleeing || combat_ai_class_never_moves(class)) {
+            let monster_attack =
+                self.combat_ai_attack_route_attack(actor_slot, target_slot, attack_route, draws);
             return Some(CombatAiTurnApplication {
                 actor_slot,
                 special: None,
@@ -3765,7 +3786,18 @@ impl PlayState {
         // one axis, with randomized axis priority": the coin belongs to the
         // stepping arm, below the attack path and below the teleport arm, so
         // in shared-PRNG mode it is drawn here and nowhere earlier.
+        //
+        // `combat.md §9.1`: the surrounded predicate's second consumer is "an
+        // **early return** taken ... before either axis attempt: a
+        // surrounded actor takes no step at all and the primitive reports
+        // that it did not move" - after the teleport arm, before the coin.
+        let teleport_accepted = teleport_capable
+            && teleport_candidate
+                .is_some_and(|(x, y)| combat_ai_legal_cell(&legal_cells, x as i16, y as i16));
+        let surrounded = !teleport_accepted
+            && combat_ai_cardinal_neighbours_blocked(&legal_cells, actor.x, actor.y, fleeing);
         let offers_horizontal_axis = match draws {
+            CombatAiTurnDraws::SharedPrng if surrounded => false,
             CombatAiTurnDraws::SharedPrng => self.combat_ai_offers_horizontal_axis(actor_slot),
             CombatAiTurnDraws::Fixed {
                 offers_horizontal_axis,
@@ -3865,6 +3897,38 @@ impl PlayState {
             }
         };
         let command_key = resolve_combat_ai_synthesized_command_key(None, movement_direction_code);
+
+        // `combat.md §9.1`: "When the primitive reports that it did not move
+        // and the fleeing bit is still set, the turn is not silent: the
+        // driver dispatches that actor into the ordinary attack/target
+        // routine instead" - and that dispatch is "draw-free, tick-free and
+        // silent from the driver's side".
+        if fleeing
+            && attack_route_attacks
+            && matches!(
+                movement,
+                CombatAiMovementOutcome::Blocked {
+                    action_consumed: false,
+                    ..
+                }
+            )
+        {
+            let monster_attack =
+                self.combat_ai_attack_route_attack(actor_slot, target_slot, attack_route, draws);
+            return Some(CombatAiTurnApplication {
+                actor_slot,
+                special: None,
+                possess_hook_handled: false,
+                acting_group,
+                target,
+                step_vector: Some(step_vector),
+                attack_route,
+                monster_attack,
+                movement: Some(movement),
+                command_key: Some(COMBAT_AI_ATTACK_COMMAND_KEY),
+                movement_commit,
+            });
+        }
 
         Some(CombatAiTurnApplication {
             actor_slot,

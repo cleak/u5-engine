@@ -177,3 +177,134 @@ fn fleeing_turn_heal_draw_comes_first_and_has_no_ceiling() {
     assert_eq!(state.prng_state, 1234);
     assert_eq!(state.combat_actors[8].hp_or_wound, max_hp);
 }
+
+fn audit_g1_blocking_arena_tile() -> u8 {
+    (0..=u8::MAX)
+        .find(|&tile| !is_combat_arena_tile_walkable(tile))
+        .expect("some arena tile refuses a step")
+}
+
+#[test]
+fn surrounded_actor_takes_no_step_and_no_movement_draws() {
+    // `combat.md §9.1`: "An **early return** taken before target selection
+    // and before either axis attempt: a surrounded actor takes no step at
+    // all and the primitive reports that it did not move."
+    let mut state = combat_ai_turn_state(8, 5);
+    state.combat_actors[8].hp_or_wound = combat_class_stats(COMBAT_CLASS_GIANT_RAT).unwrap().max_hp;
+    state.combat_actors[0].x = 2;
+    state.active_objects[0].x = 2;
+    let wall = audit_g1_blocking_arena_tile();
+    for (x, y) in [(7usize, 5usize), (9, 5), (8, 4), (8, 6)] {
+        state.combat_terrain[y][x] = wall;
+    }
+    state.prng_state = 0x1357;
+
+    let application = state.apply_combat_ai_turn(8).unwrap();
+
+    assert_eq!(
+        application.movement,
+        Some(CombatAiMovementOutcome::Blocked {
+            random_cardinal_attempts: 0,
+            action_consumed: false,
+        })
+    );
+    // No axis coin and no fallback draws.
+    assert_eq!(state.prng_state, 0x1357);
+    assert_eq!((state.combat_actors[8].x, state.combat_actors[8].y), (8, 5));
+}
+
+fn audit_g1_fleeing_adjacent_state() -> PlayState {
+    let mut state = combat_ai_turn_state(6, 5);
+    // Below one quarter of the class maximum: the classifier always flees.
+    state.combat_actors[8].hp_or_wound = 1;
+    state.combat_actors[8].set_fleeing(true);
+    state.party[0].status = b'G';
+    state.party[0].hp = 20;
+    state.party[0].max_hp = 20;
+    state
+}
+
+fn audit_g1_forced_hit() -> CombatMonsterAttackInputs {
+    CombatMonsterAttackInputs {
+        forced_hit: Some(true),
+        ..CombatMonsterAttackInputs::default()
+    }
+}
+
+#[test]
+fn fleeing_actor_in_reach_moves_first_and_does_not_attack() {
+    // `combat.md §9.1`: a fleeing actor runs the movement primitive; only
+    // "when the primitive reports that it did not move and the fleeing bit
+    // is still set" does the driver dispatch it into the attack routine.
+    let mut state = audit_g1_fleeing_adjacent_state();
+
+    let application = state
+        .apply_combat_ai_turn_with_inputs(
+            8,
+            false,
+            0,
+            false,
+            255,
+            255,
+            &[],
+            None,
+            0,
+            false,
+            None,
+            true,
+            &[1, 2, 3, 4],
+            Some(audit_g1_forced_hit()),
+        )
+        .unwrap();
+
+    assert_eq!(application.attack_route, Some(CombatAiAttackRoute::Melee));
+    assert_eq!(
+        application.movement,
+        Some(CombatAiMovementOutcome::Step {
+            direction_code: 2,
+            x: 7,
+            y: 5,
+        })
+    );
+    assert_eq!(application.monster_attack, None);
+    assert_eq!(state.party[0].hp, 20);
+}
+
+#[test]
+fn fleeing_actor_that_did_not_move_falls_into_the_attack_routine() {
+    let mut state = audit_g1_fleeing_adjacent_state();
+    let wall = audit_g1_blocking_arena_tile();
+    for (x, y) in [(7usize, 5usize), (6, 4), (6, 6)] {
+        state.combat_terrain[y][x] = wall;
+    }
+
+    let application = state
+        .apply_combat_ai_turn_with_inputs(
+            8,
+            false,
+            0,
+            false,
+            255,
+            255,
+            &[],
+            None,
+            0,
+            false,
+            None,
+            true,
+            &[1, 2, 3, 4],
+            Some(audit_g1_forced_hit()),
+        )
+        .unwrap();
+
+    assert_eq!(
+        application.movement,
+        Some(CombatAiMovementOutcome::Blocked {
+            random_cardinal_attempts: 0,
+            action_consumed: false,
+        })
+    );
+    assert!(application.monster_attack.is_some());
+    assert_eq!(application.command_key, Some(COMBAT_AI_ATTACK_COMMAND_KEY));
+    assert!(state.party[0].hp < 20);
+}
