@@ -7555,8 +7555,9 @@ fn validate_route_smoke_case_state(
                 // destruction adds `\nThe doom of the Shadowlord_`, the
                 // matching name Faulinei, Astaroth or Nosfentor, then
                 // `_is wrought!\n`." The old `<name> is vanquished!` was an
-                // engine diagnostic. The spec gives the name's spelling but
-                // not its case, so the match ignores case.
+                // engine diagnostic. The name prints mixed-case (`Faulinei`,
+                // u5-spec#298 Q34); the runtime tests pin the exact case and
+                // this route check folds it.
                 "the doom of the shadowlord faulinei is wrought!",
             )?;
         }

@@ -227,7 +227,7 @@ fn use_shadowlord_shard_prints_the_prologue_then_the_shared_no_effect_result_off
         );
         // Phase 6's closing line names the destroyed Shadowlord.
         assert!(
-            !message.contains(SHADOWLORD_NAME_FAULINEI),
+            !message.contains(crate::commands::USE_SHARD_DOOM_NAMES[0]),
             "{label}: nothing is destroyed by a refused attempt, got {message:?}"
         );
 
@@ -293,7 +293,7 @@ fn use_shadowlord_shard_actor_and_handshake_gates_return_silently() {
     );
     let success_message = shard_presentation_text(&success);
     assert!(
-        success_message.contains(SHADOWLORD_NAME_FAULINEI),
+        success_message.contains(crate::commands::USE_SHARD_DOOM_NAMES[0]),
         "phase 6 `closes with a line naming the destroyed Shadowlord`, got {success_message:?}"
     );
 
@@ -346,7 +346,7 @@ fn use_shadowlord_shard_actor_and_handshake_gates_return_silently() {
             "{label}: `only the position gate produces the shared no-effect result`, got {message:?}"
         );
         assert!(
-            !message.contains(SHADOWLORD_NAME_FAULINEI),
+            !message.contains(crate::commands::USE_SHARD_DOOM_NAMES[0]),
             "{label}: phase 6 must not run, got {message:?}"
         );
 

@@ -1982,7 +1982,7 @@
             // ends in a feed, so the two make the blank row between them.
             // This engine read `FAULINEI is vanquished! Cleared 1
             // encounter(s).`, which is a diagnostic, not a game line.
-            "Thou dost hold above thee the evil Shard of Falsehood...\n\n...and cast it into the Flame of Truth!\n\nThe doom of the Shadowlord FAULINEI is wrought!\n"
+            "Thou dost hold above thee the evil Shard of Falsehood...\n\n...and cast it into the Flame of Truth!\n\nThe doom of the Shadowlord Faulinei is wrought!\n"
         );
     }
 
@@ -2004,7 +2004,7 @@
             // ends in a feed, so the two make the blank row between them.
             // This engine read `FAULINEI is vanquished! Cleared 1
             // encounter(s).`, which is a diagnostic, not a game line.
-            "Thou dost hold above thee the evil Shard of Falsehood...\n\n...and cast it into the Flame of Truth!\n\nThe doom of the Shadowlord FAULINEI is wrought!\n",
+            "Thou dost hold above thee the evil Shard of Falsehood...\n\n...and cast it into the Flame of Truth!\n\nThe doom of the Shadowlord Faulinei is wrought!\n",
             ),
             (
                 SHADOWLORD_HATRED_INDEX,
@@ -2014,7 +2014,7 @@
                 15,
                 3,
                 EternalFlame::Love,
-                "Thou dost hold above thee the evil Shard of Hatred...\n\n...and cast it into the Flame of Love!\n\nThe doom of the Shadowlord ASTAROTH is wrought!\n",
+                "Thou dost hold above thee the evil Shard of Hatred...\n\n...and cast it into the Flame of Love!\n\nThe doom of the Shadowlord Astaroth is wrought!\n",
             ),
             (
                 SHADOWLORD_COWARDICE_INDEX,
@@ -2024,7 +2024,7 @@
                 15,
                 16,
                 EternalFlame::Courage,
-                "Thou dost hold above thee the evil Shard of Cowardice...\n\n...and cast it into the Flame of Courage!\n\nThe doom of the Shadowlord NOSFENTOR is wrought!\n",
+                "Thou dost hold above thee the evil Shard of Cowardice...\n\n...and cast it into the Flame of Courage!\n\nThe doom of the Shadowlord Nosfentor is wrought!\n",
             ),
         ];
 

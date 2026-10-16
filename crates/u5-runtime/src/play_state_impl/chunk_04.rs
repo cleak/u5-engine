@@ -1422,7 +1422,9 @@ impl PlayState {
         // here, which is an engine diagnostic wearing a game line's
         // clothes. The count keeps its value as bookkeeping and goes where
         // the rest of this engine's bookkeeping goes.
-        let name = shadowlord_name_for_slot(index).unwrap_or("The Shadowlord");
+        // The name is the doom line's own mixed-case set, not the
+        // capitalised Yell keywords (`inventory.md §7.1`, u5-spec#298 Q34).
+        let name = crate::commands::use_shard_doom_name(index).unwrap_or("The Shadowlord");
         staged_tail.push_str(&format!("{USE_SHARD_DOOM_PREFIX}{name}{USE_SHARD_DOOM_SUFFIX}"));
         self.staged_narration
             .push_secs_on_open_row(swell_secs, staged_tail);
