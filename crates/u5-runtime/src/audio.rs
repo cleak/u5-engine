@@ -1822,6 +1822,12 @@ pub enum SoundEffect {
     /// before the separate refusal beep." Ships, skiffs, carpets and
     /// first-person dungeon movement do not select this.
     TopDownMovementSting,
+    /// `audio.md §7.5` "Movement stings", combat row: the same two-part
+    /// rumble, once per "combat directional step accepted inside the arena",
+    /// "after both actor-position representations change, before the
+    /// room-specific follow-up and subsequent committed-action absorption
+    /// check". `§8.7` step 1's endgame absorption step is this cue.
+    CombatMovementSting,
     /// `§8.6.2` fixed six-envelope Blackthorn rescue sequence.
     BlackthornRescueEnvelopes,
     /// `audio.md §6.1`'s absorb cue. See [`MAGIC_ABSORBED_ENVELOPE`].
@@ -1930,7 +1936,8 @@ impl SoundEffect {
             }
             SoundEffect::BlackthornMovementStinger
             | SoundEffect::EndgameTableauMovementSting
-            | SoundEffect::TopDownMovementSting => two_part_sting(jitter),
+            | SoundEffect::TopDownMovementSting
+            | SoundEffect::CombatMovementSting => two_part_sting(jitter),
             SoundEffect::BlackthornRescueEnvelopes => blackthorn_rescue_envelope_program(),
             SoundEffect::MagicAbsorbed => envelope_program(MAGIC_ABSORBED_ENVELOPE),
             SoundEffect::ShrineOrdinationChime => shrine_ordination_chime_program(),

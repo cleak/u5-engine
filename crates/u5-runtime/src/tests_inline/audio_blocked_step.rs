@@ -147,6 +147,44 @@ fn an_accepted_town_step_plays_the_movement_sting() {
 }
 
 #[test]
+fn an_accepted_combat_step_plays_the_combat_movement_sting() {
+    // `audio.md §7.5` combat row: "One sting after both actor-position
+    // representations change ... A rejected step skips this success sting
+    // and uses the refusal cue." `§8.7` step 1 reuses it for the absorption
+    // step.
+    let mut state = world_state(open_world_grid(), 10, 20);
+    state.active_objects[0] = ActiveObject {
+        type_byte: 0x5c,
+        tile: 0x5c,
+        x: 5,
+        y: 5,
+        z: 0,
+        phase: STEADY_PHASE,
+        aux1: 0,
+        aux3: 0,
+    };
+    state.combat_actors[0] =
+        CombatActorDescriptor::from_row([20, 7, COMBAT_ACTOR_FLAG_SELECTABLE_80, 0, 0, 0, 5, 5]);
+    let serial = state.sound_effect_serial;
+    let outcome =
+        state.apply_combat_step_or_attack_primitive(0, COMBAT_TARGET_GROUP_PARTY, 2, true, false);
+    assert!(outcome.committed_movement());
+    assert_eq!(
+        state.sound_effects_after(serial),
+        vec![SoundEffect::CombatMovementSting]
+    );
+
+    let serial = state.sound_effect_serial;
+    let outcome =
+        state.apply_combat_step_or_attack_primitive(0, COMBAT_TARGET_GROUP_PARTY, 2, false, false);
+    assert_eq!(outcome, CombatStepOrAttackPrimitiveOutcome::BlockedWall);
+    assert!(
+        state.sound_effects_after(serial).is_empty(),
+        "the primitive owns no refusal cue; the command dispatcher beeps"
+    );
+}
+
+#[test]
 fn a_refused_dungeon_step_stays_silent_on_both_arms() {
     // audio.md §7.4: the dungeon carries **zero** of the four sites - "Silent.
     // No sound call on either refusal arm" - and §9 lists "a rejected dungeon
