@@ -146,8 +146,9 @@ pub enum EgaDisplayOperation<'a> {
         background: u8,
     },
     AdvanceTitleTick,
+    /// `display-driver.md §8` offset `0x6C` mode `0`: save-and-substitute.
     SaveLoadedTileGraphics {
-        atlas: &'a TileAtlas,
+        atlas: &'a mut TileAtlas,
         saved: &'a mut EgaLoadedTileGraphicsSave,
     },
     RestoreLoadedTileGraphics {
@@ -292,32 +293,77 @@ impl EgaDissolveState {
     }
 }
 
+/// `display-driver.md §8`: the two tiles whose blocks the `0x6C` mode `0`
+/// save-and-substitute covers - "the fifteenth pixel row of tile `200` (the
+/// chair-marker tile that doubles as the NPC start marker) and of tile `279`
+/// (the object-domain ladder)". The identification is published as
+/// *inferred*; the copy shape (one tile row, replaced by the row "one
+/// tile-stride-minus-sixteen earlier", i.e. the tile's own first row) is
+/// established.
+pub const EGA_TILE_GRAPHICS_SAVE_TILES: [usize; 2] = [200, 279];
+/// The fifteenth pixel row, zero-based: a 128-byte stride minus sixteen is
+/// fourteen eight-byte EGA rows back to row zero.
+pub const EGA_TILE_GRAPHICS_SAVE_ROW: usize = 14;
+
+/// `display-driver.md §8`: the driver's "two eight-byte blocks of its own
+/// private scratch, one per affected tile". An eight-byte EGA block is one
+/// sixteen-pixel tile row; this atlas stores one byte per pixel, so each
+/// block is one atlas row of [`TILE_ATLAS_SIDE`] pixels.
 #[derive(Clone, Debug, Default, PartialEq, Eq)]
 pub struct EgaLoadedTileGraphicsSave {
-    pixels: Option<Vec<u8>>,
+    blocks: Option<[[u8; TILE_ATLAS_SIDE]; 2]>,
 }
 
 impl EgaLoadedTileGraphicsSave {
     pub fn has_saved_pixels(&self) -> bool {
-        self.pixels.is_some()
+        self.blocks.is_some()
     }
 
-    pub fn saved_pixels(&self) -> Option<&[u8]> {
-        self.pixels.as_deref()
+    pub fn saved_blocks(&self) -> Option<&[[u8; TILE_ATLAS_SIDE]; 2]> {
+        self.blocks.as_ref()
     }
 
-    pub fn save_from_atlas(&mut self, atlas: &TileAtlas) {
-        self.pixels = Some(atlas.pixels.clone());
+    fn row_range(tile: usize, row: usize) -> Range<usize> {
+        let start = tile * TILE_ATLAS_TILE_PIXELS + row * TILE_ATLAS_SIDE;
+        start..start + TILE_ATLAS_SIDE
     }
 
+    /// Mode `0`, "**save-and-substitute**": "for each of the two affected
+    /// tile regions the driver first copies the eight live asset bytes into
+    /// its scratch, and then overwrites those same eight bytes with" the
+    /// tile's own first row. A tile the atlas does not hold is skipped.
+    pub fn save_from_atlas(&mut self, atlas: &mut TileAtlas) {
+        let mut blocks = self.blocks.unwrap_or([[0; TILE_ATLAS_SIDE]; 2]);
+        for (block, &tile) in blocks.iter_mut().zip(EGA_TILE_GRAPHICS_SAVE_TILES.iter()) {
+            let target = Self::row_range(tile, EGA_TILE_GRAPHICS_SAVE_ROW);
+            if target.end > atlas.pixels.len() {
+                continue;
+            }
+            block.copy_from_slice(&atlas.pixels[target.clone()]);
+            atlas
+                .pixels
+                .copy_within(Self::row_range(tile, 0), target.start);
+        }
+        self.blocks = Some(blocks);
+    }
+
+    /// Mode `1`, "a **pure restore**: it copies the two scratch blocks back
+    /// and does nothing else" - every other atlas byte, including any tile
+    /// animation since the save, is left alone.
     pub fn restore_to_atlas(&self, atlas: &mut TileAtlas) -> io::Result<()> {
-        let Some(pixels) = &self.pixels else {
+        let Some(blocks) = &self.blocks else {
             return Err(io::Error::new(
                 io::ErrorKind::InvalidInput,
                 "loaded tile graphics restore requested before save",
             ));
         };
-        atlas.pixels.clone_from(pixels);
+        for (block, &tile) in blocks.iter().zip(EGA_TILE_GRAPHICS_SAVE_TILES.iter()) {
+            let target = Self::row_range(tile, EGA_TILE_GRAPHICS_SAVE_ROW);
+            if target.end > atlas.pixels.len() {
+                continue;
+            }
+            atlas.pixels[target].copy_from_slice(block);
+        }
         Ok(())
     }
 }

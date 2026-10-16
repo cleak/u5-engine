@@ -518,16 +518,14 @@ pub struct PlayState {
     /// breath, through the same driver entry with mode value `0`" - so the
     /// pair is a driver-private save-and-substitute, `display-driver.md`.
     ///
-    /// **A second reader constrains the ordering**: "The dungeon K-Klimb
-    /// handler consults the same flag to decide whether the ladder under the
-    /// party goes both ways ... so the restore phase's clear must not be
-    /// reordered ahead of a Klimb that could still read it"
-    /// (`dungeon-mode.md §13.1`/`§14.1`). This engine has no room-entry-mode
-    /// Klimb path - its dungeon rooms are entered as combat and its Klimb
-    /// classifier reads the underfoot nibble
-    /// ([`crate::dungeon_klimb_apply`]) - so that reader has no site here
-    /// yet, and the ordering constraint is recorded rather than enforced.
+    /// "**No Klimb ordering constraint**" (`combat.md §4`, `RETRACTIONS.md`
+    /// R471): the K-Klimb handler does not read this flag.
     pub tile_restoration_pending: bool,
+    /// Driver tile-graphics saves (`0x6C` mode `0`) the dungeon room
+    /// painter's two-way-ladder cell issued and owes a frontend, in the same
+    /// drained-request model as the restores below; a frontend issues
+    /// [`crate::EgaDisplayOperation::SaveLoadedTileGraphics`] for each one.
+    pub pending_driver_tile_graphics_saves: usize,
     /// Driver tile-graphics restores the combat framer sampled out of
     /// [`Self::tile_restoration_pending`] and owes a frontend. The runtime
     /// has no display driver of its own, so it records the request in the

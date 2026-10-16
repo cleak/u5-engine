@@ -5994,18 +5994,7 @@ fn display_driver_loaded_tile_graphics_save_restore_and_plane_swap() {
     atlas.pixels[0] = 0x02;
     atlas.pixels[TILE_ATLAS_TILE_PIXELS] = 0x04;
     atlas.pixels[TILE_ATLAS_TILE_PIXELS * 2] = 0x06;
-    let mut saved = EgaLoadedTileGraphicsSave::default();
-
-    assert!(!saved.has_saved_pixels());
     let mut surface = surface;
-    surface
-        .execute(EgaDisplayOperation::SaveLoadedTileGraphics {
-            atlas: &atlas,
-            saved: &mut saved,
-        })
-        .unwrap();
-    assert!(saved.has_saved_pixels());
-
     surface
         .execute(EgaDisplayOperation::SwapLoadedTileRedGreenPlanes {
             atlas: &mut atlas,
@@ -6015,16 +6004,93 @@ fn display_driver_loaded_tile_graphics_save_restore_and_plane_swap() {
     assert_eq!(atlas.pixels[0], 0x04);
     assert_eq!(atlas.pixels[TILE_ATLAS_TILE_PIXELS], 0x02);
     assert_eq!(atlas.pixels[TILE_ATLAS_TILE_PIXELS * 2], 0x06);
+}
 
+/// `display-driver.md §8`: mode `0` saves the fifteenth pixel row of tiles
+/// `200` and `279` into two private blocks and overwrites each with that
+/// tile's first row; mode `1` "copies the two scratch blocks back and does
+/// nothing else" - so intervening tile animation elsewhere survives it.
+#[test]
+fn display_driver_tile_graphics_save_substitutes_two_rows_and_restore_puts_back_only_them() {
+    let mut surface = EgaDisplaySurface::new();
+    let mut atlas = TileAtlas {
+        depth: TileGraphicsDepth::Ega16,
+        pixels: (0..TILE_ATLAS_TILE_PIXELS * 512)
+            .map(|index| (index % 251) as u8)
+            .collect(),
+        dungeon_billboards: None,
+        dungeon_sprites: None,
+    };
+    let original = atlas.pixels.clone();
+    let row = |tile: usize, row: usize| {
+        let start = tile * TILE_ATLAS_TILE_PIXELS + row * TILE_ATLAS_SIDE;
+        start..start + TILE_ATLAS_SIDE
+    };
+    let mut saved = EgaLoadedTileGraphicsSave::default();
+    assert!(!saved.has_saved_pixels());
+    surface
+        .execute(EgaDisplayOperation::SaveLoadedTileGraphics {
+            atlas: &mut atlas,
+            saved: &mut saved,
+        })
+        .unwrap();
+    for tile in [200, 279] {
+        assert_eq!(atlas.pixels[row(tile, 14)], original[row(tile, 0)]);
+    }
+    let changed = atlas
+        .pixels
+        .iter()
+        .zip(original.iter())
+        .filter(|(a, b)| a != b)
+        .count();
+    assert!(changed <= 2 * TILE_ATLAS_SIDE && changed > 0);
+
+    // Tile animation between save and restore is not undone.
+    atlas.pixels[5 * TILE_ATLAS_TILE_PIXELS] ^= 0x0F;
+    let animated = atlas.pixels[5 * TILE_ATLAS_TILE_PIXELS];
     surface
         .execute(EgaDisplayOperation::RestoreLoadedTileGraphics {
             atlas: &mut atlas,
             saved: &saved,
         })
         .unwrap();
-    assert_eq!(atlas.pixels[0], 0x02);
-    assert_eq!(atlas.pixels[TILE_ATLAS_TILE_PIXELS], 0x04);
-    assert_eq!(atlas.pixels[TILE_ATLAS_TILE_PIXELS * 2], 0x06);
+    assert_eq!(atlas.pixels[5 * TILE_ATLAS_TILE_PIXELS], animated);
+    atlas.pixels[5 * TILE_ATLAS_TILE_PIXELS] = original[5 * TILE_ATLAS_TILE_PIXELS];
+    assert_eq!(atlas.pixels, original);
+}
+
+/// `dungeon-mode.md §14.1`: "A two-way ladder cell sets the flag and
+/// dispatches the associated local presentation helper" - the driver save,
+/// mode `0` - while "other non-empty icon classes clear it".
+#[test]
+fn dungeon_room_painter_two_way_ladder_requests_the_driver_save_and_raises_the_flag() {
+    fn ambush_from_underfoot(cell: u8, pending: bool) -> PlayState {
+        let mut state = test_state(open_grid(), 1, 1);
+        state.player.facing = Direction::North;
+        state.grid[dungeon_cell_index(3, 1, 1)] = cell;
+        state.tile_restoration_pending = pending;
+        let object = ActiveObject {
+            type_byte: 0,
+            tile: 0,
+            x: 2,
+            y: 1,
+            z: 3,
+            phase: STEADY_PHASE,
+            aux1: 20,
+            aux3: DUNGEON_MONSTER_UPPER_DEP3,
+        };
+        state
+            .enter_dungeon_active_monster_combat(3, object)
+            .expect("the ambush launches");
+        state
+    }
+    let two_way = ambush_from_underfoot(0x30, false);
+    assert!(two_way.tile_restoration_pending);
+    assert_eq!(two_way.pending_driver_tile_graphics_saves, 1);
+
+    let up = ambush_from_underfoot(0x10, true);
+    assert!(!up.tile_restoration_pending);
+    assert_eq!(up.pending_driver_tile_graphics_saves, 0);
 }
 
 #[test]
