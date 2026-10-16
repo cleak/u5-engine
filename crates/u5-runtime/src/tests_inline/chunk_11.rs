@@ -1001,7 +1001,9 @@
         );
 
         assert_eq!(state.party[0].status, b'P');
-        assert!(state.message.contains("Avatar is poisoned!"));
+        // `town-mode.md §10`: a bare `Poisoned!` with no name or lead-in.
+        assert!(state.message.contains("Poisoned!"));
+        assert!(!state.message.contains("Avatar"));
         assert_eq!(state.turn, 1);
     }
 
@@ -1114,7 +1116,7 @@
 
         assert_eq!(state.party[0].status, b'P');
         assert_eq!(state.party[1].status, b'P');
-        assert!(state.message.contains("Party member 1 is poisoned!"));
+        assert_eq!(state.message.matches("Poisoned!").count(), 1);
     }
 
     #[test]
@@ -1137,7 +1139,7 @@
             u5_prng_range_u16(&mut expected_prng, 0, TOWN_GAS_DOORWAY_RANGE_MAX);
         assert!(expected_roll > 0);
 
-        let report = state.apply_town_poison_gas(TownPoisonGasEntry {
+        let poisoned = state.apply_town_poison_gas(TownPoisonGasEntry {
             scene: Scene::new(17).unwrap(),
             floor: 0,
             x: 0,
@@ -1148,7 +1150,38 @@
         assert_eq!(state.party[0].status, b'P');
         assert_eq!(state.party[1].status, b'P');
         assert_eq!(state.prng_state, expected_prng);
-        assert_eq!(report, "Party member 1 is poisoned!");
+        assert_eq!(poisoned, 1);
+        assert_eq!(state.message, "Poisoned!");
+    }
+
+    /// `town-mode.md §10`: "Skipped members and successful saves add no
+    /// text", and a failed save repaints the stats panel for that member.
+    #[test]
+    fn town_poison_gas_prints_nothing_when_every_save_succeeds() {
+        let entry = TownPoisonGasEntry {
+            scene: Scene::new(17).unwrap(),
+            floor: 0,
+            x: 0,
+            y: 1,
+            expected_tile: None,
+        };
+        let mut state = test_state(open_grid(), 0, 1);
+        state.prng_state = poison_gas_first_poison_seed();
+        state.party[0].status = b'G';
+        state.party[0].climb_stat = 29;
+        assert_eq!(state.apply_town_poison_gas(entry), 0);
+        assert_eq!(state.party[0].status, b'G');
+        assert!(state.message.is_empty(), "{}", state.message);
+
+        let mut state = test_state(open_grid(), 0, 1);
+        state.prng_state = poison_gas_first_poison_seed();
+        state.party[0].status = b'G';
+        state.party[0].climb_stat = 0;
+        state.repaint_stats_panel();
+        let before = state.stats_panel.clone();
+        assert_eq!(state.apply_town_poison_gas(entry), 1);
+        assert_eq!(state.message, "Poisoned!");
+        assert_ne!(state.stats_panel, before, "the panel is repainted");
     }
 
     /// `town-mode.md §17` "Underfoot-effect cadence is fixed": "The underfoot
@@ -1234,7 +1267,7 @@
             "the passed turn consumed a save roll",
         );
         assert!(
-            state.message.contains("is poisoned!"),
+            state.message.contains("Poisoned!"),
             "the gas report is appended to the pass line: {}",
             state.message,
         );

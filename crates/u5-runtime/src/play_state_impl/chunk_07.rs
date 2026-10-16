@@ -72,6 +72,8 @@ impl PlayState {
 
     /// `town-mode.md §10`: the stored line printed by the burning family.
     pub const TOWN_BURNING_MESSAGE: &'static str = "Burning!";
+    /// `town-mode.md §10` poison-gas status line, stored like `Burning!`.
+    pub const TOWN_POISONED_MESSAGE: &'static str = "Poisoned!";
 
     /// `blackthorn.md §4`/`§8`: "Moral standing | Durable; debited five per
     /// correct interrogation answer". The subtraction is clamped and floored
@@ -4008,45 +4010,39 @@ impl PlayState {
         else {
             return Ok(());
         };
-        let report = self.apply_town_poison_gas(entry);
-        if self.message.is_empty() {
-            self.message = format!("{report}.");
-        } else {
-            self.message.push_str(&format!(" {report}."));
-        }
+        self.apply_town_poison_gas(entry);
         Ok(())
     }
 
-    pub fn apply_town_poison_gas(&mut self, _entry: TownPoisonGasEntry) -> String {
-        let mut checked = 0usize;
-        let mut poisoned = Vec::new();
-        for (member_index, member) in self.party.iter_mut().enumerate() {
-            if member.status == b'D' || member.status == b'P' {
+    /// `town-mode.md §10` poison-gas save. For each eligible slot in order,
+    /// a roll above Dexterity sets Poisoned, prints the status line and
+    /// repaints the stats panel. "Each failed save prints exactly
+    /// `Poisoned!\n`, once for that member, with no name, number or
+    /// gas-specific lead-in ... Skipped members and successful saves add no
+    /// text." Returns how many members were poisoned.
+    pub fn apply_town_poison_gas(&mut self, _entry: TownPoisonGasEntry) -> usize {
+        let mut poisoned = 0usize;
+        for index in 0..self.party.len() {
+            let status = self.party[index].status;
+            if status == b'D' || status == b'P' {
                 continue;
             }
-            checked += 1;
             let roll = u5_prng_range_u16(&mut self.prng_state, 0, TOWN_GAS_DOORWAY_RANGE_MAX);
-            if roll > u16::from(member.climb_stat) {
-                member.status = b'P';
-                poisoned.push((member_index, member.slot));
+            if roll <= u16::from(self.party[index].climb_stat) {
+                continue;
             }
+            self.party[index].status = b'P';
+            poisoned += 1;
+            // Composed like the burning arm's stored line in this handler.
+            let line = Self::TOWN_POISONED_MESSAGE;
+            self.message = if self.message.is_empty() {
+                line.to_string()
+            } else {
+                format!("{} {line}", self.message)
+            };
+            self.repaint_stats_panel();
         }
-        if poisoned.is_empty() {
-            format!("poison gas doorway checked {checked} eligible member(s); no poison")
-        } else {
-            poisoned
-                .iter()
-                .map(|(member_index, slot)| {
-                    let name = self
-                        .party_names
-                        .get(*member_index)
-                        .and_then(|name| party_name_to_string(name))
-                        .unwrap_or_else(|| format!("Party member {slot}"));
-                    format!("{name} is poisoned!")
-                })
-                .collect::<Vec<_>>()
-                .join(" ")
-        }
+        poisoned
     }
 
     /// The cardinal direction from the party to an orthogonally adjacent
