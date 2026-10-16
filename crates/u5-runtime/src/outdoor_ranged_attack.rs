@@ -243,15 +243,15 @@ pub fn outdoor_ranged_attacker_figure(
 /// `active-objects.md §8`: the broadside's announcement, printed "before
 /// the shot".
 ///
-/// §8 and `overworld.md §6.2` both require *a* boom message here without
-/// fixing its wording, so this reuses the wording the tree already prints
-/// for the player's own broadside in
-/// [`crate::PlayState::fire_ship_broadside`] rather than introducing a
-/// second spelling of the same cue. §6.2.4 is explicit about what this
-/// message is *not*: "Neither the generic 'attacked' message nor any melee
-/// narration belongs to these paths; that message is the
+/// `overworld.md §6.2.1` (u5-spec#297) quotes it: "`* BOOOM! *` followed by
+/// a blank line, before the shot (the shipped font draws the asterisk as a
+/// small diamond; this is not the F-Fire `BOOOM!` literal)". The engine used
+/// to borrow an invented sentence here; the asterisks are ordinary `0x2A`
+/// glyphs, so the font draws them as the original does. §6.2.4 is explicit
+/// about what this message is *not*: "Neither the generic 'attacked' message
+/// nor any melee narration belongs to these paths; that message is the
 /// adjacent-engagement case."
-pub const OUTDOOR_BROADSIDE_BOOM_MESSAGE: &str = "BOOOM! A broadside is fired at the party.";
+pub const OUTDOOR_BROADSIDE_BOOM_MESSAGE: &str = "* BOOOM! *\n\n";
 
 /// Per-slot salt mixed into the breath attack's one-in-eight gate roll, so
 /// the gate is decorrelated from the step planner's axis-choice roll on the

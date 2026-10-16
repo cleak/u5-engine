@@ -5034,6 +5034,10 @@ impl PlayState {
     ) -> OutdoorRangedAttackReport {
         if let Some(announcement) = announcement {
             self.push_impact_line(announcement);
+            // `overworld.md §6.2.1`: the broadside's `* BOOOM! *` is
+            // "followed by a blank line", so the cursor stands at column 0
+            // of a fresh row when the shot is drawn.
+            self.message_row_open_mid_line = false;
         }
 
         let attacker_cell = outdoor_ranged_attacker_viewport_cell(wrapped_dx, wrapped_dy);
