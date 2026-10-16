@@ -653,16 +653,22 @@ fn handle_active_yell_key_input(
             state.active_yell = None;
             return Ok(PlayInputDisposition::Continue);
         };
+        // `input.md §8`: Escape in the free-text reader clears the line but
+        // neither submits nor ends the prompt - the same rule the
+        // exploration Yell prompt follows (`step_active_yell`).
+        if key == '\u{1b}' && suffix.is_empty() {
+            return Ok(PlayInputDisposition::Continue);
+        }
         let Some(mut session) = state.active_yell.take() else {
             return Ok(PlayInputDisposition::Continue);
         };
         let mut line = String::new();
-        if !matches!(key, '\r' | '\n' | '\u{1b}') {
+        if !matches!(key, '\r' | '\n') {
             line.push(key);
         }
         line.push_str(suffix);
         session.buffer.push_str(&line);
-        state.message = if key == '\u{1b}' || session.buffer.trim().is_empty() {
+        state.message = if session.buffer.trim().is_empty() {
             YELL_NOTHING_SAID_MESSAGE.to_string()
         } else {
             // `combat.md §8`, the `Y` row: nonempty combat Yell "reaches the
@@ -4238,6 +4244,20 @@ fn handle_active_conversation_key_input(
     // we treat the concatenation as the typed line. Pressing a bare
     // Enter (key `\r` or `\n`) submits an empty line, which closes
     // the conversation via the Bye shortcut.
+    //
+    // `input.md §8`: in the free-text reader (keyword and ASK-WHO prompts,
+    // `conversation.md`) "Escape clears the whole current line but does
+    // **not** submit or terminate it". The shell clears its own line
+    // buffer; a bare Escape reaching here is never a typed keyword.
+    if key == '\u{1b}'
+        && suffix.is_empty()
+        && state
+            .active_conversation
+            .as_ref()
+            .is_some_and(|session| !session.prompt_message().is_empty())
+    {
+        return PlayInputDisposition::Continue;
+    }
     let mut line = String::new();
     if !matches!(key, '\r' | '\n' | ' ') {
         line.push(key);

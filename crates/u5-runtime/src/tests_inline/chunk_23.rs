@@ -12978,6 +12978,15 @@ fn combat_input_dispatch_empty_yell_commits_the_pending_actor_action() {
     assert!(state.active_yell.is_some());
     assert_eq!(state.pending_combat_actor_slot, Some(0));
 
+    // `input.md §8`: Escape in the free-text reader neither submits nor
+    // ends the prompt (audit A097).
+    assert_eq!(
+        handle_play_key_input(&mut state, '\u{1b}', "", game_dir).unwrap(),
+        PlayInputDisposition::Continue
+    );
+    assert!(state.active_yell.is_some());
+    assert_eq!(state.active_effect_counter, 3);
+
     assert_eq!(
         handle_play_key_input(&mut state, '\r', "", game_dir).unwrap(),
         PlayInputDisposition::Continue
