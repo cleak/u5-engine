@@ -1229,7 +1229,9 @@ fn look_shrine_altar_tiles_take_no_appender() {
         state.look_description(SHRINE_ALTAR_TILE_FIRST, Some(&table), 0),
         "an altar"
     );
-    assert_eq!(state.look_description(SHRINE_ALTAR_TILE_LAST, None, 0), "special");
+    // `formats/look2-dat.md §5` (audit A007): with no table there is no
+    // tile-range class to fall back on.
+    assert_eq!(state.look_description(SHRINE_ALTAR_TILE_LAST, None, 0), "");
 }
 
 #[test]

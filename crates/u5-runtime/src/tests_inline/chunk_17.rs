@@ -3793,7 +3793,9 @@
         // this diagnostic directly.
         assert_eq!(
             state.message,
-            "Cause Fear affected 2 combat actor(s).\nAvatar, armed with bare hands:\n"
+            // `magic.md §5.1` completion census (audit A120): the engine's
+            // `Cause Fear affected N` diagnostic is no longer player text.
+            "\nAvatar, armed with bare hands:\n"
         );
     }
 

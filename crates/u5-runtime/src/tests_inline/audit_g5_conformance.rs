@@ -688,18 +688,12 @@ fn audit_a012_sign_pause_byte_waits_for_a_key_before_the_rest() {
         signs_dat_bytes_for_test(&[(17, 0, 1, 2, b"Read\x0dMore")]),
     )
     .unwrap();
-    let mut state = test_state(open_grid(), 1, 1);
+    // `view.md §3` row 5 (audit A180): the sign path is keyed on the live
+    // terrain tile, so the sign is placed in the map, not as an object.
+    let mut grid = open_grid();
+    grid[32 + 2] = 0xa0;
+    let mut state = test_state(grid, 1, 1);
     state.player.facing = Direction::East;
-    state.active_objects.push(ActiveObject {
-        type_byte: 0xa0,
-        tile: 0xa0,
-        x: 2,
-        y: 1,
-        z: 0,
-        phase: STEADY_PHASE,
-        aux1: 0,
-        aux3: 0,
-    });
     state.look_facing_with_game_dir(&dir).unwrap();
     state.flush_message_slot();
     assert_eq!(state.message, "Sign:\nRead");
