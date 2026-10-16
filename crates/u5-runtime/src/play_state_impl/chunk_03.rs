@@ -5301,9 +5301,11 @@ impl PlayState {
             .is_some_and(CombatLinkedVisibilityOutcome::changed);
         if applied {
             self.mark_visibility_dirty();
-            // Measured 2026-09-07: Lor Sanct in the arena prints nothing
-            // beyond its own `Spell name:` rows.
-            self.message.clear();
+            // `magic.md §8` issue-#225 table: "Invisibility, Sanct Lor |
+            // `Success!\n`; no `Invisibility!` banner" - a fresh trace of the
+            // shared completion, which supersedes the 2026-09-07 capture that
+            // showed nothing (issue #231, still open on the capture side).
+            self.message = crate::commands::SPELL_SUCCESS_LINE.to_string();
             MoveOutcome::Cast
         } else {
             self.fail_committed_spell_cast();
@@ -5418,9 +5420,10 @@ impl PlayState {
         self.stats_panel_command_refresh = crate::stats_panel::PanelRefreshMode::Deferred;
         self.party[target_index].status = b'G';
         self.advance_turn();
-        // The cure's success line is not measured; its sibling An Zu is
-        // silent, so this stays silent rather than invent one.
-        self.message.clear();
+        // `magic.md §8` issue-#225 table: "Cure, An Nox | `Success!\n`; no
+        // `Cured` or `Poison cured!` line" (`§5.1` lists An Nox in the
+        // `Success!` row). Its sibling An Zu is the silent one.
+        self.message = crate::commands::SPELL_SUCCESS_LINE.to_string();
         MoveOutcome::Cast
     }
 

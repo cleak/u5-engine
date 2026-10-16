@@ -3565,7 +3565,8 @@
         assert!(state.combat_actors[0].is_phase_suppressed());
         assert_eq!(state.active_objects[0].tile, COMBAT_HIDDEN_ACTIVE_OBJECT_TILE);
         assert!(state.visibility_dirty);
-        assert_eq!(state.message, "");
+        // `magic.md §8` issue-#225 table: Sanct Lor prints `Success!`.
+        assert_eq!(state.message, crate::commands::SPELL_SUCCESS_LINE);
     }
 
     #[test]
@@ -3777,7 +3778,8 @@
         assert_eq!(cure.party[0].mana, 2);
         assert_eq!(cure.turn, 1);
         assert_eq!(cure.clock, GameClock::new(12, 1).unwrap());
-        assert_eq!(cure.message, "");
+        // `magic.md §8` issue-#225 table: An Nox prints `Success!`.
+        assert_eq!(cure.message, crate::commands::SPELL_SUCCESS_LINE);
 
         let mut awaken = dungeon_state(open_dungeon_record(), 0, 1, 1);
         awaken.party = vec![
