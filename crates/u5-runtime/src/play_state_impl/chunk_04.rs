@@ -566,7 +566,14 @@ impl PlayState {
                 let echoed = Self::use_item_echo_family(row.request).inspect(|family| {
                     self.commit_prompt_reply(&prompt, family);
                 });
-                if let Some(pending) = pending_action_for_use_request(row.request) {
+                // `inventory.md §7.1`: in dungeon exploration the Skull Key
+                // refuses `Not here!` with no `Direction-` prompt (its key
+                // already spent), so it takes the direct handler path.
+                let pending = pending_action_for_use_request(row.request).filter(|pending| {
+                    !(matches!(pending, UsePendingAction::SkullKeyDirection)
+                        && self.skull_key_refused_here())
+                });
+                if let Some(pending) = pending {
                     // The potion and scroll rows debit their stock when the
                     // row is accepted, before the argument is asked for, and
                     // `inventory.md §7` puts the skull key in the same place:
@@ -574,11 +581,7 @@ impl PlayState {
                     // then** asks for a cardinal target". Its lock attempt is
                     // what waits for the direction, not its cost.
                     if matches!(pending, UsePendingAction::SkullKeyDirection) {
-                        // Except in a dungeon, where §7 refuses instead and
-                        // the key is kept.
-                        if !matches!(self.area, Area::Dungeon { .. }) {
-                            self.spend_skull_key();
-                        }
+                        self.spend_skull_key();
                     } else {
                         let _ = self.use_item_command(Some(row.request), Some(game_dir))?;
                     }

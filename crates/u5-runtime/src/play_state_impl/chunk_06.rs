@@ -621,85 +621,87 @@ impl PlayState {
             self.message.clear();
             return Ok(MoveOutcome::Blocked);
         }
-        // `inventory.md §7`: "Dungeon exploration refuses through this path",
-        // and §7's result table gives it `Not here!`. The refusal comes before
-        // the spend - a refused use keeps the key, which
-        // `skull_key_dungeon_refusal_keeps_stock_and_runs_the_normal_turn`
-        // measured.
-        if matches!(self.area, Area::Dungeon { .. }) {
-            return self.use_skull_key_dispatch(game_dir);
-        }
+        // `inventory.md §7.1`: "One skull key is already spent before the
+        // prompt or the dungeon refusal."
         self.spend_skull_key();
         self.use_skull_key_dispatch(game_dir)
     }
 
-    /// The lock attempt itself, with the counter already spent.
-    pub fn use_skull_key_dispatch(&mut self, game_dir: Option<&Path>) -> io::Result<MoveOutcome> {
-        match self.area {
-            Area::Town { scene, floor } => self.use_skull_key_town_facing(game_dir, scene, floor),
-            Area::Dungeon { .. } => {
-                self.message = "Not here!".to_string();
-                Ok(MoveOutcome::Blocked)
-            }
-            Area::World { .. } => {
-                self.message = USE_SKULL_KEY_FAILED.to_string();
-                Ok(MoveOutcome::Blocked)
-            }
-        }
+    /// `inventory.md §7`: "Dungeon exploration refuses through this path";
+    /// a dungeon-room combat is an arena and runs the helper.
+    pub fn skull_key_refused_here(&self) -> bool {
+        matches!(self.area, Area::Dungeon { .. }) && !self.combat_active
     }
 
-    pub fn use_skull_key_town_facing(
-        &mut self,
-        game_dir: Option<&Path>,
-        scene: Scene,
-        floor: i8,
-    ) -> io::Result<MoveOutcome> {
-        let (dx, dy) = self.player.facing.delta();
-        let tx = self.player.x as isize + dx;
-        let ty = self.player.y as isize + dy;
-        if !(0..32).contains(&tx) || !(0..32).contains(&ty) {
-            self.message = USE_SKULL_KEY_FAILED.to_string();
+    /// The lock attempt itself, with the counter already spent, on the cell
+    /// in the party's (prompted) facing.
+    ///
+    /// `inventory.md §7.1` "Skull Key targeting": "A selected target of tile
+    /// `0x97` becomes `0xB8`, and `0x98` becomes `0xBA`; either success
+    /// dirties the map and adds no result sentence. Other target tiles print
+    /// `Failed!\n` with the ordinary Use failure sound, not Jimmy's `No
+    /// lock!`." "Combat runs this same directed unlock helper" on the arena
+    /// cell beside the acting combatant.
+    pub fn use_skull_key_dispatch(&mut self, _game_dir: Option<&Path>) -> io::Result<MoveOutcome> {
+        if self.skull_key_refused_here() {
+            self.message = "Not here!".to_string();
             return Ok(MoveOutcome::Blocked);
         }
-
-        let tx = tx as usize;
-        let ty = ty as usize;
-        if self.blocking_object_at(tx, ty).is_some() {
-            self.advance_turn();
-            self.message = USE_SKULL_KEY_FAILED.to_string();
-            return Ok(MoveOutcome::LockTried);
-        }
-
-        let idx = ty * 32 + tx;
-        let tile = self.grid[idx];
-        // `RETRACTIONS.md` R448 withdraws R412's "revealed town/dwelling
-        // secret doors respond like ordinary unlocked doors":
-        // `doors-and-z-transitions.md` §8 now says the reveal "obeys the
-        // resulting lock state" - the ground/upper-floor `0xB9` is an
-        // ordinary *locked* door and the below-ground `0xB8` an ordinary
-        // closed one - so the reveal gets no special case at all.
-        if let Some(entry) = self.town_lock_at(game_dir, scene, floor, tx, ty, tile)? {
-            if entry.kind == TownLockKind::Magic {
-                self.advance_turn();
-                self.message = "Magic lock!".to_string();
-                return Ok(MoveOutcome::LockTried);
+        let (dx, dy) = self.player.facing.delta();
+        let target = if self.combat_active {
+            self.pending_combat_actor_slot
+                .and_then(|slot| self.combat_actors.get(slot).copied())
+                .and_then(|actor| {
+                    let tx = isize::from(actor.x) + dx;
+                    let ty = isize::from(actor.y) + dy;
+                    ((0..COMBAT_ARENA_SIDE as isize).contains(&tx)
+                        && (0..COMBAT_ARENA_SIDE as isize).contains(&ty))
+                    .then_some((tx as usize, ty as usize))
+                })
+        } else {
+            match self.area {
+                Area::World { .. } => Some((
+                    (self.player.x as isize + dx).rem_euclid(WORLD_SIDE as isize) as usize,
+                    (self.player.y as isize + dy).rem_euclid(WORLD_SIDE as isize) as usize,
+                )),
+                Area::Town { .. } => {
+                    let tx = self.player.x as isize + dx;
+                    let ty = self.player.y as isize + dy;
+                    ((0..32).contains(&tx) && (0..32).contains(&ty))
+                        .then_some((tx as usize, ty as usize))
+                }
+                Area::Dungeon { .. } => None,
             }
-            self.grid[idx] = entry.unlocked_tile;
-            self.mark_visibility_dirty();
-            self.advance_turn();
-            self.message = "Unlocked!".to_string();
-            return Ok(MoveOutcome::LockTried);
-        }
-        if let Some(unlocked_tile) = Self::visible_jimmy_unlock_tile(tile) {
-            self.grid[idx] = unlocked_tile;
-            self.mark_visibility_dirty();
-            self.advance_turn();
-            self.message = "Unlocked!".to_string();
-            return Ok(MoveOutcome::LockTried);
-        }
-
+        };
         self.advance_turn();
+        let rewritten = target.and_then(|(tx, ty)| {
+            let tile = if self.combat_active {
+                self.combat_terrain[ty][tx]
+            } else {
+                self.current_area_tile(tx, ty)
+            };
+            let unlocked = skull_key_unlock_rewrite(tile)?;
+            if self.combat_active {
+                self.combat_terrain[ty][tx] = unlocked;
+            } else {
+                match self.area {
+                    Area::World { .. } => {
+                        self.grid[world_cell_index(tx, ty)] = unlocked;
+                        let _ = self.refresh_world_live_chunks_for_current_area();
+                    }
+                    Area::Town { .. } => self.grid[ty * 32 + tx] = unlocked,
+                    Area::Dungeon { .. } => return None,
+                }
+            }
+            Some(unlocked)
+        });
+        if rewritten.is_some() {
+            self.mark_visibility_dirty();
+            self.message.clear();
+            return Ok(MoveOutcome::LockTried);
+        }
         self.message = USE_SKULL_KEY_FAILED.to_string();
+        self.emit_sound_effect(SoundEffect::CastFailure);
         Ok(MoveOutcome::LockTried)
     }
 
@@ -3469,6 +3471,21 @@ pub const CORPSE_SEARCH_FOOD_DENOMINATOR: u8 = 4;
 pub const CORPSE_SEARCH_PLAGUE_DENOMINATOR: u8 = 32;
 /// `containers.md §9`: exactly this value, not zero, selects Plague.
 pub const CORPSE_SEARCH_PLAGUE_VALUE: u8 = 19;
+
+/// `inventory.md §7.1` Skull Key target rewrites: `0x97` becomes `0xB8`
+/// and `0x98` becomes `0xBA`; every other tile fails.
+pub const SKULL_KEY_TARGET_FIRST: u8 = 0x97;
+pub const SKULL_KEY_TARGET_FIRST_UNLOCKED: u8 = 0xb8;
+pub const SKULL_KEY_TARGET_SECOND: u8 = 0x98;
+pub const SKULL_KEY_TARGET_SECOND_UNLOCKED: u8 = 0xba;
+
+pub const fn skull_key_unlock_rewrite(tile: u8) -> Option<u8> {
+    match tile {
+        SKULL_KEY_TARGET_FIRST => Some(SKULL_KEY_TARGET_FIRST_UNLOCKED),
+        SKULL_KEY_TARGET_SECOND => Some(SKULL_KEY_TARGET_SECOND_UNLOCKED),
+        _ => None,
+    }
+}
 
 /// `containers.md §8` inventory-add class codes for the two families the
 /// corpse minority arm can stage: "`0x02` | Gold" and "`0x0F` | Food /

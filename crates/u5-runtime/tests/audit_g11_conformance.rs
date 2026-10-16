@@ -305,3 +305,36 @@ fn a100_combat_armour_lock_is_voiced_and_lifts_once_the_outcome_is_announced() {
     empty_arena.combat_frame_snapshot = Some(combat_snapshot(&empty_arena, false, false));
     assert_eq!(empty_arena.ready_equipment_from_suffix("1/10"), MoveOutcome::Used);
 }
+
+/// `inventory.md §7.1`: in dungeon exploration the Skull Key prints
+/// `Not here!` without asking `Direction-`, its key already spent.
+#[test]
+fn a103_dungeon_skull_key_refuses_without_a_direction_prompt() {
+    let dir = u5_runtime::test_fixtures::debug_game_dir();
+    let mut state = u5_runtime::test_fixtures::dungeon_state(
+        u5_runtime::test_fixtures::open_dungeon_record(),
+        0,
+        1,
+        1,
+    );
+    state.special_items = [0; 16];
+    state.scroll_stock = [0; SCROLL_COUNT];
+    state.potion_stock = [0; POTION_COUNT];
+    state.special_items[SPECIAL_ITEM_SKULL_KEY_INDEX] = 1;
+
+    handle_play_key_input(&mut state, 'u', "", &dir).unwrap();
+    assert!(state.active_use.is_some());
+    handle_play_key_input(&mut state, '\r', "", &dir).unwrap();
+
+    assert!(state.active_use.is_none(), "no Direction- prompt is pending");
+    assert_eq!(state.special_items[SPECIAL_ITEM_SKULL_KEY_INDEX], 0);
+    let transcript: Vec<String> = state
+        .message_entries()
+        .iter()
+        .map(|entry| entry.text.clone())
+        .chain(std::iter::once(state.message.clone()))
+        .collect();
+    assert!(transcript.iter().any(|row| row.contains("Not here!")), "{transcript:?}");
+    assert!(!transcript.iter().any(|row| row.contains("Direction-")), "{transcript:?}");
+    let _ = std::fs::remove_dir_all(dir);
+}

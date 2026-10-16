@@ -1318,13 +1318,15 @@ fn magic_carpet_use_requires_stock_footing_and_accepted_tile() {
     assert_eq!(dungeon.message, "Not here!");
 }
 
+/// `inventory.md §7.1` "Skull Key targeting": "A selected target of tile
+/// `0x97` becomes `0xB8`, and `0x98` becomes `0xBA`; either success dirties
+/// the map and adds no result sentence." No lock table is consulted, and
+/// ordinary keys are untouched.
 #[test]
-fn use_command_routes_inline_skull_key_requests_to_town_lock_handler() {
+fn use_command_routes_inline_skull_key_requests_to_the_tile_rewrite() {
     let dir = debug_game_dir();
-    fs::write(dir.join(TOWN_LOCK_TABLE_FILE), "CASTLE:0 0 2 1 185 184\n").unwrap();
-
     let mut town_grid = open_grid();
-    town_grid[32 + 2] = TOWN_DOOR_PLAIN_LOCKED_TILE;
+    town_grid[32 + 2] = 0x97;
     let mut town = test_state(town_grid, 1, 1);
     town.player.facing = Direction::East;
     town.visibility_dirty = false;
@@ -1336,17 +1338,29 @@ fn use_command_routes_inline_skull_key_requests_to_town_lock_handler() {
         PlayInputDisposition::Continue
     );
 
-    assert_eq!(town.grid[32 + 2], TOWN_DOOR_PLAIN_UNLOCKED_TILE);
+    assert_eq!(town.grid[32 + 2], 0xb8);
     assert_eq!(town.turn, 1);
     assert_eq!(town.keys, 7);
     assert_eq!(town.special_items[SPECIAL_ITEM_SKULL_KEY_INDEX], 1);
     assert!(town.visibility_dirty);
-    assert_eq!(town.message, "Unlocked!");
+    assert_eq!(town.message, "");
+
+    // `0x98` becomes `0xBA`; any other tile prints `Failed!`.
+    town.special_items[SPECIAL_ITEM_SKULL_KEY_INDEX] = 2;
+    town.grid[32 + 2] = 0x98;
+    town.use_skull_key(None).unwrap();
+    assert_eq!(town.grid[32 + 2], 0xba);
+    town.grid[32 + 2] = TOWN_DOOR_PLAIN_LOCKED_TILE;
+    town.use_skull_key(None).unwrap();
+    assert_eq!(town.grid[32 + 2], TOWN_DOOR_PLAIN_LOCKED_TILE);
+    assert_eq!(town.message, USE_SKULL_KEY_FAILED);
     let _ = fs::remove_dir_all(dir);
 }
 
+/// `inventory.md §7.1`: "One skull key is already spent before the prompt
+/// or the dungeon refusal."
 #[test]
-fn skull_key_dungeon_refusal_keeps_stock_and_runs_the_normal_turn() {
+fn skull_key_dungeon_refusal_spends_the_key_and_runs_the_normal_turn() {
     let dir = debug_game_dir();
     let mut dungeon_grid = open_dungeon_record();
     dungeon_grid[dungeon_cell_index(0, 1, 1)] = 0x00;
@@ -1361,7 +1375,7 @@ fn skull_key_dungeon_refusal_keeps_stock_and_runs_the_normal_turn() {
 
     assert_eq!(dungeon.grid[dungeon_cell_index(0, 1, 1)], 0x00);
     assert_eq!(dungeon.turn, 1);
-    assert_eq!(dungeon.special_items[SPECIAL_ITEM_SKULL_KEY_INDEX], 1);
+    assert_eq!(dungeon.special_items[SPECIAL_ITEM_SKULL_KEY_INDEX], 0);
     assert!(dungeon.visibility_dirty);
     assert_eq!(dungeon.message, "Not here!");
     let _ = fs::remove_dir_all(dir);
