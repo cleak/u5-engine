@@ -4602,15 +4602,23 @@ impl PlayState {
     /// the leading feed this producer wants - unlike the teleport line
     /// directly above it in `§11.1`'s table, which has "no leading
     /// newline of its own" and so continues an open row instead.
+    ///
+    /// `§11.1` on the cue: "**The cue is the 40-update action snap**", and
+    /// "the interleaved order here is line feed, cue, name, stored line".
+    /// `§14` on the tail: the slot release comes first, the Shadow Lord's
+    /// release pass of `§6.3` runs "after the slot release and before that
+    /// tick", and the arm "ends with **exactly one** world tick".
     fn apply_combat_arena_exit(&mut self, actor_slot: usize, class: u8) {
         let name = crate::input_dispatch::combat_actor_display_name(self, actor_slot);
+        self.emit_sound_effect(SoundEffect::ActionSnap);
         self.emit_message_line(format!("{name}{COMBAT_ARENA_EXIT_ESCAPES_LINE}"));
-        if class == COMBAT_CLASS_SHADOW_LORD {
-            let _ = self.apply_combat_party_control_faint_scan();
-        }
         if self.release_combat_actor_slot_negative(actor_slot) {
             self.mark_visibility_dirty();
         }
+        if class == COMBAT_CLASS_SHADOW_LORD {
+            let _ = self.apply_combat_party_control_faint_scan();
+        }
+        self.advance_visual_tick();
     }
 
     /// Negative-form release used by vanished, incorporeal, terrain-rejected,
