@@ -804,3 +804,34 @@ fn shipped_chair_census_matches_the_published_proportions() {
         "most seats in the shipped maps are fall-throughs"
     );
 }
+
+/// `visibility.md §4`/§8 (audit A187): a carve-resolved cell holds a real
+/// tile byte, so a `0x5C` slot standing on a `0x92` chair takes the seated
+/// branch - it stamps its own frame and takes no variant draw - instead of
+/// falling to the default helper's frame-minus-eight `0x92` row.
+#[test]
+fn a_0x5c_slot_on_a_visible_0x92_chair_stamps_its_own_frame_without_a_draw() {
+    let mut grid = open_grid();
+    grid[5 * TOWN_GRID_SIDE + 6] = SINGLE_SPRITE_FAMILY_SEATED_CHAIR_TERRAIN;
+    let mut state = test_state(grid, 5, 5);
+    state.active_objects.push(ActiveObject {
+        type_byte: 0x5C,
+        tile: 0x5C,
+        x: 6,
+        y: 5,
+        z: 0,
+        phase: STEADY_PHASE,
+        aux1: 0,
+        aux3: 0,
+    });
+    state.visibility_dirty = true;
+    let prng_before = state.prng_state;
+
+    state.refresh_top_down_visibility_buffers(TopDownRenderArea::Town, VIEWPORT_PLAYER_ROW);
+
+    let cell_grid = visibility_grid_active_index(VIEWPORT_PLAYER_ROW, VIEWPORT_PLAYER_COL + 1).unwrap();
+    let cell_band = terrain_band_active_index(VIEWPORT_PLAYER_ROW, VIEWPORT_PLAYER_COL + 1).unwrap();
+    assert_eq!(state.visibility_grid[cell_grid], VISIBILITY_USE_COMPANION);
+    assert_eq!(state.terrain_band[cell_band], 0x5C, "own frame, not the 0x32 chair row");
+    assert_eq!(state.prng_state, prng_before, "the seated branch takes no draw");
+}

@@ -1652,6 +1652,20 @@ impl PlayState {
         Some(self.animation.resolve_static_tile(tile))
     }
 
+    /// The visibility-grid byte the compositor's guards and branch tests
+    /// see. `visibility.md §4`: "grid cells resolved by the carve = real
+    /// tile bytes", and §11's arena blat-copy puts the arena terrain in the
+    /// grid byte-for-byte, so the §8 seated branch fires when that byte is
+    /// the chair `0x92`. This engine keeps a resolved cell's terrain in the
+    /// companion band and its brightness marker in the grid, so for a cell
+    /// still holding a clear/dim marker the real byte is the band's.
+    fn compositor_grid_byte(&self, grid_index: usize, terrain_index: usize) -> u8 {
+        match self.visibility_grid[grid_index] {
+            VISIBILITY_CLEAR | VISIBILITY_DIM_PERIPHERY => self.terrain_band[terrain_index],
+            byte => byte,
+        }
+    }
+
     fn composite_combat_object_into_visibility_buffers(&mut self, object: ActiveObject) {
         if object.is_empty() {
             return;
@@ -1666,7 +1680,7 @@ impl PlayState {
         ) else {
             return;
         };
-        let current_grid_byte = self.visibility_grid[grid_index];
+        let current_grid_byte = self.compositor_grid_byte(grid_index, terrain_index);
         let object_x = object.x as isize;
         let object_y = object.y as isize;
         let current_terrain = self
@@ -1780,7 +1794,7 @@ impl PlayState {
         }
         let grid_index = visibility_grid_active_index(row, col).unwrap();
         let terrain_index = terrain_band_active_index(row, col).unwrap();
-        let current_grid_byte = self.visibility_grid[grid_index];
+        let current_grid_byte = self.compositor_grid_byte(grid_index, terrain_index);
         // `visibility.md §8`: "Terrain-aware stamps use the live
         // world/combat tile at the object's coordinate, plus one
         // neighbouring row for a few edge shapes." The read is against the map
