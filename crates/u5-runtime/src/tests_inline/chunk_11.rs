@@ -1430,6 +1430,41 @@
         let _ = fs::remove_dir_all(dir);
     }
 
+    /// `town-mode.md §10`: after a floor change "the handler re-reads the
+    /// tile under the party's new position and applies that tile's effect
+    /// too, so chained effects within one turn are possible". A landing on
+    /// another trapdoor falls again in the same turn.
+    #[test]
+    fn town_trapdoor_landing_on_a_trapdoor_falls_again_in_the_same_turn() {
+        let dir = debug_game_dir();
+        let scene = Scene::new(17).unwrap();
+        // Base page 5 is floor 0, so floor -1 is page 4 and floor -2 page 3.
+        let mut pages = location_pages();
+        pages[4 * 1024 + 1] = TOWN_TRAPDOOR_LIVE_TILE;
+        fs::write(dir.join("CASTLE.DAT"), pages).unwrap();
+        fs::write(dir.join(LOCATION_FLOOR_TABLE_FILE), "CASTLE:0 5\n").unwrap();
+        let mut grid = open_grid();
+        grid[1] = TOWN_TRAPDOOR_LIVE_TILE;
+        let mut state = test_state(grid, 0, 0);
+        state.party[0].hp = 40;
+        state.party[0].max_hp = 40;
+
+        assert_eq!(
+            handle_play_key_input(&mut state, 'd', "", &dir).unwrap(),
+            PlayInputDisposition::Continue
+        );
+
+        assert_eq!(state.area, Area::Town { scene, floor: -2 });
+        assert_eq!(state.turn, 1, "the chain stays inside one turn");
+        assert!(
+            (24..=38).contains(&state.party[0].hp),
+            "two independent 1..8 rolls: {}",
+            state.party[0].hp
+        );
+        assert_eq!(state.message.matches("A TRAPDOOR!").count(), 2);
+        let _ = fs::remove_dir_all(dir);
+    }
+
     #[test]
     fn stonegate_trapdoor_applies_exact_scripted_defeat_without_transition() {
         let dir = debug_game_dir();

@@ -3741,14 +3741,46 @@ impl PlayState {
                     self.close_message_row();
                     return Ok(Some(MoveOutcome::Used));
                 }
-                let outcome =
+                let mut outcome =
                     self.apply_town_trap_door_transition(game_dir, scene, entry, false)?;
                 // `town-mode.md §10`: "If an effect moves the party to a
                 // different floor, the handler re-reads the tile under the
-                // party's new position and applies that tile's effect too."
-                let landed_tile = self.grid[self.player.y * 32 + self.player.x];
-                if Self::is_town_burning_live_tile(landed_tile) {
-                    self.apply_town_burning_underfoot_effect();
+                // party's new position and applies that tile's effect too, so
+                // chained effects within one turn are possible" - including a
+                // landing on another trapdoor, which runs the whole trapdoor
+                // prefix and descends again. The chain stops once a landing
+                // no longer changes the floor.
+                loop {
+                    let landed_tile = self.grid[self.player.y * 32 + self.player.x];
+                    let Area::Town {
+                        floor: landed_floor,
+                        ..
+                    } = self.area
+                    else {
+                        break;
+                    };
+                    if !matches!(self.player.transport, TransportState::Carpet { .. })
+                        && let Some(next) = self.town_trap_door_at(
+                            game_dir,
+                            scene,
+                            landed_floor,
+                            self.player.x,
+                            self.player.y,
+                            landed_tile,
+                        )?
+                        && next.to_floor != landed_floor
+                    {
+                        let chained_message = self.message.clone();
+                        self.apply_town_trapdoor_party_damage();
+                        outcome =
+                            self.apply_town_trap_door_transition(game_dir, scene, next, false)?;
+                        self.message = format!("{chained_message} {}", self.message);
+                        continue;
+                    }
+                    if Self::is_town_burning_live_tile(landed_tile) {
+                        self.apply_town_burning_underfoot_effect();
+                    }
+                    break;
                 }
                 let Area::Town {
                     scene: landed_scene,
