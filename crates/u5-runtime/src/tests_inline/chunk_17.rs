@@ -1068,6 +1068,32 @@
     }
 
     #[test]
+    fn overworld_open_prompts_for_a_direction_instead_of_using_facing() {
+        // `doors-and-z-transitions.md §4`: "The non-dungeon variant prompts
+        // for a direction and probes the tile in front"; only the dungeon
+        // variant skips the prompt.
+        let dir = debug_game_dir();
+        let mut state = world_state(vec![0x05; WORLD_SIDE * WORLD_SIDE], 10, 10);
+        state.player.facing = Direction::South;
+
+        assert_eq!(
+            handle_play_key_input(&mut state, 'O', "", &dir).unwrap(),
+            PlayInputDisposition::Continue
+        );
+        assert!(state.active_direction_prompt.is_some());
+        assert_eq!(state.message, "Open-");
+        assert_eq!(state.turn, 0);
+
+        assert_eq!(
+            handle_play_key_input(&mut state, '6', "", &dir).unwrap(),
+            PlayInputDisposition::Continue
+        );
+        assert!(state.active_direction_prompt.is_none());
+        assert_eq!(state.turn, 1);
+        let _ = fs::remove_dir_all(dir);
+    }
+
+    #[test]
     fn active_direction_prompt_routes_get_open_and_search() {
         let dir = debug_game_dir();
 
