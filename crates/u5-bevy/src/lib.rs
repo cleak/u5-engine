@@ -12181,6 +12181,16 @@ fn step_visual_intro_panel(intro: &mut VisualIntroState, ch: char) -> bool {
             result,
             message,
         } => {
+            if matches!(subflow, IntroSubflow::ReturnToView) {
+                // `formats/location-dat.md §11` "Return-to-View preview
+                // tick": the tick that reads the aborting key (step 6)
+                // has already fired its intro title tick (step 2), so the
+                // free-running strip counter advances once more before the
+                // preview returns. What stays visible is the restored
+                // pre-preview snapshot (`systems/intro.md §12`), so only the
+                // counter moves.
+                intro.title_tick_frame = title_tick_next_frame(intro.title_tick_frame);
+            }
             intro.panel = VisualIntroPanel::Menu;
             intro.dispatch.complete_subflow(subflow, result);
             intro.modal_backing = None;
@@ -20309,15 +20319,17 @@ mod tests {
         // partial band was already published draw-before-advance, so the
         // final clean tick draws frame 1 and leaves the counter at frame 2.
         // The driver does not consume the pending key; after loader cleanup
-        // the automatic preview reads it and aborts, so the menu never sees
-        // that Down key and the highlight stays on `Journey Onward`.
+        // the automatic preview's first tick fires its title tick (counter
+        // to 3), reads that key and aborts, restoring the frame-1 snapshot.
+        // The menu never sees the Down key, so the highlight stays on
+        // `Journey Onward`.
         assert!(step_visual_intro(
             &mut intro,
             char::from(u5_runtime::INPUT_CODE_SOUTH)
         ));
         assert!(matches!(intro.panel, VisualIntroPanel::Menu));
         assert_eq!(intro.title_tick_visible_frame, 1);
-        assert_eq!(intro.title_tick_frame, 2);
+        assert_eq!(intro.title_tick_frame, 3);
         assert_eq!(
             visual_intro_menu_highlight(&intro),
             IntroSubflow::JourneyOnward
