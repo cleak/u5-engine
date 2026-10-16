@@ -523,33 +523,34 @@ impl PlayState {
         x: usize,
         y: usize,
         tile: u8,
+        actor: Option<usize>,
     ) -> MoveOutcome {
-        let detail = self.dungeon_chest_trap_detail(level, x, y, tile);
+        let detail = self.dungeon_chest_trap_detail(level, x, y, tile, actor);
         self.advance_turn();
         self.message = dungeon_chest_search_trap_line(detail).to_string();
         MoveOutcome::Searched
     }
 
+    /// `dungeon-mode.md` Section 8, chest Search: the threshold is
+    /// `(2 * Z - member Dexterity + 30) / 2` for the acting member, and both
+    /// the `1..30` roll and the fresh `1..8` tier roll are shared-PRNG draws.
     pub fn dungeon_chest_trap_detail(
-        &self,
+        &mut self,
         level: u8,
         x: usize,
         y: usize,
         tile: u8,
+        actor: Option<usize>,
     ) -> &'static str {
-        let trap_detection_stat = self
-            .party
-            .iter()
-            .find(|member| member.living())
-            .map(|member| member.class_byte)
-            .unwrap_or_default();
-        let threshold = Self::dungeon_chest_pick_threshold(level, trap_detection_stat);
-        let roll = self.dungeon_chest_trap_roll(level, x, y, tile, 0, 30);
+        let _ = (x, y);
+        let dexterity = self.dungeon_search_actor_dexterity(actor);
+        let threshold = Self::dungeon_chest_pick_threshold(level, dexterity);
+        let roll = self.random_range_u8(1, 30);
         let detail = if u16::from(roll) > threshold && Self::is_plain_closed_dungeon_chest(tile) {
             "no trap"
         } else {
             let tier = if u16::from(roll) <= threshold {
-                self.dungeon_chest_trap_roll(level, x, y, tile, 1, 8)
+                self.random_range_u8(1, 8)
             } else {
                 level
             };
@@ -562,24 +563,30 @@ impl PlayState {
         detail
     }
 
+    /// `dungeon-mode.md` Section 8.1, "Who acts": the Dexterity of the member
+    /// the shared acting-member prompt chose. Without an explicit pick this
+    /// is the member the prompt selects silently, else the first eligible
+    /// (Good or Poisoned) member.
+    pub fn dungeon_search_actor_dexterity(&self, actor: Option<usize>) -> u8 {
+        let index = actor.or_else(|| match self.acting_member_selection() {
+            ActingMemberSelection::Selected(slot) => Some(slot),
+            _ => self
+                .party
+                .iter()
+                .position(|member| acting_member_status_eligible(member.status)),
+        });
+        index
+            .and_then(|index| self.party.get(index))
+            .map(|member| member.dexterity())
+            .unwrap_or_default()
+    }
+
     pub fn dungeon_chest_pick_threshold(level: u8, dexterity: u8) -> u16 {
         dungeon_chest_jimmy_threshold(level, dexterity)
     }
 
     pub fn is_plain_closed_dungeon_chest(tile: u8) -> bool {
         tile == 0x40
-    }
-
-    pub fn dungeon_chest_trap_roll(
-        &self,
-        level: u8,
-        x: usize,
-        y: usize,
-        tile: u8,
-        stage: u8,
-        upper: u8,
-    ) -> u8 {
-        1 + (self.dungeon_chest_roll_seed(level, x, y, tile, 7, stage) % upper)
     }
 
     pub fn consume_dungeon_chest(

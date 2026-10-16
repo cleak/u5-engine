@@ -1965,7 +1965,10 @@ fn dungeon_search_bomb_trap_can_report_nothing_without_rewrite() {
     let mut state = dungeon_state(grid, 0, 1, 1);
     state.player.facing = Direction::East;
     state.torch_counter = 5;
-    state.party[0].class_byte = b'A';
+    // `dungeon-mode.md §8`: the threshold reads the acting member's
+    // Dexterity. 31 on level 0 makes `2 * Z - Dex + 30` wrap under the
+    // unsigned convention, so every `1..30` roll is at or below it.
+    state.party[0].climb_stat = 31;
 
     assert_eq!(
         state.search_facing_with_game_dir(&dir).unwrap(),
@@ -2679,4 +2682,65 @@ fn dungeon_look_prints_the_two_row_you_see_line() {
 
     assert!(state.message.starts_with(DUNGEON_LOOK_PREAMBLE));
     assert!(!state.message.contains("You see: "));
+}
+
+/// `dungeon-mode.md §8` chest Search (audit A087): the threshold uses the
+/// *acting* member's Dexterity, and the `1..30` roll is a shared-PRNG draw.
+/// Member 2 with Dexterity 30 on level 0 gives threshold `(0 - 30 + 30) / 2
+/// = 0`, so any roll is above it and a plain closed chest reads `No trap`
+/// after exactly one draw. Member 1 (Dexterity 0) would give 15.
+#[test]
+fn dungeon_search_chest_rolls_acting_member_dexterity_from_shared_prng() {
+    let dir = debug_game_dir();
+    let mut grid = open_dungeon_record();
+    grid[dungeon_cell_index(0, 2, 1)] = 0x40;
+    let mut state = dungeon_state(grid, 0, 1, 1);
+    state.player.facing = Direction::East;
+    state.torch_counter = 5;
+    let mut second = state.party[0];
+    second.slot = 1;
+    second.climb_stat = 30;
+    state.party[0].climb_stat = 0;
+    state.party.push(second);
+    state.prng_state = 0x1234;
+    let mut expected_prng = state.prng_state;
+    let _ = u5_prng_range_u16(&mut expected_prng, 1, 30);
+
+    assert_eq!(
+        state
+            .search_dungeon_focus_with_game_dir_as(DungeonLookFocus::Ahead, &dir, Some(1))
+            .unwrap(),
+        MoveOutcome::Searched
+    );
+    assert_eq!(state.message, DUNGEON_SEARCH_NO_TRAP);
+    assert_eq!(state.prng_state, expected_prng);
+    let _ = fs::remove_dir_all(dir);
+}
+
+/// `dungeon-mode.md §8`, `0x62` Search row (audit A087): Dexterity 30 on
+/// level 0 gives threshold 0, so the shared-PRNG `1..30` roll is above it
+/// and the bomb springs, clearing the cell to `0x00`.
+#[test]
+fn dungeon_search_bomb_uses_acting_member_dexterity_and_shared_prng() {
+    let dir = debug_game_dir();
+    let mut grid = open_dungeon_record();
+    grid[dungeon_cell_index(0, 2, 1)] = 0x62;
+    let mut state = dungeon_state(grid, 0, 1, 1);
+    state.player.facing = Direction::East;
+    state.torch_counter = 5;
+    state.party[0].climb_stat = 30;
+    state.prng_state = 0x4321;
+    let mut expected_prng = state.prng_state;
+    let _ = u5_prng_range_u16(&mut expected_prng, 1, 30);
+
+    assert_eq!(
+        state
+            .search_dungeon_focus_with_game_dir_as(DungeonLookFocus::Ahead, &dir, Some(0))
+            .unwrap(),
+        MoveOutcome::Searched
+    );
+    assert_eq!(state.message, DUNGEON_SEARCH_A_BOMB_TRAP);
+    assert_eq!(state.grid[dungeon_cell_index(0, 2, 1)], 0x00);
+    assert_eq!(state.prng_state, expected_prng);
+    let _ = fs::remove_dir_all(dir);
 }
