@@ -175,13 +175,15 @@ impl PlayState {
                     self.random_range_u8(0, (OVERWORLD_CHUNK_BUFFER_WINDOW_SIDE - 1) as u8),
                 ))
                 % WORLD_SIDE;
+            // `encounters.md §4`: separation, a zero bucket, a sea creature on
+            // shore, and the 128 cap are the only rejections. There is no
+            // occupancy test; a full table is handled by eviction (§9).
             if !encounter_spawner_separation_ok(
                 x as u8,
                 y as u8,
                 self.player.x as u8,
                 self.player.y as u8,
-            ) || self.world_object_at(x, y).is_some()
-            {
+            ) {
                 continue;
             }
 
@@ -305,10 +307,9 @@ impl PlayState {
         // saves the vehicle marker across the damage block and restores it
         // **before** the coordinate test, "so the plane swap runs with the
         // original transport in place; the falls handler does not force the
-        // durable post-transition transport marker to foot". Section 8.1 says
-        // nothing about the whirlpool's *durable* marker after the teleport,
-        // so that arm keeps the ordinary reset and only the falls chain sets
-        // this flag.
+        // durable post-transition transport marker to foot". The whirlpool
+        // swallow sets it too: `vehicles.md §2` lists its frame as a saved
+        // and restored override, and no marker writer resets it to foot.
         let preserve_transport = entry.preserves_transport;
         let pre_transition_transport = self.player.transport;
         self.cache_current_world_overlay();
@@ -2966,6 +2967,7 @@ impl PlayState {
     /// pass. Ring regeneration is invoked once for this five-minute camp step.
     pub fn advance_wilderness_camp_tick(&mut self, minutes: u8) {
         self.advance_turn_with_minutes_policy(minutes, true, true, false, true);
+        self.apply_pending_world_object_walker_pass();
         self.apply_hourly_ring_regeneration_tick();
     }
 
@@ -2994,6 +2996,16 @@ impl PlayState {
                 .effective_minutes(minutes)
         };
         self.dungeon_loop_minute_charged = true;
+        self.advance_clock_half(effective_minutes);
+    }
+
+    /// The clock half of a turn shared by [`Self::advance_dungeon_loop_minute`]
+    /// and the outdoor difficult-terrain charge of `movement.md §8.1`: the
+    /// calendar cascade, the hour bundle, the light-counter decay and the
+    /// daylight recompute, without bumping the action counter or entering
+    /// any post-action pass. `effective_minutes` is already scaled by the
+    /// timed-effect clock rules.
+    pub(crate) fn advance_clock_half(&mut self, effective_minutes: u8) {
         let previous_day = self.clock.day;
         let previous_hour = self.clock.hour;
         // `time.md §2`: "A pre-cascade snapshot of the hour, taken at the
@@ -3074,6 +3086,8 @@ impl PlayState {
             self.apply_hourly_status_provision_pass();
         }
         self.apply_pending_town_object_epilogue();
+        // Same safety net for the outdoor epilogue's deferred walker.
+        self.apply_pending_world_object_walker_pass();
         let negate_time_active = self.negate_time_active();
         let effective_minutes = if negate_time_active {
             0
@@ -3162,7 +3176,12 @@ impl PlayState {
         // revolution per world turn, gated on the ambient value the line above
         // just recomputed.
         self.advance_light_beacon();
-        self.refresh_natural_moongates();
+        // `overworld.md §9`/§9.1: the natural-gate refresh runs "once per
+        // world turn during the resident world tick, for non-combat scenes",
+        // and combat "neither reads nor writes" the presence counter.
+        if !self.combat_active {
+            self.refresh_natural_moongates();
+        }
         self.sync_player_object();
         self.world_walkers_ran_this_turn = false;
         if self.time_stop_counter != 0 {
@@ -3221,6 +3240,13 @@ impl PlayState {
                 if deferred_town_tail {
                     self.pending_town_npc_schedule_pass = true;
                     self.pending_town_active_object_pass = advance_active_objects;
+                } else if matches!(self.area, Area::World { .. }) {
+                    // `overworld.md §5` step 6h: the creature walker belongs
+                    // to the outdoor object epilogue, after the narrative
+                    // gate, status pass, underfoot chain and encounter roll.
+                    // The gate decision above is this turn's; the walk is
+                    // owed to that epilogue.
+                    self.pending_world_object_walker_pass = advance_active_objects;
                 } else {
                     // `town-mode.md §7` step 4 (R328): "the walker runs
                     // between the slot-zero coordinate copy and the schedule
@@ -4326,6 +4352,18 @@ impl PlayState {
     /// outdoor creature walker. The town animator is in neither list, so the
     /// per-turn epilogue calls this rather than the bundled entry point and
     /// runs the animator outside the gate.
+    /// Run the outdoor walker owed by the last consumed world turn
+    /// (`overworld.md §5` step 6h). A turn whose epilogue never ran - a
+    /// mode change, or a low-level caller - drops it outside the overworld.
+    pub fn apply_pending_world_object_walker_pass(&mut self) {
+        if std::mem::take(&mut self.pending_world_object_walker_pass)
+            && matches!(self.area, Area::World { .. })
+            && !self.combat_active
+        {
+            self.advance_active_object_walkers();
+        }
+    }
+
     pub fn advance_active_object_walkers(&mut self) {
         match self.area {
             Area::Dungeon { .. } => return,
@@ -4667,7 +4705,7 @@ impl PlayState {
             // Its I/O-bearing combat/transition effect is completed by the
             // post-turn handler, but it claims the walker slot here so neither
             // it nor any lower slot can move out from under that handler.
-            let claimed_by_first_phase = self.outdoor_first_phase_reaction_fires(slot);
+            let claimed_by_first_phase = self.claim_outdoor_first_phase_reaction(slot);
             if claimed_by_first_phase {
                 self.pending_outdoor_reaction_slots.push(slot);
             }
@@ -4762,6 +4800,22 @@ impl PlayState {
     /// resources and can pause/resume the remaining lower slots around a
     /// terrain-combat frame.
     pub fn outdoor_first_phase_reaction_fires(&self, slot: usize) -> bool {
+        let mut preview = self.prng_state;
+        self.outdoor_first_phase_reaction_fires_with(slot, &mut preview)
+    }
+
+    /// The walker's own claim test: [`Self::outdoor_first_phase_reaction_fires`]
+    /// with the breath gate drawn from the shared generator in walker order
+    /// (`overworld.md §6.2.1`, `active-objects.md §8`). A claimed breath has
+    /// already passed its gate, so the staged resolution does not roll again.
+    fn claim_outdoor_first_phase_reaction(&mut self, slot: usize) -> bool {
+        let mut state = self.prng_state;
+        let fires = self.outdoor_first_phase_reaction_fires_with(slot, &mut state);
+        self.prng_state = state;
+        fires
+    }
+
+    fn outdoor_first_phase_reaction_fires_with(&self, slot: usize, prng_state: &mut u16) -> bool {
         if self.outdoor_active_object_is_adjacent(slot) {
             return true;
         }
@@ -4782,7 +4836,7 @@ impl PlayState {
         );
         match outdoor_ranged_attacker_figure(object.type_byte, dx, dy) {
             Some(OutdoorRangedAttackFigure::SparkCloud) => {
-                outdoor_serpent_dragon_triggers(self.outdoor_serpent_dragon_breath_roll(slot))
+                outdoor_serpent_dragon_triggers(outdoor_serpent_dragon_breath_draw(prng_state))
             }
             Some(OutdoorRangedAttackFigure::SolidBurst) => true,
             None => false,
@@ -4794,6 +4848,23 @@ impl PlayState {
     pub fn outdoor_first_phase_ranged_attack_detail(
         &mut self,
         slot: usize,
+    ) -> Option<OutdoorRangedAttackReport> {
+        self.outdoor_first_phase_ranged_attack_resolve(slot, true)
+    }
+
+    /// Resolve a ranged reaction the walker already claimed: its breath gate
+    /// was drawn at claim time, so it is not drawn a second time here.
+    pub(crate) fn outdoor_claimed_ranged_attack_detail(
+        &mut self,
+        slot: usize,
+    ) -> Option<OutdoorRangedAttackReport> {
+        self.outdoor_first_phase_ranged_attack_resolve(slot, false)
+    }
+
+    fn outdoor_first_phase_ranged_attack_resolve(
+        &mut self,
+        slot: usize,
+        draw_breath_gate: bool,
     ) -> Option<OutdoorRangedAttackReport> {
         let Area::World { plane } = self.area else {
             return None;
@@ -4831,7 +4902,11 @@ impl PlayState {
                 // closed interval `[0, 7]` and fires on one of those eight
                 // outcomes." The broadside has no such gate: it "fires
                 // whenever the geometry holds".
-                if !outdoor_serpent_dragon_triggers(self.outdoor_serpent_dragon_breath_roll(slot)) {
+                if draw_breath_gate
+                    && !outdoor_serpent_dragon_triggers(outdoor_serpent_dragon_breath_draw(
+                        &mut self.prng_state,
+                    ))
+                {
                     return None;
                 }
                 None
@@ -4866,9 +4941,14 @@ impl PlayState {
     /// [`OUTDOOR_SERPENT_DRAGON_TRIGGER_DENOMINATOR`]. Named so the gate
     /// can be exercised directly rather than inferred from whether a
     /// breath attack happened to fire.
-    pub fn outdoor_serpent_dragon_breath_roll(&self, slot: usize) -> u8 {
-        self.outdoor_active_object_step_seed(slot, OUTDOOR_SERPENT_DRAGON_BREATH_SALT)
-            % OUTDOOR_SERPENT_DRAGON_TRIGGER_DENOMINATOR
+    ///
+    /// The roll is the shared generator's inclusive range draw `[0, 7]`
+    /// (`overworld.md §6.2.1`: "The shared range draw is **inclusive on both
+    /// bounds**; the breath asks for the closed interval `[0, 7]`"). This
+    /// accessor previews the next draw without consuming it.
+    pub fn outdoor_serpent_dragon_breath_roll(&self, _slot: usize) -> u8 {
+        let mut preview = self.prng_state;
+        outdoor_serpent_dragon_breath_draw(&mut preview)
     }
 
     /// `overworld.md §6.2` shared ranged-attack resolution, creature-to-
@@ -5427,8 +5507,12 @@ impl PlayState {
             return false;
         }
 
+        // `overworld.md §6.1` / `active-objects.md §8`: "Each turn the
+        // creature flips a fair coin" from the shared generator to pick the
+        // axis it attempts first.
+        let axis = axis_first_choice(self.random_range_u8(0, 1));
         for direction in self
-            .outdoor_directed_step_directions(slot, object)
+            .outdoor_directed_step_candidates(object, axis)
             .into_iter()
             .flatten()
         {
@@ -5447,11 +5531,11 @@ impl PlayState {
             }
         }
 
-        let Some(direction) = direction_from_active_object_phase(object.phase)
-            .filter(|direction| direction.is_cardinal())
-        else {
-            return false;
-        };
+        // `overworld.md §6.1`: "If neither directed move is legal, the
+        // creature instead attempts one randomly chosen cardinal move" - the
+        // random four-direction walker of `active-objects.md §8`, which
+        // "rolls one cardinal direction and makes a single attempt at it".
+        let direction = OUTDOOR_RANDOM_WALK_DIRECTIONS[usize::from(self.random_range_u8(0, 3))];
         let (dx, dy) = direction.delta();
         self.try_step_outdoor_active_object(slot, object, dx, dy, direction, last_vacated)
     }
@@ -5467,10 +5551,22 @@ impl PlayState {
             .next()
     }
 
+    /// Preview of the directed candidates in the order the walker's next
+    /// shared-generator coin would try them; consumes no draw.
     pub fn outdoor_directed_step_directions(
         &self,
-        slot: usize,
+        _slot: usize,
         object: ActiveObject,
+    ) -> [Option<Direction>; 2] {
+        let mut preview = self.prng_state;
+        let coin = u5_prng_range_u16(&mut preview, 0, 1) as u8;
+        self.outdoor_directed_step_candidates(object, axis_first_choice(coin))
+    }
+
+    fn outdoor_directed_step_candidates(
+        &self,
+        object: ActiveObject,
+        axis: Axis,
     ) -> [Option<Direction>; 2] {
         let (dx, dy) = directed_step_offsets(
             object.x as u8,
@@ -5478,7 +5574,7 @@ impl PlayState {
             self.player.x as u8,
             self.player.y as u8,
         );
-        let candidates = match axis_first_choice(self.outdoor_active_object_step_seed(slot, 0)) {
+        let candidates = match axis {
             Axis::X => [(dx, 0), (0, dy)],
             Axis::Y => [(0, dy), (dx, 0)],
         };
@@ -5543,7 +5639,8 @@ impl PlayState {
         }
         if !type_bypasses_terrain_chance_gate(object.type_byte) {
             if let Some(denominator) = terrain_chance_gate_denominator(tile) {
-                if self.outdoor_active_object_step_seed(slot, tile) % denominator != 0 {
+                // `active-objects.md §8`: a one-in-`d` shared-generator draw.
+                if self.random_range_u8(0, denominator - 1) != 0 {
                     return OutdoorActiveObjectStepAttempt::ChanceRefused;
                 }
             }
@@ -5572,16 +5669,6 @@ impl PlayState {
         self.active_objects[slot].y = ny;
         self.mark_visibility_dirty();
         OutdoorActiveObjectStepAttempt::Committed
-    }
-
-    pub fn outdoor_active_object_step_seed(&self, slot: usize, salt: u8) -> u8 {
-        self.turn as u8
-            ^ self.clock.hour
-            ^ self.clock.minute
-            ^ (slot as u8).wrapping_mul(17)
-            ^ (self.player.x as u8).wrapping_mul(3)
-            ^ (self.player.y as u8).wrapping_mul(5)
-            ^ salt
     }
 
     pub fn advance_town_free_roaming_active_objects(&mut self) {
@@ -6157,10 +6244,12 @@ pub fn outdoor_active_object_step_accepts_tile(
     match class_byte {
         0x2c..=0x2f => water_creature_terrain_accepts(tile),
         0x80..=0x8f | 0x9c..=0x9f | 0xfc..=0xff => tile <= 0x03 || (0x60..=0x6f).contains(&tile),
-        0x94..=0x97 | 0xb0..=0xb3 | 0xd8..=0xdf | 0xf0..=0xf3 => {
-            (is_base_tile_passable(tile, passability) || is_water_tile(tile) || is_lava_tile(tile))
-                && !is_mountain_tile(tile)
-                && !is_wall_or_closed_door_tile(tile)
+        // `movement.md §4`: Wanderer and Lord British (`0x74..0x77`,
+        // `0x7C..0x7F`), Bat, Gazer, Daemon/Dragon and Mongbat "use the
+        // carpet-like composite predicate", whose accepted set already
+        // excludes the `0x90..0x93` chair force-reject run.
+        0x74..=0x77 | 0x7c..=0x7f | 0x94..=0x97 | 0xb0..=0xb3 | 0xd8..=0xdf | 0xf0..=0xf3 => {
+            carpet_terrain_accepts(tile)
         }
         _ => {
             is_base_tile_passable(tile, passability)
@@ -6337,4 +6426,23 @@ mod time_cascade_and_daylight_spec_tests {
         state.clock.minute = 0;
         assert_eq!(state.base_daylight(), FULL_DARKNESS);
     }
+}
+
+/// `active-objects.md §8` random four-direction walker: the cardinal picked
+/// by its single `[0, 3]` draw.
+const OUTDOOR_RANDOM_WALK_DIRECTIONS: [Direction; 4] = [
+    Direction::North,
+    Direction::East,
+    Direction::South,
+    Direction::West,
+];
+
+/// `overworld.md §6.2.1`: the breath gate's shared inclusive range draw
+/// `[0, 7]`.
+fn outdoor_serpent_dragon_breath_draw(prng_state: &mut u16) -> u8 {
+    u5_prng_range_u16(
+        prng_state,
+        0,
+        u16::from(OUTDOOR_SERPENT_DRAGON_TRIGGER_DENOMINATOR - 1),
+    ) as u8
 }

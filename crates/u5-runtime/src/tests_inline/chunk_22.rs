@@ -14,6 +14,8 @@
 
         state.advance_turn();
 
+        state.apply_pending_world_object_walker_pass();
+
         let object = state
             .active_objects
             .iter()
@@ -55,6 +57,8 @@
 
         state.advance_turn();
 
+        state.apply_pending_world_object_walker_pass();
+
         assert_eq!(
             (state.active_objects[1].x, state.active_objects[1].y),
             (4, 5)
@@ -91,6 +95,8 @@
         });
 
         state.advance_turn();
+
+        state.apply_pending_world_object_walker_pass();
 
         let object = state
             .active_objects
@@ -161,6 +167,7 @@
         // The separately published per-render-frame animator
         // (`active-objects.md §8`) is not on this path at all.
         state.advance_turn();
+        state.apply_pending_world_object_walker_pass();
         assert_eq!(state.active_objects[1].phase, 0x22);
         assert_eq!(state.active_objects[1].tile, 192);
         assert_eq!((state.active_objects[1].x, state.active_objects[1].y), (5, 5));
@@ -169,6 +176,7 @@
         // the walker takes its step, with no separate "do I move" roll
         // (`active-objects.md §8`).
         state.advance_turn();
+        state.apply_pending_world_object_walker_pass();
         assert_eq!(state.active_objects[1].phase & 0x0f, 0x01);
         assert_ne!((state.active_objects[1].x, state.active_objects[1].y), (5, 5));
     }
@@ -212,6 +220,8 @@
 
         terrain_blocked.advance_turn();
 
+        terrain_blocked.apply_pending_world_object_walker_pass();
+
         let object = terrain_blocked
             .active_objects
             .iter()
@@ -233,6 +243,8 @@
         });
 
         player_blocked.advance_turn();
+
+        player_blocked.apply_pending_world_object_walker_pass();
 
         let object = player_blocked
             .active_objects
@@ -279,6 +291,8 @@
         state.active_objects.push(prunable_marker(100, 112)); // y fails -> prune
 
         state.advance_turn();
+
+        state.apply_pending_world_object_walker_pass();
 
         assert_eq!(state.active_objects[1], prunable_marker(111, 100));
         assert!(state.active_objects[2].is_empty());
@@ -839,6 +853,8 @@
 
         state.advance_turn();
 
+        state.apply_pending_world_object_walker_pass();
+
         assert_eq!(
             (state.active_objects[1].x, state.active_objects[1].y),
             (4, 5)
@@ -846,6 +862,37 @@
         assert_eq!(state.active_objects[1].type_byte, 0x2f);
         assert_eq!(state.active_objects[1].tile, 0x2f);
         assert_eq!(state.active_objects[1].phase, 0x60);
+    }
+
+    #[test]
+    fn world_underfoot_chain_runs_before_the_object_epilogue_engagement() {
+        // `overworld.md §5`: step 6g's lava arm precedes step 6h's object
+        // epilogue, whose adjacent engagement enters combat. A creature that
+        // reaches the party does not pre-empt the burn.
+        let dir = debug_game_dir();
+        let record = synthetic_combat_arena_record();
+        fs::write(dir.join(BRIT_CBT_FILE), record.repeat(BRIT_CBT_RECORDS)).unwrap();
+        let mut grid = open_world_grid();
+        grid[world_cell_index(5, 5)] = 0x8f;
+        let mut state = world_state(grid, 5, 5);
+        state.active_objects.push(ActiveObject {
+            type_byte: 0xc0,
+            tile: 0xc0,
+            x: 6,
+            y: 5,
+            z: WorldPlane::Underworld.save_floor(),
+            phase: STEADY_PHASE,
+            aux1: 0,
+            aux3: 0,
+        });
+        let hp_before = state.party[0].hp;
+
+        let outcome = state.pass_turn_with_game_dir(Some(&dir)).unwrap();
+
+        assert_eq!(outcome, MoveOutcome::Used);
+        assert!(state.combat_active);
+        assert!(state.party[0].hp < hp_before);
+        let _ = fs::remove_dir_all(dir);
     }
 
     #[test]
@@ -1260,6 +1307,8 @@
 
         state.advance_turn();
 
+        state.apply_pending_world_object_walker_pass();
+
         assert_eq!(state.active_objects.len(), 4);
         assert!(state.active_objects[1].is_empty());
         assert_eq!(state.active_objects[2].type_byte, 0x10);
@@ -1298,6 +1347,8 @@
 
         state.advance_turn();
 
+        state.apply_pending_world_object_walker_pass();
+
         assert_eq!(state.active_objects[1].type_byte, 192);
         assert_eq!(
             (state.active_objects[1].x, state.active_objects[1].y),
@@ -1321,6 +1372,8 @@
         });
 
         state.advance_turn();
+
+        state.apply_pending_world_object_walker_pass();
 
         let object = state
             .active_objects

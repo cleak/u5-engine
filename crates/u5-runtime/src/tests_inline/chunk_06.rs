@@ -177,7 +177,7 @@
         assert_eq!(state.prng_state, expected_prng);
         assert_eq!(state.turn, 1);
         assert!(state.visibility_dirty);
-        assert!(state.message.contains("durability now"));
+        assert!(!state.message.contains("BOOOM"));
         assert!(!state.message.contains("out of scope"));
     }
 
@@ -207,7 +207,7 @@
 
         assert!(state.active_objects[1].is_empty());
         assert_eq!(state.turn, 1);
-        assert!(state.message.contains("target destroyed"));
+        assert!(!state.message.contains("BOOOM"));
         assert!(!state.message.contains("out of scope"));
     }
 
@@ -215,7 +215,8 @@
     fn whirlpool_engagement_pulls_ship_party_to_underworld_landing() {
         // active-objects.md §8: adjacent whirlpool engagement is a
         // plane-transition effect when the party is not on foot. The party
-        // lands at underworld coordinate (34, 18) on foot.
+        // lands at underworld coordinate (34, 18) still aboard: `vehicles.md
+        // §2` lists no whirlpool writer of the durable marker.
         let dir = debug_game_dir();
         let mut state = world_state(open_world_grid(), 5, 5);
         state.area = Area::World {
@@ -261,7 +262,14 @@
                 plane: WorldPlane::Underworld,
             }
         );
-        assert_eq!(state.player.transport, TransportState::Foot);
+        assert!(
+            matches!(
+                state.player.transport,
+                TransportState::Ship { type_byte: 168, skiffs: 2, hull, .. } if hull < 100
+            ),
+            "the frigate survives the swallow with its hull roll applied: {:?}",
+            state.player.transport
+        );
         assert_eq!((state.player.x, state.player.y), (34, 18));
         // `overworld.md §8.1`: the banner is the first and only text on the
         // path; the coordinate narration is gone.
@@ -386,7 +394,7 @@
         assert_eq!(state.active_objects[1].aux1, 7);
         assert!(!state.active_objects[1].is_empty());
         assert_eq!(state.turn, 1);
-        assert!(state.message.contains("no target in range"));
+        assert!(state.diagnostics.iter().any(|line| line.contains("with no target")));
     }
 
     #[test]
@@ -3234,15 +3242,30 @@
     }
 
     #[test]
+    fn carpet_like_outdoor_object_families_use_the_carpet_composite_predicate() {
+        // `movement.md §4`: Wanderer/Lord British, Bat, Gazer, Daemon/Dragon
+        // and Mongbat use the carpet-like composite predicate, which takes
+        // the `0x60..0x6F` glyph/river family and force-rejects chairs.
+        for class in [0x74, 0x7c, 0x94, 0xb0, 0xd8, 0xdc, 0xf0] {
+            for tile in 0u8..=0xff {
+                assert_eq!(
+                    outdoor_active_object_step_accepts_tile(class, tile, None),
+                    carpet_terrain_accepts(tile),
+                    "class {class:#04x} tile {tile:#04x}"
+                );
+            }
+            assert!(outdoor_active_object_step_accepts_tile(class, 0x64, None));
+            assert!(!outdoor_active_object_step_accepts_tile(class, 0x90, None));
+        }
+    }
+
+    #[test]
     fn outdoor_walker_chance_refusal_does_not_try_the_other_axis() {
         // The terrain chance gate is after validation. Once that gate refuses
         // the first valid directed candidate, the slot's attempt ends; only a
         // genuinely blocked candidate falls through to the second axis.
         let mut state = world_state_with_walker(12, 12, 0x98, 10, 10);
         let object = state.active_objects[1];
-        let [Some(first), Some(_second)] = state.outdoor_directed_step_directions(1, object) else {
-            panic!("a diagonal offset must produce two directed candidates");
-        };
         let gate_tile = [0x04, 0x06, 0x07, 0x08, 0x09, 0x0a, 0x0b, 0x0c, 0x0d, 0x0e, 0x0f]
             .into_iter()
             .find(|tile| {
@@ -3250,13 +3273,22 @@
                     object.type_byte,
                     *tile,
                     state.passability.as_ref(),
-                ) && terrain_chance_gate_denominator(*tile).is_some_and(|denominator| {
-                    !state
-                        .outdoor_active_object_step_seed(1, *tile)
-                        .is_multiple_of(denominator)
-                })
+                ) && terrain_chance_gate_denominator(*tile).is_some()
             })
-            .expect("at least one accepted gated tile refuses this deterministic seed");
+            .expect("at least one gated tile is accepted by this walker");
+        let denominator = u16::from(terrain_chance_gate_denominator(gate_tile).unwrap());
+        // The axis coin and then the gate are shared-generator draws, in that
+        // order; pick a stream position whose gate draw refuses.
+        state.prng_state = (0..=u16::MAX)
+            .find(|seed| {
+                let mut stream = *seed;
+                let _coin = u5_prng_range_u16(&mut stream, 0, 1);
+                u5_prng_range_u16(&mut stream, 0, denominator - 1) != 0
+            })
+            .unwrap();
+        let [Some(first), Some(_second)] = state.outdoor_directed_step_directions(1, object) else {
+            panic!("a diagonal offset must produce two directed candidates");
+        };
         let (dx, dy) = first.delta();
         let first_target = (
             (object.x as isize + dx) as usize,
@@ -3414,13 +3446,15 @@
         let mut state = world_state_with_walker(5, 5, 0x88, 8, 5);
         state.party = six_member_party(40);
         block_projectile_at(&mut state, 7, 5);
-        let turn = (0u64..256)
-            .find(|turn| {
-                state.turn = *turn;
+        // `overworld.md §6.2.1`: the gate is the shared generator's `[0, 7]`
+        // draw, so the stream position, not the turn, decides it.
+        let seed = (0u16..256)
+            .find(|seed| {
+                state.prng_state = *seed;
                 outdoor_serpent_dragon_triggers(state.outdoor_serpent_dragon_breath_roll(1))
             })
-            .expect("a hitting gate roll exists within 256 turns");
-        state.turn = turn;
+            .expect("a hitting gate roll exists within 256 stream positions");
+        state.prng_state = seed;
 
         let report = state.outdoor_first_phase_ranged_attack_detail(1).unwrap();
         assert_eq!(report.figure, OutdoorRangedAttackFigure::SparkCloud);
@@ -3847,13 +3881,15 @@
         // pending cleak/u5-spec#90's byte-identity question.
         let mut state = world_state_with_walker(5, 5, 0xDC, 8, 5);
         block_projectile_at(&mut state, 7, 5);
-        let turn = (0u64..256)
-            .find(|turn| {
-                state.turn = *turn;
+        // `overworld.md §6.2.1`: the gate is the shared generator's `[0, 7]`
+        // draw, so the stream position, not the turn, decides it.
+        let seed = (0u16..256)
+            .find(|seed| {
+                state.prng_state = *seed;
                 outdoor_serpent_dragon_triggers(state.outdoor_serpent_dragon_breath_roll(1))
             })
-            .expect("a hitting gate roll exists within 256 turns");
-        state.turn = turn;
+            .expect("a hitting gate roll exists within 256 stream positions");
+        state.prng_state = seed;
 
         assert!(state.outdoor_first_phase_ranged_attack(1));
         // §6.2's breath row announces nothing -- the boom message belongs to
@@ -3863,16 +3899,84 @@
     }
 
     #[test]
+    fn outdoor_breath_gate_and_axis_coin_are_shared_generator_draws() {
+        // `overworld.md §6.1`/§6.2.1 and `active-objects.md §8`: the axis
+        // coin and the one-in-eight breath gate come from the shared
+        // generator, the breath as an inclusive `[0, 7]` range draw.
+        let mut state = world_state_with_walker(5, 5, 0xDC, 8, 5);
+        block_projectile_at(&mut state, 7, 5);
+        let mut expected = 0x1234u16;
+        state.prng_state = expected;
+        let roll = u5_prng_range_u16(&mut expected, 0, 7) as u8;
+        let fired = state.outdoor_first_phase_ranged_attack_detail(1).is_some();
+        assert_eq!(fired, outdoor_serpent_dragon_triggers(roll));
+        if !fired {
+            assert_eq!(state.prng_state, expected, "a missed gate costs one draw");
+        }
+
+        // The same geometry and turn answer differently at different
+        // stream positions: no clock/turn hash decides the coin.
+        let walker = world_state_with_walker(12, 12, 0x98, 10, 10);
+        let object = walker.active_objects[1];
+        let firsts: Vec<_> = (0u16..64)
+            .map(|seed| {
+                let mut probe = walker.clone();
+                probe.prng_state = seed;
+                probe.outdoor_directed_step_directions(1, object)[0]
+            })
+            .collect();
+        assert!(firsts.contains(&Some(Direction::East)), "the coin must pick X first");
+        assert!(firsts.contains(&Some(Direction::South)), "the coin must pick Y first");
+        let mut probe = walker.clone();
+        let before = probe.prng_state;
+        assert!(probe.try_wander_active_object(1));
+        assert_ne!(probe.prng_state, before, "the walker consumes the coin draw");
+    }
+
+    #[test]
+    fn outdoor_walker_blocked_on_both_axes_rolls_a_random_cardinal() {
+        // `overworld.md §6.1`: "If neither directed move is legal, the
+        // creature instead attempts one randomly chosen cardinal move" - not
+        // the slot's stored facing.
+        let mut seen = std::collections::BTreeSet::new();
+        for seed in 0u16..64 {
+            let mut state = world_state_with_walker(12, 12, 0x98, 10, 10);
+            // Directed candidates are east (11,10) and south (10,11).
+            for (x, y) in [(11usize, 10usize), (10, 11)] {
+                state.active_objects.push(ActiveObject {
+                    type_byte: 0x05,
+                    tile: 0x05,
+                    x,
+                    y,
+                    z: WorldPlane::Underworld.save_floor(),
+                    phase: STEADY_PHASE,
+                    aux1: 0,
+                    aux3: 0,
+                });
+            }
+            state.active_objects[1].phase = active_object_phase_from_direction(Direction::North, 0);
+            state.prng_state = seed;
+            if state.try_wander_active_object(1) {
+                seen.insert((state.active_objects[1].x, state.active_objects[1].y));
+            }
+        }
+        assert!(seen.contains(&(10, 9)), "north reached: {seen:?}");
+        assert!(seen.contains(&(9, 10)), "west reached: {seen:?}");
+    }
+
+    #[test]
     fn outdoor_walker_dragon_breath_does_not_fire_when_the_gate_misses() {
         let mut state = world_state_with_walker(5, 5, 0xDC, 8, 5);
         block_projectile_at(&mut state, 7, 5);
-        let turn = (0u64..256)
-            .find(|turn| {
-                state.turn = *turn;
+        // `overworld.md §6.2.1`: the gate is the shared generator's `[0, 7]`
+        // draw, so the stream position, not the turn, decides it.
+        let seed = (0u16..256)
+            .find(|seed| {
+                state.prng_state = *seed;
                 !outdoor_serpent_dragon_triggers(state.outdoor_serpent_dragon_breath_roll(1))
             })
-            .expect("a missing gate roll exists within 256 turns");
-        state.turn = turn;
+            .expect("a missing gate roll exists within 256 stream positions");
+        state.prng_state = seed;
 
         assert!(!state.outdoor_first_phase_ranged_attack(1));
     }

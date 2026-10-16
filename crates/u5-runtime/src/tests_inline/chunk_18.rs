@@ -627,7 +627,9 @@
         assert_eq!(state.turn, 1);
         assert_eq!(state.clock, GameClock::new(12, 2).unwrap());
         assert_eq!(state.sail_cadence, 0);
-        assert_eq!(state.message, "Wind change! Calm Winds -> North Winds.");
+        // `magic.md §5.1`: Rel Hur has no generic completion line, and
+        // `Wind change!` is the scroll's banner; the wind banner repaints.
+        assert_eq!(state.message, "");
     }
 
     #[test]
@@ -646,11 +648,13 @@
 
         assert_eq!(state.wind, WindState::West);
         assert_eq!(state.wind_save_byte, 4);
-        assert_eq!(state.message, "Wind change! West Winds -> West Winds.");
+        assert_eq!(state.message, "");
     }
 
     #[test]
-    fn cast_rel_hur_missing_direction_prompts_without_spending_spell() {
+    fn cast_rel_hur_spends_charge_and_mana_before_prompting_for_direction() {
+        // `magic.md §5`: "Charge and mana are already spent when a handler
+        // prompts", and "No later gate can fail after a prompt opens".
         let mut state = britannia_state(open_world_grid(), 5, 5);
         state.spell_charges[REL_HUR_SPELL_INDEX] = 1;
         state.party[0].mana = 3;
@@ -663,13 +667,62 @@
         );
 
         assert_eq!(state.wind, WindState::East);
-        assert_eq!(state.spell_charges[REL_HUR_SPELL_INDEX], 1);
-        assert_eq!(state.party[0].mana, 3);
+        assert_eq!(state.spell_charges[REL_HUR_SPELL_INDEX], 0);
+        assert_eq!(state.party[0].mana, 1);
         assert_eq!(state.turn, 0);
         assert_eq!(
             state.pending_cast_argument,
             Some(CastArgumentRequest::Direction)
         );
+    }
+
+    #[test]
+    fn cast_rel_hur_low_mana_refuses_before_the_direction_prompt_opens() {
+        let mut state = britannia_state(open_world_grid(), 5, 5);
+        state.spell_charges[REL_HUR_SPELL_INDEX] = 1;
+        state.party[0].mana = 1;
+        state.party[0].level = 2;
+
+        assert_eq!(
+            handle_play_key_input(&mut state, 'C', "1HR", Path::new("")).unwrap(),
+            PlayInputDisposition::Continue
+        );
+
+        assert_eq!(state.pending_cast_argument, None);
+        assert_eq!(state.spell_charges[REL_HUR_SPELL_INDEX], 0);
+        assert_eq!(state.message, "M.P. too low!\nFailed!\n");
+    }
+
+    #[test]
+    fn cast_rel_hur_interactive_direction_spends_once_and_echoes_only_the_direction() {
+        let mut state = britannia_state(open_world_grid(), 5, 5);
+        state.spell_charges[REL_HUR_SPELL_INDEX] = 2;
+        state.party[0].mana = 4;
+        state.party[0].level = 2;
+        state.wind = WindState::Calm;
+
+        state.active_player = Some(0);
+        assert_eq!(state.start_cast_spell_prompt(), MoveOutcome::Observed);
+        assert!(state.step_active_cast('H', "R", Path::new("")).unwrap().is_none());
+        assert!(state.step_active_cast(' ', "", Path::new("")).unwrap().is_none());
+        assert!(state.active_cast_followup.is_some());
+        assert_eq!(state.spell_charges[REL_HUR_SPELL_INDEX], 1);
+        assert_eq!(state.party[0].mana, 2);
+
+        let result = state
+            .step_active_cast_followup('6', "", Path::new(""))
+            .unwrap()
+            .expect("east finishes Rel Hur");
+        assert_eq!(result.0, MoveOutcome::Cast);
+        assert_eq!(state.wind, WindState::East);
+        assert_eq!(state.spell_charges[REL_HUR_SPELL_INDEX], 1);
+        assert_eq!(state.party[0].mana, 2);
+        assert_eq!(state.turn, 1);
+        assert!(!state.message.contains("Wind change"), "{}", state.message);
+        assert!(state
+            .message_entries()
+            .iter()
+            .any(|entry| entry.text == format!("{SPELL_DIRECTION_PROMPT_PREFIX}East")));
     }
 
     #[test]

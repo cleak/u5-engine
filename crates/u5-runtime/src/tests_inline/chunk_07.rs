@@ -2189,6 +2189,63 @@ fn horse_world_movement_uses_one_cell_on_rough_terrain() {
 }
 
 #[test]
+fn difficult_terrain_extra_object_call_takes_its_own_transport_cadence_turn() {
+    // `movement.md §8.1`: "The cadence unit is **one object-update call**,
+    // including each additional terrain call and the later ordinary outdoor
+    // object call." A horse step onto brush makes one extra call: from
+    // parity 0 it flips to 1 (skip), and the ordinary call flips it back to
+    // 0 (run). Without the extra call the ordinary call would be skipped.
+    let mut grid = open_world_grid();
+    grid[world_cell_index(1, 0)] = 7;
+    let mut state = world_state(grid, 0, 0);
+    mount_horse(&mut state);
+    state.transport_walker_gate_parity = false;
+    let clock = state.clock;
+
+    assert_eq!(state.step(Direction::East), MoveOutcome::Moved);
+
+    assert!(!state.transport_walker_gate_parity);
+    assert!(state.world_walkers_ran_this_turn);
+    // Two terrain minutes as their own advance, then the ordinary two.
+    let mut expected = clock;
+    expected.advance_minutes(4);
+    assert_eq!(state.clock, expected);
+    assert_eq!(state.turn, 1);
+}
+
+#[test]
+fn difficult_terrain_feedback_is_suppressed_by_a_hostile_extra_call() {
+    // `movement.md §8.1`: "the message is suppressed if any of the
+    // additional object-update calls reports a hostile interaction";
+    // "Suppression does not remove the terrain's time charge."
+    let mut grid = open_world_grid();
+    grid[world_cell_index(6, 5)] = 7;
+    let mut state = world_state(grid, 5, 5);
+    state.active_objects.push(ActiveObject {
+        type_byte: 0x80,
+        tile: 0x80,
+        x: 7,
+        y: 5,
+        z: WorldPlane::Underworld.save_floor(),
+        phase: 0,
+        aux1: 0,
+        aux3: 0,
+    });
+    let clock = state.clock;
+
+    assert_eq!(state.step(Direction::East), MoveOutcome::Moved);
+
+    assert!(
+        !state.message.contains(crate::commands::MOVEMENT_SLOW_PROGRESS_LINE),
+        "message: {}",
+        state.message
+    );
+    let mut expected = clock;
+    expected.advance_minutes(4);
+    assert_eq!(state.clock, expected);
+}
+
+#[test]
 fn overworld_special_underfoot_latch_forces_darkness_and_holds_valid_movement() {
     let mut grid = open_world_grid();
     grid[world_cell_index(5, 5)] = OVERWORLD_UNDERFOOT_BLACKOUT_TILE;
@@ -2218,6 +2275,10 @@ fn overworld_special_underfoot_latch_forces_darkness_and_holds_valid_movement() 
             .iter()
             .any(|note| note.contains("special underfoot tile"))
     );
+    // The held step consumed a turn; the walker it owed ran on that turn
+    // instead of carrying over into the next turn's clock call.
+    assert!(state.world_walkers_ran_this_turn);
+    assert!(!state.pending_world_object_walker_pass);
 }
 
 #[test]
@@ -2516,12 +2577,14 @@ fn world_encounter_sidecar_spawns_one_actor_after_consumed_overworld_turn() {
 
     assert_eq!(state.turn, 1);
     assert_eq!(state.active_objects.len(), 2);
+    // `overworld.md §5` step 6h rolls the encounter before the creature walk,
+    // so the actor spawned two cells east has already stepped once west.
     assert_eq!(
         state.active_objects[1],
         ActiveObject {
             type_byte: 192,
             tile: 192,
-            x: 12,
+            x: 11,
             y: 10,
             z: WorldPlane::Britannia.save_floor(),
             phase: active_object_phase_from_direction(Direction::West, 0),
@@ -2816,6 +2879,39 @@ fn native_world_encounter_spawner_evicts_on_a_full_table_per_encounters_md_9() {
         "eviction must stay inside the ordinary acquisition range, got {slot}"
     );
     assert_eq!(state.active_objects[slot].type_byte, 0x2C);
+}
+
+#[test]
+fn native_world_encounter_spawner_does_not_reject_an_occupied_candidate() {
+    // `encounters.md §4` lists the retry rejections exhaustively:
+    // separation, a zero bucket, a sea creature on shore, and the 128 cap.
+    // An object already on the candidate cell is not one of them.
+    let mut probe = britannia_state(vec![0x02; WORLD_CELLS], 0, 40);
+    probe.prng_state = 0x0007;
+    let slot = probe
+        .spawn_native_world_encounter(WorldPlane::Britannia)
+        .unwrap();
+    let (x, y) = (probe.active_objects[slot].x, probe.active_objects[slot].y);
+
+    let mut state = britannia_state(vec![0x02; WORLD_CELLS], 0, 40);
+    state.prng_state = 0x0007;
+    state.active_objects.push(ActiveObject {
+        type_byte: 0x01,
+        tile: 0x01,
+        x,
+        y,
+        z: WorldPlane::Britannia.save_floor(),
+        phase: STEADY_PHASE,
+        aux1: 0,
+        aux3: 0,
+    });
+
+    let slot = state
+        .spawn_native_world_encounter(WorldPlane::Britannia)
+        .unwrap();
+
+    assert_eq!((state.active_objects[slot].x, state.active_objects[slot].y), (x, y));
+    assert_eq!(state.prng_state, probe.prng_state);
 }
 
 #[test]

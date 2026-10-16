@@ -355,13 +355,60 @@ fn world_movement_into_combat_class_object_selects_brit_cbt_arena() {
 }
 
 #[test]
-fn board_vehicle_uses_facing_active_object_and_clears_parked_slot() {
+fn board_vehicle_ignores_vehicle_in_facing_cell() {
+    // `vehicles.md §4`: B-Board "probes the current position"; a vehicle one
+    // cell ahead is not boardable.
+    let mut state = world_state(open_world_grid(), 0, 0);
+    state.player.facing = Direction::East;
+    state.active_objects.push(ActiveObject {
+        type_byte: SHIP_PARKED_FIRST,
+        tile: FIRST_PLAYABLE_FRIGATE_TILE,
+        x: 1,
+        y: 0,
+        z: WorldPlane::Underworld.save_floor(),
+        phase: STEADY_PHASE,
+        aux1: 77,
+        aux3: 2,
+    });
+
+    assert_eq!(state.board_vehicle(), MoveOutcome::Blocked);
+    assert_eq!(state.message, "What?");
+    assert_eq!(state.player.transport, TransportState::Foot);
+    assert!(!state.active_objects[1].is_empty());
+}
+
+#[test]
+fn board_vehicle_refuses_monster_whose_tile_byte_sits_in_old_vehicle_band() {
+    // `vehicles.md §4`: only the boardable object bytes are vehicles; a
+    // slime record (actor frame `0xA0`) is not, whatever its tile byte.
+    let mut state = world_state(open_world_grid(), 0, 0);
+    state.active_objects.push(ActiveObject {
+        type_byte: 0xA0,
+        tile: 0xA0,
+        x: 0,
+        y: 0,
+        z: WorldPlane::Underworld.save_floor(),
+        phase: STEADY_PHASE,
+        aux1: 0,
+        aux3: 0,
+    });
+
+    assert_eq!(state.board_vehicle(), MoveOutcome::Blocked);
+    assert_eq!(state.message, "What?");
+    assert_eq!(state.player.transport, TransportState::Foot);
+    assert!(!state.active_objects[1].is_empty());
+    assert_eq!(transport_from_vehicle_object(0xA0, 0xA0, 0, 0), None);
+    assert_eq!(transport_from_vehicle_object(0xA8, 168, 77, 2), None);
+}
+
+#[test]
+fn board_vehicle_uses_underfoot_active_object_and_clears_parked_slot() {
     let mut state = world_state(open_world_grid(), 0, 0);
     state.player.facing = Direction::East;
     let parked = ActiveObject {
-        type_byte: 168,
-        tile: 168,
-        x: 1,
+        type_byte: SHIP_PARKED_FIRST,
+        tile: FIRST_PLAYABLE_FRIGATE_TILE,
+        x: 0,
         y: 0,
         z: WorldPlane::Underworld.save_floor(),
         phase: STEADY_PHASE,
@@ -375,8 +422,8 @@ fn board_vehicle_uses_facing_active_object_and_clears_parked_slot() {
     assert_eq!(
         state.player.transport,
         TransportState::Ship {
-            type_byte: 168,
-            tile: 168,
+            type_byte: SHIP_PARKED_FIRST,
+            tile: FIRST_PLAYABLE_FRIGATE_TILE,
             sails_hoisted: false,
             hull: 77,
             skiffs: 2,
@@ -395,7 +442,7 @@ fn board_vehicle_uses_facing_active_object_and_clears_parked_slot() {
         }
     );
     assert!(state.active_objects[1].is_empty());
-    assert!(state.world_object_at(1, 0).is_none());
+    assert!(state.world_object_at(0, 0).is_none());
     assert_eq!(state.turn, 1);
     assert_eq!(state.message, "Boarded ship.");
     // `stats-panel.md §2.2.1` row 11: Board defers the panel refresh.
@@ -418,9 +465,9 @@ fn board_vehicle_removal_is_written_to_the_live_saved_gam_table() {
     let mut state = world_state(open_world_grid(), 0, 0);
     state.player.facing = Direction::East;
     state.active_objects.push(ActiveObject {
-        type_byte: 168,
-        tile: 168,
-        x: 1,
+        type_byte: SHIP_PARKED_FIRST,
+        tile: FIRST_PLAYABLE_FRIGATE_TILE,
+        x: 0,
         y: 0,
         z: WorldPlane::Underworld.save_floor(),
         phase: STEADY_PHASE,
@@ -478,7 +525,7 @@ fn board_vehicle_removal_is_written_to_the_live_saved_gam_table() {
         }
     );
     assert!(reloaded.active_objects[1].is_empty());
-    assert!(reloaded.world_object_at(1, 0).is_none());
+    assert!(reloaded.world_object_at(0, 0).is_none());
     let _ = fs::remove_dir_all(dir);
 }
 
@@ -489,9 +536,9 @@ fn board_and_exit_skiff_do_not_change_shared_magic_effect() {
     state.active_effect_counter = 20;
     state.player.facing = Direction::East;
     state.active_objects.push(ActiveObject {
-        type_byte: 176,
-        tile: 176,
-        x: 1,
+        type_byte: SKIFF_PARKED_FIRST,
+        tile: FIRST_PLAYABLE_SKIFF_TILE,
+        x: 0,
         y: 0,
         z: WorldPlane::Underworld.save_floor(),
         phase: STEADY_PHASE,
@@ -504,8 +551,8 @@ fn board_and_exit_skiff_do_not_change_shared_magic_effect() {
     assert_eq!(
         state.player.transport,
         TransportState::Skiff {
-            type_byte: 176,
-            tile: 176,
+            type_byte: SKIFF_PARKED_FIRST,
+            tile: FIRST_PLAYABLE_SKIFF_TILE,
         }
     );
     assert_eq!(state.active_effect_tag, Some(PROTECTION_ACTIVE_EFFECT_TAG));
@@ -522,17 +569,17 @@ fn board_and_exit_skiff_do_not_change_shared_magic_effect() {
 fn board_ship_accepts_waterborne_transport_state() {
     let mut state = world_state(open_world_grid(), 0, 0);
     state.player.transport = TransportState::Skiff {
-        type_byte: 176,
-        tile: 176,
+        type_byte: SKIFF_PARKED_FIRST,
+        tile: FIRST_PLAYABLE_SKIFF_TILE,
     };
     state.active_effect_tag = Some(QUICKNESS_ACTIVE_EFFECT_TAG);
     state.active_effect_counter = QUICKNESS_ACTIVE_EFFECT_DURATION;
     state.player.facing = Direction::East;
     state.sync_player_object();
     state.active_objects.push(ActiveObject {
-        type_byte: 168,
-        tile: 168,
-        x: 1,
+        type_byte: SHIP_PARKED_FIRST,
+        tile: FIRST_PLAYABLE_FRIGATE_TILE,
+        x: 0,
         y: 0,
         z: WorldPlane::Underworld.save_floor(),
         phase: STEADY_PHASE,
@@ -545,8 +592,8 @@ fn board_ship_accepts_waterborne_transport_state() {
     assert_eq!(
         state.player.transport,
         TransportState::Ship {
-            type_byte: 168,
-            tile: 168,
+            type_byte: SHIP_PARKED_FIRST,
+            tile: FIRST_PLAYABLE_FRIGATE_TILE,
             sails_hoisted: false,
             hull: 0,
             skiffs: 0,
@@ -577,7 +624,7 @@ fn board_ship_accepts_public_object_byte_and_preserves_save_marker() {
     state.active_objects.push(ActiveObject {
         type_byte: TRANSPORT_MARKER_SHIP_FURLED_FIRST + 1,
         tile: 0,
-        x: 1,
+        x: 0,
         y: 0,
         z: WorldPlane::Underworld.save_floor(),
         phase: STEADY_PHASE,
@@ -650,7 +697,7 @@ fn board_ship_accepts_carpet_north_east_and_stows_carpet() {
         state.active_objects.push(ActiveObject {
             type_byte: TRANSPORT_MARKER_SHIP_FURLED_FIRST,
             tile: 0,
-            x: 1,
+            x: 0,
             y: 0,
             z: WorldPlane::Underworld.save_floor(),
             phase: STEADY_PHASE,
@@ -701,9 +748,9 @@ fn board_ship_with_zero_hull_reports_badly_damaged_warning() {
     let mut state = world_state(open_world_grid(), 0, 0);
     state.player.facing = Direction::East;
     state.active_objects.push(ActiveObject {
-        type_byte: 168,
-        tile: 168,
-        x: 1,
+        type_byte: SHIP_PARKED_FIRST,
+        tile: FIRST_PLAYABLE_FRIGATE_TILE,
+        x: 0,
         y: 0,
         z: WorldPlane::Underworld.save_floor(),
         phase: STEADY_PHASE,
@@ -716,8 +763,8 @@ fn board_ship_with_zero_hull_reports_badly_damaged_warning() {
     assert_eq!(
         state.player.transport,
         TransportState::Ship {
-            type_byte: 168,
-            tile: 168,
+            type_byte: SHIP_PARKED_FIRST,
+            tile: FIRST_PLAYABLE_FRIGATE_TILE,
             sails_hoisted: false,
             hull: 0,
             skiffs: 2,
@@ -738,9 +785,9 @@ fn board_ship_with_hull_below_ten_reports_badly_damaged_warning() {
         let mut state = world_state(open_world_grid(), 0, 0);
         state.player.facing = Direction::East;
         state.active_objects.push(ActiveObject {
-            type_byte: 168,
-            tile: 168,
-            x: 1,
+            type_byte: SHIP_PARKED_FIRST,
+            tile: FIRST_PLAYABLE_FRIGATE_TILE,
+            x: 0,
             y: 0,
             z: WorldPlane::Underworld.save_floor(),
             phase: STEADY_PHASE,
@@ -764,9 +811,9 @@ fn board_ship_with_hull_at_ten_or_above_omits_badly_damaged_warning() {
         let mut state = world_state(open_world_grid(), 0, 0);
         state.player.facing = Direction::East;
         state.active_objects.push(ActiveObject {
-            type_byte: 168,
-            tile: 168,
-            x: 1,
+            type_byte: SHIP_PARKED_FIRST,
+            tile: FIRST_PLAYABLE_FRIGATE_TILE,
+            x: 0,
             y: 0,
             z: WorldPlane::Underworld.save_floor(),
             phase: STEADY_PHASE,
@@ -787,15 +834,15 @@ fn board_ship_with_hull_at_ten_or_above_omits_badly_damaged_warning() {
 fn board_non_ship_vehicle_still_requires_foot() {
     let mut state = world_state(open_world_grid(), 0, 0);
     state.player.transport = TransportState::Skiff {
-        type_byte: 176,
-        tile: 176,
+        type_byte: SKIFF_PARKED_FIRST,
+        tile: FIRST_PLAYABLE_SKIFF_TILE,
     };
     state.player.facing = Direction::East;
     state.sync_player_object();
     state.active_objects.push(ActiveObject {
-        type_byte: 160,
-        tile: 160,
-        x: 1,
+        type_byte: HORSE_PARKED_FIRST,
+        tile: FIRST_PLAYABLE_HORSE_TILE,
+        x: 0,
         y: 0,
         z: WorldPlane::Underworld.save_floor(),
         phase: STEADY_PHASE,
@@ -808,8 +855,8 @@ fn board_non_ship_vehicle_still_requires_foot() {
     assert_eq!(
         state.player.transport,
         TransportState::Skiff {
-            type_byte: 176,
-            tile: 176,
+            type_byte: SKIFF_PARKED_FIRST,
+            tile: FIRST_PLAYABLE_SKIFF_TILE,
         }
     );
     assert_eq!(state.active_objects.len(), 2);
@@ -822,9 +869,9 @@ fn board_vehicle_accepts_magic_carpet_from_foot() {
     let mut state = world_state(open_world_grid(), 0, 0);
     state.player.facing = Direction::East;
     state.active_objects.push(ActiveObject {
-        type_byte: 184,
-        tile: 184,
-        x: 1,
+        type_byte: CARPET_PARKED,
+        tile: FIRST_PLAYABLE_MAGIC_CARPET_TILE,
+        x: 0,
         y: 0,
         z: WorldPlane::Underworld.save_floor(),
         phase: STEADY_PHASE,
@@ -837,8 +884,8 @@ fn board_vehicle_accepts_magic_carpet_from_foot() {
     assert_eq!(
         state.player.transport,
         TransportState::Carpet {
-            type_byte: 184,
-            tile: 184,
+            type_byte: CARPET_MOUNTED,
+            tile: transport_visual_tile_for_marker(CARPET_MOUNTED).unwrap(),
         }
     );
     assert_eq!(state.active_objects.len(), 2);
@@ -966,17 +1013,17 @@ fn board_town_horse_refuses_occupied_object_with_nay_without_turn() {
         type_byte: 192,
         tile: 192,
         x: 0,
-        y: 1,
+        y: 0,
         z: 0,
         phase: STEADY_PHASE,
         aux1: 0,
         aux3: 0,
     });
     state.active_objects.push(ActiveObject {
-        type_byte: 160,
-        tile: 160,
+        type_byte: HORSE_PARKED_FIRST,
+        tile: FIRST_PLAYABLE_HORSE_TILE,
         x: 0,
-        y: 1,
+        y: 0,
         z: 0,
         phase: STEADY_PHASE,
         aux1: 0,
@@ -999,7 +1046,7 @@ fn board_world_horse_ignores_town_occupancy_refusal() {
     state.active_objects.push(ActiveObject {
         type_byte: 192,
         tile: 192,
-        x: 1,
+        x: 0,
         y: 0,
         z: WorldPlane::Underworld.save_floor(),
         phase: STEADY_PHASE,
@@ -1007,9 +1054,9 @@ fn board_world_horse_ignores_town_occupancy_refusal() {
         aux3: 0,
     });
     state.active_objects.push(ActiveObject {
-        type_byte: 160,
-        tile: 160,
-        x: 1,
+        type_byte: HORSE_PARKED_FIRST,
+        tile: FIRST_PLAYABLE_HORSE_TILE,
+        x: 0,
         y: 0,
         z: WorldPlane::Underworld.save_floor(),
         phase: STEADY_PHASE,
@@ -1022,8 +1069,8 @@ fn board_world_horse_ignores_town_occupancy_refusal() {
     assert_eq!(
         state.player.transport,
         TransportState::Horse {
-            type_byte: 160,
-            tile: 160,
+            type_byte: HORSE_MOUNTED_FIRST,
+            tile: transport_visual_tile_for_marker(HORSE_MOUNTED_FIRST).unwrap(),
         }
     );
     assert!(!state.active_objects[1].is_empty());

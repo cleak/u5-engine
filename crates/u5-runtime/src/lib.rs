@@ -333,7 +333,7 @@ pub use commands::{
     YELL_FREE_TEXT_OPEN_LINE, YELL_INPUT_MAX_LEN, YELL_NO_EFFECT_MESSAGE,
     YELL_NOTHING_SAID_MESSAGE, YELL_QUESTION, YELL_SAILS_FURLED_MESSAGE,
     YELL_SAILS_HOISTED_MESSAGE, YellInputContext, command_echo, command_for_letter,
-    death_vision_look_tile, dungeon_display_level, local_view_class_for_tile, movement_echo,
+    death_vision_look_tile, dungeon_display_level, local_view_class_for_tile, movement_echo, vehicle_movement_echo, MovementEchoPrefix,
     new_order_outcome, new_order_swap_accepted, pushable_facing_index, pushable_oriented_tile,
     pushable_tile_family, ready_occupied_slot_refusal, sign_or_wanted_poster_object_class,
     surface_town_fountain_look_tile, surface_wishing_well_look_tile,

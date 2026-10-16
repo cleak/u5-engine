@@ -6690,6 +6690,8 @@ fn active_object_countdown_updates_vehicle_frame_tile() {
 
     state.advance_turn();
 
+    state.apply_pending_world_object_walker_pass();
+
     let object = state
         .active_objects
         .iter()
@@ -6714,6 +6716,8 @@ fn active_object_decision_point_returns_to_base_frame_tile() {
     });
 
     state.advance_turn();
+
+    state.apply_pending_world_object_walker_pass();
 
     let object = state
         .active_objects
@@ -6740,6 +6744,8 @@ fn active_ship_drifts_with_matching_wind() {
     });
 
     state.advance_turn();
+
+    state.apply_pending_world_object_walker_pass();
 
     let object = state
         .active_objects
@@ -6814,6 +6820,7 @@ fn active_ship_away_from_wind_uses_three_of_four_cadence() {
             (object.x, object.y)
         };
         state.advance_turn();
+        state.apply_pending_world_object_walker_pass();
         let object = state
             .active_objects
             .iter()

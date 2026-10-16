@@ -40,6 +40,32 @@ fn a_step_that_hands_off_no_moongate_cell_stays_silent() {
 }
 
 #[test]
+fn a_live_gate_cell_in_a_town_or_combat_scene_is_inert() {
+    // `overworld.md §9.2`: the entry hook "is confined to the overworld
+    // only because it is the overworld loop that runs it; town, dungeon and
+    // combat loops never do".
+    let dir = Path::new(".");
+    let mut grid = open_grid();
+    grid[4 * 32 + 4] = NATURAL_MOONGATE_TERRAIN_TILE;
+    let mut town = test_state(grid, 4, 4);
+    town.natural_moongate_counter = MOONGATE_PHASE_FULL;
+    let serial = town.sound_effect_serial;
+    assert_eq!(town.resolve_natural_moongate_entry(dir).unwrap(), None);
+    assert!(town.sound_effects_after(serial).is_empty());
+    assert_eq!(town.grid[4 * 32 + 4], NATURAL_MOONGATE_TERRAIN_TILE);
+    assert_eq!(town.natural_moongate_counter, MOONGATE_PHASE_FULL);
+
+    let idx = world_cell_index(5, 5);
+    let mut grid = open_world_grid();
+    grid[idx] = NATURAL_MOONGATE_TERRAIN_TILE;
+    let mut combat = britannia_state(grid, 5, 5);
+    combat.combat_active = true;
+    combat.natural_moongate_counter = MOONGATE_PHASE_FULL;
+    assert_eq!(combat.resolve_natural_moongate_entry(dir).unwrap(), None);
+    assert_eq!(combat.grid[idx], NATURAL_MOONGATE_TERRAIN_TILE);
+}
+
+#[test]
 fn a_gate_cell_whose_terrain_is_no_longer_live_stays_silent() {
     // Same clause, the second gate in the hook: the party stands on the
     // cell but its terrain has already been rewritten to `5`, so no

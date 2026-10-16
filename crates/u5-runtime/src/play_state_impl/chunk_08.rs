@@ -1530,15 +1530,48 @@ impl PlayState {
         {
             self.advance_turn();
             self.message = format!("{}\nAttacked at entrance!", live_class.text());
-            // The public contract identifies this as an entrance ambush object,
-            // not an immediate scene transition. Reuse the native outdoor
-            // encounter placer so it obeys the live object table and terrain.
-            let _ = self.spawn_native_world_encounter(plane);
+            // `encounters.md §4` Scope: "the entrance-attack path forces the
+            // Shadow Lord family" before calling terrain-combat entry, the
+            // same shape as the bridge-toll Troll ambush.
+            self.enter_doom_entrance_ambush_combat(game_dir, plane)?;
             return Ok(MoveOutcome::Blocked);
         }
 
         self.emit_world_entry_narration(live_class, entry.proper_name);
         self.enter_world_target(game_dir, plane, entry.target, false)
+    }
+
+    /// `encounters.md §4` / `commands.md §5.5` Doom row: the entrance
+    /// ambush allocates an active object of the Shadow Lord family on the
+    /// party's cell and enters terrain combat with it, which selects that
+    /// family's arena and runs the sceptre-reclaim branch. Without the arena
+    /// bank there is no combat to enter, so the forced object is released.
+    fn enter_doom_entrance_ambush_combat(
+        &mut self,
+        game_dir: &Path,
+        plane: WorldPlane,
+    ) -> io::Result<()> {
+        let object = ActiveObject {
+            type_byte: SHADOWLORD_ACTOR_TILE,
+            tile: SHADOWLORD_ACTOR_TILE,
+            x: self.player.x,
+            y: self.player.y,
+            z: plane.save_floor(),
+            phase: 0,
+            aux1: 0,
+            aux3: 0,
+        };
+        let Some(slot) = self.allocate_active_object_slot(object) else {
+            return Ok(());
+        };
+        if !game_dir.join(BRIT_CBT_FILE).exists() {
+            self.free_active_object_slot(slot);
+            self.diagnostics
+                .push("Doom entrance ambush skipped: no BRIT.CBT arena bank".to_string());
+            return Ok(());
+        }
+        let _report = self.enter_terrain_combat_from_world_object(game_dir, plane, slot, object)?;
+        Ok(())
     }
 
     fn emit_world_entry_narration(
@@ -1977,11 +2010,15 @@ impl PlayState {
     }
 
     pub fn current_live_natural_moongate_cell_index(&self) -> Option<usize> {
+        // `overworld.md §9.2`: the live-gate entry hook "is confined to the
+        // overworld only because it is the overworld loop that runs it;
+        // town, dungeon and combat loops never do". Town-family scenes still
+        // receive the placement stamp of §9, but standing on one is inert.
+        if self.combat_active {
+            return None;
+        }
         let idx = match self.area {
             Area::World { .. } => world_cell_index(self.player.x, self.player.y),
-            Area::Town { .. } if self.player.x < 32 && self.player.y < 32 => {
-                self.player.y * 32 + self.player.x
-            }
             _ => return None,
         };
         (idx < self.grid.len()).then_some(idx)
@@ -2702,13 +2739,15 @@ impl PlayState {
         }
 
         let narrative = if self.shrine_ordained_mask != 0 {
-            "\nPass, Seeker!\n"
+            // systems/overworld.md 9.3: the shared fragment is `\n"`; both
+            // arms close the quotation.
+            "\n\"Pass, Seeker!\"\n"
         } else {
             self.player.y = (self.player.y + 1) % WORLD_SIDE;
             self.sync_player_object();
             let _ = self.rebuild_world_live_chunks_from_grid(plane);
             self.mark_visibility_dirty();
-            "\nThou art not upon a Sacred Quest!\nPassage denied!\n"
+            "\n\"Thou art not upon a Sacred Quest!\nPassage denied!\"\n"
         };
         // The accepted step no longer leaves a line in the slot, so the
         // narrative block must not open with the separator newline it used

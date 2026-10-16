@@ -147,26 +147,10 @@ impl PlayState {
         })
     }
 
+    /// `vehicles.md §4`: B-Board "reads the vehicle or object under the
+    /// party" and "probes the current position"; there is no adjacent probe.
     pub fn board_probe_positions(&self) -> Vec<(usize, usize)> {
-        let mut out = vec![(self.player.x, self.player.y)];
-        let (dx, dy) = self.player.facing.delta();
-        match self.area {
-            Area::World { .. } => {
-                out.push((
-                    (self.player.x as isize + dx).rem_euclid(WORLD_SIDE as isize) as usize,
-                    (self.player.y as isize + dy).rem_euclid(WORLD_SIDE as isize) as usize,
-                ));
-            }
-            Area::Town { .. } => {
-                let x = self.player.x as isize + dx;
-                let y = self.player.y as isize + dy;
-                if (0..32).contains(&x) && (0..32).contains(&y) {
-                    out.push((x as usize, y as usize));
-                }
-            }
-            Area::Dungeon { .. } => {}
-        }
-        out
+        vec![(self.player.x, self.player.y)]
     }
 
     pub fn vehicle_exit_has_nearby_support(&self, game_dir: Option<&Path>) -> io::Result<bool> {

@@ -691,8 +691,27 @@ pub fn top_gap(content: &ChromeGap) -> Option<ResolvedGap> {
 }
 
 /// Resolve the row-23 gap for the given content, if any.
+///
+/// `weather.md §2.1`: the banner "starts at a fixed cell - absolute column
+/// 6, row 23 - and there is no centring arithmetic anywhere in it", so a
+/// short (out-of-range) banner closes at column 13 rather than being
+/// centred. The dungeon facing label shares the same left anchor
+/// (`dungeon-mode.md §4.1`, caps at 6 and 17).
 pub fn bottom_gap(content: &ChromeGap) -> Option<ResolvedGap> {
-    gap_for(BOTTOM_GAP, content)
+    let ChromeGap::Label(label) = content else {
+        return gap_for(BOTTOM_GAP, content);
+    };
+    let cells = label.chars().count().min(BOTTOM_GAP.content_cells);
+    if cells == 0 {
+        return None;
+    }
+    let content_first_column = BOTTOM_GAP.content_first_column;
+    Some(ResolvedGap {
+        left_cap_column: content_first_column - 1,
+        right_cap_column: content_first_column + cells as u8,
+        content_first_column,
+        content_cells: cells,
+    })
 }
 
 /// Resolve the divider row-7 timing-glyph gap, if the tag byte is
@@ -1344,7 +1363,15 @@ pub fn gameplay_chrome_content(state: &crate::PlayState) -> GameplayChromeConten
         crate::Area::Town { scene, floor } if crate::sky_strip_erase_arm(scene.byte, floor < 0) => {
             GameplayChromeContent {
                 top: ChromeGap::Unbroken,
-                bottom: ChromeGap::Label(wind_banner_text(wind_banner_direction_name(state))),
+                // `weather.md §2.1`: "A below-surface level actively
+                // **erases**" the wind banner, restoring the plain ribbon.
+                // That erase is the signed level test alone; Ararat's
+                // scene-byte arm suppresses only the sky strip.
+                bottom: if floor < 0 {
+                    ChromeGap::Unbroken
+                } else {
+                    ChromeGap::Label(wind_banner_text(wind_banner_direction_name(state)))
+                },
                 stats_label,
                 timing_glyph,
                 stats_panel_single_box,

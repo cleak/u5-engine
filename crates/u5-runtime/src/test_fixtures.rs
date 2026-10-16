@@ -88,6 +88,7 @@ pub fn test_state(grid: Vec<u8>, x: usize, y: usize) -> PlayState {
         under_sail_wait_cursor_poll_pending: false,
         pending_town_active_object_pass: false,
         pending_town_active_object_animate_pass: false,
+        pending_world_object_walker_pass: false,
         natural_moongate_live_cells: Vec::new(),
         cached_moon_glyph_bytes: cached_moon_glyph_bytes_for_day(PLAY_START_DAY)
             .expect("the shipped start day is inside the published 1..=28 glyph tables"),
@@ -319,6 +320,7 @@ pub fn dungeon_state(grid: Vec<u8>, level: u8, x: usize, y: usize) -> PlayState 
         under_sail_wait_cursor_poll_pending: false,
         pending_town_active_object_pass: false,
         pending_town_active_object_animate_pass: false,
+        pending_world_object_walker_pass: false,
         natural_moongate_live_cells: Vec::new(),
         cached_moon_glyph_bytes: cached_moon_glyph_bytes_for_day(PLAY_START_DAY)
             .expect("the shipped start day is inside the published 1..=28 glyph tables"),
@@ -556,6 +558,7 @@ pub fn world_state(grid: Vec<u8>, x: usize, y: usize) -> PlayState {
         under_sail_wait_cursor_poll_pending: false,
         pending_town_active_object_pass: false,
         pending_town_active_object_animate_pass: false,
+        pending_world_object_walker_pass: false,
         natural_moongate_live_cells: Vec::new(),
         cached_moon_glyph_bytes: cached_moon_glyph_bytes_for_day(PLAY_START_DAY)
             .expect("the shipped start day is inside the published 1..=28 glyph tables"),

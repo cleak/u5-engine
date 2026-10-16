@@ -1037,7 +1037,8 @@
         );
         assert!(ship.active_direction_prompt.is_none());
         assert_eq!(ship.turn, 1);
-        assert!(ship.message.contains("BOOOM! Ship broadside fired West"));
+        // `vehicles.md §7`: the broadside prints nothing after the echo.
+        assert_eq!(ship.message, "Fire-West");
 
         fs::write(dir.join(TOWN_PUSHABLE_TABLE_FILE), "CASTLE:0 0 2 1 44\n").unwrap();
         let mut grid = open_grid();

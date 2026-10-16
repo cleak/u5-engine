@@ -1253,9 +1253,9 @@ impl PlayState {
         self.sync_player_object();
         self.mark_visibility_dirty();
         self.advance_turn();
-        let mut message = format!("{}!", transport.kind_name());
-        transport.append_ship_auxiliary_warnings(&mut message);
-        self.message = message;
+        // `vehicles.md §5.1`: a furled-ship exit onto land "adds no further
+        // success text"; the hull/skiff warnings belong to B-Board (§4).
+        self.message = format!("{}!", transport.kind_name());
         Ok(MoveOutcome::ExitedVehicle)
     }
 
@@ -2719,6 +2719,16 @@ impl PlayState {
         TownFireTarget::None
     }
 
+    /// `vehicles.md §7` overworld F-Fire ship-broadside helper.
+    ///
+    /// Step 2's shared pre-action gate is the shared direction prompt
+    /// (`doors-and-z-transitions.md §9`, `RETRACTIONS.md` R470): a call
+    /// without a direction opens that prompt, and its cancel arm aborts
+    /// without a shot. The helper prints no narration of its own after the
+    /// direction echo; steps 5 and 7 are presentation only (an impact on a
+    /// hit, the projectile flown to the endpoint on a miss), so a shot
+    /// requests a viewport repaint and records the traced endpoint as a
+    /// diagnostic rather than writing message text.
     pub fn fire_ship_broadside(&mut self, direction: Option<Direction>) -> MoveOutcome {
         if !matches!(self.area, Area::World { .. }) {
             self.message = "What?".to_string();
@@ -2729,9 +2739,7 @@ impl PlayState {
             return MoveOutcome::Blocked;
         }
         let Some(direction) = direction else {
-            self.message =
-                "Fire- which direction? Use F plus a direction in this harness.".to_string();
-            return MoveOutcome::Blocked;
+            return self.start_fire_direction_prompt();
         };
         let Some(ship_facing) = self.player.facing.cardinal_facing_index() else {
             self.message = "Fire broadsides only!".to_string();
@@ -2749,35 +2757,37 @@ impl PlayState {
         let hit = self
             .ship_broadside_target_slot(direction)
             .map(|slot| (slot, self.active_objects[slot]));
-        let mut hit_report = None;
         if let Some((slot, object)) = hit {
             let damage = self.ship_broadside_damage_roll();
             if let Some(remaining) = ship_broadside_apply_damage(object.aux1, damage) {
                 if let Some(target) = self.active_objects.get_mut(slot) {
                     target.aux1 = remaining;
-                    hit_report = Some(format!(
-                        "BOOOM! Ship broadside hit object tile {} at ({}, {}) for {damage} durability damage; durability now {remaining}.",
-                        object.tile, object.x, object.y
-                    ));
                 }
             } else {
                 self.free_active_object_slot(slot);
-                hit_report = Some(format!(
-                    "BOOOM! Ship broadside hit object tile {} at ({}, {}) for {damage} durability damage; target destroyed.",
-                    object.tile, object.x, object.y
-                ));
             }
-            self.mark_visibility_dirty();
-        }
-        self.advance_turn();
-        self.message = if let Some(report) = hit_report {
-            report
+            // §7 step 5: the impact is animated at the struck object.
+            self.diagnostics.push(format!(
+                "ship broadside fired {} and hit object tile {} at ({}, {}) for {damage}",
+                direction.name(),
+                object.tile,
+                object.x,
+                object.y
+            ));
         } else {
-            format!(
-                "BOOOM! Ship broadside fired {} with no target in range.",
+            // §7 step 7: with no target the projectile still flies to the
+            // end of the up-to-three-cell line.
+            let (dx, dy) = direction.delta();
+            let reach = SHIP_BROADSIDE_RANGE_CELLS as isize;
+            let x = (self.player.x as isize + dx * reach).rem_euclid(WORLD_SIDE as isize);
+            let y = (self.player.y as isize + dy * reach).rem_euclid(WORLD_SIDE as isize);
+            self.diagnostics.push(format!(
+                "ship broadside fired {} with no target; projectile ends at ({x}, {y})",
                 direction.name()
-            )
-        };
+            ));
+        }
+        self.mark_visibility_dirty();
+        self.advance_turn();
         MoveOutcome::Fired
     }
 
@@ -3412,10 +3422,15 @@ impl PlayState {
         // [`PlayState::idle_wait_pass`], before the turn's key is read.
         if self.world_falls_underfoot_trigger_tile().is_some() {
             if let Some(transition) = self.apply_world_falls_chain(game_dir, plane)? {
+                // A scene change ends the turn before the object epilogue;
+                // the walker it owed must not run on the destination next
+                // turn.
+                self.pending_world_object_walker_pass = false;
                 return Ok(Some(MoveOutcome::Transition(transition)));
             }
         }
         if let Some(transition) = self.apply_world_underfoot_plane_transition(game_dir, plane)? {
+            self.pending_world_object_walker_pass = false;
             let transition_message = self.message.clone();
             // The command that consumed the turn may have printed nothing
             // (`Pass`, an accepted step), so the separator only belongs here
@@ -3428,9 +3443,38 @@ impl PlayState {
             };
             return Ok(Some(MoveOutcome::Transition(transition)));
         }
+        let object_epilogue_runs = self.world_object_epilogue_runs_for_turn(turn_before);
+        // `overworld.md §5` steps 6e-6g: the fixed narrative gate, the status
+        // pass's report, then the exclusive underfoot chain (bridge ambush,
+        // swamp, lava).
+        self.apply_fixed_narrative_gate_branch(plane);
+        self.append_pending_hourly_status_message();
+        // `overworld.md §7.1`: "the first arm of the per-turn underfoot
+        // chain", ahead of the swamp and lava arms below.
+        self.apply_troll_bridge_ambush(plane);
+        self.append_world_damage_tile_message(Some(game_dir), plane)?;
+        self.append_world_status_tile_message(plane);
+        // `overworld.md §6.2.5`: rough seas follows committed action work and
+        // cleanup, but precedes the remaining encounter epilogue.
+        let _ = self.apply_rough_seas_if_eligible();
+        // `overworld.md §5` step 6h: "roll for a random encounter, then
+        // animate/move and prune eligible non-player active objects".
+        if object_epilogue_runs {
+            if let Some(slot) = self.apply_world_encounter_probe(game_dir, plane)? {
+                // The spawn is an engine-side event: `encounters.md §2.1`
+                // rolls it every overworld turn and the original prints
+                // nothing for it. Measured 2026-09-12
+                // (`cast-blink-overworld/blinked`), where this engine
+                // appended ` Wandering encounter spawned in slot 1.` to the
+                // command's own result row.
+                self.diagnostics
+                    .push(format!("wandering encounter spawned in slot {slot}"));
+            }
+        }
+        self.apply_pending_world_object_walker_pass();
         // active-objects.md §8: adjacent whirlpool engagement is a
         // plane-transition effect when the party is not on foot.
-        let object_epilogue_runs = self.world_object_epilogue_runs_for_turn(turn_before);
+        let pre_effect_message = self.message.clone();
         if object_epilogue_runs {
             if let Some(outcome) = self.apply_pending_outdoor_reactions(game_dir, plane)? {
                 if outcome.is_transition() {
@@ -3457,29 +3501,6 @@ impl PlayState {
                 if outcome.is_transition() || self.combat_active {
                     return Ok(Some(outcome));
                 }
-            }
-        }
-        // `overworld.md §6.2.5`: rough seas follows committed action work and
-        // cleanup, but precedes the remaining encounter epilogue. A reaction
-        // that already changed mode returned above; an ordinary reaction does
-        // not suppress this terrain/transport check.
-        let _ = self.apply_rough_seas_if_eligible();
-        // `overworld.md §7.1`: "the first arm of the per-turn underfoot
-        // chain", ahead of the swamp and lava arms below.
-        self.apply_troll_bridge_ambush(plane);
-        self.apply_fixed_narrative_gate_branch(plane);
-        self.append_world_damage_tile_message(Some(game_dir), plane)?;
-        self.append_world_status_tile_message(plane);
-        if object_epilogue_runs {
-            if let Some(slot) = self.apply_world_encounter_probe(game_dir, plane)? {
-                // The spawn is an engine-side event: `encounters.md §2.1`
-                // rolls it every overworld turn and the original prints
-                // nothing for it. Measured 2026-09-12
-                // (`cast-blink-overworld/blinked`), where this engine
-                // appended ` Wandering encounter spawned in slot 1.` to the
-                // command's own result row.
-                self.diagnostics
-                    .push(format!("wandering encounter spawned in slot {slot}"));
             }
         }
         Ok(nonterminal_outcome)
@@ -3531,7 +3552,7 @@ impl PlayState {
             }
 
             if self
-                .outdoor_first_phase_ranged_attack_detail(slot)
+                .outdoor_claimed_ranged_attack_detail(slot)
                 .is_some()
             {
                 reacted = true;
@@ -3622,11 +3643,12 @@ impl PlayState {
             to_x: WHIRLPOOL_UNDERWORLD_EMERGENCE_X,
             to_y: WHIRLPOOL_UNDERWORLD_EMERGENCE_Y,
             expected_tile: None,
-            // Section 8.1 publishes the *order* - marker restored, payload,
-            // then the plane write - but says nothing about the durable
-            // marker after the teleport, so the engine's existing foot reset
-            // stands. Only the falls chain is published as preserving it.
-            preserves_transport: false,
+            // `vehicles.md §2`: the whirlpool frame is a one-frame override
+            // that is "saved ... and restored", and the marker writer census
+            // has no whirlpool reset to foot. Section 8.1 restores the marker
+            // before the payload, so only the payload's own sinking ladder
+            // may change it; the teleport keeps what it left.
+            preserves_transport: true,
         };
         self.apply_world_plane_transition(game_dir, entry)?;
         Ok(MoveOutcome::Transition(AreaTransition::ChangedWorldPlane {

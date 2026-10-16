@@ -322,6 +322,36 @@ impl PlayState {
         self.step_dungeon_back(direction, nx, ny, scene, level, game_dir)
     }
 
+    /// `vehicles.md §6` "Movement Announcements And Facing Frames": the
+    /// movement-key echo carries the vehicle prefix. Returns `None` for keys
+    /// that are not movement keys in [`top_down_command_echo`]'s order.
+    pub fn vehicle_prefixed_movement_echo(&self, key: char) -> Option<CommandEcho> {
+        if key == ' ' || key.is_ascii_uppercase() {
+            return None;
+        }
+        let direction = Direction::from_play_key(key)?;
+        let prefix = match self.player.transport {
+            TransportState::Horse { .. } => MovementEchoPrefix::Ride,
+            TransportState::Carpet { .. } => MovementEchoPrefix::Fly,
+            TransportState::Skiff { .. } => MovementEchoPrefix::Row,
+            // A frigate turns in place only under sail, when the heading
+            // differs from the cached one (`weather.md §5`: "the ship turns
+            // ... that action does not also move the ship"); town-family
+            // scenes never prefix a frigate.
+            TransportState::Ship {
+                sails_hoisted: true,
+                ..
+            } if matches!(self.area, Area::World { .. })
+                && direction.is_cardinal()
+                && self.sail_cached_direction != Some(direction) =>
+            {
+                MovementEchoPrefix::Head
+            }
+            _ => MovementEchoPrefix::None,
+        };
+        vehicle_movement_echo(direction, prefix)
+    }
+
     /// `commands.md §5`: every overworld and town-family command echoes
     /// its resident verb prefix before the handler prompts or refuses.
     /// See [`PlayState::begin_command_echo`].
@@ -338,6 +368,7 @@ impl PlayState {
             return Ok(false);
         }
         if let Some(echo) = top_down_command_echo(key) {
+            let echo = self.vehicle_prefixed_movement_echo(key).unwrap_or(echo);
             self.begin_command_echo(echo);
         }
         let handled = self.handle_top_down_key_with_inline_inner(

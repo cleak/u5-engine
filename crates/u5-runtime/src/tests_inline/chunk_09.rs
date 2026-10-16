@@ -26,6 +26,23 @@ fn animation_tick_never_advances_the_gate_presence_counter() {
     assert_ne!(state.animation.frame, 0);
 }
 
+#[test]
+fn combat_turn_advance_never_steps_the_gate_presence_counter() {
+    // `overworld.md §9.1`: "Any combat routine, and the combat round loop"
+    // does not touch the counter; the refresh runs "every non-combat scene".
+    let mut state = britannia_state(open_world_grid(), 5, 5);
+    state.clock = GameClock::new(21, 0).unwrap();
+    state.natural_moongate_counter = 7;
+    state.combat_active = true;
+
+    state.advance_turn_with_minutes(2);
+    assert_eq!(state.natural_moongate_counter, 7);
+
+    state.combat_active = false;
+    state.advance_turn_with_minutes(2);
+    assert_eq!(state.natural_moongate_counter, 8);
+}
+
 /// `stats-panel.md §2.2.1` row 18: continuing on a skiff or carpet after
 /// a ship is destroyed defers the panel; the 74-site table's total-loss
 /// (drown) arm is left at the Immediate default.
@@ -489,10 +506,11 @@ fn world_plane_transition_preserves_runtime_overlay_cache_between_planes() {
     let dir = debug_game_dir();
     let mut state = britannia_state(open_world_grid(), 10, 20);
     state.player.facing = Direction::East;
+    // `vehicles.md §4`: B-Board probes only the party's own cell.
     state.active_objects.push(ActiveObject {
-        type_byte: 168,
-        tile: 168,
-        x: 11,
+        type_byte: SHIP_PARKED_FIRST,
+        tile: FIRST_PLAYABLE_FRIGATE_TILE,
+        x: 10,
         y: 20,
         z: WorldPlane::Britannia.save_floor(),
         phase: STEADY_PHASE,

@@ -290,6 +290,26 @@ fn exit_vehicle_refuses_furled_ship_with_no_landing_and_no_skiffs() {
 }
 
 #[test]
+fn exit_vehicle_under_sail_refusal_takes_its_own_row() {
+    // `vehicles.md §5.1`: "Ship under sail | `\nUnder sail!\n`".
+    let mut state = world_state(open_world_grid(), 5, 5);
+    state.player.transport = TransportState::Ship {
+        type_byte: SHIP_TRANSPORT_HOISTED_FIRST,
+        tile: FIRST_PLAYABLE_FRIGATE_TILE,
+        sails_hoisted: true,
+        hull: 77,
+        skiffs: 2,
+    };
+    state.sync_player_object();
+
+    assert_eq!(state.exit_vehicle(), MoveOutcome::Blocked);
+
+    assert_eq!(state.message, "\nUnder sail!\n");
+    assert!(state.player.transport.is_ship_under_sail());
+    assert_eq!(state.turn, 0);
+}
+
+#[test]
 fn exit_vehicle_horse_dismounts_without_nearby_support() {
     let mut state = world_state(vec![BRIT_DEEP_WATER_TILE; WORLD_CELLS], 5, 5);
     state.player.transport = TransportState::Horse {
@@ -375,7 +395,7 @@ fn exit_vehicle_ship_can_use_nearby_vehicle_object_as_support_without_relocation
     };
     state.sync_player_object();
     state.active_objects.push(ActiveObject {
-        type_byte: FIRST_PLAYABLE_SKIFF_TILE,
+        type_byte: SKIFF_PARKED_FIRST,
         tile: FIRST_PLAYABLE_SKIFF_TILE,
         x: 6,
         y: 5,
@@ -392,7 +412,8 @@ fn exit_vehicle_ship_can_use_nearby_vehicle_object_as_support_without_relocation
     assert!(state.active_objects.iter().skip(1).any(|object| {
         object.type_byte == FIRST_PLAYABLE_FRIGATE_TILE && object.x == 5 && object.y == 5
     }));
-    assert_eq!(state.message, format!("ship! {SHIP_NO_SKIFFS_WARNING}"));
+    // `vehicles.md §5.1`: no further success text after `ship!`.
+    assert_eq!(state.message, "ship!");
     assert_eq!(state.turn, 1);
 }
 
@@ -705,7 +726,7 @@ fn exit_ship_fallbacks_save_load_round_trip_vehicle_state() {
 }
 
 #[test]
-fn exit_ship_without_skiffs_reports_public_warning() {
+fn exit_ship_without_skiffs_omits_boarding_skiff_warning() {
     let mut state = world_state(open_world_grid(), 5, 5);
     state.player.transport = TransportState::Ship {
         type_byte: 168,
@@ -733,11 +754,13 @@ fn exit_ship_without_skiffs_reports_public_warning() {
             aux3: 0,
         }
     );
-    assert_eq!(state.message, format!("ship! {SHIP_NO_SKIFFS_WARNING}"));
+    // `vehicles.md §5.1`: X-it adds no further success text; this
+    // warning is B-Board's (§4).
+    assert_eq!(state.message, "ship!");
 }
 
 #[test]
-fn exit_ship_with_zero_hull_reports_badly_damaged_warning() {
+fn exit_ship_with_zero_hull_omits_boarding_damage_warning() {
     let mut state = world_state(open_world_grid(), 5, 5);
     state.player.transport = TransportState::Ship {
         type_byte: 168,
@@ -763,7 +786,9 @@ fn exit_ship_with_zero_hull_reports_badly_damaged_warning() {
             aux3: 2,
         }
     );
-    assert_eq!(state.message, format!("ship! {SHIP_BADLY_DAMAGED_WARNING}"));
+    // `vehicles.md §5.1`: X-it adds no further success text; this
+    // warning is B-Board's (§4).
+    assert_eq!(state.message, "ship!");
 }
 
 #[test]
@@ -997,6 +1022,31 @@ fn rough_seas_hits_each_non_dead_member_after_one_repaint_tick() {
     assert_eq!(
         state.message_entries().last().map(|entry| entry.text.as_str()),
         Some("Rough seas!")
+    );
+}
+
+#[test]
+fn rough_seas_fires_on_an_accepted_skiff_step_onto_deep_water() {
+    // `overworld.md §6.2.5`: "every otherwise eligible consumed action on
+    // that terrain triggers it", movement included.
+    let mut grid = open_world_grid();
+    grid[world_cell_index(5, 5)] = BRIT_DEEP_WATER_TILE;
+    grid[world_cell_index(5, 4)] = BRIT_DEEP_WATER_TILE;
+    let mut state = world_state(grid, 5, 5);
+    state.player.transport = TransportState::Skiff {
+        type_byte: TRANSPORT_MARKER_SKIFF_FIRST,
+        tile: TRANSPORT_MARKER_SKIFF_FIRST,
+    };
+    state.party = six_member_party(40);
+
+    assert_eq!(state.step(Direction::North), MoveOutcome::Moved);
+    assert_eq!((state.player.x, state.player.y), (5, 4));
+    assert!(
+        state
+            .message_entries()
+            .iter()
+            .any(|entry| entry.text == "Rough seas!"),
+        "an accepted skiff step onto deep water must run rough seas"
     );
 }
 
@@ -2061,9 +2111,13 @@ fn ship_fire_requires_ship_and_inline_broadside_direction_without_turn() {
     };
     ship.sync_player_object();
 
-    assert_eq!(ship.fire_ship_broadside(None), MoveOutcome::Blocked);
-    assert!(ship.message.contains("which direction"));
+    // `vehicles.md §7` step 2: the pre-action gate is the shared direction
+    // prompt; no shot and no turn until it yields a direction.
+    assert_eq!(ship.fire_ship_broadside(None), MoveOutcome::Observed);
+    assert!(ship.active_direction_prompt.is_some());
+    assert_eq!(ship.message, "Fire-");
     assert_eq!(ship.turn, 0);
+    ship.active_direction_prompt = None;
 
     assert_eq!(
         ship.fire_ship_broadside(Some(Direction::NorthEast)),
@@ -2127,8 +2181,14 @@ fn ship_fire_broadside_removes_first_target_in_three_cell_trace() {
 
     assert_eq!(state.turn, 1);
     assert_eq!(state.clock, GameClock::new(12, 2).unwrap());
-    assert!(state.message.contains("BOOOM!"));
-    assert!(state.message.contains("object tile 192"));
+    // `vehicles.md §7`: no engineering report; the hit is presentation.
+    assert!(!state.message.contains("BOOOM!"));
+    assert!(
+        state
+            .diagnostics
+            .iter()
+            .any(|line| line.contains("hit object tile 192"))
+    );
     assert_eq!(state.active_objects.len(), 3);
     assert!(state.active_objects[1].is_empty());
     assert!(state.world_object_at(10, 8).is_none());
@@ -2290,7 +2350,13 @@ fn ship_fire_broadside_miss_still_consumes_turn() {
 
     assert_eq!(state.turn, 1);
     assert_eq!(state.clock, GameClock::new(12, 2).unwrap());
-    assert!(state.message.contains("no target in range"));
+    assert!(state.message.is_empty());
+    assert!(
+        state
+            .diagnostics
+            .iter()
+            .any(|line| line.contains("with no target; projectile ends at (10, 13)"))
+    );
 }
 
 #[test]
@@ -2536,4 +2602,54 @@ fn town_fire_destroyed_door_reverts_after_floor_reload() {
     assert_eq!(state.door_tracker, None);
     assert_eq!(state.turn, 3);
     let _ = fs::remove_dir_all(dir);
+}
+
+#[test]
+fn vehicle_movement_echo_carries_the_vehicle_prefix() {
+    // `vehicles.md §6` "Movement Announcements And Facing Frames".
+    let text = |state: &PlayState, key: char| {
+        state
+            .vehicle_prefixed_movement_echo(key)
+            .map(|echo| echo.text)
+    };
+    let mut state = world_state(open_world_grid(), 5, 5);
+    assert_eq!(text(&state, 'w'), Some("North"));
+    assert_eq!(text(&state, 'W'), None);
+    state.player.transport = TransportState::Horse {
+        type_byte: HORSE_MOUNTED_FIRST,
+        tile: FIRST_PLAYABLE_HORSE_TILE,
+    };
+    assert_eq!(text(&state, 'd'), Some("Ride East"));
+    state.player.transport = TransportState::Carpet {
+        type_byte: CARPET_MOUNTED,
+        tile: FIRST_PLAYABLE_MAGIC_CARPET_TILE,
+    };
+    assert_eq!(text(&state, 's'), Some("Fly South"));
+    state.player.transport = TransportState::Skiff {
+        type_byte: SKIFF_PARKED_FIRST,
+        tile: FIRST_PLAYABLE_SKIFF_TILE,
+    };
+    assert_eq!(text(&state, 'a'), Some("Row West"));
+
+    // A furled frigate has no prefix; a hoisted one turning in place on the
+    // overworld announces `Head`, and one already on its cached heading
+    // does not.
+    state.player.transport = TransportState::Ship {
+        type_byte: SHIP_PARKED_FIRST,
+        tile: FIRST_PLAYABLE_FRIGATE_TILE,
+        sails_hoisted: false,
+        hull: 77,
+        skiffs: 2,
+    };
+    assert_eq!(text(&state, 'w'), Some("North"));
+    state.player.transport = TransportState::Ship {
+        type_byte: SHIP_TRANSPORT_HOISTED_FIRST,
+        tile: FIRST_PLAYABLE_FRIGATE_TILE,
+        sails_hoisted: true,
+        hull: 77,
+        skiffs: 2,
+    };
+    state.sail_cached_direction = Some(Direction::East);
+    assert_eq!(text(&state, 'w'), Some("Head North"));
+    assert_eq!(text(&state, 'd'), Some("East"));
 }

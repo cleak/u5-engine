@@ -6138,7 +6138,7 @@ fn validate_route_smoke_case_state(
                 || state.wind_save_byte != WindState::East.save_byte()
                 || state.spell_charges[REL_HUR_SPELL_INDEX] != 0
                 || state.party.first().is_none_or(|member| member.mana != 0)
-                || state.message != "Wind change! Calm Winds -> East Winds."
+                || !state.message.is_empty()
             {
                 return Err(io::Error::other(format!(
                     "route smoke `{case_name}` did not apply the public Rel Hur wind mapping"
@@ -6969,7 +6969,7 @@ fn validate_route_smoke_case_state(
                 })
                 || !state
                     .message
-                    .ends_with("Thou art not upon a Sacred Quest!\nPassage denied!\n")
+                    .ends_with("\"Thou art not upon a Sacred Quest!\nPassage denied!\"\n")
             {
                 return Err(io::Error::other(format!(
                     "route smoke `{case_name}` did not apply the unordained narrative gate branch"
@@ -6985,7 +6985,7 @@ fn validate_route_smoke_case_state(
             ) || state.player.x != NARRATIVE_GATE_X as usize
                 || state.player.y != NARRATIVE_GATE_Y as usize
                 || state.shrine_ordained_mask == 0
-                || !state.message.ends_with("Pass, Seeker!\n")
+                || !state.message.ends_with("\"Pass, Seeker!\"\n")
             {
                 return Err(io::Error::other(format!(
                     "route smoke `{case_name}` did not apply the ordained passage branch"
@@ -6994,7 +6994,7 @@ fn validate_route_smoke_case_state(
         }
         "ship-broadside-fire-route" => {
             if !matches!(state.player.transport, TransportState::Ship { .. })
-                || !state.message.contains("BOOOM! Ship broadside fired")
+                || !state.diagnostics.iter().any(|line| line.starts_with("ship broadside fired"))
             {
                 return Err(io::Error::other(format!(
                     "route smoke `{case_name}` did not fire the ship broadside"

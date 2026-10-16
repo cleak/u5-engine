@@ -936,6 +936,11 @@ impl PlayState {
 
         if underfoot_blackout_latched {
             self.advance_turn();
+            // This branch skips the step-6 block, but the walker the clock
+            // routine just owed still runs on this turn, as it did when the
+            // walk lived inside `advance_turn`; left pending it would run at
+            // the start of the next turn, on top of that turn's own pass.
+            self.apply_pending_world_object_walker_pass();
             // Unpublished (`cleak/u5-spec#262`): the latched underfoot
             // blackout consumes the step, and the original prints nothing
             // this engine has been able to capture.
@@ -964,25 +969,42 @@ impl PlayState {
         // same terrain-cost table, without an exemption or a reduced minute
         // charge", so the charge is not gated on transport.
         //
-        // The surcharge is folded into the same advance rather than run as a
-        // separate one, so an hour boundary the extra minutes cross still
-        // reaches the hourly cascade: §8.1 says "Terrain's extra work does not
-        // repeat the whole party-upkeep tail", not that it can lose an hour.
-        // Quickness and Negate Time scale the sum, which for these even
-        // charges is the same as scaling each part.
-        //
-        // Not modelled, and the reason the line here is unconditional: §8.1's
-        // one or two **extra outdoor object-update calls**, and the
-        // suppression rule that hangs off them - "the message is suppressed if
-        // any of the additional object-update calls reports a hostile
-        // interaction". Suppression "does not remove the terrain's time
-        // charge", so the charge below is right either way.
+        // Order: the one or two extra outdoor object-update calls, each with
+        // its proximity pause; then the feedback line unless a call reported
+        // a hostile interaction; then "the terrain clock advance remains
+        // separate from the later ordinary two-minute advance"; then the
+        // ordinary turn.
         let difficult = world_difficult_terrain_step(final_tile);
-        let extra_minutes = difficult.map_or(0, |step| step.extra_minutes);
-        self.advance_turn_with_minutes(self.turn_minute_increment().saturating_add(extra_minutes));
+        let mut slow_line = None;
+        if let Some(step) = difficult {
+            let hostile = match self.run_difficult_terrain_object_updates(
+                game_dir,
+                plane,
+                step.extra_object_update_calls,
+            )? {
+                Ok(hostile) => hostile,
+                Err(outcome) => return Ok(outcome),
+            };
+            // "Suppression does not remove the terrain's time charge."
+            if !hostile {
+                slow_line = Some(step.line);
+            }
+            let effective_minutes = if self.negate_time_active() {
+                0
+            } else {
+                TimingStatusTag::from_save_byte(self.active_effect_tag.unwrap_or(0))
+                    .effective_minutes(step.extra_minutes)
+            };
+            self.advance_clock_half(effective_minutes);
+        }
+        self.advance_turn();
 
         if let Some(game_dir) = game_dir {
             if let Some(entry) = transition {
+                // The plane change ends this turn's overworld block before
+                // the object epilogue: drop the walker owed to it rather than
+                // letting it run on the destination plane next turn.
+                self.pending_world_object_walker_pass = false;
                 self.apply_world_plane_transition(game_dir, entry)?;
                 return Ok(MoveOutcome::Transition(AreaTransition::ChangedWorldPlane {
                     from: plane,
@@ -1005,38 +1027,29 @@ impl PlayState {
         // the transports the measurement could not reach: "Mounted and carpet
         // direction echoes can include their normal `Ride ` or `Fly ` prefix
         // before the compass word", so the line is not foot-only.
-        if let Some(step) = difficult {
-            self.emit_message_line(step.line);
+        if let Some(line) = slow_line {
+            self.emit_message_line(line);
         }
+        // `overworld.md §5` steps 6e-6h, in order: the fixed narrative gate,
+        // the status pass's report, the exclusive underfoot chain (bridge
+        // ambush, swamp, lava), then the outdoor object epilogue.
+        self.apply_fixed_narrative_gate_branch(plane);
+        self.append_pending_hourly_status_message();
         // `overworld.md §7.1`: "the first arm of the per-turn underfoot
         // chain", ahead of the swamp and lava arms below.
         self.apply_troll_bridge_ambush(plane);
-        self.apply_fixed_narrative_gate_branch(plane);
         self.append_world_damage_tile_message(game_dir, plane)?;
         self.append_world_status_tile_message(plane);
-        self.append_pending_hourly_status_message();
-        // `active-objects.md §8`: the walker that just ran inside
-        // `advance_turn` *queues* its adjacency reactions - whirlpool
-        // engagement, sea-serpent breath, the pirate broadside, a creature
-        // reaching the party - and leaves the I/O-bearing half to the
-        // post-turn handler. That handler is the shared epilogue the movement
-        // branch skips, so on a step the queue was filled and then dropped by
-        // the next walker pass: outdoor creatures never acted on the party
-        // while it walked or sailed. They acted only if the *party* stepped
-        // into them, which `step_world` handles above.
-        //
-        // A reaction that changes mode owns the outcome, exactly as the
-        // epilogue's own arm does.
-        if let Some(game_dir) = game_dir
-            && self.world_object_epilogue_runs_for_turn(self.turn)
-            && let Some(outcome) = self.apply_pending_outdoor_reactions(game_dir, plane)?
-            && (outcome.is_transition() || self.combat_active)
-        {
-            return Ok(outcome);
-        }
+        // `overworld.md §6.2.5`: rough seas fires on "every otherwise
+        // eligible consumed action on that terrain", after the action's
+        // time increment and party cleanup and ahead of the encounter
+        // epilogue. An accepted step is such an action, so a skiff or carpet
+        // moving onto deep water takes it here as well.
+        let _ = self.apply_rough_seas_if_eligible();
         // `encounters.md §2.1`: "**Every turn** the overworld mode loop runs
         // its per-turn block ... and that block contains an *encounter
-        // probe*." An accepted step is such a turn.
+        // probe*." An accepted step is such a turn, and `overworld.md §5`
+        // step 6h rolls it before the creature walk.
         //
         // The probe used to run only from the shared post-turn epilogue,
         // which the movement branch deliberately skips for world moves - the
@@ -1047,10 +1060,6 @@ impl PlayState {
         // threshold of four against a `1..=30` draw predicts about one turn
         // in ten, while calling the probe directly from the same state
         // spawned 23 times in 300 calls (`cleak/u5-engine#17`).
-        //
-        // The walkers themselves are not affected: they run inside
-        // `advance_turn`, which this function has already called, and the
-        // same flag that gates them gates this.
         if let Some(game_dir) = game_dir
             && self.world_object_epilogue_runs_for_turn(self.turn)
             && let Some(slot) = self.apply_world_encounter_probe(game_dir, plane)?
@@ -1060,6 +1069,92 @@ impl PlayState {
             // the player and visible only to the harness.
             self.push_diagnostic(format!("Wandering encounter spawned in slot {slot}."));
         }
+        // `overworld.md §5` step 6h: animate/move/prune, owed by the clock
+        // routine's cadence decision.
+        self.apply_pending_world_object_walker_pass();
+        // `active-objects.md §8`: the walker *queues* its adjacency
+        // reactions - whirlpool engagement, sea-serpent breath, the pirate
+        // broadside, a creature reaching the party - and leaves the
+        // I/O-bearing half to the post-turn handler. That handler is the
+        // shared epilogue the movement branch skips, so they resolve here.
+        //
+        // A reaction that changes mode owns the outcome, exactly as the
+        // epilogue's own arm does.
+        if let Some(game_dir) = game_dir
+            && self.world_object_epilogue_runs_for_turn(self.turn)
+            && let Some(outcome) = self.apply_pending_outdoor_reactions(game_dir, plane)?
+            && (outcome.is_transition() || self.combat_active)
+        {
+            return Ok(outcome);
+        }
         Ok(MoveOutcome::Moved)
+    }
+
+    /// `movement.md §8.1`: the extra outdoor object-update calls of a
+    /// difficult-terrain step. Each call takes the ordinary cadence gates
+    /// ("They share the same stored parities"), and a reached call runs the
+    /// creature walker, its hostile reactions and the encounter probe. Each
+    /// call, including a cadence-skipped one, is followed by the proximity
+    /// pause: "one world tick when active-object slot 1 is live, on the same
+    /// floor and within five cells of the party on both axes".
+    ///
+    /// Returns whether any call reported a hostile interaction (an adjacent
+    /// engagement or a reached ranged attack: the walker's claimed
+    /// reactions), or the outcome of a reaction that changed mode.
+    fn run_difficult_terrain_object_updates(
+        &mut self,
+        game_dir: Option<&Path>,
+        plane: WorldPlane,
+        calls: u8,
+    ) -> io::Result<Result<bool, MoveOutcome>> {
+        let mut hostile = false;
+        for _ in 0..calls {
+            if self.time_stop_counter == 0 && !self.combat_active {
+                let gate = self.overworld_walker_effect_gates();
+                if gate.walkers_run() {
+                    // `overworld.md §5` step 6h: encounter roll, then the
+                    // creature walk and its engagements.
+                    if let Some(game_dir) = game_dir
+                        && let Some(slot) = self.apply_world_encounter_probe(game_dir, plane)?
+                    {
+                        self.push_diagnostic(format!(
+                            "Wandering encounter spawned in slot {slot}."
+                        ));
+                    }
+                    self.advance_active_object_walkers();
+                    if !self.pending_outdoor_reaction_slots.is_empty() {
+                        hostile = true;
+                    }
+                    if let Some(game_dir) = game_dir
+                        && let Some(outcome) =
+                            self.apply_pending_outdoor_reactions(game_dir, plane)?
+                        && (outcome.is_transition() || self.combat_active)
+                    {
+                        return Ok(Err(outcome));
+                    }
+                }
+            }
+            if self.slot_one_within_proximity_pause(plane) {
+                let _ = self.advance_visual_tick();
+            }
+        }
+        Ok(Ok(hostile))
+    }
+
+    /// `movement.md §8.1` proximity-pause test.
+    fn slot_one_within_proximity_pause(&self, plane: WorldPlane) -> bool {
+        let Some(object) = self.active_objects.get(1) else {
+            return false;
+        };
+        if object.is_empty() || object.z != plane.save_floor() {
+            return false;
+        }
+        let (dx, dy) = wrapped_deltas_to_player(
+            object.x as u8,
+            object.y as u8,
+            self.player.x as u8,
+            self.player.y as u8,
+        );
+        dx.abs() <= 5 && dy.abs() <= 5
     }
 }
