@@ -1475,7 +1475,10 @@ impl PlayState {
             return self.read_codex_urn_after_entry(game_dir);
         }
         let Some(live_class) = WorldEntryNarrationClass::from_live_tile(tile) else {
-            self.message = "What?".to_string();
+            // `karma.md §8`: a tile with no entry handler (e.g. `0x41`)
+            // "takes the ordinary `Enter what?\n` refusal" - lower-case
+            // `w`, completing the open echo as the non-world branch does.
+            self.refuse_world_enter_with_nothing();
             return Ok(MoveOutcome::Blocked);
         };
         let helper = live_class.helper();
@@ -1492,7 +1495,7 @@ impl PlayState {
             .filter(coordinate_matches)
             .any(|entry| entry.narration_class.is_none())
         {
-            self.message = "What?".to_string();
+            self.refuse_world_enter_with_nothing();
             return Ok(MoveOutcome::Blocked);
         }
 
@@ -1539,6 +1542,14 @@ impl PlayState {
 
         self.emit_world_entry_narration(live_class, entry.proper_name);
         self.enter_world_target(game_dir, plane, entry.target, false)
+    }
+
+    /// `commands.md §5.3` / `karma.md §8`: the ordinary `Enter what?`
+    /// refusal, completing the open `Enter ` echo.
+    fn refuse_world_enter_with_nothing(&mut self) {
+        if !self.complete_open_direction_echo("Enter ", ENTER_NOTHING_REFUSAL) {
+            self.message = format!("Enter {ENTER_NOTHING_REFUSAL}");
+        }
     }
 
     fn emit_world_entry_narration(

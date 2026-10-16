@@ -787,8 +787,31 @@ fn world_enter_sidecar_without_narration_class_is_no_action() {
     assert_eq!((state.player.x, state.player.y), (10, 20));
     assert_eq!(state.turn, 0);
     assert_eq!((state.clock.hour, state.clock.minute), (12, 0));
-    assert_eq!(state.message, "What?");
-    assert_eq!(state.message_entries()[0].text, "Enter What?");
+    // `karma.md §8` / `commands.md §5.3`: the ordinary refusal completes
+    // the open echo with lower-case `what?`.
+    assert_eq!(state.message_entries()[0].text, "Enter what?");
+    let _ = fs::remove_dir_all(dir);
+}
+
+#[test]
+fn world_enter_on_codex_decoration_tile_takes_lower_case_what_refusal() {
+    // `karma.md §8`: "Tile `0x41` is not an alternative entry trigger.
+    // E-Enter on that tile takes the ordinary `Enter what?\n` refusal".
+    let dir = debug_game_dir();
+    let mut grid = open_world_grid();
+    grid[world_cell_index(10, 20)] = 0x41;
+    let mut state = britannia_state(grid, 10, 20);
+
+    state.begin_command_echo_for(Command::Enter);
+    assert_eq!(
+        state.enter_current_location(&dir).unwrap(),
+        MoveOutcome::Blocked
+    );
+    state.commit_command_echo();
+
+    assert_eq!(state.turn, 0);
+    assert_eq!(state.message_entries()[0].text, "Enter what?");
+    assert!(state.active_shrine.is_none());
     let _ = fs::remove_dir_all(dir);
 }
 
