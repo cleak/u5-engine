@@ -496,11 +496,14 @@ fn speaker_effects_after(
         .collect()
 }
 
-/// Modern-host scale for a silent 50-unit subtitle-ignition publication.
-/// `timing.md §5.1` publishes calibrated work rather than a portable wall-clock
-/// duration, so the Bevy shell keeps the existing 14 ms presentation target but
-/// applies the exact 45/50-unit branch ratio from public commit `12485b3`.
-const INTRO_SUBTITLE_IGNITION_SILENT_PUBLISH_INTERVAL_SECS: f32 = 0.014;
+/// Wall-clock seconds for one driver-local calibrated unit of the subtitle
+/// ignition's publication wait. `timing.md §5.1` scopes the 14 ms modernised
+/// cadence to the `TITLE.BIT` flourish only; the ignition row waits "45 full
+/// calibration units" sounded or "50" silent, and `§7.4` prices the
+/// title-sequence (driver-local) unit at "about 0.92 ms" under the normative
+/// `§7.1` anchor - about 41.4 ms and 46 ms per publication.
+const INTRO_SUBTITLE_IGNITION_UNIT_SECS: f32 =
+    u5_runtime::audio::DRIVER_LOCAL_UNIT_NANOS as f32 / 1_000_000_000.0;
 
 /// `systems/intro.md §3` step 2 (`cleak/u5-spec#77`): after the
 /// flourish returns, the finished mark plus the slot-7 "Presents"
@@ -11308,8 +11311,7 @@ fn visual_intro_animation_interval(intro: &VisualIntroState) -> f32 {
 }
 
 fn subtitle_ignition_publish_interval(wait_units: u8) -> f32 {
-    INTRO_SUBTITLE_IGNITION_SILENT_PUBLISH_INTERVAL_SECS * f32::from(wait_units)
-        / f32::from(u5_runtime::SUBTITLE_IGNITION_SILENT_WAIT_UNITS)
+    INTRO_SUBTITLE_IGNITION_UNIT_SECS * f32::from(wait_units)
 }
 
 fn advance_intro_animation_pump(pump: &mut VisualIntroAnimationPump, delta: f32) -> bool {
@@ -20067,16 +20069,19 @@ mod tests {
     }
 
     #[test]
-    fn subtitle_ignition_wait_units_preserve_published_speaker_pacing_ratio() {
+    fn subtitle_ignition_wait_units_use_the_calibrated_unit_anchor() {
+        // `timing.md §5.1`/`§6.3`: 50 silent and 45 sounded driver-local units
+        // per publication; `§7.1` makes 0.79-0.97 ms per unit normative and
+        // `§7.4` puts the driver-local unit at about 0.92 ms. The 14 ms
+        // cadence belongs to the flourish alone.
         let silent =
             subtitle_ignition_publish_interval(u5_runtime::SUBTITLE_IGNITION_SILENT_WAIT_UNITS);
-        assert!(
-            (silent - INTRO_SUBTITLE_IGNITION_SILENT_PUBLISH_INTERVAL_SECS).abs()
-                < f32::EPSILON * 8.0
-        );
+        assert!((silent - 0.046).abs() < 1e-6, "silent publication {silent} s");
+        assert!((50.0 * 0.00079..=50.0 * 0.00097).contains(&silent));
         let burst =
             subtitle_ignition_publish_interval(u5_runtime::SUBTITLE_IGNITION_SPEAKER_WAIT_UNITS);
-        assert!((burst - 0.0126).abs() < f32::EPSILON * 8.0);
+        assert!((burst - 0.0414).abs() < 1e-6, "sounded publication {burst} s");
+        assert!((45.0 * 0.00079..=45.0 * 0.00097).contains(&burst));
     }
 
     #[test]
