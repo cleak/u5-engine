@@ -647,7 +647,16 @@ impl PlayState {
         // highlighted member rather than closing, exactly as it does in the
         // item picker itself. A direction prompt takes the shared `Pass`
         // word instead (the wind scroll reads `Direction-Pass`).
-        if key == '\u{1b}' {
+        //
+        // `input.md §11` / `inventory.md §7.1`: the shared `Direction-`
+        // prompt takes only a cardinal or Space; Escape is one of the "other
+        // keys [that] are ignored", so it falls through to the per-kind arms
+        // below and the prompt reads again.
+        let direction_prompt = matches!(
+            pending,
+            UsePendingAction::SkullKeyDirection | UsePendingAction::ScrollWindDirection { .. }
+        );
+        if key == '\u{1b}' && !direction_prompt {
             let turn_before = self.turn;
             let prompt = self.render_pending_use_action(pending);
             self.commit_prompt_reply(&prompt, SELECTION_CANCELLED_LITERAL);
@@ -655,12 +664,7 @@ impl PlayState {
             self.apply_post_turn_effects_after_outcome(turn_before, game_dir, MoveOutcome::Used)?;
             return Ok(true);
         }
-        if key == ' '
-            && matches!(
-                pending,
-                UsePendingAction::SkullKeyDirection | UsePendingAction::ScrollWindDirection { .. }
-            )
-        {
+        if key == ' ' && direction_prompt {
             let turn_before = self.turn;
             self.commit_prompt_reply(SPELL_DIRECTION_PROMPT_PREFIX, DIRECTION_PROMPT_LABEL_PASS);
             self.ensure_use_action_turn(turn_before);

@@ -1363,15 +1363,13 @@ impl PlayState {
             match session.kind {
                 CastFollowupKind::Direction { pass_allowed } => {
                     if ch == '\u{1b}' {
-                        // `magic.md §8`: the four shared directed utility
-                        // helpers cannot be escaped after their resource
-                        // gates. They keep polling until a cardinal direction
-                        // or Space/Pass is accepted.
-                        if matches!(session.spell_code.as_str(), "AY" | "AS" | "AEP" | "EIP") {
-                            continue;
-                        }
-                        self.message = "None!".to_string();
-                        return Ok(None);
+                        // `input.md §11`: the shared spell `Direction-`
+                        // prompt takes a cardinal or Space; "Other keys are
+                        // ignored and the prompt reads again", and Escape is
+                        // not its cancel key. `magic.md §8`: it "cannot be
+                        // escaped except by a cardinal or Space" - for every
+                        // caller, not only the four directed utility helpers.
+                        continue;
                     }
                     if ch == ' ' {
                         if pass_allowed {
