@@ -12085,8 +12085,22 @@ fn step_visual_intro(intro: &mut VisualIntroState, ch: char) -> bool {
     }
 
     intro.menu_idle_ticks = 0;
-    // The automatic preview runs *before* the first poll; once a
-    // key has been read the one-shot is spent.
+    // `systems/intro.md §3` "Start/menu screen composition": while the
+    // caller's skip flag is still clear, "immediately after the loader
+    // returns, that caller still plays the one-shot automatic
+    // Return-to-View preview before polling the menu". A key already
+    // pending at that point - typically the one that aborted subtitle
+    // ignition, whose status-only probe does not consume it (`§5` item
+    // 7) - is therefore read by the preview's first tick, not by the
+    // menu: `formats/location-dat.md §11` step 6, "A pending key is
+    // consumed ... The aborting key cannot immediately dispatch there",
+    // which that section contrasts with "the status-only probe inside
+    // subtitle ignition". Handing it to the menu instead lets a Space
+    // that interrupts ignition commit the highlighted `Journey Onward`.
+    if advance_visual_intro_auto_return_to_view(intro) {
+        return step_visual_intro_panel(intro, ch);
+    }
+    // Once a key has been read the one-shot is spent.
     intro.pending_auto_return_to_view = false;
     let key = if ch == '\r' { b'\r' } else { ch as u8 };
     // `systems/intro.md §6.2`: the arrow keys move the inverse-video
@@ -20268,10 +20282,14 @@ mod tests {
 
     #[test]
     #[cfg(feature = "original-asset-tests")]
-    fn intro_subtitle_ignition_preserves_its_abort_key_for_menu() {
+    fn intro_subtitle_ignition_abort_key_is_spent_on_the_automatic_preview() {
         // Subtitle ignition has the distinct non-consuming contract from
-        // `#118`: after an uninterrupted logo reveal enters ignition, its
-        // abort key is handed to the freshly built menu.
+        // `#118`: its abort key survives the loader. The caller's skip flag
+        // is still clear, so `systems/intro.md §3` plays the one-shot
+        // automatic Return-to-View preview "before polling the menu", and
+        // that preview's consuming read (`formats/location-dat.md §11` step
+        // 6) takes the key: "The aborting key cannot immediately dispatch
+        // there."
         let dir = debug_game_dir();
         install_intro_assets(&dir);
         let mut intro = visual_intro_state_with_panel(dir.clone(), VisualIntroPanel::Menu);
@@ -20290,8 +20308,9 @@ mod tests {
         // This key is the ignition's interruptible-driver poll. The first
         // partial band was already published draw-before-advance, so the
         // final clean tick draws frame 1 and leaves the counter at frame 2.
-        // The driver does not consume the pending key: after loader cleanup,
-        // that same Down key reaches the menu and moves its highlight.
+        // The driver does not consume the pending key; after loader cleanup
+        // the automatic preview reads it and aborts, so the menu never sees
+        // that Down key and the highlight stays on `Journey Onward`.
         assert!(step_visual_intro(
             &mut intro,
             char::from(u5_runtime::INPUT_CODE_SOUTH)
@@ -20301,7 +20320,41 @@ mod tests {
         assert_eq!(intro.title_tick_frame, 2);
         assert_eq!(
             visual_intro_menu_highlight(&intro),
-            IntroSubflow::CharacterCreation
+            IntroSubflow::JourneyOnward
+        );
+        assert!(!intro.pending_auto_return_to_view);
+        let _ = fs::remove_dir_all(dir);
+    }
+
+    /// The paired-play opening (`space` during the title, then `j` on the
+    /// menu): a Space that interrupts subtitle ignition is spent on the
+    /// automatic preview and must not commit the highlighted
+    /// `Journey Onward` row; the later `J` on the settled menu does.
+    #[test]
+    #[cfg(feature = "original-asset-tests")]
+    fn space_interrupting_subtitle_ignition_does_not_commit_journey_onward() {
+        let dir = debug_game_dir();
+        install_intro_assets(&dir);
+        let mut intro = visual_intro_state_with_panel(dir.clone(), VisualIntroPanel::Menu);
+        intro.dispatch = UnifiedMenuDispatch::new();
+        intro.title_flourish_complete = true;
+        intro.title_signature_complete = true;
+
+        let outcome = finish_visual_intro_title_to_menu(&mut intro, false);
+        assert!(outcome.animated_after_reveal);
+        assert!(matches!(
+            intro.panel,
+            VisualIntroPanel::SubtitleIgnition { .. }
+        ));
+
+        assert!(step_visual_intro(&mut intro, ' '));
+
+        assert!(matches!(intro.panel, VisualIntroPanel::Menu));
+        assert!(!intro.message_waiting_for_key);
+        assert!(intro.launch_result.lock().unwrap().is_none());
+        assert_eq!(
+            visual_intro_menu_highlight(&intro),
+            IntroSubflow::JourneyOnward
         );
         assert!(!intro.pending_auto_return_to_view);
         let _ = fs::remove_dir_all(dir);
