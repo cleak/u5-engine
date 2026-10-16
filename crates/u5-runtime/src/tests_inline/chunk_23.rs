@@ -8378,7 +8378,7 @@ fn combat_cast_clone_routes_resources_and_places_copy_on_legal_cell() {
     assert_eq!(state.party[0].mana, 0);
     assert_eq!(state.turn, 1);
     assert_eq!(state.prng_state, expected_prng);
-    assert_eq!(state.message, "Clone!");
+    assert_eq!(state.message, "Success!");
     assert_eq!(
         state.combat_actors[cloned_actor_slot],
         clone_combat_actor_descriptor(
@@ -16476,7 +16476,7 @@ fn combat_cast_repel_undead_routes_resources_and_forces_undead_to_flee() {
     );
     assert!(!state.combat_actors[COMBAT_PARTY_ACTOR_SLOTS + 2].is_fleeing());
     assert_eq!(state.party_experience[0], 10);
-    assert_eq!(state.message, "Repel Undead! 2 undead repelled.");
+    assert_eq!(state.message, "");
 }
 
 #[test]
@@ -16894,7 +16894,7 @@ fn combat_cast_tremor_routes_resources_table_damage_and_xp() {
     assert_eq!(state.party[0].mana, 0);
     assert_eq!(state.turn, 1);
     assert_ne!(state.prng_state, initial_prng);
-    assert_eq!(state.message, "Tremor!");
+    assert_eq!(state.message, "");
     assert!(state.party[0].hp < 30);
     assert!(state.combat_actors[target_slot].hp_or_wound < stats.max_hp);
     assert!(state.party_experience[0] > 10);
@@ -17107,7 +17107,7 @@ fn combat_cast_polymorph_routes_resources_and_replaces_hostile_creature() {
     assert_eq!(state.spell_charges[spell_index], 0);
     assert_eq!(state.party[0].mana, 0);
     assert_eq!(state.turn, 1);
-    assert_eq!(state.message, "Polymorph!");
+    assert_eq!(state.message, "Success!");
     assert_eq!(
         state.combat_actors[target_slot].owner_target_class,
         COMBAT_CLASS_GIANT_RAT
@@ -17259,7 +17259,7 @@ fn combat_cast_field_spell_places_arena_marker_after_coordinate_lookup() {
     assert_eq!(state.spell_charges[spell_index], 0);
     assert_eq!(state.party[0].mana, 0);
     assert_eq!(state.turn, 1);
-    assert_eq!(state.message, "Poison field placed.");
+    assert_eq!(state.message, "");
     assert_eq!(
         state.active_objects[1],
         ActiveObject {
@@ -17339,7 +17339,7 @@ fn combat_cast_field_spell_places_marker_without_immediate_contact() {
     assert_eq!(state.spell_charges[spell_index], 0);
     assert_eq!(state.party[0].mana, 0);
     assert_eq!(state.turn, 1);
-    assert_eq!(state.message, "Fire field placed.");
+    assert_eq!(state.message, "");
     assert_eq!(state.party_experience, vec![123]);
     assert!(!state.combat_actors[target_slot].is_marked_dead());
     assert_eq!(state.combat_actors[target_slot].hp_or_wound, stats.max_hp);
@@ -17421,7 +17421,7 @@ fn combat_cast_fire_field_places_marker_without_random_gate() {
     assert_eq!(state.spell_charges[spell_index], 0);
     assert_eq!(state.party[0].mana, 0);
     assert_eq!(state.turn, 1);
-    assert_eq!(state.message, "Fire field placed.");
+    assert_eq!(state.message, "");
     assert!(!state.combat_actors[target_slot].is_marked_dead());
     assert_eq!(state.combat_actors[target_slot].hp_or_wound, stats.max_hp);
     assert_eq!(state.active_objects[target_slot].tile, 0x70);
@@ -17474,7 +17474,7 @@ fn combat_cast_field_spell_places_marker_without_actor_contact_target() {
     assert_eq!(state.spell_charges[spell_index], 0);
     assert_eq!(state.party[0].mana, 0);
     assert_eq!(state.turn, 1);
-    assert_eq!(state.message, "Poison field placed.");
+    assert_eq!(state.message, "");
     assert_eq!(state.active_objects[1].type_byte, COMBAT_FIELD_KIND_POISON);
     assert_eq!(
         (state.active_objects[1].x, state.active_objects[1].y),
@@ -17534,7 +17534,7 @@ fn combat_cast_dispel_field_removes_matching_arena_marker() {
     assert_eq!(state.spell_charges[DISPEL_FIELD_SPELL_INDEX], 0);
     assert_eq!(state.party[0].mana, 0);
     assert_eq!(state.turn, 1);
-    assert_eq!(state.message, "Dispelled Fire field.");
+    assert_eq!(state.message, "Success!");
     assert!(state.active_objects[1].is_empty());
     assert_eq!(state.active_objects[1].tile, COMBAT_FIELD_KIND_FIRE);
     assert!(state.visibility_dirty);

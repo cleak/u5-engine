@@ -631,7 +631,7 @@
         assert_eq!(state.turn, 1);
         assert_eq!(state.clock, GameClock::new(12, 2).unwrap());
         assert_eq!(state.sail_cadence, 0);
-        assert_eq!(state.message, "Wind change! Calm Winds -> North Winds.");
+        assert_eq!(state.message, "");
     }
 
     #[test]
@@ -650,7 +650,7 @@
 
         assert_eq!(state.wind, WindState::West);
         assert_eq!(state.wind_save_byte, 4);
-        assert_eq!(state.message, "Wind change! West Winds -> West Winds.");
+        assert_eq!(state.message, "");
     }
 
     #[test]

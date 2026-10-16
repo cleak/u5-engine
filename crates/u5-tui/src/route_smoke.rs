@@ -5605,7 +5605,7 @@ fn validate_combat_spell_route_state(state: &PlayState, case_name: &str) -> io::
             }
         }
         "combat-reveal-hidden-target" => {
-            if !state.message.starts_with("Revealed 1 combat actor")
+            if !state.diagnostics_contain("Reveal uncovered 1 combat actor")
                 || state.combat_actors[COMBAT_PARTY_ACTOR_SLOTS].is_phase_suppressed()
             {
                 return Err(io::Error::other(format!(
@@ -5625,9 +5625,7 @@ fn validate_combat_spell_route_state(state: &PlayState, case_name: &str) -> io::
             }
         }
         "combat-cause-fear-target" => {
-            if !state
-                .message
-                .starts_with("Cause Fear affected 1 combat actor")
+            if !state.diagnostics_contain("Cause Fear affected 1 combat actor")
                 || state.combat_actors[COMBAT_PARTY_ACTOR_SLOTS].flags & COMBAT_ACTOR_FLAG_FLEEING
                     == 0
             {
@@ -5667,7 +5665,7 @@ fn validate_combat_spell_route_state(state: &PlayState, case_name: &str) -> io::
             }
         }
         "combat-tremor-targets" => {
-            if !state.message.starts_with("Tremor!")
+            if !state.diagnostics_contain("Tremor damaged")
                 || state
                     .party
                     .first()
@@ -5683,9 +5681,7 @@ fn validate_combat_spell_route_state(state: &PlayState, case_name: &str) -> io::
             }
         }
         "combat-repel-undead-targets" => {
-            if !state
-                .message
-                .starts_with("Repel Undead! 2 undead repelled.")
+            if !state.diagnostics_contain("Repel Undead affected 2 undead")
                 || state.combat_actors[COMBAT_PARTY_ACTOR_SLOTS].hp_or_wound != 1
                 || !state.combat_actors[COMBAT_PARTY_ACTOR_SLOTS].is_fleeing()
                 || state.combat_actors[COMBAT_PARTY_ACTOR_SLOTS + 1].hp_or_wound != 1
@@ -5712,7 +5708,7 @@ fn validate_combat_spell_route_state(state: &PlayState, case_name: &str) -> io::
             }
         }
         "combat-polymorph-target" => {
-            if !state.message.starts_with("Polymorph!")
+            if !state.message.starts_with("Success!")
                 || state.combat_actors[COMBAT_PARTY_ACTOR_SLOTS].owner_target_class
                     != COMBAT_CLASS_GIANT_RAT
             {
@@ -5722,7 +5718,7 @@ fn validate_combat_spell_route_state(state: &PlayState, case_name: &str) -> io::
             }
         }
         "combat-clone-target" => {
-            if !state.message.starts_with("Clone!")
+            if !state.message.starts_with("Success!")
                 || state.combat_actors[COMBAT_PARTY_ACTOR_SLOTS + 1].is_empty()
             {
                 return Err(io::Error::other(format!(
@@ -6131,7 +6127,7 @@ fn validate_route_smoke_case_state(
                 || state.wind_save_byte != WindState::East.save_byte()
                 || state.spell_charges[REL_HUR_SPELL_INDEX] != 0
                 || state.party.first().is_none_or(|member| member.mana != 0)
-                || state.message != "Wind change! Calm Winds -> East Winds."
+                || !state.message.is_empty()
             {
                 return Err(io::Error::other(format!(
                     "route smoke `{case_name}` did not apply the public Rel Hur wind mapping"
@@ -6324,9 +6320,7 @@ fn validate_route_smoke_case_state(
                 || state.spell_charges[spell_index] != 0
                 || state.party.first().is_none_or(|member| member.mana != 0)
                 || marker.is_none_or(|(_, placed)| placed != field)
-                || !state
-                    .message
-                    .contains(&format!("{} field placed.", field.label()))
+                || state.message.contains("Failed!")
             {
                 return Err(io::Error::other(format!(
                     "route smoke `{case_name}` did not materialize the public combat field marker"
@@ -6338,7 +6332,7 @@ fn validate_route_smoke_case_state(
                 || state.spell_charges[DISPEL_FIELD_SPELL_INDEX] != 0
                 || state.party.first().is_none_or(|member| member.mana != 0)
                 || state.find_combat_arena_field_marker(6, 5).is_some()
-                || state.message != "Dispelled Fire field."
+                || state.message != "Success!"
             {
                 return Err(io::Error::other(format!(
                     "route smoke `{case_name}` did not remove the public combat field marker"

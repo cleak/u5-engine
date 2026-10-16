@@ -5267,11 +5267,11 @@ impl PlayState {
             self.mark_visibility_dirty();
         }
         self.advance_turn();
-        self.message = if revealed == 0 {
-            "Reveal found nothing.".to_string()
-        } else {
-            format!("Revealed {revealed} combat actor(s).")
-        };
+        // `magic.md §5.1`: Wis Quas is in the "No generic completion line"
+        // row; the count is a diagnostic, not a player line.
+        self.diagnostics
+            .push(format!("Reveal uncovered {revealed} combat actor(s)."));
+        self.message.clear();
         MoveOutcome::Cast
     }
 
@@ -5349,11 +5349,11 @@ impl PlayState {
         let affected = apply_cause_fear_critical_hp_setup(&mut self.combat_actors, &accepted);
 
         self.advance_turn();
-        self.message = if affected == 0 {
-            "Cause Fear found no target.".to_string()
-        } else {
-            format!("Cause Fear affected {affected} combat actor(s).")
-        };
+        // `magic.md §5.1`: In Quas Corp is in the "No generic completion
+        // line" row; the count is a diagnostic, not a player line.
+        self.diagnostics
+            .push(format!("Cause Fear affected {affected} combat actor(s)."));
+        self.message.clear();
         MoveOutcome::Cast
     }
 

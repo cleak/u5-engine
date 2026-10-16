@@ -3512,7 +3512,7 @@
         assert_eq!(state.turn, 1);
         assert!(!state.combat_actors[7].is_phase_suppressed());
         assert!(state.visibility_dirty);
-        assert_eq!(state.message, "Revealed 1 combat actor(s).");
+        assert_eq!(state.message, "");
     }
 
     #[test]
@@ -3667,7 +3667,7 @@
             // roll's `0..=60` raw draw, and R336 makes the monster's
             // attack value flat, so a Daemon that used to miss now
             // lands on this seed.
-            "Cause Fear affected 2 combat actor(s).\nAvatar hit!\n\nAvatar, armed with bare hands:\n"
+            "\nAvatar hit!\n\nAvatar, armed with bare hands:\n"
         );
     }
 
@@ -3738,7 +3738,7 @@
             state.combat_actors[7].hp_or_wound,
             cause_fear_forced_current_hp(combat_class_stats(COMBAT_CLASS_PYTHON).unwrap().max_hp)
         );
-        assert_eq!(state.message, "Cause Fear affected 2 combat actor(s).");
+        assert_eq!(state.message, "");
     }
 
     #[test]

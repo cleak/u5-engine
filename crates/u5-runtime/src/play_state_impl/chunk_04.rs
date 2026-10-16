@@ -206,11 +206,15 @@ impl PlayState {
             .expect("inline Rel Hur parser returns cardinal directions only");
         self.apply_wind_state(next);
         self.advance_turn();
-        self.message = format!(
-            "Wind change! {} -> {}.",
+        // `magic.md §5.1`: Rel Hur is in the "No generic completion line"
+        // row, and `Wind change!` is the scroll-dispatch banner, not the
+        // spell's. The transition is a diagnostic only.
+        self.diagnostics.push(format!(
+            "Wind change: {} -> {}.",
             previous,
             self.wind_status_message()
-        );
+        ));
+        self.message.clear();
         MoveOutcome::Cast
     }
 
