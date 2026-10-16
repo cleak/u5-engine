@@ -788,6 +788,7 @@ impl PlayState {
             under_sail_wait_cursor_poll_pending: false,
             pending_town_active_object_pass: false,
             pending_town_active_object_animate_pass: false,
+            pending_world_object_walker_pass: false,
             // `formats/saved-gam.md §5.1` (spec `0170809`): the pair is
             // restored from `0x02DF`/`0x02E0` and then rewritten by the
             // scene-entry moon-strip refresh - `RETRACTIONS.md` R343: "The
@@ -1182,6 +1183,7 @@ impl PlayState {
             under_sail_wait_cursor_poll_pending: false,
             pending_town_active_object_pass: false,
             pending_town_active_object_animate_pass: false,
+            pending_world_object_walker_pass: false,
             // `formats/saved-gam.md §5.1` (spec `0170809`): the pair is
             // restored from `0x02DF`/`0x02E0` and then rewritten by the
             // scene-entry moon-strip refresh - `RETRACTIONS.md` R343: "The
@@ -1589,6 +1591,7 @@ impl PlayState {
             under_sail_wait_cursor_poll_pending: false,
             pending_town_active_object_pass: false,
             pending_town_active_object_animate_pass: false,
+            pending_world_object_walker_pass: false,
             // `formats/saved-gam.md §5.1` (spec `0170809`): the pair is
             // restored from `0x02DF`/`0x02E0` and then rewritten by the
             // scene-entry moon-strip refresh - `RETRACTIONS.md` R343: "The

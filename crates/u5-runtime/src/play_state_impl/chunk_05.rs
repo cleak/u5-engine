@@ -1023,41 +1023,26 @@ impl PlayState {
         if let Some(line) = slow_line {
             self.emit_message_line(line);
         }
+        // `overworld.md §5` steps 6e-6h, in order: the fixed narrative gate,
+        // the status pass's report, the exclusive underfoot chain (bridge
+        // ambush, swamp, lava), then the outdoor object epilogue.
+        self.apply_fixed_narrative_gate_branch(plane);
+        self.append_pending_hourly_status_message();
         // `overworld.md §7.1`: "the first arm of the per-turn underfoot
         // chain", ahead of the swamp and lava arms below.
         self.apply_troll_bridge_ambush(plane);
-        self.apply_fixed_narrative_gate_branch(plane);
         self.append_world_damage_tile_message(game_dir, plane)?;
         self.append_world_status_tile_message(plane);
-        self.append_pending_hourly_status_message();
         // `overworld.md §6.2.5`: rough seas fires on "every otherwise
         // eligible consumed action on that terrain", after the action's
         // time increment and party cleanup and ahead of the encounter
         // epilogue. An accepted step is such an action, so a skiff or carpet
         // moving onto deep water takes it here as well.
         let _ = self.apply_rough_seas_if_eligible();
-        // `active-objects.md §8`: the walker that just ran inside
-        // `advance_turn` *queues* its adjacency reactions - whirlpool
-        // engagement, sea-serpent breath, the pirate broadside, a creature
-        // reaching the party - and leaves the I/O-bearing half to the
-        // post-turn handler. That handler is the shared epilogue the movement
-        // branch skips, so on a step the queue was filled and then dropped by
-        // the next walker pass: outdoor creatures never acted on the party
-        // while it walked or sailed. They acted only if the *party* stepped
-        // into them, which `step_world` handles above.
-        //
-        // A reaction that changes mode owns the outcome, exactly as the
-        // epilogue's own arm does.
-        if let Some(game_dir) = game_dir
-            && self.world_object_epilogue_runs_for_turn(self.turn)
-            && let Some(outcome) = self.apply_pending_outdoor_reactions(game_dir, plane)?
-            && (outcome.is_transition() || self.combat_active)
-        {
-            return Ok(outcome);
-        }
         // `encounters.md §2.1`: "**Every turn** the overworld mode loop runs
         // its per-turn block ... and that block contains an *encounter
-        // probe*." An accepted step is such a turn.
+        // probe*." An accepted step is such a turn, and `overworld.md §5`
+        // step 6h rolls it before the creature walk.
         //
         // The probe used to run only from the shared post-turn epilogue,
         // which the movement branch deliberately skips for world moves - the
@@ -1068,10 +1053,6 @@ impl PlayState {
         // threshold of four against a `1..=30` draw predicts about one turn
         // in ten, while calling the probe directly from the same state
         // spawned 23 times in 300 calls (`cleak/u5-engine#17`).
-        //
-        // The walkers themselves are not affected: they run inside
-        // `advance_turn`, which this function has already called, and the
-        // same flag that gates them gates this.
         if let Some(game_dir) = game_dir
             && self.world_object_epilogue_runs_for_turn(self.turn)
             && let Some(slot) = self.apply_world_encounter_probe(game_dir, plane)?
@@ -1081,8 +1062,27 @@ impl PlayState {
             // the player and visible only to the harness.
             self.push_diagnostic(format!("Wandering encounter spawned in slot {slot}."));
         }
+        // `overworld.md §5` step 6h: animate/move/prune, owed by the clock
+        // routine's cadence decision.
+        self.apply_pending_world_object_walker_pass();
+        // `active-objects.md §8`: the walker *queues* its adjacency
+        // reactions - whirlpool engagement, sea-serpent breath, the pirate
+        // broadside, a creature reaching the party - and leaves the
+        // I/O-bearing half to the post-turn handler. That handler is the
+        // shared epilogue the movement branch skips, so they resolve here.
+        //
+        // A reaction that changes mode owns the outcome, exactly as the
+        // epilogue's own arm does.
+        if let Some(game_dir) = game_dir
+            && self.world_object_epilogue_runs_for_turn(self.turn)
+            && let Some(outcome) = self.apply_pending_outdoor_reactions(game_dir, plane)?
+            && (outcome.is_transition() || self.combat_active)
+        {
+            return Ok(outcome);
+        }
         Ok(MoveOutcome::Moved)
     }
+
     /// `movement.md §8.1`: the extra outdoor object-update calls of a
     /// difficult-terrain step. Each call takes the ordinary cadence gates
     /// ("They share the same stored parities"), and a reached call runs the
@@ -1105,22 +1105,25 @@ impl PlayState {
             if self.time_stop_counter == 0 && !self.combat_active {
                 let gate = self.overworld_walker_effect_gates();
                 if gate.walkers_run() {
+                    // `overworld.md §5` step 6h: encounter roll, then the
+                    // creature walk and its engagements.
+                    if let Some(game_dir) = game_dir
+                        && let Some(slot) = self.apply_world_encounter_probe(game_dir, plane)?
+                    {
+                        self.push_diagnostic(format!(
+                            "Wandering encounter spawned in slot {slot}."
+                        ));
+                    }
                     self.advance_active_object_walkers();
                     if !self.pending_outdoor_reaction_slots.is_empty() {
                         hostile = true;
                     }
-                    if let Some(game_dir) = game_dir {
-                        if let Some(outcome) =
+                    if let Some(game_dir) = game_dir
+                        && let Some(outcome) =
                             self.apply_pending_outdoor_reactions(game_dir, plane)?
-                            && (outcome.is_transition() || self.combat_active)
-                        {
-                            return Ok(Err(outcome));
-                        }
-                        if let Some(slot) = self.apply_world_encounter_probe(game_dir, plane)? {
-                            self.push_diagnostic(format!(
-                                "Wandering encounter spawned in slot {slot}."
-                            ));
-                        }
+                        && (outcome.is_transition() || self.combat_active)
+                    {
+                        return Ok(Err(outcome));
                     }
                 }
             }

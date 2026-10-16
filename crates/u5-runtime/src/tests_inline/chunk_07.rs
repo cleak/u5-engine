@@ -2568,12 +2568,14 @@ fn world_encounter_sidecar_spawns_one_actor_after_consumed_overworld_turn() {
 
     assert_eq!(state.turn, 1);
     assert_eq!(state.active_objects.len(), 2);
+    // `overworld.md §5` step 6h rolls the encounter before the creature walk,
+    // so the actor spawned two cells east has already stepped once west.
     assert_eq!(
         state.active_objects[1],
         ActiveObject {
             type_byte: 192,
             tile: 192,
-            x: 12,
+            x: 11,
             y: 10,
             z: WorldPlane::Britannia.save_floor(),
             phase: active_object_phase_from_direction(Direction::West, 0),

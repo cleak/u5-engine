@@ -1606,6 +1606,8 @@ impl PlayState {
         } else {
             self.advance_turn();
         }
+        // A sailing wait pass runs its own outdoor epilogue (`weather.md §5`).
+        self.apply_pending_world_object_walker_pass();
     }
 
     pub fn use_magic_carpet(&mut self) -> MoveOutcome {

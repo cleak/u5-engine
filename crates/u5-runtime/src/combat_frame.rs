@@ -4457,6 +4457,7 @@ impl PlayState {
         // `§5.3` attaches no condition to it, so every way the round loop
         // ends reaches it.
         self.advance_turn();
+        self.apply_pending_world_object_walker_pass();
         CombatRoundLoopExitApplication {
             exit,
             result_code,

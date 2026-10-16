@@ -2967,6 +2967,7 @@ impl PlayState {
     /// pass. Ring regeneration is invoked once for this five-minute camp step.
     pub fn advance_wilderness_camp_tick(&mut self, minutes: u8) {
         self.advance_turn_with_minutes_policy(minutes, true, true, false, true);
+        self.apply_pending_world_object_walker_pass();
         self.apply_hourly_ring_regeneration_tick();
     }
 
@@ -3085,6 +3086,8 @@ impl PlayState {
             self.apply_hourly_status_provision_pass();
         }
         self.apply_pending_town_object_epilogue();
+        // Same safety net for the outdoor epilogue's deferred walker.
+        self.apply_pending_world_object_walker_pass();
         let negate_time_active = self.negate_time_active();
         let effective_minutes = if negate_time_active {
             0
@@ -3237,6 +3240,13 @@ impl PlayState {
                 if deferred_town_tail {
                     self.pending_town_npc_schedule_pass = true;
                     self.pending_town_active_object_pass = advance_active_objects;
+                } else if matches!(self.area, Area::World { .. }) {
+                    // `overworld.md §5` step 6h: the creature walker belongs
+                    // to the outdoor object epilogue, after the narrative
+                    // gate, status pass, underfoot chain and encounter roll.
+                    // The gate decision above is this turn's; the walk is
+                    // owed to that epilogue.
+                    self.pending_world_object_walker_pass = advance_active_objects;
                 } else {
                     // `town-mode.md §7` step 4 (R328): "the walker runs
                     // between the slot-zero coordinate copy and the schedule
@@ -4348,6 +4358,18 @@ impl PlayState {
     /// outdoor creature walker. The town animator is in neither list, so the
     /// per-turn epilogue calls this rather than the bundled entry point and
     /// runs the animator outside the gate.
+    /// Run the outdoor walker owed by the last consumed world turn
+    /// (`overworld.md §5` step 6h). A turn whose epilogue never ran - a
+    /// mode change, or a low-level caller - drops it outside the overworld.
+    pub fn apply_pending_world_object_walker_pass(&mut self) {
+        if std::mem::take(&mut self.pending_world_object_walker_pass)
+            && matches!(self.area, Area::World { .. })
+            && !self.combat_active
+        {
+            self.advance_active_object_walkers();
+        }
+    }
+
     pub fn advance_active_object_walkers(&mut self) {
         match self.area {
             Area::Dungeon { .. } => return,

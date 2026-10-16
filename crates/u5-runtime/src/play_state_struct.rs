@@ -153,6 +153,12 @@ pub struct PlayState {
     /// render frame" wording; §12 also answers issue #189 that the cadence is
     /// **descriptive**). Never serialized.
     pub pending_town_active_object_animate_pass: bool,
+    /// `overworld.md §5` step 6h: the outdoor object epilogue (encounter
+    /// roll, then animate/move/prune) runs after the narrative gate, the
+    /// status pass and the underfoot chain. The clock routine takes the
+    /// cadence-gate decision; this flag carries the walker it owes to that
+    /// epilogue. Never serialized.
+    pub pending_world_object_walker_pass: bool,
     /// `npc-schedules.md §5` gate 1 / `encounters.md §2.1` gate 3: "While
     /// the party's transport marker is one of the four values `0x12..0x15`,
     /// a stored parity bit flips each turn and the loop skips **both** town
