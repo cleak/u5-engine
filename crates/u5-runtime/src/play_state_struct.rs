@@ -317,6 +317,11 @@ pub struct PlayState {
     /// `combat.md §6.3`: global combat action-result/narration scratch.
     /// It is reset before actor dispatch and has no resumable combat lifetime.
     pub combat_action_result: u8,
+    /// `combat.md §11.1`: the target slot whose flee classifier (and its
+    /// `§9` morale draw) the single direction-keyed swing already ran at hit
+    /// time, ahead of the committed-action tail. The result narrator consumes
+    /// it instead of classifying the same hit a second time.
+    pub combat_wound_classified_at_hit: Option<usize>,
     /// `magic.md §7`: save-backed per-victim source slots used by the C-Cast
     /// interference gate. This state intentionally survives combat boundaries.
     pub combat_interference_sources: [u8; COMBAT_ACTOR_SLOTS],

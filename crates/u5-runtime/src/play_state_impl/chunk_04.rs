@@ -4362,7 +4362,7 @@ impl PlayState {
             self.message = "Funny, no response!".to_string();
             return Ok(MoveOutcome::Blocked);
         };
-        if self.talk_liveness_blocked() {
+        if self.talk_entry_gates_apply() && self.talk_liveness_blocked() {
             return Ok(self.consume_ordinary_town_talk());
         }
         if let Some((dialog_id, target_x, target_y)) = self.talk_target_in_direction(direction)
@@ -4371,8 +4371,9 @@ impl PlayState {
                 TOWN_NPC_COWERING_DIALOG_ID | TOWN_NPC_BRUSHOFF_DIALOG_ID
             )
         {
-            if let Some(refusal) =
-                talk_status_tile_refusal(self.talk_status_tile_at(target_x, target_y))
+            if self.talk_entry_gates_apply()
+                && let Some(refusal) =
+                    talk_status_tile_refusal(self.talk_status_tile_at(target_x, target_y))
             {
                 self.message = format!("\n{refusal}");
                 return Ok(self.consume_ordinary_town_talk());
@@ -4750,7 +4751,7 @@ impl PlayState {
             self.message = "Funny, no response!".to_string();
             return MoveOutcome::Blocked;
         }
-        if self.talk_liveness_blocked() {
+        if self.talk_entry_gates_apply() && self.talk_liveness_blocked() {
             return self.consume_ordinary_town_talk();
         }
 
@@ -4764,8 +4765,9 @@ impl PlayState {
 
         // `conversation.md §2` step 4: the status-tile gate reads the live map
         // tile at the resolved cell, the same query movement and Look use.
-        if let Some(refusal) =
-            talk_status_tile_refusal(self.talk_status_tile_at(target_x, target_y))
+        if self.talk_entry_gates_apply()
+            && let Some(refusal) =
+                talk_status_tile_refusal(self.talk_status_tile_at(target_x, target_y))
         {
             self.message = format!("\n{refusal}");
             return self.consume_ordinary_town_talk();
@@ -4963,7 +4965,12 @@ impl PlayState {
             ask_who_response: 0,
             yield_on_pause: false,
             yield_on_ask: false,
-            mark_holds: false,
+            // `conversation.md §7.3` (R520): "Every response stream ... goes
+            // through the same byte runner, so both codes behave identically
+            // on every path." This legacy keyword-carrying path marks its
+            // `0x83`/`0x8F` holds like the session does, and the reply is
+            // printed through the hold-aware emitter below.
+            mark_holds: true,
         };
 
         // Resolve which field(s) to run through the byte runner.
@@ -5029,7 +5036,13 @@ impl PlayState {
             // prints it that way, and the original never names the speaker
             // on the reply row.
             let _ = name;
-            self.message = legacy_text;
+            if crate::text_hold::text_has_hold_markers(&legacy_text) {
+                // The first page prints now; each later page waits behind
+                // its pause or wait-key (`PlayState::emit_tlk_message`).
+                self.emit_tlk_message(crate::tlk_runner::TlkRenderedText::plain(legacy_text));
+            } else {
+                self.message = legacy_text;
+            }
         } else {
             let greeting_text = if let Some(output) = run_field(2) {
                 applied_grants.extend(output.action_grants.iter().copied());
@@ -5283,79 +5296,6 @@ impl PlayState {
         }
         let slot = self.talk_branch_flags.entry(scene.byte).or_insert(0);
         *slot |= mask;
-    }
-
-    /// Render the raw TLK Description entry for a conversation opening
-    /// and apply any byte-runner side effects it emits. The normal
-    /// keyword session owns the Greeting and later responses; the
-    /// Description preamble runs once before the session is installed.
-    pub fn render_raw_conversation_description(
-        &mut self,
-        raw_fields: &[Vec<u8>],
-        decoded_fields: &[String],
-    ) -> String {
-        let fallback = decoded_fields
-            .get(1)
-            .filter(|description| !description.is_empty())
-            .map(String::as_str)
-            .unwrap_or("no description");
-        let Some(bytes) = raw_fields.get(1) else {
-            return fallback.to_string();
-        };
-
-        let avatar_name = self
-            .party_names
-            .first()
-            .map(|name| {
-                let trimmed: Vec<u8> = name.iter().take_while(|b| **b != 0).copied().collect();
-                String::from_utf8_lossy(&trimmed).into_owned()
-            })
-            .unwrap_or_else(|| "Avatar".to_string());
-        let branch_flags = match self.area {
-            Area::Town { scene, .. } => self.talk_branch_slot_for_scene(scene),
-            _ => 0,
-        };
-        let dictionary_owned = self.common_word_dictionary.clone();
-        let dictionary_refs = common_word_dictionary_refs_or_published(dictionary_owned.as_ref());
-        let inputs = crate::tlk_runner::TlkRunInputs {
-            avatar_name: &avatar_name,
-            branch_flags,
-            moral_standing: self.moral_standing,
-            dictionary: Some(&dictionary_refs),
-            curse_seen: false,
-            gold_available: Some(self.gold),
-            npc_slot: self.active_conversation_npc_slot.map(|slot| slot as u8),
-            ask_who_response: 0,
-            yield_on_pause: false,
-            yield_on_ask: false,
-            mark_holds: false,
-        };
-        let output = crate::tlk_runner::run_tlk_stream(bytes, &inputs);
-        self.apply_tlk_action_grants(&output.action_grants);
-        let gold_payments: Vec<_> = output
-            .events
-            .iter()
-            .filter_map(|event| match event {
-                crate::tlk_runner::TlkRunEvent::GoldPayment { amount, accepted } => {
-                    Some(crate::conversation_session::ConversationGoldPayment {
-                        amount: *amount,
-                        accepted: *accepted,
-                    })
-                }
-                _ => None,
-            })
-            .collect();
-        self.apply_tlk_gold_payments(&gold_payments);
-        self.apply_tlk_moral_standing(output.moral_standing);
-        self.record_tlk_signal_flags(&output.signal_flags);
-        if let Area::Town { scene, .. } = self.area {
-            self.merge_talk_branch_flags(scene, output.branch_flags_set);
-        }
-        if output.text.is_empty() {
-            fallback.to_string()
-        } else {
-            output.text
-        }
     }
 
     /// Open a multi-turn conversation session for the facing NPC.
@@ -6239,6 +6179,17 @@ impl PlayState {
                 Some(self.open_town_arrest(active.arrest, game_dir).ok()?)
             }
         }
+    }
+
+    /// `conversation.md §2` step 5: "The dispatcher in step 5 is also called
+    /// by the NPC's automatic conversation-contact event, without steps 1–4."
+    /// Contact therefore takes neither the step-1 liveness gate nor the
+    /// step-4 mirror/bed status-tile gate. The step-3 lookup is kept only as
+    /// this engine's way of resolving the contacting NPC: the producer is
+    /// orthogonally adjacent by construction (`npc-schedules.md §9.2`) and the
+    /// direction is derived from it, so the lookup lands on that NPC.
+    pub(crate) fn talk_entry_gates_apply(&self) -> bool {
+        !self.talk_entered_by_contact
     }
 
     pub fn talk_liveness_blocked(&self) -> bool {

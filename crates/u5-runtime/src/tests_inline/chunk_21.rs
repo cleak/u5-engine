@@ -5787,6 +5787,86 @@ fn active_shop_surcharge_suppresses_without_zero_shadowlord_sentinel() {
     assert!(!state.message.contains("Surcharge"));
 }
 
+/// `conversation.md §7.3` (R520): "Every response stream ... goes through the
+/// same byte runner, so both codes behave identically on every path" - `0x83`
+/// is a timed, key-ended pause and `0x8F` a one-key wait, and neither ever
+/// stops a response. The legacy keyword-carrying raw path ran the runner
+/// with no hold markers, so a pause vanished and the whole reply printed at
+/// once (audit A071 follow-up).
+#[test]
+fn legacy_raw_keyword_reply_holds_at_pause_and_wait_key() {
+    let enc = |text: &str| -> Vec<u8> {
+        text.bytes()
+            .map(|byte| byte ^ TLK_TEXT_XOR_MASK)
+            .collect()
+    };
+    let mut job = enc("First");
+    job.push(crate::tlk_control_codes::TLK_CODE_PAUSE);
+    job.extend(enc("Second"));
+    job.push(crate::tlk_control_codes::TLK_CODE_WAIT_KEY);
+    job.extend(enc("Third"));
+    job.push(crate::tlk_control_codes::TLK_CODE_END_OF_RESPONSE);
+    let fields: Vec<String> = ["Bob", "a man", "Hi", "FirstSecondThird", "Bye"]
+        .iter()
+        .map(|field| field.to_string())
+        .collect();
+    let raw_fields: Vec<Vec<u8>> = vec![
+        enc("Bob"),
+        enc("a man"),
+        enc("Hi"),
+        job,
+        enc("Bye"),
+    ];
+    let dialogue = HashMap::from([(5u16, fields)]);
+    let raw = HashMap::from([(5u16, raw_fields)]);
+
+    let mut state = test_state(open_grid(), 1, 1);
+    state.player.facing = Direction::East;
+    state.load_scheduled_npcs(&[
+        NpcSlot {
+            slot: 0,
+            type_byte: 0,
+            dialog_id: 0,
+            schedule: [0; 16],
+            name: None,
+        },
+        NpcSlot {
+            slot: 1,
+            type_byte: 0x54,
+            dialog_id: 5,
+            schedule: [0, 0, 0, 2, 2, 2, 1, 1, 1, 0, 0, 0, 0, 8, 16, 20],
+            name: None,
+        },
+    ]);
+
+    assert_eq!(
+        state.talk_direction_with_dialogue_and_keyword_raw(
+            Direction::East,
+            &dialogue,
+            &raw,
+            Some("JOB"),
+        ),
+        MoveOutcome::Talked
+    );
+    let shown = transcript_texts(&state).join("\n");
+    assert!(
+        shown.contains("First") || state.message.contains("First"),
+        "{shown:?} / {:?}",
+        state.message
+    );
+    assert!(
+        !shown.contains("Second") && !state.message.contains("Second"),
+        "the pause holds the rest of the reply: {shown:?} / {:?}",
+        state.message
+    );
+    assert!(
+        !crate::text_hold::text_has_hold_markers(&state.message)
+            && !crate::text_hold::text_has_hold_markers(&shown),
+        "markers never print"
+    );
+    assert!(state.pending_text_hold.is_some());
+}
+
 #[test]
 fn talk_display_marker_tile_does_not_preempt_real_shop() {
     use crate::shop_session::ActiveShopSession;
@@ -6782,6 +6862,42 @@ fn end_to_end_shipwright_pending_frigate_dock_space_always_refuses() {
         state.return_world.as_ref().and_then(|world| world.pending_vehicle),
         Some(pending)
     );
+}
+
+/// `shops.md §8.C` "Shipwrights": "Record `119` is the F/S menu. F and S
+/// echo with `\n\n`". The letter lands on the menu's open prompt row, that
+/// row is closed and one blank row follows before the offer record.
+#[test]
+fn shipwright_menu_letter_echo_is_followed_by_a_blank_row() {
+    use crate::shop_runtime::ShipBrokerState;
+    use crate::shop_session::ActiveShopSession;
+
+    for letter in ['F', 'S'] {
+        let mut state = test_state(open_grid(), 3, 4);
+        state.gold = 50;
+        state.active_shop = Some(ActiveShopSession::ShipBroker(
+            ShipBrokerState::menu_for_shipwright(Shipwright::TheRustyBucket),
+        ));
+        state.return_world = None;
+        // Record `119` ends on its own prompt with the cursor mid-row.
+        state.emit_message_line_continuing_row("like to see?\" ");
+        state.open_message_row();
+
+        handle_play_key_input(&mut state, letter, "", Path::new("")).unwrap();
+        let rows: Vec<(String, bool)> = state
+            .message_transcript
+            .iter()
+            .map(|entry| (entry.text.clone(), entry.explicit_blank))
+            .collect();
+        let echo = rows
+            .iter()
+            .position(|(text, _)| text == &format!("like to see?\" {letter}"))
+            .unwrap_or_else(|| panic!("{letter} must echo onto the menu row: {rows:?}"));
+        assert!(
+            rows.get(echo + 1).is_some_and(|(text, blank)| *blank && text.is_empty()),
+            "{letter}'s `\\n\\n` echo leaves one blank row under it: {rows:?}"
+        );
+    }
 }
 
 /// `animation.md §6` (spec HEAD `c00bf63`): "These are render

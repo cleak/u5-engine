@@ -1469,7 +1469,10 @@ fn y_yell_shadowlord_name_spawns_in_any_eternal_flame_keep() {
     );
 
     assert_eq!(town.turn, 1);
-    assert!(town.message.contains("Falsehood appears"));
+    // `commands.md` §11 publishes no appearance text, so the summon is
+    // visible as the installed actor below, not as an engine sentence.
+    assert!(!town.message.contains("appears"), "{:?}", town.message);
+    assert_eq!(town.summoned_shadowlord, Some(SHADOWLORD_FALSEHOOD_INDEX));
     assert_eq!(town.active_objects.len(), OOL_SLOTS);
     assert_eq!(
         town.active_objects[OOL_SLOTS - 1],
@@ -1580,6 +1583,35 @@ fn shadowlord_name_allocation_detaches_an_empty_descriptor_from_stale_npc_owners
     assert!(PlayState::is_shadowlord_actor(
         town.active_objects[acquired_slot]
     ));
+}
+
+/// `commands.md` §11: a matched Shadowlord name "installs the Shadowlord as
+/// an active object exactly two cells north of the party ... and plays the
+/// appearance line together with the long warble and the fade-in effect".
+/// The spec publishes no text naming the word, the Shadowlord or the
+/// active-object slot, so the summon must not print one (audit F9).
+#[test]
+fn shadowlord_name_summon_prints_no_invented_slot_diagnostic() {
+    let mut town = test_state(open_grid(), 5, 5);
+    town.area = Area::Town {
+        scene: Scene::new(SCENE_THE_LYCAEUM).unwrap(),
+        floor: 0,
+    };
+    town.shadowlord_hideouts[SHADOWLORD_FALSEHOOD_INDEX] = 4;
+    town.active_objects.resize(OOL_SLOTS, ActiveObject::empty());
+
+    assert_eq!(town.yell_command(Some("faulinei")), MoveOutcome::Used);
+    assert_eq!(town.summoned_shadowlord, Some(SHADOWLORD_FALSEHOOD_INDEX));
+    assert!(
+        !town.message.contains("slot") && !town.message.contains("appears"),
+        "the summon printed an unpublished diagnostic: {:?}",
+        town.message
+    );
+    assert!(
+        !town.message.contains("No effect"),
+        "a successful summon is not the no-effect result: {:?}",
+        town.message
+    );
 }
 
 #[test]

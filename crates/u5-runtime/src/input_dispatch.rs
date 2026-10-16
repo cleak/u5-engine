@@ -2207,7 +2207,13 @@ fn handle_active_shop_key_input(
                 _ => None,
             };
             if let Some(letter) = shipwright_letter_echo {
+                // `§8.C` "Shipwrights": "F and S echo with `\n\n`" - the
+                // letter closes the menu's open prompt row and one blank row
+                // follows. The blank leaves the cursor at column 0, so the
+                // row state is set explicitly rather than inferred.
                 state.emit_message_line_continuing_row(letter.to_string());
+                state.push_explicit_blank_message_entry();
+                state.close_message_row();
             }
             // `§8.C` "Shipwrights": the ordinary offer's answer echoes `No` or
             // `Yes\n\n`; the dock-space and continuation answers echo a bare
@@ -6240,8 +6246,14 @@ pub(crate) fn combat_landed_damage_result_line(
             // score of 2 on the morale draw described in Section 9 - also
             // raises the target's fleeing bit as a side effect of narrating
             // the hit": the classifier runs here, morale draw included.
+            //
+            // The single direction-keyed swing runs it at hit time, ahead of
+            // the committed-action tail, and leaves a marker so this later
+            // transcript assembly does not take the morale draw twice.
             let max_hp = combat_class_stats(damage.class)?.max_hp;
-            let _ = state.apply_combat_wound_score_classifier(target_slot);
+            if state.combat_wound_classified_at_hit.take() != Some(target_slot) {
+                let _ = state.apply_combat_wound_score_classifier(target_slot);
+            }
             let actor = state.combat_actors.get(target_slot)?;
             let wound_line = combat_monster_wound_line_grade(actor.hp_or_wound, max_hp);
             Some(format!("{class_name} {wound_line}!"))

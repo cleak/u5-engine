@@ -399,6 +399,24 @@ impl PlayState {
         handled
     }
 
+    /// `commands.md §3`/§7: the inline-direction `G`/`J`/`O`/`S` forms report
+    /// "acted" on every exit, exactly as their prompted forms do through
+    /// [`Self::charge_tile_command_acted_exit`].
+    ///
+    /// The verb echo is committed first. The charge advances the clock, and
+    /// the per-turn work behind it flushes the message slot as a line of its
+    /// own; with the echo still pending, that flush printed the handler's
+    /// result (`Nothing to open!`) on a row under `Open-` instead of folding
+    /// it onto the echoed verb row the way [`Self::commit_command_echo`]
+    /// does. Committing first keeps the result on the verb row, and the
+    /// caller's own later commit then finds nothing pending.
+    fn charge_inline_tile_command_acted_exit(&mut self, turn_before: u64) {
+        if self.turn == turn_before {
+            self.commit_command_echo();
+        }
+        self.charge_tile_command_acted_exit(turn_before);
+    }
+
     fn handle_top_down_key_with_inline_inner(
         &mut self,
         key: char,
@@ -465,7 +483,9 @@ impl PlayState {
                 }
                 'G' => {
                     if let Some(direction) = inline_direction {
-                        handled!(self.get_direction_with_game_dir(direction, game_dir)?);
+                        let outcome = self.get_direction_with_game_dir(direction, game_dir)?;
+                        self.charge_inline_tile_command_acted_exit(turn_before);
+                        handled!(outcome);
                     } else if matches!(self.area, Area::Dungeon { .. }) {
                         handled!(self.get_facing_with_game_dir(game_dir)?);
                     } else {
@@ -480,11 +500,13 @@ impl PlayState {
                 }
                 'J' => {
                     if let Some(direction) = inline_direction {
-                        handled!(self.jimmy_direction_with_game_dir_and_member(
+                        let outcome = self.jimmy_direction_with_game_dir_and_member(
                             direction,
                             Some(game_dir),
                             None,
-                        )?);
+                        )?;
+                        self.charge_inline_tile_command_acted_exit(turn_before);
+                        handled!(outcome);
                     } else {
                         handled!(self.start_jimmy_direction_prompt());
                     }
@@ -521,7 +543,9 @@ impl PlayState {
                 }
                 'O' => {
                     if let Some(direction) = inline_direction {
-                        handled!(self.open_direction_with_game_dir(direction, Some(game_dir))?);
+                        let outcome = self.open_direction_with_game_dir(direction, Some(game_dir))?;
+                        self.charge_inline_tile_command_acted_exit(turn_before);
+                        handled!(outcome);
                     } else {
                         handled!(self.start_open_direction_prompt());
                     }
@@ -547,7 +571,9 @@ impl PlayState {
                 }
                 'S' => {
                     if let Some(direction) = inline_direction {
-                        handled!(self.search_direction_with_game_dir(direction, game_dir)?);
+                        let outcome = self.search_direction_with_game_dir(direction, game_dir)?;
+                        self.charge_inline_tile_command_acted_exit(turn_before);
+                        handled!(outcome);
                     } else if matches!(self.area, Area::Dungeon { .. }) {
                         handled!(self.search_facing_with_game_dir(game_dir)?);
                     } else {
@@ -2650,6 +2676,9 @@ impl PlayState {
         // moral-standing selector, clamped at ninety-nine.
         let _ = self.add_moral_standing(digit);
         self.push_runic_message_entry("ALAKAZAM");
+        // The runic word leaves its row open for the normal-font `!`; the
+        // row state is stated here because the push above does not set it.
+        self.open_message_row();
         self.emit_message_line_continuing_row("!\n");
         self.adopt_flushed_message("ALAKAZAM!");
         // `karma.md §7.2` names §12's "local viewport/sound effect" on this

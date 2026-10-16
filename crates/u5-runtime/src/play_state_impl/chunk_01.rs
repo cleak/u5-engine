@@ -888,6 +888,7 @@ impl PlayState {
             active_player: options.active_player,
             combat_round_counter: options.combat_round_counter,
             combat_action_result: 0,
+            combat_wound_classified_at_hit: None,
             combat_interference_sources: options.combat_interference_sources,
             combat_active: false,
             pace_combat_presentations: false,
@@ -1294,6 +1295,7 @@ impl PlayState {
             active_player: options.active_player,
             combat_round_counter: options.combat_round_counter,
             combat_action_result: 0,
+            combat_wound_classified_at_hit: None,
             combat_interference_sources: options.combat_interference_sources,
             combat_active: false,
             pace_combat_presentations: false,
@@ -1711,6 +1713,7 @@ impl PlayState {
             active_player: options.active_player,
             combat_round_counter: options.combat_round_counter,
             combat_action_result: 0,
+            combat_wound_classified_at_hit: None,
             combat_interference_sources: options.combat_interference_sources,
             combat_active: false,
             pace_combat_presentations: false,
@@ -2191,10 +2194,9 @@ impl PlayState {
         entry: TownTrapDoorEntry,
         advance_turn: bool,
     ) -> io::Result<MoveOutcome> {
-        self.message = "A TRAPDOOR!".to_string();
         // The line closes its own row; see the Stonegate arm of
         // `apply_town_underfoot_effects`, where this was measured.
-        self.close_message_row();
+        self.emit_town_underfoot_line(Self::TOWN_TRAPDOOR_MESSAGE);
         self.reload_town_floor(game_dir, scene, entry.to_floor)?;
         if advance_turn {
             self.advance_turn();
