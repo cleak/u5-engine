@@ -724,19 +724,15 @@ pub const fn npc_schedule_hour_at_boundary(time: [u8; 4], hour: u8) -> bool {
 }
 
 pub const fn npc_schedule_waypoint_for_hour(time: [u8; 4], hour: u8) -> u8 {
-    // Map (boundary -> waypoint) per the spec table.
+    // `formats/npc.md §5.1`: the boundary "whose unsigned eight-bit
+    // subtraction `current_hour - time[i]` is smallest", mapped through the
+    // segment table (the wraparound boundary time[3] selects waypoint 1).
     let waypoints: [u8; 4] = [0, 1, 2, 1];
-    // Score each segment's start by how recently it occurred (mod 24).
-    // Prefer the segment whose start has the smallest "hour - start"
-    // remainder. The wraparound boundary (time[3]) maps to waypoint 1,
-    // matching the night band that returns the NPC to the home/sleep
-    // waypoint until the next morning.
     let mut best_idx: usize = 0;
-    let mut best_recency: u8 = 24;
-    let mut i: usize = 0;
+    let mut best_recency: u8 = hour.wrapping_sub(time[0]);
+    let mut i: usize = 1;
     while i < 4 {
-        let start = time[i] % 24;
-        let recency = (hour + 24 - start) % 24;
+        let recency = hour.wrapping_sub(time[i]);
         if recency < best_recency {
             best_recency = recency;
             best_idx = i;

@@ -1746,18 +1746,15 @@ pub fn render_class_byte(tile: u8) -> u8 {
     }
 }
 
+/// `formats/npc.md §5.1`: "The four boundary values are not required to be
+/// sorted ascending. The engine computes the active waypoint by picking the
+/// boundary whose unsigned eight-bit subtraction `current_hour - time[i]` is
+/// smallest", mapped through the segment table `[0, 1, 2, 1]`. Equal
+/// boundaries (an unpublished tie) resolve to the lowest index.
 pub fn waypoint_for_hour(schedule: &[u8; NPC_SCHEDULE_RECORD_LEN], hour: u8) -> usize {
-    let t0 = schedule[NPC_SCHEDULE_TIME_OFFSET];
-    let t1 = schedule[NPC_SCHEDULE_TIME_OFFSET + 1];
-    let t2 = schedule[NPC_SCHEDULE_TIME_OFFSET + 2];
-    let t3 = schedule[NPC_SCHEDULE_TIME_OFFSET + 3];
-    if in_wrapping_range(hour, t0, t1) {
-        0
-    } else if in_wrapping_range(hour, t2, t3) {
-        2
-    } else {
-        1
-    }
+    let mut time = [0u8; 4];
+    time.copy_from_slice(&schedule[NPC_SCHEDULE_TIME_OFFSET..NPC_SCHEDULE_TIME_OFFSET + 4]);
+    npc_schedule_waypoint_for_hour(time, hour) as usize
 }
 
 pub fn in_wrapping_range(hour: u8, start: u8, end: u8) -> bool {
