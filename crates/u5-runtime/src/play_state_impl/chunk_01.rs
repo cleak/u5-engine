@@ -891,6 +891,7 @@ impl PlayState {
             combat_prompt_row_opened_by_banner: false,
             view_overlay_row_opened_by_result: false,
             surface_command_row_follows_history: false,
+            overworld_prompt_pair_suppressed: false,
             staged_narration: Default::default(),
             pending_blackthorn_rescue: None,
             pending_blackthorn_audience_exit: false,
@@ -1285,6 +1286,7 @@ impl PlayState {
             combat_prompt_row_opened_by_banner: false,
             view_overlay_row_opened_by_result: false,
             surface_command_row_follows_history: false,
+            overworld_prompt_pair_suppressed: false,
             staged_narration: Default::default(),
             pending_blackthorn_rescue: None,
             pending_blackthorn_audience_exit: false,
@@ -1692,6 +1694,7 @@ impl PlayState {
             combat_prompt_row_opened_by_banner: false,
             view_overlay_row_opened_by_result: false,
             surface_command_row_follows_history: false,
+            overworld_prompt_pair_suppressed: false,
             staged_narration: Default::default(),
             pending_blackthorn_rescue: None,
             pending_blackthorn_audience_exit: false,
@@ -1838,6 +1841,9 @@ impl PlayState {
         if !direction.is_cardinal() && !matches!(self.area, Area::Dungeon { .. }) {
             return Ok(MoveOutcome::Blocked);
         }
+        // `text-output.md §10.2`: any direction taken aboard a ship, keyed or
+        // synthesised, turning or repeating, clears the overworld prompt flag.
+        self.note_overworld_direction_taken();
         self.player.facing = direction;
         let previous_avatar_tile = self.player.transport.avatar_tile();
         self.player.transport = self.player.transport.with_facing(direction);

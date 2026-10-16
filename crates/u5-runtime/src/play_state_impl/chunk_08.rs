@@ -2283,6 +2283,7 @@ impl PlayState {
         // outdoor-mode entry pass clears the cache in its opening block, so
         // no cached heading survives a scene change into the overworld."
         self.clear_sail_cache_on_outdoor_mode_entry();
+        self.arm_overworld_prompt_pair_on_entry();
         self.mode_zero_cleanup();
         self.mark_visibility_dirty();
         true
@@ -2361,6 +2362,7 @@ impl PlayState {
         // outdoor-mode entry pass clears the cache in its opening block, so
         // no cached heading survives a scene change into the overworld."
         self.clear_sail_cache_on_outdoor_mode_entry();
+        self.arm_overworld_prompt_pair_on_entry();
         self.mode_zero_cleanup();
         self.mark_visibility_dirty();
         Ok(())
@@ -2426,6 +2428,7 @@ impl PlayState {
         // outdoor-mode entry pass clears the cache in its opening block, so
         // no cached heading survives a scene change into the overworld."
         self.clear_sail_cache_on_outdoor_mode_entry();
+        self.arm_overworld_prompt_pair_on_entry();
         self.mode_zero_cleanup();
         self.mark_visibility_dirty();
         Ok(())

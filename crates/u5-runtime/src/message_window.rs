@@ -495,10 +495,18 @@ pub fn message_log_from_entries<'a>(
             // the row the turn banner's trailing line feed opened, so the
             // echo written there takes no second line feed and none of
             // §10.4's derived blank.
-            if !entry.continues_open_row {
-                log.end_turn();
+            if entry.prompt_pair_suppressed {
+                // `text-output.md §10.2`'s overworld gate: after a direction
+                // taken aboard a ship the next prompt emits neither the line
+                // feed nor the end-cap, so the echo starts in column 24 on
+                // the row beneath the history, with no derived blank.
+                log.push_output(&text);
+            } else {
+                if !entry.continues_open_row {
+                    log.end_turn();
+                }
+                log.push_command(&text);
             }
-            log.push_command(&text);
         } else if entry.centered && text == entry.text {
             let glyphs = entry.glyphs.clone();
             log.lines.push(MessageLogLine {
@@ -597,6 +605,18 @@ pub fn combat_prompt_row_follows_history(state: &crate::PlayState) -> bool {
             .active_mix
             .as_ref()
             .is_some_and(|session| matches!(session.phase, crate::z_stats::MixPhase::Quantity))
+}
+
+/// Whether the overworld's waiting prompt row emits neither line feed nor
+/// end-cap.
+///
+/// `text-output.md §10.2`: the overworld gate "is cleared by **any direction
+/// taken while the party is aboard a ship** ... so exactly one following
+/// prompt pair is suppressed", which is what "keeps synthesised sailing turns
+/// from accumulating empty prompt rows". The waiting row is then a
+/// continuation in [`LiveRowKind`]'s sense: no blank above it, no end cap.
+pub fn overworld_prompt_pair_is_suppressed(state: &crate::PlayState) -> bool {
+    matches!(state.area, crate::Area::World { .. }) && state.overworld_prompt_pair_suppressed
 }
 
 /// Is the row an overlay is pausing on a continuation rather than a command row?

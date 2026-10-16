@@ -902,6 +902,7 @@ pub fn compose_gameplay_screen(
     };
     let live_row_kind = if spell_echo.is_some()
         || u5_runtime::dungeon_fountain_prompt_row_is_continuation(state)
+        || u5_runtime::overworld_prompt_pair_is_suppressed(state)
     {
         u5_runtime::LiveRowKind::Continuation
     } else {

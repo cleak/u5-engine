@@ -17391,6 +17391,9 @@ fn render_integrated_status_framebuffer(
             || u5_runtime::selector_prompt_row_is_continuation(&display_state)
             || u5_runtime::dungeon_fountain_prompt_row_is_continuation(&display_state)
             || display_state.defeated_party_row_is_continuation()
+            // `text-output.md §10.2`: the overworld prompt after a shipboard
+            // direction emits neither feed nor end cap.
+            || u5_runtime::overworld_prompt_pair_is_suppressed(&display_state)
         {
             u5_runtime::LiveRowKind::Continuation
         } else if u5_runtime::endgame_page_row_is_key_wait(&display_state) {
