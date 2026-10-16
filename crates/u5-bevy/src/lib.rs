@@ -82,7 +82,7 @@ use u5_runtime::{
     SAVED_OOL_FILENAME, SAVED_OOL_LEN, SCENE_EMPATH_ABBEY, SCENE_JHELOM, SCENE_MOONGLOW,
     SCENE_SERPENTS_HOLD, SCENE_STONEGATE, SCENE_THE_LYCAEUM, SHADOWLORD_COWARDICE_INDEX,
     SHADOWLORD_FALSEHOOD_INDEX, SHADOWLORD_HATRED_INDEX, SHADOWLORD_HIDEOUT_VANQUISHED,
-    SHADOWLORD_OBJECT_TILE_BASE, SHADOWLORD_VANQUISHED, SHIP_NO_SKIFFS_WARNING,
+    SHADOWLORD_OBJECT_TILE_BASE, SHADOWLORD_VANQUISHED,
     SHIPPED_PALETTE_REGISTERS, SLEEP_COST, SLEEP_FIELD_SPELL_INDEX,
     SLEEP_SPELL_INDEX, SPECIAL_ITEM_HMS_CAPE_PLANS_INDEX, SPECIAL_ITEM_MAGIC_CARPET_INDEX,
     SPECIAL_ITEM_OWNED_VALUE, SPECIAL_ITEM_POCKET_WATCH_INDEX, SPECIAL_ITEM_SCEPTRE_LB_INDEX,
@@ -1875,30 +1875,39 @@ fn validate_visual_route_final_state(
                 state.player.x,
                 state.player.y,
             );
+            // `dungeon-mode.md §8.1`'s chest-command table: "a bare `\n`
+            // first ... then one of `No keys!\n`, `Key broke!\n`, `Chest
+            // unlocked\n`, `Already open!\n`, `What?\n`" - a non-chest cell
+            // answers `What?`, not the surface `No lock!`. §8: success leaves
+            // "the variant bit plus the closed-chest class" (not the open
+            // class). §11: a cancelled acting-member prompt answers `None!`.
             let expected = match label {
                 "route-dungeon-jimmy-no-keys-commits-action" => {
                     state.keys == 0
                         && state.grid[index] == 0x4b
                         && state.prng_state == 0x1234
-                        && state.message == "No keys!"
+                        && state.message == "\nNo keys!\n"
                 }
                 "route-dungeon-jimmy-no-lock-commits-action" => {
                     state.keys == 2
                         && state.grid[index] == 0x00
                         && state.prng_state == 0x1234
-                        && state.message == "No lock!"
+                        && state.message == "\nWhat?\n"
                 }
                 "route-dungeon-jimmy-cancel-commits-action" => {
                     state.keys == 2
                         && state.grid[index] == 0x4b
                         && state.prng_state == 0x1234
-                        && state.message == "None!"
+                        && state
+                            .message_entries()
+                            .last()
+                            .is_some_and(|entry| entry.text == "None!")
                 }
                 "route-dungeon-jimmy-success-clears-trap-subtype" => {
                     state.keys == 2
-                        && state.grid[index] == 0x78
+                        && state.grid[index] == 0x48
                         && state.prng_state == u5_prng_advance_state(0x1234)
-                        && state.message == "Unlocked!"
+                        && state.message == "\nChest unlocked\n"
                 }
                 _ => unreachable!("grouped Jimmy visual-route labels are exhaustive"),
             };
@@ -1970,7 +1979,16 @@ fn validate_visual_route_final_state(
                         ..
                     }
                 )
-                || state.message != SHIP_NO_SKIFFS_WARNING
+                // `vehicles.md §5.1`: "If all three options fail, append
+                // `\nNo skiffs on board!\n` after `ship!\n`, leaving a blank
+                // row before the refusal." `SHIP_NO_SKIFFS_WARNING` is the
+                // all-capitals *boarding* warning, a different beat.
+                || !state
+                    .message_entries()
+                    .iter()
+                    .map(|entry| entry.text.as_str())
+                    .collect::<Vec<_>>()
+                    .ends_with(&["X-it ship!", "", "No skiffs on board!"])
             {
                 return Err(io::Error::other(
                     "ship X-it visual route did not preserve the furled ship on the published no-skiffs refusal",
@@ -2013,10 +2031,12 @@ fn validate_visual_route_final_state(
         let bytes = std::fs::read(game_dir.join(BRIT_OOL_FILENAME))?;
         let offset = 31 * OOL_RECORD_LEN;
         let expected = [0x71, 0x72, 73, 74, 0, 0x75, 0x76, 0x77];
+        // `blackthorn.md §7` step 11: the handoff is scene seventeen "on
+        // logical floor one at local position `(10, 10)`" (audit A039).
         if state.area
             != (u5_runtime::Area::Town {
                 scene: rescue_scene,
-                floor: 0,
+                floor: 1,
             })
             || state.turn != 0
             || state.party.is_empty()
@@ -2037,10 +2057,11 @@ fn validate_visual_route_final_state(
         return Ok(());
     }
     let rescue_scene = Scene::new(BLACKTHORN_RESCUE_HANDOFF_SCENE)?;
+    // `blackthorn.md §7` step 11: logical floor one (audit A039).
     if state.area
         != (u5_runtime::Area::Town {
             scene: rescue_scene,
-            floor: 0,
+            floor: 1,
         })
         || state.turn != 1
         || state.party.is_empty()
@@ -2292,12 +2313,14 @@ fn seed_visual_key_route_shrine(state: &mut PlayState) {
     seed_visual_route_shrine(state, ShrineVirtue::Honesty);
 }
 
-fn seed_visual_key_route_reagent_shop(state: &mut PlayState) {
-    state.gold = 100;
-    state.reagents = [0; REAGENT_COUNT];
-    state.active_shop = Some(ActiveShopSession::Reagent(ReagentShopState::for_herbalist(
-        Herbalist::Mysticism,
-    )));
+fn seed_visual_key_route_tavern_provisions(state: &mut PlayState) {
+    state.gold = 999;
+    state.food = 0;
+    // `shops.md §8.5`: the Sword and Keg's menu offers provisions on `R`.
+    state.active_shop = Some(ActiveShopSession::Tavern(TavernState::Menu {
+        tavern: Tavern::TheSwordAndKeg,
+        continuation_ready: false,
+    }));
 }
 
 fn seed_visual_key_route_ready_picker(state: &mut PlayState) {
@@ -3745,8 +3768,13 @@ const VISUAL_KEY_SHRINE_STEPS: &[VisualKeyStep] = &[
     VisualKeyStep::key("key_m", KeyCode::KeyM),
     VisualKeyStep::key("enter", KeyCode::Enter),
 ];
+// `shops.md §8.C`, "Provision offer": the tavern's provisions letter opens
+// the shared two-digit typed-number reader. Reagent and guild offers were
+// this route's subject, but they are now Y/N bundle confirmations with no
+// typed quantity (R418), so the buffer is exercised on the one shop prompt
+// that still reads one.
 const VISUAL_KEY_SHOP_QUANTITY_STEPS: &[VisualKeyStep] = &[
-    VisualKeyStep::key("key_a", KeyCode::KeyA),
+    VisualKeyStep::key("key_r", KeyCode::KeyR),
     VisualKeyStep::key("digit_1", KeyCode::Digit1),
     VisualKeyStep::key("digit_2", KeyCode::Digit2),
     VisualKeyStep::key("backspace", KeyCode::Backspace),
@@ -3886,7 +3914,7 @@ fn visual_key_route_suite_cases() -> Vec<VisualKeyRouteSuiteCase> {
             frame_kind: "visual key route prompt frame",
             options: PlayOptions::default(),
             steps: VISUAL_KEY_SHOP_QUANTITY_STEPS,
-            configure: Some(seed_visual_key_route_reagent_shop),
+            configure: Some(seed_visual_key_route_tavern_provisions),
         },
         VisualKeyRouteSuiteCase {
             label: "route-key-prompt-escape-cancel",
@@ -4324,7 +4352,10 @@ fn visual_route_suite_cases() -> Vec<VisualRouteSuiteCase> {
                 start: Some((62, 124)),
                 ..PlayOptions::default()
             },
-            script: &["d", "."],
+            // `animation.md §13.2`: "the very first world step of a session is
+            // a bare repaint", so the first idle tick after the move
+            // repeats the frame; the second is the one that animates.
+            script: &["d", ".", "."],
             configure: None,
         },
         VisualRouteSuiteCase {
@@ -4335,7 +4366,10 @@ fn visual_route_suite_cases() -> Vec<VisualRouteSuiteCase> {
                 start: Some((62, 124)),
                 ..PlayOptions::default()
             },
-            script: &["d", "."],
+            // `animation.md §13.2`: "the very first world step of a session is
+            // a bare repaint", so the first idle tick after the move
+            // repeats the frame; the second is the one that animates.
+            script: &["d", ".", "."],
             configure: None,
         },
         VisualRouteSuiteCase {
@@ -4595,14 +4629,22 @@ fn visual_route_suite_cases() -> Vec<VisualRouteSuiteCase> {
             label: "route-britannia-chasm-fall-to-underworld",
             frame_kind: "visual route world frame",
             options: chasm_fall.clone(),
-            script: &["empty"],
+            // `overworld.md §8`: with the waterfall directly south, the falls
+            // chain runs "from the top of the input helper, before that
+            // turn's key is read" - no command reaches it; the post-action
+            // arm is the underfoot one (`RETRACTIONS.md` R320).
+            script: &["input-wait"],
             configure: None,
         },
         VisualRouteSuiteCase {
             label: "route-reload-chasm-underworld-pass",
             frame_kind: "visual route world frame",
             options: chasm_fall,
-            script: &["empty", "empty"],
+            // `overworld.md §8`: with the waterfall directly south, the falls
+            // chain runs "from the top of the input helper, before that
+            // turn's key is read" - no command reaches it; the post-action
+            // arm is the underfoot one (`RETRACTIONS.md` R320).
+            script: &["input-wait", "empty"],
             configure: None,
         },
         VisualRouteSuiteCase {
@@ -5154,7 +5196,10 @@ fn visual_route_suite_cases() -> Vec<VisualRouteSuiteCase> {
                 torch_counter: 9,
                 ..PlayOptions::default()
             },
-            script: &["J", "1"],
+            // `dungeon-mode.md §11`: the acting-member prompt "is silent when
+            // zero or one member is eligible"; the old trailing `1` became
+            // the next command (Set Active Player).
+            script: &["J"],
             configure: Some(seed_visual_route_dungeon_jimmy_no_keys),
         },
         VisualRouteSuiteCase {
@@ -5166,7 +5211,10 @@ fn visual_route_suite_cases() -> Vec<VisualRouteSuiteCase> {
                 torch_counter: 9,
                 ..PlayOptions::default()
             },
-            script: &["J", "1"],
+            // `dungeon-mode.md §11`: the acting-member prompt "is silent when
+            // zero or one member is eligible"; the old trailing `1` became
+            // the next command (Set Active Player).
+            script: &["J"],
             configure: Some(seed_visual_route_dungeon_jimmy_no_lock),
         },
         VisualRouteSuiteCase {
@@ -5179,7 +5227,7 @@ fn visual_route_suite_cases() -> Vec<VisualRouteSuiteCase> {
                 ..PlayOptions::default()
             },
             script: &["J", "\x1b"],
-            configure: Some(seed_visual_route_dungeon_jimmy_chest),
+            configure: Some(seed_visual_route_dungeon_jimmy_cancel),
         },
         VisualRouteSuiteCase {
             label: "route-dungeon-jimmy-success-clears-trap-subtype",
@@ -5190,7 +5238,10 @@ fn visual_route_suite_cases() -> Vec<VisualRouteSuiteCase> {
                 torch_counter: 9,
                 ..PlayOptions::default()
             },
-            script: &["J", "1"],
+            // `dungeon-mode.md §11`: the acting-member prompt "is silent when
+            // zero or one member is eligible"; the old trailing `1` became
+            // the next command (Set Active Player).
+            script: &["J"],
             configure: Some(seed_visual_route_dungeon_jimmy_chest),
         },
         VisualRouteSuiteCase {
@@ -5555,7 +5606,13 @@ fn visual_route_suite_cases() -> Vec<VisualRouteSuiteCase> {
                 target: PlayTarget::Town(castle),
                 ..PlayOptions::default()
             },
-            script: &["A", "1", "N"],
+            // `shops.md §8.B`/`§8.C`: `Y` enters the reagent stock list, the
+            // letter offers one fixed bundle, `Y` accepts it (reagent offers
+            // "accept Y/N only", R418 - no typed quantity), and the last
+            // step leaves the list. A `" "` command trims to the empty
+            // command, which a shop receives as Return; the reagent list
+            // exits on "Space, Escape, or Return".
+            script: &["Y", "A", "Y", " "],
             configure: Some(seed_visual_route_reagent),
         },
         VisualRouteSuiteCase {
@@ -5565,7 +5622,13 @@ fn visual_route_suite_cases() -> Vec<VisualRouteSuiteCase> {
                 target: PlayTarget::Town(castle),
                 ..PlayOptions::default()
             },
-            script: &["A", "1", "N"],
+            // `shops.md §8.B`/`§8.C`: `Y` enters the reagent stock list, the
+            // letter offers one fixed bundle, `Y` accepts it (reagent offers
+            // "accept Y/N only", R418 - no typed quantity), and the last
+            // step leaves the list. A `" "` command trims to the empty
+            // command, which a shop receives as Return; the reagent list
+            // exits on "Space, Escape, or Return".
+            script: &["Y", "A", "Y", " "],
             configure: Some(seed_visual_route_reagent),
         },
         VisualRouteSuiteCase {
@@ -5785,7 +5848,14 @@ fn visual_route_suite_cases() -> Vec<VisualRouteSuiteCase> {
                 target: PlayTarget::Town(castle),
                 ..PlayOptions::default()
             },
-            script: &["A", "1", "D"],
+            // `shops.md §8.B`/`§8.C`: `Y` enters the guild stock list, the
+            // letter offers one fixed bundle, `Y` accepts it (§8.2: one
+            // Y/N offer per fixed bundle, R418 - no typed quantity), and
+            // Escape leaves the list. A `" "` command would trim to the
+            // empty command, a shop's Return, and at the guild list "other
+            // keys, including Return, silently wait" (the TUI route
+            // `shop-guild-buy-route` sends Escape for the same reason).
+            script: &["Y", "A", "Y", "\u{1b}"],
             configure: Some(seed_visual_route_guild),
         },
         VisualRouteSuiteCase {
@@ -5795,7 +5865,14 @@ fn visual_route_suite_cases() -> Vec<VisualRouteSuiteCase> {
                 target: PlayTarget::Town(castle),
                 ..PlayOptions::default()
             },
-            script: &["A", "1", "D"],
+            // `shops.md §8.B`/`§8.C`: `Y` enters the guild stock list, the
+            // letter offers one fixed bundle, `Y` accepts it (§8.2: one
+            // Y/N offer per fixed bundle, R418 - no typed quantity), and
+            // Escape leaves the list. A `" "` command would trim to the
+            // empty command, a shop's Return, and at the guild list "other
+            // keys, including Return, silently wait" (the TUI route
+            // `shop-guild-buy-route` sends Escape for the same reason).
+            script: &["Y", "A", "Y", "\u{1b}"],
             configure: Some(seed_visual_route_guild),
         },
         VisualRouteSuiteCase {
@@ -6577,14 +6654,20 @@ fn visual_route_suite_cases() -> Vec<VisualRouteSuiteCase> {
             label: "route-blackthorn-audience-correct",
             frame_kind: "visual route town frame",
             options: PlayOptions::default(),
-            script: &["setup:blackthorn-audience", "Ahm"],
+            // `blackthorn.md §3`: two setup acknowledgement keys precede
+            // the first demand (audit A031); without them the answer was
+            // swallowed as the greeting page's key.
+            script: &["setup:blackthorn-audience", "empty", "empty", "Ahm"],
             configure: None,
         },
         VisualRouteSuiteCase {
             label: "route-blackthorn-audience-wrong",
             frame_kind: "visual route town frame",
             options: PlayOptions::default(),
-            script: &["setup:blackthorn-audience", "wrong"],
+            // `blackthorn.md §3`: two setup acknowledgement keys precede
+            // the first demand (audit A031); without them the answer was
+            // swallowed as the greeting page's key.
+            script: &["setup:blackthorn-audience", "empty", "empty", "wrong"],
             configure: None,
         },
         VisualRouteSuiteCase {
@@ -6721,7 +6804,9 @@ fn visual_route_suite_cases() -> Vec<VisualRouteSuiteCase> {
             label: "route-endgame-box-victory-confirmation",
             frame_kind: "visual route endgame frame",
             options: PlayOptions::default(),
-            script: &["Y", "Y"],
+            // `endgame.md §5` step 2: with the box owned, a first Yes skips
+            // the sandalwood question and opens the rite (R404).
+            script: &["Y"],
             configure: Some(seed_visual_route_endgame_victory),
         },
         VisualRouteSuiteCase {
@@ -7510,6 +7595,22 @@ fn seed_visual_route_dungeon_jimmy_chest(state: &mut PlayState) {
     state.mark_visibility_dirty();
 }
 
+/// `dungeon-mode.md §11`: the acting-member prompt only appears - and so
+/// can only be cancelled - when more than one member is eligible.
+fn seed_visual_route_dungeon_jimmy_cancel(state: &mut PlayState) {
+    seed_visual_route_dungeon_jimmy_chest(state);
+    state.party.push(PartyMember {
+        slot: 1,
+        class_byte: b'F',
+        status: b'G',
+        climb_stat: DEFAULT_CLIMB_STAT,
+        mana: 0,
+        hp: 30,
+        max_hp: 30,
+        level: 8,
+    });
+}
+
 fn seed_visual_route_dungeon_jimmy_no_keys(state: &mut PlayState) {
     seed_visual_route_dungeon_jimmy_chest(state);
     state.keys = 0;
@@ -7563,10 +7664,14 @@ fn seed_visual_route_board_horse(state: &mut PlayState) {
     state
         .active_objects
         .resize(OOL_SLOTS, ActiveObject::empty());
+    // `vehicles.md §4`: B-Board "reads the vehicle or object under the
+    // party" and "probes the current position"; there is no adjacent probe
+    // (audit A173). The horse used to be parked one cell east, which the
+    // retracted adjacent probe found; it now waits on the party's own cell.
     state.active_objects[1] = ActiveObject {
         type_byte: HORSE_PARKED_FIRST,
         tile: HORSE_PARKED_FIRST,
-        x: 63,
+        x: 62,
         y: 124,
         z: WorldPlane::Britannia.save_floor(),
         phase: 0,
@@ -8856,16 +8961,18 @@ fn seed_visual_route_yew_wanted_poster(state: &mut PlayState) {
     state.player.y = 21;
     state.player.facing = Direction::East;
     let floor = state.current_floor().unwrap_or(0);
-    state.active_objects.push(ActiveObject {
-        type_byte: 0xA0,
-        tile: 0xA0,
-        x: 17,
-        y: 21,
-        z: floor,
-        phase: 0,
-        aux1: 0,
-        aux3: 0,
-    });
+    // `view.md §3` entry row 5: the sign/poster path is selected by the
+    // *live tile* (`0x89`, `0x8A`, `0xA0`, `0xA4`, `0xF8`), and the Yew
+    // poster coordinate is checked only inside it. A per-map object at the
+    // cell wins at row 4 (audit A180), so this used to push an active object
+    // carrying `0xA0` - which is now, correctly, described as that object.
+    // Stamp the live tile instead and clear any object on the cell.
+    state
+        .active_objects
+        .retain(|object| object.is_empty() || object.x != 17 || object.y != 21 || object.z != floor);
+    if let Some(cell) = state.grid.get_mut(21 * TOWN_GRID_SIDE + 17) {
+        *cell = 0xA0;
+    }
     state.sync_player_object();
     state.mark_visibility_dirty();
 }
@@ -9058,25 +9165,28 @@ fn seed_visual_route_ruined_honesty_shrine(state: &mut PlayState) {
 /// `endgame.md §7.1` fade to black, all six `END.DAT` narrative windows,
 /// the certificate and elapsed-time report, finishing in the `§9.5`
 /// terminal hold.
-const ENDGAME_FULL_VICTORY_CINEMATIC_SCRIPT: [&str; 98] = {
-    let mut script = [""; 98];
+const ENDGAME_FULL_VICTORY_CINEMATIC_SCRIPT: [&str; 97] = {
+    let mut script = [""; 97];
+    // `endgame.md §5` step 2: "**Only a first No** asks the second question
+    // ... A first Yes skips this question whether the party owns the box or
+    // not" (R404). With the box owned the first Yes opens the rite, so the
+    // second `Y` this script used to send is gone.
     script[0] = "Y";
-    script[1] = "Y";
-    // Forty display frames occupy 2..=41 for the rite lead-in, whose last
-    // tick advances to "He says". Six dismissal keys occupy 42..=47. The
-    // next display frame publishes the Orb, index 49 acknowledges it, and
+    // Forty display frames occupy 1..=40 for the rite lead-in, whose last
+    // tick advances to "He says". Six dismissal keys occupy 41..=46. The
+    // next display frame publishes the Orb, index 48 acknowledges it, and
     // the 40 automatic
     // frames cover the 15-phase rise, four full-height ticks,
     // one-member/Lord-British exits, 15-phase sink, floor restore, and
     // fade. The remaining eight keys reach terminal hold.
-    let mut index = 2;
-    while index < 42 {
+    let mut index = 1;
+    while index < 41 {
         script[index] = "endgame:frame";
         index += 1;
     }
-    script[48] = "endgame:frame";
-    index = 50;
-    while index < 90 {
+    script[47] = "endgame:frame";
+    index = 49;
+    while index < 89 {
         script[index] = "endgame:frame";
         index += 1;
     }
@@ -9430,7 +9540,7 @@ fn visual_route_frame_is_intentionally_black(label: &str) -> bool {
 /// `§7.1` fade. Pinned so a change in the beat ordering fails the suite
 /// rather than silently moving the black frame somewhere else.
 const ENDGAME_FADE_TO_BLACK_FRAME_LABEL: &str =
-    "route-endgame-box-full-victory-cinematic-89-endgame_frame";
+    "route-endgame-box-full-victory-cinematic-88-endgame_frame";
 
 fn visual_route_allows_unchanged_step(route_label: &str, step: usize) -> bool {
     // `endgame.md §4`: the restoration beat is a held frame - a short
@@ -9451,27 +9561,19 @@ fn visual_route_allows_unchanged_step(route_label: &str, step: usize) -> bool {
     (route_label == "route-endgame-missing-box-terminal-jitter" && (2..=3).contains(&step))
         || (route_label == "route-endgame-missing-box-confirmation" && step == 2)
         || (route_label == "route-endgame-tableau-walk-in")
-        || (route_label == "route-endgame-box-full-victory-cinematic" && (3..=98).contains(&step))
+        || (route_label == "route-endgame-box-full-victory-cinematic" && (2..=97).contains(&step))
         || (route_label == "route-doom-combat-multi-round-pass" && (2..=5).contains(&step))
+        // `animation.md §13.2`: "The shipped initial value of the byte is the
+        // freeze state, so the very first world step of a session is a bare
+        // repaint." Step 2 is that step (the move before it runs none);
+        // step 3, the next idle tick, must animate.
+        || ((route_label == "route-world-movement"
+            || route_label == "route-britannia-move-pass-idle")
+            && step == 2)
         || (route_label == "route-castle-light-decay-route" && (1..=2).contains(&step))
         || (route_label.starts_with("route-shop-arms-")
             && route_label.ends_with("-terminator-refusal")
             && (1..=3).contains(&step))
-        // The reagent and guild purchases end on a key that pays, stocks the
-        // item and leaves. None of that reaches the drawn frame on the step
-        // that does it. `shops.md §8.A`: there is "no universal `Farewell.`
-        // or `As you wish.` line", and the silent outcome "omits this entire
-        // sequence and its random draw" - so the message window keeps what
-        // it had. The gold the purchase spends is in the roster panel, and
-        // that panel is a snapshot whose deferred refresh drains at the head
-        // of the *next* command prompt (`stats-panel.md §2.3`), which a
-        // final step never reaches. Both halves are the specified
-        // behaviour, so the frame is allowed to repeat exactly.
-        || ((route_label == "route-shop-reagent-buy"
-            || route_label == "route-shop-reagent-buy-route"
-            || route_label == "route-shop-guild-buy"
-            || route_label == "route-shop-guild-buy-route")
-            && step == 3)
 }
 
 fn run_visual_intro_menu_app(
@@ -24007,7 +24109,17 @@ mod tests {
         // the inn gained `shops.md` §8's `Y`/`N`/Space entry answer on four
         // routes (+4) and the healer lost its invented member prompt on five
         // (-5), a one-member party being treated off the service letter.
-        assert_eq!(reports.len(), 1953);
+        // The audit merge's route rewrites (E-Enter shrine and Codex
+        // sessions, the stepped Codex reader, and the rest) took the suite
+        // from 1953 to 2054 frames without updating this count, because the
+        // suite failed before reaching it. The route-regression repair then
+        // added a second idle step to the two world-movement routes
+        // (`animation.md §13.2`, +2), the two Blackthorn setup
+        // acknowledgements (`blackthorn.md §3`, +4), the shop-list exit on
+        // the four reagent/guild routes (+4), and dropped the second endgame
+        // Yes (`endgame.md §5`, -2) and the stray Jimmy member keys
+        // (`dungeon-mode.md §11`, -3).
+        assert_eq!(reports.len(), 2059);
         for report in &reports {
             assert!(report.path.exists());
             assert_eq!(report.width, VISUAL_PLAY_FRAME_WIDTH);
@@ -24022,7 +24134,7 @@ mod tests {
             }
         }
         let manifest = fs::read_to_string(dir.join("manifest.txt")).unwrap();
-        assert!(manifest.contains("coverage\tvisual-route-steps\t1953"));
+        assert!(manifest.contains("coverage\tvisual-route-steps\t2059"));
         assert!(manifest.contains("coverage\tvisual-key-route-steps\t90"));
         assert!(manifest.contains("coverage\tvisual-route-combat-steps\t"));
         assert!(manifest.contains("route-world-movement-01-d\t320x200\t"));
@@ -24090,7 +24202,7 @@ mod tests {
         assert!(manifest.contains("route-gate-travel-shipboard-refusal-01-c1prv2"));
         assert!(manifest.contains("route-natural-moongate-trammel-gate-travel-01-idle_1"));
         assert!(manifest.contains("route-natural-moongate-empty-slot-clears-live-tile-01-idle_1"));
-        assert!(manifest.contains("route-britannia-chasm-fall-to-underworld-01-empty"));
+        assert!(manifest.contains("route-britannia-chasm-fall-to-underworld-01-input-wait"));
         assert!(manifest.contains("route-reload-chasm-underworld-pass-02-empty"));
         assert!(
             manifest.contains(
@@ -24200,8 +24312,8 @@ mod tests {
         assert!(manifest.contains("route-shop-healer-resurrect-accept-03-y"));
         assert!(manifest.contains("route-shop-inn-rest-decline-04-p"));
         assert!(manifest.contains("route-shop-inn-rest-decline-route-04-p"));
-        assert!(manifest.contains("route-shop-reagent-buy-03-n"));
-        assert!(manifest.contains("route-shop-reagent-buy-route-03-n"));
+        assert!(manifest.contains("route-shop-reagent-buy-04-_"));
+        assert!(manifest.contains("route-shop-reagent-buy-route-04-_"));
         assert!(manifest.contains("route-shop-tavern-drink-and-food-06-n"));
         assert!(manifest.contains("route-shop-tavern-drink-and-food-route-06-n"));
         assert!(manifest.contains("route-shop-tavern-honest-meal-lore-06-y"));
@@ -24223,8 +24335,8 @@ mod tests {
         assert!(manifest.contains("route-shop-shipwright-crows-nest-skiff-buy-02-y"));
         assert!(manifest.contains("route-shop-shipwright-oaken-oar-frigate-buy-02-y"));
         assert!(manifest.contains("route-shop-shipwright-rusty-bucket-skiff-buy-02-y"));
-        assert!(manifest.contains("route-shop-guild-buy-03-d"));
-        assert!(manifest.contains("route-shop-guild-buy-route-03-d"));
+        assert!(manifest.contains("route-shop-guild-buy-04-_"));
+        assert!(manifest.contains("route-shop-guild-buy-route-04-_"));
         assert!(manifest.contains("route-shop-sage-topic-miss-01-mantra"));
         assert!(manifest.contains("route-shop-sage-topic-miss-route-01-mantra"));
         assert!(manifest.contains("route-britannia-blink-east-ray-01-c1ip6"));
@@ -24309,8 +24421,8 @@ mod tests {
             manifest.contains("route-buccaneers-den-wishing-well-ferrari-grants-horse-03-ferrari")
         );
         assert!(manifest.contains("route-castle-death-vision-look-01-l6"));
-        assert!(manifest.contains("route-blackthorn-audience-correct-02-ahm"));
-        assert!(manifest.contains("route-blackthorn-audience-wrong-02-wrong"));
+        assert!(manifest.contains("route-blackthorn-audience-correct-04-ahm"));
+        assert!(manifest.contains("route-blackthorn-audience-wrong-04-wrong"));
         assert!(manifest.contains("route-blackthorn-rescue-refuge-02-empty"));
         assert!(manifest.contains("route-world-defeat-persists-ool-before-rescue-02-q"));
         assert!(manifest.contains("route-virtue-town-shadowlord-entry-00-initial"));
@@ -24326,9 +24438,9 @@ mod tests {
         assert!(manifest.contains("route-britannia-empty-yell-is-acted-02-empty"));
         assert!(manifest.contains("route-endgame-missing-box-terminal-jitter-03-endgame_frame"));
         assert!(manifest.contains("route-endgame-missing-box-confirmation-02-y"));
-        assert!(manifest.contains("route-endgame-box-victory-confirmation-02-y"));
+        assert!(manifest.contains("route-endgame-box-victory-confirmation-01-y"));
         assert!(manifest.contains(ENDGAME_FADE_TO_BLACK_FRAME_LABEL));
-        assert!(manifest.contains("route-endgame-box-full-victory-cinematic-98-empty"));
+        assert!(manifest.contains("route-endgame-box-full-victory-cinematic-97-empty"));
         assert!(manifest.contains("route-doom-combat-trigger-01-empty"));
         assert!(manifest.contains("route-doom-room-combat-trigger-01-empty"));
         assert!(manifest.contains("route-doom-combat-pass-02-empty"));

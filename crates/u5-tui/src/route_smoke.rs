@@ -34,6 +34,7 @@ use std::path::{Path, PathBuf};
 use std::time::{SystemTime, UNIX_EPOCH};
 
 use u5_runtime::{
+    DUNGEON_CHEST_JIMMY_NO_KEYS, DUNGEON_CHEST_JIMMY_UNLOCKED, DUNGEON_CHEST_JIMMY_WHAT,
     AN_SANCT_CHEST_OPENED_LINE, AWAKEN_COST, AWAKEN_SPELL_INDEX, DUNGEON_CHEST_OPENED, ActiveObject, Area, ArmsShop, BLACKTHORN_CAPTIVE_CELL_SCENE,
     BLACKTHORN_RESCUE_HANDOFF_SCENE, BLINK_COST, BLINK_SPELL_INDEX, BRIT_DAT_FILENAME,
     BRIT_OOL_FILENAME, COMBAT_ACTOR_FLAG_FLEEING,
@@ -72,7 +73,7 @@ use u5_runtime::{
     SAVED_GAM_FILENAME, SAVED_OOL_FILENAME, SAVED_OOL_LEN, SCENE_EMPATH_ABBEY, SCENE_JHELOM,
     SCENE_MOONGLOW, SCENE_SERPENTS_HOLD, SCENE_STONEGATE, SCENE_THE_LYCAEUM,
     SHADOWLORD_COWARDICE_INDEX, SHADOWLORD_FALSEHOOD_INDEX, SHADOWLORD_HATRED_INDEX,
-    SHADOWLORD_HIDEOUT_VANQUISHED, SHADOWLORD_VANQUISHED, SHIP_NO_SKIFFS_WARNING,
+    SHADOWLORD_HIDEOUT_VANQUISHED, SHADOWLORD_VANQUISHED,
     CODEX_SHRINE_ENTRY_TILE, SHRINE_MARKER_TILE, SHRINE_RESTORATION_SUCCESS_BANNER,
     SLEEP_COST,
     SLEEP_FIELD_SPELL_INDEX, SLEEP_SPELL_INDEX, SPECIAL_ITEM_HMS_CAPE_PLANS_INDEX,
@@ -1148,18 +1149,24 @@ pub fn route_smoke_cases() -> Vec<RouteSmokeCase> {
         RouteSmokeCase {
             name: "britannia-chasm-fall-to-underworld",
             options: chasm_fall.clone(),
-            // The chain runs off the post-action pass, so any turn-consuming
-            // command on the brink reaches it; stepping south is refused by
-            // the waterfall tile itself.
-            script: &["empty"],
+            // `overworld.md §8`: a waterfall directly south takes the
+            // chain's "second, earlier" entry, "from the top of the input
+            // helper, before that turn's key is read"; the post-action arm
+            // is the one a waterfall *underfoot* takes (`RETRACTIONS.md`
+            // R320). So no command reaches it and no turn is spent - one
+            // idle input wait does. (The old script passed a turn and
+            // relied on the retired post-action trigger.)
+            script: &["input-wait"],
             expected: RouteSmokeExpectation::World(WorldPlane::Underworld),
-            min_turn: 1,
+            min_turn: 0,
             expected_frame_kind: "tile viewport",
         },
         RouteSmokeCase {
             name: "reload-chasm-underworld-pass",
             options: chasm_fall,
-            script: &["empty", "empty"],
+            // As above: the input wait lands the party, the checkpoint
+            // reloads it, and the pass is echoed from the Underworld.
+            script: &["input-wait", "empty"],
             expected: RouteSmokeExpectation::World(WorldPlane::Underworld),
             min_turn: 1,
             expected_frame_kind: "tile viewport",
@@ -1321,10 +1328,14 @@ pub fn route_smoke_cases() -> Vec<RouteSmokeCase> {
         RouteSmokeCase {
             name: "blackthorn-audience-correct",
             options: PlayOptions::default(),
+            // `blackthorn.md §3`: "the audience takes **two** blocking key
+            // presses before the first demand is ever asked, one after the
+            // greeting page and one after the preamble record" (audit A031),
+            // so the first two lines are those acknowledgements.
             // `blackthorn.md §5` step 5: "Wait for player acknowledgement
-            // before returning to the caller branch." The second line is that
+            // before returning to the caller branch." The last line is that
             // acknowledgement; the captive-cell handoff runs on it.
-            script: &["Ahm", " "],
+            script: &[" ", " ", "Ahm", " "],
             expected: RouteSmokeExpectation::Town(blackthorn_captive_scene),
             min_turn: 0,
             expected_frame_kind: "tile viewport",
@@ -1332,9 +1343,10 @@ pub fn route_smoke_cases() -> Vec<RouteSmokeCase> {
         RouteSmokeCase {
             name: "blackthorn-audience-wrong",
             options: PlayOptions::default(),
-            // As above: the terminating wrong answer's reaction is
-            // acknowledged before the handoff runs.
-            script: &["wrong", " "],
+            // As above: two setup acknowledgements, then the terminating
+            // wrong answer's reaction is acknowledged before the handoff
+            // runs.
+            script: &[" ", " ", "wrong", " "],
             expected: RouteSmokeExpectation::Town(blackthorn_captive_scene),
             min_turn: 0,
             expected_frame_kind: "tile viewport",
@@ -1558,7 +1570,9 @@ pub fn route_smoke_cases() -> Vec<RouteSmokeCase> {
             script: &["empty"],
             expected: RouteSmokeExpectation::Town(castle),
             min_turn: 1,
-            expected_frame_kind: "tile viewport",
+            // `npc-schedules.md §9.2`: the contact enters the NPC-conflict
+            // chain, which is a fight.
+            expected_frame_kind: "combat viewport",
         },
         RouteSmokeCase {
             name: "castle-town-guard-arrest-refusal",
@@ -2305,7 +2319,11 @@ pub fn route_smoke_cases() -> Vec<RouteSmokeCase> {
         RouteSmokeCase {
             name: "dungeon-jimmy-no-keys-commits-action",
             options: dungeon_options.clone(),
-            script: &["J", "1"],
+            // `dungeon-mode.md §11`: the shared acting-member prompt "is
+            // silent when zero or one member is eligible", so a one-member
+            // party's `J` resolves at once; the `1` this script used to
+            // send went to the next command prompt as Set Active Player.
+            script: &["J"],
             expected: RouteSmokeExpectation::Dungeon(dungeon),
             min_turn: 1,
             expected_frame_kind: "dungeon first-person viewport",
@@ -2313,14 +2331,26 @@ pub fn route_smoke_cases() -> Vec<RouteSmokeCase> {
         RouteSmokeCase {
             name: "dungeon-jimmy-no-lock-commits-action",
             options: dungeon_options.clone(),
-            script: &["J", "1"],
+            // `dungeon-mode.md §11`: the shared acting-member prompt "is
+            // silent when zero or one member is eligible", so a one-member
+            // party's `J` resolves at once; the `1` this script used to
+            // send went to the next command prompt as Set Active Player.
+            script: &["J"],
             expected: RouteSmokeExpectation::Dungeon(dungeon),
             min_turn: 1,
             expected_frame_kind: "dungeon first-person viewport",
         },
         RouteSmokeCase {
             name: "dungeon-jimmy-cancel-commits-action",
-            options: dungeon_options.clone(),
+            // §11: the prompt only appears - and so can only be cancelled -
+            // when more than one member is eligible.
+            options: PlayOptions {
+                party: vec![
+                    route_party_member(0, b'A', b'G', 30, 30),
+                    route_party_member(1, b'F', b'G', 30, 30),
+                ],
+                ..dungeon_options.clone()
+            },
             script: &["J", "\x1b"],
             expected: RouteSmokeExpectation::Dungeon(dungeon),
             min_turn: 1,
@@ -2329,7 +2359,11 @@ pub fn route_smoke_cases() -> Vec<RouteSmokeCase> {
         RouteSmokeCase {
             name: "dungeon-jimmy-success-clears-trap-subtype",
             options: dungeon_options.clone(),
-            script: &["J", "1"],
+            // `dungeon-mode.md §11`: the shared acting-member prompt "is
+            // silent when zero or one member is eligible", so a one-member
+            // party's `J` resolves at once; the `1` this script used to
+            // send went to the next command prompt as Set Active Player.
+            script: &["J"],
             expected: RouteSmokeExpectation::Dungeon(dungeon),
             min_turn: 1,
             expected_frame_kind: "dungeon first-person viewport",
@@ -4645,19 +4679,18 @@ fn seed_yew_wanted_poster_route(state: &mut PlayState) {
     let floor = state.current_floor().unwrap_or(0);
     let target_x = 17;
     let target_y = 21;
+    // `view.md §3` entry row 5: the sign/poster path is selected by the
+    // *live tile* (`0x89`, `0x8A`, `0xA0`, `0xA4`, `0xF8`), and the Yew
+    // poster coordinate is checked only inside it. A per-map object at the
+    // cell wins at row 4 (audit A180), so this used to push an active object
+    // carrying `0xA0` - which is now, correctly, described as that object.
+    // Stamp the live tile instead and clear any object on the cell.
     state.active_objects.retain(|object| {
         object.is_empty() || object.x != target_x || object.y != target_y || object.z != floor
     });
-    state.active_objects.push(ActiveObject {
-        type_byte: 0xA0,
-        tile: 0xA0,
-        x: target_x,
-        y: target_y,
-        z: floor,
-        phase: 0,
-        aux1: 0,
-        aux3: 0,
-    });
+    if let Some(cell) = state.grid.get_mut(target_y * TOWN_GRID_SIDE + target_x) {
+        *cell = 0xA0;
+    }
     state.sync_player_object();
     state.mark_visibility_dirty();
 }
@@ -4728,10 +4761,22 @@ fn seed_town_hostile_adjacent_alarm_route(state: &mut PlayState) {
     if let Some(npc) = state.npcs.iter_mut().find(|npc| npc.slot == 1) {
         npc.dialog_id = 1;
     }
+    // `npc-schedules.md §6`: "For the whole of an hour that *does* equal one
+    // of [the NPC's own four `time` bytes], a settled NPC is routed into the
+    // route/state machine of Section 7 instead" of the §9 AI dispatch, so it
+    // never reaches the engagement step that produces contact. The shared
+    // seed's 08:00 is one of its time bytes (`0, 8, 16, 20`); 09:00 is not.
+    state.clock = GameClock::new(9, 0).expect("route clock is valid");
 }
 
 fn seed_town_guard_arrest_route(state: &mut PlayState) {
     seed_town_route_scheduled_npc(state, 2, 0x70, 6, 5, 6);
+    // `npc-schedules.md §6`: "For the whole of an hour that *does* equal one
+    // of [the NPC's own four `time` bytes], a settled NPC is routed into the
+    // route/state machine of Section 7 instead" of the §9 AI dispatch, so it
+    // never reaches the engagement step that produces contact. The shared
+    // seed's 08:00 is one of its time bytes (`0, 8, 16, 20`); 09:00 is not.
+    state.clock = GameClock::new(9, 0).expect("route clock is valid");
 }
 
 fn seed_town_jimmy_unoccupied_target(state: &mut PlayState, tile: u8) {
@@ -4836,10 +4881,14 @@ fn seed_world_board_horse_route(state: &mut PlayState) {
     state
         .active_objects
         .resize(OOL_SLOTS, ActiveObject::empty());
+    // `vehicles.md §4`: B-Board "reads the vehicle or object under the
+    // party" and "probes the current position"; there is no adjacent probe
+    // (audit A173). The horse used to be parked one cell east, which the
+    // retracted adjacent probe found; it now waits on the party's own cell.
     state.active_objects[1] = ActiveObject {
         type_byte: HORSE_PARKED_FIRST,
         tile: HORSE_PARKED_FIRST,
-        x: 63,
+        x: 62,
         y: 124,
         z: WorldPlane::Britannia.save_floor(),
         phase: 0,
@@ -5370,6 +5419,7 @@ fn seed_combat_spell_route(state: &mut PlayState, code: &str) -> io::Result<()> 
         "FV" => COMBAT_FIREBALL_ROUTE_SEED,
         "IPVY" => first_nonzero_prng_roll_seed(19),
         "ACX" => 0x1234,
+        "CIQ" => COMBAT_CAUSE_FEAR_ROUTE_SEED,
         _ => 0,
     };
 
@@ -5482,8 +5532,26 @@ fn seed_combat_special_death_route(state: &mut PlayState, class: u8) -> io::Resu
     state.spell_charges[spell_index] = 1;
 
     let mut actors = [CombatActorDescriptor::empty(); COMBAT_ACTOR_SLOTS];
-    actors[0] =
-        CombatActorDescriptor::from_row([99, 1, COMBAT_ACTOR_FLAG_SELECTABLE_80, 0, 0, 0, 5, 5]);
+    // `magic.md §8`: Kill "compares the ordinary two actor ratings and combat
+    // roll specified in `systems/combat.md` Section 11", and §11 has "a score
+    // of `1` or less always hits". The caster used to carry rating 1, so the
+    // cast landed only on a lucky draw - and `animation.md §13.2`'s bare
+    // first world step (audit A019) shifted the stream into a miss. This
+    // route is about the special death transition, so the caster's rating
+    // makes the hit certain instead of PRNG-dependent. The Shadow Lord case
+    // keeps the old rating: its `Failed!` expectation predates R446 (see
+    // the note on `validate_combat_spell_route_state`).
+    let caster_rating = if class == COMBAT_CLASS_SHADOW_LORD { 1 } else { 99 };
+    actors[0] = CombatActorDescriptor::from_row([
+        99,
+        caster_rating,
+        COMBAT_ACTOR_FLAG_SELECTABLE_80,
+        0,
+        0,
+        0,
+        5,
+        5,
+    ]);
 
     let mut active_objects = vec![ActiveObject::empty(); COMBAT_ACTOR_SLOTS];
     active_objects[0] = route_combat_active_object(0x4c, 5, 5, 0);
@@ -5578,6 +5646,16 @@ fn seed_dungeon_room_party_entry_route(state: &mut PlayState, game_dir: &Path) -
 /// four all summon a Daemon inside the script.
 const COMBAT_FIREBALL_ROUTE_SEED: u16 = 5;
 
+/// The Cause Fear route's pinned seed, for the reason given above for
+/// Fireball. The cast itself is deterministic (the shared-resistance gate is
+/// forced open by the caster's Intelligence), but the frightened monster's
+/// own turns between the cast and the checkpoint draw from the stream, and
+/// some draws take it back out of flight. Seed zero stopped landing when
+/// `animation.md §13.2`'s bare first world step (audit A019) removed one
+/// wind draw from the front of the stream. Two is the lowest seed at which
+/// the case's own validator passes.
+const COMBAT_CAUSE_FEAR_ROUTE_SEED: u16 = 2;
+
 fn first_nonzero_prng_roll_seed(max: u16) -> u16 {
     for candidate in 0..=u16::MAX {
         let mut state = candidate;
@@ -5593,6 +5671,13 @@ fn validate_combat_spell_route_state(state: &PlayState, case_name: &str) -> io::
     let spell_index = spell_index_from_code(code)
         .ok_or_else(|| io::Error::other(format!("unknown combat spell code `{code}`")))?;
     if case_name == "combat-kill-shadowlord-protected-rejection" {
+        // Open question: `RETRACTIONS.md` R446 withdrew Kill's protected-class
+        // rejection - classes 14, 15 and 47 "can reach Kill's shared damage
+        // endpoint after an admitted hit" and keep only their class-specific
+        // death behaviour. This case's `Failed!` therefore now comes from the
+        // ordinary `combat.md §11` to-hit miss of a rating-1 caster, not from
+        // a protection rule; it needs re-scoping to the Shadow Lord's
+        // class-specific death behaviour once that outcome is pinned.
         let target = state.combat_actors[COMBAT_PARTY_ACTOR_SLOTS];
         if !state.combat_active
             || state.spell_charges[spell_index] != 0
@@ -6004,10 +6089,12 @@ fn validate_route_smoke_case_state(
             let bytes = fs::read(game_dir.join(BRIT_OOL_FILENAME))?;
             let offset = 31 * OOL_RECORD_LEN;
             let expected = [0x71, 0x72, 73, 74, 0, 0x75, 0x76, 0x77];
+            // `blackthorn.md §7` step 11: the handoff is scene seventeen "on
+            // logical floor one at local position `(10, 10)`" (audit A039).
             if state.area
                 != (Area::Town {
                     scene: rescue_scene,
-                    floor: 0,
+                    floor: 1,
                 })
                 || state.turn != 0
                 || state.party.is_empty()
@@ -6644,12 +6731,15 @@ fn validate_route_smoke_case_state(
                     .is_none_or(|member| member.status != b'P')
                 // `town-mode.md §10`: each failed save prints `Poisoned!\n`
                 // once - its own terminated row, never joined in the slot.
+                // "Dead (`D`) and already Poisoned (`P`) slots are skipped"
+                // and "Skipped members ... add no text": members 0 and 2
+                // start Poisoned, so member 1's failed save is the only row.
                 || state
                     .message_entries()
                     .iter()
                     .filter(|entry| entry.text == "Poisoned!")
                     .count()
-                    != 3
+                    != 1
             {
                 return Err(io::Error::other(format!(
                     "route smoke `{case_name}` did not apply public #51 poison-gas roll semantics; \
@@ -6903,7 +6993,10 @@ fn validate_route_smoke_case_state(
             ) || state.player.x != 134
                 || state.player.y != 2
                 || state.turn != 0
-                || !state.message.contains("Gate Travel phase 1")
+                // The transit narrates nothing of its own (`commands.md
+                // §8.1`; `audio.md §8.3` gives it a cue only), so the
+                // phase report is a harness diagnostic, not message text.
+                || !state.diagnostics_contain("Gate Travel phase 1")
             {
                 return Err(io::Error::other(format!(
                     "route smoke `{case_name}` did not consume the cached natural moongate slot"
@@ -7124,12 +7217,22 @@ fn validate_route_smoke_case_state(
             }
         }
         "castle-town-hostile-adjacent-alarm" => {
-            if state.combat_active
-                || !state.diagnostics_contain("Hostile NPC slot 1")
-                || !state.diagnostics_contain("alarm raised")
+            // `npc-schedules.md §9.2`, last row: "AI 6 or 7 | Dialogue other
+            // than `0xFE`, linked live sprite other than `0x70` | Conflict
+            // outcome: linked actor byte at least `0x40` gives `Attacked!`
+            // and the NPC-conflict chain". This case used to expect the
+            // withdrawn alarm-only cleanup with no fight (`RETRACTIONS.md`
+            // R399 moved the alarm to the arrest/conflict family, and the
+            // `0x50` villager here is above the `0x40` line).
+            if !state.combat_active
+                || !state
+                    .message_entries()
+                    .iter()
+                    .any(|entry| entry.text == "Attacked!")
+                || !state.diagnostics_contain("contact enters NPC conflict")
             {
                 return Err(io::Error::other(format!(
-                    "route smoke `{case_name}` did not handle the adjacent hostile NPC through alarm cleanup"
+                    "route smoke `{case_name}` did not take the adjacent hostile NPC into the NPC-conflict chain"
                 )));
             }
         }
@@ -7440,9 +7543,13 @@ fn validate_route_smoke_case_state(
                 case_name,
                 SHADOWLORD_FALSEHOOD_INDEX,
                 SPECIAL_ITEM_SHARD_FALSEHOOD_INDEX,
-                // `quest-graph.md §5` publishes the Shadowlord name; the
-                // sentence around it is not published, so pin the name.
-                "FAULINEI is vanquished!",
+                // `inventory.md §7.1`: "The later actual Shadowlord
+                // destruction adds `\nThe doom of the Shadowlord_`, the
+                // matching name Faulinei, Astaroth or Nosfentor, then
+                // `_is wrought!\n`." The old `<name> is vanquished!` was an
+                // engine diagnostic. The spec gives the name's spelling but
+                // not its case, so the match ignores case.
+                "the doom of the shadowlord faulinei is wrought!",
             )?;
         }
         "empath-shard-hatred-vanquish" => {
@@ -7451,7 +7558,7 @@ fn validate_route_smoke_case_state(
                 case_name,
                 SHADOWLORD_HATRED_INDEX,
                 SPECIAL_ITEM_SHARD_HATRED_INDEX,
-                "ASTAROTH is vanquished!",
+                "the doom of the shadowlord astaroth is wrought!",
             )?;
         }
         "serpents-hold-shard-cowardice-vanquish" => {
@@ -7460,7 +7567,7 @@ fn validate_route_smoke_case_state(
                 case_name,
                 SHADOWLORD_COWARDICE_INDEX,
                 SPECIAL_ITEM_SHARD_COWARDICE_INDEX,
-                "NOSFENTOR is vanquished!",
+                "the doom of the shadowlord nosfentor is wrought!",
             )?;
         }
         "shop-arms-local-buy-sell-route" => {
@@ -8026,10 +8133,22 @@ fn validate_route_smoke_case_state(
                         ..
                     }
                 )
-                || state.message != SHIP_NO_SKIFFS_WARNING
+                // `vehicles.md §5.1`: "If all three options fail, append
+                // `\nNo skiffs on board!\n` after `ship!\n`, leaving a blank
+                // row before the refusal." `SHIP_NO_SKIFFS_WARNING` is the
+                // all-capitals *boarding* warning, a different beat.
+                || !route_transcript_ends_with(
+                    state,
+                    &["X-it ship!", "", "No skiffs on board!"],
+                )
             {
                 return Err(io::Error::other(format!(
-                    "route smoke `{case_name}` did not preserve the furled ship on the published no-skiffs refusal"
+                    "route smoke `{case_name}` did not preserve the furled ship on the published no-skiffs refusal; rows {:?}",
+                    state
+                        .message_entries()
+                        .iter()
+                        .map(|entry| entry.text.as_str())
+                        .collect::<Vec<_>>()
                 )));
             }
         }
@@ -8160,30 +8279,37 @@ fn validate_route_smoke_case_state(
                 state.player.x,
                 state.player.y,
             );
+            // `dungeon-mode.md §8.1`'s chest-command table: Jimmy prints "a
+            // bare `\n` first ... then one of `No keys!\n`, `Key broke!\n`,
+            // `Chest unlocked\n`, `Already open!\n`, `What?\n`" - so a
+            // non-chest cell answers `What?`, not the surface `No lock!`.
+            // §8: a successful pick "rewrites a locked chest cell to the
+            // variant bit plus the closed-chest class" (not the open class).
+            // §11: a cancelled acting-member prompt answers `None!`.
             let expected = match case_name {
                 "dungeon-jimmy-no-keys-commits-action" => {
                     state.keys == 0
                         && state.grid[index] == 0x4b
                         && state.prng_state == 0x1234
-                        && state.message == "No keys!"
+                        && state.message == DUNGEON_CHEST_JIMMY_NO_KEYS
                 }
                 "dungeon-jimmy-no-lock-commits-action" => {
                     state.keys == 2
                         && state.grid[index] == 0x00
                         && state.prng_state == 0x1234
-                        && state.message == "No lock!"
+                        && state.message == DUNGEON_CHEST_JIMMY_WHAT
                 }
                 "dungeon-jimmy-cancel-commits-action" => {
                     state.keys == 2
                         && state.grid[index] == 0x4b
                         && state.prng_state == 0x1234
-                        && state.message == "None!"
+                        && route_transcript_ends_with(state, &["None!"])
                 }
                 "dungeon-jimmy-success-clears-trap-subtype" => {
                     state.keys == 2
-                        && state.grid[index] == 0x78
+                        && state.grid[index] == 0x48
                         && state.prng_state == u5_prng_advance_state(0x1234)
-                        && state.message == "Unlocked!"
+                        && state.message == DUNGEON_CHEST_JIMMY_UNLOCKED
                 }
                 _ => unreachable!("grouped Jimmy route names are exhaustive"),
             };
@@ -8394,6 +8520,17 @@ fn validate_combat_party_descriptor_links(state: &PlayState, case_name: &str) ->
     Ok(())
 }
 
+/// Whether the message transcript's last rows are exactly `rows`, oldest
+/// first.
+fn route_transcript_ends_with(state: &PlayState, rows: &[&str]) -> bool {
+    let entries = state.message_entries();
+    entries.len() >= rows.len()
+        && entries[entries.len() - rows.len()..]
+            .iter()
+            .zip(rows)
+            .all(|(entry, row)| entry.text == *row)
+}
+
 fn validate_shadowlord_shard_route(
     state: &PlayState,
     case_name: &str,
@@ -8410,7 +8547,7 @@ fn validate_shadowlord_shard_route(
             .skip(1)
             .any(PlayState::is_shadowlord_actor)
         || state.summoned_shadowlord.is_some()
-        || !state.message.contains(message_fragment)
+        || !state.message.to_ascii_lowercase().contains(message_fragment)
     {
         return Err(io::Error::other(format!(
             "route smoke `{case_name}` did not complete native shard destruction: \
