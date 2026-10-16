@@ -1821,9 +1821,17 @@ BRITANNIA 11 21
         let mut state = britannia_state(open_world_grid(), 10, 20);
         state.shrine_ordained_mask = ShrineVirtue::Honesty.bit();
         state.shrine_codex_mask = 0xFF & !ShrineVirtue::Honesty.bit();
+        // `karma.md §8.2` (audit A114): the reader is stepped, and the
+        // flashes belong to advance key 4. Keys 1-3 print `37`, `38` and the
+        // stamped aphorism.
+        state.read_codex_urn_after_entry(&dir).unwrap();
+        state.flush_staged_narration();
+        for _ in 0..3 {
+            assert!(state.step_codex_presentation(&dir).unwrap());
+        }
         let prng_before = state.prng_state;
         let serial = state.sound_effect_serial;
-        state.read_codex_urn_after_entry(&dir).unwrap();
+        assert!(state.step_codex_presentation(&dir).unwrap());
 
         let flashes = state
             .sound_effects_after(serial)
@@ -1843,7 +1851,16 @@ BRITANNIA 11 21
         partial.shrine_codex_mask = 0;
         let serial = partial.sound_effect_serial;
         partial.read_codex_urn_after_entry(&dir).unwrap();
-        assert!(partial.sound_effects_after(serial).is_empty());
+        while partial.codex_presentation_steps != 0 {
+            partial.flush_staged_narration();
+            assert!(partial.step_codex_presentation(&dir).unwrap());
+        }
+        // The approach walk's world steps may sound on their own; what must
+        // not play is a flash.
+        assert!(!partial
+            .sound_effects_after(serial)
+            .iter()
+            .any(|effect| matches!(effect, SoundEffect::MajorFlash { .. })));
         let _ = fs::remove_dir_all(dir);
     }
 
