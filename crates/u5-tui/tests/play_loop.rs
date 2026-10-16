@@ -1402,7 +1402,7 @@ fn route_smoke_cases_cover_representative_modes() {
         "combat-summon-daemon-ring",
         "combat-kill-gazer-eye-burst",
         "combat-kill-gargoyle-lava-marker",
-        "combat-kill-shadowlord-protected-rejection",
+        "combat-kill-shadowlord-vanishes",
         "terrain-combat-party-entry",
         "dungeon-room-party-entry",
     ] {

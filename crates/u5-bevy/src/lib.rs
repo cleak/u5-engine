@@ -6341,7 +6341,7 @@ fn visual_route_suite_cases() -> Vec<VisualRouteSuiteCase> {
             configure: Some(seed_visual_route_combat_kill_gargoyle),
         },
         VisualRouteSuiteCase {
-            label: "route-combat-kill-shadowlord-protected-rejection",
+            label: "route-combat-kill-shadowlord-vanishes",
             frame_kind: "visual route combat frame",
             options: PlayOptions {
                 target: PlayTarget::World(WorldPlane::Britannia),
@@ -8352,8 +8352,13 @@ fn seed_visual_route_combat_kill_gargoyle(state: &mut PlayState) {
     seed_visual_route_combat_special_death(state, 30);
 }
 
+/// `magic.md §8` (`RETRACTIONS.md` R446): Kill has no protected-class
+/// rejection, so an admitted hit reaches the Shadow Lord's own
+/// vanish-on-death branch (`combat.md §6.3`). The caster's rating makes the
+/// hit certain, so the frame shows that death rather than a PRNG-dependent
+/// miss.
 fn seed_visual_route_combat_kill_shadowlord(state: &mut PlayState) {
-    seed_visual_route_combat_special_death(state, 47);
+    seed_visual_route_combat_special_death_with_caster_rating(state, 47, 99);
 }
 
 fn seed_visual_route_combat_spell(state: &mut PlayState, code: &str) {
@@ -8444,6 +8449,14 @@ fn seed_visual_route_combat_spell(state: &mut PlayState, code: &str) {
 }
 
 fn seed_visual_route_combat_special_death(state: &mut PlayState, class: u8) {
+    seed_visual_route_combat_special_death_with_caster_rating(state, class, 1);
+}
+
+fn seed_visual_route_combat_special_death_with_caster_rating(
+    state: &mut PlayState,
+    class: u8,
+    caster_rating: u8,
+) {
     let spell_index = spell_index_from_code("CX").expect("visual route Kill spell code is valid");
     let cost = spell_mp_cost(spell_index).expect("visual route Kill spell cost is valid");
 
@@ -8461,8 +8474,16 @@ fn seed_visual_route_combat_special_death(state: &mut PlayState, class: u8) {
     state.spell_charges[spell_index] = 1;
 
     let mut actors = [CombatActorDescriptor::empty(); COMBAT_ACTOR_SLOTS];
-    actors[0] =
-        CombatActorDescriptor::from_row([99, 1, COMBAT_ACTOR_FLAG_SELECTABLE_80, 0, 0, 0, 5, 5]);
+    actors[0] = CombatActorDescriptor::from_row([
+        99,
+        caster_rating,
+        COMBAT_ACTOR_FLAG_SELECTABLE_80,
+        0,
+        0,
+        0,
+        5,
+        5,
+    ]);
 
     let mut active_objects = vec![ActiveObject::empty(); COMBAT_ACTOR_SLOTS];
     active_objects[0] = visual_route_combat_active_object(0x4c, 5, 5, 0);
@@ -23605,7 +23626,7 @@ mod tests {
             "route-combat-summon-daemon-ring",
             "route-combat-kill-gazer-eye-burst",
             "route-combat-kill-gargoyle-lava-marker",
-            "route-combat-kill-shadowlord-protected-rejection",
+            "route-combat-kill-shadowlord-vanishes",
             "route-terrain-combat-party-entry",
             "route-terrain-combat-escape-announced-cleanup",
             "route-terrain-combat-out-of-arena-leave",
@@ -24383,7 +24404,7 @@ mod tests {
         assert!(manifest.contains("route-combat-summon-daemon-ring-01-c1ckx6"));
         assert!(manifest.contains("route-combat-kill-gazer-eye-burst-01-c1cx7"));
         assert!(manifest.contains("route-combat-kill-gargoyle-lava-marker-01-c1cx7"));
-        assert!(manifest.contains("route-combat-kill-shadowlord-protected-rejection-01-c1cx7"));
+        assert!(manifest.contains("route-combat-kill-shadowlord-vanishes-01-c1cx7"));
         assert!(
             manifest
                 .contains("route-terrain-combat-party-entry-01-setup_terrain-combat-party-entry")

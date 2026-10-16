@@ -5293,13 +5293,13 @@ impl PlayState {
         // can take `combat.md §9`'s morale draw (`§11.1`, graded wound
         // lines), which must not land behind the turn advance's own draws.
         let result_line = match applied {
-            Some(application) => crate::input_dispatch::combat_landed_damage_result_line(
-                self,
-                target_slot,
-                Some(caster_index),
-                application.damage_application,
-            )
-            .unwrap_or_default(),
+            Some(application) => self
+                .combat_spell_narrated_result_line(
+                    target_slot,
+                    Some(caster_index),
+                    application.damage_application,
+                )
+                .unwrap_or_default(),
             None => "Failed!".to_string(),
         };
         self.advance_turn();
@@ -5740,14 +5740,11 @@ impl PlayState {
                                         true,
                                     )
                                 {
-                                    narration.extend(
-                                        crate::input_dispatch::combat_landed_damage_result_line(
-                                            self,
-                                            slot,
-                                            None,
-                                            application,
-                                        ),
-                                    );
+                                    narration.extend(self.combat_spell_narrated_result_line(
+                                        slot,
+                                        None,
+                                        application,
+                                    ));
                                 }
                             }
                             // The status-only arm is a deliberate silence:
@@ -5766,14 +5763,11 @@ impl PlayState {
                         if let Some(application) =
                             self.apply_combat_weapon_damage_to_target(None, slot, raw_damage, true)
                         {
-                            narration.extend(
-                                crate::input_dispatch::combat_landed_damage_result_line(
-                                    self,
-                                    slot,
-                                    None,
-                                    application,
-                                ),
-                            );
+                            narration.extend(self.combat_spell_narrated_result_line(
+                                slot,
+                                None,
+                                application,
+                            ));
                         }
                         affected = true;
                     }
@@ -5793,8 +5787,7 @@ impl PlayState {
                         true,
                     ) {
                         affected = true;
-                        narration.extend(crate::input_dispatch::combat_landed_damage_result_line(
-                            self,
+                        narration.extend(self.combat_spell_narrated_result_line(
                             slot,
                             Some(caster_index),
                             application,
@@ -5826,8 +5819,7 @@ impl PlayState {
                         true,
                     ) {
                         affected = true;
-                        narration.extend(crate::input_dispatch::combat_landed_damage_result_line(
-                            self,
+                        narration.extend(self.combat_spell_narrated_result_line(
                             slot,
                             Some(caster_index),
                             application,
@@ -6262,6 +6254,34 @@ impl PlayState {
             resolution,
             damage_application,
         })
+    }
+
+    /// `magic.md §8`: a landed attack spell (Magic Missile, Fireball, Kill)
+    /// and an accepted directed-wind target "reach the shared result
+    /// narrator", and "Vanish-class and other exceptional results remain as
+    /// specified in combat Section 11.1". That narrator is the one `§6.3`
+    /// gates on the shared result field: a vanish death has already printed
+    /// `<name> vanishes!` and raised `0x02`, so the generic killed/slept/hit
+    /// chain is skipped - a Kill on the Shadow Lord reads `Shadow Lord
+    /// vanishes!` and never also `Shadow Lord killed!`. The gate runs per
+    /// target, inside the resolution, for the reason
+    /// [`Self::apply_combat_monster_attack_narrator_gate`] gives.
+    fn combat_spell_narrated_result_line(
+        &mut self,
+        target_slot: usize,
+        caster_slot: Option<usize>,
+        application: CombatWeaponDamageApplication,
+    ) -> Option<String> {
+        let line = crate::input_dispatch::combat_landed_damage_result_line(
+            self,
+            target_slot,
+            caster_slot,
+            application,
+        );
+        let narrates_kill = combat_weapon_damage_application_killed(Some(application));
+        let gate = resolve_combat_attack_narrator_gate(self.combat_action_result, narrates_kill);
+        self.combat_action_result = gate.result_after;
+        if gate.run_generic_chain { line } else { None }
     }
 
     #[allow(clippy::too_many_arguments)]

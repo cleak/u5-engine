@@ -1134,6 +1134,7 @@ mod tests {
     include!("tests_inline/damage_distribution_conformance.rs");
     include!("tests_inline/combat_audit_g1.rs");
     include!("tests_inline/command_echo_epilogue_rows.rs");
+    include!("tests_inline/kill_shadowlord_vanish.rs");
     include!("tests_inline/audit_g6_conformance.rs");
     include!("tests_inline/audit_g8_magic_view.rs");
 }

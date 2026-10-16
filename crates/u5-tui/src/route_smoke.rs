@@ -39,7 +39,7 @@ use u5_runtime::{
     BLACKTHORN_RESCUE_HANDOFF_SCENE, BLINK_COST, BLINK_SPELL_INDEX, BRIT_DAT_FILENAME,
     BRIT_OOL_FILENAME, COMBAT_ACTOR_FLAG_FLEEING,
     COMBAT_ACTOR_FLAG_PHASE_BLINK_FILTER, COMBAT_ACTOR_FLAG_SELECTABLE_80, COMBAT_ACTOR_SLOTS,
-    COMBAT_ARENA_SIDE, COMBAT_CLASS_GIANT_RAT, COMBAT_CLASS_SHADOW_LORD,
+    COMBAT_ARENA_SIDE, COMBAT_CLASS_GIANT_RAT,
     COMBAT_DEFAULT_DEATH_DROP_TILE, COMBAT_GARGOYLE_DEATH_TERRAIN_TILE,
     COMBAT_GAZER_DEATH_MARKER_TILE, COMBAT_PARTY_ACTOR_SLOTS, COMBAT_PLACEMENT_PHASE_BASE,
     COMPLETED_LONG_CAMP_COOLDOWN_HOURS, CREATE_FOOD_COST, CREATE_FOOD_MAX_GRANT,
@@ -2793,7 +2793,7 @@ pub fn route_smoke_cases() -> Vec<RouteSmokeCase> {
             expected_frame_kind: "combat viewport",
         },
         RouteSmokeCase {
-            name: "combat-kill-shadowlord-protected-rejection",
+            name: "combat-kill-shadowlord-vanishes",
             options: world.clone(),
             script: &["C1CX7"],
             expected: RouteSmokeExpectation::World(WorldPlane::Britannia),
@@ -3870,7 +3870,7 @@ fn apply_route_smoke_case_setup(
         "combat-kill-gargoyle-lava-marker" => {
             seed_combat_special_death_route(state, 30)?;
         }
-        "combat-kill-shadowlord-protected-rejection" => {
+        "combat-kill-shadowlord-vanishes" => {
             seed_combat_special_death_route(state, 47)?;
             seed_route_combat_pending_party_actor(state);
         }
@@ -5364,7 +5364,7 @@ fn combat_spell_route_code(case_name: &str) -> &'static str {
         "combat-summon-daemon-ring" => "CKX",
         "combat-kill-gazer-eye-burst"
         | "combat-kill-gargoyle-lava-marker"
-        | "combat-kill-shadowlord-protected-rejection" => "CX",
+        | "combat-kill-shadowlord-vanishes" => "CX",
         _ => "GP",
     }
 }
@@ -5538,10 +5538,9 @@ fn seed_combat_special_death_route(state: &mut PlayState, class: u8) -> io::Resu
     // cast landed only on a lucky draw - and `animation.md §13.2`'s bare
     // first world step (audit A019) shifted the stream into a miss. This
     // route is about the special death transition, so the caster's rating
-    // makes the hit certain instead of PRNG-dependent. The Shadow Lord case
-    // keeps the old rating: its `Failed!` expectation predates R446 (see
-    // the note on `validate_combat_spell_route_state`).
-    let caster_rating = if class == COMBAT_CLASS_SHADOW_LORD { 1 } else { 99 };
+    // makes the hit certain instead of PRNG-dependent - the Shadow Lord case
+    // included, now that R446 has Kill reach its class-specific death.
+    let caster_rating = 99;
     actors[0] = CombatActorDescriptor::from_row([
         99,
         caster_rating,
@@ -5670,26 +5669,35 @@ fn validate_combat_spell_route_state(state: &PlayState, case_name: &str) -> io::
     let code = combat_spell_route_code(case_name);
     let spell_index = spell_index_from_code(code)
         .ok_or_else(|| io::Error::other(format!("unknown combat spell code `{code}`")))?;
-    if case_name == "combat-kill-shadowlord-protected-rejection" {
-        // Open question: `RETRACTIONS.md` R446 withdrew Kill's protected-class
-        // rejection - classes 14, 15 and 47 "can reach Kill's shared damage
-        // endpoint after an admitted hit" and keep only their class-specific
-        // death behaviour. This case's `Failed!` therefore now comes from the
-        // ordinary `combat.md §11` to-hit miss of a rating-1 caster, not from
-        // a protection rule; it needs re-scoping to the Shadow Lord's
-        // class-specific death behaviour once that outcome is pinned.
+    if case_name == "combat-kill-shadowlord-vanishes" {
+        // `magic.md §8` (`RETRACTIONS.md` R446): Kill has no protected-class
+        // rejection - "Classes 14, 15 and 47 can reach Kill's shared damage
+        // endpoint after an admitted hit; this does not remove their existing
+        // class-specific death behavior." The Shadow Lord's is the
+        // vanish-on-death branch of `combat.md §6.3`: it prints
+        // `<name> vanishes!`, which suppresses the generic `killed!` line
+        // (`§11.1`), and releases the descriptor and its linked active-object
+        // record. The Giant Rat keeps the fight going.
         let target = state.combat_actors[COMBAT_PARTY_ACTOR_SLOTS];
+        let transcript: Vec<String> = state
+            .message_entries()
+            .iter()
+            .map(|entry| entry.text.clone())
+            .collect();
         if !state.combat_active
             || state.spell_charges[spell_index] != 0
             || state.party.first().is_none_or(|member| member.mana != 0)
             || state.turn < 1
-            || target.owner_target_class != COMBAT_CLASS_SHADOW_LORD
-            || target.is_marked_dead()
+            || !target.is_empty()
+            || !state.active_objects[COMBAT_PARTY_ACTOR_SLOTS].is_empty()
             || state.active_cast_followup.is_some()
-            || !state.message.contains("Failed!")
+            || !transcript.iter().any(|row| row.contains("Shadow Lord vanishes!"))
+            || transcript
+                .iter()
+                .any(|row| row.contains("killed!") || row.contains("Failed!"))
         {
             return Err(io::Error::other(format!(
-                "route smoke `{case_name}` did not commit the protected Shadow Lord rejection after spending cast resources"
+                "route smoke `{case_name}` did not take the Shadow Lord's vanish-on-death branch after spending cast resources (transcript {transcript:?}, actor {target:?})"
             )));
         }
         return Ok(());
@@ -6517,7 +6525,7 @@ fn validate_route_smoke_case_state(
         | "combat-summon-daemon-ring"
         | "combat-kill-gazer-eye-burst"
         | "combat-kill-gargoyle-lava-marker"
-        | "combat-kill-shadowlord-protected-rejection" => {
+        | "combat-kill-shadowlord-vanishes" => {
             validate_combat_spell_route_state(state, case_name)?;
         }
         "dungeon-level-up-down-spells" => {
