@@ -2478,6 +2478,12 @@ impl PlayState {
         spell_index: usize,
         mana_cost: u8,
     ) -> Option<MoveOutcome> {
+        // `magic.md §5`: the dispatcher already ran these gates before the
+        // handler (and before any handler prompt); see
+        // [`PlayState::cast_resources_spent`].
+        if self.cast_resources_spent {
+            return None;
+        }
         let Some(caster) = self.party.get(caster_index).copied() else {
             // Out-of-range caster: the `Player: ` prompt bounds the index.
             self.message.clear();

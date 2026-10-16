@@ -468,6 +468,12 @@ pub struct PlayState {
     /// See [`crate::CastArgumentRequest`]: what the last spell dispatch
     /// still needs, for the cast prompt's follow-up to open.
     pub pending_cast_argument: Option<CastArgumentRequest>,
+    /// `magic.md §5` (issue #277): "Steps 4 to 6 precede the handler, so a
+    /// handler's own prompt [...] is reached with the charge - and [...] the
+    /// mana - already spent." Set while a dispatch runs whose charge, mana
+    /// and level gates have already been settled, so the handler's own
+    /// [`PlayState::cast_spell_resource_gate`] call does not charge twice.
+    pub cast_resources_spent: bool,
     pub active_combat_targeting: Option<CombatTargetingCursorSession>,
     /// `combat.md §8.2`: the targeting cursor "starts on **the attacker's**
     /// remembered previous target when that target is still a valid, live,

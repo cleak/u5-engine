@@ -8504,7 +8504,7 @@ fn combat_cast_charm_routes_resources_and_toggles_target_allegiance() {
 }
 
 #[test]
-fn combat_cast_charm_rejects_an_unmarked_same_group_target_before_resources() {
+fn combat_cast_charm_rejects_an_unmarked_same_group_target_after_resources() {
     // `magic.md §8`: Charm re-targets an actor that already carries the
     // controlled/charmed marker, because "a second successful Charm on the
     // same actor clears it". The refusal this pins is the *other* case —
@@ -8529,7 +8529,8 @@ fn combat_cast_charm_rejects_an_unmarked_same_group_target_before_resources() {
     state.combat_actors[0] =
         CombatActorDescriptor::from_row([30, 1, COMBAT_ACTOR_FLAG_SELECTABLE_80, 0, 0, 0, 3, 3]);
     // A party-side slot with the marker clear groups with the caster, so
-    // the creature prompt refuses it before the resource gate.
+    // the creature prompt refuses it - after the dispatcher has already
+    // spent the charge and mana (`magic.md §5`, issue #277).
     let target_slot = 1usize;
     state.combat_actors[target_slot] = CombatActorDescriptor::from_row([
         20,
@@ -8553,8 +8554,8 @@ fn combat_cast_charm_rejects_an_unmarked_same_group_target_before_resources() {
         MoveOutcome::Blocked
     );
 
-    assert_eq!(state.spell_charges[spell_index], 1);
-    assert_eq!(state.party[0].mana, 6);
+    assert_eq!(state.spell_charges[spell_index], 0);
+    assert_eq!(state.party[0].mana, 0);
     assert_eq!(state.turn, 0);
     assert_eq!(
         state.message,
@@ -16333,7 +16334,8 @@ fn combat_cast_magic_missile_aims_with_the_arena_cursor() {
         Some(CastFollowupKind::CombatAimCursor { x: 4, y: 5 })
     );
     assert!(state.message.contains("Aim!"));
-    assert_eq!(state.spell_charges[spell_index], 1);
+    // `magic.md §5` (issue #277): the cursor opens with the charge spent.
+    assert_eq!(state.spell_charges[spell_index], 0);
     assert_eq!(state.turn, 0);
 
     // One cardinal step east puts the cursor on the orc.
@@ -16969,7 +16971,7 @@ fn the_creature_prompt_opens_the_arena_cursor_and_casts_on_the_confirmed_cell() 
     );
 
     // One cell east is empty, and a confirm there keeps the cursor open
-    // rather than spending the cast.
+    // (the charge was already spent before the prompt, `magic.md §5`).
     state
         .step_active_cast_followup(char::from(INPUT_CODE_EAST), "", std::path::Path::new(""))
         .unwrap();
@@ -16981,7 +16983,7 @@ fn the_creature_prompt_opens_the_arena_cursor_and_casts_on_the_confirmed_cell() 
         .step_active_cast_followup(' ', "", std::path::Path::new(""))
         .unwrap();
     assert!(state.active_cast_followup.is_some());
-    assert_eq!(state.spell_charges[spell_index], 1);
+    assert_eq!(state.spell_charges[spell_index], 0);
 
     // One more east lands on the dragon; that confirm resolves the cast.
     state

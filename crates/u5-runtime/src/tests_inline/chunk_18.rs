@@ -10,8 +10,10 @@
             PlayInputDisposition::Continue
         );
 
-        assert_eq!(missing_direction.spell_charges[FIRE_FIELD_SPELL_INDEX], 1);
-        assert_eq!(missing_direction.party[0].mana, FIELD_SPELL_COST);
+        // `magic.md §5` (issue #277): the handler's prompt is reached with
+        // the charge and mana already spent.
+        assert_eq!(missing_direction.spell_charges[FIRE_FIELD_SPELL_INDEX], 0);
+        assert_eq!(missing_direction.party[0].mana, 0);
         assert_eq!(missing_direction.turn, 0);
         assert_eq!(
             missing_direction.pending_cast_argument,
@@ -92,8 +94,10 @@
             PlayInputDisposition::Continue
         );
 
-        assert_eq!(missing_direction.spell_charges[DISPEL_FIELD_SPELL_INDEX], 1);
-        assert_eq!(missing_direction.party[0].mana, DISPEL_FIELD_COST);
+        // `magic.md §5` (issue #277): the handler's prompt is reached with
+        // the charge and mana already spent.
+        assert_eq!(missing_direction.spell_charges[DISPEL_FIELD_SPELL_INDEX], 0);
+        assert_eq!(missing_direction.party[0].mana, 0);
         assert_eq!(missing_direction.turn, 0);
         assert_eq!(
             missing_direction.pending_cast_argument,
@@ -650,7 +654,7 @@
     }
 
     #[test]
-    fn cast_rel_hur_missing_direction_prompts_without_spending_spell() {
+    fn cast_rel_hur_missing_direction_prompts_after_spending_spell() {
         let mut state = britannia_state(open_world_grid(), 5, 5);
         state.spell_charges[REL_HUR_SPELL_INDEX] = 1;
         state.party[0].mana = 3;
@@ -663,8 +667,10 @@
         );
 
         assert_eq!(state.wind, WindState::East);
-        assert_eq!(state.spell_charges[REL_HUR_SPELL_INDEX], 1);
-        assert_eq!(state.party[0].mana, 3);
+        // `magic.md §5` (issue #277): the handler's prompt is reached with
+        // the charge and mana already spent.
+        assert_eq!(state.spell_charges[REL_HUR_SPELL_INDEX], 0);
+        assert_eq!(state.party[0].mana, 1);
         assert_eq!(state.turn, 0);
         assert_eq!(
             state.pending_cast_argument,

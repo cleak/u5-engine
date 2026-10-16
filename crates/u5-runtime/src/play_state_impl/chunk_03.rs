@@ -1666,6 +1666,9 @@ impl PlayState {
             return Ok(Some((outcome, combat)));
         }
         let suffix = format!("{}{}{}", session.caster_index + 1, session.spell_code, tail);
+        // The first dispatch settled charge, mana and level before opening
+        // this prompt (`magic.md §5`, issue #277).
+        self.cast_resources_spent = true;
         let outcome = self.cast_spell_from_suffix(&suffix, game_dir)?;
         Ok(Some((outcome, combat)))
     }

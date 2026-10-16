@@ -633,8 +633,10 @@
         // `commands.md §5.2`: the prompt is the bare `Direction-` echo; the
         // help sentence the engine used to append is gone.
         assert_eq!(state.message, crate::SPELL_DIRECTION_PROMPT_PREFIX);
-        assert_eq!(state.spell_charges[BLINK_SPELL_INDEX], 1);
-        assert_eq!(state.party[0].mana, BLINK_COST);
+        // `magic.md §5` (issue #277): the prompt is reached with the charge
+        // and mana already spent.
+        assert_eq!(state.spell_charges[BLINK_SPELL_INDEX], 0);
+        assert_eq!(state.party[0].mana, 0);
         assert_eq!(state.turn, 0);
 
         assert!(
@@ -692,8 +694,9 @@
         assert!(state.step_active_cast(' ', "", Path::new("")).unwrap().is_none());
         assert!(state.active_cast_followup.is_some());
         assert_eq!(state.message, USE_POTION_TARGET_PROMPT);
-        assert_eq!(state.spell_charges[HEAL_SPELL_INDEX], 1);
-        assert_eq!(state.party[0].mana, HEAL_COST);
+        // `magic.md §5` (issue #277): spent before `On who: ` opens.
+        assert_eq!(state.spell_charges[HEAL_SPELL_INDEX], 0);
+        assert_eq!(state.party[0].mana, 0);
         assert_eq!(state.turn, 0);
 
         assert!(
@@ -742,8 +745,9 @@
         assert!(state.step_active_cast(' ', "", Path::new("")).unwrap().is_none());
         assert!(state.active_cast_followup.is_some());
         assert!(state.message.contains("To phase?"));
-        assert_eq!(state.spell_charges[GATE_TRAVEL_SPELL_INDEX], 1);
-        assert_eq!(state.party[0].mana, GATE_TRAVEL_COST);
+        // `magic.md §5` (issue #277): spent before the phase prompt opens.
+        assert_eq!(state.spell_charges[GATE_TRAVEL_SPELL_INDEX], 0);
+        assert_eq!(state.party[0].mana, 0);
         assert_eq!(state.turn, 0);
 
         assert!(
@@ -4085,7 +4089,7 @@
     }
 
     #[test]
-    fn cast_restore_target_prompt_precedes_resource_consumption() {
+    fn cast_restore_target_prompt_follows_resource_consumption() {
         let mut missing_target = dungeon_state(open_dungeon_record(), 0, 1, 1);
         missing_target.spell_charges[CURE_SPELL_INDEX] = 1;
         missing_target.party[0].mana = CURE_COST;
@@ -4096,8 +4100,9 @@
             PlayInputDisposition::Continue
         );
 
-        assert_eq!(missing_target.spell_charges[CURE_SPELL_INDEX], 1);
-        assert_eq!(missing_target.party[0].mana, CURE_COST);
+        // `magic.md §5` (issue #277): spent before the handler prompts.
+        assert_eq!(missing_target.spell_charges[CURE_SPELL_INDEX], 0);
+        assert_eq!(missing_target.party[0].mana, 0);
         assert_eq!(missing_target.turn, 0);
         assert_eq!(
             missing_target.pending_cast_argument,
@@ -4114,8 +4119,8 @@
             PlayInputDisposition::Continue
         );
 
-        assert_eq!(invalid_target.spell_charges[CURE_SPELL_INDEX], 1);
-        assert_eq!(invalid_target.party[0].mana, CURE_COST);
+        assert_eq!(invalid_target.spell_charges[CURE_SPELL_INDEX], 0);
+        assert_eq!(invalid_target.party[0].mana, 0);
         assert_eq!(invalid_target.turn, 0);
         assert_eq!(invalid_target.message, "");
     }
@@ -4749,8 +4754,9 @@
             PlayInputDisposition::Continue
         );
 
-        assert_eq!(missing_direction.spell_charges[BLINK_SPELL_INDEX], 1);
-        assert_eq!(missing_direction.party[0].mana, BLINK_COST);
+        // `magic.md §5` (issue #277): spent before the handler prompts.
+        assert_eq!(missing_direction.spell_charges[BLINK_SPELL_INDEX], 0);
+        assert_eq!(missing_direction.party[0].mana, 0);
         assert_eq!(missing_direction.turn, 0);
         assert_eq!(
             missing_direction.pending_cast_argument,
