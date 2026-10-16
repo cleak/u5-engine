@@ -2993,6 +2993,16 @@ impl PlayState {
                 .effective_minutes(minutes)
         };
         self.dungeon_loop_minute_charged = true;
+        self.advance_clock_half(effective_minutes);
+    }
+
+    /// The clock half of a turn shared by [`Self::advance_dungeon_loop_minute`]
+    /// and the outdoor difficult-terrain charge of `movement.md §8.1`: the
+    /// calendar cascade, the hour bundle, the light-counter decay and the
+    /// daylight recompute, without bumping the action counter or entering
+    /// any post-action pass. `effective_minutes` is already scaled by the
+    /// timed-effect clock rules.
+    pub(crate) fn advance_clock_half(&mut self, effective_minutes: u8) {
         let previous_day = self.clock.day;
         let previous_hour = self.clock.hour;
         // `time.md §2`: "A pre-cascade snapshot of the hour, taken at the
@@ -5507,8 +5517,7 @@ impl PlayState {
         // creature instead attempts one randomly chosen cardinal move" - the
         // random four-direction walker of `active-objects.md §8`, which
         // "rolls one cardinal direction and makes a single attempt at it".
-        let direction =
-            OUTDOOR_RANDOM_WALK_DIRECTIONS[usize::from(self.random_range_u8(0, 3))];
+        let direction = OUTDOOR_RANDOM_WALK_DIRECTIONS[usize::from(self.random_range_u8(0, 3))];
         let (dx, dy) = direction.delta();
         self.try_step_outdoor_active_object(slot, object, dx, dy, direction, last_vacated)
     }

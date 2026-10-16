@@ -2184,6 +2184,63 @@ fn horse_world_movement_uses_one_cell_on_rough_terrain() {
 }
 
 #[test]
+fn difficult_terrain_extra_object_call_takes_its_own_transport_cadence_turn() {
+    // `movement.md §8.1`: "The cadence unit is **one object-update call**,
+    // including each additional terrain call and the later ordinary outdoor
+    // object call." A horse step onto brush makes one extra call: from
+    // parity 0 it flips to 1 (skip), and the ordinary call flips it back to
+    // 0 (run). Without the extra call the ordinary call would be skipped.
+    let mut grid = open_world_grid();
+    grid[world_cell_index(1, 0)] = 7;
+    let mut state = world_state(grid, 0, 0);
+    mount_horse(&mut state);
+    state.transport_walker_gate_parity = false;
+    let clock = state.clock;
+
+    assert_eq!(state.step(Direction::East), MoveOutcome::Moved);
+
+    assert!(!state.transport_walker_gate_parity);
+    assert!(state.world_walkers_ran_this_turn);
+    // Two terrain minutes as their own advance, then the ordinary two.
+    let mut expected = clock;
+    expected.advance_minutes(4);
+    assert_eq!(state.clock, expected);
+    assert_eq!(state.turn, 1);
+}
+
+#[test]
+fn difficult_terrain_feedback_is_suppressed_by_a_hostile_extra_call() {
+    // `movement.md §8.1`: "the message is suppressed if any of the
+    // additional object-update calls reports a hostile interaction";
+    // "Suppression does not remove the terrain's time charge."
+    let mut grid = open_world_grid();
+    grid[world_cell_index(6, 5)] = 7;
+    let mut state = world_state(grid, 5, 5);
+    state.active_objects.push(ActiveObject {
+        type_byte: 0x80,
+        tile: 0x80,
+        x: 7,
+        y: 5,
+        z: WorldPlane::Underworld.save_floor(),
+        phase: 0,
+        aux1: 0,
+        aux3: 0,
+    });
+    let clock = state.clock;
+
+    assert_eq!(state.step(Direction::East), MoveOutcome::Moved);
+
+    assert!(
+        !state.message.contains(crate::commands::MOVEMENT_SLOW_PROGRESS_LINE),
+        "message: {}",
+        state.message
+    );
+    let mut expected = clock;
+    expected.advance_minutes(4);
+    assert_eq!(state.clock, expected);
+}
+
+#[test]
 fn overworld_special_underfoot_latch_forces_darkness_and_holds_valid_movement() {
     let mut grid = open_world_grid();
     grid[world_cell_index(5, 5)] = OVERWORLD_UNDERFOOT_BLACKOUT_TILE;
