@@ -278,3 +278,34 @@ fn a130_floor_link_search_goals_are_exactly_the_marker_and_reachable() {
     assert_eq!((state.npcs[0].x, state.npcs[0].y, state.npcs[0].z), (2, 2, 0));
     assert_eq!(state.npcs[0].state, NPC_STATE_INPLANE_MOVE);
 }
+
+#[test]
+fn a132_refused_on_floor_gate_installs_the_route_and_replays_it() {
+    // npc-schedules.md §8.5: on a refused 6/7 gate the walker "routes
+    // toward it and enters the queue-replay state, so the NPC walks onto
+    // the link and passes the gate on a later tick".
+    let mut grid = g6_open_grid();
+    grid[5 * 32 + 8] = NPC_FLOOR_LINK_TILE_C8;
+    let mut state = test_state(grid, 20, 20);
+    let mut npc = g6_npc(1, 5, 5, 0, (12, 12, 1));
+    npc.z = 0;
+    npc.state = NPC_STATE_CLIMB_UP_OFF_FLOOR;
+    state.npcs = vec![npc];
+    state.relink_npc_objects();
+
+    state.advance_npc_schedules();
+    assert_eq!((state.npcs[0].x, state.npcs[0].y, state.npcs[0].z), (6, 5, 0));
+    assert_eq!(state.npcs[0].state, NPC_STATE_REPLAY_QUEUE);
+    assert_eq!(
+        state.npcs[0].move_queue[state.npcs[0].move_queue_pos..],
+        [NPC_PATH_DIR_EAST, NPC_PATH_DIR_EAST]
+    );
+    // Later ticks replay the queue on the displayed floor ...
+    state.advance_npc_schedules();
+    state.advance_npc_schedules();
+    assert_eq!((state.npcs[0].x, state.npcs[0].y, state.npcs[0].z), (8, 5, 0));
+    assert_eq!(state.npcs[0].state, NPC_STATE_CLIMB_UP_OFF_FLOOR);
+    // ... and the gate accepts on the next tick.
+    state.advance_npc_schedules();
+    assert_eq!((state.npcs[0].x, state.npcs[0].y, state.npcs[0].z), (12, 12, 1));
+}

@@ -1256,8 +1256,12 @@ impl PlayState {
             return self.npc_route_recovery_wander(npc_index, floor, target_x, target_y);
         }
         self.npcs[npc_index].advance_move_queue_direction();
+        // A queued step moves within the displayed floor: an in-plane route
+        // has `target_z == floor`, and a route toward a floor link (§8.5
+        // states 6/7) must not carry the NPC to the waypoint's floor early.
+        let npc_z = self.npcs[npc_index].z;
         let moved = self.commit_npc_schedule_position(
-            npc_index, waypoint, target_x, target_y, target_z, floor, nx, ny, target_z,
+            npc_index, waypoint, target_x, target_y, target_z, floor, nx, ny, npc_z,
         );
         if (nx, ny) != (target_x, target_y) && !self.npcs[npc_index].move_queue.is_empty() {
             self.npcs[npc_index].state = NPC_STATE_REPLAY_QUEUE;
@@ -1595,15 +1599,24 @@ impl PlayState {
                 return false;
             }
             *searched = true;
-            if let Some((nx, ny)) =
-                self.npc_path_step_to_floor_link(npc_index, marker, target_x, target_y, floor)
-            {
-                self.npcs[npc_index].x = nx;
-                self.npcs[npc_index].y = ny;
-                self.sync_npc_active_object(npc_index, floor);
-                self.npcs[npc_index].state = schedule_floor_state(npc_z, target_z, floor);
-                self.npcs[npc_index].stuck_counter = 0;
-                return true;
+            // npc-schedules.md §8.5: "When the gate refuses, the walker falls
+            // back to the tile-ID search for the matching marker, routes
+            // toward it and enters the queue-replay state, so the NPC walks
+            // onto the link and passes the gate on a later tick." The queue
+            // drain then re-enters 6/7 and ends the tick (§7).
+            if let Some(route) = self.npc_path_route_to_floor_link_marker(
+                npc_index,
+                current,
+                marker,
+                (target_x, target_y),
+                floor,
+            ) {
+                self.npcs[npc_index].set_move_queue(route);
+                return self
+                    .advance_npc_replay_queue_step(
+                        npc_index, waypoint, target_x, target_y, target_z, floor,
+                    )
+                    == NpcScheduleStepOutcome::Moved;
             }
             // `RETRACTIONS.md` R367: a failed floor-link search is not a
             // refused queued route step, so the counter stands.
