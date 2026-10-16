@@ -1788,6 +1788,16 @@ pub fn quote_arms_purchase(
     })
 }
 
+/// `shops.md §8.A` arms buy confirmation row: a successful purchase
+/// "increments the equipment counter or fills arrows/quarrels to `99`".
+pub fn arms_purchase_stock_after(item_id: usize, stock: u8) -> u8 {
+    if item_id == crate::EQUIPMENT_ID_ARROWS || item_id == crate::EQUIPMENT_ID_QUARRELS {
+        EQUIPMENT_STOCK_CAP
+    } else {
+        stock.saturating_add(1).min(EQUIPMENT_STOCK_CAP)
+    }
+}
+
 pub fn apply_arms_purchase(
     gold: &mut u16,
     stock: &mut u8,
@@ -1811,7 +1821,7 @@ pub fn apply_arms_purchase(
     let gold_before = *gold;
     let stock_before = *stock;
     *gold -= quote.total_price;
-    *stock += 1;
+    *stock = arms_purchase_stock_after(item_id, *stock);
 
     Ok(ArmsPurchaseOutcome {
         quote,

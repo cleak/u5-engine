@@ -400,7 +400,10 @@ pub fn step_arms_shop(
                 return ArmsShopOutcome::BuyRefusedShortFunds { item, quoted_price };
             }
             *gold -= quoted_price;
-            stock[item_idx] = stock[item_idx].saturating_add(1);
+            // `shops.md §8.A` arms buy confirmation row: a paid purchase
+            // "increments the equipment counter or fills arrows/quarrels
+            // to `99`" (§8.1: "caps arrows/quarrels at `99`").
+            stock[item_idx] = crate::shops::arms_purchase_stock_after(item_idx, stock[item_idx]);
             // Measured 2026-09-07 (`qa/paired/shop-arms-menus.tsv`): a
             // completed purchase does not drop back to the Buy-or-Sell
             // greeting. The stock list is redrawn under the post-item prompt
@@ -2110,6 +2113,42 @@ mod tests {
         assert!(matches!(outcome, ArmsShopOutcome::Bought { item: 3, .. }));
         assert_eq!(stock[3], 1);
         assert!(gold < 100);
+    }
+
+    /// `shops.md §8.A` arms buy confirmation row: a successful payment
+    /// "increments the equipment counter or fills arrows/quarrels to `99`".
+    #[test]
+    fn arms_shop_buying_ammunition_fills_the_counter_to_99() {
+        let prices = make_price_table();
+        let ctx = ShopTransactionContext {
+            party_gold: 100,
+            speaker_intelligence: 10,
+            world_hour: 12,
+            party_size: 1,
+            living_party_members: 1,
+        };
+        for item in [crate::EQUIPMENT_ID_ARROWS, crate::EQUIPMENT_ID_QUARRELS] {
+            let mut state = ArmsShopState::BuyConfirm {
+                item: item as u8,
+                quoted_price: 5,
+                quote_record_id: 0,
+            };
+            let mut stock = make_stock();
+            stock[item] = 7;
+            let mut gold = 100u16;
+            let outcome = step_arms_shop(
+                &mut state,
+                ArmsShopInput::Confirm(true),
+                ctx,
+                &mut gold,
+                &mut stock,
+                &prices,
+            );
+            assert!(matches!(outcome, ArmsShopOutcome::Bought { .. }));
+            assert_eq!(stock[item], EQUIPMENT_STOCK_CAP);
+            assert_eq!(gold, 95);
+        }
+        assert_eq!(crate::shops::arms_purchase_stock_after(3, 7), 8);
     }
 
     #[test]
