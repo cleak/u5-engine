@@ -5086,7 +5086,10 @@ impl PlayState {
                         self.message = format!("{demand}\n\n{BLACKTHORN_INPUT_PROMPT}");
                         Ok(MoveOutcome::PromptDeclined)
                     }
-                    // Fourth wrong answer: the §5 execution.
+                    // Fourth wrong answer: the §5 execution. `blackthorn.md
+                    // §6.1`: "index 3 executes a companion (Section 5) rather
+                    // than stamping", and the §6.3 swap script ran on the
+                    // first wrong answer only, so it is not replayed here.
                     _ => {
                         // §5: the tail names "the actual removed member",
                         // read before the roster record is lifted out.

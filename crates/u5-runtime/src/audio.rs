@@ -1285,22 +1285,17 @@ pub fn shrine_swell_program(period: u16, iterations: u32) -> SpeakerProgram {
 }
 
 /// `quest-graph.md §5` "Presentation order", step 2 of a Gem Shard use: "a
-/// rising pitch sweep, followed by a falling one, again unconditionally". No
-/// recipe is published; asked as `cleak/u5-spec#296`.
+/// rising pitch sweep, followed by a falling one, again unconditionally".
 ///
-/// Measured pending u5-spec#296 (2026-10-14, `qa/paired/use-shard-sweep.tsv`,
-/// stock side, two runs): the sound is **not** a frequency glissando. Its
-/// fundamental holds at 891 Hz throughout, harmonics at 2x/3x/4x, while the
-/// pulse width widens from a few per cent to about 40 per cent and back -
-/// the same one-pitch duty swell shape as `karma.md §7.2`'s shrine arms, so
-/// it reuses [`shrine_swell_program`]. Rising limb about 4.15 s, falling limb
-/// about 4.12 s, no gap between them; 8.25 s and 8.27 s in all.
-///
-/// The period puts the gate at 891 Hz on [`ENVELOPE_ITERATION_NANOS`]
-/// (`2511 / 65536 / 43 µs`), and the iteration count makes 920 runs last
-/// the measured 8.27 s. Both are fitted to the capture, not published.
-pub const SHARD_SWELL_PERIOD: u16 = 2511;
-pub const SHARD_SWELL_ITERATIONS: u32 = 209;
+/// `audio.md §5.4.7` publishes it as the "Shadowlord destruction" caller of
+/// the 920-step swell: phase increment 2640, 200 iterations per run, 184,000
+/// in all, about 937 Hz and 7.91 s audible. "Every parameter and every count
+/// is exact; the pitches and the milliseconds are calibrated approximations."
+/// The stock capture (`qa/paired/use-shard-sweep.tsv`: one pitch near 891 Hz,
+/// 8.25-8.27 s) sits inside that calibration band; the earlier constants
+/// fitted to it (2511 / 209) are replaced by the published ones.
+pub const SHARD_SWELL_PERIOD: u16 = 2640;
+pub const SHARD_SWELL_ITERATIONS: u32 = 200;
 
 pub fn blackthorn_rescue_envelope_program() -> SpeakerProgram {
     let mut ops = Vec::with_capacity(BLACKTHORN_RESCUE_ENVELOPES.len() * 2);
@@ -1822,6 +1817,12 @@ pub enum SoundEffect {
     /// before the separate refusal beep." Ships, skiffs, carpets and
     /// first-person dungeon movement do not select this.
     TopDownMovementSting,
+    /// `audio.md §7.5` "Movement stings", combat row: the same two-part
+    /// rumble, once per "combat directional step accepted inside the arena",
+    /// "after both actor-position representations change, before the
+    /// room-specific follow-up and subsequent committed-action absorption
+    /// check". `§8.7` step 1's endgame absorption step is this cue.
+    CombatMovementSting,
     /// `§8.6.2` fixed six-envelope Blackthorn rescue sequence.
     BlackthornRescueEnvelopes,
     /// `audio.md §6.1`'s absorb cue. See [`MAGIC_ABSORBED_ENVELOPE`].
@@ -1840,8 +1841,9 @@ pub enum SoundEffect {
     /// `karma.md §7.2`, the Codex-turn-in arm's 920-run swell. The
     /// shared flash/rumble helper runs **after** this, not instead of it.
     ShrineTurnInSwell,
-    /// `quest-graph.md §5` step 2, the Gem Shard's rise-and-fall. Measured
-    /// pending u5-spec#296; see [`SHARD_SWELL_PERIOD`].
+    /// `quest-graph.md §5` step 2, the Gem Shard's rise-and-fall:
+    /// `audio.md §5.4.7`'s "Shadowlord destruction" swell; see
+    /// [`SHARD_SWELL_PERIOD`].
     ShardSwell,
     /// R494's per-slot restoration note, carrying the slot it precedes.
     BlackthornRescueRestoration(usize),
@@ -1930,7 +1932,8 @@ impl SoundEffect {
             }
             SoundEffect::BlackthornMovementStinger
             | SoundEffect::EndgameTableauMovementSting
-            | SoundEffect::TopDownMovementSting => two_part_sting(jitter),
+            | SoundEffect::TopDownMovementSting
+            | SoundEffect::CombatMovementSting => two_part_sting(jitter),
             SoundEffect::BlackthornRescueEnvelopes => blackthorn_rescue_envelope_program(),
             SoundEffect::MagicAbsorbed => envelope_program(MAGIC_ABSORBED_ENVELOPE),
             SoundEffect::ShrineOrdinationChime => shrine_ordination_chime_program(),

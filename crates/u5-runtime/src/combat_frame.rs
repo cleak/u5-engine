@@ -8797,6 +8797,11 @@ impl PlayState {
             attacks_hostile_occupant,
         );
         if outcome.committed_movement() {
+            // `audio.md §7.5` combat row: the accepted step's sting plays
+            // after both actor-position representations changed (above) and
+            // before the room-specific follow-up and the committed-action
+            // absorption check. A rejected step uses the refusal cue instead.
+            self.emit_sound_effect(SoundEffect::CombatMovementSting);
             self.mark_visibility_dirty();
             let _ = self.apply_combat_ambush_reveal_for_actor_position(moving_slot);
         }

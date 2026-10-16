@@ -884,6 +884,38 @@ pub fn active_object_next_frame_tile(type_byte: u8, current_tile: u8) -> Option<
     Some(base + ((frame + 1) & span))
 }
 
+/// `animation.md §5` "One family, named": the beggar run, atlas `364..367`
+/// (type bytes `0x6C..0x6F`), the one class whose frame script is published.
+pub const BEGGAR_FRAME_FAMILY_BASE: u8 = 0x6C;
+/// The third successor, from which the script either re-bases or rewinds.
+pub const BEGGAR_FRAME_FAMILY_LAST: u8 = BEGGAR_FRAME_FAMILY_BASE + 3;
+/// "returns to the base - on a one-in-four roll - and holds it for six ticks".
+pub const BEGGAR_BASE_HOLD_TICKS: u8 = 6;
+
+/// Whether `type_byte` belongs to the beggar family of `animation.md §5`.
+pub const fn is_beggar_frame_family(type_byte: u8) -> bool {
+    type_byte & !0x03 == BEGGAR_FRAME_FAMILY_BASE
+}
+
+/// One advancing decision of the beggar script (`animation.md §5`): "the
+/// successors are emitted in ascending order, and from the third the slot
+/// either returns to the base - on a one-in-four roll - and holds it for six
+/// ticks, or rewinds to the first and climbs again".
+///
+/// `rebase_roll` is consulted only from the third successor. Returns the next
+/// displayed tile and the hold to reseed (zero for none).
+pub fn beggar_script_next_frame(current_tile: u8, rebase_roll: impl FnOnce() -> bool) -> (u8, u8) {
+    let frame = current_tile.wrapping_sub(BEGGAR_FRAME_FAMILY_BASE) & 0x03;
+    if BEGGAR_FRAME_FAMILY_BASE + frame != BEGGAR_FRAME_FAMILY_LAST {
+        return (BEGGAR_FRAME_FAMILY_BASE + frame + 1, 0);
+    }
+    if rebase_roll() {
+        (BEGGAR_FRAME_FAMILY_BASE, BEGGAR_BASE_HOLD_TICKS)
+    } else {
+        (BEGGAR_FRAME_FAMILY_BASE + 1, 0)
+    }
+}
+
 pub fn is_ambient_wanderer_object(object: ActiveObject) -> bool {
     (192..=255).contains(&object.type_byte) || (192..=255).contains(&object.tile)
 }

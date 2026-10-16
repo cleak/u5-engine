@@ -1268,7 +1268,8 @@ impl PlayState {
     /// not published — only their order, their completing words, and which of
     /// them are unconditional — so the literals below are engine voice. The
     /// rising/falling sweep of phase 2 is [`SoundEffect::ShardSwell`]
-    /// (`audio.md §5.4.7`'s Shadowlord-destruction row) and plays before the
+    /// (`audio.md §5.4.7`'s 920-step swell at the "Shadowlord destruction"
+    /// row's parameters) and plays before the
     /// position gate on every path; the text after it waits the swell out.
     /// The `§8.4` destruction flash below is published and is preserved at
     /// its own boundary.

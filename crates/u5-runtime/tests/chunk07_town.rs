@@ -214,6 +214,84 @@ fn blackthorn_first_wrong_answer_threatens_and_re_asks_instead_of_ending() {
     let _ = fs::remove_dir_all(dir);
 }
 
+/// `blackthorn.md §6.1` / `formats/tiles.md §6.1`: the §6.3 swap script
+/// (`0x80` -> `0x82` at `(5,7)`, `0xE8` -> `0xE9` at `(5,9)`) runs on the
+/// first wrong answer only; later wrong answers stamp the hourglass cell by
+/// question index (1 -> `0xEB`, 2 -> `0xE8`) and index 3 executes rather than
+/// stamping. "The visible sequence for an all-wrong run is therefore `0xE8`
+/// -> `0xE9` -> `0xEB` -> `0xE8`."
+#[test]
+fn blackthorn_wrong_answers_run_the_published_hourglass_sequence() {
+    let dir = debug_game_dir();
+    let mut state = test_state(open_grid(), 5, 5);
+    push_companions(&mut state, 2);
+    state.area = Area::Town {
+        scene: Scene::new(BLACKTHORN_CAPTIVE_CELL_SCENE).unwrap(),
+        floor: 0,
+    };
+    state.begin_blackthorn_audience_capture(&dir).unwrap();
+    // `blackthorn.md §3`: the greeting and preamble acknowledgements.
+    state.submit_blackthorn_audience_answer("", &dir).unwrap();
+    state.submit_blackthorn_audience_answer("", &dir).unwrap();
+    let tile = |state: &PlayState, x: usize, y: usize| {
+        state
+            .blackthorn_audience_map
+            .as_ref()
+            .and_then(|map| map.tile(x, y))
+    };
+
+    state
+        .submit_blackthorn_audience_answer("nonsense", &dir)
+        .unwrap();
+    assert_eq!(tile(&state, 5, 7), Some(BLACKTHORN_PENDULUM_TILE));
+    assert_eq!(tile(&state, 5, 9), Some(BLACKTHORN_HOURGLASS_TILE));
+    // §4.1's acknowledgement between the first reaction and the second ask.
+    state.submit_blackthorn_audience_answer("", &dir).unwrap();
+
+    state
+        .submit_blackthorn_audience_answer("nonsense", &dir)
+        .unwrap();
+    assert_eq!(
+        tile(&state, 5, 9),
+        Some(BLACKTHORN_HOURGLASS_SECOND_WRONG_TILE)
+    );
+    assert_eq!(tile(&state, 5, 7), Some(BLACKTHORN_PENDULUM_TILE));
+    // §4.1's third demand, record `2`, follows the second wrong answer.
+    assert!(
+        state.message.starts_with("\"Resistance is futile!"),
+        "{}",
+        state.message,
+    );
+
+    state
+        .submit_blackthorn_audience_answer("nonsense", &dir)
+        .unwrap();
+    assert_eq!(
+        tile(&state, 5, 9),
+        Some(BLACKTHORN_HOURGLASS_SPENT_TILE)
+    );
+    // §4.1's fourth demand, record `3`, which "has an opening quotation mark
+    // but **no closing quotation mark**, and its caller adds none".
+    assert!(
+        state
+            .message
+            .starts_with("\"My patience with thee has worn away!"),
+        "{}",
+        state.message,
+    );
+    assert_eq!(state.party.len(), 3);
+
+    // Index 3 executes "rather than stamping": the hourglass stays `0xE8`.
+    state
+        .submit_blackthorn_audience_answer("nonsense", &dir)
+        .unwrap();
+    assert_eq!(
+        tile(&state, 5, 9),
+        Some(BLACKTHORN_HOURGLASS_SPENT_TILE)
+    );
+    let _ = fs::remove_dir_all(dir);
+}
+
 #[test]
 fn blackthorn_middle_wrong_answers_stamp_props_without_erasing_the_victim() {
     let dir = debug_game_dir();

@@ -1805,6 +1805,48 @@ BRITANNIA 11 21
         let _ = fs::remove_dir_all(dir);
     }
 
+    /// `karma.md §8.1`: a read that completes the Codex mask "continue[s]
+    /// with three shared viewport flash/rumble effects, then record `40`";
+    /// `audio.md §8.4` prices each at 1,856 gameplay-PRNG draws.
+    #[test]
+    fn codex_completion_runs_three_major_flashes() {
+        let dir = debug_game_dir();
+        let mut miscmsg = Vec::new();
+        for index in 0..MISCMSG_DAT_RECORDS {
+            miscmsg.extend_from_slice(format!("rec{index}").as_bytes());
+            miscmsg.push(0);
+        }
+        fs::write(dir.join(MISCMSG_DAT_FILE), miscmsg).unwrap();
+
+        let mut state = britannia_state(open_world_grid(), 10, 20);
+        state.shrine_ordained_mask = ShrineVirtue::Honesty.bit();
+        state.shrine_codex_mask = 0xFF & !ShrineVirtue::Honesty.bit();
+        let prng_before = state.prng_state;
+        let serial = state.sound_effect_serial;
+        state.read_codex_urn_after_entry(&dir).unwrap();
+
+        let flashes = state
+            .sound_effects_after(serial)
+            .into_iter()
+            .filter(|effect| matches!(effect, SoundEffect::MajorFlash { .. }))
+            .count();
+        assert_eq!(flashes, 3);
+        let mut prng = U5Prng::new(prng_before);
+        for _ in 0..3 {
+            let _ = audio::draw_major_flash_bands(&mut prng);
+        }
+        assert_eq!(state.prng_state, prng.state());
+
+        // An incomplete resulting mask finishes without the flashes.
+        let mut partial = britannia_state(open_world_grid(), 10, 20);
+        partial.shrine_ordained_mask = ShrineVirtue::Honesty.bit();
+        partial.shrine_codex_mask = 0;
+        let serial = partial.sound_effect_serial;
+        partial.read_codex_urn_after_entry(&dir).unwrap();
+        assert!(partial.sound_effects_after(serial).is_empty());
+        let _ = fs::remove_dir_all(dir);
+    }
+
     /// `karma.md §8` (`RETRACTIONS.md` R451): "`M` remains Mix Reagents at
     /// this location. The earlier statement that the M command owns Codex
     /// entry is retracted." So `M` on the Codex tile mixes and stamps nothing.
@@ -2469,6 +2511,44 @@ BRITANNIA 11 21
         // font and appends `!` in the normal one.
         assert_eq!(state.message, "ALAKAZAM!");
         // `karma.md §7.2`: one unrestored inversion precedes the swell.
+        assert!(state.presentation_viewport_inverted);
+        let _ = fs::remove_dir_all(dir);
+    }
+
+    #[test]
+    fn shrine_offering_and_turn_in_queue_one_unrestored_viewport_inversion() {
+        // `audio.md §5.4.7` / `karma.md §7.2`: both shrine swell callers
+        // precede the sweep with one unrestored viewport inversion; the
+        // refusal arms reach none. Driven through the interactive session
+        // (`karma.md §12`; `M` always mixes, audit A112), with the inversion
+        // carried by `presentation_viewport_inverted` (audit A107).
+        let dir = debug_game_dir();
+        let virtue = ShrineVirtue::Justice;
+        let bit = virtue.bit();
+
+        let mut state = shrine_marker_state(&dir, virtue);
+        state.shrine_codex_mask = bit;
+        state.gold = 900;
+        meditate_through_shrine_session(&mut state, &dir, "Justice", "Beh");
+        handle_play_key_input(&mut state, '0', "", &dir).unwrap();
+        assert!(!state.presentation_viewport_inverted);
+
+        let mut state = shrine_marker_state(&dir, virtue);
+        state.shrine_codex_mask = bit;
+        state.gold = 900;
+        meditate_through_shrine_session(&mut state, &dir, "Justice", "Beh");
+        handle_play_key_input(&mut state, '1', "", &dir).unwrap();
+        assert_eq!(state.message, "ALAKAZAM!");
+        assert!(state.presentation_viewport_inverted);
+        // Never restored: the following world steps paint over it.
+        state.flush_staged_narration();
+        assert!(!state.presentation_viewport_inverted);
+
+        let mut state = shrine_marker_state(&dir, virtue);
+        state.shrine_codex_mask = bit;
+        state.shrine_ordained_mask = bit;
+        meditate_through_shrine_session(&mut state, &dir, "Justice", "Beh");
+        assert_eq!(state.shrine_ordained_mask, 0);
         assert!(state.presentation_viewport_inverted);
         let _ = fs::remove_dir_all(dir);
     }

@@ -3,6 +3,10 @@ use std::path::Path;
 
 use crate::*;
 
+/// `karma.md §8.1` / `audio.md §8.4`: the completed Codex read runs "three
+/// shared viewport flash/rumble effects" before page-turn record `40`.
+const CODEX_COMPLETION_MAJOR_FLASHES: usize = 3;
+
 impl PlayState {
     pub fn step_non_town(
         &mut self,
@@ -2446,7 +2450,9 @@ impl PlayState {
                     // §8.1: "Each of those three cycles sets a drawing colour
                     // and inverts the gameplay viewport before running the
                     // shared effect, and no restoring inversion follows them."
-                    for _ in 0..3 {
+                    // `audio.md §8.4`: each draws its gameplay-PRNG bands
+                    // whether or not sound is audible (audit A029).
+                    for _ in 0..CODEX_COMPLETION_MAJOR_FLASHES {
                         self.presentation_viewport_inverted = !self.presentation_viewport_inverted;
                         self.emit_major_flash();
                     }

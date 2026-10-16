@@ -206,10 +206,8 @@ fn open_magic_lock_and_unlock_magic_use_their_published_variants() {
 
 #[test]
 fn committed_party_spells_play_their_published_variant_before_the_effect() {
-    // audio.md §6 variant 1: "Awaken, Cure, Heal". Variant 8: "The highest
-    // resurrection-mode presentation". audio.md §8.3 puts the pre-effect
-    // after the spell's own gate and before the effect, so a post-commit
-    // failure sounds the variant first and the failure tail second.
+    // audio.md §6.1 ids 2-4 and 42: Awaken, Cure and Heal play variant 1 and
+    // Resurrect variant 8, each only once its own status test passes.
     let mut cure = test_state(open_grid(), 1, 1);
     cure.party[0].status = b'P';
     arm_spell(&mut cure, CURE_SPELL_INDEX);
@@ -237,23 +235,65 @@ fn committed_party_spells_play_their_published_variant_before_the_effect() {
     assert_eq!(awaken.message, "Failed!");
     assert_eq!(
         awaken.sound_effects_after(serial),
-        vec![
-            SoundEffect::SharedVariant { variant: 1 },
-            SoundEffect::CastFailure,
-        ],
-        "a no-sleeper Awaken still commits, then fails"
+        vec![SoundEffect::CastFailure],
+        "audio.md §6.1 id 2: variant 1 only if the chosen member is asleep"
+    );
+
+    let mut asleep = test_state(open_grid(), 1, 1);
+    asleep.party.push(asleep.party[0]);
+    asleep.party[1].status = b'S';
+    arm_spell(&mut asleep, AWAKEN_SPELL_INDEX);
+    let serial = asleep.sound_effect_serial;
+    assert_eq!(asleep.cast_awaken(0, 1), MoveOutcome::Cast);
+    assert_eq!(
+        asleep.sound_effects_after(serial),
+        vec![SoundEffect::SharedVariant { variant: 1 }]
+    );
+
+    let mut healthy_cure = test_state(open_grid(), 1, 1);
+    arm_spell(&mut healthy_cure, CURE_SPELL_INDEX);
+    let serial = healthy_cure.sound_effect_serial;
+    assert_eq!(healthy_cure.cast_cure(0, 0), MoveOutcome::Blocked);
+    assert_eq!(healthy_cure.message, "Failed!");
+    assert_eq!(
+        healthy_cure.sound_effects_after(serial),
+        vec![SoundEffect::CastFailure],
+        "audio.md §6.1 id 3: variant 1 only if the chosen member is poisoned"
+    );
+
+    let mut dead_heal = test_state(open_grid(), 1, 1);
+    dead_heal.party.push(dead_heal.party[0]);
+    dead_heal.party[1].status = b'D';
+    arm_spell(&mut dead_heal, HEAL_SPELL_INDEX);
+    let serial = dead_heal.sound_effect_serial;
+    assert_eq!(dead_heal.cast_heal(0, 1), MoveOutcome::Blocked);
+    assert_eq!(
+        dead_heal.sound_effects_after(serial),
+        vec![SoundEffect::CastFailure],
+        "audio.md §6.1 id 4: variant 1 only if the target was not dead"
     );
 
     let mut resurrect = test_state(open_grid(), 1, 1);
     arm_spell(&mut resurrect, RESURRECT_SPELL_INDEX);
     let serial = resurrect.sound_effect_serial;
     assert_eq!(resurrect.cast_resurrect(0, 0), MoveOutcome::Blocked);
+    assert!(
+        !resurrect
+            .sound_effects_after(serial)
+            .contains(&SoundEffect::SharedVariant { variant: 8 }),
+        "audio.md §6.1 id 42: a living target never plays variant 8"
+    );
+    assert_ne!(resurrect.message, "Not dead!");
+
+    let mut dead = test_state(open_grid(), 1, 1);
+    dead.party.push(dead.party[0]);
+    dead.party[1].status = b'D';
+    arm_spell(&mut dead, RESURRECT_SPELL_INDEX);
+    let serial = dead.sound_effect_serial;
+    assert_eq!(dead.cast_resurrect(0, 1), MoveOutcome::Cast);
     assert_eq!(
-        resurrect.sound_effects_after(serial),
-        vec![
-            SoundEffect::SharedVariant { variant: 8 },
-            SoundEffect::CastFailure,
-        ]
+        dead.sound_effects_after(serial),
+        vec![SoundEffect::SharedVariant { variant: 8 }]
     );
 }
 
@@ -385,6 +425,27 @@ fn committed_dungeon_spells_play_their_published_variant() {
         descend.sound_effects_after(serial)[0],
         SoundEffect::SharedVariant { variant: 4 },
         "the committed cast sounds before the destination test"
+    );
+
+    // audio.md §6.1 ids 21/22: Doom "refuses before the sound".
+    let mut doom = dungeon_state(open_dungeon_record(), 0, 4, 4);
+    doom.area = Area::Dungeon {
+        scene: DungeonScene {
+            byte: DUNGEON_DOOM_SCENE_BYTE,
+            record: DOOM_DUNGEON_RECORD,
+        },
+        level: 0,
+    };
+    arm_spell(&mut doom, DES_POR_SPELL_INDEX);
+    let serial = doom.sound_effect_serial;
+    assert_eq!(
+        doom.cast_dungeon_level_spell(0, DES_POR_SPELL_INDEX, 1, "Down", Path::new(""))
+            .unwrap(),
+        MoveOutcome::Blocked
+    );
+    assert_eq!(
+        doom.sound_effects_after(serial),
+        vec![SoundEffect::CastFailure]
     );
 
     // No field under the target cell: the variant still runs, then the tail.
@@ -675,15 +736,26 @@ fn combat_blink_cursor_and_caster_refusals_stay_silent() {
 
 #[test]
 fn failed_directed_utility_casts_sound_only_the_failure_tail() {
-    // audio.md §6 qualifies these rows by success - "successful Open" is
-    // variant 2, and variant 5 covers "Magic Lock, and successful
-    // unlock-door effects" - and audio.md §8.3's only pre-success spell
-    // boundary is Vanish. A failed attempt therefore reaches the §8.3
-    // failure tail with no shared variant ahead of it.
-    for spell_index in [
-        OPEN_SPELL_INDEX,
-        MAGIC_LOCK_SPELL_INDEX,
-        UNLOCK_MAGIC_SPELL_INDEX,
+    // audio.md §6.1 id 6 qualifies Open's surface arm by success, so a failed
+    // Open reaches the §8.3 failure tail with no shared variant ahead of it.
+    // Ids 25/26 instead sound variant 5 on any accepted direction, "whether
+    // or not a door was there", and then reach the same tail.
+    for (spell_index, expected) in [
+        (OPEN_SPELL_INDEX, vec![SoundEffect::CastFailure]),
+        (
+            MAGIC_LOCK_SPELL_INDEX,
+            vec![
+                SoundEffect::SharedVariant { variant: 5 },
+                SoundEffect::CastFailure,
+            ],
+        ),
+        (
+            UNLOCK_MAGIC_SPELL_INDEX,
+            vec![
+                SoundEffect::SharedVariant { variant: 5 },
+                SoundEffect::CastFailure,
+            ],
+        ),
     ] {
         // A tile the route has no rewrite for, and no chest under it.
         let mut nonmatching = test_state(open_grid(), 1, 1);
@@ -703,8 +775,8 @@ fn failed_directed_utility_casts_sound_only_the_failure_tail() {
         assert_eq!(nonmatching.message, "Failed!");
         assert_eq!(
             nonmatching.sound_effects_after(serial),
-            vec![SoundEffect::CastFailure],
-            "spell {spell_index} must not sound a success variant on a nonmatching tile"
+            expected,
+            "spell {spell_index} on a nonmatching tile"
         );
 
         // An off-map target never reaches a tile at all.
@@ -725,18 +797,18 @@ fn failed_directed_utility_casts_sound_only_the_failure_tail() {
         assert_eq!(off_map.message, "Failed!");
         assert_eq!(
             off_map.sound_effects_after(serial),
-            vec![SoundEffect::CastFailure],
-            "spell {spell_index} must not sound a success variant off the map"
+            expected,
+            "spell {spell_index} off the map"
         );
     }
 }
 
 #[test]
-fn vanish_is_the_only_directed_utility_spell_that_sounds_before_its_tile_test() {
+fn open_is_the_directed_utility_spell_that_waits_for_its_tile_test() {
     // audio.md §8.3: "Vanish first runs variant 1 when direction input
     // commits ... A nonmatching tile retains the earlier variant-1
-    // presentation, then reaches the common failure tail." No other row of
-    // the audio.md §6 table carries that pre-success boundary.
+    // presentation, then reaches the common failure tail." Open's surface arm
+    // instead sounds "only on a successful door unlock" (audio.md §6.1 id 6).
     let mut vanish = test_state(open_grid(), 1, 1);
     arm_spell(&mut vanish, VANISH_SPELL_INDEX);
     let serial = vanish.sound_effect_serial;
@@ -768,7 +840,7 @@ fn vanish_is_the_only_directed_utility_spell_that_sounds_before_its_tile_test() 
     assert_eq!(
         open.sound_effects_after(serial),
         vec![SoundEffect::CastFailure],
-        "only Vanish sounds ahead of the tile test"
+        "Open does not sound ahead of the tile test"
     );
 }
 

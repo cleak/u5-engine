@@ -571,6 +571,8 @@ fn exit_vehicle_parked_object_is_written_to_the_live_saved_gam_table() {
     assert_eq!(options.transport, TransportState::Foot);
     assert_eq!(options.saved_active_objects.as_ref().unwrap()[0], parked);
     let reloaded = PlayState::load_scene(&dir, options).unwrap();
+    // `animation.md §13.2`: a loaded session starts in the freeze state.
+    assert!(reloaded.session_start_world_step_frozen);
     assert_eq!(reloaded.player.transport, TransportState::Foot);
     assert_eq!(reloaded.active_objects[1], parked);
     assert_eq!(reloaded.world_object_at(5, 5), Some(&parked));

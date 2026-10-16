@@ -110,6 +110,9 @@ impl PlayState {
         // screens leave it at the bottom. `cleak/u5-engine#11`; asked on
         // the spec side as `cleak/u5-spec#210`.
         state.message_window_top_offset = MESSAGE_WINDOW_LOAD_CURSOR_ROWS;
+        // `animation.md §13.2`: the gating byte ships in the freeze state,
+        // so the session's first world step is a bare repaint.
+        state.session_start_world_step_frozen = true;
         Ok(state)
     }
 
@@ -780,6 +783,7 @@ impl PlayState {
             pending_blackthorn_rescue_playbacks: Vec::new(),
             pending_combat_terrain_reveals: Vec::new(),
             pending_potion_flash: None,
+            session_start_world_step_frozen: false,
             pending_stonegate_trapdoor_playback: None,
             pending_town_status_provision_pass: false,
             pending_town_npc_schedule_pass: false,
@@ -1182,6 +1186,7 @@ impl PlayState {
             pending_blackthorn_rescue_playbacks: Vec::new(),
             pending_combat_terrain_reveals: Vec::new(),
             pending_potion_flash: None,
+            session_start_world_step_frozen: false,
             pending_stonegate_trapdoor_playback: None,
             pending_town_status_provision_pass: false,
             pending_town_npc_schedule_pass: false,
@@ -1595,6 +1600,7 @@ impl PlayState {
             pending_blackthorn_rescue_playbacks: Vec::new(),
             pending_combat_terrain_reveals: Vec::new(),
             pending_potion_flash: None,
+            session_start_world_step_frozen: false,
             pending_stonegate_trapdoor_playback: None,
             pending_town_status_provision_pass: false,
             pending_town_npc_schedule_pass: false,
@@ -1961,6 +1967,12 @@ impl PlayState {
             self.player.y = ny;
             self.sync_player_object();
             self.mark_visibility_dirty();
+            // `audio.md §7.5`: a mounted horse's "normal successful in-map
+            // step" plays "a second sting after the position changes";
+            // ordinary foot movement, exits and stair transitions do not.
+            if self.player.transport.is_horse() {
+                self.emit_sound_effect(SoundEffect::TopDownMovementSting);
+            }
             // `text-output.md §10.2`/§10.3: the direction echo is the whole
             // of an accepted step; there is no result line and no
             // coordinate narration (`commands.md §8.1`).

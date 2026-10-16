@@ -13,30 +13,32 @@ fn cardinal_direction_key(direction: Direction) -> char {
     }
 }
 
-/// `audio.md §8.3` commit-time shared variant for the directed utility route.
+/// `audio.md §8.3`/`§6.1` commit-time shared variant for the directed utility
+/// route.
 ///
-/// `§8.3` names exactly one pre-success spell boundary: Vanish "first runs
-/// variant 1 when direction input commits", which is why "a nonmatching tile
-/// retains the earlier variant-1 presentation, then reaches the common failure
-/// tail". No other spell on this route sounds before its own success test.
+/// Vanish "first runs variant 1 when direction input commits", which is why
+/// "a nonmatching tile retains the earlier variant-1 presentation, then
+/// reaches the common failure tail". `§6.1` ids 25/26 give Magic Lock variant
+/// 5 "on an accepted direction" and Unlock Magic variant 5 "whenever the
+/// direction prompt was accepted, whether or not a door was there".
 fn directed_utility_commit_variant(spell_index: usize) -> Option<u8> {
     match spell_index {
         VANISH_SPELL_INDEX => Some(1),
+        MAGIC_LOCK_SPELL_INDEX | UNLOCK_MAGIC_SPELL_INDEX => Some(5),
         _ => None,
     }
 }
 
-/// `audio.md §6` shared variant for the directed utility spells whose row the
-/// published table qualifies by success: `successful Open` is variant 2, and
-/// `Magic Lock, and successful unlock-door effects` are variant 5.
+/// `audio.md §6.1` id 6 shared variant for the one directed utility spell
+/// whose row is qualified by success: Open's surface/town/combat arm plays
+/// variant 2 "only on a successful door unlock or a successful actor-flag
+/// clear".
 ///
-/// Vanish is absent because `§8.3` already sounded its variant 1 at the commit
-/// and closes with the action snap instead. A spell the published table does
-/// not name gets no cue.
+/// Vanish, Magic Lock and Unlock Magic are absent because they sounded at the
+/// commit; Vanish closes with the action snap instead.
 fn directed_utility_success_variant(spell_index: usize) -> Option<u8> {
     match spell_index {
         OPEN_SPELL_INDEX => Some(2),
-        MAGIC_LOCK_SPELL_INDEX | UNLOCK_MAGIC_SPELL_INDEX => Some(5),
         _ => None,
     }
 }
@@ -5116,9 +5118,10 @@ impl PlayState {
         // audio.md §8.3: Vanish "first runs variant 1 when direction input
         // commits", before the tile is matched, so "a nonmatching tile retains
         // the earlier variant-1 presentation, then reaches the common failure
-        // tail". Open, Magic Lock and Unlock Magic carry audio.md §6 rows
-        // qualified by success, so they sound from the success arms below
-        // instead. The explicit pass returned above is silent for all four.
+        // tail". audio.md §6.1 gives Magic Lock and Unlock Magic the same
+        // accepted-direction boundary. Open's row is qualified by success, so
+        // it sounds from the success arms below instead. The explicit pass
+        // returned above is silent for all four.
         if let Some(variant) = directed_utility_commit_variant(spell_index) {
             self.emit_sound_effect(SoundEffect::SharedVariant { variant });
         }
@@ -5394,16 +5397,16 @@ impl PlayState {
             return outcome;
         }
 
-        // audio.md §6: Awaken is variant 1; audio.md §8.3 puts the committed
-        // pre-effect after the spell's own gate and before the effect, so a
-        // no-sleeper Awaken still sounds before the failure tail.
-        self.emit_sound_effect(SoundEffect::SharedVariant { variant: 1 });
-
         if self.party[target_index].status != b'S' {
             self.advance_turn();
             self.fail_committed_spell_cast();
             return MoveOutcome::Blocked;
         }
+
+        // audio.md §6.1 id 2: Awaken plays variant 1 "only if the chosen
+        // member is asleep", so a no-sleeper Awaken reaches the failure tail
+        // without it.
+        self.emit_sound_effect(SoundEffect::SharedVariant { variant: 1 });
 
         // `stats-panel.md §2.2.1` row 3: Awaken's status change is deferred.
         self.stats_panel_command_refresh = crate::stats_panel::PanelRefreshMode::Deferred;
@@ -5429,15 +5432,15 @@ impl PlayState {
             return outcome;
         }
 
-        // audio.md §6: Cure is variant 1; audio.md §8.3 puts the committed
-        // pre-effect after the spell's own gate and before the effect.
-        self.emit_sound_effect(SoundEffect::SharedVariant { variant: 1 });
-
         if self.party[target_index].status != b'P' {
             self.advance_turn();
             self.fail_committed_spell_cast();
             return MoveOutcome::Blocked;
         }
+
+        // audio.md §6.1 id 3: Cure plays variant 1 "only if the chosen member
+        // is poisoned".
+        self.emit_sound_effect(SoundEffect::SharedVariant { variant: 1 });
 
         // `stats-panel.md §2.2.1` row 4: Cure's status change is deferred.
         self.stats_panel_command_refresh = crate::stats_panel::PanelRefreshMode::Deferred;
@@ -5463,15 +5466,15 @@ impl PlayState {
             return outcome;
         }
 
-        // audio.md §6: Heal is variant 1; audio.md §8.3 puts the committed
-        // pre-effect after the spell's own gate and before the effect.
-        self.emit_sound_effect(SoundEffect::SharedVariant { variant: 1 });
-
         if self.party[target_index].status == b'D' {
             self.advance_turn();
             self.fail_committed_spell_cast();
             return MoveOutcome::Blocked;
         }
+
+        // audio.md §6.1 id 4: Heal plays variant 1 "only if the heal
+        // succeeded, i.e. the target was not dead".
+        self.emit_sound_effect(SoundEffect::SharedVariant { variant: 1 });
 
         let amount = self.heal_spell_amount();
         let healed = self.party[target_index].heal_by(amount);
@@ -5616,16 +5619,21 @@ impl PlayState {
             return outcome;
         }
 
-        // audio.md §6 variant 8 is "the highest resurrection-mode
-        // presentation"; audio.md §8.3 puts the committed pre-effect after the
-        // spell's own gate and before the effect.
-        self.emit_sound_effect(SoundEffect::SharedVariant { variant: 8 });
-
+        // `magic.md` §8: "the ordinary spell/scroll path records a failed
+        // result and lets the dispatcher own the trailing failure narration";
+        // the verbose `Not dead!` refusal is never printed on this path.
+        // audio.md §6.1 id 42 calls the living-target arm "fully silent"; the
+        // variant is certainly absent, while the dispatcher's failure tail is
+        // kept until the two documents agree.
         if self.party[target_index].status != b'D' {
             self.advance_turn();
             self.fail_committed_spell_cast();
             return MoveOutcome::Blocked;
         }
+
+        // audio.md §6.1 id 42: Resurrect plays variant 8 "only if the target
+        // is dead".
+        self.emit_sound_effect(SoundEffect::SharedVariant { variant: 8 });
 
         let max_hp = self
             .resurrect_party_member_to_hp(target_index, 1)
@@ -5954,11 +5962,6 @@ impl PlayState {
             return Ok(outcome);
         }
 
-        // audio.md §6: "Dungeon rise/fall" is variant 4; audio.md §8.3 puts
-        // the committed pre-effect after the spell's own gate and before the
-        // effect, so the Doom refusal below still sounds first.
-        self.emit_sound_effect(SoundEffect::SharedVariant { variant: 4 });
-
         // `dungeon-mode.md` §13.1/§13.3: both level-change spells refuse
         // outright in Doom. This is an effect-level refusal after the common
         // spell resource gate has accepted and spent the cast.
@@ -5967,6 +5970,10 @@ impl PlayState {
             self.fail_committed_spell_cast();
             return Ok(MoveOutcome::Blocked);
         }
+
+        // audio.md §6.1 ids 21/22: Uus Por and Des Por play variant 4 "unless
+        // the scene is the Doom scene, which refuses before the sound".
+        self.emit_sound_effect(SoundEffect::SharedVariant { variant: 4 });
 
         // `dungeon-mode.md §13.1` "What a level change prints": the Up and
         // Down spells print "the same `Up!\n` or `Down!\n`, and only that -

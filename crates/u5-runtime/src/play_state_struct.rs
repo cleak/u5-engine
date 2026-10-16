@@ -123,6 +123,11 @@ pub struct PlayState {
     /// frontend to present it. This is transient presentation state, never
     /// resumable or saved gameplay state.
     pub pending_potion_flash: Option<PotionFlashPlayback>,
+    /// `animation.md §13.2`: "The shipped initial value of the byte is the
+    /// freeze state, so the very first world step of a session is a bare
+    /// repaint." Set by [`PlayState::load_scene`]; the first world step
+    /// clears it and advances nothing.
+    pub session_start_world_step_frozen: bool,
     /// Completed Stonegate trapdoor tableau waiting for a frontend. This is a
     /// blocking, non-resumable presentation record and is never save data.
     pub pending_stonegate_trapdoor_playback: Option<StonegateTrapdoorPlayback>,
