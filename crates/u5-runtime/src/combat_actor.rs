@@ -47,7 +47,7 @@ pub enum MonsterWoundBucket {
     /// Below one truncated quarter — always-fleeing critical band.
     Critical,
     /// One to just under two truncated quarters — morale-check band;
-    /// fleeing on 252/256.
+    /// fleeing on 5/257 (`RETRACTIONS.md` R519).
     Wounded,
     /// Two to just under three truncated quarters — light wounds.
     LightlyWounded,
@@ -55,13 +55,17 @@ pub enum MonsterWoundBucket {
     Healthy,
 }
 
-/// `combat.md §9` morale-check threshold over a `0..=255` roll.
+/// `combat.md §9` morale-check threshold over a `0..=256` roll.
 ///
 /// In the wounded band fleeing is set only when the roll reaches this
-/// value - **four** of the 256 possible results, not 252 of them.
-/// `RETRACTIONS.md` R483 withdrew the inverted reading this comment used
-/// to carry.
+/// value - "five of 257 possible results (a roll of 252 through 256; the
+/// draw is over the inclusive range `0..256`, not a byte)". `RETRACTIONS.md`
+/// R483 withdrew the inverted reading this comment used to carry, and R519
+/// the byte-wide draw.
 pub const WOUND_MORALE_FLEE_THRESHOLD: u16 = 252;
+
+/// `combat.md §9`: the inclusive upper bound of the morale draw (R519).
+pub const COMBAT_AI_MORALE_ROLL_HIGH: u16 = 256;
 
 /// `combat.md §9` monster wound-score classifier. Returns the
 /// four-bucket wound classification.
@@ -92,8 +96,9 @@ pub const fn monster_wound_bucket(current_hp: u16, class_max_hp: u16) -> Monster
 
 /// `combat.md §9` morale verdict for the wounded band. Below 1/4 the
 /// classifier always sets fleeing; in [1/4, 1/2) it sets fleeing only
-/// when the morale roll is **252 or more** - 4 of 256 outcomes - and at
-/// or above 1/2 it clears fleeing regardless of the roll.
+/// when the morale roll is **252 or more** - 5 of 257 outcomes over the
+/// `0..=256` draw (R519) - and at or above 1/2 it clears fleeing
+/// regardless of the roll.
 ///
 /// `RETRACTIONS.md` R483 calls the old reading, which this carried,
 /// "**Inverted**": "A roll of 251 or less commits with the fleeing bit
@@ -108,13 +113,11 @@ pub const fn monster_wound_bucket(current_hp: u16, class_max_hp: u16) -> Monster
 pub const fn monster_wound_sets_fleeing(
     current_hp: u16,
     class_max_hp: u16,
-    morale_roll_0_to_255: u8,
+    morale_roll_0_to_256: u16,
 ) -> bool {
     match monster_wound_bucket(current_hp, class_max_hp) {
         MonsterWoundBucket::Critical => true,
-        MonsterWoundBucket::Wounded => {
-            (morale_roll_0_to_255 as u16) >= WOUND_MORALE_FLEE_THRESHOLD
-        }
+        MonsterWoundBucket::Wounded => morale_roll_0_to_256 >= WOUND_MORALE_FLEE_THRESHOLD,
         MonsterWoundBucket::LightlyWounded | MonsterWoundBucket::Healthy => false,
     }
 }
@@ -4772,14 +4775,14 @@ pub fn combat_ai_exhausted_fallback_consumes_action(drawn: &[u8]) -> bool {
 pub fn resolve_combat_wound_morale(
     current_hp: u8,
     max_hp: u8,
-    morale_roll: u8,
+    morale_roll: u16,
 ) -> CombatWoundMorale {
     let bucket = combat_wound_score_bucket(current_hp, max_hp);
     let fleeing = match bucket {
         CombatWoundScoreBucket::UnderOneQuarter => true,
-        // R483, as above: four of 256, not 252 of 256.
+        // R483/R519, as above: five of 257 over `0..=256`.
         CombatWoundScoreBucket::OneQuarterToUnderHalf => {
-            (morale_roll as u16) >= WOUND_MORALE_FLEE_THRESHOLD
+            morale_roll >= WOUND_MORALE_FLEE_THRESHOLD
         }
         CombatWoundScoreBucket::HalfToUnderThreeQuarters
         | CombatWoundScoreBucket::ThreeQuartersOrMore => false,
@@ -4790,7 +4793,7 @@ pub fn resolve_combat_wound_morale(
 pub fn resolve_combat_wound_morale_for_class(
     current_hp: u8,
     class: u8,
-    morale_roll: u8,
+    morale_roll: u16,
 ) -> Option<CombatWoundMorale> {
     let stats = combat_class_stats(class)?;
     Some(resolve_combat_wound_morale(

@@ -14888,9 +14888,10 @@ fn combat_wound_morale_uses_truncated_quarter_thresholds_and_documented_roll_rat
 
     // 9's morale rule over the same buckets: below one quarter sets fleeing;
     // one-quarter through just under one-half rolls a morale check that sets
-    // fleeing only on a roll of 252 or more - four of 256, per
-    // `RETRACTIONS.md` R483, which withdrew the inverted "252 of 256"
-    // reading these assertions carried; one-half or higher clears fleeing.
+    // fleeing only on a roll of 252 or more - five of 257 over the `0..=256`
+    // draw (`RETRACTIONS.md` R519), per R483, which withdrew the inverted
+    // "252 of 256" reading these assertions carried; one-half or higher
+    // clears fleeing.
     assert_eq!(
         resolve_combat_wound_morale(23, 99, 255),
         CombatWoundMorale {

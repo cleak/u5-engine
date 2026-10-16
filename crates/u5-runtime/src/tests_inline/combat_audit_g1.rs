@@ -108,3 +108,31 @@ fn self_acting_arena_exit_plays_the_action_snap_and_runs_one_world_tick() {
     );
     assert!(!combat_actor_is_active_not_dead(state.combat_actors[8]));
 }
+
+#[test]
+fn wound_band_morale_draw_spans_zero_through_two_fifty_six() {
+    // `combat.md §9` (`RETRACTIONS.md` R519): the morale check "sets
+    // fleeing on only five of 257 possible results (a roll of 252 through
+    // 256; the draw is over the inclusive range `0..256`, not a byte)".
+    let seed = (0..=u16::MAX)
+        .find(|&seed| {
+            let mut probe = seed;
+            u5_prng_range_u16(&mut probe, 0, 256) == 256
+        })
+        .expect("some seed draws 256");
+    let mut state = combat_ai_turn_state(8, 5);
+    let max_hp = combat_class_stats(COMBAT_CLASS_GIANT_RAT).unwrap().max_hp;
+    // First value of the quarter-to-under-half band.
+    state.combat_actors[8].hp_or_wound = max_hp / 4;
+    state.prng_state = seed;
+    let mut expected_state = seed;
+    let _ = u5_prng_range_u16(&mut expected_state, 0, 256);
+
+    assert!(state.combat_ai_actor_fleeing(8));
+    assert_eq!(state.prng_state, expected_state);
+    assert!(monster_wound_sets_fleeing(30, 100, 256));
+    assert_eq!(
+        resolve_combat_wound_morale(30, 100, 256).fleeing,
+        true
+    );
+}

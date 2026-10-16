@@ -1797,9 +1797,11 @@ impl PlayState {
             )
     }
 
-    fn combat_ai_morale_roll(&mut self, actor_slot: usize) -> u8 {
+    /// `combat.md §9` (`RETRACTIONS.md` R519): "the draw is over the
+    /// inclusive range `0..256`, not a byte" - 257 values.
+    fn combat_ai_morale_roll(&mut self, actor_slot: usize) -> u16 {
         let _ = actor_slot;
-        self.random_range_u8(0, u8::MAX)
+        u5_prng_range_u16(&mut self.prng_state, 0, COMBAT_AI_MORALE_ROLL_HIGH)
     }
 
     /// `combat.md §9.1`: "The fleeing flag is re-evaluated at the head of
@@ -1816,7 +1818,7 @@ impl PlayState {
     /// draws on exactly the turns a fleeing actor takes them.
     /// `cleak/u5-spec#285` asks; adding it on a reading would move the
     /// shared PRNG stream for every fleeing turn in the game.
-    fn combat_ai_actor_fleeing(&mut self, actor_slot: usize) -> bool {
+    pub(crate) fn combat_ai_actor_fleeing(&mut self, actor_slot: usize) -> bool {
         let Some(actor) = self.combat_actors.get(actor_slot).copied() else {
             return false;
         };
