@@ -22351,9 +22351,10 @@ fn active_object_eviction_phase_matches_spec_cascade() {
 }
 
 #[test]
-fn chargen_questionnaire_always_floors_strength_to_twenty() {
-    // chargen.md §7: max STR contribution is 2 per question and there
-    // are 7 questions, so the floor always fires.
+fn chargen_questionnaire_floors_strength_to_twenty_over_seeded_tallies() {
+    // chargen.md §7: STR is floored to twenty at commit; the tally starts
+    // at the seed's 15 (§6, 2026-09-04), so the floor fires only when the
+    // winners add fewer than six.
     assert_eq!(CHARGEN_STR_FLOOR, 20);
     assert_eq!(CHARGEN_STARTING_PARTY_SIZE, 3);
 
@@ -22369,7 +22370,11 @@ fn chargen_questionnaire_always_floors_strength_to_twenty() {
     assert_eq!(stats.strength, CHARGEN_STR_FLOOR);
     assert_eq!(CHARGEN_SEED_DEXTERITY, 15);
     assert_eq!(stats.dexterity, CHARGEN_SEED_DEXTERITY);
-    assert_eq!(stats.intelligence, 0);
+    // `chargen.md §6` (2026-09-04): STR and INT tallies are seeded at 15
+    // too, so an empty tally commits INT 15 and the floored STR 20.
+    assert_eq!(CHARGEN_SEED_STRENGTH, 15);
+    assert_eq!(CHARGEN_SEED_INTELLIGENCE, 15);
+    assert_eq!(stats.intelligence, CHARGEN_SEED_INTELLIGENCE);
 
     // `combat.md §5.1`: "A questionnaire Avatar therefore enters play with
     // dexterity 15 or better, giving a phase counter of **21 or less**."
@@ -22384,12 +22389,15 @@ fn chargen_questionnaire_always_floors_strength_to_twenty() {
         assert!(COMBAT_PLACEMENT_PHASE_BASE - stats.dexterity <= 21);
     }
 
-    // Worst-case STR contribution (any seven Spirituality wins):
-    // chargen_virtue_stat_delta(Spirituality) is INT-only, so STR
-    // remains 0 before the floor.
+    // `chargen.md §7` scope caveat: strength is 20 only when the winners
+    // added fewer than six points; seven Spirituality wins add seven to the
+    // seeded 15, so STR lands above the floor.
     let all_spirituality = vec![ShrineVirtue::Spirituality; 7];
     let stats = chargen_stats_from_winners(&all_spirituality);
-    assert_eq!(stats.strength, CHARGEN_STR_FLOOR);
+    assert_eq!(stats.strength, CHARGEN_SEED_STRENGTH + 7);
+    assert_eq!(stats.intelligence, CHARGEN_SEED_INTELLIGENCE + 7);
+    let few_str = chargen_stats_from_winners(&[ShrineVirtue::Valor, ShrineVirtue::Honor]);
+    assert_eq!(few_str.strength, CHARGEN_STR_FLOOR);
 
     // Best-case STR contribution: any seven full-STR virtues should
     // still floor the result, since 7*max delta < 20 only if delta<3.

@@ -344,9 +344,9 @@ fn chargen_winner_stats_apply_virtue_deltas_and_strength_floor() {
     assert_eq!(
         stats,
         ChargenStats {
-            strength: 20,
+            strength: CHARGEN_SEED_STRENGTH + 5,
             dexterity: CHARGEN_SEED_DEXTERITY + 5,
-            intelligence: 5,
+            intelligence: CHARGEN_SEED_INTELLIGENCE + 5,
         }
     );
 }

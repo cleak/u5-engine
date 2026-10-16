@@ -954,9 +954,9 @@ fn cli_parser_accepts_deterministic_create_character_command() {
     assert_eq!(
         command.stats,
         ChargenStats {
-            strength: 20,
+            strength: CHARGEN_SEED_STRENGTH + 5,
             dexterity: CHARGEN_SEED_DEXTERITY + 5,
-            intelligence: 5,
+            intelligence: CHARGEN_SEED_INTELLIGENCE + 5,
         }
     );
 }
