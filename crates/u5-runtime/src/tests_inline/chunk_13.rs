@@ -5989,18 +5989,7 @@ fn display_driver_loaded_tile_graphics_save_restore_and_plane_swap() {
     atlas.pixels[0] = 0x02;
     atlas.pixels[TILE_ATLAS_TILE_PIXELS] = 0x04;
     atlas.pixels[TILE_ATLAS_TILE_PIXELS * 2] = 0x06;
-    let mut saved = EgaLoadedTileGraphicsSave::default();
-
-    assert!(!saved.has_saved_pixels());
     let mut surface = surface;
-    surface
-        .execute(EgaDisplayOperation::SaveLoadedTileGraphics {
-            atlas: &atlas,
-            saved: &mut saved,
-        })
-        .unwrap();
-    assert!(saved.has_saved_pixels());
-
     surface
         .execute(EgaDisplayOperation::SwapLoadedTileRedGreenPlanes {
             atlas: &mut atlas,
@@ -6010,16 +5999,93 @@ fn display_driver_loaded_tile_graphics_save_restore_and_plane_swap() {
     assert_eq!(atlas.pixels[0], 0x04);
     assert_eq!(atlas.pixels[TILE_ATLAS_TILE_PIXELS], 0x02);
     assert_eq!(atlas.pixels[TILE_ATLAS_TILE_PIXELS * 2], 0x06);
+}
 
+/// `display-driver.md §8`: mode `0` saves the fifteenth pixel row of tiles
+/// `200` and `279` into two private blocks and overwrites each with that
+/// tile's first row; mode `1` "copies the two scratch blocks back and does
+/// nothing else" - so intervening tile animation elsewhere survives it.
+#[test]
+fn display_driver_tile_graphics_save_substitutes_two_rows_and_restore_puts_back_only_them() {
+    let mut surface = EgaDisplaySurface::new();
+    let mut atlas = TileAtlas {
+        depth: TileGraphicsDepth::Ega16,
+        pixels: (0..TILE_ATLAS_TILE_PIXELS * 512)
+            .map(|index| (index % 251) as u8)
+            .collect(),
+        dungeon_billboards: None,
+        dungeon_sprites: None,
+    };
+    let original = atlas.pixels.clone();
+    let row = |tile: usize, row: usize| {
+        let start = tile * TILE_ATLAS_TILE_PIXELS + row * TILE_ATLAS_SIDE;
+        start..start + TILE_ATLAS_SIDE
+    };
+    let mut saved = EgaLoadedTileGraphicsSave::default();
+    assert!(!saved.has_saved_pixels());
+    surface
+        .execute(EgaDisplayOperation::SaveLoadedTileGraphics {
+            atlas: &mut atlas,
+            saved: &mut saved,
+        })
+        .unwrap();
+    for tile in [200, 279] {
+        assert_eq!(atlas.pixels[row(tile, 14)], original[row(tile, 0)]);
+    }
+    let changed = atlas
+        .pixels
+        .iter()
+        .zip(original.iter())
+        .filter(|(a, b)| a != b)
+        .count();
+    assert!(changed <= 2 * TILE_ATLAS_SIDE && changed > 0);
+
+    // Tile animation between save and restore is not undone.
+    atlas.pixels[5 * TILE_ATLAS_TILE_PIXELS] ^= 0x0F;
+    let animated = atlas.pixels[5 * TILE_ATLAS_TILE_PIXELS];
     surface
         .execute(EgaDisplayOperation::RestoreLoadedTileGraphics {
             atlas: &mut atlas,
             saved: &saved,
         })
         .unwrap();
-    assert_eq!(atlas.pixels[0], 0x02);
-    assert_eq!(atlas.pixels[TILE_ATLAS_TILE_PIXELS], 0x04);
-    assert_eq!(atlas.pixels[TILE_ATLAS_TILE_PIXELS * 2], 0x06);
+    assert_eq!(atlas.pixels[5 * TILE_ATLAS_TILE_PIXELS], animated);
+    atlas.pixels[5 * TILE_ATLAS_TILE_PIXELS] = original[5 * TILE_ATLAS_TILE_PIXELS];
+    assert_eq!(atlas.pixels, original);
+}
+
+/// `dungeon-mode.md §14.1`: "A two-way ladder cell sets the flag and
+/// dispatches the associated local presentation helper" - the driver save,
+/// mode `0` - while "other non-empty icon classes clear it".
+#[test]
+fn dungeon_room_painter_two_way_ladder_requests_the_driver_save_and_raises_the_flag() {
+    fn ambush_from_underfoot(cell: u8, pending: bool) -> PlayState {
+        let mut state = test_state(open_grid(), 1, 1);
+        state.player.facing = Direction::North;
+        state.grid[dungeon_cell_index(3, 1, 1)] = cell;
+        state.tile_restoration_pending = pending;
+        let object = ActiveObject {
+            type_byte: 0,
+            tile: 0,
+            x: 2,
+            y: 1,
+            z: 3,
+            phase: STEADY_PHASE,
+            aux1: 20,
+            aux3: DUNGEON_MONSTER_UPPER_DEP3,
+        };
+        state
+            .enter_dungeon_active_monster_combat(3, object)
+            .expect("the ambush launches");
+        state
+    }
+    let two_way = ambush_from_underfoot(0x30, false);
+    assert!(two_way.tile_restoration_pending);
+    assert_eq!(two_way.pending_driver_tile_graphics_saves, 1);
+
+    let up = ambush_from_underfoot(0x10, true);
+    assert!(!up.tile_restoration_pending);
+    assert_eq!(up.pending_driver_tile_graphics_saves, 0);
 }
 
 #[test]
@@ -22393,9 +22459,10 @@ fn active_object_eviction_phase_matches_spec_cascade() {
 }
 
 #[test]
-fn chargen_questionnaire_always_floors_strength_to_twenty() {
-    // chargen.md §7: max STR contribution is 2 per question and there
-    // are 7 questions, so the floor always fires.
+fn chargen_questionnaire_floors_strength_to_twenty_over_seeded_tallies() {
+    // chargen.md §7: STR is floored to twenty at commit; the tally starts
+    // at the seed's 15 (§6, 2026-09-04), so the floor fires only when the
+    // winners add fewer than six.
     assert_eq!(CHARGEN_STR_FLOOR, 20);
     assert_eq!(CHARGEN_STARTING_PARTY_SIZE, 3);
 
@@ -22411,7 +22478,11 @@ fn chargen_questionnaire_always_floors_strength_to_twenty() {
     assert_eq!(stats.strength, CHARGEN_STR_FLOOR);
     assert_eq!(CHARGEN_SEED_DEXTERITY, 15);
     assert_eq!(stats.dexterity, CHARGEN_SEED_DEXTERITY);
-    assert_eq!(stats.intelligence, 0);
+    // `chargen.md §6` (2026-09-04): STR and INT tallies are seeded at 15
+    // too, so an empty tally commits INT 15 and the floored STR 20.
+    assert_eq!(CHARGEN_SEED_STRENGTH, 15);
+    assert_eq!(CHARGEN_SEED_INTELLIGENCE, 15);
+    assert_eq!(stats.intelligence, CHARGEN_SEED_INTELLIGENCE);
 
     // `combat.md §5.1`: "A questionnaire Avatar therefore enters play with
     // dexterity 15 or better, giving a phase counter of **21 or less**."
@@ -22426,16 +22497,18 @@ fn chargen_questionnaire_always_floors_strength_to_twenty() {
         assert!(COMBAT_PLACEMENT_PHASE_BASE - stats.dexterity <= 21);
     }
 
-    // Worst-case STR contribution (any seven Spirituality wins):
-    // chargen_virtue_stat_delta(Spirituality) is INT-only, so STR
-    // remains 0 before the floor.
+    // `chargen.md §7` scope caveat: strength is 20 only when the winners
+    // added fewer than six points; seven Spirituality wins add seven to the
+    // seeded 15, so STR lands above the floor.
     let all_spirituality = vec![ShrineVirtue::Spirituality; 7];
     let stats = chargen_stats_from_winners(&all_spirituality);
-    assert_eq!(stats.strength, CHARGEN_STR_FLOOR);
+    assert_eq!(stats.strength, CHARGEN_SEED_STRENGTH + 7);
+    assert_eq!(stats.intelligence, CHARGEN_SEED_INTELLIGENCE + 7);
+    let few_str = chargen_stats_from_winners(&[ShrineVirtue::Valor, ShrineVirtue::Honor]);
+    assert_eq!(few_str.strength, CHARGEN_STR_FLOOR);
 
-    // Best-case STR contribution: any seven full-STR virtues should
-    // still floor the result, since 7*max delta < 20 only if delta<3.
-    // Either way, the result must be >= floor.
+    // Whatever seven identical winners add to the seeded tally, the
+    // committed strength is never below the floor.
     for v in [
         ShrineVirtue::Honesty,
         ShrineVirtue::Compassion,

@@ -60,6 +60,67 @@ pub const SHRINE_KNEELING_ROLL_HIGH: u16 = 255;
 pub const SHRINE_ALTAR_CELL: (usize, usize) = (SHRINE_WALK_COLUMN, 5);
 pub const SHRINE_ALTAR_TILE: u8 = 0xB2;
 
+/// `karma.md §8`: the Codex walk is "**twelve** animation frames, and
+/// **sixty** world steps", stamped at `(5, 10)` on frame 5 and stepped up to
+/// `(5, 3)`, "ending one row below the Codex at `(5, 2)`".
+pub const CODEX_APPROACH_WALK_FRAMES: u8 = 12;
+pub const CODEX_WALK_LAST_ROW: usize = 3;
+
+/// §7 "Exit pacing": after the re-stamp step the presentation "runs four
+/// more frames with nothing drawn, waits ten world steps".
+pub const SHRINE_EXIT_BLANK_FRAMES: u8 = 4;
+pub const SHRINE_EXIT_CLOSING_WAIT_STEPS: u16 = 10;
+
+/// Which presentation arm is running: they share the frame shape and the
+/// exit block, and differ in how far the avatar climbs (§7, §8).
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Default)]
+pub enum PresentationArm {
+    /// Nine frames, four rows climbed, then the meditation handler kneels.
+    #[default]
+    Shrine,
+    /// Twelve frames, seven rows climbed; the reader never kneels.
+    Codex,
+}
+
+impl PresentationArm {
+    pub const fn walk_frames(self) -> u8 {
+        match self {
+            Self::Shrine => SHRINE_APPROACH_WALK_FRAMES,
+            Self::Codex => CODEX_APPROACH_WALK_FRAMES,
+        }
+    }
+
+    /// The approach's world steps: forty-five for a shrine, sixty for the
+    /// Codex.
+    pub const fn walk_world_steps(self) -> u16 {
+        self.walk_frames() as u16 * SHRINE_APPROACH_WALK_STEPS_PER_FRAME as u16
+    }
+
+    /// The row the walk ends on, one row below the feature.
+    pub const fn rest_row(self) -> usize {
+        match self {
+            Self::Shrine => SHRINE_WALK_LAST_ROW,
+            Self::Codex => CODEX_WALK_LAST_ROW,
+        }
+    }
+
+    /// §7: "one frame per grid row the approach climbed" - four for a
+    /// shrine, seven for the Codex.
+    pub const fn rows_climbed(self) -> u8 {
+        (SHRINE_WALK_FIRST_ROW - self.rest_row()) as u8
+    }
+
+    /// §7 "Exit pacing", after the handler returns: one re-stamp step, the
+    /// walk-back frames at five steps each, four blank frames and the
+    /// ten-step closing wait - fifty-one steps for a shrine, sixty-six for
+    /// the Codex.
+    pub const fn exit_world_steps(self) -> u16 {
+        1 + (self.rows_climbed() as u16 + SHRINE_EXIT_BLANK_FRAMES as u16)
+            * SHRINE_APPROACH_WALK_STEPS_PER_FRAME as u16
+            + SHRINE_EXIT_CLOSING_WAIT_STEPS
+    }
+}
+
 /// What the shrine presentation is drawing over its backdrop right now.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum ShrinePose {
@@ -72,23 +133,30 @@ pub enum ShrinePose {
     Kneeling { column: usize, row: usize },
 }
 
-/// How far into the approach walk the presentation has got.
+/// How far into the presentation's counted world steps the walk has got.
 ///
 /// The walk is measured in world steps rather than wall-clock: §7 counts
-/// forty-five of them, each "paired with one request for a one-tick
-/// hardware-timer delay". This engine does not model the nine two-part
-/// stings' own cost, so it spreads the forty-five steps evenly across the
-/// measured Approach-to-Kneel interval that
-/// `crate::SHRINE_KNEEL_HOLD_BIOS_TICKS` carries - the two agree to within
-/// the bracket that constant was measured at. `cleak/u5-engine#30` asks for
-/// the constant to fall out of the animation once the sting cost is modelled;
-/// until then the interval is the measurement and this is its subdivision.
+/// them, and each is "paired with one request for a one-tick hardware-timer
+/// delay". The presentation calls [`Self::on_world_step`] once per counted
+/// step, and the pose is a pure function of how many have run - so a shell
+/// that spreads the steps across a measured hold and one that runs them
+/// straight through draw the same sequence.
 #[derive(Clone, Copy, Debug, PartialEq, Default)]
 pub struct ShrineApproachWalk {
-    started_at_secs: Option<f64>,
-    step: u8,
+    arm: PresentationArm,
+    /// Counted world steps since the presentation started, the opening step
+    /// included.
+    steps: u16,
     /// Set once the meditation handler has replaced the pose.
     kneeling: bool,
+    /// §7 "What 'restore the standing Avatar pose' means": the ordaining arm
+    /// re-stamps the walking pose in the altar cell.
+    standing: bool,
+    /// `Some(handler_steps)` once the handler has returned: how many of the
+    /// following counted steps are still the handler's own closing wait.
+    exit_handler_steps: Option<u16>,
+    /// Counted steps since the exit began.
+    exit_steps: u16,
     /// Which member of the kneeling family is displayed: 0 is the base.
     kneel_frame: u8,
     /// Ticks still owed to §5's six-tick hold after a return to the base.
@@ -107,29 +175,80 @@ impl ShrineApproachWalk {
         Self::default()
     }
 
-    /// Advance to a monotonic clock reading, spreading the published
-    /// forty-five world steps across `interval_secs`.
-    pub fn advance_to(&mut self, now_secs: f64, interval_secs: f64) {
-        let started = *self.started_at_secs.get_or_insert(now_secs);
-        if interval_secs <= 0.0 {
-            self.step = SHRINE_APPROACH_WALK_WORLD_STEPS;
+    /// The Codex arm of the same presentation (§8).
+    pub fn codex() -> Self {
+        Self {
+            arm: PresentationArm::Codex,
+            ..Self::default()
+        }
+    }
+
+    pub fn arm(&self) -> PresentationArm {
+        self.arm
+    }
+
+    /// One counted world step of the presentation. The first is the
+    /// presentation's own opening step; the approach walk's steps follow;
+    /// on the shrine arm the step after the walk is the handler's kneeling
+    /// repaint (§7: "that repaint is the forty-sixth world step of the
+    /// interval").
+    pub fn on_world_step(&mut self) {
+        if self.exit_handler_steps.is_some() {
+            self.exit_steps = self.exit_steps.saturating_add(1);
             return;
         }
-        let elapsed = (now_secs - started).max(0.0);
-        let per_step = interval_secs / f64::from(SHRINE_APPROACH_WALK_WORLD_STEPS);
-        let step = (elapsed / per_step).floor();
-        self.step = if step >= f64::from(SHRINE_APPROACH_WALK_WORLD_STEPS) {
-            SHRINE_APPROACH_WALK_WORLD_STEPS
-        } else {
-            step as u8
-        };
+        let walk_end = 1 + self.arm.walk_world_steps();
+        if self.steps >= walk_end && self.arm == PresentationArm::Shrine && !self.standing {
+            self.kneel();
+        }
+        self.steps = self.steps.saturating_add(1);
+    }
+
+    /// Counted steps run so far, the opening step included.
+    pub fn steps(&self) -> u16 {
+        self.steps
+    }
+
+    /// Whether the approach walk has finished drawing.
+    pub fn approach_finished(&self) -> bool {
+        self.steps > self.arm.walk_world_steps()
     }
 
     /// The handler's first act, §7: "replace the walking pose with a
     /// **different** pose, the kneeling one, in the same cell".
     pub fn kneel(&mut self) {
-        self.step = SHRINE_APPROACH_WALK_WORLD_STEPS;
+        if self.standing || self.exit_handler_steps.is_some() {
+            return;
+        }
+        self.steps = self.steps.max(1 + self.arm.walk_world_steps());
         self.kneeling = true;
+    }
+
+    /// §7: on the ordaining arm "the walking pose ... stamped back into the
+    /// slot while the figure is still in the altar cell `(5, 6)`", so the
+    /// avatar "stands up in place" through both key waits and the handler's
+    /// closing ten steps.
+    pub fn stand(&mut self) {
+        self.steps = self.steps.max(1 + self.arm.walk_world_steps());
+        self.kneeling = false;
+        self.standing = true;
+    }
+
+    /// §7 "Exit pacing": the handler has returned. `handler_steps` is how
+    /// many of the following counted steps are still the handler's own
+    /// closing wait (ten on the completion arms, none on a refusal), after
+    /// which the presentation re-stamps the walking pose, walks back down,
+    /// clears the slot and waits.
+    pub fn begin_exit(&mut self, handler_steps: u16) {
+        self.steps = self.steps.max(1 + self.arm.walk_world_steps());
+        if self.exit_handler_steps.is_none() {
+            self.exit_handler_steps = Some(handler_steps);
+            self.exit_steps = 0;
+        }
+    }
+
+    pub fn is_exiting(&self) -> bool {
+        self.exit_handler_steps.is_some()
     }
 
     /// Seed the animator's generator. Called once, when the presentation
@@ -150,7 +269,7 @@ impl ShrineApproachWalk {
     /// reads the base for the whole meditation", which is why `pose` still
     /// reports the kneeling pose and this only chooses the family member.
     pub fn tick_kneeling_frame(&mut self) {
-        if !self.kneeling {
+        if !matches!(self.pose(), ShrinePose::Kneeling { .. }) {
             return;
         }
         if self.kneel_hold > 0 {
@@ -190,18 +309,60 @@ impl ShrineApproachWalk {
         self.kneeling
     }
 
-    /// One-based animation frame, 1..=9.
+    pub fn is_standing(&self) -> bool {
+        self.standing
+    }
+
+    /// One-based approach animation frame, 1..=9 (1..=12 for the Codex).
+    /// The presentation's opening step counts as frame 1.
     pub fn frame(&self) -> u8 {
-        (self.step / SHRINE_APPROACH_WALK_STEPS_PER_FRAME + 1)
-            .min(SHRINE_APPROACH_WALK_FRAMES)
+        let walked = self.steps.saturating_sub(2);
+        let frame = walked / u16::from(SHRINE_APPROACH_WALK_STEPS_PER_FRAME) + 1;
+        frame.min(u16::from(self.arm.walk_frames())) as u8
     }
 
     pub fn pose(&self) -> ShrinePose {
+        let rest_row = self.arm.rest_row();
+        if let Some(handler_steps) = self.exit_handler_steps
+            && self.exit_steps > handler_steps
+        {
+            // §7 "Exit pacing": "re-stamps the walking pose ... **in the cell
+            // the figure knelt in**, and spends one world step there", then
+            // "walks the avatar back down to the bottom grid row one row per
+            // animation frame", then clears the slot for the four blank
+            // frames and the closing wait.
+            let exit = self.exit_steps - handler_steps;
+            if exit == 1 {
+                return ShrinePose::Walking {
+                    column: SHRINE_WALK_COLUMN,
+                    row: rest_row,
+                };
+            }
+            let walk_back = exit - 2;
+            let frame = walk_back / u16::from(SHRINE_APPROACH_WALK_STEPS_PER_FRAME);
+            if frame < u16::from(self.arm.rows_climbed()) {
+                return ShrinePose::Walking {
+                    column: SHRINE_WALK_COLUMN,
+                    row: rest_row + 1 + usize::from(frame),
+                };
+            }
+            return ShrinePose::None;
+        }
+        if self.standing {
+            return ShrinePose::Walking {
+                column: SHRINE_WALK_COLUMN,
+                row: rest_row,
+            };
+        }
         if self.kneeling {
             return ShrinePose::Kneeling {
                 column: SHRINE_WALK_COLUMN,
-                row: SHRINE_WALK_LAST_ROW,
+                row: rest_row,
             };
+        }
+        if self.steps <= 1 {
+            // The presentation's own opening step: bare backdrop.
+            return ShrinePose::None;
         }
         let frame = self.frame();
         if frame < SHRINE_APPROACH_WALK_FIRST_POSE_FRAME {
@@ -212,7 +373,7 @@ impl ShrineApproachWalk {
         let climbed = usize::from(frame - SHRINE_APPROACH_WALK_FIRST_POSE_FRAME);
         ShrinePose::Walking {
             column: SHRINE_WALK_COLUMN,
-            row: SHRINE_WALK_FIRST_ROW.saturating_sub(climbed),
+            row: SHRINE_WALK_FIRST_ROW.saturating_sub(climbed).max(rest_row),
         }
     }
 
@@ -235,16 +396,46 @@ mod tests {
     use super::*;
     use std::collections::BTreeSet;
 
+    fn run(walk: &mut ShrineApproachWalk, steps: u16) -> Vec<ShrinePose> {
+        (0..steps)
+            .map(|_| {
+                walk.on_world_step();
+                walk.pose()
+            })
+            .collect()
+    }
+
+    /// The distinct cells a run of poses visits, in order.
+    fn cells(poses: &[ShrinePose]) -> Vec<(usize, usize)> {
+        let mut seen = Vec::new();
+        for pose in poses {
+            if let ShrinePose::Walking { column, row } = *pose
+                && seen.last() != Some(&(column, row))
+            {
+                seen.push((column, row));
+            }
+        }
+        seen
+    }
+
+    /// §7: frames 1-4 draw nothing - "twenty repaints of bare shrine
+    /// backdrop, twenty-one counting the presentation's own opening world
+    /// step".
     #[test]
     fn the_walk_draws_nothing_for_its_first_four_frames() {
         let mut walk = ShrineApproachWalk::new();
-        walk.advance_to(0.0, 4.0);
-        for frame in 1..SHRINE_APPROACH_WALK_FIRST_POSE_FRAME {
-            let step = (frame - 1) * SHRINE_APPROACH_WALK_STEPS_PER_FRAME;
-            walk.advance_to(f64::from(step) * (4.0 / 45.0) + 0.001, 4.0);
-            assert_eq!(walk.frame(), frame, "frame {frame}");
-            assert_eq!(walk.pose(), ShrinePose::None, "frame {frame} draws nothing");
-        }
+        let poses = run(&mut walk, 21);
+        assert!(poses.iter().all(|pose| *pose == ShrinePose::None));
+        assert_eq!(walk.frame(), 4);
+        walk.on_world_step();
+        assert_eq!(walk.frame(), 5);
+        assert_eq!(
+            walk.pose(),
+            ShrinePose::Walking {
+                column: SHRINE_WALK_COLUMN,
+                row: SHRINE_WALK_FIRST_ROW
+            }
+        );
     }
 
     /// §7: "Stamped at `(5, 10)` on frame 5, stepping to `(5, 9)`, `(5, 8)`,
@@ -252,17 +443,14 @@ mod tests {
     #[test]
     fn the_walk_steps_the_published_cells() {
         let mut walk = ShrineApproachWalk::new();
-        walk.advance_to(0.0, 4.5);
-        let mut seen = Vec::new();
-        for step in 0..SHRINE_APPROACH_WALK_WORLD_STEPS {
-            walk.advance_to(f64::from(step) * 0.1 + 0.001, 4.5);
-            if let ShrinePose::Walking { column, row } = walk.pose() {
-                if seen.last() != Some(&(column, row)) {
-                    seen.push((column, row));
-                }
-            }
-        }
-        assert_eq!(seen, vec![(5, 10), (5, 9), (5, 8), (5, 7), (5, 6)]);
+        let poses = run(&mut walk, 1 + SHRINE_APPROACH_WALK_WORLD_STEPS as u16);
+        assert_eq!(cells(&poses), vec![(5, 10), (5, 9), (5, 8), (5, 7), (5, 6)]);
+        // Five repaints on each painted cell.
+        let painted = poses
+            .iter()
+            .filter(|pose| matches!(pose, ShrinePose::Walking { .. }))
+            .count();
+        assert_eq!(painted, 25);
     }
 
     /// The walk ends "one row short of the altar tile, which sits in the same
@@ -274,11 +462,12 @@ mod tests {
         assert_eq!(SHRINE_WALK_LAST_ROW, altar_row + 1);
     }
 
+    /// §7: the handler's kneeling repaint "is the forty-sixth world step of
+    /// the interval".
     #[test]
     fn kneeling_replaces_the_pose_in_the_same_cell() {
         let mut walk = ShrineApproachWalk::new();
-        walk.advance_to(0.0, 1.0);
-        walk.advance_to(10.0, 1.0);
+        run(&mut walk, 1 + 45);
         assert_eq!(
             walk.pose(),
             ShrinePose::Walking {
@@ -286,13 +475,97 @@ mod tests {
                 row: SHRINE_WALK_LAST_ROW
             }
         );
-        walk.kneel();
+        walk.on_world_step();
         assert_eq!(
             walk.pose(),
             ShrinePose::Kneeling {
                 column: SHRINE_WALK_COLUMN,
                 row: SHRINE_WALK_LAST_ROW
             }
+        );
+    }
+
+    /// §8: the Codex walk stamps `(5, 10)` and steps up to `(5, 3)` - "eight
+    /// painted cells at five repaints each" - and never kneels.
+    #[test]
+    fn the_codex_walk_climbs_seven_rows_and_never_kneels() {
+        let mut walk = ShrineApproachWalk::codex();
+        let poses = run(&mut walk, 1 + 60 + 5);
+        assert_eq!(
+            cells(&poses),
+            (3..=10).rev().map(|row| (5, row)).collect::<Vec<_>>()
+        );
+        assert!(poses.iter().all(|pose| !matches!(pose, ShrinePose::Kneeling { .. })));
+        assert_eq!(
+            poses
+                .iter()
+                .filter(|pose| matches!(pose, ShrinePose::Walking { .. }))
+                .count(),
+            40 + 5
+        );
+    }
+
+    /// §7 "Exit pacing": one re-stamp repaint in the kneel cell, the walk
+    /// back down rows 7..10 at five repaints each, then thirty repaints of
+    /// bare backdrop - fifty-one steps after the handler's own wait.
+    #[test]
+    fn the_shrine_exit_walks_back_down_and_clears() {
+        assert_eq!(PresentationArm::Shrine.exit_world_steps(), 51);
+        let mut walk = ShrineApproachWalk::new();
+        run(&mut walk, 1 + 45 + 1 + 10);
+        walk.begin_exit(10);
+        let poses = run(&mut walk, 10 + 51);
+        assert!(
+            poses[..10]
+                .iter()
+                .all(|pose| matches!(pose, ShrinePose::Kneeling { row: 6, .. })),
+            "the handler's closing wait still kneels on this arm"
+        );
+        let exit = &poses[10..];
+        assert_eq!(exit[0], ShrinePose::Walking { column: 5, row: 6 });
+        assert_eq!(cells(exit), vec![(5, 6), (5, 7), (5, 8), (5, 9), (5, 10)]);
+        assert_eq!(
+            exit.iter()
+                .filter(|pose| matches!(pose, ShrinePose::Walking { .. }))
+                .count(),
+            1 + 20
+        );
+        assert!(exit[21..].iter().all(|pose| *pose == ShrinePose::None));
+        assert_eq!(exit[21..].len(), 30);
+    }
+
+    /// §8: the Codex exit "is the shrine's - the same block": re-stamp at
+    /// `(5, 3)`, rows 4 through 10, four blank frames and the closing wait.
+    #[test]
+    fn the_codex_exit_walks_back_seven_rows() {
+        assert_eq!(PresentationArm::Codex.exit_world_steps(), 66);
+        let mut walk = ShrineApproachWalk::codex();
+        run(&mut walk, 61);
+        walk.begin_exit(0);
+        let poses = run(&mut walk, 66);
+        assert_eq!(
+            cells(&poses),
+            (3..=10).map(|row| (5, row)).collect::<Vec<_>>()
+        );
+        assert!(poses[36..].iter().all(|pose| *pose == ShrinePose::None));
+    }
+
+    /// §7: the ordaining arm re-stamps the walking pose in the altar cell
+    /// and holds it through the key waits and the closing ten steps.
+    #[test]
+    fn standing_restores_the_walking_pose_in_the_altar_cell() {
+        let mut walk = ShrineApproachWalk::new();
+        run(&mut walk, 1 + 45 + 1 + 10);
+        assert!(walk.is_kneeling());
+        walk.stand();
+        assert_eq!(walk.pose(), ShrinePose::Walking { column: 5, row: 6 });
+        walk.begin_exit(10);
+        let poses = run(&mut walk, 11);
+        assert!(
+            poses
+                .iter()
+                .all(|pose| *pose == ShrinePose::Walking { column: 5, row: 6 }),
+            "ten standing repaints plus the exit's re-stamp make eleven"
         );
     }
 

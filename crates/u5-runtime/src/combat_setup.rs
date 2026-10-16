@@ -1338,11 +1338,26 @@ impl PlayState {
         // never a `0x4?` one. Only the chest class's byte is published,
         // so no other class stamps anything here. Confidence follows §5:
         // **probable** for the icon-class identification.
-        let centre_icon = matches!(
-            dungeon_cell_class_of(self.dungeon_cell(level, self.player.x, self.player.y)),
-            DungeonCellClass::Chest
-        )
-        .then_some(COMBAT_ARENA_CENTRE_SPECIAL_TILE);
+        let underfoot_class =
+            dungeon_cell_class_of(self.dungeon_cell(level, self.player.x, self.player.y));
+        // `dungeon-mode.md §14.1`: "A two-way ladder cell sets the flag and
+        // dispatches the associated local presentation helper" - the driver's
+        // `0x6C` mode `0` save (`display-driver.md §8`) - "other non-empty
+        // icon classes clear it". The icon classes named there are the up,
+        // down and two-way ladders, the chest and the fountain.
+        match underfoot_class {
+            DungeonCellClass::TwoWayLadder => {
+                self.tile_restoration_pending = true;
+                self.pending_driver_tile_graphics_saves += 1;
+            }
+            DungeonCellClass::UpLadder
+            | DungeonCellClass::DownLadder
+            | DungeonCellClass::Chest
+            | DungeonCellClass::Fountain => self.tile_restoration_pending = false,
+            _ => {}
+        }
+        let centre_icon = matches!(underfoot_class, DungeonCellClass::Chest)
+            .then_some(COMBAT_ARENA_CENTRE_SPECIAL_TILE);
         let record = CombatArenaRecord::synthesise_dungeon_ambush(
             DUNGEON_AMBUSH_ARENA_FLOOR_TILE,
             facing_seed,

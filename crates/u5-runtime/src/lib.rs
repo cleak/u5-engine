@@ -232,6 +232,13 @@ pub use combat_frame::*;
 pub use combat_setup::*;
 pub use combat_stats::*;
 pub use combat_targeting::*;
+// `karma.md §7`/`§7.2` presentation step counts (audit A104/A106/A110).
+pub use commands::{
+    CODEX_PRESENTATION_CUTSCENE_MAP_RECORD, SHRINE_HANDLER_CLOSING_WORLD_STEPS, SHRINE_KNEEL_WORLD_STEPS, SHRINE_MANTRA_FIRST_WORLD_STEPS,
+    SHRINE_MANTRA_SUBSEQUENT_WORLD_STEPS, SHRINE_OFFERING_SWELL_HOLD_BIOS_TICKS,
+    SHRINE_TURN_IN_SWELL_HOLD_BIOS_TICKS, SHRINE_VIRTUE_QUESTION_WORLD_STEPS,
+    shrine_presentation_hold_bios_ticks,
+};
 pub use commands::{
     AN_SANCT_CHEST_OPENED_LINE, AN_SANCT_DISARM_BIT, AN_SANCT_DISARMED_LINE,
     ATTACK_NOTHING_TO_ATTACK_REFUSAL, CAMP_BODY_SLEEP_LINE, CODEX_SHRINE_ENTER_ECHO_TAIL,
@@ -615,6 +622,7 @@ pub use map_viewport_dissolve::*;
 pub use message_window::*;
 pub use misc_tables::*;
 pub use misc_tables_io::*;
+pub use miscmsg_io::MISCMSG_SHRINE_TURN_IN_CONGRATULATION;
 pub use miscmsg_io::{
     CODEX_COMPLETION_READ_LEAD_IN, CODEX_PRESENTATION_KEY_STEPS_COMPLETION,
     CODEX_PRESENTATION_KEY_STEPS_NO_ORDAINED, CODEX_PRESENTATION_KEY_STEPS_ORDAINED,

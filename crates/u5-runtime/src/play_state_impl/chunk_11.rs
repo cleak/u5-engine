@@ -39,7 +39,12 @@ impl PlayState {
         // and walks the avatar back down before the mode loop's prompt. So it
         // is released once the session has ended *and* that staged hold has
         // run out, not on the handler's return.
-        if self.active_shrine.is_none() && !self.staged_narration_active() {
+        // The Codex reader (§8.2) holds the same display through its key
+        // waits, so an open reader keeps it too.
+        if self.active_shrine.is_none()
+            && self.codex_presentation_steps == 0
+            && !self.staged_narration_active()
+        {
             self.shrine_presentation_map = None;
             self.shrine_approach_walk = None;
         }

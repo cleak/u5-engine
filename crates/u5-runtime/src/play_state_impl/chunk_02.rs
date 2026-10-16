@@ -1936,15 +1936,19 @@ impl PlayState {
         for ch in std::iter::once(key).chain(suffix.chars()) {
             match session.phase {
                 ShrinePhase::Virtue => match ch {
+                    // `karma.md §7`: "Escape erases the whole current
+                    // answer and keeps the same prompt open." It never
+                    // cancels the meditation.
                     '\u{1b}' => {
-                        self.message = SELECTION_CANCELLED_LITERAL.to_string();
-                        return Ok(Some(MoveOutcome::PromptDeclined));
+                        session.virtue_buffer.clear();
                     }
                     '\r' | '\n' => {
                         // `karma.md §12`: "A blank virtue answer or any blank
                         // mantra ends the interaction immediately without the
                         // unfocused-result record."
                         if session.virtue_buffer.trim().is_empty() {
+                            // §7 "Exit pacing" runs after every arm.
+                            self.begin_shrine_presentation_exit(0);
                             return Ok(Some(MoveOutcome::PromptDeclined));
                         }
                         // "The location has already selected the shrine's
@@ -1968,8 +1972,11 @@ impl PlayState {
                         // staged narration is pending, so a pure hold here
                         // is enough - nothing new needs printing once it
                         // clears.
-                        self.staged_narration
-                            .push_ticks(SHRINE_MANTRA_FIRST_HOLD_BIOS_TICKS, String::new());
+                        self.staged_narration.push_ticks_counting_world_steps(
+                            SHRINE_MANTRA_FIRST_HOLD_BIOS_TICKS,
+                            SHRINE_MANTRA_FIRST_WORLD_STEPS,
+                            String::new(),
+                        );
                     }
                     '\u{8}' | '\u{7f}' => {
                         session.virtue_buffer.pop();
@@ -2049,17 +2056,14 @@ impl PlayState {
                     // viewport inversion, which the section gives to the
                     // offering and turn-in arms only.
                     self.emit_sound_effect(SoundEffect::ShrineOrdinationChime);
-                    // the pause is, and it is a real
-                    // hold rather than ten instant animator steps. Measured
-                    // 2026-09-12 (`qa/paired/shrine-three-mantras.tsv`, beat
-                    // `after2`): the original is still inside it - no command
-                    // row on screen - where this engine had already returned
-                    // to play. An empty beat prints nothing and only waits.
-                    for _ in 0..SHRINE_OFFERING_RESULT_WORLD_TICKS {
-                        self.animation.tick_static_tiles();
-                    }
-                    self.staged_narration
-                        .push_ticks(SHRINE_EXIT_PACING_HOLD_BIOS_TICKS, String::new());
+                    // The handler's ten closing world steps and the
+                    // presentation's exit pacing are one real hold rather
+                    // than ten instant animator steps. Measured 2026-09-12
+                    // (`qa/paired/shrine-three-mantras.tsv`, beat `after2`):
+                    // the original is still inside it - no command row on
+                    // screen - where this engine had already returned to
+                    // play. An empty beat prints nothing and only waits.
+                    self.begin_shrine_presentation_exit(SHRINE_HANDLER_CLOSING_WORLD_STEPS);
                     return Ok(Some(MoveOutcome::Observed));
                 }
                 ShrinePhase::Offering => {
@@ -2076,6 +2080,7 @@ impl PlayState {
                     // pause."
                     if digit == 0 {
                         self.emit_message_line_continuing_row("0 gp\n");
+                        self.begin_shrine_presentation_exit(0);
                         return Ok(Some(MoveOutcome::PromptDeclined));
                     }
                     // "`1` through `9` | After echoing the digit, append
@@ -2125,6 +2130,7 @@ impl PlayState {
             // `offset+1`): the original's marker row sits directly under
             // `Mantra:` and this engine spent a blank between them.
             self.surface_command_row_follows_history = true;
+            self.begin_shrine_presentation_exit(0);
             return Ok(Some(MoveOutcome::PromptDeclined));
         }
         // `karma.md §12`: "Each mantra answer uses that same matcher against
@@ -2141,8 +2147,11 @@ impl PlayState {
             session.mantra_buffer.clear();
             // §12: "waiting twelve world ticks after each nonblank answer."
             // Same pure-hold shape as the first ask's six-tick wait above.
-            self.staged_narration
-                .push_ticks(SHRINE_MANTRA_SUBSEQUENT_HOLD_BIOS_TICKS, String::new());
+            self.staged_narration.push_ticks_counting_world_steps(
+                SHRINE_MANTRA_SUBSEQUENT_HOLD_BIOS_TICKS,
+                SHRINE_MANTRA_SUBSEQUENT_WORLD_STEPS,
+                String::new(),
+            );
             self.active_shrine = Some(session);
             self.adopt_shrine_prompt_row();
             return Ok(None);
@@ -2159,8 +2168,11 @@ impl PlayState {
         // a handoff instead of printing queued text; a frontend's per-frame
         // pump (or a headless shell's straight-through runner) calls
         // [`Self::step_shrine_third_mantra_resolution`] once the hold drains.
-        self.staged_narration
-            .push_ticks(SHRINE_MANTRA_SUBSEQUENT_HOLD_BIOS_TICKS, String::new());
+        self.staged_narration.push_ticks_counting_world_steps(
+            SHRINE_MANTRA_SUBSEQUENT_HOLD_BIOS_TICKS,
+            SHRINE_MANTRA_SUBSEQUENT_WORLD_STEPS,
+            String::new(),
+        );
         self.pending_shrine_third_mantra = Some(session);
         Ok(Some(MoveOutcome::Observed))
     }
@@ -2185,6 +2197,9 @@ impl PlayState {
                 MISCMSG_SHRINE_UNFOCUSED_RESULT,
                 true,
             )?;
+            // §7: the wrong-answer arm takes its early exit "ahead of both
+            // the stamp and that ten-tick hold", so only the exit pacing runs.
+            self.begin_shrine_presentation_exit(0);
             return Ok(Some(MoveOutcome::PromptDeclined));
         }
         let bit = session.virtue.bit();
@@ -2213,6 +2228,13 @@ impl PlayState {
             // altar's quest announcement. Restore the standing Avatar
             // pose and wait for a command key."
             self.shrine_ordained_mask |= bit;
+            // §7 "What 'restore the standing Avatar pose' means": the walking
+            // pose is re-stamped at `(5, 6)` "between the quest-bit write and
+            // record `31`", so the avatar stands through both key waits and
+            // the closing ten steps.
+            if let Some(walk) = self.shrine_approach_walk.as_mut() {
+                walk.stand();
+            }
             // Measured 2026-09-12 (`qa/paired/shrine-three-mantras.tsv`,
             // beat `mantra3`): the announcement prints with the cursor
             // still at the end of the accepted `Mantra:AHM` row, so the
@@ -2229,7 +2251,91 @@ impl PlayState {
             self.active_shrine = Some(session);
             return Ok(None);
         }
-        self.meditate_shrine_from_suffix(&session.mantra_buffer, game_dir)
+        // Ordained and Codex read: the turn-in arm. The mantra has already
+        // been accepted by the substring matcher above, so nothing here
+        // re-reads the typed text.
+        self.complete_shrine_codex_turn_in(session.virtue, game_dir)?;
+        Ok(Some(MoveOutcome::Observed))
+    }
+
+    /// `karma.md §7`, quest-state row "Ordained and Codex read", and §7.2's
+    /// turn-in beat: "Clear ordination before record `36`, the congratulatory
+    /// response. Play the turn-in beat of Section 7.2 - one unrestored
+    /// viewport inversion, then the 920-step envelope swell, then the shared
+    /// flash/rumble described below - and then award standing and the
+    /// applicable Avatar attributes. Each applicable attribute prints
+    /// `Strength +1\n`, `Dexterity +1\n`, or `Intelligence +1\n`, in that
+    /// order ... Finish with ten world ticks."
+    fn complete_shrine_codex_turn_in(
+        &mut self,
+        virtue: ShrineVirtue,
+        game_dir: &Path,
+    ) -> io::Result<()> {
+        let bit = virtue.bit();
+        self.shrine_ordained_mask &= !bit;
+        // Printed while the accepted `Mantra:` row is still open, like
+        // records `30` and `31`.
+        self.emit_shrine_misc_record_after_open_row(
+            game_dir,
+            MISCMSG_SHRINE_TURN_IN_CONGRATULATION,
+            true,
+        )?;
+        // §7.2: "sets the drawing colour and then issues a single rectangle
+        // fill over the gameplay viewport with the driver's exclusive-or mode
+        // selected", once and never undone.
+        self.presentation_viewport_inverted = true;
+        // The swell: 920 envelope runs at phase increment 3100, about 5.93 s.
+        self.emit_sound_effect(SoundEffect::ShrineTurnInSwell);
+        // "Only the turn-in arm then runs the shared flash-and-rumble helper
+        // ... **after** the swell rather than instead of it."
+        self.emit_major_flash();
+        // karma.md §3-4: shared moral-standing selector +3 on Codex turn-in,
+        // with Humility receiving another +3 after the stat step.
+        let mut moral_gained =
+            self.add_moral_standing(ShrineVirtue::SHRINE_CODEX_TURN_IN_MORAL_INCREASE);
+        let stat_notes = self.apply_shrine_stat_reward(virtue);
+        if virtue == ShrineVirtue::Humility {
+            let humility_moral =
+                self.add_moral_standing(ShrineVirtue::SHRINE_CODEX_TURN_IN_MORAL_INCREASE);
+            moral_gained = moral_gained.saturating_add(humility_moral);
+        }
+        self.diagnostics.push(format!(
+            "shrine of {} completed; moral +{} to {}",
+            virtue.name(),
+            moral_gained,
+            self.moral_standing
+        ));
+        // §7.2: "On that arm the attribute lines print after the whole sound,
+        // not during it." The swell costs no world step, so its hold carries
+        // none; the inversion stands until it ends.
+        let lines: String = stat_notes.iter().map(|line| format!("{line}\n")).collect();
+        self.staged_narration
+            .push_ticks(SHRINE_TURN_IN_SWELL_HOLD_BIOS_TICKS, lines);
+        self.begin_shrine_presentation_exit(SHRINE_HANDLER_CLOSING_WORLD_STEPS);
+        Ok(())
+    }
+
+    /// `karma.md §7` "Exit pacing": the presentation's exit after the
+    /// handler returns, on every arm. `handler_steps` is the handler's own
+    /// closing wait that precedes it - ten world steps on the completion
+    /// arms, none on the blank, wrong-answer and zero-offering arms, which
+    /// "take their early exit ahead of both the stamp and that ten-tick
+    /// hold".
+    pub(crate) fn begin_shrine_presentation_exit(&mut self, handler_steps: u16) {
+        let arm = self
+            .shrine_approach_walk
+            .as_ref()
+            .map(|walk| walk.arm())
+            .unwrap_or_default();
+        if let Some(walk) = self.shrine_approach_walk.as_mut() {
+            walk.begin_exit(handler_steps);
+        }
+        let steps = handler_steps + arm.exit_world_steps();
+        self.staged_narration.push_ticks_counting_world_steps(
+            shrine_presentation_hold_bios_ticks(steps),
+            steps,
+            String::new(),
+        );
     }
 
     /// Run the third-mantra resolution straight through, for shells with no
@@ -2245,308 +2351,170 @@ impl PlayState {
         self.step_shrine_third_mantra_resolution(game_dir)
     }
 
-    pub fn meditate_shrine_from_suffix(
-        &mut self,
-        suffix: &str,
-        game_dir: &Path,
-    ) -> io::Result<Option<MoveOutcome>> {
-        let Some(entry) = self.current_shrine_entry(game_dir)? else {
-            return Ok(None);
-        };
-        let request = match parse_inline_shrine_request(suffix) {
-            Ok(Some(request)) => request,
-            Ok(None) => {
-                self.message = shrine_prompt_message(entry.virtue);
-                return Ok(Some(MoveOutcome::PromptDeclined));
-            }
-            Err(err) => {
-                self.message = format!("{err}");
-                return Ok(Some(MoveOutcome::Blocked));
-            }
-        };
-        if !request.mantra.eq_ignore_ascii_case(entry.virtue.mantra()) {
-            self.message = "No effect!".to_string();
-            return Ok(Some(MoveOutcome::Blocked));
-        }
-
-        let bit = entry.virtue.bit();
-        let ordained = self.shrine_ordained_mask & bit != 0;
-        let codex = self.shrine_codex_mask & bit != 0;
-        let outcome = match (ordained, codex) {
-            (false, false) => {
-                self.shrine_ordained_mask |= bit;
-                // `karma.md §12`'s Codex-unread arm is the record `31`/`32`/
-                // `33` presentation, which the interactive session path above
-                // runs. This inline suffix form has no key waits to hang those
-                // records on, so it applies the state change and prints
-                // nothing rather than the summary sentence it used to invent.
-                self.diagnostics.push(format!(
-                    "meditated at the Shrine of {}; ordained for the Codex quest",
-                    entry.virtue.name()
-                ));
-                self.message.clear();
-                MoveOutcome::Observed
-            }
-            (true, false) => {
-                self.diagnostics.push(format!(
-                    "meditated at the Shrine of {}; already ordained, Codex unread",
-                    entry.virtue.name()
-                ));
-                self.message.clear();
-                MoveOutcome::Observed
-            }
-            (true, true) => {
-                self.shrine_ordained_mask &= !bit;
-                // karma.md §3-4: shared moral-standing selector +3 on Codex
-                // turn-in, with Humility receiving an additional +3.
-                let mut moral_gained =
-                    self.add_moral_standing(ShrineVirtue::SHRINE_CODEX_TURN_IN_MORAL_INCREASE);
-                let stat_notes = self.apply_shrine_stat_reward(entry.virtue);
-                if entry.virtue == ShrineVirtue::Humility {
-                    let humility_moral =
-                        self.add_moral_standing(ShrineVirtue::SHRINE_CODEX_TURN_IN_MORAL_INCREASE);
-                    moral_gained = moral_gained.saturating_add(humility_moral);
-                }
-                // `karma.md §7.2`'s Codex-turn-in arm: the envelope
-                // generator run 920 times in one sweep at phase increment
-                // 3100, 150 iterations a run - "one slow swell and decay
-                // at one pitch", about 5.93 s. §7.2 also has this arm
-                // alone run the shared flash/rumble helper, and "it runs
-                // **after** the swell rather than instead of it", so the
-                // two are ordered rather than exclusive.
-                //
-                // Not implemented from §7.2, as on the offering arm: the
-                // unrestored exclusive-or inversion of the gameplay
-                // viewport that precedes the swell.
-                self.emit_sound_effect(SoundEffect::ShrineTurnInSwell);
-                self.emit_major_flash();
-                // `karma.md §12`, "Ordained and Codex read": the awarded
-                // attribute lines are the whole of the added text - the
-                // standing award and the virtue name are state, not
-                // narration. The congratulatory record `36` that precedes
-                // them is emitted by the caller's record path.
-                self.diagnostics.push(format!(
-                    "shrine of {} completed; moral +{} to {}",
-                    entry.virtue.name(),
-                    moral_gained,
-                    self.moral_standing
-                ));
-                self.message = stat_notes.join("\n");
-                MoveOutcome::Observed
-            }
-            (false, true) => {
-                let Some(offering) = request.offering else {
-                    self.message = format!(
-                        "Offering? Use M{}/1 through M{}/9, or M{}/0 to cancel.",
-                        entry.virtue.mantra(),
-                        entry.virtue.mantra(),
-                        entry.virtue.mantra()
-                    );
-                    return Ok(Some(MoveOutcome::PromptDeclined));
-                };
-                if offering == 0 {
-                    // `karma.md §12`: digit zero "end[s] the interaction
-                    // without payment", and the row it leaves is the echo.
-                    self.emit_message_line_continuing_row("0 gp\n");
-                    return Ok(Some(MoveOutcome::PromptDeclined));
-                }
-                self.emit_message_line_continuing_row(format!("{offering}00 gp\n\n"));
-                let cost = offering as u16 * 100;
-                if self.gold < cost {
-                    self.emit_shrine_misc_record(
-                        game_dir,
-                        MISCMSG_SHRINE_OFFERING_INSUFFICIENT_GOLD,
-                    )?;
-                    self.emit_shrine_misc_record(game_dir, MISCMSG_SHRINE_OFFERING_PROMPT)?;
-                    return Ok(Some(MoveOutcome::Blocked));
-                }
-                self.apply_shrine_offering_payment(cost, offering);
-                MoveOutcome::Observed
-            }
-        };
-        Ok(Some(outcome))
-    }
-
     /// `karma.md §8`: run the Codex presentation after E-Enter has echoed
     /// `Enter the Shrine of the Codex!`.
     ///
+    /// The presentation "suspends the ordinary active objects and shows the
+    /// eleven-by-eleven Codex map from `MISCMAPS.DAT`, record 2", runs its
+    /// opening world step, prints its own approach record `46` (§8.1: "Every
+    /// Codex presentation begins with `MISCMSG.DAT` record `46`"), and walks
+    /// the avatar up seven rows: "**twelve** animation frames, and **sixty**
+    /// world steps ... between the Codex's own approach record and the
+    /// reader". The reader then waits on a key before each later record
+    /// (§8.2), which [`Self::step_codex_presentation`] serves one key at a
+    /// time; nothing is printed ahead.
+    ///
+    /// Not implemented from §8: the interred-party page the presentation
+    /// inserts inside the walk "if any party member carries the interred
+    /// sentinel". The spec names neither the sentinel nor the page's exact
+    /// lines, and the arm was not exercised (`OPEN-QUESTIONS.md`), so the
+    /// walk runs as the published nobody-interred case.
+    ///
     /// Measured 2026-09-09 (`qa/paired/codex-enter.tsv`) against the original,
-    /// seeded straight onto Britannia `(233, 233)`. The presentation prints
-    /// `MISCMSG.DAT` record `46`, then `37`, then `38`, then one page, each
-    /// with its own authored line feeds:
-    ///
-    /// ```text
-    /// The Codex of Ultimate Wisdom lies before thee...
-    /// The book is open to the page thou dost seek!
-    ///
-    /// Upon the hallowed page thou dost read:
-    ///
-    /// HOW DID YOU GET HERE?
-    /// ```
-    ///
-    /// §8 says the reader "walks the eight virtues in the standard virtue
-    /// order and considers only virtues whose ordained bit is set", and
-    /// publishes no line for the no-ordained branch. Record `39` is that
-    /// line, and the preamble prints whatever the quest state.
-    ///
-    /// The **ordained** page is not implemented. `formats/miscmsg-dat.md §3`
-    /// calls records `37-44` "Urn/Codex prophecy", and this engine read that
-    /// as eight per-virtue pages indexed by virtue - which cannot be right,
-    /// since `37` and `38` are the preamble above. Printing the wrong record
-    /// is worse than printing none, so the stamped branch stays silent until
-    /// `cleak/u5-spec#253` answers which record a quest page comes from. The
-    /// Codex-read bit is still stamped, so quest progress is unaffected.
+    /// seeded straight onto Britannia `(233, 233)`: record `46`, then `37`,
+    /// `38` and the page, each behind its own key.
     pub fn read_codex_urn_after_entry(&mut self, game_dir: &Path) -> io::Result<MoveOutcome> {
-        let outcome = read_codex_urn(self.shrine_ordained_mask, &mut self.shrine_codex_mask);
-        let Some(messages) = load_misc_messages(game_dir)? else {
-            // A profile without the file logs nothing rather than
-            // substituting engine prose.
-            return Ok(MoveOutcome::Observed);
-        };
-        let mut runic_pages = String::new();
-        let mut text = String::new();
-        for index in [
-            MISCMSG_CODEX_ENTRY_NARRATION,
-            MISCMSG_CODEX_PAGE_OPENED,
-            MISCMSG_CODEX_READS_PREFIX,
-        ] {
-            if let Some(record) = messages.record(index) {
-                text.push_str(&record.replace('\r', "\n"));
-            }
-        }
-        // The page itself. `formats/miscmsg-dat.md §3` calls records `37-44`
-        // "Urn/Codex prophecy" and this engine read that as eight per-virtue
-        // pages indexed by virtue, which cannot be right - `37` and `38` are
-        // the preamble above (`cleak/u5-spec#253`).
-        //
-        // The per-virtue pages are the aphorism range `20..27`, in the
-        // standard virtue order. Established from the shipped records
-        // themselves - `20` opens "A dishonest life brings unto thee
-        // temporary", `25` "It is the guilt, not the guillotine", `27` "Pride
-        // is a vice, which Pride itself inclines" - and corroborated against
-        // public Ultima V documentation, which summarises the eight Codex
-        // readings as Honesty teaching about dishonest gains, Honor about
-        // guilt and shame, Humility about pride, and so on, one per virtue in
-        // that same order.
-        //
-        // `12..19` are a different cluster: they complete the *shrine's* quest
-        // sentence (`karma.md §12`, record `32` plus the virtue's own), and
-        // read as fragments - "the failing of Dishonesty!" - not as pages.
-        // `karma.md` §8.1 / §8.2 and `miscmsg-dat.md` §3, published
-        // 2026-09-10 in answer to cleak/u5-spec#253.
-        //
-        // The per-virtue pages are the aphorism range `20..27` in the standard
-        // virtue order - Honesty `20` through Humility `27` - not the `37..44`
-        // cluster, whose `37`/`38` are the preamble above. That was already
-        // corrected here; the rest of the contract was not.
-        //
-        // The aphorism "is enclosed by an opening double quote and a closing
-        // double quote followed by two newlines, in addition to the record's
-        // own authored content".
-        let steps = match outcome {
-            CodexUrnReadOutcome::NoOrdained => {
-                if let Some(record) = messages.record(MISCMSG_CODEX_NO_QUEST_PAGE) {
-                    text.push_str(&record.replace('\r', "\n"));
-                }
-                crate::miscmsg_io::CODEX_PRESENTATION_KEY_STEPS_NO_ORDAINED
-            }
-            CodexUrnReadOutcome::Stamped {
-                virtue,
-                read_mask_complete,
-            } => {
-                let index = *MISCMSG_VIRTUE_APHORISM_RANGE.start() + virtue.index();
-                if let Some(record) = messages.record(index) {
-                    text.push('"');
-                    text.push_str(&record.replace('\r', "\n"));
-                    text.push_str("\"\n\n");
-                }
-                if read_mask_complete {
-                    // §8.1: "continue with three shared viewport flash/rumble
-                    // effects, then record `40` once as the page-turn
-                    // transition. After another key, print `Thou dost read:`
-                    // and the shared runic pages `41`, `42`, `43`, `44` in
-                    // that order [...] record `40` is not repeated between
-                    // them."
-                    //
-                    // The three flash/rumble effects are not emitted here.
-                    // This engine models a viewport flash as a playback record
-                    // a frontend replays (see `blackthorn_rescue_playback`),
-                    // and the Codex has no such record yet; the text and key
-                    // contract below is what a paired capture measures.
-                    // Tracked as unfinished rather than faked.
-                    if let Some(record) =
-                        messages.record(crate::miscmsg_io::MISCMSG_CODEX_PAGE_TURN)
-                    {
-                        text.push_str(&record.replace('\r', "\n"));
-                    }
-                    text.push_str(crate::miscmsg_io::CODEX_COMPLETION_READ_LEAD_IN);
-                    // `miscmsg-dat.md §4` (`RETRACTIONS.md` R453): records
-                    // `41`-`44` are printed by the ordinary fixed-window
-                    // message printer with the runic font selected - "Keep
-                    // the authored glyph stream and line separators intact" -
-                    // and the normal font restored afterwards. The pages are
-                    // carried as runic cells rather than expanded to prose.
-                    for index in crate::miscmsg_io::MISCMSG_CODEX_COMPLETION_PAGES {
-                        if let Some(record) = messages.record(index) {
-                            runic_pages.push_str(&record.replace('\r', "\n"));
-                        }
-                    }
-                    crate::miscmsg_io::CODEX_PRESENTATION_KEY_STEPS_COMPLETION
-                } else {
-                    crate::miscmsg_io::CODEX_PRESENTATION_KEY_STEPS_ORDAINED
-                }
-            }
-        };
-        if !text.is_empty() {
-            self.emit_message_line(text.clone());
-        }
-        if !runic_pages.is_empty() {
-            // The runic pages follow on the same printer with the same row
-            // rules as `emit_message_line` (a leading feed closes an open
-            // row; an embedded feed is a producer blank, not the derived
-            // turn blank), but each cell keeps the runic font. The ordinary
-            // text above stays on `emit_message_line` so its rows are
-            // unchanged.
-            self.flush_message_slot();
-            let row_open = self.message_row_open_mid_line;
-            let mut segments = runic_pages.split('\n').peekable();
-            let mut first = true;
-            while let Some(line) = segments.next() {
-                let is_last = segments.peek().is_none();
-                let closes_open_row = first && row_open;
-                first = false;
-                if line.is_empty() {
-                    if !is_last && !closes_open_row {
-                        self.push_producer_blank_message_entry();
-                    }
-                    continue;
-                }
-                self.push_runic_message_entry(line);
-            }
-            // Set explicitly for this caller: the last page decides whether
-            // the printer left its row open.
-            self.message_row_open_mid_line = !runic_pages.ends_with('\n');
-            self.adopt_flushed_message(format!("{text}{runic_pages}"));
-        }
-        // Measured: the original draws record `46` and then waits, and each
-        // accepted key advances the presentation without reaching the command
-        // parser. This engine has already drawn the whole presentation, so the
-        // steps only owe the keys - which is what keeps a scripted Space from
-        // becoming a `Pass` the original never printed.
-        self.codex_presentation_steps = steps;
+        self.shrine_presentation_map =
+            load_miscmaps_cutscene_map(game_dir, CODEX_PRESENTATION_CUTSCENE_MAP_RECORD)?;
+        let mut walk = crate::shrine_presentation::ShrineApproachWalk::codex();
+        walk.seed_animator(self.prng_state);
+        self.shrine_approach_walk = Some(walk);
+        // §7's frame shape, shared by §8: build the display, run one world
+        // step, print the approach record, then walk.
+        self.advance_presentation_world_step();
+        self.emit_shrine_misc_record(game_dir, MISCMSG_CODEX_ENTRY_NARRATION)?;
+        // "There is no forty-sixth repaint step ... so the Codex interval is
+        // a flat sixty."
+        let steps = crate::shrine_presentation::PresentationArm::Codex.walk_world_steps();
+        self.staged_narration.push_ticks_counting_world_steps(
+            shrine_presentation_hold_bios_ticks(steps),
+            steps,
+            String::new(),
+        );
+        // §8.2: "The counts begin after the initial approach record `46`."
+        self.codex_presentation_steps = 1;
         Ok(MoveOutcome::Observed)
     }
 
-    /// Absorb one key owed to an open Codex presentation.
+    /// Serve one advance key owed to an open Codex reader, `karma.md §8.2`:
+    /// "Each accepted key advances the presentation; its command value is
+    /// discarded and produces no ordinary command echo or world command."
     ///
     /// Returns `true` when the key belonged to the presentation and must not
     /// reach the command parser.
-    pub fn step_codex_presentation(&mut self) -> bool {
-        if self.codex_presentation_steps == 0 {
-            return false;
+    pub fn step_codex_presentation(&mut self, game_dir: &Path) -> io::Result<bool> {
+        let key = self.codex_presentation_steps;
+        if key == 0 {
+            return Ok(false);
         }
-        self.codex_presentation_steps -= 1;
-        true
+        let mut finished = false;
+        match key {
+            // "1 | Print shared record `37`." / "2 | Print shared record `38`."
+            1 => self.emit_shrine_misc_record(game_dir, MISCMSG_CODEX_PAGE_OPENED)?,
+            2 => self.emit_shrine_misc_record(game_dir, MISCMSG_CODEX_READS_PREFIX)?,
+            // "3 | With no ordained virtue, print `39` and finish. Otherwise
+            // stamp the selected virtue and print its quoted aphorism
+            // `20`-`27`."
+            3 => match read_codex_urn(self.shrine_ordained_mask, &mut self.shrine_codex_mask) {
+                CodexUrnReadOutcome::NoOrdained => {
+                    self.emit_shrine_misc_record(game_dir, MISCMSG_CODEX_NO_QUEST_PAGE)?;
+                    finished = true;
+                }
+                CodexUrnReadOutcome::Stamped { virtue, .. } => {
+                    // §8.1: "The aphorism is enclosed by an opening double
+                    // quote and a closing double quote followed by two
+                    // newlines, in addition to the record's own authored
+                    // content."
+                    let index = *MISCMSG_VIRTUE_APHORISM_RANGE.start() + virtue.index();
+                    if let Some(record) = load_misc_messages(game_dir)?
+                        .and_then(|messages| messages.record(index).map(str::to_owned))
+                    {
+                        self.emit_message_line(format!(
+                            "\"{}\"\n\n",
+                            record.replace('\r', "\n")
+                        ));
+                    }
+                }
+            },
+            // "4, ordained path only | If the updated read mask is
+            // incomplete, finish. Otherwise perform the three flash/rumble
+            // effects and print page-turn record `40`."
+            4 => {
+                if self.shrine_codex_mask != 0xFF {
+                    finished = true;
+                } else {
+                    // §8.1: "Each of those three cycles sets a drawing colour
+                    // and inverts the gameplay viewport before running the
+                    // shared effect, and no restoring inversion follows them."
+                    for _ in 0..3 {
+                        self.presentation_viewport_inverted = !self.presentation_viewport_inverted;
+                        self.emit_major_flash();
+                    }
+                    self.emit_shrine_misc_record(game_dir, crate::miscmsg_io::MISCMSG_CODEX_PAGE_TURN)?;
+                }
+            }
+            // "5 | Print the ordinary-font read lead-in, then runic record
+            // `41`." / 6-8: runic `42`-`44`.
+            5..=8 => {
+                if key == 5 {
+                    self.emit_message_line(crate::miscmsg_io::CODEX_COMPLETION_READ_LEAD_IN);
+                }
+                let index = *crate::miscmsg_io::MISCMSG_CODEX_COMPLETION_PAGES.start()
+                    + usize::from(key - 5);
+                self.emit_codex_runic_page(game_dir, index)?;
+            }
+            // "9 | Finish and allow the enclosing presentation to restore the
+            // prior scene."
+            _ => finished = true,
+        }
+        if finished {
+            self.codex_presentation_steps = 0;
+            // §8: the Codex exit "is the shrine's - the same block, reached
+            // unconditionally after either handler returns".
+            self.begin_shrine_presentation_exit(0);
+        } else {
+            self.codex_presentation_steps = key + 1;
+        }
+        Ok(true)
+    }
+
+    /// One of the Codex's runic pages, `karma.md §8.2`: "Records `41`-`44`
+    /// use the ordinary message window with the runic font selected for each
+    /// record; the normal font is restored before each following key wait.
+    /// Preserve the stored glyphs and separators". The glyph stream goes to
+    /// the runic font as stored - `@`, `[`, `]` and `_` are runic cells
+    /// (`formats/miscmsg-dat.md §4`), not digraphs to expand.
+    fn emit_codex_runic_page(&mut self, game_dir: &Path, index: usize) -> io::Result<()> {
+        let Some(record) = load_misc_messages(game_dir)?
+            .and_then(|messages| messages.record(index).map(|record| record.replace('\r', "\n")))
+        else {
+            return Ok(());
+        };
+        // Same row rules as `emit_message_line` (a leading feed closes an
+        // open row; an embedded feed is a producer blank, not the derived
+        // turn blank), but each cell keeps the runic font (audit A010
+        // review).
+        self.flush_message_slot();
+        let row_open = self.message_row_open_mid_line;
+        let mut segments = record.split('\n').peekable();
+        let mut first = true;
+        while let Some(row) = segments.next() {
+            let is_last = segments.peek().is_none();
+            let closes_open_row = first && row_open;
+            first = false;
+            if row.is_empty() {
+                if !is_last && !closes_open_row {
+                    self.push_producer_blank_message_entry();
+                }
+                continue;
+            }
+            self.push_runic_message_entry(row);
+        }
+        // Set explicitly for this caller: the page decides whether the
+        // printer left its row open.
+        self.message_row_open_mid_line = !record.ends_with('\n');
+        self.adopt_flushed_message(record.clone());
+        Ok(())
     }
 
     pub fn codex_urn_text_for_virtue(
@@ -2633,18 +2601,17 @@ impl PlayState {
         // arm: the envelope generator run 920 times in one sweep at a fixed
         // pitch, "one slow swell and decay", about 7.91 s.
         //
-        // Not implemented from §7.2: the arm also "issues a single rectangle
-        // fill over the gameplay viewport with the driver's exclusive-or
-        // mode selected", once and never undone. That is a viewport write
-        // whose interaction with the following world steps this engine has
-        // no capture of, and getting it wrong shows on every beat after it,
-        // so it waits for a measurement rather than a reading.
+        // The swell is preceded by "a single rectangle fill over the
+        // gameplay viewport with the driver's exclusive-or mode selected",
+        // once and never undone: "the world steps that follow simply repaint
+        // over it".
+        self.presentation_viewport_inverted = true;
         self.emit_sound_effect(SoundEffect::ShrineOfferingSwell);
-        // The ten-tick result pause. `animation.md §13.5`: a blocking
-        // presentation pumps the sprite animator while it waits.
-        for _ in 0..SHRINE_OFFERING_RESULT_WORLD_TICKS {
-            self.animation.tick_static_tiles();
-        }
+        // The swell blocks for its own length and costs no world step; then
+        // the ten-tick result pause and the exit pacing, as counted steps.
+        self.staged_narration
+            .push_ticks(SHRINE_OFFERING_SWELL_HOLD_BIOS_TICKS, String::new());
+        self.begin_shrine_presentation_exit(SHRINE_HANDLER_CLOSING_WORLD_STEPS);
     }
 
     /// `karma.md §7`: meditation matches the party position against the

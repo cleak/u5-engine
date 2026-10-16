@@ -148,11 +148,11 @@ fn handle_play_key_input_inner(
     if state.active_blackthorn.is_some() {
         return handle_active_blackthorn_key_input(state, key, suffix, game_dir);
     }
-    // `karma.md §8`: the Codex presentation owns the keyboard until it has
-    // stepped through its records. Measured 2026-09-09
-    // (`qa/paired/codex-enter.tsv`): three keys after E-Enter print nothing of
-    // their own, and the fourth is an ordinary command again.
-    if state.step_codex_presentation() {
+    // `karma.md §8.2`: the Codex reader owns the keyboard until it has
+    // stepped through its records, one record per key. Measured 2026-09-09
+    // (`qa/paired/codex-enter.tsv`): with nothing ordained the fourth key
+    // after E-Enter is an ordinary command again.
+    if state.step_codex_presentation(game_dir)? {
         return Ok(PlayInputDisposition::Continue);
     }
     if state.active_yes_no_prompt.is_some() {
@@ -319,14 +319,10 @@ fn handle_play_key_input_inner(
     }
     if key == 'M' && !suffix.is_empty() {
         state.begin_command_echo_for(Command::Mix);
-        // `karma.md §8` (`RETRACTIONS.md` R451): the Codex reader is reached
-        // by E-Enter on tile `0x11`, not by `M`.
-        if state
-            .meditate_shrine_from_suffix(suffix, game_dir)?
-            .is_none()
-        {
-            state.mix_reagents_from_suffix(suffix);
-        }
+        // `karma.md §7`: "`M` always selects Mix Reagents, including at a
+        // shrine" (`RETRACTIONS.md` R411); meditation is reached only through
+        // E-Enter. §8 (R451): the Codex reader is likewise E-Enter on `0x11`.
+        state.mix_reagents_from_suffix(suffix);
         return Ok(PlayInputDisposition::Continue);
     }
     if key == 'N' && !suffix.is_empty() {

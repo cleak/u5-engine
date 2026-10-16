@@ -697,7 +697,10 @@ pub const SHRINE_VIRTUE_PROMPT: &str = "Upon what virtue dost thou meditate?";
 /// shrine - which is what `gazetteer.md` §7 means when it says the one
 /// coordinate table also supplies "the shrine of *virtue*" name - and two
 /// narration lines print before the question, each followed by a blank row.
-pub const SHRINE_ENTER_ECHO_PREFIX: &str = "the shrine of ";
+/// `karma.md §7`'s entry table: the prefix is `the shrine of\n`, so the
+/// virtue name prints on its own row; this is the row's text, and the
+/// line feed is the row break the caller emits before the name.
+pub const SHRINE_ENTER_ECHO_PREFIX: &str = "the shrine of";
 /// `karma.md §8`: E on the Codex tile "prints `Enter the Shrine of the
 /// Codex!\n` and immediately starts the shrine/Codex presentation". The
 /// literal completes the open `Enter ` echo, so it carries no verb of its own.
@@ -709,6 +712,9 @@ pub const CODEX_SHRINE_ENTER_ECHO_TAIL: &str = "the Shrine of the Codex!";
 /// `formats/location-dat.md §11`: "Record `1` supplies ordinary virtue-shrine
 /// meditation and record `2` supplies the Codex presentation".
 pub const SHRINE_PRESENTATION_CUTSCENE_MAP_RECORD: usize = 1;
+/// `karma.md §8`: the Codex presentation "shows the eleven-by-eleven Codex
+/// map from `MISCMAPS.DAT`, record 2 (zero-based)".
+pub const CODEX_PRESENTATION_CUTSCENE_MAP_RECORD: usize = 2;
 pub const SHRINE_APPROACH_NARRATION: &str = "Thou dost approach the tranquil Shrine...";
 pub const SHRINE_KNEEL_NARRATION: &str = "...and thou dost kneel before the Altar.";
 /// `karma.md §12`'s entry table gives no interval between the approach record
@@ -809,6 +815,41 @@ pub const SHRINE_MANTRA_SUBSEQUENT_HOLD_BIOS_TICKS: u16 = 19;
 
 /// `karma.md §12`: an affordable offering finishes "with ten world ticks".
 pub const SHRINE_OFFERING_RESULT_WORLD_TICKS: usize = 10;
+
+/// `karma.md §7` entry table, Kneel row: "the approach walk: nine animation
+/// frames, forty-five world steps ... plus the handler's own repaint step -
+/// forty-six world steps in all".
+pub const SHRINE_KNEEL_WORLD_STEPS: u16 = 46;
+/// `karma.md §7` entry table, Virtue question row: "ten world steps".
+pub const SHRINE_VIRTUE_QUESTION_WORLD_STEPS: u16 = 10;
+/// `karma.md §7` entry table, Mantra questions row: "six world steps after a
+/// nonblank virtue answer, then twelve after each nonblank mantra answer".
+pub const SHRINE_MANTRA_FIRST_WORLD_STEPS: u16 = 6;
+pub const SHRINE_MANTRA_SUBSEQUENT_WORLD_STEPS: u16 = 12;
+/// `karma.md §7.2`: the handler's own closing wait on the completion arms,
+/// "ten (the handler's own closing wait)".
+pub const SHRINE_HANDLER_CLOSING_WORLD_STEPS: u16 = 10;
+/// [`SHRINE_EXIT_PACING_HOLD_BIOS_TICKS`] is the measured hold for the
+/// ordination arm's sixty-one world steps (`karma.md §7.2`: ten handler steps
+/// plus the fifty-one of the exit). Other windows scale from that rate.
+pub const SHRINE_EXIT_PACING_HOLD_WORLD_STEPS: u16 = 61;
+
+/// The wall-clock hold for `world_steps` counted presentation steps, at the
+/// measured rate of [`SHRINE_EXIT_PACING_HOLD_BIOS_TICKS`].
+pub const fn shrine_presentation_hold_bios_ticks(world_steps: u16) -> u16 {
+    let ticks = (world_steps as u32 * SHRINE_EXIT_PACING_HOLD_BIOS_TICKS as u32
+        + SHRINE_EXIT_PACING_HOLD_WORLD_STEPS as u32 / 2)
+        / SHRINE_EXIT_PACING_HOLD_WORLD_STEPS as u32;
+    ticks as u16
+}
+
+/// `karma.md §7.2`: the offering and turn-in swells run the envelope
+/// generator 920 times - "about 7.91 s" and "about 5.93 s" audible - and
+/// "the whole run sits between the closing record and the first counted
+/// pause", so the presentation holds for it. Converted at the ~55 ms BIOS
+/// tick; the swell itself costs no tick and no world step.
+pub const SHRINE_OFFERING_SWELL_HOLD_BIOS_TICKS: u16 = 144;
+pub const SHRINE_TURN_IN_SWELL_HOLD_BIOS_TICKS: u16 = 108;
 /// The daylight refusal, measured aboard a ship at noon.
 pub const USE_SEXTANT_DAYTIME_REFUSAL: &str = "Only at night!";
 pub const USE_WOODEN_BOX_PROMPT: &str = "How?";

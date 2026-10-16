@@ -701,20 +701,26 @@ fn draw_virtue(
 /// `chargen.md §7` deliberately publishes **no** upper bound for
 /// questionnaire dexterity, so nothing here clamps the tally from above.
 ///
-/// `§7`'s scope caveat withdraws the matching zero-start reading for
-/// strength and intelligence only as *unverified*, not as false: "Whether
-/// the strength and intelligence tallies likewise start from their seed
-/// values was **not re-derived**." Those two therefore keep the
-/// conservative zero start until the spec settles them.
+/// `chargen.md §6` (re-derived 2026-09-04) and `§7`'s scope caveat: "all
+/// three tallies are seeded from the record-0 bytes of the shipped seed
+/// image, and all three seeds are 15".
 pub const CHARGEN_SEED_DEXTERITY: u8 = 15;
+
+/// `chargen.md §6`/`§7`: the strength tally also starts at the seed's 15;
+/// the commit-time floor of [`CHARGEN_STR_FLOOR`] applies on top.
+pub const CHARGEN_SEED_STRENGTH: u8 = 15;
+
+/// `chargen.md §6`/`§7`: the intelligence tally starts at the seed's 15;
+/// INT is written as tallied and copied into MP.
+pub const CHARGEN_SEED_INTELLIGENCE: u8 = 15;
 
 /// `chargen.md §7`: the questionnaire converts the running tallies into
 /// the Avatar's STR/DEX/INT bytes. STR takes the one-step floor of
 /// [`CHARGEN_STR_FLOOR`]; DEX and INT receive no floor of their own.
 pub fn chargen_stats_from_winners(winners: &[ShrineVirtue]) -> ChargenStats {
-    let mut strength = 0u8;
+    let mut strength = CHARGEN_SEED_STRENGTH;
     let mut dexterity = CHARGEN_SEED_DEXTERITY;
-    let mut intelligence = 0u8;
+    let mut intelligence = CHARGEN_SEED_INTELLIGENCE;
     for winner in winners {
         let delta = chargen_virtue_stat_delta(*winner);
         strength = strength.saturating_add(delta.strength);

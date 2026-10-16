@@ -1410,10 +1410,12 @@ impl PlayState {
                 .unwrap_or(ShrineVirtue::Spirituality);
             // Measured: the echo names the shrine, then two narration lines
             // print, each under a blank row, and only then the question.
-            let _ = self.complete_open_direction_echo(
-                "Enter ",
-                &format!("{SHRINE_ENTER_ECHO_PREFIX}{}", virtue.name()),
-            );
+            // `karma.md §7` entry table, Enter prefix: `Enter `, then `the
+            // shrine of\n`, then the virtue's name, then one line feed - so
+            // the name starts its own row.
+            if self.complete_open_direction_echo("Enter ", SHRINE_ENTER_ECHO_PREFIX) {
+                self.push_message_entry(virtue.name(), false);
+            }
             // `karma.md §12`: "Record `45`, including its leading newline
             // **and trailing blank row**". The engine printed the leading one
             // and not the trailing one, which only showed once the narration
@@ -1442,6 +1444,10 @@ impl PlayState {
             let mut walk = crate::shrine_presentation::ShrineApproachWalk::new();
             walk.seed_animator(self.prng_state);
             self.shrine_approach_walk = Some(walk);
+            // §7: the presentation "builds the display, and runs one world
+            // step. It prints the Approach record, and only then begins the
+            // walk."
+            self.advance_presentation_world_step();
             self.emit_message_line(format!("\n{SHRINE_APPROACH_NARRATION}\n\n"));
             // `karma.md §12`'s entry table paces this: the kneel record, then
             // "After ten world ticks, record `29`: the question asking which
@@ -1457,8 +1463,12 @@ impl PlayState {
             // 600 ms sample, which fits the published ten. Asked as
             // `cleak/u5-spec#271`; forty is the midpoint of the measured
             // bound, not a published figure.
-            self.staged_narration.push_ticks(
+            // §7 "Entry pacing": the Approach-to-Kneel interval is the walk's
+            // forty-five world steps "plus the handler's own repaint step -
+            // forty-six world steps in all", spread across the measured hold.
+            self.staged_narration.push_ticks_counting_world_steps(
                 SHRINE_KNEEL_HOLD_BIOS_TICKS,
+                SHRINE_KNEEL_WORLD_STEPS,
                 // No leading feed of its own: the approach record's trailing
                 // blank row above is already the separator, and adding one
                 // here put a second blank between them once that blank was
@@ -1476,8 +1486,9 @@ impl PlayState {
             // shows beneath it; the answer row is the *live* row the shrine
             // session serves (`text-output.md` §10.6), so typing into it
             // edits one row instead of re-logging the question per letter.
-            self.staged_narration.push_ticks(
+            self.staged_narration.push_ticks_counting_world_steps(
                 SHRINE_VIRTUE_QUESTION_HOLD_WORLD_TICKS,
+                SHRINE_VIRTUE_QUESTION_WORLD_STEPS,
                 format!("{SHRINE_VIRTUE_PROMPT}\n\n"),
             );
             self.active_shrine = Some(ShrineSession::entering(virtue));
@@ -1496,7 +1507,10 @@ impl PlayState {
             return self.read_codex_urn_after_entry(game_dir);
         }
         let Some(live_class) = WorldEntryNarrationClass::from_live_tile(tile) else {
-            self.message = "What?".to_string();
+            // `karma.md §8`: a tile with no entry handler (e.g. `0x41`)
+            // "takes the ordinary `Enter what?\n` refusal" - lower-case
+            // `w`, completing the open echo as the non-world branch does.
+            self.refuse_world_enter_with_nothing();
             return Ok(MoveOutcome::Blocked);
         };
         let helper = live_class.helper();
@@ -1513,7 +1527,7 @@ impl PlayState {
             .filter(coordinate_matches)
             .any(|entry| entry.narration_class.is_none())
         {
-            self.message = "What?".to_string();
+            self.refuse_world_enter_with_nothing();
             return Ok(MoveOutcome::Blocked);
         }
 
@@ -1593,6 +1607,14 @@ impl PlayState {
         }
         let _report = self.enter_terrain_combat_from_world_object(game_dir, plane, slot, object)?;
         Ok(())
+    }
+
+    /// `commands.md §5.3` / `karma.md §8`: the ordinary `Enter what?`
+    /// refusal, completing the open `Enter ` echo.
+    fn refuse_world_enter_with_nothing(&mut self) {
+        if !self.complete_open_direction_echo("Enter ", ENTER_NOTHING_REFUSAL) {
+            self.message = format!("Enter {ENTER_NOTHING_REFUSAL}");
+        }
     }
 
     fn emit_world_entry_narration(

@@ -524,16 +524,14 @@ pub struct PlayState {
     /// breath, through the same driver entry with mode value `0`" - so the
     /// pair is a driver-private save-and-substitute, `display-driver.md`.
     ///
-    /// **A second reader constrains the ordering**: "The dungeon K-Klimb
-    /// handler consults the same flag to decide whether the ladder under the
-    /// party goes both ways ... so the restore phase's clear must not be
-    /// reordered ahead of a Klimb that could still read it"
-    /// (`dungeon-mode.md §13.1`/`§14.1`). This engine has no room-entry-mode
-    /// Klimb path - its dungeon rooms are entered as combat and its Klimb
-    /// classifier reads the underfoot nibble
-    /// ([`crate::dungeon_klimb_apply`]) - so that reader has no site here
-    /// yet, and the ordering constraint is recorded rather than enforced.
+    /// "**No Klimb ordering constraint**" (`combat.md §4`, `RETRACTIONS.md`
+    /// R471): the K-Klimb handler does not read this flag.
     pub tile_restoration_pending: bool,
+    /// Driver tile-graphics saves (`0x6C` mode `0`) the dungeon room
+    /// painter's two-way-ladder cell issued and owes a frontend, in the same
+    /// drained-request model as the restores below; a frontend issues
+    /// [`crate::EgaDisplayOperation::SaveLoadedTileGraphics`] for each one.
+    pub pending_driver_tile_graphics_saves: usize,
     /// Driver tile-graphics restores the combat framer sampled out of
     /// [`Self::tile_restoration_pending`] and owes a frontend. The runtime
     /// has no display driver of its own, so it records the request in the
@@ -725,6 +723,11 @@ pub struct PlayState {
     pub shrine_presentation_map: Option<MiscmapsCutsceneMap>,
     /// `karma.md §7`'s approach walk, while the shrine presentation is up.
     pub shrine_approach_walk: Option<crate::shrine_presentation::ShrineApproachWalk>,
+    /// `karma.md §7.2`: the offering and Codex turn-in arms XOR-invert the
+    /// whole gameplay viewport once and never restore it; the counted steps
+    /// after the swell repaint over it. Set from the inversion until the
+    /// swell's hold releases.
+    pub presentation_viewport_inverted: bool,
     pub active_shop: Option<crate::shop_session::ActiveShopSession>,
     /// `shops.md §8.1`: the arms post-item prompt closes with `sir?`/`milady?`
     /// once a transaction has completed in this visit and with `then?` before
@@ -759,14 +762,17 @@ pub struct PlayState {
     pub active_jimmy: Option<crate::z_stats::JimmySession>,
     pub active_surface_chest: Option<crate::z_stats::SurfaceChestSession>,
     pub active_shrine: Option<crate::z_stats::ShrineSession>,
-    /// Steps left in the Codex presentation, each released by one keypress.
+    /// The open Codex reader's key position.
     ///
     /// `karma.md §8`'s presentation is not instant. Measured 2026-09-09
     /// (`qa/paired/codex-enter.tsv`): after E-Enter the original draws its
     /// first record and then waits - sixteen seconds with no key advanced it
     /// no further - and the next three keys step it through the remaining
-    /// records without reaching the command parser. The fourth key is an
-    /// ordinary command again.
+    /// records without reaching the command parser.
+    ///
+    /// `karma.md §8.2`: the number of the advance key the open reader waits
+    /// for next (`1..=9` in that section's table), or `0` when no reader is
+    /// open. Each key prints its own record; nothing is printed ahead.
     pub codex_presentation_steps: u8,
     pub active_mix: Option<crate::z_stats::MixSession>,
     pub active_new_order: Option<crate::z_stats::NewOrderSession>,

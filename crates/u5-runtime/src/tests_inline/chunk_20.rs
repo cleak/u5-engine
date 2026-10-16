@@ -1681,6 +1681,11 @@ fn codex_entry_is_the_live_tile_and_needs_no_sidecar() {
         handle_play_key_input(&mut state, 'E', "", &dir).unwrap(),
         PlayInputDisposition::Continue
     );
+    // `karma.md §8.2`: the reader stamps on its third advance key.
+    for _ in 0..3 {
+        state.flush_staged_narration();
+        handle_play_key_input(&mut state, ' ', "", &dir).unwrap();
+    }
     assert_eq!(state.shrine_codex_mask, ShrineVirtue::Honesty.bit());
 
     // One cell away is not the Codex: the ordinary refusal, and no bit set.

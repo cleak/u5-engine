@@ -4384,7 +4384,9 @@ impl PlayState {
         // frontend issues `EgaDisplayOperation::RestoreLoadedTileGraphics`
         // for each one. The setter is `dungeon-mode.md §14.1`'s room
         // painter (a two-way ladder cell sets the flag, other non-empty
-        // icon classes clear it) and is deliberately not implemented here.
+        // icon classes clear it) and lives in
+        // `enter_dungeon_active_monster_combat`, which also queues the
+        // matching mode `0` save.
         if std::mem::take(&mut self.tile_restoration_pending) {
             self.pending_driver_tile_graphics_restores += 1;
         }

@@ -16625,6 +16625,19 @@ fn render_shrine_presentation_viewport(
     {
         blit_tile_id_to_viewport(&mut viewport, atlas, usize::from(tile), column, row)?;
     }
+    // `karma.md §7.2`: the offering and Codex turn-in arms invert "the whole
+    // viewport" with one exclusive-or fill that is never undone; the counted
+    // steps after the swell repaint over it. The same inversion as the
+    // potion flash (`audio.md §6`), every colour bit flipped.
+    if state.presentation_viewport_inverted {
+        let mask = match viewport.depth {
+            TileGraphicsDepth::Ega16 => u5_runtime::POTION_FLASH_PALETTE_XOR_MASK,
+            TileGraphicsDepth::Cga4 => 0x03,
+        };
+        for pixel in &mut viewport.pixels {
+            *pixel ^= mask;
+        }
+    }
     Ok(Some(viewport))
 }
 

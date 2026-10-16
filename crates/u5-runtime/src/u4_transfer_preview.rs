@@ -716,7 +716,10 @@ impl U4PreviewSource {
     /// The commit-side record this preview hands to the save writer.
     pub fn to_transfer_source(&self) -> U4TransferSource {
         U4TransferSource {
-            name: self.name.as_bytes().to_vec(),
+            // The preview decodes each name byte as one `char`
+            // (`byte as char`), so map back per char to keep bytes at or
+            // above `0x80` byte-exact (`§7` copies the name verbatim).
+            name: self.name.chars().map(|ch| ch as u32 as u8).collect(),
             male: self.male,
             class_index: self.class_index,
             strength: self.strength,

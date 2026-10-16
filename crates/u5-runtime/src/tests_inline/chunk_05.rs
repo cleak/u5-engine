@@ -1363,6 +1363,9 @@ fn y_yell_ruined_shrine_four_response_success_restores_only_shrine_state() {
     assert_eq!(world.word_of_power_seal_flags[0], 0xa7);
     assert!(world.visibility_dirty);
     assert!(world.message.contains(SHRINE_RESTORATION_SUCCESS_BANNER));
+    // `karma.md §7.1`: the banner ends the printed text; the second
+    // flash/rumble adds none.
+    assert!(world.message.ends_with(SHRINE_RESTORATION_SUCCESS_BANNER));
     // The uttered-word line opens the restoration transcript; the rumble and
     // flash are presentation, recorded as diagnostics rather than narrated.
     assert!(world
