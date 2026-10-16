@@ -3004,6 +3004,7 @@ impl PlayState {
 
     pub fn clear_active_view_overlay(&mut self) {
         self.active_view_overlay = None;
+        self.view_overlay_idle_polls = 0;
         self.view_overlay_row_opened_by_result = false;
         self.message.clear();
     }
@@ -3069,8 +3070,25 @@ impl PlayState {
             ),
             _ => (cells / 2, cells / 2),
         };
-        draw_surface_view_cell(&mut viewport, marker_x, marker_y, scale, 0, 0, true, mode);
+        if surface_view_marker_visible(self.view_overlay_idle_polls) {
+            draw_surface_view_cell(&mut viewport, marker_x, marker_y, scale, 0, 0, true, mode);
+        }
         viewport
+    }
+
+    /// One idle poll of the modal local view's key wait (`view.md §4`,
+    /// and §3's dismissal loop that "re-draws the party marker every fourth
+    /// idle pass"). The frontend calls this once per wait pump; with no
+    /// surface overlay up the count resets so the next view starts afresh.
+    pub fn poll_view_overlay_idle(&mut self) {
+        if matches!(
+            self.active_view_overlay.as_ref().map(|overlay| overlay.kind),
+            Some(ViewOverlayKind::Surface)
+        ) {
+            self.view_overlay_idle_polls = self.view_overlay_idle_polls.wrapping_add(1);
+        } else {
+            self.view_overlay_idle_polls = 0;
+        }
     }
 
     pub fn render_surface_view_class_cell_for_mode(
@@ -6187,6 +6205,20 @@ fn pending_use_cardinal_direction(key: char, suffix: &str) -> Option<Direction> 
         .filter(|direction| direction.opposite_cardinal().is_some())
 }
 
+/// `view.md §4` party-marker pen: slot 1, white (15) on EGA/Tandy; the
+/// driver's pen mask reduces it to 3 on CGA.
+const SURFACE_VIEW_MARKER_XOR_PEN: u8 = 15;
+
+/// `view.md §4`: the party-marker box is XOR-drawn "on every fourth idle
+/// poll" while the local view waits, so it blinks; §3 calls the same step
+/// "re-draws the party marker every fourth idle pass", so the box is up
+/// when the view is first shown. Polls 0..=3 show it, the fourth poll's XOR
+/// erases it for polls 4..=7, the eighth restores it, and so on. (A
+/// frontend with no wait loop never polls and so shows it steadily.)
+const fn surface_view_marker_visible(idle_polls: u32) -> bool {
+    (idle_polls / 4) % 2 == 0
+}
+
 fn draw_surface_view_cell(
     viewport: &mut TileViewport,
     cell_x: usize,
@@ -6198,9 +6230,20 @@ fn draw_surface_view_cell(
     mode: ViewOverlayMode,
 ) {
     if player_marker {
-        for offset in 0..scale {
-            set_view_overlay_pixel(viewport, cell_x, cell_y, scale, offset, scale / 2, 15);
-            set_view_overlay_pixel(viewport, cell_x, cell_y, scale, scale / 2, offset, 15);
+        // `view.md §4`: "a 4-by-4 box at the party's own cell is XOR-drawn
+        // with the slot-1 pen [...] so each pixel's colour index is inverted
+        // against white rather than set to a fixed colour".
+        let limit = viewport.depth.pixel_limit();
+        let pen = SURFACE_VIEW_MARKER_XOR_PEN % limit;
+        for local_y in 0..scale {
+            for local_x in 0..scale {
+                let x = cell_x * scale + local_x;
+                let y = cell_y * scale + local_y;
+                if x < viewport.width && y < viewport.height {
+                    let pixel = &mut viewport.pixels[y * viewport.width + x];
+                    *pixel = (*pixel ^ pen) % limit;
+                }
+            }
         }
         return;
     }
@@ -6312,19 +6355,12 @@ fn draw_dungeon_view_glyph(
     };
     match glyph {
         // §12.4 party marker: arrowhead glyph 0x60 at the centre cell.
-        // The player-marker branch of `draw_surface_view_cell` returns
-        // before any mode-dependent colour lookup, so the mode passed
-        // here is inert; the dungeon map has no peer-spell branch.
-        0x60 => draw_surface_view_cell(
-            viewport,
-            cell_x,
-            cell_y,
-            scale,
-            0,
-            0,
-            true,
-            ViewOverlayMode::GemView,
-        ),
+        0x60 => {
+            for offset in 0..scale {
+                set_view_overlay_pixel(viewport, cell_x, cell_y, scale, offset, scale / 2, 15);
+                set_view_overlay_pixel(viewport, cell_x, cell_y, scale, scale / 2, offset, 15);
+            }
+        }
         0x18 => draw_view_overlay_hline(viewport, cell_x, cell_y, scale, scale / 2, 7),
         0x2e => draw_dungeon_ladder_glyph(viewport, cell_x, cell_y, scale, true, false, highlight),
         0x2d => draw_dungeon_ladder_glyph(viewport, cell_x, cell_y, scale, false, true, highlight),

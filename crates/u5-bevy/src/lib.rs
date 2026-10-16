@@ -17672,6 +17672,9 @@ fn advance_visual_wait_frame(
     game_dir: &Path,
     prompt_cursor_visible: &mut bool,
 ) -> bool {
+    // `view.md §4`: the modal local view's key wait blinks the party
+    // marker on every fourth idle poll; each wait pump is one poll.
+    state.poll_view_overlay_idle();
     if visual_line_prompt_active(state) {
         *prompt_cursor_visible = !*prompt_cursor_visible;
         true

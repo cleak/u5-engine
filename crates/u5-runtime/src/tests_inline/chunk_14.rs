@@ -909,10 +909,49 @@
             viewport.width,
             LOCAL_VIEW_OVERLAY_SIDE * LOCAL_VIEW_CELL_PIXEL_SCALE
         );
-        // The marker's cross is drawn at the party's cell: row 5, column 5,
-        // at four pixels per cell, so its horizontal stroke runs y = 22,
-        // x = 20..23.
-        assert_eq!(viewport.pixel(20, 22), Some(15));
+        // `view.md §4`: the marker is a 4-by-4 box XOR-drawn with the
+        // slot-1 pen at the party's cell (row 5, column 5, four pixels per
+        // cell: x, y = 20..23), and it blinks on every fourth idle poll of
+        // the modal wait. With the box erased the cell shows its class
+        // drawing; with it up every pixel of the cell is that XOR 15.
+        let marked = viewport;
+        for _ in 0..4 {
+            state.poll_view_overlay_idle();
+        }
+        let unmarked = state.render_top_down_frame(5, &atlas).unwrap().unwrap();
+        for y in 20..24 {
+            for x in 20..24 {
+                assert_eq!(
+                    marked.pixel(x, y),
+                    unmarked.pixel(x, y).map(|pixel| pixel ^ 15),
+                    "({x}, {y})"
+                );
+            }
+        }
+        // Outside the party cell nothing changes.
+        assert_eq!(marked.pixel(19, 20), unmarked.pixel(19, 20));
+        for _ in 0..4 {
+            state.poll_view_overlay_idle();
+        }
+        let again = state.render_top_down_frame(5, &atlas).unwrap().unwrap();
+        assert_eq!(again.pixels, marked.pixels);
+        state.clear_active_view_overlay();
+        assert_eq!(state.view_overlay_idle_polls, 0);
+    }
+
+    #[test]
+    fn surface_view_marker_xor_inverts_the_cell_against_white() {
+        // `view.md §4`: "each pixel's colour index is inverted against
+        // white rather than set to a fixed colour": on a blank (0) cell
+        // that is white throughout.
+        let viewport = PlayState::render_surface_view_class_cell_for_mode(
+            TileGraphicsDepth::Ega16,
+            0,
+            0,
+            true,
+            ViewOverlayMode::GemView,
+        );
+        assert!(viewport.pixels.iter().all(|pixel| *pixel == 15));
     }
 
     #[test]
