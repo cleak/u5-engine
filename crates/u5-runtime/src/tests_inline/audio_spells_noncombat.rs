@@ -427,6 +427,27 @@ fn committed_dungeon_spells_play_their_published_variant() {
         "the committed cast sounds before the destination test"
     );
 
+    // audio.md §6.1 ids 21/22: Doom "refuses before the sound".
+    let mut doom = dungeon_state(open_dungeon_record(), 0, 4, 4);
+    doom.area = Area::Dungeon {
+        scene: DungeonScene {
+            byte: DUNGEON_DOOM_SCENE_BYTE,
+            record: DOOM_DUNGEON_RECORD,
+        },
+        level: 0,
+    };
+    arm_spell(&mut doom, DES_POR_SPELL_INDEX);
+    let serial = doom.sound_effect_serial;
+    assert_eq!(
+        doom.cast_dungeon_level_spell(0, DES_POR_SPELL_INDEX, 1, "Down", Path::new(""))
+            .unwrap(),
+        MoveOutcome::Blocked
+    );
+    assert_eq!(
+        doom.sound_effects_after(serial),
+        vec![SoundEffect::CastFailure]
+    );
+
     // No field under the target cell: the variant still runs, then the tail.
     let mut dispel = dungeon_state(open_dungeon_record(), 0, 4, 4);
     arm_spell(&mut dispel, DISPEL_FIELD_SPELL_INDEX);

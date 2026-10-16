@@ -5931,11 +5931,6 @@ impl PlayState {
             return Ok(outcome);
         }
 
-        // audio.md §6: "Dungeon rise/fall" is variant 4; audio.md §8.3 puts
-        // the committed pre-effect after the spell's own gate and before the
-        // effect, so the Doom refusal below still sounds first.
-        self.emit_sound_effect(SoundEffect::SharedVariant { variant: 4 });
-
         // `dungeon-mode.md` §13.1/§13.3: both level-change spells refuse
         // outright in Doom. This is an effect-level refusal after the common
         // spell resource gate has accepted and spent the cast.
@@ -5944,6 +5939,10 @@ impl PlayState {
             self.fail_committed_spell_cast();
             return Ok(MoveOutcome::Blocked);
         }
+
+        // audio.md §6.1 ids 21/22: Uus Por and Des Por play variant 4 "unless
+        // the scene is the Doom scene, which refuses before the sound".
+        self.emit_sound_effect(SoundEffect::SharedVariant { variant: 4 });
 
         // `dungeon-mode.md §13.1` "What a level change prints": the Up and
         // Down spells print "the same `Up!\n` or `Down!\n`, and only that -
