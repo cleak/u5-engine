@@ -394,7 +394,19 @@ impl ConversationSession {
         let kind = tlk_player_input_kind(&input_upper);
         let mut out = ConversationSessionOutput::default();
         if matches!(kind, TlkPlayerInputKind::ReservedRebuke { .. }) {
-            out.set_plain_text(TLK_RESERVED_REBUKE_MESSAGE);
+            // `conversation.md §6`: the rebuke "prints `With language like
+            // that, how did you become an Avatar?`, emits the same
+            // quote/newline framing used by other reserved responses, then
+            // runs a bounded pause loop" of "at most twenty-eight" passes
+            // with an early key-abort, and returns to the keyword prompt.
+            // That loop is the `0x83` timed pause's shape, so it rides the
+            // same hold.
+            out.set_framed_text(TLK_RESERVED_REBUKE_MESSAGE);
+            debug_assert_eq!(
+                u16::from(TLK_RESERVED_REBUKE_PAUSE_LIMIT),
+                crate::text_hold::TEXT_HOLD_TIMED_PAUSE_PASSES
+            );
+            out.push_plain_text(crate::text_hold::TextHoldKind::TimedPause.marker_str());
             return out;
         }
         let field_idx = match kind {
@@ -1671,7 +1683,11 @@ mod tests {
 
         let out = s.submit_keyword("ASS HAT", &ctx());
 
-        assert_eq!(out.text, TLK_RESERVED_REBUKE_MESSAGE);
+        // §6: reserved-response framing, then the bounded pause loop.
+        assert_eq!(
+            out.text,
+            "\n\"With language like that, how did you become an Avatar?\"\n\n\u{1}"
+        );
         assert!(!out.ended);
         assert_eq!(s.phase, ConversationSessionPhase::AwaitingKeyword);
     }

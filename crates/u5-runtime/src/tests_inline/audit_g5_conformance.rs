@@ -655,3 +655,23 @@ fn audit_a071_wait_key_blocks_for_one_key_and_prints_nothing() {
     let after = audit_g5_transcript(&state);
     assert!(after.contains("\"One.Two.\""), "{after:?}");
 }
+
+/// Audit A068. `conversation.md §6`: the rebuke prints its line with the
+/// reserved-response quote/newline framing, then "runs a bounded pause loop"
+/// of at most twenty-eight passes that a key cuts short, then reprompts.
+#[test]
+fn audit_a068_rebuke_is_framed_and_pauses_before_the_prompt() {
+    let mut state = audit_g5_ask_who_conversation();
+    handle_play_key_input(&mut state, 'A', "SS HAT", Path::new("")).unwrap();
+    let held = audit_g5_transcript(&state);
+    assert!(
+        held.contains("\"With language like that, how did you become an Avatar?\""),
+        "{held:?}"
+    );
+    assert!(state.text_hold_active(), "the pause loop runs before the prompt");
+    assert!(!held.ends_with(':'), "{held:?}");
+    assert!(state.advance_text_hold_to(5.0));
+    assert!(!state.advance_text_hold_to(5.0 + crate::narration::bios_ticks_secs(28) + 0.01));
+    assert!(audit_g5_transcript(&state).ends_with(':'));
+    assert!(state.active_conversation.is_some());
+}
