@@ -140,7 +140,8 @@ fn world_load_consumes_pending_frigate_into_first_free_object_slot() {
             y: 21,
             z: WorldPlane::Underworld.save_floor(),
             phase: STEADY_PHASE,
-            aux1: FIRST_PLAYABLE_FULL_SHIP_HULL,
+            // `vehicles.md §4`: the delivered Frigate's hull is `99`.
+            aux1: FRIGATE_PURCHASE_HULL,
             aux3: 3,
         }
     );

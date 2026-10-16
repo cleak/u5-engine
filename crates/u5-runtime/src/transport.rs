@@ -348,7 +348,9 @@ impl PendingVehicleAcquisition {
                 y,
                 z,
                 phase: STEADY_PHASE,
-                aux1: FIRST_PLAYABLE_FULL_SHIP_HULL,
+                // `vehicles.md §4`: "The delivered Frigate starts with hull
+                // condition `99` in byte `+5`".
+                aux1: FRIGATE_PURCHASE_HULL,
                 aux3: skiffs & 0x3f,
             },
             Self::Skiff { x, y, aux3 } => ActiveObject {
