@@ -3594,6 +3594,14 @@ impl PlayState {
                 }
                 self.active_z_stats = Some(session);
             }
+            ZStatsInputAction::SharedEquipment => {
+                // `inventory.md §4`: "`0` jumps to shared Equipment" from any
+                // browsing screen, the same target as the initial selector's
+                // `0`.
+                session.open_shared_equipment();
+                self.message = self.render_z_stats_session(&session);
+                self.active_z_stats = Some(session);
+            }
             ZStatsInputAction::Redraw | ZStatsInputAction::Discard => {
                 self.message = self.render_z_stats_session(&session);
                 self.active_z_stats = Some(session);

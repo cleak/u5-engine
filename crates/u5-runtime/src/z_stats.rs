@@ -636,6 +636,8 @@ pub enum ZStatsInputAction {
     InventoryPageNext,
     InventoryPagePrevious,
     SelectParty(usize),
+    /// `inventory.md §4`: while browsing, "`0` jumps to shared Equipment".
+    SharedEquipment,
     Redraw,
     Discard,
 }
@@ -970,6 +972,7 @@ pub fn z_stats_input_action(key: char) -> ZStatsInputAction {
         ']' | '}' => ZStatsInputAction::InventoryPageNext,
         '[' | '{' => ZStatsInputAction::InventoryPagePrevious,
         '1'..='6' => ZStatsInputAction::SelectParty((key as u8 - b'1') as usize),
+        '0' => ZStatsInputAction::SharedEquipment,
         'Z' | 'z' => ZStatsInputAction::Redraw,
         _ => ZStatsInputAction::Discard,
     }

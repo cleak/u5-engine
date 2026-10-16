@@ -401,3 +401,20 @@ fn a102_arena_sceptre_fallback_takes_a_direction() {
     assert_eq!(state.message, "Field dissolved!");
     assert!(state.find_combat_arena_field_marker(6, 5).is_none());
 }
+
+/// `inventory.md §4`: while browsing, "`0` jumps to shared Equipment" from
+/// any screen.
+#[test]
+fn a099_zero_jumps_to_shared_equipment_while_browsing() {
+    assert_eq!(z_stats_input_action('0'), ZStatsInputAction::SharedEquipment);
+    let mut state = test_state(open_grid(), 1, 1);
+    state.active_z_stats = Some(ZStatsSession {
+        selected_party_index: 0,
+        page: ZStatsPage::Stats,
+        inventory_cursor: 3,
+    });
+    assert!(state.step_active_z_stats('0', ""));
+    let session = state.active_z_stats.expect("still browsing");
+    assert_eq!(session.page, ZStatsPage::Counters);
+    assert_eq!(session.inventory_cursor, 0);
+}
