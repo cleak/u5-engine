@@ -133,19 +133,13 @@ impl PlayState {
         // shared generator. The step leaves the party on the cell, so the
         // underfoot pass sees it on the same turn and prints the pair in
         // the same place the original does.
-        if let Some(field) = dungeon_field_effect(tile) {
-            // Section 8.1: "Both field lines print **before** their per-member
-            // rolls, so the line appears even when nobody is affected."
-            let line = dungeon_field_consequence_line(field);
-            if let Some(line) = line {
-                self.emit_message_line(line);
-            }
-            let _ = self.apply_dungeon_field_effect_at(level, nx, ny, tile, field);
-            self.advance_turn();
-            // "Any other underfoot byte: nothing."
-            self.message = line.unwrap_or_default().to_string();
-            return Ok(MoveOutcome::Moved);
-        }
+        // Sleep, poison and fire fields are not resolved here either:
+        // `dungeon-mode.md` Section 8 says they "resolve after the party
+        // enters their cell", and Section 8.1 lists them among the
+        // post-action underfoot consequences. Resolving them on the step as
+        // well printed `Poison!`/`Fire!!` twice and rolled twice, exactly as
+        // the bomb did (audit A088). The step leaves the party on the cell;
+        // the post-action pass prints the line and makes the rolls.
         if is_dungeon_room_helper_state(tile) {
             return self.resolve_dungeon_room_trigger(game_dir, scene, level, nx, ny, tile);
         }

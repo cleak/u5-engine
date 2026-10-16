@@ -967,7 +967,7 @@ fn dungeon_fall_trap_chain_restores_snapshot_grid_without_exterior_coordinate_re
 /// the original's one `Bomb Trap!` / `KABOOM!!` pair came out twice
 /// (measured by `qa/paired/dungeon-bomb-trap.tsv`, 2026-09-19). The step
 /// therefore moves the party and marks nothing; the pass that follows it
-/// on the same turn marks the cell and prints the pair.
+/// on the same turn consumes the cell (masking it to bit 0x08) and prints the pair.
 #[test]
 fn dungeon_bomb_trap_marks_cell_in_the_post_action_pass() {
     let dir = debug_game_dir();
@@ -993,7 +993,8 @@ fn dungeon_bomb_trap_marks_cell_in_the_post_action_pass() {
         .apply_dungeon_post_turn_effects_after_turn(turn_before, &dir)
         .unwrap();
 
-    assert_eq!(state.grid[dungeon_cell_index(0, 2, 1)], 0x6a);
+    // `dungeon-mode.md §8` (R512): masked to bit 0x08 only, so 0x62 -> 0x00.
+    assert_eq!(state.grid[dungeon_cell_index(0, 2, 1)], 0x00);
     let pairs = state
         .message_transcript
         .iter()
@@ -1005,6 +1006,40 @@ fn dungeon_bomb_trap_marks_cell_in_the_post_action_pass() {
             .message_transcript
             .iter()
             .filter(|entry| entry.text.contains("KABOOM!!"))
+            .count(),
+        1
+    );
+}
+
+/// `dungeon-mode.md §8` (R512): a fired bomb keeps only bit 0x08, so a
+/// marked `0x6A` becomes `0x08` and a second acted turn on the consumed
+/// cell prints no second `Bomb Trap!` and takes no second damage sweep.
+#[test]
+fn dungeon_fired_bomb_cell_cannot_fire_again() {
+    let dir = debug_game_dir();
+    let mut grid = open_dungeon_record();
+    grid[dungeon_cell_index(0, 2, 1)] = 0x6a;
+    let mut state = dungeon_state(grid, 0, 1, 1);
+    let turn_before = state.turn;
+    assert_eq!(state.step(Direction::East), MoveOutcome::Moved);
+    state
+        .apply_dungeon_post_turn_effects_after_turn(turn_before, &dir)
+        .unwrap();
+    assert_eq!(state.grid[dungeon_cell_index(0, 2, 1)], 0x08);
+    let hp_after_first = state.party[0].hp;
+
+    let turn_before = state.turn;
+    state.advance_turn();
+    state
+        .apply_dungeon_post_turn_effects_after_turn(turn_before, &dir)
+        .unwrap();
+    assert_eq!(state.grid[dungeon_cell_index(0, 2, 1)], 0x08);
+    assert_eq!(state.party[0].hp, hp_after_first);
+    assert_eq!(
+        state
+            .message_transcript
+            .iter()
+            .filter(|entry| entry.text.contains("Bomb Trap!"))
             .count(),
         1
     );
@@ -1120,7 +1155,7 @@ fn inline_cast_on_dungeon_bomb_trap_marks_underfoot_without_extra_turn() {
     );
 
     assert_eq!(state.area, Area::Dungeon { scene, level: 0 });
-    assert_eq!(state.grid[dungeon_cell_index(0, 1, 1)], 0x6a);
+    assert_eq!(state.grid[dungeon_cell_index(0, 1, 1)], 0x00);
     assert_eq!(state.turn, 1);
     assert_eq!(state.spell_charges[IN_LOR_SPELL_INDEX], 0);
     assert_eq!(state.party[0].mana, 0);
@@ -1164,10 +1199,23 @@ fn dungeon_poison_field_entry_poison_living_party_without_blocking_movement() {
         },
     ];
 
+    // `dungeon-mode.md §8`: the field resolves in the post-action pass after
+    // the party enters the cell, once (audit A088).
+    let dir = debug_game_dir();
     assert_eq!(state.step(Direction::East), MoveOutcome::Moved);
+    assert_eq!(state.party[0].status, b'G', "the step itself rolls nothing");
+    state.apply_dungeon_post_turn_effects_after_turn(0, &dir).unwrap();
 
     assert_eq!((state.player.x, state.player.y), (2, 1));
     assert_eq!(state.turn, 1);
+    assert_eq!(
+        state
+            .message_transcript
+            .iter()
+            .filter(|entry| entry.text.contains("Poison!"))
+            .count(),
+        1
+    );
     assert_eq!(state.party[0].status, b'P');
     assert_eq!(state.party[1].status, b'D');
     // `dungeon-mode.md §8.1`: the field line is the whole of the narration,
@@ -1239,6 +1287,9 @@ fn dungeon_sleep_field_marker_variant_sets_living_party_asleep_and_clears_cell()
     ];
 
     assert_eq!(state.step(Direction::East), MoveOutcome::Moved);
+    state
+        .apply_dungeon_post_turn_effects_after_turn(0, &debug_game_dir())
+        .unwrap();
 
     assert_eq!((state.player.x, state.player.y), (2, 1));
     assert_eq!(state.party[0].status, b'S');
@@ -1259,6 +1310,9 @@ fn dungeon_sleep_field_base_variant_clears_to_open_passage() {
     state.party[0].climb_stat = 0;
 
     assert_eq!(state.step(Direction::East), MoveOutcome::Moved);
+    state
+        .apply_dungeon_post_turn_effects_after_turn(0, &debug_game_dir())
+        .unwrap();
 
     assert_eq!(state.grid[dungeon_cell_index(0, 2, 1)], 0x00);
     assert_eq!(state.party[0].status, b'S');
@@ -1296,6 +1350,16 @@ fn dungeon_fire_and_electric_fields_damage_living_party_members() {
     let expected_fire_damage = u5_prng_range_u16(&mut expected_fire_prng, 1, 8) as u8;
 
     assert_eq!(fire.step(Direction::East), MoveOutcome::Moved);
+    assert_eq!(fire.party[0].hp, 10, "the step itself deals no fire damage");
+    fire.apply_dungeon_post_turn_effects_after_turn(0, &debug_game_dir())
+        .unwrap();
+    assert_eq!(
+        fire.message_transcript
+            .iter()
+            .filter(|entry| entry.text.contains("Fire!!"))
+            .count(),
+        1
+    );
 
     assert_eq!(fire.party[0].hp, 10 - expected_fire_damage as u16);
     assert_eq!(fire.party[1].hp, 9);

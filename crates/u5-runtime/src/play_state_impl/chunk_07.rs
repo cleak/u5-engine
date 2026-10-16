@@ -5871,7 +5871,10 @@ impl PlayState {
             return Ok(Some(outcome));
         }
         if is_dungeon_bomb_trap(tile) {
-            self.grid[dungeon_cell_index(level, x, y)] |= 0x08;
+            // `dungeon-mode.md` Section 8: the fired bomb keeps only its
+            // visit-marker bit (`0x62` -> `0x00`, `0x6A` -> `0x08`), so the
+            // consumed cell cannot fire again (R512).
+            self.grid[dungeon_cell_index(level, x, y)] = tile & DUNGEON_VISIT_MARKER_BIT;
             self.mark_visibility_dirty();
             // `dungeon-mode.md` Section 8.1: the two bomb lines, and nothing
             // else. The post-action pass is a producer that can run alongside
@@ -5885,11 +5888,14 @@ impl PlayState {
             self.apply_dungeon_floor_trap_damage();
             return Ok(None);
         }
-        if let Some(field) = dungeon_field_effect(tile) {
-            // Section 8.1: the field line prints before the per-member rolls.
-            if let Some(line) = dungeon_field_consequence_line(field) {
-                self.emit_message_line(line);
-            }
+        // Section 8.1: only the sleep, poison and fire rows belong to the
+        // post-action pass ("Any other underfoot byte: nothing"); electric
+        // contact is a movement-time consequence. The field line prints
+        // before the per-member rolls.
+        if let Some((field, line)) = dungeon_field_effect(tile)
+            .and_then(|field| dungeon_field_consequence_line(field).map(|line| (field, line)))
+        {
+            self.emit_message_line(line);
             let _ = self.apply_dungeon_field_effect_at(level, x, y, tile, field);
             return Ok(None);
         }
