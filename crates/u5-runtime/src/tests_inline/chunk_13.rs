@@ -1092,13 +1092,9 @@ fn town_rest_tick_budget_anchors_to_hours_per_day_times_ticks_per_hour() {
 
 #[test]
 fn rest_tick_minute_cadences_derive_from_minutes_per_hour() {
-    // rest-and-camp.md §5: wilderness camp uses five-minute steps,
-    // dungeon watch-rest uses twenty-minute steps, and town bed rest
-    // uses ten-minute steps.
-    assert_eq!(
-        REST_WATCH_MINUTES_PER_TICK,
-        MINUTES_PER_HOUR / REST_WATCH_TICKS_PER_HOUR,
-    );
+    // rest-and-camp.md §5 / dungeon-mode.md §11: the wilderness and dungeon
+    // camp loop uses five-minute steps, and town bed rest uses ten-minute
+    // steps.
     assert_eq!(
         WILDERNESS_CAMP_MINUTES_PER_TICK,
         MINUTES_PER_HOUR / WILDERNESS_CAMP_TICKS_PER_HOUR,
@@ -1107,7 +1103,6 @@ fn rest_tick_minute_cadences_derive_from_minutes_per_hour() {
         TOWN_REST_MINUTES_PER_TICK,
         MINUTES_PER_HOUR / TOWN_REST_TICKS_PER_HOUR,
     );
-    assert_eq!(REST_WATCH_MINUTES_PER_TICK, 20);
     assert_eq!(WILDERNESS_CAMP_MINUTES_PER_TICK, 5);
     assert_eq!(TOWN_REST_MINUTES_PER_TICK, 10);
 }
