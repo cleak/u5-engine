@@ -6324,6 +6324,47 @@ fn end_to_end_tavern_provisions_print_the_published_partial_and_refusal_arms() {
     assert!(state.active_shop.is_none());
 }
 
+/// `shops.md §4.1`/`§6`: the reagent offer record's `^` is the fixed bundle
+/// quantity the quoted price buys (Mysticism sells Spider Silk in twos), not
+/// zero.
+#[test]
+fn reagent_offer_renders_the_bundle_quantity_placeholder() {
+    use crate::shop_runtime::ReagentShopState;
+    use crate::shop_session::ActiveShopSession;
+
+    let dir = debug_game_dir();
+    // Record `139 + 3`: Spider Silk in the canonical eight-reagent order.
+    fs::write(
+        dir.join("SHOPPE.DAT"),
+        shoppe_dat_with_records(&[(142, b"Silk, % gp for ^ spools.")]),
+    )
+    .unwrap();
+    let mut state = test_state(open_grid(), 1, 1);
+    state.gold = 999;
+    state.active_shop = Some(ActiveShopSession::Reagent(ReagentShopState::for_herbalist(
+        Herbalist::Mysticism,
+    )));
+    let quote = crate::shops::quote_reagent_purchase(
+        Herbalist::Mysticism,
+        crate::shops::Reagent::SpiderSilk,
+        crate::input_dispatch::active_speaker_intelligence(&state),
+    )
+    .unwrap();
+
+    handle_play_key_input(&mut state, 'Y', "", &dir).unwrap();
+    handle_play_key_input(&mut state, 'A', "", &dir).unwrap();
+
+    assert!(
+        state.message.contains(&format!(
+            "Silk, {} gp for 2 spools. Is this thy need?",
+            quote.total_price
+        )),
+        "{:?}",
+        state.message
+    );
+    let _ = fs::remove_dir_all(dir);
+}
+
 fn shoppe_dat_with_records(records: &[(usize, &[u8])]) -> Vec<u8> {
     assert!(!records.is_empty());
     let payload_len: usize = records.iter().map(|(_, record)| record.len()).sum();

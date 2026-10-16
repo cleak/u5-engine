@@ -4335,7 +4335,7 @@ fn format_reagent_outcome(
     game_dir: &Path,
 ) -> String {
     use crate::shop_runtime::ReagentShopOutcome::*;
-    let render = |record_id: usize, gold: u16| {
+    let render = |record_id: usize, gold: u16, quantity: u16| {
         crate::shoppe_bark::ShoppeTextRenderer::load_from_game_dir(game_dir)
             .ok()
             .and_then(|renderer| {
@@ -4344,6 +4344,7 @@ fn format_reagent_outcome(
                         record_id,
                         &crate::shoppe_bark::ShoppeBarkContext {
                             gold,
+                            quantity,
                             vendor_name: vendor_name.unwrap_or_default(),
                             ..Default::default()
                         },
@@ -4374,14 +4375,25 @@ fn format_reagent_outcome(
         }
         // `shops.md §8.C` "Offer": `\n\n"`, then record `139..146` in the
         // canonical eight-reagent order, then ` Is this thy need?" `.
-        Offered { reagent, price, .. } => {
+        Offered {
+            herbalist,
+            reagent,
+            price,
+        } => {
             let ordinal = crate::shops::REAGENT_VENDOR_ORDER
                 .iter()
                 .position(|candidate| *candidate == reagent)
                 .unwrap_or_default();
+            // `shops.md §4.1`: `^` is "a count" filled "mid-loop by the shop
+            // arm as the player picks items"; for a reagent offer that is the
+            // §6 fixed bundle quantity the quoted price buys. Leaving it at
+            // zero rendered `costs 22 gp for 0 roots`.
+            let quantity = crate::shops::herbalist_reagent_bundle_quantity(herbalist, reagent)
+                .map(u16::from)
+                .unwrap_or_default();
             format!(
                 "\n\"{} Is this thy need?\"",
-                render(REAGENT_OFFER_RECORD_FIRST + ordinal, price)
+                render(REAGENT_OFFER_RECORD_FIRST + ordinal, price, quantity)
             )
         }
         // "Already carrying 99 | `\n\n"Thou canst not carry any more!"\n\n`;
@@ -4400,7 +4412,7 @@ fn format_reagent_outcome(
             )
         }
         // "Short funds | Record `147`; visit ends without ordinary farewell".
-        RefusedShortFunds { cost } => render(REAGENT_SHORT_FUNDS_RECORD, cost),
+        RefusedShortFunds { cost } => render(REAGENT_SHORT_FUNDS_RECORD, cost, 0),
         // "Decline | `No\n\n"What else?\n\n`, then stock".
         Declined { herbalist } => format!(
             "\n\"What else?\n\n{}",
