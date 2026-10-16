@@ -397,9 +397,10 @@ fn stonegate_scripted_death_reaches_rescue_on_the_next_gate() {
     ));
     assert_eq!(state.party[0].status, b'G');
     assert_eq!(state.party[0].hp, state.party[0].max_hp);
+    // `blackthorn.md §7` step 11: "on logical floor one" (audit A039).
     assert!(matches!(
         state.area,
-        Area::Town { scene, floor: 0 } if scene.byte == BLACKTHORN_RESCUE_HANDOFF_SCENE
+        Area::Town { scene, floor: 1 } if scene.byte == BLACKTHORN_RESCUE_HANDOFF_SCENE
     ));
     let _ = fs::remove_dir_all(dir);
 }

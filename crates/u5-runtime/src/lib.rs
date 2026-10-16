@@ -1108,6 +1108,7 @@ mod tests {
     include!("tests_inline/save_fidelity.rs");
     include!("tests_inline/npc_band_conformance.rs");
     include!("tests_inline/spec_conformance_chunk_07.rs");
+    include!("tests_inline/audit_g5_conformance.rs");
     include!("tests_inline/variant_rescope.rs");
     include!("tests_inline/combat_frame_conformance.rs");
     include!("tests_inline/combat_descriptors_conformance.rs");

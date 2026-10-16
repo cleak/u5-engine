@@ -195,6 +195,17 @@ pub const BLACKTHORN_RESCUE_HANDOFF_SCENE: u8 = crate::SCENE_LORD_BRITISHS_CASTL
 pub const BLACKTHORN_RESCUE_HANDOFF_X: u8 = 10;
 pub const BLACKTHORN_RESCUE_HANDOFF_Y: u8 = 10;
 
+/// `blackthorn.md` section 7 step 11: the rescue lands "on logical floor
+/// one". "Logical floor" is the signed floor byte (`formats/location-dat.md`
+/// Section 4: "Floor `0` is the base page, floor `+1` the page after it"),
+/// so this is floor `+1`, one storey above the castle's base page.
+pub const BLACKTHORN_RESCUE_HANDOFF_FLOOR: i8 = 1;
+
+/// `blackthorn.md` section 7 step 11 / 7.1 / 8.1: the handoff spins "the
+/// clock ... forward until the hour reads 06:00", after the second dissolve
+/// and before the light-counter clears and the food repair.
+pub const BLACKTHORN_RESCUE_HANDOFF_HOUR: u8 = 6;
+
 /// `blackthorn.md` section 7: the rescue path raises the shared moral-standing
 /// selector to at least this floor after printing the verdict.
 pub const BLACKTHORN_RESCUE_STANDING_FLOOR: u8 = 75;

@@ -5766,6 +5766,16 @@ impl PlayState {
         self.blackthorn_rescue_reveals_shown = 0;
         self.moral_standing = blackthorn_rescue_post_print_standing(self.moral_standing);
         self.clear_active_effect_slot();
+        // `blackthorn.md §7` step 11 / §7.1: the handoff comes "with the
+        // clock spun forward until the hour reads 06:00", and "Once the clock
+        // has been spun forward it also zeroes both light counters"; §8.1 puts
+        // the food repair "after the wait to 06:00". The section publishes no
+        // per-turn work for the spin, and §8.1 preserves every nonzero food
+        // word "exactly", so this is a bare clock spin: no provision pass and
+        // no gameplay-PRNG draws beyond the flashes §7.1 counts.
+        while self.clock.hour != crate::blackthorn::BLACKTHORN_RESCUE_HANDOFF_HOUR {
+            self.clock.advance_hour();
+        }
         self.torch_counter = 0;
         self.light_spell_counter = 0;
         // `blackthorn.md §8.1` (R284): there is no captive-cell counter.
@@ -5775,7 +5785,8 @@ impl PlayState {
             self.food = 63;
         }
         let scene = Scene::new(BLACKTHORN_RESCUE_HANDOFF_SCENE)?;
-        let floor = 0i8;
+        // §7 step 11: "on logical floor one" - the signed floor byte `+1`.
+        let floor = crate::blackthorn::BLACKTHORN_RESCUE_HANDOFF_FLOOR;
         let (grid, beacon_sources) =
             load_town_runtime_floor_with_beacon_sources(game_dir, scene, floor, self.clock.hour)?;
         self.grid = grid;
