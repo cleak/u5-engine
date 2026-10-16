@@ -3863,9 +3863,11 @@ impl PlayState {
                 Some(word) => format!("{base} {word}"),
                 None => base,
             }
-        } else if let Some(virtue) = shrine_virtue_for_altar_tile(tile) {
-            format!("{base} (Shrine of {})", virtue.name())
         } else {
+            // `formats/look2-dat.md §5` / `view.md §3` rows 5a..5c list the
+            // only appenders; there is no shrine appender, and
+            // `catalogs/gazetteer.md §7`: "The `0x88..0x8F` band does not
+            // encode the eight surface shrines."
             base
         }
     }
@@ -3942,47 +3944,12 @@ impl PlayState {
     ) -> io::Result<String> {
         let base = self.look_description(tile, look_table);
         if tile != 0xdf {
-            if let Some(virtue) = self.world_shrine_virtue_at(game_dir, plane, x, y, tile)? {
-                let shrine_name = format!("Shrine of {}", virtue.name());
-                if base.contains(&shrine_name) {
-                    return Ok(base);
-                }
-                return Ok(format!("{base} ({shrine_name})"));
-            }
             return Ok(base);
         }
         let Some(name) = self.world_dungeon_name_at(game_dir, plane, x, y, tile)? else {
             return Ok(base);
         };
         Ok(format!("{base} ({name})"))
-    }
-
-    pub fn world_shrine_virtue_at(
-        &self,
-        game_dir: Option<&Path>,
-        plane: WorldPlane,
-        x: usize,
-        y: usize,
-        tile: u8,
-    ) -> io::Result<Option<ShrineVirtue>> {
-        if plane != WorldPlane::Britannia {
-            return Ok(None);
-        }
-        if let Some(game_dir) = game_dir {
-            if let Some(entries) = load_shrine_entries(game_dir)? {
-                if let Some(entry) = entries.into_iter().find(|entry| {
-                    entry.plane == plane
-                        && entry.x == x
-                        && entry.y == y
-                        && entry
-                            .expected_tile
-                            .map_or(true, |expected| expected == tile)
-                }) {
-                    return Ok(Some(entry.virtue));
-                }
-            }
-        }
-        Ok(shrine_virtue_for_altar_tile(tile))
     }
 
     pub fn world_dungeon_name_at(

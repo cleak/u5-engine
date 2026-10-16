@@ -1043,21 +1043,33 @@ fn look_clock_tiles_append_twelve_hour_time_context() {
 }
 
 #[test]
-fn look_shrine_altar_tiles_append_virtue_context() {
-    let table = parse_look2_dat(&look2_bytes(&[(
-        SHRINE_ALTAR_TILE_FIRST as usize,
-        "an altar",
-    )]))
+fn look_shrine_band_tiles_print_bare_description_without_shrine_appender() {
+    // `formats/look2-dat.md §5` / `view.md §3` rows 5a..5c: only
+    // `0xFA`/`0xFB`, `0xDE` and `0xDF` have appenders, and
+    // `catalogs/gazetteer.md §7` denies that `0x88..0x8F` encodes the
+    // surface shrines (audit A009).
+    let table = parse_look2_dat(&look2_bytes(&[
+        (SHRINE_ALTAR_TILE_FIRST as usize, "an altar"),
+        (SHRINE_ALTAR_TILE_LAST as usize, "an altar"),
+        (0x19, "a shrine"),
+    ]))
     .unwrap();
     let state = test_state(open_grid(), 1, 1);
 
     assert_eq!(
         state.look_description(SHRINE_ALTAR_TILE_FIRST, Some(&table)),
-        "an altar (Shrine of Honesty)"
+        "an altar"
     );
     assert_eq!(
-        state.look_description(SHRINE_ALTAR_TILE_LAST, None),
-        "special (Shrine of Humility)"
+        state.look_description(SHRINE_ALTAR_TILE_LAST, Some(&table)),
+        "an altar"
+    );
+    let world = world_state(open_world_grid(), 0, 0);
+    assert_eq!(
+        world
+            .look_description_for_world_tile(0x19, Some(&table), None, WorldPlane::Britannia, 81, 207)
+            .unwrap(),
+        "a shrine"
     );
 }
 
@@ -1194,16 +1206,18 @@ fn world_look_dungeon_mouth_appends_clean_location_name() {
 }
 
 #[test]
-fn world_look_shrine_table_appends_clean_virtue_name() {
+fn world_look_at_shrine_table_cell_prints_bare_description() {
+    // `view.md §3` rows 5a..5c have no shrine appender (audit A009): a
+    // shrine-table coordinate prints its plain `LOOK2.DAT` string.
     let dir = debug_game_dir();
-    fs::write(dir.join(LOOK2_DAT_FILE), look2_bytes(&[(0x80, "a shrine")])).unwrap();
+    fs::write(dir.join(LOOK2_DAT_FILE), look2_bytes(&[(0x19, "a shrine")])).unwrap();
     fs::write(
         dir.join(SHRINE_TABLE_FILE),
-        "BRITANNIA 2 1 COMPASSION 0x80\n",
+        "BRITANNIA 2 1 COMPASSION 0x19\n",
     )
     .unwrap();
     let mut grid = open_world_grid();
-    grid[world_cell_index(2, 1)] = 0x80;
+    grid[world_cell_index(2, 1)] = 0x19;
     let mut state = britannia_state(grid, 1, 1);
     state.player.facing = Direction::East;
 
@@ -1212,33 +1226,8 @@ fn world_look_shrine_table_appends_clean_virtue_name() {
         MoveOutcome::Observed
     );
 
-    assert!(state.message.contains("a shrine (Shrine of Compassion)"));
-    assert_eq!(state.turn, 1);
-    assert_eq!(state.clock, GameClock::new(12, 2).unwrap());
-    let _ = fs::remove_dir_all(dir);
-}
-
-#[test]
-fn world_look_shrine_altar_avoids_duplicate_virtue_context() {
-    let dir = debug_game_dir();
-    fs::write(
-        dir.join(LOOK2_DAT_FILE),
-        look2_bytes(&[(SHRINE_ALTAR_TILE_FIRST as usize, "an altar")]),
-    )
-    .unwrap();
-    fs::write(dir.join(SHRINE_TABLE_FILE), "BRITANNIA 2 1 HONESTY 0x88\n").unwrap();
-    let mut grid = open_world_grid();
-    grid[world_cell_index(2, 1)] = SHRINE_ALTAR_TILE_FIRST;
-    let mut state = britannia_state(grid, 1, 1);
-    state.player.facing = Direction::East;
-
-    assert_eq!(
-        state.look_facing_with_game_dir(&dir).unwrap(),
-        MoveOutcome::Observed
-    );
-
-    assert!(state.message.contains("an altar (Shrine of Honesty)"));
-    assert_eq!(state.message.matches("Shrine of Honesty").count(), 1);
+    assert!(state.message.ends_with("\na shrine"), "{:?}", state.message);
+    assert!(!state.message.contains("Shrine of"));
     assert_eq!(state.turn, 1);
     assert_eq!(state.clock, GameClock::new(12, 2).unwrap());
     let _ = fs::remove_dir_all(dir);
