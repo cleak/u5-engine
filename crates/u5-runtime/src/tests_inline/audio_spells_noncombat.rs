@@ -206,10 +206,8 @@ fn open_magic_lock_and_unlock_magic_use_their_published_variants() {
 
 #[test]
 fn committed_party_spells_play_their_published_variant_before_the_effect() {
-    // audio.md §6 variant 1: "Awaken, Cure, Heal". Variant 8: "The highest
-    // resurrection-mode presentation". audio.md §8.3 puts the pre-effect
-    // after the spell's own gate and before the effect, so a post-commit
-    // failure sounds the variant first and the failure tail second.
+    // audio.md §6.1 ids 2-4 and 42: Awaken, Cure and Heal play variant 1 and
+    // Resurrect variant 8, each only once its own status test passes.
     let mut cure = test_state(open_grid(), 1, 1);
     cure.party[0].status = b'P';
     arm_spell(&mut cure, CURE_SPELL_INDEX);
@@ -237,11 +235,42 @@ fn committed_party_spells_play_their_published_variant_before_the_effect() {
     assert_eq!(awaken.message, "Failed!");
     assert_eq!(
         awaken.sound_effects_after(serial),
-        vec![
-            SoundEffect::SharedVariant { variant: 1 },
-            SoundEffect::CastFailure,
-        ],
-        "a no-sleeper Awaken still commits, then fails"
+        vec![SoundEffect::CastFailure],
+        "audio.md §6.1 id 2: variant 1 only if the chosen member is asleep"
+    );
+
+    let mut asleep = test_state(open_grid(), 1, 1);
+    asleep.party.push(asleep.party[0]);
+    asleep.party[1].status = b'S';
+    arm_spell(&mut asleep, AWAKEN_SPELL_INDEX);
+    let serial = asleep.sound_effect_serial;
+    assert_eq!(asleep.cast_awaken(0, 1), MoveOutcome::Cast);
+    assert_eq!(
+        asleep.sound_effects_after(serial),
+        vec![SoundEffect::SharedVariant { variant: 1 }]
+    );
+
+    let mut healthy_cure = test_state(open_grid(), 1, 1);
+    arm_spell(&mut healthy_cure, CURE_SPELL_INDEX);
+    let serial = healthy_cure.sound_effect_serial;
+    assert_eq!(healthy_cure.cast_cure(0, 0), MoveOutcome::Blocked);
+    assert_eq!(healthy_cure.message, "Failed!");
+    assert_eq!(
+        healthy_cure.sound_effects_after(serial),
+        vec![SoundEffect::CastFailure],
+        "audio.md §6.1 id 3: variant 1 only if the chosen member is poisoned"
+    );
+
+    let mut dead_heal = test_state(open_grid(), 1, 1);
+    dead_heal.party.push(dead_heal.party[0]);
+    dead_heal.party[1].status = b'D';
+    arm_spell(&mut dead_heal, HEAL_SPELL_INDEX);
+    let serial = dead_heal.sound_effect_serial;
+    assert_eq!(dead_heal.cast_heal(0, 1), MoveOutcome::Blocked);
+    assert_eq!(
+        dead_heal.sound_effects_after(serial),
+        vec![SoundEffect::CastFailure],
+        "audio.md §6.1 id 4: variant 1 only if the target was not dead"
     );
 
     let mut resurrect = test_state(open_grid(), 1, 1);

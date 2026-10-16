@@ -5366,16 +5366,16 @@ impl PlayState {
             return outcome;
         }
 
-        // audio.md §6: Awaken is variant 1; audio.md §8.3 puts the committed
-        // pre-effect after the spell's own gate and before the effect, so a
-        // no-sleeper Awaken still sounds before the failure tail.
-        self.emit_sound_effect(SoundEffect::SharedVariant { variant: 1 });
-
         if self.party[target_index].status != b'S' {
             self.advance_turn();
             self.fail_committed_spell_cast();
             return MoveOutcome::Blocked;
         }
+
+        // audio.md §6.1 id 2: Awaken plays variant 1 "only if the chosen
+        // member is asleep", so a no-sleeper Awaken reaches the failure tail
+        // without it.
+        self.emit_sound_effect(SoundEffect::SharedVariant { variant: 1 });
 
         // `stats-panel.md §2.2.1` row 3: Awaken's status change is deferred.
         self.stats_panel_command_refresh = crate::stats_panel::PanelRefreshMode::Deferred;
@@ -5401,15 +5401,15 @@ impl PlayState {
             return outcome;
         }
 
-        // audio.md §6: Cure is variant 1; audio.md §8.3 puts the committed
-        // pre-effect after the spell's own gate and before the effect.
-        self.emit_sound_effect(SoundEffect::SharedVariant { variant: 1 });
-
         if self.party[target_index].status != b'P' {
             self.advance_turn();
             self.fail_committed_spell_cast();
             return MoveOutcome::Blocked;
         }
+
+        // audio.md §6.1 id 3: Cure plays variant 1 "only if the chosen member
+        // is poisoned".
+        self.emit_sound_effect(SoundEffect::SharedVariant { variant: 1 });
 
         // `stats-panel.md §2.2.1` row 4: Cure's status change is deferred.
         self.stats_panel_command_refresh = crate::stats_panel::PanelRefreshMode::Deferred;
@@ -5435,15 +5435,15 @@ impl PlayState {
             return outcome;
         }
 
-        // audio.md §6: Heal is variant 1; audio.md §8.3 puts the committed
-        // pre-effect after the spell's own gate and before the effect.
-        self.emit_sound_effect(SoundEffect::SharedVariant { variant: 1 });
-
         if self.party[target_index].status == b'D' {
             self.advance_turn();
             self.fail_committed_spell_cast();
             return MoveOutcome::Blocked;
         }
+
+        // audio.md §6.1 id 4: Heal plays variant 1 "only if the heal
+        // succeeded, i.e. the target was not dead".
+        self.emit_sound_effect(SoundEffect::SharedVariant { variant: 1 });
 
         let amount = self.heal_spell_amount();
         let healed = self.party[target_index].heal_by(amount);
