@@ -6087,21 +6087,11 @@ impl PlayState {
             self.message = "Not here!".to_string();
             return MoveOutcome::Blocked;
         };
-        let Some(direction) = direction else {
-            self.request_cast_argument(CastArgumentRequest::Direction);
-            return MoveOutcome::Blocked;
-        };
-        if !direction.is_cardinal() {
-            // `magic.md §8` "Directed utility tile helpers": the shared spell
-            // direction prompt takes "a cardinal choice ... Space echoes
-            // `Pass` ...; any other key re-prompts, and the prompt cannot be
-            // escaped except by a cardinal or Space". A diagonal therefore
-            // re-opens the prompt silently, exactly as the combat arm of this
-            // same spell already does; the engine-voice sentence that used to
-            // stand here was invented.
-            self.request_cast_argument(CastArgumentRequest::Direction);
-            return MoveOutcome::Blocked;
-        }
+        // `magic.md §8` (R513, issue #287): the dungeon arm raises no
+        // direction prompt. It "checks the party's own cell first and, only
+        // if that is not a field, the cell one step ahead in the party's
+        // facing direction on the current dungeon layer".
+        let _ = direction;
         if let Some(outcome) =
             self.cast_spell_resource_gate(caster_index, DISPEL_FIELD_SPELL_INDEX, DISPEL_FIELD_COST)
         {
@@ -6113,16 +6103,21 @@ impl PlayState {
         // effect. The combat route returned above owns its own boundary.
         self.emit_sound_effect(SoundEffect::SharedVariant { variant: 4 });
 
-        let (dx, dy) = direction.delta();
-        let tx = self.player.x as isize + dx;
-        let ty = self.player.y as isize + dy;
-        if !(0..DUNGEON_SIDE as isize).contains(&tx) || !(0..DUNGEON_SIDE as isize).contains(&ty) {
+        let own = (self.player.x, self.player.y);
+        let own_is_field = (own.0 < DUNGEON_SIDE && own.1 < DUNGEON_SIDE)
+            && dungeon_field_effect(self.grid[dungeon_cell_index(level, own.0, own.1)]).is_some();
+        let target = if own_is_field {
+            Some(own)
+        } else {
+            self.dungeon_forward_target()
+        };
+        let Some((tx, ty)) = target else {
             self.advance_turn();
             self.fail_committed_spell_cast();
             return MoveOutcome::Blocked;
-        }
+        };
 
-        let idx = dungeon_cell_index(level, tx as usize, ty as usize);
+        let idx = dungeon_cell_index(level, tx, ty);
         let cell = self.grid[idx];
         let Some(field) = dungeon_field_effect(cell) else {
             self.advance_turn();

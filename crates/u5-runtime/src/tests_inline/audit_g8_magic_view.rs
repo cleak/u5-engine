@@ -70,3 +70,44 @@ fn audit_a118_mana_refusal_precedes_the_handler_prompt() {
     assert_eq!(state.message, "M.P. too low!\nFailed!\n");
     assert_eq!(state.spell_charges[HEAL_SPELL_INDEX], 0);
 }
+
+#[test]
+fn audit_a123_dungeon_dispel_field_clears_the_own_cell_before_the_faced_cell() {
+    // `magic.md §8` (R513): "it checks the party's own cell first and, only
+    // if that is not a field, the cell one step ahead in the party's facing
+    // direction on the current dungeon layer" - with no direction prompt.
+    let mut grid = open_dungeon_record();
+    grid[dungeon_cell_index(0, 1, 1)] = 0x89;
+    grid[dungeon_cell_index(0, 2, 1)] = 0x8a;
+    let mut state = dungeon_state(grid, 0, 1, 1);
+    state.player.facing = Direction::East;
+    state.spell_charges[DISPEL_FIELD_SPELL_INDEX] = 2;
+    state.party[0].mana = 2 * DISPEL_FIELD_COST;
+    state.party[0].level = DISPEL_FIELD_COST;
+
+    assert_eq!(state.cast_spell_from_suffix("1AG", Path::new("")).unwrap(), MoveOutcome::Cast);
+    assert_eq!(state.pending_cast_argument, None);
+    assert_eq!(state.grid[dungeon_cell_index(0, 1, 1)], 0x08);
+    assert_eq!(state.grid[dungeon_cell_index(0, 2, 1)], 0x8a);
+    assert_eq!(state.message, DISPEL_FIELD_DESTROYED_LINE);
+
+    // The own cell is clear now, so the second cast takes the faced cell.
+    assert_eq!(state.cast_spell_from_suffix("1AG", Path::new("")).unwrap(), MoveOutcome::Cast);
+    assert_eq!(state.grid[dungeon_cell_index(0, 2, 1)], 0x08);
+    assert_eq!(state.message, DISPEL_FIELD_DESTROYED_LINE);
+}
+
+#[test]
+fn audit_a123_dungeon_dispel_field_ignores_a_typed_direction_and_uses_facing() {
+    let mut grid = open_dungeon_record();
+    grid[dungeon_cell_index(0, 1, 2)] = 0x8a;
+    let mut state = dungeon_state(grid, 0, 1, 1);
+    state.player.facing = Direction::South;
+    state.spell_charges[DISPEL_FIELD_SPELL_INDEX] = 1;
+    state.party[0].mana = DISPEL_FIELD_COST;
+    state.party[0].level = DISPEL_FIELD_COST;
+
+    // An east key in the inline form is not a prompt answer in a dungeon.
+    assert_eq!(state.cast_spell_from_suffix("1AG6", Path::new("")).unwrap(), MoveOutcome::Cast);
+    assert_eq!(state.grid[dungeon_cell_index(0, 1, 2)], 0x08);
+}

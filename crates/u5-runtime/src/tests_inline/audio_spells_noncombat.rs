@@ -497,11 +497,8 @@ fn refusals_before_the_committed_cast_stay_silent() {
     assert_eq!(not_here.message, "Not here!");
     assert!(not_here.sound_effects_after(serial).is_empty());
 
-    let mut no_direction = dungeon_state(open_dungeon_record(), 0, 4, 4);
-    arm_spell(&mut no_direction, DISPEL_FIELD_SPELL_INDEX);
-    let serial = no_direction.sound_effect_serial;
-    assert_eq!(no_direction.cast_dispel_field(0, None), MoveOutcome::Blocked);
-    assert!(no_direction.sound_effects_after(serial).is_empty());
+    // (The dungeon Dispel Field arm used to be the direction-prompt case
+    // here; `magic.md §8` R513 removed its prompt.)
 
     let mut no_charge = test_state(open_grid(), 1, 1);
     no_charge.spell_charges[AWAKEN_SPELL_INDEX] = 0;
