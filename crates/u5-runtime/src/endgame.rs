@@ -1606,6 +1606,9 @@ impl PlayState {
                 .push_ticks(ENDGAME_ABSORPTION_HOLD_BIOS_TICKS, String::new());
             return true;
         }
+        // The hold has run out (or there was none): from here on the pump
+        // draws the tableau setup, so the arena the hold showed is released.
+        self.endgame_absorption_arena = None;
         if let Some(endgame) = self.endgame.as_mut()
             && endgame.entry_greeting_hold_owed
         {
@@ -1882,6 +1885,13 @@ impl PlayState {
             }
         }
         frames
+    }
+
+    /// The final-room frame the absorption hold keeps on screen, while it
+    /// holds. See [`PlayState::endgame_absorption_arena`].
+    pub fn endgame_absorption_arena_view(&self) -> Option<&PlayState> {
+        self.endgame.as_ref()?;
+        self.endgame_absorption_arena.as_deref()
     }
 
     /// `true` while the endgame entry presentation still owes frames.

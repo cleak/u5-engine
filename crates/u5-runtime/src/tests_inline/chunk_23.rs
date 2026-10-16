@@ -5616,6 +5616,95 @@ fn combat_post_dispatch_absorbable_field_contact_sets_armed_result_marker() {
     assert!(!state.combat_active);
 }
 
+/// `endgame.md §3`/`§5.1` and the measured absorption hold: the stock keeps
+/// the final room on screen, the Avatar gone, until the tableau setup draws
+/// (`doom-final-room-waiting`, 2026-10-16). The contact holds that frame for
+/// display and releases it on the first pumped frame after the hold.
+#[test]
+fn armed_absorption_holds_the_arena_without_the_avatar_until_the_tableau_setup() {
+    let mut state = world_state(open_world_grid(), 10, 20);
+    state.combat_active = true;
+    state.active_player = Some(0);
+    state.active_objects = vec![ActiveObject::empty(); OOL_SLOTS];
+    let avatar = ActiveObject {
+        type_byte: 0x5c,
+        tile: 0x5c,
+        x: 6,
+        y: 2,
+        z: 0,
+        phase: STEADY_PHASE,
+        aux1: 0,
+        aux3: 0,
+    };
+    let field = ActiveObject {
+        type_byte: DUNGEON_ROOM_ABSORBABLE_FIELD_SOURCE,
+        tile: DUNGEON_ROOM_ABSORBABLE_FIELD_SOURCE,
+        x: 6,
+        y: 1,
+        z: 0,
+        phase: STEADY_PHASE,
+        aux1: 0,
+        aux3: 0,
+    };
+    state.active_objects[0] = avatar;
+    state.active_objects[7] = field;
+    state.combat_actors[0] =
+        CombatActorDescriptor::from_row([20, 7, COMBAT_ACTOR_FLAG_SELECTABLE_80, 0, 0, 0, 6, 2]);
+    let avatar_slot = usize::from(state.combat_actors[0].active_object_slot);
+    assert_eq!(state.active_objects[avatar_slot], avatar);
+    state.combat_frame_snapshot = Some(CombatFrameSnapshot {
+        area: Area::Dungeon {
+            scene: DungeonScene::new(DUNGEON_DOOM_SCENE_BYTE).unwrap(),
+            level: DOOM_FINAL_ROOM_LEVEL,
+        },
+        player: state.player,
+        active_objects: state.active_objects.clone(),
+        active_player: state.active_player,
+        combat_terrain: state.combat_terrain,
+        dungeon_room_clear_on_success: None,
+        enter_endgame_after_successful_combat: false,
+        endgame_messages: Some(EndgameMessages {
+            records: vec!["Welcome back".to_string()],
+        }),
+        endgame_tableau_map: None,
+        encounter_mode_high_bit: false,
+        suppress_controlled_faint_sleep_tick: false,
+        exit_announced: false,
+        established_exit_direction_code: None,
+        any_foe_seated: true,
+    });
+
+    state
+        .apply_combat_player_command_with_attack_inputs(
+            0,
+            CombatPlayerCommandInput::Key(' '),
+            CombatPlayerWeaponAttackInputs::default(),
+        )
+        .expect("pass should complete the player dispatch");
+    assert!(state.endgame.is_some(), "contact entered the endgame");
+
+    // The held frame is the arena: still a combat frame, the field still
+    // standing, the absorbed Avatar gone.
+    let arena = state
+        .endgame_absorption_arena_view()
+        .expect("the absorption holds the arena for display");
+    assert!(arena.combat_active);
+    assert!(arena.endgame.is_none());
+    assert!(arena.active_objects[avatar_slot].is_empty());
+    assert_eq!(arena.active_objects[7], field);
+
+    // First pumped frame: the absorption line and the hold. The arena stays.
+    assert!(state.advance_endgame_entry_presentation());
+    assert!(state.staged_narration_active(), "the hold is a timed wait");
+    assert!(state.endgame_absorption_arena_view().is_some());
+
+    // The hold runs out; the next frame is the tableau setup's, and the
+    // arena is released.
+    state.flush_staged_narration();
+    assert!(state.advance_endgame_entry_presentation());
+    assert!(state.endgame_absorption_arena_view().is_none());
+}
+
 #[test]
 fn combat_absorbable_field_contact_without_armed_snapshot_does_not_set_result_marker() {
     let mut state = world_state(open_world_grid(), 10, 20);

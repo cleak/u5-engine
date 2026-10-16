@@ -16762,6 +16762,9 @@ fn render_visual_play_frame_with_input_and_cursor(
 enum EndgameViewport {
     World,
     Tableau,
+    /// The final room held through the absorption hold
+    /// ([`PlayState::endgame_absorption_arena_view`]).
+    AbsorptionArena,
 }
 
 #[allow(clippy::too_many_arguments)]
@@ -16801,6 +16804,15 @@ fn render_visual_play_frame_over_viewport(
             let viewport = render_endgame_tableau_viewport(state, atlas)
                 .unwrap_or_else(|err| panic!("endgame tableau render failed: {err}"));
             tile_viewport_to_visual_rgba(&viewport)
+        }
+        EndgameViewport::AbsorptionArena => {
+            let mut arena = state
+                .endgame_absorption_arena
+                .take()
+                .expect("the absorption-arena viewport requires the held arena");
+            let viewport = render_base_framebuffer(&mut arena, atlas);
+            state.endgame_absorption_arena = Some(arena);
+            viewport
         }
     };
 
@@ -16917,6 +16929,12 @@ fn render_endgame_framebuffer(
     if !endgame_frame_should_show_tableau(state) {
         return render_endgame_full_screen_framebuffer(state, ctx);
     }
+    // `endgame.md §3`/`§5.1`: the measured absorption hold shows the final
+    // room - Avatar gone, floor not yet remapped - until the tableau setup
+    // draws. Measured (`doom-final-room-waiting`, 2026-10-16): the stock
+    // keeps the red-floored arena for three to four timelapse frames after
+    // `Avatar is absorbed!`, where this engine already showed the tableau.
+    let viewport = endgame_tableau_phase_viewport(state);
     render_visual_play_frame_over_viewport(
         state,
         atlas,
@@ -16924,7 +16942,7 @@ fn render_endgame_framebuffer(
         input_line,
         default_message,
         false,
-        EndgameViewport::Tableau,
+        viewport,
     )
 }
 
@@ -17189,6 +17207,16 @@ fn endgame_frame_is_certificate(state: &PlayState) -> bool {
                 | u5_runtime::endgame_cinematic::EndgameCinematicStep::Finished
         ) && endgame.certificate.is_some()
     })
+}
+
+/// Which raster the endgame's tableau phase puts in the viewport: the held
+/// final room through the absorption hold, the tableau after it.
+fn endgame_tableau_phase_viewport(state: &PlayState) -> EndgameViewport {
+    if state.endgame_absorption_arena_view().is_some() {
+        EndgameViewport::AbsorptionArena
+    } else {
+        EndgameViewport::Tableau
+    }
 }
 
 fn endgame_frame_should_show_tableau(state: &PlayState) -> bool {
@@ -29713,5 +29741,25 @@ mod tests {
         assert!(is_wandering_encounter_diagnostic(&lines[0]));
         assert!(!is_wandering_encounter_diagnostic(&lines[1]));
         assert!(take_new_runtime_diagnostics(&state, &mut cursor).is_empty());
+    }
+
+    #[test]
+    fn the_absorption_hold_draws_the_held_arena_and_then_the_tableau() {
+        let mut state = test_state(
+            vec![1; u5_runtime::TOWN_GRID_SIDE * u5_runtime::TOWN_GRID_SIDE],
+            1,
+            1,
+        );
+        state.endgame =
+            Some(u5_runtime::EndgameState::awaiting_first_confirmation_with_messages(None));
+        assert!(endgame_frame_should_show_tableau(&state));
+        assert!(endgame_tableau_phase_viewport(&state) == EndgameViewport::Tableau);
+        let mut arena = state.clone();
+        arena.endgame = None;
+        arena.combat_active = true;
+        state.endgame_absorption_arena = Some(Box::new(arena));
+        assert!(endgame_tableau_phase_viewport(&state) == EndgameViewport::AbsorptionArena);
+        state.endgame_absorption_arena = None;
+        assert!(endgame_tableau_phase_viewport(&state) == EndgameViewport::Tableau);
     }
 }

@@ -2392,6 +2392,18 @@ impl PlayState {
             // tableau's own floor never appears. The original's room
             // changes colour at this moment, which is that floor.
             if let Some(snapshot) = self.combat_frame_snapshot.take() {
+                // The arena the hold keeps on screen: this frame, the
+                // absorbed actor gone (`endgame.md §3`; see
+                // `PlayState::endgame_absorption_arena`).
+                let mut arena = self.clone();
+                arena.endgame_absorption_arena = None;
+                arena.message_transcript.clear();
+                if let Some(object) = arena
+                    .active_objects
+                    .get_mut(usize::from(actor.active_object_slot))
+                {
+                    *object = ActiveObject::empty();
+                }
                 // `endgame.md §3` step 2's redraw does not take the message
                 // window with it. Measured 2026-10-16 (`doom-final-room`,
                 // `-refusal`, `-waiting`, every timelapse frame between the
@@ -2404,6 +2416,7 @@ impl PlayState {
                 let tableau_map = snapshot.endgame_tableau_map.clone();
                 self.restore_combat_frame_with_trigger_reconcile(snapshot, true);
                 self.enter_endgame_with_resources(messages, tableau_map);
+                self.endgame_absorption_arena = Some(Box::new(arena));
                 // Owe §3 step 2's redraw to the first pumped entry
                 // frame. Only this route has an absorption line to put
                 // at the top of it; the direct entries the suites use

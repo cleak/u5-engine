@@ -744,6 +744,17 @@ pub struct PlayState {
     /// forwards diagnostics to its own log keeps the serial it last saw and
     /// asks [`Self::diagnostics_since`] for the rest.
     pub diagnostics_serial: u64,
+    /// The final room as it stood when the Avatar was absorbed, with the
+    /// absorbed actor gone, held for display through the measured
+    /// absorption hold ([`crate::ENDGAME_ABSORPTION_HOLD_BIOS_TICKS`]).
+    ///
+    /// `endgame.md §3` rebuilds the table as the tableau at entry, but the
+    /// screen does not show it until the setup pass draws: the original
+    /// keeps the arena on screen, Avatar gone, for the whole hold
+    /// (`doom-final-room` timelapses). The live state has already left the
+    /// arena by then, so the frame it shows is kept here and released when
+    /// the tableau setup's first frame is pumped. Display state only.
+    pub endgame_absorption_arena: Option<Box<PlayState>>,
     pub active_blackthorn: Option<crate::blackthorn_session::BlackthornChallenge>,
     pub blackthorn_audience_map: Option<MiscmapsCutsceneMap>,
     /// `karma.md §7` "Entry pacing": the shrine presentation's own display.
