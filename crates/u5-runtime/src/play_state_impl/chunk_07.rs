@@ -4941,9 +4941,13 @@ impl PlayState {
                 // the ending branch is the one where no such companion exists.
                 // §4 does not quantify "few" beyond that, so nothing narrower
                 // is assumed here.
+                // `blackthorn.md §4`: "A wrong answer, when fewer than two
+                // nondead party members remain, ends the interrogation".
                 let victim = self
                     .blackthorn_failure_victim_index()
-                    .filter(|index| *index != 0);
+                    .filter(|index| {
+                        *index != 0 && self.blackthorn_eligible_party_member_count() >= 2
+                    });
                 let Some(victim) = victim else {
                     // The ordinal and the expected mantra are harness detail,
                     // not player text.
@@ -4965,7 +4969,13 @@ impl PlayState {
                         let (next_ordinal, prompt) = challenge
                             .current_prompt()
                             .unwrap_or((ordinal + 1, "Virtue"));
-                        let victim_name = self.blackthorn_victim_display_name(victim);
+                        // `blackthorn.md §4` / §4.1 (R441): the threat names
+                        // "the second roster entry", fixed, whatever its
+                        // status; the execution victim is separately the
+                        // second nondead member, so the two can differ.
+                        let victim_name = self.blackthorn_victim_display_name(
+                            crate::blackthorn::BLACKTHORN_FAILURE_VICTIM_SLOT,
+                        );
                         let _ = prompt;
                         challenge.await_acknowledgement(next_ordinal);
                         self.active_blackthorn = Some(challenge);

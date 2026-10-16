@@ -110,3 +110,41 @@ fn audit_a032_avatar_plus_one_companion_is_enough_for_the_merciful_death() {
     assert_eq!(state.party.len(), 1, "the second nondead member is executed");
     let _ = fs::remove_dir_all(dir);
 }
+
+fn audit_g5_named(state: &mut PlayState, names: &[&str]) {
+    state.party_names = names
+        .iter()
+        .map(|name| {
+            let mut bytes = [0u8; SAVE_CHARACTER_NAME_LEN];
+            bytes[..name.len()].copy_from_slice(name.as_bytes());
+            bytes
+        })
+        .collect();
+}
+
+/// Audit A033. `blackthorn.md §4` (R441): "The first wrong answer produces a
+/// threat naming the second roster entry. ... If the second roster entry is
+/// dead, the threatened name and actual victim differ."
+#[test]
+fn audit_a033_first_threat_names_the_fixed_second_roster_entry() {
+    let dir = debug_game_dir();
+    let mut state = test_state(open_grid(), 5, 5);
+    state.party.push(audit_g5_companion(1));
+    state.party.push(audit_g5_companion(2));
+    state.party.push(audit_g5_companion(3));
+    state.party[1].status = b'D';
+    state.party[1].hp = 0;
+    audit_g5_named(&mut state, &["Avatar", "Deadman", "Iolo", "Shamino"]);
+    state.begin_blackthorn_audience_capture(&dir).unwrap();
+    while state.active_blackthorn.as_ref().is_some_and(|c| c.current_prompt().is_none()) {
+        state.submit_blackthorn_audience_answer("", &dir).unwrap();
+    }
+
+    state.submit_blackthorn_audience_answer("wrong", &dir).unwrap();
+    assert!(
+        state.message.contains("Deadman die!"),
+        "the threat names roster entry two: {:?}",
+        state.message
+    );
+    let _ = fs::remove_dir_all(dir);
+}
