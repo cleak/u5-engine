@@ -200,3 +200,26 @@ fn a136_guard_sprite_arrests_and_low_sprite_clears_the_slot() {
     assert!(state.pending_town_arrest.is_none());
     assert!(!state.diagnostics_contain("alarm raised"));
 }
+
+#[test]
+fn a127_per_step_gate_refuses_any_occupant_but_the_workspace_keeps_the_cutoff() {
+    // npc-schedules.md §10: "the per-step gate applies no cutoff", while
+    // the workspace builder ignores occupants four or more from the
+    // destination (§8.3 phase 4).
+    let mut state = g6_town_with(
+        vec![
+            g6_npc(1, 1, 1, 0, (20, 20, 0)),
+            g6_npc(2, 2, 1, 0, (2, 1, 0)),
+        ],
+        30,
+        30,
+    );
+    // The occupant at (2, 1) is far from the destination (20, 20).
+    assert!(!state.npc_can_step_toward(0, 2, 1, 0, 20, 20));
+    assert!(state.npc_workspace_cell_open(0, 2, 1, 0, 20, 20));
+    // Within the cutoff both refuse.
+    assert!(!state.npc_workspace_cell_open(0, 2, 1, 0, 3, 1));
+    state.npcs.truncate(1);
+    state.relink_npc_objects();
+    assert!(state.npc_can_step_toward(0, 2, 1, 0, 20, 20));
+}

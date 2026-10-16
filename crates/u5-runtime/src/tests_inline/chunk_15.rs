@@ -1404,7 +1404,13 @@
         state.apply_pending_town_status_provision_pass();
         state.apply_pending_town_object_epilogue();
 
-        assert_eq!((state.npcs[0].x, state.npcs[0].y), (3, 1));
+        // `npc-schedules.md §10`: the workspace ignores the occupant (it is
+        // four or more from the destination), so a route is planned through
+        // its cell; but "the per-step gate applies no cutoff", so the queued
+        // step into the occupied cell is refused and counted (audit A127 -
+        // this test used to pin a walk-through onto the occupant's cell).
+        assert_ne!((state.npcs[0].x, state.npcs[0].y), (3, 1));
+        assert_eq!(state.npcs[0].stuck_counter, 1);
         assert_eq!((state.npcs[1].x, state.npcs[1].y), (3, 1));
     }
 

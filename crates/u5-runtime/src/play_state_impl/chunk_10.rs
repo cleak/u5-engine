@@ -1515,7 +1515,7 @@ impl PlayState {
             for (nx, ny) in neighbors(x, y) {
                 let idx = ny * 32 + nx;
                 if seen[idx]
-                    || !self.npc_can_step_toward(npc_index, nx, ny, floor, target.0, target.1)
+                    || !self.npc_workspace_cell_open(npc_index, nx, ny, floor, target.0, target.1)
                 {
                     continue;
                 }

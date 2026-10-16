@@ -158,6 +158,11 @@ impl PlayState {
         self.npc_can_step_toward(npc_index, x, y, floor, dest_x, dest_y)
     }
 
+    /// `npc-schedules.md §10` "The per-step gate": "is the cell occupied by
+    /// another active object. An occupied cell is refused even where the
+    /// terrain allows it." ... "the per-step gate applies no cutoff, so a
+    /// route planned around a far-off actor can still be refused a step when
+    /// that actor has since moved into the way."
     pub fn npc_can_step_toward(
         &self,
         npc_index: usize,
@@ -166,6 +171,36 @@ impl PlayState {
         floor: u8,
         destination_x: usize,
         destination_y: usize,
+    ) -> bool {
+        self.npc_cell_open(npc_index, x, y, floor, destination_x, destination_y, false)
+    }
+
+    /// `npc-schedules.md §8.3` phase 4: the pathfinding workspace's
+    /// dynamic-obstacle overlay stamps only occupants whose "Manhattan
+    /// distance from the NPC's runtime destination is strictly less than
+    /// four"; farther occupants are treated as walkable by the search.
+    pub fn npc_workspace_cell_open(
+        &self,
+        npc_index: usize,
+        x: usize,
+        y: usize,
+        floor: u8,
+        destination_x: usize,
+        destination_y: usize,
+    ) -> bool {
+        self.npc_cell_open(npc_index, x, y, floor, destination_x, destination_y, true)
+    }
+
+    #[allow(clippy::too_many_arguments)]
+    fn npc_cell_open(
+        &self,
+        npc_index: usize,
+        x: usize,
+        y: usize,
+        floor: u8,
+        destination_x: usize,
+        destination_y: usize,
+        destination_cutoff: bool,
     ) -> bool {
         if x >= 32 || y >= 32 {
             return false;
@@ -193,12 +228,13 @@ impl PlayState {
                     && object.x == x
                     && object.y == y
                     && object.z == floor as i8
-                    && npc_dynamic_obstacle_blocks(
-                        object.x as i32,
-                        object.y as i32,
-                        destination_x as i32,
-                        destination_y as i32,
-                    )
+                    && (!destination_cutoff
+                        || npc_dynamic_obstacle_blocks(
+                            object.x as i32,
+                            object.y as i32,
+                            destination_x as i32,
+                            destination_y as i32,
+                        ))
             })
     }
 }
