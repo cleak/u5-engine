@@ -4362,7 +4362,7 @@ impl PlayState {
             self.message = "Funny, no response!".to_string();
             return Ok(MoveOutcome::Blocked);
         };
-        if self.talk_liveness_blocked() {
+        if self.talk_entry_gates_apply() && self.talk_liveness_blocked() {
             return Ok(self.consume_ordinary_town_talk());
         }
         if let Some((dialog_id, target_x, target_y)) = self.talk_target_in_direction(direction)
@@ -4371,8 +4371,9 @@ impl PlayState {
                 TOWN_NPC_COWERING_DIALOG_ID | TOWN_NPC_BRUSHOFF_DIALOG_ID
             )
         {
-            if let Some(refusal) =
-                talk_status_tile_refusal(self.talk_status_tile_at(target_x, target_y))
+            if self.talk_entry_gates_apply()
+                && let Some(refusal) =
+                    talk_status_tile_refusal(self.talk_status_tile_at(target_x, target_y))
             {
                 self.message = format!("\n{refusal}");
                 return Ok(self.consume_ordinary_town_talk());
@@ -4750,7 +4751,7 @@ impl PlayState {
             self.message = "Funny, no response!".to_string();
             return MoveOutcome::Blocked;
         }
-        if self.talk_liveness_blocked() {
+        if self.talk_entry_gates_apply() && self.talk_liveness_blocked() {
             return self.consume_ordinary_town_talk();
         }
 
@@ -4764,8 +4765,9 @@ impl PlayState {
 
         // `conversation.md §2` step 4: the status-tile gate reads the live map
         // tile at the resolved cell, the same query movement and Look use.
-        if let Some(refusal) =
-            talk_status_tile_refusal(self.talk_status_tile_at(target_x, target_y))
+        if self.talk_entry_gates_apply()
+            && let Some(refusal) =
+                talk_status_tile_refusal(self.talk_status_tile_at(target_x, target_y))
         {
             self.message = format!("\n{refusal}");
             return self.consume_ordinary_town_talk();
@@ -6239,6 +6241,17 @@ impl PlayState {
                 Some(self.open_town_arrest(active.arrest, game_dir).ok()?)
             }
         }
+    }
+
+    /// `conversation.md §2` step 5: "The dispatcher in step 5 is also called
+    /// by the NPC's automatic conversation-contact event, without steps 1–4."
+    /// Contact therefore takes neither the step-1 liveness gate nor the
+    /// step-4 mirror/bed status-tile gate. The step-3 lookup is kept only as
+    /// this engine's way of resolving the contacting NPC: the producer is
+    /// orthogonally adjacent by construction (`npc-schedules.md §9.2`) and the
+    /// direction is derived from it, so the lookup lands on that NPC.
+    pub(crate) fn talk_entry_gates_apply(&self) -> bool {
+        !self.talk_entered_by_contact
     }
 
     pub fn talk_liveness_blocked(&self) -> bool {

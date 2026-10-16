@@ -1550,6 +1550,64 @@
         let _ = fs::remove_dir_all(dir);
     }
 
+    /// `conversation.md §2` step 5: "The dispatcher in step 5 is also called
+    /// by the NPC's automatic conversation-contact event, without steps 1–4"
+    /// - no liveness gate and no mirror/bed status-tile gate. A keeper parked
+    /// on a bed cell, or a starving party, still reaches the dispatcher,
+    /// whose behaviour-4-to-1 rewrite then runs (audit A148 follow-up).
+    #[test]
+    fn contact_entry_skips_talks_liveness_and_status_tile_gates() {
+        let dir = debug_game_dir();
+        let keeper = || NpcSlot {
+            slot: 1,
+            type_byte: 0x54,
+            dialog_id: 0x81,
+            schedule: [4, 4, 4, 6, 6, 6, 5, 5, 5, 0, 0, 0, 0, 8, 16, 20],
+            name: None,
+        };
+        let idle = || NpcSlot {
+            slot: 0,
+            type_byte: 0,
+            dialog_id: 0,
+            schedule: [0; 16],
+            name: None,
+        };
+        let ai_at_cached_wp = |state: &PlayState| {
+            let npc = state.npcs.iter().find(|npc| npc.slot == 1).unwrap();
+            npc.schedule[NPC_SCHEDULE_AI_OFFSET + npc.cached_wp]
+        };
+
+        for case in ["bed", "starving"] {
+            let mut grid = open_grid();
+            if case == "bed" {
+                grid[5 * 32 + 6] = 0xAB;
+            }
+            let mut state = test_state(grid, 5, 5);
+            if case == "starving" {
+                state.food = 0;
+            }
+            let Area::Town { scene, floor } = state.area else {
+                unreachable!()
+            };
+            state.load_scheduled_npcs(&[idle(), keeper()]);
+            state.advance_npc_schedules();
+            assert!(state.pending_town_npc_contact.is_some(), "{case}");
+            let outcome = state.apply_town_npc_contact_event(scene, floor, &dir).unwrap();
+            assert!(outcome.is_some(), "{case}");
+            assert_eq!(
+                ai_at_cached_wp(&state),
+                1,
+                "{case}: contact reaches the dispatcher's stand-down"
+            );
+            assert!(
+                !state.message.contains("Zzzzzz"),
+                "{case}: contact has no bed gate: {:?}",
+                state.message
+            );
+        }
+        let _ = fs::remove_dir_all(dir);
+    }
+
     #[test]
     fn mode_five_adjacent_attack_requires_live_dialogue_awareness() {
         let mut state = test_state(open_grid(), 5, 5);
