@@ -1977,11 +1977,15 @@ impl PlayState {
     }
 
     pub fn current_live_natural_moongate_cell_index(&self) -> Option<usize> {
+        // `overworld.md §9.2`: the live-gate entry hook "is confined to the
+        // overworld only because it is the overworld loop that runs it;
+        // town, dungeon and combat loops never do". Town-family scenes still
+        // receive the placement stamp of §9, but standing on one is inert.
+        if self.combat_active {
+            return None;
+        }
         let idx = match self.area {
             Area::World { .. } => world_cell_index(self.player.x, self.player.y),
-            Area::Town { .. } if self.player.x < 32 && self.player.y < 32 => {
-                self.player.y * 32 + self.player.x
-            }
             _ => return None,
         };
         (idx < self.grid.len()).then_some(idx)
