@@ -2347,6 +2347,10 @@ fn dungeon_get_chest_consumes_turn_and_marks_visit_local_passage() {
     assert!(state.diagnostics.iter().any(|note| note.contains("generated chest grants") || note.contains("generated chest grants")));
 }
 
+/// `containers.md §6`: every gate and quantity draw comes from the shared
+/// uniform random helper, in row order - the gate `1..(4 * depth + 4)`, then
+/// the row's own quantity or subtype draw when the gate passes. The
+/// expected transcript is replayed from the same seed here.
 #[test]
 fn dungeon_get_chest_generated_rewards_follow_public_rows() {
     let scene = DungeonScene::new(33).unwrap();
@@ -2358,6 +2362,57 @@ fn dungeon_get_chest_generated_rewards_follow_public_rows() {
     state.keys = 0;
     state.gems = 0;
     state.torches = 0;
+    state.prng_state = 0x2468;
+
+    let mut prng = U5Prng::new(0x2468);
+    let mut rows = Vec::new();
+    let (mut food, mut gold, mut keys, mut gems, mut torches) = (0u16, 0u16, 0u8, 0u8, 0u8);
+    let mut potion = None;
+    let mut scroll = None;
+    for row in DUNGEON_CHEST_ROWS {
+        let gate = prng.next_range_u8(1, 32);
+        if !dungeon_chest_row_awarded(row, gate) {
+            continue;
+        }
+        match row.reward {
+            DungeonChestReward::Food => {
+                let n = prng.next_range_u8(1, 31);
+                food += u16::from(n);
+                rows.push(format!("{n} food!"));
+            }
+            DungeonChestReward::Gold => {
+                let n = prng.next_range_u8(1, 56);
+                gold += u16::from(n);
+                rows.push(format!("{n} gold!"));
+            }
+            DungeonChestReward::Keys => {
+                let n = prng.next_range_u8(1, 3);
+                keys += n;
+                rows.push(ObjectPickupKind::Keys.pickup_result_line(n));
+            }
+            DungeonChestReward::Gems => {
+                let n = prng.next_range_u8(1, 3);
+                gems += n;
+                rows.push(ObjectPickupKind::Gems.pickup_result_line(n));
+            }
+            DungeonChestReward::Torches => {
+                let n = prng.next_range_u8(1, 3);
+                torches += n;
+                rows.push(ObjectPickupKind::Torches.pickup_result_line(n));
+            }
+            DungeonChestReward::Potion => {
+                let k = usize::from(prng.next_range_u8(0, 7));
+                potion = Some(k);
+                rows.push(ObjectPickupKind::Potion(k).pickup_result_line(1));
+            }
+            DungeonChestReward::Scroll => {
+                let k = usize::from(prng.next_range_u8(0, 7));
+                scroll = Some(k);
+                rows.push(ObjectPickupKind::Scroll(k).pickup_result_line(1));
+            }
+        }
+    }
+    assert!(rows.len() >= 3, "seed should fire several rows: {rows:?}");
 
     assert_eq!(
         state.get_dungeon_underfoot(scene, 7),
@@ -2365,29 +2420,46 @@ fn dungeon_get_chest_generated_rewards_follow_public_rows() {
     );
 
     assert_eq!(state.grid[dungeon_cell_index(7, 0, 2)], 0x08);
-    assert_eq!(state.food, 11);
-    assert_eq!(state.gold, 52);
-    assert_eq!(state.keys, 2);
-    assert_eq!(state.gems, 1);
-    assert_eq!(state.torches, 2);
-    assert_eq!(state.potion_stock[7], 1);
-    assert_eq!(state.scroll_stock[6], 1);
+    assert_eq!(state.prng_state, prng.state());
+    assert_eq!(state.food, food);
+    assert_eq!(state.gold, gold);
+    assert_eq!(state.keys, keys);
+    assert_eq!(state.gems, gems);
+    assert_eq!(state.torches, torches);
+    if let Some(k) = potion {
+        assert_eq!(state.potion_stock[k], 1);
+    }
+    if let Some(k) = scroll {
+        assert_eq!(state.scroll_stock[k], 1);
+    }
     assert_eq!(state.turn, 1);
-    assert!(state.diagnostics.iter().any(|note| note.contains("generated chest grants 11 food") || note.contains("generated chest grants 11 food")));
-    assert!(state.diagnostics.iter().any(|note| note.contains("52 gold") || note.contains("52 gold")));
-    assert!(state.diagnostics.iter().any(|note| note.contains("A white potion!")));
-    assert!(state.diagnostics.iter().any(|note| note.contains("A scroll: IMC!")));
     // `containers.md §6` "What each row prints": the handler's own `Get` row,
     // the three-row preamble, then one row per reward row that fired, in the
     // table's order.
     assert_eq!(
         state.message,
-        format!(
-            "{DUNGEON_CHEST_GET_CONTENTS}\
-             11 food!\n52 gold!\n2 keys!\n1 gem!\n2 torches!\n\
-             A white potion!\nA scroll: IMC!"
-        )
+        format!("{DUNGEON_CHEST_GET_CONTENTS}{}", rows.join("\n"))
     );
+}
+
+/// `containers.md §6`: "Nothing per-chest, per-room, per-level or
+/// per-coordinate is consulted" - X and Y only index the cell, and the cell
+/// byte's low nibble "cannot reach content generation". Two chests at
+/// different coordinates with different low nibbles, opened from the same
+/// PRNG state, grant the same contents.
+#[test]
+fn dungeon_chest_contents_ignore_coordinates_and_cell_low_nibble() {
+    let scene = DungeonScene::new(33).unwrap();
+    let run = |x: usize, y: usize, cell: u8| {
+        let mut grid = open_dungeon_record();
+        grid[dungeon_cell_index(7, x, y)] = cell;
+        let mut state = dungeon_state(grid, 7, x, y);
+        state.prng_state = 0x0bad;
+        state.turn = (x * 3 + y) as u64;
+        state.get_dungeon_underfoot(scene, 7);
+        (state.message.clone(), state.food, state.gold, state.prng_state)
+    };
+    assert_eq!(run(0, 2, 0x7c), run(5, 6, 0x71));
 }
 
 /// `containers.md §6`: "**The generator is the whole contract. There is no
