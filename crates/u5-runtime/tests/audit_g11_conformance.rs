@@ -213,3 +213,42 @@ fn a062_search_trap_assessment_prompts_for_the_acting_member() {
     // would have wrapped the threshold and reported a phantom trap.
     assert_eq!(state.message, format!("{SEARCH_PREAMBLE}{SEARCH_TRAP_NONE_LINE}"));
 }
+
+/// `containers.md §7`: crops `0x2D` and the wall torches `0xB0`/`0xB1` are
+/// tile-class rules that "apply at any coordinate" - no per-coordinate
+/// sidecar row is needed.
+#[test]
+fn a064_crops_and_wall_torches_are_tile_class_get_rules() {
+    let mut grid = open_grid();
+    grid[32 + 2] = 0x2d;
+    grid[2 * 32 + 1] = 0xb1;
+    let mut state = test_state(grid, 1, 1);
+    state.moral_standing = 10;
+    state.food = 9999;
+    let scene = Scene::new(0x11).unwrap();
+    let empty = std::env::temp_dir().join("u5-audit-g11-no-sidecars");
+
+    let turn = state.turn;
+    assert_eq!(
+        state
+            .get_town_direction(&empty, scene, 0, Direction::East)
+            .unwrap(),
+        MoveOutcome::Got
+    );
+    assert_eq!(state.grid[32 + 2], 0x2c);
+    assert_eq!(state.message, GET_TILE_CROPS_PICKED_LINE);
+    assert_eq!(state.food, 9999, "9999 cap");
+    assert!(state.moral_standing < 10);
+    assert_eq!(state.turn, turn + 1);
+
+    state.torch_counter = 0;
+    assert_eq!(
+        state
+            .get_town_direction(&empty, scene, 0, Direction::South)
+            .unwrap(),
+        MoveOutcome::Got
+    );
+    assert_eq!(state.grid[2 * 32 + 1], 0x44);
+    assert_eq!(state.message, GET_TILE_BORROWED_LINE);
+    assert_eq!(state.torch_counter, 100);
+}

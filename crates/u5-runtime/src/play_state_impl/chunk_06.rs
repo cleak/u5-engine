@@ -1864,6 +1864,10 @@ impl PlayState {
 
         let idx = world_cell_index(tx, ty);
         let tile = self.grid[idx];
+        if let Some(outcome) = self.get_tile_consumable(idx, tile) {
+            self.rebuild_world_live_chunks_from_grid(plane)?;
+            return Ok(outcome);
+        }
         let Some(entries) = load_world_get_tile_entries(game_dir)? else {
             self.message = GET_NOTHING_REFUSAL.to_string();
             return Ok(MoveOutcome::Blocked);
@@ -1907,6 +1911,48 @@ impl PlayState {
         Ok(MoveOutcome::Got)
     }
 
+    /// `containers.md §7` tile consumables. Both are tile-class rules that
+    /// apply at any coordinate, from any approach direction, ahead of the
+    /// QA-only per-coordinate Get-tile sidecar:
+    ///
+    /// - "Crop cells `0x2D` ... The cell changes to the plowed-field tile
+    ///   `0x2C`, the line `Crops_picked!\n` is printed, one unit is credited
+    ///   to the shared party food word with the 9999 cap, the shared
+    ///   moral-standing selector is debited when nonzero, the party-dirty bit
+    ///   is set, and the turn sentinel is set."
+    /// - "The two **wall-torch** tiles `0xB0` and `0xB1`, and no other cell
+    ///   ... The cell is rewritten to the plain floor tile `0x44` ..., the
+    ///   line `Borrowed!\n` is printed, the theft sound plays, and the
+    ///   party's torch counter is set to 100 counter units".
+    pub fn get_tile_consumable(&mut self, idx: usize, tile: u8) -> Option<MoveOutcome> {
+        match tile {
+            GET_TILE_CROPS_SOURCE => {
+                self.grid[idx] = GET_TILE_CROPS_REPLACEMENT;
+                self.apply_get_tile_grant(ObjectPickupGrant {
+                    kind: ObjectPickupKind::Food,
+                    amount: 1,
+                });
+                self.mark_visibility_dirty();
+                self.advance_turn();
+                self.message = GET_TILE_CROPS_PICKED_LINE.to_string();
+                Some(MoveOutcome::Got)
+            }
+            GET_TILE_WALL_TORCH_SOURCE_FIRST | GET_TILE_WALL_TORCH_SOURCE_SECOND => {
+                self.grid[idx] = GET_TILE_WALL_TORCH_REPLACEMENT;
+                self.stats_panel_command_refresh = crate::stats_panel::PanelRefreshMode::Deferred;
+                self.mark_visibility_dirty();
+                self.advance_turn();
+                self.message = GET_TILE_BORROWED_LINE.to_string();
+                self.apply_borrowed_lit_fixture_light(tile);
+                // audio.md §8.1 borrowed fixed object: the 40-update action
+                // snap after the line.
+                self.emit_sound_effect(SoundEffect::ActionSnap);
+                Some(MoveOutcome::Got)
+            }
+            _ => None,
+        }
+    }
+
     /// `lighting.md §8`: "The G-Get "borrow" branch, which lifts a lit
     /// fixture out of a town or castle cell, sets the torch counter to 100
     /// counter units and consumes no carried torch". `containers.md §7`
@@ -1923,17 +1969,16 @@ impl PlayState {
     /// [`BORROWED_FIXTURE_TORCH_DURATION`] anchor rather than a local
     /// literal.
     ///
-    /// **Tile-set caveat.** Neither `lighting.md §8` nor `containers.md §7`
-    /// enumerates the borrowable lit-fixture tile ids - §7 says only
-    /// "Certain furniture/lit-fixture cells can be 'borrowed'". The one
-    /// published enumeration of lit fixtures in the tile domain is the
-    /// local-light source set of `visibility.md §12`
-    /// ([`is_local_light_source_tile`]), so the branch is keyed on that
-    /// rather than on invented ids. A Get-tile row whose source tile is not
-    /// a published light source stays ordinary furniture/crop handling and
-    /// leaves both counters alone.
+    /// `containers.md §7` (corrected 2026-09-12, `RETRACTIONS.md` R478):
+    /// "The two **wall-torch** tiles `0xB0` and `0xB1`, and no other cell,
+    /// can be 'borrowed'." The earlier keying on the whole local-light
+    /// source set is withdrawn; any other source tile leaves both counters
+    /// alone.
     pub fn apply_borrowed_lit_fixture_light(&mut self, source_tile: u8) {
-        if !is_local_light_source_tile(source_tile) {
+        if !matches!(
+            source_tile,
+            GET_TILE_WALL_TORCH_SOURCE_FIRST | GET_TILE_WALL_TORCH_SOURCE_SECOND
+        ) {
             return;
         }
         self.torch_counter = BORROWED_FIXTURE_TORCH_DURATION;
@@ -1999,6 +2044,9 @@ impl PlayState {
         let idx = ty * 32 + tx;
         let tile = self.grid[idx];
         if let Some(outcome) = self.get_town_table_food(idx, tx, ty, tile, dx, dy) {
+            return Ok(outcome);
+        }
+        if let Some(outcome) = self.get_tile_consumable(idx, tile) {
             return Ok(outcome);
         }
         let Some(entries) = load_town_get_tile_entries(game_dir)? else {
