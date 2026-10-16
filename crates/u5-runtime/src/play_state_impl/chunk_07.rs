@@ -3353,7 +3353,12 @@ impl PlayState {
                 self.apply_town_post_turn_effects_after_turn(turn_before, game_dir)
             }
             Area::Dungeon { .. } => {
-                self.apply_dungeon_post_turn_effects_after_turn(turn_before, game_dir)
+                let outcome =
+                    self.apply_dungeon_post_turn_effects_after_turn(turn_before, game_dir);
+                // `stats-panel.md §2.2.1`: the dungeon's post-action redraw
+                // is an immediate whole-panel site.
+                self.repaint_stats_panel();
+                outcome
             }
         }?;
         if outcome.is_none() {

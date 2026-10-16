@@ -75,7 +75,11 @@ pub fn handle_play_key_input(
     // at all: the sites in `stats-panel.md §2.2`'s census are sites that
     // *changed* something. Without this test every command would refresh,
     // and the wishing well's debit - which its own arm declines to paint -
-    // would appear on the panel at the very next command anyway.
+    // would appear on the panel at the very next command anyway. The census'
+    // "whole panel" immediate sites (`§2.2.1`: U-Use after the pick, Stats
+    // browser exit, R Ready end, dungeon post-action redraw, combat entry
+    // and exit) repaint unconditionally at their own step instead, which is
+    // §2.4's "any inline repaint" that does reveal a stale debit.
     if crate::stats_panel::stats_panel_snapshot_of(state) != state.stats_panel_command_baseline {
         match state.stats_panel_command_refresh {
             crate::stats_panel::PanelRefreshMode::Immediate => state.repaint_stats_panel(),
@@ -470,6 +474,10 @@ fn handle_active_z_stats_key_input(
         .flatten();
     state.step_active_z_stats(key, suffix);
     if state.active_z_stats.is_none() {
+        // `stats-panel.md §2.2.1`: "Stats browser exit" is an immediate
+        // whole-panel site - it repaints from live state whether or not
+        // anything changed, which also corrects a stale panel.
+        state.repaint_stats_panel();
         finish_combat_modal_actor_action(state, combat_actor);
     }
     PlayInputDisposition::Continue
@@ -486,6 +494,9 @@ fn handle_active_ready_key_input(
         .flatten();
     state.step_active_ready(key, suffix);
     if state.active_ready.is_none() {
+        // `stats-panel.md §2.2.1`: "R Ready at its end" repaints the whole
+        // panel inline.
+        state.repaint_stats_panel();
         finish_combat_modal_actor_action(state, combat_actor);
     }
     PlayInputDisposition::Continue

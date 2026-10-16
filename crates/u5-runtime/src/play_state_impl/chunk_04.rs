@@ -560,6 +560,9 @@ impl PlayState {
                     )?;
                     return Ok(true);
                 };
+                // `stats-panel.md §2.2.1`: "U-Use, right after the item is
+                // picked and before its effect runs" repaints the whole panel.
+                self.repaint_stats_panel();
                 // The accepted row completes the open `Item: ` line before
                 // the handler runs; see [`Self::use_item_echo_family`].
                 let prompt = session.item_prompt_literal();

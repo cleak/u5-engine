@@ -2211,6 +2211,35 @@
     }
 
     #[test]
+    fn stats_browser_exit_repaints_a_stale_panel_from_live_state() {
+        // `stats-panel.md §2.2.1`: "Stats browser exit" is an immediate
+        // whole-panel site, and §2.4: a debit no site repaints (the wishing
+        // well) "stays invisible until some unrelated event repaints the
+        // panel: any inline repaint". (Audit A161.)
+        let mut state = test_state(open_grid(), 5, 5);
+        state.gold = 300;
+        state.repaint_stats_panel();
+        let stale = state.stats_panel.clone();
+        // A no-refresh debit, as the wishing well makes.
+        state.gold = 299;
+        assert_eq!(state.stats_panel, stale);
+
+        for key in ['Z', '\r', '\u{1b}'] {
+            assert_eq!(
+                handle_play_key_input(&mut state, key, "", Path::new("")).unwrap(),
+                PlayInputDisposition::Continue
+            );
+        }
+        assert!(state.active_z_stats.is_none());
+        assert!(state.active_party_selector.is_none());
+        assert_ne!(state.stats_panel, stale, "the browser exit repainted");
+        assert_eq!(
+            state.stats_panel,
+            crate::stats_panel::stats_panel_snapshot_of(&state)
+        );
+    }
+
+    #[test]
     fn shadowlord_midnight_reroll_skips_vanquished_and_samples_living_slots() {
         let mut state = world_state(open_world_grid(), 5, 5);
         state.clock = GameClock::with_date(139, 4, 5, 23, 59).unwrap();
