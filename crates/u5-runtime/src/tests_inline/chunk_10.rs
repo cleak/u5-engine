@@ -1132,14 +1132,40 @@ fn world_enter_underworld_dungeon_seed_respects_doom_exception() {
             .collect::<Vec<_>>(),
         vec!["Enter cave", "Attacked at entrance!"]
     );
+    // Without an arena bank no combat can be entered, so no stray
+    // ambush object is left behind.
     assert!(
         sealed_doom_state
             .active_objects
             .iter()
             .skip(1)
-            .any(|object| !object.is_empty()),
-        "sealed Doom entry must place its outdoor ambush object"
+            .all(|object| object.is_empty()),
     );
+    assert!(!sealed_doom_state.combat_active);
+
+    // `encounters.md §4` Scope: "the entrance-attack path forces the Shadow
+    // Lord family" into terrain-combat entry.
+    fs::write(
+        dir.join(BRIT_CBT_FILE),
+        synthetic_combat_arena_record().repeat(BRIT_CBT_RECORDS),
+    )
+    .unwrap();
+    let mut ambushed_state = world_state(doom_grid.clone(), 12, 34);
+    ambushed_state.special_items[SPECIAL_ITEM_SCEPTRE_LB_INDEX] = 1;
+    assert_eq!(
+        ambushed_state.enter_current_location(&dir).unwrap(),
+        MoveOutcome::Blocked
+    );
+    assert!(ambushed_state.combat_active);
+    // The Shadow Lord class is what reaches the sceptre-reclaim branch.
+    assert_eq!(ambushed_state.special_items[SPECIAL_ITEM_SCEPTRE_LB_INDEX], 0);
+    assert!(
+        ambushed_state
+            .message_entries()
+            .iter()
+            .any(|entry| entry.text.contains(SCEPTRE_RECLAIMED_LINE))
+    );
+    fs::remove_file(dir.join(BRIT_CBT_FILE)).unwrap();
 
     let mut doom_state = world_state(doom_grid, 12, 34);
     doom_state.shadowlord_hideouts = [SHADOWLORD_VANQUISHED; SHADOWLORD_COUNT];

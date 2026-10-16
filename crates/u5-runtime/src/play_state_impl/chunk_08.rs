@@ -1530,15 +1530,48 @@ impl PlayState {
         {
             self.advance_turn();
             self.message = format!("{}\nAttacked at entrance!", live_class.text());
-            // The public contract identifies this as an entrance ambush object,
-            // not an immediate scene transition. Reuse the native outdoor
-            // encounter placer so it obeys the live object table and terrain.
-            let _ = self.spawn_native_world_encounter(plane);
+            // `encounters.md §4` Scope: "the entrance-attack path forces the
+            // Shadow Lord family" before calling terrain-combat entry, the
+            // same shape as the bridge-toll Troll ambush.
+            self.enter_doom_entrance_ambush_combat(game_dir, plane)?;
             return Ok(MoveOutcome::Blocked);
         }
 
         self.emit_world_entry_narration(live_class, entry.proper_name);
         self.enter_world_target(game_dir, plane, entry.target, false)
+    }
+
+    /// `encounters.md §4` / `commands.md §5.5` Doom row: the entrance
+    /// ambush allocates an active object of the Shadow Lord family on the
+    /// party's cell and enters terrain combat with it, which selects that
+    /// family's arena and runs the sceptre-reclaim branch. Without the arena
+    /// bank there is no combat to enter, so the forced object is released.
+    fn enter_doom_entrance_ambush_combat(
+        &mut self,
+        game_dir: &Path,
+        plane: WorldPlane,
+    ) -> io::Result<()> {
+        let object = ActiveObject {
+            type_byte: SHADOWLORD_ACTOR_TILE,
+            tile: SHADOWLORD_ACTOR_TILE,
+            x: self.player.x,
+            y: self.player.y,
+            z: plane.save_floor(),
+            phase: 0,
+            aux1: 0,
+            aux3: 0,
+        };
+        let Some(slot) = self.allocate_active_object_slot(object) else {
+            return Ok(());
+        };
+        if !game_dir.join(BRIT_CBT_FILE).exists() {
+            self.free_active_object_slot(slot);
+            self.diagnostics
+                .push("Doom entrance ambush skipped: no BRIT.CBT arena bank".to_string());
+            return Ok(());
+        }
+        let _report = self.enter_terrain_combat_from_world_object(game_dir, plane, slot, object)?;
+        Ok(())
     }
 
     fn emit_world_entry_narration(
