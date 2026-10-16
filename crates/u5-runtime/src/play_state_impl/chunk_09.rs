@@ -4709,7 +4709,9 @@ impl PlayState {
             // committed step - a two-turn pacing gate applied to every class,
             // which is exactly the "do I move at all" test the section
             // denies. The class pacing that survives is the ship wind cadence
-            // handled above and the whirlpool parity inside the committer.
+            // handled above. The whirlpool parity bit is not modelled: the
+            // spec does not publish which byte/bit holds it or how the clear
+            // turn chooses between the random and directed steps.
             //
             // What survives of the old phase test is only the steady marker.
             // §8's phase table gives the all-ones nibble as "Steady; do not
@@ -5432,6 +5434,28 @@ impl PlayState {
         if object.z != plane.save_floor() || !is_outdoor_active_object_walker(object) {
             return false;
         }
+
+        // `active-objects.md §8` `0xFC` proximity-mask branch: at a listed
+        // wrapped `(dy, dx)` cell the slot's first auxiliary byte is
+        // incremented as an age counter. Both exits of that branch reach
+        // the same directed step planner ("one branch's two exits were found
+        // to reach the same movement call with a dead argument, so no
+        // behavioural difference should be modelled between them beyond the
+        // counter byte one of them increments"), so the counter is the only
+        // effect modelled here; movement continues below either way.
+        if object.type_byte & 0xfc == 0xfc {
+            let (dx, dy) = wrapped_deltas_to_player(
+                object.x as u8,
+                object.y as u8,
+                self.player.x as u8,
+                self.player.y as u8,
+            );
+            // Wrapped deltas are at most half the 256-cell torus.
+            if fc_sprite_proximity_mask_hits(dy.unsigned_abs() as u8, dx.unsigned_abs() as u8) {
+                self.active_objects[slot].aux1 = object.aux1.wrapping_add(1);
+            }
+        }
+        let object = self.active_objects[slot];
 
         for direction in self
             .outdoor_directed_step_directions(slot, object)

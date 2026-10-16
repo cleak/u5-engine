@@ -3300,6 +3300,30 @@
     }
 
     #[test]
+    fn outdoor_walker_shadowlord_proximity_mask_ages_its_first_aux_byte() {
+        // `active-objects.md §8`: a `0xFC` slot at a listed wrapped
+        // `(dy, dx)` cell increments its first auxiliary byte; unlisted
+        // cells fall through to ordinary directed movement untouched.
+        // Listed: (dy 0, dx 3), across the torus seam.
+        let mut state = world_state_with_walker(1, 40, 0xfc, 254, 40);
+        state.active_objects[1].aux1 = 4;
+        state.try_wander_active_object(1);
+        assert_eq!(state.active_objects[1].aux1, 5);
+        // Unlisted: (dy 0, dx 1) is adjacent, (dy 5, dx 0) is outside.
+        for (ox, oy) in [(2, 40), (1, 45)] {
+            let mut state = world_state_with_walker(1, 40, 0xfc, ox, oy);
+            state.active_objects[1].aux1 = 4;
+            state.try_wander_active_object(1);
+            assert_eq!(state.active_objects[1].aux1, 4, "({ox}, {oy})");
+        }
+        // Other classes never touch the byte.
+        let mut state = world_state_with_walker(1, 40, 0xf8, 254, 40);
+        state.active_objects[1].aux1 = 4;
+        state.try_wander_active_object(1);
+        assert_eq!(state.active_objects[1].aux1, 4);
+    }
+
+    #[test]
     fn outdoor_walker_chance_refusal_does_not_try_the_other_axis() {
         // The terrain chance gate is after validation. Once that gate refuses
         // the first valid directed candidate, the slot's attempt ends; only a
