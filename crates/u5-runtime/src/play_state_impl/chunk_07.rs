@@ -4133,7 +4133,12 @@ impl PlayState {
             let Some(direction) = self.contact_direction_to(npc_x, npc_y) else {
                 return Ok(None);
             };
-            let outcome = self.talk_direction_with_game_dir(direction, game_dir)?;
+            // `shops.md §2`: automatic entry "does not create an additional
+            // Talk command or schedule tick".
+            self.talk_entered_by_contact = true;
+            let outcome = self.talk_direction_with_game_dir(direction, game_dir);
+            self.talk_entered_by_contact = false;
+            let outcome = outcome?;
             self.push_diagnostic(format!(
                 "NPC slot {npc_slot} (type {type_byte}) opens conversation contact."
             ));

@@ -4047,10 +4047,9 @@ impl PlayState {
     /// open-for-business test is equality with an odd number: an even index
     /// fails both, an odd index other than one passes the parity gate and
     /// fails the equality. The parity clause is therefore stated rather than
-    /// coded, and this comment is the record of why. If the dispatcher ever
-    /// gains a side effect between the two - `conversation.md §2`'s
-    /// behaviour-4-to-1 waypoint rewrite is the candidate - the order becomes
-    /// observable and the gate has to be split.
+    /// coded, and this comment is the record of why. `conversation.md §2`'s
+    /// behaviour-4-to-1 waypoint rewrite runs before both gates
+    /// (`talk_stand_down_approach_behavior`), so it does not split them.
     ///
     /// A slot this engine cannot resolve - no runtime NPC at the cell, which
     /// the harness fixtures produce - is treated as open, so unit fixtures
@@ -4097,6 +4096,7 @@ impl PlayState {
                 self.message = format!("\n{refusal}");
                 return Ok(self.consume_ordinary_town_talk());
             }
+            self.talk_stand_down_approach_behavior(target_x, target_y);
             return Ok(self
                 .talk_alarm_sentinel_at(dialog_id, target_x, target_y)
                 .expect("published alarm sentinel was preclassified"));
@@ -4232,6 +4232,7 @@ impl PlayState {
             self.message = format!("\n{refusal}");
             return self.consume_ordinary_town_talk();
         }
+        let stood_down = self.talk_stand_down_approach_behavior(target_x, target_y);
         if let Some(outcome) = self.talk_alarm_sentinel_at(dialog_id, target_x, target_y) {
             return outcome;
         }
@@ -4292,7 +4293,7 @@ impl PlayState {
                 ) {
                     self.clear_active_effect_slot();
                 }
-                self.advance_turn();
+                self.advance_talk_turn();
                 // Both Talk entries go through one greeting builder now. This
                 // one is the dialogue-map path and carries no game directory,
                 // so it takes the builder's no-assets fallback; the
@@ -4315,14 +4316,9 @@ impl PlayState {
         //
         // The approach-and-converse waypoint behaviour is checked first: that
         // arm stands the guard down and dispatches on the dialog index instead.
-        if let Some(npc) = self.npc_at_current_floor(target_x, target_y)
+        if !stood_down
+            && let Some(npc) = self.npc_at_current_floor(target_x, target_y)
             && npc.type_byte == crate::tlk_control_codes::TALK_GUARD_SPRITE
-            && npc_ai_behavior(
-                npc.schedule
-                    .get(NPC_SCHEDULE_AI_OFFSET + npc.cached_wp)
-                    .copied()
-                    .unwrap_or_default(),
-            ) != Some(NpcAiBehavior::ApproachAndAttack)
             && !crate::talk_guard_sprite_dispatches(npc.cached_wp, dialog_id as u8)
         {
             self.message = crate::talk_non_speaker_refusal_for_sprite(Some(
@@ -4338,7 +4334,8 @@ impl PlayState {
         // original refuses the palace guard with `The guard offers` /
         // `no response!` where this engine opened the password demand.
         if dialog_id == BLACKTHORN_GUARD_DEMAND_DIALOG_ID {
-            return match self.begin_blackthorn_guard_demand(target_x, target_y, true, None) {
+            let consume_turn = !self.talk_entered_by_contact;
+            return match self.begin_blackthorn_guard_demand(target_x, target_y, consume_turn, None) {
                 Ok(outcome) => outcome,
                 Err(_) => MoveOutcome::Blocked,
             };
@@ -4384,7 +4381,7 @@ impl PlayState {
             .map(String::as_str)
             .unwrap_or("...");
 
-        self.advance_turn();
+        self.advance_talk_turn();
         if let Some(keyword) = keyword.and_then(non_empty_talk_keyword) {
             if fields.len() < 5 {
                 self.message = format!("Dialogue id {dialog_id} has no complete talk envelope."); // audit: not a player-facing line
@@ -4478,6 +4475,7 @@ impl PlayState {
             self.message = format!("\n{refusal}");
             return self.consume_ordinary_town_talk();
         }
+        let stood_down = self.talk_stand_down_approach_behavior(target_x, target_y);
         if let Some(outcome) = self.talk_alarm_sentinel_at(dialog_id, target_x, target_y) {
             return outcome;
         }
@@ -4528,7 +4526,7 @@ impl PlayState {
                 ) {
                     self.clear_active_effect_slot();
                 }
-                self.advance_turn();
+                self.advance_talk_turn();
                 let message = self.format_talk_shop_opening_message(
                     dialog_id,
                     &session,
@@ -4552,14 +4550,9 @@ impl PlayState {
         // (`qa/paired/blackthorn-palace-password.tsv`, beat `talk`): the
         // original refuses the palace guard where this engine opened the
         // password demand.
-        if let Some(npc) = self.npc_at_current_floor(target_x, target_y)
+        if !stood_down
+            && let Some(npc) = self.npc_at_current_floor(target_x, target_y)
             && npc.type_byte == crate::tlk_control_codes::TALK_GUARD_SPRITE
-            && npc_ai_behavior(
-                npc.schedule
-                    .get(NPC_SCHEDULE_AI_OFFSET + npc.cached_wp)
-                    .copied()
-                    .unwrap_or_default(),
-            ) != Some(NpcAiBehavior::ApproachAndAttack)
             && !crate::talk_guard_sprite_dispatches(npc.cached_wp, dialog_id as u8)
         {
             self.message = crate::talk_non_speaker_refusal_for_sprite(Some(
@@ -4568,7 +4561,8 @@ impl PlayState {
             return self.consume_ordinary_town_talk();
         }
         if dialog_id == BLACKTHORN_GUARD_DEMAND_DIALOG_ID {
-            return match self.begin_blackthorn_guard_demand(target_x, target_y, true, None) {
+            let consume_turn = !self.talk_entered_by_contact;
+            return match self.begin_blackthorn_guard_demand(target_x, target_y, consume_turn, None) {
                 Ok(outcome) => outcome,
                 Err(_) => MoveOutcome::Blocked,
             };
@@ -4611,7 +4605,7 @@ impl PlayState {
             .map(String::as_str)
             .unwrap_or("no description");
 
-        self.advance_turn();
+        self.advance_talk_turn();
 
         let scene_for_flags = match self.area {
             Area::Town { scene, .. } => Some(scene),
@@ -5770,8 +5764,43 @@ impl PlayState {
     /// stub, or liveness refusal therefore still consumes the town's
     /// one-minute turn and schedule pass.
     fn consume_ordinary_town_talk(&mut self) -> MoveOutcome {
-        self.advance_turn();
+        self.advance_talk_turn();
         MoveOutcome::Blocked
+    }
+
+    /// `shops.md §2` "Contact and turn accounting": "Explicit Talk, including
+    /// either refusal, has the ordinary acted outcome and receives normal town
+    /// clock/scheduler processing. Automatic entry is part of the triggering
+    /// command's existing post-action pass and does not create an additional
+    /// Talk command or schedule tick."
+    fn advance_talk_turn(&mut self) {
+        if !self.talk_entered_by_contact {
+            self.advance_turn();
+        }
+    }
+
+    /// `conversation.md §2` step 5 / `shops.md §2`: "the shared dispatcher
+    /// first changes behavior 4 at the cached reached waypoint to behavior
+    /// 1" - a persisted schedule edit made before the guard gate and either
+    /// shop refusal, on explicit Talk and automatic contact alike. Returns
+    /// whether the NPC was in behavior 4, which skips the guard-sprite gate.
+    fn talk_stand_down_approach_behavior(&mut self, target_x: usize, target_y: usize) -> bool {
+        let Some(slot) = self.npc_at_current_floor(target_x, target_y).map(|npc| npc.slot) else {
+            return false;
+        };
+        let Some(index) = self.npcs.iter().position(|npc| npc.slot == slot) else {
+            return false;
+        };
+        let ai_index = NPC_SCHEDULE_AI_OFFSET + self.npcs[index].cached_wp;
+        let Some(ai) = self.npcs[index].schedule.get_mut(ai_index) else {
+            return false;
+        };
+        if npc_ai_behavior(*ai) != Some(NpcAiBehavior::ApproachAndAttack) {
+            return false;
+        }
+        *ai = 1;
+        self.record_town_npc_mutation(index);
+        true
     }
 
     fn talk_alarm_sentinel_at(
@@ -5798,7 +5827,7 @@ impl PlayState {
             }
             _ => return None,
         };
-        self.advance_turn();
+        self.advance_talk_turn();
         self.message = response.to_string();
         Some(MoveOutcome::Talked)
     }
