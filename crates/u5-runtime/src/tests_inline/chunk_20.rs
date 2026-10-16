@@ -236,14 +236,33 @@ fn open_facing_rewrites_door_and_auto_closes_after_four_turns() {
 }
 
 #[test]
-fn open_facing_non_door_is_not_a_turn() {
+fn open_facing_non_door_commits_one_turn() {
+    // `doors-and-z-transitions.md §4`: "Every resolved non-dungeon Open
+    // attempt returns the dispatcher's ordinary committed-action status,
+    // including the already-open, too-heavy, locked, and generic refusal
+    // paths."
     let mut state = test_state(open_grid(), 1, 1);
     state.player.facing = Direction::East;
 
     assert_eq!(state.open_facing(), MoveOutcome::Blocked);
-    assert_eq!(state.turn, 0);
+    assert_eq!(state.turn, 1);
     assert_eq!(state.grid[32 + 2], 16);
     assert_eq!(state.message, "Nothing to open!");
+}
+
+#[test]
+fn world_open_with_no_container_commits_one_turn() {
+    // `doors-and-z-transitions.md §4`: the generic refusal of the
+    // non-dungeon Open still "returns the dispatcher's ordinary
+    // committed-action status" on the overworld.
+    let mut state = world_state(vec![0x05; WORLD_SIDE * WORLD_SIDE], 10, 10);
+
+    assert_eq!(
+        state.open_direction_with_game_dir(Direction::East, None).unwrap(),
+        MoveOutcome::Blocked
+    );
+    assert_eq!(state.message, "Nothing to open!");
+    assert_eq!(state.turn, 1);
 }
 
 #[test]
@@ -314,7 +333,10 @@ fn jimmy_wrong_tile_reports_no_lock_and_commits_turn() {
 }
 
 #[test]
-fn open_facing_tracked_open_door_consumes_turn_without_resetting_timer() {
+fn open_facing_cleared_door_cell_is_not_already_open() {
+    // `doors-and-z-transitions.md §2`: "Open alone treats exact tile `0xAF`
+    // as already open"; a door Open cleared is the ordinary `0x44` cell and
+    // falls through to the generic refusal, still committing the turn.
     let mut grid = open_grid();
     grid[32 + 2] = TOWN_DOOR_PLAIN_UNLOCKED_TILE;
     let mut state = test_state(grid, 1, 1);
@@ -324,7 +346,7 @@ fn open_facing_tracked_open_door_consumes_turn_without_resetting_timer() {
     assert_eq!(state.open_facing(), MoveOutcome::DoorOpened);
     state.visibility_dirty = false;
 
-    assert_eq!(state.open_facing(), MoveOutcome::DoorOpened);
+    assert_eq!(state.open_facing(), MoveOutcome::Blocked);
 
     assert_eq!(state.turn, 2);
     assert_eq!(state.grid[32 + 2], TOWN_DOOR_CLEARED_TILE);
@@ -337,7 +359,7 @@ fn open_facing_tracked_open_door_consumes_turn_without_resetting_timer() {
             turns_remaining: 3,
         })
     );
-    assert_eq!(state.message, "It's open!");
+    assert_eq!(state.message, "Nothing to open!");
     assert!(!state.visibility_dirty);
 }
 
@@ -380,7 +402,7 @@ fn open_facing_runs_auto_close_before_reopening_expiring_door() {
 }
 
 #[test]
-fn open_facing_acknowledges_first_open_door_after_second_door_overwrites_timer() {
+fn open_facing_first_open_door_after_second_door_overwrites_timer_is_plain_floor() {
     let mut grid = open_grid();
     grid[32 + 2] = TOWN_DOOR_PLAIN_UNLOCKED_TILE;
     grid[2 * 32 + 1] = TOWN_DOOR_WINDOWED_UNLOCKED_TILE;
@@ -404,7 +426,7 @@ fn open_facing_acknowledges_first_open_door_after_second_door_overwrites_timer()
     );
 
     state.player.facing = Direction::East;
-    assert_eq!(state.open_facing(), MoveOutcome::DoorOpened);
+    assert_eq!(state.open_facing(), MoveOutcome::Blocked);
 
     assert_eq!(state.turn, 3);
     assert_eq!(state.grid[32 + 2], TOWN_DOOR_CLEARED_TILE);
@@ -418,11 +440,11 @@ fn open_facing_acknowledges_first_open_door_after_second_door_overwrites_timer()
             turns_remaining: 3,
         })
     );
-    assert_eq!(state.message, "It's open!");
+    assert_eq!(state.message, "Nothing to open!");
 }
 
 #[test]
-fn town_open_locked_sidecar_refuses_without_turn() {
+fn town_open_locked_sidecar_refuses_and_commits_turn() {
     let dir = debug_game_dir();
     fs::write(dir.join(TOWN_LOCK_TABLE_FILE), "CASTLE:0 0 2 1 185 184\n").unwrap();
     let mut grid = open_grid();
@@ -437,7 +459,7 @@ fn town_open_locked_sidecar_refuses_without_turn() {
 
     assert_eq!(state.message, "Locked!");
     assert_eq!(state.grid[32 + 2], TOWN_DOOR_PLAIN_LOCKED_TILE);
-    assert_eq!(state.turn, 0);
+    assert_eq!(state.turn, 1);
     assert_eq!(state.door_tracker, None);
     let _ = fs::remove_dir_all(dir);
 }
@@ -1211,7 +1233,8 @@ fn trapped_town_container_cannot_spring_twice() {
     assert_eq!(state.open_facing(), MoveOutcome::Blocked);
     assert_eq!(state.message, "Nothing to open!");
     assert_eq!(state.party[0].hp, hp_after_first);
-    assert_eq!(state.turn, turn_after_first);
+    // `doors-and-z-transitions.md §4`: the generic refusal still commits.
+    assert_eq!(state.turn, turn_after_first + 1);
 }
 
 #[test]

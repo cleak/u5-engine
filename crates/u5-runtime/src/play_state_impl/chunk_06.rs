@@ -271,6 +271,10 @@ impl PlayState {
                         SurfaceChestVerb::Open,
                     ));
                 }
+                // `doors-and-z-transitions.md §4`: "Every resolved
+                // non-dungeon Open attempt returns the dispatcher's ordinary
+                // committed-action status", the generic refusal included.
+                self.advance_turn();
                 self.message = "Nothing to open!".to_string();
                 return Ok(MoveOutcome::Blocked);
             }
@@ -280,6 +284,7 @@ impl PlayState {
         let tx = self.player.x as isize + dx;
         let ty = self.player.y as isize + dy;
         if !(0..32).contains(&tx) || !(0..32).contains(&ty) {
+            self.advance_turn_without_door_tick();
             self.message = "Nothing to open!".to_string();
             return Ok(MoveOutcome::Blocked);
         }
@@ -287,10 +292,10 @@ impl PlayState {
         let ty = ty as usize;
         let idx = ty * 32 + tx;
         let tile = self.grid[idx];
-        if tile == TOWN_OPEN_ALREADY_OPEN_TILE
-            || (tile == TOWN_DOOR_CLEARED_TILE
-                && self.is_recorded_open_town_door(scene, floor, tx, ty))
-        {
+        // `doors-and-z-transitions.md §2`: "Open alone treats exact tile
+        // `0xAF` as already open". A door Open cleared is the ordinary `0x44`
+        // floor byte and falls through the cascade like any other cell.
+        if tile == TOWN_OPEN_ALREADY_OPEN_TILE {
             self.advance_turn_without_door_tick();
             self.message = "It's open!".to_string();
             return Ok(MoveOutcome::DoorOpened);
@@ -312,6 +317,9 @@ impl PlayState {
                 .town_lock_at(game_dir, scene, floor, tx, ty, tile)?
                 .is_some()
         {
+            // `doors-and-z-transitions.md §4`: the locked refusal commits the
+            // action like every other resolved non-dungeon Open.
+            self.advance_turn_without_door_tick();
             self.message = "Locked!".to_string();
             return Ok(MoveOutcome::Blocked);
         }
@@ -319,6 +327,7 @@ impl PlayState {
             return Ok(self.begin_surface_object_chest_interaction(tx, ty, SurfaceChestVerb::Open));
         }
         if !openable_town_door(tile) {
+            self.advance_turn_without_door_tick();
             self.message = "Nothing to open!".to_string();
             return Ok(MoveOutcome::Blocked);
         }
