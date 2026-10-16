@@ -2635,10 +2635,11 @@ impl PlayState {
     ) -> bool {
         match entry.rule {
             HiddenTreasureRule::OneShot => !self.fixed_hidden_treasure_found(entry.record),
+            // `hidden-treasures.md §2` record 13: the only gate is the Keys
+            // counter plus the NPC test; no found-bitmap bit is read or set,
+            // so "spending every key opens it again".
             HiddenTreasureRule::KeyNpcGated => {
-                self.keys == 0
-                    && !self.fixed_hidden_treasure_found(entry.record)
-                    && !self.fixed_hidden_treasure_target_has_npc(x, y)
+                self.keys == 0 && !self.fixed_hidden_treasure_target_has_npc(x, y)
             }
             HiddenTreasureRule::Daily => self.fixed_hidden_treasure_daily_day != self.clock.day,
             // `hidden-treasures.md §2` record 15: the gate field is "the
@@ -2669,7 +2670,9 @@ impl PlayState {
             // field is `equipment_stock[entry.state]`, which the Get
             // inventory transfer increments.
             HiddenTreasureRule::SingleUseNpcGated => {}
-            _ => self.set_fixed_hidden_treasure_found(entry.record),
+            // `hidden-treasures.md §2`: record 13 sets no found-bitmap bit.
+            HiddenTreasureRule::KeyNpcGated => {}
+            HiddenTreasureRule::OneShot => self.set_fixed_hidden_treasure_found(entry.record),
         }
     }
 
@@ -4834,6 +4837,31 @@ mod hidden_treasure_record_15_spec_tests {
         // "a party that discards or loses its Glass Sword makes the record
         // available again - that is original behaviour, not a defect."
         state.equipment_stock[EQUIPMENT_ID_GLASS_SWORD] = 0;
+        assert!(state.fixed_hidden_treasure_rule_allows(entry, entry.x, entry.y));
+    }
+
+    /// `hidden-treasures.md §2` record 13: "None of the three sets a
+    /// found-bitmap bit … spending every key opens it again."
+    #[test]
+    fn record_13_sets_no_found_bit_and_reopens_when_keys_are_spent() {
+        let entry = *FIXED_HIDDEN_TREASURES
+            .iter()
+            .find(|entry| entry.record == 13)
+            .expect("record 13 is published in hidden-treasures.md §3");
+        let mut state = world_state(open_world_grid(), entry.x, entry.y);
+        state.keys = 0;
+        assert!(state.fixed_hidden_treasure_rule_allows(entry, entry.x, entry.y));
+
+        state.mark_fixed_hidden_treasure_found(entry);
+        assert!(!state.fixed_hidden_treasure_found(entry.record));
+
+        state.keys = 1;
+        assert!(!state.fixed_hidden_treasure_rule_allows(entry, entry.x, entry.y));
+        state.keys = 0;
+        assert!(state.fixed_hidden_treasure_rule_allows(entry, entry.x, entry.y));
+
+        // Even a stale bit (e.g. from an older save) does not close it.
+        state.set_fixed_hidden_treasure_found(entry.record);
         assert!(state.fixed_hidden_treasure_rule_allows(entry, entry.x, entry.y));
     }
 }

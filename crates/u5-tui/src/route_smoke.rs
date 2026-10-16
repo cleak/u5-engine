@@ -6762,8 +6762,9 @@ fn validate_route_smoke_case_state(
             }
         }
         "blackthorn-fixed-hidden-zero-key-search" => {
+            // `hidden-treasures.md §2`: record 13 sets no found-bitmap bit.
             if state.keys != 0
-                || !state.fixed_hidden_treasure_found(13)
+                || state.fixed_hidden_treasure_found(13)
                 || !state
                     .active_objects
                     .iter()
