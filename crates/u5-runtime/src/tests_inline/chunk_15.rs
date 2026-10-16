@@ -1526,6 +1526,10 @@
             unreachable!()
         };
         state.load_scheduled_npcs(&[idle(), keeper(4)]);
+        // `npc-schedules.md §9.2` (audit A133): the contact event is the one
+        // the schedule pass records, so run the pass that produces it first.
+        state.advance_npc_schedules();
+        assert!(state.pending_town_npc_contact.is_some());
         let clock_before = state.clock;
         let outcome = state.apply_town_npc_contact_event(scene, floor, &dir).unwrap();
         assert!(outcome.is_some());

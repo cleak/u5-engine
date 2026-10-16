@@ -3307,13 +3307,17 @@
             // A stored West "facing" must not be replayed.
             state.active_objects[1].phase = 0x60;
             state.prng_state = 0x1357 ^ seed.wrapping_mul(0x9e37);
+            // `active-objects.md §8`: the planner first "rolls a fair coin to
+            // decide which axis to attempt first" (audit A139), then the
+            // fallback's cardinal roll.
             let mut expected_prng = state.prng_state;
+            let _axis_coin = u5_prng_range_u16(&mut expected_prng, 0, 1);
             let roll = u5_prng_range_u16(&mut expected_prng, 0, 3) as usize;
             let expected = directions[roll];
 
             let moved = state.try_wander_active_object(1);
 
-            assert_eq!(state.prng_state, expected_prng, "exactly one draw");
+            assert_eq!(state.prng_state, expected_prng, "the axis coin and one cardinal draw");
             assert_eq!(state.active_objects[1].phase, 0x60);
             if expected == Direction::East {
                 assert!(!moved);
