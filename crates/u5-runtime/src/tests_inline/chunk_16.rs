@@ -1723,6 +1723,11 @@ BRITANNIA 11 21
             handle_play_key_input(&mut state, 'E', "", &dir).unwrap(),
             PlayInputDisposition::Continue
         );
+        // `karma.md §8.2`: the reader prints one record per key; key 5 is
+        // the lead-in plus runic `41`.
+        for _ in 0..5 {
+            press_codex_key(&mut state, &dir);
+        }
 
         let page = state
             .message_entries()
@@ -1774,6 +1779,10 @@ BRITANNIA 11 21
             state.shrine_ordained_mask = ShrineVirtue::Honesty.bit();
             state.shrine_codex_mask = codex_mask;
             handle_play_key_input(&mut state, 'E', "", &dir).unwrap();
+            // `karma.md §8.2`: drive the stepped reader to its finish.
+            while state.codex_presentation_steps != 0 {
+                press_codex_key(&mut state, &dir);
+            }
 
             let entries = state.message_entries();
             let start = entries
