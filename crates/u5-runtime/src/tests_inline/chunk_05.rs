@@ -2111,9 +2111,13 @@ fn ship_fire_requires_ship_and_inline_broadside_direction_without_turn() {
     };
     ship.sync_player_object();
 
-    assert_eq!(ship.fire_ship_broadside(None), MoveOutcome::Blocked);
-    assert!(ship.message.contains("which direction"));
+    // `vehicles.md §7` step 2: the pre-action gate is the shared direction
+    // prompt; no shot and no turn until it yields a direction.
+    assert_eq!(ship.fire_ship_broadside(None), MoveOutcome::Observed);
+    assert!(ship.active_direction_prompt.is_some());
+    assert_eq!(ship.message, "Fire-");
     assert_eq!(ship.turn, 0);
+    ship.active_direction_prompt = None;
 
     assert_eq!(
         ship.fire_ship_broadside(Some(Direction::NorthEast)),
@@ -2177,8 +2181,14 @@ fn ship_fire_broadside_removes_first_target_in_three_cell_trace() {
 
     assert_eq!(state.turn, 1);
     assert_eq!(state.clock, GameClock::new(12, 2).unwrap());
-    assert!(state.message.contains("BOOOM!"));
-    assert!(state.message.contains("object tile 192"));
+    // `vehicles.md §7`: no engineering report; the hit is presentation.
+    assert!(!state.message.contains("BOOOM!"));
+    assert!(
+        state
+            .diagnostics
+            .iter()
+            .any(|line| line.contains("hit object tile 192"))
+    );
     assert_eq!(state.active_objects.len(), 3);
     assert!(state.active_objects[1].is_empty());
     assert!(state.world_object_at(10, 8).is_none());
@@ -2340,7 +2350,13 @@ fn ship_fire_broadside_miss_still_consumes_turn() {
 
     assert_eq!(state.turn, 1);
     assert_eq!(state.clock, GameClock::new(12, 2).unwrap());
-    assert!(state.message.contains("no target in range"));
+    assert!(state.message.is_empty());
+    assert!(
+        state
+            .diagnostics
+            .iter()
+            .any(|line| line.contains("with no target; projectile ends at (10, 13)"))
+    );
 }
 
 #[test]

@@ -2706,6 +2706,16 @@ impl PlayState {
         TownFireTarget::None
     }
 
+    /// `vehicles.md §7` overworld F-Fire ship-broadside helper.
+    ///
+    /// Step 2's shared pre-action gate is the shared direction prompt
+    /// (`doors-and-z-transitions.md §9`, `RETRACTIONS.md` R470): a call
+    /// without a direction opens that prompt, and its cancel arm aborts
+    /// without a shot. The helper prints no narration of its own after the
+    /// direction echo; steps 5 and 7 are presentation only (an impact on a
+    /// hit, the projectile flown to the endpoint on a miss), so a shot
+    /// requests a viewport repaint and records the traced endpoint as a
+    /// diagnostic rather than writing message text.
     pub fn fire_ship_broadside(&mut self, direction: Option<Direction>) -> MoveOutcome {
         if !matches!(self.area, Area::World { .. }) {
             self.message = "What?".to_string();
@@ -2716,9 +2726,7 @@ impl PlayState {
             return MoveOutcome::Blocked;
         }
         let Some(direction) = direction else {
-            self.message =
-                "Fire- which direction? Use F plus a direction in this harness.".to_string();
-            return MoveOutcome::Blocked;
+            return self.start_fire_direction_prompt();
         };
         let Some(ship_facing) = self.player.facing.cardinal_facing_index() else {
             self.message = "Fire broadsides only!".to_string();
@@ -2736,35 +2744,37 @@ impl PlayState {
         let hit = self
             .ship_broadside_target_slot(direction)
             .map(|slot| (slot, self.active_objects[slot]));
-        let mut hit_report = None;
         if let Some((slot, object)) = hit {
             let damage = self.ship_broadside_damage_roll();
             if let Some(remaining) = ship_broadside_apply_damage(object.aux1, damage) {
                 if let Some(target) = self.active_objects.get_mut(slot) {
                     target.aux1 = remaining;
-                    hit_report = Some(format!(
-                        "BOOOM! Ship broadside hit object tile {} at ({}, {}) for {damage} durability damage; durability now {remaining}.",
-                        object.tile, object.x, object.y
-                    ));
                 }
             } else {
                 self.free_active_object_slot(slot);
-                hit_report = Some(format!(
-                    "BOOOM! Ship broadside hit object tile {} at ({}, {}) for {damage} durability damage; target destroyed.",
-                    object.tile, object.x, object.y
-                ));
             }
-            self.mark_visibility_dirty();
-        }
-        self.advance_turn();
-        self.message = if let Some(report) = hit_report {
-            report
+            // §7 step 5: the impact is animated at the struck object.
+            self.diagnostics.push(format!(
+                "ship broadside fired {} and hit object tile {} at ({}, {}) for {damage}",
+                direction.name(),
+                object.tile,
+                object.x,
+                object.y
+            ));
         } else {
-            format!(
-                "BOOOM! Ship broadside fired {} with no target in range.",
+            // §7 step 7: with no target the projectile still flies to the
+            // end of the up-to-three-cell line.
+            let (dx, dy) = direction.delta();
+            let reach = SHIP_BROADSIDE_RANGE_CELLS as isize;
+            let x = (self.player.x as isize + dx * reach).rem_euclid(WORLD_SIDE as isize);
+            let y = (self.player.y as isize + dy * reach).rem_euclid(WORLD_SIDE as isize);
+            self.diagnostics.push(format!(
+                "ship broadside fired {} with no target; projectile ends at ({x}, {y})",
                 direction.name()
-            )
-        };
+            ));
+        }
+        self.mark_visibility_dirty();
+        self.advance_turn();
         MoveOutcome::Fired
     }
 

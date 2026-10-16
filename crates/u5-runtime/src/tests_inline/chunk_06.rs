@@ -177,7 +177,7 @@
         assert_eq!(state.prng_state, expected_prng);
         assert_eq!(state.turn, 1);
         assert!(state.visibility_dirty);
-        assert!(state.message.contains("durability now"));
+        assert!(!state.message.contains("BOOOM"));
         assert!(!state.message.contains("out of scope"));
     }
 
@@ -207,7 +207,7 @@
 
         assert!(state.active_objects[1].is_empty());
         assert_eq!(state.turn, 1);
-        assert!(state.message.contains("target destroyed"));
+        assert!(!state.message.contains("BOOOM"));
         assert!(!state.message.contains("out of scope"));
     }
 
@@ -394,7 +394,7 @@
         assert_eq!(state.active_objects[1].aux1, 7);
         assert!(!state.active_objects[1].is_empty());
         assert_eq!(state.turn, 1);
-        assert!(state.message.contains("no target in range"));
+        assert!(state.diagnostics.iter().any(|line| line.contains("with no target")));
     }
 
     #[test]

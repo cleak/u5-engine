@@ -6988,7 +6988,7 @@ fn validate_route_smoke_case_state(
         }
         "ship-broadside-fire-route" => {
             if !matches!(state.player.transport, TransportState::Ship { .. })
-                || !state.message.contains("BOOOM! Ship broadside fired")
+                || !state.diagnostics.iter().any(|line| line.starts_with("ship broadside fired"))
             {
                 return Err(io::Error::other(format!(
                     "route smoke `{case_name}` did not fire the ship broadside"
