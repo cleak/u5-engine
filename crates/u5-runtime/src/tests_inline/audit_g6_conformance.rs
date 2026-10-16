@@ -223,3 +223,17 @@ fn a127_per_step_gate_refuses_any_occupant_but_the_workspace_keeps_the_cutoff() 
     state.relink_npc_objects();
     assert!(state.npc_can_step_toward(0, 2, 1, 0, 20, 20));
 }
+
+#[test]
+fn a131_bfs_expands_neighbours_in_the_cyclic_code_order() {
+    // npc-schedules.md §8.4: four directions "in cyclic order" over codes
+    // 1=W, 2=S, 3=E, 4=N, starting from the dequeued cell's current
+    // direction (the start cell is seeded north). From (5,5) to (6,6) the
+    // south neighbour is dequeued before the east one, and from south the
+    // cycle tries east next, so the route is south-then-east.
+    let state = g6_town_with(vec![g6_npc(1, 5, 5, 0, (6, 6, 0))], 20, 20);
+    assert_eq!(
+        state.npc_path_route(0, (5, 5), (6, 6), 0),
+        Some(vec![NPC_PATH_DIR_SOUTH, NPC_PATH_DIR_EAST])
+    );
+}

@@ -1508,11 +1508,14 @@ impl PlayState {
         }
         let mut prev = vec![None::<(usize, usize)>; 1024];
         let mut seen = vec![false; 1024];
+        // `npc-schedules.md §8.2`/§8.4: each visited cell carries its
+        // inbound direction code, and the start cell is seeded "north".
+        let mut inbound = vec![NPC_PATH_DIR_NORTH; 1024];
         let mut q = VecDeque::new();
         q.push_back(start);
         seen[start.1 * 32 + start.0] = true;
         while let Some((x, y)) = q.pop_front() {
-            for (nx, ny) in neighbors(x, y) {
+            for (code, (nx, ny)) in npc_bfs_neighbors((x, y), inbound[y * 32 + x]) {
                 let idx = ny * 32 + nx;
                 if seen[idx]
                     || !self.npc_workspace_cell_open(npc_index, nx, ny, floor, target.0, target.1)
@@ -1520,6 +1523,7 @@ impl PlayState {
                     continue;
                 }
                 seen[idx] = true;
+                inbound[idx] = code;
                 prev[idx] = Some((x, y));
                 if (nx, ny) == target {
                     let mut cells = vec![(nx, ny)];
@@ -1671,11 +1675,14 @@ impl PlayState {
         }
         let mut prev = vec![None::<(usize, usize)>; 1024];
         let mut seen = vec![false; 1024];
+        // `npc-schedules.md §8.2`/§8.4: each visited cell carries its
+        // inbound direction code, and the start cell is seeded "north".
+        let mut inbound = vec![NPC_PATH_DIR_NORTH; 1024];
         let mut q = VecDeque::new();
         q.push_back(start);
         seen[start.1 * 32 + start.0] = true;
         while let Some((x, y)) = q.pop_front() {
-            for (nx, ny) in neighbors(x, y) {
+            for (code, (nx, ny)) in npc_bfs_neighbors((x, y), inbound[y * 32 + x]) {
                 let idx = ny * 32 + nx;
                 if seen[idx]
                     || !self.npc_can_step_toward_floor_link_marker(
@@ -1690,6 +1697,7 @@ impl PlayState {
                     continue;
                 }
                 seen[idx] = true;
+                inbound[idx] = code;
                 prev[idx] = Some((x, y));
                 if npc_floor_link_arrival_accepts(self.grid[idx], marker) {
                     let mut cells = vec![(nx, ny)];
@@ -1835,6 +1843,21 @@ pub(crate) fn town_npc_contact_dialogue_allows(behavior: NpcAiBehavior, dialog_i
     } else {
         behavior.raises_arrest_or_conflict_contact()
     }
+}
+
+/// `npc-schedules.md §8.4`: "For each of four cardinal directions in cyclic
+/// order" over the §8.2 codes `1` west, `2` south, `3` east, `4` north. The
+/// cycle starts at the dequeued cell's "current direction" - the inbound code
+/// in its high nibble (the start cell's seed is north).
+fn npc_bfs_neighbors(
+    cell: (usize, usize),
+    current: u8,
+) -> impl Iterator<Item = (u8, (usize, usize))> {
+    let first = current.clamp(NPC_PATH_DIR_WEST, NPC_PATH_DIR_NORTH) - 1;
+    (0..4u8).filter_map(move |k| {
+        let code = (first + k) % 4 + 1;
+        npc_step_from_direction_code(cell, code).map(|next| (code, next))
+    })
 }
 
 fn npc_direction_code_between(from: (usize, usize), to: (usize, usize)) -> Option<u8> {
