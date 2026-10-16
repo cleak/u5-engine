@@ -1358,12 +1358,19 @@
         assert!(state.active_yes_no_prompt.is_some());
         assert_eq!(state.message, SAVE_PROMPT_MESSAGE);
 
+        // `save-load.md §5.2` step 1: "Only `Y` and `N` are accepted" -
+        // Escape is not a decline; the prompt stays open.
+        let _ = handle_play_key_input(&mut state, '\u{1b}', "", &dir).unwrap();
+        assert!(state.active_yes_no_prompt.is_some());
+        assert_eq!(state.message, SAVE_PROMPT_MESSAGE);
+
         assert_eq!(
             handle_play_key_input(&mut state, 'N', "", &dir).unwrap(),
             PlayInputDisposition::Continue
         );
         assert!(state.active_yes_no_prompt.is_none());
-        assert_eq!(state.message, "No.");
+        // "On `N`, it prints `No`" on the prompt's own row.
+        assert_eq!(state.message, format!("{SAVE_PROMPT_MESSAGE} {SAVE_PROMPT_NO_REPLY}"));
         assert!(!dir.join("SAVED.OOL").exists());
         assert_eq!(state.turn, 0);
 
@@ -1383,7 +1390,7 @@
             PlayInputDisposition::Continue
         );
         assert!(dungeon.active_yes_no_prompt.is_none());
-        assert_eq!(dungeon.message, "No.");
+        assert_eq!(dungeon.message, format!("{SAVE_PROMPT_MESSAGE} {SAVE_PROMPT_NO_REPLY}"));
         assert!(!dir.join("SAVED.OOL").exists());
         let _ = fs::remove_dir_all(dir);
     }
@@ -2335,6 +2342,35 @@
     }
 
     #[test]
+    fn stats_browser_exit_repaints_a_stale_panel_from_live_state() {
+        // `stats-panel.md §2.2.1`: "Stats browser exit" is an immediate
+        // whole-panel site, and §2.4: a debit no site repaints (the wishing
+        // well) "stays invisible until some unrelated event repaints the
+        // panel: any inline repaint". (Audit A161.)
+        let mut state = test_state(open_grid(), 5, 5);
+        state.gold = 300;
+        state.repaint_stats_panel();
+        let stale = state.stats_panel.clone();
+        // A no-refresh debit, as the wishing well makes.
+        state.gold = 299;
+        assert_eq!(state.stats_panel, stale);
+
+        for key in ['Z', '\r', '\u{1b}'] {
+            assert_eq!(
+                handle_play_key_input(&mut state, key, "", Path::new("")).unwrap(),
+                PlayInputDisposition::Continue
+            );
+        }
+        assert!(state.active_z_stats.is_none());
+        assert!(state.active_party_selector.is_none());
+        assert_ne!(state.stats_panel, stale, "the browser exit repainted");
+        assert_eq!(
+            state.stats_panel,
+            crate::stats_panel::stats_panel_snapshot_of(&state)
+        );
+    }
+
+    #[test]
     fn shadowlord_midnight_reroll_skips_vanquished_and_samples_living_slots() {
         let mut state = world_state(open_world_grid(), 5, 5);
         state.clock = GameClock::with_date(139, 4, 5, 23, 59).unwrap();
@@ -2577,15 +2613,18 @@
                 level: 3,
             },
         ];
+        // commands.md §6: the refusal names the leader's actual name, not
+        // a fixed `Avatar`.
+        state.party_names = vec![*b"Maria\0\0\0\0", *b"Iolo\0\0\0\0\0", *b"Dupre\0\0\0\0"];
         let original = state.party.clone();
 
         assert_eq!(state.new_order_from_suffix("12"), MoveOutcome::Blocked);
-        assert_eq!(state.message, NEW_ORDER_LEADER_REFUSAL);
+        assert_eq!(state.message, "Maria must lead!");
         assert_eq!(state.party, original);
         assert_eq!(state.turn, 0);
 
         assert_eq!(state.new_order_from_suffix("31"), MoveOutcome::Blocked);
-        assert_eq!(state.message, NEW_ORDER_LEADER_REFUSAL);
+        assert_eq!(state.message, "Maria must lead!");
         assert_eq!(state.party, original);
         assert_eq!(state.turn, 0);
     }
@@ -2661,7 +2700,10 @@
         assert_eq!(state.turn, 0);
 
         assert_eq!(state.new_order_from_suffix("11"), MoveOutcome::Blocked);
-        assert_eq!(state.message, NEW_ORDER_LEADER_REFUSAL);
+        assert_eq!(
+            state.message,
+            new_order_leader_refusal(&state.party_member_display_name(0))
+        );
         assert_eq!(state.party, original);
         assert_eq!(state.turn, 0);
 

@@ -434,6 +434,20 @@ impl PlayState {
     /// one of the seventy-four the census puts on the immediate side.
     pub fn repaint_stats_panel(&mut self) {
         self.stats_panel = crate::stats_panel::stats_panel_snapshot_of(self);
+        // `stats-panel.md §2.1`/§6: in this one state every repaint lifts the
+        // message window's painted history by one row, the message cursor
+        // unchanged (`display-driver-abi.md §9.5`).
+        if crate::stats_panel::stats_panel_repaint_requests_strip_scroll(self) {
+            self.flush_message_slot();
+            if !self.message_row_open_mid_line {
+                // Cursor at column 0 of a fresh row: the lift leaves one
+                // blank row between the history and the cursor.
+                self.push_explicit_blank_message_entry();
+            } else if let Some(open) = self.message_transcript.last().map(|entry| entry.text.clone())
+            {
+                let _ = self.break_open_prompt_row_for_strip_scroll(&open);
+            }
+        }
     }
 
     /// Raise §2.2's deferred request. A raise "does not depend on the change
@@ -999,8 +1013,12 @@ impl PlayState {
                     // prompt row the pick completed, so it opens with a
                     // feed and one blank row stands between them. A
                     // capture reads `Swap Avatar`, a blank row, then
-                    // `Avatar must lead!` (`cleak/u5-engine#5`).
-                    self.message = format!("\n{NEW_ORDER_LEADER_REFUSAL}");
+                    // `Avatar must lead!` (`cleak/u5-engine#5`). The name
+                    // is the leader's actual name (`commands.md §6`).
+                    self.message = format!(
+                        "\n{}",
+                        new_order_leader_refusal(&self.party_member_display_name(0))
+                    );
                 } else {
                     self.start_party_selector(PartySelectorTarget::NewOrder { first: Some(index) });
                 }
@@ -1011,8 +1029,12 @@ impl PlayState {
                     // prompt row the pick completed, so it opens with a
                     // feed and one blank row stands between them. A
                     // capture reads `Swap Avatar`, a blank row, then
-                    // `Avatar must lead!` (`cleak/u5-engine#5`).
-                    self.message = format!("\n{NEW_ORDER_LEADER_REFUSAL}");
+                    // `Avatar must lead!` (`cleak/u5-engine#5`). The name
+                    // is the leader's actual name (`commands.md §6`).
+                    self.message = format!(
+                        "\n{}",
+                        new_order_leader_refusal(&self.party_member_display_name(0))
+                    );
                 } else {
                     // The result completes the `with ` line with `!`; the
                     // shared swap routine moves the whole records and
@@ -1361,15 +1383,13 @@ impl PlayState {
             match session.kind {
                 CastFollowupKind::Direction { pass_allowed } => {
                     if ch == '\u{1b}' {
-                        // `magic.md §8`: the four shared directed utility
-                        // helpers cannot be escaped after their resource
-                        // gates. They keep polling until a cardinal direction
-                        // or Space/Pass is accepted.
-                        if matches!(session.spell_code.as_str(), "AY" | "AS" | "AEP" | "EIP") {
-                            continue;
-                        }
-                        self.message = "None!".to_string();
-                        return Ok(None);
+                        // `input.md §11`: the shared spell `Direction-`
+                        // prompt takes a cardinal or Space; "Other keys are
+                        // ignored and the prompt reads again", and Escape is
+                        // not its cancel key. `magic.md §8`: it "cannot be
+                        // escaped except by a cardinal or Space" - for every
+                        // caller, not only the four directed utility helpers.
+                        continue;
                     }
                     if ch == ' ' {
                         if pass_allowed {
@@ -2510,6 +2530,32 @@ impl PlayState {
         MoveOutcome::Observed
     }
 
+    /// `commands.md §3` and §7: the `G`, `S`, `O` and `J` letters discard
+    /// their handler's result and report the default "acted", so the mode
+    /// loop runs its per-turn epilogue after every exit - refusals, misses
+    /// and cancels included ("the world-mode dispatcher reports the normal
+    /// committed-action result after every Jimmy exit"). Called once the
+    /// command has fully returned (no sub-prompt left open); charges the one
+    /// turn only when the handler did not already take it. The town arm
+    /// matches the measured cancelled-Search turn below. Dungeon loops are
+    /// excluded: they advance their own clock (`commands.md §3`).
+    pub fn charge_tile_command_acted_exit(&mut self, turn_before: u64) {
+        if self.turn != turn_before
+            || self.combat_active
+            || self.active_direction_prompt.is_some()
+            || self.active_party_selector.is_some()
+            || self.active_jimmy.is_some()
+            || self.active_surface_chest.is_some()
+        {
+            return;
+        }
+        match self.area {
+            Area::World { .. } => self.advance_turn(),
+            Area::Town { .. } => self.advance_turn_without_door_tick(),
+            Area::Dungeon { .. } => {}
+        }
+    }
+
     pub fn start_search_direction_prompt(&mut self) -> MoveOutcome {
         self.active_direction_prompt =
             Some(DirectionPromptSession::new(DirectionPromptKind::Search));
@@ -3200,9 +3246,15 @@ impl PlayState {
                     };
                 }
                 // §7.1 step 3: "only `Y` and `N` are accepted and every
-                // other key is ignored (**there is no abort**)" - unlike
-                // every other kind here, Escape does not stand in for `N`.
-                '\u{1b}' if matches!(session.kind, YesNoPromptKind::TrollBridgeToll { .. }) => {}
+                // other key is ignored (**there is no abort**)" - Escape
+                // does not stand in for `N`. `save-load.md §5.2` step 1
+                // gives the save confirm the same "Only `Y` and `N` are
+                // accepted" rule.
+                '\u{1b}'
+                    if matches!(
+                        session.kind,
+                        YesNoPromptKind::TrollBridgeToll { .. } | YesNoPromptKind::SaveGame
+                    ) => {}
                 'N' | '\u{1b}' => {
                     if let YesNoPromptKind::DungeonFountainDrink { party_index, focus } =
                         session.kind
@@ -3230,6 +3282,8 @@ impl PlayState {
                         // shares the combat entry with.
                         self.commit_prompt_reply(TROLL_BRIDGE_TOLL_QUESTION, "N");
                         self.enter_troll_bridge_ambush_combat(game_dir)?;
+                    } else if matches!(session.kind, YesNoPromptKind::SaveGame) {
+                        let _ = self.save_game_command(game_dir, Some(false))?;
                     } else {
                         self.message = "No.".to_string();
                     }
@@ -4648,7 +4702,7 @@ impl PlayState {
         // refuses because the leader must remain first, and it returns
         // without consuming a turn.
         if first == 0 || second == 0 {
-            self.message = NEW_ORDER_LEADER_REFUSAL.to_string();
+            self.message = new_order_leader_refusal(&self.party_member_display_name(0));
             return MoveOutcome::Blocked;
         }
         // commands.md §6: picking the same nonzero slot twice is accepted as

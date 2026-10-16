@@ -372,6 +372,17 @@ pub struct PlayState {
     /// under a blank. One-shot: set when that Return closes the prompt,
     /// consumed by the next command echo.
     pub surface_command_row_follows_history: bool,
+    /// `text-output.md §10.2`'s overworld prompt gate, stored inverted: set
+    /// means the one-byte flag is **clear**, so the next overworld prompt
+    /// emits neither its leading line feed nor its end-cap marker. "It is
+    /// cleared by **any direction taken while the party is aboard a ship** -
+    /// whether the requested direction repeats the heading the ship already
+    /// carries or turns it to a new one - so exactly one following prompt
+    /// pair is suppressed. On foot the flag is never touched." The helper
+    /// re-arms it as soon as it has tested it, and "the overworld's
+    /// per-entry initialiser sets the flag **unconditionally**"
+    /// (`RETRACTIONS.md` R497).
+    pub overworld_prompt_pair_suppressed: bool,
     /// Narration this presentation is printing on a timer rather than all at
     /// once. `main-loop.md §9`: "presentations, cutscene beats and paced turn
     /// loops call [the world tick] directly", so a handler with waits between
@@ -943,6 +954,11 @@ pub struct MessageEntry {
     /// marker is drawn on the row the banner's own newline opened and no
     /// second line feed - and therefore no derived blank row - precedes it.
     pub continues_open_row: bool,
+    /// Whether this echo's prompt emitted neither the leading line feed nor
+    /// the end-cap marker: `text-output.md §10.2`'s overworld gate after a
+    /// direction taken aboard a ship. The echo starts in column 24 on the row
+    /// directly beneath the history, with no derived blank above it.
+    pub prompt_pair_suppressed: bool,
     /// Whether this entry leaves its row open: written without a closing
     /// line feed, so the next cycle's leading feed closes the row rather
     /// than deriving `text-output.md §10.4`'s blank under it.

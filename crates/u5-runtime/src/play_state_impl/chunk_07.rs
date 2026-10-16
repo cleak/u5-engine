@@ -989,17 +989,22 @@ impl PlayState {
         &mut self,
         game_dir: Option<&Path>,
     ) -> io::Result<MoveOutcome> {
-        if matches!(self.area, Area::Dungeon { .. }) {
-            self.message = "Not here!".to_string();
-            return Ok(MoveOutcome::Blocked);
-        }
         let transport = self.player.transport;
         if transport.is_foot() {
             // `commands.md §5.3`: `X-it ` is an operand-follows echo, and the
             // on-foot refusal completes that same line (`cleak/u5-spec#194`).
+            // `commands.md §7`: this is also the dungeon answer - the party
+            // is always on foot underground.
             if !self.complete_open_direction_echo("X-it ", XIT_ON_FOOT_REFUSAL) {
                 self.message = format!("X-it {XIT_ON_FOOT_REFUSAL}");
             }
+            return Ok(MoveOutcome::Blocked);
+        }
+        // Engine guard for a mounted transport value underground, which
+        // shipped play never produces; vehicle landing below is not written
+        // for dungeon cells.
+        if matches!(self.area, Area::Dungeon { .. }) {
+            self.message = "Not here!".to_string();
             return Ok(MoveOutcome::Blocked);
         }
         if matches!(
@@ -3283,7 +3288,12 @@ impl PlayState {
                 self.apply_town_post_turn_effects_after_turn(turn_before, game_dir)
             }
             Area::Dungeon { .. } => {
-                self.apply_dungeon_post_turn_effects_after_turn(turn_before, game_dir)
+                let outcome =
+                    self.apply_dungeon_post_turn_effects_after_turn(turn_before, game_dir);
+                // `stats-panel.md §2.2.1`: the dungeon's post-action redraw
+                // is an immediate whole-panel site.
+                self.repaint_stats_panel();
+                outcome
             }
         }?;
         if outcome.is_none() {

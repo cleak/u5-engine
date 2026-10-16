@@ -221,9 +221,16 @@ impl PlayState {
                 self.message = "Funny, no response!".to_string();
                 handled!();
             }
-            'b' | 'x' => {
+            'b' => {
                 self.message = "Not here!".to_string();
                 handled!();
+            }
+            // `commands.md §7` / `active-objects.md §10`: X-it reaches its
+            // ordinary handler from a dungeon scene; the party is on foot
+            // underground, so it refuses with the shared `X-it what?`
+            // (`commands.md §5.8`). The dungeon-specific refusal never prints.
+            'x' => {
+                handled!(self.exit_vehicle_with_game_dir(Some(game_dir))?);
             }
             // `commands.md §5.3`: "`Enter ` is an operand-follows echo; with
             // nothing to enter the line completes with `what?`". The original

@@ -1335,7 +1335,9 @@ pub fn paint_stats_panel_text_window(
         (date_row, state.stats_panel.date_row.clone()),
     ] {
         system.set_active_cursor(0, row);
-        for byte in line.trim_end().bytes().take(STATS_PANEL_WIDTH) {
+        // `stats-panel.md §6`: only the ship variant's three-digit hull is
+        // longer than the field, and it writes column 39 (`§3`).
+        for byte in line.trim_end().bytes().take(STATS_PANEL_WIDTH + 1) {
             system.emit_byte(byte);
         }
     }
@@ -1618,7 +1620,28 @@ fn render_stats_panel_counter_row(state: &PlayState) -> String {
                 .saturating_sub(food.chars().count())
         }
     };
-    fixed_panel_line(&format!("{food}{}{middle}", " ".repeat(padding)))
+    let line = format!("{food}{}{middle}", " ".repeat(padding));
+    // `stats-panel.md §6`, "Three-digit hulls run past the field": the ship
+    // variant has no clamp, so a hull of 100 or more puts its third digit in
+    // column 39, the stats window's last writable cell (§3's exception).
+    if line.chars().count() > STATS_PANEL_WIDTH {
+        return truncate_ascii_chars(&line, STATS_PANEL_WIDTH + 1);
+    }
+    fixed_panel_line(&line)
+}
+
+/// `stats-panel.md §2.1` "The one arm that does request a scroll": a panel
+/// repaint in a non-combat scene, with a ship-family transport marker and a
+/// hull of 100 or more, writes column 39, wraps the stats cursor, and the
+/// date row's leading feed then requests a strip scroll that lifts the
+/// message window's painted rows by one while the message cursor stays put.
+pub fn stats_panel_repaint_requests_strip_scroll(state: &PlayState) -> bool {
+    !state.combat_active
+        && matches!(
+            stats_panel_middle_counter(state.player.transport.save_marker()),
+            StatsPanelMiddleCounter::ShipHullCondition
+        )
+        && current_ship_hull(state).is_some_and(|hull| hull >= 100)
 }
 
 fn render_stats_panel_middle_counter(state: &PlayState) -> String {

@@ -17455,6 +17455,9 @@ fn render_integrated_status_framebuffer(
             || u5_runtime::selector_prompt_row_is_continuation(&display_state)
             || u5_runtime::dungeon_fountain_prompt_row_is_continuation(&display_state)
             || display_state.defeated_party_row_is_continuation()
+            // `text-output.md §10.2`: the overworld prompt after a shipboard
+            // direction emits neither feed nor end cap.
+            || u5_runtime::overworld_prompt_pair_is_suppressed(&display_state)
         {
             u5_runtime::LiveRowKind::Continuation
         } else if u5_runtime::endgame_page_row_is_key_wait(&display_state) {
@@ -17806,6 +17809,14 @@ fn handle_visual_line_key(
     match u5_runtime::free_text_input_action(byte) {
         u5_runtime::FreeTextInputAction::Cancel => {
             input_line.clear();
+            // `input.md §8`: in the free-text reader (conversation keyword,
+            // ASK-WHO and Yell) "Escape clears the whole current line but
+            // does **not** submit or terminate it; the reader continues
+            // until Enter is pressed". Prompts that do allow cancellation
+            // (for example Mix's `For what spell?`) still receive it.
+            if state.active_conversation.is_some() || state.active_yell.is_some() {
+                return Ok(Some(PlayInputDisposition::Continue));
+            }
             handle_play_key_input(state, '\u{1b}', "", game_dir).map(Some)
         }
         u5_runtime::FreeTextInputAction::Submit => {
@@ -25395,6 +25406,42 @@ mod tests {
         .unwrap();
 
         assert!(input_line.is_empty());
+        assert!(transcript_contains(&state, "mend"));
+    }
+
+    #[test]
+    fn visual_line_input_escape_clears_the_keyword_line_without_submitting() {
+        // `input.md §8`: Escape clears the whole current line but does not
+        // submit or end the prompt; Enter then submits what remains.
+        // (Audit A097.)
+        let mut state = test_state(open_grid(), 1, 1);
+        install_test_conversation(&mut state);
+        let mut input_line = String::new();
+
+        for key in [KeyCode::KeyJ, KeyCode::KeyO] {
+            handle_visual_line_key(&mut state, &mut input_line, key, false, false, Path::new(""))
+                .unwrap();
+        }
+        let entries_before = state.message_entries().len();
+        let message_before = state.message.clone();
+        handle_visual_line_key(
+            &mut state,
+            &mut input_line,
+            KeyCode::Escape,
+            false,
+            false,
+            Path::new(""),
+        )
+        .unwrap();
+        assert!(input_line.is_empty());
+        assert!(state.active_conversation.is_some());
+        assert_eq!(state.message_entries().len(), entries_before, "nothing submitted");
+        assert_eq!(state.message, message_before);
+
+        for key in [KeyCode::KeyJ, KeyCode::KeyO, KeyCode::KeyB, KeyCode::Enter] {
+            handle_visual_line_key(&mut state, &mut input_line, key, false, false, Path::new(""))
+                .unwrap();
+        }
         assert!(transcript_contains(&state, "mend"));
     }
 

@@ -2839,6 +2839,42 @@
         assert_eq!(column(gold_row, 38), '6');
     }
 
+    #[test]
+    fn three_digit_hull_writes_column_39_and_each_repaint_lifts_the_message_strip() {
+        // `stats-panel.md §6` "Three-digit hulls run past the field" and
+        // §2.1 "The one arm that does request a scroll" (audit A162).
+        let mut state = test_state(open_grid(), 1, 1);
+        state.food = 123;
+        state.player.transport = TransportState::Ship {
+            type_byte: TRANSPORT_MARKER_SHIP_FURLED_FIRST,
+            tile: FIRST_PLAYABLE_FRIGATE_TILE,
+            sails_hoisted: false,
+            hull: 150,
+            skiffs: 1,
+        };
+        state.repaint_stats_panel();
+        assert_eq!(state.stats_panel.counter_row, "F:123   Ship:150");
+        assert_eq!(state.stats_panel.counter_row.chars().count(), STATS_PANEL_WIDTH + 1);
+
+        state.emit_message_line("Hello");
+        let entries = state.message_entries().len();
+        state.repaint_stats_panel();
+        assert_eq!(state.message_entries().len(), entries + 1, "one strip scroll");
+        state.repaint_stats_panel();
+        assert_eq!(state.message_entries().len(), entries + 2, "one per repaint");
+
+        // Below 100, or in combat: no scroll.
+        for (hull, combat) in [(99, false), (150, true)] {
+            if let TransportState::Ship { hull: h, .. } = &mut state.player.transport {
+                *h = hull;
+            }
+            state.combat_active = combat;
+            let entries = state.message_entries().len();
+            state.repaint_stats_panel();
+            assert_eq!(state.message_entries().len(), entries, "hull {hull} combat {combat}");
+        }
+    }
+
     /// `stats-panel.md §4.1`: "The marker is drawn on the row whose slot
     /// equals the resident active-player selector, with one exception:
     /// if that member's status byte is `'D'` (dead) or `'S'` (sleeping),

@@ -1588,7 +1588,8 @@ fn top_down_q_yes_routes_to_save_and_q_no_cancels() {
             .handle_top_down_key_with_inline('Q', &dir, None, None, Some(false), None)
             .unwrap()
     );
-    assert_eq!(state.message, "No.");
+    // `save-load.md §5.2` step 1: "On `N`, it prints `No`".
+    assert_eq!(state.message, SAVE_PROMPT_NO_REPLY);
     assert!(!dir.join("SAVED.OOL").exists());
 
     assert!(

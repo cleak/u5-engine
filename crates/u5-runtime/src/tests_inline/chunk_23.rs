@@ -13007,6 +13007,15 @@ fn combat_input_dispatch_empty_yell_commits_the_pending_actor_action() {
     assert!(state.active_yell.is_some());
     assert_eq!(state.pending_combat_actor_slot, Some(0));
 
+    // `input.md §8`: Escape in the free-text reader neither submits nor
+    // ends the prompt (audit A097).
+    assert_eq!(
+        handle_play_key_input(&mut state, '\u{1b}', "", game_dir).unwrap(),
+        PlayInputDisposition::Continue
+    );
+    assert!(state.active_yell.is_some());
+    assert_eq!(state.active_effect_counter, 3);
+
     assert_eq!(
         handle_play_key_input(&mut state, '\r', "", game_dir).unwrap(),
         PlayInputDisposition::Continue
@@ -21325,4 +21334,77 @@ fn dungeon_room_special_ids_7_8_13_15_draw_eight_ways_for_one_through_eight() {
         assert!(!seen[0]);
         assert!(seen[1..=8].iter().all(|&hit| hit), "id {id}: {seen:?}");
     }
+}
+
+/// `text-output.md §10.2` (`RETRACTIONS.md` R497): the overworld prompt flag
+/// "is cleared by **any direction taken while the party is aboard a ship** -
+/// whether the requested direction repeats the heading the ship already
+/// carries or turns it to a new one - so exactly one following prompt pair is
+/// suppressed. On foot the flag is never touched."
+#[test]
+fn overworld_prompt_pair_is_suppressed_once_after_a_shipboard_direction() {
+    fn frigate_state(sails_hoisted: bool) -> PlayState {
+        let mut state = world_state(vec![1; WORLD_CELLS], 100, 100);
+        state.player.transport = TransportState::Ship {
+            type_byte: 168,
+            tile: 168,
+            sails_hoisted,
+            hull: 100,
+            skiffs: 2,
+        };
+        state.sync_player_object();
+        state
+    }
+
+    // Aboard a furled frigate: the first echo is an ordinary command row, the
+    // echo after the direction loses both the feed and the end cap.
+    let mut state = frigate_state(false);
+    assert!(!overworld_prompt_pair_is_suppressed(&state));
+    handle_play_key_input(&mut state, 'w', "", Path::new("")).unwrap();
+    assert!(
+        overworld_prompt_pair_is_suppressed(&state),
+        "a direction aboard a ship clears the flag"
+    );
+    handle_play_key_input(&mut state, ' ', "", Path::new("")).unwrap();
+    let echoes: Vec<_> = state
+        .message_entries()
+        .iter()
+        .filter(|entry| entry.is_command_echo)
+        .map(|entry| (entry.text.clone(), entry.prompt_pair_suppressed))
+        .collect();
+    assert_eq!(echoes[0], ("North".to_string(), false));
+    assert!(echoes[1].0.starts_with("Pass"), "{echoes:?}");
+    assert!(echoes[1].1, "the prompt after the direction is suppressed");
+    // Pass is not a direction, and the helper re-armed the flag on its test.
+    assert!(!overworld_prompt_pair_is_suppressed(&state));
+    let log = message_log_from_entries(state.message_entries(), |text| Some(text.to_string()));
+    let kinds: Vec<_> = log.lines().iter().map(|line| line.kind).collect();
+    assert!(
+        !kinds.contains(&MessageLineKind::Blank),
+        "no derived blank between the two echoes: {kinds:?}"
+    );
+    assert_eq!(
+        kinds.iter().filter(|kind| kind.prefixed()).count(),
+        1,
+        "only the first echo carries the end cap: {kinds:?}"
+    );
+
+    // Under sail, a pressed direction that turns the ship also clears it.
+    let mut sailing = frigate_state(true);
+    sailing.sail_cached_direction = Some(Direction::South);
+    handle_play_key_input(&mut sailing, 'w', "", Path::new("")).unwrap();
+    assert!(overworld_prompt_pair_is_suppressed(&sailing));
+    // Overworld entry arms the flag unconditionally.
+    sailing.arm_overworld_prompt_pair_on_entry();
+    assert!(!overworld_prompt_pair_is_suppressed(&sailing));
+
+    // On foot the flag is never touched.
+    let mut walking = world_state(open_world_grid(), 100, 100);
+    handle_play_key_input(&mut walking, 'w', "", Path::new("")).unwrap();
+    handle_play_key_input(&mut walking, ' ', "", Path::new("")).unwrap();
+    assert!(!overworld_prompt_pair_is_suppressed(&walking));
+    assert!(walking
+        .message_entries()
+        .iter()
+        .all(|entry| !entry.prompt_pair_suppressed));
 }

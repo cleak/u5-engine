@@ -4340,6 +4340,9 @@ impl PlayState {
         self.combat_ambush_reveals = reveals;
         self.combat_active = true;
         self.combat_action_result = 0;
+        // `stats-panel.md §2.2.1`: combat entry is an immediate whole-panel
+        // site.
+        self.repaint_stats_panel();
         self.pending_combat_terrain_reveals.clear();
         // `combat.md §5`/`§5.3` step 3 (`RETRACTIONS.md` R307): the
         // encounter-entry ring hooks belong to **seating**, not to the
@@ -4425,6 +4428,9 @@ impl PlayState {
         self.combat_active = false;
         self.combat_action_result = 0;
         self.combat_frame_snapshot = None;
+        // `stats-panel.md §2.2.1`: combat exit is an immediate whole-panel
+        // site.
+        self.repaint_stats_panel();
         self.pending_combat_actor_slot = None;
         self.next_combat_actor_slot = 0;
         if let Some(slot) = pending_terrain_trigger {
@@ -4544,6 +4550,8 @@ impl PlayState {
             self.combat_actors = [CombatActorDescriptor::empty(); COMBAT_ACTOR_SLOTS];
             self.combat_ambush_reveals = [None; COMBAT_AMBUSH_REVEAL_SLOT_COUNT];
             self.mark_visibility_dirty();
+            // `stats-panel.md §2.2.1`: combat exit repaints the whole panel.
+            self.repaint_stats_panel();
             false
         };
         // `combat.md §5.3`, closing line: "One consumer outside this
@@ -7757,13 +7765,17 @@ impl PlayState {
     }
 
     pub fn apply_combat_escape_cleanup(&mut self) -> CombatEscapeCleanupApplication {
+        // `stats-panel.md §2.2.1` row 13: the Escape key in combat is a
+        // deferred site "on both the refused and the accepted outcome", and
+        // §2.2 "A raise does not depend on the change surviving" - so the
+        // request is raised directly, not through the end-of-command
+        // changed-counter test, which a refusal would never pass.
+        self.request_stats_panel_refresh();
+        self.stats_panel_command_refresh = crate::stats_panel::PanelRefreshMode::Deferred;
         let decision = self.combat_escape_cleanup_decision();
         if decision != CombatEscapeCleanupDecision::Accepted {
             return CombatEscapeCleanupApplication::refused(decision);
         }
-        // `stats-panel.md §2.2.1` row 13: the Escape key's accepted
-        // outcome is a deferred site.
-        self.stats_panel_command_refresh = crate::stats_panel::PanelRefreshMode::Deferred;
 
         let mut cleared_descriptor_slots = 0u8;
         for slot in 0..COMBAT_ACTOR_SLOTS {

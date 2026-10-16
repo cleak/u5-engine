@@ -75,7 +75,11 @@ pub fn handle_play_key_input(
     // at all: the sites in `stats-panel.md §2.2`'s census are sites that
     // *changed* something. Without this test every command would refresh,
     // and the wishing well's debit - which its own arm declines to paint -
-    // would appear on the panel at the very next command anyway.
+    // would appear on the panel at the very next command anyway. The census'
+    // "whole panel" immediate sites (`§2.2.1`: U-Use after the pick, Stats
+    // browser exit, R Ready end, dungeon post-action redraw, combat entry
+    // and exit) repaint unconditionally at their own step instead, which is
+    // §2.4's "any inline repaint" that does reveal a stale debit.
     if crate::stats_panel::stats_panel_snapshot_of(state) != state.stats_panel_command_baseline {
         match state.stats_panel_command_refresh {
             crate::stats_panel::PanelRefreshMode::Immediate => state.repaint_stats_panel(),
@@ -212,7 +216,19 @@ fn handle_play_key_input_inner(
         return handle_active_use_key_input(state, key, suffix, game_dir);
     }
     if state.active_party_selector.is_some() {
+        let search_turn_before = state
+            .active_party_selector
+            .is_some_and(|session| matches!(session.target, PartySelectorTarget::Search { .. }))
+            .then_some(state.turn);
         state.step_active_party_selector_with_game_dir(key, suffix, game_dir);
+        // `commands.md §3`/§7: a Search that reached the acting-member
+        // picker reports "acted" whether the pick searched or cancelled.
+        if let Some(turn_before) = search_turn_before {
+            if state.active_party_selector.is_none() {
+                state.charge_tile_command_acted_exit(turn_before);
+                state.apply_top_down_post_turn_effects_after_turn(turn_before, game_dir)?;
+            }
+        }
         return Ok(PlayInputDisposition::Continue);
     }
     if state.active_z_stats.is_some() {
@@ -467,6 +483,10 @@ fn handle_active_z_stats_key_input(
         .flatten();
     state.step_active_z_stats(key, suffix);
     if state.active_z_stats.is_none() {
+        // `stats-panel.md §2.2.1`: "Stats browser exit" is an immediate
+        // whole-panel site - it repaints from live state whether or not
+        // anything changed, which also corrects a stale panel.
+        state.repaint_stats_panel();
         finish_combat_modal_actor_action(state, combat_actor);
     }
     PlayInputDisposition::Continue
@@ -483,6 +503,9 @@ fn handle_active_ready_key_input(
         .flatten();
     state.step_active_ready(key, suffix);
     if state.active_ready.is_none() {
+        // `stats-panel.md §2.2.1`: "R Ready at its end" repaints the whole
+        // panel inline.
+        state.repaint_stats_panel();
         finish_combat_modal_actor_action(state, combat_actor);
     }
     PlayInputDisposition::Continue
@@ -581,6 +604,8 @@ fn handle_active_jimmy_key_input(
 ) -> io::Result<PlayInputDisposition> {
     let turn_before = state.turn;
     if let Some(outcome) = state.step_active_jimmy(key, suffix, game_dir)? {
+        // `commands.md §7`: Jimmy reports "acted" after every exit.
+        state.charge_tile_command_acted_exit(turn_before);
         state.apply_post_turn_effects_after_outcome(turn_before, game_dir, outcome)?;
     }
     Ok(PlayInputDisposition::Continue)
@@ -594,6 +619,9 @@ fn handle_active_surface_chest_key_input(
 ) -> io::Result<PlayInputDisposition> {
     let turn_before = state.turn;
     if let Some(outcome) = state.step_active_surface_chest(key, suffix)? {
+        // `commands.md §3`/§7: the G/S/O/J letter that opened this picker
+        // reports "acted" on every exit.
+        state.charge_tile_command_acted_exit(turn_before);
         state.apply_post_turn_effects_after_outcome(turn_before, game_dir, outcome)?;
     }
     Ok(PlayInputDisposition::Continue)
@@ -645,16 +673,22 @@ fn handle_active_yell_key_input(
             state.active_yell = None;
             return Ok(PlayInputDisposition::Continue);
         };
+        // `input.md §8`: Escape in the free-text reader clears the line but
+        // neither submits nor ends the prompt - the same rule the
+        // exploration Yell prompt follows (`step_active_yell`).
+        if key == '\u{1b}' && suffix.is_empty() {
+            return Ok(PlayInputDisposition::Continue);
+        }
         let Some(mut session) = state.active_yell.take() else {
             return Ok(PlayInputDisposition::Continue);
         };
         let mut line = String::new();
-        if !matches!(key, '\r' | '\n' | '\u{1b}') {
+        if !matches!(key, '\r' | '\n') {
             line.push(key);
         }
         line.push_str(suffix);
         session.buffer.push_str(&line);
-        state.message = if key == '\u{1b}' || session.buffer.trim().is_empty() {
+        state.message = if session.buffer.trim().is_empty() {
             YELL_NOTHING_SAID_MESSAGE.to_string()
         } else {
             // `combat.md §8`, the `Y` row: nonempty combat Yell "reaches the
@@ -709,7 +743,20 @@ fn handle_active_direction_prompt_key_input(
         .active_direction_prompt
         .as_ref()
         .is_some_and(|session| matches!(session.kind, DirectionPromptKind::CombatKlimb { .. }));
+    let tile_command = state.active_direction_prompt.as_ref().is_some_and(|session| {
+        matches!(
+            session.kind,
+            DirectionPromptKind::Get
+                | DirectionPromptKind::Jimmy
+                | DirectionPromptKind::Open
+                | DirectionPromptKind::Search
+        )
+    });
     if let Some(outcome) = state.step_active_direction_prompt(key, suffix, game_dir)? {
+        if tile_command {
+            // `commands.md §3`/§7: G/S/O/J report "acted" on every exit.
+            state.charge_tile_command_acted_exit(turn_before);
+        }
         if let Some(actor_slot) = combat_push_actor {
             if combat_klimb && matches!(outcome, MoveOutcome::Blocked) {
                 // `combat.md §8`: blocked Klimb is one of the parser's
@@ -4701,6 +4748,20 @@ fn handle_active_conversation_key_input(
     // `conversation.md §7.6`: "a line containing only a space is *not*
     // empty", and `input.md §8` accepts space as printable input, so only
     // the Enter that ends the line is dropped; the typed bytes are kept.
+    //
+    // `input.md §8`: in the free-text reader (keyword and ASK-WHO prompts,
+    // `conversation.md`) "Escape clears the whole current line but does
+    // **not** submit or terminate it". The shell clears its own line
+    // buffer; a bare Escape reaching here is never a typed keyword.
+    if key == '\u{1b}'
+        && suffix.is_empty()
+        && state
+            .active_conversation
+            .as_ref()
+            .is_some_and(|session| !session.prompt_message().is_empty())
+    {
+        return PlayInputDisposition::Continue;
+    }
     let mut line = String::new();
     if !matches!(key, '\r' | '\n') {
         line.push(key);

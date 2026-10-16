@@ -178,7 +178,16 @@ impl PlayState {
                 Ok(MoveOutcome::PromptDeclined)
             }
             Some(false) => {
-                self.message = "No.".to_string();
+                // `save-load.md §5.2` step 1: "On `N`, it prints `No`" and
+                // returns. Like the `Yes` reply it lands on the still-open
+                // `Save game?` line.
+                if !self.complete_open_direction_echo(
+                    SAVE_PROMPT_MESSAGE,
+                    &format!(" {SAVE_PROMPT_NO_REPLY}"),
+                ) && !self.complete_open_direction_echo(SAVE_PROMPT_LINE, SAVE_PROMPT_NO_REPLY)
+                {
+                    self.message = SAVE_PROMPT_NO_REPLY.to_string();
+                }
                 Ok(MoveOutcome::PromptDeclined)
             }
             Some(true) => {
@@ -889,6 +898,7 @@ impl PlayState {
             view_overlay_row_opened_by_result: false,
             view_overlay_idle_polls: 0,
             surface_command_row_follows_history: false,
+            overworld_prompt_pair_suppressed: false,
             staged_narration: Default::default(),
             pending_text_hold: None,
             pending_blackthorn_rescue: None,
@@ -1294,6 +1304,7 @@ impl PlayState {
             view_overlay_row_opened_by_result: false,
             view_overlay_idle_polls: 0,
             surface_command_row_follows_history: false,
+            overworld_prompt_pair_suppressed: false,
             staged_narration: Default::default(),
             pending_text_hold: None,
             pending_blackthorn_rescue: None,
@@ -1710,6 +1721,7 @@ impl PlayState {
             view_overlay_row_opened_by_result: false,
             view_overlay_idle_polls: 0,
             surface_command_row_follows_history: false,
+            overworld_prompt_pair_suppressed: false,
             staged_narration: Default::default(),
             pending_text_hold: None,
             pending_blackthorn_rescue: None,
@@ -1862,6 +1874,9 @@ impl PlayState {
         if !direction.is_cardinal() && !matches!(self.area, Area::Dungeon { .. }) {
             return Ok(MoveOutcome::Blocked);
         }
+        // `text-output.md §10.2`: any direction taken aboard a ship, keyed or
+        // synthesised, turning or repeating, clears the overworld prompt flag.
+        self.note_overworld_direction_taken();
         self.player.facing = direction;
         let previous_avatar_tile = self.player.transport.avatar_tile();
         self.player.transport = self.player.transport.with_facing(direction);

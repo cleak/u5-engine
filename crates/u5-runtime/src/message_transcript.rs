@@ -128,6 +128,7 @@ impl PlayState {
             glyphs,
             is_command_echo,
             continues_open_row,
+            prompt_pair_suppressed: false,
             leaves_row_open,
             centered,
             explicit_blank,
@@ -629,6 +630,7 @@ impl PlayState {
                 glyphs: Vec::new(),
                 is_command_echo: false,
                 continues_open_row: false,
+                prompt_pair_suppressed: false,
                 leaves_row_open: false,
                 centered: false,
                 explicit_blank: true,
@@ -643,6 +645,7 @@ impl PlayState {
             glyphs: ordinary_glyphs_from_engine_text(&indent),
             is_command_echo: false,
             continues_open_row: false,
+            prompt_pair_suppressed: false,
             leaves_row_open: false,
             centered: false,
             explicit_blank: false,
@@ -927,6 +930,14 @@ impl PlayState {
         let text = echo.text.to_string();
         let glyphs = ordinary_glyphs_from_engine_text(&text);
         self.append_transcript_entry_on_row(text, glyphs, true, false, false, continues_open_row);
+        // `text-output.md §10.2`: the overworld helper tests its prompt flag
+        // and "re-arms the flag as soon as it has tested it", so exactly one
+        // prompt after a shipboard direction loses its feed and marker.
+        if self.take_overworld_prompt_pair_suppression() {
+            if let Some(entry) = self.message_transcript.last_mut() {
+                entry.prompt_pair_suppressed = true;
+            }
+        }
         self.message_transcript_revision = self.message_transcript_revision.wrapping_add(1);
         self.pending_command_echo = Some(PendingCommandEcho {
             echo,
@@ -949,6 +960,33 @@ impl PlayState {
         self.begin_command_echo(echo);
     }
 
+    /// `text-output.md §10.2` / `overworld.md §5` step 3: "A direction taken
+    /// while the party is aboard a ship - pressed or synthesised, repeating
+    /// the current heading or turning to a new one - also clears the one-byte
+    /// flag that gates the next prompt's line feed and marker". On foot (and
+    /// off the overworld) the flag is never touched.
+    pub fn note_overworld_direction_taken(&mut self) {
+        if matches!(self.area, Area::World { .. })
+            && matches!(self.player.transport, TransportState::Ship { .. })
+        {
+            self.overworld_prompt_pair_suppressed = true;
+        }
+    }
+
+    /// `text-output.md §10.2`: "The overworld's per-entry initialiser sets
+    /// the flag **unconditionally**, before the turn loop runs".
+    pub fn arm_overworld_prompt_pair_on_entry(&mut self) {
+        self.overworld_prompt_pair_suppressed = false;
+    }
+
+    /// Test-and-re-arm of the overworld prompt gate: whether this overworld
+    /// prompt emits neither feed nor marker. Only the overworld helper reads
+    /// the flag, so a prompt in any other mode leaves it alone.
+    pub(crate) fn take_overworld_prompt_pair_suppression(&mut self) -> bool {
+        matches!(self.area, Area::World { .. })
+            && std::mem::take(&mut self.overworld_prompt_pair_suppressed)
+    }
+
     /// Drop an echo that was opened for a key the active mode turned out
     /// not to handle, restoring the message the caller saw before.
     pub fn abort_command_echo(&mut self) {
@@ -960,7 +998,15 @@ impl PlayState {
             .last()
             .is_some_and(|entry| entry.is_command_echo && entry.text == pending.echo.text)
         {
-            self.message_transcript.pop();
+            // The prompt the withdrawn echo sat on still spent (or skipped)
+            // its pair, so a replacement echo inherits the suppression.
+            if self
+                .message_transcript
+                .pop()
+                .is_some_and(|entry| entry.prompt_pair_suppressed)
+            {
+                self.overworld_prompt_pair_suppressed = true;
+            }
             self.message_transcript_revision = self.message_transcript_revision.wrapping_sub(1);
         }
         if self.message.is_empty() {

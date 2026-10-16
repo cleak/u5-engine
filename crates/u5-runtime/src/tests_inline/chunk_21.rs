@@ -7125,6 +7125,54 @@ fn escape_is_ignored_at_the_adjacent_tile_direction_prompt() {
 }
 
 #[test]
+fn escape_is_ignored_at_the_shared_spell_direction_prompt() {
+    // `input.md §11`: "Other keys are ignored and the prompt reads again
+    // ... Escape is not the confirmed cancellation key for this shared spell
+    // prompt." `inventory.md §7.1`: the Wind Change scroll and the Skull Key
+    // use that prompt; `magic.md §8`: it "cannot be escaped except by a
+    // cardinal or Space". (Audit A096.)
+    let dir = debug_game_dir();
+    for pending in [
+        UsePendingAction::SkullKeyDirection,
+        UsePendingAction::ScrollWindDirection {
+            index: SCROLL_WIND_CHANGE_INDEX,
+        },
+    ] {
+        let mut state = test_state(open_grid(), 4, 4);
+        state.active_use = Some(UseSession {
+            cursor: 0,
+            pending: Some(pending),
+            strip_scrolls: 0,
+        });
+        assert!(state.step_active_use('\u{1b}', "", &dir).unwrap());
+        assert_eq!(
+            state.active_use.and_then(|session| session.pending),
+            Some(pending),
+            "{pending:?} must still be waiting after Escape"
+        );
+        assert_eq!(state.turn, 0);
+    }
+
+    for spell in ["HR", "IP", "AY"] {
+        let mut state = test_state(open_grid(), 4, 4);
+        state.active_cast_followup = Some(CastFollowupSession::new(
+            0,
+            spell.to_string(),
+            CastFollowupKind::Direction { pass_allowed: true },
+            None,
+            false,
+        ));
+        let _ = state.step_active_cast_followup('\u{1b}', "", &dir).unwrap();
+        assert!(
+            state.active_cast_followup.is_some(),
+            "{spell}: Escape must not cancel the Direction- prompt"
+        );
+        assert_ne!(state.message, "None!");
+    }
+    let _ = fs::remove_dir_all(dir);
+}
+
+#[test]
 fn escape_is_ignored_at_the_push_direction_prompt() {
     // `commands.md §8.1` row A: "Escape pressed at the direction prompt
     // | `Push-` remains open; Escape emits no byte | Prompt remains

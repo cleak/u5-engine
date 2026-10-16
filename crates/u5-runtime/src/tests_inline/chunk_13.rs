@@ -8462,10 +8462,11 @@ fn save_load_published_messages_match_spec_text() {
 fn yell_published_message_constants_match_spec_text() {
     // commands.md §11: the ship-aboard Y branch prints the
     // sail-state message; the free-text branch prints
-    // "Nothing said." on empty input. Spec text is verbatim.
+    // the nothing-said result on empty input, which commands.md §5.8
+    // publishes as the row `Nothing` (no period, no `said`).
     assert_eq!(YELL_SAILS_HOISTED_MESSAGE, "HOIST!");
     assert_eq!(YELL_SAILS_FURLED_MESSAGE, "FURL!");
-    assert_eq!(YELL_NOTHING_SAID_MESSAGE, "Nothing said.");
+    assert_eq!(YELL_NOTHING_SAID_MESSAGE, "Nothing");
 }
 
 #[test]
@@ -26349,6 +26350,17 @@ fn dungeon_mode_refuses_world_vehicle_and_entry_letters_without_turn() {
     assert_eq!(state.message, "What?");
     assert_eq!(state.turn, 0);
 
+    // `commands.md §7` / §5.8: on foot - the only shipped dungeon transport -
+    // X reaches the ordinary X-it handler and refuses `X-it what?`.
+    state.player.transport = TransportState::Foot;
+    assert!(state.handle_dungeon_key('X', Path::new("")).unwrap());
+    // The refusal completes the open `X-it ` echo row.
+    assert_eq!(
+        state.message_transcript.last().map(|entry| entry.text.as_str()),
+        Some(format!("X-it {XIT_ON_FOOT_REFUSAL}").as_str())
+    );
+    assert_eq!(state.turn, 0);
+
     assert!(state.handle_dungeon_key('P', Path::new("")).unwrap());
     assert_eq!(state.message, PUSH_NOT_HERE_REFUSAL);
     assert_eq!(state.turn, 0);
@@ -26392,12 +26404,12 @@ fn dungeon_q_is_the_ordinary_save_route() {
     assert_eq!(state.turn, 0);
     assert!(!dir.join("SAVED.OOL").exists());
 
-    // "On `N`, it returns without writing."
+    // "On `N`, it prints `No`, returns" without writing.
     assert_eq!(
         handle_play_key_input(&mut state, 'N', "", &dir).unwrap(),
         PlayInputDisposition::Continue
     );
-    assert_eq!(state.message, "No.");
+    assert_eq!(state.message, format!("{SAVE_PROMPT_MESSAGE} {SAVE_PROMPT_NO_REPLY}"));
     assert_eq!(state.turn, 0);
     assert!(!dir.join("SAVED.OOL").exists());
     assert_eq!(fs::read(dir.join("SAVED.GAM")).unwrap(), template);
