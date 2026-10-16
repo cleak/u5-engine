@@ -502,6 +502,15 @@ pub fn handle_play_script_command(
         handle_empty_play_input(state, game_dir)?;
         return Ok(PlayInputDisposition::Continue);
     }
+    // One pass of the input helper's idle wait with no key pressed
+    // (`timing.md §8.2`), the pass the visual shell pumps every frame. Work
+    // that runs "from the top of the input helper, before that turn's key is
+    // read" - the directly-south arm of the `overworld.md §8` falls chain -
+    // happens here and nowhere a key reaches.
+    if command.eq_ignore_ascii_case("input-wait") {
+        state.idle_wait_pass(Some(game_dir))?;
+        return Ok(PlayInputDisposition::Continue);
+    }
     if let Some(count) = play_script_idle_tick_count(command)? {
         for _ in 0..count {
             if handle_play_key_input(state, '.', "", game_dir)? == PlayInputDisposition::Quit {

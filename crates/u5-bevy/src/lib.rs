@@ -1651,7 +1651,7 @@ pub fn visual_route_suite(
     // the other 89.
     let mut failures: Vec<String> = Vec::new();
     for case in visual_route_suite_cases() {
-        let mut run_case = || -> io::Result<()> {
+        let run_case = || -> io::Result<()> {
         std::fs::write(game_dir.join(BRIT_OOL_FILENAME), &baseline_brit_ool)?;
         std::fs::write(game_dir.join(UNDER_OOL_FILENAME), &baseline_under_ool)?;
         let route_game_dir = prepare_visual_route_case_game_dir(game_dir, case.label)?;
@@ -1687,6 +1687,7 @@ pub fn visual_route_suite(
                     ),
                 )
             })?;
+            settle_visual_route_presentations(&mut state, command_game_dir)?;
             if state.area != previous_area {
                 state.prng_state = VISUAL_SUITE_PRNG_SEED;
                 previous_area = state.area;
@@ -1743,7 +1744,14 @@ pub fn visual_route_suite(
     }
     std::fs::write(game_dir.join(BRIT_OOL_FILENAME), &baseline_brit_ool)?;
     std::fs::write(game_dir.join(UNDER_OOL_FILENAME), &baseline_under_ool)?;
-    push_visual_key_route_reports(game_dir, out_dir, &atlas, ctx, &mut reports)?;
+    // The key routes run after the command routes; an error there used to
+    // return before the command-route failures above were printed, hiding
+    // every one of them behind the key route's message.
+    if let Err(error) = push_visual_key_route_reports(game_dir, out_dir, &atlas, ctx, &mut reports)
+    {
+        println!("visual-key-route: FAILED");
+        failures.push(format!("visual key routes: {error}"));
+    }
     if !failures.is_empty() {
         println!(
             "\nVisual route: {} case(s) failed.",
@@ -9267,6 +9275,22 @@ fn apply_visual_route_command(
         handle_empty_visual_route_input(state, game_dir)?;
         return Ok(PlayInputDisposition::Continue);
     }
+    // The terminal play script's `input-wait`: one pass of the input
+    // helper's idle wait with no key pressed (`timing.md §8.2`), which the
+    // live app pumps every frame through [`visual_idle_tick`]. The
+    // directly-south arm of the `overworld.md §8` falls chain runs there,
+    // "before that turn's key is read".
+    if lower == "input-wait" {
+        state.idle_wait_pass(Some(game_dir))?;
+        return Ok(PlayInputDisposition::Continue);
+    }
+    // The same Return token the terminal play script reads
+    // (`u5_tui::play_loop::is_return_token`). The shrine and Codex routes
+    // submit each typed line with it; without this arm the replay typed the
+    // word `return` into the open line instead.
+    if matches!(lower.as_str(), "return" | "enter") {
+        return handle_play_key_input(state, '\r', "", game_dir);
+    }
     if matches!(lower.as_str(), "idle" | "tick" | "ticks") {
         return handle_play_key_input(state, '.', "", game_dir);
     }
@@ -9313,6 +9337,25 @@ fn handle_empty_visual_route_input(state: &mut PlayState, game_dir: &Path) -> io
         // the message window; calling the handler directly skipped it.
         let _ = handle_play_key_input(state, ' ', "", game_dir)?;
     }
+    Ok(())
+}
+
+/// The route replay's stand-in for the live app's presentation pump, run
+/// after every command exactly as `u5_tui::play_loop`'s
+/// `replay_play_script_commands` does.
+///
+/// [`settle_visual_route_exploration_gate`] only runs while no modal session
+/// is open, and `karma.md §7`'s shrine presentation is staged *inside* the
+/// shrine session ("Entry pacing": the approach walk and its counted world
+/// steps precede the virtue prompt). So after `E` the presentation was never
+/// released, every later key went to `keys_buffered_during_hold`, and the
+/// meditation routes repeated their frame from step 2 on.
+fn settle_visual_route_presentations(state: &mut PlayState, game_dir: &Path) -> io::Result<()> {
+    state.flush_staged_narration();
+    state.flush_text_hold();
+    state.run_blackthorn_rescue_to_handoff(game_dir)?;
+    state.run_blackthorn_audience_exit_to_handoff(game_dir)?;
+    state.run_shrine_third_mantra_resolution_to_completion(game_dir)?;
     Ok(())
 }
 
