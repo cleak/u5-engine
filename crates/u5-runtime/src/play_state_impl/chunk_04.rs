@@ -245,7 +245,11 @@ impl PlayState {
         wind: WindState,
         caller: Option<audio::WindChangeCaller>,
     ) -> bool {
-        if self.wind == WindState::Calm && wind == WindState::Calm {
+        // Compare the stored byte, not the normalised state: a preserved
+        // out-of-range byte reads as Calm, and a drift to a real Calm must
+        // still store `0` over it (`weather.md §2.1`, out-of-range values).
+        let out_of_range_byte = self.wind_save_byte > 4;
+        if self.wind == WindState::Calm && wind == WindState::Calm && !out_of_range_byte {
             return false;
         }
         // `audio.md §7.3`: "**The variant is chosen by the caller tag, not by
@@ -257,7 +261,7 @@ impl PlayState {
         if let Some(variant) = variant {
             self.emit_sound_effect(SoundEffect::SharedVariant { variant });
         }
-        let changed = self.wind != wind;
+        let changed = self.wind != wind || out_of_range_byte;
         self.wind = wind;
         self.wind_save_byte = wind.save_byte();
         // `weather.md §5.1`, "**A fourth reset of the sailing counter.**":

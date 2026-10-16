@@ -214,6 +214,27 @@ fn wind_banner_pads_direction_into_a_five_column_field() {
     assert_eq!(gap.left_cap_column, 6);
     assert_eq!(gap.right_cap_column, 18);
     assert_eq!(gap.content_first_column, WIND_BANNER_FIRST_COLUMN);
+
+    // `weather.md §2.1`: an out-of-range byte keeps the fixed anchor - cap
+    // at 6, suffix at 7..=12, closing cap at 13 - with no centring.
+    let gap = bottom_gap(&ChromeGap::Label(wind_banner_text(None))).unwrap();
+    assert_eq!(gap.left_cap_column, 6);
+    assert_eq!(gap.content_first_column, 7);
+    assert_eq!(gap.right_cap_column, 13);
+}
+
+#[test]
+fn a_drift_to_calm_overwrites_a_preserved_out_of_range_wind_byte() {
+    // `weather.md §2.1`: a preserved value above 4 stays until the single
+    // writer stores a real direction; the drift "passes the raw direction
+    // index to the setter", and the store "happens before any scene test,
+    // so the state is always updated".
+    let mut state = world_state(open_world_grid(), 5, 5);
+    state.wind = WindState::Calm;
+    state.wind_save_byte = 7;
+    assert!(state.apply_wind_state_without_sound(WindState::Calm));
+    assert_eq!(state.wind_save_byte, 0);
+    assert_eq!(state.wind, WindState::Calm);
 }
 
 #[test]
@@ -298,6 +319,22 @@ fn stats_label_strip_uses_the_cap_anchor_formula_and_interrupts_its_rule() {
     // Its opening cap uses the same two-colour sprite as every other gap.
     assert_eq!(chrome_index_at(&rgba, 224, 1), CHROME_RIBBON_INDEX);
     assert_eq!(chrome_index_at(&rgba, 225, 1), CHROME_RULE_INDEX);
+}
+
+#[test]
+fn a_below_surface_town_floor_erases_the_wind_banner() {
+    // `weather.md §2.1`: "A below-surface level actively **erases**" the
+    // banner, restoring the plain ribbon; the test is the signed level byte.
+    let mut state = test_state(open_grid(), 1, 1);
+    state.wind = WindState::South;
+    state.wind_save_byte = WindState::South.save_byte();
+    let Area::Town { scene, .. } = state.area else {
+        panic!("test_state is a town scene");
+    };
+    state.area = Area::Town { scene, floor: -1 };
+    let below = gameplay_chrome_content(&state);
+    assert_eq!(below.top, ChromeGap::Unbroken);
+    assert_eq!(below.bottom, ChromeGap::Unbroken);
 }
 
 #[test]
