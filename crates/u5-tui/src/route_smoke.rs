@@ -1874,7 +1874,9 @@ pub fn route_smoke_cases() -> Vec<RouteSmokeCase> {
         RouteSmokeCase {
             name: "shop-reagent-buy-route",
             options: PlayOptions::default(),
-            script: &["A", "1", "N"],
+            // `shops.md §8.C`: enter, offer the first reagent, accept, then
+            // Space leaves the list.
+            script: &["Y", "A", "Y", " "],
             expected: RouteSmokeExpectation::Town(castle),
             min_turn: 0,
             expected_frame_kind: "tile viewport",
@@ -1962,7 +1964,7 @@ pub fn route_smoke_cases() -> Vec<RouteSmokeCase> {
         RouteSmokeCase {
             name: "shop-horse-trader-decline-route",
             options: PlayOptions::default(),
-            script: &["B", "N"],
+            script: &["Y", "N"],
             expected: RouteSmokeExpectation::Town(castle),
             min_turn: 0,
             expected_frame_kind: "tile viewport",
@@ -1970,7 +1972,7 @@ pub fn route_smoke_cases() -> Vec<RouteSmokeCase> {
         RouteSmokeCase {
             name: "shop-horse-trader-horse-and-rider-buy",
             options: PlayOptions::default(),
-            script: &["B", "Y"],
+            script: &["Y", "Y"],
             expected: RouteSmokeExpectation::Town(castle),
             min_turn: 0,
             expected_frame_kind: "tile viewport",
@@ -1978,7 +1980,7 @@ pub fn route_smoke_cases() -> Vec<RouteSmokeCase> {
         RouteSmokeCase {
             name: "reload-horse-trader-horse-and-rider-buy-pass",
             options: PlayOptions::default(),
-            script: &["B", "Y", "empty"],
+            script: &["Y", "Y", "empty"],
             expected: RouteSmokeExpectation::Town(castle),
             min_turn: 1,
             expected_frame_kind: "tile viewport",
@@ -1986,7 +1988,7 @@ pub fn route_smoke_cases() -> Vec<RouteSmokeCase> {
         RouteSmokeCase {
             name: "shop-horse-trader-stablehouse-buy",
             options: PlayOptions::default(),
-            script: &["B", "Y"],
+            script: &["Y", "Y"],
             expected: RouteSmokeExpectation::Town(castle),
             min_turn: 0,
             expected_frame_kind: "tile viewport",
@@ -1994,7 +1996,7 @@ pub fn route_smoke_cases() -> Vec<RouteSmokeCase> {
         RouteSmokeCase {
             name: "shop-horse-trader-wishing-well-buy",
             options: PlayOptions::default(),
-            script: &["B", "Y"],
+            script: &["Y", "Y"],
             expected: RouteSmokeExpectation::Town(castle),
             min_turn: 0,
             expected_frame_kind: "tile viewport",
@@ -2042,7 +2044,10 @@ pub fn route_smoke_cases() -> Vec<RouteSmokeCase> {
         RouteSmokeCase {
             name: "shop-guild-buy-route",
             options: PlayOptions::default(),
-            script: &["A", "1", "D"],
+            // `shops.md §8.C`: enter, offer Keys, accept, then Escape exits.
+            // A script's `" "` trims to the empty command, which a shop
+            // receives as Return, and the guild list does not take Return.
+            script: &["Y", "A", "Y", "\u{1b}"],
             expected: RouteSmokeExpectation::Town(castle),
             min_turn: 0,
             expected_frame_kind: "tile viewport",
@@ -4232,8 +4237,10 @@ fn apply_route_smoke_case_setup(
                 active_objects: state.active_objects.clone(),
                 pending_vehicle: None,
             });
+            // Seeded past the entry `Y`, at the record-`119` menu
+            // (`shops.md §8.B`).
             state.active_shop = Some(ActiveShopSession::ShipBroker(
-                ShipBrokerState::for_shipwright(shipwright),
+                ShipBrokerState::menu_for_shipwright(shipwright),
             ));
         }
         "shop-guild-buy-route" => {
@@ -6534,13 +6541,11 @@ fn validate_route_smoke_case_state(
                     .party
                     .get(2)
                     .is_none_or(|member| member.hp != 0 || member.status != b'D')
-                || !state.message.contains("Starving! starvation damage")
-                || !state
-                    .message
-                    .contains(&format!("party slot 0 took {poisoned_starvation} HP"))
-                || !state
-                    .message
-                    .contains(&format!("party slot 1 took {good_starvation} HP"))
+                // `time.md`: the starvation branch prints only `Starving!`;
+                // the per-slot damage report was this engine's own text. The
+                // HP equalities above pin each roll.
+                || !state.message.contains("Starving!")
+                || state.message.contains("starvation damage")
             {
                 return Err(io::Error::other(format!(
                     "route smoke `{case_name}` did not apply public poison-before-starvation rolls"
@@ -6762,8 +6767,9 @@ fn validate_route_smoke_case_state(
             }
         }
         "blackthorn-fixed-hidden-zero-key-search" => {
+            // `hidden-treasures.md §2`: record 13 sets no found-bitmap bit.
             if state.keys != 0
-                || !state.fixed_hidden_treasure_found(13)
+                || state.fixed_hidden_treasure_found(13)
                 || !state
                     .active_objects
                     .iter()
@@ -7600,12 +7606,14 @@ fn validate_route_smoke_case_state(
             // §4`), so a table-wide "no parked horse anywhere" test says
             // nothing about this sale - it only used to hold because every
             // NPC sprite byte was being clamped to one monster tile.
+            // `shops.md §8.A`: inner `N` "exits through the nothing-bought
+            // bark"; `As you wish.` was this engine's own wording.
             if state.gold != 999
-                || state.active_shop.is_none()
+                || state.active_shop.is_some()
                 || state.active_objects.iter().any(|object| {
                     object.type_byte == HORSE_PARKED_FIRST && (object.x, object.y) == (15, 16)
                 })
-                || !state.message.contains("As you wish")
+                || state.message.is_empty()
             {
                 return Err(io::Error::other(format!(
                     "route smoke `{case_name}` did not quote and decline the horse trader"
@@ -7680,7 +7688,9 @@ fn validate_route_smoke_case_state(
                     .return_world
                     .as_ref()
                     .is_none_or(|world| world.pending_vehicle.is_some())
-                || state.active_shop.is_none()
+                // `shops.md §8.A`: a declined quote ends the visit on the
+                // nothing-bought bark.
+                || state.active_shop.is_some()
                 // Measured 2026-09-08 (`qa/paired/bd-shipwright.tsv`): the
                 // decline draws the shipwright's own jeer, not the engine's
                 // `As you wish.` The observables that matter are the
@@ -7727,7 +7737,8 @@ fn validate_route_smoke_case_state(
                     .return_world
                     .as_ref()
                     .is_none_or(|world| world.pending_vehicle != Some(expected_pending))
-                || !state.message.contains("Delivery is queued")
+                // `shops.md §8.C`: the sale ends on the `124` continuation.
+                || !state.message.ends_with("sir?\" ")
             {
                 return Err(io::Error::other(format!(
                     "route smoke `{case_name}` did not queue delivery at the published \

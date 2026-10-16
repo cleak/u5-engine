@@ -3405,37 +3405,34 @@ impl PlayState {
         damaged
     }
 
+    /// `time.md §5` hour-gated part, provision counter already zero: "The
+    /// party receives the starvation warning, and then each party slot below
+    /// the active party count, capped at six slots, that is not Dead takes an
+    /// independently rolled uniform `1..8` hit points of damage through the
+    /// same shared party-damage path." Sleeping and Poisoned members starve;
+    /// "only Dead members are skipped". The warning is `inventory.md`'s
+    /// `Starving!\n`; the shared damage path shows a row flash and rumble but
+    /// no text, so the per-slot amounts go to diagnostics only.
     pub fn apply_hourly_starvation_tick(&mut self) -> Option<String> {
-        let mut reports = Vec::new();
-        // `cleak/u5-spec#50`: per-slot starvation damage is the PRNG
-        // roll `prng_range(1, 8)`. Roll independently for each
-        // eligible slot in iteration order so the corrected spec's
-        // "independent per slot" rule holds.
-        for member in &mut self.party {
-            if !member.living() {
+        let slots = self.party.len().min(OUTDOOR_IMPACT_PARTY_PASS_SLOT_BOUND);
+        for slot in 0..slots {
+            if self.party[slot].status == b'D' {
                 continue;
             }
-            let slot = member.slot;
+            // `cleak/u5-spec#50`: per-slot starvation damage is the PRNG
+            // roll `prng_range(1, 8)`, rolled independently per slot.
             let roll = u5_prng_range_u16(
                 &mut self.prng_state,
                 HOURLY_STARVATION_DAMAGE_MIN,
                 HOURLY_STARVATION_DAMAGE_MAX,
             ) as u8;
-            let applied = member.apply_damage(roll);
-            reports.push(format!(
-                "party slot {slot} took {applied} HP ({} HP left)",
-                member.hp
+            let damage = self.apply_shared_party_damage(slot, roll);
+            self.diagnostics.push(format!(
+                "starvation: party slot {slot} took {} HP ({} HP left)",
+                damage.applied, damage.hp_after
             ));
         }
-
-        if reports.is_empty() {
-            Some("Starving! starvation damage skipped for 0 living member(s)".to_string())
-        } else {
-            Some(format!(
-                "Starving! starvation damage: {}",
-                reports.join("; ")
-            ))
-        }
+        Some(STARVATION_WARNING.to_string())
     }
 
     /// Append one result sentence to the slot, separated by a space only

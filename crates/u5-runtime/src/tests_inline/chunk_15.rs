@@ -1481,6 +1481,58 @@
         let _ = fs::remove_dir_all(dir);
     }
 
+    /// `shops.md §2` "Contact and turn accounting": on either entry route the
+    /// shared dispatcher "first changes behavior 4 at the cached reached
+    /// waypoint to behavior 1" - persisted, and before the shop refusals - and
+    /// automatic entry "does not create an additional Talk command or schedule
+    /// tick", whereas explicit Talk is an ordinary acted turn.
+    #[test]
+    fn shop_contact_rewrites_behavior_four_and_adds_no_turn() {
+        let dir = debug_game_dir();
+        let keeper = |ai: u8| NpcSlot {
+            slot: 1,
+            type_byte: 0x54,
+            dialog_id: 0x81,
+            schedule: [ai, ai, ai, 6, 6, 6, 5, 5, 5, 0, 0, 0, 0, 8, 16, 20],
+            name: None,
+        };
+        let idle = || NpcSlot {
+            slot: 0,
+            type_byte: 0,
+            dialog_id: 0,
+            schedule: [0; 16],
+            name: None,
+        };
+        let ai_at_cached_wp = |state: &PlayState| {
+            let npc = state.npcs.iter().find(|npc| npc.slot == 1).unwrap();
+            npc.schedule[NPC_SCHEDULE_AI_OFFSET + npc.cached_wp]
+        };
+
+        let mut state = test_state(open_grid(), 5, 5);
+        let Area::Town { scene, floor } = state.area else {
+            unreachable!()
+        };
+        state.load_scheduled_npcs(&[idle(), keeper(4)]);
+        let clock_before = state.clock;
+        let outcome = state.apply_town_npc_contact_event(scene, floor, &dir).unwrap();
+        assert!(outcome.is_some());
+        assert!(state.diagnostics_contain("opens conversation contact"));
+        assert_eq!(ai_at_cached_wp(&state), 1);
+        assert!(!state.town_npc_mutations.is_empty());
+        assert_eq!(state.clock, clock_before);
+        assert!(!state.talk_entered_by_contact);
+
+        // Explicit Talk makes the same edit and is an ordinary acted turn.
+        let mut state = test_state(open_grid(), 5, 5);
+        state.load_scheduled_npcs(&[idle(), keeper(4)]);
+        state.player.facing = Direction::East;
+        let clock_before = state.clock;
+        state.talk_facing_with_dialogue(&HashMap::new());
+        assert_eq!(ai_at_cached_wp(&state), 1);
+        assert_ne!(state.clock, clock_before);
+        let _ = fs::remove_dir_all(dir);
+    }
+
     #[test]
     fn mode_five_adjacent_attack_requires_live_dialogue_awareness() {
         let mut state = test_state(open_grid(), 5, 5);

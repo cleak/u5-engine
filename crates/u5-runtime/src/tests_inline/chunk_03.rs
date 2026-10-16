@@ -2646,9 +2646,55 @@ fn hourly_status_pass_applies_poison_before_seeded_starvation_rolls() {
     assert_eq!(state.party[2].hp, 0);
     assert_eq!(state.party[2].status, b'D');
     assert_eq!(state.prng_state, expected_prng);
-    let report = state.pending_hourly_status_message.as_deref().unwrap();
-    assert!(report.contains(&format!("party slot 0 took {poisoned_starvation} HP")));
-    assert!(report.contains(&format!("party slot 1 took {good_starvation} HP")));
+    // `time.md §5` / `inventory.md`: the warning alone; the shared damage
+    // path prints no per-member text.
+    assert_eq!(
+        state.pending_hourly_status_message.as_deref(),
+        Some(STARVATION_WARNING)
+    );
+}
+
+/// `time.md §5`: "Sleeping and Poisoned members are eligible starvation
+/// targets; only Dead members are skipped", each roll going through the
+/// shared party-damage path (rumble, Dead, selector clear).
+#[test]
+fn starvation_skips_only_dead_and_uses_shared_damage_path() {
+    let mut state = world_state(open_world_grid(), 10, 20);
+    state.food = 0;
+    state.prng_state = 0x3456;
+    state.party = vec![
+        PartyMember {
+            slot: 0,
+            class_byte: b'A',
+            status: b'G',
+            climb_stat: 30,
+            mana: 8,
+            hp: 1,
+            max_hp: 20,
+            level: 8,
+        },
+        // Hit points zero but not marked Dead: still a target.
+        PartyMember {
+            slot: 1,
+            class_byte: b'F',
+            status: b'S',
+            climb_stat: 30,
+            mana: 8,
+            hp: 20,
+            max_hp: 20,
+            level: 8,
+        },
+    ];
+    state.active_player = Some(0);
+
+    let report = state.apply_hourly_starvation_tick();
+
+    assert_eq!(report.as_deref(), Some(STARVATION_WARNING));
+    assert_eq!(state.party[0].hp, 0);
+    assert_eq!(state.party[0].status, b'D');
+    assert_eq!(state.active_player, None);
+    assert!(state.party[1].hp < 20);
+    assert!(state.diagnostics.iter().any(|line| line.contains("starvation")));
 }
 
 #[test]

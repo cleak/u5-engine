@@ -732,6 +732,10 @@ pub struct PlayState {
     /// NPC roster slot captured when the active conversation opens. The
     /// opening acquaintance test addresses this slot in the scene's TALK bitset.
     pub active_conversation_npc_slot: Option<usize>,
+    /// `shops.md §2` "Contact and turn accounting": set while the shared
+    /// Talk dispatcher runs for an automatic conversation-contact event,
+    /// which "does not create an additional Talk command or schedule tick".
+    pub talk_entered_by_contact: bool,
     pub active_conversation_join_candidate: Option<String>,
     pub active_z_stats: Option<crate::z_stats::ZStatsSession>,
     /// `inventory.md §4`: the outside-combat party-member selector that

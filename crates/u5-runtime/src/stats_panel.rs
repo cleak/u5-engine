@@ -306,12 +306,15 @@ pub fn paint_inn_pickup_register_text_window(system: &mut TextWindowSystem, stat
         INN_PICKUP_REGISTER_BOTTOM,
     );
 
+    // `shops.md §8.C` "Multiple-guest selection": "the framed list headings
+    // are `    GUEST` and `  REGISTER:\n\n`", at window-local `(1, 1)` and
+    // `(1, 2)`; the guest lines follow the blank row.
     system.set_active_cursor(1, 1);
-    system.print_wrapped_string("Pick up");
+    system.print_wrapped_string("    GUEST");
     system.set_active_cursor(1, 2);
-    system.print_wrapped_string("Companion");
+    system.print_wrapped_string("  REGISTER:");
 
-    let rows = usize::from(*guest_count).min(INN_REGISTRY_CAP).min(5);
+    let rows = usize::from(*guest_count).min(INN_REGISTRY_CAP).min(4);
     for row in 0..rows {
         let Some(guest) = guest_indices
             .get(row)
@@ -319,7 +322,7 @@ pub fn paint_inn_pickup_register_text_window(system: &mut TextWindowSystem, stat
         else {
             continue;
         };
-        let display_row = 3 + row;
+        let display_row = 4 + row;
         let name =
             party_name_to_string(&guest.name).unwrap_or_else(|| format!("Guest {}", row + 1));
         let line = format!("{} {}", row + 1, truncate_ascii_chars(&name, 11));

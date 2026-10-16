@@ -71,6 +71,9 @@ pub const RTV_TEMPORARY_ACTOR_TILE: u8 = RTV_OVERLAY_HELPER_OWNED;
 
 pub const RTV_OPEN_EFFECT_FINAL_TILE: u8 = 0xdc;
 pub const RTV_CLOSE_EFFECT_FINAL_TILE: u8 = 0x05;
+/// Palette index zero. `location-dat.md §11`: actors reach the screen only
+/// through the overlay plane and the ordinary opaque blitter, so this index
+/// is an ordinary written colour, not a see-through key.
 pub const RTV_ACTOR_TRANSPARENT_PIXEL: u8 = 0;
 /// `#54`: the local cell effect is the driver's animated-terrain shimmer
 /// entry, stepped `1..15` to open and `15..1` to close, with two ticks
@@ -464,9 +467,26 @@ impl ReturnToViewPreviewState {
         self.ticks_since_strip_load = elapsed_title_ticks.saturating_sub(strip_load_tick);
     }
 
+    /// `location-dat.md §11` preview tick step 3: "Scatter the preview
+    /// actor table into the planes: for every drawable actor, clear the
+    /// terrain byte at its cell and write its sprite byte into the overlay
+    /// byte at that cell." Move and hide restore the terrain byte from the
+    /// backing plane, which is what lets the cell show terrain again.
+    pub fn scatter_actors(&mut self) {
+        for actor in self.actors.iter().filter(|actor| actor.drawable) {
+            if let Some(index) = preview_cell_index(actor.x, actor.y) {
+                self.terrain[index] = 0;
+                self.overlay[index] = actor.tile0;
+            }
+        }
+    }
+
     /// Advance the shared preview tick: the reveal cursor widens with
     /// elapsed preview ticks, so every tick-consuming command feeds it.
     fn advance_preview_ticks(&mut self, ticks: u32) {
+        if ticks > 0 {
+            self.scatter_actors();
+        }
         add_return_to_view_counter(
             &mut self.total_ticks,
             ticks,
@@ -1667,11 +1687,34 @@ fn render_return_to_view_state_viewport(
         },
     };
 
+    // Every drawable actor must lie on the strip; an off-strip actor is a
+    // data fault rather than something to clip.
+    for actor in state.actors.iter().filter(|actor| actor.drawable) {
+        let x = usize::from(actor.x);
+        let y = usize::from(actor.y);
+        if x >= RTV_STRIP_VISIBLE_COLUMNS || y >= RTV_STRIP_VISIBLE_ROWS {
+            return Err(io::Error::new(
+                io::ErrorKind::InvalidData,
+                format!(
+                    "Return-to-View actor at preview cell ({x}, {y}) falls outside the {RTV_STRIP_VISIBLE_COLUMNS}x{RTV_STRIP_VISIBLE_ROWS} strip"
+                ),
+            ));
+        }
+    }
+
     let Some((first_column, last_column)) = state.revealed_columns() else {
         // Before the chapter's first preview tick the cursor paints
         // nothing; the previous contents stand.
         return Ok(viewport);
     };
+
+    // `location-dat.md §11` preview tick: step 3 scatters the drawable
+    // actors into the planes before step 4 repaints, so an actor is drawn
+    // as its cell's overlay tile through the ordinary opaque blitter -
+    // colour-0 sprite pixels are written, not see-through.
+    let mut scattered = state.clone();
+    scattered.scatter_actors();
+    let state = &scattered;
 
     for cell_y in 0..RTV_STRIP_VISIBLE_ROWS {
         for cell_x in first_column..=last_column {
@@ -1688,34 +1731,6 @@ fn render_return_to_view_state_viewport(
         }
     }
 
-    // Drawable actors are the helper that owns their cells; they paint
-    // on top with the sprite's transparent pixel left alone.
-    for actor in state.actors.iter().filter(|actor| {
-        actor.drawable
-            && actor.tile0 != RTV_TEMPORARY_ACTOR_TILE
-            && actor.tile1 != RTV_TEMPORARY_ACTOR_TILE
-    }) {
-        let x = usize::from(actor.x);
-        let y = usize::from(actor.y);
-        if x >= RTV_STRIP_VISIBLE_COLUMNS || y >= RTV_STRIP_VISIBLE_ROWS {
-            return Err(io::Error::new(
-                io::ErrorKind::InvalidData,
-                format!(
-                    "Return-to-View actor at preview cell ({x}, {y}) falls outside the {RTV_STRIP_VISIBLE_COLUMNS}x{RTV_STRIP_VISIBLE_ROWS} strip"
-                ),
-            ));
-        }
-        if x < first_column || x > last_column {
-            continue;
-        }
-        blit_return_to_view_actor_to_viewport(
-            &mut viewport,
-            atlas,
-            RTV_OVERLAY_TILE_BASE + usize::from(actor.tile0),
-            x,
-            y,
-        )?;
-    }
     Ok(viewport)
 }
 
@@ -1866,34 +1881,6 @@ pub const fn return_to_view_fixed_wipe_rectangles(
     let x1 = 137 + 9 * step as u16;
     let y1 = 155 + 3 * step as u16;
     Some([((x0, y0), (x1, y1)), ((x0, y0 + 1), (x1, y1 + 1))])
-}
-
-fn blit_return_to_view_actor_to_viewport(
-    viewport: &mut TileViewport,
-    atlas: &TileAtlas,
-    tile: usize,
-    cell_x: usize,
-    cell_y: usize,
-) -> io::Result<()> {
-    let tile_pixels = atlas.tile_pixels(tile).ok_or_else(|| {
-        io::Error::new(
-            io::ErrorKind::InvalidData,
-            format!("tile atlas is missing tile {tile}"),
-        )
-    })?;
-    let dst_x = cell_x * TILE_ATLAS_SIDE;
-    let dst_y = cell_y * TILE_ATLAS_SIDE;
-    for row in 0..TILE_ATLAS_SIDE {
-        let dst_start = (dst_y + row) * viewport.width + dst_x;
-        let src_start = row * TILE_ATLAS_SIDE;
-        for col in 0..TILE_ATLAS_SIDE {
-            let pixel = tile_pixels[src_start + col];
-            if pixel != RTV_ACTOR_TRANSPARENT_PIXEL {
-                viewport.pixels[dst_start + col] = pixel;
-            }
-        }
-    }
-    Ok(())
 }
 
 fn rtv_slot_index(slot: u8) -> io::Result<usize> {
@@ -2831,7 +2818,7 @@ mod tests {
     }
 
     #[test]
-    fn render_return_to_view_preview_actor_zero_pixels_leave_map_visible() {
+    fn render_return_to_view_preview_actor_zero_pixels_are_drawn_opaquely() {
         let mut strips = rtv_filled_strips();
         strips.strips[0][RTV_REVEAL_CENTRE_COLUMN] = 0x05;
         let script = ReturnToViewScript {
@@ -2847,8 +2834,10 @@ mod tests {
                 ReturnToViewCommand::RestartStream,
             ],
         };
-        // Sprite `256 + 3` is transparent except for its first pixel, so
-        // the map tile underneath must survive everywhere else.
+        // Sprite `256 + 3` is palette index zero except for its first
+        // pixel. `location-dat.md §11`: the tick scatters the actor into
+        // the overlay plane and the cell draws through the ordinary opaque
+        // blitter, so the zero pixels replace the map tile underneath.
         let mut pixels = Vec::with_capacity(crate::TILE_ATLAS_PIXEL_LEN);
         for tile in 0..crate::TILE_ATLAS_TILE_COUNT {
             if tile == RTV_OVERLAY_TILE_BASE + 3 {
@@ -2872,7 +2861,52 @@ mod tests {
 
         let x = RTV_REVEAL_CENTRE_COLUMN * TILE_ATLAS_SIDE;
         assert_eq!(viewport.pixel(x, 0), Some(7));
-        assert_eq!(viewport.pixel(x + 1, 0), Some(5));
+        assert_eq!(viewport.pixel(x + 1, 0), Some(RTV_ACTOR_TRANSPARENT_PIXEL));
+    }
+
+    /// `location-dat.md §11` preview tick step 3: each tick clears the
+    /// terrain byte under a drawable actor and writes its sprite byte into
+    /// the overlay; moving restores the terrain from the backing plane.
+    #[test]
+    fn return_to_view_tick_scatters_drawable_actors_into_the_planes() {
+        let strips = rtv_filled_strips();
+        let mut state = ReturnToViewPreviewState::default();
+        for (index, command) in [
+            ReturnToViewCommand::LoadMapStrip { strip: 0 },
+            ReturnToViewCommand::SetActor {
+                slot: 0,
+                tile: 0x21,
+                x: 4,
+                y: 2,
+            },
+        ]
+        .into_iter()
+        .enumerate()
+        {
+            state.apply_command(&strips, index, command).unwrap();
+        }
+        // Set actor alone updates state only.
+        assert_eq!(state.cell(4, 2), Some(0x44));
+
+        state
+            .apply_command(&strips, 2, ReturnToViewCommand::RunPreviewTick { ticks: 1 })
+            .unwrap();
+        assert_eq!(state.cell(4, 2), Some(0));
+        assert_eq!(state.overlay_cell(4, 2), Some(0x21));
+
+        state
+            .apply_command(
+                &strips,
+                3,
+                ReturnToViewCommand::MoveActorAndTick {
+                    slot: 0,
+                    direction: 1,
+                },
+            )
+            .unwrap();
+        assert_eq!(state.cell(4, 2), Some(0x44));
+        assert_eq!(state.cell(5, 2), Some(0));
+        assert_eq!(state.overlay_cell(5, 2), Some(0x21));
     }
 
     #[test]

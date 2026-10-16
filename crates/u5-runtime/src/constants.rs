@@ -1942,6 +1942,9 @@ pub const HOURLY_STARVATION_DAMAGE_MIN: u16 = 1;
 /// Maximum hourly starvation damage per non-dead party slot (inclusive
 /// upper bound of the PRNG roll).
 pub const HOURLY_STARVATION_DAMAGE_MAX: u16 = 8;
+/// `inventory.md` message table / `time.md §5`: the out-of-food warning
+/// (`Starving!\n`), stored as one message-slot line.
+pub const STARVATION_WARNING: &str = "Starving!";
 
 /// `systems/town-mode.md` / `cleak/u5-spec#51`: town poison-gas
 /// doorway rolls an inclusive `0..=29` Dexterity save per eligible

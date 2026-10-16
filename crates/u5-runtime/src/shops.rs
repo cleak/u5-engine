@@ -376,6 +376,22 @@ pub const SHOPPE_RECORD_SHIPWRIGHT_SKIFF_OFFER: usize = 118;
 /// See [`SHOPPE_RECORD_SHIPWRIGHT_FRIGATE_OFFER`]: the shared confirmation
 /// that follows either offer body.
 pub const SHOPPE_RECORD_SHIPWRIGHT_CONFIRM: usize = 126;
+/// `shops.md §8.C`'s shipwright result table: "Skiff added to pending
+/// Frigate | Record `120`".
+pub const SHOPPE_RECORD_SHIPWRIGHT_SKIFF_STOWED: usize = 120;
+/// "Another standalone Skiff already pending | Record `121`".
+pub const SHOPPE_RECORD_SHIPWRIGHT_ALREADY_SKIFF: usize = 121;
+/// "Affordability failure | Record `122`, then token-expanded `yells $.\n`".
+pub const SHOPPE_RECORD_SHIPWRIGHT_SHORT_FUNDS: usize = 122;
+/// "Standalone delivery newly queued | Record `123`".
+pub const SHOPPE_RECORD_SHIPWRIGHT_DELIVERY_QUEUED: usize = 123;
+/// "Purchase continuation | Record `124`, honorific, then `?" `".
+pub const SHOPPE_RECORD_SHIPWRIGHT_CONTINUATION: usize = 124;
+/// "Pending delivery, another Frigate requested | Record `125`".
+pub const SHOPPE_RECORD_SHIPWRIGHT_DOCK_SPACE: usize = 125;
+/// `shops.md §8.7`: the duplicate-Frigate gate tests "a fixed `10000`, not
+/// the shipwright's Frigate price", above the `9999` gold ceiling.
+pub const SHIPWRIGHT_SPECIAL_DELIVERY_GOLD: u16 = 10000;
 
 pub const SHOPPE_RECORDS_REAGENT_FIRST: usize = SHOPPE_RECORDS_SHIP_BROKER_LAST + 1;
 pub const SHOPPE_RECORDS_REAGENT_LAST: usize = 146;
@@ -550,29 +566,53 @@ impl GuildCommodity {
     }
 }
 
-/// `shops.md §8.2` guildmaster (magic shop) entry-menu outcome.
-/// After the greeting, the player picks `a` Keys, `b` Gems, `c`
-/// Torches, or any other key (Exit). The shipped flow does not
-/// re-prompt: any non-`a`/`b`/`c` input including Space exits.
+/// `shops.md §8.2` / `§8.C` guildmaster stock-menu key.
+///
+/// "A/B/C echo the corresponding lowercase letter. D renders record `164`,
+/// then redraws the stock menu. Space or Escape exits; other keys, including
+/// Return, silently wait at the existing menu."
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum GuildShopAction {
-    /// `a` (case-insensitive) — Keys.
+    /// `a` Keys, `b` Gems, `c` Torches (either case).
     Purchase(GuildCommodity),
-    /// Any other key — exit the menu.
+    /// `D`: render record `164`, then redraw the stock menu.
+    Describe,
+    /// Space or Escape.
     Exit,
+    /// Any other key: silently wait.
+    Ignore,
 }
 
-/// `shops.md §8.2`: classify one keystroke for the guildmaster
-/// entry menu. Caller has applied the input case fold; this helper
-/// also accepts the upper-case `A` / `B` / `C` variants so
-/// uppercase-naive callers pass through cleanly.
+/// `shops.md §8.C`: classify one keystroke at the guild stock menu.
 pub const fn guild_shop_action(byte: u8) -> GuildShopAction {
     match byte {
         b'a' | b'A' => GuildShopAction::Purchase(GuildCommodity::Keys),
         b'b' | b'B' => GuildShopAction::Purchase(GuildCommodity::Gems),
         b'c' | b'C' => GuildShopAction::Purchase(GuildCommodity::Torches),
-        _ => GuildShopAction::Exit,
+        b'd' | b'D' => GuildShopAction::Describe,
+        b' ' | 0x1b => GuildShopAction::Exit,
+        _ => GuildShopAction::Ignore,
     }
+}
+
+/// `shops.md §8.2`: "Each Y/N offer is for one fixed bundle: three keys,
+/// four gems, or five torches."
+pub const fn guild_bundle_quantity(commodity: GuildCommodity) -> u8 {
+    match commodity {
+        GuildCommodity::Keys => 3,
+        GuildCommodity::Gems => 4,
+        GuildCommodity::Torches => 5,
+    }
+}
+
+/// `shops.md §6`: "Each offer costs
+/// `base + trunc(base * (100 - 3 * speaker_intelligence) / 100)`."
+pub const fn guild_bundle_price(
+    shop: GuildShop,
+    commodity: GuildCommodity,
+    speaker_intelligence: u8,
+) -> u16 {
+    shop_intelligence_adjusted_price(guild_unit_price(shop, commodity), speaker_intelligence)
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -593,10 +633,10 @@ pub struct GuildPurchaseOutcome {
     pub stock_after: u8,
 }
 
+/// `shops.md §8.2`: "There is no carry-cap refusal before a guild offer";
+/// only the affordability check can refuse.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum GuildPurchaseError {
-    ZeroQuantity,
-    StockCap { current: u8, requested: u8, cap: u8 },
     InsufficientGold { available: u16, required: u16 },
 }
 
@@ -626,8 +666,8 @@ pub enum ShipwrightPurchaseKind {
 }
 
 /// `shops.md §8.7` shipwright selection outcome: `F` offers Frigates, `S`
-/// offers Skiffs, while Space or Escape exits, and any other key silently
-/// re-prompts.
+/// offers Skiffs, while Space or Escape exits, and `§8.C` has any other key
+/// redraw record `119`.
 ///
 /// It is not what the flow *opens* with. `RETRACTIONS.md` R405 withdraws
 /// "opens with a small letter menu" along with "clears the inherited
@@ -635,15 +675,16 @@ pub enum ShipwrightPurchaseKind {
 /// accepts Yes/No (Space means No), then renders asset record `119` for
 /// Frigate/Skiff selection without an entry clear". That is the flow this
 /// engine runs - `ShipBrokerState::Greeting` is in `awaiting_entry_answer`
-/// and the selection is `SHOPPE_RECORD_SHIPWRIGHT_MENU` - so this is the
-/// citation going stale rather than the behaviour.
+/// and the selection, `ShipBrokerState::Menu`, is
+/// `SHOPPE_RECORD_SHIPWRIGHT_MENU` - so this is the citation going stale
+/// rather than the behaviour.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum ShipwrightMenuAction {
     /// `F` (case-insensitive) — Frigate purchase quote.
     Purchase(ShipwrightPurchaseKind),
     /// Space or Escape — exit the menu.
     Exit,
-    /// Any other byte — silently re-prompt.
+    /// Any other byte — redraw record `119` (`shops.md §8.C`).
     Discard,
 }
 
@@ -783,7 +824,7 @@ pub enum HealerServiceAction {
     /// Space or Return — leave the service menu and print the
     /// exit line.
     Exit,
-    /// Any other byte — silently re-prompt.
+    /// Any other byte — silently wait without reprinting (`shops.md §8.C`, R419).
     Discard,
 }
 
@@ -1001,11 +1042,11 @@ pub struct ReagentPurchaseOutcome {
     pub stock_after: u8,
 }
 
+/// `shops.md §8.9`: acceptance "charges the full bundle price and adds its
+/// quantity, capped at 99"; only an unstocked reagent or short funds refuse.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum ReagentPurchaseError {
-    ZeroQuantity,
     NotStocked,
-    StockCap { current: u8, requested: u8, cap: u8 },
     InsufficientGold { available: u16, required: u16 },
 }
 
@@ -1271,9 +1312,10 @@ impl Inn {
         }
     }
 
-    /// `shops.md §8.4` per-inn minimum-gold gate. The inn refuses to
-    /// open the main menu when party gold is below this floor.
-    pub const fn minimum_gold_gate(self) -> u16 {
+    /// `shops.md §8.4` "Maximum guests lodged here": "The third column
+    /// limits existing guests at this inn before Rest or Leave; it is not a
+    /// minimum-gold gate (R420)."
+    pub const fn max_lodged_guests(self) -> usize {
         match self {
             Self::TheWayfarerInn => 3,
             Self::TheWarriorsStead => 4,
@@ -1366,9 +1408,9 @@ pub enum InnMainAction {
     LeaveCompanion,
     /// `P` (case-insensitive) — Pick up a previously-left companion.
     PickUpCompanion,
-    /// Space or Escape — exit the menu.
+    /// Space — exit the menu.
     Exit,
-    /// Any other byte — silently re-prompt.
+    /// Any other byte — silently wait (`shops.md §8.C` "Inn actions").
     Discard,
 }
 
@@ -1409,7 +1451,6 @@ pub struct InnRestQuote {
     pub inn: Inn,
     pub party_size: usize,
     pub base_room_rate: u16,
-    pub minimum_gold: u16,
     pub total_price: u16,
 }
 
@@ -1425,6 +1466,7 @@ pub struct InnLeaveOutcome {
     pub scene_marker: u8,
     pub party_index: usize,
     pub registry_index: usize,
+    /// The quoted monthly rate; nothing is charged at Leave (R420).
     pub deposit: u16,
     pub gold_before: u16,
     pub gold_after: u16,
@@ -1462,10 +1504,10 @@ pub enum InnError {
         requested_scene: u8,
     },
     RegistryFull,
-    BelowMinimumGold {
-        available: u16,
-        minimum: u16,
-    },
+    /// `shops.md §8.C` "Leave selects Avatar": the friend(s) refusal.
+    AvatarCannotLeave,
+    /// `shops.md §8.C` "Leave selects a dead companion": record `192`.
+    DeadCompanion,
     InsufficientGold {
         available: u16,
         required: u16,
@@ -1788,6 +1830,16 @@ pub fn quote_arms_purchase(
     })
 }
 
+/// `shops.md §8.A` arms buy confirmation row: a successful purchase
+/// "increments the equipment counter or fills arrows/quarrels to `99`".
+pub fn arms_purchase_stock_after(item_id: usize, stock: u8) -> u8 {
+    if item_id == crate::EQUIPMENT_ID_ARROWS || item_id == crate::EQUIPMENT_ID_QUARRELS {
+        EQUIPMENT_STOCK_CAP
+    } else {
+        stock.saturating_add(1).min(EQUIPMENT_STOCK_CAP)
+    }
+}
+
 pub fn apply_arms_purchase(
     gold: &mut u16,
     stock: &mut u8,
@@ -1811,7 +1863,7 @@ pub fn apply_arms_purchase(
     let gold_before = *gold;
     let stock_before = *stock;
     *gold -= quote.total_price;
-    *stock += 1;
+    *stock = arms_purchase_stock_after(item_id, *stock);
 
     Ok(ArmsPurchaseOutcome {
         quote,
@@ -1988,15 +2040,63 @@ pub fn herbalist_menu_entries(herbalist: Herbalist) -> Vec<ReagentMenuEntry> {
     entries
 }
 
+/// `shops.md §6`: "These are base prices for the following fixed
+/// quantities, before adjustment" - the bundle quantity matrix, keyed like
+/// the price matrix.
+pub const fn herbalist_reagent_bundle_quantity(herbalist: Herbalist, reagent: Reagent) -> Option<u8> {
+    match herbalist {
+        Herbalist::TheHerbalist => match reagent {
+            Reagent::Ginseng => Some(10),
+            Reagent::Garlic => Some(6),
+            Reagent::SpiderSilk => Some(4),
+            Reagent::Nightshade => Some(1),
+            Reagent::Mandrake => Some(1),
+            _ => None,
+        },
+        Herbalist::HealersHerbs => match reagent {
+            Reagent::SulfurAsh => Some(12),
+            Reagent::Ginseng => Some(8),
+            Reagent::Garlic => Some(8),
+            Reagent::SpiderSilk => Some(2),
+            Reagent::BloodMoss => Some(4),
+            _ => None,
+        },
+        Herbalist::TheAlchemist => match reagent {
+            Reagent::SulfurAsh => Some(14),
+            Reagent::Ginseng => Some(8),
+            Reagent::BloodMoss => Some(6),
+            Reagent::BlackPearl => Some(6),
+            _ => None,
+        },
+        Herbalist::Mysticism => match reagent {
+            Reagent::SpiderSilk => Some(2),
+            Reagent::BloodMoss => Some(2),
+            Reagent::BlackPearl => Some(2),
+            Reagent::Nightshade => Some(1),
+            Reagent::Mandrake => Some(1),
+            _ => None,
+        },
+        Herbalist::TheSharperMage => match reagent {
+            Reagent::BloodMoss => Some(4),
+            Reagent::Nightshade => Some(1),
+            Reagent::Mandrake => Some(1),
+            _ => None,
+        },
+    }
+}
+
+/// `shops.md §6`: one fixed bundle, quoted with "the same Intelligence
+/// adjustment as guild offers". `unit_price` is the published base bundle
+/// price; `total_price` is what the offer charges.
 pub const fn quote_reagent_purchase(
     herbalist: Herbalist,
     reagent: Reagent,
-    quantity: u8,
+    speaker_intelligence: u8,
 ) -> Result<ReagentPurchaseQuote, ReagentPurchaseError> {
-    if quantity == 0 {
-        return Err(ReagentPurchaseError::ZeroQuantity);
-    }
-    let Some(unit_price) = herbalist_reagent_price(herbalist, reagent) else {
+    let (Some(unit_price), Some(quantity)) = (
+        herbalist_reagent_price(herbalist, reagent),
+        herbalist_reagent_bundle_quantity(herbalist, reagent),
+    ) else {
         return Err(ReagentPurchaseError::NotStocked);
     };
     Ok(ReagentPurchaseQuote {
@@ -2004,32 +2104,21 @@ pub const fn quote_reagent_purchase(
         reagent,
         quantity,
         unit_price,
-        total_price: unit_price * quantity as u16,
+        total_price: shop_intelligence_adjusted_price(unit_price, speaker_intelligence),
     })
 }
 
+/// `shops.md §8.9`: "Acceptance charges the full bundle price and adds its
+/// quantity, capped at 99". The pre-offer refusal for a counter already at
+/// 99 belongs to the shop flow, before any offer is made.
 pub fn apply_reagent_purchase(
     gold: &mut u16,
     stock: &mut u8,
     herbalist: Herbalist,
     reagent: Reagent,
-    quantity: u8,
+    speaker_intelligence: u8,
 ) -> Result<ReagentPurchaseOutcome, ReagentPurchaseError> {
-    let quote = quote_reagent_purchase(herbalist, reagent, quantity)?;
-    let Some(stock_after) = stock.checked_add(quantity) else {
-        return Err(ReagentPurchaseError::StockCap {
-            current: *stock,
-            requested: quantity,
-            cap: SHOP_COMMODITY_STOCK_CAP,
-        });
-    };
-    if stock_after > SHOP_COMMODITY_STOCK_CAP {
-        return Err(ReagentPurchaseError::StockCap {
-            current: *stock,
-            requested: quantity,
-            cap: SHOP_COMMODITY_STOCK_CAP,
-        });
-    }
+    let quote = quote_reagent_purchase(herbalist, reagent, speaker_intelligence)?;
     if *gold < quote.total_price {
         return Err(ReagentPurchaseError::InsufficientGold {
             available: *gold,
@@ -2040,14 +2129,16 @@ pub fn apply_reagent_purchase(
     let gold_before = *gold;
     let stock_before = *stock;
     *gold -= quote.total_price;
-    *stock = stock_after;
+    *stock = stock
+        .saturating_add(quote.quantity)
+        .min(SHOP_COMMODITY_STOCK_CAP);
 
     Ok(ReagentPurchaseOutcome {
         quote,
         gold_before,
         gold_after: *gold,
         stock_before,
-        stock_after,
+        stock_after: *stock,
     })
 }
 
@@ -2133,7 +2224,13 @@ pub const TAVERN_PROVISION_QUOTE_RECORD_FIRST: usize = 77;
 pub const TAVERN_PROVISION_QUOTE_RECORD_LAST: usize = 82;
 pub const TAVERN_NO_SALE_RECORD_FIRST: usize = 61;
 pub const TAVERN_NO_SALE_RECORD_LAST: usize = 64;
+/// `shops.md §8.A` shared closing-bark table, tavern purchase-completed row.
+pub const TAVERN_PURCHASE_COMPLETED_RECORD_FIRST: usize = 65;
+pub const TAVERN_PURCHASE_COMPLETED_RECORD_LAST: usize = 68;
 pub const TAVERN_TABLE_SCRAPS_RECORD_ID: usize = 90;
+/// `shops.md §8.C` tavern result table, "Blue Boar wine list cancelled":
+/// Space prints `\n\n`, then this record, then returns to continuation.
+pub const BLUE_BOAR_WINE_LIST_CANCEL_RECORD_ID: usize = 89;
 pub const TAVERN_BARE_TABLE_SETTING_TILE: u8 = 0x95;
 pub const TAVERN_NORTH_FOOD_SETTING_TILE: u8 = 0x9B;
 pub const TAVERN_SOUTH_FOOD_SETTING_TILE: u8 = 0x9A;
@@ -2392,15 +2489,15 @@ pub const fn inn_base_room_rate(inn: Inn) -> u16 {
     }
 }
 
-pub const fn inn_minimum_gold(inn: Inn) -> u16 {
-    match inn {
-        Inn::TheWayfarerInn => 3,
-        Inn::TheWarriorsStead => 4,
-        Inn::TheHauntingInn => 3,
-        Inn::HotelBrittany => 2,
-        Inn::TheSmugglersInn => 2,
-        Inn::TheKingsRansomInn => 2,
-    }
+/// `shops.md §8.4` "Maximum guests lodged here" column.
+pub const fn inn_max_lodged_guests(inn: Inn) -> usize {
+    inn.max_lodged_guests()
+}
+
+/// `shops.md §8.C` "Capacity check before Rest or Leave": true when this
+/// inn already lodges its maximum number of guests.
+pub fn inn_lodging_full(inn: Inn, registry: &[InnGuestRecord], scene_marker: u8) -> bool {
+    inn_guest_indices_for_scene(registry, scene_marker).len() >= inn_max_lodged_guests(inn)
 }
 
 pub fn inn_guest_indices_for_scene(registry: &[InnGuestRecord], scene_marker: u8) -> Vec<usize> {
@@ -2460,7 +2557,6 @@ pub fn quote_inn_rest(
         inn,
         party_size,
         base_room_rate,
-        minimum_gold: inn_minimum_gold(inn),
         total_price: base_room_rate * party_size as u16,
     })
 }
@@ -2479,7 +2575,6 @@ pub fn quote_inn_rest_for_speaker(
         inn,
         party_size,
         base_room_rate,
-        minimum_gold: inn_minimum_gold(inn),
         total_price: shop_intelligence_adjusted_price(raw, speaker_intelligence),
     })
 }
@@ -2491,12 +2586,8 @@ pub fn apply_inn_rest_payment(
     base_room_rate: u16,
 ) -> Result<InnRestOutcome, InnError> {
     let quote = quote_inn_rest(inn, party_size, base_room_rate)?;
-    if *gold < quote.minimum_gold {
-        return Err(InnError::BelowMinimumGold {
-            available: *gold,
-            minimum: quote.minimum_gold,
-        });
-    }
+    // `shops.md §8.4`: "Only Rest and Pickup test affordability; there is no
+    // separate minimum-gold gate (R420)."
     if *gold < quote.total_price {
         return Err(InnError::InsufficientGold {
             available: *gold,
@@ -2522,13 +2613,7 @@ pub fn apply_inn_rest_total_payment(
     if party_size == 0 {
         return Err(InnError::EmptyParty);
     }
-    let minimum_gold = inn_minimum_gold(inn);
-    if *gold < minimum_gold {
-        return Err(InnError::BelowMinimumGold {
-            available: *gold,
-            minimum: minimum_gold,
-        });
-    }
+    // `shops.md §8.4`: no separate minimum-gold gate (R420).
     if *gold < total_price {
         return Err(InnError::InsufficientGold {
             available: *gold,
@@ -2543,7 +2628,6 @@ pub fn apply_inn_rest_total_payment(
             inn,
             party_size,
             base_room_rate: inn_base_room_rate(inn),
-            minimum_gold,
             total_price,
         },
         gold_before,
@@ -2577,15 +2661,17 @@ pub fn apply_inn_leave_guest(
     if registry.len() >= INN_REGISTRY_CAP {
         return Err(InnError::RegistryFull);
     }
+    // `shops.md §8.C`: Leave "rejects a sole traveller, Avatar, or a dead
+    // selected companion".
+    if party_index == 0 {
+        return Err(InnError::AvatarCannotLeave);
+    }
+    if party[party_index].status == b'D' {
+        return Err(InnError::DeadCompanion);
+    }
     let Some(registry_slot) = crate::free_inn_registry_slot(registry) else {
         return Err(InnError::RegistryFull);
     };
-    if *gold < base_lodging_charge {
-        return Err(InnError::InsufficientGold {
-            available: *gold,
-            required: base_lodging_charge,
-        });
-    }
 
     let member = party.remove(party_index);
     let name = remove_or_default(party_names, party_index, [0; SAVE_CHARACTER_NAME_LEN]);
@@ -2611,8 +2697,9 @@ pub fn apply_inn_leave_guest(
         equipment,
         stay_counter: 0,
     };
+    // `shops.md §8.4`: "Leave performs no affordability check or gold
+    // debit"; the quoted monthly rate is due at Pickup (R420).
     let gold_before = *gold;
-    *gold -= base_lodging_charge;
     registry.push(guest);
     Ok(InnLeaveOutcome {
         scene_marker,
@@ -3042,10 +3129,11 @@ pub fn apply_shipwright_purchase(
     };
 
     if status == ShipwrightPurchaseStatus::ExistingDeliveryRefusal {
-        if kind == ShipwrightPurchaseKind::Frigate && *gold < quote.price {
+        // `shops.md §8.7`: the duplicate-Frigate gate tests a fixed `10000`.
+        if kind == ShipwrightPurchaseKind::Frigate && *gold < SHIPWRIGHT_SPECIAL_DELIVERY_GOLD {
             return Err(ShipwrightPurchaseError::InsufficientGold {
                 available: *gold,
-                required: quote.price,
+                required: SHIPWRIGHT_SPECIAL_DELIVERY_GOLD,
             });
         }
         return Ok(ShipwrightPurchaseOutcome {
@@ -3079,47 +3167,33 @@ pub fn apply_shipwright_purchase(
     })
 }
 
+/// `shops.md §8.2`: one fixed bundle at the Intelligence-adjusted bundle
+/// price. `unit_price` is the published base bundle price.
 pub const fn quote_guild_purchase(
     shop: GuildShop,
     commodity: GuildCommodity,
-    quantity: u8,
-) -> Result<GuildPurchaseQuote, GuildPurchaseError> {
-    if quantity == 0 {
-        return Err(GuildPurchaseError::ZeroQuantity);
-    }
-
-    let unit_price = guild_unit_price(shop, commodity);
-    Ok(GuildPurchaseQuote {
+    speaker_intelligence: u8,
+) -> GuildPurchaseQuote {
+    GuildPurchaseQuote {
         shop,
         commodity,
-        quantity,
-        unit_price,
-        total_price: unit_price * quantity as u16,
-    })
+        quantity: guild_bundle_quantity(commodity),
+        unit_price: guild_unit_price(shop, commodity),
+        total_price: guild_bundle_price(shop, commodity, speaker_intelligence),
+    }
 }
 
+/// `shops.md §8.2`: "The Intelligence-adjusted bundle price is charged on
+/// acceptance; the inventory addition caps at 99, without reducing the
+/// price for overflow."
 pub fn apply_guild_purchase(
     gold: &mut u16,
     stock: &mut u8,
     shop: GuildShop,
     commodity: GuildCommodity,
-    quantity: u8,
+    speaker_intelligence: u8,
 ) -> Result<GuildPurchaseOutcome, GuildPurchaseError> {
-    let quote = quote_guild_purchase(shop, commodity, quantity)?;
-    let Some(stock_after) = stock.checked_add(quantity) else {
-        return Err(GuildPurchaseError::StockCap {
-            current: *stock,
-            requested: quantity,
-            cap: SHOP_COMMODITY_STOCK_CAP,
-        });
-    };
-    if stock_after > SHOP_COMMODITY_STOCK_CAP {
-        return Err(GuildPurchaseError::StockCap {
-            current: *stock,
-            requested: quantity,
-            cap: SHOP_COMMODITY_STOCK_CAP,
-        });
-    }
+    let quote = quote_guild_purchase(shop, commodity, speaker_intelligence);
     if *gold < quote.total_price {
         return Err(GuildPurchaseError::InsufficientGold {
             available: *gold,
@@ -3130,14 +3204,16 @@ pub fn apply_guild_purchase(
     let gold_before = *gold;
     let stock_before = *stock;
     *gold -= quote.total_price;
-    *stock = stock_after;
+    *stock = stock
+        .saturating_add(quote.quantity)
+        .min(SHOP_COMMODITY_STOCK_CAP);
 
     Ok(GuildPurchaseOutcome {
         quote,
         gold_before,
         gold_after: *gold,
         stock_before,
-        stock_after,
+        stock_after: *stock,
     })
 }
 
@@ -3183,19 +3259,14 @@ impl PlayState {
         &mut self,
         shop: GuildShop,
         commodity: GuildCommodity,
-        quantity: u8,
+        speaker_intelligence: u8,
     ) -> Result<GuildPurchaseOutcome, GuildPurchaseError> {
-        match commodity {
-            GuildCommodity::Keys => {
-                apply_guild_purchase(&mut self.gold, &mut self.keys, shop, commodity, quantity)
-            }
-            GuildCommodity::Gems => {
-                apply_guild_purchase(&mut self.gold, &mut self.gems, shop, commodity, quantity)
-            }
-            GuildCommodity::Torches => {
-                apply_guild_purchase(&mut self.gold, &mut self.torches, shop, commodity, quantity)
-            }
-        }
+        let stock = match commodity {
+            GuildCommodity::Keys => &mut self.keys,
+            GuildCommodity::Gems => &mut self.gems,
+            GuildCommodity::Torches => &mut self.torches,
+        };
+        apply_guild_purchase(&mut self.gold, stock, shop, commodity, speaker_intelligence)
     }
 
     pub fn buy_shipwright_vehicle(
@@ -3364,14 +3435,14 @@ impl PlayState {
         &mut self,
         herbalist: Herbalist,
         reagent: Reagent,
-        quantity: u8,
+        speaker_intelligence: u8,
     ) -> Result<ReagentPurchaseOutcome, ReagentPurchaseError> {
         apply_reagent_purchase(
             &mut self.gold,
             &mut self.reagents[reagent.inventory_index()],
             herbalist,
             reagent,
-            quantity,
+            speaker_intelligence,
         )
     }
 

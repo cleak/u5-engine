@@ -5668,7 +5668,7 @@ fn visual_route_suite_cases() -> Vec<VisualRouteSuiteCase> {
                 target: PlayTarget::Town(castle),
                 ..PlayOptions::default()
             },
-            script: &["B", "N"],
+            script: &["Y", "N"],
             configure: Some(seed_visual_route_horse_trader_decline),
         },
         VisualRouteSuiteCase {
@@ -5678,7 +5678,7 @@ fn visual_route_suite_cases() -> Vec<VisualRouteSuiteCase> {
                 target: PlayTarget::Town(castle),
                 ..PlayOptions::default()
             },
-            script: &["B", "N"],
+            script: &["Y", "N"],
             configure: Some(seed_visual_route_horse_trader_decline),
         },
         VisualRouteSuiteCase {
@@ -5688,7 +5688,7 @@ fn visual_route_suite_cases() -> Vec<VisualRouteSuiteCase> {
                 target: PlayTarget::Town(castle),
                 ..PlayOptions::default()
             },
-            script: &["B", "Y"],
+            script: &["Y", "Y"],
             configure: Some(seed_visual_route_horse_trader_no_marker),
         },
         VisualRouteSuiteCase {
@@ -6377,7 +6377,7 @@ fn visual_route_suite_cases() -> Vec<VisualRouteSuiteCase> {
                 target: PlayTarget::Town(castle),
                 ..PlayOptions::default()
             },
-            script: &["B", "Y"],
+            script: &["Y", "Y"],
             configure: Some(seed_visual_route_horse_trader_horse_and_rider),
         },
         VisualRouteSuiteCase {
@@ -6387,7 +6387,7 @@ fn visual_route_suite_cases() -> Vec<VisualRouteSuiteCase> {
                 target: PlayTarget::Town(castle),
                 ..PlayOptions::default()
             },
-            script: &["B", "Y", "empty"],
+            script: &["Y", "Y", "empty"],
             configure: Some(seed_visual_route_horse_trader_horse_and_rider),
         },
         VisualRouteSuiteCase {
@@ -6397,7 +6397,7 @@ fn visual_route_suite_cases() -> Vec<VisualRouteSuiteCase> {
                 target: PlayTarget::Town(castle),
                 ..PlayOptions::default()
             },
-            script: &["B", "Y"],
+            script: &["Y", "Y"],
             configure: Some(seed_visual_route_horse_trader_stablehouse),
         },
         VisualRouteSuiteCase {
@@ -6407,7 +6407,7 @@ fn visual_route_suite_cases() -> Vec<VisualRouteSuiteCase> {
                 target: PlayTarget::Town(castle),
                 ..PlayOptions::default()
             },
-            script: &["B", "Y"],
+            script: &["Y", "Y"],
             configure: Some(seed_visual_route_horse_trader_wishing_well),
         },
         VisualRouteSuiteCase {
@@ -8738,8 +8738,9 @@ fn seed_visual_route_shipwright_shop(state: &mut PlayState, shipwright: Shipwrig
         active_objects: state.active_objects.clone(),
         pending_vehicle: None,
     });
+    // Seeded at the record-`119` menu, past the entry `Y` (`shops.md §8.B`).
     state.active_shop = Some(ActiveShopSession::ShipBroker(
-        ShipBrokerState::for_shipwright(shipwright),
+        ShipBrokerState::menu_for_shipwright(shipwright),
     ));
 }
 
@@ -17621,8 +17622,6 @@ fn visual_line_prompt_active(state: &PlayState) -> bool {
             Some(
                 ActiveShopSession::Sage(SageState::Prompt { .. })
                     | ActiveShopSession::Tavern(TavernState::PickProvisionQuantity { .. })
-                    | ActiveShopSession::Reagent(ReagentShopState::PickQuantity { .. })
-                    | ActiveShopSession::Guild(GuildShopState::PickQuantity { .. })
             )
         )
 }
@@ -18082,9 +18081,7 @@ mod tests {
     use std::path::Path;
     use u5_runtime::blackthorn_session::BlackthornChallenge;
     use u5_runtime::conversation_session::ConversationSession;
-    use u5_runtime::shop_runtime::{
-        ArmsShopState, GuildShopState, ReagentShopState, SageState, TavernState,
-    };
+    use u5_runtime::shop_runtime::{ArmsShopState, GuildShopState, SageState, TavernState};
     use u5_runtime::shop_session::ActiveShopSession;
     use u5_runtime::test_fixtures::{
         debug_game_dir, dungeon_state, open_dungeon_record, open_grid, open_world_grid,
@@ -18093,9 +18090,9 @@ mod tests {
     use u5_runtime::tlk_control_codes::TLK_TEXT_XOR_MASK;
     use u5_runtime::{
         Area, ArmsShop, CH_CELL_SIDE, CH_FONT_LEN, COMBAT_ARENA_SIDE, Direction, GuildShop,
-        Herbalist, IBM_CH_FILE, INIT_GAM_FILENAME, INIT_OOL_FILENAME, INTRO_START_MENU_REVEAL_RECT,
+        IBM_CH_FILE, INIT_GAM_FILENAME, INIT_OOL_FILENAME, INTRO_START_MENU_REVEAL_RECT,
         INTRO_STEP_1_RECT_TRANSITION, OOL_PLANE_LEN, PenStroke, ProportionalFont,
-        ProportionalGlyph, ProportionalWidthTable, REAGENT_COUNT, REAGENT_SPIDER_SILK,
+        ProportionalGlyph, ProportionalWidthTable,
         SAVE_CHARACTER_DEX_OFFSET, SAVE_CHARACTER_GENDER_OFFSET, SAVE_CHARACTER_INT_OFFSET,
         SAVE_CHARACTER_NAME_LEN, SAVE_CHARACTER_STR_OFFSET, SAVE_ROSTER_OFFSET, SAVED_GAM_FILENAME,
         SAVED_GAM_LEN, SAVED_OOL_FILENAME, SHOPPE_RECORDS_ARMS_DESCRIPTIONS_FIRST,
@@ -25498,18 +25495,17 @@ mod tests {
 
     #[test]
     fn visual_line_input_buffers_shop_quantity_until_enter() {
+        // `shops.md §8.C`, "Provision offer": the typed number allows two
+        // digits. (Reagents and guild bundles are Y/N offers, R418.)
         let mut state = test_state(open_grid(), 1, 1);
-        state.gold = 100;
-        state.reagents = [0; REAGENT_COUNT];
-        state.active_shop = Some(ActiveShopSession::Reagent(ReagentShopState::for_herbalist(
-            Herbalist::Mysticism,
-        )));
-        handle_play_key_input(&mut state, 'A', "", Path::new("")).unwrap();
-        assert!(matches!(
-            state.active_shop.as_ref(),
-            Some(ActiveShopSession::Reagent(
-                ReagentShopState::PickQuantity { .. }
-            ))
+        state.gold = 300;
+        state.food = 0;
+        state.active_shop = Some(ActiveShopSession::Tavern(
+            TavernState::PickProvisionQuantity {
+                tavern: Tavern::TheWayfarerTavern,
+                unit_price: 15,
+                continuation_ready: false,
+            },
         ));
         assert!(visual_line_prompt_active(&state));
 
@@ -25534,8 +25530,8 @@ mod tests {
         .unwrap();
 
         assert_eq!(input_line, "12");
-        assert_eq!(state.gold, 100);
-        assert_eq!(state.reagents[REAGENT_SPIDER_SILK], 0);
+        assert_eq!(state.gold, 300);
+        assert_eq!(state.food, 0);
 
         handle_visual_line_key(
             &mut state,
@@ -25548,9 +25544,8 @@ mod tests {
         .unwrap();
 
         assert!(input_line.is_empty());
-        assert_eq!(state.gold, 28);
-        assert_eq!(state.reagents[REAGENT_SPIDER_SILK], 12);
-        assert!(state.message.contains("72 gold"));
+        assert_eq!(state.gold, 120);
+        assert_eq!(state.food, 300);
     }
 
     #[test]
@@ -25629,13 +25624,15 @@ mod tests {
         ));
         assert!(visual_line_prompt_active(&tavern));
 
+        // `shops.md §8.2`: the guild offer is a Y/N confirmation, not a typed
+        // quantity (R418).
         let mut guild = test_state(open_grid(), 1, 1);
-        guild.active_shop = Some(ActiveShopSession::Guild(GuildShopState::PickQuantity {
+        guild.active_shop = Some(ActiveShopSession::Guild(GuildShopState::ConfirmBundle {
             shop: GuildShop::TheDen,
             commodity: u5_runtime::GuildCommodity::Keys,
-            unit_price: 190,
+            price: 190,
         }));
-        assert!(visual_line_prompt_active(&guild));
+        assert!(!visual_line_prompt_active(&guild));
     }
 
     #[test]

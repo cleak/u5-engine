@@ -67,6 +67,19 @@ impl ActiveShopSession {
         ) {
             return true;
         }
+        // `shops.md §8.B`/`§8.C`: record `119`, the dock-space record `125`
+        // and the continuation's `?" ` all leave their row open on a closing
+        // quote and a space, as the entry greeting does.
+        if matches!(
+            self,
+            Self::ShipBroker(
+                ShipBrokerState::Menu { .. }
+                    | ShipBrokerState::ConfirmDockSpace { .. }
+                    | ShipBrokerState::Continuation { .. }
+            )
+        ) {
+            return true;
+        }
         matches!(
             self,
             Self::Arms(
@@ -159,13 +172,15 @@ impl ActiveShopSession {
             | Self::Innkeeper(InnkeeperState::PickLeaveCompanion { inn, .. })
             | Self::Innkeeper(InnkeeperState::ConfirmLeaveCompanion { inn, .. })
             | Self::Innkeeper(InnkeeperState::PickUpCompanion { inn, .. })
-            | Self::Innkeeper(InnkeeperState::ConfirmPickUpCompanion { inn, .. }) => {
+            | Self::Innkeeper(InnkeeperState::ConfirmPickUpCompanion { inn, .. })
+            | Self::Innkeeper(InnkeeperState::Continuation { inn }) => {
                 inn.display_name()
             }
             Self::Innkeeper(InnkeeperState::Exited) => "Innkeeper",
             Self::Reagent(ReagentShopState::Greeting { herbalist })
             | Self::Reagent(ReagentShopState::PickReagent { herbalist })
-            | Self::Reagent(ReagentShopState::PickQuantity { herbalist, .. }) => {
+            | Self::Reagent(ReagentShopState::ConfirmBundle { herbalist, .. })
+            | Self::Reagent(ReagentShopState::CapRefusalWait { herbalist }) => {
                 herbalist.display_name()
             }
             Self::Reagent(ReagentShopState::Exited) => "Herbalist",
@@ -183,14 +198,12 @@ impl ActiveShopSession {
                 stable.display_name()
             }
             Self::HorseTrader(HorseTraderState::Exited) => "Horse Trader",
-            Self::ShipBroker(ShipBrokerState::Greeting { shipwright }) => shipwright.display_name(),
-            Self::ShipBroker(ShipBrokerState::ConfirmPurchase { quote, .. }) => {
-                quote.shipwright.display_name()
-            }
-            Self::ShipBroker(ShipBrokerState::Exited) => "Shipwright",
+            Self::ShipBroker(state) => state
+                .shipwright()
+                .map_or("Shipwright", |shipwright| shipwright.display_name()),
             Self::Guild(GuildShopState::Greeting { shop })
             | Self::Guild(GuildShopState::PickItem { shop })
-            | Self::Guild(GuildShopState::PickQuantity { shop, .. }) => shop.display_name(),
+            | Self::Guild(GuildShopState::ConfirmBundle { shop, .. }) => shop.display_name(),
             Self::Guild(GuildShopState::Exited) => "Guildmaster",
         }
     }

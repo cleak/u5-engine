@@ -22,9 +22,10 @@ use crate::shops::{
     apply_provision_purchase_at_unit_price, apply_reagent_purchase, apply_shipwright_purchase,
     apply_tavern_round_drink, arms_buy_quote_record_id_for_item, arms_shop_action,
     arms_shop_buy_quote, arms_shop_sell_offer, arms_shop_stock_item_for_letter, guild_shop_action,
-    guild_unit_price, herbalist_menu_entries, inn_base_room_rate,
+    guild_bundle_price, herbalist_menu_entries, inn_base_room_rate,
     inn_leave_companion_deposit_for_speaker, inn_main_action, inn_pickup_bill_for_speaker,
     quote_horse_purchase_for_speaker, quote_inn_rest, quote_inn_rest_for_speaker,
+    quote_reagent_purchase,
     quote_shipwright_purchase, shipwright_delivery_coordinate, shipwright_menu_action,
     shop_intelligence_adjusted_price, tavern_drink_prompt, tavern_follow_up_record_id,
     tavern_lore_menu_letter, tavern_menu_letters, tavern_provision_unit_price,
@@ -400,7 +401,10 @@ pub fn step_arms_shop(
                 return ArmsShopOutcome::BuyRefusedShortFunds { item, quoted_price };
             }
             *gold -= quoted_price;
-            stock[item_idx] = stock[item_idx].saturating_add(1);
+            // `shops.md §8.A` arms buy confirmation row: a paid purchase
+            // "increments the equipment counter or fills arrows/quarrels
+            // to `99`" (§8.1: "caps arrows/quarrels at `99`").
+            stock[item_idx] = crate::shops::arms_purchase_stock_after(item_idx, stock[item_idx]);
             // Measured 2026-09-07 (`qa/paired/shop-arms-menus.tsv`): a
             // completed purchase does not drop back to the Buy-or-Sell
             // greeting. The stock list is redrawn under the post-item prompt
@@ -567,6 +571,10 @@ pub enum HealerShopState {
         slot: u8,
         cost: u16,
     },
+    /// `shops.md §8.C`: "Continuation after treatment, refusal, or member
+    /// cancellation" - a Y/N gate; Yes repeats the service question, No ends
+    /// the visit (R419).
+    Continuation,
     Exited,
 }
 
@@ -620,15 +628,18 @@ pub fn step_healer_shop(
     members: &mut [HealerPartyMemberView],
 ) -> HealerOutcome {
     match (*state, input) {
+        // `shops.md §8.B`: the healer entry "accepts Y/N only and ignores
+        // Space"; other keys re-poll.
         (HealerShopState::Greeting, HealerShopInput::Key(b)) => match b {
-            b'H' | b'h' | b'Y' | b'y' => {
+            b'Y' | b'y' => {
                 *state = HealerShopState::PickService;
                 HealerOutcome::EnteredServiceMenu
             }
-            _ => {
+            b'N' | b'n' => {
                 *state = HealerShopState::Exited;
                 HealerOutcome::Exited
             }
+            _ => HealerOutcome::InvalidInput,
         },
         (HealerShopState::PickService, HealerShopInput::Service(service)) => {
             let cost = healer_service_cost(service);
@@ -763,6 +774,12 @@ pub enum InnkeeperState {
         registry_index: usize,
         base_lodging_charge: u16,
         bill: u16,
+    },
+    /// `shops.md §8.C` "Inn actions": after a continuing action the inn asks
+    /// `"Is there\nanything more\nI can do for\nthee?" `; Y repeats the
+    /// service question, N or Space exits, other keys wait.
+    Continuation {
+        inn: Inn,
     },
     Exited,
 }
@@ -1030,10 +1047,16 @@ pub enum ReagentShopState {
     PickReagent {
         herbalist: Herbalist,
     },
-    PickQuantity {
+    /// `shops.md §8.C`: the bundle offer's Y/N confirmation.
+    ConfirmBundle {
         herbalist: Herbalist,
         reagent: Reagent,
-        unit_price: u16,
+        price: u16,
+    },
+    /// `shops.md §8.C` "Already carrying 99": "consume one command key, then
+    /// redraw stock".
+    CapRefusalWait {
+        herbalist: Herbalist,
     },
     Exited,
 }
@@ -1055,7 +1078,6 @@ impl ReagentShopState {
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum ReagentShopInput {
     Key(u8),
-    Quantity(u8),
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -1063,10 +1085,21 @@ pub enum ReagentShopOutcome {
     EnteredMenu {
         herbalist: Herbalist,
     },
-    QuotedUnit {
+    /// `N` or Space at the entry prompt: exit through the no-sale bark.
+    DeclinedEntry,
+    /// One fixed bundle offered at its Intelligence-adjusted price.
+    Offered {
         herbalist: Herbalist,
         reagent: Reagent,
-        unit_price: u16,
+        price: u16,
+    },
+    /// The counter is already at 99: refused before any offer.
+    RefusedAtCap {
+        herbalist: Herbalist,
+    },
+    /// The key after the at-99 refusal: redraw the stock list.
+    RedrawStock {
+        herbalist: Herbalist,
     },
     Bought {
         herbalist: Herbalist,
@@ -1074,107 +1107,116 @@ pub enum ReagentShopOutcome {
         quantity: u8,
         paid: u16,
     },
+    /// Record `147`; the visit ends without the ordinary farewell.
     RefusedShortFunds {
         cost: u16,
     },
-    RefusedStockCap {
-        current: u8,
-        requested: u8,
-        cap: u8,
+    Declined {
+        herbalist: Herbalist,
     },
-    Declined,
+    /// Space, Escape or Return at the stock list: the ordinary farewell.
+    LeftMenu,
     Exited,
     InvalidInput,
 }
 
 pub const REAGENT_STOCK_CAP_PER_KIND: u8 = 99;
 
+/// `shops.md §8.9` / `§8.C` reagent flow. Entry accepts `Y`, `N` and Space
+/// (other keys re-poll); the stock list takes the displayed letters and
+/// Space, Escape or Return (others wait); an offer accepts `Y`/`N` only.
 pub fn step_reagent_shop(
     state: &mut ReagentShopState,
     input: ReagentShopInput,
     gold: &mut u16,
     reagent_stock: &mut [u8],
+    speaker_intelligence: u8,
 ) -> ReagentShopOutcome {
-    match (*state, input) {
-        (ReagentShopState::Greeting { herbalist }, ReagentShopInput::Key(b)) => {
-            *state = ReagentShopState::PickReagent { herbalist };
-            select_reagent_menu_entry(state, herbalist, b)
-        }
-        (ReagentShopState::PickReagent { herbalist }, ReagentShopInput::Key(b)) => {
-            select_reagent_menu_entry(state, herbalist, b)
-        }
-        (
-            ReagentShopState::PickQuantity {
-                herbalist, reagent, ..
-            },
-            ReagentShopInput::Quantity(quantity),
-        ) => {
-            *state = ReagentShopState::PickReagent { herbalist };
-            if quantity == 0 {
-                return ReagentShopOutcome::Declined;
+    let ReagentShopInput::Key(byte) = input;
+    match *state {
+        ReagentShopState::Greeting { herbalist } => match byte {
+            b'Y' | b'y' => {
+                *state = ReagentShopState::PickReagent { herbalist };
+                ReagentShopOutcome::EnteredMenu { herbalist }
             }
-            let idx = reagent.inventory_index();
-            let Some(stock) = reagent_stock.get_mut(idx) else {
-                return ReagentShopOutcome::InvalidInput;
-            };
-            match apply_reagent_purchase(gold, stock, herbalist, reagent, quantity) {
-                Ok(outcome) => ReagentShopOutcome::Bought {
-                    herbalist,
-                    reagent,
-                    quantity,
-                    paid: outcome.quote.total_price,
-                },
-                Err(ReagentPurchaseError::InsufficientGold { required, .. }) => {
-                    ReagentShopOutcome::RefusedShortFunds { cost: required }
-                }
-                Err(ReagentPurchaseError::StockCap {
-                    current,
-                    requested,
-                    cap,
-                }) => ReagentShopOutcome::RefusedStockCap {
-                    current,
-                    requested,
-                    cap,
-                },
-                Err(ReagentPurchaseError::ZeroQuantity) => ReagentShopOutcome::Declined,
-                Err(ReagentPurchaseError::NotStocked) => ReagentShopOutcome::InvalidInput,
+            b'N' | b'n' | b' ' => {
+                *state = ReagentShopState::Exited;
+                ReagentShopOutcome::DeclinedEntry
             }
-        }
-        (ReagentShopState::Exited, _) => ReagentShopOutcome::Exited,
-        _ => ReagentShopOutcome::InvalidInput,
-    }
-}
-
-fn select_reagent_menu_entry(
-    state: &mut ReagentShopState,
-    herbalist: Herbalist,
-    byte: u8,
-) -> ReagentShopOutcome {
-    match byte {
-        b' ' | 0x1B | b'N' | b'n' => {
-            *state = ReagentShopState::Exited;
-            ReagentShopOutcome::Exited
-        }
-        b'Y' | b'y' => ReagentShopOutcome::EnteredMenu { herbalist },
-        b => {
-            let upper = b.to_ascii_uppercase() as char;
+            _ => ReagentShopOutcome::InvalidInput,
+        },
+        ReagentShopState::PickReagent { herbalist } => {
+            if matches!(byte, b' ' | 0x1B | b'\r' | b'\n') {
+                *state = ReagentShopState::Exited;
+                return ReagentShopOutcome::LeftMenu;
+            }
+            let upper = byte.to_ascii_uppercase() as char;
             let Some(entry) = herbalist_menu_entries(herbalist)
                 .into_iter()
                 .find(|entry| entry.letter == upper)
             else {
                 return ReagentShopOutcome::InvalidInput;
             };
-            *state = ReagentShopState::PickQuantity {
-                herbalist,
-                reagent: entry.reagent,
-                unit_price: entry.unit_price,
+            // `shops.md §8.9`: "a counter already at 99 refuses before the
+            // offer".
+            if reagent_stock
+                .get(entry.reagent.inventory_index())
+                .is_some_and(|count| *count >= REAGENT_STOCK_CAP_PER_KIND)
+            {
+                *state = ReagentShopState::CapRefusalWait { herbalist };
+                return ReagentShopOutcome::RefusedAtCap { herbalist };
+            }
+            let Ok(quote) = quote_reagent_purchase(herbalist, entry.reagent, speaker_intelligence)
+            else {
+                return ReagentShopOutcome::InvalidInput;
             };
-            ReagentShopOutcome::QuotedUnit {
+            *state = ReagentShopState::ConfirmBundle {
                 herbalist,
                 reagent: entry.reagent,
-                unit_price: entry.unit_price,
+                price: quote.total_price,
+            };
+            ReagentShopOutcome::Offered {
+                herbalist,
+                reagent: entry.reagent,
+                price: quote.total_price,
             }
         }
+        ReagentShopState::CapRefusalWait { herbalist } => {
+            *state = ReagentShopState::PickReagent { herbalist };
+            ReagentShopOutcome::RedrawStock { herbalist }
+        }
+        ReagentShopState::ConfirmBundle {
+            herbalist, reagent, ..
+        } => match byte {
+            b'Y' | b'y' => {
+                let Some(stock) = reagent_stock.get_mut(reagent.inventory_index()) else {
+                    return ReagentShopOutcome::InvalidInput;
+                };
+                match apply_reagent_purchase(gold, stock, herbalist, reagent, speaker_intelligence)
+                {
+                    Ok(outcome) => {
+                        *state = ReagentShopState::PickReagent { herbalist };
+                        ReagentShopOutcome::Bought {
+                            herbalist,
+                            reagent,
+                            quantity: outcome.quote.quantity,
+                            paid: outcome.quote.total_price,
+                        }
+                    }
+                    Err(ReagentPurchaseError::InsufficientGold { required, .. }) => {
+                        *state = ReagentShopState::Exited;
+                        ReagentShopOutcome::RefusedShortFunds { cost: required }
+                    }
+                    Err(ReagentPurchaseError::NotStocked) => ReagentShopOutcome::InvalidInput,
+                }
+            }
+            b'N' | b'n' => {
+                *state = ReagentShopState::PickReagent { herbalist };
+                ReagentShopOutcome::Declined { herbalist }
+            }
+            _ => ReagentShopOutcome::InvalidInput,
+        },
+        ReagentShopState::Exited => ReagentShopOutcome::Exited,
     }
 }
 
@@ -1263,6 +1305,11 @@ pub enum TavernOutcome {
         choice: BlueBoarDrinkChoice,
         cost: u16,
     },
+    BlueBoarRefusedShortFunds {
+        choice: BlueBoarDrinkChoice,
+        cost: u16,
+    },
+    BlueBoarListCancelled,
     PickProvisionQuantity {
         tavern: Tavern,
         unit_price: u16,
@@ -1367,7 +1414,10 @@ pub fn step_tavern(
                             cost: outcome.total_price,
                         }
                     }
+                    // `shops.md §8.C`: "Cannot afford that bill ... ends visit
+                    // without shared farewell".
                     Err(TavernDrinkError::InsufficientGold { required, .. }) => {
+                        *state = TavernState::Exited;
                         TavernOutcome::RefusedShortFunds { cost: required }
                     }
                 };
@@ -1474,6 +1524,16 @@ pub fn step_tavern(
             },
             TavernInput::Key(b),
         ) => {
+            // `shops.md §8.C`, "Blue Boar wine list cancelled": Space prints
+            // record `89` and returns to continuation without establishing a
+            // purchase; other non-A..F keys silently wait.
+            if b == b' ' {
+                *state = TavernState::AnythingElse {
+                    tavern,
+                    continuation_ready,
+                };
+                return TavernOutcome::BlueBoarListCancelled;
+            }
             let Some(choice) = blue_boar_choice_for_key(b) else {
                 return TavernOutcome::InvalidInput;
             };
@@ -1489,12 +1549,14 @@ pub fn step_tavern(
                         cost: outcome.total_price,
                     }
                 }
+                // `shops.md §8.C`: a Blue Boar wine short of funds "uses the
+                // same CAN'T PAY envelope", which ends the visit.
                 Err(TavernDrinkError::InsufficientGold { required, .. }) => {
-                    *state = TavernState::Menu {
-                        tavern,
-                        continuation_ready,
-                    };
-                    TavernOutcome::RefusedShortFunds { cost: required }
+                    *state = TavernState::Exited;
+                    TavernOutcome::BlueBoarRefusedShortFunds {
+                        choice,
+                        cost: required,
+                    }
                 }
             }
         }
@@ -1591,6 +1653,8 @@ pub enum SageOutcome {
         actual: usize,
     },
     NoTopicMatch,
+    /// Empty typed topic: back to the tavern's continuation question.
+    EmptyTopic,
     Exited,
     InvalidInput,
 }
@@ -1603,9 +1667,11 @@ pub fn step_sage(state: &mut SageState, input: SageInput<'_>, gold: &mut u16) ->
                     *state = SageState::Confirm { table, quote };
                     SageOutcome::QuotedFee { quote }
                 }
+                // `shops.md §8.C` sage result table: "empty input returns to
+                // tavern continuation without an extra farewell" (R436).
                 Err(SageRumourError::EmptyInput) => {
                     *state = SageState::Exited;
-                    SageOutcome::Exited
+                    SageOutcome::EmptyTopic
                 }
                 Err(SageRumourError::InputTooLong { limit, actual }) => {
                     SageOutcome::InputTooLong { limit, actual }
@@ -1710,42 +1776,51 @@ pub fn step_horse_trader(
                 speaker_intelligence,
             },
         ) => match key {
-            b'Y' | b'y' | b'B' | b'b' => {
+            // `shops.md §8.B`: the horse-trader entry accepts `Y`, `N` and
+            // Space; Yes renders the quote, No/Space exit through the
+            // nothing-bought bark, other keys re-poll.
+            b'Y' | b'y' => {
                 let price = quote_horse_purchase_for_speaker(stable, speaker_intelligence).price;
                 *state = HorseTraderState::ConfirmPurchase { stable, price };
                 HorseTraderOutcome::QuotedPrice { price }
             }
-            _ => {
+            b'N' | b'n' | b' ' => {
                 *state = HorseTraderState::Exited;
-                HorseTraderOutcome::Exited
+                HorseTraderOutcome::Declined
             }
+            _ => HorseTraderOutcome::InvalidInput,
         },
         (
-            HorseTraderState::ConfirmPurchase { stable, price },
+            HorseTraderState::ConfirmPurchase { price, .. },
             HorseTraderInput::Confirm {
                 accepted: true,
                 can_place_horse,
             },
         ) => {
+            // `shops.md §8.C` "Horse traders": short funds "suppress the
+            // ordinary farewell" and the visit ends; the closed refusal also
+            // exits.
             if *gold < price {
-                *state = HorseTraderState::Greeting { stable };
+                *state = HorseTraderState::Exited;
                 return HorseTraderOutcome::RefusedShortFunds { price };
             }
             if !can_place_horse {
-                *state = HorseTraderState::Greeting { stable };
+                *state = HorseTraderState::Exited;
                 return HorseTraderOutcome::RefusedNoMarker { price };
             }
             *gold -= price;
             *state = HorseTraderState::Exited;
             HorseTraderOutcome::Purchased { price }
         }
+        // `shops.md §8.A`: "Inner `N` declines without selecting a new quote
+        // and also exits through the nothing-bought bark."
         (
-            HorseTraderState::ConfirmPurchase { stable, .. },
+            HorseTraderState::ConfirmPurchase { .. },
             HorseTraderInput::Confirm {
                 accepted: false, ..
             },
         ) => {
-            *state = HorseTraderState::Greeting { stable };
+            *state = HorseTraderState::Exited;
             HorseTraderOutcome::Declined
         }
         (HorseTraderState::Exited, _) => HorseTraderOutcome::Exited,
@@ -1757,13 +1832,29 @@ pub fn step_horse_trader(
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum ShipBrokerState {
+    /// `shops.md §8.B`: the entry greeting takes `Y`, `N` or Space only.
     Greeting {
+        shipwright: Shipwright,
+    },
+    /// `shops.md §8.C` "Shipwrights": the record-`119` F/S menu. "Space or
+    /// Escape exits. Invalid service keys redraw record `119`."
+    Menu {
         shipwright: Shipwright,
     },
     ConfirmPurchase {
         quote: ShipwrightPurchaseQuote,
         delivery_x: usize,
         delivery_y: usize,
+    },
+    /// `shops.md §8.7`: Frigate requested while any delivery is pending -
+    /// record `125` and a Y/N whose Yes tests the fixed `10000`.
+    ConfirmDockSpace {
+        shipwright: Shipwright,
+    },
+    /// `shops.md §8.C` "Purchase continuation": record `124`, honorific,
+    /// `?" `; bare `Yes` reopens F/S, bare `No` exits.
+    Continuation {
+        shipwright: Shipwright,
     },
     Exited,
 }
@@ -1780,6 +1871,22 @@ impl ShipBrokerState {
     pub const fn for_shipwright(shipwright: Shipwright) -> Self {
         Self::Greeting { shipwright }
     }
+
+    /// The F/S menu as the accepted entry `Y` leaves it.
+    pub const fn menu_for_shipwright(shipwright: Shipwright) -> Self {
+        Self::Menu { shipwright }
+    }
+
+    pub const fn shipwright(self) -> Option<Shipwright> {
+        match self {
+            Self::Greeting { shipwright }
+            | Self::Menu { shipwright }
+            | Self::ConfirmDockSpace { shipwright }
+            | Self::Continuation { shipwright } => Some(shipwright),
+            Self::ConfirmPurchase { quote, .. } => Some(quote.shipwright),
+            Self::Exited => None,
+        }
+    }
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -1795,17 +1902,23 @@ pub enum ShipBrokerOutcome {
     /// Measured 2026-09-08 at The Rusty Bucket
     /// (`qa/paired/bd-shipwright.tsv`): `Y` at the greeting prints the stock
     /// line and its question, and only then does a hull letter quote.
+    /// Also the record-`119` redraw for an invalid menu key, a declined
+    /// dock-space quote, and a `Yes` at the continuation.
     EnteredMenu,
     QuotedPurchase {
         quote: ShipwrightPurchaseQuote,
     },
+    /// `shops.md §8.7`: the limited-dock-space quote, record `125`.
+    QuotedDockSpace,
     PurchaseApplied {
         outcome: ShipwrightPurchaseOutcome,
     },
+    /// Ends the visit without the ordinary farewell (`shops.md §8.C`).
     RefusedShortFunds {
         available: u16,
         required: u16,
     },
+    /// The visit ends through the shared closing bark.
     Declined,
     Exited,
     InvalidInput,
@@ -1819,8 +1932,30 @@ pub fn step_ship_broker(
     speaker_intelligence: u8,
 ) -> ShipBrokerOutcome {
     match (*state, input) {
-        (ShipBrokerState::Greeting { shipwright }, ShipBrokerInput::Key(b)) => {
+        // `shops.md §8.A`: "Entry accepts `Y`, `N`, or Space; ignored entry
+        // keys do not redraw."
+        (ShipBrokerState::Greeting { shipwright }, ShipBrokerInput::Key(b)) => match b {
+            b'Y' | b'y' => {
+                *state = ShipBrokerState::Menu { shipwright };
+                ShipBrokerOutcome::EnteredMenu
+            }
+            b'N' | b'n' | b' ' => {
+                *state = ShipBrokerState::Exited;
+                ShipBrokerOutcome::Declined
+            }
+            _ => ShipBrokerOutcome::InvalidInput,
+        },
+        (ShipBrokerState::Menu { shipwright }, ShipBrokerInput::Key(b)) => {
             match shipwright_menu_action(b) {
+                // `shops.md §8.7`: "Selecting **Frigate** while any
+                // shipwright delivery is already pending shows a
+                // limited-dock-space / special-delivery quote".
+                ShipwrightMenuAction::Purchase(crate::shops::ShipwrightPurchaseKind::Frigate)
+                    if pending_vehicle.is_some() =>
+                {
+                    *state = ShipBrokerState::ConfirmDockSpace { shipwright };
+                    ShipBrokerOutcome::QuotedDockSpace
+                }
                 ShipwrightMenuAction::Purchase(kind) => {
                     let quote = quote_shipwright_purchase(shipwright, kind, speaker_intelligence);
                     let (delivery_x, delivery_y) = shipwright_delivery_coordinate(shipwright);
@@ -1833,15 +1968,9 @@ pub fn step_ship_broker(
                 }
                 ShipwrightMenuAction::Exit => {
                     *state = ShipBrokerState::Exited;
-                    ShipBrokerOutcome::Exited
+                    ShipBrokerOutcome::Declined
                 }
-                ShipwrightMenuAction::Discard => {
-                    if matches!(b, b'Y' | b'y') {
-                        ShipBrokerOutcome::EnteredMenu
-                    } else {
-                        ShipBrokerOutcome::InvalidInput
-                    }
-                }
+                ShipwrightMenuAction::Discard => ShipBrokerOutcome::EnteredMenu,
             }
         }
         (
@@ -1862,23 +1991,58 @@ pub fn step_ship_broker(
                 delivery_y,
                 speaker_intelligence,
             );
-            *state = ShipBrokerState::Greeting { shipwright };
             match outcome {
-                Ok(outcome) => ShipBrokerOutcome::PurchaseApplied { outcome },
+                Ok(outcome) => {
+                    *state = ShipBrokerState::Continuation { shipwright };
+                    ShipBrokerOutcome::PurchaseApplied { outcome }
+                }
                 Err(ShipwrightPurchaseError::InsufficientGold {
                     available,
                     required,
-                }) => ShipBrokerOutcome::RefusedShortFunds {
-                    available,
-                    required,
-                },
-                Err(ShipwrightPurchaseError::NoReturnWorld) => ShipBrokerOutcome::InvalidInput,
+                }) => {
+                    *state = ShipBrokerState::Exited;
+                    ShipBrokerOutcome::RefusedShortFunds {
+                        available,
+                        required,
+                    }
+                }
+                Err(ShipwrightPurchaseError::NoReturnWorld) => {
+                    *state = ShipBrokerState::Menu { shipwright };
+                    ShipBrokerOutcome::InvalidInput
+                }
             }
         }
-        (ShipBrokerState::ConfirmPurchase { quote, .. }, ShipBrokerInput::Confirm(false)) => {
-            *state = ShipBrokerState::Greeting {
-                shipwright: quote.shipwright,
-            };
+        // `shops.md §8.A`: the nothing-bought bark "Rendered at the tail of a
+        // visit that completed no purchase, including ... a declined quote".
+        (ShipBrokerState::ConfirmPurchase { .. }, ShipBrokerInput::Confirm(false)) => {
+            *state = ShipBrokerState::Exited;
+            ShipBrokerOutcome::Declined
+        }
+        // `shops.md §8.7`: "A Yes answer runs only the affordability/refusal
+        // gate for that quote; it does not debit gold, queue a second
+        // Frigate, or alter the pending watercraft. The amount that gate
+        // tests is a fixed `10000`".
+        (ShipBrokerState::ConfirmDockSpace { shipwright }, ShipBrokerInput::Confirm(true)) => {
+            if *gold < crate::shops::SHIPWRIGHT_SPECIAL_DELIVERY_GOLD {
+                *state = ShipBrokerState::Exited;
+                ShipBrokerOutcome::RefusedShortFunds {
+                    available: *gold,
+                    required: crate::shops::SHIPWRIGHT_SPECIAL_DELIVERY_GOLD,
+                }
+            } else {
+                // Unreachable under the `9999` gold ceiling; nothing changes.
+                *state = ShipBrokerState::Menu { shipwright };
+                ShipBrokerOutcome::EnteredMenu
+            }
+        }
+        // `shops.md §8.C`: "No reopens the F/S menu."
+        (ShipBrokerState::ConfirmDockSpace { shipwright }, ShipBrokerInput::Confirm(false))
+        | (ShipBrokerState::Continuation { shipwright }, ShipBrokerInput::Confirm(true)) => {
+            *state = ShipBrokerState::Menu { shipwright };
+            ShipBrokerOutcome::EnteredMenu
+        }
+        (ShipBrokerState::Continuation { .. }, ShipBrokerInput::Confirm(false)) => {
+            *state = ShipBrokerState::Exited;
             ShipBrokerOutcome::Declined
         }
         (ShipBrokerState::Exited, _) => ShipBrokerOutcome::Exited,
@@ -1896,10 +2060,11 @@ pub enum GuildShopState {
     PickItem {
         shop: GuildShop,
     },
-    PickQuantity {
+    /// `shops.md §8.C`: the bundle offer's Y/N confirmation.
+    ConfirmBundle {
         shop: GuildShop,
         commodity: GuildCommodity,
-        unit_price: u16,
+        price: u16,
     },
     Exited,
 }
@@ -1921,7 +2086,6 @@ impl GuildShopState {
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum GuildShopInput {
     Key(u8),
-    Quantity(u8),
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -1929,10 +2093,17 @@ pub enum GuildShopOutcome {
     EnteredMenu {
         shop: GuildShop,
     },
-    QuotedUnit {
+    /// `N` or Space at the entry prompt: exit through the no-sale bark.
+    DeclinedEntry,
+    /// `shops.md §8.C`: one fixed bundle offered at its adjusted price.
+    Offered {
         shop: GuildShop,
         commodity: GuildCommodity,
-        unit_price: u16,
+        price: u16,
+    },
+    /// `D`: record `164`, then the stock menu again.
+    Described {
+        shop: GuildShop,
     },
     Bought {
         shop: GuildShop,
@@ -1940,19 +2111,20 @@ pub enum GuildShopOutcome {
         quantity: u8,
         paid: u16,
     },
+    /// Record `163`; the visit ends without the ordinary farewell.
     RefusedShortFunds {
         cost: u16,
     },
-    RefusedStockCap {
-        current: u8,
-        requested: u8,
-        cap: u8,
-    },
     Declined,
+    /// Space or Escape at the stock menu: the ordinary farewell.
+    LeftMenu,
     Exited,
     InvalidInput,
 }
 
+/// `shops.md §8.2` / `§8.C` guild flow. Entry accepts `Y`, `N` and Space
+/// (other keys re-poll); the stock menu takes `a`/`b`/`c`, `D`, Space and
+/// Escape (other keys wait); a bundle offer accepts `Y`/`N` only.
 pub fn step_guild_shop(
     state: &mut GuildShopState,
     input: GuildShopInput,
@@ -1960,83 +2132,74 @@ pub fn step_guild_shop(
     gems: &mut u8,
     keys: &mut u8,
     torches: &mut u8,
+    speaker_intelligence: u8,
 ) -> GuildShopOutcome {
-    match (*state, input) {
-        (GuildShopState::Greeting { shop }, GuildShopInput::Key(b)) => {
-            *state = GuildShopState::PickItem { shop };
-            select_guild_menu_entry(state, shop, b)
-        }
-        (GuildShopState::PickItem { shop }, GuildShopInput::Key(b)) => {
-            select_guild_menu_entry(state, shop, b)
-        }
-        (
-            GuildShopState::PickQuantity {
-                shop, commodity, ..
-            },
-            GuildShopInput::Quantity(quantity),
-        ) => {
-            *state = GuildShopState::PickItem { shop };
-            if quantity == 0 {
-                return GuildShopOutcome::Declined;
+    let GuildShopInput::Key(byte) = input;
+    match *state {
+        GuildShopState::Greeting { shop } => match byte {
+            b'Y' | b'y' => {
+                *state = GuildShopState::PickItem { shop };
+                GuildShopOutcome::EnteredMenu { shop }
             }
-            let stock = match commodity {
-                GuildCommodity::Gems => gems,
-                GuildCommodity::Keys => keys,
-                GuildCommodity::Torches => torches,
-            };
-            match apply_guild_purchase(gold, stock, shop, commodity, quantity) {
-                Ok(outcome) => GuildShopOutcome::Bought {
-                    shop,
-                    commodity,
-                    quantity,
-                    paid: outcome.quote.total_price,
-                },
-                Err(GuildPurchaseError::InsufficientGold { required, .. }) => {
-                    GuildShopOutcome::RefusedShortFunds { cost: required }
-                }
-                Err(GuildPurchaseError::StockCap {
-                    current,
-                    requested,
-                    cap,
-                }) => GuildShopOutcome::RefusedStockCap {
-                    current,
-                    requested,
-                    cap,
-                },
-                Err(GuildPurchaseError::ZeroQuantity) => GuildShopOutcome::Declined,
+            b'N' | b'n' | b' ' => {
+                *state = GuildShopState::Exited;
+                GuildShopOutcome::DeclinedEntry
             }
-        }
-        (GuildShopState::Exited, _) => GuildShopOutcome::Exited,
-        _ => GuildShopOutcome::InvalidInput,
-    }
-}
-
-fn select_guild_menu_entry(
-    state: &mut GuildShopState,
-    shop: GuildShop,
-    byte: u8,
-) -> GuildShopOutcome {
-    match byte {
-        b'Y' | b'y' => GuildShopOutcome::EnteredMenu { shop },
-        b => match guild_shop_action(b) {
+            _ => GuildShopOutcome::InvalidInput,
+        },
+        GuildShopState::PickItem { shop } => match guild_shop_action(byte) {
             GuildShopAction::Purchase(commodity) => {
-                let unit_price = guild_unit_price(shop, commodity);
-                *state = GuildShopState::PickQuantity {
+                let price = guild_bundle_price(shop, commodity, speaker_intelligence);
+                *state = GuildShopState::ConfirmBundle {
                     shop,
                     commodity,
-                    unit_price,
+                    price,
                 };
-                GuildShopOutcome::QuotedUnit {
+                GuildShopOutcome::Offered {
                     shop,
                     commodity,
-                    unit_price,
+                    price,
                 }
             }
+            GuildShopAction::Describe => GuildShopOutcome::Described { shop },
             GuildShopAction::Exit => {
                 *state = GuildShopState::Exited;
-                GuildShopOutcome::Exited
+                GuildShopOutcome::LeftMenu
             }
+            GuildShopAction::Ignore => GuildShopOutcome::InvalidInput,
         },
+        GuildShopState::ConfirmBundle {
+            shop, commodity, ..
+        } => match byte {
+            b'Y' | b'y' => {
+                let stock = match commodity {
+                    GuildCommodity::Gems => gems,
+                    GuildCommodity::Keys => keys,
+                    GuildCommodity::Torches => torches,
+                };
+                match apply_guild_purchase(gold, stock, shop, commodity, speaker_intelligence) {
+                    Ok(outcome) => {
+                        *state = GuildShopState::PickItem { shop };
+                        GuildShopOutcome::Bought {
+                            shop,
+                            commodity,
+                            quantity: outcome.quote.quantity,
+                            paid: outcome.quote.total_price,
+                        }
+                    }
+                    Err(GuildPurchaseError::InsufficientGold { required, .. }) => {
+                        *state = GuildShopState::Exited;
+                        GuildShopOutcome::RefusedShortFunds { cost: required }
+                    }
+                }
+            }
+            b'N' | b'n' => {
+                *state = GuildShopState::PickItem { shop };
+                GuildShopOutcome::Declined
+            }
+            _ => GuildShopOutcome::InvalidInput,
+        },
+        GuildShopState::Exited => GuildShopOutcome::Exited,
     }
 }
 
@@ -2110,6 +2273,42 @@ mod tests {
         assert!(matches!(outcome, ArmsShopOutcome::Bought { item: 3, .. }));
         assert_eq!(stock[3], 1);
         assert!(gold < 100);
+    }
+
+    /// `shops.md §8.A` arms buy confirmation row: a successful payment
+    /// "increments the equipment counter or fills arrows/quarrels to `99`".
+    #[test]
+    fn arms_shop_buying_ammunition_fills_the_counter_to_99() {
+        let prices = make_price_table();
+        let ctx = ShopTransactionContext {
+            party_gold: 100,
+            speaker_intelligence: 10,
+            world_hour: 12,
+            party_size: 1,
+            living_party_members: 1,
+        };
+        for item in [crate::EQUIPMENT_ID_ARROWS, crate::EQUIPMENT_ID_QUARRELS] {
+            let mut state = ArmsShopState::BuyConfirm {
+                item: item as u8,
+                quoted_price: 5,
+                quote_record_id: 0,
+            };
+            let mut stock = make_stock();
+            stock[item] = 7;
+            let mut gold = 100u16;
+            let outcome = step_arms_shop(
+                &mut state,
+                ArmsShopInput::Confirm(true),
+                ctx,
+                &mut gold,
+                &mut stock,
+                &prices,
+            );
+            assert!(matches!(outcome, ArmsShopOutcome::Bought { .. }));
+            assert_eq!(stock[item], EQUIPMENT_STOCK_CAP);
+            assert_eq!(gold, 95);
+        }
+        assert_eq!(crate::shops::arms_purchase_stock_after(3, 7), 8);
     }
 
     #[test]
@@ -3010,93 +3209,121 @@ mod tests {
         assert_eq!(state, InnkeeperState::Exited);
     }
 
+    fn reagent_step(
+        state: &mut ReagentShopState,
+        key: u8,
+        gold: &mut u16,
+        stock: &mut [u8; 8],
+    ) -> ReagentShopOutcome {
+        step_reagent_shop(state, ReagentShopInput::Key(key), gold, stock, 30)
+    }
+
+    /// `shops.md §6`/`§8.9`: a displayed letter offers that herbalist's
+    /// fixed bundle at the adjusted bundle price; `Y` buys it once.
     #[test]
-    fn reagent_shop_compact_letter_path_debits_gold_and_increments_stock() {
-        let mut state = ReagentShopState::for_herbalist(Herbalist::Mysticism);
+    fn reagent_shop_offers_one_bundle_and_y_buys_it() {
+        let mut state = ReagentShopState::for_herbalist(Herbalist::TheAlchemist);
         let mut gold = 1000u16;
         let mut stock = [0u8; 8];
-        let quote = step_reagent_shop(
-            &mut state,
-            ReagentShopInput::Key(b'A'),
-            &mut gold,
-            &mut stock,
+        assert_eq!(
+            reagent_step(&mut state, b'Y', &mut gold, &mut stock),
+            ReagentShopOutcome::EnteredMenu {
+                herbalist: Herbalist::TheAlchemist
+            }
+        );
+        // The Alchemist's third stocked reagent is Blood Moss: six for 30.
+        assert_eq!(
+            reagent_step(&mut state, b'C', &mut gold, &mut stock),
+            ReagentShopOutcome::Offered {
+                herbalist: Herbalist::TheAlchemist,
+                reagent: Reagent::BloodMoss,
+                price: 33,
+            }
         );
         assert_eq!(
-            quote,
-            ReagentShopOutcome::QuotedUnit {
-                herbalist: Herbalist::Mysticism,
-                reagent: Reagent::SpiderSilk,
-                unit_price: 6
-            }
+            reagent_step(&mut state, b'4', &mut gold, &mut stock),
+            ReagentShopOutcome::InvalidInput
         );
-        let outcome = step_reagent_shop(
-            &mut state,
-            ReagentShopInput::Quantity(4),
-            &mut gold,
-            &mut stock,
-        );
-        assert!(matches!(
-            outcome,
+        assert_eq!(
+            reagent_step(&mut state, b'Y', &mut gold, &mut stock),
             ReagentShopOutcome::Bought {
-                herbalist: Herbalist::Mysticism,
-                reagent: Reagent::SpiderSilk,
-                quantity: 4,
-                paid: 24
+                herbalist: Herbalist::TheAlchemist,
+                reagent: Reagent::BloodMoss,
+                quantity: 6,
+                paid: 33,
             }
-        ));
-        assert_eq!(stock[Reagent::SpiderSilk.inventory_index()], 4);
-        assert_eq!(gold, 1000 - 24);
+        );
+        assert_eq!(stock[Reagent::BloodMoss.inventory_index()], 6);
+        assert_eq!(gold, 967);
+        assert_eq!(
+            state,
+            ReagentShopState::PickReagent {
+                herbalist: Herbalist::TheAlchemist
+            }
+        );
+
+        reagent_step(&mut state, b'C', &mut gold, &mut stock);
+        assert_eq!(
+            reagent_step(&mut state, b'N', &mut gold, &mut stock),
+            ReagentShopOutcome::Declined {
+                herbalist: Herbalist::TheAlchemist
+            }
+        );
+        assert_eq!(gold, 967);
+        assert_eq!(
+            reagent_step(&mut state, b'\r', &mut gold, &mut stock),
+            ReagentShopOutcome::LeftMenu
+        );
+        assert_eq!(state, ReagentShopState::Exited);
     }
 
+    /// `shops.md §8.9`: "a counter already at 99 refuses before the offer";
+    /// §8.C consumes one key, then redraws the stock.
     #[test]
-    fn reagent_shop_zero_quantity_treated_as_decline() {
-        let mut state = ReagentShopState::for_herbalist(Herbalist::TheHerbalist);
-        let mut gold = 1000u16;
-        let mut stock = [0u8; 8];
-        step_reagent_shop(
-            &mut state,
-            ReagentShopInput::Key(b'A'),
-            &mut gold,
-            &mut stock,
-        );
-        let outcome = step_reagent_shop(
-            &mut state,
-            ReagentShopInput::Quantity(0),
-            &mut gold,
-            &mut stock,
-        );
-        assert_eq!(outcome, ReagentShopOutcome::Declined);
-        assert_eq!(gold, 1000);
-    }
-
-    #[test]
-    fn reagent_shop_refuses_stock_cap_overflow_without_partial_mutation() {
-        let mut state = ReagentShopState::for_herbalist(Herbalist::TheSharperMage);
+    fn reagent_shop_refuses_a_full_counter_before_the_offer() {
+        let mut state = ReagentShopState::PickReagent {
+            herbalist: Herbalist::TheSharperMage,
+        };
         let mut gold = 60_000u16;
         let mut stock = [0u8; 8];
-        stock[Reagent::BloodMoss.inventory_index()] = 95;
-        step_reagent_shop(
-            &mut state,
-            ReagentShopInput::Key(b'A'),
-            &mut gold,
-            &mut stock,
-        );
-        let outcome = step_reagent_shop(
-            &mut state,
-            ReagentShopInput::Quantity(20),
-            &mut gold,
-            &mut stock,
-        );
+        stock[Reagent::BloodMoss.inventory_index()] = 99;
         assert_eq!(
-            outcome,
-            ReagentShopOutcome::RefusedStockCap {
-                current: 95,
-                requested: 20,
-                cap: REAGENT_STOCK_CAP_PER_KIND
+            reagent_step(&mut state, b'A', &mut gold, &mut stock),
+            ReagentShopOutcome::RefusedAtCap {
+                herbalist: Herbalist::TheSharperMage
             }
         );
-        assert_eq!(stock[Reagent::BloodMoss.inventory_index()], 95);
+        assert_eq!(
+            reagent_step(&mut state, b'Q', &mut gold, &mut stock),
+            ReagentShopOutcome::RedrawStock {
+                herbalist: Herbalist::TheSharperMage
+            }
+        );
+        assert_eq!(stock[Reagent::BloodMoss.inventory_index()], 99);
         assert_eq!(gold, 60_000);
+
+        // Below 99 the bundle is sold and the addition caps.
+        stock[Reagent::BloodMoss.inventory_index()] = 97;
+        reagent_step(&mut state, b'A', &mut gold, &mut stock);
+        reagent_step(&mut state, b'Y', &mut gold, &mut stock);
+        assert_eq!(stock[Reagent::BloodMoss.inventory_index()], 99);
+    }
+
+    /// `shops.md §8.C`: short funds renders record `147` and ends the visit.
+    #[test]
+    fn reagent_shop_short_funds_ends_the_visit() {
+        let mut state = ReagentShopState::PickReagent {
+            herbalist: Herbalist::TheSharperMage,
+        };
+        let mut gold = 10u16;
+        let mut stock = [0u8; 8];
+        reagent_step(&mut state, b'A', &mut gold, &mut stock);
+        assert_eq!(
+            reagent_step(&mut state, b'Y', &mut gold, &mut stock),
+            ReagentShopOutcome::RefusedShortFunds { cost: 55 }
+        );
+        assert_eq!(state, ReagentShopState::Exited);
+        assert_eq!(gold, 10);
     }
 
     #[test]
@@ -3220,6 +3447,63 @@ mod tests {
         );
         assert!(matches!(outcome, TavernOutcome::RefusedShortFunds { .. }));
         assert_eq!(gold, 1);
+    }
+
+    /// `shops.md §8.C` tavern result table: an unaffordable round or Blue
+    /// Boar wine "ends visit without shared farewell"; Space at the wine
+    /// list returns to continuation without establishing a purchase.
+    #[test]
+    fn tavern_short_funds_end_the_visit_and_blue_boar_space_returns_to_continuation() {
+        let ctx = ShopTransactionContext {
+            party_gold: 0,
+            speaker_intelligence: 0,
+            world_hour: 12,
+            party_size: 2,
+            living_party_members: 2,
+        };
+        let mut food = 0u16;
+        let mut gold = 0u16;
+        let tavern = Tavern::TheWayfarerTavern;
+        let mut state = TavernState::Menu {
+            tavern,
+            continuation_ready: true,
+        };
+        let round = tavern_menu_letters(tavern).round as u8;
+        let outcome = step_tavern(&mut state, TavernInput::Key(round), ctx, &mut gold, &mut food);
+        assert!(matches!(outcome, TavernOutcome::RefusedShortFunds { .. }));
+        assert_eq!(state, TavernState::Exited);
+
+        let tavern = Tavern::TheBlueBoarTavern;
+        let mut state = TavernState::BlueBoarDrinkList {
+            tavern,
+            continuation_ready: false,
+        };
+        let outcome = step_tavern(&mut state, TavernInput::Key(b'B'), ctx, &mut gold, &mut food);
+        assert!(matches!(
+            outcome,
+            TavernOutcome::BlueBoarRefusedShortFunds { .. }
+        ));
+        assert_eq!(state, TavernState::Exited);
+
+        let mut state = TavernState::BlueBoarDrinkList {
+            tavern,
+            continuation_ready: false,
+        };
+        assert_eq!(
+            step_tavern(&mut state, TavernInput::Key(b'Z'), ctx, &mut gold, &mut food),
+            TavernOutcome::InvalidInput
+        );
+        assert_eq!(
+            step_tavern(&mut state, TavernInput::Key(b' '), ctx, &mut gold, &mut food),
+            TavernOutcome::BlueBoarListCancelled
+        );
+        assert_eq!(
+            state,
+            TavernState::AnythingElse {
+                tavern,
+                continuation_ready: false,
+            }
+        );
     }
 
     #[test]
@@ -3591,6 +3875,14 @@ mod tests {
             step_sage(&mut state, SageInput::Keyword(" "), &mut gold),
             SageOutcome::Exited
         );
+
+        // `shops.md §8.C`: an empty topic returns to the tavern
+        // continuation rather than silently ending the visit.
+        let mut state = SageState::default();
+        assert_eq!(
+            step_sage(&mut state, SageInput::Keyword(" "), &mut gold),
+            SageOutcome::EmptyTopic
+        );
         assert_eq!(state, SageState::Exited);
     }
 
@@ -3629,7 +3921,7 @@ mod tests {
             step_horse_trader(
                 &mut state,
                 HorseTraderInput::Key {
-                    key: b'B',
+                    key: b'Y',
                     speaker_intelligence: 40,
                 },
                 &mut gold,
@@ -3648,12 +3940,7 @@ mod tests {
             HorseTraderOutcome::RefusedNoMarker { price: 128 }
         );
         assert_eq!(gold, 500);
-        assert_eq!(
-            state,
-            HorseTraderState::Greeting {
-                stable: Stable::WishingWellHorses
-            }
-        );
+        assert_eq!(state, HorseTraderState::Exited);
     }
 
     #[test]
@@ -3681,6 +3968,50 @@ mod tests {
             HorseTraderOutcome::RefusedShortFunds { .. }
         ));
         assert_eq!(gold, 10);
+        assert_eq!(state, HorseTraderState::Exited);
+    }
+
+    /// `shops.md §8.B`/`§8.A`: entry takes `Y`, `N` or Space; other keys
+    /// (the old `B` included) re-poll; an inner `N` exits the visit.
+    #[test]
+    fn horse_trader_entry_key_set_and_inner_decline_exit() {
+        let key = |state: &mut HorseTraderState, key: u8, gold: &mut u16| {
+            step_horse_trader(
+                state,
+                HorseTraderInput::Key {
+                    key,
+                    speaker_intelligence: 30,
+                },
+                gold,
+            )
+        };
+        let mut gold = 500u16;
+        let mut state = HorseTraderState::default();
+        for ignored in [b'B', b'\r', 0x1b, b'X'] {
+            assert_eq!(
+                key(&mut state, ignored, &mut gold),
+                HorseTraderOutcome::InvalidInput
+            );
+            assert_eq!(state, HorseTraderState::default());
+        }
+        assert_eq!(key(&mut state, b' ', &mut gold), HorseTraderOutcome::Declined);
+        assert_eq!(state, HorseTraderState::Exited);
+
+        let mut state = HorseTraderState::default();
+        key(&mut state, b'Y', &mut gold);
+        assert_eq!(
+            step_horse_trader(
+                &mut state,
+                HorseTraderInput::Confirm {
+                    accepted: false,
+                    can_place_horse: true,
+                },
+                &mut gold,
+            ),
+            HorseTraderOutcome::Declined
+        );
+        assert_eq!(state, HorseTraderState::Exited);
+        assert_eq!(gold, 500);
     }
 
     /// `shops.md §8.7`: "The stock shipwright rows carry the two base
@@ -3692,7 +4023,7 @@ mod tests {
     /// `(136, 158)`, which is not the published cell.
     #[test]
     fn ship_broker_f_key_quotes_then_queues_frigate_delivery() {
-        let mut state = ShipBrokerState::for_shipwright(Shipwright::TheRustyBucket);
+        let mut state = ShipBrokerState::menu_for_shipwright(Shipwright::TheRustyBucket);
         let mut gold = 770u16;
         let mut pending = None;
         let quote = step_ship_broker(
@@ -3744,7 +4075,7 @@ mod tests {
 
     #[test]
     fn ship_broker_s_key_adds_skiff_to_pending_frigate() {
-        let mut state = ShipBrokerState::for_shipwright(Shipwright::TheOakenOar);
+        let mut state = ShipBrokerState::menu_for_shipwright(Shipwright::TheOakenOar);
         let mut gold = 200u16;
         let mut pending = Some(PendingVehicleAcquisition::Frigate {
             x: 12,
@@ -3787,99 +4118,193 @@ mod tests {
         );
     }
 
+    /// `shops.md §8.B`/`§8.C` shipwrights: the entry takes only `Y`, `N` and
+    /// Space and `F`/`S` only from the record-`119` menu; a Frigate while any
+    /// delivery is pending is the dock-space quote whose Yes tests a fixed
+    /// `10000` and ends the visit; a sale leads to the continuation.
     #[test]
-    fn guild_shop_letter_path_debits_gold_and_increments_count() {
-        let mut state = GuildShopState::for_shop(GuildShop::TheDen);
-        let mut gold = 1000u16;
-        let mut gems = 0u8;
-        let mut keys = 0u8;
-        let mut torches = 0u8;
-        let quote = step_guild_shop(
-            &mut state,
-            GuildShopInput::Key(b'A'),
-            &mut gold,
-            &mut gems,
-            &mut keys,
-            &mut torches,
-        );
+    fn ship_broker_entry_menu_dock_space_and_continuation() {
+        let step = |state: &mut ShipBrokerState,
+                    input: ShipBrokerInput,
+                    gold: &mut u16,
+                    pending: &mut Option<PendingVehicleAcquisition>| {
+            step_ship_broker(state, input, gold, pending, 30)
+        };
+        let mut gold = 9999u16;
+        let mut pending = None;
+        let mut state = ShipBrokerState::for_shipwright(Shipwright::TheRustyBucket);
+        for ignored in [b'F', b'S', b'X'] {
+            assert_eq!(
+                step(&mut state, ShipBrokerInput::Key(ignored), &mut gold, &mut pending),
+                ShipBrokerOutcome::InvalidInput
+            );
+        }
         assert_eq!(
-            quote,
-            GuildShopOutcome::QuotedUnit {
-                shop: GuildShop::TheDen,
-                commodity: GuildCommodity::Keys,
-                unit_price: 190
+            step(&mut state, ShipBrokerInput::Key(b'Y'), &mut gold, &mut pending),
+            ShipBrokerOutcome::EnteredMenu
+        );
+        // Invalid menu keys redraw record `119`.
+        assert_eq!(
+            step(&mut state, ShipBrokerInput::Key(b'Q'), &mut gold, &mut pending),
+            ShipBrokerOutcome::EnteredMenu
+        );
+        step(&mut state, ShipBrokerInput::Key(b'S'), &mut gold, &mut pending);
+        assert!(matches!(
+            step(&mut state, ShipBrokerInput::Confirm(true), &mut gold, &mut pending),
+            ShipBrokerOutcome::PurchaseApplied { .. }
+        ));
+        assert!(matches!(state, ShipBrokerState::Continuation { .. }));
+        assert_eq!(
+            step(&mut state, ShipBrokerInput::Confirm(true), &mut gold, &mut pending),
+            ShipBrokerOutcome::EnteredMenu
+        );
+        let gold_before = gold;
+        let pending_before = pending;
+        assert_eq!(
+            step(&mut state, ShipBrokerInput::Key(b'F'), &mut gold, &mut pending),
+            ShipBrokerOutcome::QuotedDockSpace
+        );
+        // No reopens the menu.
+        assert_eq!(
+            step(&mut state, ShipBrokerInput::Confirm(false), &mut gold, &mut pending),
+            ShipBrokerOutcome::EnteredMenu
+        );
+        step(&mut state, ShipBrokerInput::Key(b'F'), &mut gold, &mut pending);
+        assert_eq!(
+            step(&mut state, ShipBrokerInput::Confirm(true), &mut gold, &mut pending),
+            ShipBrokerOutcome::RefusedShortFunds {
+                available: gold_before,
+                required: 10000,
             }
         );
-        let outcome = step_guild_shop(
-            &mut state,
-            GuildShopInput::Quantity(2),
-            &mut gold,
-            &mut gems,
-            &mut keys,
-            &mut torches,
+        assert_eq!(state, ShipBrokerState::Exited);
+        assert_eq!(gold, gold_before);
+        assert_eq!(pending, pending_before);
+    }
+
+    fn guild_step(
+        state: &mut GuildShopState,
+        key: u8,
+        gold: &mut u16,
+        counters: &mut (u8, u8, u8),
+    ) -> GuildShopOutcome {
+        let (gems, keys, torches) = counters;
+        step_guild_shop(
+            state,
+            GuildShopInput::Key(key),
+            gold,
+            gems,
+            keys,
+            torches,
+            30,
+        )
+    }
+
+    /// `shops.md §8.2`/`§6`: a Y/N offer for one fixed bundle (three keys)
+    /// at `base + trunc(base * (100 - 3 * Int) / 100)`; the addition caps
+    /// at 99 without reducing the price.
+    #[test]
+    fn guild_shop_offers_one_adjusted_bundle_and_caps_the_counter() {
+        let mut state = GuildShopState::for_shop(GuildShop::TheDen);
+        let mut gold = 1000u16;
+        let mut counters = (0u8, 98u8, 0u8);
+        assert_eq!(
+            guild_step(&mut state, b'Y', &mut gold, &mut counters),
+            GuildShopOutcome::EnteredMenu {
+                shop: GuildShop::TheDen
+            }
         );
-        assert!(matches!(
-            outcome,
+        assert_eq!(
+            guild_step(&mut state, b'a', &mut gold, &mut counters),
+            GuildShopOutcome::Offered {
+                shop: GuildShop::TheDen,
+                commodity: GuildCommodity::Keys,
+                price: 209,
+            }
+        );
+        // Offer input accepts Y/N only.
+        assert_eq!(
+            guild_step(&mut state, b'2', &mut gold, &mut counters),
+            GuildShopOutcome::InvalidInput
+        );
+        assert_eq!(
+            guild_step(&mut state, b'Y', &mut gold, &mut counters),
             GuildShopOutcome::Bought {
                 shop: GuildShop::TheDen,
                 commodity: GuildCommodity::Keys,
-                quantity: 2,
-                paid: 380
+                quantity: 3,
+                paid: 209,
             }
-        ));
-        assert_eq!(keys, 2);
-        assert_eq!(gems, 0);
-        assert_eq!(gold, 620);
+        );
+        assert_eq!(counters, (0, 99, 0));
+        assert_eq!(gold, 791);
+        assert_eq!(state, GuildShopState::PickItem { shop: GuildShop::TheDen });
+
+        // Decline returns to the stock menu.
+        guild_step(&mut state, b'c', &mut gold, &mut counters);
+        assert_eq!(
+            guild_step(&mut state, b'N', &mut gold, &mut counters),
+            GuildShopOutcome::Declined
+        );
+        assert_eq!(state, GuildShopState::PickItem { shop: GuildShop::TheDen });
     }
 
+    /// `shops.md §8.A`/`§8.C`: entry takes Y/N/Space, other keys re-poll; the
+    /// menu takes a/b/c, D, Space and Escape, other keys (Return included)
+    /// wait.
     #[test]
-    fn guild_shop_non_menu_letter_exits_without_selling_sextant_placeholder() {
+    fn guild_shop_entry_and_menu_key_sets() {
         let mut state = GuildShopState::for_shop(GuildShop::TheGuild);
         let mut gold = 5000u16;
-        let mut gems = 0u8;
-        let mut keys = 0u8;
-        let mut torches = 0u8;
-        let outcome = step_guild_shop(
-            &mut state,
-            GuildShopInput::Key(b'X'),
-            &mut gold,
-            &mut gems,
-            &mut keys,
-            &mut torches,
+        let mut counters = (0u8, 0u8, 0u8);
+        assert_eq!(
+            guild_step(&mut state, b'X', &mut gold, &mut counters),
+            GuildShopOutcome::InvalidInput
         );
-        // Non-menu guild letters exit instead of buying placeholder goods.
-        assert_eq!(outcome, GuildShopOutcome::Exited);
+        assert_eq!(state, GuildShopState::for_shop(GuildShop::TheGuild));
+        guild_step(&mut state, b'Y', &mut gold, &mut counters);
+        for key in [b'X', b'\r', b'Y'] {
+            assert_eq!(
+                guild_step(&mut state, key, &mut gold, &mut counters),
+                GuildShopOutcome::InvalidInput
+            );
+        }
+        assert_eq!(
+            guild_step(&mut state, b'D', &mut gold, &mut counters),
+            GuildShopOutcome::Described {
+                shop: GuildShop::TheGuild
+            }
+        );
+        assert_eq!(
+            guild_step(&mut state, 0x1b, &mut gold, &mut counters),
+            GuildShopOutcome::LeftMenu
+        );
         assert_eq!(state, GuildShopState::Exited);
         assert_eq!(gold, 5000);
-        assert_eq!((gems, keys, torches), (0, 0, 0));
+
+        let mut state = GuildShopState::for_shop(GuildShop::TheGuild);
+        assert_eq!(
+            guild_step(&mut state, b' ', &mut gold, &mut counters),
+            GuildShopOutcome::DeclinedEntry
+        );
+        assert_eq!(state, GuildShopState::Exited);
     }
 
+    /// `shops.md §8.C`: short funds renders record `163` and ends the visit.
     #[test]
-    fn guild_shop_short_funds_refuses_quantity_purchase() {
+    fn guild_shop_short_funds_ends_the_visit() {
         let mut state = GuildShopState::for_shop(GuildShop::TheGuild);
         let mut gold = 100u16;
-        let mut gems = 0u8;
-        let mut keys = 0u8;
-        let mut torches = 0u8;
-        step_guild_shop(
-            &mut state,
-            GuildShopInput::Key(b'B'),
-            &mut gold,
-            &mut gems,
-            &mut keys,
-            &mut torches,
+        let mut counters = (0u8, 0u8, 0u8);
+        guild_step(&mut state, b'Y', &mut gold, &mut counters);
+        guild_step(&mut state, b'B', &mut gold, &mut counters);
+        assert_eq!(
+            guild_step(&mut state, b'Y', &mut gold, &mut counters),
+            GuildShopOutcome::RefusedShortFunds { cost: 220 }
         );
-        let outcome = step_guild_shop(
-            &mut state,
-            GuildShopInput::Quantity(1),
-            &mut gold,
-            &mut gems,
-            &mut keys,
-            &mut torches,
-        );
-        assert_eq!(outcome, GuildShopOutcome::RefusedShortFunds { cost: 200 });
+        assert_eq!(state, GuildShopState::Exited);
         assert_eq!(gold, 100);
-        assert_eq!(gems, 0);
+        assert_eq!(counters, (0, 0, 0));
     }
 
     #[test]

@@ -1933,7 +1933,8 @@
             state.search_facing_with_game_dir(&dir).unwrap(),
             MoveOutcome::Searched
         );
-        assert!(state.fixed_hidden_treasure_found(13));
+        // `hidden-treasures.md §2`: record 13 sets no found-bitmap bit.
+        assert!(!state.fixed_hidden_treasure_found(13));
         assert_eq!(
             state.active_objects[1].fixed_hidden_treasure_record(),
             Some(13)

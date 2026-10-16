@@ -3051,7 +3051,7 @@
                 bottom_right_x: INN_PICKUP_REGISTER_FRAME_RIGHT,
                 bottom_right_y: INN_PICKUP_REGISTER_BOTTOM,
                 cursor_x: 7,
-                cursor_y: 3,
+                cursor_y: 4,
                 color: text_window_default_color_byte(),
                 flags: 0,
             }
@@ -3065,8 +3065,8 @@
                 b' ',
             )
             .join("\n");
-        assert!(register.contains("Pick up"), "{register}");
-        assert!(register.contains("Companion"), "{register}");
+        assert!(register.contains("    GUEST"), "{register}");
+        assert!(register.contains("  REGISTER:"), "{register}");
         assert!(register.contains("1 IOLO"), "{register}");
         assert_eq!(
             active_shop_side_panel_border_rows(&state),
