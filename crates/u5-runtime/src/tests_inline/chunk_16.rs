@@ -1996,6 +1996,35 @@ BRITANNIA 11 21
     }
 
     #[test]
+    fn shrine_offering_and_turn_in_queue_one_unrestored_viewport_inversion() {
+        // `audio.md §5.4.7` / `karma.md §7.2`: both shrine swell callers
+        // precede the sweep with one unrestored viewport inversion; the
+        // refusal arms reach none.
+        let dir = debug_game_dir();
+        fs::write(dir.join(SHRINE_TABLE_FILE), "BRITANNIA 10 20 JUSTICE 136\n").unwrap();
+        let mut grid = open_world_grid();
+        grid[world_cell_index(10, 20)] = 136;
+        let mut state = britannia_state(grid, 10, 20);
+        let bit = ShrineVirtue::Justice.bit();
+        state.shrine_codex_mask = bit;
+        state.gold = 900;
+
+        handle_play_key_input(&mut state, 'M', "Beh/0", &dir).unwrap();
+        assert!(!state.take_pending_unrestored_viewport_inversion());
+
+        handle_play_key_input(&mut state, 'M', "Beh/1", &dir).unwrap();
+        assert_eq!(state.message, "ALAKAZAM!");
+        assert!(state.take_pending_unrestored_viewport_inversion());
+        assert!(!state.take_pending_unrestored_viewport_inversion());
+
+        state.shrine_ordained_mask = bit;
+        handle_play_key_input(&mut state, 'M', "Beh", &dir).unwrap();
+        assert_eq!(state.shrine_ordained_mask, 0);
+        assert!(state.take_pending_unrestored_viewport_inversion());
+        let _ = fs::remove_dir_all(dir);
+    }
+
+    #[test]
     fn active_completed_shrine_prompt_collects_offering_digit() {
         let dir = debug_game_dir();
         fs::write(

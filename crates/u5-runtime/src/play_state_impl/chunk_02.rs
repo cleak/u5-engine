@@ -2293,10 +2293,10 @@ impl PlayState {
                 // alone run the shared flash/rumble helper, and "it runs
                 // **after** the swell rather than instead of it", so the
                 // two are ordered rather than exclusive.
-                //
-                // Not implemented from §7.2, as on the offering arm: the
-                // unrestored exclusive-or inversion of the gameplay
-                // viewport that precedes the swell.
+                // `audio.md §5.4.7`: one unrestored exclusive-or inversion
+                // of the gameplay viewport precedes the swell; the
+                // following redraws paint over it.
+                self.pending_unrestored_viewport_inversion = true;
                 self.emit_sound_effect(SoundEffect::ShrineTurnInSwell);
                 self.emit_major_flash();
                 // `karma.md §12`, "Ordained and Codex read": the awarded
@@ -2586,13 +2586,10 @@ impl PlayState {
         // `karma.md §7.2` names §12's "local viewport/sound effect" on this
         // arm: the envelope generator run 920 times in one sweep at a fixed
         // pitch, "one slow swell and decay", about 7.91 s.
-        //
-        // Not implemented from §7.2: the arm also "issues a single rectangle
-        // fill over the gameplay viewport with the driver's exclusive-or
-        // mode selected", once and never undone. That is a viewport write
-        // whose interaction with the following world steps this engine has
-        // no capture of, and getting it wrong shows on every beat after it,
-        // so it waits for a measurement rather than a reading.
+        // `audio.md §5.4.7`: the swell is preceded by one exclusive-or
+        // inversion of the gameplay viewport, never undone - the following
+        // redraws simply paint over it.
+        self.pending_unrestored_viewport_inversion = true;
         self.emit_sound_effect(SoundEffect::ShrineOfferingSwell);
         // The ten-tick result pause. `animation.md §13.5`: a blocking
         // presentation pumps the sprite animator while it waits.

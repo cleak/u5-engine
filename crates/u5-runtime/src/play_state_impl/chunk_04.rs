@@ -2362,6 +2362,13 @@ impl PlayState {
         self.pending_potion_flash.take()
     }
 
+    /// Take the shrine arms' one unrestored viewport inversion
+    /// (`karma.md §7.2`). The frontend inverts the viewport it is showing
+    /// and lets its next ordinary redraw paint over it.
+    pub fn take_pending_unrestored_viewport_inversion(&mut self) -> bool {
+        std::mem::take(&mut self.pending_unrestored_viewport_inversion)
+    }
+
     pub fn apply_combat_party_invisibility_potion(&mut self, target_index: usize) -> bool {
         if target_index >= COMBAT_PARTY_ACTOR_SLOTS {
             return false;

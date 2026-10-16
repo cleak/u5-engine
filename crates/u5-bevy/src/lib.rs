@@ -9727,6 +9727,7 @@ fn screenshot_system(
     if !state.preset_keys_applied && !config.preset_keys.is_empty() {
         if let Some(mut visual) = visual {
             if visual.potion_flash_restore_pending.is_some()
+                || visual.unrestored_inversion_redraw_pending
                 || visual.state.visibility_sweep.is_some()
                 || visual.sweep_idle_redraw_pending
             {
@@ -9745,6 +9746,9 @@ fn screenshot_system(
                 }
             }
             let v: &mut VisualState = visual.as_mut();
+            // A screenshot captures the settled frame; the shrine arms'
+            // unrestored inversion is painted over by the redraw below.
+            let _ = v.state.take_pending_unrestored_viewport_inversion();
             if let Some(playback) = v.state.take_pending_potion_flash() {
                 let mut rgba = images
                     .get(&v.image_handle)
@@ -9886,6 +9890,10 @@ struct VisualState {
     /// pre-effect framebuffer. The next Update restores by rendering the
     /// resulting gameplay state.
     potion_flash_restore_pending: Option<PotionFlashPlayback>,
+    /// `karma.md §7.2`: a shrine arm's one unrestored viewport inversion is
+    /// on screen. The next Update paints over it with an ordinary redraw;
+    /// no restoring XOR is applied.
+    unrestored_inversion_redraw_pending: bool,
     /// Prevent the animation pump from painting a second frame in the same
     /// Update that restores a potion flash.
     skip_animation_pump_once: bool,
@@ -10587,7 +10595,7 @@ fn animate_static_tiles(
     let Some(mut visual) = visual else {
         return;
     };
-    if visual.potion_flash_restore_pending.is_some() {
+    if visual.potion_flash_restore_pending.is_some() || visual.unrestored_inversion_redraw_pending {
         return;
     }
     if visual.skip_animation_pump_once {
@@ -10920,6 +10928,7 @@ fn setup(
         input_line: String::new(),
         prompt_cursor_visible: false,
         potion_flash_restore_pending: None,
+        unrestored_inversion_redraw_pending: false,
         skip_animation_pump_once: false,
         sweep_idle_redraw_pending: false,
         held_direction_repeat: HeldDirectionRepeat::default(),
@@ -11096,6 +11105,7 @@ fn transition_visual_intro_to_gameplay(
         input_line: String::new(),
         prompt_cursor_visible: false,
         potion_flash_restore_pending: None,
+        unrestored_inversion_redraw_pending: false,
         skip_animation_pump_once: false,
         sweep_idle_redraw_pending: false,
         held_direction_repeat: HeldDirectionRepeat::default(),
@@ -12477,17 +12487,21 @@ fn drive_visual(
         return;
     };
     queue_pending_speaker_effects(&mut visual, &mut speaker);
-    if let Some(playback) = visual.potion_flash_restore_pending.take() {
+    let potion_restore = visual.potion_flash_restore_pending.take();
+    let unrestored_redraw = std::mem::take(&mut visual.unrestored_inversion_redraw_pending);
+    if potion_restore.is_some() || unrestored_redraw {
         let v: &mut VisualState = visual.as_mut();
         v.skip_animation_pump_once = true;
-        let restored = images
-            .get_mut(&v.image_handle)
-            .and_then(|image| image.data.as_mut())
-            .expect("potion flash restore requires the inverted visual framebuffer");
-        assert!(
-            apply_visual_potion_flash_xor(restored, playback),
-            "potion flash restorative XOR does not fit the visual framebuffer"
-        );
+        if let Some(playback) = potion_restore {
+            let restored = images
+                .get_mut(&v.image_handle)
+                .and_then(|image| image.data.as_mut())
+                .expect("potion flash restore requires the inverted visual framebuffer");
+            assert!(
+                apply_visual_potion_flash_xor(restored, playback),
+                "potion flash restorative XOR does not fit the visual framebuffer"
+            );
+        }
         v.prompt_cursor_visible = visual_line_prompt_active(&v.state);
         let input_line = v.input_line.clone();
         let ctx = PlayFrameContext {
@@ -12672,6 +12686,24 @@ fn drive_visual(
         replace_visual_image_data(&mut images, &v.image_handle, rgba, "potion flash inversion");
         run_potion_flash_soundless_timing(playback);
         v.potion_flash_restore_pending = Some(playback);
+        return;
+    }
+    if v.state.take_pending_unrestored_viewport_inversion() {
+        // `karma.md §7.2` / `audio.md §5.4.7`: the shrine offering and
+        // Codex turn-in arms XOR the gameplay viewport once before their
+        // swell and never undo it; the next ordinary redraw paints over it.
+        // The rectangle and mask are the shared `§6` inversion's.
+        let playback = shared_viewport_inversion_playback();
+        let mut rgba = images
+            .get(&v.image_handle)
+            .and_then(|image| image.data.clone())
+            .expect("shrine viewport inversion requires the current visual framebuffer");
+        assert!(
+            apply_visual_potion_flash_xor(&mut rgba, playback),
+            "shrine viewport inversion does not fit the visual framebuffer"
+        );
+        replace_visual_image_data(&mut images, &v.image_handle, rgba, "shrine viewport inversion");
+        v.unrestored_inversion_redraw_pending = true;
         return;
     }
     let input_line = v.input_line.clone();
@@ -14973,6 +15005,13 @@ fn ega_palette_index_from_rgba(rgba: &[u8]) -> u8 {
         }
     }
     best_index
+}
+
+/// The `audio.md §6` gameplay-viewport rectangle and XOR mask, independent
+/// of any potion. Every potion row shares the same rectangle and mask, so the
+/// first row's playback carries them.
+fn shared_viewport_inversion_playback() -> PotionFlashPlayback {
+    u5_runtime::potion_flash_playback(0).expect("potion row 0 exists")
 }
 
 /// Apply one shared potion-flash XOR pass directly to the Bevy RGBA surface.

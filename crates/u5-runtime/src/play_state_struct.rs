@@ -123,6 +123,11 @@ pub struct PlayState {
     /// frontend to present it. This is transient presentation state, never
     /// resumable or saved gameplay state.
     pub pending_potion_flash: Option<PotionFlashPlayback>,
+    /// `karma.md §7.2` / `audio.md §5.4.7`: the shrine offering and Codex
+    /// turn-in arms invert the gameplay viewport once before their swell and
+    /// never restore it; the following redraws paint over it. Transient
+    /// presentation state, never saved.
+    pub pending_unrestored_viewport_inversion: bool,
     /// Completed Stonegate trapdoor tableau waiting for a frontend. This is a
     /// blocking, non-resumable presentation record and is never save data.
     pub pending_stonegate_trapdoor_playback: Option<StonegateTrapdoorPlayback>,
