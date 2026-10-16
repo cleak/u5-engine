@@ -430,6 +430,20 @@ impl PlayState {
     /// one of the seventy-four the census puts on the immediate side.
     pub fn repaint_stats_panel(&mut self) {
         self.stats_panel = crate::stats_panel::stats_panel_snapshot_of(self);
+        // `stats-panel.md §2.1`/§6: in this one state every repaint lifts the
+        // message window's painted history by one row, the message cursor
+        // unchanged (`display-driver-abi.md §9.5`).
+        if crate::stats_panel::stats_panel_repaint_requests_strip_scroll(self) {
+            self.flush_message_slot();
+            if !self.message_row_open_mid_line {
+                // Cursor at column 0 of a fresh row: the lift leaves one
+                // blank row between the history and the cursor.
+                self.push_explicit_blank_message_entry();
+            } else if let Some(open) = self.message_transcript.last().map(|entry| entry.text.clone())
+            {
+                let _ = self.break_open_prompt_row_for_strip_scroll(&open);
+            }
+        }
     }
 
     /// Raise §2.2's deferred request. A raise "does not depend on the change
