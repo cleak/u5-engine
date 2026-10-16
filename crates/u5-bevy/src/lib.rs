@@ -5668,7 +5668,7 @@ fn visual_route_suite_cases() -> Vec<VisualRouteSuiteCase> {
                 target: PlayTarget::Town(castle),
                 ..PlayOptions::default()
             },
-            script: &["B", "N"],
+            script: &["Y", "N"],
             configure: Some(seed_visual_route_horse_trader_decline),
         },
         VisualRouteSuiteCase {
@@ -5678,7 +5678,7 @@ fn visual_route_suite_cases() -> Vec<VisualRouteSuiteCase> {
                 target: PlayTarget::Town(castle),
                 ..PlayOptions::default()
             },
-            script: &["B", "N"],
+            script: &["Y", "N"],
             configure: Some(seed_visual_route_horse_trader_decline),
         },
         VisualRouteSuiteCase {
@@ -5688,7 +5688,7 @@ fn visual_route_suite_cases() -> Vec<VisualRouteSuiteCase> {
                 target: PlayTarget::Town(castle),
                 ..PlayOptions::default()
             },
-            script: &["B", "Y"],
+            script: &["Y", "Y"],
             configure: Some(seed_visual_route_horse_trader_no_marker),
         },
         VisualRouteSuiteCase {
@@ -6377,7 +6377,7 @@ fn visual_route_suite_cases() -> Vec<VisualRouteSuiteCase> {
                 target: PlayTarget::Town(castle),
                 ..PlayOptions::default()
             },
-            script: &["B", "Y"],
+            script: &["Y", "Y"],
             configure: Some(seed_visual_route_horse_trader_horse_and_rider),
         },
         VisualRouteSuiteCase {
@@ -6387,7 +6387,7 @@ fn visual_route_suite_cases() -> Vec<VisualRouteSuiteCase> {
                 target: PlayTarget::Town(castle),
                 ..PlayOptions::default()
             },
-            script: &["B", "Y", "empty"],
+            script: &["Y", "Y", "empty"],
             configure: Some(seed_visual_route_horse_trader_horse_and_rider),
         },
         VisualRouteSuiteCase {
@@ -6397,7 +6397,7 @@ fn visual_route_suite_cases() -> Vec<VisualRouteSuiteCase> {
                 target: PlayTarget::Town(castle),
                 ..PlayOptions::default()
             },
-            script: &["B", "Y"],
+            script: &["Y", "Y"],
             configure: Some(seed_visual_route_horse_trader_stablehouse),
         },
         VisualRouteSuiteCase {
@@ -6407,7 +6407,7 @@ fn visual_route_suite_cases() -> Vec<VisualRouteSuiteCase> {
                 target: PlayTarget::Town(castle),
                 ..PlayOptions::default()
             },
-            script: &["B", "Y"],
+            script: &["Y", "Y"],
             configure: Some(seed_visual_route_horse_trader_wishing_well),
         },
         VisualRouteSuiteCase {
@@ -8738,8 +8738,9 @@ fn seed_visual_route_shipwright_shop(state: &mut PlayState, shipwright: Shipwrig
         active_objects: state.active_objects.clone(),
         pending_vehicle: None,
     });
+    // Seeded at the record-`119` menu, past the entry `Y` (`shops.md §8.B`).
     state.active_shop = Some(ActiveShopSession::ShipBroker(
-        ShipBrokerState::for_shipwright(shipwright),
+        ShipBrokerState::menu_for_shipwright(shipwright),
     ));
 }
 

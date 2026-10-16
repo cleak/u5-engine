@@ -6473,7 +6473,7 @@ fn end_to_end_shipwright_frigate_queues_published_dock_delivery() {
     let mut state = test_state(open_grid(), 3, 4);
     state.gold = 770;
     state.active_shop = Some(ActiveShopSession::ShipBroker(
-        ShipBrokerState::for_shipwright(Shipwright::TheRustyBucket),
+        ShipBrokerState::menu_for_shipwright(Shipwright::TheRustyBucket),
     ));
     state.return_world = Some(WorldReturn {
         plane: WorldPlane::Britannia,
@@ -6502,7 +6502,13 @@ fn end_to_end_shipwright_frigate_queues_published_dock_delivery() {
     handle_play_key_input(&mut state, 'Y', "", Path::new("")).unwrap();
 
     assert_eq!(state.gold, 0);
-    assert!(state.message.contains("Delivery is queued"));
+    // `shops.md §8.C`: records `123` and `124` (absent without `SHOPPE.DAT`),
+    // then the resident `sir?" ` continuation; the session stays open on it.
+    assert!(state.message.ends_with("sir?\" "), "{:?}", state.message);
+    assert!(matches!(
+        state.active_shop,
+        Some(ActiveShopSession::ShipBroker(ShipBrokerState::Continuation { .. }))
+    ));
     assert_eq!(
         state
             .return_world
@@ -6514,6 +6520,51 @@ fn end_to_end_shipwright_frigate_queues_published_dock_delivery() {
             y: 159,
             skiffs: 2,
         })
+    );
+}
+
+/// `shops.md §8.7`/`§8.C`: a Frigate while a delivery is pending is the
+/// record-`125` quote; Yes tests the fixed `10000`, so it refuses (record
+/// `122` plus `yells $.`), ends the visit and leaves gold and the pending
+/// watercraft unchanged.
+#[test]
+fn end_to_end_shipwright_pending_frigate_dock_space_always_refuses() {
+    use crate::shop_runtime::ShipBrokerState;
+    use crate::shop_session::ActiveShopSession;
+
+    let mut state = test_state(open_grid(), 3, 4);
+    state.gold = 9999;
+    state.active_shop = Some(ActiveShopSession::ShipBroker(
+        ShipBrokerState::menu_for_shipwright(Shipwright::TheRustyBucket),
+    ));
+    let pending = PendingVehicleAcquisition::Skiff {
+        x: 138,
+        y: 159,
+        aux3: 0,
+    };
+    state.return_world = Some(WorldReturn {
+        plane: WorldPlane::Britannia,
+        x: 12,
+        y: 21,
+        transport: TransportState::Foot,
+        sail_cadence: 0,
+        grid: open_world_grid(),
+        active_objects: Vec::new(),
+        pending_vehicle: Some(pending),
+    });
+
+    handle_play_key_input(&mut state, 'F', "", Path::new("")).unwrap();
+    assert!(matches!(
+        state.active_shop,
+        Some(ActiveShopSession::ShipBroker(ShipBrokerState::ConfirmDockSpace { .. }))
+    ));
+    handle_play_key_input(&mut state, 'Y', "", Path::new("")).unwrap();
+    assert!(state.active_shop.is_none());
+    assert_eq!(state.gold, 9999);
+    assert!(!state.message.contains("dock space"), "{:?}", state.message);
+    assert_eq!(
+        state.return_world.as_ref().and_then(|world| world.pending_vehicle),
+        Some(pending)
     );
 }
 

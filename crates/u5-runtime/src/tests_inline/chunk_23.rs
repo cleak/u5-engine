@@ -1154,9 +1154,11 @@ fn shipwright_purchase_refusals_preserve_gold_and_pending_delivery() {
             4,
             30,
         ),
+        // `shops.md §8.7`: the duplicate-Frigate gate tests "a fixed
+        // `10000`, not the shipwright's Frigate price".
         Err(ShipwrightPurchaseError::InsufficientGold {
             available: 99,
-            required: 660,
+            required: 10000,
         })
     );
     assert_eq!(gold, 99);

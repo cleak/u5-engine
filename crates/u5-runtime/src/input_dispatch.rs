@@ -2014,7 +2014,7 @@ fn handle_active_shop_key_input(
             // tavern's menu letter uses. Measured 2026-09-12
             // (`bd-shipwright/frigate`), where the original reads
             // `like to see?" F`.
-            let shipwright_letter_echo = matches!(*s, ShipBrokerState::Greeting { .. })
+            let shipwright_letter_echo = matches!(*s, ShipBrokerState::Menu { .. })
                 .then(|| match key_byte {
                     b'F' | b'f' => Some('F'),
                     b'S' | b's' => Some('S'),
@@ -2040,22 +2040,37 @@ fn handle_active_shop_key_input(
                 .as_ref()
                 .map(|world| world.pending_vehicle)
                 .unwrap_or_else(|| state.pending_vehicle_save.acquisition());
+            let prior = *s;
             let outcome = match (*s, yes, no) {
-                (ShipBrokerState::Greeting { .. }, _, _) => step_ship_broker(
-                    s,
-                    ShipBrokerInput::Key(key_byte),
-                    &mut state.gold,
-                    &mut pending,
-                    speaker_intelligence,
-                ),
-                (ShipBrokerState::ConfirmPurchase { .. }, true, _) => step_ship_broker(
+                (ShipBrokerState::Greeting { .. } | ShipBrokerState::Menu { .. }, _, _) => {
+                    step_ship_broker(
+                        s,
+                        ShipBrokerInput::Key(key_byte),
+                        &mut state.gold,
+                        &mut pending,
+                        speaker_intelligence,
+                    )
+                }
+                (
+                    ShipBrokerState::ConfirmPurchase { .. }
+                    | ShipBrokerState::ConfirmDockSpace { .. }
+                    | ShipBrokerState::Continuation { .. },
+                    true,
+                    _,
+                ) => step_ship_broker(
                     s,
                     ShipBrokerInput::Confirm(true),
                     &mut state.gold,
                     &mut pending,
                     speaker_intelligence,
                 ),
-                (ShipBrokerState::ConfirmPurchase { .. }, _, true) => step_ship_broker(
+                (
+                    ShipBrokerState::ConfirmPurchase { .. }
+                    | ShipBrokerState::ConfirmDockSpace { .. }
+                    | ShipBrokerState::Continuation { .. },
+                    _,
+                    true,
+                ) => step_ship_broker(
                     s,
                     ShipBrokerInput::Confirm(false),
                     &mut state.gold,
@@ -2070,7 +2085,7 @@ fn handle_active_shop_key_input(
             if let ShipBrokerOutcome::PurchaseApplied { outcome: purchase } = outcome {
                 state.sync_pending_vehicle_purchase_state(purchase);
             }
-            let surcharge = if matches!(
+            let purchase_completed = matches!(
                 &outcome,
                 ShipBrokerOutcome::PurchaseApplied { outcome }
                     if matches!(
@@ -2079,7 +2094,9 @@ fn handle_active_shop_key_input(
                             | crate::shops::ShipwrightPurchaseStatus::QueuedSkiff
                             | crate::shops::ShipwrightPurchaseStatus::AddedSkiffToPendingFrigate
                     )
-            ) {
+            );
+            let surcharge = if purchase_completed {
+                state.arms_transaction_completed = true;
                 apply_active_shop_surcharge(state)
             } else {
                 None
@@ -2087,24 +2104,13 @@ fn handle_active_shop_key_input(
             let vendor_name = area_scene_byte.and_then(|scene| {
                 crate::play_state_impl::shop_vendor_name_for_scene(SHOP_DIALOG_ID_SHIPWRIGHT, scene)
             });
+            let record = |id: usize, state: &PlayState| {
+                render_shipwright_record(game_dir, id, vendor_name, state)
+            };
             // `§8.B`: the Frigate/Skiff menu is record `119`, "with no added
             // resident menu question; the record carries its own leading
             // spacing and prompt".
-            let menu_record = crate::shoppe_bark::ShoppeTextRenderer::load_from_game_dir(game_dir)
-                .ok()
-                .and_then(|renderer| {
-                    renderer
-                        .render_record(
-                            crate::shops::SHOPPE_RECORD_SHIPWRIGHT_MENU,
-                            &crate::shoppe_bark::ShoppeBarkContext {
-                                vendor_name: vendor_name.unwrap_or_default(),
-                                hour: state.clock.hour,
-                                ..Default::default()
-                            },
-                        )
-                        .ok()
-                })
-                .filter(|text| !text.trim().is_empty());
+            let menu_record = record(crate::shops::SHOPPE_RECORD_SHIPWRIGHT_MENU, state);
             // `§8.C`'s shipwright result table, "Ordinary offer": "Record
             // `117` for Frigate or `118` for Skiff, then record `126`". The
             // engine used to print its own `A frigate costs 700 gold.`
@@ -2124,32 +2130,82 @@ fn handle_active_shop_key_input(
                     };
                     render_shipwright_offer(game_dir, body, vendor_name, quote.price, state)
                 }
+                ShipBrokerOutcome::QuotedDockSpace => {
+                    record(crate::shops::SHOPPE_RECORD_SHIPWRIGHT_DOCK_SPACE, state)
+                }
                 _ => None,
             };
             if let Some(letter) = shipwright_letter_echo {
                 state.emit_message_line_continuing_row(letter.to_string());
             }
-            // `§8.A`: the no-sale closing bark is one of the four records on
-            // the shipwright's own row, inside the quote/attribution envelope.
-            let decline_record = matches!(outcome, ShipBrokerOutcome::Declined)
-                .then(|| {
-                    let roll = state.random_range_u8(0, 3);
-                    crate::shoppe_records::shared_shop_bark_record(
-                        SHOP_DIALOG_ID_SHIPWRIGHT,
-                        crate::shoppe_records::SharedShopBarkKind::InitialGreeting,
-                        roll,
+            // `§8.C` "Shipwrights": the ordinary offer's answer echoes `No` or
+            // `Yes\n\n`; the dock-space and continuation answers echo a bare
+            // `Yes` or `No`. At entry the shared echo covers `Y`/`N` and Space
+            // "means No".
+            match prior {
+                ShipBrokerState::ConfirmPurchase { .. } if yes => {
+                    state.emit_message_line_continuing_row("Yes");
+                    state.push_explicit_blank_message_entry();
+                }
+                ShipBrokerState::ConfirmDockSpace { .. } | ShipBrokerState::Continuation { .. }
+                    if yes =>
+                {
+                    state.emit_message_line_continuing_row("Yes");
+                }
+                ShipBrokerState::ConfirmPurchase { .. }
+                | ShipBrokerState::ConfirmDockSpace { .. }
+                | ShipBrokerState::Continuation { .. }
+                    if no =>
+                {
+                    state.emit_message_line_continuing_row("No");
+                }
+                ShipBrokerState::Greeting { .. } if key_byte == b' ' => {
+                    state.emit_message_line_continuing_row("No");
+                }
+                _ => {}
+            }
+            let message = match outcome {
+                // `§8.A`/`§8.C`: "Ordinary ship endings use the shared
+                // farewell", nothing-bought or purchase-completed by the visit.
+                ShipBrokerOutcome::Declined => {
+                    shop_closing_bark(state, SHOP_DIALOG_ID_SHIPWRIGHT, vendor_name, game_dir)
+                }
+                // `§8.C` "Affordability failure | Record `122`, then
+                // token-expanded `yells $.\n`; suppress ordinary farewell".
+                ShipBrokerOutcome::RefusedShortFunds { .. } => {
+                    let mut text = record(crate::shops::SHOPPE_RECORD_SHIPWRIGHT_SHORT_FUNDS, state)
+                        .unwrap_or_default();
+                    if let Some(name) = vendor_name {
+                        text.push_str(&format!("\nyells {name}.\n"));
+                    }
+                    text
+                }
+                // `§8.C`: records `123`/`120`/`121` for the three statuses,
+                // then "Record `124`, honorific, then `?" `". The shipped
+                // honorific test never matches, so it is always `sir`.
+                ShipBrokerOutcome::PurchaseApplied { outcome: purchase } => {
+                    let status_record = match purchase.status {
+                        crate::shops::ShipwrightPurchaseStatus::QueuedFrigate
+                        | crate::shops::ShipwrightPurchaseStatus::QueuedSkiff => {
+                            crate::shops::SHOPPE_RECORD_SHIPWRIGHT_DELIVERY_QUEUED
+                        }
+                        crate::shops::ShipwrightPurchaseStatus::AddedSkiffToPendingFrigate => {
+                            crate::shops::SHOPPE_RECORD_SHIPWRIGHT_SKIFF_STOWED
+                        }
+                        crate::shops::ShipwrightPurchaseStatus::ExistingDeliveryRefusal => {
+                            crate::shops::SHOPPE_RECORD_SHIPWRIGHT_ALREADY_SKIFF
+                        }
+                    };
+                    format!(
+                        "{}{}{SHIPWRIGHT_CONTINUATION_TAIL}",
+                        record(status_record, state).unwrap_or_default(),
+                        record(crate::shops::SHOPPE_RECORD_SHIPWRIGHT_CONTINUATION, state)
+                            .unwrap_or_default(),
                     )
-                    .and_then(|record_id| render_shared_shoppe_flourish(game_dir, record_id))
-                    .map(|line| match vendor_name {
-                        Some(name) => format!("{line}\nsays {name}."),
-                        None => line,
-                    })
-                })
-                .flatten();
-            shop_message_ignoring_surcharge(
-                format_ship_broker_outcome(outcome, menu_record, offer_record, decline_record),
-                surcharge,
-            )
+                }
+                outcome => format_ship_broker_outcome(outcome, menu_record, offer_record),
+            };
+            shop_message_ignoring_surcharge(message, surcharge)
         }
         ActiveShopSession::Guild(s) => {
             let mut gems = state.gems;
@@ -4357,6 +4413,32 @@ const SHIPWRIGHT_CONFIRM_PROMPT: &str = "Wilt thou take it?\"";
 /// `shops.md §8.C`: the shipwright's ordinary offer is the vessel body record
 /// followed by the shared confirmation record `126`, which "owns the
 /// confirmation's text and spacing".
+/// `shops.md §8.C` "Purchase continuation": after record `124`, the
+/// honorific - always `sir` in the shipped build - then `?" `.
+const SHIPWRIGHT_CONTINUATION_TAIL: &str = "sir?\" ";
+
+/// Render one deterministic shipwright record (`shops.md §8.7`), or `None`
+/// when `SHOPPE.DAT` is unavailable or the record is empty.
+fn render_shipwright_record(
+    game_dir: &Path,
+    record_id: usize,
+    vendor_name: Option<&'static str>,
+    state: &PlayState,
+) -> Option<String> {
+    crate::shoppe_bark::ShoppeTextRenderer::load_from_game_dir(game_dir)
+        .ok()?
+        .render_record(
+            record_id,
+            &crate::shoppe_bark::ShoppeBarkContext {
+                vendor_name: vendor_name.unwrap_or_default(),
+                hour: state.clock.hour,
+                ..Default::default()
+            },
+        )
+        .ok()
+        .filter(|text| !text.trim().is_empty())
+}
+
 fn render_shipwright_offer(
     game_dir: &Path,
     body_record: usize,
@@ -4382,11 +4464,10 @@ fn format_ship_broker_outcome(
     outcome: crate::shop_runtime::ShipBrokerOutcome,
     menu_record: Option<String>,
     offer_record: Option<String>,
-    decline_record: Option<String>,
 ) -> String {
     use crate::shop_runtime::ShipBrokerOutcome::*;
     match outcome {
-        EnteredMenu { .. } => menu_record
+        EnteredMenu => menu_record
             .unwrap_or_else(|| format!("{SHIPWRIGHT_STOCK_LINE}\n\n{SHIPWRIGHT_STOCK_QUESTION}")),
         QuotedPurchase { quote } => offer_record.unwrap_or_else(|| {
             // Fallback for a run without the asset: the engine's own
@@ -4400,42 +4481,11 @@ fn format_ship_broker_outcome(
                 quote.price
             )
         }),
-        PurchaseApplied { outcome } => match outcome.status {
-            crate::shops::ShipwrightPurchaseStatus::QueuedFrigate => {
-                format!(
-                    "Frigate purchased for {} gold. Delivery is queued.",
-                    outcome.quote.price
-                )
-            }
-            crate::shops::ShipwrightPurchaseStatus::QueuedSkiff => {
-                format!(
-                    "Skiff purchased for {} gold. Delivery is queued.",
-                    outcome.quote.price
-                )
-            }
-            crate::shops::ShipwrightPurchaseStatus::AddedSkiffToPendingFrigate => format!(
-                "Skiff purchased for {} gold and added to the pending frigate.",
-                outcome.quote.price
-            ),
-            crate::shops::ShipwrightPurchaseStatus::ExistingDeliveryRefusal => {
-                "No dock space is available for another delivery.".to_string()
-            }
-        },
-        RefusedShortFunds { required, .. } => format!("Thou lackest the {required} gold."),
-        // The jeer is a *draw*, not a fixed line: `shops.md §8.A`'s shared
-        // closing envelope takes "one of four `SHOPPE.DAT` records from the
-        // current shop-kind" row, which for the shipwright is `109..112`.
-        // The engine hard-coded one member of that pool.
-        //
-        // Measured 2026-09-12 (`bd-shipwright/no`): the original drew
-        // `"Thou wouldst probably get seasick, anyway."` over `says Jones.`
-        // where this engine always says `"Hmph! Landlubber!"`.
-        // With no `SHOPPE.DAT` to draw from there is no record to render, and
-        // the original has no line of its own here - the bark *is* the record.
-        // The hard-coded stand-in was the last invented player line in the
-        // crate (`qa/tools/engine_message_audit.py`), so the no-assets path
-        // stays silent rather than speaking for the shipwright.
-        Declined => decline_record.unwrap_or_default(),
+        // `§8.7`: the record owns the dock-space discussion; "there is no
+        // additional resident no-dockspace refusal".
+        QuotedDockSpace => offer_record.unwrap_or_default(),
+        // Rendered by the caller from records `120..124` and `122`.
+        PurchaseApplied { .. } | RefusedShortFunds { .. } | Declined => String::new(),
         // `shops.md §8.A`: "There is no universal `Farewell.` or `As you
         // wish.` line." A shop that closes on a bark renders it through the
         // shared envelope; this arm is the silent outcome, which "omits this

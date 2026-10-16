@@ -376,6 +376,22 @@ pub const SHOPPE_RECORD_SHIPWRIGHT_SKIFF_OFFER: usize = 118;
 /// See [`SHOPPE_RECORD_SHIPWRIGHT_FRIGATE_OFFER`]: the shared confirmation
 /// that follows either offer body.
 pub const SHOPPE_RECORD_SHIPWRIGHT_CONFIRM: usize = 126;
+/// `shops.md §8.C`'s shipwright result table: "Skiff added to pending
+/// Frigate | Record `120`".
+pub const SHOPPE_RECORD_SHIPWRIGHT_SKIFF_STOWED: usize = 120;
+/// "Another standalone Skiff already pending | Record `121`".
+pub const SHOPPE_RECORD_SHIPWRIGHT_ALREADY_SKIFF: usize = 121;
+/// "Affordability failure | Record `122`, then token-expanded `yells $.\n`".
+pub const SHOPPE_RECORD_SHIPWRIGHT_SHORT_FUNDS: usize = 122;
+/// "Standalone delivery newly queued | Record `123`".
+pub const SHOPPE_RECORD_SHIPWRIGHT_DELIVERY_QUEUED: usize = 123;
+/// "Purchase continuation | Record `124`, honorific, then `?" `".
+pub const SHOPPE_RECORD_SHIPWRIGHT_CONTINUATION: usize = 124;
+/// "Pending delivery, another Frigate requested | Record `125`".
+pub const SHOPPE_RECORD_SHIPWRIGHT_DOCK_SPACE: usize = 125;
+/// `shops.md §8.7`: the duplicate-Frigate gate tests "a fixed `10000`, not
+/// the shipwright's Frigate price", above the `9999` gold ceiling.
+pub const SHIPWRIGHT_SPECIAL_DELIVERY_GOLD: u16 = 10000;
 
 pub const SHOPPE_RECORDS_REAGENT_FIRST: usize = SHOPPE_RECORDS_SHIP_BROKER_LAST + 1;
 pub const SHOPPE_RECORDS_REAGENT_LAST: usize = 146;
@@ -650,8 +666,8 @@ pub enum ShipwrightPurchaseKind {
 }
 
 /// `shops.md §8.7` shipwright selection outcome: `F` offers Frigates, `S`
-/// offers Skiffs, while Space or Escape exits, and any other key silently
-/// re-prompts.
+/// offers Skiffs, while Space or Escape exits, and `§8.C` has any other key
+/// redraw record `119`.
 ///
 /// It is not what the flow *opens* with. `RETRACTIONS.md` R405 withdraws
 /// "opens with a small letter menu" along with "clears the inherited
@@ -659,15 +675,16 @@ pub enum ShipwrightPurchaseKind {
 /// accepts Yes/No (Space means No), then renders asset record `119` for
 /// Frigate/Skiff selection without an entry clear". That is the flow this
 /// engine runs - `ShipBrokerState::Greeting` is in `awaiting_entry_answer`
-/// and the selection is `SHOPPE_RECORD_SHIPWRIGHT_MENU` - so this is the
-/// citation going stale rather than the behaviour.
+/// and the selection, `ShipBrokerState::Menu`, is
+/// `SHOPPE_RECORD_SHIPWRIGHT_MENU` - so this is the citation going stale
+/// rather than the behaviour.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum ShipwrightMenuAction {
     /// `F` (case-insensitive) — Frigate purchase quote.
     Purchase(ShipwrightPurchaseKind),
     /// Space or Escape — exit the menu.
     Exit,
-    /// Any other byte — silently re-prompt.
+    /// Any other byte — redraw record `119` (`shops.md §8.C`).
     Discard,
 }
 
@@ -807,7 +824,7 @@ pub enum HealerServiceAction {
     /// Space or Return — leave the service menu and print the
     /// exit line.
     Exit,
-    /// Any other byte — silently re-prompt.
+    /// Any other byte — redraw record `119` (`shops.md §8.C`).
     Discard,
 }
 
@@ -1043,7 +1060,7 @@ pub enum TavernDrinkPrompt {
     Enter,
     /// `N` (case-insensitive) or Space — leave with the farewell.
     Leave,
-    /// Any other byte — silently re-prompt.
+    /// Any other byte — redraw record `119` (`shops.md §8.C`).
     Discard,
 }
 
@@ -1393,7 +1410,7 @@ pub enum InnMainAction {
     PickUpCompanion,
     /// Space or Escape — exit the menu.
     Exit,
-    /// Any other byte — silently re-prompt.
+    /// Any other byte — redraw record `119` (`shops.md §8.C`).
     Discard,
 }
 
@@ -3109,10 +3126,11 @@ pub fn apply_shipwright_purchase(
     };
 
     if status == ShipwrightPurchaseStatus::ExistingDeliveryRefusal {
-        if kind == ShipwrightPurchaseKind::Frigate && *gold < quote.price {
+        // `shops.md §8.7`: the duplicate-Frigate gate tests a fixed `10000`.
+        if kind == ShipwrightPurchaseKind::Frigate && *gold < SHIPWRIGHT_SPECIAL_DELIVERY_GOLD {
             return Err(ShipwrightPurchaseError::InsufficientGold {
                 available: *gold,
-                required: quote.price,
+                required: SHIPWRIGHT_SPECIAL_DELIVERY_GOLD,
             });
         }
         return Ok(ShipwrightPurchaseOutcome {

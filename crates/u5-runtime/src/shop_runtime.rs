@@ -1832,13 +1832,29 @@ pub fn step_horse_trader(
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum ShipBrokerState {
+    /// `shops.md §8.B`: the entry greeting takes `Y`, `N` or Space only.
     Greeting {
+        shipwright: Shipwright,
+    },
+    /// `shops.md §8.C` "Shipwrights": the record-`119` F/S menu. "Space or
+    /// Escape exits. Invalid service keys redraw record `119`."
+    Menu {
         shipwright: Shipwright,
     },
     ConfirmPurchase {
         quote: ShipwrightPurchaseQuote,
         delivery_x: usize,
         delivery_y: usize,
+    },
+    /// `shops.md §8.7`: Frigate requested while any delivery is pending -
+    /// record `125` and a Y/N whose Yes tests the fixed `10000`.
+    ConfirmDockSpace {
+        shipwright: Shipwright,
+    },
+    /// `shops.md §8.C` "Purchase continuation": record `124`, honorific,
+    /// `?" `; bare `Yes` reopens F/S, bare `No` exits.
+    Continuation {
+        shipwright: Shipwright,
     },
     Exited,
 }
@@ -1855,6 +1871,22 @@ impl ShipBrokerState {
     pub const fn for_shipwright(shipwright: Shipwright) -> Self {
         Self::Greeting { shipwright }
     }
+
+    /// The F/S menu as the accepted entry `Y` leaves it.
+    pub const fn menu_for_shipwright(shipwright: Shipwright) -> Self {
+        Self::Menu { shipwright }
+    }
+
+    pub const fn shipwright(self) -> Option<Shipwright> {
+        match self {
+            Self::Greeting { shipwright }
+            | Self::Menu { shipwright }
+            | Self::ConfirmDockSpace { shipwright }
+            | Self::Continuation { shipwright } => Some(shipwright),
+            Self::ConfirmPurchase { quote, .. } => Some(quote.shipwright),
+            Self::Exited => None,
+        }
+    }
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -1870,17 +1902,23 @@ pub enum ShipBrokerOutcome {
     /// Measured 2026-09-08 at The Rusty Bucket
     /// (`qa/paired/bd-shipwright.tsv`): `Y` at the greeting prints the stock
     /// line and its question, and only then does a hull letter quote.
+    /// Also the record-`119` redraw for an invalid menu key, a declined
+    /// dock-space quote, and a `Yes` at the continuation.
     EnteredMenu,
     QuotedPurchase {
         quote: ShipwrightPurchaseQuote,
     },
+    /// `shops.md §8.7`: the limited-dock-space quote, record `125`.
+    QuotedDockSpace,
     PurchaseApplied {
         outcome: ShipwrightPurchaseOutcome,
     },
+    /// Ends the visit without the ordinary farewell (`shops.md §8.C`).
     RefusedShortFunds {
         available: u16,
         required: u16,
     },
+    /// The visit ends through the shared closing bark.
     Declined,
     Exited,
     InvalidInput,
@@ -1894,8 +1932,30 @@ pub fn step_ship_broker(
     speaker_intelligence: u8,
 ) -> ShipBrokerOutcome {
     match (*state, input) {
-        (ShipBrokerState::Greeting { shipwright }, ShipBrokerInput::Key(b)) => {
+        // `shops.md §8.A`: "Entry accepts `Y`, `N`, or Space; ignored entry
+        // keys do not redraw."
+        (ShipBrokerState::Greeting { shipwright }, ShipBrokerInput::Key(b)) => match b {
+            b'Y' | b'y' => {
+                *state = ShipBrokerState::Menu { shipwright };
+                ShipBrokerOutcome::EnteredMenu
+            }
+            b'N' | b'n' | b' ' => {
+                *state = ShipBrokerState::Exited;
+                ShipBrokerOutcome::Declined
+            }
+            _ => ShipBrokerOutcome::InvalidInput,
+        },
+        (ShipBrokerState::Menu { shipwright }, ShipBrokerInput::Key(b)) => {
             match shipwright_menu_action(b) {
+                // `shops.md §8.7`: "Selecting **Frigate** while any
+                // shipwright delivery is already pending shows a
+                // limited-dock-space / special-delivery quote".
+                ShipwrightMenuAction::Purchase(crate::shops::ShipwrightPurchaseKind::Frigate)
+                    if pending_vehicle.is_some() =>
+                {
+                    *state = ShipBrokerState::ConfirmDockSpace { shipwright };
+                    ShipBrokerOutcome::QuotedDockSpace
+                }
                 ShipwrightMenuAction::Purchase(kind) => {
                     let quote = quote_shipwright_purchase(shipwright, kind, speaker_intelligence);
                     let (delivery_x, delivery_y) = shipwright_delivery_coordinate(shipwright);
@@ -1908,15 +1968,9 @@ pub fn step_ship_broker(
                 }
                 ShipwrightMenuAction::Exit => {
                     *state = ShipBrokerState::Exited;
-                    ShipBrokerOutcome::Exited
+                    ShipBrokerOutcome::Declined
                 }
-                ShipwrightMenuAction::Discard => {
-                    if matches!(b, b'Y' | b'y') {
-                        ShipBrokerOutcome::EnteredMenu
-                    } else {
-                        ShipBrokerOutcome::InvalidInput
-                    }
-                }
+                ShipwrightMenuAction::Discard => ShipBrokerOutcome::EnteredMenu,
             }
         }
         (
@@ -1937,23 +1991,58 @@ pub fn step_ship_broker(
                 delivery_y,
                 speaker_intelligence,
             );
-            *state = ShipBrokerState::Greeting { shipwright };
             match outcome {
-                Ok(outcome) => ShipBrokerOutcome::PurchaseApplied { outcome },
+                Ok(outcome) => {
+                    *state = ShipBrokerState::Continuation { shipwright };
+                    ShipBrokerOutcome::PurchaseApplied { outcome }
+                }
                 Err(ShipwrightPurchaseError::InsufficientGold {
                     available,
                     required,
-                }) => ShipBrokerOutcome::RefusedShortFunds {
-                    available,
-                    required,
-                },
-                Err(ShipwrightPurchaseError::NoReturnWorld) => ShipBrokerOutcome::InvalidInput,
+                }) => {
+                    *state = ShipBrokerState::Exited;
+                    ShipBrokerOutcome::RefusedShortFunds {
+                        available,
+                        required,
+                    }
+                }
+                Err(ShipwrightPurchaseError::NoReturnWorld) => {
+                    *state = ShipBrokerState::Menu { shipwright };
+                    ShipBrokerOutcome::InvalidInput
+                }
             }
         }
-        (ShipBrokerState::ConfirmPurchase { quote, .. }, ShipBrokerInput::Confirm(false)) => {
-            *state = ShipBrokerState::Greeting {
-                shipwright: quote.shipwright,
-            };
+        // `shops.md §8.A`: the nothing-bought bark "Rendered at the tail of a
+        // visit that completed no purchase, including ... a declined quote".
+        (ShipBrokerState::ConfirmPurchase { .. }, ShipBrokerInput::Confirm(false)) => {
+            *state = ShipBrokerState::Exited;
+            ShipBrokerOutcome::Declined
+        }
+        // `shops.md §8.7`: "A Yes answer runs only the affordability/refusal
+        // gate for that quote; it does not debit gold, queue a second
+        // Frigate, or alter the pending watercraft. The amount that gate
+        // tests is a fixed `10000`".
+        (ShipBrokerState::ConfirmDockSpace { shipwright }, ShipBrokerInput::Confirm(true)) => {
+            if *gold < crate::shops::SHIPWRIGHT_SPECIAL_DELIVERY_GOLD {
+                *state = ShipBrokerState::Exited;
+                ShipBrokerOutcome::RefusedShortFunds {
+                    available: *gold,
+                    required: crate::shops::SHIPWRIGHT_SPECIAL_DELIVERY_GOLD,
+                }
+            } else {
+                // Unreachable under the `9999` gold ceiling; nothing changes.
+                *state = ShipBrokerState::Menu { shipwright };
+                ShipBrokerOutcome::EnteredMenu
+            }
+        }
+        // `shops.md §8.C`: "No reopens the F/S menu."
+        (ShipBrokerState::ConfirmDockSpace { shipwright }, ShipBrokerInput::Confirm(false))
+        | (ShipBrokerState::Continuation { shipwright }, ShipBrokerInput::Confirm(true)) => {
+            *state = ShipBrokerState::Menu { shipwright };
+            ShipBrokerOutcome::EnteredMenu
+        }
+        (ShipBrokerState::Continuation { .. }, ShipBrokerInput::Confirm(false)) => {
+            *state = ShipBrokerState::Exited;
             ShipBrokerOutcome::Declined
         }
         (ShipBrokerState::Exited, _) => ShipBrokerOutcome::Exited,
@@ -3934,7 +4023,7 @@ mod tests {
     /// `(136, 158)`, which is not the published cell.
     #[test]
     fn ship_broker_f_key_quotes_then_queues_frigate_delivery() {
-        let mut state = ShipBrokerState::for_shipwright(Shipwright::TheRustyBucket);
+        let mut state = ShipBrokerState::menu_for_shipwright(Shipwright::TheRustyBucket);
         let mut gold = 770u16;
         let mut pending = None;
         let quote = step_ship_broker(
@@ -3986,7 +4075,7 @@ mod tests {
 
     #[test]
     fn ship_broker_s_key_adds_skiff_to_pending_frigate() {
-        let mut state = ShipBrokerState::for_shipwright(Shipwright::TheOakenOar);
+        let mut state = ShipBrokerState::menu_for_shipwright(Shipwright::TheOakenOar);
         let mut gold = 200u16;
         let mut pending = Some(PendingVehicleAcquisition::Frigate {
             x: 12,
@@ -4027,6 +4116,70 @@ mod tests {
                 skiffs: 3,
             })
         );
+    }
+
+    /// `shops.md §8.B`/`§8.C` shipwrights: the entry takes only `Y`, `N` and
+    /// Space and `F`/`S` only from the record-`119` menu; a Frigate while any
+    /// delivery is pending is the dock-space quote whose Yes tests a fixed
+    /// `10000` and ends the visit; a sale leads to the continuation.
+    #[test]
+    fn ship_broker_entry_menu_dock_space_and_continuation() {
+        let step = |state: &mut ShipBrokerState,
+                    input: ShipBrokerInput,
+                    gold: &mut u16,
+                    pending: &mut Option<PendingVehicleAcquisition>| {
+            step_ship_broker(state, input, gold, pending, 30)
+        };
+        let mut gold = 9999u16;
+        let mut pending = None;
+        let mut state = ShipBrokerState::for_shipwright(Shipwright::TheRustyBucket);
+        for ignored in [b'F', b'S', b'X'] {
+            assert_eq!(
+                step(&mut state, ShipBrokerInput::Key(ignored), &mut gold, &mut pending),
+                ShipBrokerOutcome::InvalidInput
+            );
+        }
+        assert_eq!(
+            step(&mut state, ShipBrokerInput::Key(b'Y'), &mut gold, &mut pending),
+            ShipBrokerOutcome::EnteredMenu
+        );
+        // Invalid menu keys redraw record `119`.
+        assert_eq!(
+            step(&mut state, ShipBrokerInput::Key(b'Q'), &mut gold, &mut pending),
+            ShipBrokerOutcome::EnteredMenu
+        );
+        step(&mut state, ShipBrokerInput::Key(b'S'), &mut gold, &mut pending);
+        assert!(matches!(
+            step(&mut state, ShipBrokerInput::Confirm(true), &mut gold, &mut pending),
+            ShipBrokerOutcome::PurchaseApplied { .. }
+        ));
+        assert!(matches!(state, ShipBrokerState::Continuation { .. }));
+        assert_eq!(
+            step(&mut state, ShipBrokerInput::Confirm(true), &mut gold, &mut pending),
+            ShipBrokerOutcome::EnteredMenu
+        );
+        let gold_before = gold;
+        let pending_before = pending;
+        assert_eq!(
+            step(&mut state, ShipBrokerInput::Key(b'F'), &mut gold, &mut pending),
+            ShipBrokerOutcome::QuotedDockSpace
+        );
+        // No reopens the menu.
+        assert_eq!(
+            step(&mut state, ShipBrokerInput::Confirm(false), &mut gold, &mut pending),
+            ShipBrokerOutcome::EnteredMenu
+        );
+        step(&mut state, ShipBrokerInput::Key(b'F'), &mut gold, &mut pending);
+        assert_eq!(
+            step(&mut state, ShipBrokerInput::Confirm(true), &mut gold, &mut pending),
+            ShipBrokerOutcome::RefusedShortFunds {
+                available: gold_before,
+                required: 10000,
+            }
+        );
+        assert_eq!(state, ShipBrokerState::Exited);
+        assert_eq!(gold, gold_before);
+        assert_eq!(pending, pending_before);
     }
 
     fn guild_step(
