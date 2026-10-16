@@ -26178,6 +26178,17 @@ fn dungeon_mode_refuses_world_vehicle_and_entry_letters_without_turn() {
     assert_eq!(state.message, "What?");
     assert_eq!(state.turn, 0);
 
+    // `commands.md §7` / §5.8: on foot - the only shipped dungeon transport -
+    // X reaches the ordinary X-it handler and refuses `X-it what?`.
+    state.player.transport = TransportState::Foot;
+    assert!(state.handle_dungeon_key('X', Path::new("")).unwrap());
+    // The refusal completes the open `X-it ` echo row.
+    assert_eq!(
+        state.message_transcript.last().map(|entry| entry.text.as_str()),
+        Some(format!("X-it {XIT_ON_FOOT_REFUSAL}").as_str())
+    );
+    assert_eq!(state.turn, 0);
+
     assert!(state.handle_dungeon_key('P', Path::new("")).unwrap());
     assert_eq!(state.message, PUSH_NOT_HERE_REFUSAL);
     assert_eq!(state.turn, 0);
