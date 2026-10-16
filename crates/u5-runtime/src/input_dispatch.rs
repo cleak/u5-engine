@@ -1629,6 +1629,17 @@ fn handle_active_shop_key_input(
                 state.tavern_secondary_drink_count =
                     state.tavern_secondary_drink_count.saturating_add(1);
             }
+            // `shops.md §8.A`: a visit that completed a purchase closes on the
+            // purchase-completed row rather than the nothing-bought one.
+            if matches!(
+                outcome,
+                TavernOutcome::RoundDrinkServed { .. }
+                    | TavernOutcome::SecondaryTavernSelected { .. }
+                    | TavernOutcome::BlueBoarDrinkServed { .. }
+                    | TavernOutcome::ProvisionsPurchased { paid: 1.., .. }
+            ) {
+                state.arms_transaction_completed = true;
+            }
             let surcharge_applies = match outcome {
                 TavernOutcome::RoundDrinkServed { .. }
                 | TavernOutcome::SecondaryTavernSelected { .. }
@@ -1660,10 +1671,10 @@ fn handle_active_shop_key_input(
                 TavernOutcome::DeclinedContinuation | TavernOutcome::NoSaleExit
             )
             .then(|| {
-                usize::from(state.random_range_u8(
-                    TAVERN_NO_SALE_RECORD_FIRST as u8,
-                    TAVERN_NO_SALE_RECORD_LAST as u8,
-                ))
+                // `shops.md §8.A`: nothing bought draws `61..64`, a completed
+                // purchase in this visit `65..68`.
+                let (first, last) = tavern_closing_bark_records(state.arms_transaction_completed);
+                usize::from(state.random_range_u8(first as u8, last as u8))
             });
             if let Some(letter) = tavern_letter_echo {
                 if !matches!(outcome, TavernOutcome::InvalidInput) {
@@ -1799,6 +1810,10 @@ fn handle_active_shop_key_input(
                 SageState::Exited => SageOutcome::Exited,
             };
             let paid = matches!(outcome, SageOutcome::RumourFound { .. });
+            if paid {
+                // `shops.md §8.A`: paid advice is a completed purchase.
+                state.arms_transaction_completed = true;
+            }
             // `shops.md §8.C` sage result table: an empty topic and a
             // declined fee both return to the tavern continuation, with the
             // continuation retained (R436); only short funds ends the visit.
@@ -4622,6 +4637,19 @@ fn format_guild_outcome(
         // `shops.md §8.B`/`§8.C`: an unrecognised key waits; there is no
         // I-do-not-understand line anywhere in the shop family.
         InvalidInput => String::new(),
+    }
+}
+
+/// `shops.md §8.A` shared closing-bark table, tavern row: the nothing-bought
+/// records `61..64`, or `65..68` once a purchase completed in this visit.
+pub(crate) const fn tavern_closing_bark_records(purchase_completed: bool) -> (usize, usize) {
+    if purchase_completed {
+        (
+            crate::shops::TAVERN_PURCHASE_COMPLETED_RECORD_FIRST,
+            crate::shops::TAVERN_PURCHASE_COMPLETED_RECORD_LAST,
+        )
+    } else {
+        (TAVERN_NO_SALE_RECORD_FIRST, TAVERN_NO_SALE_RECORD_LAST)
     }
 }
 

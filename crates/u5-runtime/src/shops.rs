@@ -2224,6 +2224,9 @@ pub const TAVERN_PROVISION_QUOTE_RECORD_FIRST: usize = 77;
 pub const TAVERN_PROVISION_QUOTE_RECORD_LAST: usize = 82;
 pub const TAVERN_NO_SALE_RECORD_FIRST: usize = 61;
 pub const TAVERN_NO_SALE_RECORD_LAST: usize = 64;
+/// `shops.md §8.A` shared closing-bark table, tavern purchase-completed row.
+pub const TAVERN_PURCHASE_COMPLETED_RECORD_FIRST: usize = 65;
+pub const TAVERN_PURCHASE_COMPLETED_RECORD_LAST: usize = 68;
 pub const TAVERN_TABLE_SCRAPS_RECORD_ID: usize = 90;
 /// `shops.md §8.C` tavern result table, "Blue Boar wine list cancelled":
 /// Space prints `\n\n`, then this record, then returns to continuation.

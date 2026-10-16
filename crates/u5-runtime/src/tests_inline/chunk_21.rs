@@ -5312,6 +5312,36 @@ fn end_to_end_tavern_blue_boar_fixed_drink_debits_gold() {
     assert!(state.active_shop.is_some());
 }
 
+/// `shops.md §8.A`: the tavern's closing bark draws the nothing-bought row
+/// `61..64` until a purchase completes in the visit, then the
+/// purchase-completed row `65..68`; the per-visit flag resets on entry.
+#[test]
+fn tavern_closing_bark_switches_to_purchase_completed_row_after_a_sale() {
+    use crate::shop_runtime::TavernState;
+    use crate::shop_session::ActiveShopSession;
+
+    assert_eq!(
+        crate::input_dispatch::tavern_closing_bark_records(false),
+        (61, 64)
+    );
+    assert_eq!(
+        crate::input_dispatch::tavern_closing_bark_records(true),
+        (65, 68)
+    );
+
+    let mut state = test_state(open_grid(), 1, 1);
+    state.gold = 200;
+    state.active_shop = Some(ActiveShopSession::Tavern(TavernState::for_tavern(
+        Tavern::TheBlueBoarTavern,
+    )));
+    handle_play_key_input(&mut state, 'Y', "", Path::new("")).unwrap();
+    assert!(!state.arms_transaction_completed);
+    handle_play_key_input(&mut state, 'W', "", Path::new("")).unwrap();
+    handle_play_key_input(&mut state, 'F', "", Path::new("")).unwrap();
+    assert_eq!(state.gold, 102);
+    assert!(state.arms_transaction_completed);
+}
+
 #[test]
 fn end_to_end_tavern_provisions_partially_fill_to_food_cap() {
     use crate::shop_runtime::TavernState;
