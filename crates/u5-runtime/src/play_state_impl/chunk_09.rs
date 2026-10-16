@@ -3860,6 +3860,14 @@ impl PlayState {
         if !self.combat_active && self.endgame.is_none() {
             self.sync_player_object();
         }
+        // `animation.md §13.2`: "The shipped initial value of the byte is
+        // the freeze state, so the very first world step of a session is a
+        // bare repaint." Like the `§13.1` skip state it advances nothing -
+        // no object animation, no wind check, no ambience tick and no tile
+        // passes - and the step consumes it.
+        if std::mem::take(&mut self.session_start_world_step_frozen) {
+            return None;
+        }
         // `timing.md §8.2`: the idle wait performs no world step for scene
         // values `0x21..=0x7F` inclusive, and the gate must be that numeric
         // range test "**not** ... an 'is this dungeon mode' test: the band

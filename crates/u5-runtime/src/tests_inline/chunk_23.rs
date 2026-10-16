@@ -20745,6 +20745,33 @@ fn negate_time_freezes_every_tile_animation_clock() {
     assert_eq!(state.water_scroll.phase, 8);
 }
 
+/// `animation.md §13.2`: "The shipped initial value of the byte is the freeze
+/// state, so **the very first world step of a session is a bare repaint**."
+/// The session loader arms the latch; that first step advances no tile clock,
+/// takes no wind or animator draw, and the second step runs normally.
+#[test]
+fn first_world_step_of_a_session_is_a_bare_repaint() {
+    let mut grid = open_grid();
+    grid[18 * TOWN_GRID_SIDE + 10] = 0xD4;
+    let mut state = test_state(grid, 10, 20);
+    state.animation = AnimationClock::at_static_tile_phase(3);
+    state.water_scroll = WaterScrollClock::at_phase(7);
+    state.session_start_world_step_frozen = true;
+    let prng_before = state.prng_state;
+
+    state.advance_visual_tick();
+
+    assert!(!state.session_start_world_step_frozen, "the step consumes the latch");
+    assert_eq!(state.animation.frame, 3, "no tile pass");
+    assert_eq!(state.water_scroll.phase, 7, "no water rotation");
+    assert_eq!(state.prng_state, prng_before, "no wind or animator draw");
+
+    state.advance_visual_tick();
+    assert_eq!(state.animation.frame, 4);
+    assert_eq!(state.water_scroll.phase, 8);
+    assert_ne!(state.prng_state, prng_before, "the wind check draws again");
+}
+
 /// `visibility.md §8`: "unless the Negate Time timed effect is active, select
 /// a uniform random entry from the four-value range; while it is active, the
 /// selector short-circuits and returns the first entry for every actor."

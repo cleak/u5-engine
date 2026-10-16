@@ -110,6 +110,9 @@ impl PlayState {
         // screens leave it at the bottom. `cleak/u5-engine#11`; asked on
         // the spec side as `cleak/u5-spec#210`.
         state.message_window_top_offset = MESSAGE_WINDOW_LOAD_CURSOR_ROWS;
+        // `animation.md §13.2`: the gating byte ships in the freeze state,
+        // so the session's first world step is a bare repaint.
+        state.session_start_world_step_frozen = true;
         Ok(state)
     }
 
@@ -780,6 +783,7 @@ impl PlayState {
             pending_combat_terrain_reveals: Vec::new(),
             pending_potion_flash: None,
             pending_unrestored_viewport_inversion: false,
+            session_start_world_step_frozen: false,
             pending_stonegate_trapdoor_playback: None,
             pending_town_status_provision_pass: false,
             pending_town_npc_schedule_pass: false,
@@ -1175,6 +1179,7 @@ impl PlayState {
             pending_combat_terrain_reveals: Vec::new(),
             pending_potion_flash: None,
             pending_unrestored_viewport_inversion: false,
+            session_start_world_step_frozen: false,
             pending_stonegate_trapdoor_playback: None,
             pending_town_status_provision_pass: false,
             pending_town_npc_schedule_pass: false,
@@ -1583,6 +1588,7 @@ impl PlayState {
             pending_combat_terrain_reveals: Vec::new(),
             pending_potion_flash: None,
             pending_unrestored_viewport_inversion: false,
+            session_start_world_step_frozen: false,
             pending_stonegate_trapdoor_playback: None,
             pending_town_status_provision_pass: false,
             pending_town_npc_schedule_pass: false,

@@ -128,6 +128,11 @@ pub struct PlayState {
     /// never restore it; the following redraws paint over it. Transient
     /// presentation state, never saved.
     pub pending_unrestored_viewport_inversion: bool,
+    /// `animation.md §13.2`: "The shipped initial value of the byte is the
+    /// freeze state, so the very first world step of a session is a bare
+    /// repaint." Set by [`PlayState::load_scene`]; the first world step
+    /// clears it and advances nothing.
+    pub session_start_world_step_frozen: bool,
     /// Completed Stonegate trapdoor tableau waiting for a frontend. This is a
     /// blocking, non-resumable presentation record and is never save data.
     pub pending_stonegate_trapdoor_playback: Option<StonegateTrapdoorPlayback>,
