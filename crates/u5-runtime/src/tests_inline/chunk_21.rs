@@ -371,9 +371,10 @@ fn town_look_routes_death_vision_terrain_tile_before_object_description() {
 
     assert_eq!(state.look_facing(), MoveOutcome::Observed);
 
-    // Measured 2026-09-07: no party-member prompt - the roll runs for the
-    // active player and the result is one line.
+    // One eligible member is selected silently (`view.md §3`), so the
+    // result is one line with no `Player: ` exchange.
     assert!(state.active_direction_prompt.is_none());
+    assert!(state.active_party_selector.is_none());
     assert_eq!(state.message, DEATH_VISION_STRANGE_LINE);
     assert!(state.active_view_overlay.is_some());
     assert!(!state.message.contains("actor tile"));
@@ -421,6 +422,68 @@ fn death_vision_failure_prints_the_measured_line_without_an_overlay() {
     assert_eq!(state.message, DEATH_VISION_DEATH_LINE);
     assert!(state.active_view_overlay.is_none());
     assert_eq!(state.turn, 0);
+}
+
+#[test]
+fn death_vision_failure_costs_the_member_one_hit_point() {
+    // `view.md §3`: the failed arm applies "one HP of damage to that
+    // member with the ordinary hit feedback"; HP reaching zero sets the
+    // member Dead and clears an override naming that member.
+    let mut state = test_state(open_grid(), 1, 1);
+    state.party_intelligence[0] = 0;
+    state.party[0].hp = 5;
+    state.apply_death_vision_look_for_member(2, 1, 0);
+    assert_eq!(state.party[0].hp, 4);
+
+    state.party[0].hp = 1;
+    state.active_player = Some(0);
+    state.apply_death_vision_look_for_member(2, 1, 0);
+    assert_eq!(state.party[0].hp, 0);
+    assert_eq!(state.party[0].status, CharacterStatus::Dead.save_byte());
+    assert_eq!(state.active_player, None);
+}
+
+#[test]
+fn death_vision_with_two_eligible_members_asks_player_and_resumes_for_the_pick() {
+    // `view.md §3`: "two or more eligible members do produce `Player: `;
+    // the crystal sphere does not bypass that shared selection rule".
+    let mut state = test_state(open_grid(), 1, 1);
+    state.player.facing = Direction::East;
+    state.grid[1 * 32 + 2] = DEATH_VISION_LOOK_TILE;
+    let mut second = state.party[0];
+    second.slot = 1;
+    second.hp = 7;
+    state.party.push(second);
+    state.party_intelligence = vec![31, 0];
+
+    assert_eq!(state.look_facing(), MoveOutcome::Observed);
+    assert_eq!(state.message, PARTY_SELECTION_PROMPT);
+    assert!(state.active_party_selector.is_some());
+    assert!(state.active_view_overlay.is_none());
+
+    // Pick the second member (Intelligence 0): the vision fails for them.
+    assert!(state.step_active_party_selector('2', ""));
+    assert!(state.step_active_party_selector('\r', ""));
+    assert_eq!(state.message, DEATH_VISION_DEATH_LINE);
+    assert_eq!(state.party[1].hp, 6);
+}
+
+#[test]
+fn death_vision_selector_cancel_adds_no_vision_result() {
+    let mut state = test_state(open_grid(), 1, 1);
+    state.player.facing = Direction::East;
+    state.grid[1 * 32 + 2] = DEATH_VISION_LOOK_TILE;
+    let mut second = state.party[0];
+    second.slot = 1;
+    state.party.push(second);
+    state.party_intelligence = vec![31, 31];
+    let hp = state.party[0].hp;
+
+    state.look_facing();
+    assert!(state.step_active_party_selector('\u{1b}', ""));
+    assert!(!state.message.contains("vision"));
+    assert!(state.active_view_overlay.is_none());
+    assert_eq!(state.party[0].hp, hp);
 }
 
 #[test]

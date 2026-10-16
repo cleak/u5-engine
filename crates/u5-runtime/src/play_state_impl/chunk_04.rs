@@ -3748,15 +3748,27 @@ impl PlayState {
         MoveOutcome::Observed
     }
 
-    /// `view.md §3` entry-dispatch row 2. Measured 2026-09-07: the command
-    /// takes no party-member prompt - it rolls for the active player, and
-    /// prints one of two one-line results.
+    /// `view.md §3` entry-dispatch row 2: the death-vision case "uses the
+    /// shared conditional acting-member selector; an abort retains that
+    /// selector's feedback but adds no vision result". An override or a
+    /// single eligible member is picked silently; two or more eligible
+    /// members produce `Player: ` (the earlier no-prompt reading is
+    /// withdrawn, R408).
     pub fn apply_death_vision_look(&mut self, x: usize, y: usize) -> MoveOutcome {
-        let member_index = match self.shared_acting_member_selection(false) {
-            ActingMemberSelection::Selected(slot) => slot,
-            _ => 0,
-        };
-        self.apply_death_vision_look_for_member(x, y, member_index)
+        match self.shared_acting_member_selection(false) {
+            ActingMemberSelection::Selected(slot) => {
+                self.apply_death_vision_look_for_member(x, y, slot)
+            }
+            ActingMemberSelection::Prompt => {
+                self.start_party_selector(PartySelectorTarget::DeathVision { x, y })
+            }
+            ActingMemberSelection::NoneAble => {
+                // The selector's own feedback, as the Search site answers
+                // the same state; no vision result follows.
+                self.message = super::chunk_03::PARTY_SELECTOR_CANCEL_REPLY.to_string();
+                MoveOutcome::Observed
+            }
+        }
     }
 
     pub fn apply_death_vision_look_for_member(
@@ -3792,6 +3804,14 @@ impl PlayState {
             self.active_view_overlay = None;
             self.view_overlay_row_opened_by_result = false;
             self.message = DEATH_VISION_DEATH_LINE.to_string();
+            // `view.md §3`: "Otherwise print `Death vision!\n` and apply
+            // **one HP of damage** to that member with the ordinary hit
+            // feedback and stats redraw. HP reaching zero sets the member
+            // Dead and clears an active-member override naming that
+            // member." The shared party-damage helper is that path.
+            if member_index < self.party.len() {
+                self.apply_shared_party_damage(member_index, 1);
+            }
         }
         MoveOutcome::Observed
     }

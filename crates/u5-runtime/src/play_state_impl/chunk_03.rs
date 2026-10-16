@@ -1039,6 +1039,9 @@ impl PlayState {
             PartySelectorTarget::FountainDrink { direction } => {
                 self.look_surface_fountain_with_drinker(direction, index);
             }
+            PartySelectorTarget::DeathVision { x, y } => {
+                self.apply_death_vision_look_for_member(x, y, index);
+            }
         }
         true
     }

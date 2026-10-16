@@ -1119,6 +1119,14 @@ pub enum PartySelectorTarget {
     FountainDrink {
         direction: crate::Direction,
     },
+    /// `view.md §3` death-vision tile: the crystal sphere "uses the
+    /// conditional acting-member selection of `commands.md` Section 5.8",
+    /// so two or more eligible members produce `Player: ` and the vision
+    /// resumes at the looked-at cell for the chosen member.
+    DeathVision {
+        x: usize,
+        y: usize,
+    },
 }
 
 impl PartySelectorTarget {
