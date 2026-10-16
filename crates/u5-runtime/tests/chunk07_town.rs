@@ -326,10 +326,12 @@ fn blackthorn_fourth_wrong_answer_executes_the_named_companion() {
     // unfairness/treachery speech" - three held pages, not two. Measured
     // (`qa/paired/bt-escalate.tsv`, beat `ask5`): the original's beat ends on
     // the pendulum narration's `falls!`, with the sliced line still to come.
-    assert!(state
-        .active_blackthorn
-        .as_ref()
-        .is_some_and(|challenge| challenge.closing_epilogue_pending()));
+    assert!(
+        state
+            .active_blackthorn
+            .as_ref()
+            .is_some_and(|challenge| challenge.closing_epilogue_pending())
+    );
     assert!(
         state.message.contains("pendulum blade falls!"),
         "{}",
@@ -348,10 +350,12 @@ fn blackthorn_fourth_wrong_answer_executes_the_named_companion() {
         state.message
     );
     state.submit_blackthorn_audience_answer("", &dir).unwrap();
-    assert!(state
-        .active_blackthorn
-        .as_ref()
-        .is_some_and(|challenge| challenge.awaiting_closing_acknowledgement()));
+    assert!(
+        state
+            .active_blackthorn
+            .as_ref()
+            .is_some_and(|challenge| challenge.awaiting_closing_acknowledgement())
+    );
     state.submit_blackthorn_audience_answer("", &dir).unwrap();
     assert!(
         state.active_blackthorn.is_none(),
