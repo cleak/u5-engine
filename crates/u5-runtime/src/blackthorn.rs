@@ -489,14 +489,29 @@ pub enum BlackthornCutsceneCommand {
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum BlackthornCutsceneBeat {
-    PerQuestionIntermission,
+    /// `blackthorn.md §4.2` / §6.3's audience exit beat (formerly the
+    /// "per-question intermission", a name and placement R490 withdraws).
+    AudienceExit,
     FailedChallengeReaction,
     AudienceThroneApproach,
     GuardReleaseRoute,
     ConditionalThroneCleanup,
 }
 
-pub const BLACKTHORN_CUTSCENE_PER_QUESTION_INTERMISSION: [BlackthornCutsceneCommand; 18] = [
+/// `blackthorn.md §6.3`, the audience-exit row, played once by §4.2's exit
+/// beat after its key wait. The visible checkpoints are the published ones:
+/// the acting guard's animated westward step, cobble `0x44` buffered at
+/// `(0,4)` and exposed by the explicit tick, door `0xBB` replacing it and
+/// exposed by a one-repetition stinger pause, the tableau and both guards
+/// cleared, and a final six-repetition hold.
+///
+/// Known gap: §4.2 counts the whole vector at 36 stinger repetitions and 73
+/// world ticks, and this script reaches 14 and 29. The difference is in the
+/// per-command repeat counts and directions of the guard/Avatar repositioning
+/// and tableau moves, which §6.3 deliberately does not publish ("These vectors
+/// deliberately test visible checkpoints rather than duplicating the ...
+/// movement byte stream"), so they are not invented here.
+pub const BLACKTHORN_CUTSCENE_AUDIENCE_EXIT: [BlackthornCutsceneCommand; 18] = [
     BlackthornCutsceneCommand::MoveActor {
         actor: BlackthornCutsceneActor::LeftGuard,
         direction: crate::Direction::West,
@@ -665,8 +680,8 @@ pub const fn blackthorn_cutscene_beat_commands(
     beat: BlackthornCutsceneBeat,
 ) -> &'static [BlackthornCutsceneCommand] {
     match beat {
-        BlackthornCutsceneBeat::PerQuestionIntermission => {
-            &BLACKTHORN_CUTSCENE_PER_QUESTION_INTERMISSION
+        BlackthornCutsceneBeat::AudienceExit => {
+            &BLACKTHORN_CUTSCENE_AUDIENCE_EXIT
         }
         BlackthornCutsceneBeat::FailedChallengeReaction => {
             &BLACKTHORN_CUTSCENE_FAILED_CHALLENGE_REACTION

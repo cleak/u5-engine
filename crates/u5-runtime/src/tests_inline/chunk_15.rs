@@ -2491,7 +2491,7 @@
 
         state.begin_blackthorn_audience_capture(&dir).unwrap();
         let sound_before = state.sound_effect_serial;
-        let vm = state.run_blackthorn_cutscene_beat(BlackthornCutsceneBeat::PerQuestionIntermission);
+        let vm = state.run_blackthorn_cutscene_beat(BlackthornCutsceneBeat::AudienceExit);
 
         assert_eq!(
             state
@@ -2511,6 +2511,10 @@
         ] {
             assert!(state.active_objects[actor.slot_index() as usize].is_empty());
         }
+        // `blackthorn.md §4.2` counts the whole exit vector at 36 stings and
+        // 73 world ticks; the per-command repeats that make up the difference
+        // are unpublished (see `BLACKTHORN_CUTSCENE_AUDIENCE_EXIT`), so these
+        // pin the engine's checkpoint-only script, not the published totals.
         assert_eq!(vm.world_ticks, 29);
         assert_eq!(vm.bios_ticks, 28);
         assert_eq!(vm.stinger_count, 14);

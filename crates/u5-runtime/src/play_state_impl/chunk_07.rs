@@ -4695,6 +4695,23 @@ impl PlayState {
         self.mark_visibility_dirty();
     }
 
+    /// `blackthorn.md §4.2` / §6.3: the conditional seated-Blackthorn tableau
+    /// cleanup. "The exit beat's script clears the seated-Blackthorn tableau
+    /// slot, and the tableau slot is exactly what the audience tests
+    /// afterwards to decide whether to run the conditional Blackthorn-tableau
+    /// cleanup vector ... only the punishing branch, which never ran the beat,
+    /// reaches it." Returns whether the vector ran.
+    pub fn run_blackthorn_conditional_throne_cleanup(&mut self) -> bool {
+        let slot = BlackthornCutsceneActor::SeatedBlackthorn.slot_index() as usize;
+        let seated = self.active_objects.get(slot).is_some_and(|object| {
+            !object.is_empty() && object.aux3 == BLACKTHORN_CUTSCENE_AUX3_ROLE_MARKER
+        });
+        if seated {
+            self.run_blackthorn_cutscene_beat(BlackthornCutsceneBeat::ConditionalThroneCleanup);
+        }
+        seated
+    }
+
     pub fn run_blackthorn_cutscene_beat(
         &mut self,
         beat: BlackthornCutsceneBeat,
@@ -4761,6 +4778,7 @@ impl PlayState {
                 self.emit_message_line(speech);
                 self.push_explicit_blank_message_entry();
                 self.blackthorn_audience_punished = false;
+                self.run_blackthorn_conditional_throne_cleanup();
                 return self.apply_blackthorn_captive_cell_handoff(game_dir, "");
             }
             // `blackthorn.md §4.2`, the audience exit beat. This key is the
@@ -4771,9 +4789,21 @@ impl PlayState {
             // input ... so it cannot be skipped". The window is untouched
             // across it, so the hold prints nothing.
             if std::mem::take(&mut self.blackthorn_audience_punished) {
-                // The punishing branches skip the beat and hand off directly.
+                // The punishing branches skip the beat; they alone reach the
+                // conditional tableau cleanup (§4.2).
+                self.run_blackthorn_conditional_throne_cleanup();
                 return self.apply_blackthorn_captive_cell_handoff(game_dir, "");
             }
+            // §4.2: "After the key, the beat hands the exit vector to the
+            // cutscene script VM" - §6.3's audience-exit row, whose stingers
+            // are emitted and whose final frame clears the tableau slot. The
+            // hold itself stays the measured one below, since §4.2's five
+            // seconds is only a floor.
+            let vm = self.run_blackthorn_cutscene_beat(BlackthornCutsceneBeat::AudienceExit);
+            self.push_diagnostic(format!(
+                "Blackthorn audience exit beat: {} stings, {} world ticks.",
+                vm.stinger_count, vm.world_ticks
+            ));
             self.staged_narration.push_ticks(
                 crate::blackthorn::BLACKTHORN_AUDIENCE_EXIT_BEAT_BIOS_TICKS,
                 String::new(),
@@ -4842,50 +4872,11 @@ impl PlayState {
         let shrine_index = usize::from(challenge.shrine_index);
 
         match challenge.submit(&answer) {
-            crate::blackthorn_session::BlackthornChallengeOutcome::Correct { ordinal } => {
-                // `blackthorn.md §4`: the correct-answer consequences are the
-                // shrine ruin flag and the clamped five-point standing debit.
-                self.apply_blackthorn_correct_answer_consequences(shrine_index);
-                let standing = self.moral_standing;
-                // `blackthorn.md §5` step 5: the punishment routine ends by
-                // "wait[ing] for player acknowledgement before returning to
-                // the caller branch". Measured 2026-09-12
-                // (`qa/paired/bt-correct.tsv`): the original's roster still
-                // shows three members while the merciful-death reaction is
-                // held, and drops to two on the acknowledgement. This engine
-                // lifted the record as the answer was submitted, so the panel
-                // dropped a row a beat early.
-                //
-                // An earlier note here read the same scenario as dropping "on
-                // the same beat"; today's capture of both sides side by side
-                // says otherwise.
-                let fate = self.blackthorn_correct_answer_companion_fate_preview();
-                self.pending_blackthorn_merciful_death = true;
-                let vm = self
-                    .run_blackthorn_cutscene_beat(BlackthornCutsceneBeat::PerQuestionIntermission);
-                // A correct answer resolves the interrogation; the
-                // withdrawn reading ended it only once the jail scan ran
-                // dry, i.e. once every party slot had been flagged.
-                self.run_blackthorn_cutscene_beat(BlackthornCutsceneBeat::ConditionalThroneCleanup);
-                // **Measured** 2026-09-08 (`qa/paired/bt-correct.tsv`): the
-                // right mantra is thanked, and the companion is killed anyway
-                // - the panel drops a row on the same beat.
-                self.push_diagnostic(format!(
-                    "Answered Blackthorn's prompt {} correctly; shrine {} is ruined; standing {standing}; {fate}; cutscene advanced {} world ticks.",
-                    ordinal + 1,
-                    shrine_index + 1,
-                    vm.world_ticks
-                ));
-                {
-                    let line = self.blackthorn_reaction_text(
-                        game_dir,
-                        crate::MISCMSG_BLACKTHORN_MERCIFUL_DEATH,
-                        BLACKTHORN_MERCIFUL_DEATH_LINE,
-                    )?;
-                    self.hold_blackthorn_closing(challenge, line, true)
-                }
-            }
-            crate::blackthorn_session::BlackthornChallengeOutcome::Survived => {
+            // `BlackthornChallenge::submit` reports a matching answer as
+            // `Survived`; `Correct` is never produced, so it shares the arm
+            // rather than carrying a second, divergent copy of the outcome.
+            crate::blackthorn_session::BlackthornChallengeOutcome::Correct { .. }
+            | crate::blackthorn_session::BlackthornChallengeOutcome::Survived => {
                 // `blackthorn.md §4`: a correct answer resolves the
                 // interrogation, and it is the answer — not surviving the
                 // ladder — that ruins the shrine and debits five points of
@@ -4897,12 +4888,13 @@ impl PlayState {
                 // it is read before the fate resolves.
                 let nondead = self.blackthorn_eligible_party_member_count();
                 let fate = self.blackthorn_correct_answer_companion_fate_preview();
-                let vm = self
-                    .run_blackthorn_cutscene_beat(BlackthornCutsceneBeat::ConditionalThroneCleanup);
+                // `blackthorn.md §4.2`: the conditional tableau cleanup is
+                // reached "only [by] the punishing branch"; this branch plays
+                // the exit beat, which clears the tableau slot the cleanup
+                // tests, so it skips it.
                 self.push_diagnostic(format!(
-                    "Survived Blackthorn's challenge; shrine {} is ruined; standing {standing}; {fate}; cutscene advanced {} world ticks without clearing the screen.",
+                    "Survived Blackthorn's challenge; shrine {} is ruined; standing {standing}; {fate}.",
                     shrine_index + 1,
-                    vm.world_ticks
                 ));
                 // `blackthorn.md §4.1`: "Correct answer with at least two
                 // nondead members | Record `5`, the merciful-death speech";
@@ -5741,6 +5733,8 @@ impl PlayState {
             return Ok(None);
         }
         self.pending_blackthorn_audience_exit = false;
+        // The exit vector has cleared the tableau slot, so this gate skips.
+        self.run_blackthorn_conditional_throne_cleanup();
         self.apply_blackthorn_captive_cell_handoff(game_dir, "")
             .map(Some)
     }

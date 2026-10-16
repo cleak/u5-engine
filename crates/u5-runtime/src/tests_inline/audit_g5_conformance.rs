@@ -263,3 +263,84 @@ fn audit_a036_pendulum_branch_takes_one_key_and_leaves() {
     assert!(state.active_blackthorn.is_none());
     let _ = fs::remove_dir_all(dir);
 }
+
+fn audit_g5_stingers_after(state: &PlayState, serial: u64) -> usize {
+    state
+        .sound_effects_after(serial)
+        .iter()
+        .filter(|effect| **effect == SoundEffect::BlackthornMovementStinger)
+        .count()
+}
+
+/// Audit A034 / A035. `blackthorn.md §4.2`: the exit beat is "one blocking key
+/// wait followed by the viewport-only cutscene vector Section 6.3 lists", and
+/// that vector "clears the seated-Blackthorn tableau slot", so "Every branch
+/// that runs the exit beat therefore skips that cleanup".
+#[test]
+fn audit_a034_a035_exit_beat_plays_its_vector_and_skips_the_tableau_cleanup() {
+    let dir = debug_game_dir();
+    let mut state = test_state(open_grid(), 5, 5);
+    state.begin_blackthorn_audience_capture(&dir).unwrap();
+    while state.active_blackthorn.as_ref().is_some_and(|c| c.current_prompt().is_none()) {
+        state.submit_blackthorn_audience_answer("", &dir).unwrap();
+    }
+    // A solo party: record 9, then the exit beat.
+    state.submit_blackthorn_audience_answer("Ahm", &dir).unwrap();
+    let seated = BlackthornCutsceneActor::SeatedBlackthorn.slot_index() as usize;
+    assert!(
+        !state.active_objects[seated].is_empty(),
+        "the correct answer itself runs no tableau cleanup"
+    );
+
+    let before = state.sound_effect_serial;
+    state.submit_blackthorn_audience_answer("", &dir).unwrap();
+    let exit = BlackthornCutsceneVm::with_audience_setup(Vec::new());
+    let mut exit = exit;
+    exit.run(blackthorn_cutscene_beat_commands(BlackthornCutsceneBeat::AudienceExit));
+    assert_eq!(
+        audit_g5_stingers_after(&state, before),
+        usize::from(exit.stinger_count),
+        "the key plays the exit vector's stingers"
+    );
+    assert!(state.active_objects[seated].is_empty(), "the vector clears slot 8");
+    let before = state.sound_effect_serial;
+    state.run_blackthorn_audience_exit_to_handoff(&dir).unwrap();
+    assert_eq!(
+        audit_g5_stingers_after(&state, before),
+        0,
+        "no conditional cleanup after the exit beat"
+    );
+    let _ = fs::remove_dir_all(dir);
+}
+
+/// Audit A035. `blackthorn.md §4.2`: "only the punishing branch, which never
+/// ran the beat, reaches" the conditional tableau cleanup of §6.3.
+#[test]
+fn audit_a035_punishing_branch_runs_the_conditional_tableau_cleanup() {
+    let dir = debug_game_dir();
+    let mut state = test_state(open_grid(), 5, 5);
+    state.party.push(audit_g5_companion(1));
+    state.party.push(audit_g5_companion(2));
+    state.begin_blackthorn_audience_capture(&dir).unwrap();
+    while state.active_blackthorn.as_ref().is_some_and(|c| c.current_prompt().is_none()) {
+        state.submit_blackthorn_audience_answer("", &dir).unwrap();
+    }
+    for _ in 0..4 {
+        state.submit_blackthorn_audience_answer("wrong", &dir).unwrap();
+        if state.active_blackthorn.as_ref().is_some_and(|c| c.awaiting_acknowledgement()) {
+            state.submit_blackthorn_audience_answer("", &dir).unwrap();
+        }
+    }
+    let before = state.sound_effect_serial;
+    state.submit_blackthorn_audience_answer("", &dir).unwrap();
+    let mut cleanup = BlackthornCutsceneVm::with_audience_setup(Vec::new());
+    cleanup.run(blackthorn_cutscene_beat_commands(
+        BlackthornCutsceneBeat::ConditionalThroneCleanup,
+    ));
+    assert_eq!(
+        audit_g5_stingers_after(&state, before),
+        usize::from(cleanup.stinger_count),
+        "the punishing tail runs the tableau cleanup"
+    );
+    let _ = fs::remove_dir_all(dir);
+}
