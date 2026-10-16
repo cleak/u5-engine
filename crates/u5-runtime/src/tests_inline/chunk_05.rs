@@ -290,6 +290,26 @@ fn exit_vehicle_refuses_furled_ship_with_no_landing_and_no_skiffs() {
 }
 
 #[test]
+fn exit_vehicle_under_sail_refusal_takes_its_own_row() {
+    // `vehicles.md §5.1`: "Ship under sail | `\nUnder sail!\n`".
+    let mut state = world_state(open_world_grid(), 5, 5);
+    state.player.transport = TransportState::Ship {
+        type_byte: SHIP_TRANSPORT_HOISTED_FIRST,
+        tile: FIRST_PLAYABLE_FRIGATE_TILE,
+        sails_hoisted: true,
+        hull: 77,
+        skiffs: 2,
+    };
+    state.sync_player_object();
+
+    assert_eq!(state.exit_vehicle(), MoveOutcome::Blocked);
+
+    assert_eq!(state.message, "\nUnder sail!\n");
+    assert!(state.player.transport.is_ship_under_sail());
+    assert_eq!(state.turn, 0);
+}
+
+#[test]
 fn exit_vehicle_horse_dismounts_without_nearby_support() {
     let mut state = world_state(vec![BRIT_DEEP_WATER_TILE; WORLD_CELLS], 5, 5);
     state.player.transport = TransportState::Horse {
@@ -392,7 +412,8 @@ fn exit_vehicle_ship_can_use_nearby_vehicle_object_as_support_without_relocation
     assert!(state.active_objects.iter().skip(1).any(|object| {
         object.type_byte == FIRST_PLAYABLE_FRIGATE_TILE && object.x == 5 && object.y == 5
     }));
-    assert_eq!(state.message, format!("ship! {SHIP_NO_SKIFFS_WARNING}"));
+    // `vehicles.md §5.1`: no further success text after `ship!`.
+    assert_eq!(state.message, "ship!");
     assert_eq!(state.turn, 1);
 }
 
@@ -705,7 +726,7 @@ fn exit_ship_fallbacks_save_load_round_trip_vehicle_state() {
 }
 
 #[test]
-fn exit_ship_without_skiffs_reports_public_warning() {
+fn exit_ship_without_skiffs_omits_boarding_skiff_warning() {
     let mut state = world_state(open_world_grid(), 5, 5);
     state.player.transport = TransportState::Ship {
         type_byte: 168,
@@ -733,11 +754,13 @@ fn exit_ship_without_skiffs_reports_public_warning() {
             aux3: 0,
         }
     );
-    assert_eq!(state.message, format!("ship! {SHIP_NO_SKIFFS_WARNING}"));
+    // `vehicles.md §5.1`: X-it adds no further success text; this
+    // warning is B-Board's (§4).
+    assert_eq!(state.message, "ship!");
 }
 
 #[test]
-fn exit_ship_with_zero_hull_reports_badly_damaged_warning() {
+fn exit_ship_with_zero_hull_omits_boarding_damage_warning() {
     let mut state = world_state(open_world_grid(), 5, 5);
     state.player.transport = TransportState::Ship {
         type_byte: 168,
@@ -763,7 +786,9 @@ fn exit_ship_with_zero_hull_reports_badly_damaged_warning() {
             aux3: 2,
         }
     );
-    assert_eq!(state.message, format!("ship! {SHIP_BADLY_DAMAGED_WARNING}"));
+    // `vehicles.md §5.1`: X-it adds no further success text; this
+    // warning is B-Board's (§4).
+    assert_eq!(state.message, "ship!");
 }
 
 #[test]

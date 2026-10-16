@@ -839,7 +839,7 @@ pub const USE_POTION_TARGET_PROMPT: &str = "On who: ";
 /// but quotes none of these.
 /// **Measured** (`qa/paired/ship-commands.tsv`, 2026-09-07): the three lines a
 /// ship under sail answers with. `vehicles.md` describes each case without
-/// quoting it. X-it under sail answers `Under sail!` (the engine had `Cannot
+/// quoting it. X-it under sail answers `\nUnder sail!\n` (the engine had `Cannot
 /// exit while sails are hoisted.`); a diagonal heading answers the resident
 /// `What?` refusal (the engine had `Sails need a cardinal heading.`); and the
 /// Pass that follows a stalled heading answers `Sheets in irons!` (the engine
@@ -853,7 +853,10 @@ pub const USE_POTION_TARGET_PROMPT: &str = "On who: ";
 /// state they treat. `magic.md` describes the effects without quoting a line.
 pub const SPELL_SUCCESS_LINE: &str = "Success!";
 
-pub const SHIP_XIT_UNDER_SAIL_REFUSAL: &str = "Under sail!";
+/// `vehicles.md §5.1`: "Ship under sail | `\nUnder sail!\n`" - the refusal
+/// takes its own row below the open `X-it ` echo, like
+/// [`XIT_NO_LAND_NEARBY_REFUSAL`].
+pub const SHIP_XIT_UNDER_SAIL_REFUSAL: &str = "\nUnder sail!\n";
 pub const SHIP_SAIL_STALLED_LINE: &str = "Sheets in irons!";
 
 pub const USE_MAGIC_CARPET_BOARDED: &str = "Boarded!";

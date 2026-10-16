@@ -1240,9 +1240,9 @@ impl PlayState {
         self.sync_player_object();
         self.mark_visibility_dirty();
         self.advance_turn();
-        let mut message = format!("{}!", transport.kind_name());
-        transport.append_ship_auxiliary_warnings(&mut message);
-        self.message = message;
+        // `vehicles.md §5.1`: a furled-ship exit onto land "adds no further
+        // success text"; the hull/skiff warnings belong to B-Board (§4).
+        self.message = format!("{}!", transport.kind_name());
         Ok(MoveOutcome::ExitedVehicle)
     }
 
