@@ -319,6 +319,13 @@ pub const BLACKTHORN_COBBLE_TILE: u8 = 0x44;
 pub const BLACKTHORN_LOCKED_DOOR_TILE: u8 = 0xbb;
 pub const BLACKTHORN_PENDULUM_TILE: u8 = 0x82;
 pub const BLACKTHORN_HOURGLASS_TILE: u8 = 0xe9;
+/// `blackthorn.md §6.1` / `formats/tiles.md §6.1`: the open-coded stamps a
+/// *later* wrong answer writes into the hourglass cell `(5,9)`, selected by
+/// question index. Index 1 writes `0xEB` and index 2 writes the spent frame
+/// `0xE8`; index 3 executes a companion and stamps nothing. The index-0 arm
+/// (`0xEA`) is unreachable and deliberately not modelled.
+pub const BLACKTHORN_HOURGLASS_INDEX1_STAMP_TILE: u8 = 0xeb;
+pub const BLACKTHORN_HOURGLASS_INDEX2_STAMP_TILE: u8 = 0xe8;
 pub const BLACKTHORN_RESCUE_LEFT_GUARDIAN_TILE: u8 = 0x5e;
 pub const BLACKTHORN_RESCUE_RIGHT_GUARDIAN_TILE: u8 = 0x5f;
 pub const BLACKTHORN_RESCUE_SPECTRAL_ACTOR_BYTE: u8 = 0x74;

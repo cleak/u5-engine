@@ -4949,20 +4949,29 @@ impl PlayState {
                     return self.hold_blackthorn_closing(challenge, line, false);
                 };
                 match challenge.wrong_escalation() {
-                    // First wrong answer: a threat only. No tile is stamped
-                    // yet, and the loop re-asks with the next wording.
+                    // First wrong answer: the threat, with its scene beat.
+                    // `blackthorn.md §6.1`: "The script swap listed in
+                    // Section 6.3 (`0x80` becomes `0x82`, `0xE8` becomes
+                    // `0xE9`) runs on the **first** wrong answer only" -
+                    // §6.3's "Failed challenge" vector, played between
+                    // record `7` and record `8` (§4.1, "after its scene
+                    // beat"). The loop then re-asks with the next wording.
                     Some(crate::blackthorn_session::BlackthornWrongEscalation::Threat) => {
                         let (next_ordinal, prompt) = challenge
                             .current_prompt()
                             .unwrap_or((ordinal + 1, "Virtue"));
                         let victim_name = self.blackthorn_victim_display_name(victim);
                         let _ = prompt;
+                        let vm = self.run_blackthorn_cutscene_beat(
+                            BlackthornCutsceneBeat::FailedChallengeReaction,
+                        );
                         challenge.await_acknowledgement(next_ordinal);
                         self.active_blackthorn = Some(challenge);
                         self.push_diagnostic(format!(
-                            "Failed Blackthorn's prompt {}; expected {expected}; victim slot {}.",
+                            "Failed Blackthorn's prompt {}; expected {expected}; victim slot {}; cutscene advanced {} world ticks.",
                             ordinal + 1,
                             victim + 1,
+                            vm.world_ticks,
                         ));
                         // `blackthorn.md §4.1`, the first wrong answer with at
                         // least two nondead members: record `7`, then record
@@ -4995,19 +5004,21 @@ impl PlayState {
                         Ok(MoveOutcome::PromptDeclined)
                     }
                     // Second and third wrong answers: "Later wrong answers
-                    // stamp a tile into the cutscene map". They do not run
-                    // §5's execution beat or clear the victim actor; that
-                    // happens only on the fourth answer. The two published
-                    // punishment props are introduced in prompt order.
+                    // stamp a tile into the cutscene map". `blackthorn.md
+                    // §6.1`: "an open-coded stamp selected by question index
+                    // writes the hourglass cell directly ...: index 1 writes
+                    // `0xEB`, index 2 writes `0xE8`". The pendulum swap and
+                    // the first hourglass frame belong to the first wrong
+                    // answer's script above.
                     Some(crate::blackthorn_session::BlackthornWrongEscalation::TileStamp) => {
-                        let (x, y, tile) = if ordinal == 1 {
-                            (5, 7, BLACKTHORN_PENDULUM_TILE)
+                        let tile = if ordinal == 1 {
+                            BLACKTHORN_HOURGLASS_INDEX1_STAMP_TILE
                         } else {
-                            (5, 9, BLACKTHORN_HOURGLASS_TILE)
+                            BLACKTHORN_HOURGLASS_INDEX2_STAMP_TILE
                         };
                         let mut vm = self.blackthorn_cutscene_vm_from_audience_state();
                         vm.run(&[
-                            BlackthornCutsceneCommand::WriteTerrain { x, y, tile },
+                            BlackthornCutsceneCommand::WriteTerrain { x: 5, y: 9, tile },
                             BlackthornCutsceneCommand::ExplicitRedraw,
                         ]);
                         self.apply_blackthorn_cutscene_vm_to_audience_state(&vm);
@@ -5028,14 +5039,14 @@ impl PlayState {
                         self.message = format!("{demand}\n\n{BLACKTHORN_INPUT_PROMPT}");
                         Ok(MoveOutcome::PromptDeclined)
                     }
-                    // Fourth wrong answer: the §5 execution.
+                    // Fourth wrong answer: the §5 execution. `blackthorn.md
+                    // §6.1`: "index 3 executes a companion (Section 5) rather
+                    // than stamping", and the §6.3 swap script ran on the
+                    // first wrong answer only, so it is not replayed here.
                     _ => {
                         // §5: the tail names "the actual removed member",
                         // read before the roster record is lifted out.
                         let victim_name = self.blackthorn_victim_display_name(victim);
-                        let vm = self.run_blackthorn_cutscene_beat(
-                            BlackthornCutsceneBeat::FailedChallengeReaction,
-                        );
                         // `blackthorn.md §5` step 5: the routine "wait[s] for
                         // player acknowledgement before returning to the
                         // caller branch", and measured
@@ -5050,9 +5061,8 @@ impl PlayState {
                         let report =
                             format!("companion in slot {victim} is owed the pendulum blade"); // audit: not a player-facing line
                         self.push_diagnostic(format!(
-                            "Failed Blackthorn's prompt {}; expected {expected}; {report} by the pendulum blade; cutscene advanced {} world ticks.",
+                            "Failed Blackthorn's prompt {}; expected {expected}; {report} by the pendulum blade.",
                             ordinal + 1,
-                            vm.world_ticks
                         ));
                         let line = self.blackthorn_reaction_text(
                             game_dir,
