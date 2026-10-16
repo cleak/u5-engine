@@ -1068,6 +1068,25 @@ fn look_shrine_band_tiles_print_bare_description_without_shrine_appender() {
 }
 
 #[test]
+fn look_sentinel_rows_print_the_selected_string_not_a_range_class() {
+    // `formats/look2-dat.md §5` (audit A007): "Use the offset table
+    // directly; do not derive descriptions from tile or object ranges."
+    // Terrain `0xC0` and object `0x12`/`0x74` are sentinel rows; each
+    // prints its own domain's selected sentinel string.
+    let table = parse_look2_dat(&look2_bytes(&[
+        (LOOK2_DAT_TERRAIN_ENTRIES, "x"),
+        (LOOK2_DAT_TERRAIN_ENTRIES + 0x12, "x"),
+        (LOOK2_DAT_TERRAIN_ENTRIES + 0x74, "x"),
+    ]))
+    .unwrap();
+    let state = test_state(open_grid(), 1, 1);
+
+    assert_eq!(state.look_description(0xc0, Some(&table), 0), "*");
+    assert_eq!(state.look_object_description(0x12, Some(&table)), "x");
+    assert_eq!(state.look_object_description(0x74, Some(&table)), "x");
+}
+
+#[test]
 fn world_look_wraps_and_reports_facing_object_without_spending_turn() {
     let mut state = world_state(open_world_grid(), 255, 0);
     state.player.facing = Direction::East;

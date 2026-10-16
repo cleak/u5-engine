@@ -135,6 +135,16 @@ pub const fn shop_vendor_name_for_scene(dialog_id: u8, scene_byte: u8) -> Option
     None
 }
 
+/// The `LOOK2.DAT` string at `index`, or the domain sentinel at
+/// `sentinel_index` when the row is missing (`formats/look2-dat.md §6`).
+/// With no table loaded there is no description to print.
+fn look2_selected_string(look_table: Option<&LookTable>, index: usize, sentinel_index: usize) -> String {
+    look_table
+        .and_then(|table| table.description(index).or_else(|| table.description(sentinel_index)))
+        .unwrap_or_default()
+        .to_string()
+}
+
 /// `view.md §3` row 5c: "`58` Shame, `72` Destard, `91` Despise, `126`
 /// Wrong, `128` Doom, `156` Covetous, `239` Hythloth, `240` Deceit."
 fn sealed_dungeon_name_for_x(x: usize) -> Option<&'static str> {
@@ -3853,14 +3863,11 @@ impl PlayState {
         look_table: Option<&LookTable>,
         target_x: usize,
     ) -> String {
-        let base = look_table
-            .and_then(|table| {
-                table.description(tile as usize).filter(|description| {
-                    !description.is_empty() && !table.is_sentinel(description)
-                })
-            })
-            .map(str::to_string)
-            .unwrap_or_else(|| tile_class(tile).to_string());
+        // `formats/look2-dat.md §5`: "Use the offset table directly; do not
+        // derive descriptions from tile or object ranges." A sentinel row
+        // prints its own selected string, as the original LOOK2 path does
+        // (§4); a missing row substitutes the domain's sentinel (§6).
+        let base = look2_selected_string(look_table, tile as usize, 0);
 
         if matches!(tile, 0xfa | 0xfb) {
             format!(
@@ -3905,16 +3912,14 @@ impl PlayState {
     }
 
     pub fn look_object_description(&self, object_id: u8, look_table: Option<&LookTable>) -> String {
-        look_table
-            .and_then(|table| {
-                table
-                    .description(LOOK2_DAT_TERRAIN_ENTRIES + object_id as usize)
-                    .filter(|description| {
-                        !description.is_empty() && !table.is_sentinel(description)
-                    })
-            })
-            .map(str::to_string)
-            .unwrap_or_else(|| tile_class(object_id).to_string())
+        // `formats/look2-dat.md §3`: the object domain is resolved before
+        // indexing, and its sentinel (`x`) is printed as selected, never
+        // replaced by a terrain-range class name (§5).
+        look2_selected_string(
+            look_table,
+            LOOK2_DAT_TERRAIN_ENTRIES + object_id as usize,
+            LOOK2_DAT_TERRAIN_ENTRIES,
+        )
     }
 
     pub fn sign_message_at(
