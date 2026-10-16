@@ -27,6 +27,18 @@ impl PlayState {
             self.diagnostics.remove(0);
         }
         self.diagnostics.push(text);
+        self.diagnostics_serial = self.diagnostics_serial.wrapping_add(1);
+    }
+
+    /// The diagnostics recorded after `serial`, a value previously read from
+    /// [`PlayState::diagnostics_serial`], oldest first. Entries that have
+    /// already fallen out of the bounded window are not returned.
+    pub fn diagnostics_since(&self, serial: u64) -> &[String] {
+        let unseen = self.diagnostics_serial.saturating_sub(serial);
+        let unseen = usize::try_from(unseen)
+            .unwrap_or(usize::MAX)
+            .min(self.diagnostics.len());
+        &self.diagnostics[self.diagnostics.len() - unseen..]
     }
 
     /// The most recent harness diagnostic, if any.
@@ -1259,5 +1271,41 @@ impl PlayState {
         if let Some(echo) = command_echo(command, mode) {
             self.begin_command_echo(echo);
         }
+    }
+}
+
+#[cfg(test)]
+mod diagnostics_serial_tests {
+    use crate::TOWN_GRID_SIDE;
+    use crate::test_fixtures::test_state;
+
+    #[test]
+    fn diagnostics_since_returns_only_entries_after_the_serial() {
+        let mut state = test_state(vec![1; TOWN_GRID_SIDE * TOWN_GRID_SIDE], 1, 1);
+        state.push_diagnostic("one".to_string());
+        let seen = state.diagnostics_serial;
+        state.push_diagnostic("two".to_string());
+        state.push_diagnostic("two".to_string());
+        assert_eq!(state.diagnostics_since(seen), ["two", "two"]);
+        assert!(state.diagnostics_since(state.diagnostics_serial).is_empty());
+    }
+
+    #[test]
+    fn diagnostics_since_survives_the_bounded_window_dropping_old_entries() {
+        let mut state = test_state(vec![1; TOWN_GRID_SIDE * TOWN_GRID_SIDE], 1, 1);
+        let seen = state.diagnostics_serial;
+        for index in 0..100 {
+            state.push_diagnostic(format!("entry {index}"));
+        }
+        let unseen = state.diagnostics_since(seen);
+        // Only the window is left; the newest entry is last.
+        assert_eq!(unseen.len(), state.diagnostics.len());
+        assert_eq!(unseen.last().map(String::as_str), Some("entry 99"));
+        let seen = state.diagnostics_serial;
+        state.push_diagnostic("Wandering encounter spawned in slot 2.".to_string());
+        assert_eq!(
+            state.diagnostics_since(seen),
+            ["Wandering encounter spawned in slot 2."]
+        );
     }
 }

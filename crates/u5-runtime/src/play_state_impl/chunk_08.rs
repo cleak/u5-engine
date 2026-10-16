@@ -362,7 +362,7 @@ impl PlayState {
         if let Some(report) = last_world_damage {
             // Unpublished (`cleak/u5-spec#262`): tick counts and the damage
             // report are engine bookkeeping, not the camp result text.
-            self.diagnostics.push(format!(
+            self.push_diagnostic(format!(
                 "underfoot world damage triggered {world_damage_ticks} tick(s); last {report}"
             ));
         }
@@ -517,7 +517,7 @@ impl PlayState {
                 String::new()
             }
         };
-        self.diagnostics.push(notes.join(" "));
+        self.push_diagnostic(notes.join(" "));
         self.mark_visibility_dirty();
         Ok(printed)
     }

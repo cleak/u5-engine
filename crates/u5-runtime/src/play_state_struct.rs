@@ -737,6 +737,13 @@ pub struct PlayState {
     /// the acceptance suites can still assert on them while the message
     /// window carries only published text.
     pub diagnostics: Vec<String>,
+    /// How many diagnostics [`Self::push_diagnostic`] has ever recorded.
+    ///
+    /// `diagnostics` is a bounded window that drops its oldest entry, so its
+    /// length cannot tell a frontend which entries are new. A frontend that
+    /// forwards diagnostics to its own log keeps the serial it last saw and
+    /// asks [`Self::diagnostics_since`] for the rest.
+    pub diagnostics_serial: u64,
     pub active_blackthorn: Option<crate::blackthorn_session::BlackthornChallenge>,
     pub blackthorn_audience_map: Option<MiscmapsCutsceneMap>,
     /// `karma.md §7` "Entry pacing": the shrine presentation's own display.

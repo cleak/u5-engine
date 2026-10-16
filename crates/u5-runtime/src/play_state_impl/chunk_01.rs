@@ -973,6 +973,7 @@ impl PlayState {
             // error; every caller treats `None` as "no description".
             look_table: crate::load_look_table(game_dir).ok(),
             diagnostics: Vec::new(),
+            diagnostics_serial: 0,
             active_blackthorn: None,
             blackthorn_audience_map: None,
             cutscene_black_viewport: false,
@@ -1381,6 +1382,7 @@ impl PlayState {
             // error; every caller treats `None` as "no description".
             look_table: crate::load_look_table(game_dir).ok(),
             diagnostics: Vec::new(),
+            diagnostics_serial: 0,
             active_blackthorn: None,
             blackthorn_audience_map: None,
             cutscene_black_viewport: false,
@@ -1794,6 +1796,7 @@ impl PlayState {
             // error; every caller treats `None` as "no description".
             look_table: crate::load_look_table(game_dir).ok(),
             diagnostics: Vec::new(),
+            diagnostics_serial: 0,
             active_blackthorn: None,
             blackthorn_audience_map: None,
             cutscene_black_viewport: false,

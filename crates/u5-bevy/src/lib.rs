@@ -1399,6 +1399,7 @@ pub fn run_visual_loop(
             play_speaker_effects,
             expire_speaker_voice,
             screenshot_system,
+            log_runtime_diagnostics,
         )
             .chain(),
     );
@@ -9812,6 +9813,7 @@ fn add_visual_intro_update_systems(app: &mut App) {
             play_speaker_effects,
             expire_speaker_voice,
             screenshot_system,
+            log_runtime_diagnostics,
         )
             .chain(),
     );
@@ -10275,6 +10277,9 @@ struct VisualState {
     /// input loop flushes queued type-ahead after every action, so this emits
     /// at most one fresh direction at a time after an initial hold delay.
     held_direction_repeat: HeldDirectionRepeat,
+    /// The runtime diagnostic serial this shell last forwarded to the
+    /// process log; see [`log_runtime_diagnostics`].
+    diagnostic_cursor: u64,
 }
 
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
@@ -11341,6 +11346,7 @@ fn setup(
         skip_animation_pump_once: false,
         sweep_idle_redraw_pending: false,
         held_direction_repeat: HeldDirectionRepeat::default(),
+        diagnostic_cursor: 0,
     });
     commands.remove_resource::<PendingBootstrap>();
 }
@@ -11517,6 +11523,7 @@ fn transition_visual_intro_to_gameplay(
         skip_animation_pump_once: false,
         sweep_idle_redraw_pending: false,
         held_direction_repeat: HeldDirectionRepeat::default(),
+        diagnostic_cursor: 0,
     });
     commands.remove_resource::<VisualIntroState>();
 }
@@ -13153,6 +13160,47 @@ fn queue_pending_speaker_effects(
     visual.sound_effect_cursor = visual.state.sound_effect_serial;
     for queued in speaker_effects_after(serial, visual.state.music_enabled, &visual.state) {
         speaker.write(queued);
+    }
+}
+
+/// The runtime's harness diagnostics recorded since `cursor`, which is
+/// advanced past them.
+fn take_new_runtime_diagnostics(state: &PlayState, cursor: &mut u64) -> Vec<String> {
+    let lines = state.diagnostics_since(*cursor).to_vec();
+    *cursor = state.diagnostics_serial;
+    lines
+}
+
+/// Whether a runtime diagnostic records a wandering-encounter spawn
+/// (`encounters.md §2`), which the paired captures need to see.
+fn is_wandering_encounter_diagnostic(line: &str) -> bool {
+    line.starts_with("Wandering encounter spawned")
+}
+
+/// Forward the runtime's harness diagnostics to the process log.
+///
+/// The spawn of a wandering encounter is silent to the player
+/// (`commands.md §8.1`: the movement family "never prints ... active-object
+/// slot numbers"), so a paired capture of the visual shell had no way to
+/// tell a run that rolled no monster from one whose monster never reached
+/// the party. The headless shell already prints the runtime's diagnostics;
+/// this gives the visual shell's `engine.log` the same evidence. Encounter
+/// spawns are logged at `info`, which the default filter keeps; the rest
+/// at `debug`, because several fire once per turn.
+fn log_runtime_diagnostics(visual: Option<ResMut<VisualState>>) {
+    let Some(mut visual) = visual else {
+        return;
+    };
+    if visual.state.diagnostics_serial == visual.diagnostic_cursor {
+        return;
+    }
+    let v: &mut VisualState = visual.as_mut();
+    for line in take_new_runtime_diagnostics(&v.state, &mut v.diagnostic_cursor) {
+        if is_wandering_encounter_diagnostic(&line) {
+            info!(target: "u5_engine::diagnostic", "{line}");
+        } else {
+            debug!(target: "u5_engine::diagnostic", "{line}");
+        }
     }
 }
 
@@ -19558,8 +19606,8 @@ mod tests {
             .expect("intro runtime must install an Update schedule");
         assert_eq!(
             update.systems_len(),
-            8,
-            "intro runtime needs both input drivers, both animation pumps, the aspect fit, sound playback, sound cleanup, and screenshots"
+            9,
+            "intro runtime needs both input drivers, both animation pumps, the aspect fit, sound playback, sound cleanup, screenshots, and the diagnostic log forwarder"
         );
     }
 
@@ -29443,5 +29491,227 @@ mod tests {
                 panel.slot
             );
         }
+    }
+
+    /// Copy the original asset set into a scratch directory the walk may
+    /// write to (combat entry writes the plane mirrors), so the read-only
+    /// install is never touched.
+    #[cfg(feature = "original-asset-tests")]
+    fn writable_original_asset_copy(label: &str) -> PathBuf {
+        let dir = temp_output_dir(label);
+        fs::create_dir_all(&dir).unwrap();
+        for entry in fs::read_dir(original_asset_dir()).unwrap() {
+            let entry = entry.unwrap();
+            if entry.file_type().unwrap().is_file() {
+                let target = dir.join(entry.file_name());
+                fs::copy(entry.path(), &target).unwrap();
+                let mut permissions = fs::metadata(&target).unwrap().permissions();
+                #[allow(clippy::permissions_set_readonly_false)]
+                permissions.set_readonly(false);
+                fs::set_permissions(&target, permissions).unwrap();
+            }
+        }
+        dir
+    }
+
+    /// What one walk through the live visual systems produced.
+    #[cfg(feature = "original-asset-tests")]
+    struct VisualSwampWalk {
+        steps_taken: usize,
+        spawn_lines: Vec<String>,
+        /// A spawned creature changed cell between two keyed steps.
+        creature_moved: bool,
+        reached_combat: bool,
+    }
+
+    /// Drive the shell's own gameplay systems - the keyboard dispatcher
+    /// [`drive_visual`], the idle wait-loop pump [`animate_static_tiles`] and
+    /// the diagnostic forwarder - over the `qa/paired/swamp-long.tsv` walk:
+    /// the swamp tip at 64,12 in Britannia, Left/Right alternating, a key
+    /// every 1.5 s of 60 Hz frames after a 9 s settle.
+    #[cfg(feature = "original-asset-tests")]
+    fn walk_the_swamp_through_the_visual_systems(dir: &Path, prng_seed: u16) -> VisualSwampWalk {
+        let options = PlayOptions {
+            target: PlayTarget::World(WorldPlane::Britannia),
+            start: Some((64, 12)),
+            clock: u5_runtime::GameClock::new(10, 46).unwrap(),
+            ..PlayOptions::default()
+        };
+        let mut state = PlayState::load_scene(dir, options).unwrap();
+        state.prng_state = prng_seed;
+        // As `transition_visual_intro_to_gameplay` sets it.
+        state.pace_combat_presentations = true;
+        let mut images = Assets::<Image>::default();
+        let image_handle = images.add(Image::new(
+            Extent3d {
+                width: VISUAL_PLAY_FRAME_WIDTH,
+                height: VISUAL_PLAY_FRAME_HEIGHT,
+                depth_or_array_layers: 1,
+            },
+            TextureDimension::D2,
+            vec![0; (VISUAL_PLAY_FRAME_WIDTH * VISUAL_PLAY_FRAME_HEIGHT * 4) as usize],
+            TextureFormat::Rgba8UnormSrgb,
+            RenderAssetUsages::default(),
+        ));
+        let mut app = App::new();
+        app.insert_resource(Time::<()>::default());
+        app.insert_resource(Time::<bevy::prelude::Real>::default());
+        app.insert_resource(ButtonInput::<KeyCode>::default());
+        app.insert_resource(images);
+        app.insert_resource(AnimationPump::default());
+        app.add_event::<SpeakerEffect>();
+        app.add_event::<AppExit>();
+        app.insert_resource(VisualState {
+            game_dir: dir.to_path_buf(),
+            state,
+            atlas: load_tile_atlas(dir, TileGraphicsDepth::Ega16).unwrap(),
+            image_handle,
+            text_font: load_ibm_ch_font(dir).unwrap(),
+            rune_font: load_runes_ch_font(dir).unwrap(),
+            sound_effect_cursor: 0,
+            prompt_cursor_frame: 0,
+            input_line: String::new(),
+            prompt_cursor_visible: false,
+            potion_flash_restore_pending: None,
+            skip_animation_pump_once: false,
+            sweep_idle_redraw_pending: false,
+            held_direction_repeat: HeldDirectionRepeat::default(),
+            diagnostic_cursor: 0,
+        });
+        app.add_systems(
+            Update,
+            (drive_visual, animate_static_tiles, log_runtime_diagnostics).chain(),
+        );
+        let frame = Duration::from_micros(16_667);
+        let tick = |app: &mut App| {
+            app.world_mut().resource_mut::<Time>().advance_by(frame);
+            app.world_mut()
+                .resource_mut::<Time<bevy::prelude::Real>>()
+                .update_with_duration(frame);
+            app.update();
+            app.world_mut()
+                .resource_mut::<ButtonInput<KeyCode>>()
+                .clear();
+        };
+        for _ in 0..540 {
+            tick(&mut app);
+        }
+        let mut cursor = 0;
+        let mut previous_creatures = Vec::new();
+        let mut walk = VisualSwampWalk {
+            steps_taken: 0,
+            spawn_lines: Vec::new(),
+            creature_moved: false,
+            reached_combat: false,
+        };
+        for step in 0..40 {
+            let key = if step % 2 == 0 {
+                KeyCode::ArrowLeft
+            } else {
+                KeyCode::ArrowRight
+            };
+            app.world_mut()
+                .resource_mut::<ButtonInput<KeyCode>>()
+                .press(key);
+            tick(&mut app);
+            app.world_mut()
+                .resource_mut::<ButtonInput<KeyCode>>()
+                .release(key);
+            for _ in 1..90 {
+                tick(&mut app);
+            }
+            walk.steps_taken = step + 1;
+            let visual = app.world().resource::<VisualState>();
+            // The forwarder kept pace with the runtime.
+            assert_eq!(visual.diagnostic_cursor, visual.state.diagnostics_serial);
+            walk.spawn_lines.extend(
+                take_new_runtime_diagnostics(&visual.state, &mut cursor)
+                    .into_iter()
+                    .filter(|line| is_wandering_encounter_diagnostic(line)),
+            );
+            let creatures: Vec<(usize, u8, usize, usize)> = visual
+                .state
+                .active_objects
+                .iter()
+                .enumerate()
+                .skip(1)
+                .filter(|(_, object)| !object.is_empty())
+                .map(|(slot, object)| (slot, object.type_byte, object.x, object.y))
+                .collect();
+            walk.creature_moved |= creatures.iter().any(|&(slot, kind, x, y)| {
+                previous_creatures
+                    .iter()
+                    .any(|&(s, k, px, py)| s == slot && k == kind && (px, py) != (x, y))
+            });
+            previous_creatures = creatures;
+            if visual.state.combat_active {
+                walk.reached_combat = true;
+                break;
+            }
+        }
+        walk
+    }
+
+    /// `qa/paired/swamp-long.tsv` (P19): the stock meets a wandering monster
+    /// on this walk in every capture, usually in combat by the thirtieth
+    /// step, while the visual shell built at `a78d3e61` showed none in
+    /// fourteen. That build did spawn (`encounters.md §2`) - the headless
+    /// shell of the same commit behaves identically - but its outdoor walker
+    /// drew the directed step's axis and its random fallback from a per-slot
+    /// seed rather than the shared generator, so a creature on this
+    /// peninsula never closed in; `da404b2c` replaced those draws
+    /// (`overworld.md §6.1`). The visual shell has no encounter path of its
+    /// own. This walks the route through the shell's own dispatch, idle-pump
+    /// and diagnostic systems under fixed generator seeds and asks for a
+    /// spawn on every walk, its `engine.log` line, creatures that walk, and a
+    /// fight on at least one walk.
+    #[test]
+    #[cfg(feature = "original-asset-tests")]
+    fn the_visual_shell_meets_a_wandering_monster_on_the_swamp_long_walk() {
+        let mut engaged = Vec::new();
+        for seed in [0x0123_u16, 0x0789, 0x0def] {
+            let dir = writable_original_asset_copy("swamp-long-walk");
+            let walk = walk_the_swamp_through_the_visual_systems(&dir, seed);
+            let _ = fs::remove_dir_all(&dir);
+            assert!(
+                !walk.spawn_lines.is_empty(),
+                "seed {seed:#06x}: no wandering encounter spawned in {} steps",
+                walk.steps_taken
+            );
+            assert!(
+                walk.creature_moved || walk.reached_combat,
+                "seed {seed:#06x}: spawned ({:?}) but no creature walked in {} steps",
+                walk.spawn_lines,
+                walk.steps_taken
+            );
+            if walk.reached_combat {
+                engaged.push(seed);
+            }
+        }
+        assert!(
+            !engaged.is_empty(),
+            "no walk ended in a fight with a wandering creature"
+        );
+    }
+
+    #[test]
+    fn runtime_diagnostics_forwarding_reports_each_line_once() {
+        let mut state = test_state(
+            vec![1; u5_runtime::TOWN_GRID_SIDE * u5_runtime::TOWN_GRID_SIDE],
+            1,
+            1,
+        );
+        let mut cursor = state.diagnostics_serial;
+        assert!(take_new_runtime_diagnostics(&state, &mut cursor).is_empty());
+        state.push_diagnostic("Wandering encounter spawned in slot 2.".to_string());
+        state.push_diagnostic("alarm sweep 0".to_string());
+        let lines = take_new_runtime_diagnostics(&state, &mut cursor);
+        assert_eq!(
+            lines,
+            ["Wandering encounter spawned in slot 2.", "alarm sweep 0"]
+        );
+        assert!(is_wandering_encounter_diagnostic(&lines[0]));
+        assert!(!is_wandering_encounter_diagnostic(&lines[1]));
+        assert!(take_new_runtime_diagnostics(&state, &mut cursor).is_empty());
     }
 }
