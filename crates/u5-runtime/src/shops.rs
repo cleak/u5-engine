@@ -824,7 +824,7 @@ pub enum HealerServiceAction {
     /// Space or Return — leave the service menu and print the
     /// exit line.
     Exit,
-    /// Any other byte — redraw record `119` (`shops.md §8.C`).
+    /// Any other byte — silently wait without reprinting (`shops.md §8.C`, R419).
     Discard,
 }
 
@@ -1060,7 +1060,7 @@ pub enum TavernDrinkPrompt {
     Enter,
     /// `N` (case-insensitive) or Space — leave with the farewell.
     Leave,
-    /// Any other byte — redraw record `119` (`shops.md §8.C`).
+    /// Any other byte — silently re-prompt.
     Discard,
 }
 
@@ -1408,9 +1408,9 @@ pub enum InnMainAction {
     LeaveCompanion,
     /// `P` (case-insensitive) — Pick up a previously-left companion.
     PickUpCompanion,
-    /// Space or Escape — exit the menu.
+    /// Space — exit the menu.
     Exit,
-    /// Any other byte — redraw record `119` (`shops.md §8.C`).
+    /// Any other byte — silently wait (`shops.md §8.C` "Inn actions").
     Discard,
 }
 
