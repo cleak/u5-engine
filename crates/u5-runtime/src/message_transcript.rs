@@ -911,6 +911,20 @@ impl PlayState {
         if self.message.is_empty() || self.message == self.message_flushed {
             return false;
         }
+        // `commands.md §5` / `text-output.md §10.4`: while the dispatcher's
+        // verb echo is still pending, the first thing the slot holds is the
+        // handler's own result, and that result continues the echoed verb
+        // row. The flush is reached early whenever the command's end-of-turn
+        // work prints - the dispatcher's `handled!` arm runs the per-turn
+        // epilogue before it commits the echo, and an epilogue line such as
+        // `Poisoned!` goes through [`Self::emit_message_line`], which flushes
+        // first. Flushing verbatim there split `Open-` from `Nothing to
+        // open!`; folding through the commit keeps the result on the verb row
+        // and lets the epilogue line follow on a row of its own. The commit
+        // leaves the row-open flag alone, exactly as a verbatim flush does.
+        if self.pending_command_echo.is_some() {
+            return self.commit_command_echo();
+        }
         let text = self.message.clone();
         self.push_message_transcript_lines(&text);
         self.message_flushed = text;
