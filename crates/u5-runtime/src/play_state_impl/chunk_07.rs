@@ -1497,12 +1497,16 @@ impl PlayState {
         if session.all_responses_match && coordinate_matches && target_still_ruined {
             self.shrine_ruin_flags[session.word_index] &= !SAVE_QUEST_TILE_FLAG_HIGH_BIT;
             self.grid[target_index] = WORLD_SHRINE_TILE;
+            // `karma.md §7.1` Success row: the banner, then the shared
+            // flash/rumble a second time, "which adds no text" - the prose
+            // description is a diagnostic, as on the utterance path.
             session
                 .transcript
                 .push_str(SHRINE_RESTORATION_SUCCESS_BANNER);
-            session
-                .transcript
-                .push_str(Self::word_of_power_presentation_message());
+            self.diagnostics.push(format!(
+                "Shrine restored; {}",
+                Self::word_of_power_presentation_message()
+            ));
             // `audio.md §8.4`: a successful ruined-shrine restoration invokes
             // the shared full-viewport flash again at its own success
             // boundary — a second invocation after the recognized-Word flash.
