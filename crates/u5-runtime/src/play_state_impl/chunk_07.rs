@@ -1298,10 +1298,17 @@ impl PlayState {
                 if let Some(index) = Self::shadowlord_name_index(&word) {
                     let shadowlord =
                         Self::shadowlord_title_for_index(index).unwrap_or("Shadowlord");
+                    // `commands.md` §11: a successful summon "plays the
+                    // appearance line together with the long warble and the
+                    // fade-in effect". That line's text is not published, so
+                    // the window gets nothing beyond the colon echo rather
+                    // than an invented sentence naming the slot; the
+                    // accounting goes to the diagnostics.
                     self.message = if let Some(slot) = self.place_shadowlord_name_encounter(index) {
-                        format!(
-                            "Yelled {word}, the name of {shadowlord}. {shadowlord} appears in active-object slot {slot}."
-                        )
+                        self.diagnostics.push(format!(
+                            "Yelled {word}, the name of {shadowlord}; summoned into active-object slot {slot}"
+                        ));
+                        String::new()
                     } else {
                         format!("\n{YELL_NO_EFFECT_MESSAGE}")
                     };
