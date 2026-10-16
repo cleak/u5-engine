@@ -1644,6 +1644,32 @@ pub fn dungeon_look_description(tile: u8) -> &'static str {
     }
 }
 
+/// `dungeon-mode.md` Sections 2 and 12 step 5: class `0xC?` is a
+/// flavour-presentation class. L-Look prints `a dripping stalactite.` for
+/// flavour one (Normal), `a caved in passage.` for flavour two (Mine), and
+/// for flavour three the corpse line `a less fortunate adventurer.` - or,
+/// when the caller's one-in-255 draw hit, `an unfortunate software
+/// pirate.`. Every other byte takes [`dungeon_look_description`]. The caller
+/// appends the terminal period, as it does for every description.
+pub fn dungeon_look_description_with_flavour(
+    tile: u8,
+    flavour: crate::DungeonPresentationFlavour,
+    pirate: bool,
+) -> &'static str {
+    let tile = dungeon_look_description_byte(tile);
+    if tile >> 4 != 0xC {
+        return dungeon_look_description(tile);
+    }
+    match flavour {
+        crate::DungeonPresentationFlavour::Normal => "a dripping stalactite",
+        crate::DungeonPresentationFlavour::Mine => "a caved in passage",
+        crate::DungeonPresentationFlavour::FlavourByte3 if pirate => {
+            "an unfortunate software pirate"
+        }
+        crate::DungeonPresentationFlavour::FlavourByte3 => "a less fortunate adventurer",
+    }
+}
+
 /// `dungeon-mode.md` Section 8.1, "Post-action underfoot consequences": the
 /// exact line an underfoot energy field prints, **before** its per-member
 /// rolls, so the line appears even when nobody is affected.

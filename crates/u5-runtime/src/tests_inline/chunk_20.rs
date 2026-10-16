@@ -2744,3 +2744,55 @@ fn dungeon_search_bomb_uses_acting_member_dexterity_and_shared_prng() {
     assert_eq!(state.prng_state, expected_prng);
     let _ = fs::remove_dir_all(dir);
 }
+
+/// `dungeon-mode.md §2` / `§12` step 5 (audit A082): L-Look on class `0xC?`
+/// prints the flavour's own description - stalactite for the normal
+/// flavour, caved-in passage for the mine flavour, and the corpse line for
+/// flavour byte 3, which becomes the software-pirate line on a one-in-255
+/// draw.
+#[test]
+fn dungeon_look_flavour_class_prints_the_flavour_description() {
+    let look = |record: u8, prng_state: u16| {
+        let mut grid = open_dungeon_record();
+        grid[dungeon_cell_index(0, 2, 1)] = 0xC0;
+        let mut state = dungeon_state(grid, 0, 1, 1);
+        state.area = Area::Dungeon {
+            scene: DungeonScene::from_record(record).unwrap(),
+            level: 0,
+        };
+        state.player.facing = Direction::East;
+        state.torch_counter = 5;
+        state.prng_state = prng_state;
+        assert_eq!(state.look_dungeon(), MoveOutcome::Observed);
+        (state.message.clone(), state.prng_state)
+    };
+    // Despise is Normal, Shame is Mine: no draw on either.
+    assert_eq!(
+        look(1, 7),
+        (format!("{DUNGEON_LOOK_PREAMBLE}a dripping stalactite."), 7)
+    );
+    assert_eq!(
+        look(5, 7),
+        (format!("{DUNGEON_LOOK_PREAMBLE}a caved in passage."), 7)
+    );
+    // Deceit is flavour byte 3: one shared-PRNG draw picks the line.
+    let hits = |seed: u16| {
+        let mut probe = seed;
+        u5_prng_range_u16(&mut probe, 0, 254) == 0
+    };
+    let miss = (0..=u16::MAX).find(|seed| !hits(*seed)).unwrap();
+    let hit = (0..=u16::MAX).find(|seed| hits(*seed)).unwrap();
+    let mut after_miss = miss;
+    let _ = u5_prng_range_u16(&mut after_miss, 0, 254);
+    assert_eq!(
+        look(0, miss),
+        (
+            format!("{DUNGEON_LOOK_PREAMBLE}a less fortunate adventurer."),
+            after_miss
+        )
+    );
+    assert_eq!(
+        look(0, hit).0,
+        format!("{DUNGEON_LOOK_PREAMBLE}an unfortunate software pirate.")
+    );
+}
