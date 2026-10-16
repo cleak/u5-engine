@@ -3836,11 +3836,13 @@ impl PlayState {
             // acting creature's class name followed by `teleports!` and a
             // newline (Section 11.1)." §11.1 adds that it is "printed straight
             // after the class name with no newline before it". The engine
-            // committed the move and said nothing.
+            // committed the move and said nothing. Its boundary row is
+            // `<monster> teleports!\n`: "teleport can continue an
+            // already-open row before ending it".
             if matches!(movement, CombatAiMovementOutcome::Teleport { .. })
                 && let Some(stats) = combat_class_stats(class)
             {
-                self.emit_message_line(format!("{} teleports!", stats.name));
+                self.emit_message_line_continuing_row(format!("{} teleports!\n", stats.name));
             }
             let _ = self.apply_combat_ambush_reveal_for_actor_position(actor_slot);
         }
@@ -4599,10 +4601,7 @@ impl PlayState {
     /// [`Self::emit_message_line`] opens a row before it prints, which is
     /// the leading feed this producer wants - unlike the teleport line
     /// directly above it in `§11.1`'s table, which has "no leading
-    /// newline of its own" and reaches the same helper. The two are the
-    /// same residue the blink lines carry: this engine cannot mark a line
-    /// as leaving the cursor mid-row for a later producer, so it prints
-    /// the boundary that is right for this row.
+    /// newline of its own" and so continues an open row instead.
     fn apply_combat_arena_exit(&mut self, actor_slot: usize, class: u8) {
         let name = crate::input_dispatch::combat_actor_display_name(self, actor_slot);
         self.emit_message_line(format!("{name}{COMBAT_ARENA_EXIT_ESCAPES_LINE}"));
