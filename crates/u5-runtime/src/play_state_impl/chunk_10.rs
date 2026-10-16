@@ -783,6 +783,9 @@ impl PlayState {
         };
         let floor = floor as u8;
         let mut moved = false;
+        // `npc-schedules.md §9.2`: "The schedule pass clears the shared event
+        // kind and NPC index, then visits roster slots 1 through 31."
+        self.pending_town_npc_contact = None;
         // npc-schedules.md §7: "At most one NPC per tick may start a fresh
         // search. The walker latches a 'someone already moved' flag on the
         // first slot that enters a search arm, and every later slot in the
@@ -838,9 +841,15 @@ impl PlayState {
                 let (ai_tx, ai_ty, _) = self.npcs[index].waypoint_position(ai_wp);
                 let raw_ai = self.npcs[index].schedule[NPC_SCHEDULE_AI_OFFSET + ai_wp];
                 let behavior = npc_ai_behavior(raw_ai);
+                // `npc-schedules.md §9` "The engagement step": "Values 3/6 use
+                // a Manhattan distance strictly below four from the NPC's
+                // current position to the party. Value 4 instead measures
+                // from its selected waypoint to the party, and at distance
+                // four or greater it wanders with cap three. Values 5/7
+                // engage without that distance gate."
                 if behavior == Some(NpcAiBehavior::Retreating)
                     && self.npcs[index].z == floor
-                    && self.town_npc_player_distance(index) <= TOWN_NPC_CHASE_RADIUS
+                    && self.town_npc_player_distance(index) < TOWN_NPC_ENGAGE_RADIUS
                 {
                     if let Some((nx, ny)) = self.town_npc_flee_step(index, floor) {
                         self.npcs[index].x = nx;
@@ -880,22 +889,39 @@ impl PlayState {
                                 self.sync_npc_active_object(index, floor);
                                 continue;
                             }
-                        } else if behavior.raises_contact_event() {
-                            // `npc-schedules.md §9` "The engagement step":
-                            // values 5/7 "engage without that distance gate".
-                            let unconditional_chase = behavior.engages_without_distance_gate();
-                            if !self.town_npc_adjacent_to_player(index)
-                                && (unconditional_chase
-                                    || self.town_npc_player_distance(index)
-                                        <= TOWN_NPC_CHASE_RADIUS)
+                        } else if behavior.raises_contact_event()
+                            && (behavior.engages_without_distance_gate()
+                                || behavior == NpcAiBehavior::ApproachAndAttack
+                                || self.town_npc_player_distance(index) < TOWN_NPC_ENGAGE_RADIUS)
+                        {
+                            // `npc-schedules.md §9`: "At the **start** of an
+                            // engagement invocation, orthogonal adjacency
+                            // produces the appropriate event and no movement:
+                            // values 4/5 require nonzero dialogue, whereas 6/7
+                            // do not. A zero-dialogue NPC in 4/5 continues to
+                            // step selection." §9.2: events "do not stop the
+                            // pass or form a queue: if more than one NPC
+                            // produces one during the pass, the last producer
+                            // visited supplies the event that town mode
+                            // handles." Because the event is taken here,
+                            // before this NPC steps, adjacency its own step
+                            // creates waits for a later invocation.
+                            if self.town_npc_adjacent_to_player(index)
+                                && town_npc_contact_dialogue_allows(
+                                    behavior,
+                                    self.npcs[index].dialog_id,
+                                )
                             {
-                                if let Some((nx, ny)) = self.town_npc_chase_step(index, floor) {
-                                    self.npcs[index].x = nx;
-                                    self.npcs[index].y = ny;
-                                    moved = true;
-                                    self.sync_npc_active_object(index, floor);
-                                    continue;
-                                }
+                                self.pending_town_npc_contact = Some(TownNpcContactEvent {
+                                    npc_slot: self.npcs[index].slot,
+                                    behavior,
+                                });
+                            } else if let Some((nx, ny)) = self.town_npc_chase_step(index, floor) {
+                                self.npcs[index].x = nx;
+                                self.npcs[index].y = ny;
+                                moved = true;
+                                self.sync_npc_active_object(index, floor);
+                                continue;
                             }
                         } else if behavior.is_wander() {
                             // §9 value `2`: "the same one-attempt-per-turn
@@ -1278,23 +1304,18 @@ impl PlayState {
         npc.x.abs_diff(self.player.x) + npc.y.abs_diff(self.player.y)
     }
 
+    /// `npc-schedules.md §9` "The engagement step": "For an approaching
+    /// NPC, the chooser tests legal orthogonal neighbours in **east, north,
+    /// west, south** order and takes the first that strictly reduces
+    /// Manhattan distance to the party. No equally distant detour is
+    /// planned."
+    ///
+    /// Modes 5/7 "additionally have their random direction variation"; its
+    /// rate is not published, so this engine does not model it yet.
     pub fn town_npc_chase_step(&self, npc_index: usize, floor: u8) -> Option<(usize, usize)> {
-        let npc = &self.npcs[npc_index];
-        let dx = self.player.x as isize - npc.x as isize;
-        let dy = self.player.y as isize - npc.y as isize;
-        let primary = if dx.abs() >= dy.abs() {
-            cardinal_direction_from_sign(dx.signum(), 0)
-        } else {
-            cardinal_direction_from_sign(0, dy.signum())
-        };
-        let secondary = if dx.abs() >= dy.abs() {
-            cardinal_direction_from_sign(0, dy.signum())
-        } else {
-            cardinal_direction_from_sign(dx.signum(), 0)
-        };
-        [primary, secondary]
+        let distance = self.town_npc_player_distance(npc_index);
+        TOWN_NPC_APPROACH_DIRECTIONS
             .into_iter()
-            .flatten()
             .find_map(|direction| {
                 self.town_npc_step_in_direction_toward(
                     npc_index,
@@ -1303,6 +1324,9 @@ impl PlayState {
                     self.player.x,
                     self.player.y,
                 )
+                .filter(|(nx, ny)| {
+                    nx.abs_diff(self.player.x) + ny.abs_diff(self.player.y) < distance
+                })
             })
     }
 
@@ -1762,7 +1786,17 @@ impl PlayState {
     }
 }
 
-const TOWN_NPC_CHASE_RADIUS: usize = 8;
+/// `npc-schedules.md §9` "The engagement step": values 3/6 act only while
+/// the NPC-to-party Manhattan distance is "strictly below four".
+const TOWN_NPC_ENGAGE_RADIUS: usize = 4;
+/// `npc-schedules.md §9`: the approach chooser's "east, north, west, south"
+/// test order.
+const TOWN_NPC_APPROACH_DIRECTIONS: [Direction; 4] = [
+    Direction::East,
+    Direction::North,
+    Direction::West,
+    Direction::South,
+];
 /// `npc-schedules.md §9` value `1`: "an accepted step must leave the NPC
 /// within Manhattan distance **three** of the active waypoint", and value `4`
 /// (R317) "uses the **same constant cap of three**".
@@ -1791,13 +1825,15 @@ const TOWN_NPC_CARDINAL_DIRECTIONS: [Direction; 4] = [
     Direction::North,
 ];
 
-fn cardinal_direction_from_sign(dx: isize, dy: isize) -> Option<Direction> {
-    match (dx, dy) {
-        (-1, 0) => Some(Direction::West),
-        (1, 0) => Some(Direction::East),
-        (0, -1) => Some(Direction::North),
-        (0, 1) => Some(Direction::South),
-        _ => None,
+/// `npc-schedules.md §9.2`: "AI 4 or 5 | Zero live dialogue | No contact
+/// event; continue movement selection." Values 6/7 carry no dialogue
+/// requirement - §9 "values 4/5 require nonzero dialogue, whereas 6/7 do
+/// not".
+pub(crate) fn town_npc_contact_dialogue_allows(behavior: NpcAiBehavior, dialog_id: u8) -> bool {
+    if behavior.raises_conversation_contact() {
+        dialog_id != NPC_DIALOG_ID_NONE
+    } else {
+        behavior.raises_arrest_or_conflict_contact()
     }
 }
 

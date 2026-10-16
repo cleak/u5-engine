@@ -517,6 +517,12 @@ pub const TOWN_NPC_COWERING_DIALOG_ID: u8 = 0xFD;
 pub const TOWN_NPC_BRUSHOFF_DIALOG_ID: u8 = 0xFE;
 pub const TOWN_NPC_COWERING_RESPONSE: &str = "They cower in fear.";
 pub const TOWN_NPC_BRUSHOFF_RESPONSE: &str = "Begone, vermin!";
+/// `town-mode.md §14`: on the arrest/conflict contact's conflict outcome, "an
+/// actor byte at least `0x40` prints `Attacked!` and enters the NPC-conflict
+/// chain; a lower byte clears the NPC slot".
+pub const TOWN_NPC_CONTACT_CONFLICT_ACTOR_FIRST: u8 = 0x40;
+/// `town-mode.md §14`: the conflict outcome's printed line.
+pub const TOWN_NPC_CONTACT_ATTACKED_LINE: &str = "Attacked!";
 /// Slot zero of every sub-map is the unused-sentinel slot the schedule
 /// processor skips; effective capacity per sub-map is therefore 31.
 pub const NPC_SENTINEL_SLOT: usize = 0;

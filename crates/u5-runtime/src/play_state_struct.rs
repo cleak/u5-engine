@@ -482,6 +482,11 @@ pub struct PlayState {
     /// "On exit the town chain clears the NPC slot, reloads the town
     /// map, and re-runs the Shadowlord install pass of Section 13".
     pub pending_town_conflict: Option<PendingTownConflict>,
+    /// `npc-schedules.md §9.2`: the engagement event kind/index pair. "The
+    /// schedule pass clears the shared event kind and NPC index", an
+    /// engagement records its producer, and "the last producer visited
+    /// supplies the event that town mode handles".
+    pub pending_town_npc_contact: Option<TownNpcContactEvent>,
     /// High-to-low outdoor reaction slots staged by the I/O-free active-object
     /// walker. Lower entries survive a terrain-combat frame and resume when
     /// that frame returns to the world.

@@ -4071,10 +4071,22 @@ impl PlayState {
         floor: i8,
         game_dir: &Path,
     ) -> io::Result<Option<MoveOutcome>> {
+        // `npc-schedules.md §9.2`: the event is the one the schedule pass
+        // recorded at the start of its producer's engagement invocation -
+        // "the last producer visited supplies the event that town mode
+        // handles". A turn whose pass did not run has none to handle.
+        let Some(event) = self.pending_town_npc_contact.take() else {
+            return Ok(None);
+        };
         if floor < 0 {
             return Ok(None);
         }
-        let Some((npc_slot, type_byte, behavior)) = self.town_adjacent_event_npc(scene, floor)
+        let npc_slot = event.npc_slot;
+        let behavior = event.behavior;
+        let Some(type_byte) = self
+            .npcs
+            .iter()
+            .find_map(|npc| (npc.slot == npc_slot).then_some(npc.type_byte))
         else {
             return Ok(None);
         };
@@ -4139,7 +4151,29 @@ impl PlayState {
             ));
             return Ok(Some(outcome));
         }
-        if behavior.raises_guard_event() {
+        if !behavior.raises_arrest_or_conflict_contact() {
+            return Ok(None);
+        }
+        // `npc-schedules.md §9.2` / `town-mode.md §14`: past the brush-off,
+        // "the exact linked live guard sprite byte `0x70` enters arrest;
+        // other sprites take the conflict outcome. At that outcome, an actor
+        // byte at least `0x40` prints `Attacked!` and enters the NPC-conflict
+        // chain; a lower byte clears the NPC slot." The live sprite is byte 0
+        // of the NPC's linked active-object record (`active-objects.md §3`).
+        let linked = self.npcs.iter().find_map(|npc| {
+            (npc.slot == npc_slot)
+                .then_some(npc.active_object)
+                .flatten()
+                .and_then(|slot| {
+                    self.active_objects
+                        .get(slot)
+                        .copied()
+                        .filter(|object| !object.is_empty())
+                        .map(|object| (slot, object))
+                })
+        });
+        let live_sprite = linked.map_or(type_byte, |(_, object)| object.type_byte);
+        if live_sprite == crate::tlk_control_codes::TALK_GUARD_SPRITE {
             // `town-mode.md §14` / `blackthorn.md §3`: "The arrest sequence
             // itself branches on the current location **before it prints
             // anything**. Inside Lord Blackthorn's Castle, and while the
@@ -4174,49 +4208,52 @@ impl PlayState {
             ));
             return Ok(Some(outcome));
         }
-        if behavior.raises_arrest_or_conflict_contact() {
-            let (pursued, fled) = self.town_alarm_sweep(scene, floor, Some(npc_slot));
+        if live_sprite >= TOWN_NPC_CONTACT_CONFLICT_ACTOR_FIRST {
+            self.mark_visibility_dirty();
+            self.emit_message_line(TOWN_NPC_CONTACT_ATTACKED_LINE);
+            // `town-mode.md §14`: the NPC-conflict chain, "entered both from
+            // A-Attack and from post-action cleanup, ... hands the target
+            // NPC's linked active-object slot to the same terrain-combat
+            // entry the overworld uses". The trigger is stamped the way the
+            // A-Attack entry stamps it.
+            if let Some((object_slot, object)) = linked {
+                let trigger = ActiveObject {
+                    type_byte,
+                    tile: type_byte,
+                    ..object
+                };
+                if game_dir.join(BRIT_CBT_FILE).exists()
+                    && terrain_combat_base_class(trigger).is_some()
+                {
+                    self.pending_town_conflict = Some(PendingTownConflict {
+                        scene_byte: scene.byte,
+                        floor,
+                        npc_slot,
+                        type_byte,
+                        awaiting_floor_reload: false,
+                    });
+                    let hostile_terrain = self.grid[object.y * TOWN_GRID_SIDE + object.x];
+                    let _setup_report = self
+                        .enter_terrain_combat_from_object_in_scene_with_terrain(
+                            game_dir,
+                            WorldPlane::Britannia,
+                            object_slot,
+                            trigger,
+                            scene.byte,
+                            hostile_terrain,
+                        )?;
+                }
+            }
             self.push_diagnostic(format!(
-                "Hostile NPC slot {npc_slot} (type {type_byte}) attacks; alarm raised ({pursued} pursuing, {fled} fleeing)."
+                "NPC slot {npc_slot} (sprite 0x{live_sprite:02X}) contact enters NPC conflict."
             ));
             return Ok(Some(MoveOutcome::Used));
         }
-        Ok(None)
-    }
-
-    pub fn town_adjacent_event_npc(
-        &self,
-        _scene: Scene,
-        floor: i8,
-    ) -> Option<(usize, u8, NpcAiBehavior)> {
-        let floor_u8 = floor as u8;
-        self.npcs.iter().find_map(|npc| {
-            if npc.z != floor_u8
-                || npc.x.abs_diff(self.player.x) + npc.y.abs_diff(self.player.y) != 1
-            {
-                return None;
-            }
-            let wp = waypoint_for_hour(&npc.schedule, self.clock.hour);
-            let behavior = npc_ai_behavior(npc.schedule[NPC_SCHEDULE_AI_OFFSET + wp])?;
-            // `npc-schedules.md §9` value `4` (spec `b6558f0`): the
-            // approach-and-attack arm "can raise the town-mode attack event
-            // - but only for an NPC whose dialogue-index field is non-zero;
-            // an NPC with no dialogue entry pursues without ever raising it
-            // (the same field J-Jimmy clears for value `5`)". Value `5`
-            // shares the gate through `doors-and-z-transitions.md §3.1`:
-            // released prisoners keep mode 5 pursuit for the visit, but the
-            // cleared awareness byte suppresses the adjacent attack event.
-            // Value `7` is not dialogue-gated.
-            // §9.2: "AI 4 or 5 | Zero live dialogue | No contact event;
-            // continue movement selection." 6/7 carry no such requirement -
-            // §9 "values 4/5 require nonzero dialogue, whereas 6/7 do not".
-            let raises_contact = if behavior.raises_conversation_contact() {
-                npc.dialog_id != NPC_DIALOG_ID_NONE
-            } else {
-                behavior.raises_arrest_or_conflict_contact()
-            };
-            raises_contact.then_some((npc.slot, npc.type_byte, behavior))
-        })
+        self.clear_town_conflict_npc_slot(scene, npc_slot, type_byte);
+        self.push_diagnostic(format!(
+            "NPC slot {npc_slot} (sprite 0x{live_sprite:02X}) contact clears the NPC slot."
+        ));
+        Ok(Some(MoveOutcome::Used))
     }
 
     pub fn resolve_town_arrest_prompt(

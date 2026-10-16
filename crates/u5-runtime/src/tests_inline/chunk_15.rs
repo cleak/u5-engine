@@ -1408,10 +1408,13 @@
         assert_eq!((state.npcs[1].x, state.npcs[1].y), (3, 1));
     }
 
-    /// `npc-schedules.md §9.2`: the arrest/conflict family is AI `6`/`7`, and
-    /// it is the only one that can reach the town alarm.
+    /// `npc-schedules.md §9.2` / `town-mode.md §14`: AI `6`/`7` contact
+    /// whose linked live sprite is not the guard `0x70` takes the conflict
+    /// outcome - an actor byte at least `0x40` "prints `Attacked!` and enters
+    /// the NPC-conflict chain". It does not sweep the town alarm (audit
+    /// A136/A168; this test used to pin the withdrawn alarm routing).
     #[test]
-    fn adjacent_hostile_town_npc_raises_alarm_without_combat() {
+    fn adjacent_hostile_town_npc_takes_the_conflict_outcome() {
         let dir = debug_game_dir();
         let mut state = test_state(open_grid(), 5, 5);
         state.load_scheduled_npcs(&[
@@ -1436,8 +1439,9 @@
             MoveOutcome::Used
         );
 
-        assert!(!state.combat_active);
-        assert!(state.diagnostics_contain("Hostile NPC slot 1"));
+        assert!(state.message.contains(TOWN_NPC_CONTACT_ATTACKED_LINE));
+        assert!(state.diagnostics_contain("contact enters NPC conflict"));
+        assert!(!state.diagnostics_contain("alarm raised"));
         let _ = fs::remove_dir_all(dir);
     }
 
@@ -1484,7 +1488,7 @@
     #[test]
     fn mode_five_adjacent_attack_requires_live_dialogue_awareness() {
         let mut state = test_state(open_grid(), 5, 5);
-        let scene = match state.area {
+        let _scene = match state.area {
             Area::Town { scene, .. } => scene,
             _ => unreachable!(),
         };
@@ -1505,12 +1509,17 @@
             },
         ]);
 
-        assert_eq!(state.town_adjacent_event_npc(scene, 0), None);
+        state.advance_npc_schedules();
+        assert_eq!(state.pending_town_npc_contact, None);
 
         state.npcs[0].dialog_id = 2;
+        state.advance_npc_schedules();
         assert_eq!(
-            state.town_adjacent_event_npc(scene, 0),
-            Some((1, 0x0E, NpcAiBehavior::ReservedEngage))
+            state.pending_town_npc_contact,
+            Some(TownNpcContactEvent {
+                npc_slot: 1,
+                behavior: NpcAiBehavior::ReservedEngage,
+            })
         );
     }
 
@@ -1521,7 +1530,7 @@
         // field is non-zero; an NPC with no dialogue entry pursues without
         // ever raising it".
         let mut state = test_state(open_grid(), 5, 5);
-        let scene = match state.area {
+        let _scene = match state.area {
             Area::Town { scene, .. } => scene,
             _ => unreachable!(),
         };
@@ -1542,20 +1551,29 @@
             },
         ]);
 
-        assert_eq!(state.town_adjacent_event_npc(scene, 0), None);
+        state.advance_npc_schedules();
+        assert_eq!(state.pending_town_npc_contact, None);
 
         state.npcs[0].dialog_id = 2;
+        state.advance_npc_schedules();
         assert_eq!(
-            state.town_adjacent_event_npc(scene, 0),
-            Some((1, 0x0E, NpcAiBehavior::ApproachAndAttack))
+            state.pending_town_npc_contact,
+            Some(TownNpcContactEvent {
+                npc_slot: 1,
+                behavior: NpcAiBehavior::ApproachAndAttack,
+            })
         );
 
         // Value `7` keeps raising the event without a dialogue entry.
         state.npcs[0].dialog_id = NPC_DIALOG_ID_NONE;
         state.npcs[0].schedule[..3].copy_from_slice(&[7, 7, 7]);
+        state.advance_npc_schedules();
         assert_eq!(
-            state.town_adjacent_event_npc(scene, 0),
-            Some((1, 0x0E, NpcAiBehavior::RandomChase))
+            state.pending_town_npc_contact,
+            Some(TownNpcContactEvent {
+                npc_slot: 1,
+                behavior: NpcAiBehavior::RandomChase,
+            })
         );
     }
 
@@ -1761,6 +1779,8 @@
             },
         ]);
 
+        // npc-schedules.md §9.2: the schedule pass produces the event.
+        state.advance_npc_schedules();
         assert_eq!(
             state.apply_town_npc_contact_event(scene, 0, Path::new("")).unwrap(),
             Some(MoveOutcome::Used)
