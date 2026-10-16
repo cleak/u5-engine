@@ -5966,10 +5966,13 @@ impl PlayState {
             return Ok(Some(MoveOutcome::Used));
         }
 
+        // `dungeon-mode.md §6.9`: the dungeon `phase` byte is packed sprite
+        // state - symmetry `0x90`, animation mode `0x60` and a four-bit
+        // phase - that the painter rebuilds preserving the symmetry and mode
+        // bits. A committed step (`§14`) moves the record; it does not write
+        // a facing into that byte.
         self.active_objects[slot].x = step.x;
         self.active_objects[slot].y = step.y;
-        self.active_objects[slot].phase =
-            active_object_phase_from_direction(step.direction, object.phase & 0x0f);
         self.mark_visibility_dirty();
         let move_message = format!(
             "Dungeon monster tile {} moved {} to ({}, {}) on {} level {level}.",

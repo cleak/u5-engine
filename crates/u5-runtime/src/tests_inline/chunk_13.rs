@@ -25995,10 +25995,9 @@ fn dungeon_post_turn_active_monster_greedy_steps_toward_party() {
 
     let object = state.active_objects[1];
     assert_eq!((object.x, object.y), (2, 1));
-    assert_eq!(
-        object.phase,
-        active_object_phase_from_direction(Direction::West, 0)
-    );
+    // `dungeon-mode.md §6.9`: the phase byte is packed sprite state; a
+    // committed step moves the record without writing a facing into it.
+    assert_eq!(object.phase, 0x20);
     // A monster's step prints nothing; the note is a diagnostic.
     assert!(
         state
@@ -26006,6 +26005,32 @@ fn dungeon_post_turn_active_monster_greedy_steps_toward_party() {
             .join(" ")
             .contains("Dungeon monster tile 192 moved West to (2, 1)")
     );
+}
+
+#[test]
+fn dungeon_active_monster_step_preserves_packed_sprite_state() {
+    // `dungeon-mode.md §6.9`: Ghost starts at `0x90` (complement symmetry);
+    // the symmetry and mode bits must survive a committed step.
+    let mut state = dungeon_state(open_dungeon_record(), 0, 1, 1);
+    state.active_objects.push(ActiveObject {
+        type_byte: 3,
+        tile: 3,
+        x: 3,
+        y: 1,
+        z: 0,
+        phase: 0x90,
+        aux1: 23,
+        aux3: 0,
+    });
+
+    assert_eq!(
+        state.pass_turn_with_game_dir(Some(Path::new(""))).unwrap(),
+        MoveOutcome::Passed
+    );
+
+    let object = state.active_objects[1];
+    assert_eq!((object.x, object.y), (2, 1));
+    assert_eq!(object.phase, 0x90);
 }
 
 #[test]
