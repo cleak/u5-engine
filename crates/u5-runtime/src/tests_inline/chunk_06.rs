@@ -3167,6 +3167,23 @@
     }
 
     #[test]
+    fn outdoor_walker_predicate_reads_byte_zero_and_excludes_environment_runs() {
+        // `formats/tiles.md`: the outdoor classifier is false for `0xB4..0xB7`
+        // and `0xE8..0xEB`; `active-objects.md §8` classifies by byte 0.
+        for type_byte in [0xb4, 0xb7, 0xe8, 0xeb] {
+            let state = world_state_with_walker(5, 5, type_byte, 6, 5);
+            assert!(!state.outdoor_active_object_is_adjacent(1), "{type_byte:#x}");
+        }
+        for type_byte in [0x2c, 0x80, 0xb3, 0xb8, 0xe7, 0xec, 0xff] {
+            let state = world_state_with_walker(5, 5, type_byte, 6, 5);
+            assert!(state.outdoor_active_object_is_adjacent(1), "{type_byte:#x}");
+        }
+        let mut state = world_state_with_walker(5, 5, 0x10, 6, 5);
+        state.active_objects[1].tile = 0x80;
+        assert!(!state.outdoor_active_object_is_adjacent(1));
+    }
+
+    #[test]
     fn outdoor_walker_reaction_suppresses_every_lower_slots_movement() {
         // The walk is high-to-low. Slot 2 fires first; the running reaction
         // total then suppresses slot 1's otherwise legal directed step.

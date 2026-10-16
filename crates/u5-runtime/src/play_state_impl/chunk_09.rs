@@ -6107,13 +6107,21 @@ pub const fn merge_active_ship_cadence_phase(post_tick: u8, pre_tick: u8) -> u8 
     }
 }
 
+/// `active-objects.md §8`: the outdoor walker "applies only to the outdoor
+/// animated/monster predicate ... excluding the small environment-animation
+/// ranges", and terrain-combat classification "derives ... from the
+/// triggering slot's byte-0 type". The predicate therefore reads byte 0
+/// only; the per-frame tile byte (byte 1) does not qualify a slot.
 pub fn is_outdoor_active_object_walker(object: ActiveObject) -> bool {
     is_outdoor_active_object_walker_byte(object.type_byte)
-        || is_outdoor_active_object_walker_byte(object.tile)
 }
 
+/// `formats/tiles.md`: the outdoor classifier "returns true for
+/// `0x2C..0x2F` and for values at or above `0x80` generally, but **false**
+/// for `0xB4..0xB7`, false for `0xE8..0xEB`, and false for everything below
+/// `0x80`" (the excluded subfamilies of the `active-objects.md §8` table).
 pub const fn is_outdoor_active_object_walker_byte(byte: u8) -> bool {
-    matches!(byte, 0x2c..=0x2f | 0x80..=0xff)
+    matches!(byte, 0x2c..=0x2f | 0x80..=0xff) && !matches!(byte, 0xb4..=0xb7 | 0xe8..=0xeb)
 }
 
 pub fn town_active_object_step_accepts_tile(tile: u8) -> bool {
