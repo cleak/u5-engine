@@ -21870,7 +21870,7 @@ mod tests {
         );
         // Completing the fade publishes window one; the beat consumes
         // no input, so nothing else can publish it.
-        assert_eq!(state.message, "Window one");
+        assert_eq!(state.message, "{Window one");
     }
 
     #[test]

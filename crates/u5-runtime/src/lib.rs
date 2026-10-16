@@ -403,7 +403,7 @@ pub use end_io::{
     END_DAT_FILE, END_DAT_LEN, END_DAT_PUBLISHED_WINDOW_RANGE_OPTIONS,
     END_DAT_PUBLISHED_WINDOW_RANGES, END_DAT_WINDOW_COUNT, END_NARRATIVE_WINDOW_TABLE_FILE,
     END_PARAGRAPH_START_MARKER, END_SOFT_BREAK_MARKER, EndNarrative, EndNarrativeGroup,
-    EndNarrativeWindow, EndNarrativeWindowRange, decode_end_window, end_narrative_window,
+    EndNarrativeWindow, EndNarrativeWindowRange, decode_end_window, decode_end_window_keeping_layout_markers, end_narrative_window,
     load_end_narrative, load_end_narrative_window_ranges, parse_end_narrative,
     parse_end_narrative_window_ranges, require_end_narrative,
 };

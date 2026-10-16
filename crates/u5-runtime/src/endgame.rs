@@ -567,7 +567,11 @@ impl EndgameState {
             Step::NarrativeWindow(index) => self
                 .final_narrative
                 .as_ref()
-                .and_then(|narrative| narrative.window_by_number(index.saturating_add(1)))
+                .and_then(|narrative| {
+                    // `formats/end-dat.md §3`/`§4`: the proportional
+                    // renderer consumes `{` and `_`, so they stay in.
+                    narrative.layout_window_by_number(index.saturating_add(1))
+                })
                 .unwrap_or_else(|| {
                     panic!(
                         "endgame final narrative window {} has no END.DAT text; displaying the step's debug banner label instead is a forbidden fallback (endgame.md §8)",

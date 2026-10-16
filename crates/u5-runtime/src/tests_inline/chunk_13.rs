@@ -19394,7 +19394,7 @@ fn endgame_flow_uses_loaded_endmsg_records_for_prompts_rite_and_refusal() {
         ENDGAME_TABLEAU_BOX_ACTOR_BYTE
     );
     run_victory_tableau_to_first_narrative_window(&mut victory);
-    assert_eq!(victory.message, "Window one");
+    assert_eq!(victory.message, "{Window one");
 }
 
 #[test]
@@ -19435,7 +19435,7 @@ fn victory_endgame_cinematic_advances_through_all_panels_then_holds_terminal_sta
 
     // The automatic tableau sequence includes the one silent fade and
     // publishes the first narrative window without consuming another key.
-    assert_eq!(state.message, "Window one");
+    assert_eq!(state.message, "{Window one");
 
     for expected in [
         "Window two",
@@ -19445,7 +19445,7 @@ fn victory_endgame_cinematic_advances_through_all_panels_then_holds_terminal_sta
         "Window six",
     ] {
         state.resolve_endgame_confirmation(true);
-        assert_eq!(state.message, expected);
+        assert_eq!(state.message, format!("{{{expected}"));
     }
     {
         // Advance the cinematic directly: routing this through
@@ -23861,6 +23861,30 @@ fn decode_end_window_strips_layout_markers_and_terminates_on_nul() {
     assert_eq!(decode_end_window(bytes), "AvatarStanding\natthecircle");
 }
 
+/// `formats/end-dat.md §3`/`§4`: the window handed to the endgame's
+/// proportional renderer keeps `{` (15-px first-line indent) and `_`
+/// (soft hyphen) so the layout can consume them.
+#[test]
+fn end_narrative_layout_window_keeps_brace_and_soft_hyphen() {
+    let raw = b"\n{Avatar_Standing\r\nat the circle\0pad".to_vec();
+    let end = raw.len();
+    let table = format!("1 0 {end}\n");
+    let ranges = parse_end_narrative_window_ranges(&table).unwrap();
+    let narrative = EndNarrative::new(raw).with_window_ranges(ranges);
+    assert_eq!(
+        narrative.layout_window_by_number(1).as_deref(),
+        Some("\n{Avatar_Standing\n\nat the circle")
+    );
+    assert_eq!(
+        decode_end_window_keeping_layout_markers(b"{a_b\0c"),
+        "{a_b"
+    );
+    // A window whose only bytes are markers has no renderable text.
+    let marker_only = EndNarrative::new(b"{_\0".to_vec())
+        .with_window_ranges(parse_end_narrative_window_ranges("1 0 3\n").unwrap());
+    assert_eq!(marker_only.layout_window_by_number(1), None);
+}
+
 #[test]
 fn end_narrative_window_returns_decoded_subslice() {
     let raw = b"{Hello\nWorld\0".to_vec();
@@ -23915,9 +23939,9 @@ fn end_narrative_window_ranges_select_pages_for_cinematic() {
     endgame.advance_cinematic();
     assert_eq!(endgame.current_cinematic_text(), "");
     assert!(endgame.advance_cinematic_frame_operation());
-    assert_eq!(endgame.current_cinematic_text(), "Window one");
+    assert_eq!(endgame.current_cinematic_text(), "{Window one");
     endgame.advance_cinematic();
-    assert_eq!(endgame.current_cinematic_text(), "Window two");
+    assert_eq!(endgame.current_cinematic_text(), "{Window two");
 }
 
 #[test]
