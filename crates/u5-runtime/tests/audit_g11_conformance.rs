@@ -1,0 +1,215 @@
+//! Conformance tests for the 2026-10-16 audit, cluster g11
+//! (`systems/containers.md`, `systems/inventory.md`,
+//! `catalogs/quest-graph.md`, `systems/doors-and-z-transitions.md`,
+//! `systems/rest-and-camp.md`). Each test names the clause it pins.
+
+use std::path::Path;
+
+use u5_runtime::test_fixtures::{open_grid, test_state};
+use u5_runtime::*;
+
+fn town_chest_state(stat: u8) -> PlayState {
+    let mut grid = open_grid();
+    grid[32 + 2] = 0x4f;
+    let mut state = test_state(grid, 1, 1);
+    state.player.facing = Direction::East;
+    state.active_objects.push(ActiveObject {
+        type_byte: 0x4f,
+        tile: 0x4f,
+        x: 2,
+        y: 1,
+        z: 0,
+        phase: STEADY_PHASE,
+        aux1: stat,
+        aux3: 0,
+    });
+    state
+}
+
+fn staged_at(state: &PlayState, x: usize, y: usize) -> Vec<(usize, ActiveObject)> {
+    state
+        .active_objects
+        .iter()
+        .copied()
+        .enumerate()
+        .skip(1)
+        .filter(|(_, object)| !object.is_empty() && (object.x, object.y) == (x, y))
+        .collect()
+}
+
+/// `containers.md §4`: "Every successful row from either pool is committed
+/// the same way: the engine acquires a free active-object slot, writes the
+/// result family and the rolled quantity into it". The chest credits no
+/// inventory; a later `G` Get collects each staged object.
+#[test]
+fn a060_surface_chest_rows_are_staged_as_floor_objects_for_a_later_get() {
+    // Class 7 is eligible for Food, Torches and Gold, and for the one
+    // threshold-5 equipment index.
+    let mut state = town_chest_state(0x07);
+    let food = state.food;
+    let torches = state.torches;
+    let gold = state.gold;
+
+    // Find a seed whose opening grants at least one row.
+    let mut seed = 0u16;
+    loop {
+        let mut probe = town_chest_state(0x07);
+        probe.prng_state = seed;
+        probe.consume_surface_object_chest_at(2, 1, 0, "Opened");
+        if probe.message.starts_with(CHEST_TRANSCRIPT_FOUND_HEADING) {
+            break;
+        }
+        seed += 1;
+    }
+    state.prng_state = seed;
+    assert_eq!(
+        state.consume_surface_object_chest_at(2, 1, 0, "Opened"),
+        Some(MoveOutcome::ContainerOpened)
+    );
+    assert_eq!((state.food, state.torches, state.gold), (food, torches, gold));
+    let staged = staged_at(&state, 2, 1);
+    let lines = state.message.lines().count() - 1;
+    assert_eq!(staged.len(), lines, "{:?} / {:?}", staged, state.message);
+    for (_, object) in &staged {
+        assert!(matches!(object.type_byte, 0x02 | 0x09 | 0x0d | 0x0f), "{object:?}");
+        assert_ne!(object.aux1, 0);
+    }
+    // Downward scan: the first staged row takes the highest index.
+    assert_eq!(staged.last().unwrap().0, OOL_SLOTS - 1);
+
+    // Each Get transfers one staged object through the class dispatcher.
+    let mut gets = 0;
+    while !staged_at(&state, 2, 1).is_empty() {
+        let outcome = state
+            .get_town_facing(Path::new(""), Scene::new(0x11).unwrap(), 0)
+            .unwrap();
+        assert_eq!(outcome, MoveOutcome::Got, "{:?}", state.message);
+        gets += 1;
+    }
+    assert_eq!(gets, lines);
+    assert!(state.food > food || state.torches > torches || state.gold > gold);
+}
+
+/// `containers.md §4`: "when every entry is occupied it returns index zero
+/// as well. The caller reads a returned index of zero as 'no slot
+/// available' and abandons that row's grant", and `§4.1` step 2: a
+/// dropped grant "prints nothing".
+#[test]
+fn a060_rows_beyond_the_free_slots_are_dropped_silently() {
+    let mut state = town_chest_state(0x7f);
+    state.active_objects.resize(OOL_SLOTS, ActiveObject::empty());
+    for slot in 2..OOL_SLOTS {
+        state.active_objects[slot] = ActiveObject {
+            type_byte: 0x50,
+            tile: 0x50,
+            x: 20,
+            y: 20,
+            z: 0,
+            phase: STEADY_PHASE,
+            aux1: 0,
+            aux3: 0,
+        };
+    }
+    let food = state.food;
+    // Put the chest in the top slot and fill slot 1, so once the chest's
+    // record is cleared its slot is the only free one in the table.
+    state.active_objects.swap(1, OOL_SLOTS - 1);
+    assert_eq!(
+        state.consume_surface_object_chest_at(2, 1, 0, "Opened"),
+        Some(MoveOutcome::ContainerOpened)
+    );
+    // The chest's own cleared slot takes exactly one row; the rest drop.
+    assert_eq!(staged_at(&state, 2, 1).len(), 1);
+    assert_eq!(state.message.lines().count(), 2, "{:?}", state.message);
+    assert_eq!(state.food, food);
+}
+
+/// `containers.md §4.1` "Draw-order details": every roll is a shared PRNG
+/// draw. A class-2 chest is below every primary and equipment threshold, so
+/// only the equipment pool's `floor(2 / 2) + 1 = 2` index draws are made -
+/// ineligible rows and indices draw nothing more.
+#[test]
+fn a061_ineligible_rows_and_indices_skip_their_gate_draw() {
+    let mut state = town_chest_state(0x02);
+    state.prng_state = 0x4321;
+    state.consume_surface_object_chest_at(2, 1, 0, "Opened");
+    let mut prng = U5Prng::new(0x4321);
+    prng.next_range_u8(0, 47);
+    prng.next_range_u8(0, 47);
+    assert_eq!(state.prng_state, prng.state());
+    assert_eq!(state.message, CHEST_TRANSCRIPT_EMPTY_LINE);
+}
+
+/// `containers.md §4.1`: "for the Chest-marker and Gold rows that first draw
+/// (`1..10` and `1..90`) is **discarded** and the family's own roll ... is
+/// made afterwards". Replays a class-3 chest (Gold is its only eligible
+/// primary row; the equipment pool makes two index draws).
+#[test]
+fn a061_gold_row_takes_a_discarded_first_draw() {
+    for seed in 0..64u16 {
+        let mut state = town_chest_state(0x03);
+        state.prng_state = seed;
+        state.consume_surface_object_chest_at(2, 1, 0, "Opened");
+
+        let mut prng = U5Prng::new(seed);
+        let gate = prng.next_range_u8(1, 30);
+        let mut expected_gold = None;
+        if gate >= 3 {
+            prng.next_range_u8(1, 90);
+            expected_gold = Some(prng.next_range_u8(1, 9));
+        }
+        prng.next_range_u8(0, 47);
+        prng.next_range_u8(0, 47);
+        assert_eq!(state.prng_state, prng.state(), "seed {seed}");
+        let staged = staged_at(&state, 2, 1);
+        match expected_gold {
+            Some(amount) => {
+                assert_eq!(staged.len(), 1);
+                assert_eq!(staged[0].1.type_byte, 0x02);
+                assert_eq!(staged[0].1.aux1, amount);
+                assert_eq!(
+                    state.message,
+                    format!("{CHEST_TRANSCRIPT_FOUND_HEADING}{CHEST_TRANSCRIPT_GOLD_LINE}")
+                );
+            }
+            None => assert!(staged.is_empty()),
+        }
+    }
+}
+
+/// `containers.md §5`: the narrator uses "the acting member's
+/// **Intelligence**" - not the class letter - and "a uniform `1..30`
+/// roll". An untrapped container's threshold is `(30 - INT) / 2`, so an
+/// Intelligence of 30 detects every time and reads `no trap!`.
+#[test]
+fn a062_search_trap_assessment_uses_intelligence_and_the_shared_prng() {
+    let mut state = town_chest_state(0x05);
+    state.party_intelligence[0] = 30;
+    let before = state.prng_state;
+    assert_eq!(state.search_facing_secret(&[], None), MoveOutcome::Searched);
+    assert_eq!(state.message, format!("{SEARCH_PREAMBLE}{SEARCH_TRAP_NONE_LINE}"));
+    assert_eq!(state.prng_state, u5_prng_advance_state(before));
+}
+
+/// `containers.md §5` with `traps.md §2.1`: the assessing member comes from
+/// the shared acting-member selection, so a party with two able members is
+/// asked `Player: ` first and the chosen member's Intelligence is used.
+#[test]
+fn a062_search_trap_assessment_prompts_for_the_acting_member() {
+    let mut state = town_chest_state(0x05);
+    let mut second = state.party[0];
+    second.slot = 1;
+    state.party.push(second);
+    state.party_names = default_party_names(2);
+    state.party_intelligence = vec![60, 30];
+
+    assert_eq!(state.search_facing_secret(&[], None), MoveOutcome::Observed);
+    assert!(state.active_surface_chest.is_some());
+    assert_eq!(
+        state.step_active_surface_chest('2', "").unwrap(),
+        Some(MoveOutcome::Searched)
+    );
+    // Member 2's Intelligence 30 always detects: `no trap!`. Member 1's 60
+    // would have wrapped the threshold and reported a phantom trap.
+    assert_eq!(state.message, format!("{SEARCH_PREAMBLE}{SEARCH_TRAP_NONE_LINE}"));
+}

@@ -514,6 +514,13 @@ impl PlayState {
                 )
             } else if session.verb == SurfaceChestVerb::Search {
                 self.finish_moldy_corpse_search_at(session.x, session.y, member_index)
+                    .or_else(|| {
+                        self.finish_surface_object_trap_search_at(
+                            session.x,
+                            session.y,
+                            member_index,
+                        )
+                    })
                     .unwrap_or_else(|| {
                         // `commands.md §5.8`: the Search command's own
                         // empty result, not a second wording for it.
@@ -1110,6 +1117,11 @@ impl PlayState {
         let stat = Self::surface_object_chest_stat(object)?;
         let chest_class = stat & 0x7f;
         let trapped = stat & 0x80 != 0;
+        // `containers.md §4`: "The clear happens **after** the helper has
+        // taken its own local copy of the container's flag/class byte and
+        // **before** it tests that copy for the trap condition." The freed
+        // slot is then available to the per-row staging below.
+        self.clear_consumed_active_object_slot(slot);
         // `containers.md §4.1`/`traps.md §4`: "print `Trapped!` plus one
         // line feed - no leading feed, no member name, no trap-kind word -
         // and then run the shared trap resolver, which prints its own
@@ -1135,8 +1147,7 @@ impl PlayState {
         if trap_note.is_some() && self.combat_active {
             self.apply_surface_container_trap_combat_cleanup(member_index);
         }
-        let content_note = self.generate_surface_object_chest_content(slot, x, y, chest_class);
-        self.clear_consumed_active_object_slot(slot);
+        let content_note = self.generate_surface_object_chest_content(x, y, chest_class);
         self.rewrite_surface_object_chest_cell(x, y);
         if matches!(self.area, Area::Town { .. }) {
             self.moral_standing = town_chest_open_standing(self.moral_standing);
@@ -1231,123 +1242,85 @@ impl PlayState {
     /// line per successful grant naming only the family - never a count,
     /// colour, rune word or equipment name - prefixed with a `Found:`
     /// heading before the first line, or `Chest empty!` if nothing
-    /// granted. `cleak/u5-engine` found this printing invented
-    /// engineering prose instead; the roll sequence itself (which grants
-    /// succeed, and what each stages into inventory) is unchanged here.
+    /// granted.
+    ///
+    /// `containers.md §4`: "Every successful row from either pool is
+    /// committed the same way: the engine acquires a free active-object
+    /// slot, writes the result family and the rolled quantity into it, and
+    /// names the granted object." Nothing is credited here; the staged
+    /// floor object is a later `G` Get's to transfer through the ordinary
+    /// class dispatcher. A row whose slot cannot be acquired is dropped
+    /// and prints nothing.
+    ///
+    /// Every draw comes from the shared gameplay PRNG in the published
+    /// order (`§4.1` "Draw-order details"): an eligible primary row draws
+    /// its `1..30` gate, a passing row draws its quantity (Gold and the
+    /// Chest marker first take a discarded `1..90` / `1..10` draw), and
+    /// the quantity draw precedes slot allocation. An equipment index
+    /// whose threshold exceeds the class is skipped without its `1..30`
+    /// draw.
     pub fn generate_surface_object_chest_content(
         &mut self,
-        slot: usize,
         x: usize,
         y: usize,
         chest_class: u8,
     ) -> String {
         let mut parts: Vec<&'static str> = Vec::new();
         for (row, threshold) in CHEST_PRIMARY_POOL_THRESHOLDS.iter().copied().enumerate() {
-            let roll = self.surface_object_chest_roll(slot, x, y, chest_class, row, 0, 30);
+            // "A row is eligible only when its threshold is less than or
+            // equal to the chest class. Eligible rows then roll `1..30`".
+            if threshold > chest_class {
+                continue;
+            }
+            let roll = self.random_range_u8(1, CHEST_CONTENT_ROLL_DIE);
             if !chest_primary_pool_row_succeeds(chest_class, threshold, roll) {
                 continue;
             }
-            match row {
-                0 => {
-                    let amount = self.surface_object_chest_roll(slot, x, y, chest_class, row, 1, 2);
-                    self.apply_object_pickup(ObjectPickupKind::Food, amount);
-                    parts.push(CHEST_TRANSCRIPT_FOOD_LINE);
-                }
-                1 => {
-                    let amount = self.surface_object_chest_roll(slot, x, y, chest_class, row, 1, 2);
-                    self.apply_object_pickup(ObjectPickupKind::Torches, amount);
-                    parts.push(CHEST_TRANSCRIPT_TORCHES_LINE);
-                }
-                2 => {
-                    let amount = self.surface_object_chest_roll(slot, x, y, chest_class, row, 1, 2);
-                    self.apply_object_pickup(ObjectPickupKind::Gems, amount);
-                    parts.push(CHEST_TRANSCRIPT_GEMS_LINE);
-                }
-                3 => {
-                    let amount = self.surface_object_chest_roll(slot, x, y, chest_class, row, 1, 2);
-                    self.apply_object_pickup(ObjectPickupKind::Keys, amount);
-                    parts.push(CHEST_TRANSCRIPT_KEYS_LINE);
-                }
-                4 => {
-                    let subtype = self.surface_object_chest_zero_based_roll(
-                        slot,
-                        x,
-                        y,
-                        chest_class,
-                        row,
-                        1,
-                        8,
-                    );
-                    self.apply_object_pickup(ObjectPickupKind::Scroll(subtype), 1);
-                    parts.push(CHEST_TRANSCRIPT_SCROLL_LINE);
-                }
-                5 => {
-                    let subtype = self.surface_object_chest_zero_based_roll(
-                        slot,
-                        x,
-                        y,
-                        chest_class,
-                        row,
-                        1,
-                        8,
-                    );
-                    self.apply_object_pickup(ObjectPickupKind::Potion(subtype), 1);
-                    parts.push(CHEST_TRANSCRIPT_POTION_LINE);
-                }
+            let (class_code, value, line) = match row {
+                0 => (INVENTORY_ADD_CLASS_CODE_FOOD, self.random_range_u8(1, 2), CHEST_TRANSCRIPT_FOOD_LINE),
+                1 => (INVENTORY_ADD_CLASS_CODE_TORCH, self.random_range_u8(1, 2), CHEST_TRANSCRIPT_TORCHES_LINE),
+                2 => (INVENTORY_ADD_CLASS_CODE_GEM, self.random_range_u8(1, 2), CHEST_TRANSCRIPT_GEMS_LINE),
+                3 => (INVENTORY_ADD_CLASS_CODE_KEY, self.random_range_u8(1, 2), CHEST_TRANSCRIPT_KEYS_LINE),
+                4 => (INVENTORY_ADD_CLASS_CODE_SCROLL, self.random_range_u8(1, 8) - 1, CHEST_TRANSCRIPT_SCROLL_LINE),
+                5 => (INVENTORY_ADD_CLASS_CODE_POTION, self.random_range_u8(1, 8) - 1, CHEST_TRANSCRIPT_POTION_LINE),
                 6 => {
+                    let _discarded = self.random_range_u8(1, CHEST_GOLD_DISCARDED_DRAW_MAX);
                     let upper = chest_class.saturating_mul(3);
-                    if upper != 0 {
-                        let amount =
-                            self.surface_object_chest_roll(slot, x, y, chest_class, row, 1, upper);
-                        self.apply_object_pickup(ObjectPickupKind::Gold, amount);
-                        parts.push(CHEST_TRANSCRIPT_GOLD_LINE);
-                    }
+                    (INVENTORY_ADD_CLASS_CODE_GOLD, self.random_range_u8(1, upper), CHEST_TRANSCRIPT_GOLD_LINE)
                 }
                 7 => {
-                    // `containers.md §4` row 8, "staged context value": not
-                    // yet published what this value feeds, so the roll is
-                    // kept exactly as before and only the printed line
-                    // changes here.
-                    let _marker = self.surface_object_chest_roll(
-                        slot,
-                        x,
-                        y,
-                        chest_class,
-                        row,
-                        1,
-                        chest_class,
-                    );
-                    parts.push(CHEST_TRANSCRIPT_MARKER_LINE);
+                    // `§4` row 8, "Roll `1..chest_class` as the staged
+                    // context value", staged as a container-class record
+                    // (`§8` `0x01`), which a later Get answers with
+                    // `Open_it_first!`.
+                    let _discarded = self.random_range_u8(1, CHEST_MARKER_DISCARDED_DRAW_MAX);
+                    (INVENTORY_ADD_CLASS_CODE_CONTAINER, self.random_range_u8(1, chest_class), CHEST_TRANSCRIPT_MARKER_LINE)
                 }
-                _ => {}
+                _ => continue,
+            };
+            if self.stage_surface_chest_grant(x, y, class_code, value) {
+                parts.push(line);
             }
         }
 
         let attempts = chest_secondary_pool_attempts(chest_class);
-        for attempt in 0..attempts {
-            let row = self.surface_object_chest_zero_based_roll(
-                slot,
-                x,
-                y,
-                chest_class,
-                usize::from(attempt),
-                2,
-                CHEST_SECONDARY_POOL_ROW_COUNT,
-            );
+        for _ in 0..attempts {
+            let row = usize::from(self.random_range_u8(0, (CHEST_SECONDARY_POOL_ROW_COUNT - 1) as u8));
             let Some(threshold) = chest_secondary_pool_threshold(row) else {
                 continue;
             };
-            let roll = self.surface_object_chest_roll(
-                slot,
-                x,
-                y,
-                chest_class,
-                usize::from(attempt),
-                3,
-                30,
-            );
-            if chest_primary_pool_row_succeeds(chest_class, threshold, roll) {
-                self.apply_object_pickup(ObjectPickupKind::Equipment(row), 1);
+            if threshold > chest_class {
+                continue;
+            }
+            let roll = self.random_range_u8(1, CHEST_CONTENT_ROLL_DIE);
+            if chest_primary_pool_row_succeeds(chest_class, threshold, roll)
+                && self.stage_surface_chest_grant(
+                    x,
+                    y,
+                    INVENTORY_ADD_CLASS_CODE_EQUIPMENT,
+                    row as u8,
+                )
+            {
                 parts.push(chest_secondary_pool_transcript_line(row));
             }
         }
@@ -1359,56 +1332,30 @@ impl PlayState {
         }
     }
 
-    pub fn surface_object_chest_roll(
-        &self,
-        slot: usize,
+    /// `containers.md §4` per-row commit: acquire a free active-object
+    /// slot with the shipped downward scan - index zero is never handed
+    /// out, and a full table yields no slot - and write the family's
+    /// class byte and the rolled value into it at the chest's coordinate.
+    /// Returns `false` when the row is dropped.
+    pub fn stage_surface_chest_grant(
+        &mut self,
         x: usize,
         y: usize,
-        chest_class: u8,
-        row: usize,
-        stage: u8,
-        upper: u8,
-    ) -> u8 {
-        if upper == 0 {
-            0
-        } else {
-            1 + (self.surface_object_chest_seed(slot, x, y, chest_class, row, stage) % upper)
-        }
-    }
-
-    pub fn surface_object_chest_zero_based_roll(
-        &self,
-        slot: usize,
-        x: usize,
-        y: usize,
-        chest_class: u8,
-        row: usize,
-        stage: u8,
-        upper: usize,
-    ) -> usize {
-        if upper == 0 {
-            0
-        } else {
-            usize::from(self.surface_object_chest_seed(slot, x, y, chest_class, row, stage)) % upper
-        }
-    }
-
-    pub fn surface_object_chest_seed(
-        &self,
-        slot: usize,
-        x: usize,
-        y: usize,
-        chest_class: u8,
-        row: usize,
-        stage: u8,
-    ) -> u8 {
-        (self.turn as u8)
-            ^ (slot as u8).wrapping_mul(7)
-            ^ (x as u8).wrapping_mul(11)
-            ^ (y as u8).wrapping_mul(13)
-            ^ chest_class.wrapping_mul(17)
-            ^ (row as u8).wrapping_mul(19)
-            ^ stage.wrapping_mul(23)
+        class_code: u8,
+        value: u8,
+    ) -> bool {
+        let z = self.current_floor().unwrap_or(0);
+        self.allocate_highest_empty_active_object_slot(ActiveObject {
+            type_byte: class_code,
+            tile: class_code,
+            x,
+            y,
+            z,
+            phase: STEADY_PHASE,
+            aux1: value,
+            aux3: 0,
+        })
+        .is_some()
     }
 
     pub fn add_moral_standing(&mut self, amount: u8) -> u8 {
@@ -1631,24 +1578,49 @@ impl PlayState {
         Ok(Some(MoveOutcome::Got))
     }
 
+    /// `containers.md §5` trap/detail narrator for a container-class
+    /// object slot. The assessing member comes from the shared
+    /// acting-member selection (`traps.md §2.1`), exactly as the corpse
+    /// branch's does: a prompt resumes through
+    /// [`Self::step_active_surface_chest`], and nobody able aborts with
+    /// `None!` before any roll.
     pub fn search_surface_object_trap_at(&mut self, x: usize, y: usize) -> Option<MoveOutcome> {
-        let (slot, object) = self.surface_object_chest_slot_at(x, y)?;
+        self.surface_object_chest_slot_at(x, y)?;
+        Some(match self.shared_acting_member_selection(true) {
+            ActingMemberSelection::Selected(member_index) => self
+                .finish_surface_object_trap_search_at(x, y, member_index)
+                .unwrap_or(MoveOutcome::Blocked),
+            ActingMemberSelection::Prompt => {
+                self.start_surface_object_chest_prompt(x, y, SurfaceChestVerb::Search)
+            }
+            ActingMemberSelection::NoneAble => {
+                self.message = DUNGEON_ACTING_MEMBER_NONE.to_string();
+                MoveOutcome::Blocked
+            }
+        })
+    }
+
+    /// `containers.md §5`: "Search combines that difficulty with the acting
+    /// member's **Intelligence** ... and a uniform `1..30` roll", drawn from
+    /// the shared gameplay PRNG.
+    pub fn finish_surface_object_trap_search_at(
+        &mut self,
+        x: usize,
+        y: usize,
+        member_index: usize,
+    ) -> Option<MoveOutcome> {
+        let (_slot, object) = self.surface_object_chest_slot_at(x, y)?;
         let stat = Self::surface_object_chest_stat(object)?;
-        let member_index = self
-            .party
-            .iter()
-            .position(|member| member.living())
-            .unwrap_or_default();
-        let member_trap_detection = self
-            .party
+        let member_intelligence = self
+            .party_intelligence
             .get(member_index)
-            .map(|member| member.class_byte)
+            .copied()
             .unwrap_or_default();
         let trappable = stat & 0x80 != 0;
         let difficulty = stat & 0x7f;
         let threshold =
-            search_trap_detection_threshold(trappable, difficulty, member_trap_detection);
-        let roll = self.surface_object_search_trap_roll(slot, x, y, stat, member_index);
+            search_trap_detection_threshold(trappable, difficulty, member_intelligence);
+        let roll = self.random_range_u8(1, JIMMY_OBJECT_DIE_HIGH);
         let detection_bit = u16::from(roll) >= threshold;
         let visibility = search_trap_visibility(trappable, difficulty, detection_bit);
 
@@ -1669,18 +1641,6 @@ impl PlayState {
             surface_search_trap_visibility_line(visibility)
         );
         Some(MoveOutcome::Searched)
-    }
-
-    pub fn surface_object_search_trap_roll(
-        &self,
-        slot: usize,
-        x: usize,
-        y: usize,
-        stat: u8,
-        member_index: usize,
-    ) -> u8 {
-        1 + (self.surface_object_chest_seed(slot, x, y, stat, member_index, 2)
-            % JIMMY_OBJECT_DIE_HIGH)
     }
 
     pub fn get_native_object_pickup_at(&mut self, x: usize, y: usize) -> Option<MoveOutcome> {
@@ -3467,6 +3427,25 @@ pub const CORPSE_SEARCH_PLAGUE_VALUE: u8 = 19;
 /// grain".
 pub const INVENTORY_ADD_CLASS_CODE_GOLD: u8 = 0x02;
 pub const INVENTORY_ADD_CLASS_CODE_FOOD: u8 = 0x0f;
+
+/// `containers.md §8` class codes for the remaining surface/town chest
+/// families that `§4` stages into an active-object slot.
+pub const INVENTORY_ADD_CLASS_CODE_CONTAINER: u8 = 0x01;
+pub const INVENTORY_ADD_CLASS_CODE_POTION: u8 = 0x03;
+pub const INVENTORY_ADD_CLASS_CODE_SCROLL: u8 = 0x04;
+pub const INVENTORY_ADD_CLASS_CODE_KEY: u8 = 0x07;
+pub const INVENTORY_ADD_CLASS_CODE_GEM: u8 = 0x08;
+pub const INVENTORY_ADD_CLASS_CODE_TORCH: u8 = 0x0d;
+/// `§8` lists `0x05`, `0x06` and `0x09..0x0C` as one Equipment arm that
+/// adds stock "by the supplied equipment id"; which of them the chest
+/// stages per family is not published, and the grant is the same for
+/// every one of them, so the staged equipment row carries this one.
+pub const INVENTORY_ADD_CLASS_CODE_EQUIPMENT: u8 = 0x09;
+
+/// `containers.md §4.1`: the Gold and Chest-marker rows' first quantity
+/// draws, `1..90` and `1..10`, are discarded.
+pub const CHEST_GOLD_DISCARDED_DRAW_MAX: u8 = 90;
+pub const CHEST_MARKER_DISCARDED_DRAW_MAX: u8 = 10;
 
 /// `containers.md §9` exact ordinary narration selector table. The selector
 /// is an inclusive draw `0..upper`, after an inclusive `upper` draw `0..3`.

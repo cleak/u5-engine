@@ -849,7 +849,15 @@ fn town_open_object_chest_consumes_slot_trap_and_public_reward_pools() {
     // `containers.md §4.1`: the surface/town transcript is a `Found:`
     // heading followed by one fixed family line per successful grant.
     assert!(state.message.starts_with("Found:\n"), "{:?}", state.message);
-    assert!(state.food > DEFAULT_FOOD_STOCK || state.gold > DEFAULT_GOLD_STOCK);
+    // `containers.md §4`: each successful row is *staged* as a floor object
+    // at the chest's cell for a later Get; nothing is credited here.
+    assert_eq!(state.food, DEFAULT_FOOD_STOCK);
+    assert_eq!(state.gold, DEFAULT_GOLD_STOCK);
+    assert!(state
+        .active_objects
+        .iter()
+        .skip(1)
+        .any(|object| !object.is_empty() && (object.x, object.y) == (2, 1)));
 }
 
 #[test]
