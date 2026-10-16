@@ -18,8 +18,8 @@ fn ring_vanish_plays_the_action_snap_after_the_mutation_and_narration() {
     // narration, play the 40-update action snap.
     let mut state = test_state(open_grid(), 1, 1);
     state.equipment_stock[EQUIPMENT_ID_RING_REGENERATION] = 1;
-    // ready_ring_vanish_roll = (turn + party_index + item_id) & 0x0f.
-    state.turn = 4;
+    // `inventory.md §6`: the vanish roll is a shared-PRNG 0..15 draw.
+    state.prng_state = seed_whose_first_uniform_0_15_is(0);
     let serial = state.sound_effect_serial;
 
     assert_eq!(
@@ -51,7 +51,7 @@ fn ordinary_ready_and_its_refusals_stay_silent() {
     // successful commands silent.
     let mut kept = test_state(open_grid(), 1, 1);
     kept.equipment_stock[EQUIPMENT_ID_RING_REGENERATION] = 1;
-    kept.turn = 5;
+    kept.prng_state = seed_whose_first_uniform_0_15_is(5);
     let serial = kept.sound_effect_serial;
 
     assert_eq!(

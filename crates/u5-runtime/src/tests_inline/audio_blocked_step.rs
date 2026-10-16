@@ -301,7 +301,7 @@ fn the_two_ring_vanish_paths_share_the_snap_and_order_it_per_path() {
     // the 40-update action snap."
     let mut ready = test_state(open_grid(), 1, 1);
     ready.equipment_stock[EQUIPMENT_ID_RING_REGENERATION] = 1;
-    ready.turn = 4;
+    ready.prng_state = seed_whose_first_uniform_0_15_is(0);
     let serial = ready.sound_effect_serial;
     assert_eq!(
         ready.ready_equipment(InlineReadyRequest {

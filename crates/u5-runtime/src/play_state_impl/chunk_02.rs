@@ -614,10 +614,13 @@ impl PlayState {
             'o' => {
                 if let Some(direction) = inline_direction {
                     self.open_direction_with_game_dir(direction, Some(game_dir))?
-                } else if matches!(self.area, Area::Town { .. }) {
-                    self.start_open_direction_prompt()
-                } else {
+                } else if matches!(self.area, Area::Dungeon { .. }) {
                     self.open_facing_with_game_dir(Some(game_dir))?
+                } else {
+                    // `doors-and-z-transitions.md §4`: "The non-dungeon
+                    // variant prompts for a direction and probes the tile in
+                    // front" - the overworld included.
+                    self.start_open_direction_prompt()
                 }
             }
             'l' => {

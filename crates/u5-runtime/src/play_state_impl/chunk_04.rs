@@ -583,21 +583,34 @@ impl PlayState {
                 let echoed = Self::use_item_echo_family(row.request).inspect(|family| {
                     self.commit_prompt_reply(&prompt, family);
                 });
-                if let Some(pending) = pending_action_for_use_request(row.request) {
+                // `inventory.md §7.1`: in dungeon exploration the Skull Key
+                // refuses `Not here!` with no `Direction-` prompt (its key
+                // already spent), so it takes the direct handler path.
+                let pending = pending_action_for_use_request(row.request)
+                    .filter(|pending| {
+                        !(matches!(pending, UsePendingAction::SkullKeyDirection)
+                            && self.skull_key_refused_here())
+                    })
+                    .or_else(|| {
+                        (row.request == UseItemRequest::Sceptre
+                            && self.sceptre_arena_fallback_prompts())
+                        .then_some(UsePendingAction::SceptreFieldDirection)
+                    });
+                if let Some(pending) = pending {
                     // The potion and scroll rows debit their stock when the
                     // row is accepted, before the argument is asked for, and
                     // `inventory.md §7` puts the skull key in the same place:
                     // it "**Decrements the skull-key/special-key counter,
                     // then** asks for a cardinal target". Its lock attempt is
                     // what waits for the direction, not its cost.
-                    if matches!(pending, UsePendingAction::SkullKeyDirection) {
-                        // Except in a dungeon, where §7 refuses instead and
-                        // the key is kept.
-                        if !matches!(self.area, Area::Dungeon { .. }) {
-                            self.spend_skull_key();
+                    match pending {
+                        UsePendingAction::SkullKeyDirection => self.spend_skull_key(),
+                        // The Sceptre is not consumed; its wielding line is
+                        // the prompt's lead line below.
+                        UsePendingAction::SceptreFieldDirection => {}
+                        _ => {
+                            let _ = self.use_item_command(Some(row.request), Some(game_dir))?;
                         }
-                    } else {
-                        let _ = self.use_item_command(Some(row.request), Some(game_dir))?;
                     }
                     session.pending = Some(pending);
                     // Measured: a scroll announces its effect on a row of
@@ -675,7 +688,9 @@ impl PlayState {
         if key == ' '
             && matches!(
                 pending,
-                UsePendingAction::SkullKeyDirection | UsePendingAction::ScrollWindDirection { .. }
+                UsePendingAction::SkullKeyDirection
+                    | UsePendingAction::SceptreFieldDirection
+                    | UsePendingAction::ScrollWindDirection { .. }
             )
         {
             let turn_before = self.turn;
@@ -693,6 +708,17 @@ impl PlayState {
                     // `Direction-` row, then the key is tried on that cell.
                     self.commit_prompt_reply(SPELL_DIRECTION_PROMPT_PREFIX, direction.name());
                     self.use_skull_key_direction(Some(game_dir), direction)?
+                } else {
+                    session.pending = Some(pending);
+                    self.message = self.render_use_session(&session);
+                    self.active_use = Some(session);
+                    return Ok(true);
+                }
+            }
+            UsePendingAction::SceptreFieldDirection => {
+                if let Some(direction) = pending_use_cardinal_direction(key, suffix) {
+                    self.commit_prompt_reply(SPELL_DIRECTION_PROMPT_PREFIX, direction.name());
+                    self.use_sceptre_arena_field_direction(direction)
                 } else {
                     session.pending = Some(pending);
                     self.message = self.render_use_session(&session);
@@ -810,6 +836,10 @@ impl PlayState {
             UsePendingAction::ScrollWindDirection { .. } => Some(SCROLL_WIND_CHANGE_RESULT),
             UsePendingAction::ScrollResurrectionTarget { .. } => Some(SCROLL_RESURRECTION_RESULT),
             UsePendingAction::SkullKeyDirection => None,
+            // `inventory.md §7.1`: "`Wielding the Sceptre of Lord
+            // British...\n`" on every accepted selection, before the field
+            // checks - so ahead of the fallback's prompt.
+            UsePendingAction::SceptreFieldDirection => Some(USE_SCEPTRE_WIELDED),
         }
     }
 
@@ -832,7 +862,9 @@ impl PlayState {
                 let _ = index;
                 USE_POTION_TARGET_PROMPT.to_string()
             }
-            UsePendingAction::SkullKeyDirection => SPELL_DIRECTION_PROMPT_PREFIX.to_string(),
+            UsePendingAction::SkullKeyDirection | UsePendingAction::SceptreFieldDirection => {
+                SPELL_DIRECTION_PROMPT_PREFIX.to_string()
+            }
         }
     }
 
@@ -1209,10 +1241,11 @@ impl PlayState {
     /// Boundary: the exact heading, aloft, cast and destruction strings are
     /// not published — only their order, their completing words, and which of
     /// them are unconditional — so the literals below are engine voice. The
-    /// rising/falling pitch sweep of phase 2 has no published `audio.md §8`
-    /// row and no [`SoundEffect`] variant, so it is not emitted rather than
-    /// borrowing a neighbouring cue; the `§8.4` destruction flash below is
-    /// published and is preserved at its own boundary.
+    /// rising/falling sweep of phase 2 is [`SoundEffect::ShardSwell`]
+    /// (`audio.md §5.4.7`'s Shadowlord-destruction row) and plays before the
+    /// position gate on every path; the text after it waits the swell out.
+    /// The `§8.4` destruction flash below is published and is preserved at
+    /// its own boundary.
     pub fn use_shadowlord_shard(
         &mut self,
         index: usize,
@@ -1260,58 +1293,56 @@ impl PlayState {
             self.published_eternal_flame_at_current_position()
         };
         let on_position = flame_entry.is_some_and(|entry| entry.flame == required_flame);
+        // Phase 2, the unconditional rise-and-fall. `quest-graph.md §5`
+        // step 2: "It then plays a rising pitch sweep, followed by a falling
+        // one, again unconditionally" - before the position gate, so the
+        // destruction row hears it too. Measured pending u5-spec#296
+        // (`qa/paired/use-shard-sweep.tsv`, stock side): the aloft line is up
+        // within ~0.1 s of Return, the swell runs 8.25-8.27 s, and the next
+        // text is on screen by the first sample after it ends. The engine
+        // printed everything at once (`use-specials/sceptre`, four rows
+        // apart, `cleak/u5-engine#25`). Whatever follows waits out the swell:
+        // the stock window ends on the aloft row itself during it, and that
+        // row is still open when the next line's first feed arrives to close
+        // it.
+        self.emit_sound_effect(SoundEffect::ShardSwell);
+        let swell_secs = SoundEffect::ShardSwell
+            .program(&mut crate::audio::RumbleJitter::default())
+            .duration(true)
+            .as_secs_f64();
         if !on_position {
             // §7.1: "A wrong destruction position adds `\n\nNo effect!\n`" -
             // two line feeds, so a blank row stands between the aloft line and
             // the refusal. This engine spent one.
             //
-            // Phase 2, the unconditional rise-and-fall, stands between the
-            // aloft line and that refusal. Measured pending u5-spec#296
-            // (`qa/paired/use-shard-sweep.tsv`, stock side): the aloft line
-            // is up within ~0.1 s of Return, the swell runs 8.25-8.27 s, and
-            // `No effect!` is on screen by the first sample after it ends.
-            // The engine printed both at once (`use-specials/sceptre`, four
-            // rows apart, `cleak/u5-engine#25`). Both feeds wait out the
-            // swell with the refusal: the stock window ends on the aloft row
-            // itself during it (a feed spent now scrolled the engine one row
-            // ahead), and that row is still open when the refusal's first
-            // feed arrives to close it.
-            //
             // Not reproduced: the stock side also draws the stats panel
             // inverted from the aloft line onward, and it is still inverted
             // after a following Pass. When it is restored is not measured,
             // so this engine leaves the panel alone rather than guess.
-            //
-            // Only this branch is paced. On the destruction row the swell
-            // presumably precedes the cast line too, but that path has no
-            // capture, so it stays as it was.
-            self.emit_sound_effect(SoundEffect::ShardSwell);
-            self.staged_narration.push_secs_on_open_row(
-                SoundEffect::ShardSwell
-                    .program(&mut crate::audio::RumbleJitter::default())
-                    .duration(true)
-                    .as_secs_f64(),
-                "\n\nNo effect!\n",
-            );
+            self.staged_narration
+                .push_secs_on_open_row(swell_secs, "\n\nNo effect!\n");
             return Ok(MoveOutcome::Blocked);
         }
 
         // Phase 4: the cast-into-the-flame line, completed by the opposed
-        // principle's word, printed *before* the remaining two gates.
+        // principle's word, printed *before* the remaining two gates and,
+        // like the refusal above, behind the swell.
         // §7.1: "At the matching position, the next text is
         // `\n\n...and cast it into the Flame of_` followed by `Truth!\n`,
         // `Love!\n` or `Courage!\n`."
-        self.message.push_str(&format!(
-            "\n\n...and cast it into the {}!\n",
-            required_flame.label()
-        ));
+        // `quest-graph.md §5` step 4 also brackets this line with a pause
+        // before and after; neither length is published, so no extra hold
+        // is invented beyond the swell.
+        let mut staged_tail = format!("\n\n...and cast it into the {}!\n", required_flame.label());
 
         // Phase 5: the Shadowlord-on-flame and handshake gates are silent.
-        // `self.message` is left as the cast line and nothing new is printed.
+        // The cast line is the last text and nothing new is printed.
         // A shard whose Shadowlord slot is already vanquished can have no live
         // matching encounter, so it belongs with these silent tests rather
         // than with the position gate.
         if !self.shadowlord_alive(index) || !self.matching_shadowlord_name_encounter_north(index) {
+            self.staged_narration
+                .push_secs_on_open_row(swell_secs, staged_tail);
             return Ok(MoveOutcome::Blocked);
         }
 
@@ -1336,8 +1367,9 @@ impl PlayState {
         // clothes. The count keeps its value as bookkeeping and goes where
         // the rest of this engine's bookkeeping goes.
         let name = shadowlord_name_for_slot(index).unwrap_or("The Shadowlord");
-        self.message
-            .push_str(&format!("{USE_SHARD_DOOM_PREFIX}{name}{USE_SHARD_DOOM_SUFFIX}"));
+        staged_tail.push_str(&format!("{USE_SHARD_DOOM_PREFIX}{name}{USE_SHARD_DOOM_SUFFIX}"));
+        self.staged_narration
+            .push_secs_on_open_row(swell_secs, staged_tail);
         self.diagnostics
             .push(format!("shard destruction cleared {cleared} encounter(s)"));
         Ok(MoveOutcome::Used)
@@ -1478,6 +1510,19 @@ impl PlayState {
         MoveOutcome::Used
     }
 
+    /// `inventory.md §7`/§7.1 Sceptre of Lord British. The wielding line
+    /// prints on every accepted selection. Outside first-person dungeon
+    /// exploration the 3x3 party-centred scan runs first; when it dissolves
+    /// nothing - and always in a dungeon - "The Sceptre's fallback" calls
+    /// the An Grav field-removal helper silently:
+    ///
+    /// - dungeon: "it tests the party's own cell and then the cell one step
+    ///   ahead; a field cell is cleared to its visit-marker bit, the helper
+    ///   itself prints `Field destroyed!`, and the Sceptre adds nothing;
+    ///   otherwise it returns 0 and the Sceptre prints `No effect!`";
+    /// - arena: the direction prompt (opened by the picker, see
+    ///   [`Self::use_sceptre_arena_field_direction`]);
+    /// - overworld and town: "treat the helper as finding no field".
     pub fn use_sceptre_of_lord_british(&mut self) -> MoveOutcome {
         if self.special_items[SPECIAL_ITEM_SCEPTRE_LB_INDEX] == 0 {
             // The U-Use picker lists only what the party carries, so no
@@ -1486,32 +1531,27 @@ impl PlayState {
             self.message.clear();
             return MoveOutcome::Blocked;
         }
-        if matches!(self.area, Area::Dungeon { .. }) {
-            self.message = "Not here!".to_string();
+        if let (Area::Dungeon { level, .. }, false) = (self.area, self.combat_active) {
+            if self.sceptre_dungeon_field_helper(level) {
+                self.mark_visibility_dirty();
+                self.advance_turn();
+                self.message = format!("{USE_SCEPTRE_WIELDED}\n{DISPEL_FIELD_DESTROYED_LINE}");
+                return MoveOutcome::Used;
+            }
+            self.message = format!("{USE_SCEPTRE_WIELDED}\nNo effect!");
             return MoveOutcome::Blocked;
         }
 
         let dissolved = self.dissolve_sceptre_barriers_near_party();
         if dissolved == 0 {
-            // `inventory.md §7`'s Use table gives the fallback three
-            // outcomes, and this engine implements two of them:
-            // "Sceptre fallback reports no effect | `No effect!\n`" and
-            // "Sceptre fallback returns its other result | No additional
-            // result". The third - "Sceptre fallback reports a dissolved
-            // field | `Field dissolved!\n`" - is not implemented, because
-            // §7 never says what the fallback *is*.
-            //
-            // §7's own prose calls it only "the alternate helper result",
-            // after the nearby-square scan "rewrites accepted cells to
-            // ordinary open ground ... counts dissolved cells, and
-            // otherwise reports no effect or the alternate helper result".
-            // Which helper, and which of its outcomes dissolves a field
-            // rather than reporting nothing, would both be guesses -
-            // and `Field dissolved!` is a different line from
-            // `magic.md §5.1`'s An Grav `Field destroyed!`, so they are
-            // not the same helper wearing two names.
-            //
-            // Asked as `cleak/u5-spec#287`.
+            if self.combat_active {
+                // The arena fallback's direction prompt belongs to the
+                // picker; the inline form has no direction to give it, so
+                // it reads as the cancelled prompt, which "returns
+                // silently".
+                self.message = USE_SCEPTRE_WIELDED.to_string();
+                return MoveOutcome::Blocked;
+            }
             self.message = format!("{USE_SCEPTRE_WIELDED}\nNo effect!");
             return MoveOutcome::Blocked;
         }
@@ -1525,6 +1565,63 @@ impl PlayState {
         self.push_diagnostic(format!("Sceptre dissolved {dissolved} barrier cell(s)."));
         self.message = USE_SCEPTRE_WIELDED.to_string();
         MoveOutcome::Used
+    }
+
+    /// True when an accepted Sceptre selection reaches the arena fallback's
+    /// direction prompt: a combat scene whose nearby scan finds nothing.
+    pub fn sceptre_arena_fallback_prompts(&self) -> bool {
+        self.combat_active
+            && self.special_items[SPECIAL_ITEM_SCEPTRE_LB_INDEX] != 0
+            && self.sceptre_barriers_near_party() == 0
+    }
+
+    /// `inventory.md §7.1`: "a chosen cell holding a field marker has that
+    /// marker removed and returns 1 so the Sceptre prints `Field
+    /// dissolved!`, and otherwise it returns 0 (`No effect!`)".
+    pub fn use_sceptre_arena_field_direction(&mut self, direction: Direction) -> MoveOutcome {
+        let (dx, dy) = direction.delta();
+        let target = self
+            .pending_combat_actor_slot
+            .and_then(|slot| self.combat_actors.get(slot).copied())
+            .and_then(|actor| {
+                let tx = isize::from(actor.x) + dx;
+                let ty = isize::from(actor.y) + dy;
+                ((0..COMBAT_ARENA_SIDE as isize).contains(&tx)
+                    && (0..COMBAT_ARENA_SIDE as isize).contains(&ty))
+                .then_some((tx as u8, ty as u8))
+            });
+        let removed = target
+            .and_then(|(tx, ty)| self.apply_combat_arena_field_removal(tx, ty))
+            .is_some();
+        self.advance_turn();
+        if removed {
+            self.message = crate::commands::USE_SCEPTRE_FIELD_DISSOLVED.to_string();
+            MoveOutcome::Used
+        } else {
+            self.message = "No effect!".to_string();
+            MoveOutcome::Blocked
+        }
+    }
+
+    /// The An Grav dungeon arm used silently by the Sceptre: the party's own
+    /// cell, then the cell one step ahead; a field is cleared to its
+    /// visit-marker bit.
+    fn sceptre_dungeon_field_helper(&mut self, level: u8) -> bool {
+        let (dx, dy) = self.player.facing.delta();
+        let own = (self.player.x as isize, self.player.y as isize);
+        let ahead = (own.0 + dx, own.1 + dy);
+        for (x, y) in [own, ahead] {
+            if !(0..DUNGEON_SIDE as isize).contains(&x) || !(0..DUNGEON_SIDE as isize).contains(&y)
+            {
+                continue;
+            }
+            let idx = dungeon_cell_index(level, x as usize, y as usize);
+            if dungeon_field_effect(self.grid[idx]).is_some() {
+                self.grid[idx] &= 0x08;
+                return true;
+            }
+        }
+        false
     }
 
     pub fn dissolve_sceptre_barriers_near_party(&mut self) -> usize {
@@ -1541,6 +1638,20 @@ impl PlayState {
             }
         }
         dissolved
+    }
+
+    pub fn sceptre_barriers_near_party(&self) -> usize {
+        let x = self.player.x as isize;
+        let y = self.player.y as isize;
+        (-1..=1)
+            .flat_map(|dy| (-1..=1).map(move |dx| (x + dx, y + dy)))
+            .filter(|(tx, ty)| {
+                self.top_down_grid_index(*tx, *ty).is_some_and(|index| {
+                    (SCEPTRE_BARRIER_TILE_FIRST..=SCEPTRE_BARRIER_TILE_LAST)
+                        .contains(&self.grid[index])
+                })
+            })
+            .count()
     }
 
     fn dissolve_sceptre_barrier_at(&mut self, x: isize, y: isize) -> bool {

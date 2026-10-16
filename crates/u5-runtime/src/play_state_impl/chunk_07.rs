@@ -606,17 +606,12 @@ impl PlayState {
         tile: u8,
         verb: &str,
     ) -> MoveOutcome {
-        let content_tile = if tile >> 4 == 0x7 {
-            0x40 | (tile & 0x0f)
-        } else {
-            tile
-        };
         // `containers.md §6`: "**The generator is the whole contract. There is
         // no authored per-chest override.** ... An implementation carrying an
         // authored per-chest content sidecar has no counterpart for it in the
         // original and should retire it."
         let _ = entries;
-        let rows = self.generate_dungeon_chest_content(level, x, y, content_tile);
+        let rows = self.generate_dungeon_chest_content(level);
         self.consume_dungeon_chest_with_note(scene, level, x, y, idx, tile, verb, &rows)
     }
 
@@ -629,79 +624,55 @@ impl PlayState {
     /// threshold is at or below that roll
     /// ([`dungeon_chest_row_awarded`]); multiple rows can succeed for
     /// one chest.
-    pub fn generate_dungeon_chest_content(
-        &mut self,
-        level: u8,
-        x: usize,
-        y: usize,
-        tile: u8,
-    ) -> String {
-        let gate_upper = u16::from(dungeon_chest_row_gate_max(level));
+    ///
+    /// "The generator's complete input set is: the party's dungeon depth;
+    /// the party's X and Y **used only to index the underfoot cell**; the
+    /// cell byte itself, which is masked so that its low nibble is
+    /// discarded ...; three fixed seven-entry tables ...; and the shared
+    /// uniform random helper." So every draw comes from the shared
+    /// gameplay PRNG and nothing per-coordinate is an input here.
+    pub fn generate_dungeon_chest_content(&mut self, level: u8) -> String {
+        let gate_upper = dungeon_chest_row_gate_max(level);
         let mut parts = Vec::new();
 
-        for (index, row) in DUNGEON_CHEST_ROWS.iter().enumerate() {
-            let row_index = index as u8;
-            let gate_roll = self.dungeon_chest_roll(level, x, y, tile, row_index, 0, gate_upper);
+        for row in DUNGEON_CHEST_ROWS.iter() {
+            let gate_roll = self.random_range_u8(1, gate_upper);
             if !dungeon_chest_row_awarded(*row, gate_roll) {
                 continue;
             }
             match row.reward {
                 DungeonChestReward::Food => {
-                    let amount = self.dungeon_chest_roll(
-                        level,
-                        x,
-                        y,
-                        tile,
-                        row_index,
-                        1,
-                        u16::from(DUNGEON_CHEST_FOOD_MAX),
-                    );
+                    let amount = self.random_range_u8(1, DUNGEON_CHEST_FOOD_MAX);
                     self.apply_object_pickup(ObjectPickupKind::Food, amount);
                     parts.push(ObjectPickupKind::Food.pickup_result_line(amount));
                 }
                 DungeonChestReward::Gold => {
-                    let amount = self.dungeon_chest_gold_roll(level, x, y, tile);
+                    let amount = self.dungeon_chest_gold_roll(level);
                     self.apply_object_pickup(ObjectPickupKind::Gold, amount);
                     parts.push(ObjectPickupKind::Gold.pickup_result_line(amount));
                 }
                 DungeonChestReward::Keys => {
-                    let amount = self.dungeon_chest_small_roll(level, x, y, tile, row_index);
+                    let amount = self.random_range_u8(1, DUNGEON_CHEST_SMALL_MAX);
                     self.apply_object_pickup(ObjectPickupKind::Keys, amount);
                     parts.push(ObjectPickupKind::Keys.pickup_result_line(amount));
                 }
                 DungeonChestReward::Gems => {
-                    let amount = self.dungeon_chest_small_roll(level, x, y, tile, row_index);
+                    let amount = self.random_range_u8(1, DUNGEON_CHEST_SMALL_MAX);
                     self.apply_object_pickup(ObjectPickupKind::Gems, amount);
                     parts.push(ObjectPickupKind::Gems.pickup_result_line(amount));
                 }
                 DungeonChestReward::Torches => {
-                    let amount = self.dungeon_chest_small_roll(level, x, y, tile, row_index);
+                    let amount = self.random_range_u8(1, DUNGEON_CHEST_SMALL_MAX);
                     self.apply_object_pickup(ObjectPickupKind::Torches, amount);
                     parts.push(ObjectPickupKind::Torches.pickup_result_line(amount));
                 }
                 DungeonChestReward::Potion => {
-                    let subtype = self.dungeon_chest_zero_based_roll(
-                        level,
-                        x,
-                        y,
-                        tile,
-                        row_index,
-                        1,
-                        POTION_COUNT,
-                    );
+                    let subtype = usize::from(self.random_range_u8(0, DUNGEON_CHEST_SUBTYPE_MAX));
                     self.apply_object_pickup(ObjectPickupKind::Potion(subtype), 1);
                     parts.push(ObjectPickupKind::Potion(subtype).pickup_result_line(1));
                 }
                 DungeonChestReward::Scroll => {
-                    let subtype = self.dungeon_chest_zero_based_roll(
-                        level,
-                        x,
-                        y,
-                        tile,
-                        row_index,
-                        1,
-                        SCROLL_COUNT,
-                    );
+                    let subtype = usize::from(self.random_range_u8(0, DUNGEON_CHEST_SUBTYPE_MAX));
                     self.apply_object_pickup(ObjectPickupKind::Scroll(subtype), 1);
                     parts.push(ObjectPickupKind::Scroll(subtype).pickup_result_line(1));
                 }
@@ -720,33 +691,6 @@ impl PlayState {
         parts.join("\n")
     }
 
-    /// `containers.md §6`: the keys, gems, and torches rows all roll
-    /// `1..3` for their quantity.
-    pub fn dungeon_chest_small_roll(&self, level: u8, x: usize, y: usize, tile: u8, row: u8) -> u8 {
-        self.dungeon_chest_roll(
-            level,
-            x,
-            y,
-            tile,
-            row,
-            1,
-            u16::from(DUNGEON_CHEST_SMALL_MAX),
-        )
-    }
-
-    pub fn dungeon_chest_gate_succeeds(
-        &self,
-        level: u8,
-        x: usize,
-        y: usize,
-        tile: u8,
-        row: u8,
-        threshold: u8,
-        upper: u16,
-    ) -> bool {
-        threshold <= self.dungeon_chest_roll(level, x, y, tile, row, 0, upper)
-    }
-
     /// `containers.md §6` gold row. The row passes lower endpoint `1`
     /// and upper endpoint `8 * dungeon_depth`
     /// ([`dungeon_chest_gold_upper`]) to the shared one-based random
@@ -754,50 +698,12 @@ impl PlayState {
     /// range; the published behaviour is to consume one PRNG advance
     /// and reach the zero-width edge rather than clamp the bound to
     /// one, so [`dungeon_chest_gold_is_zero_width`] gates that branch.
-    pub fn dungeon_chest_gold_roll(&self, level: u8, x: usize, y: usize, tile: u8) -> u8 {
-        const GOLD_ROW: u8 = 1;
+    pub fn dungeon_chest_gold_roll(&mut self, level: u8) -> u8 {
         if dungeon_chest_gold_is_zero_width(level) {
-            let _ = self.dungeon_chest_roll_seed(level, x, y, tile, GOLD_ROW, 1);
+            self.prng_state = u5_prng_advance_state(self.prng_state);
             return 0;
         }
-        self.dungeon_chest_roll(
-            level,
-            x,
-            y,
-            tile,
-            GOLD_ROW,
-            1,
-            u16::from(dungeon_chest_gold_upper(level)),
-        )
-    }
-
-    pub fn dungeon_chest_roll(
-        &self,
-        level: u8,
-        x: usize,
-        y: usize,
-        tile: u8,
-        row: u8,
-        stage: u8,
-        upper: u16,
-    ) -> u8 {
-        if upper == 0 {
-            return 0;
-        }
-        1 + (u16::from(self.dungeon_chest_roll_seed(level, x, y, tile, row, stage)) % upper) as u8
-    }
-
-    pub fn dungeon_chest_zero_based_roll(
-        &self,
-        level: u8,
-        x: usize,
-        y: usize,
-        tile: u8,
-        row: u8,
-        stage: u8,
-        upper: usize,
-    ) -> usize {
-        usize::from(self.dungeon_chest_roll_seed(level, x, y, tile, row, stage)) % upper
+        self.random_range_u8(1, dungeon_chest_gold_upper(level))
     }
 
     pub fn dungeon_chest_roll_seed(
@@ -6245,8 +6151,11 @@ impl PlayState {
         for _ in 0..TOWN_REST_INITIAL_SCHEDULE_BURST_TICKS {
             // `karma.md §4.1`: these zero-minute schedule-only setup
             // ticks are not one of the ten-minute rest ticks that age the
-            // conversation-payment cooldown.
-            self.advance_turn_with_minutes_policy(0, true, true, true, false);
+            // conversation-payment cooldown. Nor do they run the party
+            // status/provision pass: `time.md §12` names exactly four
+            // callers, and among rest only "the town-bed rest loop's
+            // ten-minute step" (`rest-and-camp.md §5`).
+            self.advance_turn_with_minutes_policy(0, true, true, false, false);
             if !self.town_rest_bed_still_accepts(entries, scene, floor) {
                 return false;
             }

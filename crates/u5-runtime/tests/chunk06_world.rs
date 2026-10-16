@@ -170,9 +170,9 @@ fn getting_a_lit_fixture_tile_sets_the_borrowed_fixture_torch_counter() {
     // item, and it consumes no carried torch ... The traced branch does not
     // debit the shared moral-standing selector."
     //
-    // `0xBC` is a published local-light source tile (`visibility.md §12`) and
-    // `RETRACTIONS.md` R151 independently confirms it as a light source.
-    let (mut state, dir) = borrow_state(0xbc);
+    // `containers.md §7` (R478): "The two **wall-torch** tiles `0xB0` and
+    // `0xB1`, and no other cell, can be 'borrowed'."
+    let (mut state, dir) = borrow_state(0xb0);
 
     assert_eq!(
         state
@@ -196,9 +196,10 @@ fn getting_a_lit_fixture_tile_sets_the_borrowed_fixture_torch_counter() {
 fn getting_an_ordinary_tile_leaves_the_torch_counter_alone() {
     // Only the borrow branch writes the counter: `lighting.md §8` names
     // I-Ignite, this branch, and the Blackthorn restoration as "the only
-    // three torch-counter writers besides decay". `0x2E` is not in the
-    // published light-source set, so it is ordinary tile handling.
-    let (mut state, dir) = borrow_state(0x2e);
+    // three torch-counter writers besides decay". `0xBC` is a local-light
+    // source tile but not one of the two wall torches `containers.md §7`
+    // names, so a QA sidecar row for it is ordinary tile handling.
+    let (mut state, dir) = borrow_state(0xbc);
 
     assert_eq!(
         state

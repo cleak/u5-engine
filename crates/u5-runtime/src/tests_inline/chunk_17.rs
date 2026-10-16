@@ -1069,6 +1069,32 @@
     }
 
     #[test]
+    fn overworld_open_prompts_for_a_direction_instead_of_using_facing() {
+        // `doors-and-z-transitions.md §4`: "The non-dungeon variant prompts
+        // for a direction and probes the tile in front"; only the dungeon
+        // variant skips the prompt.
+        let dir = debug_game_dir();
+        let mut state = world_state(vec![0x05; WORLD_SIDE * WORLD_SIDE], 10, 10);
+        state.player.facing = Direction::South;
+
+        assert_eq!(
+            handle_play_key_input(&mut state, 'O', "", &dir).unwrap(),
+            PlayInputDisposition::Continue
+        );
+        assert!(state.active_direction_prompt.is_some());
+        assert_eq!(state.message, "Open-");
+        assert_eq!(state.turn, 0);
+
+        assert_eq!(
+            handle_play_key_input(&mut state, '6', "", &dir).unwrap(),
+            PlayInputDisposition::Continue
+        );
+        assert!(state.active_direction_prompt.is_none());
+        assert_eq!(state.turn, 1);
+        let _ = fs::remove_dir_all(dir);
+    }
+
+    #[test]
     fn active_direction_prompt_routes_get_open_and_search() {
         let dir = debug_game_dir();
 
@@ -1798,10 +1824,21 @@
         // possession."
         assert_eq!(vanquished.special_items[SPECIAL_ITEM_SHARD_COWARDICE_INDEX], 1);
         assert_eq!(
-            vanquished.message,
+            shard_presentation_text(&vanquished),
             "Thou dost hold above thee the evil Shard of Cowardice...\n\n...and cast it into the Flame of Courage!\n"
         );
         assert_eq!(vanquished.turn, 0);
+    }
+
+    /// The shard narration as the player ends up reading it: the aloft line
+    /// printed at once plus every beat staged behind `quest-graph.md §5`
+    /// step 2's swell.
+    fn shard_presentation_text(state: &PlayState) -> String {
+        let mut text = state.message.clone();
+        for beat in state.staged_narration.beats() {
+            text.push_str(&beat.text);
+        }
+        text
     }
 
     #[test]
@@ -1838,7 +1875,7 @@
         assert!(!state.shadowlord_name_encounter_present(SHADOWLORD_FALSEHOOD_INDEX));
         assert_eq!(state.turn, 1);
         assert_eq!(
-            state.message,
+            shard_presentation_text(&state),
             // `inventory.md §7.1`: the destruction "adds `\nThe doom of the
             // Shadowlord_`, the matching name Faulinei, Astaroth or
             // Nosfentor, then `_is wrought!\n`". The cast line already
@@ -1930,7 +1967,7 @@
             // Courage (phase 4), and a closing line "naming the destroyed
             // Shadowlord" (phase 6). The three shard rows differ in exactly
             // those three words and in nothing else.
-            assert_eq!(state.message, message);
+            assert_eq!(shard_presentation_text(&state), message);
         }
     }
 
@@ -2040,7 +2077,7 @@
         // returns. It prints no refusal line." Printing one is the second
         // divergence §5 names explicitly.
         assert_eq!(
-            state.message,
+            shard_presentation_text(&state),
             "Thou dost hold above thee the evil Shard of Falsehood...\n\n...and cast it into the Flame of Truth!\n"
         );
     }
@@ -3098,7 +3135,8 @@
     #[test]
     fn ready_magic_ring_vanish_closes_picker_without_done_literal() {
         let mut state = test_state(open_grid(), 1, 1);
-        state.turn = 5;
+        // `inventory.md §6`: the vanish check is a shared-PRNG 0..15 draw.
+        state.prng_state = seed_whose_first_uniform_0_15_is(0);
         state.party_strengths = vec![50];
         state.party_equipment = default_party_equipment(1);
         state.equipment_stock[EQUIPMENT_ID_RING_INVISIBILITY] = 1;
@@ -3115,7 +3153,7 @@
         assert!(state.message.contains("Ring vanishes!"));
         assert!(state.diagnostics.iter().any(|d| d.contains("vanished")));
         assert!(!state.message.contains(READY_PICKER_ESCAPE_MESSAGE));
-        assert_eq!(state.turn, 6);
+        assert_eq!(state.turn, 1, "one ordinary turn for the R invocation");
     }
 
     #[test]
@@ -3461,7 +3499,8 @@
         );
         assert_eq!(state.party_equipment[0][EQUIP_SLOT_ARMOUR], 9);
         assert_eq!(state.equipment_stock[9], 0);
-        assert_eq!(state.message, "");
+        // `inventory.md §5.2`: the lock is voiced while combat is undecided.
+        assert_eq!(state.message, format!("\n\n{READY_COMBAT_ARMOUR_LOCK_REFUSAL}"));
 
         assert_eq!(
             state.ready_equipment_from_suffix("1/10"),
@@ -3469,7 +3508,7 @@
         );
         assert_eq!(state.party_equipment[0][EQUIP_SLOT_ARMOUR], 9);
         assert_eq!(state.equipment_stock[10], 1);
-        assert_eq!(state.message, "");
+        assert_eq!(state.message, format!("\n\n{READY_COMBAT_ARMOUR_LOCK_REFUSAL}"));
 
         assert_eq!(
             state.ready_equipment_from_suffix("1/16"),

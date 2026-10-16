@@ -1443,6 +1443,9 @@
             aux1: 0x85,
             aux3: 0,
         });
+        // `containers.md §5`: the stat is the acting member's Intelligence;
+        // above thirty the unsigned halving wraps and the roll always fails.
+        state.party_intelligence[0] = 60;
 
         assert_eq!(
             state.search_facing_secret(&[], None),

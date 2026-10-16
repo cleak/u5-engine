@@ -291,12 +291,11 @@ fn use_shadowlord_shard_actor_and_handshake_gates_return_silently() {
         MoveOutcome::Used,
         "the published Falsehood row destroys Faulinei when both silent gates pass"
     );
+    let success_message = shard_presentation_text(&success);
     assert!(
-        success.message.contains(SHADOWLORD_NAME_FAULINEI),
-        "phase 6 `closes with a line naming the destroyed Shadowlord`, got {:?}",
-        success.message
+        success_message.contains(SHADOWLORD_NAME_FAULINEI),
+        "phase 6 `closes with a line naming the destroyed Shadowlord`, got {success_message:?}"
     );
-    let success_message = success.message.clone();
 
     // (a) Gate 2. The Shadowlord is on the map but two cells north - where the
     // Yell path drops it - not on the flame cell one north that the
@@ -331,7 +330,7 @@ fn use_shadowlord_shard_actor_and_handshake_gates_return_silently() {
         );
         assert_eq!(state.turn, 0, "{label}: no turn is consumed");
 
-        let message = state.message.clone();
+        let message = shard_presentation_text(&state);
 
         // Phase 4 ran: it prints "before testing whether a Shadowlord is on the
         // flame and whether the handshake matches", completed by the opposed

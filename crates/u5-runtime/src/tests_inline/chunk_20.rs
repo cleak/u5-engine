@@ -236,14 +236,33 @@ fn open_facing_rewrites_door_and_auto_closes_after_four_turns() {
 }
 
 #[test]
-fn open_facing_non_door_is_not_a_turn() {
+fn open_facing_non_door_commits_one_turn() {
+    // `doors-and-z-transitions.md §4`: "Every resolved non-dungeon Open
+    // attempt returns the dispatcher's ordinary committed-action status,
+    // including the already-open, too-heavy, locked, and generic refusal
+    // paths."
     let mut state = test_state(open_grid(), 1, 1);
     state.player.facing = Direction::East;
 
     assert_eq!(state.open_facing(), MoveOutcome::Blocked);
-    assert_eq!(state.turn, 0);
+    assert_eq!(state.turn, 1);
     assert_eq!(state.grid[32 + 2], 16);
     assert_eq!(state.message, "Nothing to open!");
+}
+
+#[test]
+fn world_open_with_no_container_commits_one_turn() {
+    // `doors-and-z-transitions.md §4`: the generic refusal of the
+    // non-dungeon Open still "returns the dispatcher's ordinary
+    // committed-action status" on the overworld.
+    let mut state = world_state(vec![0x05; WORLD_SIDE * WORLD_SIDE], 10, 10);
+
+    assert_eq!(
+        state.open_direction_with_game_dir(Direction::East, None).unwrap(),
+        MoveOutcome::Blocked
+    );
+    assert_eq!(state.message, "Nothing to open!");
+    assert_eq!(state.turn, 1);
 }
 
 #[test]
@@ -314,7 +333,10 @@ fn jimmy_wrong_tile_reports_no_lock_and_commits_turn() {
 }
 
 #[test]
-fn open_facing_tracked_open_door_consumes_turn_without_resetting_timer() {
+fn open_facing_cleared_door_cell_is_not_already_open() {
+    // `doors-and-z-transitions.md §2`: "Open alone treats exact tile `0xAF`
+    // as already open"; a door Open cleared is the ordinary `0x44` cell and
+    // falls through to the generic refusal, still committing the turn.
     let mut grid = open_grid();
     grid[32 + 2] = TOWN_DOOR_PLAIN_UNLOCKED_TILE;
     let mut state = test_state(grid, 1, 1);
@@ -324,7 +346,7 @@ fn open_facing_tracked_open_door_consumes_turn_without_resetting_timer() {
     assert_eq!(state.open_facing(), MoveOutcome::DoorOpened);
     state.visibility_dirty = false;
 
-    assert_eq!(state.open_facing(), MoveOutcome::DoorOpened);
+    assert_eq!(state.open_facing(), MoveOutcome::Blocked);
 
     assert_eq!(state.turn, 2);
     assert_eq!(state.grid[32 + 2], TOWN_DOOR_CLEARED_TILE);
@@ -337,7 +359,7 @@ fn open_facing_tracked_open_door_consumes_turn_without_resetting_timer() {
             turns_remaining: 3,
         })
     );
-    assert_eq!(state.message, "It's open!");
+    assert_eq!(state.message, "Nothing to open!");
     assert!(!state.visibility_dirty);
 }
 
@@ -380,7 +402,7 @@ fn open_facing_runs_auto_close_before_reopening_expiring_door() {
 }
 
 #[test]
-fn open_facing_acknowledges_first_open_door_after_second_door_overwrites_timer() {
+fn open_facing_first_open_door_after_second_door_overwrites_timer_is_plain_floor() {
     let mut grid = open_grid();
     grid[32 + 2] = TOWN_DOOR_PLAIN_UNLOCKED_TILE;
     grid[2 * 32 + 1] = TOWN_DOOR_WINDOWED_UNLOCKED_TILE;
@@ -404,7 +426,7 @@ fn open_facing_acknowledges_first_open_door_after_second_door_overwrites_timer()
     );
 
     state.player.facing = Direction::East;
-    assert_eq!(state.open_facing(), MoveOutcome::DoorOpened);
+    assert_eq!(state.open_facing(), MoveOutcome::Blocked);
 
     assert_eq!(state.turn, 3);
     assert_eq!(state.grid[32 + 2], TOWN_DOOR_CLEARED_TILE);
@@ -418,11 +440,11 @@ fn open_facing_acknowledges_first_open_door_after_second_door_overwrites_timer()
             turns_remaining: 3,
         })
     );
-    assert_eq!(state.message, "It's open!");
+    assert_eq!(state.message, "Nothing to open!");
 }
 
 #[test]
-fn town_open_locked_sidecar_refuses_without_turn() {
+fn town_open_locked_sidecar_refuses_and_commits_turn() {
     let dir = debug_game_dir();
     fs::write(dir.join(TOWN_LOCK_TABLE_FILE), "CASTLE:0 0 2 1 185 184\n").unwrap();
     let mut grid = open_grid();
@@ -437,7 +459,7 @@ fn town_open_locked_sidecar_refuses_without_turn() {
 
     assert_eq!(state.message, "Locked!");
     assert_eq!(state.grid[32 + 2], TOWN_DOOR_PLAIN_LOCKED_TILE);
-    assert_eq!(state.turn, 0);
+    assert_eq!(state.turn, 1);
     assert_eq!(state.door_tracker, None);
     let _ = fs::remove_dir_all(dir);
 }
@@ -855,7 +877,15 @@ fn town_open_object_chest_consumes_slot_trap_and_public_reward_pools() {
     // `containers.md §4.1`: the surface/town transcript is a `Found:`
     // heading followed by one fixed family line per successful grant.
     assert!(state.message.starts_with("Found:\n"), "{:?}", state.message);
-    assert!(state.food > DEFAULT_FOOD_STOCK || state.gold > DEFAULT_GOLD_STOCK);
+    // `containers.md §4`: each successful row is *staged* as a floor object
+    // at the chest's cell for a later Get; nothing is credited here.
+    assert_eq!(state.food, DEFAULT_FOOD_STOCK);
+    assert_eq!(state.gold, DEFAULT_GOLD_STOCK);
+    assert!(state
+        .active_objects
+        .iter()
+        .skip(1)
+        .any(|object| !object.is_empty() && (object.x, object.y) == (2, 1)));
 }
 
 #[test]
@@ -1209,7 +1239,8 @@ fn trapped_town_container_cannot_spring_twice() {
     assert_eq!(state.open_facing(), MoveOutcome::Blocked);
     assert_eq!(state.message, "Nothing to open!");
     assert_eq!(state.party[0].hp, hp_after_first);
-    assert_eq!(state.turn, turn_after_first);
+    // `doors-and-z-transitions.md §4`: the generic refusal still commits.
+    assert_eq!(state.turn, turn_after_first + 1);
 }
 
 #[test]
@@ -2381,6 +2412,10 @@ fn dungeon_get_chest_consumes_turn_and_marks_visit_local_passage() {
     assert!(state.diagnostics.iter().any(|note| note.contains("generated chest grants") || note.contains("generated chest grants")));
 }
 
+/// `containers.md §6`: every gate and quantity draw comes from the shared
+/// uniform random helper, in row order - the gate `1..(4 * depth + 4)`, then
+/// the row's own quantity or subtype draw when the gate passes. The
+/// expected transcript is replayed from the same seed here.
 #[test]
 fn dungeon_get_chest_generated_rewards_follow_public_rows() {
     let scene = DungeonScene::new(33).unwrap();
@@ -2392,6 +2427,57 @@ fn dungeon_get_chest_generated_rewards_follow_public_rows() {
     state.keys = 0;
     state.gems = 0;
     state.torches = 0;
+    state.prng_state = 0x2468;
+
+    let mut prng = U5Prng::new(0x2468);
+    let mut rows = Vec::new();
+    let (mut food, mut gold, mut keys, mut gems, mut torches) = (0u16, 0u16, 0u8, 0u8, 0u8);
+    let mut potion = None;
+    let mut scroll = None;
+    for row in DUNGEON_CHEST_ROWS {
+        let gate = prng.next_range_u8(1, 32);
+        if !dungeon_chest_row_awarded(row, gate) {
+            continue;
+        }
+        match row.reward {
+            DungeonChestReward::Food => {
+                let n = prng.next_range_u8(1, 31);
+                food += u16::from(n);
+                rows.push(format!("{n} food!"));
+            }
+            DungeonChestReward::Gold => {
+                let n = prng.next_range_u8(1, 56);
+                gold += u16::from(n);
+                rows.push(format!("{n} gold!"));
+            }
+            DungeonChestReward::Keys => {
+                let n = prng.next_range_u8(1, 3);
+                keys += n;
+                rows.push(ObjectPickupKind::Keys.pickup_result_line(n));
+            }
+            DungeonChestReward::Gems => {
+                let n = prng.next_range_u8(1, 3);
+                gems += n;
+                rows.push(ObjectPickupKind::Gems.pickup_result_line(n));
+            }
+            DungeonChestReward::Torches => {
+                let n = prng.next_range_u8(1, 3);
+                torches += n;
+                rows.push(ObjectPickupKind::Torches.pickup_result_line(n));
+            }
+            DungeonChestReward::Potion => {
+                let k = usize::from(prng.next_range_u8(0, 7));
+                potion = Some(k);
+                rows.push(ObjectPickupKind::Potion(k).pickup_result_line(1));
+            }
+            DungeonChestReward::Scroll => {
+                let k = usize::from(prng.next_range_u8(0, 7));
+                scroll = Some(k);
+                rows.push(ObjectPickupKind::Scroll(k).pickup_result_line(1));
+            }
+        }
+    }
+    assert!(rows.len() >= 3, "seed should fire several rows: {rows:?}");
 
     assert_eq!(
         state.get_dungeon_underfoot(scene, 7),
@@ -2399,29 +2485,46 @@ fn dungeon_get_chest_generated_rewards_follow_public_rows() {
     );
 
     assert_eq!(state.grid[dungeon_cell_index(7, 0, 2)], 0x08);
-    assert_eq!(state.food, 11);
-    assert_eq!(state.gold, 52);
-    assert_eq!(state.keys, 2);
-    assert_eq!(state.gems, 1);
-    assert_eq!(state.torches, 2);
-    assert_eq!(state.potion_stock[7], 1);
-    assert_eq!(state.scroll_stock[6], 1);
+    assert_eq!(state.prng_state, prng.state());
+    assert_eq!(state.food, food);
+    assert_eq!(state.gold, gold);
+    assert_eq!(state.keys, keys);
+    assert_eq!(state.gems, gems);
+    assert_eq!(state.torches, torches);
+    if let Some(k) = potion {
+        assert_eq!(state.potion_stock[k], 1);
+    }
+    if let Some(k) = scroll {
+        assert_eq!(state.scroll_stock[k], 1);
+    }
     assert_eq!(state.turn, 1);
-    assert!(state.diagnostics.iter().any(|note| note.contains("generated chest grants 11 food") || note.contains("generated chest grants 11 food")));
-    assert!(state.diagnostics.iter().any(|note| note.contains("52 gold") || note.contains("52 gold")));
-    assert!(state.diagnostics.iter().any(|note| note.contains("A white potion!")));
-    assert!(state.diagnostics.iter().any(|note| note.contains("A scroll: IMC!")));
     // `containers.md §6` "What each row prints": the handler's own `Get` row,
     // the three-row preamble, then one row per reward row that fired, in the
     // table's order.
     assert_eq!(
         state.message,
-        format!(
-            "{DUNGEON_CHEST_GET_CONTENTS}\
-             11 food!\n52 gold!\n2 keys!\n1 gem!\n2 torches!\n\
-             A white potion!\nA scroll: IMC!"
-        )
+        format!("{DUNGEON_CHEST_GET_CONTENTS}{}", rows.join("\n"))
     );
+}
+
+/// `containers.md §6`: "Nothing per-chest, per-room, per-level or
+/// per-coordinate is consulted" - X and Y only index the cell, and the cell
+/// byte's low nibble "cannot reach content generation". Two chests at
+/// different coordinates with different low nibbles, opened from the same
+/// PRNG state, grant the same contents.
+#[test]
+fn dungeon_chest_contents_ignore_coordinates_and_cell_low_nibble() {
+    let scene = DungeonScene::new(33).unwrap();
+    let run = |x: usize, y: usize, cell: u8| {
+        let mut grid = open_dungeon_record();
+        grid[dungeon_cell_index(7, x, y)] = cell;
+        let mut state = dungeon_state(grid, 7, x, y);
+        state.prng_state = 0x0bad;
+        state.turn = (x * 3 + y) as u64;
+        state.get_dungeon_underfoot(scene, 7);
+        (state.message.clone(), state.food, state.gold, state.prng_state)
+    };
+    assert_eq!(run(0, 2, 0x7c), run(5, 6, 0x71));
 }
 
 /// `containers.md §6`: "**The generator is the whole contract. There is no

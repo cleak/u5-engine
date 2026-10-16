@@ -130,6 +130,7 @@ impl PlayState {
                 session.pending,
                 Some(
                     crate::z_stats::UsePendingAction::SkullKeyDirection
+                        | crate::z_stats::UsePendingAction::SceptreFieldDirection
                         | crate::z_stats::UsePendingAction::ScrollWindDirection { .. }
                 )
             ) {
@@ -325,6 +326,7 @@ impl PlayState {
                             // `qa/paired/use-specials.tsv` beat `skullkeys`).
                             | crate::z_stats::UsePendingAction::ScrollWindDirection { .. }
                             | crate::z_stats::UsePendingAction::SkullKeyDirection
+                            | crate::z_stats::UsePendingAction::SceptreFieldDirection
                     )
                 )
             })
@@ -3352,6 +3354,16 @@ impl PlayState {
     /// (`qa/paired/hut-ready-picker.tsv`, beat `shield`): the original reads
     /// `Item:`, a blank row, then `Thou art not strong enough!`, and this
     /// engine ran the prompt and the refusal together.
+    /// `combat.md §7`: "The announcement guard is initialized once on
+    /// combat entry, with victory already suppressed when the initial foe
+    /// count is zero", and set once the outcome is announced. A detached
+    /// fixture with no framer snapshot is treated as undecided.
+    fn combat_outcome_announcement_guard_set(&self) -> bool {
+        self.combat_frame_snapshot
+            .as_ref()
+            .is_some_and(|snapshot| snapshot.exit_announced || !snapshot.any_foe_seated)
+    }
+
     fn ready_refusal(&mut self, refusal: &str) -> String {
         // The picker's row is open whichever way the handler got here, so say
         // so rather than let the two feeds below land against whatever the
@@ -3587,6 +3599,14 @@ impl PlayState {
                     // size are rejected" - the page simply redraws.
                     self.message = self.render_z_stats_session(&session);
                 }
+                self.active_z_stats = Some(session);
+            }
+            ZStatsInputAction::SharedEquipment => {
+                // `inventory.md §4`: "`0` jumps to shared Equipment" from any
+                // browsing screen, the same target as the initial selector's
+                // `0`.
+                session.open_shared_equipment();
+                self.message = self.render_z_stats_session(&session);
                 self.active_z_stats = Some(session);
             }
             ZStatsInputAction::Redraw | ZStatsInputAction::Discard => {
@@ -4721,11 +4741,20 @@ impl PlayState {
         {
             return MoveOutcome::Blocked;
         }
-        if self.combat_active && EQUIPMENT_CLASS_TAGS[item_id] == EQUIPMENT_TAG_ARMOUR {
-            // Measured 2026-09-07 (`qa/paired/combat-ready-armour.tsv`): the
-            // arena lists the armour rows and answers a pick of one with no
-            // line at all. The refusal stands; the sentence does not.
-            self.message.clear();
+        if self.combat_active
+            && !self.combat_outcome_announcement_guard_set()
+            && EQUIPMENT_CLASS_TAGS[item_id] == EQUIPMENT_TAG_ARMOUR
+        {
+            // `inventory.md §6` combat armour lock: body armour, a combat
+            // arena, "**and** the battle has not yet been decided. All three
+            // must hold ... the lock lifts as soon as the outcome has been
+            // announced". §5.2 voices it, and the issue #231 note keeps the
+            // voiced refusal: "An arena that starts empty already has its
+            // announcement guard set (combat Section 7), so that gate is
+            // lifted". The silent pick measured 2026-09-07 in
+            // `qa/paired/combat-ready-armour.tsv` is that reconciliation's
+            // open evidence, not the contract.
+            self.message = self.ready_refusal(READY_COMBAT_ARMOUR_LOCK_REFUSAL);
             return MoveOutcome::Blocked;
         }
         if let Some(slot) = self.party_equipment[request.party_index]
@@ -4786,13 +4815,6 @@ impl PlayState {
             self.message.clear();
             return MoveOutcome::Blocked;
         };
-        // `inventory.md §5.2` publishes `Thou canst not change armour in
-        // heated battle!` for this branch, but the lock above - measured
-        // 2026-09-07 in `qa/paired/combat-ready-armour.tsv` - answers with no
-        // line at all. §5.2 scopes its row to *undecided* combat, which the
-        // capture may not have been in, so the measured silence stands and
-        // the difference is reported rather than papered over
-        // (cleak/u5-spec#247).
         // `inventory.md §2.1`: "Before an item is written into a readied
         // slot, the command sums the selected character's current
         // readied-equipment burden, adds the candidate item's R-Ready
@@ -4900,7 +4922,7 @@ impl PlayState {
         self.party_equipment[request.party_index][slot] = item_id as u8;
         self.equipment_stock[item_id] = self.equipment_stock[item_id].saturating_sub(1);
         if is_magic_vanish_ring(item_id)
-            && self.ready_ring_vanish_roll(request.party_index, item_id) == 0
+            && self.ready_ring_vanish_roll() == 0
         {
             self.party_equipment[request.party_index][slot] = EQUIPMENT_EMPTY;
             // `inventory.md` §5.2: "The ring vanish instead prints
@@ -4945,11 +4967,11 @@ impl PlayState {
         }
     }
 
-    pub fn ready_ring_vanish_roll(&self, party_index: usize, item_id: usize) -> u8 {
-        (self.turn as u8)
-            .wrapping_add(party_index as u8)
-            .wrapping_add(item_id as u8)
-            & 0x0f
+    /// `inventory.md §6` magic-ring vanish check: after the ring is
+    /// written, the command "rolls an inclusive `0..15` random value" from
+    /// the shared gameplay PRNG; zero vanishes the ring.
+    pub fn ready_ring_vanish_roll(&mut self) -> u8 {
+        self.random_range_u8(0, 15)
     }
 
     /// `audio.md §8.3` common spell failure tail: print `Failed!`, then play

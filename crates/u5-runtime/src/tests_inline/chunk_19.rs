@@ -802,6 +802,42 @@
         let _ = fs::remove_dir_all(dir);
     }
 
+    /// `time.md §12`: the status/provision pass has exactly four callers,
+    /// and among rest only "the town-bed rest loop's ten-minute step". The
+    /// sixteen-pass schedule burst before that loop is not one of them, so a
+    /// poisoned member loses exactly six hit points over one hour of bed rest.
+    #[test]
+    fn town_hole_up_schedule_burst_skips_the_status_pass() {
+        let dir = debug_game_dir();
+        fs::write(dir.join(TOWN_REST_BED_TABLE_FILE), "CASTLE:0 0 1 1 55\n").unwrap();
+        let mut grid = open_grid();
+        grid[32 + 1] = 55;
+        let mut state = test_state(grid, 1, 1);
+        state.clock = GameClock::new(8, 0).unwrap();
+        state.party = vec![PartyMember {
+            slot: 0,
+            class_byte: b'A',
+            status: b'P',
+            climb_stat: DEFAULT_CLIMB_STAT,
+            mana: 90,
+            hp: 60,
+            max_hp: 99,
+            level: 8,
+        }];
+
+        assert_eq!(
+            state.hole_up_command(&dir, Some(1)).unwrap(),
+            MoveOutcome::Rested
+        );
+
+        assert_eq!(state.party[0].status, b'P');
+        assert_eq!(
+            state.party[0].hp,
+            60 - u16::from(TOWN_REST_TICKS_PER_HOUR)
+        );
+        let _ = fs::remove_dir_all(dir);
+    }
+
     #[test]
     fn rest_with_watch_requires_hours_without_turn() {
         let mut state = britannia_state(open_world_grid(), 1, 1);
@@ -1676,12 +1712,23 @@
         assert_eq!(state.party_strengths[1], 20);
         assert_eq!(state.party[1].climb_stat, 21);
         assert!(state.visibility_dirty);
-        assert!(state.message.contains("Lord British-in-disguise camp event."));
-        assert!(state.message.contains("P1 reached level 3 from 200 XP"));
-        assert!(state.message.contains("P2 reached level 3 from 200 XP"));
-        assert!(state.message.contains("Intelligence reward"));
-        assert!(state.message.contains("Dexterity reward"));
-        assert!(state.message.contains("Verdict: camp-top"));
+        // `rest-and-camp.md §7`: the published text is the `KARMA.DAT`
+        // verdict, printed as the record; the per-member summary is engine
+        // bookkeeping and stays out of the message slot.
+        assert!(state.message.ends_with(" camp-top"));
+        assert!(!state.message.contains("Verdict:"));
+        assert!(!state.message.contains("Lord British-in-disguise"));
+        assert!(!state.message.contains("reached level"));
+        let notes = state.diagnostics.join(" ");
+        assert!(notes.contains("Lord British-in-disguise camp event."));
+        assert!(notes.contains("P1 reached level 3 from 200 XP"));
+        assert!(notes.contains("P2 reached level 3 from 200 XP"));
+        assert!(notes.contains("Intelligence reward"));
+        assert!(notes.contains("Dexterity reward"));
+        // `rest-and-camp.md §7`: the event "advances the turn clock before
+        // normal play resumes", so the six-hour camp ends one turn past 06:00.
+        assert_eq!(state.clock.hour, 6);
+        assert!(state.clock.minute > 0);
         assert_eq!(state.camp_month_cookie, state.clock.month);
         let _ = fs::remove_dir_all(dir);
     }

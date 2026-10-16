@@ -495,6 +495,10 @@ pub enum UsePendingAction {
     /// `Item: Skull Key` and then opens the shared `Direction-` prompt
     /// rather than acting on the party's facing.
     SkullKeyDirection,
+    /// `inventory.md §7.1` "The Sceptre's fallback": in an arena, when the
+    /// nearby scan dissolved nothing, the field-removal helper "shows the
+    /// ordinary direction prompt".
+    SceptreFieldDirection,
 }
 
 impl ReadySession {
@@ -632,6 +636,8 @@ pub enum ZStatsInputAction {
     InventoryPageNext,
     InventoryPagePrevious,
     SelectParty(usize),
+    /// `inventory.md §4`: while browsing, "`0` jumps to shared Equipment".
+    SharedEquipment,
     Redraw,
     Discard,
 }
@@ -966,6 +972,7 @@ pub fn z_stats_input_action(key: char) -> ZStatsInputAction {
         ']' | '}' => ZStatsInputAction::InventoryPageNext,
         '[' | '{' => ZStatsInputAction::InventoryPagePrevious,
         '1'..='6' => ZStatsInputAction::SelectParty((key as u8 - b'1') as usize),
+        '0' => ZStatsInputAction::SharedEquipment,
         'Z' | 'z' => ZStatsInputAction::Redraw,
         _ => ZStatsInputAction::Discard,
     }
