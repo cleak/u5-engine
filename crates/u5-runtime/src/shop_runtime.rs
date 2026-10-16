@@ -1776,42 +1776,51 @@ pub fn step_horse_trader(
                 speaker_intelligence,
             },
         ) => match key {
-            b'Y' | b'y' | b'B' | b'b' => {
+            // `shops.md §8.B`: the horse-trader entry accepts `Y`, `N` and
+            // Space; Yes renders the quote, No/Space exit through the
+            // nothing-bought bark, other keys re-poll.
+            b'Y' | b'y' => {
                 let price = quote_horse_purchase_for_speaker(stable, speaker_intelligence).price;
                 *state = HorseTraderState::ConfirmPurchase { stable, price };
                 HorseTraderOutcome::QuotedPrice { price }
             }
-            _ => {
+            b'N' | b'n' | b' ' => {
                 *state = HorseTraderState::Exited;
-                HorseTraderOutcome::Exited
+                HorseTraderOutcome::Declined
             }
+            _ => HorseTraderOutcome::InvalidInput,
         },
         (
-            HorseTraderState::ConfirmPurchase { stable, price },
+            HorseTraderState::ConfirmPurchase { price, .. },
             HorseTraderInput::Confirm {
                 accepted: true,
                 can_place_horse,
             },
         ) => {
+            // `shops.md §8.C` "Horse traders": short funds "suppress the
+            // ordinary farewell" and the visit ends; the closed refusal also
+            // exits.
             if *gold < price {
-                *state = HorseTraderState::Greeting { stable };
+                *state = HorseTraderState::Exited;
                 return HorseTraderOutcome::RefusedShortFunds { price };
             }
             if !can_place_horse {
-                *state = HorseTraderState::Greeting { stable };
+                *state = HorseTraderState::Exited;
                 return HorseTraderOutcome::RefusedNoMarker { price };
             }
             *gold -= price;
             *state = HorseTraderState::Exited;
             HorseTraderOutcome::Purchased { price }
         }
+        // `shops.md §8.A`: "Inner `N` declines without selecting a new quote
+        // and also exits through the nothing-bought bark."
         (
-            HorseTraderState::ConfirmPurchase { stable, .. },
+            HorseTraderState::ConfirmPurchase { .. },
             HorseTraderInput::Confirm {
                 accepted: false, ..
             },
         ) => {
-            *state = HorseTraderState::Greeting { stable };
+            *state = HorseTraderState::Exited;
             HorseTraderOutcome::Declined
         }
         (HorseTraderState::Exited, _) => HorseTraderOutcome::Exited,
@@ -3823,7 +3832,7 @@ mod tests {
             step_horse_trader(
                 &mut state,
                 HorseTraderInput::Key {
-                    key: b'B',
+                    key: b'Y',
                     speaker_intelligence: 40,
                 },
                 &mut gold,
@@ -3842,12 +3851,7 @@ mod tests {
             HorseTraderOutcome::RefusedNoMarker { price: 128 }
         );
         assert_eq!(gold, 500);
-        assert_eq!(
-            state,
-            HorseTraderState::Greeting {
-                stable: Stable::WishingWellHorses
-            }
-        );
+        assert_eq!(state, HorseTraderState::Exited);
     }
 
     #[test]
@@ -3875,6 +3879,50 @@ mod tests {
             HorseTraderOutcome::RefusedShortFunds { .. }
         ));
         assert_eq!(gold, 10);
+        assert_eq!(state, HorseTraderState::Exited);
+    }
+
+    /// `shops.md §8.B`/`§8.A`: entry takes `Y`, `N` or Space; other keys
+    /// (the old `B` included) re-poll; an inner `N` exits the visit.
+    #[test]
+    fn horse_trader_entry_key_set_and_inner_decline_exit() {
+        let key = |state: &mut HorseTraderState, key: u8, gold: &mut u16| {
+            step_horse_trader(
+                state,
+                HorseTraderInput::Key {
+                    key,
+                    speaker_intelligence: 30,
+                },
+                gold,
+            )
+        };
+        let mut gold = 500u16;
+        let mut state = HorseTraderState::default();
+        for ignored in [b'B', b'\r', 0x1b, b'X'] {
+            assert_eq!(
+                key(&mut state, ignored, &mut gold),
+                HorseTraderOutcome::InvalidInput
+            );
+            assert_eq!(state, HorseTraderState::default());
+        }
+        assert_eq!(key(&mut state, b' ', &mut gold), HorseTraderOutcome::Declined);
+        assert_eq!(state, HorseTraderState::Exited);
+
+        let mut state = HorseTraderState::default();
+        key(&mut state, b'Y', &mut gold);
+        assert_eq!(
+            step_horse_trader(
+                &mut state,
+                HorseTraderInput::Confirm {
+                    accepted: false,
+                    can_place_horse: true,
+                },
+                &mut gold,
+            ),
+            HorseTraderOutcome::Declined
+        );
+        assert_eq!(state, HorseTraderState::Exited);
+        assert_eq!(gold, 500);
     }
 
     /// `shops.md §8.7`: "The stock shipwright rows carry the two base

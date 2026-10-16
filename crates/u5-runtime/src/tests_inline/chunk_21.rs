@@ -4142,9 +4142,12 @@ fn town_talk_horse_mounted_refuses_non_horse_trader_shops() {
 #[test]
 fn town_talk_horse_mounted_still_reaches_horse_trader() {
     // shops.md §2: the 0x83 horse-trader vehicle-sale arm remains
-    // available while mounted.
+    // available while mounted. A placement cell south keeps the stables open
+    // (`shops.md §8.10`).
     let dialogue = HashMap::new();
-    let mut state = test_state(open_grid(), 1, 1);
+    let mut grid = open_grid();
+    grid[2 * 32 + 1] = 0x05;
+    let mut state = test_state(grid, 1, 1);
     state.area = Area::Town {
         scene: Scene::new(6).unwrap(),
         floor: 0,
@@ -4219,9 +4222,11 @@ fn end_to_end_horse_trader_purchase_places_boardable_horse() {
 
     handle_play_key_input(&mut state, 'Y', "", Path::new("")).unwrap();
 
+    // `shops.md §8.C`: the sale ends on the purchase-completed farewell, which
+    // needs `SHOPPE.DAT`; there is no resident success line of its own.
     assert_eq!(state.gold, 0);
     assert!(state.active_shop.is_none());
-    assert!(state.message.contains("Thy horse awaits outside"));
+    assert!(!state.message.contains("Thy horse awaits outside"));
     let horse = state
         .active_objects
         .iter()
@@ -4327,23 +4332,89 @@ fn horse_trader_purchase_refuses_without_local_marker_and_preserves_gold() {
         },
     ]);
 
+    // `shops.md §8.C` "Horse traders": no suitable adjacent placement cell
+    // prints `The stables are closed.\n` "before any greeting, then exit".
     assert_eq!(
         state.talk_facing_with_dialogue(&dialogue),
-        MoveOutcome::Talked
+        MoveOutcome::Blocked
     );
-    handle_play_key_input(&mut state, 'Y', "", Path::new("")).unwrap();
-    handle_play_key_input(&mut state, 'Y', "", Path::new("")).unwrap();
-
+    assert_eq!(state.message, "\nThe stables are closed.\n");
+    assert!(state.active_shop.is_none());
     assert_eq!(state.gold, 143);
-    assert!(state.active_shop.is_some());
-    // `shops.md §8.6`: both placement failures print the same line.
-    assert!(state.message.contains("The stables are closed."));
     assert!(
         !state
             .active_objects
             .iter()
             .any(|object| object.type_byte == HORSE_PARKED_FIRST)
     );
+}
+
+/// `shops.md §8.B`/`§8.C` horse traders: other entry keys re-poll, short
+/// funds print the feed-it line with `yells $.` and end the visit silently,
+/// and an inner `N` exits the visit.
+#[test]
+fn horse_trader_entry_short_funds_and_decline_end_the_visit() {
+    let open = |gold: u16| {
+        let mut grid = open_grid();
+        grid[2 * 32 + 1] = 0x05;
+        let mut state = test_state(grid, 1, 1);
+        state.area = Area::Town {
+            scene: Scene::new(20).unwrap(),
+            floor: 0,
+        };
+        state.player.facing = Direction::East;
+        state.gold = gold;
+        state.load_scheduled_npcs(&[
+            NpcSlot {
+                slot: 0,
+                type_byte: 0,
+                dialog_id: 0,
+                schedule: [0; 16],
+                name: None,
+            },
+            NpcSlot {
+                slot: 1,
+                type_byte: 1,
+                dialog_id: 0x83,
+                schedule: [0, 0, 0, 2, 2, 2, 1, 1, 1, 0, 0, 0, 0, 8, 16, 20],
+                name: None,
+            },
+        ]);
+        assert_eq!(
+            state.talk_facing_with_dialogue(&HashMap::new()),
+            MoveOutcome::Talked
+        );
+        state
+    };
+
+    let mut state = open(10);
+    for ignored in ['B', 'X'] {
+        handle_play_key_input(&mut state, ignored, "", Path::new("")).unwrap();
+        assert!(matches!(
+            state.active_shop,
+            Some(crate::shop_session::ActiveShopSession::HorseTrader(
+                crate::shop_runtime::HorseTraderState::Greeting { .. }
+            ))
+        ));
+    }
+    handle_play_key_input(&mut state, 'Y', "", Path::new("")).unwrap();
+    assert!(state.message.ends_with("\n\nDeal?\" "), "{:?}", state.message);
+    handle_play_key_input(&mut state, 'Y', "", Path::new("")).unwrap();
+    assert!(state.active_shop.is_none());
+    assert_eq!(state.gold, 10);
+    assert!(
+        state
+            .message
+            .starts_with("\n\n\"Thou couldst not afford to feed it!\"\nyells "),
+        "{:?}",
+        state.message
+    );
+
+    let mut state = open(500);
+    handle_play_key_input(&mut state, 'Y', "", Path::new("")).unwrap();
+    handle_play_key_input(&mut state, 'N', "", Path::new("")).unwrap();
+    assert!(state.active_shop.is_none());
+    assert_eq!(state.gold, 500);
 }
 
 #[test]
@@ -4454,7 +4525,9 @@ fn town_talk_herbalist_uses_scene_local_reagent_menu() {
 #[test]
 fn town_talk_horse_trader_uses_scene_local_stable_price() {
     let dialogue = HashMap::new();
-    let mut state = test_state(open_grid(), 1, 1);
+    let mut grid = open_grid();
+    grid[2 * 32 + 1] = 0x05;
+    let mut state = test_state(grid, 1, 1);
     state.area = Area::Town {
         scene: Scene::new(20).unwrap(),
         floor: 0,
@@ -4491,7 +4564,9 @@ fn town_talk_horse_trader_uses_scene_local_stable_price() {
 #[test]
 fn town_talk_horse_trader_quotes_active_speaker_intelligence() {
     let dialogue = HashMap::new();
-    let mut state = test_state(open_grid(), 1, 1);
+    let mut grid = open_grid();
+    grid[2 * 32 + 1] = 0x05;
+    let mut state = test_state(grid, 1, 1);
     state.area = Area::Town {
         scene: Scene::new(20).unwrap(),
         floor: 0,

@@ -4265,6 +4265,20 @@ impl PlayState {
             if let Some(session) =
                 crate::shop_session::shop_session_for_talk_context(dialog_id, scene_byte)
             {
+                // `shops.md §8.C` "Horse traders": no free active-object slot
+                // and no suitable adjacent placement cell "both print `The
+                // stables are closed.\n` before any greeting, then exit."
+                if matches!(
+                    &session,
+                    crate::shop_session::ActiveShopSession::HorseTrader(_)
+                ) && crate::input_dispatch::horse_trader_stables_closed(self)
+                {
+                    self.message = format!(
+                        "\n{}",
+                        crate::input_dispatch::HORSE_TRADER_STABLES_CLOSED_LINE
+                    );
+                    return self.consume_ordinary_town_talk();
+                }
                 if matches!(&session, crate::shop_session::ActiveShopSession::Tavern(_)) {
                     self.tavern_secondary_drink_count = 0;
                 }
@@ -4487,6 +4501,20 @@ impl PlayState {
             if let Some(session) =
                 crate::shop_session::shop_session_for_talk_context(dialog_id, scene_byte)
             {
+                // `shops.md §8.C` "Horse traders": no free active-object slot
+                // and no suitable adjacent placement cell "both print `The
+                // stables are closed.\n` before any greeting, then exit."
+                if matches!(
+                    &session,
+                    crate::shop_session::ActiveShopSession::HorseTrader(_)
+                ) && crate::input_dispatch::horse_trader_stables_closed(self)
+                {
+                    self.message = format!(
+                        "\n{}",
+                        crate::input_dispatch::HORSE_TRADER_STABLES_CLOSED_LINE
+                    );
+                    return self.consume_ordinary_town_talk();
+                }
                 if matches!(&session, crate::shop_session::ActiveShopSession::Tavern(_)) {
                     self.tavern_secondary_drink_count = 0;
                 }

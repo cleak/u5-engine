@@ -1903,6 +1903,10 @@ fn handle_active_shop_key_input(
             message
         }
         ActiveShopSession::HorseTrader(s) => {
+            let vendor = area_scene_byte.and_then(|scene| {
+                crate::play_state_impl::shop_vendor_name_for_scene(SHOP_DIALOG_ID_STABLE, scene)
+            });
+            let prior = *s;
             let outcome = match (*s, yes, no) {
                 (HorseTraderState::Greeting { .. }, _, _) => step_horse_trader(
                     s,
@@ -1914,7 +1918,7 @@ fn handle_active_shop_key_input(
                 ),
                 (HorseTraderState::ConfirmPurchase { stable, price }, true, _) => {
                     if state.gold < price {
-                        *s = HorseTraderState::Greeting { stable };
+                        *s = HorseTraderState::Exited;
                         HorseTraderOutcome::RefusedShortFunds { price }
                     } else if let Some((x, y)) = horse_sale_position(state) {
                         match state.buy_horse_for_price(stable, price, x, y) {
@@ -1923,12 +1927,12 @@ fn handle_active_shop_key_input(
                                 HorseTraderOutcome::Purchased { price }
                             }
                             Err(_) => {
-                                *s = HorseTraderState::Greeting { stable };
-                                HorseTraderOutcome::InvalidInput
+                                *s = HorseTraderState::Exited;
+                                HorseTraderOutcome::RefusedNoMarker { price }
                             }
                         }
                     } else {
-                        *s = HorseTraderState::Greeting { stable };
+                        *s = HorseTraderState::Exited;
                         HorseTraderOutcome::RefusedNoMarker { price }
                     }
                 }
@@ -1942,40 +1946,61 @@ fn handle_active_shop_key_input(
                 ),
                 _ => HorseTraderOutcome::InvalidInput,
             };
+            let confirming = matches!(prior, HorseTraderState::ConfirmPurchase { .. });
+            // `shops.md §8.C` "Horse traders": "Its Y/N-only confirmation
+            // echoes `No` on decline or `Yes!` on acceptance, without a
+            // trailing line feed." At entry the shared echo covers `Y`/`N`;
+            // Space "means No" and echoes it here.
+            match outcome {
+                HorseTraderOutcome::Declined if confirming || key_byte == b' ' => {
+                    state.emit_message_line_continuing_row("No");
+                }
+                HorseTraderOutcome::Purchased { .. }
+                | HorseTraderOutcome::RefusedShortFunds { .. }
+                | HorseTraderOutcome::RefusedNoMarker { .. }
+                    if confirming =>
+                {
+                    state.emit_message_line_continuing_row("Yes!");
+                }
+                _ => {}
+            }
             let surcharge = if matches!(outcome, HorseTraderOutcome::Purchased { .. }) {
+                state.arms_transaction_completed = true;
                 apply_active_shop_surcharge(state)
             } else {
                 None
             };
-            // Measured 2026-09-08 at North Britanny's stable at noon
-            // (`qa/paired/nb-stable-open.tsv`): the accepted purchase debits
-            // the gold and ends the visit on the shop's farewell bark,
-            // attributed - `"Fare thee well!"` over `says Theoan.` - with no
-            // success line of its own. The engine printed
-            // `Sold for 143 gold. Thy horse awaits outside.`
             let message = match outcome {
-                HorseTraderOutcome::Purchased { .. } => {
-                    let vendor = area_scene_byte.and_then(|scene| {
-                        crate::play_state_impl::shop_vendor_name_for_scene(
-                            SHOP_DIALOG_ID_STABLE,
-                            scene,
-                        )
-                    });
-                    let roll = state.random_range_u8(0, 3);
-                    let record = crate::shoppe_records::shared_shop_bark_record(
-                        SHOP_DIALOG_ID_STABLE,
-                        crate::shoppe_records::SharedShopBarkKind::Farewell,
-                        roll,
+                // `shops.md §8.B`: `Yes\n\n"`, then record `104`, then
+                // `\n\nDeal?" `, with the adjusted price through `%`.
+                HorseTraderOutcome::QuotedPrice { price } => {
+                    let body = render_shared_shoppe_record(
+                        game_dir,
+                        HORSE_TRADER_OFFER_RECORD,
+                        price,
+                        vendor,
+                        "",
                     );
-                    let flourish = record
-                        .and_then(|record_id| render_shared_shoppe_flourish(game_dir, record_id));
-                    match (flourish, vendor) {
-                        (Some(line), Some(name)) => format!("{line}\nsays {name}."),
-                        (Some(line), None) => line,
-                        (None, _) => format_horse_trader_outcome(outcome),
+                    if body.is_empty() {
+                        format_horse_trader_outcome(outcome, vendor)
+                    } else {
+                        format!("\"{body}{HORSE_TRADER_DEAL_PROMPT}")
                     }
                 }
-                outcome => format_horse_trader_outcome(outcome),
+                // `shops.md §8.C`: "Successful placement uses the sale
+                // farewell; entry/offer decline uses no-sale." Measured
+                // 2026-09-08 at North Britanny's stable at noon
+                // (`qa/paired/nb-stable-open.tsv`): `"Fare thee well!"` over
+                // `says Theoan.` with no success line of its own.
+                HorseTraderOutcome::Purchased { .. } | HorseTraderOutcome::Declined => {
+                    let bark = shop_closing_bark(state, SHOP_DIALOG_ID_STABLE, vendor, game_dir);
+                    if bark.is_empty() {
+                        format_horse_trader_outcome(outcome, vendor)
+                    } else {
+                        bark
+                    }
+                }
+                outcome => format_horse_trader_outcome(outcome, vendor),
             };
             shop_message_ignoring_surcharge(message, surcharge)
         }
@@ -4262,19 +4287,54 @@ const REAGENT_MENU_QUESTION: &str = "Thy interest?\"";
 
 /// `shops.md §8.6`, the horse trader's one placement refusal.
 const HORSE_TRADER_CLOSED_REFUSAL: &str = "The stables are closed.\n";
+/// `shops.md §8.B` "Horse and ship resource lookup": the stable / horse
+/// offer body is record `104`, followed by the resident `\n\nDeal?" `.
+const HORSE_TRADER_OFFER_RECORD: usize = 104;
+const HORSE_TRADER_DEAL_PROMPT: &str = "\n\nDeal?\" ";
 
-fn format_horse_trader_outcome(outcome: crate::shop_runtime::HorseTraderOutcome) -> String {
+/// `shops.md §8.10`: on entry the flow takes the first free active-object
+/// slot and probes the four cardinal placement cells; "If all four probes
+/// fail, or if no free object slot was found, the shop prints the refusal
+/// line and exits without a purchase". True when the stables are closed.
+pub(crate) fn horse_trader_stables_closed(state: &PlayState) -> bool {
+    let has_free_slot = !state.active_objects.is_empty()
+        && (state.active_objects.len() <= crate::ACTIVE_OBJECT_ACQUISITION_LAST_SLOT
+            || state
+                .active_objects
+                .iter()
+                .skip(1)
+                .take(crate::ACTIVE_OBJECT_ACQUISITION_LAST_SLOT)
+                .any(|object| object.is_empty()));
+    !has_free_slot || horse_sale_position(state).is_none()
+}
+
+/// The closed refusal as the entry prints it, before any greeting.
+pub(crate) const HORSE_TRADER_STABLES_CLOSED_LINE: &str = HORSE_TRADER_CLOSED_REFUSAL;
+
+fn format_horse_trader_outcome(
+    outcome: crate::shop_runtime::HorseTraderOutcome,
+    vendor_name: Option<&'static str>,
+) -> String {
     use crate::shop_runtime::HorseTraderOutcome::*;
     match outcome {
-        QuotedPrice { price } => format!("A fine steed costs {price} gold. (Y/N)"),
-        Purchased { price } => format!("Sold for {price} gold. Thy horse awaits outside."),
-        RefusedShortFunds { price } => format!("Thou lackest the {price} gold."),
-        // `shops.md §8.6`: "No free active-object slot and no suitable
+        // Fallbacks for a run without `SHOPPE.DAT` only; the asset supplies
+        // record `104` and the closing barks.
+        QuotedPrice { price } => format!("\"A fine steed costs {price} gold.{HORSE_TRADER_DEAL_PROMPT}"),
+        Purchased { .. } | Declined => String::new(),
+        // `shops.md §8.C` "Horse traders": "Short funds then print
+        // `\n\n"Thou couldst not afford to ` followed by token-expanded
+        // `feed it!"\nyells $.\n`, and suppress the ordinary farewell."
+        RefusedShortFunds { .. } => format!(
+            "\n\n\"Thou couldst not afford to feed it!\"{}",
+            vendor_name
+                .map(|name| format!("\nyells {name}.\n"))
+                .unwrap_or_default()
+        ),
+        // `shops.md §8.C`: "No free active-object slot and no suitable
         // adjacent placement cell both print `The stables are closed.\n`
-        // before any greeting, then exit." One line covers both failures;
-        // `There is no room for a horse here.` was invented.
+        // before any greeting, then exit." The entry probe normally catches
+        // it; this covers a cell lost between entry and confirmation.
         RefusedNoMarker { .. } => HORSE_TRADER_CLOSED_REFUSAL.to_string(),
-        Declined => "As you wish.".to_string(),
         Exited => String::new(),
         // `shops.md §8.6`: the purchase loop is "Y/N driven" and other keys
         // wait; no refusal prints.
