@@ -397,3 +397,92 @@ fn audit_a066_silent_figure_prints_the_published_rows() {
     assert!(state.message.contains("Don't hurt me!\nPlease go away!"), "{:?}", state.message);
     assert!(!state.message.contains("cower"));
 }
+
+/// A one-NPC town conversation whose `WHO` keyword runs a `0x88` ASK-WHO.
+fn audit_g5_ask_who_conversation() -> PlayState {
+    let mut dialogue: HashMap<u16, Vec<String>> = HashMap::new();
+    dialogue.insert(
+        0x10,
+        ["Maris", "a quiet sage", "Greetings", "I read books", "Farewell", "WHO", "Name."]
+            .iter()
+            .map(|s| s.to_string())
+            .collect(),
+    );
+    let enc = |s: &str| s.bytes().map(|b| b ^ 0x80).collect::<Vec<u8>>();
+    let mut who_response = enc("Name.");
+    who_response.push(TLK_CODE_ASK_WHO);
+    who_response.extend(enc(" Done."));
+    who_response.push(TLK_CODE_END_OF_RESPONSE);
+    let mut raw: HashMap<u16, Vec<Vec<u8>>> = HashMap::new();
+    raw.insert(
+        0x10,
+        vec![
+            enc("Maris"),
+            enc("a quiet sage"),
+            enc("Greetings"),
+            enc("I read books"),
+            enc("Farewell"),
+            enc("WHO"),
+            who_response,
+        ],
+    );
+    let mut state = test_state(open_grid(), 1, 1);
+    state.party_names = vec![*b"AVATAR\0\0\0"];
+    state.player.facing = Direction::East;
+    state.load_scheduled_npcs(&[
+        NpcSlot { slot: 0, type_byte: 0, dialog_id: 0, schedule: [0; 16], name: None },
+        NpcSlot {
+            slot: 1,
+            type_byte: 1,
+            dialog_id: 0x10,
+            schedule: [0, 0, 0, 2, 2, 2, 1, 1, 1, 0, 0, 0, 0, 8, 16, 20],
+            name: None,
+        },
+    ]);
+    assert_eq!(
+        state.talk_facing_with_dialogue_and_keyword_raw(&dialogue, &raw, None),
+        MoveOutcome::Talked
+    );
+    state
+}
+
+fn audit_g5_transcript(state: &PlayState) -> String {
+    state
+        .message_entries()
+        .iter()
+        .map(|entry| entry.text.clone())
+        .collect::<Vec<_>>()
+        .join("\n")
+}
+
+/// Audit A070. `conversation.md §6` step 3: "The ASK-WHO name prompt ...
+/// never reaches the farewell path: an empty line there prints the dismissive
+/// acknowledgement and returns to the stream".
+#[test]
+fn audit_a070_empty_ask_who_answer_echoes_no_bye() {
+    let mut state = audit_g5_ask_who_conversation();
+    handle_play_key_input(&mut state, 'W', "HO", Path::new("")).unwrap();
+    assert_eq!(state.message, TLK_ASK_WHO_PROMPT);
+    let before = audit_g5_transcript(&state);
+    handle_play_key_input(&mut state, '\n', "", Path::new("")).unwrap();
+    let after = audit_g5_transcript(&state);
+    let added = after.strip_prefix(before.as_str()).unwrap_or(&after);
+    assert!(added.contains(TLK_ASK_WHO_DISMISSIVE_LINE), "{added:?}");
+    assert!(!added.contains("BYE"), "no farewell echo: {added:?}");
+    assert!(state.active_conversation.is_some());
+}
+
+/// Audit A069. `conversation.md §7.6`: "a line containing only a space is
+/// *not* empty", and §6 step 3's shortcut is for "an empty line" only, so a
+/// lone space runs the ordinary scan and ends on the no-match line.
+#[test]
+fn audit_a069_lone_space_is_not_the_bye_shortcut() {
+    let mut state = audit_g5_ask_who_conversation();
+    handle_play_key_input(&mut state, ' ', "", Path::new("")).unwrap();
+    assert!(state.active_conversation.is_some(), "a space does not say goodbye");
+    assert!(
+        audit_g5_transcript(&state).contains("I cannot help thee with that."),
+        "{}",
+        audit_g5_transcript(&state)
+    );
+}

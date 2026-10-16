@@ -5300,13 +5300,24 @@ impl PlayState {
         // (`qa/paired/dwelling-talk-after-entry.tsv`, beat `bye`): the
         // original reads `:BYE`, where this engine left the `:` row empty and
         // opened a fresh row for the word.
-        let empty_line = line.trim().is_empty();
+        //
+        // `conversation.md §6` step 3: "The shortcut belongs to this prompt
+        // alone. The ASK-WHO name prompt ... never reaches the farewell path:
+        // an empty line there prints the dismissive acknowledgement", so
+        // neither the `BYE` echo nor the spent-feed strip applies there.
+        // Only a truly empty line is empty; a lone space is typed input
+        // (`conversation.md §7.6`).
+        let empty_line = line.is_empty()
+            && !self
+                .active_conversation
+                .as_ref()
+                .is_some_and(|session| session.awaiting_ask_who());
         if let Some(prompt) = open_prompt.as_deref() {
             // §6's capture shows the keyword echoed in capitals.
             let echo = if empty_line {
                 TLK_EMPTY_INPUT_BYE_ECHO.to_string()
             } else {
-                line.trim().to_ascii_uppercase()
+                line.to_ascii_uppercase()
             };
             self.commit_typed_prompt_line(prompt, &echo);
         }

@@ -4208,12 +4208,15 @@ fn handle_active_conversation_key_input(
     // we treat the concatenation as the typed line. Pressing a bare
     // Enter (key `\r` or `\n`) submits an empty line, which closes
     // the conversation via the Bye shortcut.
+    // `conversation.md §7.6`: "a line containing only a space is *not*
+    // empty", and `input.md §8` accepts space as printable input, so only
+    // the Enter that ends the line is dropped; the typed bytes are kept.
     let mut line = String::new();
-    if !matches!(key, '\r' | '\n' | ' ') {
+    if !matches!(key, '\r' | '\n') {
         line.push(key);
     }
     line.push_str(suffix);
-    let line = line.trim().to_string();
+    let line = line.trim_end_matches(['\r', '\n']).to_string();
     let (_text, ended) = state.submit_active_conversation_keyword(&line);
     if !ended {
         if let Some(session) = state.active_conversation.as_ref() {

@@ -482,6 +482,14 @@ impl ConversationSession {
         }
     }
 
+    /// Whether the next typed line answers a `0x88` ASK-WHO name prompt.
+    /// `conversation.md §6` step 3: the empty-input BYE shortcut "belongs to
+    /// [the keyword] prompt alone"; an empty line here prints the dismissive
+    /// acknowledgement instead.
+    pub fn awaiting_ask_who(&self) -> bool {
+        matches!(self.phase, ConversationSessionPhase::AwaitingAskWho { .. })
+    }
+
     /// Caller has finished presenting the Bye response; close the
     /// session.
     pub fn acknowledge_close(&mut self) {
@@ -879,8 +887,11 @@ fn make_inputs<'a>(
     }
 }
 
+/// `conversation.md §6` step 2 caps the line at fifteen characters; §7.6:
+/// "a line containing only a space is *not* empty", so the typed bytes are
+/// kept as typed rather than trimmed - only a line terminator is dropped.
 fn capped_tlk_input_bytes(line: &str) -> Vec<u8> {
-    line.trim()
+    line.trim_end_matches(['\r', '\n'])
         .as_bytes()
         .iter()
         .take(TLK_INPUT_MAX_LEN)
