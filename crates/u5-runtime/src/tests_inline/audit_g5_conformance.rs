@@ -513,3 +513,34 @@ fn audit_a065_faced_object_without_an_npc_record_answers_no_response() {
     state.talk_facing_with_dialogue(&HashMap::new());
     assert_eq!(state.message, TALK_NOBODY_HERE_LINE);
 }
+
+/// Audit A067. `conversation.md §2` step 5: at a reached waypoint whose
+/// behaviour is `4` the dispatcher "first **rewrites that waypoint's
+/// behaviour to the bounded-wander mode** (value `1`, a persisted schedule
+/// edit ...)", and a zero live word then prints the bare `No response!`.
+#[test]
+fn audit_a067_talk_stands_the_reached_waypoint_down_from_four_to_one() {
+    let mut state = test_state(open_grid(), 1, 1);
+    state.player.facing = Direction::East;
+    state.load_scheduled_npcs(&[
+        NpcSlot { slot: 0, type_byte: 0, dialog_id: 0, schedule: [0; 16], name: None },
+        NpcSlot {
+            slot: 1,
+            type_byte: crate::tlk_control_codes::TALK_GUARD_SPRITE,
+            dialog_id: 0,
+            schedule: [4, 4, 4, 2, 2, 2, 1, 1, 1, 0, 0, 0, 0, 8, 16, 20],
+            name: None,
+        },
+    ]);
+    let index = state.npcs.iter().position(|npc| npc.slot == 1).unwrap();
+    state.npcs[index].cached_wp = 0;
+    state.talk_facing_with_dialogue(&HashMap::new());
+    assert_eq!(state.npcs[index].schedule[NPC_SCHEDULE_AI_OFFSET], 1);
+    assert_eq!(state.message, format!("\n{TALK_NO_RESPONSE_MESSAGE}"));
+    let mutation = state
+        .town_npc_mutations
+        .iter()
+        .find(|mutation| mutation.npc_slot == 1)
+        .expect("the stand-down is a persisted schedule edit");
+    assert_eq!(mutation.ai[0], 1);
+}

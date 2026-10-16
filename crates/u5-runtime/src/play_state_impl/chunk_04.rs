@@ -4047,14 +4047,42 @@ impl PlayState {
     /// open-for-business test is equality with an odd number: an even index
     /// fails both, an odd index other than one passes the parity gate and
     /// fails the equality. The parity clause is therefore stated rather than
-    /// coded, and this comment is the record of why. If the dispatcher ever
-    /// gains a side effect between the two - `conversation.md §2`'s
-    /// behaviour-4-to-1 waypoint rewrite is the candidate - the order becomes
-    /// observable and the gate has to be split.
+    /// coded, and this comment is the record of why. `conversation.md §2`'s
+    /// behaviour-4-to-1 waypoint rewrite
+    /// ([`Self::talk_dispatcher_stand_down`]) runs before both and edits
+    /// only the behaviour byte, which neither test reads.
     ///
     /// A slot this engine cannot resolve - no runtime NPC at the cell, which
     /// the harness fixtures produce - is treated as open, so unit fixtures
     /// that seat a trigger without a schedule keep working.
+    /// `conversation.md §2` step 5, the dispatcher's first decision: "If that
+    /// waypoint's behaviour is the approach-and-converse mode (... value
+    /// `4`), the dispatcher first **rewrites that waypoint's behaviour to the
+    /// bounded-wander mode** (value `1`, a persisted schedule edit: the guard
+    /// stands down for the rest of the period and the edit travels with the
+    /// save) and then dispatches on the dialog index." The waypoint is the
+    /// reached one, and the rewrite "applies to shopkeepers as well as guards,
+    /// before a shop can open or refuse" and before any of the dispatcher's own
+    /// lines. Returns whether the rewrite happened, which skips the guard gate.
+    pub(crate) fn talk_dispatcher_stand_down(&mut self, x: usize, y: usize) -> bool {
+        let Some(slot) = self.npc_at_current_floor(x, y).map(|npc| npc.slot) else {
+            return false;
+        };
+        let Some(index) = self.npcs.iter().position(|npc| npc.slot == slot) else {
+            return false;
+        };
+        let at = NPC_SCHEDULE_AI_OFFSET + self.npcs[index].cached_wp;
+        let Some(byte) = self.npcs[index].schedule.get(at).copied() else {
+            return false;
+        };
+        if npc_ai_behavior(byte) != Some(NpcAiBehavior::ApproachAndAttack) {
+            return false;
+        }
+        self.npcs[index].schedule[at] = 1;
+        self.record_town_npc_mutation(index);
+        true
+    }
+
     fn shop_keeper_is_open_for_business(&self, x: usize, y: usize) -> bool {
         const SHOP_WORKING_WAYPOINT: usize = 1;
         let Some(npc) = self.npc_at_current_floor(x, y) else {
@@ -4097,6 +4125,7 @@ impl PlayState {
                 self.message = format!("\n{refusal}");
                 return Ok(self.consume_ordinary_town_talk());
             }
+            self.talk_dispatcher_stand_down(target_x, target_y);
             return Ok(self
                 .talk_alarm_sentinel_at(dialog_id, target_x, target_y)
                 .expect("published alarm sentinel was preclassified"));
@@ -4242,6 +4271,7 @@ impl PlayState {
             self.message = format!("\n{refusal}");
             return self.consume_ordinary_town_talk();
         }
+        let stood_down = self.talk_dispatcher_stand_down(target_x, target_y);
         if let Some(outcome) = self.talk_alarm_sentinel_at(dialog_id, target_x, target_y) {
             return outcome;
         }
@@ -4313,12 +4343,7 @@ impl PlayState {
         // arm stands the guard down and dispatches on the dialog index instead.
         if let Some(npc) = self.npc_at_current_floor(target_x, target_y)
             && npc.type_byte == crate::tlk_control_codes::TALK_GUARD_SPRITE
-            && npc_ai_behavior(
-                npc.schedule
-                    .get(NPC_SCHEDULE_AI_OFFSET + npc.cached_wp)
-                    .copied()
-                    .unwrap_or_default(),
-            ) != Some(NpcAiBehavior::ApproachAndAttack)
+            && !stood_down
             && !crate::talk_guard_sprite_dispatches(npc.cached_wp, dialog_id as u8)
         {
             self.message = crate::talk_non_speaker_refusal_for_sprite(Some(
@@ -4348,9 +4373,13 @@ impl PlayState {
             // other non-speaker answers the bare `No response!`. The line "is
             // not composed from the NPC's Look description", which is what
             // this engine used to do off a single guard capture.
+            // A stood-down NPC skipped the guard gate, so its zero word
+            // prints the bare line whatever its sprite (§2's decision tree,
+            // arm 1).
             self.message = crate::talk_non_speaker_refusal_for_sprite(
                 self.npc_at_current_floor(target_x, target_y)
-                    .map(|npc| npc.type_byte),
+                    .map(|npc| npc.type_byte)
+                    .filter(|_| !stood_down),
             );
             return self.consume_ordinary_town_talk();
         }
@@ -4474,6 +4503,7 @@ impl PlayState {
             self.message = format!("\n{refusal}");
             return self.consume_ordinary_town_talk();
         }
+        let stood_down = self.talk_dispatcher_stand_down(target_x, target_y);
         if let Some(outcome) = self.talk_alarm_sentinel_at(dialog_id, target_x, target_y) {
             return outcome;
         }
@@ -4536,12 +4566,7 @@ impl PlayState {
         // password demand.
         if let Some(npc) = self.npc_at_current_floor(target_x, target_y)
             && npc.type_byte == crate::tlk_control_codes::TALK_GUARD_SPRITE
-            && npc_ai_behavior(
-                npc.schedule
-                    .get(NPC_SCHEDULE_AI_OFFSET + npc.cached_wp)
-                    .copied()
-                    .unwrap_or_default(),
-            ) != Some(NpcAiBehavior::ApproachAndAttack)
+            && !stood_down
             && !crate::talk_guard_sprite_dispatches(npc.cached_wp, dialog_id as u8)
         {
             self.message = crate::talk_non_speaker_refusal_for_sprite(Some(
@@ -4564,9 +4589,13 @@ impl PlayState {
             // other non-speaker answers the bare `No response!`. The line "is
             // not composed from the NPC's Look description", which is what
             // this engine used to do off a single guard capture.
+            // A stood-down NPC skipped the guard gate, so its zero word
+            // prints the bare line whatever its sprite (§2's decision tree,
+            // arm 1).
             self.message = crate::talk_non_speaker_refusal_for_sprite(
                 self.npc_at_current_floor(target_x, target_y)
-                    .map(|npc| npc.type_byte),
+                    .map(|npc| npc.type_byte)
+                    .filter(|_| !stood_down),
             );
             return self.consume_ordinary_town_talk();
         }

@@ -4104,6 +4104,9 @@ impl PlayState {
                     .then_some((npc.x, npc.y))
             })
         {
+            // `conversation.md §2`: contact enters the same dispatcher, whose
+            // behaviour-4-to-1 rewrite runs before the regime handler.
+            self.talk_dispatcher_stand_down(x, y);
             return Ok(Some(self.begin_blackthorn_guard_demand(
                 x,
                 y,
