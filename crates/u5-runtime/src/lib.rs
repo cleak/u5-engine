@@ -1109,6 +1109,7 @@ mod tests {
     include!("tests_inline/chunk_32.rs");
     include!("tests_inline/chunk_33.rs");
     include!("tests_inline/audio_spells_noncombat.rs");
+    include!("tests_inline/endgame_window_rows.rs");
     include!("tests_inline/audio_jimmy_get.rs");
     include!("tests_inline/audio_stonegate_shrine.rs");
     include!("tests_inline/audio_spells_combat.rs");

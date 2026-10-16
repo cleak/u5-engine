@@ -17244,7 +17244,15 @@ fn render_endgame_tableau_viewport(
         // 512-tile space - which is why actor `0x44` is the Bard sprite
         // (tile 324) and not the floor tile whose terrain index is also
         // `0x44`. `0x16` is the reserved draw-nothing value.
-        let Some(tile) = u5_runtime::actor_tile_for_byte(object.tile) else {
+        //
+        // The byte drawn is the compositor's, not the slot's: the default
+        // helper is terrain-aware for actors at or above `0x40`, so a king on
+        // the bed or a leader on a chair draws as the occupied fixture
+        // (`endgame_tableau_actor_drawn_byte`).
+        let Some(byte) = u5_runtime::endgame_tableau_actor_drawn_byte(&state.grid, object) else {
+            continue;
+        };
+        let Some(tile) = u5_runtime::actor_tile_for_byte(byte) else {
             continue;
         };
         blit_tile_id_to_viewport(&mut viewport, atlas, tile, object.x, object.y)?;

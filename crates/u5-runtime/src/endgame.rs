@@ -232,6 +232,42 @@ pub struct EndgameState {
     /// `endgame.md §7`: display-owned state for the victory tableau's
     /// Orb hold, shared-moongate rise/hold/sink sequence, and actor exits.
     pub victory_tableau_phase: EndgameVictoryTableauPhase,
+    /// The measured hold between the absorption line and the tableau,
+    /// still owed. See [`ENDGAME_ABSORPTION_HOLD_BIOS_TICKS`].
+    pub entry_absorption_hold_owed: bool,
+    /// The measured hold between the last party member settling and Lord
+    /// British's greeting, still owed. See
+    /// [`ENDGAME_GREETING_HOLD_BIOS_TICKS`].
+    pub entry_greeting_hold_owed: bool,
+    /// `endgame.md §5.1`/`§6`: the waiting branch's display-driven beats.
+    pub refusal_phase: EndgameRefusalPhase,
+}
+
+/// `endgame.md §5.1` and `§6`: the waiting branch, beat by beat. The
+/// lead-in prints with the answer; the forty-tick pause, record 10, the
+/// leader's one-row nudge and the three-actor walk follow as display
+/// frames, and only then does the terminal jitter loop run.
+///
+/// Measured 2026-10-16 (`doom-final-room`, `-refusal`, `-waiting`): the
+/// original prints `"I see...`, holds about four timelapse frames, prints
+/// record 10, and only then walks Lord British to the bed and the leader to
+/// the chair over the next three; this engine printed all of it and teleported
+/// the actors on the answering key.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+pub enum EndgameRefusalPhase {
+    /// Not on the waiting branch, or nothing owed yet.
+    #[default]
+    Inactive,
+    /// The forty-tick pause after the lead-in is owed.
+    LeadInPauseOwed,
+    /// Record 10 prints on the next frame.
+    RecordOwed,
+    /// `§6` step 1: slot 0's Y decrement and its sting beat.
+    NudgeOwed,
+    /// `§6` step 2: the three scripted walks, one round per frame.
+    Walking,
+    /// `§6` step 3: the terminal jitter loop.
+    Jitter,
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -275,6 +311,9 @@ pub const ENDGAME_GATE_CELL: (usize, usize) = (5, 4);
 pub const ENDGAME_GATE_FULL_HOLD_TICKS: u8 = 4;
 pub const ENDGAME_TABLEAU_LORD_BRITISH_THRONE_TARGET: (usize, usize) = (5, 3);
 const ENDGAME_ENTRY_COMPLETE_SLOT: u8 = u8::MAX;
+/// Every party member has settled and the greeting is waiting out
+/// [`ENDGAME_GREETING_HOLD_BIOS_TICKS`].
+pub(crate) const ENDGAME_ENTRY_GREETING_SLOT: u8 = u8::MAX - 1;
 /// `formats/location-dat.md section 11`: endgame loads MISCMAPS cutscene-map
 /// record 3 as the authored 11x11 terminal tableau scene.
 pub const ENDGAME_TABLEAU_CUTSCENE_MAP_RECORD: usize = 3;
@@ -375,6 +414,9 @@ impl EndgameState {
             entry_party_slot: ENDGAME_ENTRY_COMPLETE_SLOT,
             victory_tableau_phase: EndgameVictoryTableauPhase::Inactive,
             greeting_page_pending: false,
+            entry_absorption_hold_owed: false,
+            entry_greeting_hold_owed: false,
+            refusal_phase: EndgameRefusalPhase::Inactive,
         }
     }
 
@@ -401,6 +443,9 @@ impl EndgameState {
             entry_party_slot: ENDGAME_ENTRY_COMPLETE_SLOT,
             victory_tableau_phase: EndgameVictoryTableauPhase::Inactive,
             greeting_page_pending: false,
+            entry_absorption_hold_owed: false,
+            entry_greeting_hold_owed: false,
+            refusal_phase: EndgameRefusalPhase::Inactive,
         }
     }
 
@@ -440,6 +485,9 @@ impl EndgameState {
             entry_party_slot: ENDGAME_ENTRY_COMPLETE_SLOT,
             victory_tableau_phase: EndgameVictoryTableauPhase::Inactive,
             greeting_page_pending: false,
+            entry_absorption_hold_owed: false,
+            entry_greeting_hold_owed: false,
+            refusal_phase: EndgameRefusalPhase::Inactive,
         }
     }
 
@@ -509,11 +557,14 @@ impl EndgameState {
     pub fn second_prompt_text(&self, first_answer: bool) -> String {
         if let Some(messages) = &self.messages {
             if let Some(prompt) = messages.second_box_prompt() {
-                // The echo is committed onto the record's own row by the
-                // caller; this is the blank line and the next record that
-                // §5.1 says follow it.
+                // The echo and the blank line §5.1 puts after it are both
+                // committed by the caller, so the record follows directly.
+                // Measured 2026-10-16 (`doom-final-room-refusal`, beats
+                // `answered-no` and `after-key`, reading `scroll`): the
+                // original keeps one blank row between `You reply: No` and
+                // this record, where a leading feed here spent a second.
                 let _ = first_answer;
-                return format!("\n{prompt}");
+                return prompt.to_string();
             }
         }
         "Endgame: Lord British asks again for the sandalwood box. (Y/N)".to_string()
@@ -524,19 +575,24 @@ impl EndgameState {
     /// `ENDMSG.DAT` record 10. The engine printed record 10 alone, which is
     /// the missing line `cleak/u5-engine#12` recorded in the stock capture.
     pub fn refusal_text(&self) -> String {
-        let record = self
-            .messages
+        format!(
+            "{}{}",
+            crate::endgame_cinematic::ENDGAME_WAITING_LEAD_IN,
+            self.refusal_record_text()
+        )
+    }
+
+    /// `ENDMSG.DAT` record 10, the waiting exchange printed after the
+    /// lead-in's forty-tick pause.
+    pub fn refusal_record_text(&self) -> String {
+        self.messages
             .as_ref()
             .and_then(|messages| messages.refusal_branch())
             .map(str::to_string)
             .unwrap_or_else(|| {
                 "Endgame: the sandalwood box handoff failed; the ending tableau is terminal."
                     .to_string()
-            });
-        format!(
-            "{}{record}",
-            crate::endgame_cinematic::ENDGAME_WAITING_LEAD_IN
-        )
+            })
     }
 
     /// Text the current cinematic beat puts on the endgame surface.
@@ -1229,6 +1285,80 @@ pub const ENDGAME_TABLEAU_LORD_BRITISH_ARRIVAL_HOLD_BIOS_TICKS: u16 = 40;
 /// pause before walking."
 pub const ENDGAME_TABLEAU_PLACEMENT_HOLD_BIOS_TICKS: u16 = 1;
 
+/// The hold between the absorption line and the tableau. **Measured, not
+/// published.** Over every `doom-endgame-audio` capture from 2026-09-06 to
+/// 2026-10-16 (forty runs, one-member party) the original's action snap
+/// precedes Lord British's first movement sting by 4.08 s, within 10 ms,
+/// where this engine - paying `§8.7`'s forty-tick arrival pause and the
+/// step's two leading ticks - took 2.27 s. The timelapses of
+/// `doom-final-room` place the difference before the tableau appears: the
+/// stock arena stays on screen, the Avatar already gone, for three to four
+/// frames after `Avatar is absorbed!` prints. 1.81 s is thirty-three BIOS
+/// ticks. Spec question: `endgame.md §3` lists the bitmap loads at this
+/// point but gives them no duration.
+pub const ENDGAME_ABSORPTION_HOLD_BIOS_TICKS: u16 = 33;
+
+/// The hold between the last party member settling and Lord British's
+/// greeting. **Measured, not published.** `endgame.md §5.1` prints the
+/// greeting straight after the tableau walk, and this engine did; the
+/// `doom-final-room`, `-refusal` and `-waiting` timelapses (2026-10-14 and
+/// 2026-10-16) show the original's leader standing settled for 1.9 to 2.4 s
+/// before `Lord British says:` prints, which is the forty-tick pause the
+/// sequence uses elsewhere (`§5.1`'s waiting and rite pauses). Spec question
+/// recorded with the scenario.
+pub const ENDGAME_GREETING_HOLD_BIOS_TICKS: u16 = 40;
+
+/// The actor byte the scene compositor actually stamps for one tableau
+/// actor, or `None` when nothing is drawn.
+///
+/// `endgame.md §4`'s actor-byte table names what each slot *holds*; the
+/// compositor that places it is the shared one of `visibility.md §8`, and
+/// its default helper is terrain-aware for every byte at or above `0x40`
+/// (`catalogs/tile-catalog.md §3.1`). The tableau's terrain is the scene
+/// grid at the actor's own cell, which in the endgame's combat-range scene
+/// is the viewport cell directly. So Lord British (`0x7C`) at the waiting
+/// branch's `(4, 1)` lands on the bed and is stamped as its occupied form,
+/// and the leader at `(8, 4)` lands on a chair and is stamped seated.
+/// Measured 2026-10-16 (`doom-final-room`, beat `answered`;
+/// `doom-final-room-waiting`, beats `waiting`, `tableau1`, `tableau2`): the
+/// original's bed shows a sleeper with no standing king beside it and its
+/// chair a seated figure, where this engine drew both actors standing.
+///
+/// The selecting rows of the default helper (`visibility.md §8`'s five
+/// variant rows) are drawn with variant 0: the tableau's only selecting cell
+/// is the `0x90` chair at `(8, 6)`, which only slot 2 of a party of three or
+/// more reaches, and this renderer does not consume the shared stream.
+pub fn endgame_tableau_actor_drawn_byte(grid: &[u8], object: ActiveObject) -> Option<u8> {
+    if object.x >= ENDGAME_TABLEAU_WIDTH || object.y >= ENDGAME_TABLEAU_HEIGHT {
+        return None;
+    }
+    let terrain = |x: usize, y: usize| grid.get(y * TOWN_GRID_SIDE + x).copied();
+    let current = terrain(object.x, object.y).unwrap_or(0);
+    let previous = object
+        .y
+        .checked_sub(1)
+        .and_then(|y| terrain(object.x, y));
+    let next = (object.y + 1 < ENDGAME_TABLEAU_HEIGHT)
+        .then(|| terrain(object.x, object.y + 1))
+        .flatten();
+    let byte = match crate::active_object_default_composite(
+        object.tile,
+        current,
+        previous,
+        next,
+        object.y,
+        0,
+    ) {
+        crate::ActiveObjectCompositeResult::Suppress
+        | crate::ActiveObjectCompositeResult::Direct(_) => return None,
+        crate::ActiveObjectCompositeResult::Companion(byte)
+        | crate::ActiveObjectCompositeResult::PreviousRowDirectAndCompanion {
+            tile: byte, ..
+        } => byte,
+    };
+    (byte != crate::ACTOR_TILE_TRANSPARENT_BYTE).then_some(byte)
+}
+
 pub fn endgame_tableau_cell_walkable_fallback(x: usize, y: usize) -> bool {
     x > 0
         && x + 1 < ENDGAME_TABLEAU_WIDTH
@@ -1388,6 +1518,9 @@ impl PlayState {
         if self.endgame.as_ref().is_some_and(|endgame| {
             matches!(endgame.outcome, Some(EndgameOutcome::MissingBoxOrRefused))
         }) {
+            if self.advance_endgame_refusal_staging_frame() {
+                return true;
+            }
             self.advance_endgame_terminal_tableau_jitter();
             return true;
         }
@@ -1452,6 +1585,42 @@ impl PlayState {
             // 6.5 s of the nine-second capture after the absorbing step and
             // this engine sounded for none of it.
             self.emit_sound_effect(SoundEffect::ActionSnap);
+            // `endgame.md §5.1`: "The absorption line printed by the
+            // final-room effect ends with its own line feed, which closes its
+            // row." The slot's text does not carry that feed, so say so here:
+            // otherwise the greeting's leading feed is spent closing this row
+            // once the slot is flushed, and the blank row between the two
+            // prints vanishes on the greeting's page key - measured
+            // 2026-10-16 (`doom-final-room-refusal`, beat `greeting-page`,
+            // reading `scroll`).
+            self.close_message_row();
+            if let Some(endgame) = self.endgame.as_mut() {
+                endgame.entry_absorption_hold_owed = true;
+            }
+        }
+        if let Some(endgame) = self.endgame.as_mut()
+            && endgame.entry_absorption_hold_owed
+        {
+            endgame.entry_absorption_hold_owed = false;
+            self.staged_narration
+                .push_ticks(ENDGAME_ABSORPTION_HOLD_BIOS_TICKS, String::new());
+            return true;
+        }
+        if let Some(endgame) = self.endgame.as_mut()
+            && endgame.entry_greeting_hold_owed
+        {
+            endgame.entry_greeting_hold_owed = false;
+            self.staged_narration
+                .push_ticks_chained(ENDGAME_GREETING_HOLD_BIOS_TICKS);
+            return true;
+        }
+        if self
+            .endgame
+            .as_ref()
+            .is_some_and(|endgame| endgame.entry_party_slot == ENDGAME_ENTRY_GREETING_SLOT)
+        {
+            self.finish_endgame_entry_prompt();
+            return true;
         }
         let Some(endgame) = self.endgame.as_ref() else {
             return false;
@@ -1599,12 +1768,13 @@ impl PlayState {
                         endgame.entry_party_slot = ENDGAME_ENTRY_COMPLETE_SLOT;
                     }
                 }
-                if self
-                    .endgame
-                    .as_ref()
-                    .is_some_and(|endgame| endgame.entry_party_slot == ENDGAME_ENTRY_COMPLETE_SLOT)
+                if let Some(endgame) = self.endgame.as_mut()
+                    && endgame.entry_party_slot == ENDGAME_ENTRY_COMPLETE_SLOT
                 {
-                    self.append_endgame_first_prompt();
+                    // The greeting waits out the measured settle hold first
+                    // ([`ENDGAME_GREETING_HOLD_BIOS_TICKS`]).
+                    endgame.entry_party_slot = ENDGAME_ENTRY_GREETING_SLOT;
+                    endgame.entry_greeting_hold_owed = true;
                 }
             }
             return moved;
@@ -1946,6 +2116,17 @@ impl PlayState {
         // movement phase without the cue is a shape the section has. The
         // exit walks are left without it rather than assumed into it.
         if sting {
+            self.run_endgame_tableau_sting_beat();
+        } else {
+            self.animation.tick_static_tiles();
+        }
+        true
+    }
+
+    /// `audio.md §8.7` step 3's beat: two world-animation ticks, the short
+    /// two-part sting, three more ticks, paid as one chained hold.
+    fn run_endgame_tableau_sting_beat(&mut self) {
+        {
             for _ in 0..ENDGAME_TABLEAU_STING_LEADING_TICKS {
                 self.animation.tick_static_tiles();
             }
@@ -1970,16 +2151,112 @@ impl PlayState {
             // which is what that save carries.
             self.staged_narration
                 .push_ticks_chained(ENDGAME_TABLEAU_STING_HOLD_BIOS_TICKS);
-        } else {
-            self.animation.tick_static_tiles();
         }
-        true
     }
 
     fn clear_endgame_tableau_slot_type_tile(&mut self, slot: usize) {
         if let Some(object) = self.active_objects.get_mut(slot) {
             object.type_byte = 0;
             object.tile = 0;
+        }
+    }
+
+    /// `endgame.md §5.1`/`§6`: one display frame of the waiting branch's
+    /// staging. Returns `false` once only the terminal jitter loop is left.
+    pub fn advance_endgame_refusal_staging_frame(&mut self) -> bool {
+        let Some(phase) = self.endgame.as_ref().map(|endgame| endgame.refusal_phase) else {
+            return false;
+        };
+        let set_phase = |state: &mut Self, phase| {
+            if let Some(endgame) = state.endgame.as_mut() {
+                endgame.refusal_phase = phase;
+            }
+        };
+        match phase {
+            EndgameRefusalPhase::Inactive | EndgameRefusalPhase::Jitter => false,
+            EndgameRefusalPhase::LeadInPauseOwed => {
+                // `§5.1`: "It then pauses for forty shared world-animation
+                // ticks before printing record 10."
+                self.staged_narration.push_ticks(
+                    u16::from(crate::endgame_cinematic::ENDGAME_WAITING_LEAD_IN_PAUSE_TICKS),
+                    String::new(),
+                );
+                set_phase(self, EndgameRefusalPhase::RecordOwed);
+                true
+            }
+            EndgameRefusalPhase::RecordOwed => {
+                let record = self
+                    .endgame
+                    .as_ref()
+                    .map(EndgameState::refusal_record_text)
+                    .unwrap_or_default();
+                // The lead-in is already on the transcript; record 10 is a
+                // new emission, not a rewrite of that slot.
+                self.flush_message_slot();
+                // The lead-in ends with its own line feed (`§5.1`), so record
+                // 10's leading feed is the blank row between them.
+                self.close_message_row();
+                self.message = record;
+                self.message_flushed.clear();
+                self.flush_message_slot();
+                // Record 10 ends with a line feed, and nothing prints after
+                // it: the cursor sits at column 0 of the row beneath, which
+                // the window scrolled up to show, and no command row opens
+                // there (the branch reads no command). Measured 2026-10-16
+                // (`doom-final-room`, beat `answered`): the original's
+                // `here a while."` is the window's second-to-last row with
+                // an empty row under it.
+                if self.message.ends_with('\n') {
+                    self.push_explicit_blank_message_entry();
+                }
+                set_phase(self, EndgameRefusalPhase::NudgeOwed);
+                true
+            }
+            EndgameRefusalPhase::NudgeOwed => {
+                // `§6` step 1: "Slot 0's Y coordinate is decremented once.
+                // Then run two world-animation ticks, the short two-part
+                // movement sting ..., and three world-animation ticks."
+                if let Some(object) = self.active_objects.get_mut(0)
+                    && endgame_tableau_role_for_slot(0, *object)
+                        == Some(EndgameTableauActorRole::PartyMember(0))
+                {
+                    object.y = object.y.saturating_sub(1);
+                }
+                self.run_endgame_tableau_sting_beat();
+                set_phase(self, EndgameRefusalPhase::Walking);
+                true
+            }
+            EndgameRefusalPhase::Walking => {
+                // `§6` step 2: one round of the three scripted walks per
+                // frame, each actual step carrying the movement beat.
+                let moved = self.step_endgame_tableau_slot_once_with_sting(
+                    2,
+                    ENDGAME_TABLEAU_REFUSAL_SLOT2_TARGET,
+                ) | self.step_endgame_tableau_slot_once_with_sting(
+                    ENDGAME_TABLEAU_LORD_BRITISH_SLOT,
+                    ENDGAME_TABLEAU_REFUSAL_LORD_BRITISH_TARGET,
+                ) | self.step_endgame_tableau_slot_once_with_sting(
+                    0,
+                    ENDGAME_TABLEAU_REFUSAL_SLOT0_TARGET,
+                );
+                if !moved {
+                    set_phase(self, EndgameRefusalPhase::Jitter);
+                    return false;
+                }
+                true
+            }
+        }
+    }
+
+    /// Run the waiting branch's staging through to the jitter loop at once,
+    /// for callers that drive keystrokes only.
+    pub fn finish_endgame_refusal_staging(&mut self) {
+        let mut frames = 0;
+        while self.advance_endgame_refusal_staging_frame() {
+            frames += 1;
+            if frames > ENDGAME_TABLEAU_SETTLE_STEP_CAP * 4 {
+                break;
+            }
         }
     }
 
@@ -2357,6 +2634,17 @@ impl PlayState {
         answer: bool,
         final_narrative: Option<EndNarrative>,
     ) -> MoveOutcome {
+        self.resolve_endgame_confirmation_inner(answer, final_narrative, true)
+    }
+
+    /// `echo_final_answer` is `false` only on the first Yes's recursion,
+    /// whose answer has already been echoed onto record 1's reply row.
+    fn resolve_endgame_confirmation_inner(
+        &mut self,
+        answer: bool,
+        final_narrative: Option<EndNarrative>,
+        echo_final_answer: bool,
+    ) -> MoveOutcome {
         // `endgame.md §4`/`§5`: the tableau setup pass completes before
         // the dialogue's blocking prompts are answered. If input
         // arrives while the walk-in is still being rendered, settle it
@@ -2427,6 +2715,7 @@ impl PlayState {
                     // eight seconds into the jitter, where this engine had
                     // appended `Lord British waits with thee in the ending
                     // tableau.` under it.
+                    self.finish_endgame_refusal_staging();
                     self.advance_endgame_terminal_tableau_jitter();
                 }
                 None => unreachable!("terminal endgame has an outcome"),
@@ -2471,7 +2760,7 @@ impl PlayState {
             // going straight to record 10's "pull up a chair" exchange
             // (`cleak/u5-engine#12`).
             if answer {
-                return self.resolve_endgame_confirmation_with_narrative(answer, final_narrative);
+                return self.resolve_endgame_confirmation_inner(answer, final_narrative, false);
             }
             self.message = self
                 .endgame
@@ -2481,6 +2770,23 @@ impl PlayState {
             return MoveOutcome::Used;
         }
 
+        // `§5.1`: the second answer is echoed exactly as the first is - the
+        // literal on record 2's `You reply: ` row, then a blank line - and
+        // only then does the next record print. A first Yes reaches here by
+        // recursion with its own echo already committed, and the second
+        // question's reply row is the only one still open.
+        //
+        // Measured 2026-10-16 (`doom-final-room-waiting`, beats `waiting`,
+        // `tableau1`, `tableau2`, reading `scroll`): the original reads
+        // `You reply: No`, a blank row, then `"I see...`; this engine left the
+        // reply row bare and ran the lead-in straight under it.
+        if echo_final_answer && let Some(prompt) = self.endgame_open_prompt_line() {
+            self.flush_message_slot();
+            self.commit_typed_prompt_line(&prompt, yes_no_word(answer));
+            self.push_producer_blank_message_entry();
+            self.message.clear();
+            self.message_flushed.clear();
+        }
         let first = current.first_confirmation.unwrap_or(false);
         let has_box = self.special_items[SPECIAL_ITEM_WOODEN_BOX_INDEX] != 0;
         let certificate = endgame_certificate_fields(&self.party_leader_name(), self.clock);
@@ -2494,17 +2800,22 @@ impl PlayState {
             current.messages,
             final_narrative,
         );
-        match next.outcome {
-            Some(EndgameOutcome::Victory) => self.prepare_endgame_victory_tableau(),
-            Some(EndgameOutcome::MissingBoxOrRefused) => self.prepare_endgame_refusal_tableau(),
-            None => {}
+        let mut next = next;
+        if next.outcome == Some(EndgameOutcome::Victory) {
+            self.prepare_endgame_victory_tableau();
         }
         self.message = match next.outcome {
             // The victory branch opens on the first rite beat, or on
             // the throne tableau when `ENDMSG.DAT` carried no rite
             // records; neither composes certificate prose here.
             Some(EndgameOutcome::Victory) => next.current_cinematic_text(),
-            Some(EndgameOutcome::MissingBoxOrRefused) => next.refusal_text(),
+            // `§5.1`: the lead-in alone. The forty-tick pause, record 10
+            // and `§6`'s staging are display frames
+            // ([`EndgameRefusalPhase`]).
+            Some(EndgameOutcome::MissingBoxOrRefused) => {
+                next.refusal_phase = EndgameRefusalPhase::LeadInPauseOwed;
+                crate::endgame_cinematic::ENDGAME_WAITING_LEAD_IN.to_string()
+            }
             None => unreachable!("terminal endgame has an outcome"),
         };
         self.endgame = Some(next);

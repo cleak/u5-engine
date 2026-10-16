@@ -19242,9 +19242,20 @@ fn doom_final_room_successful_dungeon_cbt_combat_enters_endgame_from_absorbable_
     let renderer_slot = usize::from(state.combat_actors[0].active_object_slot);
     state.active_objects[renderer_slot].x = 5;
     state.active_objects[renderer_slot].y = 2;
+    state.emit_message_line("Earlier arena turn");
     let application = state
         .apply_combat_player_command_with_inputs(0, CombatPlayerCommandInput::Key(' '))
         .expect("committed action beneath Doom marker should dispatch");
+    // `endgame.md §3` step 2's redraw leaves the message window alone: the
+    // stock window keeps the arena turns above the absorption line until the
+    // greeting scrolls them away (measured 2026-10-16, `doom-final-room`).
+    assert!(
+        state
+            .message_transcript
+            .iter()
+            .any(|entry| entry.text == "Earlier arena turn"),
+        "the contact must not clear the message window"
+    );
     let absorption = application
         .absorbable_contact
         .expect("committed action beneath Doom marker should set absorption result");
@@ -19447,7 +19458,12 @@ fn endgame_flow_uses_loaded_endmsg_records_for_prompts_rite_and_refusal() {
     // follows immediately instead of record 2 (`cleak/u5-engine#12`).
     // `endgame.md §5`: the waiting branch prints the fixed `"I see...`
     // lead-in first; record 10 supplies its own leading newline.
-    assert_eq!(refusal.message, "\"I see...\nWait here without the box");
+    // The record follows the lead-in's forty-tick pause, a display frame
+    // later (`§5.1`).
+    assert_eq!(refusal.message, "\"I see...\n");
+    assert!(refusal.advance_endgame_display_frame());
+    assert!(refusal.advance_endgame_display_frame());
+    assert_eq!(refusal.message, "Wait here without the box");
 
     let mut victory = dungeon_state(open_dungeon_record(), 0, 1, 1);
     victory.special_items[SPECIAL_ITEM_WOODEN_BOX_INDEX] = 1;

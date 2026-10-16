@@ -2392,14 +2392,14 @@ impl PlayState {
             // tableau's own floor never appears. The original's room
             // changes colour at this moment, which is that floor.
             if let Some(snapshot) = self.combat_frame_snapshot.take() {
-                // `endgame.md §3` step 2's redraw takes the message
-                // window with it. It runs here, at the contact, because
-                // the step that walked onto the field commits its own
-                // echo afterwards: the stock window shows that echo at
-                // the top of an otherwise empty window, with the
-                // absorption line under it and nothing of the arena turn
-                // that preceded it.
-                self.clear_message_window();
+                // `endgame.md §3` step 2's redraw does not take the message
+                // window with it. Measured 2026-10-16 (`doom-final-room`,
+                // `-refusal`, `-waiting`, every timelapse frame between the
+                // absorption and the greeting): the stock window keeps the
+                // arena turns above the step's `>North` echo, with the
+                // absorption line under it. The earlier reading of an
+                // otherwise empty window was taken after the greeting had
+                // scrolled that history away.
                 let messages = snapshot.endgame_messages.clone();
                 let tableau_map = snapshot.endgame_tableau_map.clone();
                 self.restore_combat_frame_with_trigger_reconcile(snapshot, true);

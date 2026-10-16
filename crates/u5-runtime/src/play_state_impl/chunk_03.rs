@@ -276,6 +276,14 @@ impl PlayState {
         (self.staged_narration_active()
             && (self.message_row_open_mid_line || self.staged_narration.head_continues_open_row()))
             || self.mix_reagent_selection_active()
+            // `endgame.md §6`: the waiting branch is terminal and reads no
+            // command, so no command row opens under record 10. Measured
+            // 2026-10-16 (`doom-final-room`, beat `answered`, reading
+            // `offset+1`): the original's last row is `here a while."` and
+            // this engine drew a blank and an end-capped cursor row under it.
+            || self.endgame.as_ref().is_some_and(|endgame| {
+                endgame.outcome == Some(crate::EndgameOutcome::MissingBoxOrRefused)
+            })
             // The mixer's quantity prompt, for the same reason as `On who: `
             // below: the literal is `How much? `, "nine characters and a
             // trailing space, ten cells, with no line feed of its own at
