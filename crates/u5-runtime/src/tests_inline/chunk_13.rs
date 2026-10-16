@@ -8400,10 +8400,11 @@ fn save_load_published_messages_match_spec_text() {
 fn yell_published_message_constants_match_spec_text() {
     // commands.md §11: the ship-aboard Y branch prints the
     // sail-state message; the free-text branch prints
-    // "Nothing said." on empty input. Spec text is verbatim.
+    // the nothing-said result on empty input, which commands.md §5.8
+    // publishes as the row `Nothing` (no period, no `said`).
     assert_eq!(YELL_SAILS_HOISTED_MESSAGE, "HOIST!");
     assert_eq!(YELL_SAILS_FURLED_MESSAGE, "FURL!");
-    assert_eq!(YELL_NOTHING_SAID_MESSAGE, "Nothing said.");
+    assert_eq!(YELL_NOTHING_SAID_MESSAGE, "Nothing");
 }
 
 #[test]

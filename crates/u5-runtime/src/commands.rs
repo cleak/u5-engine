@@ -344,10 +344,11 @@ pub const YELL_INPUT_MAX_LEN: usize = 30;
 
 /// `commands.md §11` published Y-Yell narration strings. The
 /// ship-aboard branch prints the sail-state message; the free-text
-/// branch prints the nothing-said message on empty input.
+/// branch prints the nothing-said message on empty input, published in
+/// `commands.md §5.8` as the row `Nothing` under the `:` row.
 pub const YELL_SAILS_HOISTED_MESSAGE: &str = "HOIST!";
 pub const YELL_SAILS_FURLED_MESSAGE: &str = "FURL!";
-pub const YELL_NOTHING_SAID_MESSAGE: &str = "Nothing said.";
+pub const YELL_NOTHING_SAID_MESSAGE: &str = "Nothing";
 
 /// `commands.md §11` / `vehicles.md §6`: the no-input sail shortcut
 /// is selected only for a frigate marker in the unsigned low scene-byte
