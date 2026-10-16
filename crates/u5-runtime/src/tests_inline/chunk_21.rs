@@ -5787,6 +5787,86 @@ fn active_shop_surcharge_suppresses_without_zero_shadowlord_sentinel() {
     assert!(!state.message.contains("Surcharge"));
 }
 
+/// `conversation.md §7.3` (R520): "Every response stream ... goes through the
+/// same byte runner, so both codes behave identically on every path" - `0x83`
+/// is a timed, key-ended pause and `0x8F` a one-key wait, and neither ever
+/// stops a response. The legacy keyword-carrying raw path ran the runner
+/// with no hold markers, so a pause vanished and the whole reply printed at
+/// once (audit A071 follow-up).
+#[test]
+fn legacy_raw_keyword_reply_holds_at_pause_and_wait_key() {
+    let enc = |text: &str| -> Vec<u8> {
+        text.bytes()
+            .map(|byte| byte ^ TLK_TEXT_XOR_MASK)
+            .collect()
+    };
+    let mut job = enc("First");
+    job.push(crate::tlk_control_codes::TLK_CODE_PAUSE);
+    job.extend(enc("Second"));
+    job.push(crate::tlk_control_codes::TLK_CODE_WAIT_KEY);
+    job.extend(enc("Third"));
+    job.push(crate::tlk_control_codes::TLK_CODE_END_OF_RESPONSE);
+    let fields: Vec<String> = ["Bob", "a man", "Hi", "FirstSecondThird", "Bye"]
+        .iter()
+        .map(|field| field.to_string())
+        .collect();
+    let raw_fields: Vec<Vec<u8>> = vec![
+        enc("Bob"),
+        enc("a man"),
+        enc("Hi"),
+        job,
+        enc("Bye"),
+    ];
+    let dialogue = HashMap::from([(5u16, fields)]);
+    let raw = HashMap::from([(5u16, raw_fields)]);
+
+    let mut state = test_state(open_grid(), 1, 1);
+    state.player.facing = Direction::East;
+    state.load_scheduled_npcs(&[
+        NpcSlot {
+            slot: 0,
+            type_byte: 0,
+            dialog_id: 0,
+            schedule: [0; 16],
+            name: None,
+        },
+        NpcSlot {
+            slot: 1,
+            type_byte: 0x54,
+            dialog_id: 5,
+            schedule: [0, 0, 0, 2, 2, 2, 1, 1, 1, 0, 0, 0, 0, 8, 16, 20],
+            name: None,
+        },
+    ]);
+
+    assert_eq!(
+        state.talk_direction_with_dialogue_and_keyword_raw(
+            Direction::East,
+            &dialogue,
+            &raw,
+            Some("JOB"),
+        ),
+        MoveOutcome::Talked
+    );
+    let shown = transcript_texts(&state).join("\n");
+    assert!(
+        shown.contains("First") || state.message.contains("First"),
+        "{shown:?} / {:?}",
+        state.message
+    );
+    assert!(
+        !shown.contains("Second") && !state.message.contains("Second"),
+        "the pause holds the rest of the reply: {shown:?} / {:?}",
+        state.message
+    );
+    assert!(
+        !crate::text_hold::text_has_hold_markers(&state.message)
+            && !crate::text_hold::text_has_hold_markers(&shown),
+        "markers never print"
+    );
+    assert!(state.pending_text_hold.is_some());
+}
+
 #[test]
 fn talk_display_marker_tile_does_not_preempt_real_shop() {
     use crate::shop_session::ActiveShopSession;
