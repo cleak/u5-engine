@@ -1797,9 +1797,11 @@ impl PlayState {
             )
     }
 
-    fn combat_ai_morale_roll(&mut self, actor_slot: usize) -> u8 {
+    /// `combat.md §9` (`RETRACTIONS.md` R519): "the draw is over the
+    /// inclusive range `0..256`, not a byte" - 257 values.
+    fn combat_ai_morale_roll(&mut self, actor_slot: usize) -> u16 {
         let _ = actor_slot;
-        self.random_range_u8(0, u8::MAX)
+        u5_prng_range_u16(&mut self.prng_state, 0, COMBAT_AI_MORALE_ROLL_HIGH)
     }
 
     /// `combat.md §9.1`: "The fleeing flag is re-evaluated at the head of
@@ -1808,15 +1810,38 @@ impl PlayState {
     /// threshold stops fleeing and can no longer leave the arena." That is
     /// what this does, so the flag is not latched.
     ///
-    /// Not implemented: §9.1's other half - "The same pre-step block also
-    /// rolls a one-in-four chance to restore one point of that actor's
-    /// health." The section does not say where that draw sits relative to
-    /// the conditional morale roll below, and the two orderings put a
-    /// different number of draws in front of the step's own random-cardinal
-    /// draws on exactly the turns a fleeing actor takes them.
-    /// `cleak/u5-spec#285` asks; adding it on a reading would move the
-    /// shared PRNG stream for every fleeing turn in the game.
-    fn combat_ai_actor_fleeing(&mut self, actor_slot: usize) -> bool {
+    /// `§9.1`'s other half (clarified 2026-10-12, issue #285): "The same
+    /// pre-step block, for a monster-side fleeing actor, **first** takes one
+    /// draw over the four values zero through three on every fleeing turn
+    /// ... and on a three adds exactly one to the actor's current health
+    /// with **no ceiling**". "That draw precedes the classifier's own
+    /// conditional draw", so the classifier reads the healed health.
+    pub(crate) fn combat_ai_actor_fleeing(&mut self, actor_slot: usize) -> bool {
+        let Some(mut actor) = self.combat_actors.get(actor_slot).copied() else {
+            return false;
+        };
+        if actor_slot < COMBAT_PARTY_ACTOR_SLOTS || !combat_actor_is_active_not_dead(actor) {
+            return false;
+        }
+        if actor.is_fleeing() && self.random_range_u8(0, 3) == 3 {
+            // "a plain increment ... an engine must not clamp".
+            actor.hp_or_wound = actor.hp_or_wound.wrapping_add(1);
+            self.combat_actors[actor_slot].hp_or_wound = actor.hp_or_wound;
+        }
+        self.apply_combat_wound_score_classifier(actor_slot)
+    }
+
+    /// `combat.md §9`'s monster wound-score classifier: "below one quarter
+    /// sets fleeing, one-quarter through just under one-half rolls a morale
+    /// check ... and otherwise clears it, and one-half or higher clears
+    /// fleeing". It "refuses a party record outright" (`§11.1`).
+    ///
+    /// Two consumers: the head of a fleeing turn
+    /// ([`Self::combat_ai_actor_fleeing`]) and `§11.1`'s graded wound line,
+    /// where "a score of 1 - and a score of 2 on the morale draw described
+    /// in Section 9 - also raises the target's fleeing bit as a side effect
+    /// of narrating the hit".
+    pub(crate) fn apply_combat_wound_score_classifier(&mut self, actor_slot: usize) -> bool {
         let Some(actor) = self.combat_actors.get(actor_slot).copied() else {
             return false;
         };
@@ -3411,6 +3436,101 @@ impl PlayState {
         resolve_combat_ai_target_after_scan(&mut self.combat_actors, pick, cleanup_fallback_target)
     }
 
+    /// The ordinary attack/target routine of `combat.md §9`/`§11` for an
+    /// automatic actor whose chosen target is in attack range.
+    fn combat_ai_attack_route_attack(
+        &mut self,
+        actor_slot: usize,
+        target_slot: Option<usize>,
+        attack_route: Option<CombatAiAttackRoute>,
+        draws: CombatAiTurnDraws<'_>,
+    ) -> Option<CombatMonsterAttackApplication> {
+        // `magic.md §8`: only a scene-resistant, non-adjacent effect is
+        // aborted here. The outer attack driver still reports the action
+        // as handled, so the result is a silent consumed attack with no
+        // projectile, hit test, damage, or status path.
+        let resistant_ranged_effect_suppressed =
+            matches!(
+                attack_route,
+                Some(CombatAiAttackRoute::RangedEffect {
+                    scene_resistance: true,
+                    ..
+                })
+            ) && negate_magic_aura_active(self.active_effect_tag, self.active_effect_counter);
+        (!resistant_ranged_effect_suppressed)
+            .then_some(target_slot)
+            .flatten()
+            .and_then(|target_slot| {
+                let ranged_effect =
+                    matches!(attack_route, Some(CombatAiAttackRoute::RangedEffect { .. }));
+                // `combat.md §11` puts the Amulet/Turning byte in attack
+                // setup: "When such an actor targets a living party member
+                // who has Amulet/Turning readied in the amulet/neck
+                // equipment slot, attack setup rolls one byte in
+                // `[0, 255]`." Nothing published conditions that roll on
+                // whether a caller pre-supplied the attempt's other
+                // inputs, so the production arm below takes it at setup.
+                //
+                // The deterministic arm keeps the roll where it was, inside
+                // the input-supplied closure. Hoisting it there would have
+                // spent a draw on an attempt that has no inputs and so
+                // never resolves, which no section publishes; §11.1's
+                // ranged carve-out is about the scatter a **failed to-hit
+                // roll** causes and does not reach this gate.
+                match draws {
+                    CombatAiTurnDraws::SharedPrng => {
+                        if ranged_effect
+                            && self.combat_monster_amulet_turning_scatter_applies(
+                                actor_slot,
+                                target_slot,
+                            )
+                        {
+                            let hit_raw_roll_0_to_60 = self.combat_monster_hit_roll();
+                            let scatter_roll = self.combat_monster_scatter_cell_roll();
+                            self.resolve_and_apply_combat_monster_scattered_attack(
+                                actor_slot,
+                                target_slot,
+                                hit_raw_roll_0_to_60,
+                                scatter_roll,
+                            )
+                        } else {
+                            self.resolve_and_apply_combat_monster_attack_from_shared_prng(
+                                actor_slot,
+                                target_slot,
+                            )
+                        }
+                    }
+                    CombatAiTurnDraws::Fixed {
+                        monster_attack_inputs,
+                        ..
+                    } => monster_attack_inputs.and_then(|inputs| {
+                        if ranged_effect
+                            && self.combat_monster_amulet_turning_scatter_applies(
+                                actor_slot,
+                                target_slot,
+                            )
+                        {
+                            self.resolve_and_apply_combat_monster_scattered_attack(
+                                actor_slot,
+                                target_slot,
+                                inputs.hit_raw_roll_0_to_60,
+                                inputs.amulet_turning_scatter_roll,
+                            )
+                        } else {
+                            self.resolve_and_apply_combat_monster_attack(
+                                actor_slot,
+                                target_slot,
+                                inputs.hit_raw_roll_0_to_60,
+                                inputs.poison_gate_accepts,
+                                inputs.poison_damage_roll,
+                                inputs.forced_hit,
+                            )
+                        }
+                    }),
+                }
+            })
+    }
+
     /// `draws` selects between the production shared-PRNG mode and the
     /// deterministic-input mode; see [`CombatAiTurnDraws`].
     #[allow(clippy::too_many_arguments)]
@@ -3607,94 +3727,20 @@ impl PlayState {
                 movement_commit: None,
             });
         }
-        if matches!(
+        let attack_route_attacks = matches!(
             attack_route,
             Some(CombatAiAttackRoute::Melee | CombatAiAttackRoute::RangedEffect { .. })
-        ) {
-            // `magic.md §8`: only a scene-resistant, non-adjacent effect is
-            // aborted here. The outer attack driver still reports the action
-            // as handled, so the result is a silent consumed attack with no
-            // projectile, hit test, damage, or status path.
-            let resistant_ranged_effect_suppressed =
-                matches!(
-                    attack_route,
-                    Some(CombatAiAttackRoute::RangedEffect {
-                        scene_resistance: true,
-                        ..
-                    })
-                ) && negate_magic_aura_active(self.active_effect_tag, self.active_effect_counter);
-            let monster_attack = (!resistant_ranged_effect_suppressed)
-                .then_some(target_slot)
-                .flatten()
-                .and_then(|target_slot| {
-                    let ranged_effect =
-                        matches!(attack_route, Some(CombatAiAttackRoute::RangedEffect { .. }));
-                    // `combat.md §11` puts the Amulet/Turning byte in attack
-                    // setup: "When such an actor targets a living party member
-                    // who has Amulet/Turning readied in the amulet/neck
-                    // equipment slot, attack setup rolls one byte in
-                    // `[0, 255]`." Nothing published conditions that roll on
-                    // whether a caller pre-supplied the attempt's other
-                    // inputs, so the production arm below takes it at setup.
-                    //
-                    // The deterministic arm keeps the roll where it was, inside
-                    // the input-supplied closure. Hoisting it there would have
-                    // spent a draw on an attempt that has no inputs and so
-                    // never resolves, which no section publishes; §11.1's
-                    // ranged carve-out is about the scatter a **failed to-hit
-                    // roll** causes and does not reach this gate.
-                    match draws {
-                        CombatAiTurnDraws::SharedPrng => {
-                            if ranged_effect
-                                && self.combat_monster_amulet_turning_scatter_applies(
-                                    actor_slot,
-                                    target_slot,
-                                )
-                            {
-                                let hit_raw_roll_0_to_60 = self.combat_monster_hit_roll();
-                                let scatter_roll = self.combat_monster_scatter_cell_roll();
-                                self.resolve_and_apply_combat_monster_scattered_attack(
-                                    actor_slot,
-                                    target_slot,
-                                    hit_raw_roll_0_to_60,
-                                    scatter_roll,
-                                )
-                            } else {
-                                self.resolve_and_apply_combat_monster_attack_from_shared_prng(
-                                    actor_slot,
-                                    target_slot,
-                                )
-                            }
-                        }
-                        CombatAiTurnDraws::Fixed {
-                            monster_attack_inputs,
-                            ..
-                        } => monster_attack_inputs.and_then(|inputs| {
-                            if ranged_effect
-                                && self.combat_monster_amulet_turning_scatter_applies(
-                                    actor_slot,
-                                    target_slot,
-                                )
-                            {
-                                self.resolve_and_apply_combat_monster_scattered_attack(
-                                    actor_slot,
-                                    target_slot,
-                                    inputs.hit_raw_roll_0_to_60,
-                                    inputs.amulet_turning_scatter_roll,
-                                )
-                            } else {
-                                self.resolve_and_apply_combat_monster_attack(
-                                    actor_slot,
-                                    target_slot,
-                                    inputs.hit_raw_roll_0_to_60,
-                                    inputs.poison_gate_accepts,
-                                    inputs.poison_damage_roll,
-                                    inputs.forced_hit,
-                                )
-                            }
-                        }),
-                    }
-                });
+        );
+        // `combat.md §9.1`: a fleeing actor runs the movement primitive
+        // first, and only "when the primitive reports that it did not move
+        // and the fleeing bit is still set" does the driver dispatch it into
+        // the ordinary attack/target routine - below, after the movement.
+        // The Reaper and the Mimic never reach the primitive's step arm
+        // (`§9`), and what the refusal reports is not published, so they
+        // keep the attack-first order.
+        if attack_route_attacks && (!fleeing || combat_ai_class_never_moves(class)) {
+            let monster_attack =
+                self.combat_ai_attack_route_attack(actor_slot, target_slot, attack_route, draws);
             return Some(CombatAiTurnApplication {
                 actor_slot,
                 special: None,
@@ -3760,7 +3806,18 @@ impl PlayState {
         // one axis, with randomized axis priority": the coin belongs to the
         // stepping arm, below the attack path and below the teleport arm, so
         // in shared-PRNG mode it is drawn here and nowhere earlier.
+        //
+        // `combat.md §9.1`: the surrounded predicate's second consumer is "an
+        // **early return** taken ... before either axis attempt: a
+        // surrounded actor takes no step at all and the primitive reports
+        // that it did not move" - after the teleport arm, before the coin.
+        let teleport_accepted = teleport_capable
+            && teleport_candidate
+                .is_some_and(|(x, y)| combat_ai_legal_cell(&legal_cells, x as i16, y as i16));
+        let surrounded = !teleport_accepted
+            && combat_ai_cardinal_neighbours_blocked(&legal_cells, actor.x, actor.y, fleeing);
         let offers_horizontal_axis = match draws {
+            CombatAiTurnDraws::SharedPrng if surrounded => false,
             CombatAiTurnDraws::SharedPrng => self.combat_ai_offers_horizontal_axis(actor_slot),
             CombatAiTurnDraws::Fixed {
                 offers_horizontal_axis,
@@ -3836,11 +3893,13 @@ impl PlayState {
             // acting creature's class name followed by `teleports!` and a
             // newline (Section 11.1)." §11.1 adds that it is "printed straight
             // after the class name with no newline before it". The engine
-            // committed the move and said nothing.
+            // committed the move and said nothing. Its boundary row is
+            // `<monster> teleports!\n`: "teleport can continue an
+            // already-open row before ending it".
             if matches!(movement, CombatAiMovementOutcome::Teleport { .. })
                 && let Some(stats) = combat_class_stats(class)
             {
-                self.emit_message_line(format!("{} teleports!", stats.name));
+                self.emit_message_line_continuing_row(format!("{} teleports!\n", stats.name));
             }
             let _ = self.apply_combat_ambush_reveal_for_actor_position(actor_slot);
         }
@@ -3858,6 +3917,38 @@ impl PlayState {
             }
         };
         let command_key = resolve_combat_ai_synthesized_command_key(None, movement_direction_code);
+
+        // `combat.md §9.1`: "When the primitive reports that it did not move
+        // and the fleeing bit is still set, the turn is not silent: the
+        // driver dispatches that actor into the ordinary attack/target
+        // routine instead" - and that dispatch is "draw-free, tick-free and
+        // silent from the driver's side".
+        if fleeing
+            && attack_route_attacks
+            && matches!(
+                movement,
+                CombatAiMovementOutcome::Blocked {
+                    action_consumed: false,
+                    ..
+                }
+            )
+        {
+            let monster_attack =
+                self.combat_ai_attack_route_attack(actor_slot, target_slot, attack_route, draws);
+            return Some(CombatAiTurnApplication {
+                actor_slot,
+                special: None,
+                possess_hook_handled: false,
+                acting_group,
+                target,
+                step_vector: Some(step_vector),
+                attack_route,
+                monster_attack,
+                movement: Some(movement),
+                command_key: Some(COMBAT_AI_ATTACK_COMMAND_KEY),
+                movement_commit,
+            });
+        }
 
         Some(CombatAiTurnApplication {
             actor_slot,
@@ -4599,19 +4690,24 @@ impl PlayState {
     /// [`Self::emit_message_line`] opens a row before it prints, which is
     /// the leading feed this producer wants - unlike the teleport line
     /// directly above it in `§11.1`'s table, which has "no leading
-    /// newline of its own" and reaches the same helper. The two are the
-    /// same residue the blink lines carry: this engine cannot mark a line
-    /// as leaving the cursor mid-row for a later producer, so it prints
-    /// the boundary that is right for this row.
+    /// newline of its own" and so continues an open row instead.
+    ///
+    /// `§11.1` on the cue: "**The cue is the 40-update action snap**", and
+    /// "the interleaved order here is line feed, cue, name, stored line".
+    /// `§14` on the tail: the slot release comes first, the Shadow Lord's
+    /// release pass of `§6.3` runs "after the slot release and before that
+    /// tick", and the arm "ends with **exactly one** world tick".
     fn apply_combat_arena_exit(&mut self, actor_slot: usize, class: u8) {
         let name = crate::input_dispatch::combat_actor_display_name(self, actor_slot);
+        self.emit_sound_effect(SoundEffect::ActionSnap);
         self.emit_message_line(format!("{name}{COMBAT_ARENA_EXIT_ESCAPES_LINE}"));
-        if class == COMBAT_CLASS_SHADOW_LORD {
-            let _ = self.apply_combat_party_control_faint_scan();
-        }
         if self.release_combat_actor_slot_negative(actor_slot) {
             self.mark_visibility_dirty();
         }
+        if class == COMBAT_CLASS_SHADOW_LORD {
+            let _ = self.apply_combat_party_control_faint_scan();
+        }
+        self.advance_visual_tick();
     }
 
     /// Negative-form release used by vanished, incorporeal, terrain-rejected,
@@ -5158,7 +5254,6 @@ impl PlayState {
             )
         };
 
-        self.advance_turn();
         let succeeded = applied.is_some();
         // `combat.md §11.1`: "The two sides join below the announcement
         // layer ... Both then share the to-hit roll, the impact presentation,
@@ -5172,7 +5267,13 @@ impl PlayState {
         // exact case: "To-hit fails on a cast issued from the combat command
         // layer | party melee or ranged | `Failed!` - **with no name** -
         // replacing the miss line entirely".
-        self.message = match applied {
+        //
+        // The line is produced before the turn advance: `magic.md §8` runs
+        // "impact presentation, a newline, shared damage resolution and the
+        // shared target-result narrator" as one resolution, and the narrator
+        // can take `combat.md §9`'s morale draw (`§11.1`, graded wound
+        // lines), which must not land behind the turn advance's own draws.
+        let result_line = match applied {
             Some(application) => crate::input_dispatch::combat_landed_damage_result_line(
                 self,
                 target_slot,
@@ -5182,6 +5283,8 @@ impl PlayState {
             .unwrap_or_default(),
             None => "Failed!".to_string(),
         };
+        self.advance_turn();
+        self.message = result_line;
         if succeeded && audio::spell_shared_variant(spell_index).is_none() {
             // `audio.md §6.1` combat effect template: "On a resolved effect it
             // adds a **descending** glissando, 20 updates from 1300 Hz down
@@ -5682,29 +5785,37 @@ impl PlayState {
                 Some(affected)
             }
             CombatDirectedSpellEffect::FlameWind => {
-                let damage_rolls = target_slots
-                    .iter()
-                    .map(|_| {
-                        self.combat_spell_damage_roll_for_kind(CombatSpellDamageKind::FlameWind)
-                    })
-                    .collect::<Vec<_>>();
-                let application = self.apply_directed_combat_spell_damage(
-                    Some(caster_index),
-                    effect,
-                    &target_cells,
-                    &damage_rolls,
-                );
-                if let Some(application) = &application {
-                    for slot_application in &application.applications {
+                // `magic.md §8`: the per-effect branch "rolls raw damage in
+                // `[1, 30]` before the same damage/status path", and each
+                // accepted target then "reach[es] the shared result narrator
+                // after [its] effect" - the narrator reads the shared result
+                // field while it still describes that target. Roll, apply
+                // and narrate one target at a time, as Death Wind does: the
+                // narrator can take `combat.md §9`'s morale draw (`§11.1`), so
+                // batching every damage roll first would move it.
+                let mut affected = false;
+                for slot in target_slots.iter().copied() {
+                    let roll =
+                        self.combat_spell_damage_roll_for_kind(CombatSpellDamageKind::FlameWind);
+                    let Some(raw_damage) = resolve_directed_spell_raw_damage(effect, roll) else {
+                        continue;
+                    };
+                    if let Some(application) = self.apply_combat_weapon_damage_to_target(
+                        Some(caster_index),
+                        slot,
+                        raw_damage,
+                        true,
+                    ) {
+                        affected = true;
                         narration.extend(crate::input_dispatch::combat_landed_damage_result_line(
                             self,
-                            slot_application.target_slot,
+                            slot,
                             Some(caster_index),
-                            slot_application.damage_application,
+                            application,
                         ));
                     }
                 }
-                application.map(|application| !application.applications.is_empty())
+                Some(affected)
             }
         };
 
@@ -6785,8 +6896,23 @@ impl PlayState {
                 self.active_player = None;
                 CombatActivePlayerSelectionOutcome::Clear
             }
+            // `combat.md §8.4` (issue #293): "A member is eligible when it is
+            // a party-side actor in the arena with that roster slot and none
+            // of the disabled, asleep or dead-marked bits". Descriptors are
+            // packed (`§5`), so the digit names a roster slot, not a
+            // descriptor index.
             CombatActivePlayerSelectionOutcome::SelectPartySlot(slot)
-                if slot < self.party.len() && slot < COMBAT_PARTY_ACTOR_SLOTS =>
+                if slot < self.party.len()
+                    && self
+                        .combat_actors
+                        .iter()
+                        .take(COMBAT_PARTY_ACTOR_SLOTS)
+                        .any(|actor| {
+                            actor.is_party_side()
+                                && usize::from(actor.owner_target_class) == slot
+                                && !actor.is_status_disabled()
+                                && !actor.is_marked_dead()
+                        }) =>
             {
                 self.active_player = Some(slot);
                 CombatActivePlayerSelectionOutcome::SelectPartySlot(slot)
@@ -7905,6 +8031,27 @@ impl PlayState {
             };
         }
 
+        // `combat.md §7` step 2 runs before the step-3 restraint skip: the
+        // sweep reads "its linked character record's status byte". Party
+        // descriptors are packed (`§5`), so the record is reached through the
+        // descriptor's roster field, never by the descriptor index itself.
+        // The spec names a "death-narration effect" but publishes no text
+        // for it, so none is printed here; the slot render falls out of the
+        // walk stopping on this automatic action.
+        if self
+            .combat_roster_slot_for_actor_slot(slot)
+            .and_then(|roster_slot| self.party.get(roster_slot).copied())
+            .is_some_and(|member| member.status == b'D' || member.hp == 0)
+        {
+            self.combat_actors[slot].mark_dead();
+            return CombatActorSlotDispatchApplication::Slot {
+                slot,
+                phase_tick: None,
+                action: CombatActorDispatchAction::PartyDeathSweep,
+                control_after: self.combat_round_loop_control_census(false, false),
+            };
+        }
+
         // `combat.md §7` step 3: the restraint skip runs *before* the
         // phase decrement in step 4, "so a restrained actor's counter
         // never advances and it never takes a turn at all".
@@ -7913,22 +8060,6 @@ impl PlayState {
                 slot,
                 phase_tick: Some(CombatActorPhaseTick::Inactive),
                 action: CombatActorDispatchAction::Inactive,
-                control_after: self.combat_round_loop_control_census(false, false),
-            };
-        }
-
-        if slot < COMBAT_PARTY_ACTOR_SLOTS
-            && self
-                .party
-                .get(slot)
-                .copied()
-                .is_some_and(|member| member.status == b'D' || member.hp == 0)
-        {
-            self.combat_actors[slot].mark_dead();
-            return CombatActorSlotDispatchApplication::Slot {
-                slot,
-                phase_tick: None,
-                action: CombatActorDispatchAction::PartyDeathSweep,
                 control_after: self.combat_round_loop_control_census(false, false),
             };
         }

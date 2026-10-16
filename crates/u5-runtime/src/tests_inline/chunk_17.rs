@@ -3649,20 +3649,17 @@
             state.combat_actors[8].hp_or_wound,
             cause_fear_forced_current_hp(combat_class_stats(COMBAT_CLASS_PYTHON).unwrap().max_hp)
         );
-        // The Daemon's own turn follows and its to-hit fails. `combat.md`
-        // 11.1: an ordinary hostile's melee miss prints "nothing at all - no
-        // newline, no name, no line, no tone", so the next actor's turn
-        // banner - which "opens with a newline" (8.1) - follows this
-        // diagnostic directly.
+        // The Daemon's own turn follows. Cause Fear left it fleeing, and
+        // `combat.md §9.1` runs a fleeing actor's movement primitive first
+        // (with its self-heal draw ahead of the classifier), dispatching it
+        // into the attack routine only when it did not move. On this seed it
+        // no longer lands the hit it did when it attacked first; an ordinary
+        // hostile's melee miss prints "nothing at all" (11.1), so the next
+        // actor's turn banner - which "opens with a newline" (8.1) - follows
+        // this diagnostic directly.
         assert_eq!(
             state.message,
-            // The Daemon's reply re-baselines with the shared stream:
-            // `RETRACTIONS.md` R334 flips which side the score
-            // favours, R335 narrows the to-hit draw to the skewed
-            // roll's `0..=60` raw draw, and R336 makes the monster's
-            // attack value flat, so a Daemon that used to miss now
-            // lands on this seed.
-            "Cause Fear affected 2 combat actor(s).\nAvatar hit!\n\nAvatar, armed with bare hands:\n"
+            "Cause Fear affected 2 combat actor(s).\nAvatar, armed with bare hands:\n"
         );
     }
 

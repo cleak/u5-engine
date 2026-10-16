@@ -315,7 +315,7 @@ fn a_gazer_attack_sleeps_the_defender_instead_of_damaging_it() {
     );
     assert_eq!(state.active_player, None);
     assert_eq!(
-        crate::input_dispatch::combat_monster_attack_result_message(&state, attack).as_deref(),
+        crate::input_dispatch::combat_monster_attack_result_message(&mut state, attack).as_deref(),
         Some("Avatar slept!")
     );
 
@@ -436,7 +436,7 @@ fn a_landed_gremlin_attack_steals_food_instead_of_dealing_damage() {
     // The narrator returns the row bare, like every sibling line it owns;
     // `append_combat_result_line` is what supplies the newline on each side.
     assert_eq!(
-        crate::input_dispatch::combat_monster_attack_result_message(&state, attack).as_deref(),
+        crate::input_dispatch::combat_monster_attack_result_message(&mut state, attack).as_deref(),
         Some("A Gremlin stole some food!")
     );
 
@@ -456,7 +456,7 @@ fn a_landed_gremlin_attack_steals_food_instead_of_dealing_damage() {
     rows.emit_combat_print("Pass");
     rows.emit_combat_print(&format!(
         "\n{}\n",
-        crate::input_dispatch::combat_monster_attack_result_message(&state, attack)
+        crate::input_dispatch::combat_monster_attack_result_message(&mut state, attack)
             .expect("the theft narrates")
     ));
     assert_eq!(rows.message, "Pass\nA Gremlin stole some food!\n");

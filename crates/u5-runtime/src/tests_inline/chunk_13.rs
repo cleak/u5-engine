@@ -16172,6 +16172,8 @@ fn monster_wound_classifier_matches_spec_thresholds() {
     assert!(!monster_wound_sets_fleeing(30, 100, 251));
     assert!(monster_wound_sets_fleeing(30, 100, 252));
     assert!(monster_wound_sets_fleeing(30, 100, 255));
+    // R519: the draw is `0..=256`, so 256 is the fifth fleeing result.
+    assert!(monster_wound_sets_fleeing(30, 100, 256));
     // Lightly wounded / healthy: never fleeing.
     assert!(!monster_wound_sets_fleeing(50, 100, 0));
     assert!(!monster_wound_sets_fleeing(80, 100, 251));

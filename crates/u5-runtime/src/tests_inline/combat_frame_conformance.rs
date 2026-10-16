@@ -883,6 +883,104 @@
     // against `rest-and-camp.md §6`, and adopting the other reading should
     // stay a one-line change rather than a test rewrite.
 
+    /// `combat.md §5.3` row 3a: on the surface camp ambush "step 3 is
+    /// skipped entirely, so the shuffle is the first drawing step there" -
+    /// no ring vanish draw, no regeneration sweep, no asleep-member world
+    /// tick. A party that would make seating draw must leave the stream
+    /// exactly where a draw-free party leaves it, and keep its ring.
+    #[test]
+    fn the_camp_ambush_skips_the_seating_pass_draws() {
+        let run = |ring: bool, asleep: bool| {
+            let mut state = world_state(open_world_grid(), 10, 20);
+            state.prng_state = 0x0f0f;
+            if ring {
+                state.party_equipment[0][EQUIP_SLOT_RING] = EQUIPMENT_ID_RING_REGENERATION as u8;
+                state.party[0].hp = state.party[0].max_hp - 1;
+            }
+            if asleep {
+                state.party[0].status = b'S';
+            }
+            state
+                .enter_sleep_ambush_combat(SleepAmbushMonster::Bat, 0, std::path::Path::new(""))
+                .unwrap();
+            state
+        };
+        let reference = run(false, false);
+        let ringed = run(true, false);
+        assert_eq!(ringed.prng_state, reference.prng_state);
+        assert_eq!(
+            ringed.party_equipment[0][EQUIP_SLOT_RING],
+            EQUIPMENT_ID_RING_REGENERATION as u8
+        );
+        assert_eq!(ringed.party[0].hp, ringed.party[0].max_hp - 1);
+        let sleeper = run(false, true);
+        assert_eq!(sleeper.prng_state, reference.prng_state);
+    }
+
+    /// `combat.md §5` "Picking a class per monster" / `§5.3` step 7: the
+    /// camp ambush reaches the same terrain setup helper, so an early spawn
+    /// index may be created as the base class's companion class, carrying
+    /// that class's own tile and stats. The first monster never is.
+    #[test]
+    fn the_camp_ambush_mixes_in_the_companion_class() {
+        let base = sleep_ambush_monster_sprite(SleepAmbushMonster::Troll);
+        let base_class = combat_class_stats_for_sprite_byte(base).unwrap().class;
+        let companion = combat_class_companion(base_class).unwrap();
+        assert_ne!(companion, base_class);
+        let companion_stats = combat_class_stats(companion).unwrap();
+        let mut saw_companion = false;
+        for seed in 0u16..400 {
+            let mut state = world_state(open_world_grid(), 10, 20);
+            state.prng_state = seed.wrapping_mul(163);
+            state
+                .enter_sleep_ambush_combat(SleepAmbushMonster::Troll, 0, std::path::Path::new(""))
+                .unwrap();
+            assert_eq!(
+                state.combat_actors[COMBAT_PARTY_ACTOR_SLOTS].owner_target_class,
+                base_class
+            );
+            for slot in COMBAT_PARTY_ACTOR_SLOTS + 1..COMBAT_ACTOR_SLOTS {
+                let actor = state.combat_actors[slot];
+                if actor.is_empty() || actor.owner_target_class != companion {
+                    continue;
+                }
+                saw_companion = true;
+                let record = state.active_objects[usize::from(actor.active_object_slot)];
+                assert_eq!(record.tile, combat_class_sprite_byte(companion));
+                assert_eq!(record.aux1, companion_stats.max_hp);
+            }
+        }
+        assert!(saw_companion, "some seed must roll the one-in-nine companion");
+    }
+
+    /// The companion roll belongs to the terrain setup helper, which only the
+    /// **surface** camp ambush reaches (`combat.md §5`); a dungeon rest
+    /// interruption is set up by the room-combat helper, which takes one speed
+    /// draw per monster and no class check. Gated like the shuffle.
+    #[test]
+    fn a_dungeon_camp_ambush_rolls_no_companion_class() {
+        let base = sleep_ambush_monster_sprite(SleepAmbushMonster::Troll);
+        let base_class = combat_class_stats_for_sprite_byte(base).unwrap().class;
+        for seed in 0u16..400 {
+            let mut state = world_state(open_world_grid(), 10, 20);
+            state.area = Area::Dungeon {
+                scene: DungeonScene::from_record(1).unwrap(),
+                level: 0,
+            };
+            state.prng_state = seed.wrapping_mul(163);
+            state
+                .enter_sleep_ambush_combat(SleepAmbushMonster::Troll, 0, std::path::Path::new(""))
+                .unwrap();
+            for slot in COMBAT_PARTY_ACTOR_SLOTS..COMBAT_ACTOR_SLOTS {
+                let actor = state.combat_actors[slot];
+                if actor.is_empty() {
+                    continue;
+                }
+                assert_eq!(actor.owner_target_class, base_class, "seed {seed} slot {slot}");
+            }
+        }
+    }
+
     #[test]
     fn sleep_ambush_placement_seeds_base_step_and_phase_like_any_other_placement() {
         // `combat.md §5`: the alternate rest/camp entry modes seat the
@@ -1852,7 +1950,7 @@
             // attacker (Section 11.1 rule 1).
             assert_eq!(
                 crate::input_dispatch::combat_monster_attack_result_message(
-                    &state,
+                    &mut state,
                     CombatMonsterAttackApplication {
                         attacker_slot: COMBAT_PARTY_ACTOR_SLOTS,
                         target_slot: 0,
@@ -1876,10 +1974,10 @@
         // rounds: "To-hit fails | **monster melee** | **nothing at all**".
         // A failed roll is not a graze and not a line - "no newline, no
         // name, no line, no tone".
-        let state = worked_bat_arena(&[(6, 5)], 0);
+        let mut state = worked_bat_arena(&[(6, 5)], 0);
         assert_eq!(
             crate::input_dispatch::combat_monster_attack_result_message(
-                &state,
+                &mut state,
                 CombatMonsterAttackApplication {
                     attacker_slot: COMBAT_PARTY_ACTOR_SLOTS,
                     target_slot: 0,
@@ -1902,7 +2000,7 @@
         // member's failed swing **at** a Bat".
         assert_eq!(
             crate::input_dispatch::combat_weapon_attack_result_message(
-                &state,
+                &mut state,
                 COMBAT_PARTY_ACTOR_SLOTS,
                 CombatWeaponAttackApplication {
                     resolution: CombatWeaponAttackResolution::Miss {
@@ -1966,7 +2064,7 @@
                     let damage_application =
                         state.apply_combat_weapon_damage_to_target(None, 0, raw_damage, false);
                     let line = crate::input_dispatch::combat_monster_attack_result_message(
-                        &state,
+                        &mut state,
                         CombatMonsterAttackApplication {
                             attacker_slot: COMBAT_PARTY_ACTOR_SLOTS,
                             target_slot: 0,
@@ -1993,7 +2091,7 @@
                         false,
                     );
                     let line = crate::input_dispatch::combat_weapon_attack_result_message(
-                        &state,
+                        &mut state,
                         COMBAT_PARTY_ACTOR_SLOTS,
                         CombatWeaponAttackApplication {
                             resolution,
@@ -2090,7 +2188,7 @@
             state.combat_actors[target_slot].hp_or_wound = remaining_hp;
             assert_eq!(
                 crate::input_dispatch::combat_weapon_attack_result_message(
-                    &state,
+                    &mut state,
                     target_slot,
                     landed_monster_target_attack(target_slot, COMBAT_CLASS_CORPSER, None),
                 )
@@ -2139,7 +2237,7 @@
         );
         assert_eq!(
             crate::input_dispatch::combat_weapon_attack_result_message(
-                &state,
+                &mut state,
                 target_slot,
                 landed_monster_target_attack(
                     target_slot,
@@ -2166,7 +2264,7 @@
             state.combat_actors[attacker_slot].owner_target_class = attacker_class;
             assert_eq!(
                 crate::input_dispatch::combat_monster_attack_result_message(
-                    &state,
+                    &mut state,
                     CombatMonsterAttackApplication {
                         attacker_slot,
                         target_slot: 0,
@@ -2508,7 +2606,7 @@
         // that suppresses the kill line.
         assert_eq!(
             crate::input_dispatch::combat_weapon_attack_result_message(
-                &state,
+                &mut state,
                 target_slot,
                 application,
             )
@@ -2567,7 +2665,7 @@
         );
         assert_eq!(
             crate::input_dispatch::combat_weapon_attack_result_message(
-                &untouched,
+                &mut untouched,
                 COMBAT_PARTY_ACTOR_SLOTS,
                 jewelled,
             )
@@ -2647,7 +2745,7 @@
         // line is a prefix to the result line, not a replacement.
         assert_eq!(
             crate::input_dispatch::combat_weapon_attack_result_message(
-                &state,
+                &mut state,
                 target_slot,
                 application,
             )

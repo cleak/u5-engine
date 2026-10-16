@@ -1076,16 +1076,12 @@ pub fn terrain_combat_place_monsters_after_party(
             roll_seed,
         );
         // `combat.md §5`: "A spawned actor's renderer-facing tile is
-        // then derived from whichever class was chosen." The base
-        // class keeps the triggering object's own tile byte so its
-        // animation frame survives; a substituted companion class
-        // derives its sprite from the class identity.
+        // then derived from whichever class was chosen", and the record
+        // "receives the class-derived tile in both its tile and
+        // tile-mirror bytes" - never the raw trigger tile (a ship
+        // trigger `0x2C..0x2F` seats class-1 crew, not ship sprites).
         let stats = combat_class_stats(chosen_class).unwrap_or(base_class);
-        let tile = if stats.class == base_class.class {
-            setup.base_tile
-        } else {
-            combat_class_sprite_byte(stats.class)
-        };
+        let tile = combat_class_sprite_byte(stats.class);
         // `active-objects.md §7`: the descriptor comes from the
         // monster-side scan that starts at index six, while the
         // renderer-facing record comes from the lowest free record.
@@ -1451,7 +1447,12 @@ impl PlayState {
         };
         let mut active_objects = vec![ActiveObject::empty(); OOL_SLOTS];
         let mut actors = [CombatActorDescriptor::empty(); COMBAT_ACTOR_SLOTS];
-        self.populate_terrain_combat_party(&mut active_objects, &mut actors, z);
+        let surface_camp_ambush = matches!(self.area, Area::World { .. });
+        if surface_camp_ambush {
+            self.populate_camp_ambush_combat_party(&mut active_objects, &mut actors, z);
+        } else {
+            self.populate_terrain_combat_party(&mut active_objects, &mut actors, z);
+        }
 
         // `combat.md §5.3` step 3a: the surface camp ambush "sets and
         // forwards the [shuffle] bit ... and draws exactly fifteen uniform
@@ -1469,7 +1470,6 @@ impl PlayState {
         // surface-only gate below is the conservative stand-in until the spec
         // settles it; it is deliberately left untested so that adopting the
         // other reading is a one-line change, not a test rewrite.
-        let surface_camp_ambush = matches!(self.area, Area::World { .. });
         let permutation =
             surface_camp_ambush.then(|| self.terrain_combat_placement_slot_permutation());
 
@@ -1508,6 +1508,18 @@ impl PlayState {
             .min((OOL_SLOTS - COMBAT_PARTY_ACTOR_SLOTS) as u8)
             .min((COMBAT_ACTOR_SLOTS - COMBAT_PARTY_ACTOR_SLOTS) as u8)
             .min(placement_slots.len() as u8);
+        // `combat.md §5` "Picking a class per monster": the camp route uses
+        // the same terrain setup helper, so early spawn indexes roll the
+        // one-in-nine companion substitution too. Only the **surface** camp
+        // ambush reaches that helper (`§5`); a dungeon rest interruption goes
+        // through the dungeon framer and the room-combat setup, whose
+        // placement takes one speed draw per monster and no class check, so
+        // it is gated on the same surface test as the shuffle and banner.
+        let companion_class = if surface_camp_ambush {
+            combat_class_companion(stats.class)
+        } else {
+            None
+        };
         let mut placed = 0u8;
         for spawn in 0..placement_count {
             // `active-objects.md §7`: descriptor from the monster-side
@@ -1524,25 +1536,39 @@ impl PlayState {
                 .map(|permutation| usize::from(permutation[usize::from(spawn)]))
                 .unwrap_or(usize::from(spawn));
             let (x, y) = placement_slots[placement_slot.min(placement_slots.len() - 1)];
+            // `combat.md §5.3` step 7: "Each subsequent monster whose spawn
+            // index is below `count / 4 + 1` is preceded by one additional
+            // uniform `[0, 8]` draw" - taken before its speed draw.
+            let roll_seed =
+                self.terrain_combat_replacement_roll_seed(spawn, requested_count, companion_class);
+            let chosen_class = terrain_combat_class_for_spawn_index(
+                spawn,
+                requested_count,
+                stats.class,
+                companion_class,
+                roll_seed,
+            );
+            let spawn_stats = combat_class_stats(chosen_class).unwrap_or(stats);
+            let spawn_tile = combat_class_sprite_byte(spawn_stats.class);
             active_objects[record_slot] = ActiveObject {
-                type_byte: tile,
-                tile,
+                type_byte: spawn_tile,
+                tile: spawn_tile,
                 x: usize::from(x),
                 y: usize::from(y),
                 z,
                 phase: COMBAT_PLACEMENT_ACTIVE_OBJECT_PHASE,
-                aux1: stats.max_hp,
+                aux1: spawn_stats.max_hp,
                 aux3: COMBAT_ACTIVE_OBJECT_NO_DESCRIPTOR,
             };
             // `combat.md §5`: one speed-variation draw per ordinary
             // placement, phase counter of thirty-six minus the base-step.
             let speed_adjust_roll = self.combat_placement_speed_adjust_roll();
             actors[descriptor_slot] = combat_placement_descriptor(
-                stats,
+                spawn_stats,
                 record_slot as u8,
                 x,
                 y,
-                combat_monster_placement_flags(stats.class),
+                combat_monster_placement_flags(spawn_stats.class),
                 speed_adjust_roll,
             );
             placed += 1;
@@ -1939,6 +1965,40 @@ impl PlayState {
         z: i8,
         positions: &[(u8, u8); COMBAT_PARTY_ACTOR_SLOTS],
     ) {
+        self.populate_combat_party_seats(active_objects, actors, z, positions, true);
+    }
+
+    /// `combat.md §5`/`§5.3` row 3a: the surface camp ambush "skips the
+    /// pre-placement pass that clears the combat tables and seats the
+    /// party", and "on that route step 3 is skipped entirely, so the
+    /// shuffle is the first drawing step there". The party actors are still
+    /// written at the engine's conservative seats (where they come from on
+    /// this route "is not established"), but none of step 3's work runs:
+    /// no ring vanish check, no ring-effect/regeneration sweep and no
+    /// asleep-member world tick.
+    pub fn populate_camp_ambush_combat_party(
+        &mut self,
+        active_objects: &mut [ActiveObject],
+        actors: &mut [CombatActorDescriptor; COMBAT_ACTOR_SLOTS],
+        z: i8,
+    ) {
+        self.populate_combat_party_seats(
+            active_objects,
+            actors,
+            z,
+            &TERRAIN_COMBAT_PARTY_POSITIONS,
+            false,
+        );
+    }
+
+    fn populate_combat_party_seats(
+        &mut self,
+        active_objects: &mut [ActiveObject],
+        actors: &mut [CombatActorDescriptor; COMBAT_ACTOR_SLOTS],
+        z: i8,
+        positions: &[(u8, u8); COMBAT_PARTY_ACTOR_SLOTS],
+        seating_pass: bool,
+    ) {
         let roster: Vec<PartyMember> = self
             .party
             .iter()
@@ -1961,7 +2021,9 @@ impl PlayState {
             // outcome `11`." The ordering is load-bearing for PRNG
             // reproduction - "one vanish lowers every subsequent count in
             // the same seating pass" (`RETRACTIONS.md` R307).
-            self.apply_combat_seating_ring_vanish_check(roster_slot);
+            if seating_pass {
+                self.apply_combat_seating_ring_vanish_check(roster_slot);
+            }
             let record_slot = packed_slot;
             packed_slot += 1;
             let (x, y) = positions[roster_slot];
@@ -2039,7 +2101,7 @@ impl PlayState {
             // `combat.md §5`: "After the member is placed, a ring-effect
             // step runs - but **only** for members whose status byte is
             // exactly `'G'` (good) or `'P'` (poisoned)."
-            if matches!(member.status, b'G' | b'P') {
+            if seating_pass && matches!(member.status, b'G' | b'P') {
                 self.apply_combat_seating_ring_effect_step(
                     roster_slot,
                     record_slot,
@@ -2058,7 +2120,7 @@ impl PlayState {
             // the shared world step of `animation.md §13.2`; its own draw
             // count is that step's contract, and `§5.3` publishes no
             // maximum for it.
-            if asleep {
+            if seating_pass && asleep {
                 self.advance_visual_tick();
             }
         }

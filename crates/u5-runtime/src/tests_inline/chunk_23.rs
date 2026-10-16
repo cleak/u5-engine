@@ -288,7 +288,11 @@ fn dungeon_room_setup_sources_classify_sources_with_high_bit_mask() {
     );
     assert_eq!(
         dungeon_room_special_post_write(15),
-        DungeonRoomSpecialPostWrite::RandomRange { low: 1, high: 7 }
+        DungeonRoomSpecialPostWrite::RandomRangePlus {
+            base: 1,
+            low: 0,
+            high: 7
+        }
     );
     assert_eq!(
         dungeon_room_special_post_write(16),
@@ -553,7 +557,11 @@ fn dungeon_room_special_setup_ids_keep_public_post_write_shape() {
         setup.setup_sources[2].kind,
         DungeonRoomSetupSourceKind::SpecialPlacement(DungeonRoomSpecialPlacement {
             setup_id: 15,
-            post_write: DungeonRoomSpecialPostWrite::RandomRange { low: 1, high: 7 },
+            post_write: DungeonRoomSpecialPostWrite::RandomRangePlus {
+                base: 1,
+                low: 0,
+                high: 7,
+            },
         })
     );
     assert_eq!(
@@ -567,7 +575,7 @@ fn dungeon_room_special_setup_ids_keep_public_post_write_shape() {
     let mut expected_prng = 0;
     let _expected_random_ids = dungeon_room_random_special_setup_ids(true, &mut expected_prng);
     let expected_id2_aux = u5_prng_range_u16(&mut expected_prng, 1, 30) as u8;
-    let expected_id15_aux = u5_prng_range_u16(&mut expected_prng, 1, 7) as u8;
+    let expected_id15_aux = 1 + u5_prng_range_u16(&mut expected_prng, 0, 7) as u8;
     let mut actual_prng = 0;
     let instance = dungeon_room_combat_instance_from_setup_with_prng(&setup, 2, &mut actual_prng);
 
@@ -6034,6 +6042,10 @@ fn combat_active_player_digit_state_wrapper_updates_only_valid_party_slots() {
     let mut second = state.party[0];
     second.slot = 1;
     state.party.push(second);
+    // `combat.md §8.4`: eligibility needs a party-side actor in the arena
+    // with that roster slot.
+    state.combat_actors[0] =
+        CombatActorDescriptor::from_row([20, 1, COMBAT_ACTOR_FLAG_SELECTABLE_80, 1, 0, 0, 5, 5]);
 
     assert_eq!(
         state.apply_combat_active_player_digit('2'),
@@ -10325,6 +10337,10 @@ fn negate_magic_silently_consumes_only_scene_resistant_ranged_effects() {
 
     let mut ordinary = combat_ai_turn_state(8, 5);
     ordinary.combat_actors[8].owner_target_class = COMBAT_CLASS_DRAGON;
+    // At full health, so the classifier leaves it attacking: a fleeing
+    // actor moves first (`combat.md §9.1`).
+    ordinary.combat_actors[8].hp_or_wound =
+        combat_class_stats(COMBAT_CLASS_DRAGON).unwrap().max_hp;
     ordinary.active_effect_tag = Some(NEGATE_MAGIC_ACTIVE_EFFECT_TAG);
     ordinary.active_effect_counter = 20;
     ordinary.party[0].status = b'G';
@@ -11155,6 +11171,30 @@ fn combat_jimmy_restraints_use_flat_dexterity_roll_and_clear_on_success() {
     assert_eq!(failure.keys, 0);
     assert!(!failure.visibility_dirty);
     assert_eq!(failure.message, "Key broke!");
+}
+
+/// `combat.md §7.1`: Jimmy "rolls the selected member's Dexterity". With a
+/// dead member packed out, descriptor zero links to a later roster slot, and
+/// that member's Dexterity - not roster slot zero's - decides the pick.
+#[test]
+fn combat_jimmy_restraint_reads_the_linked_roster_members_dexterity() {
+    let mut state = combat_player_command_state(10, 10);
+    assert_ne!(state.combat_actors[0].flags, 0);
+    state.combat_actors[0].owner_target_class = 1;
+    let second = state.party[0].clone();
+    state.party.push(second);
+    state.keys = 1;
+    state.party[0].climb_stat = 0;
+    state.party[1].climb_stat = 30;
+    state.combat_terrain[5][6] = JIMMY_STOCKS_TILE;
+
+    assert_eq!(
+        state.jimmy_combat_actor_direction(0, Direction::East),
+        MoveOutcome::LockTried
+    );
+    assert_eq!(state.combat_terrain[5][6], TOWN_DOOR_CLEARED_TILE);
+    assert_eq!(state.keys, 1);
+    assert_eq!(state.message, "Unlocked");
 }
 
 #[test]
@@ -14038,6 +14078,91 @@ fn combat_actor_slot_dispatch_sweeps_dead_party_before_phase_tick() {
     assert_eq!(state.combat_actors[0].phase_counter, 1);
 }
 
+fn dispatch_slot_for_death_sweep(state: &mut PlayState, slot: usize) -> CombatActorSlotDispatchApplication {
+    state.apply_combat_actor_slot_dispatch_with_inputs(
+        slot,
+        30,
+        false,
+        0,
+        false,
+        1,
+        1,
+        &[],
+        None,
+        0,
+        false,
+        None,
+        true,
+        &[1, 2, 3, 4],
+        &[],
+    )
+}
+
+/// `combat.md §7` step 2 reads "its linked character record's status
+/// byte"; `§5` packs party descriptors past dead members, so descriptor 1
+/// can carry roster slot 2. The sweep must follow the roster field.
+#[test]
+fn combat_death_sweep_reads_linked_roster_record_not_descriptor_index() {
+    let mut state = combat_ai_turn_state(8, 5);
+    while state.party.len() < 3 {
+        let member = state.party[0];
+        state.party.push(member);
+    }
+    for member in state.party.iter_mut() {
+        member.status = b'G';
+        member.hp = 50;
+    }
+    // Roster [G, D, G]: the third member sits at descriptor 1.
+    state.party[1].status = b'D';
+    state.party[1].hp = 0;
+    state.combat_actors[1] =
+        CombatActorDescriptor::from_row([20, 1, COMBAT_ACTOR_FLAG_SELECTABLE_80, 2, 0, 1, 6, 5]);
+
+    let application = dispatch_slot_for_death_sweep(&mut state, 1);
+    assert!(!matches!(
+        application,
+        CombatActorSlotDispatchApplication::Slot {
+            action: CombatActorDispatchAction::PartyDeathSweep,
+            ..
+        }
+    ));
+    assert!(!state.combat_actors[1].is_marked_dead());
+
+    // The linked record (roster 2) dying is what the sweep retires.
+    state.party[2].status = b'D';
+    state.party[2].hp = 0;
+    state.combat_actors[1].phase_counter = 5;
+    let application = dispatch_slot_for_death_sweep(&mut state, 1);
+    assert!(matches!(
+        application,
+        CombatActorSlotDispatchApplication::Slot {
+            action: CombatActorDispatchAction::PartyDeathSweep,
+            ..
+        }
+    ));
+    assert!(state.combat_actors[1].is_marked_dead());
+}
+
+/// `combat.md §7`: step 2 (the death sweep) precedes step 3 (the restraint
+/// skip), so a member who died while held in the stocks is still retired.
+#[test]
+fn combat_death_sweep_runs_before_restraint_skip() {
+    let mut state = combat_ai_turn_state(8, 5);
+    state.combat_terrain[5][5] = 0x84;
+    state.party[0].status = b'D';
+    state.party[0].hp = 0;
+
+    let application = dispatch_slot_for_death_sweep(&mut state, 0);
+    assert!(matches!(
+        application,
+        CombatActorSlotDispatchApplication::Slot {
+            action: CombatActorDispatchAction::PartyDeathSweep,
+            ..
+        }
+    ));
+    assert!(state.combat_actors[0].is_marked_dead());
+}
+
 #[test]
 fn combat_round_walk_stops_when_player_slot_is_ready_for_input() {
     let mut state = combat_ai_turn_state(8, 5);
@@ -14828,8 +14953,33 @@ fn combat_ai_random_cardinal_fallback_is_four_independent_draws() {
         }
     );
 
-    // A fully enclosed actor is no longer short-circuited: it still spends
-    // its four attempts.
+    // An actor whose draws all miss its one open neighbour still spends its
+    // four attempts.
+    assert_eq!(
+        resolve_combat_ai_movement(
+            &legal,
+            0,
+            0,
+            CombatStepVector { dx: -1, dy: -1 },
+            false,
+            false,
+            None,
+            true,
+            &[1, 3, 4, 4],
+        ),
+        CombatAiMovementOutcome::Blocked {
+            random_cardinal_attempts: 4,
+            // `combat.md §9`: the final draw (`4`) is not the first code
+            // (`1`), so the exhausted fallback still reports the action
+            // consumed.
+            action_consumed: true,
+        }
+    );
+
+    // A fully enclosed actor is a different case: `combat.md §9.1`'s
+    // surrounded early return takes "no step at all" and reports that it
+    // did not move, before any axis attempt or fallback draw. That gate is
+    // not the neighbour scan R311 withdrew from inside the fallback.
     legal[0][1] = false;
     assert_eq!(
         resolve_combat_ai_movement(
@@ -14844,10 +14994,8 @@ fn combat_ai_random_cardinal_fallback_is_four_independent_draws() {
             &[1, 3, 2, 4],
         ),
         CombatAiMovementOutcome::Blocked {
-            random_cardinal_attempts: 4,
-            // `combat.md §9`: the final draw (`4`) is not the first (`1`), so
-            // the exhausted fallback still reports the action consumed.
-            action_consumed: true,
+            random_cardinal_attempts: 0,
+            action_consumed: false,
         }
     );
 }
@@ -14880,9 +15028,10 @@ fn combat_wound_morale_uses_truncated_quarter_thresholds_and_documented_roll_rat
 
     // 9's morale rule over the same buckets: below one quarter sets fleeing;
     // one-quarter through just under one-half rolls a morale check that sets
-    // fleeing only on a roll of 252 or more - four of 256, per
-    // `RETRACTIONS.md` R483, which withdrew the inverted "252 of 256"
-    // reading these assertions carried; one-half or higher clears fleeing.
+    // fleeing only on a roll of 252 or more - five of 257 over the `0..=256`
+    // draw (`RETRACTIONS.md` R519), per R483, which withdrew the inverted
+    // "252 of 256" reading these assertions carried; one-half or higher
+    // clears fleeing.
     assert_eq!(
         resolve_combat_wound_morale(23, 99, 255),
         CombatWoundMorale {
@@ -19912,6 +20061,37 @@ fn terrain_combat_setup_from_record_copies_record_slices_and_base_class() {
     assert_eq!(base_class.name, "Orc");
 }
 
+/// `combat.md §5`: the renderer-facing record "receives the class-derived
+/// tile in both its tile and tile-mirror bytes". A pirate-ship trigger
+/// (`0x2C..0x2F`) maps to class 1, so its crew is drawn as `1*4+0x40`,
+/// and an animated trigger frame does not leak into the spawned sprite.
+#[test]
+fn terrain_combat_placement_tile_derives_from_class_not_trigger_tile() {
+    let record = CombatArenaRecord::from_record_bytes(&synthetic_combat_arena_record()).unwrap();
+    for (trigger_tile, expected_class) in [(0x2d_u8, OUTDOOR_PIRATE_COMBAT_CLASS), (0xc1, 32)] {
+        let trigger = ActiveObject {
+            type_byte: trigger_tile,
+            tile: trigger_tile,
+            x: 10,
+            y: 20,
+            z: 0,
+            phase: 0,
+            aux1: 0,
+            aux3: 0,
+        };
+        let setup =
+            terrain_combat_setup_from_record_at_arena(WorldPlane::Britannia, trigger, 4, &record)
+                .unwrap();
+        let instance = terrain_combat_instance_from_setup(&setup, 2, None, &[], &[]).unwrap();
+        let expected_tile = combat_class_sprite_byte(expected_class);
+        for slot in 6..8 {
+            assert_eq!(instance.actors[slot].owner_target_class, expected_class);
+            assert_eq!(instance.active_objects[slot].tile, expected_tile);
+            assert_eq!(instance.active_objects[slot].type_byte, expected_tile);
+        }
+    }
+}
+
 #[test]
 fn terrain_combat_instance_places_monsters_and_parallel_descriptors() {
     let record = CombatArenaRecord::from_record_bytes(&synthetic_combat_arena_record()).unwrap();
@@ -21108,4 +21288,24 @@ fn a_dungeon_room_arena_draws_its_terrain_through_the_red_green_plane_swap() {
     assert!(state.dungeon_room_arena_plane_swap_active());
     state.combat_active = false;
     assert!(!state.dungeon_room_arena_plane_swap_active());
+}
+
+#[test]
+fn dungeon_room_special_ids_7_8_13_15_draw_eight_ways_for_one_through_eight() {
+    // `formats/cbt.md §5`: ids 7, 8, 13, 15 write `1 + random_range(0, 7)`.
+    for id in [7u8, 8, 13, 15] {
+        let post_write = dungeon_room_special_post_write(id);
+        let mut seen = [false; 9];
+        for seed in 0..512u16 {
+            let mut state = seed;
+            let mut expected_state = seed;
+            let aux = dungeon_room_special_aux1(post_write, 1, &mut state);
+            let expected = 1 + u5_prng_range_u16(&mut expected_state, 0, 7) as u8;
+            assert_eq!(aux, expected);
+            assert_eq!(state, expected_state);
+            seen[usize::from(aux)] = true;
+        }
+        assert!(!seen[0]);
+        assert!(seen[1..=8].iter().all(|&hit| hit), "id {id}: {seen:?}");
+    }
 }
