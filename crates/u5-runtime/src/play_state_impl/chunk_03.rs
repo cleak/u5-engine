@@ -3345,6 +3345,16 @@ impl PlayState {
     /// (`qa/paired/hut-ready-picker.tsv`, beat `shield`): the original reads
     /// `Item:`, a blank row, then `Thou art not strong enough!`, and this
     /// engine ran the prompt and the refusal together.
+    /// `combat.md §7`: "The announcement guard is initialized once on
+    /// combat entry, with victory already suppressed when the initial foe
+    /// count is zero", and set once the outcome is announced. A detached
+    /// fixture with no framer snapshot is treated as undecided.
+    fn combat_outcome_announcement_guard_set(&self) -> bool {
+        self.combat_frame_snapshot
+            .as_ref()
+            .is_some_and(|snapshot| snapshot.exit_announced || !snapshot.any_foe_seated)
+    }
+
     fn ready_refusal(&mut self, refusal: &str) -> String {
         // The picker's row is open whichever way the handler got here, so say
         // so rather than let the two feeds below land against whatever the
@@ -4714,11 +4724,20 @@ impl PlayState {
         {
             return MoveOutcome::Blocked;
         }
-        if self.combat_active && EQUIPMENT_CLASS_TAGS[item_id] == EQUIPMENT_TAG_ARMOUR {
-            // Measured 2026-09-07 (`qa/paired/combat-ready-armour.tsv`): the
-            // arena lists the armour rows and answers a pick of one with no
-            // line at all. The refusal stands; the sentence does not.
-            self.message.clear();
+        if self.combat_active
+            && !self.combat_outcome_announcement_guard_set()
+            && EQUIPMENT_CLASS_TAGS[item_id] == EQUIPMENT_TAG_ARMOUR
+        {
+            // `inventory.md §6` combat armour lock: body armour, a combat
+            // arena, "**and** the battle has not yet been decided. All three
+            // must hold ... the lock lifts as soon as the outcome has been
+            // announced". §5.2 voices it, and the issue #231 note keeps the
+            // voiced refusal: "An arena that starts empty already has its
+            // announcement guard set (combat Section 7), so that gate is
+            // lifted". The silent pick measured 2026-09-07 in
+            // `qa/paired/combat-ready-armour.tsv` is that reconciliation's
+            // open evidence, not the contract.
+            self.message = self.ready_refusal(READY_COMBAT_ARMOUR_LOCK_REFUSAL);
             return MoveOutcome::Blocked;
         }
         if let Some(slot) = self.party_equipment[request.party_index]
@@ -4779,13 +4798,6 @@ impl PlayState {
             self.message.clear();
             return MoveOutcome::Blocked;
         };
-        // `inventory.md §5.2` publishes `Thou canst not change armour in
-        // heated battle!` for this branch, but the lock above - measured
-        // 2026-09-07 in `qa/paired/combat-ready-armour.tsv` - answers with no
-        // line at all. §5.2 scopes its row to *undecided* combat, which the
-        // capture may not have been in, so the measured silence stands and
-        // the difference is reported rather than papered over
-        // (cleak/u5-spec#247).
         // `inventory.md §2.1`: "Before an item is written into a readied
         // slot, the command sums the selected character's current
         // readied-equipment burden, adds the candidate item's R-Ready

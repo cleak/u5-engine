@@ -252,3 +252,56 @@ fn a064_crops_and_wall_torches_are_tile_class_get_rules() {
     assert_eq!(state.message, GET_TILE_BORROWED_LINE);
     assert_eq!(state.torch_counter, 100);
 }
+
+fn combat_snapshot(state: &PlayState, exit_announced: bool, any_foe_seated: bool) -> CombatFrameSnapshot {
+    CombatFrameSnapshot {
+        area: state.area,
+        player: state.player,
+        active_objects: state.active_objects.clone(),
+        active_player: None,
+        combat_terrain: [[0; COMBAT_ARENA_SIDE]; COMBAT_ARENA_SIDE],
+        dungeon_room_clear_on_success: None,
+        enter_endgame_after_successful_combat: false,
+        endgame_messages: None,
+        endgame_tableau_map: None,
+        encounter_mode_high_bit: false,
+        suppress_controlled_faint_sleep_tick: false,
+        exit_announced,
+        established_exit_direction_code: None,
+        any_foe_seated,
+    }
+}
+
+/// `inventory.md §5.2`/§6: the body-armour lock is voiced as
+/// `\n\nThou canst not change armour in heated battle!` while the battle is
+/// undecided, and "lifts as soon as the outcome has been announced"; an
+/// arena that starts empty "already has its announcement guard set".
+#[test]
+fn a100_combat_armour_lock_is_voiced_and_lifts_once_the_outcome_is_announced() {
+    let fresh = || {
+        let mut state = test_state(open_grid(), 1, 1);
+        state.combat_active = true;
+        state.party_strengths = vec![60];
+        state.party_equipment = default_party_equipment(1);
+        state.party_equipment[0][EQUIP_SLOT_ARMOUR] = EQUIPMENT_EMPTY;
+        state.equipment_stock[10] = 1;
+        state
+    };
+
+    let mut undecided = fresh();
+    undecided.combat_frame_snapshot = Some(combat_snapshot(&undecided, false, true));
+    assert_eq!(undecided.ready_equipment_from_suffix("1/10"), MoveOutcome::Blocked);
+    assert_eq!(
+        undecided.message,
+        format!("\n\n{READY_COMBAT_ARMOUR_LOCK_REFUSAL}")
+    );
+
+    let mut announced = fresh();
+    announced.combat_frame_snapshot = Some(combat_snapshot(&announced, true, true));
+    assert_eq!(announced.ready_equipment_from_suffix("1/10"), MoveOutcome::Used);
+    assert_eq!(announced.party_equipment[0][EQUIP_SLOT_ARMOUR], 10);
+
+    let mut empty_arena = fresh();
+    empty_arena.combat_frame_snapshot = Some(combat_snapshot(&empty_arena, false, false));
+    assert_eq!(empty_arena.ready_equipment_from_suffix("1/10"), MoveOutcome::Used);
+}

@@ -3460,7 +3460,8 @@
         );
         assert_eq!(state.party_equipment[0][EQUIP_SLOT_ARMOUR], 9);
         assert_eq!(state.equipment_stock[9], 0);
-        assert_eq!(state.message, "");
+        // `inventory.md §5.2`: the lock is voiced while combat is undecided.
+        assert_eq!(state.message, format!("\n\n{READY_COMBAT_ARMOUR_LOCK_REFUSAL}"));
 
         assert_eq!(
             state.ready_equipment_from_suffix("1/10"),
@@ -3468,7 +3469,7 @@
         );
         assert_eq!(state.party_equipment[0][EQUIP_SLOT_ARMOUR], 9);
         assert_eq!(state.equipment_stock[10], 1);
-        assert_eq!(state.message, "");
+        assert_eq!(state.message, format!("\n\n{READY_COMBAT_ARMOUR_LOCK_REFUSAL}"));
 
         assert_eq!(
             state.ready_equipment_from_suffix("1/16"),
