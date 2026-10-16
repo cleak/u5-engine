@@ -6684,6 +6684,26 @@ fn surface_view_river_tile(tile: u8) -> bool {
     matches!(tile, 0x60..=0x69 | 0x6C..=0x6F)
 }
 
+/// `view.md §4` river-family corner table: a set bit is a light-blue (B)
+/// corner, in the corner order `(1,0)`, `(3,1)`, `(1,2)`, `(3,3)` = bits
+/// `0x01`, `0x02`, `0x04`, `0x08`. The table is the authority: `0x60` and
+/// `0x66` share one pattern with different low nibbles, so the mask is per
+/// tile, not the raw `tile & 0x0F`. Non-river members are all B.
+const fn surface_view_river_shoreline_mask(tile: u8) -> u8 {
+    match tile {
+        0x60 | 0x66 => 0x0A, // G B G B
+        0x61 | 0x65 => 0x06, // G B B G
+        0x62 | 0x6F => 0x02, // G B G G
+        0x63 | 0x6C => 0x08, // G G G B
+        0x64 => 0x0C,        // G G B B
+        0x67 | 0x68 => 0x0E, // G B B B
+        0x69 => 0x07,        // B B B G
+        0x6D => 0x04,        // G G B G
+        0x6E => 0x01,        // B G G G
+        _ => 0x0F,
+    }
+}
+
 fn draw_surface_view_water_corners(
     viewport: &mut TileViewport,
     cell_x: usize,
@@ -6694,7 +6714,7 @@ fn draw_surface_view_water_corners(
 ) {
     let modal = surface_view_class_color(0x0A, mode);
     let secondary = surface_view_class_color(0x02, mode);
-    let shoreline_mask = tile & 0x0F;
+    let shoreline_mask = surface_view_river_shoreline_mask(tile);
     for (bit, x, y) in [(0x01, 1, 0), (0x02, 3, 1), (0x04, 1, 2), (0x08, 3, 3)] {
         let color = if surface_view_river_tile(tile) && shoreline_mask & bit == 0 {
             secondary

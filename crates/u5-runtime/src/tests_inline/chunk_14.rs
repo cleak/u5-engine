@@ -1342,12 +1342,38 @@
         assert_eq!(
             surface_view_audit_mask(0x0A, 0x03, x_ray), [[0, 9, 0, 0], [0, 0, 0, 9], [0, 9, 0, 0], [0, 0, 0, 9]]);
 
-        // River `0x60` has no shoreline bits: all four corners use the fixed
-        // secondary source. `0x69` selects modal corners for bits 0 and 3.
-        assert_eq!(
-            surface_view_audit_mask(0x0A, 0x60, gem), [[0, 10, 0, 0], [0, 0, 0, 10], [0, 10, 0, 0], [0, 0, 0, 10]]);
-        assert_eq!(
-            surface_view_audit_mask(0x0A, 0x69, gem), [[0, 9, 0, 0], [0, 0, 0, 10], [0, 10, 0, 0], [0, 0, 0, 9]]);
+        // `view.md §4` river-family corner table, corner order `(1,0)`,
+        // `(3,1)`, `(1,2)`, `(3,3)`; G = 10, B = 9. The table is per tile
+        // (`0x60` and `0x66` share a pattern), not the raw low nibble.
+        for (tile, corners) in [
+            (0x60, "GBGB"),
+            (0x61, "GBBG"),
+            (0x62, "GBGG"),
+            (0x63, "GGGB"),
+            (0x64, "GGBB"),
+            (0x65, "GBBG"),
+            (0x66, "GBGB"),
+            (0x67, "GBBB"),
+            (0x68, "GBBB"),
+            (0x69, "BBBG"),
+            (0x6C, "GGGB"),
+            (0x6D, "GGBG"),
+            (0x6E, "BGGG"),
+            (0x6F, "GBGG"),
+            (0xE4, "BBBB"),
+            (0xE7, "BBBB"),
+        ] {
+            let mask = surface_view_audit_mask(0x0A, tile, gem);
+            let got: String = [mask[0][1], mask[1][3], mask[2][1], mask[3][3]]
+                .iter()
+                .map(|pixel| match pixel {
+                    10 => 'G',
+                    9 => 'B',
+                    _ => '?',
+                })
+                .collect();
+            assert_eq!(got, corners, "tile {tile:#04x}");
+        }
     }
 
     #[test]
