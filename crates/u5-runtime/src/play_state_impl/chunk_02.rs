@@ -1911,9 +1911,11 @@ impl PlayState {
         for ch in std::iter::once(key).chain(suffix.chars()) {
             match session.phase {
                 ShrinePhase::Virtue => match ch {
+                    // `karma.md §7`: "Escape erases the whole current
+                    // answer and keeps the same prompt open." It never
+                    // cancels the meditation.
                     '\u{1b}' => {
-                        self.message = SELECTION_CANCELLED_LITERAL.to_string();
-                        return Ok(Some(MoveOutcome::PromptDeclined));
+                        session.virtue_buffer.clear();
                     }
                     '\r' | '\n' => {
                         // `karma.md §12`: "A blank virtue answer or any blank

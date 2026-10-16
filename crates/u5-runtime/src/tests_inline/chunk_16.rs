@@ -1819,6 +1819,35 @@ BRITANNIA 11 21
     }
 
     #[test]
+    fn escape_at_the_virtue_prompt_erases_the_answer_and_keeps_the_prompt() {
+        // `karma.md §7`: "Escape erases the whole current answer and keeps
+        // the same prompt open. At an empty answer, Escape changes nothing
+        // visible."
+        let dir = debug_game_dir();
+        fs::write(dir.join(SHRINE_TABLE_FILE), "BRITANNIA 10 20 HONESTY 25\n").unwrap();
+        let mut grid = open_world_grid();
+        grid[world_cell_index(10, 20)] = SHRINE_MARKER_TILE;
+        let mut state = britannia_state(grid, 10, 20);
+
+        handle_play_key_input(&mut state, 'E', "", &dir).unwrap();
+        state.flush_staged_narration();
+        handle_play_key_input(&mut state, 'X', "YZ", &dir).unwrap();
+        assert_eq!(state.message, ":XYZ");
+        handle_play_key_input(&mut state, '\u{1b}', "", &dir).unwrap();
+        assert!(state.active_shrine.is_some(), "Escape must not end the meditation");
+        assert_eq!(state.message, ":");
+        handle_play_key_input(&mut state, '\u{1b}', "", &dir).unwrap();
+        assert!(state.active_shrine.is_some());
+        assert_eq!(state.message, ":");
+
+        handle_play_key_input(&mut state, 'H', "onesty\r", &dir).unwrap();
+        state.flush_staged_narration();
+        state.adopt_shrine_prompt_row();
+        assert_eq!(state.message, SHRINE_MANTRA_PROMPT);
+        let _ = fs::remove_dir_all(dir);
+    }
+
+    #[test]
     fn active_shrine_prompt_blank_mantra_has_no_effect() {
         let dir = debug_game_dir();
         fs::write(dir.join(SHRINE_TABLE_FILE), "BRITANNIA 10 20 HONESTY 25\n").unwrap();
