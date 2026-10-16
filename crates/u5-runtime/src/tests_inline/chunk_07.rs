@@ -2871,6 +2871,39 @@ fn native_world_encounter_spawner_evicts_on_a_full_table_per_encounters_md_9() {
 }
 
 #[test]
+fn native_world_encounter_spawner_does_not_reject_an_occupied_candidate() {
+    // `encounters.md §4` lists the retry rejections exhaustively:
+    // separation, a zero bucket, a sea creature on shore, and the 128 cap.
+    // An object already on the candidate cell is not one of them.
+    let mut probe = britannia_state(vec![0x02; WORLD_CELLS], 0, 40);
+    probe.prng_state = 0x0007;
+    let slot = probe
+        .spawn_native_world_encounter(WorldPlane::Britannia)
+        .unwrap();
+    let (x, y) = (probe.active_objects[slot].x, probe.active_objects[slot].y);
+
+    let mut state = britannia_state(vec![0x02; WORLD_CELLS], 0, 40);
+    state.prng_state = 0x0007;
+    state.active_objects.push(ActiveObject {
+        type_byte: 0x01,
+        tile: 0x01,
+        x,
+        y,
+        z: WorldPlane::Britannia.save_floor(),
+        phase: STEADY_PHASE,
+        aux1: 0,
+        aux3: 0,
+    });
+
+    let slot = state
+        .spawn_native_world_encounter(WorldPlane::Britannia)
+        .unwrap();
+
+    assert_eq!((state.active_objects[slot].x, state.active_objects[slot].y), (x, y));
+    assert_eq!(state.prng_state, probe.prng_state);
+}
+
+#[test]
 fn native_world_encounter_spawner_declines_only_after_the_128_candidate_loop() {
     // `encounters.md §4` step 5: "After one hundred twenty-eight
     // rejected candidates, return silently without spawning." Mountains

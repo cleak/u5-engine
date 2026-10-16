@@ -175,13 +175,15 @@ impl PlayState {
                     self.random_range_u8(0, (OVERWORLD_CHUNK_BUFFER_WINDOW_SIDE - 1) as u8),
                 ))
                 % WORLD_SIDE;
+            // `encounters.md §4`: separation, a zero bucket, a sea creature on
+            // shore, and the 128 cap are the only rejections. There is no
+            // occupancy test; a full table is handled by eviction (§9).
             if !encounter_spawner_separation_ok(
                 x as u8,
                 y as u8,
                 self.player.x as u8,
                 self.player.y as u8,
-            ) || self.world_object_at(x, y).is_some()
-            {
+            ) {
                 continue;
             }
 
