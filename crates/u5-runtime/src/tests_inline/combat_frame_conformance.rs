@@ -883,6 +883,40 @@
     // against `rest-and-camp.md §6`, and adopting the other reading should
     // stay a one-line change rather than a test rewrite.
 
+    /// `combat.md §5.3` row 3a: on the surface camp ambush "step 3 is
+    /// skipped entirely, so the shuffle is the first drawing step there" -
+    /// no ring vanish draw, no regeneration sweep, no asleep-member world
+    /// tick. A party that would make seating draw must leave the stream
+    /// exactly where a draw-free party leaves it, and keep its ring.
+    #[test]
+    fn the_camp_ambush_skips_the_seating_pass_draws() {
+        let run = |ring: bool, asleep: bool| {
+            let mut state = world_state(open_world_grid(), 10, 20);
+            state.prng_state = 0x0f0f;
+            if ring {
+                state.party_equipment[0][EQUIP_SLOT_RING] = EQUIPMENT_ID_RING_REGENERATION as u8;
+                state.party[0].hp = state.party[0].max_hp - 1;
+            }
+            if asleep {
+                state.party[0].status = b'S';
+            }
+            state
+                .enter_sleep_ambush_combat(SleepAmbushMonster::Bat, 0, std::path::Path::new(""))
+                .unwrap();
+            state
+        };
+        let reference = run(false, false);
+        let ringed = run(true, false);
+        assert_eq!(ringed.prng_state, reference.prng_state);
+        assert_eq!(
+            ringed.party_equipment[0][EQUIP_SLOT_RING],
+            EQUIPMENT_ID_RING_REGENERATION as u8
+        );
+        assert_eq!(ringed.party[0].hp, ringed.party[0].max_hp - 1);
+        let sleeper = run(false, true);
+        assert_eq!(sleeper.prng_state, reference.prng_state);
+    }
+
     #[test]
     fn sleep_ambush_placement_seeds_base_step_and_phase_like_any_other_placement() {
         // `combat.md §5`: the alternate rest/camp entry modes seat the

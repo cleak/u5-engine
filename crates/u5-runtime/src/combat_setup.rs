@@ -1447,7 +1447,12 @@ impl PlayState {
         };
         let mut active_objects = vec![ActiveObject::empty(); OOL_SLOTS];
         let mut actors = [CombatActorDescriptor::empty(); COMBAT_ACTOR_SLOTS];
-        self.populate_terrain_combat_party(&mut active_objects, &mut actors, z);
+        let surface_camp_ambush = matches!(self.area, Area::World { .. });
+        if surface_camp_ambush {
+            self.populate_camp_ambush_combat_party(&mut active_objects, &mut actors, z);
+        } else {
+            self.populate_terrain_combat_party(&mut active_objects, &mut actors, z);
+        }
 
         // `combat.md §5.3` step 3a: the surface camp ambush "sets and
         // forwards the [shuffle] bit ... and draws exactly fifteen uniform
@@ -1465,7 +1470,6 @@ impl PlayState {
         // surface-only gate below is the conservative stand-in until the spec
         // settles it; it is deliberately left untested so that adopting the
         // other reading is a one-line change, not a test rewrite.
-        let surface_camp_ambush = matches!(self.area, Area::World { .. });
         let permutation =
             surface_camp_ambush.then(|| self.terrain_combat_placement_slot_permutation());
 
@@ -1935,6 +1939,40 @@ impl PlayState {
         z: i8,
         positions: &[(u8, u8); COMBAT_PARTY_ACTOR_SLOTS],
     ) {
+        self.populate_combat_party_seats(active_objects, actors, z, positions, true);
+    }
+
+    /// `combat.md §5`/`§5.3` row 3a: the surface camp ambush "skips the
+    /// pre-placement pass that clears the combat tables and seats the
+    /// party", and "on that route step 3 is skipped entirely, so the
+    /// shuffle is the first drawing step there". The party actors are still
+    /// written at the engine's conservative seats (where they come from on
+    /// this route "is not established"), but none of step 3's work runs:
+    /// no ring vanish check, no ring-effect/regeneration sweep and no
+    /// asleep-member world tick.
+    pub fn populate_camp_ambush_combat_party(
+        &mut self,
+        active_objects: &mut [ActiveObject],
+        actors: &mut [CombatActorDescriptor; COMBAT_ACTOR_SLOTS],
+        z: i8,
+    ) {
+        self.populate_combat_party_seats(
+            active_objects,
+            actors,
+            z,
+            &TERRAIN_COMBAT_PARTY_POSITIONS,
+            false,
+        );
+    }
+
+    fn populate_combat_party_seats(
+        &mut self,
+        active_objects: &mut [ActiveObject],
+        actors: &mut [CombatActorDescriptor; COMBAT_ACTOR_SLOTS],
+        z: i8,
+        positions: &[(u8, u8); COMBAT_PARTY_ACTOR_SLOTS],
+        seating_pass: bool,
+    ) {
         let roster: Vec<PartyMember> = self
             .party
             .iter()
@@ -1957,7 +1995,9 @@ impl PlayState {
             // outcome `11`." The ordering is load-bearing for PRNG
             // reproduction - "one vanish lowers every subsequent count in
             // the same seating pass" (`RETRACTIONS.md` R307).
-            self.apply_combat_seating_ring_vanish_check(roster_slot);
+            if seating_pass {
+                self.apply_combat_seating_ring_vanish_check(roster_slot);
+            }
             let record_slot = packed_slot;
             packed_slot += 1;
             let (x, y) = positions[roster_slot];
@@ -2035,7 +2075,7 @@ impl PlayState {
             // `combat.md §5`: "After the member is placed, a ring-effect
             // step runs - but **only** for members whose status byte is
             // exactly `'G'` (good) or `'P'` (poisoned)."
-            if matches!(member.status, b'G' | b'P') {
+            if seating_pass && matches!(member.status, b'G' | b'P') {
                 self.apply_combat_seating_ring_effect_step(
                     roster_slot,
                     record_slot,
@@ -2054,7 +2094,7 @@ impl PlayState {
             // the shared world step of `animation.md §13.2`; its own draw
             // count is that step's contract, and `§5.3` publishes no
             // maximum for it.
-            if asleep {
+            if seating_pass && asleep {
                 self.advance_visual_tick();
             }
         }
