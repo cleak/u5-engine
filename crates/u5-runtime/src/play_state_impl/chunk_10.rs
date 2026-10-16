@@ -1620,9 +1620,36 @@ impl PlayState {
                 return false;
             }
             *searched = true;
-            let Some((x, y)) = self.nearest_npc_floor_link_to(marker, target_x, target_y) else {
+            // npc-schedules.md §8.5, states 4/5: "The search runs first; if
+            // no link cell is reachable within the search budget the NPC does
+            // nothing this tick." Route selection is "nearest reachable cell
+            // carrying the selected marker, measured by the same
+            // breadth-first search used for ordinary movement", started, as
+            // that search always is, from the NPC's own runtime cell.
+            let start = (self.npcs[npc_index].x, self.npcs[npc_index].y);
+            let Some((x, y)) = self
+                .npc_path_route_to_floor_link_marker(
+                    npc_index,
+                    start,
+                    marker,
+                    (target_x, target_y),
+                    floor,
+                )
+                .and_then(|route| {
+                    route.into_iter().try_fold(start, |cell, code| {
+                        npc_step_from_direction_code(cell, code)
+                    })
+                })
+            else {
                 return false;
             };
+            // "... and then re-reads the live tile at the link cell. If that
+            // tile is the state's own marker, or any tile in the stairway
+            // family `0xC4..0xC7`, the NPC is placed on the displayed floor
+            // at that cell".
+            if !npc_floor_link_arrival_accepts(self.grid[y * 32 + x], marker) {
+                return false;
+            }
             self.npcs[npc_index].x = x;
             self.npcs[npc_index].y = y;
             self.npcs[npc_index].z = floor;
@@ -1699,7 +1726,11 @@ impl PlayState {
                 seen[idx] = true;
                 inbound[idx] = code;
                 prev[idx] = Some((x, y));
-                if npc_floor_link_arrival_accepts(self.grid[idx], marker) {
+                // npc-schedules.md §8.3 phase 3: "every cell whose live tile
+                // equals the selected marker becomes a goal sentinel" - the
+                // stairway family is accepted only by the gate and the
+                // arrival re-read, never as a search goal.
+                if self.grid[idx] == marker {
                     let mut cells = vec![(nx, ny)];
                     let mut current = (nx, ny);
                     while let Some(parent) = prev[current.1 * 32 + current.0] {
@@ -1770,25 +1801,14 @@ impl PlayState {
             })
     }
 
-    pub fn nearest_npc_floor_link_to(
-        &self,
-        marker: u8,
-        target_x: usize,
-        target_y: usize,
-    ) -> Option<(usize, usize)> {
-        self.floor_link_marker_coordinates(marker)
-            .into_iter()
-            .min_by_key(|(x, y)| x.abs_diff(target_x) + y.abs_diff(target_y))
-    }
-
     pub fn floor_link_marker_coordinates(&self, marker: u8) -> Vec<(usize, usize)> {
         self.grid
             .chunks_exact(32)
             .enumerate()
             .flat_map(|(y, row)| {
-                row.iter().enumerate().filter_map(move |(x, tile)| {
-                    npc_floor_link_arrival_accepts(*tile, marker).then_some((x, y))
-                })
+                row.iter()
+                    .enumerate()
+                    .filter_map(move |(x, tile)| (*tile == marker).then_some((x, y)))
             })
             .collect()
     }

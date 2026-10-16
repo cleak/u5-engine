@@ -950,7 +950,10 @@
 
     #[test]
     fn scheduled_npc_arriving_on_current_floor_uses_floor_link_before_waypoint() {
-        let mut grid = open_grid();
+        // `npc-schedules.md §8.5`: the link is found by the ordinary BFS, so
+        // the ground has to be NPC-routable (`open_grid()`'s tile is an NPC
+        // obstacle under §10).
+        let mut grid = npc_open_grid();
         grid[6 * 32 + 5] = NPC_FLOOR_LINK_TILE_C8;
         let mut state = test_state(grid, 10, 10);
         state.clock = GameClock::new(17, 59).unwrap();

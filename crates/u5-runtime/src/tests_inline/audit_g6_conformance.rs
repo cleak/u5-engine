@@ -237,3 +237,44 @@ fn a131_bfs_expands_neighbours_in_the_cyclic_code_order() {
         Some(vec![NPC_PATH_DIR_SOUTH, NPC_PATH_DIR_EAST])
     );
 }
+
+#[test]
+fn a130_floor_link_search_goals_are_exactly_the_marker_and_reachable() {
+    // npc-schedules.md §8.3 phase 3 / §8.5: goals are the cells carrying
+    // the selected marker; the stairway family is not a goal.
+    let mut grid = g6_open_grid();
+    grid[5 * 32 + 6] = TOWN_STAIR_TILE_FIRST;
+    grid[5 * 32 + 9] = NPC_FLOOR_LINK_TILE_C9;
+    let state = {
+        let mut state = test_state(grid, 20, 20);
+        state.npcs = vec![g6_npc(1, 5, 5, 0, (5, 5, 0))];
+        state.relink_npc_objects();
+        state
+    };
+    let route = state
+        .npc_path_route_to_floor_link_marker(0, (5, 5), NPC_FLOOR_LINK_TILE_C9, (5, 5), 0)
+        .unwrap();
+    assert_eq!(route.len(), 4, "the stairway at distance 1 is not a goal");
+    assert_eq!(
+        state.floor_link_marker_coordinates(NPC_FLOOR_LINK_TILE_C9),
+        vec![(9, 5)]
+    );
+
+    // States 4/5 take the nearest *reachable* marker by BFS from the NPC's
+    // cell: the marker nearer the waypoint is walled off.
+    let mut grid = g6_open_grid();
+    grid[10 * 32 + 10] = NPC_FLOOR_LINK_TILE_C8;
+    for (x, y) in [(9, 10), (11, 10), (10, 9), (10, 11)] {
+        grid[y * 32 + x] = 0x4E;
+    }
+    grid[2 * 32 + 2] = NPC_FLOOR_LINK_TILE_C8;
+    let mut state = test_state(grid, 30, 30);
+    let mut npc = g6_npc(1, 4, 2, 0, (11, 11, 0));
+    npc.z = 1;
+    npc.state = NPC_STATE_DESCEND_TOWARD_TARGET;
+    state.npcs = vec![npc];
+    let mut searched = false;
+    assert!(state.advance_npc_floor_transition_step(0, 0, 11, 11, 0, 0, &mut searched));
+    assert_eq!((state.npcs[0].x, state.npcs[0].y, state.npcs[0].z), (2, 2, 0));
+    assert_eq!(state.npcs[0].state, NPC_STATE_INPLANE_MOVE);
+}
