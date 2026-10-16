@@ -9794,7 +9794,8 @@ fn screenshot_system(
                 // once the intro is actually able to consume it, so a
                 // sequence like `U5_BEVY_PRESS=C` selects a menu entry
                 // after the flourish instead of being swallowed by it.
-                // `J` keeps its pre-flourish shortcut.
+                // A leading `J` was already offered to the pre-flourish
+                // poll before the app started.
                 if let Some(ch) = config.preset_keys.get(state.preset_key_cursor).copied() {
                     if visual_intro_accepts_preset_key(&intro, ch)
                         && step_visual_intro(&mut intro, ch)
@@ -9837,14 +9838,13 @@ fn screenshot_system(
 
 /// `systems/intro.md §3`/`§6`: the title screen only hands keys to the
 /// menu once the flourish and the signature have finished animating
-/// (and it auto-advances to the menu at that point). `J` is the one
-/// key the title itself honours early. Anything else offered during
-/// the title phase must stay queued rather than be spent dismissing
-/// the title.
+/// (and it auto-advances to the menu at that point). The early `J` is
+/// "accepted at exactly this single poll, not throughout the flourish" -
+/// the pre-flourish poll, which already saw the first preset key - so a
+/// later `J` waits for the menu like every other key rather than being
+/// spent dismissing the title.
 fn visual_intro_accepts_preset_key(intro: &VisualIntroState, ch: char) -> bool {
-    if ch.eq_ignore_ascii_case(&'J') {
-        return true;
-    }
+    let _ = ch;
     if !matches!(intro.panel, VisualIntroPanel::Menu) {
         return true;
     }
@@ -12002,17 +12002,12 @@ fn step_visual_intro(intro: &mut VisualIntroState, ch: char) -> bool {
     }
 
     if matches!(intro.dispatch.tick_title(), UnifiedMenuStep::PresentTitle) {
-        if ch.eq_ignore_ascii_case(&'J') {
-            intro.title_flourish_step = 0;
-            intro.title_flourish_complete = true;
-            intro.title_signature_progress = 0;
-            intro.title_signature_complete = true;
-            intro.title_tick_frame = 0;
-            intro.title_tick_visible_frame = 0;
-            intro.title_sequence_skipped = true;
-            finish_visual_intro_title_to_menu(intro, false);
-            return resolve_visual_intro_subflow(intro, IntroSubflow::JourneyOnward);
-        }
+        // `systems/intro.md §3` "Pre-flourish phase" item 6: "The early `J`
+        // shortcut is therefore accepted at exactly this single poll, not
+        // throughout the flourish." That poll is `run_intro_pre_flourish_phase`;
+        // here a `J` is an ordinary keystroke that "only skip[s] the visual
+        // flourish" to the start/menu screen.
+        //
         // `systems/intro.md §3` + `cleak/u5-spec#67`: a keystroke does
         // not cut away mid-picture and does not mean the same thing at
         // every point in the sequence.
@@ -20344,6 +20339,56 @@ mod tests {
         ));
         assert_eq!(intro.title_tick_frame, 0);
         assert_eq!(intro.title_tick_visible_frame, 0);
+        let _ = fs::remove_dir_all(&intro.game_dir);
+    }
+
+    #[test]
+    fn intro_title_flourish_j_only_skips_to_the_menu() {
+        let mut intro = VisualIntroState {
+            game_dir: debug_game_dir(),
+            raster_depth: TileGraphicsDepth::Ega16,
+            dispatch: UnifiedMenuDispatch::new(),
+            title_flourish_step: 3,
+            title_flourish_complete: false,
+            title_signature_progress: 0,
+            title_signature_complete: false,
+            title_presents_hold_ticks: 0,
+            title_sequence_skipped: false,
+            pending_auto_return_to_view: false,
+            title_tick_frame: 0,
+            title_tick_visible_frame: 0,
+            surface: new_intro_display_buffer(),
+            modal_backing: None,
+            menu_idle_ticks: 0,
+            menu_idle_bios_ticks: 0,
+            menu_cursor_pass: 0,
+            menu_cursor_blanked: false,
+            message_waiting_for_key: false,
+            message: String::new(),
+            panel: VisualIntroPanel::Menu,
+            launch_result: Arc::new(Mutex::new(None)),
+            image_handle: None,
+            font_slots: None,
+            text_windows: TextWindowSystem::new(),
+            pending_pre_flourish_outcome: None,
+            title_tick_frames: None,
+            pending_reveal_clicks: Vec::new(),
+        };
+
+        // `systems/intro.md §3` item 6: "The early `J` shortcut is therefore
+        // accepted at exactly this single poll, not throughout the flourish
+        // ... later flourish keystrokes only skip the visual flourish."
+        assert!(step_visual_intro(&mut intro, 'J'));
+
+        assert!(intro.title_flourish_complete);
+        assert!(intro.title_sequence_skipped);
+        assert!(visual_intro_presents_hold_active(&intro));
+        assert!(matches!(
+            intro.dispatch.tick_title(),
+            UnifiedMenuStep::PresentTitle
+        ));
+        assert!(intro.launch_result.lock().unwrap().is_none());
+        assert!(!visual_intro_accepts_preset_key(&intro, 'J'));
         let _ = fs::remove_dir_all(&intro.game_dir);
     }
 
