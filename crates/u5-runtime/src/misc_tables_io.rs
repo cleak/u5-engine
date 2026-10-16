@@ -18,13 +18,22 @@ pub fn parse_karma_dat(bytes: &[u8]) -> io::Result<Vec<String>> {
     let mut records = Vec::with_capacity(KARMA_RECORD_COUNT);
     let mut start = 0;
     for record_index in 0..KARMA_RECORD_COUNT {
-        let Some(relative_end) = bytes[start..].iter().position(|byte| *byte == 0) else {
-            return Err(io::Error::new(
-                io::ErrorKind::InvalidData,
-                format!("{KARMA_DAT_FILE} record {record_index} is not NUL-terminated"),
-            ));
+        let remaining = bytes.get(start..).unwrap_or(&[]);
+        let end = match remaining.iter().position(|byte| *byte == 0) {
+            Some(relative_end) => start + relative_end,
+            // `formats/karma-dat.md` Section 2 (R495): the original reads to
+            // end of file and delimits by NUL, so the final record may run to
+            // EOF unterminated. Earlier records still need their NUL.
+            None if record_index + 1 == KARMA_RECORD_COUNT && !remaining.is_empty() => {
+                bytes.len()
+            }
+            None => {
+                return Err(io::Error::new(
+                    io::ErrorKind::InvalidData,
+                    format!("{KARMA_DAT_FILE} record {record_index} is not NUL-terminated"),
+                ));
+            }
         };
-        let end = start + relative_end;
         let record = &bytes[start..end];
         if let Some(byte) = record
             .iter()

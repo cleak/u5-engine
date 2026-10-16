@@ -170,6 +170,22 @@
     }
 
     #[test]
+    fn karma_dat_parser_accepts_final_record_running_to_end_of_file() {
+        let mut bytes = karma_bytes(&["low", "twenty", "forty", "sixty", "eighty", "top"]);
+        assert_eq!(bytes.pop(), Some(0));
+
+        assert_eq!(
+            parse_karma_dat(&bytes).unwrap(),
+            vec!["low", "twenty", "forty", "sixty", "eighty", "top"]
+        );
+        // An unterminated earlier record is still a short file.
+        let mut five = karma_bytes(&["one", "two", "three", "four", "five"]);
+        assert!(parse_karma_dat(&five).is_err());
+        five.pop();
+        assert!(parse_karma_dat(&five).is_err());
+    }
+
+    #[test]
     fn karma_dat_parser_rejects_missing_records_and_high_bytes() {
         assert!(parse_karma_dat(&karma_bytes(&["one", "two"])).is_err());
 
