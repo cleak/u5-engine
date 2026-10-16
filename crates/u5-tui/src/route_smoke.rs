@@ -6131,7 +6131,7 @@ fn validate_route_smoke_case_state(
                 || state.wind_save_byte != WindState::East.save_byte()
                 || state.spell_charges[REL_HUR_SPELL_INDEX] != 0
                 || state.party.first().is_none_or(|member| member.mana != 0)
-                || state.message != "Wind change! Calm Winds -> East Winds."
+                || !state.message.is_empty()
             {
                 return Err(io::Error::other(format!(
                     "route smoke `{case_name}` did not apply the public Rel Hur wind mapping"

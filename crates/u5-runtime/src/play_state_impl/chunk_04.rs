@@ -178,16 +178,26 @@ impl PlayState {
             self.message = "Not here!".to_string();
             return MoveOutcome::Blocked;
         }
-        if direction.is_none() && !pass {
-            self.request_cast_argument(CastArgumentRequest::Direction);
-            return MoveOutcome::Blocked;
-        }
+        // `magic.md §5` steps 4-6 precede the handler: "Charge and mana are
+        // already spent when a handler prompts", and "No later gate can fail
+        // after a prompt opens" (`weather.md §3`: the pipeline "consumes the
+        // appropriate pre-mixed charge, prompts for a direction, and then
+        // routes to the wind setter").
         if let Some(outcome) =
             self.cast_spell_resource_gate(caster_index, REL_HUR_SPELL_INDEX, REL_HUR_COST)
         {
             return outcome;
         }
+        if direction.is_none() && !pass {
+            self.request_cast_argument(CastArgumentRequest::Direction);
+            return MoveOutcome::Blocked;
+        }
+        self.confirm_spent_rel_hur(direction, pass)
+    }
 
+    /// Finish Rel Hur after the dispatcher has already consumed its charge
+    /// and mana (`magic.md §5`).
+    pub fn confirm_spent_rel_hur(&mut self, direction: Option<Direction>, pass: bool) -> MoveOutcome {
         if pass {
             self.advance_turn();
             // Measured 2026-09-07: Space completes the scroll's own
@@ -200,17 +210,20 @@ impl PlayState {
             self.message.clear();
             return MoveOutcome::Cast;
         }
+        let Some(direction) = direction else {
+            return MoveOutcome::Blocked;
+        };
 
-        let previous = self.wind.status_message();
-        let next = WindState::rel_hur_target(direction.expect("direction checked above"))
+        let next = WindState::rel_hur_target(direction)
             .expect("inline Rel Hur parser returns cardinal directions only");
         self.apply_wind_state(next);
         self.advance_turn();
-        self.message = format!(
-            "Wind change! {} -> {}.",
-            previous,
-            self.wind_status_message()
-        );
+        // `weather.md §3`: an accepted direction prints its direction name,
+        // then the setter stores and repaints the wind banner. `magic.md
+        // §5.1` lists Rel Hur under "No generic completion line", and
+        // `Wind change!` is the scroll-dispatch banner, not a spell line.
+        let _ = self.complete_open_direction_echo(SPELL_DIRECTION_PROMPT_PREFIX, direction.name());
+        self.message.clear();
         MoveOutcome::Cast
     }
 

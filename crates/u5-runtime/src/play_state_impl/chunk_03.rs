@@ -1648,6 +1648,13 @@ impl PlayState {
                 return Ok(Some((outcome, combat)));
             }
         }
+        if session.spell_code == "HR" {
+            // `magic.md §5`: the charge and mana were spent before the
+            // `Direction-` prompt opened, so the answer only finishes it.
+            let outcome =
+                self.confirm_spent_rel_hur(parse_inline_cardinal_direction(tail), tail == " ");
+            return Ok(Some((outcome, combat)));
+        }
         let directed_utility_spell = match session.spell_code.as_str() {
             "AY" => Some(VANISH_SPELL_INDEX),
             "AS" => Some(OPEN_SPELL_INDEX),
