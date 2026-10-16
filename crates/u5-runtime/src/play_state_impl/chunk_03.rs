@@ -996,8 +996,12 @@ impl PlayState {
                     // prompt row the pick completed, so it opens with a
                     // feed and one blank row stands between them. A
                     // capture reads `Swap Avatar`, a blank row, then
-                    // `Avatar must lead!` (`cleak/u5-engine#5`).
-                    self.message = format!("\n{NEW_ORDER_LEADER_REFUSAL}");
+                    // `Avatar must lead!` (`cleak/u5-engine#5`). The name
+                    // is the leader's actual name (`commands.md §6`).
+                    self.message = format!(
+                        "\n{}",
+                        new_order_leader_refusal(&self.party_member_display_name(0))
+                    );
                 } else {
                     self.start_party_selector(PartySelectorTarget::NewOrder { first: Some(index) });
                 }
@@ -1008,8 +1012,12 @@ impl PlayState {
                     // prompt row the pick completed, so it opens with a
                     // feed and one blank row stands between them. A
                     // capture reads `Swap Avatar`, a blank row, then
-                    // `Avatar must lead!` (`cleak/u5-engine#5`).
-                    self.message = format!("\n{NEW_ORDER_LEADER_REFUSAL}");
+                    // `Avatar must lead!` (`cleak/u5-engine#5`). The name
+                    // is the leader's actual name (`commands.md §6`).
+                    self.message = format!(
+                        "\n{}",
+                        new_order_leader_refusal(&self.party_member_display_name(0))
+                    );
                 } else {
                     // The result completes the `with ` line with `!`; the
                     // shared swap routine moves the whole records and
@@ -4598,7 +4606,7 @@ impl PlayState {
         // refuses because the leader must remain first, and it returns
         // without consuming a turn.
         if first == 0 || second == 0 {
-            self.message = NEW_ORDER_LEADER_REFUSAL.to_string();
+            self.message = new_order_leader_refusal(&self.party_member_display_name(0));
             return MoveOutcome::Blocked;
         }
         // commands.md §6: picking the same nonzero slot twice is accepted as

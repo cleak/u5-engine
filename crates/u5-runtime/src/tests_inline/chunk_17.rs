@@ -2446,15 +2446,18 @@
                 level: 3,
             },
         ];
+        // commands.md §6: the refusal names the leader's actual name, not
+        // a fixed `Avatar`.
+        state.party_names = vec![*b"Maria\0\0\0\0", *b"Iolo\0\0\0\0\0", *b"Dupre\0\0\0\0"];
         let original = state.party.clone();
 
         assert_eq!(state.new_order_from_suffix("12"), MoveOutcome::Blocked);
-        assert_eq!(state.message, NEW_ORDER_LEADER_REFUSAL);
+        assert_eq!(state.message, "Maria must lead!");
         assert_eq!(state.party, original);
         assert_eq!(state.turn, 0);
 
         assert_eq!(state.new_order_from_suffix("31"), MoveOutcome::Blocked);
-        assert_eq!(state.message, NEW_ORDER_LEADER_REFUSAL);
+        assert_eq!(state.message, "Maria must lead!");
         assert_eq!(state.party, original);
         assert_eq!(state.turn, 0);
     }
@@ -2530,7 +2533,10 @@
         assert_eq!(state.turn, 0);
 
         assert_eq!(state.new_order_from_suffix("11"), MoveOutcome::Blocked);
-        assert_eq!(state.message, NEW_ORDER_LEADER_REFUSAL);
+        assert_eq!(
+            state.message,
+            new_order_leader_refusal(&state.party_member_display_name(0))
+        );
         assert_eq!(state.party, original);
         assert_eq!(state.turn, 0);
 

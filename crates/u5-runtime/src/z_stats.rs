@@ -1162,8 +1162,15 @@ impl PartySelectorTarget {
 /// `cleak/u5-spec#194` capture: the two N-New Order selector prompts.
 pub const NEW_ORDER_FIRST_PROMPT: &str = "Swap ";
 pub const NEW_ORDER_SECOND_PROMPT: &str = "with ";
-/// `cleak/u5-spec#194` capture: picking the leader in either prompt.
-pub const NEW_ORDER_LEADER_REFUSAL: &str = "Avatar must lead!";
+/// `commands.md §6`: picking the leader in either prompt prints the
+/// leader's actual name followed by this suffix (`Avatar must lead!` is the
+/// example for a leader named Avatar).
+pub const NEW_ORDER_LEADER_REFUSAL_SUFFIX: &str = " must lead!";
+
+/// `commands.md §6`: the leader refusal line for a leader named `leader`.
+pub fn new_order_leader_refusal(leader: &str) -> String {
+    format!("{leader}{NEW_ORDER_LEADER_REFUSAL_SUFFIX}")
+}
 /// **Measured** 2026-09-07: the New Order selector's own cancel word.
 pub const NEW_ORDER_CANCEL_REPLY: &str = "nobody!";
 
