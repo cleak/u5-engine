@@ -10,8 +10,10 @@
             PlayInputDisposition::Continue
         );
 
-        assert_eq!(missing_direction.spell_charges[FIRE_FIELD_SPELL_INDEX], 1);
-        assert_eq!(missing_direction.party[0].mana, FIELD_SPELL_COST);
+        // `magic.md §5` (issue #277): the handler's prompt is reached with
+        // the charge and mana already spent.
+        assert_eq!(missing_direction.spell_charges[FIRE_FIELD_SPELL_INDEX], 0);
+        assert_eq!(missing_direction.party[0].mana, 0);
         assert_eq!(missing_direction.turn, 0);
         assert_eq!(
             missing_direction.pending_cast_argument,
@@ -92,13 +94,13 @@
             PlayInputDisposition::Continue
         );
 
-        assert_eq!(missing_direction.spell_charges[DISPEL_FIELD_SPELL_INDEX], 1);
-        assert_eq!(missing_direction.party[0].mana, DISPEL_FIELD_COST);
-        assert_eq!(missing_direction.turn, 0);
-        assert_eq!(
-            missing_direction.pending_cast_argument,
-            Some(CastArgumentRequest::Direction)
-        );
+        // `magic.md §8` (R513): the dungeon arm raises no direction prompt;
+        // with no field in the own or facing cell it is an ordinary failure.
+        assert_eq!(missing_direction.spell_charges[DISPEL_FIELD_SPELL_INDEX], 0);
+        assert_eq!(missing_direction.party[0].mana, 0);
+        assert_eq!(missing_direction.turn, 1);
+        assert_eq!(missing_direction.pending_cast_argument, None);
+        assert_eq!(missing_direction.message, "Failed!");
 
         let mut wrong_scene = test_state(open_grid(), 1, 1);
         wrong_scene.spell_charges[DISPEL_FIELD_SPELL_INDEX] = 1;
@@ -667,6 +669,8 @@
         );
 
         assert_eq!(state.wind, WindState::East);
+        // `magic.md §5` (issue #277): the handler's prompt is reached with
+        // the charge and mana already spent.
         assert_eq!(state.spell_charges[REL_HUR_SPELL_INDEX], 0);
         assert_eq!(state.party[0].mana, 1);
         assert_eq!(state.turn, 0);

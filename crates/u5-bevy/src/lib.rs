@@ -16056,7 +16056,17 @@ fn render_visual_play_frame_over_viewport(
         VIEWPORT_ORIGIN_X,
         VIEWPORT_ORIGIN_Y,
     );
-    blit_active_view_overlay_rgba(&mut rgba, width, height, state, atlas.depth);
+    blit_active_view_overlay_rgba(
+        &mut rgba,
+        width,
+        height,
+        state,
+        atlas.depth,
+        Some(u5_runtime::DungeonViewFonts {
+            text: ctx.ibm,
+            runic: ctx.runes,
+        }),
+    );
     rgba
 }
 
@@ -17198,8 +17208,11 @@ fn blit_active_view_overlay_rgba(
     dst_height: usize,
     state: &PlayState,
     depth: TileGraphicsDepth,
+    fonts: Option<u5_runtime::DungeonViewFonts<'_>>,
 ) {
-    let Some(overlay) = state.render_active_view_overlay(depth) else {
+    // `view.md §6.2`: the dungeon V-View glyphs come from the two fixed
+    // fonts this compositor already holds for text.
+    let Some(overlay) = state.render_active_view_overlay_with_fonts(depth, fonts) else {
         return;
     };
     // `view.md §6`/`dungeon-mode.md §12.1`: dungeon V-View and the
@@ -17727,6 +17740,9 @@ fn advance_visual_wait_frame(
     game_dir: &Path,
     prompt_cursor_visible: &mut bool,
 ) -> bool {
+    // `view.md §4`: the modal local view's key wait blinks the party
+    // marker on every fourth idle poll; each wait pump is one poll.
+    state.poll_view_overlay_idle();
     if visual_line_prompt_active(state) {
         *prompt_cursor_visible = !*prompt_cursor_visible;
         true

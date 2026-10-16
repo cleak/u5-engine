@@ -1563,8 +1563,12 @@ impl PlayState {
                 else {
                     continue;
                 };
-                let terrain_index = terrain_band_active_index(row, col).unwrap();
-                self.terrain_band[terrain_index] = terrain;
+                // `visibility.md §10`: "the path queries the world-tile
+                // getter at the cell's world coordinates and writes the
+                // resulting tile byte" into the grid, so the cell becomes a
+                // direct terrain tile (first bank, §9) and a stationary
+                // water-bound slot sees a nonzero byte and restamps.
+                self.visibility_grid[grid_index] = terrain;
             }
         }
         self.composite_active_objects_into_visibility_buffers(area, radius);
@@ -1653,6 +1657,20 @@ impl PlayState {
         Some(self.animation.resolve_static_tile(tile))
     }
 
+    /// The visibility-grid byte the compositor's guards and branch tests
+    /// see. `visibility.md §4`: "grid cells resolved by the carve = real
+    /// tile bytes", and §11's arena blat-copy puts the arena terrain in the
+    /// grid byte-for-byte, so the §8 seated branch fires when that byte is
+    /// the chair `0x92`. This engine keeps a resolved cell's terrain in the
+    /// companion band and its brightness marker in the grid, so for a cell
+    /// still holding a clear/dim marker the real byte is the band's.
+    fn compositor_grid_byte(&self, grid_index: usize, terrain_index: usize) -> u8 {
+        match self.visibility_grid[grid_index] {
+            VISIBILITY_CLEAR | VISIBILITY_DIM_PERIPHERY => self.terrain_band[terrain_index],
+            byte => byte,
+        }
+    }
+
     fn composite_combat_object_into_visibility_buffers(&mut self, object: ActiveObject) {
         if object.is_empty() {
             return;
@@ -1667,7 +1685,7 @@ impl PlayState {
         ) else {
             return;
         };
-        let current_grid_byte = self.visibility_grid[grid_index];
+        let current_grid_byte = self.compositor_grid_byte(grid_index, terrain_index);
         let object_x = object.x as isize;
         let object_y = object.y as isize;
         let current_terrain = self
@@ -1781,7 +1799,7 @@ impl PlayState {
         }
         let grid_index = visibility_grid_active_index(row, col).unwrap();
         let terrain_index = terrain_band_active_index(row, col).unwrap();
-        let current_grid_byte = self.visibility_grid[grid_index];
+        let current_grid_byte = self.compositor_grid_byte(grid_index, terrain_index);
         // `visibility.md §8`: "Terrain-aware stamps use the live
         // world/combat tile at the object's coordinate, plus one
         // neighbouring row for a few edge shapes." The read is against the map
@@ -2779,23 +2797,11 @@ impl PlayState {
             }
         }
 
-        if let Some(floor) = self.current_floor() {
-            for object in &self.active_objects {
-                if object.is_empty()
-                    || object.z != floor
-                    || !is_local_light_source_tile(object.tile)
-                {
-                    continue;
-                }
-                let x = object.x as isize;
-                let y = object.y as isize;
-                if surface_local_light_mask_index(origin_x, origin_y, x, y, wrap_world).is_some() {
-                    self.carve_surface_local_light_source(
-                        x, y, origin_x, origin_y, wrap_world, &mut mask,
-                    );
-                }
-            }
-        }
+        // `visibility.md §12.1` step 2 scans only the map window's terrain
+        // ids. Actor bytes are a separate storage domain the classifier
+        // never sees (§6; `active-objects.md`): actor `0xDC` is a Dragon
+        // frame and `0xBC` an Insect Swarm frame, not a moon gate and a
+        // fireplace, so active objects contribute no light here.
         if self.local_light_mask.as_slice() != mask.as_slice() {
             self.local_light_mask.copy_from_slice(&mask);
             self.mark_visibility_dirty();

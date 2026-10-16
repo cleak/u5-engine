@@ -633,8 +633,10 @@
         // `commands.md §5.2`: the prompt is the bare `Direction-` echo; the
         // help sentence the engine used to append is gone.
         assert_eq!(state.message, crate::SPELL_DIRECTION_PROMPT_PREFIX);
-        assert_eq!(state.spell_charges[BLINK_SPELL_INDEX], 1);
-        assert_eq!(state.party[0].mana, BLINK_COST);
+        // `magic.md §5` (issue #277): the prompt is reached with the charge
+        // and mana already spent.
+        assert_eq!(state.spell_charges[BLINK_SPELL_INDEX], 0);
+        assert_eq!(state.party[0].mana, 0);
         assert_eq!(state.turn, 0);
 
         assert!(
@@ -692,8 +694,9 @@
         assert!(state.step_active_cast(' ', "", Path::new("")).unwrap().is_none());
         assert!(state.active_cast_followup.is_some());
         assert_eq!(state.message, USE_POTION_TARGET_PROMPT);
-        assert_eq!(state.spell_charges[HEAL_SPELL_INDEX], 1);
-        assert_eq!(state.party[0].mana, HEAL_COST);
+        // `magic.md §5` (issue #277): spent before `On who: ` opens.
+        assert_eq!(state.spell_charges[HEAL_SPELL_INDEX], 0);
+        assert_eq!(state.party[0].mana, 0);
         assert_eq!(state.turn, 0);
 
         assert!(
@@ -741,18 +744,12 @@
         assert!(state.step_active_cast('P', "RV", Path::new("")).unwrap().is_none());
         assert!(state.step_active_cast(' ', "", Path::new("")).unwrap().is_none());
         assert!(state.active_cast_followup.is_some());
-        assert!(state.message.contains("To phase?"));
-        assert_eq!(state.spell_charges[GATE_TRAVEL_SPELL_INDEX], 1);
-        assert_eq!(state.party[0].mana, GATE_TRAVEL_COST);
+        // `magic.md §8` handler-family map: "prompts `To phase:_`".
+        assert!(state.message.ends_with("To phase:_"), "{:?}", state.message);
+        // `magic.md §5` (issue #277): spent before the phase prompt opens.
+        assert_eq!(state.spell_charges[GATE_TRAVEL_SPELL_INDEX], 0);
+        assert_eq!(state.party[0].mana, 0);
         assert_eq!(state.turn, 0);
-
-        assert!(
-            state
-                .step_active_cast_followup('9', "", Path::new(""))
-                .unwrap()
-                .is_none()
-        );
-        assert!(state.active_cast_followup.is_some());
 
         let result = state
             .step_active_cast_followup('1', "", Path::new(""))
@@ -764,6 +761,71 @@
         assert_eq!(state.party[0].mana, 0);
         assert_eq!(state.turn, 1);
         assert_eq!(state.message, "Failed!");
+    }
+
+    /// `magic.md §8` handler-family map, Gate travel: "A key outside
+    /// `1`..`8` [...] report[s] the ordinary `Failed!`" - neither a `None!`
+    /// cancel nor an ignored key - and the charge and mana stay spent.
+    #[test]
+    fn active_cast_gate_phase_key_outside_one_to_eight_fails() {
+        for key in ['9', '0', '\u{1b}', 'x'] {
+            let mut state = britannia_state(open_world_grid(), 1, 1);
+            state.spell_charges[GATE_TRAVEL_SPELL_INDEX] = 1;
+            state.party[0].mana = GATE_TRAVEL_COST;
+            state.party[0].level = GATE_TRAVEL_COST;
+            state.active_player = Some(0);
+            assert_eq!(state.start_cast_spell_prompt(), MoveOutcome::Observed);
+            assert!(state.step_active_cast('P', "RV", Path::new("")).unwrap().is_none());
+            assert!(state.step_active_cast(' ', "", Path::new("")).unwrap().is_none());
+            assert!(state.active_cast_followup.is_some());
+
+            let result = state
+                .step_active_cast_followup(key, "", Path::new(""))
+                .unwrap()
+                .unwrap_or_else(|| panic!("key {key:?} must end the phase prompt"));
+            assert_eq!(result.0, MoveOutcome::Blocked);
+            assert!(state.active_cast_followup.is_none());
+            assert_eq!(state.message, "Failed!", "key {key:?}");
+            assert_eq!(state.spell_charges[GATE_TRAVEL_SPELL_INDEX], 0);
+            assert_eq!(state.party[0].mana, 0);
+            assert_eq!(state.turn, 1);
+        }
+    }
+
+    /// `magic.md §8` handler-family map, Gate travel: "Refuses while the
+    /// party is aboard a frigate or a skiff **before** printing anything,
+    /// so that transcript is a bare `Failed!` with no `To phase:_` row."
+    #[test]
+    fn gate_travel_aboard_skiff_or_frigate_fails_before_phase_prompt() {
+        let transports = [
+            TransportState::Skiff {
+                type_byte: FIRST_PLAYABLE_SKIFF_TILE,
+                tile: FIRST_PLAYABLE_SKIFF_TILE,
+            },
+            TransportState::Ship {
+                type_byte: 0x20,
+                tile: 0x20,
+                sails_hoisted: false,
+                hull: 99,
+                skiffs: 1,
+            },
+        ];
+        for transport in transports {
+            let mut state = britannia_state(open_world_grid(), 1, 1);
+            state.player.transport = transport;
+            state.spell_charges[GATE_TRAVEL_SPELL_INDEX] = 1;
+            state.party[0].mana = GATE_TRAVEL_COST;
+            state.party[0].level = GATE_TRAVEL_COST;
+            state.active_player = Some(0);
+            assert_eq!(state.start_cast_spell_prompt(), MoveOutcome::Observed);
+            assert!(state.step_active_cast('P', "RV", Path::new("")).unwrap().is_none());
+            let finished = state.step_active_cast(' ', "", Path::new("")).unwrap();
+            assert!(finished.is_some(), "{transport:?} must not open the phase prompt");
+            assert!(state.active_cast_followup.is_none());
+            assert_eq!(state.message, "Failed!", "{transport:?}");
+            assert_eq!(state.spell_charges[GATE_TRAVEL_SPELL_INDEX], 0);
+            assert_eq!(state.party[0].mana, 0);
+        }
     }
 
     /// `magic.md §6` Step 6: "The handler prints `Mixing...`, pauses
@@ -834,6 +896,37 @@
         assert_eq!(state.spell_charges[IN_LOR_SPELL_INDEX], 1);
         assert_eq!(state.turn, 0);
         assert_eq!(state.message, "Mixing...\n\nDone!");
+    }
+
+    /// `magic.md §6` step 4, "What Return does": "A leading minus is
+    /// accepted by the reader but never survives validation [...] a
+    /// negative quantity is larger than any counter, always takes the
+    /// shortfall notice, and can never be accepted or consume a reagent."
+    #[test]
+    fn active_mix_negative_quantity_takes_the_shortfall_notice() {
+        let mut state = test_state(open_grid(), 5, 5);
+        state.reagents = [0; REAGENT_COUNT];
+        state.reagents[REAGENT_SULFUR_ASH] = 9;
+
+        for (key, suffix) in [('M', ""), ('I', "L"), ('1', ""), ('M', ""), ('-', ""), ('5', "")] {
+            assert_eq!(
+                handle_play_key_input(&mut state, key, suffix, Path::new("")).unwrap(),
+                PlayInputDisposition::Continue
+            );
+        }
+        assert_eq!(
+            handle_play_key_input(&mut state, '\r', "", Path::new("")).unwrap(),
+            PlayInputDisposition::Continue
+        );
+        assert!(state.active_mix.is_some(), "the prompt is asked again: {:?}", state.message);
+        assert!(
+            state.message.starts_with(MMIX_INSUFFICIENT_REAGENTS_MESSAGE),
+            "{:?}",
+            state.message
+        );
+        assert!(state.message.contains(MMIX_QUANTITY_PROMPT_MESSAGE));
+        assert_eq!(state.reagents[REAGENT_SULFUR_ASH], 9);
+        assert_eq!(state.spell_charges[IN_LOR_SPELL_INDEX], 0);
     }
 
     #[test]
@@ -3548,7 +3641,7 @@
         assert_eq!(state.turn, 1);
         assert!(!state.combat_actors[7].is_phase_suppressed());
         assert!(state.visibility_dirty);
-        assert_eq!(state.message, "Revealed 1 combat actor(s).");
+        assert_eq!(state.message, "");
     }
 
     #[test]
@@ -3601,7 +3694,8 @@
         assert!(state.combat_actors[0].is_phase_suppressed());
         assert_eq!(state.active_objects[0].tile, COMBAT_HIDDEN_ACTIVE_OBJECT_TILE);
         assert!(state.visibility_dirty);
-        assert_eq!(state.message, "");
+        // `magic.md §8` issue-#225 table: Sanct Lor prints `Success!`.
+        assert_eq!(state.message, crate::commands::SPELL_SUCCESS_LINE);
     }
 
     #[test]
@@ -3770,7 +3864,7 @@
             state.combat_actors[7].hp_or_wound,
             cause_fear_forced_current_hp(combat_class_stats(COMBAT_CLASS_PYTHON).unwrap().max_hp)
         );
-        assert_eq!(state.message, "Cause Fear affected 2 combat actor(s).");
+        assert_eq!(state.message, "");
     }
 
     #[test]
@@ -3810,7 +3904,8 @@
         assert_eq!(cure.party[0].mana, 2);
         assert_eq!(cure.turn, 1);
         assert_eq!(cure.clock, GameClock::new(12, 1).unwrap());
-        assert_eq!(cure.message, "");
+        // `magic.md §8` issue-#225 table: An Nox prints `Success!`.
+        assert_eq!(cure.message, crate::commands::SPELL_SUCCESS_LINE);
 
         let mut awaken = dungeon_state(open_dungeon_record(), 0, 1, 1);
         awaken.party = vec![
@@ -4122,7 +4217,7 @@
     }
 
     #[test]
-    fn cast_restore_target_prompt_precedes_resource_consumption() {
+    fn cast_restore_target_prompt_follows_resource_consumption() {
         let mut missing_target = dungeon_state(open_dungeon_record(), 0, 1, 1);
         missing_target.spell_charges[CURE_SPELL_INDEX] = 1;
         missing_target.party[0].mana = CURE_COST;
@@ -4133,8 +4228,9 @@
             PlayInputDisposition::Continue
         );
 
-        assert_eq!(missing_target.spell_charges[CURE_SPELL_INDEX], 1);
-        assert_eq!(missing_target.party[0].mana, CURE_COST);
+        // `magic.md §5` (issue #277): spent before the handler prompts.
+        assert_eq!(missing_target.spell_charges[CURE_SPELL_INDEX], 0);
+        assert_eq!(missing_target.party[0].mana, 0);
         assert_eq!(missing_target.turn, 0);
         assert_eq!(
             missing_target.pending_cast_argument,
@@ -4151,8 +4247,8 @@
             PlayInputDisposition::Continue
         );
 
-        assert_eq!(invalid_target.spell_charges[CURE_SPELL_INDEX], 1);
-        assert_eq!(invalid_target.party[0].mana, CURE_COST);
+        assert_eq!(invalid_target.spell_charges[CURE_SPELL_INDEX], 0);
+        assert_eq!(invalid_target.party[0].mana, 0);
         assert_eq!(invalid_target.turn, 0);
         assert_eq!(invalid_target.message, "");
     }
@@ -4786,8 +4882,9 @@
             PlayInputDisposition::Continue
         );
 
-        assert_eq!(missing_direction.spell_charges[BLINK_SPELL_INDEX], 1);
-        assert_eq!(missing_direction.party[0].mana, BLINK_COST);
+        // `magic.md §5` (issue #277): spent before the handler prompts.
+        assert_eq!(missing_direction.spell_charges[BLINK_SPELL_INDEX], 0);
+        assert_eq!(missing_direction.party[0].mana, 0);
         assert_eq!(missing_direction.turn, 0);
         assert_eq!(
             missing_direction.pending_cast_argument,
@@ -4892,6 +4989,9 @@
         assert_eq!(state.clock, GameClock::new(12, 2).unwrap());
         assert!(state.visibility_dirty);
         assert!(state.diagnostics.iter().any(|n| n.contains("blinked to (3, 1)")), "{:?}", state.diagnostics);
+        // `magic.md §8` "What Blink prints": an accepted arena step prints
+        // `Success!` (audit A122/A002).
+        assert_eq!(state.message, crate::commands::SPELL_SUCCESS_LINE);
     }
 
     #[test]

@@ -2285,8 +2285,10 @@ impl PlayState {
             self.apply_combat_arena_field_placement(field, target_x, target_y, callback_accepts);
 
         self.advance_turn();
+        // `magic.md §5.1`: "Successful field placement adds no generic
+        // completion line."
         self.message = if applied.is_some() {
-            format!("{} field placed.", field.label())
+            String::new()
         } else {
             "Failed!".to_string()
         };
@@ -2496,8 +2498,12 @@ impl PlayState {
         };
 
         self.advance_turn();
+        // `magic.md §5.1`, the An Grav row: "successful combat field
+        // removal prints `Success!`."
         self.message = if let Some(application) = applied {
-            format!("Dispelled {} field.", application.field.label())
+            self.diagnostics
+                .push(format!("Dispelled {} field.", application.field.label()));
+            crate::commands::SPELL_SUCCESS_LINE.to_string()
         } else {
             "Failed!".to_string()
         };
@@ -2585,8 +2591,9 @@ impl PlayState {
             self.apply_combat_polymorph_giant_rat(target_slot)
         };
         self.advance_turn();
+        // `magic.md §5.1`: Rel Xen Bet prints `Success!` after the effect.
         self.message = if applied.is_some() {
-            "Polymorph!".to_string()
+            crate::commands::SPELL_SUCCESS_LINE.to_string()
         } else {
             "Failed!".to_string()
         };
@@ -4215,8 +4222,9 @@ impl PlayState {
         let applied =
             self.apply_combat_clone_with_legal_mask(target_slot, &legal_cells, &candidates);
         self.advance_turn();
+        // `magic.md §5.1`: In Quas Xen prints `Success!` after the effect.
         self.message = if applied.is_some() {
-            "Clone!".to_string()
+            crate::commands::SPELL_SUCCESS_LINE.to_string()
         } else {
             "Failed!".to_string()
         };
@@ -5386,14 +5394,14 @@ impl PlayState {
         let applied = Some(CombatTremorSpellDamageApplication { applications });
 
         self.advance_turn();
-        self.message = if applied
+        // `magic.md §5.1`: In Vas Por Ylem is in the "No generic completion
+        // line" row; the hit count is a diagnostic, not a player line.
+        let hits = applied
             .as_ref()
-            .is_some_and(|application| !application.applications.is_empty())
-        {
-            "Tremor!".to_string()
-        } else {
-            "Tremor found no target.".to_string()
-        };
+            .map_or(0, |application| application.applications.len());
+        self.diagnostics
+            .push(format!("Tremor damaged {hits} combat actor(s)."));
+        self.message.clear();
         MoveOutcome::Cast
     }
 
@@ -5889,11 +5897,11 @@ impl PlayState {
         let affected = apply_cause_fear_critical_hp_setup(&mut self.combat_actors, &accepted);
 
         self.advance_turn();
-        self.message = if affected == 0 {
-            "Repel Undead found no target.".to_string()
-        } else {
-            format!("Repel Undead! {affected} undead repelled.")
-        };
+        // `magic.md §5.1`: An Xen Corp is in the "No generic completion
+        // line" row; the count is a diagnostic, not a player line.
+        self.diagnostics
+            .push(format!("Repel Undead affected {affected} undead actor(s)."));
+        self.message.clear();
         MoveOutcome::Cast
     }
 

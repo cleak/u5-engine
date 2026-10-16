@@ -913,10 +913,49 @@
             viewport.width,
             LOCAL_VIEW_OVERLAY_SIDE * LOCAL_VIEW_CELL_PIXEL_SCALE
         );
-        // The marker's cross is drawn at the party's cell: row 5, column 5,
-        // at four pixels per cell, so its horizontal stroke runs y = 22,
-        // x = 20..23.
-        assert_eq!(viewport.pixel(20, 22), Some(15));
+        // `view.md §4`: the marker is a 4-by-4 box XOR-drawn with the
+        // slot-1 pen at the party's cell (row 5, column 5, four pixels per
+        // cell: x, y = 20..23), and it blinks on every fourth idle poll of
+        // the modal wait. With the box erased the cell shows its class
+        // drawing; with it up every pixel of the cell is that XOR 15.
+        let marked = viewport;
+        for _ in 0..4 {
+            state.poll_view_overlay_idle();
+        }
+        let unmarked = state.render_top_down_frame(5, &atlas).unwrap().unwrap();
+        for y in 20..24 {
+            for x in 20..24 {
+                assert_eq!(
+                    marked.pixel(x, y),
+                    unmarked.pixel(x, y).map(|pixel| pixel ^ 15),
+                    "({x}, {y})"
+                );
+            }
+        }
+        // Outside the party cell nothing changes.
+        assert_eq!(marked.pixel(19, 20), unmarked.pixel(19, 20));
+        for _ in 0..4 {
+            state.poll_view_overlay_idle();
+        }
+        let again = state.render_top_down_frame(5, &atlas).unwrap().unwrap();
+        assert_eq!(again.pixels, marked.pixels);
+        state.clear_active_view_overlay();
+        assert_eq!(state.view_overlay_idle_polls, 0);
+    }
+
+    #[test]
+    fn surface_view_marker_xor_inverts_the_cell_against_white() {
+        // `view.md §4`: "each pixel's colour index is inverted against
+        // white rather than set to a fixed colour": on a blank (0) cell
+        // that is white throughout.
+        let viewport = PlayState::render_surface_view_class_cell_for_mode(
+            TileGraphicsDepth::Ega16,
+            0,
+            0,
+            true,
+            ViewOverlayMode::GemView,
+        );
+        assert!(viewport.pixels.iter().all(|pixel| *pixel == 15));
     }
 
     #[test]
@@ -1090,6 +1129,61 @@
         // foreground pen, not the old full-width cross-bar's blue.
         assert_eq!(px(1, -1, cell / 2, cell / 2), Some(15));
         assert_eq!(px(-1, 1, cell / 2, cell / 2), Some(11));
+    }
+
+    #[test]
+    fn dungeon_view_with_fonts_blits_the_selected_font_glyph_opaquely() {
+        // `view.md §6.2`: each font class is an index into "whichever of
+        // the two fonts that class selects", drawn opaquely; the fountain
+        // and the energy field stay vector drawings.
+        let mut text = vec![0u8; CH_FONT_LEN];
+        let mut runic = vec![0u8; CH_FONT_LEN];
+        // Text glyph 0x7F: left half set on every row.
+        for row in 0..8 {
+            text[0x7F * 8 + row] = 0xF0;
+        }
+        // Runic glyph 0x74: a single top-left pixel; runic 0x7F stays blank.
+        runic[0x74 * 8] = 0x80;
+        // Runic 0x60, the party arrowhead: top-right pixel only.
+        runic[0x60 * 8] = 0x01;
+        let text = parse_ch_font(&text, "text").unwrap();
+        let runic = parse_ch_font(&runic, "runic").unwrap();
+        let fonts = DungeonViewFonts {
+            text: &text,
+            runic: &runic,
+        };
+
+        let mut grid = open_dungeon_record();
+        grid[dungeon_cell_index(0, 2, 1)] = 0xB0; // bedrock: text 0x7F
+        grid[dungeon_cell_index(0, 0, 1)] = 0xB1; // latticed wall: runic 0x74
+        grid[dungeon_cell_index(0, 2, 0)] = 0x50; // fountain: vector
+        let state = dungeon_state(grid, 0, 1, 1);
+        let viewport =
+            state.render_dungeon_view_overlay_with_fonts(0, TileGraphicsDepth::Ega16, Some(fonts));
+        let cell = DUNGEON_GEM_VIEW_CELL_PIXELS;
+        let (party_x, party_y) = DUNGEON_GEM_VIEW_PARTY_CELL;
+        let px = |dx: isize, dy: isize, lx: usize, ly: usize| {
+            let x = (party_x as isize + dx) as usize * cell + lx;
+            let y = (party_y as isize + dy) as usize * cell + ly;
+            viewport.pixel(x, y).unwrap()
+        };
+        // Bedrock: left four columns lit, right four black, all rows.
+        for row in 0..8 {
+            assert_ne!(px(1, 0, 0, row), 0);
+            assert_ne!(px(1, 0, 3, row), 0);
+            assert_eq!(px(1, 0, 4, row), 0);
+            assert_eq!(px(1, 0, 7, row), 0);
+        }
+        // Latticed wall: only the top-left pixel.
+        assert_ne!(px(-1, 0, 0, 0), 0);
+        assert_eq!(px(-1, 0, 1, 0), 0);
+        assert_eq!(px(-1, 0, 0, 7), 0);
+        assert_eq!(px(-1, 0, 7, 7), 0);
+        // Party marker from runic 0x60: top-right pixel only, no cross.
+        assert_ne!(px(0, 0, 7, 0), 0);
+        assert_eq!(px(0, 0, cell / 2, 0), 0);
+        // Fountain keeps its §12.5 vector basin.
+        assert_eq!(px(1, -1, cell / 2, cell / 2), 15);
     }
 
     #[test]
@@ -1346,12 +1440,38 @@
         assert_eq!(
             surface_view_audit_mask(0x0A, 0x03, x_ray), [[0, 9, 0, 0], [0, 0, 0, 9], [0, 9, 0, 0], [0, 0, 0, 9]]);
 
-        // River `0x60` has no shoreline bits: all four corners use the fixed
-        // secondary source. `0x69` selects modal corners for bits 0 and 3.
-        assert_eq!(
-            surface_view_audit_mask(0x0A, 0x60, gem), [[0, 10, 0, 0], [0, 0, 0, 10], [0, 10, 0, 0], [0, 0, 0, 10]]);
-        assert_eq!(
-            surface_view_audit_mask(0x0A, 0x69, gem), [[0, 9, 0, 0], [0, 0, 0, 10], [0, 10, 0, 0], [0, 0, 0, 9]]);
+        // `view.md §4` river-family corner table, corner order `(1,0)`,
+        // `(3,1)`, `(1,2)`, `(3,3)`; G = 10, B = 9. The table is per tile
+        // (`0x60` and `0x66` share a pattern), not the raw low nibble.
+        for (tile, corners) in [
+            (0x60, "GBGB"),
+            (0x61, "GBBG"),
+            (0x62, "GBGG"),
+            (0x63, "GGGB"),
+            (0x64, "GGBB"),
+            (0x65, "GBBG"),
+            (0x66, "GBGB"),
+            (0x67, "GBBB"),
+            (0x68, "GBBB"),
+            (0x69, "BBBG"),
+            (0x6C, "GGGB"),
+            (0x6D, "GGBG"),
+            (0x6E, "BGGG"),
+            (0x6F, "GBGG"),
+            (0xE4, "BBBB"),
+            (0xE7, "BBBB"),
+        ] {
+            let mask = surface_view_audit_mask(0x0A, tile, gem);
+            let got: String = [mask[0][1], mask[1][3], mask[2][1], mask[3][3]]
+                .iter()
+                .map(|pixel| match pixel {
+                    10 => 'G',
+                    9 => 'B',
+                    _ => '?',
+                })
+                .collect();
+            assert_eq!(got, corners, "tile {tile:#04x}");
+        }
     }
 
     #[test]
@@ -2526,51 +2646,32 @@
         assert!(!state.town_cell_visible_with_light_threshold(8, 3, 8, 6, 6, 0));
     }
 
+    /// `visibility.md §12.1` step 2 scans the map window's terrain only;
+    /// §6 keeps actor bytes in a separate domain, so a Dragon frame `0xDC`
+    /// or an Insect Swarm frame `0xBC` lights nothing (audit A186). These
+    /// tests used to pin the withdrawn actor-light loop.
     #[test]
-    fn active_object_local_light_sources_contribute_to_surface_visibility() {
-        let mut state = test_state(open_grid(), 10, 10);
-        state.ambient_light = DAWN_DUSK_LIGHT[1];
-        state.active_objects.push(ActiveObject {
-            type_byte: 0xDC,
-            tile: 0xDC,
-            x: 10,
-            y: 18,
-            z: 0,
-            phase: STEADY_PHASE,
-            aux1: 0,
-            aux3: 0,
-        });
-        state.rebuild_surface_local_light_mask();
+    fn active_object_frames_in_the_light_source_band_light_nothing() {
+        for frame in [0xDC, 0xBC, 0xDE, 0xB0] {
+            let mut state = test_state(open_grid(), 8, 3);
+            state.active_objects.push(ActiveObject {
+                type_byte: frame,
+                tile: frame,
+                x: 8,
+                y: 8,
+                z: 0,
+                phase: STEADY_PHASE,
+                aux1: 0,
+                aux3: 0,
+            });
+            state.rebuild_surface_local_light_mask();
 
-        assert!(state.town_cell_visible_with_light_threshold(10, 10, 10, 18, 10, 1));
-        assert_eq!(
-            state
-                .render_text_view(10)
-                .lines()
-                .nth(19)
-                .unwrap()
-                .chars()
-                .nth(10),
-            Some('^')
-        );
-    }
-
-    #[test]
-    fn active_object_flame_local_light_source_contributes_to_surface_visibility() {
-        let mut state = test_state(open_grid(), 8, 3);
-        state.active_objects.push(ActiveObject {
-            type_byte: 0xDE,
-            tile: 0xDE,
-            x: 8,
-            y: 8,
-            z: 0,
-            phase: STEADY_PHASE,
-            aux1: 0,
-            aux3: 0,
-        });
-        state.rebuild_surface_local_light_mask();
-
-        assert!(state.town_cell_visible_with_light_threshold(8, 3, 8, 6, 6, 0));
+            assert!(
+                !state.town_cell_visible_with_light_threshold(8, 3, 8, 6, 6, 0),
+                "actor frame {frame:#04x} must not carve a light disc"
+            );
+            assert!(state.local_light_mask.iter().all(|lit| !*lit));
+        }
     }
 
     #[test]

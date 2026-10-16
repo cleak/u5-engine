@@ -307,6 +307,15 @@ impl FixedCellFont {
     }
 }
 
+/// The two fixed 8x8 one-bit fonts the dungeon V-View draws from
+/// (`view.md §6.2`): the text font (`IBM.CH`) and the runic font
+/// (`RUNES.CH`), as the frontend already loads them for text output.
+#[derive(Clone, Copy)]
+pub struct DungeonViewFonts<'a> {
+    pub text: &'a FixedCellFont,
+    pub runic: &'a FixedCellFont,
+}
+
 pub fn load_ibm_ch_font(game_dir: &std::path::Path) -> io::Result<FixedCellFont> {
     parse_ch_font(&read_disk_file(&game_dir.join(IBM_CH_FILE))?, IBM_CH_FILE)
 }

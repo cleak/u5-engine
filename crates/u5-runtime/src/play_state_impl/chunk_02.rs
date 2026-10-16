@@ -714,6 +714,21 @@ impl PlayState {
         suffix: &str,
         game_dir: &Path,
     ) -> io::Result<MoveOutcome> {
+        // A cast follow-up re-enters here with the answer appended and the
+        // resources already settled by the first entry; anything else
+        // starts unpaid. The flag never outlives one dispatch.
+        let already_spent = std::mem::take(&mut self.cast_resources_spent);
+        let outcome = self.dispatch_cast_spell_from_suffix(suffix, game_dir, already_spent);
+        self.cast_resources_spent = false;
+        outcome
+    }
+
+    fn dispatch_cast_spell_from_suffix(
+        &mut self,
+        suffix: &str,
+        game_dir: &Path,
+        already_spent: bool,
+    ) -> io::Result<MoveOutcome> {
         let spell_code = inline_spell_code(suffix);
         if spell_code.is_empty() {
             self.message = cast_prompt_message();
@@ -722,7 +737,6 @@ impl PlayState {
         let spell_index = spell_index_from_code(&spell_code);
         if spell_index.is_some()
             && parse_inline_party_index(suffix).is_some()
-            && spell_index != Some(TIME_STOP_SPELL_INDEX)
             && self.current_scene_absorbs_casts()
         {
             self.message = SCENE_ABSORBED_CAST_MESSAGE.to_string();
@@ -785,18 +799,39 @@ impl PlayState {
         // gate it eventually reached - `cast_spell_resource_gate`, whose own
         // ordering is right - sat behind the prompt.
         //
-        // This arm only *refuses*; the decrement stays where it was. §5 also
-        // says the charge is spent "immediately, before any further checks",
-        // which for a prompting spell means before its prompt rather than
-        // after the answer, and that is a second divergence this does not
-        // address - `cleak/u5-spec#277`.
+        // `magic.md §5` (clarified 2026-10-12, issue #277): "Steps 4 to 6
+        // precede the handler, so a handler's own prompt [...] is reached
+        // with the charge - and, for any spell that passed the mana gate,
+        // the mana - already spent. Cancelling the prompt returns neither."
+        // So the whole charge/mana/level gate runs here, once, and the
+        // handler's own gate call is told it has been paid. A follow-up
+        // answer re-enters with `already_spent` and is not charged again.
         if let (Some(spell_index), Some(caster_index)) =
             (spell_index, parse_inline_party_index(suffix))
             && self.party.get(caster_index).is_some()
-            && self.spell_charges[spell_index] == 0
+            // Step 1, "resolve the acting member (silent abort)", precedes
+            // the gates: a combat caster with no live arena actor is left
+            // to the handler's own `Who casts?` refusal, spending nothing.
+            && (!self.combat_active
+                || self
+                    .combat_actors
+                    .get(caster_index)
+                    .copied()
+                    .is_some_and(combat_actor_is_active_not_dead))
         {
-            self.emit_cast_gate_refusal(crate::magic::CastGateOutcome::NoneMixed);
-            return Ok(MoveOutcome::Blocked);
+            if !already_spent {
+                if self.spell_charges[spell_index] == 0 {
+                    self.emit_cast_gate_refusal(crate::magic::CastGateOutcome::NoneMixed);
+                    return Ok(MoveOutcome::Blocked);
+                }
+                if let Some(circle) = spell_circle_for(spell_index as u8)
+                    && let Some(outcome) =
+                        self.cast_spell_resource_gate(caster_index, spell_index, circle)
+                {
+                    return Ok(outcome);
+                }
+            }
+            self.cast_resources_spent = true;
         }
         match spell_code.as_str() {
             "AG" => {
@@ -1372,6 +1407,13 @@ impl PlayState {
                     self.request_cast_argument(CastArgumentRequest::Caster);
                     return Ok(MoveOutcome::Blocked);
                 };
+                // `magic.md §8` handler-family map: Gate Travel "[r]efuses
+                // while the party is aboard a frigate or a skiff **before**
+                // printing anything, so that transcript is a bare `Failed!`
+                // with no `To phase:_` row".
+                if self.party_is_shipboard_for_gate_travel() {
+                    return Ok(self.fail_committed_gate_travel());
+                }
                 let Some(slot_index) = parse_inline_gate_phase_index(suffix) else {
                     self.request_cast_argument(CastArgumentRequest::GatePhase);
                     return Ok(MoveOutcome::Blocked);

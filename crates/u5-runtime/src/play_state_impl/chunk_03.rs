@@ -1042,6 +1042,9 @@ impl PlayState {
             PartySelectorTarget::FountainDrink { direction } => {
                 self.look_surface_fountain_with_drinker(direction, index);
             }
+            PartySelectorTarget::DeathVision { x, y } => {
+                self.apply_death_vision_look_for_member(x, y, index);
+            }
         }
         true
     }
@@ -1317,9 +1320,9 @@ impl PlayState {
                 // same `On who: ` prompt a potion does, and the chosen
                 // member's name completes that row.
                 CastFollowupKind::PartyTarget => USE_POTION_TARGET_PROMPT.to_string(),
-                CastFollowupKind::GatePhase => {
-                    "To phase? _\nChoose moon phase 1-8; Esc cancels.".to_string()
-                }
+                // `magic.md §8` handler-family map: Gate Travel "prompts
+                // `To phase:_`". No key cancels it (see the reader below).
+                CastFollowupKind::GatePhase => "To phase:_".to_string(),
                 CastFollowupKind::CombatTarget { creature } => {
                     let label = if creature { "Creature" } else { "Target" };
                     let value = if session.buffer.is_empty() {
@@ -1431,19 +1434,22 @@ impl PlayState {
                     }
                 }
                 CastFollowupKind::GatePhase => {
-                    if matches!(ch, '\u{1b}' | ' ' | '\r' | '\n' | '0') {
-                        self.message = "None!".to_string();
-                        return Ok(None);
-                    }
-                    let Some(digit) = ch
+                    // `magic.md §8` handler-family map: the prompt "accepts a
+                    // digit `1`..`8` [...] A key outside `1`..`8` [...]
+                    // report[s] the ordinary `Failed!`". The charge and mana
+                    // were settled before the prompt opened (§5), so every
+                    // other key - Escape included - is a committed handler
+                    // failure, not a `None!` cancel and not ignored.
+                    let digit = ch
                         .to_digit(10)
                         .and_then(|digit| usize::try_from(digit).ok())
-                    else {
-                        continue;
+                        .filter(|digit| (1..=MOONSTONE_SLOT_COUNT).contains(digit));
+                    let Some(digit) = digit else {
+                        let combat = session
+                            .combat_actor_slot
+                            .map(|slot| (slot, session.combat_had_foe));
+                        return Ok(Some((self.fail_committed_gate_travel(), combat)));
                     };
-                    if !(1..=MOONSTONE_SLOT_COUNT).contains(&digit) {
-                        continue;
-                    }
                     return self.finish_active_cast_followup(session, &digit.to_string(), game_dir);
                 }
                 CastFollowupKind::CombatTarget { .. } => {
@@ -1676,6 +1682,9 @@ impl PlayState {
             return Ok(Some((outcome, combat)));
         }
         let suffix = format!("{}{}{}", session.caster_index + 1, session.spell_code, tail);
+        // The first dispatch settled charge, mana and level before opening
+        // this prompt (`magic.md §5`, issue #277).
+        self.cast_resources_spent = true;
         let outcome = self.cast_spell_from_suffix(&suffix, game_dir)?;
         Ok(Some((outcome, combat)))
     }
@@ -2119,7 +2128,14 @@ impl PlayState {
     }
 
     fn complete_mix_session(&mut self, session: &mut MixSession) -> Option<MoveOutcome> {
-        let amount = session.quantity_buffer.parse::<u8>().unwrap_or(0);
+        // `magic.md §6` step 4: "A leading minus is accepted by the reader
+        // but never survives validation: the comparison against the counters
+        // is unsigned, so a negative quantity is larger than any counter,
+        // always takes the shortfall notice". Read the sign rather than let
+        // a failed unsigned parse turn `-5` into the silent zero exit.
+        let signed_amount = session.quantity_buffer.parse::<i16>().unwrap_or(0);
+        let negative = signed_amount < 0;
+        let amount = u8::try_from(signed_amount).unwrap_or(0);
         // `magic.md §6` step 4: a zero quantity "prints nothing further".
         // For the interactive prompt that is stronger than printing an empty
         // message - the prompt's own row is still open, with the cursor in
@@ -2134,12 +2150,18 @@ impl PlayState {
         // *next* command prompt, not to this one - which is exactly what
         // `cleak/u5-spec#272` answer 2 had to disentangle from two captures
         // that looked contradictory.
-        if amount == 0 {
+        if amount == 0 && !negative {
             return Some(MoveOutcome::PromptDeclined);
         }
-        if amount > 0 {
+        if negative && session.reagent_mask == 0 {
+            // Step 5: an empty selection with a nonzero (here: unsigned-large)
+            // quantity is `Nothing to mix!`.
+            self.message = MMIX_EMPTY_SELECTION_MESSAGE.to_string();
+            return Some(MoveOutcome::Blocked);
+        }
+        if amount > 0 || negative {
             for index in selected_reagent_indices(session.reagent_mask) {
-                if self.reagents[index] < amount {
+                if negative || self.reagents[index] < amount {
                     session.quantity_buffer.clear();
                     self.message = format!(
                         "{}\n{}",
@@ -5295,11 +5317,11 @@ impl PlayState {
             self.mark_visibility_dirty();
         }
         self.advance_turn();
-        self.message = if revealed == 0 {
-            "Reveal found nothing.".to_string()
-        } else {
-            format!("Revealed {revealed} combat actor(s).")
-        };
+        // `magic.md §5.1`: Wis Quas is in the "No generic completion line"
+        // row; the count is a diagnostic, not a player line.
+        self.diagnostics
+            .push(format!("Reveal uncovered {revealed} combat actor(s)."));
+        self.message.clear();
         MoveOutcome::Cast
     }
 
@@ -5329,9 +5351,11 @@ impl PlayState {
             .is_some_and(CombatLinkedVisibilityOutcome::changed);
         if applied {
             self.mark_visibility_dirty();
-            // Measured 2026-09-07: Lor Sanct in the arena prints nothing
-            // beyond its own `Spell name:` rows.
-            self.message.clear();
+            // `magic.md §8` issue-#225 table: "Invisibility, Sanct Lor |
+            // `Success!\n`; no `Invisibility!` banner" - a fresh trace of the
+            // shared completion, which supersedes the 2026-09-07 capture that
+            // showed nothing (issue #231, still open on the capture side).
+            self.message = crate::commands::SPELL_SUCCESS_LINE.to_string();
             MoveOutcome::Cast
         } else {
             self.fail_committed_spell_cast();
@@ -5375,11 +5399,11 @@ impl PlayState {
         let affected = apply_cause_fear_critical_hp_setup(&mut self.combat_actors, &accepted);
 
         self.advance_turn();
-        self.message = if affected == 0 {
-            "Cause Fear found no target.".to_string()
-        } else {
-            format!("Cause Fear affected {affected} combat actor(s).")
-        };
+        // `magic.md §5.1`: In Quas Corp is in the "No generic completion
+        // line" row; the count is a diagnostic, not a player line.
+        self.diagnostics
+            .push(format!("Cause Fear affected {affected} combat actor(s)."));
+        self.message.clear();
         MoveOutcome::Cast
     }
 
@@ -5411,6 +5435,12 @@ impl PlayState {
         // `stats-panel.md §2.2.1` row 3: Awaken's status change is deferred.
         self.stats_panel_command_refresh = crate::stats_panel::PanelRefreshMode::Deferred;
         self.party[target_index].status = b'G';
+        // `magic.md §8` Healing effects: "In combat it also wakes the
+        // matching combat descriptor for that selected member" - the same
+        // wake the blue potion's combat arm performs.
+        if self.clear_combat_party_sleep_presentation(target_index) {
+            self.mark_visibility_dirty();
+        }
         self.advance_turn();
         // Measured: waking a sleeping member prints nothing, the same
         // way the blue potion's wake does.
@@ -5446,9 +5476,10 @@ impl PlayState {
         self.stats_panel_command_refresh = crate::stats_panel::PanelRefreshMode::Deferred;
         self.party[target_index].status = b'G';
         self.advance_turn();
-        // The cure's success line is not measured; its sibling An Zu is
-        // silent, so this stays silent rather than invent one.
-        self.message.clear();
+        // `magic.md §8` issue-#225 table: "Cure, An Nox | `Success!\n`; no
+        // `Cured` or `Poison cured!` line" (`§5.1` lists An Nox in the
+        // `Success!` row). Its sibling An Zu is the silent one.
+        self.message = crate::commands::SPELL_SUCCESS_LINE.to_string();
         MoveOutcome::Cast
     }
 
@@ -6116,21 +6147,11 @@ impl PlayState {
             self.message = "Not here!".to_string();
             return MoveOutcome::Blocked;
         };
-        let Some(direction) = direction else {
-            self.request_cast_argument(CastArgumentRequest::Direction);
-            return MoveOutcome::Blocked;
-        };
-        if !direction.is_cardinal() {
-            // `magic.md §8` "Directed utility tile helpers": the shared spell
-            // direction prompt takes "a cardinal choice ... Space echoes
-            // `Pass` ...; any other key re-prompts, and the prompt cannot be
-            // escaped except by a cardinal or Space". A diagonal therefore
-            // re-opens the prompt silently, exactly as the combat arm of this
-            // same spell already does; the engine-voice sentence that used to
-            // stand here was invented.
-            self.request_cast_argument(CastArgumentRequest::Direction);
-            return MoveOutcome::Blocked;
-        }
+        // `magic.md §8` (R513, issue #287): the dungeon arm raises no
+        // direction prompt. It "checks the party's own cell first and, only
+        // if that is not a field, the cell one step ahead in the party's
+        // facing direction on the current dungeon layer".
+        let _ = direction;
         if let Some(outcome) =
             self.cast_spell_resource_gate(caster_index, DISPEL_FIELD_SPELL_INDEX, DISPEL_FIELD_COST)
         {
@@ -6142,16 +6163,21 @@ impl PlayState {
         // effect. The combat route returned above owns its own boundary.
         self.emit_sound_effect(SoundEffect::SharedVariant { variant: 4 });
 
-        let (dx, dy) = direction.delta();
-        let tx = self.player.x as isize + dx;
-        let ty = self.player.y as isize + dy;
-        if !(0..DUNGEON_SIDE as isize).contains(&tx) || !(0..DUNGEON_SIDE as isize).contains(&ty) {
+        let own = (self.player.x, self.player.y);
+        let own_is_field = (own.0 < DUNGEON_SIDE && own.1 < DUNGEON_SIDE)
+            && dungeon_field_effect(self.grid[dungeon_cell_index(level, own.0, own.1)]).is_some();
+        let target = if own_is_field {
+            Some(own)
+        } else {
+            self.dungeon_forward_target()
+        };
+        let Some((tx, ty)) = target else {
             self.advance_turn();
             self.fail_committed_spell_cast();
             return MoveOutcome::Blocked;
-        }
+        };
 
-        let idx = dungeon_cell_index(level, tx as usize, ty as usize);
+        let idx = dungeon_cell_index(level, tx, ty);
         let cell = self.grid[idx];
         let Some(field) = dungeon_field_effect(cell) else {
             self.advance_turn();
@@ -6382,12 +6408,17 @@ impl PlayState {
             return MoveOutcome::Blocked;
         };
         self.mark_visibility_dirty();
-        // Unpublished (`cleak/u5-spec#262`).
         self.diagnostics.push(format!(
             "blinked to ({}, {})",
             commit.actor_position_after.0, commit.actor_position_after.1
         ));
-        self.message.clear();
+        // `magic.md §8` "What Blink prints": "An accepted arena step prints
+        // `Success!\n` with no sound". The same paragraph says combat Blink
+        // never prompts and tries "a fixed budget of seven candidate
+        // steps"; how those candidates are generated is unpublished, so the
+        // coordinate cursor stays as this engine's stand-in until the spec
+        // names the search.
+        self.message = crate::commands::SPELL_SUCCESS_LINE.to_string();
         MoveOutcome::Cast
     }
 

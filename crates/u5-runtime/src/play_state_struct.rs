@@ -362,6 +362,9 @@ pub struct PlayState {
     /// spends no second one - the same shape as the arena banner and the arms
     /// shop welcome. True only while that modal view is up.
     pub view_overlay_row_opened_by_result: bool,
+    /// `view.md §4`: idle polls the modal local view has spent waiting for
+    /// its key; the party-marker box is XOR-drawn on every fourth one.
+    pub view_overlay_idle_polls: u32,
     /// `karma.md §12`: the meditation's ask is `\nMantra:` - a **leading**
     /// line feed - so the label's row is still open when an empty Return
     /// closes the interaction. `text-output.md §10.4`'s next-cycle feed is
@@ -483,6 +486,12 @@ pub struct PlayState {
     /// See [`crate::CastArgumentRequest`]: what the last spell dispatch
     /// still needs, for the cast prompt's follow-up to open.
     pub pending_cast_argument: Option<CastArgumentRequest>,
+    /// `magic.md §5` (issue #277): "Steps 4 to 6 precede the handler, so a
+    /// handler's own prompt [...] is reached with the charge - and [...] the
+    /// mana - already spent." Set while a dispatch runs whose charge, mana
+    /// and level gates have already been settled, so the handler's own
+    /// [`PlayState::cast_spell_resource_gate`] call does not charge twice.
+    pub cast_resources_spent: bool,
     pub active_combat_targeting: Option<CombatTargetingCursorSession>,
     /// `combat.md §8.2`: the targeting cursor "starts on **the attacker's**
     /// remembered previous target when that target is still a valid, live,

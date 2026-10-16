@@ -242,6 +242,7 @@ impl PlayState {
 
         let next = WindState::rel_hur_target(direction)
             .expect("inline Rel Hur parser returns cardinal directions only");
+        let previous = self.wind_status_message();
         self.apply_wind_state(next);
         self.advance_turn();
         // `weather.md §3`: an accepted direction prints its direction name,
@@ -249,6 +250,11 @@ impl PlayState {
         // §5.1` lists Rel Hur under "No generic completion line", and
         // `Wind change!` is the scroll-dispatch banner, not a spell line.
         let _ = self.complete_open_direction_echo(SPELL_DIRECTION_PROMPT_PREFIX, direction.name());
+        self.diagnostics.push(format!(
+            "Wind change: {} -> {}.",
+            previous,
+            self.wind_status_message()
+        ));
         self.message.clear();
         MoveOutcome::Cast
     }
@@ -319,6 +325,25 @@ impl PlayState {
         wind_status_message_from_state_and_save_byte(self.wind, self.wind_save_byte)
     }
 
+    /// `magic.md §8` handler-family map: Gate Travel refuses "while the
+    /// party is aboard a frigate or a skiff".
+    pub(crate) fn party_is_shipboard_for_gate_travel(&self) -> bool {
+        matches!(
+            self.player.transport,
+            TransportState::Ship { .. } | TransportState::Skiff { .. }
+        )
+    }
+
+    /// The ordinary handler failure for a committed Gate Travel cast:
+    /// `Failed!` with the failure sound, one turn, nothing refunded
+    /// (`magic.md §5` step 8, §8).
+    pub(crate) fn fail_committed_gate_travel(&mut self) -> MoveOutcome {
+        self.advance_turn();
+        self.message = "Failed!".to_string();
+        self.emit_sound_effect(SoundEffect::CastFailure);
+        MoveOutcome::Blocked
+    }
+
     pub fn cast_gate_travel(
         &mut self,
         caster_index: usize,
@@ -346,11 +371,8 @@ impl PlayState {
         // handler - §8 "requires the party not to be shipboard" - so it is an
         // ordinary handler failure and the dispatcher's own epilogue narrates
         // it. The engine-voice sentence that used to stand here was invented.
-        if matches!(self.player.transport, TransportState::Ship { .. }) {
-            self.advance_turn();
-            self.message = "Failed!".to_string();
-            self.emit_sound_effect(SoundEffect::CastFailure);
-            return Ok(MoveOutcome::Blocked);
+        if self.party_is_shipboard_for_gate_travel() {
+            return Ok(self.fail_committed_gate_travel());
         }
 
         // `audio.md §6.1` id 46: the variant (circle 8) plays "only after the
@@ -2635,6 +2657,12 @@ impl PlayState {
         spell_index: usize,
         mana_cost: u8,
     ) -> Option<MoveOutcome> {
+        // `magic.md §5`: the dispatcher already ran these gates before the
+        // handler (and before any handler prompt); see
+        // [`PlayState::cast_resources_spent`].
+        if self.cast_resources_spent {
+            return None;
+        }
         let Some(caster) = self.party.get(caster_index).copied() else {
             // Out-of-range caster: the `Player: ` prompt bounds the index.
             self.message.clear();
@@ -3151,11 +3179,23 @@ impl PlayState {
 
     pub fn clear_active_view_overlay(&mut self) {
         self.active_view_overlay = None;
+        self.view_overlay_idle_polls = 0;
         self.view_overlay_row_opened_by_result = false;
         self.message.clear();
     }
 
     pub fn render_active_view_overlay(&self, depth: TileGraphicsDepth) -> Option<TileViewport> {
+        self.render_active_view_overlay_with_fonts(depth, None)
+    }
+
+    /// [`PlayState::render_active_view_overlay`] with the two fixed fonts
+    /// the dungeon V-View draws its glyphs from (`view.md §6.2`). A caller
+    /// without them gets the engine's vector stand-ins.
+    pub fn render_active_view_overlay_with_fonts(
+        &self,
+        depth: TileGraphicsDepth,
+        fonts: Option<DungeonViewFonts<'_>>,
+    ) -> Option<TileViewport> {
         let overlay = self.active_view_overlay.as_ref()?;
         match overlay.kind {
             ViewOverlayKind::Surface => {
@@ -3165,7 +3205,7 @@ impl PlayState {
                 Some(render_sky_overlay(depth, &sky, self.shadowlord_hideouts))
             }
             ViewOverlayKind::Dungeon { level } => {
-                Some(self.render_dungeon_view_overlay_for_mode(level, depth, overlay.mode))
+                Some(self.render_dungeon_view_overlay_with_fonts(level, depth, fonts))
             }
         }
     }
@@ -3216,8 +3256,25 @@ impl PlayState {
             ),
             _ => (cells / 2, cells / 2),
         };
-        draw_surface_view_cell(&mut viewport, marker_x, marker_y, scale, 0, 0, true, mode);
+        if surface_view_marker_visible(self.view_overlay_idle_polls) {
+            draw_surface_view_cell(&mut viewport, marker_x, marker_y, scale, 0, 0, true, mode);
+        }
         viewport
+    }
+
+    /// One idle poll of the modal local view's key wait (`view.md §4`,
+    /// and §3's dismissal loop that "re-draws the party marker every fourth
+    /// idle pass"). The frontend calls this once per wait pump; with no
+    /// surface overlay up the count resets so the next view starts afresh.
+    pub fn poll_view_overlay_idle(&mut self) {
+        if matches!(
+            self.active_view_overlay.as_ref().map(|overlay| overlay.kind),
+            Some(ViewOverlayKind::Surface)
+        ) {
+            self.view_overlay_idle_polls = self.view_overlay_idle_polls.wrapping_add(1);
+        } else {
+            self.view_overlay_idle_polls = 0;
+        }
     }
 
     pub fn render_surface_view_class_cell_for_mode(
@@ -3305,6 +3362,19 @@ impl PlayState {
         depth: TileGraphicsDepth,
         _mode: ViewOverlayMode,
     ) -> TileViewport {
+        self.render_dungeon_view_overlay_with_fonts(level, depth, None)
+    }
+
+    /// `view.md §6.2` / `dungeon-mode.md §12.3`: with the text and runic
+    /// fonts supplied, every font class is blitted from its selected 8x8
+    /// one-bit glyph, opaquely; only the fountain and the energy field
+    /// stay vector drawings.
+    pub fn render_dungeon_view_overlay_with_fonts(
+        &self,
+        level: u8,
+        depth: TileGraphicsDepth,
+        fonts: Option<DungeonViewFonts<'_>>,
+    ) -> TileViewport {
         let cells = DUNGEON_GEM_VIEW_GRID_SIDE;
         let scale = DUNGEON_GEM_VIEW_CELL_PIXELS;
         let width = cells * scale;
@@ -3320,7 +3390,14 @@ impl PlayState {
         for cell_y in 0..cells {
             for cell_x in 0..cells {
                 let index = cell_y * cells + cell_x;
-                draw_dungeon_view_glyph(&mut viewport, cell_x, cell_y, scale, glyphs[index]);
+                draw_dungeon_view_glyph(
+                    &mut viewport,
+                    cell_x,
+                    cell_y,
+                    scale,
+                    glyphs[index],
+                    fonts,
+                );
             }
         }
         viewport
@@ -3343,7 +3420,7 @@ impl PlayState {
             height: scale,
             pixels: vec![0; scale * scale],
         };
-        draw_dungeon_view_glyph(&mut viewport, 0, 0, scale, glyph);
+        draw_dungeon_view_glyph(&mut viewport, 0, 0, scale, glyph, None);
         viewport
     }
 
@@ -3648,14 +3725,10 @@ impl PlayState {
                 if death_vision_look_tile(self.grid[y * 32 + x]) {
                     return Ok(self.apply_death_vision_look(x, y));
                 }
+                // `view.md §3` entry-dispatch row 4: "the per-map object case
+                // wins over the sign case when both would match", and a
+                // per-map object always prints its object description.
                 if let Some(object) = self.blocking_object_at(x, y) {
-                    if sign_or_wanted_poster_object_class(object.type_byte) {
-                        let sign = self
-                            .sign_message_at_for_current_area(game_dir, y as u8, x as u8)?
-                            .unwrap_or_else(|| "Sign:\n".to_string());
-                        self.present_sign_message(sign);
-                        return Ok(MoveOutcome::Observed);
-                    }
                     // `cleak/u5-spec#194` (black-box): the stock game prints
                     // `Thou dost see` and the description on the next row.
                     self.message = if look_table.is_some() {
@@ -3668,14 +3741,18 @@ impl PlayState {
                     };
                     return Ok(MoveOutcome::Observed);
                 }
-                if let Area::Town { scene, floor } = self.area {
-                    if let Some(sign) =
-                        self.sign_message_at(game_dir, scene.byte, floor as u8, y as u8, x as u8)?
-                    {
-                        self.present_sign_message(sign);
-                        return Ok(MoveOutcome::Observed);
-                    }
+                // Row 5: the sign path is selected by the live terrain tile,
+                // and only then is `SIGNS.DAT` consulted.
+                if sign_or_wanted_poster_object_class(self.grid[y * 32 + x]) {
+                    let sign = self
+                        .sign_message_at_for_current_area(game_dir, y as u8, x as u8)?
+                        .unwrap_or_else(|| "Sign:\n".to_string());
+                    // `view.md §5` (audit A012): a `0x0D` holds the rest of
+                    // the sign behind a key.
+                    self.present_sign_message(sign);
+                    return Ok(MoveOutcome::Observed);
                 }
+                let (x, y) = self.resolve_look_redirect_tiles(x, y);
                 let tile = self.grid[y * 32 + x];
                 // `view.md §3` terrain-description path row 2: live tile
                 // `0x59` is a **telescope** and enters the §4.2 sky renderer
@@ -3724,13 +3801,6 @@ impl PlayState {
                     return Ok(self.apply_death_vision_look(x, y));
                 }
                 if let Some(object) = self.world_object_at(x, y) {
-                    if sign_or_wanted_poster_object_class(object.type_byte) {
-                        let sign = self
-                            .sign_message_at_for_current_area(game_dir, y as u8, x as u8)?
-                            .unwrap_or_else(|| "Sign:\n".to_string());
-                        self.present_sign_message(sign);
-                        return Ok(MoveOutcome::Observed);
-                    }
                     self.message = if look_table.is_some() {
                         format!(
                             "{LOOK_RESULT_PREFIX}\n{}",
@@ -3741,19 +3811,18 @@ impl PlayState {
                     };
                     return Ok(MoveOutcome::Observed);
                 }
+                // `view.md §3` entry-dispatch row 5, see the town arm.
+                if sign_or_wanted_poster_object_class(self.grid[world_cell_index(x, y)]) {
+                    let sign = self
+                        .sign_message_at_for_current_area(game_dir, y as u8, x as u8)?
+                        .unwrap_or_else(|| "Sign:\n".to_string());
+                    self.present_sign_message(sign);
+                    return Ok(MoveOutcome::Observed);
+                }
+                let (x, y) = self.resolve_look_redirect_tiles(x, y);
                 let tile = self.grid[world_cell_index(x, y)];
                 if tile == TELESCOPE_LOOK_TRIGGER_TILE {
                     self.look_through_telescope();
-                    return Ok(MoveOutcome::Observed);
-                }
-                if let Some(sign) = self.sign_message_at(
-                    game_dir,
-                    SCENE_OVERWORLD,
-                    plane.save_floor() as u8,
-                    y as u8,
-                    x as u8,
-                )? {
-                    self.present_sign_message(sign);
                     return Ok(MoveOutcome::Observed);
                 }
                 if surface_wishing_well_look_tile(tile) {
@@ -3778,6 +3847,42 @@ impl PlayState {
                 Ok(MoveOutcome::Observed)
             }
         }
+    }
+
+    /// `view.md §3` terrain-description path row 1: live tiles `0xE0`,
+    /// `0xE1` and `0xE2` redirect the look target one cell north, east and
+    /// west, re-read it and restart the terrain table; "The redirect can
+    /// chain, so a run of redirect tiles resolves to one final cell". The
+    /// overworld wraps like every other overworld step. The spec does not
+    /// say what a town redirect off the 32-by-32 grid does, so that step
+    /// (and a cycle, which no shipped map is known to hold) stops on the
+    /// current cell rather than inventing a target.
+    pub(crate) fn resolve_look_redirect_tiles(&self, x: usize, y: usize) -> (usize, usize) {
+        let (mut x, mut y) = (x, y);
+        for _ in 0..(WORLD_SIDE * WORLD_SIDE) {
+            let (dx, dy): (isize, isize) = match self.surface_tile_at(x, y) {
+                LOOK_REDIRECT_NORTH_TILE => (0, -1),
+                LOOK_REDIRECT_EAST_TILE => (1, 0),
+                LOOK_REDIRECT_WEST_TILE => (-1, 0),
+                _ => break,
+            };
+            let nx = x as isize + dx;
+            let ny = y as isize + dy;
+            match self.area {
+                Area::World { .. } => {
+                    x = nx.rem_euclid(WORLD_SIDE as isize) as usize;
+                    y = ny.rem_euclid(WORLD_SIDE as isize) as usize;
+                }
+                _ => {
+                    if !(0..32).contains(&nx) || !(0..32).contains(&ny) {
+                        break;
+                    }
+                    x = nx as usize;
+                    y = ny as usize;
+                }
+            }
+        }
+        (x, y)
     }
 
     pub fn look_surface_fountain_with_drinker(
@@ -3896,15 +4001,27 @@ impl PlayState {
         MoveOutcome::Observed
     }
 
-    /// `view.md §3` entry-dispatch row 2. Measured 2026-09-07: the command
-    /// takes no party-member prompt - it rolls for the active player, and
-    /// prints one of two one-line results.
+    /// `view.md §3` entry-dispatch row 2: the death-vision case "uses the
+    /// shared conditional acting-member selector; an abort retains that
+    /// selector's feedback but adds no vision result". An override or a
+    /// single eligible member is picked silently; two or more eligible
+    /// members produce `Player: ` (the earlier no-prompt reading is
+    /// withdrawn, R408).
     pub fn apply_death_vision_look(&mut self, x: usize, y: usize) -> MoveOutcome {
-        let member_index = match self.shared_acting_member_selection(false) {
-            ActingMemberSelection::Selected(slot) => slot,
-            _ => 0,
-        };
-        self.apply_death_vision_look_for_member(x, y, member_index)
+        match self.shared_acting_member_selection(false) {
+            ActingMemberSelection::Selected(slot) => {
+                self.apply_death_vision_look_for_member(x, y, slot)
+            }
+            ActingMemberSelection::Prompt => {
+                self.start_party_selector(PartySelectorTarget::DeathVision { x, y })
+            }
+            ActingMemberSelection::NoneAble => {
+                // The selector's own feedback, as the Search site answers
+                // the same state; no vision result follows.
+                self.message = super::chunk_03::PARTY_SELECTOR_CANCEL_REPLY.to_string();
+                MoveOutcome::Observed
+            }
+        }
     }
 
     pub fn apply_death_vision_look_for_member(
@@ -3940,6 +4057,14 @@ impl PlayState {
             self.active_view_overlay = None;
             self.view_overlay_row_opened_by_result = false;
             self.message = DEATH_VISION_DEATH_LINE.to_string();
+            // `view.md §3`: "Otherwise print `Death vision!\n` and apply
+            // **one HP of damage** to that member with the ordinary hit
+            // feedback and stats redraw. HP reaching zero sets the member
+            // Dead and clears an active-member override naming that
+            // member." The shared party-damage helper is that path.
+            if member_index < self.party.len() {
+                self.apply_shared_party_damage(member_index, 1);
+            }
         }
         MoveOutcome::Observed
     }
@@ -3950,16 +4075,19 @@ impl PlayState {
     }
 
     fn surface_look_target_position(&self, direction: Direction) -> Option<(usize, usize)> {
-        match self.area {
-            Area::Town { .. } => self.adjacent_position(direction),
+        // The well and fountain follow-ups re-resolve the cell the Look
+        // chose, so they take the same `view.md §3` redirect step.
+        let (x, y) = match self.area {
+            Area::Town { .. } => self.adjacent_position(direction)?,
             Area::World { .. } => {
                 let (dx, dy) = direction.delta();
                 let x = (self.player.x as isize + dx).rem_euclid(WORLD_SIDE as isize) as usize;
                 let y = (self.player.y as isize + dy).rem_euclid(WORLD_SIDE as isize) as usize;
-                Some((x, y))
+                (x, y)
             }
-            Area::Dungeon { .. } => None,
-        }
+            Area::Dungeon { .. } => return None,
+        };
+        Some(self.resolve_look_redirect_tiles(x, y))
     }
 
     fn surface_look_target_visible(&self, x: isize, y: isize) -> bool {
@@ -6333,6 +6461,20 @@ fn pending_use_cardinal_direction(key: char, suffix: &str) -> Option<Direction> 
         .filter(|direction| direction.opposite_cardinal().is_some())
 }
 
+/// `view.md §4` party-marker pen: slot 1, white (15) on EGA/Tandy; the
+/// driver's pen mask reduces it to 3 on CGA.
+const SURFACE_VIEW_MARKER_XOR_PEN: u8 = 15;
+
+/// `view.md §4`: the party-marker box is XOR-drawn "on every fourth idle
+/// poll" while the local view waits, so it blinks; §3 calls the same step
+/// "re-draws the party marker every fourth idle pass", so the box is up
+/// when the view is first shown. Polls 0..=3 show it, the fourth poll's XOR
+/// erases it for polls 4..=7, the eighth restores it, and so on. (A
+/// frontend with no wait loop never polls and so shows it steadily.)
+const fn surface_view_marker_visible(idle_polls: u32) -> bool {
+    (idle_polls / 4) % 2 == 0
+}
+
 fn draw_surface_view_cell(
     viewport: &mut TileViewport,
     cell_x: usize,
@@ -6344,9 +6486,20 @@ fn draw_surface_view_cell(
     mode: ViewOverlayMode,
 ) {
     if player_marker {
-        for offset in 0..scale {
-            set_view_overlay_pixel(viewport, cell_x, cell_y, scale, offset, scale / 2, 15);
-            set_view_overlay_pixel(viewport, cell_x, cell_y, scale, scale / 2, offset, 15);
+        // `view.md §4`: "a 4-by-4 box at the party's own cell is XOR-drawn
+        // with the slot-1 pen [...] so each pixel's colour index is inverted
+        // against white rather than set to a fixed colour".
+        let limit = viewport.depth.pixel_limit();
+        let pen = SURFACE_VIEW_MARKER_XOR_PEN % limit;
+        for local_y in 0..scale {
+            for local_x in 0..scale {
+                let x = cell_x * scale + local_x;
+                let y = cell_y * scale + local_y;
+                if x < viewport.width && y < viewport.height {
+                    let pixel = &mut viewport.pixels[y * viewport.width + x];
+                    *pixel = (*pixel ^ pen) % limit;
+                }
+            }
         }
         return;
     }
@@ -6435,6 +6588,7 @@ fn draw_dungeon_view_glyph(
     cell_y: usize,
     scale: usize,
     glyph: Option<DungeonMinimapGlyph>,
+    fonts: Option<DungeonViewFonts<'_>>,
 ) {
     let Some(glyph) = glyph else {
         return;
@@ -6442,6 +6596,19 @@ fn draw_dungeon_view_glyph(
     let door_color = dungeon_view_door_color();
     let wall_color = dungeon_view_wall_color();
     let highlight = DUNGEON_VIEW_HIGHLIGHT_COLOR;
+    // `view.md §6.2`: "Every published glyph identifier in the
+    // class-to-glyph table is an index into whichever of the two fonts that
+    // class selects, and each cell is drawn opaquely in a
+    // foreground/background pair."
+    if let (Some(fonts), DungeonMinimapGlyph::Font { index, font }) = (fonts, glyph) {
+        let source = match font {
+            DungeonMinimapFont::Text => fonts.text,
+            DungeonMinimapFont::Runic => fonts.runic,
+        };
+        let foreground = dungeon_view_font_glyph_foreground(index);
+        blit_dungeon_view_font_glyph(viewport, cell_x, cell_y, scale, source, index, foreground);
+        return;
+    }
     // `dungeon-mode.md §12.3`: two classes "are not font characters at
     // all but small vector drawings". Their geometry is §12.5's and is
     // drawn directly rather than through a glyph index.
@@ -6458,19 +6625,12 @@ fn draw_dungeon_view_glyph(
     };
     match glyph {
         // §12.4 party marker: arrowhead glyph 0x60 at the centre cell.
-        // The player-marker branch of `draw_surface_view_cell` returns
-        // before any mode-dependent colour lookup, so the mode passed
-        // here is inert; the dungeon map has no peer-spell branch.
-        0x60 => draw_surface_view_cell(
-            viewport,
-            cell_x,
-            cell_y,
-            scale,
-            0,
-            0,
-            true,
-            ViewOverlayMode::GemView,
-        ),
+        0x60 => {
+            for offset in 0..scale {
+                set_view_overlay_pixel(viewport, cell_x, cell_y, scale, offset, scale / 2, 15);
+                set_view_overlay_pixel(viewport, cell_x, cell_y, scale, scale / 2, offset, 15);
+            }
+        }
         0x18 => draw_view_overlay_hline(viewport, cell_x, cell_y, scale, scale / 2, 7),
         0x2e => draw_dungeon_ladder_glyph(viewport, cell_x, cell_y, scale, true, false, highlight),
         0x2d => draw_dungeon_ladder_glyph(viewport, cell_x, cell_y, scale, false, true, highlight),
@@ -6519,6 +6679,45 @@ fn draw_dungeon_view_glyph(
     }
 }
 
+/// The foreground pen of a font-drawn minimap class. `dungeon-mode.md
+/// §12.4` publishes the glyph, the font and that the cell is opaque, but not
+/// the palette indices of the pens (only that `0xC?`/`0xD?` use a
+/// "background pen" and that `0xD?`'s depends on the adapter), so these are
+/// the engine's existing stand-in colours per class, unchanged.
+const fn dungeon_view_font_glyph_foreground(index: u8) -> u8 {
+    match index {
+        0x18 | 0x12 => 7,
+        0x71 => 12,
+        0x72 => 14,
+        0x73 | 0x77 => dungeon_view_door_color(),
+        0x74 | 0x75 | 0x7f => dungeon_view_wall_color(),
+        0x76 => dungeon_view_extra_wall_color(),
+        0x70 => 6,
+        _ => DUNGEON_VIEW_HIGHLIGHT_COLOR,
+    }
+}
+
+/// Opaque one-bit blit of one 8x8 font glyph: set bits take `foreground`,
+/// clear bits the black background, most significant bit leftmost.
+fn blit_dungeon_view_font_glyph(
+    viewport: &mut TileViewport,
+    cell_x: usize,
+    cell_y: usize,
+    scale: usize,
+    font: &FixedCellFont,
+    index: u8,
+    foreground: u8,
+) {
+    for row in 0..scale.min(8) {
+        let bits = font.glyph_row(index, row).unwrap_or(0);
+        for column in 0..scale.min(8) {
+            let set = bits & (0x80 >> column) != 0;
+            let color = if set { foreground } else { 0 };
+            set_view_overlay_pixel(viewport, cell_x, cell_y, scale, column, row, color);
+        }
+    }
+}
+
 /// Diagnostic ASCII stand-in for one minimap cell. The letters are this
 /// engine's own text rendering of the map, not published art; what the
 /// published table fixes is that each class gets its **own** output, so
@@ -6563,18 +6762,18 @@ const DUNGEON_VIEW_HIGHLIGHT_COLOR: u8 = 15;
 /// display adapter ([`TileGraphicsDepth`]), and CGA/Hercules raster output
 /// is outside the v1 clean-recreation target, so one high-colour pen set
 /// serves every mode.
-fn dungeon_view_door_color() -> u8 {
+const fn dungeon_view_door_color() -> u8 {
     11
 }
 
-fn dungeon_view_wall_color() -> u8 {
+const fn dungeon_view_wall_color() -> u8 {
     8
 }
 
 /// `dungeon-mode.md §12.4`: the `0xD?` arch wall is "drawn with a
 /// background pen; which pen depends on the display adapter" - the adapter,
 /// not the view mode.
-fn dungeon_view_extra_wall_color() -> u8 {
+const fn dungeon_view_extra_wall_color() -> u8 {
     13
 }
 
@@ -6830,6 +7029,26 @@ fn surface_view_river_tile(tile: u8) -> bool {
     matches!(tile, 0x60..=0x69 | 0x6C..=0x6F)
 }
 
+/// `view.md §4` river-family corner table: a set bit is a light-blue (B)
+/// corner, in the corner order `(1,0)`, `(3,1)`, `(1,2)`, `(3,3)` = bits
+/// `0x01`, `0x02`, `0x04`, `0x08`. The table is the authority: `0x60` and
+/// `0x66` share one pattern with different low nibbles, so the mask is per
+/// tile, not the raw `tile & 0x0F`. Non-river members are all B.
+const fn surface_view_river_shoreline_mask(tile: u8) -> u8 {
+    match tile {
+        0x60 | 0x66 => 0x0A, // G B G B
+        0x61 | 0x65 => 0x06, // G B B G
+        0x62 | 0x6F => 0x02, // G B G G
+        0x63 | 0x6C => 0x08, // G G G B
+        0x64 => 0x0C,        // G G B B
+        0x67 | 0x68 => 0x0E, // G B B B
+        0x69 => 0x07,        // B B B G
+        0x6D => 0x04,        // G G B G
+        0x6E => 0x01,        // B G G G
+        _ => 0x0F,
+    }
+}
+
 fn draw_surface_view_water_corners(
     viewport: &mut TileViewport,
     cell_x: usize,
@@ -6840,7 +7059,7 @@ fn draw_surface_view_water_corners(
 ) {
     let modal = surface_view_class_color(0x0A, mode);
     let secondary = surface_view_class_color(0x02, mode);
-    let shoreline_mask = tile & 0x0F;
+    let shoreline_mask = surface_view_river_shoreline_mask(tile);
     for (bit, x, y) in [(0x01, 1, 0), (0x02, 3, 1), (0x04, 1, 2), (0x08, 3, 3)] {
         let color = if surface_view_river_tile(tile) && shoreline_mask & bit == 0 {
             secondary

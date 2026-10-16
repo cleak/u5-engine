@@ -275,7 +275,9 @@ fn town_look_reports_facing_actor_without_spending_turn() {
 }
 
 #[test]
-fn town_look_routes_sign_object_classes_through_sign_records() {
+fn town_look_sign_class_object_prints_its_object_description() {
+    // `view.md §3` entry dispatch: a per-map object (row 4) wins over the
+    // sign path (row 5), which is keyed on the live terrain tile only.
     let dir = debug_game_dir();
     fs::write(dir.join(LOOK2_DAT_FILE), look2_bytes(&[])).unwrap();
     fs::write(
@@ -301,30 +303,92 @@ fn town_look_routes_sign_object_classes_through_sign_records() {
         MoveOutcome::Observed
     );
 
-    assert_eq!(state.message, "Sign:\nPosted notice");
+    assert!(state.message.starts_with(LOOK_RESULT_PREFIX), "{}", state.message);
+    assert!(!state.message.contains("Posted notice"));
     assert_eq!(state.turn, 1);
     let _ = fs::remove_dir_all(dir);
 }
 
 #[test]
+fn town_look_sign_terrain_tile_reads_signs_dat_or_the_blank_sign() {
+    // `view.md §3` row 5: live tile `0x89`/`0x8A`/`0xA0`/`0xA4`/`0xF8`
+    // selects the sign path; "If no record matches, the sign path prints
+    // the blank-sign fallback."
+    let dir = debug_game_dir();
+    fs::write(dir.join(LOOK2_DAT_FILE), look2_bytes(&[(0x5a, "a sign")])).unwrap();
+    fs::write(
+        dir.join(SIGNS_DAT_FILE),
+        signs_dat_bytes_for_test(&[(17, 0, 1, 2, b"Posted notice"), (17, 0, 2, 1, b"Hidden")]),
+    )
+    .unwrap();
+    let mut grid = open_grid();
+    grid[32 + 2] = 0x89;
+    grid[3 * 32 + 1] = 0xf8;
+    // A non-sign tile with a SIGNS.DAT record is described, not read.
+    grid[2 * 32 + 1] = 0x5a;
+    let mut state = test_state(grid, 1, 1);
+
+    state.look_direction_with_game_dir(Direction::East, &dir).unwrap();
+    assert_eq!(state.message, "Sign:\nPosted notice");
+
+    state.look_direction_with_game_dir(Direction::South, &dir).unwrap();
+    assert_eq!(state.message, format!("{LOOK_RESULT_PREFIX}\na sign"));
+
+    state.player.y = 2;
+    state.look_direction_with_game_dir(Direction::South, &dir).unwrap();
+    assert_eq!(state.message, "Sign:\n");
+    let _ = fs::remove_dir_all(dir);
+}
+
+#[test]
+fn town_look_redirect_tiles_chain_to_the_final_cell() {
+    // `view.md §3` terrain-description path row 1: `0xE0` north, `0xE1`
+    // east, `0xE2` west; "The redirect can chain".
+    let table = parse_look2_dat(&look2_bytes(&[(0x40, "a target"), (0xe1, "redirect")])).unwrap();
+    let mut grid = open_grid();
+    // Look east from (1, 3) onto (2, 3) = E1 -> (3, 3) = E0 -> (3, 2).
+    grid[3 * 32 + 2] = LOOK_REDIRECT_EAST_TILE;
+    grid[3 * 32 + 3] = LOOK_REDIRECT_NORTH_TILE;
+    grid[2 * 32 + 3] = 0x40;
+    let mut state = test_state(grid, 1, 3);
+
+    state.look_direction_with_table(Direction::East, Some(&table));
+    assert_eq!(state.message, format!("{LOOK_RESULT_PREFIX}\na target"));
+
+    // West redirect lands on (1, 3)... set up a fresh one-step chain.
+    let mut grid = open_grid();
+    grid[5 * 32 + 5] = LOOK_REDIRECT_WEST_TILE;
+    grid[5 * 32 + 4] = 0x40;
+    let mut state = test_state(grid, 5, 4);
+    state.look_direction_with_table(Direction::South, Some(&table));
+    assert_eq!(state.message, format!("{LOOK_RESULT_PREFIX}\na target"));
+}
+
+#[test]
+fn world_look_redirect_wraps_across_the_map_edge() {
+    let table = parse_look2_dat(&look2_bytes(&[(0x40, "a target")])).unwrap();
+    let mut grid = open_world_grid();
+    grid[world_cell_index(0, 1)] = LOOK_REDIRECT_WEST_TILE;
+    grid[world_cell_index(255, 1)] = 0x40;
+    let mut state = britannia_state(grid, 1, 1);
+
+    state.look_direction_with_table(Direction::West, Some(&table));
+    assert_eq!(state.message, format!("{LOOK_RESULT_PREFIX}\na target"));
+}
+
+#[test]
 fn yew_wanted_poster_exception_uses_party_names_without_signs_dat() {
-    let mut state = test_state(open_grid(), 16, 21);
+    // `view.md §3` row 5: the poster is reached through the live sign
+    // tile; the fixed coordinate is tested only after that.
+    let mut grid = open_grid();
+    grid[21 * 32 + 17] = 0xa0;
+    let mut state = test_state(grid, 16, 21);
     state.area = Area::Town {
         scene: Scene::new(4).unwrap(),
         floor: 0,
     };
     state.player.facing = Direction::East;
     state.party_names = vec![*b"AVATAR\0\0\0", *b"IOLO\0\0\0\0\0"];
-    state.active_objects.push(ActiveObject {
-        type_byte: 0xa0,
-        tile: 0xa0,
-        x: 17,
-        y: 21,
-        z: 0,
-        phase: STEADY_PHASE,
-        aux1: 0,
-        aux3: 0,
-    });
 
     assert_eq!(state.look_facing(), MoveOutcome::Observed);
 
@@ -371,9 +435,10 @@ fn town_look_routes_death_vision_terrain_tile_before_object_description() {
 
     assert_eq!(state.look_facing(), MoveOutcome::Observed);
 
-    // Measured 2026-09-07: no party-member prompt - the roll runs for the
-    // active player and the result is one line.
+    // One eligible member is selected silently (`view.md §3`), so the
+    // result is one line with no `Player: ` exchange.
     assert!(state.active_direction_prompt.is_none());
+    assert!(state.active_party_selector.is_none());
     assert_eq!(state.message, DEATH_VISION_STRANGE_LINE);
     assert!(state.active_view_overlay.is_some());
     assert!(!state.message.contains("actor tile"));
@@ -421,6 +486,68 @@ fn death_vision_failure_prints_the_measured_line_without_an_overlay() {
     assert_eq!(state.message, DEATH_VISION_DEATH_LINE);
     assert!(state.active_view_overlay.is_none());
     assert_eq!(state.turn, 0);
+}
+
+#[test]
+fn death_vision_failure_costs_the_member_one_hit_point() {
+    // `view.md §3`: the failed arm applies "one HP of damage to that
+    // member with the ordinary hit feedback"; HP reaching zero sets the
+    // member Dead and clears an override naming that member.
+    let mut state = test_state(open_grid(), 1, 1);
+    state.party_intelligence[0] = 0;
+    state.party[0].hp = 5;
+    state.apply_death_vision_look_for_member(2, 1, 0);
+    assert_eq!(state.party[0].hp, 4);
+
+    state.party[0].hp = 1;
+    state.active_player = Some(0);
+    state.apply_death_vision_look_for_member(2, 1, 0);
+    assert_eq!(state.party[0].hp, 0);
+    assert_eq!(state.party[0].status, CharacterStatus::Dead.save_byte());
+    assert_eq!(state.active_player, None);
+}
+
+#[test]
+fn death_vision_with_two_eligible_members_asks_player_and_resumes_for_the_pick() {
+    // `view.md §3`: "two or more eligible members do produce `Player: `;
+    // the crystal sphere does not bypass that shared selection rule".
+    let mut state = test_state(open_grid(), 1, 1);
+    state.player.facing = Direction::East;
+    state.grid[1 * 32 + 2] = DEATH_VISION_LOOK_TILE;
+    let mut second = state.party[0];
+    second.slot = 1;
+    second.hp = 7;
+    state.party.push(second);
+    state.party_intelligence = vec![31, 0];
+
+    assert_eq!(state.look_facing(), MoveOutcome::Observed);
+    assert_eq!(state.message, PARTY_SELECTION_PROMPT);
+    assert!(state.active_party_selector.is_some());
+    assert!(state.active_view_overlay.is_none());
+
+    // Pick the second member (Intelligence 0): the vision fails for them.
+    assert!(state.step_active_party_selector('2', ""));
+    assert!(state.step_active_party_selector('\r', ""));
+    assert_eq!(state.message, DEATH_VISION_DEATH_LINE);
+    assert_eq!(state.party[1].hp, 6);
+}
+
+#[test]
+fn death_vision_selector_cancel_adds_no_vision_result() {
+    let mut state = test_state(open_grid(), 1, 1);
+    state.player.facing = Direction::East;
+    state.grid[1 * 32 + 2] = DEATH_VISION_LOOK_TILE;
+    let mut second = state.party[0];
+    second.slot = 1;
+    state.party.push(second);
+    state.party_intelligence = vec![31, 31];
+    let hp = state.party[0].hp;
+
+    state.look_facing();
+    assert!(state.step_active_party_selector('\u{1b}', ""));
+    assert!(!state.message.contains("vision"));
+    assert!(state.active_view_overlay.is_none());
+    assert_eq!(state.party[0].hp, hp);
 }
 
 #[test]
@@ -849,14 +976,15 @@ fn signs_dat_bytes_for_test(records: &[(u8, u8, u8, u8, &[u8])]) -> Vec<u8> {
 #[test]
 fn town_look_renders_matching_signs_dat_record_and_spends_its_turn() {
     let dir = debug_game_dir();
-    fs::write(dir.join(LOOK2_DAT_FILE), look2_bytes(&[(0x5a, "a sign")])).unwrap();
+    fs::write(dir.join(LOOK2_DAT_FILE), look2_bytes(&[(0xa0, "a sign")])).unwrap();
     fs::write(
         dir.join(SIGNS_DAT_FILE),
         signs_dat_bytes_for_test(&[(17, 0, 1, 2, b"North Road")]),
     )
     .unwrap();
     let mut grid = open_grid();
-    grid[32 + 2] = 0x5a;
+    // `view.md §3` row 5: the sign path is keyed on the live tile.
+    grid[32 + 2] = 0xa0;
     let mut state = test_state(grid, 1, 1);
     state.player.facing = Direction::East;
 
@@ -1087,6 +1215,24 @@ fn look_sentinel_rows_print_the_selected_string_not_a_range_class() {
 }
 
 #[test]
+fn look_shrine_altar_tiles_take_no_appender() {
+    // `view.md §3` rows 5a-5c: only `0xFA`/`0xFB`, `0xDE` and `0xDF`
+    // append anything; the former `(Shrine of X)` suffix is not published.
+    let table = parse_look2_dat(&look2_bytes(&[(
+        SHRINE_ALTAR_TILE_FIRST as usize,
+        "an altar",
+    )]))
+    .unwrap();
+    let state = test_state(open_grid(), 1, 1);
+
+    assert_eq!(
+        state.look_description(SHRINE_ALTAR_TILE_FIRST, Some(&table), 0),
+        "an altar"
+    );
+    assert_eq!(state.look_description(SHRINE_ALTAR_TILE_LAST, None, 0), "special");
+}
+
+#[test]
 fn world_look_wraps_and_reports_facing_object_without_spending_turn() {
     let mut state = world_state(open_world_grid(), 255, 0);
     state.player.facing = Direction::East;
@@ -1251,6 +1397,32 @@ fn world_look_at_shrine_table_cell_prints_bare_description() {
 
     assert!(state.message.ends_with("\na shrine"), "{:?}", state.message);
     assert!(!state.message.contains("Shrine of"));
+    assert_eq!(state.message, format!("{LOOK_RESULT_PREFIX}\na shrine"));
+    assert_eq!(state.turn, 1);
+    assert_eq!(state.clock, GameClock::new(12, 2).unwrap());
+    let _ = fs::remove_dir_all(dir);
+}
+
+#[test]
+fn world_look_shrine_altar_appends_no_virtue_context() {
+    let dir = debug_game_dir();
+    fs::write(
+        dir.join(LOOK2_DAT_FILE),
+        look2_bytes(&[(SHRINE_ALTAR_TILE_FIRST as usize, "an altar")]),
+    )
+    .unwrap();
+    fs::write(dir.join(SHRINE_TABLE_FILE), "BRITANNIA 2 1 HONESTY 0x88\n").unwrap();
+    let mut grid = open_world_grid();
+    grid[world_cell_index(2, 1)] = SHRINE_ALTAR_TILE_FIRST;
+    let mut state = britannia_state(grid, 1, 1);
+    state.player.facing = Direction::East;
+
+    assert_eq!(
+        state.look_facing_with_game_dir(&dir).unwrap(),
+        MoveOutcome::Observed
+    );
+
+    assert_eq!(state.message, format!("{LOOK_RESULT_PREFIX}\nan altar"));
     assert_eq!(state.turn, 1);
     assert_eq!(state.clock, GameClock::new(12, 2).unwrap());
     let _ = fs::remove_dir_all(dir);
