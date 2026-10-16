@@ -8016,6 +8016,27 @@ impl PlayState {
             };
         }
 
+        // `combat.md §7` step 2 runs before the step-3 restraint skip: the
+        // sweep reads "its linked character record's status byte". Party
+        // descriptors are packed (`§5`), so the record is reached through the
+        // descriptor's roster field, never by the descriptor index itself.
+        // The spec names a "death-narration effect" but publishes no text
+        // for it, so none is printed here; the slot render falls out of the
+        // walk stopping on this automatic action.
+        if self
+            .combat_roster_slot_for_actor_slot(slot)
+            .and_then(|roster_slot| self.party.get(roster_slot).copied())
+            .is_some_and(|member| member.status == b'D' || member.hp == 0)
+        {
+            self.combat_actors[slot].mark_dead();
+            return CombatActorSlotDispatchApplication::Slot {
+                slot,
+                phase_tick: None,
+                action: CombatActorDispatchAction::PartyDeathSweep,
+                control_after: self.combat_round_loop_control_census(false, false),
+            };
+        }
+
         // `combat.md §7` step 3: the restraint skip runs *before* the
         // phase decrement in step 4, "so a restrained actor's counter
         // never advances and it never takes a turn at all".
@@ -8024,22 +8045,6 @@ impl PlayState {
                 slot,
                 phase_tick: Some(CombatActorPhaseTick::Inactive),
                 action: CombatActorDispatchAction::Inactive,
-                control_after: self.combat_round_loop_control_census(false, false),
-            };
-        }
-
-        if slot < COMBAT_PARTY_ACTOR_SLOTS
-            && self
-                .party
-                .get(slot)
-                .copied()
-                .is_some_and(|member| member.status == b'D' || member.hp == 0)
-        {
-            self.combat_actors[slot].mark_dead();
-            return CombatActorSlotDispatchApplication::Slot {
-                slot,
-                phase_tick: None,
-                action: CombatActorDispatchAction::PartyDeathSweep,
                 control_after: self.combat_round_loop_control_census(false, false),
             };
         }

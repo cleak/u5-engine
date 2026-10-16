@@ -14054,6 +14054,91 @@ fn combat_actor_slot_dispatch_sweeps_dead_party_before_phase_tick() {
     assert_eq!(state.combat_actors[0].phase_counter, 1);
 }
 
+fn dispatch_slot_for_death_sweep(state: &mut PlayState, slot: usize) -> CombatActorSlotDispatchApplication {
+    state.apply_combat_actor_slot_dispatch_with_inputs(
+        slot,
+        30,
+        false,
+        0,
+        false,
+        1,
+        1,
+        &[],
+        None,
+        0,
+        false,
+        None,
+        true,
+        &[1, 2, 3, 4],
+        &[],
+    )
+}
+
+/// `combat.md §7` step 2 reads "its linked character record's status
+/// byte"; `§5` packs party descriptors past dead members, so descriptor 1
+/// can carry roster slot 2. The sweep must follow the roster field.
+#[test]
+fn combat_death_sweep_reads_linked_roster_record_not_descriptor_index() {
+    let mut state = combat_ai_turn_state(8, 5);
+    while state.party.len() < 3 {
+        let member = state.party[0];
+        state.party.push(member);
+    }
+    for member in state.party.iter_mut() {
+        member.status = b'G';
+        member.hp = 50;
+    }
+    // Roster [G, D, G]: the third member sits at descriptor 1.
+    state.party[1].status = b'D';
+    state.party[1].hp = 0;
+    state.combat_actors[1] =
+        CombatActorDescriptor::from_row([20, 1, COMBAT_ACTOR_FLAG_SELECTABLE_80, 2, 0, 1, 6, 5]);
+
+    let application = dispatch_slot_for_death_sweep(&mut state, 1);
+    assert!(!matches!(
+        application,
+        CombatActorSlotDispatchApplication::Slot {
+            action: CombatActorDispatchAction::PartyDeathSweep,
+            ..
+        }
+    ));
+    assert!(!state.combat_actors[1].is_marked_dead());
+
+    // The linked record (roster 2) dying is what the sweep retires.
+    state.party[2].status = b'D';
+    state.party[2].hp = 0;
+    state.combat_actors[1].phase_counter = 5;
+    let application = dispatch_slot_for_death_sweep(&mut state, 1);
+    assert!(matches!(
+        application,
+        CombatActorSlotDispatchApplication::Slot {
+            action: CombatActorDispatchAction::PartyDeathSweep,
+            ..
+        }
+    ));
+    assert!(state.combat_actors[1].is_marked_dead());
+}
+
+/// `combat.md §7`: step 2 (the death sweep) precedes step 3 (the restraint
+/// skip), so a member who died while held in the stocks is still retired.
+#[test]
+fn combat_death_sweep_runs_before_restraint_skip() {
+    let mut state = combat_ai_turn_state(8, 5);
+    state.combat_terrain[5][5] = 0x84;
+    state.party[0].status = b'D';
+    state.party[0].hp = 0;
+
+    let application = dispatch_slot_for_death_sweep(&mut state, 0);
+    assert!(matches!(
+        application,
+        CombatActorSlotDispatchApplication::Slot {
+            action: CombatActorDispatchAction::PartyDeathSweep,
+            ..
+        }
+    ));
+    assert!(state.combat_actors[0].is_marked_dead());
+}
+
 #[test]
 fn combat_round_walk_stops_when_player_slot_is_ready_for_input() {
     let mut state = combat_ai_turn_state(8, 5);
