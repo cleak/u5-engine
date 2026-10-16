@@ -1389,10 +1389,12 @@ impl PlayState {
                 .unwrap_or(ShrineVirtue::Spirituality);
             // Measured: the echo names the shrine, then two narration lines
             // print, each under a blank row, and only then the question.
-            let _ = self.complete_open_direction_echo(
-                "Enter ",
-                &format!("{SHRINE_ENTER_ECHO_PREFIX}{}", virtue.name()),
-            );
+            // `karma.md §7` entry table, Enter prefix: `Enter `, then `the
+            // shrine of\n`, then the virtue's name, then one line feed - so
+            // the name starts its own row.
+            if self.complete_open_direction_echo("Enter ", SHRINE_ENTER_ECHO_PREFIX) {
+                self.push_message_entry(virtue.name(), false);
+            }
             // `karma.md §12`: "Record `45`, including its leading newline
             // **and trailing blank row**". The engine printed the leading one
             // and not the trailing one, which only showed once the narration

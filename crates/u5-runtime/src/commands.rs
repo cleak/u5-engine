@@ -697,7 +697,10 @@ pub const SHRINE_VIRTUE_PROMPT: &str = "Upon what virtue dost thou meditate?";
 /// shrine - which is what `gazetteer.md` §7 means when it says the one
 /// coordinate table also supplies "the shrine of *virtue*" name - and two
 /// narration lines print before the question, each followed by a blank row.
-pub const SHRINE_ENTER_ECHO_PREFIX: &str = "the shrine of ";
+/// `karma.md §7`'s entry table: the prefix is `the shrine of\n`, so the
+/// virtue name prints on its own row; this is the row's text, and the
+/// line feed is the row break the caller emits before the name.
+pub const SHRINE_ENTER_ECHO_PREFIX: &str = "the shrine of";
 /// `karma.md §8`: E on the Codex tile "prints `Enter the Shrine of the
 /// Codex!\n` and immediately starts the shrine/Codex presentation". The
 /// literal completes the open `Enter ` echo, so it carries no verb of its own.

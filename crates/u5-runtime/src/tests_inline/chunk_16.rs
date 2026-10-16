@@ -1797,6 +1797,28 @@ BRITANNIA 11 21
     }
 
     #[test]
+    fn shrine_enter_echo_puts_the_virtue_name_on_its_own_row() {
+        // `karma.md §7` entry table, Enter prefix: "`E`-Enter prints
+        // `Enter `, then `the shrine of\n`, then the virtue's name from the
+        // table above, then one line feed".
+        let dir = debug_game_dir();
+        fs::write(dir.join(SHRINE_TABLE_FILE), "BRITANNIA 10 20 HONESTY 25\n").unwrap();
+        let mut grid = open_world_grid();
+        grid[world_cell_index(10, 20)] = SHRINE_MARKER_TILE;
+        let mut state = britannia_state(grid, 10, 20);
+
+        handle_play_key_input(&mut state, 'E', "", &dir).unwrap();
+
+        let rows = transcript_texts(&state);
+        let at = rows
+            .iter()
+            .position(|row| row == "Enter the shrine of")
+            .unwrap_or_else(|| panic!("no `Enter the shrine of` row in {rows:?}"));
+        assert_eq!(rows[at + 1], "Honesty");
+        let _ = fs::remove_dir_all(dir);
+    }
+
+    #[test]
     fn active_shrine_prompt_blank_mantra_has_no_effect() {
         let dir = debug_game_dir();
         fs::write(dir.join(SHRINE_TABLE_FILE), "BRITANNIA 10 20 HONESTY 25\n").unwrap();
