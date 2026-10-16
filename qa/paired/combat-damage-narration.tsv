@@ -10,6 +10,14 @@
 # on which row - which a run of swings surfaces on both sides even when no
 # single swing agrees.
 #
+# What the killed merchant leaves is part of the same lottery. `combat.md`
+# §6.3 rolls `1..30` against the Merchant class's drop cap of 10: a chest
+# (`0x01`) about 36% of the time, the moldy corpse (`0x1F`) otherwise. Stock
+# left a chest on 2026-10-13 23:55 and 2026-10-16 13:46 and the corpse on
+# 2026-10-13 10:45 and 2026-10-16 11:35, so a chest on one side and a corpse
+# on the other is not a difference (`p16_` test in
+# `tests_inline/town_fight_followups.rs`).
+#
 # The seat is the town attack, not the dungeon room: the room the dungeon
 # seed enters is empty, so every swing there answers `Attack-Aim!` and
 # `Nothing!` and no damage word is reachable at all. Attacking the

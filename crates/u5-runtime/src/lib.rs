@@ -1138,4 +1138,5 @@ mod tests {
     include!("tests_inline/kill_shadowlord_vanish.rs");
     include!("tests_inline/audit_g6_conformance.rs");
     include!("tests_inline/audit_g8_magic_view.rs");
+    include!("tests_inline/town_fight_followups.rs");
 }

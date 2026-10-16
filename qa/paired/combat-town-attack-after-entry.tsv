@@ -5,6 +5,17 @@
 # `"Greetings, traveller! ..."`. Beats carrying that greeting have measured
 # nothing about the attack this scenario is for.
 #
+# **The merchant's cell on arrival is a lottery too.** Traced 2026-10-16
+# from the run timelapses: both sides walk the resident in lockstep while
+# the party is within three of its 10:00 waypoint (AI 4, `npc-schedules.md`
+# §9), but for the three steps the party spends four or five cells away -
+# the last West and the first North - it falls back to the §9.1 wander, one
+# coin and one direction per turn off a generator `prng.md` §3 seeds from
+# the host clock. Ten stock runs of this unchanged scenario put it on six
+# different cells and ended in the shop greeting six times, `Nothing to
+# attack!` three times and the arena once. The deterministic half is pinned
+# by the `p15_` tests in `tests_inline/town_fight_followups.rs`.
+#
 # Town combat entry, reached by walking in rather than from a seeded save.
 # `combat-town-attack` seeds the party at the counter from an engine-written
 # save at 12:00, when the weaponsmith is seated: the stock game answers that
