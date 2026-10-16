@@ -371,3 +371,29 @@ fn audit_a073_ask_who_tests_only_the_first_occurrence() {
     assert_eq!(tlk_ask_who_match(b"triolo iolo", &names), 0);
     assert_eq!(tlk_ask_who_match(b"iolo triolo", &names), 2);
 }
+
+/// Audit A066. `conversation.md §2` step 5, "The dispatcher's own lines": the
+/// silent-figure index prints `"` then `Don't hurt me!` ⏎ `Please go away!`
+/// then `"` and a line feed, after the dispatcher's own leading line feed.
+#[test]
+fn audit_a066_silent_figure_prints_the_published_rows() {
+    assert_eq!(
+        TOWN_NPC_COWERING_RESPONSE,
+        "\"Don't hurt me!\nPlease go away!\""
+    );
+    let mut state = test_state(open_grid(), 1, 1);
+    state.player.facing = Direction::East;
+    state.load_scheduled_npcs(&[
+        NpcSlot { slot: 0, type_byte: 0, dialog_id: 0, schedule: [0; 16], name: None },
+        NpcSlot {
+            slot: 1,
+            type_byte: 0x50,
+            dialog_id: TOWN_NPC_COWERING_DIALOG_ID,
+            schedule: [3, 3, 3, 2, 2, 2, 1, 1, 1, 0, 0, 0, 6, 12, 18, 22],
+            name: None,
+        },
+    ]);
+    state.talk_facing_with_dialogue(&HashMap::new());
+    assert!(state.message.contains("Don't hurt me!\nPlease go away!"), "{:?}", state.message);
+    assert!(!state.message.contains("cower"));
+}
