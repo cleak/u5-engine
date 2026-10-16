@@ -52,6 +52,7 @@ pub fn run_play_loop(
         // would never advance here. Print the rest of it at once rather than
         // stall: this shell is a harness, not a pacing reference.
         state.flush_staged_narration();
+        state.flush_text_hold();
         // `blackthorn.md §7`'s rescue cinematic still has to reach its
         // handoff, and this shell has no pump to walk it there.
         state.run_blackthorn_rescue_to_handoff(game_dir)?;
@@ -132,6 +133,7 @@ pub fn run_play_script_commands(
         let disposition = handle_play_script_command(state, command, game_dir)?;
         // No pump in script mode either; see the interactive loop above.
         state.flush_staged_narration();
+        state.flush_text_hold();
         print_play_script_snapshot(state, tile_atlas)?;
         if disposition == PlayInputDisposition::Quit {
             break;
@@ -152,6 +154,7 @@ where
     for (index, command) in commands.iter().enumerate() {
         let disposition = handle_play_script_command(state, command, game_dir)?;
         state.flush_staged_narration();
+        state.flush_text_hold();
         // The cinematics need walking to their handoff here as well as in the
         // idle gate. The gate only runs while `play_state_accepts_typeahead`,
         // which is false for the whole of a Blackthorn audience, so a script
@@ -543,6 +546,7 @@ fn settle_play_script_exploration_gate(state: &mut PlayState, game_dir: &Path) -
         // `britannia-defeat-persists-ool-before-rescue` and
         // `stonegate-trapdoor-rescue` were failing with.
         state.flush_staged_narration();
+        state.flush_text_hold();
         state.run_blackthorn_rescue_to_handoff(game_dir)?;
         state.run_blackthorn_audience_exit_to_handoff(game_dir)?;
         state.run_shrine_third_mantra_resolution_to_completion(game_dir)?;

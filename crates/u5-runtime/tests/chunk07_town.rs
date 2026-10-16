@@ -149,6 +149,9 @@ fn blackthorn_first_wrong_answer_threatens_and_re_asks_instead_of_ending() {
     let scene = Scene::new(BLACKTHORN_CAPTIVE_CELL_SCENE).unwrap();
     state.area = Area::Town { scene, floor: 0 };
     state.begin_blackthorn_audience_capture(&dir).unwrap();
+    // `blackthorn.md §3`: the greeting and preamble acknowledgements.
+    state.submit_blackthorn_audience_answer("", &dir).unwrap();
+    state.submit_blackthorn_audience_answer("", &dir).unwrap();
     assert!(state.active_blackthorn.is_some());
 
     // Shrine zero is Honesty, whose accepted answer is `Ahm`.
@@ -221,6 +224,9 @@ fn blackthorn_middle_wrong_answers_stamp_props_without_erasing_the_victim() {
         floor: 0,
     };
     state.begin_blackthorn_audience_capture(&dir).unwrap();
+    // `blackthorn.md §3`: the greeting and preamble acknowledgements.
+    state.submit_blackthorn_audience_answer("", &dir).unwrap();
+    state.submit_blackthorn_audience_answer("", &dir).unwrap();
 
     state
         .submit_blackthorn_audience_answer("nonsense", &dir)
@@ -237,7 +243,14 @@ fn blackthorn_middle_wrong_answers_stamp_props_without_erasing_the_victim() {
             .and_then(|map| map.tile(5, 7)),
         Some(BLACKTHORN_PENDULUM_TILE)
     );
-    assert!(!state.active_objects[1].is_empty());
+    // `blackthorn.md §6.1`: "index 1 writes `0xEB`" (audit A037).
+    assert_eq!(
+        state
+            .blackthorn_audience_map
+            .as_ref()
+            .and_then(|map| map.tile(5, 9)),
+        Some(BLACKTHORN_HOURGLASS_SECOND_WRONG_TILE)
+    );
     // §4.1's third demand, record `2`, follows the second wrong answer.
     assert!(
         state.message.starts_with("\"Resistance is futile!"),
@@ -253,7 +266,7 @@ fn blackthorn_middle_wrong_answers_stamp_props_without_erasing_the_victim() {
             .blackthorn_audience_map
             .as_ref()
             .and_then(|map| map.tile(5, 9)),
-        Some(BLACKTHORN_HOURGLASS_TILE)
+        Some(BLACKTHORN_HOURGLASS_SPENT_TILE)
     );
     // §4.1's fourth demand, record `3`, which "has an opening quotation mark
     // but **no closing quotation mark**, and its caller adds none".
@@ -264,7 +277,8 @@ fn blackthorn_middle_wrong_answers_stamp_props_without_erasing_the_victim() {
         "{}",
         state.message,
     );
-    assert!(!state.active_objects[1].is_empty());
+    // The victim's actor was led off by the first wrong answer's §6.3
+    // failed-challenge vector ("clear that member"); the roster is intact.
     assert_eq!(state.party.len(), 3);
     let _ = fs::remove_dir_all(dir);
 }
@@ -280,6 +294,9 @@ fn blackthorn_fourth_wrong_answer_executes_the_named_companion() {
     let scene = Scene::new(BLACKTHORN_CAPTIVE_CELL_SCENE).unwrap();
     state.area = Area::Town { scene, floor: 0 };
     state.begin_blackthorn_audience_capture(&dir).unwrap();
+    // `blackthorn.md §3`: the greeting and preamble acknowledgements.
+    state.submit_blackthorn_audience_answer("", &dir).unwrap();
+    state.submit_blackthorn_audience_answer("", &dir).unwrap();
     let victim_name = state.party_names[1];
 
     for ordinal in 1..=3 {
@@ -303,12 +320,11 @@ fn blackthorn_fourth_wrong_answer_executes_the_named_companion() {
         .submit_blackthorn_audience_answer("nonsense", &dir)
         .unwrap();
 
-    // `blackthorn.md §5`: "After the execution and roster removal, print
-    // `\n\n`, the actual removed member's name, and ` is sliced in half! `.
-    // After acknowledgement, record `6` supplies the quoted
-    // unfairness/treachery speech" - three held pages, not two. Measured
-    // (`qa/paired/bt-escalate.tsv`, beat `ask5`): the original's beat ends on
-    // the pendulum narration's `falls!`, with the sliced line still to come.
+    // `blackthorn.md §5`: record `4`, the animation, then the roster lift and
+    // repaint with no key; then `\n\n`, the name and ` is sliced in half! `
+    // on the one held page. "An implementation that defers the durable roster
+    // edit to the acknowledgement ... lands the drop on the wrong page"
+    // (audit A036).
     assert!(
         state
             .active_blackthorn
@@ -316,29 +332,21 @@ fn blackthorn_fourth_wrong_answer_executes_the_named_companion() {
             .is_some_and(|challenge| challenge.closing_epilogue_pending())
     );
     assert!(
-        state.message.contains("pendulum blade falls!"),
-        "{}",
-        state.message
+        state
+            .message_entries()
+            .iter()
+            .any(|entry| entry.text.contains("pendulum blade falls!")),
+        "record 4 is printed before the held page",
     );
-    assert!(
-        !state.message.contains(" is sliced in half! "),
-        "the sliced line is the next page: {}",
-        state.message
-    );
-
-    state.submit_blackthorn_audience_answer("", &dir).unwrap();
     assert!(
         state.message.contains(" is sliced in half! "),
         "{}",
         state.message
     );
-    state.submit_blackthorn_audience_answer("", &dir).unwrap();
-    assert!(
-        state
-            .active_blackthorn
-            .as_ref()
-            .is_some_and(|challenge| challenge.awaiting_closing_acknowledgement())
-    );
+    assert_eq!(state.party.len(), 2, "the lift precedes the held page");
+
+    // After that single acknowledgement, record `6` and the helper's line
+    // feed print and the loop leaves without another wait.
     state.submit_blackthorn_audience_answer("", &dir).unwrap();
     assert!(
         state.active_blackthorn.is_none(),
@@ -405,6 +413,9 @@ fn blackthorn_correct_answer_runs_the_audience_exit_beat() {
     let scene = Scene::new(BLACKTHORN_CAPTIVE_CELL_SCENE).unwrap();
     state.area = Area::Town { scene, floor: 0 };
     state.begin_blackthorn_audience_capture(&dir).unwrap();
+    // `blackthorn.md §3`: the greeting and preamble acknowledgements.
+    state.submit_blackthorn_audience_answer("", &dir).unwrap();
+    state.submit_blackthorn_audience_answer("", &dir).unwrap();
     let mantra = state
         .active_blackthorn
         .as_ref()

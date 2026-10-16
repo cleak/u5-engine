@@ -79,6 +79,7 @@ pub mod moongate;
 pub mod moongate_phase;
 pub mod moongate_transit;
 pub mod narration;
+pub mod text_hold;
 pub mod npc_band;
 pub mod npc_runtime;
 pub mod ool_audit;
@@ -161,7 +162,8 @@ pub use blackthorn::{
     BLACKTHORN_FAILURE_VICTIM_SLOT, BLACKTHORN_GUARD_ACTOR_BYTE, BLACKTHORN_GUARD_DEMAND_DIALOG_ID,
     BLACKTHORN_GUARD_PASSWORD, BLACKTHORN_GUARD_PASSWORD_COMPARE_LEN,
     BLACKTHORN_GUARD_PASSWORD_INPUT_MAX, BLACKTHORN_GUARD_TRIBUTE_PER_LIVING_MEMBER,
-    BLACKTHORN_HOURGLASS_TILE, BLACKTHORN_LOCKED_DOOR_TILE, BLACKTHORN_PENDULUM_TILE,
+    BLACKTHORN_HOURGLASS_CELL, BLACKTHORN_HOURGLASS_SECOND_WRONG_TILE, BLACKTHORN_HOURGLASS_SPENT_TILE,
+    BLACKTHORN_HOURGLASS_TILE, blackthorn_hourglass_stamp, BLACKTHORN_LOCKED_DOOR_TILE, BLACKTHORN_PENDULUM_TILE,
     BLACKTHORN_RESCUE_FLASH_COUNT, BLACKTHORN_RESCUE_FLASH_PRNG_DRAWS_PER_INVOCATION,
     BLACKTHORN_RESCUE_HANDOFF_SCENE, BLACKTHORN_RESCUE_HANDOFF_X, BLACKTHORN_RESCUE_HANDOFF_Y,
     BLACKTHORN_RESCUE_LEFT_GUARDIAN_CELL, BLACKTHORN_RESCUE_LEFT_GUARDIAN_TILE,
@@ -1116,6 +1118,7 @@ mod tests {
     include!("tests_inline/save_fidelity.rs");
     include!("tests_inline/npc_band_conformance.rs");
     include!("tests_inline/spec_conformance_chunk_07.rs");
+    include!("tests_inline/audit_g5_conformance.rs");
     include!("tests_inline/variant_rescope.rs");
     include!("tests_inline/combat_frame_conformance.rs");
     include!("tests_inline/combat_descriptors_conformance.rs");

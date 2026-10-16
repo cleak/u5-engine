@@ -24508,10 +24508,11 @@ fn parse_sign_records_rejects_bad_offsets_and_malformed_blocks() {
 
 #[test]
 fn decode_sign_payload_handles_pause_and_high_bit() {
-    // §4: 0x0D becomes a newline; high-bit text still prints as the
+    // §4: 0x0D "pauses for a keypress and then resumes printing" (a
+    // wait-key hold, not a line feed); high-bit text still prints as the
     // low-seven-bit character.
     let bytes = [b'A', 0x0d, b'B' | 0x80, b'C'];
-    assert_eq!(decode_sign_payload(&bytes), "A\nBC");
+    assert_eq!(decode_sign_payload(&bytes), "A\u{2}BC");
 }
 
 #[test]

@@ -2298,6 +2298,12 @@
 
         assert!(state.pending_town_arrest.is_none());
         assert!(state.active_blackthorn.is_some());
+        // `blackthorn.md §3`: the greeting page and the preamble record each
+        // take a blocking key before the first demand is asked.
+        assert!(state.active_blackthorn.as_ref().unwrap().awaiting_acknowledgement());
+        for _ in 0..2 {
+            handle_play_key_input(&mut state, ' ', "", &dir).unwrap();
+        }
         // blackthorn.md §3 step 3: "Clear the active-object table so the
         // audience scene can reuse those records as temporary cinematic
         // actors."
@@ -2443,9 +2449,16 @@
         );
 
         assert!(state.active_blackthorn.is_some());
+        // `blackthorn.md §3` steps 8-9: the greeting page holds for a key,
+        // then record `11` is printed and holds for the second key, and only
+        // then is the first demand asked.
+        assert!(!state.message.contains("authored demand"), "{}", state.message);
+        state.submit_blackthorn_audience_answer("", &dir).unwrap();
+        assert_eq!(state.message, "authored capture line");
+        state.submit_blackthorn_audience_answer("", &dir).unwrap();
         assert_eq!(
             state.message,
-            "authored capture line\n\nauthored demand for Honesty?\"\n\nYour response?"
+            "authored demand for Honesty?\"\n\nYour response?"
         );
         let _ = fs::remove_dir_all(dir);
     }
@@ -2503,6 +2516,9 @@
             state.begin_blackthorn_audience_capture(&dir).unwrap(),
             Some(MoveOutcome::Used)
         );
+        // `blackthorn.md §3` step 8: the guard-release route runs on the
+        // greeting page's acknowledgement key.
+        state.submit_blackthorn_audience_answer("", &dir).unwrap();
 
         for placement in BLACKTHORN_AUDIENCE_ACTOR_PLACEMENTS {
             let slot = placement.actor.slot_index() as usize;
@@ -2543,7 +2559,7 @@
 
         state.begin_blackthorn_audience_capture(&dir).unwrap();
         let sound_before = state.sound_effect_serial;
-        let vm = state.run_blackthorn_cutscene_beat(BlackthornCutsceneBeat::PerQuestionIntermission);
+        let vm = state.run_blackthorn_cutscene_beat(BlackthornCutsceneBeat::AudienceExit);
 
         assert_eq!(
             state
@@ -2563,6 +2579,10 @@
         ] {
             assert!(state.active_objects[actor.slot_index() as usize].is_empty());
         }
+        // `blackthorn.md §4.2` counts the whole exit vector at 36 stings and
+        // 73 world ticks; the per-command repeats that make up the difference
+        // are unpublished (see `BLACKTHORN_CUTSCENE_AUDIENCE_EXIT`), so these
+        // pin the engine's checkpoint-only script, not the published totals.
         assert_eq!(vm.world_ticks, 29);
         assert_eq!(vm.bios_ticks, 28);
         assert_eq!(vm.stinger_count, 14);

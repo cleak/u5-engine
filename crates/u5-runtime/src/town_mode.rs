@@ -515,7 +515,13 @@ pub const TOWN_NPC_FORCED_PURSUIT_RANDOM_AI: u8 = 7;
 pub const TOWN_NPC_FORCED_PURSUIT_NEAR_TYPE_CUTOFF: u8 = 0x2F;
 pub const TOWN_NPC_COWERING_DIALOG_ID: u8 = 0xFD;
 pub const TOWN_NPC_BRUSHOFF_DIALOG_ID: u8 = 0xFE;
-pub const TOWN_NPC_COWERING_RESPONSE: &str = "They cower in fear.";
+/// `conversation.md §2` step 5, "The dispatcher's own lines": the
+/// silent-figure index prints, after the dispatcher's own leading line feed,
+/// `"` then `Don't hurt me!` ⏎ `Please go away!` then `"` and a line feed -
+/// the quotes "framed by two separately emitted double-quote characters".
+/// The leading and closing line feeds come from the message-row framing every
+/// dispatcher line gets here (compare `TALK_NO_RESPONSE_MESSAGE`).
+pub const TOWN_NPC_COWERING_RESPONSE: &str = "\"Don't hurt me!\nPlease go away!\"";
 pub const TOWN_NPC_BRUSHOFF_RESPONSE: &str = "Begone, vermin!";
 /// Slot zero of every sub-map is the unused-sentinel slot the schedule
 /// processor skips; effective capacity per sub-map is therefore 31.

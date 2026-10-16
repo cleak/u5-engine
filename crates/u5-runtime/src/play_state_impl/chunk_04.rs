@@ -135,6 +135,32 @@ pub const fn shop_vendor_name_for_scene(dialog_id: u8, scene_byte: u8) -> Option
     None
 }
 
+/// The `LOOK2.DAT` string at `index`, or the domain sentinel at
+/// `sentinel_index` when the row is missing (`formats/look2-dat.md §6`).
+/// With no table loaded there is no description to print.
+fn look2_selected_string(look_table: Option<&LookTable>, index: usize, sentinel_index: usize) -> String {
+    look_table
+        .and_then(|table| table.description(index).or_else(|| table.description(sentinel_index)))
+        .unwrap_or_default()
+        .to_string()
+}
+
+/// `view.md §3` row 5c: "`58` Shame, `72` Destard, `91` Despise, `126`
+/// Wrong, `128` Doom, `156` Covetous, `239` Hythloth, `240` Deceit."
+fn sealed_dungeon_name_for_x(x: usize) -> Option<&'static str> {
+    Some(match x {
+        58 => "Shame",
+        72 => "Destard",
+        91 => "Despise",
+        126 => "Wrong",
+        128 => "Doom",
+        156 => "Covetous",
+        239 => "Hythloth",
+        240 => "Deceit",
+        _ => return None,
+    })
+}
+
 impl PlayState {
     /// Apply the primary tavern round's north-first table-setting rewrite.
     /// At either vertical edge the out-of-range lookup uses the town-grid
@@ -3622,9 +3648,10 @@ impl PlayState {
                 }
                 if let Some(object) = self.blocking_object_at(x, y) {
                     if sign_or_wanted_poster_object_class(object.type_byte) {
-                        self.message = self
+                        let sign = self
                             .sign_message_at_for_current_area(game_dir, y as u8, x as u8)?
                             .unwrap_or_else(|| "Sign:\n".to_string());
+                        self.present_sign_message(sign);
                         return Ok(MoveOutcome::Observed);
                     }
                     // `cleak/u5-spec#194` (black-box): the stock game prints
@@ -3643,7 +3670,7 @@ impl PlayState {
                     if let Some(sign) =
                         self.sign_message_at(game_dir, scene.byte, floor as u8, y as u8, x as u8)?
                     {
-                        self.message = sign;
+                        self.present_sign_message(sign);
                         return Ok(MoveOutcome::Observed);
                     }
                 }
@@ -3674,7 +3701,7 @@ impl PlayState {
                 }
                 self.message = format!(
                     "{LOOK_RESULT_PREFIX}\n{}",
-                    self.look_description(tile, look_table)
+                    self.look_description(tile, look_table, x)
                 );
                 Ok(MoveOutcome::Observed)
             }
@@ -3696,9 +3723,10 @@ impl PlayState {
                 }
                 if let Some(object) = self.world_object_at(x, y) {
                     if sign_or_wanted_poster_object_class(object.type_byte) {
-                        self.message = self
+                        let sign = self
                             .sign_message_at_for_current_area(game_dir, y as u8, x as u8)?
                             .unwrap_or_else(|| "Sign:\n".to_string());
+                        self.present_sign_message(sign);
                         return Ok(MoveOutcome::Observed);
                     }
                     self.message = if look_table.is_some() {
@@ -3723,7 +3751,7 @@ impl PlayState {
                     y as u8,
                     x as u8,
                 )? {
-                    self.message = sign;
+                    self.present_sign_message(sign);
                     return Ok(MoveOutcome::Observed);
                 }
                 if surface_wishing_well_look_tile(tile) {
@@ -3734,8 +3762,7 @@ impl PlayState {
                 if surface_town_fountain_look_tile(tile) {
                     return Ok(self.start_surface_fountain_drink_prompt(direction));
                 }
-                let description =
-                    self.look_description_for_world_tile(tile, look_table, game_dir, plane, x, y)?;
+                let description = self.look_description(tile, look_table, x);
                 // `view.md §3`: "the shared \"thou dost see\" preamble is
                 // printed here" with the description on the next row, and
                 // `commands.md §8.1` has the look family never print "tile
@@ -3975,15 +4002,19 @@ impl PlayState {
         }
     }
 
-    pub fn look_description(&self, tile: u8, look_table: Option<&LookTable>) -> String {
-        let base = look_table
-            .and_then(|table| {
-                table.description(tile as usize).filter(|description| {
-                    !description.is_empty() && !table.is_sentinel(description)
-                })
-            })
-            .map(str::to_string)
-            .unwrap_or_else(|| tile_class(tile).to_string());
+    /// `target_x` is the looked-at cell's map X, which selects the `0xDF`
+    /// dungeon name (`view.md §3` row 5c).
+    pub fn look_description(
+        &self,
+        tile: u8,
+        look_table: Option<&LookTable>,
+        target_x: usize,
+    ) -> String {
+        // `formats/look2-dat.md §5`: "Use the offset table directly; do not
+        // derive descriptions from tile or object ranges." A sentinel row
+        // prints its own selected string, as the original LOOK2 path does
+        // (§4); a missing row substitutes the domain's sentinel (§6).
+        let base = look2_selected_string(look_table, tile as usize, 0);
 
         if matches!(tile, 0xfa | 0xfb) {
             format!(
@@ -4008,24 +4039,34 @@ impl PlayState {
                 Some(word) => format!("{base} {word}"),
                 None => base,
             }
-        } else if let Some(virtue) = shrine_virtue_for_altar_tile(tile) {
-            format!("{base} (Shrine of {})", virtue.name())
+        } else if tile == WORD_OF_POWER_SEALED_TILE {
+            // `view.md §3` terrain-description row 5c: "Append a dungeon
+            // name chosen by the target cell's map X coordinate ... Any
+            // other X appends nothing." Keyed on X alone, in every
+            // surface/town scene; an appender row even when it appends
+            // nothing.
+            match sealed_dungeon_name_for_x(target_x) {
+                Some(name) => format!("{base} {name}"),
+                None => base,
+            }
         } else {
+            // `formats/look2-dat.md §5` / `view.md §3` rows 5a..5c list the
+            // only appenders; there is no shrine appender, and
+            // `catalogs/gazetteer.md §7`: "The `0x88..0x8F` band does not
+            // encode the eight surface shrines."
             base
         }
     }
 
     pub fn look_object_description(&self, object_id: u8, look_table: Option<&LookTable>) -> String {
-        look_table
-            .and_then(|table| {
-                table
-                    .description(LOOK2_DAT_TERRAIN_ENTRIES + object_id as usize)
-                    .filter(|description| {
-                        !description.is_empty() && !table.is_sentinel(description)
-                    })
-            })
-            .map(str::to_string)
-            .unwrap_or_else(|| tile_class(object_id).to_string())
+        // `formats/look2-dat.md §3`: the object domain is resolved before
+        // indexing, and its sentinel (`x`) is printed as selected, never
+        // replaced by a terrain-range class name (§5).
+        look2_selected_string(
+            look_table,
+            LOOK2_DAT_TERRAIN_ENTRIES + object_id as usize,
+            LOOK2_DAT_TERRAIN_ENTRIES,
+        )
     }
 
     pub fn sign_message_at(
@@ -4052,6 +4093,18 @@ impl PlayState {
         Ok(Some(format!("Sign:\n{}", bodies.join("\n"))))
     }
 
+    /// Put a sign into the message slot. `formats/signs-dat.md §6`: "Pause on
+    /// the embedded pause code" - the sign prints up to its first `0x0D` and
+    /// the rest waits behind a key (see [`crate::text_hold`]).
+    fn present_sign_message(&mut self, sign: String) {
+        let (first, rest) = crate::text_hold::split_rendered_at_holds(
+            &crate::tlk_runner::TlkRenderedText::plain(sign),
+        );
+        let row_open = !first.text.is_empty() && !first.text.ends_with('\n');
+        self.message = first.text;
+        self.begin_text_hold(rest, row_open);
+    }
+
     fn yew_wanted_poster_message(&self, scene: u8, z: u8, y: u8, x: u8) -> Option<String> {
         if !(scene == 4 && z == 0 && x == 17 && y == 21) {
             return None;
@@ -4074,91 +4127,6 @@ impl PlayState {
             }
             Area::Dungeon { .. } => Ok(None),
         }
-    }
-
-    pub fn look_description_for_world_tile(
-        &self,
-        tile: u8,
-        look_table: Option<&LookTable>,
-        game_dir: Option<&Path>,
-        plane: WorldPlane,
-        x: usize,
-        y: usize,
-    ) -> io::Result<String> {
-        let base = self.look_description(tile, look_table);
-        if tile != 0xdf {
-            if let Some(virtue) = self.world_shrine_virtue_at(game_dir, plane, x, y, tile)? {
-                let shrine_name = format!("Shrine of {}", virtue.name());
-                if base.contains(&shrine_name) {
-                    return Ok(base);
-                }
-                return Ok(format!("{base} ({shrine_name})"));
-            }
-            return Ok(base);
-        }
-        let Some(name) = self.world_dungeon_name_at(game_dir, plane, x, y, tile)? else {
-            return Ok(base);
-        };
-        Ok(format!("{base} ({name})"))
-    }
-
-    pub fn world_shrine_virtue_at(
-        &self,
-        game_dir: Option<&Path>,
-        plane: WorldPlane,
-        x: usize,
-        y: usize,
-        tile: u8,
-    ) -> io::Result<Option<ShrineVirtue>> {
-        if plane != WorldPlane::Britannia {
-            return Ok(None);
-        }
-        if let Some(game_dir) = game_dir {
-            if let Some(entries) = load_shrine_entries(game_dir)? {
-                if let Some(entry) = entries.into_iter().find(|entry| {
-                    entry.plane == plane
-                        && entry.x == x
-                        && entry.y == y
-                        && entry
-                            .expected_tile
-                            .map_or(true, |expected| expected == tile)
-                }) {
-                    return Ok(Some(entry.virtue));
-                }
-            }
-        }
-        Ok(shrine_virtue_for_altar_tile(tile))
-    }
-
-    pub fn world_dungeon_name_at(
-        &self,
-        game_dir: Option<&Path>,
-        plane: WorldPlane,
-        x: usize,
-        y: usize,
-        tile: u8,
-    ) -> io::Result<Option<&'static str>> {
-        let Some(game_dir) = game_dir else {
-            return Ok(None);
-        };
-        Ok(effective_world_location_entries(game_dir)?
-            .into_iter()
-            .find_map(|entry| {
-                if entry.plane == plane
-                    && entry.x == x
-                    && entry.y == y
-                    && entry
-                        .expected_tile
-                        .map_or(true, |expected| expected == tile)
-                {
-                    match entry.target {
-                        PlayTarget::Dungeon(scene) => Some(scene.name()),
-                        _ => None,
-                    }
-                } else {
-                    None
-                }
-            }))
     }
 
     pub fn talk_facing_with_game_dir(&mut self, game_dir: &Path) -> io::Result<MoveOutcome> {
@@ -4193,12 +4161,43 @@ impl PlayState {
     /// fails both, an odd index other than one passes the parity gate and
     /// fails the equality. The parity clause is therefore stated rather than
     /// coded, and this comment is the record of why. `conversation.md §2`'s
-    /// behaviour-4-to-1 waypoint rewrite runs before both gates
-    /// (`talk_stand_down_approach_behavior`), so it does not split them.
+    /// behaviour-4-to-1 waypoint rewrite
+    /// ([`Self::talk_dispatcher_stand_down`]) runs before both and edits
+    /// only the behaviour byte, which neither test reads.
     ///
     /// A slot this engine cannot resolve - no runtime NPC at the cell, which
     /// the harness fixtures produce - is treated as open, so unit fixtures
     /// that seat a trigger without a schedule keep working.
+    /// `conversation.md §2` step 5, the dispatcher's first decision: "If that
+    /// waypoint's behaviour is the approach-and-converse mode (... value
+    /// `4`), the dispatcher first **rewrites that waypoint's behaviour to the
+    /// bounded-wander mode** (value `1`, a persisted schedule edit: the guard
+    /// stands down for the rest of the period and the edit travels with the
+    /// save) and then dispatches on the dialog index." The waypoint is the
+    /// reached one, and the rewrite "applies to shopkeepers as well as guards,
+    /// before a shop can open or refuse" and before any of the dispatcher's own
+    /// lines. `shops.md §2` states the same edit for explicit Talk and
+    /// automatic contact alike. Returns whether the rewrite happened, which
+    /// skips the guard gate.
+    pub(crate) fn talk_dispatcher_stand_down(&mut self, x: usize, y: usize) -> bool {
+        let Some(slot) = self.npc_at_current_floor(x, y).map(|npc| npc.slot) else {
+            return false;
+        };
+        let Some(index) = self.npcs.iter().position(|npc| npc.slot == slot) else {
+            return false;
+        };
+        let at = NPC_SCHEDULE_AI_OFFSET + self.npcs[index].cached_wp;
+        let Some(byte) = self.npcs[index].schedule.get(at).copied() else {
+            return false;
+        };
+        if npc_ai_behavior(byte) != Some(NpcAiBehavior::ApproachAndAttack) {
+            return false;
+        }
+        self.npcs[index].schedule[at] = 1;
+        self.record_town_npc_mutation(index);
+        true
+    }
+
     fn shop_keeper_is_open_for_business(&self, x: usize, y: usize) -> bool {
         const SHOP_WORKING_WAYPOINT: usize = 1;
         let Some(npc) = self.npc_at_current_floor(x, y) else {
@@ -4241,7 +4240,7 @@ impl PlayState {
                 self.message = format!("\n{refusal}");
                 return Ok(self.consume_ordinary_town_talk());
             }
-            self.talk_stand_down_approach_behavior(target_x, target_y);
+            self.talk_dispatcher_stand_down(target_x, target_y);
             return Ok(self
                 .talk_alarm_sentinel_at(dialog_id, target_x, target_y)
                 .expect("published alarm sentinel was preclassified"));
@@ -4303,8 +4302,8 @@ impl PlayState {
 
         let x = x as usize;
         let y = y as usize;
-        if let Some(npc) = self.npc_at_current_floor(x, y) {
-            return Some((npc.dialog_id, x, y));
+        if let Some(target) = self.talk_target_at(x, y) {
+            return Some(target);
         }
         if !is_talk_through_tile(self.grid[y * 32 + x]) {
             return None;
@@ -4315,10 +4314,20 @@ impl PlayState {
         if !(0..32).contains(&x) || !(0..32).contains(&y) {
             return None;
         }
-        let x = x as usize;
-        let y = y as usize;
-        self.npc_at_current_floor(x, y)
-            .map(|npc| (npc.dialog_id, x, y))
+        self.talk_target_at(x as usize, y as usize)
+    }
+
+    /// `conversation.md §2` step 5, "No-owner Talk": "If no occupied,
+    /// non-idle NPC record is linked to the faced active object, Talk does not
+    /// stop with `Nobody's here!`: it runs the dispatcher with an unrelated
+    /// adjacent record that reads as all zero, so the bare `No response!` is
+    /// printed for any sprite." An object with no NPC record therefore
+    /// resolves with dialog index zero.
+    fn talk_target_at(&self, x: usize, y: usize) -> Option<(u8, usize, usize)> {
+        if let Some(npc) = self.npc_at_current_floor(x, y) {
+            return Some((npc.dialog_id, x, y));
+        }
+        self.object_at_current_floor(x, y).map(|_| (0, x, y))
     }
 
     #[cfg(test)]
@@ -4377,7 +4386,7 @@ impl PlayState {
             self.message = format!("\n{refusal}");
             return self.consume_ordinary_town_talk();
         }
-        let stood_down = self.talk_stand_down_approach_behavior(target_x, target_y);
+        let stood_down = self.talk_dispatcher_stand_down(target_x, target_y);
         if let Some(outcome) = self.talk_alarm_sentinel_at(dialog_id, target_x, target_y) {
             return outcome;
         }
@@ -4494,9 +4503,13 @@ impl PlayState {
             // other non-speaker answers the bare `No response!`. The line "is
             // not composed from the NPC's Look description", which is what
             // this engine used to do off a single guard capture.
+            // A stood-down NPC skipped the guard gate, so its zero word
+            // prints the bare line whatever its sprite (§2's decision tree,
+            // arm 1).
             self.message = crate::talk_non_speaker_refusal_for_sprite(
                 self.npc_at_current_floor(target_x, target_y)
-                    .map(|npc| npc.type_byte),
+                    .map(|npc| npc.type_byte)
+                    .filter(|_| !stood_down),
             );
             return self.consume_ordinary_town_talk();
         }
@@ -4620,7 +4633,7 @@ impl PlayState {
             self.message = format!("\n{refusal}");
             return self.consume_ordinary_town_talk();
         }
-        let stood_down = self.talk_stand_down_approach_behavior(target_x, target_y);
+        let stood_down = self.talk_dispatcher_stand_down(target_x, target_y);
         if let Some(outcome) = self.talk_alarm_sentinel_at(dialog_id, target_x, target_y) {
             return outcome;
         }
@@ -4721,9 +4734,13 @@ impl PlayState {
             // other non-speaker answers the bare `No response!`. The line "is
             // not composed from the NPC's Look description", which is what
             // this engine used to do off a single guard capture.
+            // A stood-down NPC skipped the guard gate, so its zero word
+            // prints the bare line whatever its sprite (§2's decision tree,
+            // arm 1).
             self.message = crate::talk_non_speaker_refusal_for_sprite(
                 self.npc_at_current_floor(target_x, target_y)
-                    .map(|npc| npc.type_byte),
+                    .map(|npc| npc.type_byte)
+                    .filter(|_| !stood_down),
             );
             return self.consume_ordinary_town_talk();
         }
@@ -4809,6 +4826,7 @@ impl PlayState {
             ask_who_response: 0,
             yield_on_pause: false,
             yield_on_ask: false,
+            mark_holds: false,
         };
 
         // Resolve which field(s) to run through the byte runner.
@@ -5052,8 +5070,11 @@ impl PlayState {
                 TlkActionDispatchVerb::RaiseTorches => {
                     self.torches = self.torches.saturating_add(1).min(PARTY_BYTE_STOCK_CAP);
                 }
+                // `conversation.md §7.6`: `F` is "`+1` (cap `99`)" like every
+                // counter letter; "Counter letters never assign a fixed final
+                // value".
                 TlkActionDispatchVerb::SetGrappleGate => {
-                    self.climbing_gear = 1;
+                    self.climbing_gear = self.climbing_gear.saturating_add(1).min(PARTY_BYTE_STOCK_CAP);
                 }
                 TlkActionDispatchVerb::RaiseCarpets => {
                     let slot = &mut self.special_items[SPECIAL_ITEM_MAGIC_CARPET_INDEX];
@@ -5170,6 +5191,7 @@ impl PlayState {
             ask_who_response: 0,
             yield_on_pause: false,
             yield_on_ask: false,
+            mark_holds: false,
         };
         let output = crate::tlk_runner::run_tlk_stream(bytes, &inputs);
         self.apply_tlk_action_grants(&output.action_grants);
@@ -5464,13 +5486,24 @@ impl PlayState {
         // (`qa/paired/dwelling-talk-after-entry.tsv`, beat `bye`): the
         // original reads `:BYE`, where this engine left the `:` row empty and
         // opened a fresh row for the word.
-        let empty_line = line.trim().is_empty();
+        //
+        // `conversation.md §6` step 3: "The shortcut belongs to this prompt
+        // alone. The ASK-WHO name prompt ... never reaches the farewell path:
+        // an empty line there prints the dismissive acknowledgement", so
+        // neither the `BYE` echo nor the spent-feed strip applies there.
+        // Only a truly empty line is empty; a lone space is typed input
+        // (`conversation.md §7.6`).
+        let empty_line = line.is_empty()
+            && !self
+                .active_conversation
+                .as_ref()
+                .is_some_and(|session| session.awaiting_ask_who());
         if let Some(prompt) = open_prompt.as_deref() {
             // §6's capture shows the keyword echoed in capitals.
             let echo = if empty_line {
                 TLK_EMPTY_INPUT_BYE_ECHO.to_string()
             } else {
-                line.trim().to_ascii_uppercase()
+                line.to_ascii_uppercase()
             };
             self.commit_typed_prompt_line(prompt, &echo);
         }
@@ -5885,7 +5918,10 @@ impl PlayState {
     pub fn apply_talk_action_grants(&mut self, actions: &[char]) {
         for action in actions {
             match *action {
-                'F' => self.climbing_gear = 1,
+                'F' => {
+                    self.climbing_gear =
+                        self.climbing_gear.saturating_add(1).min(PARTY_BYTE_STOCK_CAP)
+                }
                 'H' => {
                     self.special_items[SPECIAL_ITEM_SEXTANT_INDEX] =
                         SPECIAL_ITEM_TLK_CARRIED_FLAG_VALUE
@@ -5922,30 +5958,6 @@ impl PlayState {
         if !self.talk_entered_by_contact {
             self.advance_turn();
         }
-    }
-
-    /// `conversation.md §2` step 5 / `shops.md §2`: "the shared dispatcher
-    /// first changes behavior 4 at the cached reached waypoint to behavior
-    /// 1" - a persisted schedule edit made before the guard gate and either
-    /// shop refusal, on explicit Talk and automatic contact alike. Returns
-    /// whether the NPC was in behavior 4, which skips the guard-sprite gate.
-    fn talk_stand_down_approach_behavior(&mut self, target_x: usize, target_y: usize) -> bool {
-        let Some(slot) = self.npc_at_current_floor(target_x, target_y).map(|npc| npc.slot) else {
-            return false;
-        };
-        let Some(index) = self.npcs.iter().position(|npc| npc.slot == slot) else {
-            return false;
-        };
-        let ai_index = NPC_SCHEDULE_AI_OFFSET + self.npcs[index].cached_wp;
-        let Some(ai) = self.npcs[index].schedule.get_mut(ai_index) else {
-            return false;
-        };
-        if npc_ai_behavior(*ai) != Some(NpcAiBehavior::ApproachAndAttack) {
-            return false;
-        }
-        *ai = 1;
-        self.record_town_npc_mutation(index);
-        true
     }
 
     fn talk_alarm_sentinel_at(

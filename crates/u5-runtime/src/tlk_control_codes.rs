@@ -409,12 +409,14 @@ pub const QUEST_PASSWORD_OPPRESSION: &str = "IMPERA";
 /// The published rule is deliberately looser than the top-level keyword
 /// scan: "For each active party slot in order, the engine takes the
 /// **first four characters** of that member's name and searches for them
-/// as a substring of the typed line. A hit counts only at the start of
-/// the line or immediately after a literal space; a hit in the middle of
-/// a longer word is rejected and the scan continues with the next member.
-/// The first accepted hit ends the scan, sets the bit, and prints the
-/// affirmative line. Empty input is its own early exit and never sets the
-/// bit."
+/// as a substring of the typed line, folding case on both sides. Only the
+/// **first** occurrence found is tested. It is accepted at the start of the
+/// line or immediately after a literal space; when it is rejected - a hit in
+/// the middle of a longer word - the engine abandons that member and moves
+/// on to the next slot rather than looking for a later, qualifying
+/// occurrence of the same name in the same line. ... The first accepted hit
+/// ends the scan, sets the bit, and prints the affirmative line. Empty input
+/// is its own early exit and never sets the bit."
 ///
 /// Returns the matched 1-based party slot, or `0` for empty input or no
 /// match. Both sides are compared with bit 7 stripped and case folded,
@@ -444,8 +446,8 @@ pub fn tlk_ask_who_match(typed: &[u8], party_member_names: &[&[u8]]) -> u8 {
             .collect();
         let accepted = folded
             .windows(prefix_len)
-            .enumerate()
-            .any(|(at, window)| (at == 0 || folded[at - 1] == b' ') && window == prefix.as_slice());
+            .position(|window| window == prefix.as_slice())
+            .is_some_and(|at| at == 0 || folded[at - 1] == b' ');
         if accepted {
             return (zero_index + 1) as u8;
         }

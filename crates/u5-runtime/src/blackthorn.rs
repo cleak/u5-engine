@@ -195,6 +195,17 @@ pub const BLACKTHORN_RESCUE_HANDOFF_SCENE: u8 = crate::SCENE_LORD_BRITISHS_CASTL
 pub const BLACKTHORN_RESCUE_HANDOFF_X: u8 = 10;
 pub const BLACKTHORN_RESCUE_HANDOFF_Y: u8 = 10;
 
+/// `blackthorn.md` section 7 step 11: the rescue lands "on logical floor
+/// one". "Logical floor" is the signed floor byte (`formats/location-dat.md`
+/// Section 4: "Floor `0` is the base page, floor `+1` the page after it"),
+/// so this is floor `+1`, one storey above the castle's base page.
+pub const BLACKTHORN_RESCUE_HANDOFF_FLOOR: i8 = 1;
+
+/// `blackthorn.md` section 7 step 11 / 7.1 / 8.1: the handoff spins "the
+/// clock ... forward until the hour reads 06:00", after the second dissolve
+/// and before the light-counter clears and the food repair.
+pub const BLACKTHORN_RESCUE_HANDOFF_HOUR: u8 = 6;
+
 /// `blackthorn.md` section 7: the rescue path raises the shared moral-standing
 /// selector to at least this floor after printing the verdict.
 pub const BLACKTHORN_RESCUE_STANDING_FLOOR: u8 = 75;
@@ -319,6 +330,27 @@ pub const BLACKTHORN_COBBLE_TILE: u8 = 0x44;
 pub const BLACKTHORN_LOCKED_DOOR_TILE: u8 = 0xbb;
 pub const BLACKTHORN_PENDULUM_TILE: u8 = 0x82;
 pub const BLACKTHORN_HOURGLASS_TILE: u8 = 0xe9;
+
+/// `blackthorn.md §6.1`: "On any *later* wrong answer an open-coded stamp
+/// selected by question index writes the hourglass cell directly instead:
+/// index 1 writes `0xEB`, index 2 writes `0xE8`, and index 3 executes a
+/// companion (Section 5) rather than stamping. The visible sequence for an
+/// all-wrong run is therefore `0xE8` → `0xE9` → `0xEB` → `0xE8`."
+pub const BLACKTHORN_HOURGLASS_CELL: (usize, usize) = (5, 9);
+pub const BLACKTHORN_HOURGLASS_SPENT_TILE: u8 = 0xe8;
+pub const BLACKTHORN_HOURGLASS_SECOND_WRONG_TILE: u8 = 0xeb;
+
+/// `blackthorn.md §6.1`: the hourglass stamp for the wrong answer to
+/// question `index` (zero-based), or `None` where §6.1 publishes no stamp -
+/// index 0 takes the first-wrong script swap instead (its `0xEA` arm is
+/// unreachable) and index 3 executes a companion.
+pub const fn blackthorn_hourglass_stamp(index: u8) -> Option<u8> {
+    match index {
+        1 => Some(BLACKTHORN_HOURGLASS_SECOND_WRONG_TILE),
+        2 => Some(BLACKTHORN_HOURGLASS_SPENT_TILE),
+        _ => None,
+    }
+}
 pub const BLACKTHORN_RESCUE_LEFT_GUARDIAN_TILE: u8 = 0x5e;
 pub const BLACKTHORN_RESCUE_RIGHT_GUARDIAN_TILE: u8 = 0x5f;
 pub const BLACKTHORN_RESCUE_SPECTRAL_ACTOR_BYTE: u8 = 0x74;
@@ -457,14 +489,29 @@ pub enum BlackthornCutsceneCommand {
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum BlackthornCutsceneBeat {
-    PerQuestionIntermission,
+    /// `blackthorn.md §4.2` / §6.3's audience exit beat (formerly the
+    /// "per-question intermission", a name and placement R490 withdraws).
+    AudienceExit,
     FailedChallengeReaction,
     AudienceThroneApproach,
     GuardReleaseRoute,
     ConditionalThroneCleanup,
 }
 
-pub const BLACKTHORN_CUTSCENE_PER_QUESTION_INTERMISSION: [BlackthornCutsceneCommand; 18] = [
+/// `blackthorn.md §6.3`, the audience-exit row, played once by §4.2's exit
+/// beat after its key wait. The visible checkpoints are the published ones:
+/// the acting guard's animated westward step, cobble `0x44` buffered at
+/// `(0,4)` and exposed by the explicit tick, door `0xBB` replacing it and
+/// exposed by a one-repetition stinger pause, the tableau and both guards
+/// cleared, and a final six-repetition hold.
+///
+/// Known gap: §4.2 counts the whole vector at 36 stinger repetitions and 73
+/// world ticks, and this script reaches 14 and 29. The difference is in the
+/// per-command repeat counts and directions of the guard/Avatar repositioning
+/// and tableau moves, which §6.3 deliberately does not publish ("These vectors
+/// deliberately test visible checkpoints rather than duplicating the ...
+/// movement byte stream"), so they are not invented here.
+pub const BLACKTHORN_CUTSCENE_AUDIENCE_EXIT: [BlackthornCutsceneCommand; 18] = [
     BlackthornCutsceneCommand::MoveActor {
         actor: BlackthornCutsceneActor::LeftGuard,
         direction: crate::Direction::West,
@@ -633,8 +680,8 @@ pub const fn blackthorn_cutscene_beat_commands(
     beat: BlackthornCutsceneBeat,
 ) -> &'static [BlackthornCutsceneCommand] {
     match beat {
-        BlackthornCutsceneBeat::PerQuestionIntermission => {
-            &BLACKTHORN_CUTSCENE_PER_QUESTION_INTERMISSION
+        BlackthornCutsceneBeat::AudienceExit => {
+            &BLACKTHORN_CUTSCENE_AUDIENCE_EXIT
         }
         BlackthornCutsceneBeat::FailedChallengeReaction => {
             &BLACKTHORN_CUTSCENE_FAILED_CHALLENGE_REACTION

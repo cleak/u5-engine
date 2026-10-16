@@ -9102,6 +9102,9 @@ fn apply_visual_route_command(
     command: &str,
     game_dir: &Path,
 ) -> io::Result<PlayInputDisposition> {
+    // A route replay has no clock and gives no key to a held reply, so any
+    // `conversation.md §7.3` hold left by the previous command ends here.
+    state.flush_text_hold();
     let command = command.trim();
     let lower = command.to_ascii_lowercase();
     if !lower.starts_with("setup:") && !visual_modal_prompt_active(state) {
@@ -10619,6 +10622,21 @@ fn animate_static_tiles(
         return;
     }
 
+    // `conversation.md §7.3`: a message held behind a pause or key wait owns
+    // the loop. A `0x83` pause "redraws the world view and polls the
+    // keyboard without blocking" for up to 28 BIOS-tick passes, so it is
+    // advanced against the wall clock here; a key wait only ends on a key,
+    // which the input driver hands to the runtime's dispatcher.
+    if visual.state.text_hold_active() {
+        let still_held = visual
+            .state
+            .advance_text_hold_to(real_time.elapsed_secs_f64());
+        visual.prompt_cursor_visible = !still_held && visual_line_prompt_active(&visual.state);
+        visual.prompt_cursor_frame = visual.prompt_cursor_frame.wrapping_add(1);
+        repaint_visual_frame(&mut visual, &mut images, "text hold");
+        pump.accumulator = 0.0;
+        return;
+    }
     // A staged presentation owns the loop. `main-loop.md §9`: "presentations,
     // cutscene beats and paced turn loops call [the world tick] directly", so
     // while one is running this system is the presentation's own timer and no
@@ -17604,6 +17622,12 @@ fn summarize(state: &mut PlayState, default_message: &str, input_line: &str) -> 
 }
 
 fn visual_line_prompt_active(state: &PlayState) -> bool {
+    // `conversation.md §7.3`: while a reply is held behind a pause or key
+    // wait the next key ends the hold; it is not typed into the line.
+    !state.text_hold_active() && visual_line_prompt_active_ignoring_text_hold(state)
+}
+
+fn visual_line_prompt_active_ignoring_text_hold(state: &PlayState) -> bool {
     state.active_conversation.is_some()
         // `blackthorn.md §4.1`: while the audience is holding on a
         // wrong-answer reaction it is reading an *acknowledgement*, not text.

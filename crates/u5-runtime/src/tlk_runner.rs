@@ -15,6 +15,7 @@
 
 use crate::karma::{KarmaAction, apply_karma_action};
 use crate::map_io::{TALK_BRANCH_FLAG_BANK_BITS, talk_branch_flag_is_set, talk_branch_flag_mask};
+use crate::text_hold::TextHoldKind;
 use crate::tlk_control_codes::*;
 
 /// Inputs the runner needs to interpret control codes that would otherwise
@@ -55,9 +56,15 @@ pub struct TlkRunInputs<'a> {
     /// `0x83` PAUSE / `0x8F` WAIT-KEY behaviour. When `true`, the runner
     /// stops at each pause/wait-key with [`TlkRunStop::PausedAt`] /
     /// [`TlkRunStop::WaitingKey`] so the caller can flush a page and
-    /// resume. When `false`, the runner treats pauses as no-ops and
-    /// wait-key as a single newline and keeps going.
+    /// resume. When `false`, the runner keeps going: with
+    /// [`Self::mark_holds`] it leaves a [`crate::text_hold`] marker where
+    /// the hold belongs, and without it both codes emit nothing.
     pub yield_on_pause: bool,
+    /// `conversation.md §7.3`: record each `0x83` PAUSE and `0x8F` WAIT-KEY
+    /// as an inline hold marker (see [`crate::text_hold`]) so the message
+    /// layer can hold the rest of the response behind it. Ignored when
+    /// [`Self::yield_on_pause`] is set.
+    pub mark_holds: bool,
     /// `0x88` ASK-WHO behaviour. When `true`, the runner stops
     /// immediately after the ask code so the interactive conversation
     /// wrapper can collect a free-text answer and resume the same stream
@@ -135,9 +142,12 @@ pub enum TlkRunEvent {
     AskedWho(u8),
     /// `0x8B` CURSE-CHECK was reached.
     CurseChecked { curse_seen: bool },
-    /// `0x8F` WAIT-KEY synthesised newline (when `yield_on_pause` false).
-    WaitKeyTreatedAsNewline,
-    /// `0x83` PAUSE encountered (when `yield_on_pause` false).
+    /// `0x8F` WAIT-KEY encountered (when `yield_on_pause` false). §7.3:
+    /// the code emits nothing; with `mark_holds` it leaves a wait-key
+    /// marker in the output.
+    WaitKeySkipped,
+    /// `0x83` PAUSE encountered (when `yield_on_pause` false); with
+    /// `mark_holds` it leaves a timed-pause marker in the output.
     PauseSkipped,
     /// `0x8C` IF-ELSE branch decision. `bit` is the engine-chosen branch
     /// flag index (the speaking NPC's roster slot), `target_label` is the
@@ -494,6 +504,9 @@ pub fn run_tlk_stream_from(bytes: &[u8], start: usize, inputs: &TlkRunInputs) ->
                     out.consumed = pos;
                     return out;
                 }
+                if inputs.mark_holds {
+                    emit_rendered_glyph(&mut out, TextHoldKind::TimedPause.marker_glyph());
+                }
                 out.events.push(TlkRunEvent::PauseSkipped);
             }
             TLK_CODE_WAIT_KEY => {
@@ -502,9 +515,13 @@ pub fn run_tlk_stream_from(bytes: &[u8], start: usize, inputs: &TlkRunInputs) ->
                     out.consumed = pos;
                     return out;
                 }
-                emit_rendered_glyph(&mut out, TlkRenderedGlyph::ordinary(b'\n'));
-                out.events.push(TlkRunEvent::WaitKeyTreatedAsNewline);
-                last_emitted = Some(b'\n');
+                // §7.3: "Block for exactly one command keystroke ... No
+                // world or panel redraw. The stream then continues." It
+                // prints nothing of its own.
+                if inputs.mark_holds {
+                    emit_rendered_glyph(&mut out, TextHoldKind::WaitKey.marker_glyph());
+                }
+                out.events.push(TlkRunEvent::WaitKeySkipped);
             }
             TLK_CODE_PROTECT_RUN => {
                 print_mask = print_mask.toggle();
@@ -794,6 +811,13 @@ pub fn find_label_position(bytes: &[u8], label: u8) -> Option<usize> {
     find_label_position_from(bytes, label, 0)
 }
 
+/// `conversation.md §7.7` / `formats/tlk.md §9`: a transfer to label `L`
+/// "rewinds to the start of the blob and scans forward for the byte `0x90`,
+/// checks whether the byte after it equals `L`, and resumes the stream
+/// immediately past `L` on a match". The bare label byte is not a
+/// declaration - it is also the GOTO code itself. The introducer's own
+/// argument span is skipped so an `0xFE` threshold byte of `0x90` cannot pair
+/// with its own target byte.
 fn find_label_position_excluding(
     bytes: &[u8],
     label: u8,
@@ -804,13 +828,13 @@ fn find_label_position_excluding(
         return None;
     }
     let mut pos = 0usize;
-    while pos < bytes.len() {
-        if pos >= exclude_start && pos < exclude_end {
+    while pos + 1 < bytes.len() {
+        if pos + 1 >= exclude_start && pos < exclude_end {
             pos = exclude_end;
             continue;
         }
-        if bytes[pos] == label {
-            return Some(pos + 1);
+        if bytes[pos] == TLK_CODE_LABEL_RECORD && bytes[pos + 1] == label {
+            return Some(pos + 2);
         }
         pos += 1;
     }
@@ -1068,6 +1092,8 @@ mod tests {
         let mut bytes = vec![TLK_CODE_IF_ELSE, target_label];
         bytes.extend_from_slice(&enc("then"));
         bytes.push(TLK_CODE_END_OF_RESPONSE);
+        // §7.7: the target is the `0x90 <label>` declaration.
+        bytes.push(TLK_CODE_LABEL_RECORD);
         bytes.push(0x91);
         bytes.extend_from_slice(&enc("else"));
         bytes.push(TLK_CODE_END_OF_RESPONSE);
@@ -1176,6 +1202,7 @@ mod tests {
         bytes.extend_from_slice(&enc("low"));
         bytes.push(TLK_CODE_END_OF_RESPONSE);
         let label_pos = bytes.len();
+        bytes.push(TLK_CODE_LABEL_RECORD);
         bytes.push(0x92);
         bytes.extend_from_slice(&enc("high"));
         bytes.push(TLK_CODE_END_OF_RESPONSE);
@@ -1195,6 +1222,7 @@ mod tests {
     #[test]
     fn label_transfer_lookup_uses_blob_start_not_current_cursor() {
         let bytes = [
+            TLK_CODE_LABEL_RECORD,
             0x92,
             b'e' | TLK_TEXT_XOR_MASK,
             b'a' | TLK_TEXT_XOR_MASK,
@@ -1206,11 +1234,41 @@ mod tests {
             0x01,
             0x92,
         ];
-        let branch_cursor = 10;
+        let branch_cursor = 11;
 
-        assert_eq!(find_label_position(&bytes, 0x92), Some(1));
-        assert_eq!(find_label_position_excluding(&bytes, 0x92, 8, 10), Some(1));
+        assert_eq!(find_label_position(&bytes, 0x92), Some(2));
+        assert_eq!(find_label_position_excluding(&bytes, 0x92, 9, 11), Some(2));
         assert_eq!(find_label_position_from(&bytes, 0x92, branch_cursor), None);
+    }
+
+    /// `conversation.md §7.7`: a transfer resumes past the `0x90 <label>`
+    /// declaration, never at a bare label byte - which is also the GOTO code
+    /// itself - and never pairs an `0xFE` threshold byte of `0x90` with the
+    /// introducer's own target byte.
+    #[test]
+    fn label_transfer_needs_the_0x90_declaration() {
+        let bytes = [0x92, TLK_CODE_IF_ELSE_ALT, TLK_CODE_LABEL_RECORD, 0x92];
+        assert_eq!(find_label_position_excluding(&bytes, 0x92, 2, 4), None);
+
+        let mut stream = vec![TLK_CODE_IF_ELSE, 0x93];
+        stream.extend_from_slice(&enc("then"));
+        stream.push(TLK_CODE_END_OF_RESPONSE);
+        stream.push(0x93);
+        stream.extend_from_slice(&enc("bare"));
+        stream.push(TLK_CODE_END_OF_RESPONSE);
+        stream.push(TLK_CODE_LABEL_RECORD);
+        stream.push(0x93);
+        stream.extend_from_slice(&enc("declared"));
+        stream.push(TLK_CODE_END_OF_RESPONSE);
+        let out = run_tlk_stream(
+            &stream,
+            &TlkRunInputs {
+                npc_slot: Some(1),
+                branch_flags: 1 << 1,
+                ..Default::default()
+            },
+        );
+        assert_eq!(out.text, "declared");
     }
 
     #[test]
@@ -1441,14 +1499,36 @@ mod tests {
         assert_eq!(curse_events, vec![true, false]);
     }
 
+    /// `conversation.md §7.3` (R520): `0x8F` blocks for a key and "emits
+    /// nothing"; it is not a line feed.
     #[test]
-    fn wait_key_treated_as_newline_when_yield_disabled() {
+    fn wait_key_emits_nothing_when_yield_disabled() {
         let mut bytes = enc("a");
         bytes.push(TLK_CODE_WAIT_KEY);
         bytes.extend_from_slice(&enc("b"));
         bytes.push(TLK_CODE_END_OF_RESPONSE);
         let out = render(&bytes);
-        assert_eq!(out.text, "a\nb");
+        assert_eq!(out.text, "ab");
+    }
+
+    #[test]
+    fn mark_holds_leaves_a_marker_for_each_pause_and_wait_key() {
+        let mut bytes = enc("a");
+        bytes.push(TLK_CODE_PAUSE);
+        bytes.extend_from_slice(&enc("b"));
+        bytes.push(TLK_CODE_WAIT_KEY);
+        bytes.extend_from_slice(&enc("c"));
+        bytes.push(TLK_CODE_END_OF_RESPONSE);
+        let out = run_tlk_stream(
+            &bytes,
+            &TlkRunInputs {
+                mark_holds: true,
+                ..Default::default()
+            },
+        );
+        assert_eq!(out.text, "a\u{1}b\u{2}c");
+        assert_eq!(out.rendered_glyphs.len(), out.text.len());
+        assert_eq!(out.stop, TlkRunStop::EndOfResponse);
     }
 
     #[test]

@@ -369,6 +369,10 @@ pub struct PlayState {
     /// loops call [the world tick] directly", so a handler with waits between
     /// its records is holding the loop. See [`crate::narration`].
     pub staged_narration: crate::narration::StagedNarration,
+    /// Pages of an already-composed message still waiting behind a pause
+    /// or key wait (`conversation.md §7.3`, `formats/signs-dat.md §4`).
+    /// See [`crate::text_hold`].
+    pub pending_text_hold: Option<crate::text_hold::PendingTextHold>,
     /// Where `blackthorn.md §7`'s rescue cinematic has got to, if one is
     /// running. Its narration is staged; this is the part the queue cannot
     /// carry - the one blocking key read in the middle, and the durable

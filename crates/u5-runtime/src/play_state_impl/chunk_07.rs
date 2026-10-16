@@ -4049,6 +4049,9 @@ impl PlayState {
                     .then_some((npc.x, npc.y))
             })
         {
+            // `conversation.md §2`: contact enters the same dispatcher, whose
+            // behaviour-4-to-1 rewrite runs before the regime handler.
+            self.talk_dispatcher_stand_down(x, y);
             return Ok(Some(self.begin_blackthorn_guard_demand(
                 x,
                 y,
@@ -4304,6 +4307,16 @@ impl PlayState {
                 .begin_blackthorn_audience_capture(game_dir)?
                 .unwrap_or(MoveOutcome::Used));
         }
+        // `blackthorn.md §3`: "If the party reaches that helper there with
+        // nobody able to act and nobody asleep, the helper returns silently,
+        // without the audience or a surrender question. The exploration
+        // loop's separate defeat check still owns rescue." The ordinary
+        // surrender fallback in this palace case is withdrawn (R442).
+        if arrest.scene_byte == crate::blackthorn::BLACKTHORN_CAPTIVE_CELL_SCENE
+            && self.party_capability() == PartyCapability::Defeated
+        {
+            return Ok(MoveOutcome::Used);
+        }
         self.pending_town_arrest = Some(arrest);
         // The challenge opens on its own row: it is a fresh two-line
         // exchange, not a tail appended to whatever the contact
@@ -4394,46 +4407,30 @@ impl PlayState {
 
         let mut challenge =
             crate::blackthorn_session::BlackthornChallenge::for_shrine(shrine_index as u8);
-        let prompt = match challenge.begin() {
-            crate::blackthorn_session::BlackthornChallengeOutcome::PromptPresented {
-                prompt,
-                ..
-            } => prompt,
-            _ => "Virtue",
-        };
-        let virtue = challenge.shrine_virtue();
-        let preamble = self.blackthorn_audience_opening_text(game_dir)?;
-        let demand = self.blackthorn_demand_text(game_dir, 0, virtue)?;
         self.blackthorn_audience_map =
             load_miscmaps_cutscene_map(game_dir, BLACKTHORN_AUDIENCE_CUTSCENE_MAP_RECORD)?;
         self.install_blackthorn_audience_actors();
         let approach =
             self.run_blackthorn_cutscene_beat(BlackthornCutsceneBeat::AudienceThroneApproach);
-        let release = self.run_blackthorn_cutscene_beat(BlackthornCutsceneBeat::GuardReleaseRoute);
+        // `blackthorn.md §3` step 8: "Greet the addressed member by name,
+        // **wait for an acknowledgement key**, then print the gendered release
+        // lines and run the guard-release route script". The audience "takes
+        // **two** blocking key presses before the first demand is ever asked,
+        // one after the greeting page and one after the preamble record".
+        //
+        // The greeting and release literals are resident strings §3 names
+        // but does not publish, so this engine prints neither and holds the
+        // page it has; the two key waits are the published contract.
+        challenge.await_greeting_acknowledgement();
         self.active_blackthorn = Some(challenge);
-        let _ = prompt;
-        // `blackthorn.md §4.1`: record `11` is "the Wait/Avatarhood speech,
-        // then acknowledgement and two line feeds before the first demand",
-        // and every demand "is followed by `\n\nYour response?\n:`". The
-        // section is equally explicit about what must not appear: "Do not
-        // append an answer, prompt ordinal, roster slot number, cutscene
-        // timing value or other diagnostic information to the original
-        // text." The engine printed exactly that - `Blackthorn audience:
-        // <record 0>. Opening cutscene advanced 57 world ticks; the guard
-        // release advanced 23. Blackthorn demands the mantra of Honesty.` -
-        // where the stock game printed the speech and the quoted first
-        // demand. Caught by `qa/tools/paired_compare.py` at `bt-audience`'s
-        // `ask1` beat (`cleak/u5-engine#21`); the cutscene tick counts move
-        // to the diagnostic channel, where the rest of the audience's
-        // bookkeeping already lives.
+        // `blackthorn.md §4.1`: "Do not append an answer, prompt ordinal,
+        // roster slot number, cutscene timing value or other diagnostic
+        // information to the original text", so the tick counts go to the
+        // diagnostic channel (`cleak/u5-engine#21`).
         self.push_diagnostic(format!(
-            "Blackthorn audience opened: the approach advanced {} world ticks and the guard release {}.",
-            approach.world_ticks, release.world_ticks,
+            "Blackthorn audience opened: the approach advanced {} world ticks.",
+            approach.world_ticks,
         ));
-        self.message = match preamble {
-            Some(preamble) => format!("{preamble}\n\n{demand}\n\n{BLACKTHORN_INPUT_PROMPT}"),
-            None => format!("{demand}\n\n{BLACKTHORN_INPUT_PROMPT}"),
-        };
         Ok(Some(MoveOutcome::Used))
     }
 
@@ -4635,6 +4632,23 @@ impl PlayState {
         self.mark_visibility_dirty();
     }
 
+    /// `blackthorn.md §4.2` / §6.3: the conditional seated-Blackthorn tableau
+    /// cleanup. "The exit beat's script clears the seated-Blackthorn tableau
+    /// slot, and the tableau slot is exactly what the audience tests
+    /// afterwards to decide whether to run the conditional Blackthorn-tableau
+    /// cleanup vector ... only the punishing branch, which never ran the beat,
+    /// reaches it." Returns whether the vector ran.
+    pub fn run_blackthorn_conditional_throne_cleanup(&mut self) -> bool {
+        let slot = BlackthornCutsceneActor::SeatedBlackthorn.slot_index() as usize;
+        let seated = self.active_objects.get(slot).is_some_and(|object| {
+            !object.is_empty() && object.aux3 == BLACKTHORN_CUTSCENE_AUX3_ROLE_MARKER
+        });
+        if seated {
+            self.run_blackthorn_cutscene_beat(BlackthornCutsceneBeat::ConditionalThroneCleanup);
+        }
+        seated
+    }
+
     pub fn run_blackthorn_cutscene_beat(
         &mut self,
         beat: BlackthornCutsceneBeat,
@@ -4666,8 +4680,9 @@ impl PlayState {
             crate::blackthorn_session::BlackthornChallenge::awaiting_closing_acknowledgement,
         ) {
             let challenge = self.active_blackthorn.take().expect("checked above");
-            // The merciful death owed by a correct answer lands here, with the
-            // reaction acknowledged (`blackthorn.md §5` step 5).
+            // `blackthorn.md §5` puts both executions before their held page,
+            // so no arm defers one to this key any more; these two drains
+            // only settle state staged by an older build.
             if std::mem::take(&mut self.pending_blackthorn_merciful_death) {
                 let fate = self.apply_blackthorn_correct_answer_companion_fate();
                 self.push_diagnostic(format!("On acknowledgement: {fate}."));
@@ -4689,12 +4704,19 @@ impl PlayState {
                 // supplies the quoted unfairness/treachery speech, including
                 // its leading two line feeds. The execution helper finishes
                 // with one line feed."
+                // That line feed ends the punishment routine, and the loop
+                // leaves through its own tail with no further key wait.
                 let speech = self.blackthorn_reaction_text(
                     game_dir,
                     crate::MISCMSG_BLACKTHORN_TREACHERY_SPEECH,
                     "",
                 )?;
-                return self.hold_blackthorn_closing_page(challenge, speech, true, false);
+                let _ = challenge;
+                self.emit_message_line(speech);
+                self.push_explicit_blank_message_entry();
+                self.blackthorn_audience_punished = false;
+                self.run_blackthorn_conditional_throne_cleanup();
+                return self.apply_blackthorn_captive_cell_handoff(game_dir, "");
             }
             // `blackthorn.md §4.2`, the audience exit beat. This key is the
             // acknowledgement *and* the beat's own trigger
@@ -4704,9 +4726,21 @@ impl PlayState {
             // input ... so it cannot be skipped". The window is untouched
             // across it, so the hold prints nothing.
             if std::mem::take(&mut self.blackthorn_audience_punished) {
-                // The punishing branches skip the beat and hand off directly.
+                // The punishing branches skip the beat; they alone reach the
+                // conditional tableau cleanup (§4.2).
+                self.run_blackthorn_conditional_throne_cleanup();
                 return self.apply_blackthorn_captive_cell_handoff(game_dir, "");
             }
+            // §4.2: "After the key, the beat hands the exit vector to the
+            // cutscene script VM" - §6.3's audience-exit row, whose stingers
+            // are emitted and whose final frame clears the tableau slot. The
+            // hold itself stays the measured one below, since §4.2's five
+            // seconds is only a floor.
+            let vm = self.run_blackthorn_cutscene_beat(BlackthornCutsceneBeat::AudienceExit);
+            self.push_diagnostic(format!(
+                "Blackthorn audience exit beat: {} stings, {} world ticks.",
+                vm.stinger_count, vm.world_ticks
+            ));
             self.staged_narration.push_ticks(
                 crate::blackthorn::BLACKTHORN_AUDIENCE_EXIT_BEAT_BIOS_TICKS,
                 String::new(),
@@ -4727,6 +4761,19 @@ impl PlayState {
             let mut challenge = self.active_blackthorn.take().expect("checked above");
             let outcome = challenge.submit("");
             let message = match outcome {
+                // `blackthorn.md §3` steps 8-9: the greeting's key releases
+                // the guard-release route, then record `11` is printed and
+                // held for the audience's second acknowledgement.
+                crate::blackthorn_session::BlackthornChallengeOutcome::GreetingAcknowledged => {
+                    let release =
+                        self.run_blackthorn_cutscene_beat(BlackthornCutsceneBeat::GuardReleaseRoute);
+                    self.push_diagnostic(format!(
+                        "Blackthorn audience: the guard release advanced {} world ticks.",
+                        release.world_ticks,
+                    ));
+                    self.blackthorn_audience_opening_text(game_dir)?
+                        .unwrap_or_default()
+                }
                 crate::blackthorn_session::BlackthornChallengeOutcome::PromptPresented {
                     ordinal,
                     prompt,
@@ -4775,50 +4822,11 @@ impl PlayState {
         let shrine_index = usize::from(challenge.shrine_index);
 
         match challenge.submit(&answer) {
-            crate::blackthorn_session::BlackthornChallengeOutcome::Correct { ordinal } => {
-                // `blackthorn.md §4`: the correct-answer consequences are the
-                // shrine ruin flag and the clamped five-point standing debit.
-                self.apply_blackthorn_correct_answer_consequences(shrine_index);
-                let standing = self.moral_standing;
-                // `blackthorn.md §5` step 5: the punishment routine ends by
-                // "wait[ing] for player acknowledgement before returning to
-                // the caller branch". Measured 2026-09-12
-                // (`qa/paired/bt-correct.tsv`): the original's roster still
-                // shows three members while the merciful-death reaction is
-                // held, and drops to two on the acknowledgement. This engine
-                // lifted the record as the answer was submitted, so the panel
-                // dropped a row a beat early.
-                //
-                // An earlier note here read the same scenario as dropping "on
-                // the same beat"; today's capture of both sides side by side
-                // says otherwise.
-                let fate = self.blackthorn_correct_answer_companion_fate_preview();
-                self.pending_blackthorn_merciful_death = true;
-                let vm = self
-                    .run_blackthorn_cutscene_beat(BlackthornCutsceneBeat::PerQuestionIntermission);
-                // A correct answer resolves the interrogation; the
-                // withdrawn reading ended it only once the jail scan ran
-                // dry, i.e. once every party slot had been flagged.
-                self.run_blackthorn_cutscene_beat(BlackthornCutsceneBeat::ConditionalThroneCleanup);
-                // **Measured** 2026-09-08 (`qa/paired/bt-correct.tsv`): the
-                // right mantra is thanked, and the companion is killed anyway
-                // - the panel drops a row on the same beat.
-                self.push_diagnostic(format!(
-                    "Answered Blackthorn's prompt {} correctly; shrine {} is ruined; standing {standing}; {fate}; cutscene advanced {} world ticks.",
-                    ordinal + 1,
-                    shrine_index + 1,
-                    vm.world_ticks
-                ));
-                {
-                    let line = self.blackthorn_reaction_text(
-                        game_dir,
-                        crate::MISCMSG_BLACKTHORN_MERCIFUL_DEATH,
-                        BLACKTHORN_MERCIFUL_DEATH_LINE,
-                    )?;
-                    self.hold_blackthorn_closing(challenge, line, true)
-                }
-            }
-            crate::blackthorn_session::BlackthornChallengeOutcome::Survived => {
+            // `BlackthornChallenge::submit` reports a matching answer as
+            // `Survived`; `Correct` is never produced, so it shares the arm
+            // rather than carrying a second, divergent copy of the outcome.
+            crate::blackthorn_session::BlackthornChallengeOutcome::Correct { .. }
+            | crate::blackthorn_session::BlackthornChallengeOutcome::Survived => {
                 // `blackthorn.md §4`: a correct answer resolves the
                 // interrogation, and it is the answer — not surviving the
                 // ladder — that ruins the shrine and debits five points of
@@ -4829,17 +4837,14 @@ impl PlayState {
                 // setup", which is the count the fate branch itself uses, so
                 // it is read before the fate resolves.
                 let nondead = self.blackthorn_eligible_party_member_count();
-                // The same deferral as the first correct-answer arm above: the
-                // roster is not lifted until the reaction is acknowledged
-                // (`blackthorn.md §5` step 5).
                 let fate = self.blackthorn_correct_answer_companion_fate_preview();
-                self.pending_blackthorn_merciful_death = true;
-                let vm = self
-                    .run_blackthorn_cutscene_beat(BlackthornCutsceneBeat::ConditionalThroneCleanup);
+                // `blackthorn.md §4.2`: the conditional tableau cleanup is
+                // reached "only [by] the punishing branch"; this branch plays
+                // the exit beat, which clears the tableau slot the cleanup
+                // tests, so it skips it.
                 self.push_diagnostic(format!(
-                    "Survived Blackthorn's challenge; shrine {} is ruined; standing {standing}; {fate}; cutscene advanced {} world ticks without clearing the screen.",
+                    "Survived Blackthorn's challenge; shrine {} is ruined; standing {standing}; {fate}.",
                     shrine_index + 1,
-                    vm.world_ticks
                 ));
                 // `blackthorn.md §4.1`: "Correct answer with at least two
                 // nondead members | Record `5`, the merciful-death speech";
@@ -4863,6 +4868,18 @@ impl PlayState {
                         "",
                     )?
                 };
+                if nondead >= 2 {
+                    // `blackthorn.md §5`: "The correct-answer branch's
+                    // punishment has no key wait of its own - the key that
+                    // follows it belongs to the exit beat of Section 4.2", and
+                    // the roster edit and its repaint "both precede the held
+                    // page". So the execution lands at answer time, after
+                    // record `5`; deferring it to the acknowledgement "moves a
+                    // durable gameplay change for a presentation reason".
+                    let fate = self.apply_blackthorn_correct_answer_companion_fate();
+                    self.repaint_stats_panel();
+                    self.push_diagnostic(format!("At answer time: {fate}."));
+                }
                 self.hold_blackthorn_closing(challenge, reward, nondead >= 2)
             }
             crate::blackthorn_session::BlackthornChallengeOutcome::Wrong { ordinal, expected } => {
@@ -4881,9 +4898,13 @@ impl PlayState {
                 // the ending branch is the one where no such companion exists.
                 // §4 does not quantify "few" beyond that, so nothing narrower
                 // is assumed here.
+                // `blackthorn.md §4`: "A wrong answer, when fewer than two
+                // nondead party members remain, ends the interrogation".
                 let victim = self
                     .blackthorn_failure_victim_index()
-                    .filter(|index| *index != 0);
+                    .filter(|index| {
+                        *index != 0 && self.blackthorn_eligible_party_member_count() >= 2
+                    });
                 let Some(victim) = victim else {
                     // The ordinal and the expected mantra are harness detail,
                     // not player text.
@@ -4905,7 +4926,13 @@ impl PlayState {
                         let (next_ordinal, prompt) = challenge
                             .current_prompt()
                             .unwrap_or((ordinal + 1, "Virtue"));
-                        let victim_name = self.blackthorn_victim_display_name(victim);
+                        // `blackthorn.md §4` / §4.1 (R441): the threat names
+                        // "the second roster entry", fixed, whatever its
+                        // status; the execution victim is separately the
+                        // second nondead member, so the two can differ.
+                        let victim_name = self.blackthorn_victim_display_name(
+                            crate::blackthorn::BLACKTHORN_FAILURE_VICTIM_SLOT,
+                        );
                         let _ = prompt;
                         challenge.await_acknowledgement(next_ordinal);
                         self.active_blackthorn = Some(challenge);
@@ -4936,6 +4963,15 @@ impl PlayState {
                             crate::MISCMSG_BLACKTHORN_FIRST_WRONG_REBUKE,
                             BLACKTHORN_FIRST_WRONG_LINE,
                         )?;
+                        // §4.1: record `8` comes "after its scene beat", and
+                        // §6.1: "The script swap listed in Section 6.3 (`0x80`
+                        // becomes `0x82`, `0xE8` becomes `0xE9`) runs on the
+                        // **first** wrong answer only" - the failed-challenge
+                        // vector, which §4.2's table names as this branch's
+                        // failure reaction.
+                        self.run_blackthorn_cutscene_beat(
+                            BlackthornCutsceneBeat::FailedChallengeReaction,
+                        );
                         let threat = self.blackthorn_reaction_text(
                             game_dir,
                             crate::MISCMSG_BLACKTHORN_SAND_THREAT_PREFIX,
@@ -4947,19 +4983,25 @@ impl PlayState {
                     // Second and third wrong answers: "Later wrong answers
                     // stamp a tile into the cutscene map". They do not run
                     // §5's execution beat or clear the victim actor; that
-                    // happens only on the fourth answer. The two published
-                    // punishment props are introduced in prompt order.
+                    // happens only on the fourth answer.
+                    //
+                    // `blackthorn.md §6.1`: "an open-coded stamp selected by
+                    // question index writes the hourglass cell directly ...
+                    // index 1 writes `0xEB`, index 2 writes `0xE8`". The
+                    // pendulum is not stamped here: the first wrong answer's
+                    // script swap already placed it. §5 also has these
+                    // answers "advance the clock and then repaint"; the
+                    // amount of that advance is not published, so only the
+                    // repaint is modelled.
                     Some(crate::blackthorn_session::BlackthornWrongEscalation::TileStamp) => {
-                        let (x, y, tile) = if ordinal == 1 {
-                            (5, 7, BLACKTHORN_PENDULUM_TILE)
-                        } else {
-                            (5, 9, BLACKTHORN_HOURGLASS_TILE)
-                        };
+                        let (x, y) = crate::blackthorn::BLACKTHORN_HOURGLASS_CELL;
+                        let mut commands = Vec::with_capacity(2);
+                        if let Some(tile) = crate::blackthorn::blackthorn_hourglass_stamp(ordinal) {
+                            commands.push(BlackthornCutsceneCommand::WriteTerrain { x, y, tile });
+                        }
+                        commands.push(BlackthornCutsceneCommand::ExplicitRedraw);
                         let mut vm = self.blackthorn_cutscene_vm_from_audience_state();
-                        vm.run(&[
-                            BlackthornCutsceneCommand::WriteTerrain { x, y, tile },
-                            BlackthornCutsceneCommand::ExplicitRedraw,
-                        ]);
+                        vm.run(&commands);
                         self.apply_blackthorn_cutscene_vm_to_audience_state(&vm);
                         let (next_ordinal, prompt) = challenge
                             .current_prompt()
@@ -4983,24 +5025,29 @@ impl PlayState {
                         // §5: the tail names "the actual removed member",
                         // read before the roster record is lifted out.
                         let victim_name = self.blackthorn_victim_display_name(victim);
-                        let vm = self.run_blackthorn_cutscene_beat(
-                            BlackthornCutsceneBeat::FailedChallengeReaction,
-                        );
-                        // `blackthorn.md §5` step 5: the routine "wait[s] for
-                        // player acknowledgement before returning to the
-                        // caller branch", and measured
-                        // (`qa/paired/bt-escalate.tsv`, beat `ask5`) the
-                        // original's roster still carries the victim while the
-                        // pendulum narration is held. The name above is
-                        // already read, so only the lift waits.
-                        self.pending_blackthorn_execution_victim = Some(victim);
+                        // `blackthorn.md §6.1`: the failed-challenge script
+                        // swap "runs on the **first** wrong answer only", and
+                        // "index 3 executes a companion (Section 5) rather
+                        // than stamping", so the hourglass stays on the `0xE8`
+                        // the third answer left. Re-running that vector here
+                        // would rewrite `0xE9`. §5's two-phase blade
+                        // animation has no published vector, so none plays.
+                        let vm = self.blackthorn_cutscene_vm_from_audience_state();
+                        // `blackthorn.md §5`: "The roster edit and its repaint
+                        // both precede the held page ... the victim therefore
+                        // leaves the panel **between** the pendulum-narration
+                        // page and the page that names them, and it is that
+                        // later page which waits for the key." The record-4
+                        // narration is not itself a key wait.
+                        let executed = self
+                            .execute_blackthorn_companion(victim)
+                            .unwrap_or_else(|| "no companion remains to punish".to_string());
+                        self.repaint_stats_panel();
                         // This is the punishing branch, so no §4.2 exit beat
                         // follows its acknowledgement (`cleak/u5-spec#268`).
                         self.blackthorn_audience_punished = true;
-                        let report =
-                            format!("companion in slot {victim} is owed the pendulum blade"); // audit: not a player-facing line
                         self.push_diagnostic(format!(
-                            "Failed Blackthorn's prompt {}; expected {expected}; {report} by the pendulum blade; cutscene advanced {} world ticks.",
+                            "Failed Blackthorn's prompt {}; expected {expected}; {executed} by the pendulum blade; cutscene advanced {} world ticks.",
                             ordinal + 1,
                             vm.world_ticks
                         ));
@@ -5013,27 +5060,12 @@ impl PlayState {
                         // removal, print `\n\n`, the actual removed member's
                         // name, and ` is sliced in half! `. After
                         // acknowledgement, record `6` supplies the quoted
-                        // unfairness/treachery speech". The line feed belongs
-                        // to the end of that helper, not to this page - which
-                        // `bt-escalate`'s `ask5` beat shows, the stock game
-                        // ending on `falls!` with no blank row under it.
-                        // §5 holds three pages here, not two: this narration,
-                        // then the removed member's line, then record `6`.
-                        // Measured (`qa/paired/bt-escalate.tsv`, beat `ask5`):
-                        // the original's beat ends on `falls!`.
-                        self.pending_blackthorn_closing_page =
-                            Some(format!("\n\n{victim_name} is sliced in half! "));
-                        // `blackthorn.md §5`: "The execution helper finishes
-                        // with one line feed." One, not two: no blank row
-                        // appears under `falls!` - the feed just closes its
-                        // row, which is why the original draws no cursor
-                        // after it while records 9 and 10, which end on a
-                        // trailing space instead, do carry one. Measured
-                        // 2026-09-12 (`bt-escalate/ask5` against
-                        // `bt-password/passed`).
+                        // unfairness/treachery speech". One key wait, on the
+                        // page that names the victim (§5 step 6).
+                        self.emit_message_line(line);
                         self.hold_blackthorn_closing_page(
                             challenge,
-                            format!("{line}\n"),
+                            format!("\n\n{victim_name} is sliced in half! "),
                             false,
                             true,
                         )
@@ -5063,6 +5095,12 @@ impl PlayState {
                 ),
             crate::blackthorn_session::BlackthornChallengeOutcome::AlreadyAborted => {
                 self.blackthorn_resolved_handoff(game_dir, "Blackthorn's challenge was aborted.")
+            }
+            // Setup acknowledgements are consumed above, before any answer is
+            // read; reaching here only re-renders the held page.
+            crate::blackthorn_session::BlackthornChallengeOutcome::GreetingAcknowledged => {
+                self.active_blackthorn = Some(challenge);
+                Ok(MoveOutcome::PromptDeclined)
             }
         }
     }
@@ -5174,10 +5212,11 @@ impl PlayState {
     }
 
     /// `blackthorn.md §4`: "**A correct answer also decides a
-    /// companion's fate.** If more than one companion is still alive,
-    /// Blackthorn thanks the player for their honesty and **kills** one
-    /// companion as 'a merciful death'. If only one remains, he spares
-    /// the player instead."
+    /// companion's fate.** The threshold counts all nondead travelling party
+    /// members at audience setup, including Avatar when nondead. With at
+    /// least two, Blackthorn thanks the player and **kills** the second
+    /// nondead member as 'a merciful death'. With only one, he spares that
+    /// survivor instead." (R440 withdrew the more-than-one-companion rule.)
     ///
     /// §5 gives the execution's shape: the routine "erases that
     /// companion's on-screen actor; lifts their roster record out of the
@@ -5194,13 +5233,10 @@ impl PlayState {
     /// is still on screen; the roster itself is not touched until the player
     /// acknowledges (`blackthorn.md §5` step 5).
     pub fn blackthorn_correct_answer_companion_fate_preview(&self) -> String {
-        let living_companions = self
-            .party
-            .iter()
-            .skip(1)
-            .filter(|member| member.living())
-            .count();
-        if living_companions <= 1 {
+        // `blackthorn.md §4` (R440): the threshold "counts all nondead
+        // travelling party members ..., including Avatar when nondead. With at
+        // least two, Blackthorn ... **kills** the second nondead member".
+        if self.blackthorn_eligible_party_member_count() < 2 {
             return "only one companion remains, so Blackthorn spares the player".to_string(); // audit: not a player-facing line
         }
         match self.blackthorn_failure_victim_index() {
@@ -5212,13 +5248,10 @@ impl PlayState {
     }
 
     pub fn apply_blackthorn_correct_answer_companion_fate(&mut self) -> String {
-        let living_companions = self
-            .party
-            .iter()
-            .skip(1)
-            .filter(|member| member.living())
-            .count();
-        if living_companions <= 1 {
+        // `blackthorn.md §4` (R440): Avatar plus one living companion is
+        // enough for the execution branch; the earlier more-than-one-companion
+        // requirement is withdrawn.
+        if self.blackthorn_eligible_party_member_count() < 2 {
             // audit: not a player-facing line - the fate string is a harness
             // diagnostic, and the measured scene says only `merciful death!`.
             return "only one companion remains, so Blackthorn spares the player".to_string(); // audit: not a player-facing line
@@ -5232,7 +5265,7 @@ impl PlayState {
             return "only the Avatar remains, so Blackthorn spares the player".to_string(); // audit: not a player-facing line
         }
         // `blackthorn.md §5`: "The same execution runs on the *correct*-answer
-        // branch whenever more than one companion is alive, under a different
+        // branch whenever at least two travelling party members are nondead, under a different
         // message - Blackthorn thanking the player for their honesty and
         // granting the companion 'a merciful death'." Both branches therefore
         // share one execution routine.
@@ -5656,6 +5689,8 @@ impl PlayState {
             return Ok(None);
         }
         self.pending_blackthorn_audience_exit = false;
+        // The exit vector has cleared the tableau slot, so this gate skips.
+        self.run_blackthorn_conditional_throne_cleanup();
         self.apply_blackthorn_captive_cell_handoff(game_dir, "")
             .map(Some)
     }
@@ -5716,6 +5751,16 @@ impl PlayState {
         self.blackthorn_rescue_reveals_shown = 0;
         self.moral_standing = blackthorn_rescue_post_print_standing(self.moral_standing);
         self.clear_active_effect_slot();
+        // `blackthorn.md §7` step 11 / §7.1: the handoff comes "with the
+        // clock spun forward until the hour reads 06:00", and "Once the clock
+        // has been spun forward it also zeroes both light counters"; §8.1 puts
+        // the food repair "after the wait to 06:00". The section publishes no
+        // per-turn work for the spin, and §8.1 preserves every nonzero food
+        // word "exactly", so this is a bare clock spin: no provision pass and
+        // no gameplay-PRNG draws beyond the flashes §7.1 counts.
+        while self.clock.hour != crate::blackthorn::BLACKTHORN_RESCUE_HANDOFF_HOUR {
+            self.clock.advance_hour();
+        }
         self.torch_counter = 0;
         self.light_spell_counter = 0;
         // `blackthorn.md §8.1` (R284): there is no captive-cell counter.
@@ -5725,7 +5770,8 @@ impl PlayState {
             self.food = 63;
         }
         let scene = Scene::new(BLACKTHORN_RESCUE_HANDOFF_SCENE)?;
-        let floor = 0i8;
+        // §7 step 11: "on logical floor one" - the signed floor byte `+1`.
+        let floor = crate::blackthorn::BLACKTHORN_RESCUE_HANDOFF_FLOOR;
         let (grid, beacon_sources) =
             load_town_runtime_floor_with_beacon_sources(game_dir, scene, floor, self.clock.hour)?;
         self.grid = grid;
