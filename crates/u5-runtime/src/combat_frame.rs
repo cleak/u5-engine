@@ -6881,8 +6881,23 @@ impl PlayState {
                 self.active_player = None;
                 CombatActivePlayerSelectionOutcome::Clear
             }
+            // `combat.md §8.4` (issue #293): "A member is eligible when it is
+            // a party-side actor in the arena with that roster slot and none
+            // of the disabled, asleep or dead-marked bits". Descriptors are
+            // packed (`§5`), so the digit names a roster slot, not a
+            // descriptor index.
             CombatActivePlayerSelectionOutcome::SelectPartySlot(slot)
-                if slot < self.party.len() && slot < COMBAT_PARTY_ACTOR_SLOTS =>
+                if slot < self.party.len()
+                    && self
+                        .combat_actors
+                        .iter()
+                        .take(COMBAT_PARTY_ACTOR_SLOTS)
+                        .any(|actor| {
+                            actor.is_party_side()
+                                && usize::from(actor.owner_target_class) == slot
+                                && !actor.is_status_disabled()
+                                && !actor.is_marked_dead()
+                        }) =>
             {
                 self.active_player = Some(slot);
                 CombatActivePlayerSelectionOutcome::SelectPartySlot(slot)

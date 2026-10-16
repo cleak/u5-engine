@@ -363,3 +363,43 @@ fn narrating_a_graded_wound_line_runs_the_flee_classifier() {
     assert!(state.combat_actors[8].is_fleeing());
     assert_eq!(state.prng_state, expected_state);
 }
+
+#[test]
+fn active_player_digit_needs_an_eligible_party_actor_with_that_roster_slot() {
+    // `combat.md §8.4` (issue #293): "A member is eligible when it is a
+    // party-side actor in the arena with that roster slot and none of the
+    // disabled, asleep or dead-marked bits".
+    let mut state = world_state(open_world_grid(), 10, 20);
+    for slot in 1..3 {
+        let mut member = state.party[0];
+        member.slot = slot;
+        state.party.push(member);
+    }
+    // Roster [0, 1, 2] seated packed: roster 2 sits in descriptor 1 and
+    // roster 1 is not in the arena at all.
+    state.combat_actors[0] =
+        CombatActorDescriptor::from_row([20, 1, COMBAT_ACTOR_FLAG_SELECTABLE_80, 0, 0, 0, 5, 5]);
+    state.combat_actors[1] =
+        CombatActorDescriptor::from_row([20, 1, COMBAT_ACTOR_FLAG_SELECTABLE_80, 2, 1, 0, 6, 5]);
+
+    assert_eq!(
+        state.apply_combat_active_player_digit('2'),
+        CombatActivePlayerSelectionOutcome::Invalid
+    );
+    assert_eq!(state.active_player, None);
+    assert_eq!(
+        state.apply_combat_active_player_digit('3'),
+        CombatActivePlayerSelectionOutcome::SelectPartySlot(2)
+    );
+    assert_eq!(state.active_player, Some(2));
+
+    for bit in [COMBAT_ACTOR_FLAG_STATUS_DISABLED, COMBAT_ACTOR_FLAG_MARKED_DEAD] {
+        state.active_player = None;
+        state.combat_actors[1].flags = COMBAT_ACTOR_FLAG_SELECTABLE_80 | bit;
+        assert_eq!(
+            state.apply_combat_active_player_digit('3'),
+            CombatActivePlayerSelectionOutcome::Invalid
+        );
+        assert_eq!(state.active_player, None);
+    }
+}

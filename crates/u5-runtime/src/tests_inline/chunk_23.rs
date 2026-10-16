@@ -6042,6 +6042,10 @@ fn combat_active_player_digit_state_wrapper_updates_only_valid_party_slots() {
     let mut second = state.party[0];
     second.slot = 1;
     state.party.push(second);
+    // `combat.md §8.4`: eligibility needs a party-side actor in the arena
+    // with that roster slot.
+    state.combat_actors[0] =
+        CombatActorDescriptor::from_row([20, 1, COMBAT_ACTOR_FLAG_SELECTABLE_80, 1, 0, 0, 5, 5]);
 
     assert_eq!(
         state.apply_combat_active_player_digit('2'),
