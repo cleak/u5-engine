@@ -4354,6 +4354,16 @@ impl PlayState {
                 .begin_blackthorn_audience_capture(game_dir)?
                 .unwrap_or(MoveOutcome::Used));
         }
+        // `blackthorn.md §3`: "If the party reaches that helper there with
+        // nobody able to act and nobody asleep, the helper returns silently,
+        // without the audience or a surrender question. The exploration
+        // loop's separate defeat check still owns rescue." The ordinary
+        // surrender fallback in this palace case is withdrawn (R442).
+        if arrest.scene_byte == crate::blackthorn::BLACKTHORN_CAPTIVE_CELL_SCENE
+            && self.party_capability() == PartyCapability::Defeated
+        {
+            return Ok(MoveOutcome::Used);
+        }
         self.pending_town_arrest = Some(arrest);
         // The challenge opens on its own row: it is a fresh two-line
         // exchange, not a tail appended to whatever the contact
