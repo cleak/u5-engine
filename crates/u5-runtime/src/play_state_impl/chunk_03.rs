@@ -2115,7 +2115,14 @@ impl PlayState {
     }
 
     fn complete_mix_session(&mut self, session: &mut MixSession) -> Option<MoveOutcome> {
-        let amount = session.quantity_buffer.parse::<u8>().unwrap_or(0);
+        // `magic.md §6` step 4: "A leading minus is accepted by the reader
+        // but never survives validation: the comparison against the counters
+        // is unsigned, so a negative quantity is larger than any counter,
+        // always takes the shortfall notice". Read the sign rather than let
+        // a failed unsigned parse turn `-5` into the silent zero exit.
+        let signed_amount = session.quantity_buffer.parse::<i16>().unwrap_or(0);
+        let negative = signed_amount < 0;
+        let amount = u8::try_from(signed_amount).unwrap_or(0);
         // `magic.md §6` step 4: a zero quantity "prints nothing further".
         // For the interactive prompt that is stronger than printing an empty
         // message - the prompt's own row is still open, with the cursor in
@@ -2130,12 +2137,18 @@ impl PlayState {
         // *next* command prompt, not to this one - which is exactly what
         // `cleak/u5-spec#272` answer 2 had to disentangle from two captures
         // that looked contradictory.
-        if amount == 0 {
+        if amount == 0 && !negative {
             return Some(MoveOutcome::PromptDeclined);
         }
-        if amount > 0 {
+        if negative && session.reagent_mask == 0 {
+            // Step 5: an empty selection with a nonzero (here: unsigned-large)
+            // quantity is `Nothing to mix!`.
+            self.message = MMIX_EMPTY_SELECTION_MESSAGE.to_string();
+            return Some(MoveOutcome::Blocked);
+        }
+        if amount > 0 || negative {
             for index in selected_reagent_indices(session.reagent_mask) {
-                if self.reagents[index] < amount {
+                if negative || self.reagents[index] < amount {
                     session.quantity_buffer.clear();
                     self.message = format!(
                         "{}\n{}",

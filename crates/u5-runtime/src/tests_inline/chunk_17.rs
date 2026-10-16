@@ -898,6 +898,37 @@
         assert_eq!(state.message, "Mixing...\n\nDone!");
     }
 
+    /// `magic.md §6` step 4, "What Return does": "A leading minus is
+    /// accepted by the reader but never survives validation [...] a
+    /// negative quantity is larger than any counter, always takes the
+    /// shortfall notice, and can never be accepted or consume a reagent."
+    #[test]
+    fn active_mix_negative_quantity_takes_the_shortfall_notice() {
+        let mut state = test_state(open_grid(), 5, 5);
+        state.reagents = [0; REAGENT_COUNT];
+        state.reagents[REAGENT_SULFUR_ASH] = 9;
+
+        for (key, suffix) in [('M', ""), ('I', "L"), ('1', ""), ('M', ""), ('-', ""), ('5', "")] {
+            assert_eq!(
+                handle_play_key_input(&mut state, key, suffix, Path::new("")).unwrap(),
+                PlayInputDisposition::Continue
+            );
+        }
+        assert_eq!(
+            handle_play_key_input(&mut state, '\r', "", Path::new("")).unwrap(),
+            PlayInputDisposition::Continue
+        );
+        assert!(state.active_mix.is_some(), "the prompt is asked again: {:?}", state.message);
+        assert!(
+            state.message.starts_with(MMIX_INSUFFICIENT_REAGENTS_MESSAGE),
+            "{:?}",
+            state.message
+        );
+        assert!(state.message.contains(MMIX_QUANTITY_PROMPT_MESSAGE));
+        assert_eq!(state.reagents[REAGENT_SULFUR_ASH], 9);
+        assert_eq!(state.spell_charges[IN_LOR_SPELL_INDEX], 0);
+    }
+
     #[test]
     fn active_new_order_prompt_swaps_non_leader_slots() {
         let mut state = test_state(open_grid(), 5, 5);
