@@ -938,6 +938,11 @@ impl PlayState {
 
         if underfoot_blackout_latched {
             self.advance_turn();
+            // This branch skips the step-6 block, but the walker the clock
+            // routine just owed still runs on this turn, as it did when the
+            // walk lived inside `advance_turn`; left pending it would run at
+            // the start of the next turn, on top of that turn's own pass.
+            self.apply_pending_world_object_walker_pass();
             // Unpublished (`cleak/u5-spec#262`): the latched underfoot
             // blackout consumes the step, and the original prints nothing
             // this engine has been able to capture.
@@ -998,6 +1003,10 @@ impl PlayState {
 
         if let Some(game_dir) = game_dir {
             if let Some(entry) = transition {
+                // The plane change ends this turn's overworld block before
+                // the object epilogue: drop the walker owed to it rather than
+                // letting it run on the destination plane next turn.
+                self.pending_world_object_walker_pass = false;
                 self.apply_world_plane_transition(game_dir, entry)?;
                 return Ok(MoveOutcome::Transition(AreaTransition::ChangedWorldPlane {
                     from: plane,

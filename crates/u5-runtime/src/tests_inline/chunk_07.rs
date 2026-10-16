@@ -2270,6 +2270,10 @@ fn overworld_special_underfoot_latch_forces_darkness_and_holds_valid_movement() 
             .iter()
             .any(|note| note.contains("special underfoot tile"))
     );
+    // The held step consumed a turn; the walker it owed ran on that turn
+    // instead of carrying over into the next turn's clock call.
+    assert!(state.world_walkers_ran_this_turn);
+    assert!(!state.pending_world_object_walker_pass);
 }
 
 #[test]

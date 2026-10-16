@@ -3409,10 +3409,15 @@ impl PlayState {
         // [`PlayState::idle_wait_pass`], before the turn's key is read.
         if self.world_falls_underfoot_trigger_tile().is_some() {
             if let Some(transition) = self.apply_world_falls_chain(game_dir, plane)? {
+                // A scene change ends the turn before the object epilogue;
+                // the walker it owed must not run on the destination next
+                // turn.
+                self.pending_world_object_walker_pass = false;
                 return Ok(Some(MoveOutcome::Transition(transition)));
             }
         }
         if let Some(transition) = self.apply_world_underfoot_plane_transition(game_dir, plane)? {
+            self.pending_world_object_walker_pass = false;
             let transition_message = self.message.clone();
             // The command that consumed the turn may have printed nothing
             // (`Pass`, an accepted step), so the separator only belongs here
