@@ -3241,6 +3241,24 @@
     }
 
     #[test]
+    fn carpet_like_outdoor_object_families_use_the_carpet_composite_predicate() {
+        // `movement.md §4`: Wanderer/Lord British, Bat, Gazer, Daemon/Dragon
+        // and Mongbat use the carpet-like composite predicate, which takes
+        // the `0x60..0x6F` glyph/river family and force-rejects chairs.
+        for class in [0x74, 0x7c, 0x94, 0xb0, 0xd8, 0xdc, 0xf0] {
+            for tile in 0u8..=0xff {
+                assert_eq!(
+                    outdoor_active_object_step_accepts_tile(class, tile, None),
+                    carpet_terrain_accepts(tile),
+                    "class {class:#04x} tile {tile:#04x}"
+                );
+            }
+            assert!(outdoor_active_object_step_accepts_tile(class, 0x64, None));
+            assert!(!outdoor_active_object_step_accepts_tile(class, 0x90, None));
+        }
+    }
+
+    #[test]
     fn outdoor_walker_chance_refusal_does_not_try_the_other_axis() {
         // The terrain chance gate is after validation. Once that gate refuses
         // the first valid directed candidate, the slot's attempt ends; only a

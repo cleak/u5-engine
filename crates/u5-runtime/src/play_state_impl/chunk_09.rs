@@ -6226,10 +6226,12 @@ pub fn outdoor_active_object_step_accepts_tile(
     match class_byte {
         0x2c..=0x2f => water_creature_terrain_accepts(tile),
         0x80..=0x8f | 0x9c..=0x9f | 0xfc..=0xff => tile <= 0x03 || (0x60..=0x6f).contains(&tile),
-        0x94..=0x97 | 0xb0..=0xb3 | 0xd8..=0xdf | 0xf0..=0xf3 => {
-            (is_base_tile_passable(tile, passability) || is_water_tile(tile) || is_lava_tile(tile))
-                && !is_mountain_tile(tile)
-                && !is_wall_or_closed_door_tile(tile)
+        // `movement.md §4`: Wanderer and Lord British (`0x74..0x77`,
+        // `0x7C..0x7F`), Bat, Gazer, Daemon/Dragon and Mongbat "use the
+        // carpet-like composite predicate", whose accepted set already
+        // excludes the `0x90..0x93` chair force-reject run.
+        0x74..=0x77 | 0x7c..=0x7f | 0x94..=0x97 | 0xb0..=0xb3 | 0xd8..=0xdf | 0xf0..=0xf3 => {
+            carpet_terrain_accepts(tile)
         }
         _ => {
             is_base_tile_passable(tile, passability)
