@@ -486,3 +486,30 @@ fn audit_a069_lone_space_is_not_the_bye_shortcut() {
         audit_g5_transcript(&state)
     );
 }
+
+/// Audit A065. `conversation.md §2` step 5, "No-owner Talk": "If no occupied,
+/// non-idle NPC record is linked to the faced active object, Talk does not
+/// stop with `Nobody's here!`: it runs the dispatcher with an unrelated
+/// adjacent record that reads as all zero, so the bare `No response!` is
+/// printed for any sprite."
+#[test]
+fn audit_a065_faced_object_without_an_npc_record_answers_no_response() {
+    let mut state = test_state(open_grid(), 1, 1);
+    state.player.facing = Direction::East;
+    state.active_objects.resize(OOL_SLOTS, ActiveObject::empty());
+    let z = state.current_floor().unwrap();
+    state.active_objects[1] = ActiveObject {
+        type_byte: 0x50,
+        tile: 0x50,
+        x: 2,
+        y: 1,
+        z,
+        ..ActiveObject::empty()
+    };
+    state.talk_facing_with_dialogue(&HashMap::new());
+    assert_eq!(state.message, format!("\n{TALK_NO_RESPONSE_MESSAGE}"));
+
+    state.active_objects[1] = ActiveObject::empty();
+    state.talk_facing_with_dialogue(&HashMap::new());
+    assert_eq!(state.message, TALK_NOBODY_HERE_LINE);
+}

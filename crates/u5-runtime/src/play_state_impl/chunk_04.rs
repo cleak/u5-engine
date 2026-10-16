@@ -4158,8 +4158,8 @@ impl PlayState {
 
         let x = x as usize;
         let y = y as usize;
-        if let Some(npc) = self.npc_at_current_floor(x, y) {
-            return Some((npc.dialog_id, x, y));
+        if let Some(target) = self.talk_target_at(x, y) {
+            return Some(target);
         }
         if !is_talk_through_tile(self.grid[y * 32 + x]) {
             return None;
@@ -4170,10 +4170,20 @@ impl PlayState {
         if !(0..32).contains(&x) || !(0..32).contains(&y) {
             return None;
         }
-        let x = x as usize;
-        let y = y as usize;
-        self.npc_at_current_floor(x, y)
-            .map(|npc| (npc.dialog_id, x, y))
+        self.talk_target_at(x as usize, y as usize)
+    }
+
+    /// `conversation.md §2` step 5, "No-owner Talk": "If no occupied,
+    /// non-idle NPC record is linked to the faced active object, Talk does not
+    /// stop with `Nobody's here!`: it runs the dispatcher with an unrelated
+    /// adjacent record that reads as all zero, so the bare `No response!` is
+    /// printed for any sprite." An object with no NPC record therefore
+    /// resolves with dialog index zero.
+    fn talk_target_at(&self, x: usize, y: usize) -> Option<(u8, usize, usize)> {
+        if let Some(npc) = self.npc_at_current_floor(x, y) {
+            return Some((npc.dialog_id, x, y));
+        }
+        self.object_at_current_floor(x, y).map(|_| (0, x, y))
     }
 
     #[cfg(test)]
