@@ -30,6 +30,7 @@ pub fn handle_play_key_input(
     // exceptions sets its own mode while it runs.
     state.stats_panel_command_refresh = crate::stats_panel::PanelRefreshMode::Immediate;
     state.stats_panel_command_baseline = crate::stats_panel::stats_panel_snapshot_of(state);
+    let combat_was_active = state.combat_active;
     let mut result = handle_play_key_input_inner(state, key, suffix, game_dir);
     // A generic adjacent terrain combat suspends the high-to-low outdoor
     // reaction walk. As soon as the combat frame returns, continue the
@@ -41,6 +42,13 @@ pub fn handle_play_key_input(
         if let Err(error) = state.drain_pending_town_conflict(game_dir) {
             result = Err(error);
         }
+    }
+    // `town-mode.md §7` step 4: the town turn's walker and schedule tail runs
+    // after the command handler returns, and for a town A-Attack that is
+    // after the fight. It is drained only on the key that ended a fight, so
+    // a town command that leaves the tail deliberately owed is untouched.
+    if result.is_ok() && combat_was_active && !state.combat_active {
+        state.drain_town_tail_after_combat();
     }
     if result.is_ok() && !state.combat_active && !state.pending_outdoor_reaction_slots.is_empty() {
         if let Area::World { plane } = state.area {

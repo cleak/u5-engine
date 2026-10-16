@@ -3803,6 +3803,16 @@ impl PlayState {
     /// the object pass afterwards, which left a repaint conditioned on the
     /// processor's report blind to an object the walker had moved.
     pub(crate) fn apply_pending_town_object_epilogue(&mut self) {
+        // The tail belongs to the town mode loop, which is suspended while
+        // an arena fight runs: during combat the active-object table holds
+        // the arena's actors (`combat.md §4`), and the walkers would move
+        // them and the schedule processor would write town NPCs into it.
+        // A town A-Attack enters the arena with this pass still owed, so it
+        // stays owed until the frame is restored
+        // ([`Self::drain_town_tail_after_combat`]).
+        if self.combat_active {
+            return;
+        }
         let run_npc_schedule = std::mem::take(&mut self.pending_town_npc_schedule_pass);
         let run_active_objects = std::mem::take(&mut self.pending_town_active_object_pass);
         // `npc-schedules.md §5` gates "**both** town walkers", which the
@@ -3819,6 +3829,24 @@ impl PlayState {
         if run_npc_schedule && self.pending_town_arrest.is_none() {
             self.advance_npc_schedules();
         }
+    }
+
+    /// Run the town epilogue a fight left owed, once the arena frame has been
+    /// restored.
+    ///
+    /// A town A-Attack advances its turn and enters the arena from inside the
+    /// same command, so the turn's object walker and schedule pass were still
+    /// pending when combat began, and [`Self::apply_pending_town_object_epilogue`]
+    /// refuses to run them against the arena's actor table. `town-mode.md §7`
+    /// step 4 places both after the command handler has returned, which for
+    /// an attack is after the fight, and `town-mode.md §14`'s conflict chain
+    /// clears the NPC slot and reloads the map before the handler returns -
+    /// so this drains after [`Self::drain_pending_town_conflict`].
+    pub fn drain_town_tail_after_combat(&mut self) {
+        if self.combat_active || !matches!(self.area, Area::Town { .. }) {
+            return;
+        }
+        self.apply_pending_town_object_epilogue();
     }
 
     /// `town-mode.md §10`: the live town tiles in the burning family — the

@@ -2719,3 +2719,109 @@ fn vehicle_movement_echo_carries_the_vehicle_prefix() {
     assert_eq!(text(&state, 'w'), Some("Head North"));
     assert_eq!(text(&state, 'd'), Some("East"));
 }
+
+#[test]
+fn town_attack_arena_runs_no_town_walkers_until_the_fight_ends() {
+    // `combat.md §4`: combat "will overwrite" the dynamic-objects table "with
+    // its own actors", and the calling mode loop sees combat as "a function
+    // call". `main-loop.md §9` puts scheduled NPC movement in the mode loop's
+    // per-turn path, so the town walkers do not run while the arena does.
+    // The A-Attack turn's deferred town tail used to be drained by the
+    // round loop's first clock advance, which wrote the town's guards and
+    // townsfolk into the arena's actor table mid-fight
+    // (`qa/paired/combat-damage-narration.tsv`; never on the stock side).
+    let dir = debug_game_dir();
+    let mut record = synthetic_combat_arena_record();
+    for row in 0..COMBAT_ARENA_SIDE {
+        let row_start = row * COMBAT_ARENA_ROW_STRIDE;
+        record[row_start..row_start + COMBAT_ARENA_SIDE].fill(0x44);
+    }
+    let party_positions = [(5u8, 7u8), (6, 8), (4, 8), (5, 9), (7, 9), (3, 9)];
+    for (slot, (x, y)) in party_positions.into_iter().enumerate() {
+        record[3 * COMBAT_ARENA_ROW_STRIDE + 11 + slot] = x;
+        record[3 * COMBAT_ARENA_ROW_STRIDE + 17 + slot] = y;
+    }
+    for slot in 0..16 {
+        record[6 * COMBAT_ARENA_ROW_STRIDE + 11 + slot] = 1 + (slot % 4) as u8 * 2;
+        record[7 * COMBAT_ARENA_ROW_STRIDE + 11 + slot] = 1 + (slot / 4) as u8 * 2;
+    }
+    fs::write(dir.join(BRIT_CBT_FILE), record.repeat(BRIT_CBT_RECORDS)).unwrap();
+    let mut state = test_state(open_grid(), 1, 1);
+    let slots = [
+        NpcSlot {
+            slot: 0,
+            type_byte: 0,
+            dialog_id: 0,
+            schedule: [0; 16],
+            name: None,
+        },
+        // The merchant the party attacks, east of the party.
+        NpcSlot {
+            slot: 1,
+            type_byte: 0x54,
+            dialog_id: 2,
+            schedule: [0, 0, 0, 2, 2, 2, 1, 1, 1, 0, 0, 0, 0, 0, 0, 0],
+            name: None,
+        },
+        // A guard across town: the alarm sweep forces it into pursuit, so a
+        // schedule pass would walk it.
+        NpcSlot {
+            slot: 2,
+            type_byte: 0x70,
+            dialog_id: 3,
+            schedule: [0, 0, 0, 9, 9, 9, 9, 9, 9, 0, 0, 0, 0, 0, 0, 0],
+            name: None,
+        },
+    ];
+    state.load_scheduled_npcs(&slots);
+
+    handle_play_key_input(&mut state, 'A', "6", &dir).unwrap();
+    assert!(state.combat_active);
+    assert!(
+        state.pending_town_npc_schedule_pass,
+        "the attack turn's town tail is owed when the arena opens"
+    );
+    let arena_table = state.active_objects.clone();
+    let guard_before = (state.npcs[1].x, state.npcs[1].y);
+
+    // Well past the round counter's ten-dispatch wrap, which is where the
+    // round loop reaches the per-turn clock advance.
+    for _ in 0..30 {
+        state.advance_turn();
+        assert!(state.combat_active);
+    }
+    assert_eq!(
+        state.active_objects[1..],
+        arena_table[1..],
+        "no town walker touched the arena's actor table"
+    );
+    assert_eq!((state.npcs[1].x, state.npcs[1].y), guard_before);
+    assert!(state.pending_town_npc_schedule_pass);
+
+    // The tail runs once the frame is restored, after the conflict chain.
+    state.apply_combat_round_loop_exit(CombatRoundLoopExit::Victory);
+    assert!(!state.combat_active);
+    state.drain_town_tail_after_combat();
+    assert!(!state.pending_town_npc_schedule_pass);
+    assert!(!state.pending_town_active_object_pass);
+    let _ = fs::remove_dir_all(dir);
+}
+
+#[test]
+fn a_key_that_ends_a_town_fight_drains_the_owed_town_tail() {
+    // The dispatcher drains the tail only on the key that ended a fight; a
+    // town key outside combat leaves the per-command tail handling alone.
+    let dir = debug_game_dir();
+    let mut state = test_state(open_grid(), 1, 1);
+    state.combat_active = true;
+    state.pending_town_npc_schedule_pass = true;
+    state.apply_pending_town_object_epilogue();
+    assert!(
+        state.pending_town_npc_schedule_pass,
+        "the epilogue refuses to run against an arena"
+    );
+    state.combat_active = false;
+    state.drain_town_tail_after_combat();
+    assert!(!state.pending_town_npc_schedule_pass);
+    let _ = fs::remove_dir_all(dir);
+}
