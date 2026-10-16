@@ -398,11 +398,29 @@ fn blackthorn_fourth_wrong_answer_executes_the_named_companion() {
         .submit_blackthorn_audience_answer("nonsense", &dir)
         .unwrap();
 
-    // `blackthorn.md §5`: record `4`, the animation, then the roster lift and
-    // repaint with no key; then `\n\n`, the name and ` is sliced in half! `
-    // on the one held page. "An implementation that defers the durable roster
-    // edit to the acknowledgement ... lands the drop on the wrong page"
-    // (audit A036).
+    // `blackthorn.md §5` puts the roster lift before the held page, but the
+    // stock capture (`qa/paired/bt-escalate.tsv`, beat `ask5`) holds the
+    // record-4 narration, ending on `falls!`, with the victim still listed
+    // and the sliced line still to come (cleak/u5-spec#298's question).
+    assert!(
+        state
+            .active_blackthorn
+            .as_ref()
+            .is_some_and(|challenge| challenge.awaiting_closing_acknowledgement())
+    );
+    assert!(
+        state.message.contains("pendulum blade falls!"),
+        "{}",
+        state.message
+    );
+    assert!(
+        !state.message.contains(" is sliced in half! "),
+        "the sliced line is the next page: {}",
+        state.message
+    );
+    assert_eq!(state.party.len(), 3, "the held narration still lists the victim");
+
+    state.submit_blackthorn_audience_answer("", &dir).unwrap();
     assert!(
         state
             .active_blackthorn
@@ -410,18 +428,11 @@ fn blackthorn_fourth_wrong_answer_executes_the_named_companion() {
             .is_some_and(|challenge| challenge.closing_epilogue_pending())
     );
     assert!(
-        state
-            .message_entries()
-            .iter()
-            .any(|entry| entry.text.contains("pendulum blade falls!")),
-        "record 4 is printed before the held page",
-    );
-    assert!(
         state.message.contains(" is sliced in half! "),
         "{}",
         state.message
     );
-    assert_eq!(state.party.len(), 2, "the lift precedes the held page");
+    assert_eq!(state.party.len(), 2, "the narration's key lifts the victim");
 
     // After that single acknowledgement, record `6` and the helper's line
     // feed print and the loop leaves without another wait.

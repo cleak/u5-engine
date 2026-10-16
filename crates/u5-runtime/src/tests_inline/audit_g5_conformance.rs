@@ -245,15 +245,18 @@ fn audit_a036_merciful_death_lifts_the_roster_on_the_acknowledgement_key() {
     let _ = fs::remove_dir_all(dir);
 }
 
-/// Audit A036. `blackthorn.md §5`, pendulum branch: one key wait, on the page
-/// that names the victim; after it record `6` and the helper's line feed
-/// print and the audience leaves without another wait.
+/// Audit A036, pendulum branch, reconciled with the stock capture. The
+/// `bt-escalate` beat `ask5` holds the record-4 narration (ending on `falls!`)
+/// with the victim still listed on the panel. The key after it lifts the
+/// victim and repaints, and holds the page that names them; the key after
+/// that prints record `6` and leaves without another wait.
 #[test]
-fn audit_a036_pendulum_branch_takes_one_key_and_leaves() {
+fn audit_a036_pendulum_narration_is_held_with_the_victim_still_listed() {
     let dir = debug_game_dir();
     let mut state = test_state(open_grid(), 5, 5);
     state.party.push(audit_g5_companion(1));
     state.party.push(audit_g5_companion(2));
+    state.repaint_stats_panel();
     state.begin_blackthorn_audience_capture(&dir).unwrap();
     while state.active_blackthorn.as_ref().is_some_and(|c| c.current_prompt().is_none()) {
         state.submit_blackthorn_audience_answer("", &dir).unwrap();
@@ -264,8 +267,23 @@ fn audit_a036_pendulum_branch_takes_one_key_and_leaves() {
             state.submit_blackthorn_audience_answer("", &dir).unwrap();
         }
     }
-    assert_eq!(state.party.len(), 2, "the lift precedes the held page");
+    assert!(state.message.contains("pendulum blade falls!"), "{:?}", state.message);
+    assert!(!state.message.contains(" is sliced in half! "), "{:?}", state.message);
+    assert_eq!(state.party.len(), 3, "the held narration still lists the victim");
+    assert_eq!(
+        state.stats_panel,
+        crate::stats_panel::stats_panel_snapshot_of(&state),
+        "and the panel shows the full party"
+    );
+
+    state.submit_blackthorn_audience_answer("", &dir).unwrap();
     assert!(state.message.contains(" is sliced in half! "), "{:?}", state.message);
+    assert_eq!(state.party.len(), 2, "the narration's key lifts the victim");
+    assert_eq!(
+        state.stats_panel,
+        crate::stats_panel::stats_panel_snapshot_of(&state),
+        "and repaints the panel"
+    );
 
     let outcome = state.submit_blackthorn_audience_answer("", &dir).unwrap();
     assert!(matches!(
@@ -343,6 +361,9 @@ fn audit_a035_punishing_branch_runs_the_conditional_tableau_cleanup() {
             state.submit_blackthorn_audience_answer("", &dir).unwrap();
         }
     }
+    // The held pendulum narration's key (stock `bt-escalate` beat `ask5`)
+    // brings up the page that names the victim; the tail follows its key.
+    state.submit_blackthorn_audience_answer("", &dir).unwrap();
     let before = state.sound_effect_serial;
     state.submit_blackthorn_audience_answer("", &dir).unwrap();
     let mut cleanup = BlackthornCutsceneVm::with_audience_setup(Vec::new());
