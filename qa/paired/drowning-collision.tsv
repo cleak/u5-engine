@@ -16,16 +16,20 @@
 # 1 (`formats/saved-gam.md §8.1`, the player record's `+0x05`), so every roll
 # destroys it; skiffs and the carpet stock (`0x020A`) are zero, so
 # `vehicles.md §6`'s ladder reaches its last rung: `Ship sunk!`, the long
-# descent, `DROWNING!!!`. The first `Right` after hoisting only sets the
+# descent, `DROWNING!!!`. The one `Right` after hoisting only sets the
 # cached sail direction (`weather.md §5`: a heading that differs from the
-# cache turns and does not move); the second releases into the coast.
+# cache turns and does not move); the synthesized repeats then release into
+# the coast with no further key, on both sides.
 #
 # The two sides are driven separately, and the side not being recorded is
 # muted with Ctrl-S, because the capture sink mixes both processes: in the
 # first run the stock game sank on its own while the engine was being
-# recorded - after the hoist and one `Right` the original kept sailing on the
-# cached direction without another key (`weather.md §5`'s synthesized
-# repeats), where this engine waited for the second `Right`. Ctrl-S
+# recorded. That run also showed the engine not moving after one `Right`
+# (#45), and the engine side got a second `Right` as a workaround; it did not
+# reproduce on 2026-10-16 (three runs, each sinking off the single key), and
+# the workaround is gone. The wind drifts during the opening waits, so a run
+# where the engine's wind has gone Calm stalls silently - which is the likely
+# reading of that first observation. Ctrl-S
 # suppresses output only (`audio.md §3`), so it changes no timing. The stock
 # game is only muted once its rescue cinematic (`blackthorn.md §7`) has run
 # and been acknowledged, since Ctrl-S is a command-loop key.
@@ -55,9 +59,7 @@ engine	key	ctrl+s
 both	wait	1500
 engine	key	y
 both	wait	1500
-engine	key	Right
-both	wait	1500
-both	audio-start	engine-collision	Engine: the released eastward movement into the coast
+both	audio-start	engine-collision	Engine: hoisted, one eastward key into the coast
 engine	key	Right
 both	wait	22000
 both	audio-stop		Engine collision capture

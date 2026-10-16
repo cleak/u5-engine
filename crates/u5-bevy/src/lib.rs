@@ -25074,6 +25074,41 @@ mod tests {
     }
 
     #[test]
+    fn visual_idle_tick_sails_after_a_keyed_hoist_and_one_heading_key() {
+        // #45: the shell's own key route - `Y` hoists the furled frigate, one
+        // East sets the `weather.md §5.1` cache without moving - and from
+        // there the idle pump alone keeps the ship sailing (`overworld.md §5`
+        // step 3), with no second heading key.
+        let mut state = u5_runtime::test_fixtures::world_state(
+            vec![u5_runtime::BRIT_DEEP_WATER_TILE; u5_runtime::WORLD_CELLS],
+            10,
+            20,
+        );
+        state.player.facing = Direction::East;
+        state.player.transport = TransportState::Ship {
+            type_byte: u5_runtime::FIRST_PLAYABLE_FRIGATE_TILE,
+            tile: u5_runtime::FIRST_PLAYABLE_FRIGATE_TILE,
+            sails_hoisted: false,
+            hull: u5_runtime::FIRST_PLAYABLE_FULL_SHIP_HULL,
+            skiffs: 1,
+        };
+        state.sync_player_object();
+        state.wind = WindState::North;
+        let game_dir = Path::new(".");
+
+        handle_play_key_input(&mut state, 'y', "", game_dir).expect("hoist");
+        assert!(state.player.transport.is_ship_under_sail());
+        handle_play_key_input(&mut state, '\u{2}', "", game_dir).expect("heading key");
+        assert_eq!((state.player.x, state.player.y), (10, 20));
+        assert_eq!(state.sail_cached_direction, Some(Direction::East));
+
+        for _ in 0..4 {
+            assert!(visual_idle_tick(&mut state, game_dir));
+        }
+        assert_eq!((state.player.x, state.player.y), (12, 20));
+    }
+
+    #[test]
     fn visual_idle_tick_suppresses_world_tick_during_modal_prompt() {
         let mut state = world_state(open_world_grid(), 10, 20);
         let _ = state
