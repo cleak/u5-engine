@@ -272,6 +272,10 @@ pub const fn wishing_well_grant_scene(scene: u8) -> bool {
 /// of the shared "thou dost see" preamble: "the vision case is decided
 /// before anything is printed".
 pub const DEATH_VISION_LOOK_TILE: u8 = 0x29;
+/// `view.md §3` terrain-description path row 1: the Look redirect tiles.
+pub const LOOK_REDIRECT_NORTH_TILE: u8 = 0xe0;
+pub const LOOK_REDIRECT_EAST_TILE: u8 = 0xe1;
+pub const LOOK_REDIRECT_WEST_TILE: u8 = 0xe2;
 pub const DEATH_VISION_ROLL_LOW: u8 = 1;
 pub const DEATH_VISION_ROLL_HIGH: u8 = 30;
 /// Measured 2026-09-07 (paired capture, Britain's crystal sphere): both
@@ -289,8 +293,10 @@ pub const fn death_vision_look_tile(tile: u8) -> bool {
     tile == DEATH_VISION_LOOK_TILE
 }
 
-/// Public issue #43: active-object classes that share the sign/poster
-/// lookup path before generic object description.
+/// `view.md §3` entry-dispatch row 5: the **live terrain tile** ids that
+/// select the sign/poster path (`0x89`, `0x8A`, `0xA0`, `0xA4`, `0xF8`).
+/// A per-map object on the cell wins first and prints its own object
+/// description, so this is never tested against an object byte.
 pub const fn sign_or_wanted_poster_object_class(type_byte: u8) -> bool {
     matches!(type_byte, 0xa0 | 0xa4 | 0xf8 | 0x89 | 0x8a)
 }

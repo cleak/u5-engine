@@ -3501,13 +3501,10 @@ impl PlayState {
                 if death_vision_look_tile(self.grid[y * 32 + x]) {
                     return Ok(self.apply_death_vision_look(x, y));
                 }
+                // `view.md §3` entry-dispatch row 4: "the per-map object case
+                // wins over the sign case when both would match", and a
+                // per-map object always prints its object description.
                 if let Some(object) = self.blocking_object_at(x, y) {
-                    if sign_or_wanted_poster_object_class(object.type_byte) {
-                        self.message = self
-                            .sign_message_at_for_current_area(game_dir, y as u8, x as u8)?
-                            .unwrap_or_else(|| "Sign:\n".to_string());
-                        return Ok(MoveOutcome::Observed);
-                    }
                     // `cleak/u5-spec#194` (black-box): the stock game prints
                     // `Thou dost see` and the description on the next row.
                     self.message = if look_table.is_some() {
@@ -3520,14 +3517,15 @@ impl PlayState {
                     };
                     return Ok(MoveOutcome::Observed);
                 }
-                if let Area::Town { scene, floor } = self.area {
-                    if let Some(sign) =
-                        self.sign_message_at(game_dir, scene.byte, floor as u8, y as u8, x as u8)?
-                    {
-                        self.message = sign;
-                        return Ok(MoveOutcome::Observed);
-                    }
+                // Row 5: the sign path is selected by the live terrain tile,
+                // and only then is `SIGNS.DAT` consulted.
+                if sign_or_wanted_poster_object_class(self.grid[y * 32 + x]) {
+                    self.message = self
+                        .sign_message_at_for_current_area(game_dir, y as u8, x as u8)?
+                        .unwrap_or_else(|| "Sign:\n".to_string());
+                    return Ok(MoveOutcome::Observed);
                 }
+                let (x, y) = self.resolve_look_redirect_tiles(x, y);
                 let tile = self.grid[y * 32 + x];
                 // `view.md §3` terrain-description path row 2: live tile
                 // `0x59` is a **telescope** and enters the §4.2 sky renderer
@@ -3576,12 +3574,6 @@ impl PlayState {
                     return Ok(self.apply_death_vision_look(x, y));
                 }
                 if let Some(object) = self.world_object_at(x, y) {
-                    if sign_or_wanted_poster_object_class(object.type_byte) {
-                        self.message = self
-                            .sign_message_at_for_current_area(game_dir, y as u8, x as u8)?
-                            .unwrap_or_else(|| "Sign:\n".to_string());
-                        return Ok(MoveOutcome::Observed);
-                    }
                     self.message = if look_table.is_some() {
                         format!(
                             "{LOOK_RESULT_PREFIX}\n{}",
@@ -3592,19 +3584,17 @@ impl PlayState {
                     };
                     return Ok(MoveOutcome::Observed);
                 }
+                // `view.md §3` entry-dispatch row 5, see the town arm.
+                if sign_or_wanted_poster_object_class(self.grid[world_cell_index(x, y)]) {
+                    self.message = self
+                        .sign_message_at_for_current_area(game_dir, y as u8, x as u8)?
+                        .unwrap_or_else(|| "Sign:\n".to_string());
+                    return Ok(MoveOutcome::Observed);
+                }
+                let (x, y) = self.resolve_look_redirect_tiles(x, y);
                 let tile = self.grid[world_cell_index(x, y)];
                 if tile == TELESCOPE_LOOK_TRIGGER_TILE {
                     self.look_through_telescope();
-                    return Ok(MoveOutcome::Observed);
-                }
-                if let Some(sign) = self.sign_message_at(
-                    game_dir,
-                    SCENE_OVERWORLD,
-                    plane.save_floor() as u8,
-                    y as u8,
-                    x as u8,
-                )? {
-                    self.message = sign;
                     return Ok(MoveOutcome::Observed);
                 }
                 if surface_wishing_well_look_tile(tile) {
@@ -3630,6 +3620,42 @@ impl PlayState {
                 Ok(MoveOutcome::Observed)
             }
         }
+    }
+
+    /// `view.md §3` terrain-description path row 1: live tiles `0xE0`,
+    /// `0xE1` and `0xE2` redirect the look target one cell north, east and
+    /// west, re-read it and restart the terrain table; "The redirect can
+    /// chain, so a run of redirect tiles resolves to one final cell". The
+    /// overworld wraps like every other overworld step. The spec does not
+    /// say what a town redirect off the 32-by-32 grid does, so that step
+    /// (and a cycle, which no shipped map is known to hold) stops on the
+    /// current cell rather than inventing a target.
+    pub(crate) fn resolve_look_redirect_tiles(&self, x: usize, y: usize) -> (usize, usize) {
+        let (mut x, mut y) = (x, y);
+        for _ in 0..(WORLD_SIDE * WORLD_SIDE) {
+            let (dx, dy): (isize, isize) = match self.surface_tile_at(x, y) {
+                LOOK_REDIRECT_NORTH_TILE => (0, -1),
+                LOOK_REDIRECT_EAST_TILE => (1, 0),
+                LOOK_REDIRECT_WEST_TILE => (-1, 0),
+                _ => break,
+            };
+            let nx = x as isize + dx;
+            let ny = y as isize + dy;
+            match self.area {
+                Area::World { .. } => {
+                    x = nx.rem_euclid(WORLD_SIDE as isize) as usize;
+                    y = ny.rem_euclid(WORLD_SIDE as isize) as usize;
+                }
+                _ => {
+                    if !(0..32).contains(&nx) || !(0..32).contains(&ny) {
+                        break;
+                    }
+                    x = nx as usize;
+                    y = ny as usize;
+                }
+            }
+        }
+        (x, y)
     }
 
     pub fn look_surface_fountain_with_drinker(
@@ -3822,16 +3848,19 @@ impl PlayState {
     }
 
     fn surface_look_target_position(&self, direction: Direction) -> Option<(usize, usize)> {
-        match self.area {
-            Area::Town { .. } => self.adjacent_position(direction),
+        // The well and fountain follow-ups re-resolve the cell the Look
+        // chose, so they take the same `view.md §3` redirect step.
+        let (x, y) = match self.area {
+            Area::Town { .. } => self.adjacent_position(direction)?,
             Area::World { .. } => {
                 let (dx, dy) = direction.delta();
                 let x = (self.player.x as isize + dx).rem_euclid(WORLD_SIDE as isize) as usize;
                 let y = (self.player.y as isize + dy).rem_euclid(WORLD_SIDE as isize) as usize;
-                Some((x, y))
+                (x, y)
             }
-            Area::Dungeon { .. } => None,
-        }
+            Area::Dungeon { .. } => return None,
+        };
+        Some(self.resolve_look_redirect_tiles(x, y))
     }
 
     fn surface_look_target_visible(&self, x: isize, y: isize) -> bool {
@@ -3909,9 +3938,9 @@ impl PlayState {
                 Some(word) => format!("{base} {word}"),
                 None => base,
             }
-        } else if let Some(virtue) = shrine_virtue_for_altar_tile(tile) {
-            format!("{base} (Shrine of {})", virtue.name())
         } else {
+            // `view.md §3` rows 5a-5c: only `0xFA`/`0xFB`, `0xDE` and
+            // `0xDF` take an appender; there is no shrine-name suffix.
             base
         }
     }
@@ -3987,14 +4016,9 @@ impl PlayState {
         y: usize,
     ) -> io::Result<String> {
         let base = self.look_description(tile, look_table);
+        // `view.md §3` rows 5a-5c: of the appenders only `0xDF` needs the
+        // map position; no other tile (shrines included) appends a name.
         if tile != 0xdf {
-            if let Some(virtue) = self.world_shrine_virtue_at(game_dir, plane, x, y, tile)? {
-                let shrine_name = format!("Shrine of {}", virtue.name());
-                if base.contains(&shrine_name) {
-                    return Ok(base);
-                }
-                return Ok(format!("{base} ({shrine_name})"));
-            }
             return Ok(base);
         }
         let Some(name) = self.world_dungeon_name_at(game_dir, plane, x, y, tile)? else {
