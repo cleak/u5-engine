@@ -222,11 +222,15 @@ impl PlayState {
 
         self.sail_cadence = self.sail_cadence.saturating_add(1);
         self.advance_sailing_wait_turn();
-        self.message = format!(
-            "Sails stalled by {} wind while heading {}.",
-            self.wind.name(),
-            direction.name()
-        );
+        // `weather.md §5` itemises a wait pass - cleanup/redraw, clock,
+        // outdoor epilogue, world step, counter, key poll - and no line of
+        // its own. This arm used to print an invented
+        // `Sails stalled by <wind> wind while heading <dir>.`, which no spec
+        // text carries. `sail-heading-echo` (2026-10-16) showed it filling
+        // three rows of the window under an upwind heading on this engine's
+        // side; the stock side of that run had a crosswind and released at
+        // once, so the silent wait is the spec's, not a capture of one.
+        self.message.clear();
         Some(MoveOutcome::SailStalled)
     }
 

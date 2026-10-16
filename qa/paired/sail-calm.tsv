@@ -1,0 +1,39 @@
+# Hoist sail and steer under a Calm wind.
+#
+# `weather.md §5`: "Calm wind never releases a cached hoisted-sail
+# movement. The ship waits until the player enters a different command. A
+# later Pass command reports the stalled-sailing feedback `Sheets in
+# irons!\n` and clears the cached sailing state. That Pass adds no ordinary
+# `Pass` echo. The unsuccessful unchanged-heading attempt itself adds no
+# stalled-sailing sentence." The first heading key only sets the cache
+# (`§5.1`: a heading that differs from the cache turns and does not move).
+#
+# Lead from #45: in an earlier drowning-collision run the stock game showed
+# no direction echo 0.7 s after a heading key while its wind had drifted to
+# Calm, where this engine echoed at once - but this engine's wind was East
+# then, so the two were not comparable. Here both sides start Calm.
+#
+# The wind drifts on its own (`weather.md` "Autonomous Wind Drift", a 1-in-64
+# roll per world tick), so the opening waits are kept short and the `start`
+# and `pass` shots both show the banner: a run where either side's banner
+# has left Calm measured something else. The opening waits match
+# drowning-collision's, which a loaded host needs to get the stock game past
+# its title menu.
+# requires-seed: profile `seed-sail-calm` (seed-drowning-collision with the wind byte set to Calm)
+both	wait	9000
+both	key	space
+both	wait	4000
+both	key	j
+both	wait	8000
+both	shot	start	Furled frigate, Calm
+both	key	y
+both	wait	1500
+both	shot	hoisted	Sails hoisted
+both	key	Right
+both	wait	700
+both	shot	heading	0.7 s after one eastward key
+both	wait	3300
+both	shot	waiting	4 s after the key: still in place
+both	key	space
+both	wait	1500
+both	shot	pass	Pass under Calm

@@ -2077,15 +2077,20 @@ fn hoisted_ship_into_wind_uses_two_wait_ticks() {
     assert_eq!(state.sail_cadence, 0);
     assert_eq!(state.turn, 1);
 
+    // `weather.md §5`'s wait pass has no line of its own: an upwind wait
+    // is silent, not the invented `Sails stalled by ...` sentence this arm
+    // once printed.
     assert_eq!(state.step(Direction::East), MoveOutcome::SailStalled);
     assert_eq!((state.player.x, state.player.y), (10, 10));
     assert_eq!(state.sail_cadence, 1);
     assert_eq!(state.turn, 2);
+    assert_eq!(state.message, "");
 
     assert_eq!(state.step(Direction::East), MoveOutcome::SailStalled);
     assert_eq!((state.player.x, state.player.y), (10, 10));
     assert_eq!(state.sail_cadence, 2);
     assert_eq!(state.turn, 3);
+    assert_eq!(state.message, "");
 
     assert_eq!(state.step(Direction::East), MoveOutcome::Moved);
     assert_eq!((state.player.x, state.player.y), (11, 10));

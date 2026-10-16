@@ -155,3 +155,5 @@ overworld-falls	seed-overworld-falls	built with seed_position plane=britannia x=
 dungeon-chest	seed-dungeon-chest	the dungeon-look party re-placed onto the Deceit wooden chest
 dungeon-chest-jimmy	seed-dungeon-chest-jimmy	the dungeon-look party re-placed onto the Shame wooden chest
 dungeon-two-way-ladder	seed-dungeon-two-way-ladder	the dungeon-look party re-placed onto a Deceit two-way ladder
+sail-calm	seed-sail-calm	seed-drowning-collision with the wind byte set to Calm (0x02EC = 0)
+sail-heading-echo	seed-drowning-collision	same seed as drowning-collision, sailed west into open water

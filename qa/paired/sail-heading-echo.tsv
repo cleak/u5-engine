@@ -1,0 +1,33 @@
+# What a hoisted-sail heading key and the synthesized repeats print.
+#
+# `commands.md §5.2`: "Outdoor movement prints its compass word followed by a
+# newline." `weather.md §5`: under hoisted sail the first heading key only
+# sets the cached direction, and "the input helper can synthesize repeated
+# movement commands from the cached direction". `text-output.md §10.2`: any
+# shipboard direction suppresses exactly one following prompt pair.
+#
+# `sail-calm` (2026-10-16) caught the stock game, wind drifted to South,
+# printing `>BREAKING UP!` straight under `>Yell HOIST!` - no `East` for the
+# heading key or for the released step into the shoal - where this engine
+# printed `>East` first. This scenario sails away from the coast instead, so
+# the released steps are ordinary moves, and samples the window as they go.
+# requires-seed: profile `seed-drowning-collision` (frigate west of a coast)
+both	wait	9000
+both	key	space
+both	wait	4000
+both	key	j
+both	wait	8000
+both	shot	start	Furled frigate west of the coast
+both	key	y
+both	wait	1500
+both	shot	hoisted	Sails hoisted
+both	key	Left
+both	wait	700
+both	shot	heading	0.7 s after one westward key
+both	wait	3300
+both	shot	sailing	4 s after the key
+both	wait	4000
+both	shot	sailing-more	8 s after the key
+both	key	Left
+both	wait	2000
+both	shot	same-key	The cached heading pressed again
