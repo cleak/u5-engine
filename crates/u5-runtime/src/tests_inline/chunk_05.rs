@@ -289,6 +289,35 @@ fn exit_vehicle_refuses_furled_ship_with_no_landing_and_no_skiffs() {
     assert_eq!(state.turn, 0);
 }
 
+/// `vehicles.md §5.1` through the key path, where the `X-it ` echo is open
+/// in the transcript and completing it closes the row: the refusal still
+/// leaves exactly one blank row, not two.
+#[test]
+fn xit_key_no_skiffs_refusal_leaves_one_blank_row_under_the_echo() {
+    let mut state = world_state(vec![1; WORLD_CELLS], 5, 5);
+    state.player.transport = TransportState::Ship {
+        type_byte: 168,
+        tile: 168,
+        sails_hoisted: false,
+        hull: 77,
+        skiffs: 0,
+    };
+    state.sync_player_object();
+
+    crate::input_dispatch::handle_play_key_input(&mut state, 'X', "", Path::new("")).unwrap();
+
+    let rows: Vec<&str> = state
+        .message_entries()
+        .iter()
+        .map(|entry| entry.text.as_str())
+        .collect();
+    assert!(
+        rows.ends_with(&["X-it ship!", "", "No skiffs on board!"]),
+        "{rows:?}"
+    );
+    assert_eq!(state.turn, 0);
+}
+
 #[test]
 fn exit_vehicle_under_sail_refusal_takes_its_own_row() {
     // `vehicles.md §5.1`: "Ship under sail | `\nUnder sail!\n`".

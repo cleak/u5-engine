@@ -1099,13 +1099,24 @@ impl PlayState {
                 // The engine replaced the whole line with
                 // `SHIP_NO_SKIFFS_WARNING`, which is the all-capitals
                 // *boarding* warning and belongs to a different beat.
-                if !self.complete_open_direction_echo("X-it ", XIT_SHIP_ARGUMENT) {
-                    self.message = format!("X-it {XIT_SHIP_ARGUMENT}");
-                }
+                let ship_row_in_slot =
+                    if self.complete_open_direction_echo("X-it ", XIT_SHIP_ARGUMENT) {
+                        // The echo was completed where it stood. If that was
+                        // the transcript, completing it closed the row
+                        // (`commands.md §5.3`), and the slot does not hold it.
+                        self.message.ends_with(XIT_SHIP_ARGUMENT)
+                    } else {
+                        self.message = format!("X-it {XIT_SHIP_ARGUMENT}");
+                        true
+                    };
                 // `ship!\n` carries its own feed and the refusal opens with
                 // another, which is §5.1's "leaving a blank row before the
-                // refusal".
-                self.message.push('\n');
+                // refusal". The `ship!` feed is only owed here while that row
+                // is still open in the slot: adding it after the transcript
+                // already closed the row printed a second blank row.
+                if ship_row_in_slot {
+                    self.message.push('\n');
+                }
                 self.message.push_str(XIT_NO_SKIFFS_REFUSAL);
                 return Ok(MoveOutcome::Blocked);
             }
