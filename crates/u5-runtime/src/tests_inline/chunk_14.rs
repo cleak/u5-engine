@@ -1128,6 +1128,61 @@
     }
 
     #[test]
+    fn dungeon_view_with_fonts_blits_the_selected_font_glyph_opaquely() {
+        // `view.md §6.2`: each font class is an index into "whichever of
+        // the two fonts that class selects", drawn opaquely; the fountain
+        // and the energy field stay vector drawings.
+        let mut text = vec![0u8; CH_FONT_LEN];
+        let mut runic = vec![0u8; CH_FONT_LEN];
+        // Text glyph 0x7F: left half set on every row.
+        for row in 0..8 {
+            text[0x7F * 8 + row] = 0xF0;
+        }
+        // Runic glyph 0x74: a single top-left pixel; runic 0x7F stays blank.
+        runic[0x74 * 8] = 0x80;
+        // Runic 0x60, the party arrowhead: top-right pixel only.
+        runic[0x60 * 8] = 0x01;
+        let text = parse_ch_font(&text, "text").unwrap();
+        let runic = parse_ch_font(&runic, "runic").unwrap();
+        let fonts = DungeonViewFonts {
+            text: &text,
+            runic: &runic,
+        };
+
+        let mut grid = open_dungeon_record();
+        grid[dungeon_cell_index(0, 2, 1)] = 0xB0; // bedrock: text 0x7F
+        grid[dungeon_cell_index(0, 0, 1)] = 0xB1; // latticed wall: runic 0x74
+        grid[dungeon_cell_index(0, 2, 0)] = 0x50; // fountain: vector
+        let state = dungeon_state(grid, 0, 1, 1);
+        let viewport =
+            state.render_dungeon_view_overlay_with_fonts(0, TileGraphicsDepth::Ega16, Some(fonts));
+        let cell = DUNGEON_GEM_VIEW_CELL_PIXELS;
+        let (party_x, party_y) = DUNGEON_GEM_VIEW_PARTY_CELL;
+        let px = |dx: isize, dy: isize, lx: usize, ly: usize| {
+            let x = (party_x as isize + dx) as usize * cell + lx;
+            let y = (party_y as isize + dy) as usize * cell + ly;
+            viewport.pixel(x, y).unwrap()
+        };
+        // Bedrock: left four columns lit, right four black, all rows.
+        for row in 0..8 {
+            assert_ne!(px(1, 0, 0, row), 0);
+            assert_ne!(px(1, 0, 3, row), 0);
+            assert_eq!(px(1, 0, 4, row), 0);
+            assert_eq!(px(1, 0, 7, row), 0);
+        }
+        // Latticed wall: only the top-left pixel.
+        assert_ne!(px(-1, 0, 0, 0), 0);
+        assert_eq!(px(-1, 0, 1, 0), 0);
+        assert_eq!(px(-1, 0, 0, 7), 0);
+        assert_eq!(px(-1, 0, 7, 7), 0);
+        // Party marker from runic 0x60: top-right pixel only, no cross.
+        assert_ne!(px(0, 0, 7, 0), 0);
+        assert_eq!(px(0, 0, cell / 2, 0), 0);
+        // Fountain keeps its §12.5 vector basin.
+        assert_eq!(px(1, -1, cell / 2, cell / 2), 15);
+    }
+
+    #[test]
     fn surface_view_class_uses_spec_tile_ranges() {
         assert_eq!(surface_view_class(0x00), 0x00);
         assert_eq!(surface_view_class(0x05), 0x01);

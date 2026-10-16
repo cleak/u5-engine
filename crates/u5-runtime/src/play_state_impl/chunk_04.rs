@@ -3010,6 +3010,17 @@ impl PlayState {
     }
 
     pub fn render_active_view_overlay(&self, depth: TileGraphicsDepth) -> Option<TileViewport> {
+        self.render_active_view_overlay_with_fonts(depth, None)
+    }
+
+    /// [`PlayState::render_active_view_overlay`] with the two fixed fonts
+    /// the dungeon V-View draws its glyphs from (`view.md §6.2`). A caller
+    /// without them gets the engine's vector stand-ins.
+    pub fn render_active_view_overlay_with_fonts(
+        &self,
+        depth: TileGraphicsDepth,
+        fonts: Option<DungeonViewFonts<'_>>,
+    ) -> Option<TileViewport> {
         let overlay = self.active_view_overlay.as_ref()?;
         match overlay.kind {
             ViewOverlayKind::Surface => {
@@ -3019,7 +3030,7 @@ impl PlayState {
                 Some(render_sky_overlay(depth, &sky, self.shadowlord_hideouts))
             }
             ViewOverlayKind::Dungeon { level } => {
-                Some(self.render_dungeon_view_overlay_for_mode(level, depth, overlay.mode))
+                Some(self.render_dungeon_view_overlay_with_fonts(level, depth, fonts))
             }
         }
     }
@@ -3176,6 +3187,19 @@ impl PlayState {
         depth: TileGraphicsDepth,
         _mode: ViewOverlayMode,
     ) -> TileViewport {
+        self.render_dungeon_view_overlay_with_fonts(level, depth, None)
+    }
+
+    /// `view.md §6.2` / `dungeon-mode.md §12.3`: with the text and runic
+    /// fonts supplied, every font class is blitted from its selected 8x8
+    /// one-bit glyph, opaquely; only the fountain and the energy field
+    /// stay vector drawings.
+    pub fn render_dungeon_view_overlay_with_fonts(
+        &self,
+        level: u8,
+        depth: TileGraphicsDepth,
+        fonts: Option<DungeonViewFonts<'_>>,
+    ) -> TileViewport {
         let cells = DUNGEON_GEM_VIEW_GRID_SIDE;
         let scale = DUNGEON_GEM_VIEW_CELL_PIXELS;
         let width = cells * scale;
@@ -3191,7 +3215,14 @@ impl PlayState {
         for cell_y in 0..cells {
             for cell_x in 0..cells {
                 let index = cell_y * cells + cell_x;
-                draw_dungeon_view_glyph(&mut viewport, cell_x, cell_y, scale, glyphs[index]);
+                draw_dungeon_view_glyph(
+                    &mut viewport,
+                    cell_x,
+                    cell_y,
+                    scale,
+                    glyphs[index],
+                    fonts,
+                );
             }
         }
         viewport
@@ -3214,7 +3245,7 @@ impl PlayState {
             height: scale,
             pixels: vec![0; scale * scale],
         };
-        draw_dungeon_view_glyph(&mut viewport, 0, 0, scale, glyph);
+        draw_dungeon_view_glyph(&mut viewport, 0, 0, scale, glyph, None);
         viewport
     }
 
@@ -6332,6 +6363,7 @@ fn draw_dungeon_view_glyph(
     cell_y: usize,
     scale: usize,
     glyph: Option<DungeonMinimapGlyph>,
+    fonts: Option<DungeonViewFonts<'_>>,
 ) {
     let Some(glyph) = glyph else {
         return;
@@ -6339,6 +6371,19 @@ fn draw_dungeon_view_glyph(
     let door_color = dungeon_view_door_color();
     let wall_color = dungeon_view_wall_color();
     let highlight = DUNGEON_VIEW_HIGHLIGHT_COLOR;
+    // `view.md §6.2`: "Every published glyph identifier in the
+    // class-to-glyph table is an index into whichever of the two fonts that
+    // class selects, and each cell is drawn opaquely in a
+    // foreground/background pair."
+    if let (Some(fonts), DungeonMinimapGlyph::Font { index, font }) = (fonts, glyph) {
+        let source = match font {
+            DungeonMinimapFont::Text => fonts.text,
+            DungeonMinimapFont::Runic => fonts.runic,
+        };
+        let foreground = dungeon_view_font_glyph_foreground(index);
+        blit_dungeon_view_font_glyph(viewport, cell_x, cell_y, scale, source, index, foreground);
+        return;
+    }
     // `dungeon-mode.md §12.3`: two classes "are not font characters at
     // all but small vector drawings". Their geometry is §12.5's and is
     // drawn directly rather than through a glyph index.
@@ -6409,6 +6454,45 @@ fn draw_dungeon_view_glyph(
     }
 }
 
+/// The foreground pen of a font-drawn minimap class. `dungeon-mode.md
+/// §12.4` publishes the glyph, the font and that the cell is opaque, but not
+/// the palette indices of the pens (only that `0xC?`/`0xD?` use a
+/// "background pen" and that `0xD?`'s depends on the adapter), so these are
+/// the engine's existing stand-in colours per class, unchanged.
+const fn dungeon_view_font_glyph_foreground(index: u8) -> u8 {
+    match index {
+        0x18 | 0x12 => 7,
+        0x71 => 12,
+        0x72 => 14,
+        0x73 | 0x77 => dungeon_view_door_color(),
+        0x74 | 0x75 | 0x7f => dungeon_view_wall_color(),
+        0x76 => dungeon_view_extra_wall_color(),
+        0x70 => 6,
+        _ => DUNGEON_VIEW_HIGHLIGHT_COLOR,
+    }
+}
+
+/// Opaque one-bit blit of one 8x8 font glyph: set bits take `foreground`,
+/// clear bits the black background, most significant bit leftmost.
+fn blit_dungeon_view_font_glyph(
+    viewport: &mut TileViewport,
+    cell_x: usize,
+    cell_y: usize,
+    scale: usize,
+    font: &FixedCellFont,
+    index: u8,
+    foreground: u8,
+) {
+    for row in 0..scale.min(8) {
+        let bits = font.glyph_row(index, row).unwrap_or(0);
+        for column in 0..scale.min(8) {
+            let set = bits & (0x80 >> column) != 0;
+            let color = if set { foreground } else { 0 };
+            set_view_overlay_pixel(viewport, cell_x, cell_y, scale, column, row, color);
+        }
+    }
+}
+
 /// Diagnostic ASCII stand-in for one minimap cell. The letters are this
 /// engine's own text rendering of the map, not published art; what the
 /// published table fixes is that each class gets its **own** output, so
@@ -6453,18 +6537,18 @@ const DUNGEON_VIEW_HIGHLIGHT_COLOR: u8 = 15;
 /// display adapter ([`TileGraphicsDepth`]), and CGA/Hercules raster output
 /// is outside the v1 clean-recreation target, so one high-colour pen set
 /// serves every mode.
-fn dungeon_view_door_color() -> u8 {
+const fn dungeon_view_door_color() -> u8 {
     11
 }
 
-fn dungeon_view_wall_color() -> u8 {
+const fn dungeon_view_wall_color() -> u8 {
     8
 }
 
 /// `dungeon-mode.md §12.4`: the `0xD?` arch wall is "drawn with a
 /// background pen; which pen depends on the display adapter" - the adapter,
 /// not the view mode.
-fn dungeon_view_extra_wall_color() -> u8 {
+const fn dungeon_view_extra_wall_color() -> u8 {
     13
 }
 
