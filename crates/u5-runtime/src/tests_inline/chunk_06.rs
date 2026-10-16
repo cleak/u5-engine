@@ -215,7 +215,8 @@
     fn whirlpool_engagement_pulls_ship_party_to_underworld_landing() {
         // active-objects.md §8: adjacent whirlpool engagement is a
         // plane-transition effect when the party is not on foot. The party
-        // lands at underworld coordinate (34, 18) on foot.
+        // lands at underworld coordinate (34, 18) still aboard: `vehicles.md
+        // §2` lists no whirlpool writer of the durable marker.
         let dir = debug_game_dir();
         let mut state = world_state(open_world_grid(), 5, 5);
         state.area = Area::World {
@@ -261,7 +262,14 @@
                 plane: WorldPlane::Underworld,
             }
         );
-        assert_eq!(state.player.transport, TransportState::Foot);
+        assert!(
+            matches!(
+                state.player.transport,
+                TransportState::Ship { type_byte: 168, skiffs: 2, hull, .. } if hull < 100
+            ),
+            "the frigate survives the swallow with its hull roll applied: {:?}",
+            state.player.transport
+        );
         assert_eq!((state.player.x, state.player.y), (34, 18));
         // `overworld.md §8.1`: the banner is the first and only text on the
         // path; the coordinate narration is gone.

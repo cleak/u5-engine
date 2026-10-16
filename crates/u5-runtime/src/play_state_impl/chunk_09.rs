@@ -305,10 +305,9 @@ impl PlayState {
         // saves the vehicle marker across the damage block and restores it
         // **before** the coordinate test, "so the plane swap runs with the
         // original transport in place; the falls handler does not force the
-        // durable post-transition transport marker to foot". Section 8.1 says
-        // nothing about the whirlpool's *durable* marker after the teleport,
-        // so that arm keeps the ordinary reset and only the falls chain sets
-        // this flag.
+        // durable post-transition transport marker to foot". The whirlpool
+        // swallow sets it too: `vehicles.md §2` lists its frame as a saved
+        // and restored override, and no marker writer resets it to foot.
         let preserve_transport = entry.preserves_transport;
         let pre_transition_transport = self.player.transport;
         self.cache_current_world_overlay();

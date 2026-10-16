@@ -3609,11 +3609,12 @@ impl PlayState {
             to_x: WHIRLPOOL_UNDERWORLD_EMERGENCE_X,
             to_y: WHIRLPOOL_UNDERWORLD_EMERGENCE_Y,
             expected_tile: None,
-            // Section 8.1 publishes the *order* - marker restored, payload,
-            // then the plane write - but says nothing about the durable
-            // marker after the teleport, so the engine's existing foot reset
-            // stands. Only the falls chain is published as preserving it.
-            preserves_transport: false,
+            // `vehicles.md §2`: the whirlpool frame is a one-frame override
+            // that is "saved ... and restored", and the marker writer census
+            // has no whirlpool reset to foot. Section 8.1 restores the marker
+            // before the payload, so only the payload's own sinking ladder
+            // may change it; the teleport keeps what it left.
+            preserves_transport: true,
         };
         self.apply_world_plane_transition(game_dir, entry)?;
         Ok(MoveOutcome::Transition(AreaTransition::ChangedWorldPlane {
