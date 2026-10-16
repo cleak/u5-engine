@@ -418,3 +418,32 @@ fn a099_zero_jumps_to_shared_equipment_while_browsing() {
     assert_eq!(session.page, ZStatsPage::Counters);
     assert_eq!(session.inventory_cursor, 0);
 }
+
+/// `inventory.md §6`: the magic-ring vanish check "rolls an inclusive
+/// `0..15` random value" - a shared-PRNG draw, so readying the same ring
+/// twice on the same turn draws twice and can vanish after one survival.
+#[test]
+fn a101_ring_vanish_check_draws_from_the_shared_prng() {
+    let survive_then_vanish = (0..=u16::MAX).find(|seed| {
+        let mut s = *seed;
+        u5_prng_range_u16(&mut s, 0, 15) != 0 && u5_prng_range_u16(&mut s, 0, 15) == 0
+    });
+    let seed = survive_then_vanish.expect("some seed survives then vanishes");
+    let mut state = test_state(open_grid(), 1, 1);
+    state.equipment_stock[EQUIPMENT_ID_RING_REGENERATION] = 1;
+    state.prng_state = seed;
+    let request = InlineReadyRequest {
+        party_index: 0,
+        item_id: EQUIPMENT_ID_RING_REGENERATION,
+    };
+    assert_eq!(state.ready_equipment(request), MoveOutcome::Used);
+    assert_eq!(state.party_equipment[0][EQUIP_SLOT_RING] as usize, EQUIPMENT_ID_RING_REGENERATION);
+    // Unequip, then ready again on the same turn.
+    assert_eq!(state.ready_equipment(request), MoveOutcome::Used);
+    assert_eq!(state.party_equipment[0][EQUIP_SLOT_RING], EQUIPMENT_EMPTY);
+    let turn = state.turn;
+    assert_eq!(state.ready_equipment(request), MoveOutcome::Used);
+    assert_eq!(state.turn, turn);
+    assert_eq!(state.party_equipment[0][EQUIP_SLOT_RING], EQUIPMENT_EMPTY);
+    assert!(state.message.contains("Ring vanishes!"));
+}

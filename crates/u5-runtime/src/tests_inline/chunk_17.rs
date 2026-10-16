@@ -3097,7 +3097,8 @@
     #[test]
     fn ready_magic_ring_vanish_closes_picker_without_done_literal() {
         let mut state = test_state(open_grid(), 1, 1);
-        state.turn = 5;
+        // `inventory.md §6`: the vanish check is a shared-PRNG 0..15 draw.
+        state.prng_state = seed_whose_first_uniform_0_15_is(0);
         state.party_strengths = vec![50];
         state.party_equipment = default_party_equipment(1);
         state.equipment_stock[EQUIPMENT_ID_RING_INVISIBILITY] = 1;
@@ -3114,7 +3115,7 @@
         assert!(state.message.contains("Ring vanishes!"));
         assert!(state.diagnostics.iter().any(|d| d.contains("vanished")));
         assert!(!state.message.contains(READY_PICKER_ESCAPE_MESSAGE));
-        assert_eq!(state.turn, 6);
+        assert_eq!(state.turn, 1, "one ordinary turn for the R invocation");
     }
 
     #[test]

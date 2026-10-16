@@ -4915,7 +4915,7 @@ impl PlayState {
         self.party_equipment[request.party_index][slot] = item_id as u8;
         self.equipment_stock[item_id] = self.equipment_stock[item_id].saturating_sub(1);
         if is_magic_vanish_ring(item_id)
-            && self.ready_ring_vanish_roll(request.party_index, item_id) == 0
+            && self.ready_ring_vanish_roll() == 0
         {
             self.party_equipment[request.party_index][slot] = EQUIPMENT_EMPTY;
             // `inventory.md` §5.2: "The ring vanish instead prints
@@ -4960,11 +4960,11 @@ impl PlayState {
         }
     }
 
-    pub fn ready_ring_vanish_roll(&self, party_index: usize, item_id: usize) -> u8 {
-        (self.turn as u8)
-            .wrapping_add(party_index as u8)
-            .wrapping_add(item_id as u8)
-            & 0x0f
+    /// `inventory.md §6` magic-ring vanish check: after the ring is
+    /// written, the command "rolls an inclusive `0..15` random value" from
+    /// the shared gameplay PRNG; zero vanishes the ring.
+    pub fn ready_ring_vanish_roll(&mut self) -> u8 {
+        self.random_range_u8(0, 15)
     }
 
     /// `audio.md §8.3` common spell failure tail: print `Failed!`, then play
