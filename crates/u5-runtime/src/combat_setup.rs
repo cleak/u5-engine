@@ -1508,6 +1508,10 @@ impl PlayState {
             .min((OOL_SLOTS - COMBAT_PARTY_ACTOR_SLOTS) as u8)
             .min((COMBAT_ACTOR_SLOTS - COMBAT_PARTY_ACTOR_SLOTS) as u8)
             .min(placement_slots.len() as u8);
+        // `combat.md §5` "Picking a class per monster": the camp route uses
+        // the same terrain setup helper, so early spawn indexes roll the
+        // one-in-nine companion substitution too.
+        let companion_class = combat_class_companion(stats.class);
         let mut placed = 0u8;
         for spawn in 0..placement_count {
             // `active-objects.md §7`: descriptor from the monster-side
@@ -1524,25 +1528,39 @@ impl PlayState {
                 .map(|permutation| usize::from(permutation[usize::from(spawn)]))
                 .unwrap_or(usize::from(spawn));
             let (x, y) = placement_slots[placement_slot.min(placement_slots.len() - 1)];
+            // `combat.md §5.3` step 7: "Each subsequent monster whose spawn
+            // index is below `count / 4 + 1` is preceded by one additional
+            // uniform `[0, 8]` draw" - taken before its speed draw.
+            let roll_seed =
+                self.terrain_combat_replacement_roll_seed(spawn, requested_count, companion_class);
+            let chosen_class = terrain_combat_class_for_spawn_index(
+                spawn,
+                requested_count,
+                stats.class,
+                companion_class,
+                roll_seed,
+            );
+            let spawn_stats = combat_class_stats(chosen_class).unwrap_or(stats);
+            let spawn_tile = combat_class_sprite_byte(spawn_stats.class);
             active_objects[record_slot] = ActiveObject {
-                type_byte: tile,
-                tile,
+                type_byte: spawn_tile,
+                tile: spawn_tile,
                 x: usize::from(x),
                 y: usize::from(y),
                 z,
                 phase: COMBAT_PLACEMENT_ACTIVE_OBJECT_PHASE,
-                aux1: stats.max_hp,
+                aux1: spawn_stats.max_hp,
                 aux3: COMBAT_ACTIVE_OBJECT_NO_DESCRIPTOR,
             };
             // `combat.md §5`: one speed-variation draw per ordinary
             // placement, phase counter of thirty-six minus the base-step.
             let speed_adjust_roll = self.combat_placement_speed_adjust_roll();
             actors[descriptor_slot] = combat_placement_descriptor(
-                stats,
+                spawn_stats,
                 record_slot as u8,
                 x,
                 y,
-                combat_monster_placement_flags(stats.class),
+                combat_monster_placement_flags(spawn_stats.class),
                 speed_adjust_roll,
             );
             placed += 1;

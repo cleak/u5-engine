@@ -917,6 +917,42 @@
         assert_eq!(sleeper.prng_state, reference.prng_state);
     }
 
+    /// `combat.md §5` "Picking a class per monster" / `§5.3` step 7: the
+    /// camp ambush reaches the same terrain setup helper, so an early spawn
+    /// index may be created as the base class's companion class, carrying
+    /// that class's own tile and stats. The first monster never is.
+    #[test]
+    fn the_camp_ambush_mixes_in_the_companion_class() {
+        let base = sleep_ambush_monster_sprite(SleepAmbushMonster::Troll);
+        let base_class = combat_class_stats_for_sprite_byte(base).unwrap().class;
+        let companion = combat_class_companion(base_class).unwrap();
+        assert_ne!(companion, base_class);
+        let companion_stats = combat_class_stats(companion).unwrap();
+        let mut saw_companion = false;
+        for seed in 0u16..400 {
+            let mut state = world_state(open_world_grid(), 10, 20);
+            state.prng_state = seed.wrapping_mul(163);
+            state
+                .enter_sleep_ambush_combat(SleepAmbushMonster::Troll, 0, std::path::Path::new(""))
+                .unwrap();
+            assert_eq!(
+                state.combat_actors[COMBAT_PARTY_ACTOR_SLOTS].owner_target_class,
+                base_class
+            );
+            for slot in COMBAT_PARTY_ACTOR_SLOTS + 1..COMBAT_ACTOR_SLOTS {
+                let actor = state.combat_actors[slot];
+                if actor.is_empty() || actor.owner_target_class != companion {
+                    continue;
+                }
+                saw_companion = true;
+                let record = state.active_objects[usize::from(actor.active_object_slot)];
+                assert_eq!(record.tile, combat_class_sprite_byte(companion));
+                assert_eq!(record.aux1, companion_stats.max_hp);
+            }
+        }
+        assert!(saw_companion, "some seed must roll the one-in-nine companion");
+    }
+
     #[test]
     fn sleep_ambush_placement_seeds_base_step_and_phase_like_any_other_placement() {
         // `combat.md §5`: the alternate rest/camp entry modes seat the
