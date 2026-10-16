@@ -6642,10 +6642,23 @@ fn validate_route_smoke_case_state(
                     .party
                     .get(2)
                     .is_none_or(|member| member.status != b'P')
-                || state.message.matches("Poisoned!").count() != 3
+                // `town-mode.md §10`: each failed save prints `Poisoned!\n`
+                // once - its own terminated row, never joined in the slot.
+                || state
+                    .message_entries()
+                    .iter()
+                    .filter(|entry| entry.text == "Poisoned!")
+                    .count()
+                    != 3
             {
                 return Err(io::Error::other(format!(
-                    "route smoke `{case_name}` did not apply public #51 poison-gas roll semantics"
+                    "route smoke `{case_name}` did not apply public #51 poison-gas roll semantics; \
+                     rows {:?}",
+                    state
+                        .message_entries()
+                        .iter()
+                        .map(|entry| entry.text.as_str())
+                        .collect::<Vec<_>>()
                 )));
             }
         }
