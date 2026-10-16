@@ -1425,7 +1425,20 @@ pub fn dissolve_click_retune(frequency_hz: u16) -> SpeakerProgram {
 /// a train of discrete clicks. An aborted run is lowered the same way; the
 /// abort completes its current click and then reaches the same exit.
 pub fn dissolve_click_run(pitches: &[u16]) -> SpeakerProgram {
-    let hold = dissolve_click_hold_nanos();
+    dissolve_click_run_at(pitches, dissolve_click_hold_nanos())
+}
+
+/// [`dissolve_click_run`] with each retune held for `retune_period_nanos`, the
+/// time to the next retune.
+///
+/// The carrier runs continuously between retunes, so a run that is to sound
+/// for as long as the reveal is on screen holds each pitch for the whole
+/// per-visit period rather than for the calibrated hold alone. `audio.md
+/// §8.6.1` leaves that period unpublished ("wall-clock retune cadence and
+/// total duration are not established"); the visual shell passes the measured
+/// [`crate::GATED_DISSOLVE_MEASURED_CLICK_PERIOD_NANOS`].
+pub fn dissolve_click_run_at(pitches: &[u16], retune_period_nanos: u64) -> SpeakerProgram {
+    let hold = retune_period_nanos;
     let mut ops = Vec::with_capacity(pitches.len() + 1);
     for pitch in pitches {
         ops.push(SpeakerOp::tone(u32::from(*pitch), hold));

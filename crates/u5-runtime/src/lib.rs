@@ -402,8 +402,9 @@ pub use disk_prompt::*;
 pub use display_driver::*;
 pub use dissolve::{
     DissolveAbortGate, DissolveControl, DissolveOutcome, DissolveVisit, DissolveVisitOrder,
-    GATED_DISSOLVE_CLICK_HOLD_NANOS, RECTANGLE_DISSOLVE_IS_ONE_BLOCKING_CALL, RectangleDissolve,
-    gated_dissolve_hold_nanos,
+    GATED_DISSOLVE_CLICK_HOLD_NANOS, GATED_DISSOLVE_MEASURED_CLICK_PERIOD_NANOS,
+    RECTANGLE_DISSOLVE_IS_ONE_BLOCKING_CALL, RectangleDissolve, gated_dissolve_click_count,
+    gated_dissolve_clicks_due, gated_dissolve_hold_nanos, gated_dissolve_measured_nanos,
 };
 pub use dungeon_tables::*;
 pub use dungeon_tables_io::*;

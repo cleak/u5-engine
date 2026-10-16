@@ -80,6 +80,50 @@ pub const fn gated_dissolve_hold_nanos(clicked_visits: u32) -> u64 {
     clicked_visits as u64 * GATED_DISSOLVE_CLICK_HOLD_NANOS
 }
 
+/// **Measured**, not published: the wall-clock cost of one checked visit of
+/// the gated start/menu logo dissolve — the click hold, the speaker retune,
+/// the keyboard-status test and the two pixel copies it is paired with.
+///
+/// `timing.md §5.1` publishes only the calibrated part of that cost
+/// ([`GATED_DISSOLVE_CLICK_HOLD_NANOS`]) and calls its own whole-call figure
+/// ("roughly 8 to 14 s") an **unverified** cycle model; `audio.md §8.6.1`
+/// repeats that the "wall-clock retune cadence and total duration are not
+/// established". The figure here is fitted to stock black-box captures
+/// instead: across forty paired runs (DOSBox at 3000 cycles, grim timelapse at
+/// about 0.57 s per frame) the logo coverage of `(0, 0)..(319, 100)` grows
+/// linearly from first to last pixel over about 2.7 to 2.9 s. Over the
+/// rectangle's 16,160 checked visits that is about 173 microseconds each. It
+/// is a stock-reference constant awaiting publication, not a spec value.
+pub const GATED_DISSOLVE_MEASURED_CLICK_PERIOD_NANOS: u64 = 173_000;
+
+/// Wall-clock duration of a gated dissolve with `clicks` checked visits at
+/// the measured per-visit cost.
+pub const fn gated_dissolve_measured_nanos(clicks: u32) -> u64 {
+    clicks as u64 * GATED_DISSOLVE_MEASURED_CLICK_PERIOD_NANOS
+}
+
+/// Checked visits of a gated dissolve due once `elapsed_nanos` of wall-clock
+/// time has passed, capped at `total_clicks`.
+///
+/// `display-driver-abi.md §9.6` lets a frontend animate successive prefixes of
+/// the published visit order as long as the order and the final raster are
+/// kept; this is the pacing of those prefixes. Checked visits fall on copies
+/// `1, 3, 5, ...`, so `k` due visits is a prefix of `min(2k, pixels)` copies.
+pub const fn gated_dissolve_clicks_due(elapsed_nanos: u64, total_clicks: u32) -> u32 {
+    let due = elapsed_nanos / GATED_DISSOLVE_MEASURED_CLICK_PERIOD_NANOS;
+    if due >= total_clicks as u64 {
+        total_clicks
+    } else {
+        due as u32
+    }
+}
+
+/// Checked visits of a gated dissolve over `pixels` pixels: the alternating
+/// flag checks copies `1, 3, 5, ...`, so `ceil(pixels / 2)`.
+pub const fn gated_dissolve_click_count(pixels: u32) -> u32 {
+    pixels.div_ceil(2)
+}
+
 /// Maximal-length Galois tap words for register widths 2..=24 bits. Each is a
 /// primitive polynomial over GF(2), so the register cycles through every
 /// nonzero state exactly once before repeating.
@@ -650,6 +694,42 @@ mod published_visit_order_tests {
         assert_eq!(outcome.copied_pixels, 32_320);
         assert_eq!(outcome.clicks, 0);
         assert_eq!(outcome.hold_nanos(), 0);
+    }
+
+    /// The measured pacing of the gated logo reveal: 16,160 checked visits at
+    /// the fitted per-visit cost land inside the 2.7..2.9 s stock window, and
+    /// sit well above the published calibrated-hold floor.
+    #[test]
+    fn the_gated_start_menu_reveal_runs_for_the_measured_stock_duration() {
+        let clicks = gated_dissolve_click_count(32_320);
+        assert_eq!(clicks, 16_160);
+        let total = gated_dissolve_measured_nanos(clicks);
+        assert!(
+            (2_700_000_000..=2_900_000_000).contains(&total),
+            "gated logo reveal lasts {total} ns, outside the measured 2.7..2.9 s"
+        );
+        assert!(total > gated_dissolve_hold_nanos(clicks));
+        // An odd pixel count still ends on a checked visit.
+        assert_eq!(gated_dissolve_click_count(35 * 36), 630);
+        assert_eq!(gated_dissolve_click_count(3), 2);
+    }
+
+    #[test]
+    fn gated_dissolve_clicks_come_due_at_the_measured_period_and_saturate() {
+        let period = GATED_DISSOLVE_MEASURED_CLICK_PERIOD_NANOS;
+        assert_eq!(gated_dissolve_clicks_due(0, 16_160), 0);
+        assert_eq!(gated_dissolve_clicks_due(period - 1, 16_160), 0);
+        assert_eq!(gated_dissolve_clicks_due(period, 16_160), 1);
+        assert_eq!(gated_dissolve_clicks_due(20_000_000, 16_160), 115);
+        assert_eq!(
+            gated_dissolve_clicks_due(gated_dissolve_measured_nanos(16_160) - 1, 16_160),
+            16_159
+        );
+        assert_eq!(
+            gated_dissolve_clicks_due(gated_dissolve_measured_nanos(16_160), 16_160),
+            16_160
+        );
+        assert_eq!(gated_dissolve_clicks_due(u64::MAX, 16_160), 16_160);
     }
 
     #[test]
