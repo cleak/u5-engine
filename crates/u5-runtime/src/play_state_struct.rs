@@ -719,6 +719,11 @@ pub struct PlayState {
     pub shrine_presentation_map: Option<MiscmapsCutsceneMap>,
     /// `karma.md §7`'s approach walk, while the shrine presentation is up.
     pub shrine_approach_walk: Option<crate::shrine_presentation::ShrineApproachWalk>,
+    /// `karma.md §7.2`: the offering and Codex turn-in arms XOR-invert the
+    /// whole gameplay viewport once and never restore it; the counted steps
+    /// after the swell repaint over it. Set from the inversion until the
+    /// swell's hold releases.
+    pub presentation_viewport_inverted: bool,
     pub active_shop: Option<crate::shop_session::ActiveShopSession>,
     /// `shops.md §8.1`: the arms post-item prompt closes with `sir?`/`milady?`
     /// once a transaction has completed in this visit and with `then?` before

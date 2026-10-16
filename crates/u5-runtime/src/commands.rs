@@ -812,6 +812,41 @@ pub const SHRINE_MANTRA_SUBSEQUENT_HOLD_BIOS_TICKS: u16 = 19;
 
 /// `karma.md §12`: an affordable offering finishes "with ten world ticks".
 pub const SHRINE_OFFERING_RESULT_WORLD_TICKS: usize = 10;
+
+/// `karma.md §7` entry table, Kneel row: "the approach walk: nine animation
+/// frames, forty-five world steps ... plus the handler's own repaint step -
+/// forty-six world steps in all".
+pub const SHRINE_KNEEL_WORLD_STEPS: u16 = 46;
+/// `karma.md §7` entry table, Virtue question row: "ten world steps".
+pub const SHRINE_VIRTUE_QUESTION_WORLD_STEPS: u16 = 10;
+/// `karma.md §7` entry table, Mantra questions row: "six world steps after a
+/// nonblank virtue answer, then twelve after each nonblank mantra answer".
+pub const SHRINE_MANTRA_FIRST_WORLD_STEPS: u16 = 6;
+pub const SHRINE_MANTRA_SUBSEQUENT_WORLD_STEPS: u16 = 12;
+/// `karma.md §7.2`: the handler's own closing wait on the completion arms,
+/// "ten (the handler's own closing wait)".
+pub const SHRINE_HANDLER_CLOSING_WORLD_STEPS: u16 = 10;
+/// [`SHRINE_EXIT_PACING_HOLD_BIOS_TICKS`] is the measured hold for the
+/// ordination arm's sixty-one world steps (`karma.md §7.2`: ten handler steps
+/// plus the fifty-one of the exit). Other windows scale from that rate.
+pub const SHRINE_EXIT_PACING_HOLD_WORLD_STEPS: u16 = 61;
+
+/// The wall-clock hold for `world_steps` counted presentation steps, at the
+/// measured rate of [`SHRINE_EXIT_PACING_HOLD_BIOS_TICKS`].
+pub const fn shrine_presentation_hold_bios_ticks(world_steps: u16) -> u16 {
+    let ticks = (world_steps as u32 * SHRINE_EXIT_PACING_HOLD_BIOS_TICKS as u32
+        + SHRINE_EXIT_PACING_HOLD_WORLD_STEPS as u32 / 2)
+        / SHRINE_EXIT_PACING_HOLD_WORLD_STEPS as u32;
+    ticks as u16
+}
+
+/// `karma.md §7.2`: the offering and turn-in swells run the envelope
+/// generator 920 times - "about 7.91 s" and "about 5.93 s" audible - and
+/// "the whole run sits between the closing record and the first counted
+/// pause", so the presentation holds for it. Converted at the ~55 ms BIOS
+/// tick; the swell itself costs no tick and no world step.
+pub const SHRINE_OFFERING_SWELL_HOLD_BIOS_TICKS: u16 = 144;
+pub const SHRINE_TURN_IN_SWELL_HOLD_BIOS_TICKS: u16 = 108;
 /// The daylight refusal, measured aboard a ship at noon.
 pub const USE_SEXTANT_DAYTIME_REFUSAL: &str = "Only at night!";
 pub const USE_WOODEN_BOX_PROMPT: &str = "How?";

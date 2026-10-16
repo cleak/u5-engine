@@ -1567,64 +1567,32 @@ BRITANNIA 11 21
         let _ = fs::remove_dir_all(dir);
     }
 
+    /// `karma.md §7`: "`M` always selects Mix Reagents, including at a
+    /// shrine. The earlier M-Meditate entry rule is withdrawn
+    /// (`RETRACTIONS.md` R411)." A typed mantra after `M` is a mix line, on
+    /// the shrine marker and on the native altar tiles alike.
     #[test]
-    fn shrine_meditation_sets_ordained_bit_from_clean_sidecar() {
+    fn m_on_a_shrine_mixes_reagents_and_never_meditates() {
         let dir = debug_game_dir();
-        fs::write(dir.join(SHRINE_TABLE_FILE), "BRITANNIA 10 20 HONESTY 136\n").unwrap();
-        let mut grid = open_world_grid();
-        grid[world_cell_index(10, 20)] = 136;
-        let mut state = britannia_state(grid, 10, 20);
+        fs::write(dir.join(SHRINE_TABLE_FILE), "BRITANNIA 10 20 HONESTY 25\n").unwrap();
+        for tile in [SHRINE_MARKER_TILE, SHRINE_ALTAR_TILE_FIRST] {
+            let mut grid = open_world_grid();
+            grid[world_cell_index(10, 20)] = tile;
+            let mut state = britannia_state(grid, 10, 20);
+            let bit = ShrineVirtue::Honesty.bit();
+            state.shrine_ordained_mask = bit;
+            state.shrine_codex_mask = bit;
 
-        assert_eq!(
-            handle_play_key_input(&mut state, 'M', "Ahm", &dir).unwrap(),
-            PlayInputDisposition::Continue
-        );
+            assert_eq!(
+                handle_play_key_input(&mut state, 'M', "Ahm", &dir).unwrap(),
+                PlayInputDisposition::Continue
+            );
 
-        assert_eq!(state.shrine_ordained_mask, ShrineVirtue::Honesty.bit());
-        assert_eq!(state.shrine_codex_mask, 0);
-        assert_eq!(state.turn, 0);
-        assert!(
-            state
-                .diagnostics
-                .iter()
-                .any(|note| note.contains("Shrine of Honesty"))
-        );
-        assert!(
-            state
-                .diagnostics
-                .iter()
-                .any(|note| note.contains("ordained"))
-        );
-        let _ = fs::remove_dir_all(dir);
-    }
-
-    #[test]
-    fn shrine_meditation_sets_ordained_bit_from_native_altar_tile_without_sidecar() {
-        let dir = debug_game_dir();
-        let mut grid = open_world_grid();
-        grid[world_cell_index(10, 20)] = SHRINE_ALTAR_TILE_FIRST;
-        let mut state = britannia_state(grid, 10, 20);
-
-        assert_eq!(
-            handle_play_key_input(&mut state, 'M', "Ahm", &dir).unwrap(),
-            PlayInputDisposition::Continue
-        );
-
-        assert_eq!(state.shrine_ordained_mask, ShrineVirtue::Honesty.bit());
-        assert_eq!(state.shrine_codex_mask, 0);
-        assert_eq!(state.turn, 0);
-        assert!(
-            state
-                .diagnostics
-                .iter()
-                .any(|note| note.contains("Shrine of Honesty"))
-        );
-        assert!(
-            state
-                .diagnostics
-                .iter()
-                .any(|note| note.contains("ordained"))
-        );
+            assert_eq!(state.shrine_ordained_mask, bit, "tile {tile:#04x}");
+            assert!(state.active_shrine.is_none());
+            assert!(state.pending_shrine_third_mantra.is_none());
+            assert!(state.message.contains("Mix syntax"), "{:?}", state.message);
+        }
         let _ = fs::remove_dir_all(dir);
     }
 
@@ -1686,21 +1654,23 @@ BRITANNIA 11 21
         grid[world_cell_index(10, 20)] = SHRINE_ALTAR_TILE_FIRST;
         let mut state = britannia_state(grid, 10, 20);
 
-        assert_eq!(
-            handle_play_key_input(&mut state, 'M', "Lum", &dir).unwrap(),
-            PlayInputDisposition::Continue
-        );
+        state
+            .start_shrine_prompt_at_current_position(&dir)
+            .unwrap()
+            .expect("the sidecar row names the shrine");
+        for _ in 0..3 {
+            handle_play_key_input(&mut state, 'L', "um\r", &dir).unwrap();
+            state.flush_staged_narration();
+            state.adopt_shrine_prompt_row();
+        }
+        state
+            .run_shrine_third_mantra_resolution_to_completion(&dir)
+            .unwrap();
 
         assert_eq!(state.shrine_ordained_mask, ShrineVirtue::Humility.bit());
         assert_eq!(
             state.shrine_ordained_mask & ShrineVirtue::Honesty.bit(),
             0
-        );
-        assert!(
-            state
-                .diagnostics
-                .iter()
-                .any(|note| note.contains("Shrine of Humility"))
         );
         let _ = fs::remove_dir_all(dir);
     }
@@ -1847,6 +1817,129 @@ BRITANNIA 11 21
         let _ = fs::remove_dir_all(dir);
     }
 
+    /// `karma.md §7` "Random-stream cost": "Each world step in the hold
+    /// takes the unconditional 1-in-64 wind draw ... A shrine entry as far
+    /// as the virtue prompt therefore consumes **fifty-seven** draws, and an
+    /// entry abandoned at that prompt consumes **one hundred and eight**."
+    #[test]
+    fn shrine_entry_takes_one_wind_draw_per_counted_world_step() {
+        let dir = debug_game_dir();
+        let mut state = shrine_marker_state(&dir, ShrineVirtue::Honesty);
+        state.prng_state = 0x1357;
+        let mut reference = state.clone();
+
+        handle_play_key_input(&mut state, 'E', "", &dir).unwrap();
+        state.flush_staged_narration();
+        for _ in 0..57 {
+            let _ = reference.idle_wind_drift();
+        }
+        assert_eq!(state.prng_state, reference.prng_state, "57 draws to the prompt");
+        assert!(state.active_shrine.is_some());
+
+        // A blank answer abandons the entry; the exit pacing is fifty-one
+        // more counted steps.
+        handle_play_key_input(&mut state, '\r', "", &dir).unwrap();
+        assert!(state.active_shrine.is_none());
+        assert!(state.staged_narration_active());
+        state.flush_staged_narration();
+        for _ in 0..51 {
+            let _ = reference.idle_wind_drift();
+        }
+        assert_eq!(state.prng_state, reference.prng_state, "108 draws in all");
+        let _ = fs::remove_dir_all(dir);
+    }
+
+    /// `karma.md §7.2`'s window table: "World steps | 61" on the ordination
+    /// arm, from the key that dismisses the quest page to the next prompt,
+    /// each with its wind draw.
+    #[test]
+    fn shrine_ordination_window_is_sixty_one_counted_steps() {
+        let dir = debug_game_dir();
+        let mut state = shrine_marker_state(&dir, ShrineVirtue::Honesty);
+        meditate_through_shrine_session(&mut state, &dir, "Honesty", "Ahm");
+        // Two key waits: the quest sentence, then the closing record.
+        handle_play_key_input(&mut state, ' ', "", &dir).unwrap();
+        let mut reference = state.clone();
+        handle_play_key_input(&mut state, ' ', "", &dir).unwrap();
+        assert!(state.active_shrine.is_none());
+        state.flush_staged_narration();
+        for _ in 0..61 {
+            let _ = reference.idle_wind_drift();
+        }
+        assert_eq!(state.prng_state, reference.prng_state);
+        let _ = fs::remove_dir_all(dir);
+    }
+
+    /// `karma.md §7` "Exit pacing" runs "after the meditation handler
+    /// returns" on every arm: the abandoned entry walks back down and clears
+    /// the slot before the presentation is released.
+    #[test]
+    fn an_abandoned_shrine_entry_still_walks_back_down() {
+        let dir = debug_game_dir();
+        let mut state = shrine_marker_state(&dir, ShrineVirtue::Honesty);
+        handle_play_key_input(&mut state, 'E', "", &dir).unwrap();
+        state.flush_staged_narration();
+        handle_play_key_input(&mut state, '\r', "", &dir).unwrap();
+
+        let walk = state.shrine_approach_walk.expect("the presentation is still up");
+        assert!(walk.is_exiting());
+        // Nothing has stepped yet: the figure still kneels at the altar.
+        assert!(matches!(
+            walk.pose(),
+            crate::shrine_presentation::ShrinePose::Kneeling { row: 6, .. }
+        ));
+        // A pump that has not yet run the hold keeps the display.
+        state.apply_exploration_turn_gate(&dir).unwrap();
+        assert!(state.shrine_approach_walk.is_some());
+
+        let mut cells = Vec::new();
+        for _ in 0..51 {
+            state.advance_presentation_world_step();
+            if let crate::shrine_presentation::ShrinePose::Walking { column, row } =
+                state.shrine_approach_walk.unwrap().pose()
+                && cells.last() != Some(&(column, row))
+            {
+                cells.push((column, row));
+            }
+        }
+        assert_eq!(cells, vec![(5, 6), (5, 7), (5, 8), (5, 9), (5, 10)]);
+        assert_eq!(
+            state.shrine_approach_walk.unwrap().pose(),
+            crate::shrine_presentation::ShrinePose::None
+        );
+        state.staged_narration.clear();
+        state.apply_exploration_turn_gate(&dir).unwrap();
+        assert!(state.shrine_approach_walk.is_none());
+        let _ = fs::remove_dir_all(dir);
+    }
+
+    /// `karma.md §7`: on the ordaining arm the walking pose is re-stamped at
+    /// `(5, 6)` before record `31`, so the avatar stands through both key
+    /// waits; the wrong-answer arm keeps kneeling until the exit.
+    #[test]
+    fn ordination_restores_the_standing_pose_and_unfocused_keeps_kneeling() {
+        let dir = debug_game_dir();
+        let mut state = shrine_marker_state(&dir, ShrineVirtue::Honesty);
+        meditate_through_shrine_session(&mut state, &dir, "Honesty", "Ahm");
+        let walk = state.shrine_approach_walk.unwrap();
+        assert!(walk.is_standing());
+        assert_eq!(
+            walk.pose(),
+            crate::shrine_presentation::ShrinePose::Walking { column: 5, row: 6 }
+        );
+
+        let mut state = shrine_marker_state(&dir, ShrineVirtue::Honesty);
+        meditate_through_shrine_session(&mut state, &dir, "Honesty", "Mu");
+        let walk = state.shrine_approach_walk.unwrap();
+        assert!(!walk.is_standing());
+        assert!(walk.is_exiting());
+        assert!(matches!(
+            walk.pose(),
+            crate::shrine_presentation::ShrinePose::Kneeling { row: 6, .. }
+        ));
+        let _ = fs::remove_dir_all(dir);
+    }
+
     #[test]
     fn active_shrine_prompt_blank_mantra_has_no_effect() {
         let dir = debug_game_dir();
@@ -1882,17 +1975,17 @@ BRITANNIA 11 21
     #[test]
     fn shrine_meditation_wrong_mantra_and_tile_guard_do_not_mutate_state() {
         let dir = debug_game_dir();
-        fs::write(dir.join(SHRINE_TABLE_FILE), "BRITANNIA 10 20 HONESTY 136\n").unwrap();
+        fs::write(dir.join(SHRINE_TABLE_FILE), "BRITANNIA 10 20 HONESTY 25\n").unwrap();
         let mut grid = open_world_grid();
-        grid[world_cell_index(10, 20)] = 136;
+        grid[world_cell_index(10, 20)] = SHRINE_MARKER_TILE;
         let mut state = britannia_state(grid, 10, 20);
 
-        assert_eq!(
-            handle_play_key_input(&mut state, 'M', "Mu", &dir).unwrap(),
-            PlayInputDisposition::Continue
-        );
+        // `karma.md §7`: a wrong mantra reaches the unfocused result after
+        // the third answer, with no quest-state change.
+        meditate_through_shrine_session(&mut state, &dir, "Honesty", "Mu");
         assert_eq!(state.shrine_ordained_mask, 0);
-        assert_eq!(state.message, "No effect!");
+        assert!(state.active_shrine.is_none());
+        state.flush_staged_narration();
 
         state.grid[world_cell_index(10, 20)] = 5;
         assert_eq!(
@@ -1904,13 +1997,50 @@ BRITANNIA 11 21
         let _ = fs::remove_dir_all(dir);
     }
 
+    /// Drive one E-Enter meditation through the session: the virtue answer,
+    /// the three mantra asks, each hold flushed the way a shell with no pump
+    /// does, and the third-mantra resolution.
+    fn meditate_through_shrine_session(
+        state: &mut PlayState,
+        dir: &Path,
+        virtue_answer: &str,
+        mantra: &str,
+    ) {
+        handle_play_key_input(state, 'E', "", dir).unwrap();
+        state.flush_staged_narration();
+        let mut chars = virtue_answer.chars();
+        let first = chars.next().expect("nonblank virtue answer");
+        handle_play_key_input(state, first, &format!("{}\r", chars.as_str()), dir).unwrap();
+        let mut chars = mantra.chars();
+        let first = chars.next().expect("nonblank mantra");
+        let rest = format!("{}\r", chars.as_str());
+        for _ in 0..3 {
+            state.flush_staged_narration();
+            state.adopt_shrine_prompt_row();
+            handle_play_key_input(state, first, &rest, dir).unwrap();
+        }
+        state
+            .run_shrine_third_mantra_resolution_to_completion(dir)
+            .unwrap();
+    }
+
+    /// A Britannia state standing on the shrine marker, with a sidecar row
+    /// naming `virtue`.
+    fn shrine_marker_state(dir: &Path, virtue: ShrineVirtue) -> PlayState {
+        fs::write(
+            dir.join(SHRINE_TABLE_FILE),
+            format!("BRITANNIA 10 20 {} 25\n", virtue.name().to_ascii_uppercase()),
+        )
+        .unwrap();
+        let mut grid = open_world_grid();
+        grid[world_cell_index(10, 20)] = SHRINE_MARKER_TILE;
+        britannia_state(grid, 10, 20)
+    }
+
     #[test]
     fn shrine_codex_turn_in_clears_ordained_and_rewards_avatar_stats() {
         let dir = debug_game_dir();
-        fs::write(dir.join(SHRINE_TABLE_FILE), "BRITANNIA 10 20 JUSTICE 136\n").unwrap();
-        let mut grid = open_world_grid();
-        grid[world_cell_index(10, 20)] = 136;
-        let mut state = britannia_state(grid, 10, 20);
+        let mut state = shrine_marker_state(&dir, ShrineVirtue::Justice);
         let bit = ShrineVirtue::Justice.bit();
         state.shrine_ordained_mask = bit;
         state.shrine_codex_mask = bit;
@@ -1921,10 +2051,7 @@ BRITANNIA 11 21
         };
         state.party[0].climb_stat = 20;
 
-        assert_eq!(
-            handle_play_key_input(&mut state, 'M', "Beh", &dir).unwrap(),
-            PlayInputDisposition::Continue
-        );
+        meditate_through_shrine_session(&mut state, &dir, "Justice", "Beh");
 
         assert_eq!(state.shrine_ordained_mask, 0);
         assert_eq!(state.shrine_codex_mask, bit);
@@ -1938,69 +2065,102 @@ BRITANNIA 11 21
         );
         assert_eq!(state.party[0].climb_stat, 21);
         assert_eq!(state.turn, 0);
-        // `karma.md §12`: the visible text is the awarded attribute lines; the
-        // virtue and the standing award are recorded rather than narrated.
-        assert_eq!(
-            state.message,
-            format!(
-                "{}\n{}",
-                crate::commands::SHRINE_REWARD_DEXTERITY_LINE,
-                crate::commands::SHRINE_REWARD_INTELLIGENCE_LINE
-            )
-        );
+        assert!(state.active_shrine.is_none());
+        // `karma.md §7.2`: "the attribute lines print after the whole sound,
+        // not during it" - they are staged behind the swell's hold.
+        state.flush_staged_narration();
+        let rows = transcript_texts(&state);
+        let dex = rows
+            .iter()
+            .position(|row| row == crate::commands::SHRINE_REWARD_DEXTERITY_LINE)
+            .unwrap_or_else(|| panic!("no Dexterity line in {rows:?}"));
+        assert_eq!(rows[dex + 1], crate::commands::SHRINE_REWARD_INTELLIGENCE_LINE);
         assert!(
             state
                 .diagnostics
                 .iter()
                 .any(|note| note.contains("shrine of Justice completed"))
         );
-        // Already asserted above as the whole message, in the published
-        // `Dexterity +1` / `Intelligence +1` form and order.
+        let _ = fs::remove_dir_all(dir);
+    }
+
+    /// `karma.md §7` quest-state rows: the turn-in arm is reached by "an
+    /// accepted virtue answer plus all three accepted mantras" under the
+    /// shared substring matcher, so a longer answer containing the mantra
+    /// still turns the quest in. It then prints record `36` and plays the
+    /// §7.2 beat: inversion, swell, then the shared flash.
+    #[test]
+    fn shrine_turn_in_accepts_a_substring_mantra_and_prints_record_thirty_six() {
+        let dir = debug_game_dir();
+        let mut miscmsg = Vec::new();
+        for index in 0..MISCMSG_DAT_RECORDS {
+            miscmsg.extend_from_slice(format!("rec{index}\n").as_bytes());
+            miscmsg.push(0);
+        }
+        fs::write(dir.join(MISCMSG_DAT_FILE), miscmsg).unwrap();
+        let mut state = shrine_marker_state(&dir, ShrineVirtue::Honesty);
+        let bit = ShrineVirtue::Honesty.bit();
+        state.shrine_ordained_mask = bit;
+        state.shrine_codex_mask = bit;
+        let serial = state.sound_effect_serial;
+
+        meditate_through_shrine_session(&mut state, &dir, "Honesty", "ahmm/x:y");
+
+        assert_eq!(state.shrine_ordained_mask, 0);
         assert!(
-            state
-                .message
-                .contains(crate::commands::SHRINE_REWARD_INTELLIGENCE_LINE)
+            transcript_texts(&state)
+                .iter()
+                .any(|row| row == &format!("rec{MISCMSG_SHRINE_TURN_IN_CONGRATULATION}"))
         );
+        assert!(!transcript_texts(&state).iter().any(|row| row == "No effect!"));
+        assert!(state.presentation_viewport_inverted);
+        let effects = state.sound_effects_after(serial);
+        let swell = effects
+            .iter()
+            .position(|effect| *effect == SoundEffect::ShrineTurnInSwell)
+            .expect("the turn-in swell plays");
+        assert!(
+            matches!(effects.get(swell + 1), Some(SoundEffect::MajorFlash { .. })),
+            "the shared flash follows the swell: {effects:?}"
+        );
+        state.flush_staged_narration();
+        assert!(!state.presentation_viewport_inverted);
         let _ = fs::remove_dir_all(dir);
     }
 
     #[test]
     fn completed_shrine_offering_costs_gold_and_clamps_moral_standing() {
         let dir = debug_game_dir();
-        fs::write(
-            dir.join(SHRINE_TABLE_FILE),
-            "BRITANNIA 10 20 COMPASSION 136\n",
-        )
-        .unwrap();
-        let mut grid = open_world_grid();
-        grid[world_cell_index(10, 20)] = 136;
-        let mut state = britannia_state(grid, 10, 20);
         let virtue = ShrineVirtue::Compassion;
+        let mut state = shrine_marker_state(&dir, virtue);
         state.shrine_codex_mask = virtue.bit();
         state.moral_standing = 98;
         state.gold = 350;
 
+        meditate_through_shrine_session(&mut state, &dir, "Compassion", "Mu");
         assert_eq!(
-            handle_play_key_input(&mut state, 'M', "Mu/2", &dir).unwrap(),
+            handle_play_key_input(&mut state, '9', "", &dir).unwrap(),
             PlayInputDisposition::Continue
         );
+        assert_eq!(state.gold, 350);
+        // The digit's own echo is the last row: `karma.md §12` checks
+        // affordability *after* it. Record 35 and the repeated record 34 log
+        // nothing in this fixture, which ships no `MISCMSG.DAT`.
+        assert!(state.message.contains("900 gp"));
+        assert!(state.active_shrine.is_some());
 
+        assert_eq!(
+            handle_play_key_input(&mut state, '2', "", &dir).unwrap(),
+            PlayInputDisposition::Continue
+        );
         assert_eq!(state.gold, 150);
         assert_eq!(state.moral_standing, MORAL_STANDING_MAX);
         assert_eq!(state.turn, 0);
         // `karma.md §12`: the affordable arm prints `ALAKAZAM` in the runic
         // font and appends `!` in the normal one.
         assert_eq!(state.message, "ALAKAZAM!");
-
-        assert_eq!(
-            handle_play_key_input(&mut state, 'M', "Mu/9", &dir).unwrap(),
-            PlayInputDisposition::Continue
-        );
-        assert_eq!(state.gold, 150);
-        // The digit's own echo is the last row: `karma.md §12` checks
-        // affordability *after* it. Record 35 and the repeated record 34 log
-        // nothing in this fixture, which ships no `MISCMSG.DAT`.
-        assert!(state.message.contains("900 gp"));
+        // `karma.md §7.2`: one unrestored inversion precedes the swell.
+        assert!(state.presentation_viewport_inverted);
         let _ = fs::remove_dir_all(dir);
     }
 
@@ -2113,56 +2273,33 @@ BRITANNIA 11 21
 
     #[test]
     fn shrine_codex_turn_in_raises_shared_moral_standing_by_three() {
-        // karma.md §3-4: Codex turn-in adds +3 to the shared moral-standing
-        // selector, clamped at 99.
+        // karma.md §3-4/§7: Codex turn-in adds +3 to the shared
+        // moral-standing selector (Humility another +3), clamped at 99.
         let dir = debug_game_dir();
-        fs::write(dir.join(SHRINE_TABLE_FILE), "BRITANNIA 10 20 JUSTICE 136\n").unwrap();
-        let mut grid = open_world_grid();
-        grid[world_cell_index(10, 20)] = 136;
-        let mut state = britannia_state(grid, 10, 20);
+        let mut state = shrine_marker_state(&dir, ShrineVirtue::Justice);
         let bit = ShrineVirtue::Justice.bit();
         state.shrine_ordained_mask = bit;
         state.shrine_codex_mask = bit;
         state.moral_standing = 50;
 
-        assert_eq!(
-            handle_play_key_input(&mut state, 'M', "Beh", &dir).unwrap(),
-            PlayInputDisposition::Continue
-        );
+        meditate_through_shrine_session(&mut state, &dir, "Justice", "Beh");
 
         assert_eq!(state.moral_standing, 53);
-        assert!(
-            state
-                .diagnostics
-                .iter()
-                .any(|note| note.contains("moral +3 to 53"))
-        );
         let _ = fs::remove_dir_all(dir);
     }
 
     #[test]
     fn shrine_codex_humility_turn_in_raises_shared_moral_standing_by_six() {
-        // karma.md §3-4: Humility receives an additional +3 on top of the
-        // ordinary +3 Codex turn-in bonus to the shared moral-standing
-        // selector.
+        // karma.md §3-4/§7: Codex turn-in adds +3 to the shared
+        // moral-standing selector (Humility another +3), clamped at 99.
         let dir = debug_game_dir();
-        fs::write(
-            dir.join(SHRINE_TABLE_FILE),
-            "BRITANNIA 10 20 HUMILITY 136\n",
-        )
-        .unwrap();
-        let mut grid = open_world_grid();
-        grid[world_cell_index(10, 20)] = 136;
-        let mut state = britannia_state(grid, 10, 20);
+        let mut state = shrine_marker_state(&dir, ShrineVirtue::Humility);
         let bit = ShrineVirtue::Humility.bit();
         state.shrine_ordained_mask = bit;
         state.shrine_codex_mask = bit;
         state.moral_standing = 40;
 
-        assert_eq!(
-            handle_play_key_input(&mut state, 'M', "Lum", &dir).unwrap(),
-            PlayInputDisposition::Continue
-        );
+        meditate_through_shrine_session(&mut state, &dir, "Humility", "Lum");
 
         assert_eq!(state.moral_standing, 46);
         let _ = fs::remove_dir_all(dir);
@@ -2170,21 +2307,16 @@ BRITANNIA 11 21
 
     #[test]
     fn shrine_codex_turn_in_clamps_shared_moral_standing_at_ninety_nine() {
-        // karma.md §3: Shrine increases clamp the shared selector at 99.
+        // karma.md §3-4/§7: Codex turn-in adds +3 to the shared
+        // moral-standing selector (Humility another +3), clamped at 99.
         let dir = debug_game_dir();
-        fs::write(dir.join(SHRINE_TABLE_FILE), "BRITANNIA 10 20 JUSTICE 136\n").unwrap();
-        let mut grid = open_world_grid();
-        grid[world_cell_index(10, 20)] = 136;
-        let mut state = britannia_state(grid, 10, 20);
+        let mut state = shrine_marker_state(&dir, ShrineVirtue::Justice);
         let bit = ShrineVirtue::Justice.bit();
         state.shrine_ordained_mask = bit;
         state.shrine_codex_mask = bit;
         state.moral_standing = 98;
 
-        assert_eq!(
-            handle_play_key_input(&mut state, 'M', "Beh", &dir).unwrap(),
-            PlayInputDisposition::Continue
-        );
+        meditate_through_shrine_session(&mut state, &dir, "Justice", "Beh");
 
         assert_eq!(state.moral_standing, MORAL_STANDING_MAX);
         let _ = fs::remove_dir_all(dir);
@@ -2195,21 +2327,15 @@ BRITANNIA 11 21
         // karma.md §3-4: completed-shrine gold offering adds the offered
         // digit (1..9) to the shared moral-standing selector, clamped at 99.
         let dir = debug_game_dir();
-        fs::write(
-            dir.join(SHRINE_TABLE_FILE),
-            "BRITANNIA 10 20 COMPASSION 136\n",
-        )
-        .unwrap();
-        let mut grid = open_world_grid();
-        grid[world_cell_index(10, 20)] = 136;
-        let mut state = britannia_state(grid, 10, 20);
         let virtue = ShrineVirtue::Compassion;
+        let mut state = shrine_marker_state(&dir, virtue);
         state.shrine_codex_mask = virtue.bit();
         state.gold = 800;
         state.moral_standing = 20;
 
+        meditate_through_shrine_session(&mut state, &dir, "Compassion", "Mu");
         assert_eq!(
-            handle_play_key_input(&mut state, 'M', "Mu/7", &dir).unwrap(),
+            handle_play_key_input(&mut state, '7', "", &dir).unwrap(),
             PlayInputDisposition::Continue
         );
 

@@ -3814,6 +3814,28 @@ impl PlayState {
         self.advance_visual_tick_inner(true)
     }
 
+    /// One counted world step of the shrine/Codex presentation
+    /// (`karma.md §7` "Random-stream cost").
+    ///
+    /// "Each world step in the hold takes the unconditional 1-in-64 wind
+    /// draw of `systems/animation.md` Section 13.2 from the shared
+    /// generator" - so an entry as far as the virtue prompt consumes
+    /// fifty-seven draws and the closing windows sixty-one, sixty-one and
+    /// seventy-three. The presentation has cleared every active-object
+    /// slot's type byte, so the object animator has nothing to draw and the
+    /// party's slot is not re-synced; only slot zero's presentation pose
+    /// moves, and it moves with the step count.
+    pub fn advance_presentation_world_step(&mut self) {
+        if let Some(walk) = self.shrine_approach_walk.as_mut() {
+            walk.on_world_step();
+        }
+        if self.time_stop_counter == 0 && !self.negate_time_active() {
+            let _ = self.idle_wind_drift();
+            self.tick_ambient_audio_repeats();
+        }
+        self.advance_animation_clock();
+    }
+
     /// A bare repaint tick: the redraw half of a world step, without the
     /// per-pass wind check and so without its gameplay-PRNG draw.
     ///

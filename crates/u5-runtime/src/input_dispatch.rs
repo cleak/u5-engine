@@ -319,14 +319,10 @@ fn handle_play_key_input_inner(
     }
     if key == 'M' && !suffix.is_empty() {
         state.begin_command_echo_for(Command::Mix);
-        // `karma.md §8` (`RETRACTIONS.md` R451): the Codex reader is reached
-        // by E-Enter on tile `0x11`, not by `M`.
-        if state
-            .meditate_shrine_from_suffix(suffix, game_dir)?
-            .is_none()
-        {
-            state.mix_reagents_from_suffix(suffix);
-        }
+        // `karma.md §7`: "`M` always selects Mix Reagents, including at a
+        // shrine" (`RETRACTIONS.md` R411); meditation is reached only through
+        // E-Enter. §8 (R451): the Codex reader is likewise E-Enter on `0x11`.
+        state.mix_reagents_from_suffix(suffix);
         return Ok(PlayInputDisposition::Continue);
     }
     if key == 'N' && !suffix.is_empty() {

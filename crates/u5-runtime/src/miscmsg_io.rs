@@ -208,6 +208,9 @@ pub const MISCMSG_SHRINE_OFFERING_PROMPT: usize = 34;
 /// insufficient-gold response, then repeat record `34` and the single-digit
 /// chooser."
 pub const MISCMSG_SHRINE_OFFERING_INSUFFICIENT_GOLD: usize = 35;
+/// `karma.md §7`, quest-state row "Ordained and Codex read": "Clear
+/// ordination before record `36`, the congratulatory response."
+pub const MISCMSG_SHRINE_TURN_IN_CONGRATULATION: usize = 36;
 
 /// its consumer cluster. Returns `None` for indices outside the file.
 pub const fn miscmsg_family(record_index: usize) -> Option<MiscMsgFamily> {

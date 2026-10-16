@@ -43,6 +43,12 @@ pub struct NarrationBeat {
     /// fresh one, and no fresh row is drawn while it waits. Stated by the
     /// producer: the row state is not inferable from the text.
     pub continues_open_row: bool,
+    /// Counted world steps the hold before this beat stands for
+    /// (`karma.md §7`: every presentation interval is "a counted repetition
+    /// of one world step plus one one-tick delay request"). On release this
+    /// is the number of those steps not yet handed out by
+    /// [`StagedNarration::take_due_world_steps`].
+    pub world_steps: u16,
 }
 
 /// The queue plus how far into the current beat's wait we are.
@@ -53,6 +59,8 @@ pub struct StagedNarration {
     /// advance after the head becomes current, which is what makes the queue
     /// start its wait from the frontend's clock rather than from zero.
     due_at_secs: Option<f64>,
+    /// Counted world steps of the head beat already handed out.
+    head_steps_taken: u16,
 }
 
 impl StagedNarration {
@@ -70,6 +78,7 @@ impl StagedNarration {
             delay_secs,
             text: text.into(),
             continues_open_row: false,
+            world_steps: 0,
         });
     }
 
@@ -80,6 +89,7 @@ impl StagedNarration {
             delay_secs,
             text: text.into(),
             continues_open_row: true,
+            world_steps: 0,
         });
     }
 
@@ -95,9 +105,51 @@ impl StagedNarration {
         self.push_secs(bios_ticks_secs(delay_bios_ticks), text);
     }
 
+    /// Push a beat whose hold is `world_steps` counted world steps,
+    /// spread across `delay_bios_ticks` of wall clock.
+    pub fn push_ticks_counting_world_steps(
+        &mut self,
+        delay_bios_ticks: u16,
+        world_steps: u16,
+        text: impl Into<String>,
+    ) {
+        self.beats.push_back(NarrationBeat {
+            delay_secs: bios_ticks_secs(delay_bios_ticks),
+            text: text.into(),
+            continues_open_row: false,
+            world_steps,
+        });
+    }
+
+    /// Counted world steps of the head beat that have come due by
+    /// `now_secs`, spread evenly across its hold; each step is handed out
+    /// once. The rest are carried on the beat when it is released.
+    pub fn take_due_world_steps(&mut self, now_secs: f64) -> u16 {
+        let Some(beat) = self.beats.front() else {
+            return 0;
+        };
+        if beat.world_steps == 0 {
+            return 0;
+        }
+        let due = *self
+            .due_at_secs
+            .get_or_insert_with(|| now_secs + beat.delay_secs);
+        let started = due - beat.delay_secs;
+        let target = if beat.delay_secs <= 0.0 || now_secs >= due {
+            beat.world_steps
+        } else {
+            let fraction = ((now_secs - started) / beat.delay_secs).clamp(0.0, 1.0);
+            ((f64::from(beat.world_steps) * fraction).floor() as u16).min(beat.world_steps)
+        };
+        let owed = target.saturating_sub(self.head_steps_taken);
+        self.head_steps_taken = self.head_steps_taken.max(target);
+        owed
+    }
+
     pub fn clear(&mut self) {
         self.beats.clear();
         self.due_at_secs = None;
+        self.head_steps_taken = 0;
     }
 
     /// Advance to an absolute clock reading and return every beat whose wait
@@ -116,7 +168,10 @@ impl StagedNarration {
             if now_secs < due {
                 break;
             }
-            let beat = self.beats.pop_front().expect("checked above");
+            let mut beat = self.beats.pop_front().expect("checked above");
+            beat.world_steps = beat
+                .world_steps
+                .saturating_sub(std::mem::take(&mut self.head_steps_taken));
             // The next beat's wait starts when this one was *due*, not when
             // the frontend noticed: a late frame must not stretch the
             // sequence beat by beat.
@@ -131,13 +186,38 @@ impl StagedNarration {
     /// pump.
     pub fn drain_all(&mut self) -> Vec<NarrationBeat> {
         self.due_at_secs = None;
-        self.beats.drain(..).collect()
+        let taken = std::mem::take(&mut self.head_steps_taken);
+        let mut beats: Vec<NarrationBeat> = self.beats.drain(..).collect();
+        if let Some(head) = beats.first_mut() {
+            head.world_steps = head.world_steps.saturating_sub(taken);
+        }
+        beats
     }
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn counted_world_steps_are_handed_out_once_across_the_hold() {
+        let mut staged = StagedNarration::default();
+        staged.push_ticks_counting_world_steps(10, 10, "after");
+        let hold = bios_ticks_secs(10);
+        assert_eq!(staged.take_due_world_steps(0.0), 0);
+        assert_eq!(staged.take_due_world_steps(hold * 0.35), 3);
+        assert_eq!(staged.take_due_world_steps(hold * 0.35), 0);
+        assert!(staged.advance_to(hold * 0.5).is_empty());
+        let released = staged.advance_to(hold);
+        assert_eq!(released.len(), 1);
+        // The steps not yet handed out travel with the released beat.
+        assert_eq!(released[0].world_steps, 7);
+
+        staged.push_ticks_counting_world_steps(10, 10, "flushed");
+        assert_eq!(staged.take_due_world_steps(5.0), 0);
+        assert_eq!(staged.take_due_world_steps(5.0 + hold * 0.25), 2);
+        assert_eq!(staged.drain_all()[0].world_steps, 8);
+    }
 
     #[test]
     fn a_beat_is_released_when_its_wait_completes() {

@@ -1922,6 +1922,8 @@ impl PlayState {
                         // mantra ends the interaction immediately without the
                         // unfocused-result record."
                         if session.virtue_buffer.trim().is_empty() {
+                            // §7 "Exit pacing" runs after every arm.
+                            self.begin_shrine_presentation_exit(0);
                             return Ok(Some(MoveOutcome::PromptDeclined));
                         }
                         // "The location has already selected the shrine's
@@ -1945,8 +1947,11 @@ impl PlayState {
                         // staged narration is pending, so a pure hold here
                         // is enough - nothing new needs printing once it
                         // clears.
-                        self.staged_narration
-                            .push_ticks(SHRINE_MANTRA_FIRST_HOLD_BIOS_TICKS, String::new());
+                        self.staged_narration.push_ticks_counting_world_steps(
+                            SHRINE_MANTRA_FIRST_HOLD_BIOS_TICKS,
+                            SHRINE_MANTRA_FIRST_WORLD_STEPS,
+                            String::new(),
+                        );
                     }
                     '\u{8}' | '\u{7f}' => {
                         session.virtue_buffer.pop();
@@ -2026,17 +2031,14 @@ impl PlayState {
                     // viewport inversion, which the section gives to the
                     // offering and turn-in arms only.
                     self.emit_sound_effect(SoundEffect::ShrineOrdinationChime);
-                    // the pause is, and it is a real
-                    // hold rather than ten instant animator steps. Measured
-                    // 2026-09-12 (`qa/paired/shrine-three-mantras.tsv`, beat
-                    // `after2`): the original is still inside it - no command
-                    // row on screen - where this engine had already returned
-                    // to play. An empty beat prints nothing and only waits.
-                    for _ in 0..SHRINE_OFFERING_RESULT_WORLD_TICKS {
-                        self.animation.tick_static_tiles();
-                    }
-                    self.staged_narration
-                        .push_ticks(SHRINE_EXIT_PACING_HOLD_BIOS_TICKS, String::new());
+                    // The handler's ten closing world steps and the
+                    // presentation's exit pacing are one real hold rather
+                    // than ten instant animator steps. Measured 2026-09-12
+                    // (`qa/paired/shrine-three-mantras.tsv`, beat `after2`):
+                    // the original is still inside it - no command row on
+                    // screen - where this engine had already returned to
+                    // play. An empty beat prints nothing and only waits.
+                    self.begin_shrine_presentation_exit(SHRINE_HANDLER_CLOSING_WORLD_STEPS);
                     return Ok(Some(MoveOutcome::Observed));
                 }
                 ShrinePhase::Offering => {
@@ -2053,6 +2055,7 @@ impl PlayState {
                     // pause."
                     if digit == 0 {
                         self.emit_message_line_continuing_row("0 gp\n");
+                        self.begin_shrine_presentation_exit(0);
                         return Ok(Some(MoveOutcome::PromptDeclined));
                     }
                     // "`1` through `9` | After echoing the digit, append
@@ -2102,6 +2105,7 @@ impl PlayState {
             // `offset+1`): the original's marker row sits directly under
             // `Mantra:` and this engine spent a blank between them.
             self.surface_command_row_follows_history = true;
+            self.begin_shrine_presentation_exit(0);
             return Ok(Some(MoveOutcome::PromptDeclined));
         }
         // `karma.md §12`: "Each mantra answer uses that same matcher against
@@ -2118,8 +2122,11 @@ impl PlayState {
             session.mantra_buffer.clear();
             // §12: "waiting twelve world ticks after each nonblank answer."
             // Same pure-hold shape as the first ask's six-tick wait above.
-            self.staged_narration
-                .push_ticks(SHRINE_MANTRA_SUBSEQUENT_HOLD_BIOS_TICKS, String::new());
+            self.staged_narration.push_ticks_counting_world_steps(
+                SHRINE_MANTRA_SUBSEQUENT_HOLD_BIOS_TICKS,
+                SHRINE_MANTRA_SUBSEQUENT_WORLD_STEPS,
+                String::new(),
+            );
             self.active_shrine = Some(session);
             self.adopt_shrine_prompt_row();
             return Ok(None);
@@ -2136,8 +2143,11 @@ impl PlayState {
         // a handoff instead of printing queued text; a frontend's per-frame
         // pump (or a headless shell's straight-through runner) calls
         // [`Self::step_shrine_third_mantra_resolution`] once the hold drains.
-        self.staged_narration
-            .push_ticks(SHRINE_MANTRA_SUBSEQUENT_HOLD_BIOS_TICKS, String::new());
+        self.staged_narration.push_ticks_counting_world_steps(
+            SHRINE_MANTRA_SUBSEQUENT_HOLD_BIOS_TICKS,
+            SHRINE_MANTRA_SUBSEQUENT_WORLD_STEPS,
+            String::new(),
+        );
         self.pending_shrine_third_mantra = Some(session);
         Ok(Some(MoveOutcome::Observed))
     }
@@ -2162,6 +2172,9 @@ impl PlayState {
                 MISCMSG_SHRINE_UNFOCUSED_RESULT,
                 true,
             )?;
+            // §7: the wrong-answer arm takes its early exit "ahead of both
+            // the stamp and that ten-tick hold", so only the exit pacing runs.
+            self.begin_shrine_presentation_exit(0);
             return Ok(Some(MoveOutcome::PromptDeclined));
         }
         let bit = session.virtue.bit();
@@ -2190,6 +2203,13 @@ impl PlayState {
             // altar's quest announcement. Restore the standing Avatar
             // pose and wait for a command key."
             self.shrine_ordained_mask |= bit;
+            // §7 "What 'restore the standing Avatar pose' means": the walking
+            // pose is re-stamped at `(5, 6)` "between the quest-bit write and
+            // record `31`", so the avatar stands through both key waits and
+            // the closing ten steps.
+            if let Some(walk) = self.shrine_approach_walk.as_mut() {
+                walk.stand();
+            }
             // Measured 2026-09-12 (`qa/paired/shrine-three-mantras.tsv`,
             // beat `mantra3`): the announcement prints with the cursor
             // still at the end of the accepted `Mantra:AHM` row, so the
@@ -2206,7 +2226,91 @@ impl PlayState {
             self.active_shrine = Some(session);
             return Ok(None);
         }
-        self.meditate_shrine_from_suffix(&session.mantra_buffer, game_dir)
+        // Ordained and Codex read: the turn-in arm. The mantra has already
+        // been accepted by the substring matcher above, so nothing here
+        // re-reads the typed text.
+        self.complete_shrine_codex_turn_in(session.virtue, game_dir)?;
+        Ok(Some(MoveOutcome::Observed))
+    }
+
+    /// `karma.md §7`, quest-state row "Ordained and Codex read", and §7.2's
+    /// turn-in beat: "Clear ordination before record `36`, the congratulatory
+    /// response. Play the turn-in beat of Section 7.2 - one unrestored
+    /// viewport inversion, then the 920-step envelope swell, then the shared
+    /// flash/rumble described below - and then award standing and the
+    /// applicable Avatar attributes. Each applicable attribute prints
+    /// `Strength +1\n`, `Dexterity +1\n`, or `Intelligence +1\n`, in that
+    /// order ... Finish with ten world ticks."
+    fn complete_shrine_codex_turn_in(
+        &mut self,
+        virtue: ShrineVirtue,
+        game_dir: &Path,
+    ) -> io::Result<()> {
+        let bit = virtue.bit();
+        self.shrine_ordained_mask &= !bit;
+        // Printed while the accepted `Mantra:` row is still open, like
+        // records `30` and `31`.
+        self.emit_shrine_misc_record_after_open_row(
+            game_dir,
+            MISCMSG_SHRINE_TURN_IN_CONGRATULATION,
+            true,
+        )?;
+        // §7.2: "sets the drawing colour and then issues a single rectangle
+        // fill over the gameplay viewport with the driver's exclusive-or mode
+        // selected", once and never undone.
+        self.presentation_viewport_inverted = true;
+        // The swell: 920 envelope runs at phase increment 3100, about 5.93 s.
+        self.emit_sound_effect(SoundEffect::ShrineTurnInSwell);
+        // "Only the turn-in arm then runs the shared flash-and-rumble helper
+        // ... **after** the swell rather than instead of it."
+        self.emit_major_flash();
+        // karma.md §3-4: shared moral-standing selector +3 on Codex turn-in,
+        // with Humility receiving another +3 after the stat step.
+        let mut moral_gained =
+            self.add_moral_standing(ShrineVirtue::SHRINE_CODEX_TURN_IN_MORAL_INCREASE);
+        let stat_notes = self.apply_shrine_stat_reward(virtue);
+        if virtue == ShrineVirtue::Humility {
+            let humility_moral =
+                self.add_moral_standing(ShrineVirtue::SHRINE_CODEX_TURN_IN_MORAL_INCREASE);
+            moral_gained = moral_gained.saturating_add(humility_moral);
+        }
+        self.diagnostics.push(format!(
+            "shrine of {} completed; moral +{} to {}",
+            virtue.name(),
+            moral_gained,
+            self.moral_standing
+        ));
+        // §7.2: "On that arm the attribute lines print after the whole sound,
+        // not during it." The swell costs no world step, so its hold carries
+        // none; the inversion stands until it ends.
+        let lines: String = stat_notes.iter().map(|line| format!("{line}\n")).collect();
+        self.staged_narration
+            .push_ticks(SHRINE_TURN_IN_SWELL_HOLD_BIOS_TICKS, lines);
+        self.begin_shrine_presentation_exit(SHRINE_HANDLER_CLOSING_WORLD_STEPS);
+        Ok(())
+    }
+
+    /// `karma.md §7` "Exit pacing": the presentation's exit after the
+    /// handler returns, on every arm. `handler_steps` is the handler's own
+    /// closing wait that precedes it - ten world steps on the completion
+    /// arms, none on the blank, wrong-answer and zero-offering arms, which
+    /// "take their early exit ahead of both the stamp and that ten-tick
+    /// hold".
+    pub(crate) fn begin_shrine_presentation_exit(&mut self, handler_steps: u16) {
+        let arm = self
+            .shrine_approach_walk
+            .as_ref()
+            .map(|walk| walk.arm())
+            .unwrap_or_default();
+        if let Some(walk) = self.shrine_approach_walk.as_mut() {
+            walk.begin_exit(handler_steps);
+        }
+        let steps = handler_steps + arm.exit_world_steps();
+        self.staged_narration.push_ticks_counting_world_steps(
+            shrine_presentation_hold_bios_ticks(steps),
+            steps,
+            String::new(),
+        );
     }
 
     /// Run the third-mantra resolution straight through, for shells with no
@@ -2220,128 +2324,6 @@ impl PlayState {
         }
         self.flush_staged_narration();
         self.step_shrine_third_mantra_resolution(game_dir)
-    }
-
-    pub fn meditate_shrine_from_suffix(
-        &mut self,
-        suffix: &str,
-        game_dir: &Path,
-    ) -> io::Result<Option<MoveOutcome>> {
-        let Some(entry) = self.current_shrine_entry(game_dir)? else {
-            return Ok(None);
-        };
-        let request = match parse_inline_shrine_request(suffix) {
-            Ok(Some(request)) => request,
-            Ok(None) => {
-                self.message = shrine_prompt_message(entry.virtue);
-                return Ok(Some(MoveOutcome::PromptDeclined));
-            }
-            Err(err) => {
-                self.message = format!("{err}");
-                return Ok(Some(MoveOutcome::Blocked));
-            }
-        };
-        if !request.mantra.eq_ignore_ascii_case(entry.virtue.mantra()) {
-            self.message = "No effect!".to_string();
-            return Ok(Some(MoveOutcome::Blocked));
-        }
-
-        let bit = entry.virtue.bit();
-        let ordained = self.shrine_ordained_mask & bit != 0;
-        let codex = self.shrine_codex_mask & bit != 0;
-        let outcome = match (ordained, codex) {
-            (false, false) => {
-                self.shrine_ordained_mask |= bit;
-                // `karma.md §12`'s Codex-unread arm is the record `31`/`32`/
-                // `33` presentation, which the interactive session path above
-                // runs. This inline suffix form has no key waits to hang those
-                // records on, so it applies the state change and prints
-                // nothing rather than the summary sentence it used to invent.
-                self.diagnostics.push(format!(
-                    "meditated at the Shrine of {}; ordained for the Codex quest",
-                    entry.virtue.name()
-                ));
-                self.message.clear();
-                MoveOutcome::Observed
-            }
-            (true, false) => {
-                self.diagnostics.push(format!(
-                    "meditated at the Shrine of {}; already ordained, Codex unread",
-                    entry.virtue.name()
-                ));
-                self.message.clear();
-                MoveOutcome::Observed
-            }
-            (true, true) => {
-                self.shrine_ordained_mask &= !bit;
-                // karma.md §3-4: shared moral-standing selector +3 on Codex
-                // turn-in, with Humility receiving an additional +3.
-                let mut moral_gained =
-                    self.add_moral_standing(ShrineVirtue::SHRINE_CODEX_TURN_IN_MORAL_INCREASE);
-                let stat_notes = self.apply_shrine_stat_reward(entry.virtue);
-                if entry.virtue == ShrineVirtue::Humility {
-                    let humility_moral =
-                        self.add_moral_standing(ShrineVirtue::SHRINE_CODEX_TURN_IN_MORAL_INCREASE);
-                    moral_gained = moral_gained.saturating_add(humility_moral);
-                }
-                // `karma.md §7.2`'s Codex-turn-in arm: the envelope
-                // generator run 920 times in one sweep at phase increment
-                // 3100, 150 iterations a run - "one slow swell and decay
-                // at one pitch", about 5.93 s. §7.2 also has this arm
-                // alone run the shared flash/rumble helper, and "it runs
-                // **after** the swell rather than instead of it", so the
-                // two are ordered rather than exclusive.
-                //
-                // Not implemented from §7.2, as on the offering arm: the
-                // unrestored exclusive-or inversion of the gameplay
-                // viewport that precedes the swell.
-                self.emit_sound_effect(SoundEffect::ShrineTurnInSwell);
-                self.emit_major_flash();
-                // `karma.md §12`, "Ordained and Codex read": the awarded
-                // attribute lines are the whole of the added text - the
-                // standing award and the virtue name are state, not
-                // narration. The congratulatory record `36` that precedes
-                // them is emitted by the caller's record path.
-                self.diagnostics.push(format!(
-                    "shrine of {} completed; moral +{} to {}",
-                    entry.virtue.name(),
-                    moral_gained,
-                    self.moral_standing
-                ));
-                self.message = stat_notes.join("\n");
-                MoveOutcome::Observed
-            }
-            (false, true) => {
-                let Some(offering) = request.offering else {
-                    self.message = format!(
-                        "Offering? Use M{}/1 through M{}/9, or M{}/0 to cancel.",
-                        entry.virtue.mantra(),
-                        entry.virtue.mantra(),
-                        entry.virtue.mantra()
-                    );
-                    return Ok(Some(MoveOutcome::PromptDeclined));
-                };
-                if offering == 0 {
-                    // `karma.md §12`: digit zero "end[s] the interaction
-                    // without payment", and the row it leaves is the echo.
-                    self.emit_message_line_continuing_row("0 gp\n");
-                    return Ok(Some(MoveOutcome::PromptDeclined));
-                }
-                self.emit_message_line_continuing_row(format!("{offering}00 gp\n\n"));
-                let cost = offering as u16 * 100;
-                if self.gold < cost {
-                    self.emit_shrine_misc_record(
-                        game_dir,
-                        MISCMSG_SHRINE_OFFERING_INSUFFICIENT_GOLD,
-                    )?;
-                    self.emit_shrine_misc_record(game_dir, MISCMSG_SHRINE_OFFERING_PROMPT)?;
-                    return Ok(Some(MoveOutcome::Blocked));
-                }
-                self.apply_shrine_offering_payment(cost, offering);
-                MoveOutcome::Observed
-            }
-        };
-        Ok(Some(outcome))
     }
 
     /// `karma.md §8`: run the Codex presentation after E-Enter has echoed
@@ -2584,18 +2566,17 @@ impl PlayState {
         // arm: the envelope generator run 920 times in one sweep at a fixed
         // pitch, "one slow swell and decay", about 7.91 s.
         //
-        // Not implemented from §7.2: the arm also "issues a single rectangle
-        // fill over the gameplay viewport with the driver's exclusive-or
-        // mode selected", once and never undone. That is a viewport write
-        // whose interaction with the following world steps this engine has
-        // no capture of, and getting it wrong shows on every beat after it,
-        // so it waits for a measurement rather than a reading.
+        // The swell is preceded by "a single rectangle fill over the
+        // gameplay viewport with the driver's exclusive-or mode selected",
+        // once and never undone: "the world steps that follow simply repaint
+        // over it".
+        self.presentation_viewport_inverted = true;
         self.emit_sound_effect(SoundEffect::ShrineOfferingSwell);
-        // The ten-tick result pause. `animation.md §13.5`: a blocking
-        // presentation pumps the sprite animator while it waits.
-        for _ in 0..SHRINE_OFFERING_RESULT_WORLD_TICKS {
-            self.animation.tick_static_tiles();
-        }
+        // The swell blocks for its own length and costs no world step; then
+        // the ten-tick result pause and the exit pacing, as counted steps.
+        self.staged_narration
+            .push_ticks(SHRINE_OFFERING_SWELL_HOLD_BIOS_TICKS, String::new());
+        self.begin_shrine_presentation_exit(SHRINE_HANDLER_CLOSING_WORLD_STEPS);
     }
 
     /// `karma.md §7`: meditation matches the party position against the
