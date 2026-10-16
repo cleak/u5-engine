@@ -3503,9 +3503,10 @@ impl PlayState {
                 }
                 if let Some(object) = self.blocking_object_at(x, y) {
                     if sign_or_wanted_poster_object_class(object.type_byte) {
-                        self.message = self
+                        let sign = self
                             .sign_message_at_for_current_area(game_dir, y as u8, x as u8)?
                             .unwrap_or_else(|| "Sign:\n".to_string());
+                        self.present_sign_message(sign);
                         return Ok(MoveOutcome::Observed);
                     }
                     // `cleak/u5-spec#194` (black-box): the stock game prints
@@ -3524,7 +3525,7 @@ impl PlayState {
                     if let Some(sign) =
                         self.sign_message_at(game_dir, scene.byte, floor as u8, y as u8, x as u8)?
                     {
-                        self.message = sign;
+                        self.present_sign_message(sign);
                         return Ok(MoveOutcome::Observed);
                     }
                 }
@@ -3577,9 +3578,10 @@ impl PlayState {
                 }
                 if let Some(object) = self.world_object_at(x, y) {
                     if sign_or_wanted_poster_object_class(object.type_byte) {
-                        self.message = self
+                        let sign = self
                             .sign_message_at_for_current_area(game_dir, y as u8, x as u8)?
                             .unwrap_or_else(|| "Sign:\n".to_string());
+                        self.present_sign_message(sign);
                         return Ok(MoveOutcome::Observed);
                     }
                     self.message = if look_table.is_some() {
@@ -3604,7 +3606,7 @@ impl PlayState {
                     y as u8,
                     x as u8,
                 )? {
-                    self.message = sign;
+                    self.present_sign_message(sign);
                     return Ok(MoveOutcome::Observed);
                 }
                 if surface_wishing_well_look_tile(tile) {
@@ -3944,6 +3946,18 @@ impl PlayState {
             return Ok(None);
         }
         Ok(Some(format!("Sign:\n{}", bodies.join("\n"))))
+    }
+
+    /// Put a sign into the message slot. `formats/signs-dat.md §6`: "Pause on
+    /// the embedded pause code" - the sign prints up to its first `0x0D` and
+    /// the rest waits behind a key (see [`crate::text_hold`]).
+    fn present_sign_message(&mut self, sign: String) {
+        let (first, rest) = crate::text_hold::split_rendered_at_holds(
+            &crate::tlk_runner::TlkRenderedText::plain(sign),
+        );
+        let row_open = !first.text.is_empty() && !first.text.ends_with('\n');
+        self.message = first.text;
+        self.begin_text_hold(rest, row_open);
     }
 
     fn yew_wanted_poster_message(&self, scene: u8, z: u8, y: u8, x: u8) -> Option<String> {

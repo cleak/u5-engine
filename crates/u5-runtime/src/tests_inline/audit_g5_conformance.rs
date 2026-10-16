@@ -636,7 +636,8 @@ fn audit_a071_a_key_ends_the_pause_and_is_consumed() {
     assert_eq!(state.active_conversation.as_ref().unwrap().keyword_turns, turns);
     let after = audit_g5_transcript(&state);
     assert!(after.contains("\"Wait. Then.\""), "{after:?}");
-    assert!(!after.contains("I am"), "the key ran no keyword: {after:?}");
+    assert!(!after.contains(":J"), "the key was not typed: {after:?}");
+    assert!(!after.contains("I read books"), "the key ran no keyword: {after:?}");
     assert_eq!(state.message, TLK_KEYWORD_PROMPT);
 }
 
@@ -674,4 +675,45 @@ fn audit_a068_rebuke_is_framed_and_pauses_before_the_prompt() {
     assert!(!state.advance_text_hold_to(5.0 + crate::narration::bios_ticks_secs(28) + 0.01));
     assert!(audit_g5_transcript(&state).ends_with(':'));
     assert!(state.active_conversation.is_some());
+}
+
+/// Audit A012. `formats/signs-dat.md §4`: "Byte `0x0D` pauses for a keypress
+/// and then resumes printing", and §6 "Pause on the embedded pause code".
+#[test]
+fn audit_a012_sign_pause_byte_waits_for_a_key_before_the_rest() {
+    let dir = debug_game_dir();
+    fs::write(dir.join(LOOK2_DAT_FILE), look2_bytes(&[])).unwrap();
+    fs::write(
+        dir.join(SIGNS_DAT_FILE),
+        signs_dat_bytes_for_test(&[(17, 0, 1, 2, b"Read\x0dMore")]),
+    )
+    .unwrap();
+    let mut state = test_state(open_grid(), 1, 1);
+    state.player.facing = Direction::East;
+    state.active_objects.push(ActiveObject {
+        type_byte: 0xa0,
+        tile: 0xa0,
+        x: 2,
+        y: 1,
+        z: 0,
+        phase: STEADY_PHASE,
+        aux1: 0,
+        aux3: 0,
+    });
+    state.look_facing_with_game_dir(&dir).unwrap();
+    state.flush_message_slot();
+    assert_eq!(state.message, "Sign:\nRead");
+    assert!(state.text_hold_active());
+    assert!(state.advance_text_hold_to(1_000.0), "a key wait never times out");
+    assert!(!audit_g5_transcript(&state).contains("More"));
+
+    handle_play_key_input(&mut state, 'Z', "", Path::new("")).unwrap();
+    assert!(!state.text_hold_active());
+    assert!(state.active_z_stats.is_none(), "the key only resumed the sign");
+    assert!(
+        audit_g5_transcript(&state).ends_with("ReadMore"),
+        "{:?}",
+        audit_g5_transcript(&state)
+    );
+    let _ = fs::remove_dir_all(dir);
 }
