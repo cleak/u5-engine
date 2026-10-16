@@ -21978,7 +21978,7 @@ mod tests {
         let mut state = dungeon_state(open_dungeon_record(), 0, 1, 1);
         state.special_items[SPECIAL_ITEM_WOODEN_BOX_INDEX] = SPECIAL_ITEM_OWNED_VALUE;
         state.enter_endgame();
-        state.resolve_endgame_confirmation(true);
+        // `endgame.md §5`: a first Yes skips the sandalwood question.
         state.resolve_endgame_confirmation(true);
         // `endgame.md §8` narrative windows are END.DAT-backed; a
         // missing record is now a loud contract failure, so the beat

@@ -2316,9 +2316,11 @@ impl PlayState {
         answer: bool,
         game_dir: &std::path::Path,
     ) -> std::io::Result<MoveOutcome> {
+        // `endgame.md §5`: a Yes resolves the dialogue whether it is the
+        // first answer (which skips the sandalwood question) or the second,
+        // so either one can open the victory rite and needs `END.DAT`.
         let needs_final_narrative = self.endgame.as_ref().is_some_and(|state| {
             !state.is_terminal()
-                && state.first_confirmation.is_some()
                 && answer
                 && self.special_items[SPECIAL_ITEM_WOODEN_BOX_INDEX] != 0
         });
@@ -2441,15 +2443,15 @@ impl PlayState {
                 // the rest of the exchange one row high.
                 self.push_producer_blank_message_entry();
             }
-            // `endgame.md §5` step 4 does not run when the claim is
-            // false. A paired capture of the Doom final room shows the
-            // original going straight to record 10's "pull up a chair"
-            // exchange when the player answers Yes without the
-            // sandalwood box, while a No answer still gets the explicit
-            // sandalwood question, row for row as this engine draws it.
-            // `cleak/u5-engine#12`.
-            if answer && self.special_items[SPECIAL_ITEM_WOODEN_BOX_INDEX] == 0 {
-                return self.resolve_endgame_confirmation_with_narrative(answer, None);
+            // `endgame.md §5` step 2: "**Only a first No** asks the second
+            // question ... A first Yes skips this question whether the
+            // party owns the box or not." The box flag decides the outcome
+            // (step 3), not whether the question is shown (R404). A paired
+            // capture of the Doom final room shows a Yes without the box
+            // going straight to record 10's "pull up a chair" exchange
+            // (`cleak/u5-engine#12`).
+            if answer {
+                return self.resolve_endgame_confirmation_with_narrative(answer, final_narrative);
             }
             self.message = self
                 .endgame

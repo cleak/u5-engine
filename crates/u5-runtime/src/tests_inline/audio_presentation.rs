@@ -439,7 +439,7 @@ fn endgame_orb_sting_lands_on_the_acknowledgement_not_on_the_box_to_orb_swap() {
     let mut state = dungeon_state(endgame_tableau_test_grid(), 0, 1, 1);
     state.special_items[SPECIAL_ITEM_WOODEN_BOX_INDEX] = SPECIAL_ITEM_OWNED_VALUE;
     state.enter_endgame();
-    state.resolve_endgame_confirmation(true);
+    // `endgame.md §5`: a first Yes skips the sandalwood question.
     state.resolve_endgame_confirmation(true);
     state.endgame.as_mut().unwrap().final_narrative = Some(synthetic_end_narrative());
     assert_eq!(

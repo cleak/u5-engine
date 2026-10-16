@@ -18964,12 +18964,8 @@ fn endgame_real_victory_requires_end_dat_resource() {
         .enter_endgame_from_game_dir(Some(&dir))
         .expect("ENDMSG.DAT should load");
 
-    assert_eq!(
-        state
-            .resolve_endgame_confirmation_from_game_dir(true, &dir)
-            .unwrap(),
-        MoveOutcome::Used
-    );
+    // `endgame.md §5`: a first Yes with the box owned resolves straight to
+    // the victory rite, so it is that answer which needs `END.DAT`.
     let err = state
         .resolve_endgame_confirmation_from_game_dir(true, &dir)
         .unwrap_err();
@@ -19397,6 +19393,35 @@ fn endgame_flow_uses_loaded_endmsg_records_for_prompts_rite_and_refusal() {
     assert_eq!(victory.message, "{Window one");
 }
 
+/// `endgame.md §5` step 2: "**Only a first No** asks the second question
+/// ... A first Yes skips this question whether the party owns the box or
+/// not." With the box owned, a first Yes is the effective answer and goes
+/// straight to the victory rite (R404 withdrew the two-question flow).
+#[test]
+fn endgame_first_yes_with_box_skips_the_sandalwood_question() {
+    let mut state = dungeon_state(open_dungeon_record(), 0, 1, 1);
+    state.special_items[SPECIAL_ITEM_WOODEN_BOX_INDEX] = 1;
+    state.enter_endgame();
+    state.resolve_endgame_confirmation(true);
+    let endgame = state.endgame.as_ref().unwrap();
+    assert!(endgame.is_terminal());
+    assert_eq!(endgame.first_confirmation, Some(true));
+    assert_eq!(endgame.final_confirmation, Some(true));
+    assert_eq!(endgame.outcome, Some(EndgameOutcome::Victory));
+
+    // A first No still asks, and a Yes to the clarification wins.
+    let mut state = dungeon_state(open_dungeon_record(), 0, 1, 1);
+    state.special_items[SPECIAL_ITEM_WOODEN_BOX_INDEX] = 1;
+    state.enter_endgame();
+    state.resolve_endgame_confirmation(false);
+    assert!(!state.endgame.as_ref().unwrap().is_terminal());
+    state.resolve_endgame_confirmation(true);
+    assert_eq!(
+        state.endgame.as_ref().unwrap().outcome,
+        Some(EndgameOutcome::Victory)
+    );
+}
+
 #[test]
 fn victory_endgame_cinematic_advances_through_all_panels_then_holds_terminal_state() {
     let mut state = dungeon_state(open_dungeon_record(), 0, 1, 1);
@@ -19404,7 +19429,7 @@ fn victory_endgame_cinematic_advances_through_all_panels_then_holds_terminal_sta
     state.party_names = vec![*b"AVATAR\0\0\0"];
     state.clock = GameClock::with_date(141, 5, 6, 12, 0).unwrap();
     state.enter_endgame();
-    state.resolve_endgame_confirmation(true);
+    // `endgame.md §5`: a first Yes skips the sandalwood question.
     state.resolve_endgame_confirmation(true);
     state.endgame.as_mut().unwrap().final_narrative = Some(synthetic_end_narrative());
 
@@ -19478,7 +19503,7 @@ fn victory_gate_reuses_shared_moongate_phase_for_exact_rise_hold_and_sink() {
     let mut state = dungeon_state(endgame_tableau_test_grid(), 0, 1, 1);
     state.special_items[SPECIAL_ITEM_WOODEN_BOX_INDEX] = SPECIAL_ITEM_OWNED_VALUE;
     state.enter_endgame();
-    state.resolve_endgame_confirmation(true);
+    // `endgame.md §5`: a first Yes skips the sandalwood question.
     state.resolve_endgame_confirmation(true);
     state.endgame.as_mut().unwrap().final_narrative = Some(synthetic_end_narrative());
 
@@ -24889,7 +24914,7 @@ fn endgame_rendering_does_not_repopulate_gameplay_player_object() {
     state.party = vec![state.party[0]; 2];
     state.special_items[SPECIAL_ITEM_WOODEN_BOX_INDEX] = SPECIAL_ITEM_OWNED_VALUE;
     state.enter_endgame();
-    state.resolve_endgame_confirmation(true);
+    // `endgame.md §5`: a first Yes skips the sandalwood question.
     state.resolve_endgame_confirmation(true);
     assert!(state.advance_endgame_display_frame());
     state.resolve_endgame_confirmation(false);
