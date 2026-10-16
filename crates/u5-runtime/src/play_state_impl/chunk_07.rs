@@ -6102,8 +6102,11 @@ impl PlayState {
         for _ in 0..TOWN_REST_INITIAL_SCHEDULE_BURST_TICKS {
             // `karma.md §4.1`: these zero-minute schedule-only setup
             // ticks are not one of the ten-minute rest ticks that age the
-            // conversation-payment cooldown.
-            self.advance_turn_with_minutes_policy(0, true, true, true, false);
+            // conversation-payment cooldown. Nor do they run the party
+            // status/provision pass: `time.md §12` names exactly four
+            // callers, and among rest only "the town-bed rest loop's
+            // ten-minute step" (`rest-and-camp.md §5`).
+            self.advance_turn_with_minutes_policy(0, true, true, false, false);
             if !self.town_rest_bed_still_accepts(entries, scene, floor) {
                 return false;
             }

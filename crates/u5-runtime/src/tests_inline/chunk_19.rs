@@ -802,6 +802,42 @@
         let _ = fs::remove_dir_all(dir);
     }
 
+    /// `time.md §12`: the status/provision pass has exactly four callers,
+    /// and among rest only "the town-bed rest loop's ten-minute step". The
+    /// sixteen-pass schedule burst before that loop is not one of them, so a
+    /// poisoned member loses exactly six hit points over one hour of bed rest.
+    #[test]
+    fn town_hole_up_schedule_burst_skips_the_status_pass() {
+        let dir = debug_game_dir();
+        fs::write(dir.join(TOWN_REST_BED_TABLE_FILE), "CASTLE:0 0 1 1 55\n").unwrap();
+        let mut grid = open_grid();
+        grid[32 + 1] = 55;
+        let mut state = test_state(grid, 1, 1);
+        state.clock = GameClock::new(8, 0).unwrap();
+        state.party = vec![PartyMember {
+            slot: 0,
+            class_byte: b'A',
+            status: b'P',
+            climb_stat: DEFAULT_CLIMB_STAT,
+            mana: 90,
+            hp: 60,
+            max_hp: 99,
+            level: 8,
+        }];
+
+        assert_eq!(
+            state.hole_up_command(&dir, Some(1)).unwrap(),
+            MoveOutcome::Rested
+        );
+
+        assert_eq!(state.party[0].status, b'P');
+        assert_eq!(
+            state.party[0].hp,
+            60 - u16::from(TOWN_REST_TICKS_PER_HOUR)
+        );
+        let _ = fs::remove_dir_all(dir);
+    }
+
     #[test]
     fn rest_with_watch_requires_hours_without_turn() {
         let mut state = britannia_state(open_world_grid(), 1, 1);
