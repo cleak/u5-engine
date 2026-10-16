@@ -130,6 +130,7 @@ impl PlayState {
                 session.pending,
                 Some(
                     crate::z_stats::UsePendingAction::SkullKeyDirection
+                        | crate::z_stats::UsePendingAction::SceptreFieldDirection
                         | crate::z_stats::UsePendingAction::ScrollWindDirection { .. }
                 )
             ) {
@@ -325,6 +326,7 @@ impl PlayState {
                             // `qa/paired/use-specials.tsv` beat `skullkeys`).
                             | crate::z_stats::UsePendingAction::ScrollWindDirection { .. }
                             | crate::z_stats::UsePendingAction::SkullKeyDirection
+                            | crate::z_stats::UsePendingAction::SceptreFieldDirection
                     )
                 )
             })

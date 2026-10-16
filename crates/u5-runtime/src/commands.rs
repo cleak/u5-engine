@@ -880,6 +880,9 @@ pub const USE_PLANS_RIGGED_LINE: &str = "Ship rigged for double speed!";
 pub const USE_AMULET_WORN: &str = "Wearing the Amulet of Lord British...";
 pub const USE_CROWN_WORN: &str = "Thou dost don the Crown of Lord British...";
 pub const USE_SCEPTRE_WIELDED: &str = "Wielding the Sceptre of Lord British...";
+/// `inventory.md §7.1`: the Sceptre's own print site when the arena
+/// fallback removed a field marker.
+pub const USE_SCEPTRE_FIELD_DISSOLVED: &str = "Field dissolved!";
 pub const USE_BLACK_BADGE_WORN: &str = "Badge worn!";
 pub const USE_REGALIA_REMOVED: &str = "Removed!";
 /// The shard line names the shard on its own row run: `Thou dost hold above

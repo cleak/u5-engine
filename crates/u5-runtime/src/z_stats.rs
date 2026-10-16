@@ -495,6 +495,10 @@ pub enum UsePendingAction {
     /// `Item: Skull Key` and then opens the shared `Direction-` prompt
     /// rather than acting on the party's facing.
     SkullKeyDirection,
+    /// `inventory.md §7.1` "The Sceptre's fallback": in an arena, when the
+    /// nearby scan dissolved nothing, the field-removal helper "shows the
+    /// ordinary direction prompt".
+    SceptreFieldDirection,
 }
 
 impl ReadySession {

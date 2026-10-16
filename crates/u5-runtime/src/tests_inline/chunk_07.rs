@@ -974,11 +974,14 @@ fn sceptre_requires_item_non_dungeon_and_matching_nearby_barriers() {
     assert_eq!(missing.turn, 0);
     assert_eq!(missing.message, "");
 
+    // `inventory.md §7.1`: a dungeon skips the scan and runs the An Grav
+    // helper; with no field on the own cell or the one ahead it returns 0
+    // and the Sceptre prints `No effect!` under its wielding line.
     let mut dungeon = dungeon_state(open_dungeon_record(), 0, 1, 1);
     dungeon.special_items[SPECIAL_ITEM_SCEPTRE_LB_INDEX] = 1;
     assert_eq!(dungeon.use_sceptre_of_lord_british(), MoveOutcome::Blocked);
     assert_eq!(dungeon.turn, 0);
-    assert_eq!(dungeon.message, "Not here!");
+    assert_eq!(dungeon.message, "Wielding the Sceptre of Lord British...\nNo effect!");
 
     let mut no_barrier = test_state(open_grid(), 1, 1);
     no_barrier.special_items[SPECIAL_ITEM_SCEPTRE_LB_INDEX] = 1;

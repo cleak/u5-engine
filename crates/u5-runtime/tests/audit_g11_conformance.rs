@@ -338,3 +338,66 @@ fn a103_dungeon_skull_key_refuses_without_a_direction_prompt() {
     assert!(!transcript.iter().any(|row| row.contains("Direction-")), "{transcript:?}");
     let _ = std::fs::remove_dir_all(dir);
 }
+
+/// `inventory.md §7.1` "The Sceptre's fallback", dungeon arm: "it tests the
+/// party's own cell and then the cell one step ahead; a field cell is
+/// cleared to its visit-marker bit, the helper itself prints `Field
+/// destroyed!`, and the Sceptre adds nothing" - under the wielding line that
+/// prints "on every accepted selection".
+#[test]
+fn a102_dungeon_sceptre_runs_the_an_grav_helper_ahead_of_the_party() {
+    let mut grid = u5_runtime::test_fixtures::open_dungeon_record();
+    // Party at (1, 1) facing the fixture's default; put a marked fire field
+    // on the cell ahead.
+    let mut state = u5_runtime::test_fixtures::dungeon_state(grid.clone(), 0, 1, 1);
+    let (dx, dy) = state.player.facing.delta();
+    let ahead = dungeon_cell_index(0, (1 + dx) as usize, (1 + dy) as usize);
+    grid[ahead] = 0x8a;
+    let mut state = u5_runtime::test_fixtures::dungeon_state(grid, 0, 1, 1);
+    state.special_items[SPECIAL_ITEM_SCEPTRE_LB_INDEX] = 1;
+
+    assert_eq!(state.use_sceptre_of_lord_british(), MoveOutcome::Used);
+    assert_eq!(state.grid[ahead], 0x08);
+    assert_eq!(
+        state.message,
+        format!("{USE_SCEPTRE_WIELDED}\n{DISPEL_FIELD_DESTROYED_LINE}")
+    );
+}
+
+/// `inventory.md §7.1`, arena arm: when the nearby scan dissolves nothing
+/// the helper "shows the ordinary direction prompt: ... a chosen cell
+/// holding a field marker has that marker removed and returns 1 so the
+/// Sceptre prints `Field dissolved!`, and otherwise it returns 0 (`No
+/// effect!`)".
+#[test]
+fn a102_arena_sceptre_fallback_takes_a_direction() {
+    let mut state = test_state(open_grid(), 1, 1);
+    state.combat_active = true;
+    state.special_items[SPECIAL_ITEM_SCEPTRE_LB_INDEX] = 1;
+    state.combat_actors[0] = CombatActorDescriptor::from_row([30, 1, 0, 0, 0, STEADY_PHASE, 5, 5]);
+    state.pending_combat_actor_slot = Some(0);
+    assert!(state.sceptre_arena_fallback_prompts());
+
+    assert_eq!(
+        state.use_sceptre_arena_field_direction(Direction::East),
+        MoveOutcome::Blocked
+    );
+    assert_eq!(state.message, "No effect!");
+
+    state.active_objects.push(ActiveObject {
+        type_byte: COMBAT_FIELD_KIND_FIRE,
+        tile: COMBAT_FIELD_KIND_FIRE,
+        x: 6,
+        y: 5,
+        z: 0,
+        phase: STEADY_PHASE,
+        aux1: 0,
+        aux3: 0,
+    });
+    assert_eq!(
+        state.use_sceptre_arena_field_direction(Direction::East),
+        MoveOutcome::Used
+    );
+    assert_eq!(state.message, "Field dissolved!");
+    assert!(state.find_combat_arena_field_marker(6, 5).is_none());
+}
