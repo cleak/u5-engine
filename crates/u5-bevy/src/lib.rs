@@ -19,7 +19,7 @@ use image::{ImageBuffer, Rgba};
 
 use u5_runtime::SubtitleIgnitionPublish;
 use u5_runtime::TITLE_TICK_FRAME_Y;
-use u5_runtime::audio::{RumbleJitter, SoundEffect, SpeakerProgram};
+use u5_runtime::audio::{InterruptibleSound, RumbleJitter, SoundEffect, SpeakerProgram};
 use u5_runtime::audio_render::{RenderedSpeaker, render_program};
 #[cfg(test)]
 use u5_runtime::placeholder_title_tick_frames;
@@ -309,6 +309,8 @@ const INTRO_FLOURISH_STEP_INTERVAL_SECS: f32 = 0.014;
 struct SpeakerEffect {
     source: SpeakerSource,
     audible: bool,
+    /// Set for a program a later [`SpeakerSource::Cancel`] may cut short.
+    interruptible: Option<InterruptibleSound>,
 }
 
 /// What the voice should play.
@@ -326,6 +328,10 @@ struct SpeakerEffect {
 enum SpeakerSource {
     Effect(SoundEffect),
     Program(SpeakerProgram),
+    /// Stop every program queued under this tag before this event: one still
+    /// waiting is dropped, one sounding is cut where it is. Programs queued
+    /// after the cancel, and untagged ones, are untouched.
+    Cancel(InterruptibleSound),
 }
 
 impl SpeakerEffect {
@@ -338,6 +344,7 @@ impl SpeakerEffect {
         Self {
             source: SpeakerSource::Effect(effect),
             audible: true,
+            interruptible: None,
         }
     }
 
@@ -346,6 +353,23 @@ impl SpeakerEffect {
         Self {
             source: SpeakerSource::Program(program),
             audible: true,
+            interruptible: None,
+        }
+    }
+
+    /// Tag this effect so a later [`SpeakerEffect::cancel`] can cut it.
+    fn interruptible(mut self, tag: InterruptibleSound) -> Self {
+        self.interruptible = Some(tag);
+        self
+    }
+
+    /// Cut every program queued earlier under `tag` (see
+    /// [`SpeakerSource::Cancel`]).
+    fn cancel(tag: InterruptibleSound) -> Self {
+        Self {
+            source: SpeakerSource::Cancel(tag),
+            audible: true,
+            interruptible: None,
         }
     }
 
@@ -354,6 +378,7 @@ impl SpeakerEffect {
         Self {
             source: SpeakerSource::Effect(effect),
             audible,
+            interruptible: None,
         }
     }
 }
@@ -455,7 +480,24 @@ struct SpeakerVoice;
 /// several - the Stonegate trapdoor's descent and its per-member rumbles
 /// are the clearest case - plays them in order rather than only the last.
 #[derive(Resource, Default)]
-struct SpeakerQueue(std::collections::VecDeque<(SpeakerProgram, bool)>);
+struct SpeakerQueue(std::collections::VecDeque<QueuedSpeakerProgram>);
+
+/// One program waiting for the voice.
+#[derive(Debug)]
+struct QueuedSpeakerProgram {
+    program: SpeakerProgram,
+    audible: bool,
+    interruptible: Option<InterruptibleSound>,
+}
+
+/// The tag of an interruptible program the voice is sounding, with the
+/// program itself so a cut can be reported as [`SpeakerProgram::truncated_at`].
+#[derive(Component, Debug)]
+struct SpeakerVoiceInterruptible {
+    tag: InterruptibleSound,
+    program: SpeakerProgram,
+    audible: bool,
+}
 
 /// Marks a voice that actually queued samples, so the expiry system can
 /// tell "the device has not opened yet" from "this program was silent".
@@ -9717,6 +9759,7 @@ fn run_visual_intro_menu_app(
         pending_pre_flourish_outcome: Some(pre_flourish_outcome),
         title_tick_frames: None,
         pending_reveal_clicks: Vec::new(),
+        pending_speaker_cancels: Vec::new(),
     })
     .insert_resource(VisualIntroAnimationPump::default())
     // Journey Onward reuses this App. Keep the gameplay wait-loop clock alive
@@ -9823,8 +9866,14 @@ fn play_speaker_effects(
     mut waves: ResMut<Assets<VisualSoundWave>>,
     mut queued: EventReader<SpeakerEffect>,
     mut pending: ResMut<SpeakerQueue>,
-    voices: Query<Entity, With<SpeakerVoice>>,
+    voices: Query<(
+        Entity,
+        &SpeakerVoiceLifetime,
+        Option<&SpeakerVoiceInterruptible>,
+        Option<&AudioSink>,
+    )>,
 ) {
+    let mut cut_voices: Vec<Entity> = Vec::new();
     for queued_effect in queued.read() {
         // `audio.md §3`: muting "changes output, not command or animation
         // cadence", so the program is built - and the jitter stream advanced -
@@ -9839,14 +9888,34 @@ fn play_speaker_effects(
                 effect.program(&mut jitter.0)
             }
             SpeakerSource::Program(program) => program.clone(),
+            SpeakerSource::Cancel(tag) => {
+                cancel_interruptible_speaker_program(*tag, &mut pending, &voices, &mut cut_voices);
+                continue;
+            }
         };
-        pending.0.push_back((program, queued_effect.audible));
+        pending.0.push_back(QueuedSpeakerProgram {
+            program,
+            audible: queued_effect.audible,
+            interruptible: queued_effect.interruptible,
+        });
     }
-    // One channel: nothing starts while something is still sounding.
-    if !voices.is_empty() {
+    for entity in &cut_voices {
+        commands.entity(*entity).despawn();
+    }
+    // One channel: nothing starts while something is still sounding. A voice
+    // cut above is despawned by the commands queued before this spawn.
+    if voices
+        .iter()
+        .any(|(entity, ..)| !cut_voices.contains(&entity))
+    {
         return;
     }
-    let Some((program, audible)) = pending.0.pop_front() else {
+    let Some(QueuedSpeakerProgram {
+        program,
+        audible,
+        interruptible,
+    }) = pending.0.pop_front()
+    else {
         return;
     };
 
@@ -9858,6 +9927,13 @@ fn play_speaker_effects(
         SpeakerVoice,
         SpeakerVoiceLifetime(Timer::new(program.duration(audible), TimerMode::Once)),
     ));
+    if let Some(tag) = interruptible {
+        voice.insert(SpeakerVoiceInterruptible {
+            tag,
+            program: program.clone(),
+            audible,
+        });
+    }
     if !audible {
         return;
     }
@@ -9873,6 +9949,53 @@ fn play_speaker_effects(
         AudioPlayer(waves.add(speaker_wave(&rendered))),
         PlaybackSettings::ONCE.with_volume(Volume::Linear(SPEAKER_VOLUME)),
     ));
+}
+
+/// Cancel the interruptible programs queued under `tag` so far.
+///
+/// A waiting program is dropped from the queue. The sounding one is stopped
+/// where it is: its sink is stopped and its voice is despawned, which ends the
+/// sound at [`SpeakerProgram::truncated_at`] the voice's elapsed time - the
+/// speaker work the original had done when its caller's loop stopped. Nothing
+/// else is touched, so a blocking effect queued behind the cut program now
+/// starts at once instead of waiting out the rest of it.
+fn cancel_interruptible_speaker_program(
+    tag: InterruptibleSound,
+    pending: &mut SpeakerQueue,
+    voices: &Query<(
+        Entity,
+        &SpeakerVoiceLifetime,
+        Option<&SpeakerVoiceInterruptible>,
+        Option<&AudioSink>,
+    )>,
+    cut_voices: &mut Vec<Entity>,
+) {
+    pending.0.retain(|queued| queued.interruptible != Some(tag));
+    for (entity, lifetime, interruptible, sink) in voices.iter() {
+        let Some(interruptible) = interruptible.filter(|voice| voice.tag == tag) else {
+            continue;
+        };
+        if cut_voices.contains(&entity) {
+            continue;
+        }
+        let elapsed = lifetime.0.elapsed().as_nanos().min(u128::from(u64::MAX)) as u64;
+        let sounded = interruptible
+            .program
+            .truncated_at(elapsed, interruptible.audible);
+        debug!(
+            ?tag,
+            sounded_ms = sounded.duration(interruptible.audible).as_millis(),
+            full_ms = interruptible
+                .program
+                .duration(interruptible.audible)
+                .as_millis(),
+            "cut interruptible PC-speaker program"
+        );
+        if let Some(sink) = sink {
+            sink.stop();
+        }
+        cut_voices.push(entity);
+    }
 }
 
 /// Retire the voice when its program's duration has elapsed *and* the
@@ -10260,6 +10383,10 @@ struct VisualIntroState {
     /// clicks are parked here and drained by the same system that queues the
     /// §7.1 ignition bursts.
     pending_reveal_clicks: Vec<SoundEffect>,
+    /// Interruptible speaker programs a key has cut short since the audio
+    /// system last ran, drained into [`SpeakerEffect::cancel`] events ahead
+    /// of any new sound.
+    pending_speaker_cancels: Vec<InterruptibleSound>,
 }
 
 #[derive(Debug, Default)]
@@ -11426,12 +11553,26 @@ fn queue_start_menu_reveal_clicks(
     // The carrier runs on between retunes, so each pitch sounds for the
     // measured per-visit period and the run lasts exactly as long as the
     // reveal is on screen.
-    speaker.write(SpeakerEffect::always_audible_program(
-        u5_runtime::audio::dissolve_click_run_at(
+    // Tagged: in the original the carrier is retuned from inside the dissolve
+    // loop, so a key that stops the loop also reaches the shared exit's stop.
+    // `abort_visual_intro_start_menu_reveal` cancels the tag.
+    speaker.write(
+        SpeakerEffect::always_audible_program(u5_runtime::audio::dissolve_click_run_at(
             &pitches,
             u5_runtime::GATED_DISSOLVE_MEASURED_CLICK_PERIOD_NANOS,
-        ),
-    ));
+        ))
+        .interruptible(InterruptibleSound::GatedDissolve),
+    );
+}
+
+/// Forward the cuts the intro's input handling made to the speaker voice.
+fn queue_visual_intro_speaker_cancels(
+    intro: &mut VisualIntroState,
+    speaker: &mut EventWriter<SpeakerEffect>,
+) {
+    for tag in intro.pending_speaker_cancels.drain(..) {
+        speaker.write(SpeakerEffect::cancel(tag));
+    }
 }
 
 /// `audio.md §8.6`: sound the cue of the Return-to-View preview tick that is
@@ -11546,6 +11687,7 @@ fn animate_visual_intro_title_effects(
     // idempotent, so each publication bursts exactly once.
     queue_subtitle_ignition_burst(&intro, &mut speaker, &mut sounded_publish);
     queue_return_to_view_preview_cue(&intro, &mut speaker, &mut sounded_preview_frame);
+    queue_visual_intro_speaker_cancels(&mut intro, &mut speaker);
     queue_start_menu_reveal_clicks(&mut intro, &mut speaker);
     if !advanced {
         return;
@@ -12088,6 +12230,15 @@ fn abort_visual_intro_start_menu_reveal(intro: &mut VisualIntroState) -> bool {
     }
     let source = reveal.source.clone();
     intro.surface.copy_rect_from(&source, u5_runtime::INTRO_START_MENU_REVEAL_RECT);
+    // `intro.md §3` step 4 / `audio.md §8.6.1`: the carrier is retuned from
+    // inside the dissolve and silenced at its exit, so the click run stops
+    // here with the transfer instead of playing out its ~2.8 s.
+    // The run is queued in the same system call that starts the reveal, so
+    // nothing is normally left here; anything that is never sounded at all.
+    intro.pending_reveal_clicks.clear();
+    intro
+        .pending_speaker_cancels
+        .push(InterruptibleSound::GatedDissolve);
     intro.panel = VisualIntroPanel::Menu;
     complete_visual_intro_start_menu_loader(intro);
     true
@@ -16232,6 +16383,7 @@ fn visual_intro_suite_state(
         pending_pre_flourish_outcome: None,
         title_tick_frames: None,
         pending_reveal_clicks: Vec::new(),
+        pending_speaker_cancels: Vec::new(),
     };
     if title_dismissed {
         intro.dispatch.dismiss_title();
@@ -19486,6 +19638,7 @@ mod tests {
             pending_pre_flourish_outcome: None,
             title_tick_frames: None,
             pending_reveal_clicks: Vec::new(),
+            pending_speaker_cancels: Vec::new(),
         };
 
         let frame = render_intro_frame(&mut intro);
@@ -19612,6 +19765,7 @@ mod tests {
             pending_pre_flourish_outcome: None,
             title_tick_frames: None,
             pending_reveal_clicks: Vec::new(),
+            pending_speaker_cancels: Vec::new(),
         };
         intro.dispatch.dismiss_title();
 
@@ -19908,6 +20062,7 @@ mod tests {
             pending_pre_flourish_outcome: Some(PreFlourishOutcome::JourneyOnwardShortcut),
             title_tick_frames: None,
             pending_reveal_clicks: Vec::new(),
+            pending_speaker_cancels: Vec::new(),
         };
 
         apply_pre_flourish_outcome(&mut intro);
@@ -19971,6 +20126,7 @@ mod tests {
             pending_pre_flourish_outcome: Some(PreFlourishOutcome::ContinueToFlourish),
             title_tick_frames: None,
             pending_reveal_clicks: Vec::new(),
+            pending_speaker_cancels: Vec::new(),
         };
         let baseline_surface = intro.surface.clone();
 
@@ -20431,6 +20587,7 @@ mod tests {
             pending_pre_flourish_outcome: None,
             title_tick_frames: None,
             pending_reveal_clicks: Vec::new(),
+            pending_speaker_cancels: Vec::new(),
         };
 
         assert!(step_visual_intro_panel(&mut intro, ' '));
@@ -20512,6 +20669,7 @@ mod tests {
             pending_pre_flourish_outcome: None,
             title_tick_frames: None,
             pending_reveal_clicks: Vec::new(),
+            pending_speaker_cancels: Vec::new(),
         };
 
         assert!(!step_visual_intro_panel(&mut intro, ' '));
@@ -20592,6 +20750,7 @@ mod tests {
             pending_pre_flourish_outcome: None,
             title_tick_frames: None,
             pending_reveal_clicks: Vec::new(),
+            pending_speaker_cancels: Vec::new(),
         };
         assert!(visual_intro_title_surface_visible(&intro));
         assert!(matches!(
@@ -20678,6 +20837,7 @@ mod tests {
             pending_pre_flourish_outcome: None,
             title_tick_frames: None,
             pending_reveal_clicks: Vec::new(),
+            pending_speaker_cancels: Vec::new(),
         };
 
         let outcome = finish_visual_intro_title_to_menu(&mut intro, true);
@@ -21004,6 +21164,11 @@ mod tests {
         ));
 
         assert!(matches!(intro.panel, VisualIntroPanel::Menu));
+        // P11: the click run stops with the transfer rather than playing out.
+        assert_eq!(
+            intro.pending_speaker_cancels,
+            vec![InterruptibleSound::GatedDissolve]
+        );
         assert!(!matches!(
             intro.dispatch.tick_title(),
             UnifiedMenuStep::PresentTitle
@@ -21061,6 +21226,7 @@ mod tests {
             pending_pre_flourish_outcome: None,
             title_tick_frames: None,
             pending_reveal_clicks: Vec::new(),
+            pending_speaker_cancels: Vec::new(),
         };
 
         assert!(step_visual_intro(&mut intro, 'x'));
@@ -21111,6 +21277,7 @@ mod tests {
             pending_pre_flourish_outcome: None,
             title_tick_frames: None,
             pending_reveal_clicks: Vec::new(),
+            pending_speaker_cancels: Vec::new(),
         };
 
         let result = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
@@ -21175,6 +21342,7 @@ mod tests {
             pending_pre_flourish_outcome: None,
             title_tick_frames: None,
             pending_reveal_clicks: Vec::new(),
+            pending_speaker_cancels: Vec::new(),
         };
 
         // `cleak/u5-spec#67`: a keystroke during the flourish does not
@@ -21242,6 +21410,7 @@ mod tests {
             pending_pre_flourish_outcome: None,
             title_tick_frames: None,
             pending_reveal_clicks: Vec::new(),
+            pending_speaker_cancels: Vec::new(),
         };
 
         // `systems/intro.md §3` item 6: "The early `J` shortcut is therefore
@@ -21296,6 +21465,7 @@ mod tests {
             pending_pre_flourish_outcome: None,
             title_tick_frames: None,
             pending_reveal_clicks: Vec::new(),
+            pending_speaker_cancels: Vec::new(),
         };
 
         // `systems/intro.md §3` step 4: a key during the strokes
@@ -21363,6 +21533,7 @@ mod tests {
             pending_pre_flourish_outcome: None,
             title_tick_frames: None,
             pending_reveal_clicks: Vec::new(),
+            pending_speaker_cancels: Vec::new(),
         };
 
         assert!(advance_visual_intro_animation_tick(&mut intro));
@@ -21413,6 +21584,7 @@ mod tests {
             pending_pre_flourish_outcome: None,
             title_tick_frames: None,
             pending_reveal_clicks: Vec::new(),
+            pending_speaker_cancels: Vec::new(),
         };
 
         assert!(advance_visual_intro_animation_tick(&mut intro));
@@ -21550,6 +21722,7 @@ mod tests {
             pending_pre_flourish_outcome: None,
             title_tick_frames: None,
             pending_reveal_clicks: Vec::new(),
+            pending_speaker_cancels: Vec::new(),
         };
 
         let advanced = advance_visual_intro_animation_tick(&mut intro);
@@ -21595,6 +21768,7 @@ mod tests {
             pending_pre_flourish_outcome: None,
             title_tick_frames: None,
             pending_reveal_clicks: Vec::new(),
+            pending_speaker_cancels: Vec::new(),
         };
 
         let frame = render_intro_frame(&mut intro);
@@ -25465,7 +25639,7 @@ mod tests {
             .into_iter()
             .filter_map(|queued| match queued.source {
                 SpeakerSource::Effect(effect) => Some(effect),
-                SpeakerSource::Program(_) => None,
+                SpeakerSource::Program(_) | SpeakerSource::Cancel(_) => None,
             })
             .collect();
         assert!(
@@ -25733,6 +25907,130 @@ mod tests {
                 "{effect:?} lifetime must equal its program duration exactly"
             );
         }
+    }
+
+    fn send_speaker_event(app: &mut App, event: SpeakerEffect) {
+        app.world_mut()
+            .resource_mut::<Events<SpeakerEffect>>()
+            .send(event);
+        app.update();
+    }
+
+    fn long_dissolve_run() -> SpeakerProgram {
+        u5_runtime::audio::dissolve_click_run_at(
+            &[300; 16_160],
+            u5_runtime::GATED_DISSOLVE_MEASURED_CLICK_PERIOD_NANOS,
+        )
+    }
+
+    /// P11: a cancel cuts the sounding interruptible program at once, and the
+    /// blocking effect queued behind it starts on the same update instead of
+    /// waiting out the ~2.8 s run.
+    #[test]
+    fn a_cancel_cuts_the_sounding_interruptible_program_and_frees_the_voice() {
+        let mut app = speaker_test_app();
+        let run = long_dissolve_run();
+        assert!(run.duration(true) > Duration::from_secs(2));
+        send_speaker_event(
+            &mut app,
+            SpeakerEffect::always_audible_program(run.clone())
+                .interruptible(InterruptibleSound::GatedDissolve),
+        );
+        assert_eq!(voice_lifetime(&mut app), run.duration(true));
+        let run_voice = speaker_voices(&mut app);
+        assert_eq!(run_voice.len(), 1);
+
+        // A preview cue arrives behind it; one channel, so it waits.
+        send_speaker_event(
+            &mut app,
+            SpeakerEffect::always_audible(SoundEffect::ActionSnap),
+        );
+        assert_eq!(speaker_voices(&mut app), run_voice, "still the run");
+        app.update();
+        assert_eq!(speaker_voices(&mut app), run_voice, "the run plays on");
+
+        send_speaker_event(
+            &mut app,
+            SpeakerEffect::cancel(InterruptibleSound::GatedDissolve),
+        );
+        let voices = speaker_voices(&mut app);
+        assert_eq!(voices.len(), 1, "one channel, now owned by the cue");
+        assert_ne!(voices, run_voice, "the run's voice is gone");
+        let snap = SoundEffect::ActionSnap
+            .program(&mut RumbleJitter::new())
+            .duration(true);
+        assert_eq!(voice_lifetime(&mut app), snap);
+        assert!(
+            app.world().resource::<SpeakerQueue>().0.is_empty(),
+            "nothing left waiting"
+        );
+    }
+
+    /// A cancel drops only waiting programs under its own tag that were queued
+    /// before it: untagged effects stay, and a tagged program queued after the
+    /// cancel is a new run and is kept.
+    #[test]
+    fn a_cancel_drops_only_earlier_programs_under_its_tag() {
+        let mut app = speaker_test_app();
+        // Occupy the voice with an untagged blocking effect.
+        send_speaker_event(
+            &mut app,
+            SpeakerEffect::always_audible(SoundEffect::ActionSnap),
+        );
+        let snap_voice = speaker_voices(&mut app);
+        assert_eq!(snap_voice.len(), 1);
+
+        let mut writer = app.world_mut().resource_mut::<Events<SpeakerEffect>>();
+        writer.send(
+            SpeakerEffect::always_audible_program(long_dissolve_run())
+                .interruptible(InterruptibleSound::GatedDissolve),
+        );
+        writer.send(SpeakerEffect::always_audible(SoundEffect::BlockedStep));
+        writer.send(SpeakerEffect::cancel(InterruptibleSound::GatedDissolve));
+        writer.send(
+            SpeakerEffect::always_audible_program(long_dissolve_run())
+                .interruptible(InterruptibleSound::GatedDissolve),
+        );
+        app.update();
+
+        assert_eq!(
+            speaker_voices(&mut app),
+            snap_voice,
+            "an untagged sounding effect is never cut"
+        );
+        let waiting: Vec<(usize, Option<InterruptibleSound>)> = app
+            .world()
+            .resource::<SpeakerQueue>()
+            .0
+            .iter()
+            .map(|queued| (queued.program.tone_count(), queued.interruptible))
+            .collect();
+        let blocked = SoundEffect::BlockedStep
+            .program(&mut RumbleJitter::new())
+            .tone_count();
+        assert_eq!(
+            waiting,
+            vec![
+                (blocked, None),
+                (16_160, Some(InterruptibleSound::GatedDissolve)),
+            ]
+        );
+    }
+
+    /// A cancel with nothing under its tag is a no-op.
+    #[test]
+    fn a_cancel_with_nothing_to_cut_changes_nothing() {
+        let mut app = speaker_test_app();
+        send_speaker_event(
+            &mut app,
+            SpeakerEffect::always_audible(SoundEffect::ActionSnap),
+        );
+        let voice = speaker_voices(&mut app);
+        send_speaker_event(
+            &mut app,
+            SpeakerEffect::cancel(InterruptibleSound::GatedDissolve),
+        );
+        assert_eq!(speaker_voices(&mut app), voice);
     }
 
     #[test]
@@ -26799,6 +27097,7 @@ mod tests {
             pending_pre_flourish_outcome: None,
             title_tick_frames: None,
             pending_reveal_clicks: Vec::new(),
+            pending_speaker_cancels: Vec::new(),
         };
 
         let result = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
@@ -27144,6 +27443,7 @@ mod tests {
             pending_pre_flourish_outcome: None,
             title_tick_frames: None,
             pending_reveal_clicks: Vec::new(),
+            pending_speaker_cancels: Vec::new(),
         };
         intro.dispatch.dismiss_title();
         intro.dispatch.submit_menu_key(b'U');
@@ -27206,6 +27506,7 @@ mod tests {
             pending_pre_flourish_outcome: None,
             title_tick_frames: None,
             pending_reveal_clicks: Vec::new(),
+            pending_speaker_cancels: Vec::new(),
         }
     }
 
@@ -27248,6 +27549,7 @@ mod tests {
             pending_pre_flourish_outcome: None,
             title_tick_frames: None,
             pending_reveal_clicks: Vec::new(),
+            pending_speaker_cancels: Vec::new(),
         };
         if matches!(intro.panel, VisualIntroPanel::ReturnToView { .. }) {
             intro.modal_backing = Some(visual_intro_title_art_buffer(&intro.game_dir, None, None));

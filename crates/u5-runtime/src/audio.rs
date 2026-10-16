@@ -478,6 +478,85 @@ impl SpeakerProgram {
     pub fn ends_with_stop(&self) -> bool {
         matches!(self.ops.last(), Some(SpeakerOp::Stop))
     }
+
+    /// The program as it sounds when it is cut `elapsed_nanos` after it
+    /// started: every operation that had begun by then, the one in progress
+    /// shortened to the cut, and a final [`SpeakerOp::Stop`].
+    ///
+    /// This is what a frontend owes the listener when the *caller* of an
+    /// effect stops early. The single-voice queue lowers some effects ahead
+    /// of time as one continuous program - the gated start/menu dissolve is
+    /// the case that needs it - while in the original the speaker work is
+    /// interleaved with the caller's own loop, so it ends where that loop
+    /// ends. `audio.md §2` still requires the stop at the (now earlier)
+    /// effect end, so one is always appended.
+    ///
+    /// An envelope segment is shortened to the iterations it completed at the
+    /// `audible` arm's iteration cost. A cut at or past the program's end
+    /// returns the program unchanged.
+    pub fn truncated_at(&self, elapsed_nanos: u64, audible: bool) -> SpeakerProgram {
+        if elapsed_nanos >= self.total_nanos(audible) {
+            return self.clone();
+        }
+        let mut ops = Vec::new();
+        let mut start = 0u64;
+        for op in &self.ops {
+            if start >= elapsed_nanos {
+                break;
+            }
+            let remaining = elapsed_nanos - start;
+            let nanos = op.nanos(audible);
+            if nanos <= remaining {
+                ops.push(*op);
+            } else {
+                match *op {
+                    SpeakerOp::Tone {
+                        frequency_hz,
+                        divisor,
+                        ..
+                    } => ops.push(SpeakerOp::Tone {
+                        frequency_hz,
+                        divisor,
+                        nanos: remaining,
+                    }),
+                    SpeakerOp::Silence { .. } => ops.push(SpeakerOp::Silence { nanos: remaining }),
+                    SpeakerOp::Envelope(segment) => {
+                        let iterations =
+                            (remaining / EnvelopeSegment::nanos_per_iteration(audible)) as u32;
+                        if iterations > 0 {
+                            ops.push(SpeakerOp::Envelope(EnvelopeSegment {
+                                iterations,
+                                ..segment
+                            }));
+                        }
+                    }
+                    SpeakerOp::Stop => ops.push(SpeakerOp::Stop),
+                }
+            }
+            start = start.saturating_add(nanos);
+        }
+        if !matches!(ops.last(), Some(SpeakerOp::Stop)) {
+            ops.push(SpeakerOp::Stop);
+        }
+        SpeakerProgram::new(ops)
+    }
+}
+
+/// An effect whose speaker program may be cut short by a later event.
+///
+/// The frontend's single voice plays each queued program to its end, which is
+/// right for the blocking effects `audio.md` describes. A few effects are
+/// different: their speaker work is interleaved with a caller loop that a key
+/// can stop, so the sound has to stop with it. A program queued under one of
+/// these tags can be cancelled - dropped if it is still waiting, cut (see
+/// [`SpeakerProgram::truncated_at`]) if it is sounding - without disturbing
+/// anything else on the queue.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
+pub enum InterruptibleSound {
+    /// `audio.md §8.6.1` / `intro.md §3` loader step 4: the gated start/menu
+    /// logo dissolve retunes the carrier once per checked visit, so a key
+    /// that stops the dissolve also ends the carrier at the shared exit.
+    GatedDissolve,
 }
 
 // ---------------------------------------------------------------------------
@@ -2134,6 +2213,55 @@ mod tests {
             "audio.md §8.9: the last tone played is 272 Hz"
         );
         assert!(program.ends_with_stop(), "§8.9 ends in hard silence");
+    }
+
+    #[test]
+    fn a_cut_program_keeps_what_had_sounded_and_stops_at_the_cut() {
+        let period = 173_000;
+        let run = dissolve_click_run_at(&[300, 400, 500, 600], period);
+        assert_eq!(run.total_nanos(true), 4 * period);
+
+        // Inside the third retune: two whole pitches, the third shortened.
+        let cut = run.truncated_at(2 * period + 50_000, true);
+        assert_eq!(cut.frequencies(), vec![300, 400, 500]);
+        assert_eq!(cut.total_nanos(true), 2 * period + 50_000);
+        assert!(
+            cut.ends_with_stop(),
+            "audio.md §2: a stop at the effect end"
+        );
+
+        // Exactly on a boundary: nothing of the next pitch starts.
+        let cut = run.truncated_at(period, true);
+        assert_eq!(cut.frequencies(), vec![300]);
+        assert!(cut.ends_with_stop());
+
+        // A cut before anything sounded is a bare stop.
+        assert_eq!(
+            run.truncated_at(0, true),
+            SpeakerProgram::new(vec![SpeakerOp::Stop])
+        );
+        // A cut at or past the end changes nothing.
+        assert_eq!(run.truncated_at(4 * period, true), run);
+        assert_eq!(run.truncated_at(u64::MAX, true), run);
+    }
+
+    #[test]
+    fn a_cut_envelope_keeps_its_completed_iterations_per_arm() {
+        let program = shrine_ordination_chime_program();
+        let audible_total = program.total_nanos(true);
+        let half = audible_total / 2;
+        let cut = program.truncated_at(half, true);
+        assert!(cut.ends_with_stop());
+        assert!(cut.total_nanos(true) <= half);
+        assert!(
+            half - cut.total_nanos(true) < EnvelopeSegment::nanos_per_iteration(true),
+            "only the partial iteration is dropped"
+        );
+        // The muted arm runs faster (`cleak/u5-spec#146`), so the same cut
+        // keeps more of the program.
+        let muted = program.truncated_at(half, false);
+        assert!(muted.total_nanos(false) <= half);
+        assert!(half - muted.total_nanos(false) < EnvelopeSegment::nanos_per_iteration(false));
     }
 
     #[test]
