@@ -61,9 +61,13 @@ impl PlayState {
             Area::Dungeon { level, .. } => level as i8,
             Area::World { plane } => plane.save_floor(),
         };
-        let (aux1, aux3) = match self.player.transport {
-            TransportState::Ship { hull, skiffs, .. } => (hull, skiffs),
-            _ => (0, 0),
+        // `vehicles.md`: "The hull-condition byte is active-object byte `+5`
+        // of the party's vessel record", and boarding copies hull and skiffs
+        // into it. This engine keeps them in the ship transport state, so
+        // while aboard that state *is* the record's bytes 5 and 7.
+        let vessel_aux = match self.player.transport {
+            TransportState::Ship { hull, skiffs, .. } => Some((hull, skiffs)),
+            _ => None,
         };
         let marker = self.player.transport.save_marker();
         let player_object = ActiveObject {
@@ -73,8 +77,8 @@ impl PlayState {
             y: self.player.y,
             z,
             phase: PLAYER_ACTIVE_OBJECT_PHASE,
-            aux1,
-            aux3,
+            aux1: vessel_aux.map_or(0, |(hull, _)| hull),
+            aux3: vessel_aux.map_or(0, |(_, skiffs)| skiffs),
         };
         if self.active_objects.is_empty() {
             self.active_objects.push(player_object);
@@ -83,17 +87,20 @@ impl PlayState {
 
         // `active-objects.md §5`: index zero, not a magic type byte,
         // identifies the player. Refresh the five compositor-owned bytes
-        // while retaining the record's phase field. Transport-specific
-        // auxiliary bytes follow the live transport state during ordinary
-        // play; the town-exit mirror path performs its narrower byte-0..4
-        // synchronization directly so reloaded auxiliary bytes survive.
+        // and stop: "Bytes 5, 6 and 7 of slot zero are not part of that
+        // rebuild. The per-frame refresh writes bytes 0 through 4 and
+        // stops." Off a ship, bytes 5 and 7 therefore round-trip untouched
+        // (they are no longer zeroed every frame); aboard, they mirror the
+        // vessel state the engine keeps in the transport (see above).
         self.active_objects[0].type_byte = player_object.type_byte;
         self.active_objects[0].tile = player_object.tile;
         self.active_objects[0].x = player_object.x;
         self.active_objects[0].y = player_object.y;
         self.active_objects[0].z = player_object.z;
-        self.active_objects[0].aux1 = player_object.aux1;
-        self.active_objects[0].aux3 = player_object.aux3;
+        if vessel_aux.is_some() {
+            self.active_objects[0].aux1 = player_object.aux1;
+            self.active_objects[0].aux3 = player_object.aux3;
+        }
         // `overworld.md §8.1`: the falls chain hides the marker across its
         // damage pass and the whirlpool replaces it with the whirlpool
         // sprite, both restoring it before the state commit. Re-apply the

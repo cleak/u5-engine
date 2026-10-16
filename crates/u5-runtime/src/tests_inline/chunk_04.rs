@@ -37,8 +37,10 @@ fn sync_player_object_refreshes_slot_zero_without_treating_actor_bytes_as_duplic
             y: 5,
             z: WorldPlane::Underworld.save_floor(),
             phase: 0x21,
-            aux1: 0,
-            aux3: 0,
+            // `active-objects.md §5`: bytes 5, 6 and 7 of slot zero are
+            // not part of the per-frame rebuild; off a ship they round-trip.
+            aux1: 7,
+            aux3: 8,
         }
     );
     assert_eq!(
@@ -1213,4 +1215,29 @@ fn exit_vehicle_skips_foot_damaging_sidecar_landing_cells() {
     assert_eq!(state.turn, 1);
     assert_eq!(state.message, "ship!");
     let _ = fs::remove_dir_all(dir);
+}
+
+#[test]
+fn sync_player_object_leaves_slot_zero_aux_bytes_on_foot_and_mirrors_vessel_aboard() {
+    // `active-objects.md §5`: the per-frame refresh writes bytes 0..4 and
+    // stops; aboard, the engine's transport state is the vessel's bytes 5/7.
+    let mut state = world_state(open_world_grid(), 4, 5);
+    state.active_objects[0].aux1 = 0x31;
+    state.active_objects[0].aux3 = 0x02;
+    state.active_objects[0].phase = 0;
+    state.sync_player_object();
+    assert_eq!(state.active_objects[0].aux1, 0x31);
+    assert_eq!(state.active_objects[0].aux3, 0x02);
+    assert_eq!(state.active_objects[0].phase, 0);
+
+    state.player.transport = TransportState::Ship {
+        type_byte: 0x24,
+        tile: 0x24,
+        sails_hoisted: false,
+        hull: 55,
+        skiffs: 1,
+    };
+    state.sync_player_object();
+    assert_eq!(state.active_objects[0].aux1, 55);
+    assert_eq!(state.active_objects[0].aux3, 1);
 }
