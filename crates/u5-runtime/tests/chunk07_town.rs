@@ -149,6 +149,9 @@ fn blackthorn_first_wrong_answer_threatens_and_re_asks_instead_of_ending() {
     let scene = Scene::new(BLACKTHORN_CAPTIVE_CELL_SCENE).unwrap();
     state.area = Area::Town { scene, floor: 0 };
     state.begin_blackthorn_audience_capture(&dir).unwrap();
+    // `blackthorn.md §3`: the greeting and preamble acknowledgements.
+    state.submit_blackthorn_audience_answer("", &dir).unwrap();
+    state.submit_blackthorn_audience_answer("", &dir).unwrap();
     assert!(state.active_blackthorn.is_some());
 
     // Shrine zero is Honesty, whose accepted answer is `Ahm`.
@@ -221,6 +224,9 @@ fn blackthorn_middle_wrong_answers_stamp_props_without_erasing_the_victim() {
         floor: 0,
     };
     state.begin_blackthorn_audience_capture(&dir).unwrap();
+    // `blackthorn.md §3`: the greeting and preamble acknowledgements.
+    state.submit_blackthorn_audience_answer("", &dir).unwrap();
+    state.submit_blackthorn_audience_answer("", &dir).unwrap();
 
     state
         .submit_blackthorn_audience_answer("nonsense", &dir)
@@ -288,6 +294,9 @@ fn blackthorn_fourth_wrong_answer_executes_the_named_companion() {
     let scene = Scene::new(BLACKTHORN_CAPTIVE_CELL_SCENE).unwrap();
     state.area = Area::Town { scene, floor: 0 };
     state.begin_blackthorn_audience_capture(&dir).unwrap();
+    // `blackthorn.md §3`: the greeting and preamble acknowledgements.
+    state.submit_blackthorn_audience_answer("", &dir).unwrap();
+    state.submit_blackthorn_audience_answer("", &dir).unwrap();
     let victim_name = state.party_names[1];
 
     for ordinal in 1..=3 {
@@ -404,6 +413,9 @@ fn blackthorn_correct_answer_runs_the_audience_exit_beat() {
     let scene = Scene::new(BLACKTHORN_CAPTIVE_CELL_SCENE).unwrap();
     state.area = Area::Town { scene, floor: 0 };
     state.begin_blackthorn_audience_capture(&dir).unwrap();
+    // `blackthorn.md §3`: the greeting and preamble acknowledgements.
+    state.submit_blackthorn_audience_answer("", &dir).unwrap();
+    state.submit_blackthorn_audience_answer("", &dir).unwrap();
     let mantra = state
         .active_blackthorn
         .as_ref()

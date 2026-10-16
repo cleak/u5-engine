@@ -2246,6 +2246,12 @@
 
         assert!(state.pending_town_arrest.is_none());
         assert!(state.active_blackthorn.is_some());
+        // `blackthorn.md §3`: the greeting page and the preamble record each
+        // take a blocking key before the first demand is asked.
+        assert!(state.active_blackthorn.as_ref().unwrap().awaiting_acknowledgement());
+        for _ in 0..2 {
+            handle_play_key_input(&mut state, ' ', "", &dir).unwrap();
+        }
         // blackthorn.md §3 step 3: "Clear the active-object table so the
         // audience scene can reuse those records as temporary cinematic
         // actors."
@@ -2391,9 +2397,16 @@
         );
 
         assert!(state.active_blackthorn.is_some());
+        // `blackthorn.md §3` steps 8-9: the greeting page holds for a key,
+        // then record `11` is printed and holds for the second key, and only
+        // then is the first demand asked.
+        assert!(!state.message.contains("authored demand"), "{}", state.message);
+        state.submit_blackthorn_audience_answer("", &dir).unwrap();
+        assert_eq!(state.message, "authored capture line");
+        state.submit_blackthorn_audience_answer("", &dir).unwrap();
         assert_eq!(
             state.message,
-            "authored capture line\n\nauthored demand for Honesty?\"\n\nYour response?"
+            "authored demand for Honesty?\"\n\nYour response?"
         );
         let _ = fs::remove_dir_all(dir);
     }
@@ -2451,6 +2464,9 @@
             state.begin_blackthorn_audience_capture(&dir).unwrap(),
             Some(MoveOutcome::Used)
         );
+        // `blackthorn.md §3` step 8: the guard-release route runs on the
+        // greeting page's acknowledgement key.
+        state.submit_blackthorn_audience_answer("", &dir).unwrap();
 
         for placement in BLACKTHORN_AUDIENCE_ACTOR_PLACEMENTS {
             let slot = placement.actor.slot_index() as usize;

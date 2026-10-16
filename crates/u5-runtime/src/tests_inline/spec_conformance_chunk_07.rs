@@ -349,6 +349,9 @@ fn blackthorn_capture_chain_leaves_the_party_without_its_keys() {
     state.begin_blackthorn_audience_capture(&dir).unwrap();
     assert!(state.active_blackthorn.is_some());
     assert_eq!(state.keys, 4, "the keys survive until the cleanup");
+    // `blackthorn.md §3`: the greeting and preamble acknowledgements.
+    state.submit_blackthorn_audience_answer("", &dir).unwrap();
+    state.submit_blackthorn_audience_answer("", &dir).unwrap();
 
     // Shrine zero is Honesty, whose accepted answer is `Ahm`.
     state

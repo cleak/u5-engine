@@ -13,6 +13,14 @@ use crate::blackthorn::{
 pub enum BlackthornChallengePhase {
     #[default]
     AwaitingAudience,
+    /// `blackthorn.md §3` step 8: the greeting page, held for "an
+    /// acknowledgement key" before the release lines and the guard-release
+    /// route.
+    AwaitingGreetingAcknowledgement,
+    /// `blackthorn.md §3` step 9 / §4.1: record `11`, the preamble, "then
+    /// acknowledgement and two line feeds before the first demand" - the
+    /// audience's second key before any ask.
+    AwaitingPreambleAcknowledgement,
     PresentingPrompt {
         ordinal: u8,
     },
@@ -43,6 +51,8 @@ pub enum BlackthornChallengePhase {
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum BlackthornChallengeOutcome {
     PromptPresented { ordinal: u8, prompt: &'static str },
+    /// The greeting page's acknowledgement was taken; the preamble follows.
+    GreetingAcknowledged,
     Correct { ordinal: u8 },
     Wrong { ordinal: u8, expected: &'static str },
     Survived,
@@ -161,6 +171,11 @@ impl BlackthornChallenge {
             BlackthornChallengePhase::Survived => BlackthornChallengeOutcome::AlreadySurvived,
             BlackthornChallengePhase::Aborted => BlackthornChallengeOutcome::AlreadyAborted,
             BlackthornChallengePhase::AwaitingAudience => self.begin(),
+            BlackthornChallengePhase::AwaitingGreetingAcknowledgement => {
+                self.phase = BlackthornChallengePhase::AwaitingPreambleAcknowledgement;
+                BlackthornChallengeOutcome::GreetingAcknowledged
+            }
+            BlackthornChallengePhase::AwaitingPreambleAcknowledgement => self.begin(),
             BlackthornChallengePhase::AwaitingClosingAcknowledgement { .. } => {
                 self.phase = BlackthornChallengePhase::Survived;
                 BlackthornChallengeOutcome::AlreadySurvived
@@ -212,7 +227,15 @@ impl BlackthornChallenge {
         matches!(
             self.phase,
             BlackthornChallengePhase::AwaitingAcknowledgement { .. }
+                | BlackthornChallengePhase::AwaitingGreetingAcknowledgement
+                | BlackthornChallengePhase::AwaitingPreambleAcknowledgement
         )
+    }
+
+    /// `blackthorn.md §3` steps 8-9: hold the greeting page for the first of
+    /// the audience's two setup acknowledgements.
+    pub fn await_greeting_acknowledgement(&mut self) {
+        self.phase = BlackthornChallengePhase::AwaitingGreetingAcknowledgement;
     }
 
     /// Hold the reaction on screen until the player acknowledges it.
@@ -387,6 +410,26 @@ mod tests {
         assert_eq!(c.wrong_count, 4);
         assert_eq!(c.wrong_escalation(), Some(BlackthornWrongEscalation::Kill));
         assert_eq!(c.current_wording(), None);
+    }
+
+    #[test]
+    fn audience_setup_takes_two_acknowledgements_before_the_first_ask() {
+        // `blackthorn.md §3`: "the audience takes **two** blocking key
+        // presses before the first demand is ever asked, one after the
+        // greeting page and one after the preamble record."
+        let mut c = BlackthornChallenge::for_shrine(2);
+        c.await_greeting_acknowledgement();
+        assert!(c.awaiting_acknowledgement());
+        assert_eq!(c.current_prompt(), None);
+        assert_eq!(c.submit(""), BlackthornChallengeOutcome::GreetingAcknowledged);
+        assert!(c.awaiting_acknowledgement());
+        assert_eq!(c.current_prompt(), None);
+        assert!(matches!(
+            c.submit(""),
+            BlackthornChallengeOutcome::PromptPresented { ordinal: 0, .. }
+        ));
+        assert_eq!(c.current_prompt(), Some((0, "Valour")));
+        assert!(!c.awaiting_acknowledgement());
     }
 
     #[test]

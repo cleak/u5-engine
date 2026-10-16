@@ -4454,46 +4454,30 @@ impl PlayState {
 
         let mut challenge =
             crate::blackthorn_session::BlackthornChallenge::for_shrine(shrine_index as u8);
-        let prompt = match challenge.begin() {
-            crate::blackthorn_session::BlackthornChallengeOutcome::PromptPresented {
-                prompt,
-                ..
-            } => prompt,
-            _ => "Virtue",
-        };
-        let virtue = challenge.shrine_virtue();
-        let preamble = self.blackthorn_audience_opening_text(game_dir)?;
-        let demand = self.blackthorn_demand_text(game_dir, 0, virtue)?;
         self.blackthorn_audience_map =
             load_miscmaps_cutscene_map(game_dir, BLACKTHORN_AUDIENCE_CUTSCENE_MAP_RECORD)?;
         self.install_blackthorn_audience_actors();
         let approach =
             self.run_blackthorn_cutscene_beat(BlackthornCutsceneBeat::AudienceThroneApproach);
-        let release = self.run_blackthorn_cutscene_beat(BlackthornCutsceneBeat::GuardReleaseRoute);
+        // `blackthorn.md §3` step 8: "Greet the addressed member by name,
+        // **wait for an acknowledgement key**, then print the gendered release
+        // lines and run the guard-release route script". The audience "takes
+        // **two** blocking key presses before the first demand is ever asked,
+        // one after the greeting page and one after the preamble record".
+        //
+        // The greeting and release literals are resident strings §3 names
+        // but does not publish, so this engine prints neither and holds the
+        // page it has; the two key waits are the published contract.
+        challenge.await_greeting_acknowledgement();
         self.active_blackthorn = Some(challenge);
-        let _ = prompt;
-        // `blackthorn.md §4.1`: record `11` is "the Wait/Avatarhood speech,
-        // then acknowledgement and two line feeds before the first demand",
-        // and every demand "is followed by `\n\nYour response?\n:`". The
-        // section is equally explicit about what must not appear: "Do not
-        // append an answer, prompt ordinal, roster slot number, cutscene
-        // timing value or other diagnostic information to the original
-        // text." The engine printed exactly that - `Blackthorn audience:
-        // <record 0>. Opening cutscene advanced 57 world ticks; the guard
-        // release advanced 23. Blackthorn demands the mantra of Honesty.` -
-        // where the stock game printed the speech and the quoted first
-        // demand. Caught by `qa/tools/paired_compare.py` at `bt-audience`'s
-        // `ask1` beat (`cleak/u5-engine#21`); the cutscene tick counts move
-        // to the diagnostic channel, where the rest of the audience's
-        // bookkeeping already lives.
+        // `blackthorn.md §4.1`: "Do not append an answer, prompt ordinal,
+        // roster slot number, cutscene timing value or other diagnostic
+        // information to the original text", so the tick counts go to the
+        // diagnostic channel (`cleak/u5-engine#21`).
         self.push_diagnostic(format!(
-            "Blackthorn audience opened: the approach advanced {} world ticks and the guard release {}.",
-            approach.world_ticks, release.world_ticks,
+            "Blackthorn audience opened: the approach advanced {} world ticks.",
+            approach.world_ticks,
         ));
-        self.message = match preamble {
-            Some(preamble) => format!("{preamble}\n\n{demand}\n\n{BLACKTHORN_INPUT_PROMPT}"),
-            None => format!("{demand}\n\n{BLACKTHORN_INPUT_PROMPT}"),
-        };
         Ok(Some(MoveOutcome::Used))
     }
 
@@ -4774,7 +4758,7 @@ impl PlayState {
                     crate::MISCMSG_BLACKTHORN_TREACHERY_SPEECH,
                     "",
                 )?;
-                drop(challenge);
+                let _ = challenge;
                 self.emit_message_line(speech);
                 self.push_explicit_blank_message_entry();
                 self.blackthorn_audience_punished = false;
@@ -4824,6 +4808,19 @@ impl PlayState {
             let mut challenge = self.active_blackthorn.take().expect("checked above");
             let outcome = challenge.submit("");
             let message = match outcome {
+                // `blackthorn.md §3` steps 8-9: the greeting's key releases
+                // the guard-release route, then record `11` is printed and
+                // held for the audience's second acknowledgement.
+                crate::blackthorn_session::BlackthornChallengeOutcome::GreetingAcknowledged => {
+                    let release =
+                        self.run_blackthorn_cutscene_beat(BlackthornCutsceneBeat::GuardReleaseRoute);
+                    self.push_diagnostic(format!(
+                        "Blackthorn audience: the guard release advanced {} world ticks.",
+                        release.world_ticks,
+                    ));
+                    self.blackthorn_audience_opening_text(game_dir)?
+                        .unwrap_or_default()
+                }
                 crate::blackthorn_session::BlackthornChallengeOutcome::PromptPresented {
                     ordinal,
                     prompt,
@@ -5145,6 +5142,12 @@ impl PlayState {
                 ),
             crate::blackthorn_session::BlackthornChallengeOutcome::AlreadyAborted => {
                 self.blackthorn_resolved_handoff(game_dir, "Blackthorn's challenge was aborted.")
+            }
+            // Setup acknowledgements are consumed above, before any answer is
+            // read; reaching here only re-renders the held page.
+            crate::blackthorn_session::BlackthornChallengeOutcome::GreetingAcknowledged => {
+                self.active_blackthorn = Some(challenge);
+                Ok(MoveOutcome::PromptDeclined)
             }
         }
     }
