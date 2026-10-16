@@ -2702,13 +2702,15 @@ impl PlayState {
         }
 
         let narrative = if self.shrine_ordained_mask != 0 {
-            "\nPass, Seeker!\n"
+            // systems/overworld.md 9.3: the shared fragment is `\n"`; both
+            // arms close the quotation.
+            "\n\"Pass, Seeker!\"\n"
         } else {
             self.player.y = (self.player.y + 1) % WORLD_SIDE;
             self.sync_player_object();
             let _ = self.rebuild_world_live_chunks_from_grid(plane);
             self.mark_visibility_dirty();
-            "\nThou art not upon a Sacred Quest!\nPassage denied!\n"
+            "\n\"Thou art not upon a Sacred Quest!\nPassage denied!\"\n"
         };
         // The accepted step no longer leaves a line in the slot, so the
         // narrative block must not open with the separator newline it used

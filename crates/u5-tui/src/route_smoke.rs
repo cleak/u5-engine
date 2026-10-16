@@ -6963,7 +6963,7 @@ fn validate_route_smoke_case_state(
                 })
                 || !state
                     .message
-                    .ends_with("Thou art not upon a Sacred Quest!\nPassage denied!\n")
+                    .ends_with("\"Thou art not upon a Sacred Quest!\nPassage denied!\"\n")
             {
                 return Err(io::Error::other(format!(
                     "route smoke `{case_name}` did not apply the unordained narrative gate branch"
@@ -6979,7 +6979,7 @@ fn validate_route_smoke_case_state(
             ) || state.player.x != NARRATIVE_GATE_X as usize
                 || state.player.y != NARRATIVE_GATE_Y as usize
                 || state.shrine_ordained_mask == 0
-                || !state.message.ends_with("Pass, Seeker!\n")
+                || !state.message.ends_with("\"Pass, Seeker!\"\n")
             {
                 return Err(io::Error::other(format!(
                     "route smoke `{case_name}` did not apply the ordained passage branch"
