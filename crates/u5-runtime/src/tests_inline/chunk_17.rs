@@ -1823,10 +1823,21 @@
         // possession."
         assert_eq!(vanquished.special_items[SPECIAL_ITEM_SHARD_COWARDICE_INDEX], 1);
         assert_eq!(
-            vanquished.message,
+            shard_presentation_text(&vanquished),
             "Thou dost hold above thee the evil Shard of Cowardice...\n\n...and cast it into the Flame of Courage!\n"
         );
         assert_eq!(vanquished.turn, 0);
+    }
+
+    /// The shard narration as the player ends up reading it: the aloft line
+    /// printed at once plus every beat staged behind `quest-graph.md §5`
+    /// step 2's swell.
+    fn shard_presentation_text(state: &PlayState) -> String {
+        let mut text = state.message.clone();
+        for beat in state.staged_narration.beats() {
+            text.push_str(&beat.text);
+        }
+        text
     }
 
     #[test]
@@ -1863,7 +1874,7 @@
         assert!(!state.shadowlord_name_encounter_present(SHADOWLORD_FALSEHOOD_INDEX));
         assert_eq!(state.turn, 1);
         assert_eq!(
-            state.message,
+            shard_presentation_text(&state),
             // `inventory.md §7.1`: the destruction "adds `\nThe doom of the
             // Shadowlord_`, the matching name Faulinei, Astaroth or
             // Nosfentor, then `_is wrought!\n`". The cast line already
@@ -1955,7 +1966,7 @@
             // Courage (phase 4), and a closing line "naming the destroyed
             // Shadowlord" (phase 6). The three shard rows differ in exactly
             // those three words and in nothing else.
-            assert_eq!(state.message, message);
+            assert_eq!(shard_presentation_text(&state), message);
         }
     }
 
@@ -2065,7 +2076,7 @@
         // returns. It prints no refusal line." Printing one is the second
         // divergence §5 names explicitly.
         assert_eq!(
-            state.message,
+            shard_presentation_text(&state),
             "Thou dost hold above thee the evil Shard of Falsehood...\n\n...and cast it into the Flame of Truth!\n"
         );
     }

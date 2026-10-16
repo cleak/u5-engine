@@ -1224,10 +1224,11 @@ impl PlayState {
     /// Boundary: the exact heading, aloft, cast and destruction strings are
     /// not published — only their order, their completing words, and which of
     /// them are unconditional — so the literals below are engine voice. The
-    /// rising/falling pitch sweep of phase 2 has no published `audio.md §8`
-    /// row and no [`SoundEffect`] variant, so it is not emitted rather than
-    /// borrowing a neighbouring cue; the `§8.4` destruction flash below is
-    /// published and is preserved at its own boundary.
+    /// rising/falling sweep of phase 2 is [`SoundEffect::ShardSwell`]
+    /// (`audio.md §5.4.7`'s Shadowlord-destruction row) and plays before the
+    /// position gate on every path; the text after it waits the swell out.
+    /// The `§8.4` destruction flash below is published and is preserved at
+    /// its own boundary.
     pub fn use_shadowlord_shard(
         &mut self,
         index: usize,
@@ -1275,58 +1276,56 @@ impl PlayState {
             self.published_eternal_flame_at_current_position()
         };
         let on_position = flame_entry.is_some_and(|entry| entry.flame == required_flame);
+        // Phase 2, the unconditional rise-and-fall. `quest-graph.md §5`
+        // step 2: "It then plays a rising pitch sweep, followed by a falling
+        // one, again unconditionally" - before the position gate, so the
+        // destruction row hears it too. Measured pending u5-spec#296
+        // (`qa/paired/use-shard-sweep.tsv`, stock side): the aloft line is up
+        // within ~0.1 s of Return, the swell runs 8.25-8.27 s, and the next
+        // text is on screen by the first sample after it ends. The engine
+        // printed everything at once (`use-specials/sceptre`, four rows
+        // apart, `cleak/u5-engine#25`). Whatever follows waits out the swell:
+        // the stock window ends on the aloft row itself during it, and that
+        // row is still open when the next line's first feed arrives to close
+        // it.
+        self.emit_sound_effect(SoundEffect::ShardSwell);
+        let swell_secs = SoundEffect::ShardSwell
+            .program(&mut crate::audio::RumbleJitter::default())
+            .duration(true)
+            .as_secs_f64();
         if !on_position {
             // §7.1: "A wrong destruction position adds `\n\nNo effect!\n`" -
             // two line feeds, so a blank row stands between the aloft line and
             // the refusal. This engine spent one.
             //
-            // Phase 2, the unconditional rise-and-fall, stands between the
-            // aloft line and that refusal. Measured pending u5-spec#296
-            // (`qa/paired/use-shard-sweep.tsv`, stock side): the aloft line
-            // is up within ~0.1 s of Return, the swell runs 8.25-8.27 s, and
-            // `No effect!` is on screen by the first sample after it ends.
-            // The engine printed both at once (`use-specials/sceptre`, four
-            // rows apart, `cleak/u5-engine#25`). Both feeds wait out the
-            // swell with the refusal: the stock window ends on the aloft row
-            // itself during it (a feed spent now scrolled the engine one row
-            // ahead), and that row is still open when the refusal's first
-            // feed arrives to close it.
-            //
             // Not reproduced: the stock side also draws the stats panel
             // inverted from the aloft line onward, and it is still inverted
             // after a following Pass. When it is restored is not measured,
             // so this engine leaves the panel alone rather than guess.
-            //
-            // Only this branch is paced. On the destruction row the swell
-            // presumably precedes the cast line too, but that path has no
-            // capture, so it stays as it was.
-            self.emit_sound_effect(SoundEffect::ShardSwell);
-            self.staged_narration.push_secs_on_open_row(
-                SoundEffect::ShardSwell
-                    .program(&mut crate::audio::RumbleJitter::default())
-                    .duration(true)
-                    .as_secs_f64(),
-                "\n\nNo effect!\n",
-            );
+            self.staged_narration
+                .push_secs_on_open_row(swell_secs, "\n\nNo effect!\n");
             return Ok(MoveOutcome::Blocked);
         }
 
         // Phase 4: the cast-into-the-flame line, completed by the opposed
-        // principle's word, printed *before* the remaining two gates.
+        // principle's word, printed *before* the remaining two gates and,
+        // like the refusal above, behind the swell.
         // §7.1: "At the matching position, the next text is
         // `\n\n...and cast it into the Flame of_` followed by `Truth!\n`,
         // `Love!\n` or `Courage!\n`."
-        self.message.push_str(&format!(
-            "\n\n...and cast it into the {}!\n",
-            required_flame.label()
-        ));
+        // `quest-graph.md §5` step 4 also brackets this line with a pause
+        // before and after; neither length is published, so no extra hold
+        // is invented beyond the swell.
+        let mut staged_tail = format!("\n\n...and cast it into the {}!\n", required_flame.label());
 
         // Phase 5: the Shadowlord-on-flame and handshake gates are silent.
-        // `self.message` is left as the cast line and nothing new is printed.
+        // The cast line is the last text and nothing new is printed.
         // A shard whose Shadowlord slot is already vanquished can have no live
         // matching encounter, so it belongs with these silent tests rather
         // than with the position gate.
         if !self.shadowlord_alive(index) || !self.matching_shadowlord_name_encounter_north(index) {
+            self.staged_narration
+                .push_secs_on_open_row(swell_secs, staged_tail);
             return Ok(MoveOutcome::Blocked);
         }
 
@@ -1351,8 +1350,9 @@ impl PlayState {
         // clothes. The count keeps its value as bookkeeping and goes where
         // the rest of this engine's bookkeeping goes.
         let name = shadowlord_name_for_slot(index).unwrap_or("The Shadowlord");
-        self.message
-            .push_str(&format!("{USE_SHARD_DOOM_PREFIX}{name}{USE_SHARD_DOOM_SUFFIX}"));
+        staged_tail.push_str(&format!("{USE_SHARD_DOOM_PREFIX}{name}{USE_SHARD_DOOM_SUFFIX}"));
+        self.staged_narration
+            .push_secs_on_open_row(swell_secs, staged_tail);
         self.diagnostics
             .push(format!("shard destruction cleared {cleared} encounter(s)"));
         Ok(MoveOutcome::Used)

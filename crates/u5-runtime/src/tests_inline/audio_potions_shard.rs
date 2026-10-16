@@ -314,8 +314,10 @@ fn shadowlord_destruction_runs_the_shared_major_flash() {
     );
 
     let effects = state.sound_effects_after(serial);
-    assert_eq!(effects.len(), 1, "one flash per destruction");
-    match &effects[0] {
+    // `quest-graph.md §5` step 2's unconditional swell, then one flash.
+    assert_eq!(effects.len(), 2, "the swell and one flash per destruction");
+    assert_eq!(effects[0], SoundEffect::ShardSwell);
+    match &effects[1] {
         SoundEffect::MajorFlash { bands } => {
             assert_eq!(bands.len(), audio::FLASH_BAND_COUNT as usize);
             assert!(bands.iter().all(|band| {
@@ -400,7 +402,12 @@ fn shadowlord_shard_refusals_never_flash() {
         absent.special_items[SPECIAL_ITEM_SHARD_FALSEHOOD_INDEX], 1,
         "a refusal must not consume the shard"
     );
-    assert!(absent.sound_effects_after(serial).is_empty());
+    // `quest-graph.md §5` step 2: the swell precedes the position gate, so
+    // it plays on the destruction row as well; the flash still does not.
+    assert_eq!(
+        absent.sound_effects_after(serial),
+        vec![SoundEffect::ShardSwell]
+    );
 
     let _ = fs::remove_dir_all(dir);
 }
@@ -465,4 +472,52 @@ fn off_position_shard_holds_no_effect_until_the_swell_ends() {
     assert_eq!(state.message, "\n\nNo effect!\n");
     // The position-gate refusal still consumes nothing.
     assert_eq!(state.special_items[SPECIAL_ITEM_SHARD_FALSEHOOD_INDEX], 1);
+}
+
+#[test]
+fn on_position_shard_holds_the_cast_line_until_the_swell_ends() {
+    // `quest-graph.md §5` steps 1-4: the aloft line, then the rising and
+    // falling sweep "unconditionally" - before the position gate - and only
+    // then, on the matching row, the cast-into-the-flame line. The engine
+    // used to play the swell on the refusal branch alone and print the cast
+    // line at once (audit A001).
+    let mut state = test_state(open_grid(), 15, 9);
+    state.area = Area::Town {
+        scene: Scene::new(SCENE_THE_LYCAEUM).unwrap(),
+        floor: 2,
+    };
+    state.special_items[SPECIAL_ITEM_SHARD_FALSEHOOD_INDEX] = 1;
+    state.shadowlord_hideouts[SHADOWLORD_FALSEHOOD_INDEX] = 1;
+    let serial = state.sound_effect_serial;
+
+    assert_eq!(
+        state
+            .use_shadowlord_shard(SHADOWLORD_FALSEHOOD_INDEX, None)
+            .unwrap(),
+        MoveOutcome::Blocked
+    );
+    assert_eq!(
+        state.sound_effects_after(serial),
+        vec![SoundEffect::ShardSwell]
+    );
+    assert_eq!(
+        state.message,
+        "Thou dost hold above thee the evil Shard of Falsehood..."
+    );
+    let swell = SoundEffect::ShardSwell
+        .program(&mut crate::audio::RumbleJitter::default())
+        .duration(true)
+        .as_secs_f64();
+    assert!(state.advance_staged_narration_to(100.0));
+    assert!(state.advance_staged_narration_to(100.0 + 3.0));
+    assert_eq!(
+        state.staged_narration.beats().count(),
+        1,
+        "the cast line is still waiting three seconds in"
+    );
+    assert!(!state.advance_staged_narration_to(100.0 + swell + 0.01));
+    assert_eq!(state.message, "\n\n...and cast it into the Flame of Truth!\n");
+    // The silent actor gate failed: the shard stays and no turn passes.
+    assert_eq!(state.special_items[SPECIAL_ITEM_SHARD_FALSEHOOD_INDEX], 1);
+    assert_eq!(state.turn, 0);
 }
