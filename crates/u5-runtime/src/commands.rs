@@ -712,6 +712,9 @@ pub const CODEX_SHRINE_ENTER_ECHO_TAIL: &str = "the Shrine of the Codex!";
 /// `formats/location-dat.md §11`: "Record `1` supplies ordinary virtue-shrine
 /// meditation and record `2` supplies the Codex presentation".
 pub const SHRINE_PRESENTATION_CUTSCENE_MAP_RECORD: usize = 1;
+/// `karma.md §8`: the Codex presentation "shows the eleven-by-eleven Codex
+/// map from `MISCMAPS.DAT`, record 2 (zero-based)".
+pub const CODEX_PRESENTATION_CUTSCENE_MAP_RECORD: usize = 2;
 pub const SHRINE_APPROACH_NARRATION: &str = "Thou dost approach the tranquil Shrine...";
 pub const SHRINE_KNEEL_NARRATION: &str = "...and thou dost kneel before the Altar.";
 /// `karma.md §12`'s entry table gives no interval between the approach record

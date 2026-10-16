@@ -3829,6 +3829,9 @@ impl PlayState {
         if let Some(walk) = self.shrine_approach_walk.as_mut() {
             walk.on_world_step();
         }
+        // `karma.md §7.2`: an unrestored viewport inversion lasts until "the
+        // world steps that follow simply repaint over it".
+        self.presentation_viewport_inverted = false;
         if self.time_stop_counter == 0 && !self.negate_time_active() {
             let _ = self.idle_wind_drift();
             self.tick_ambient_audio_repeats();

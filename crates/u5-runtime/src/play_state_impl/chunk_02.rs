@@ -2329,157 +2329,152 @@ impl PlayState {
     /// `karma.md §8`: run the Codex presentation after E-Enter has echoed
     /// `Enter the Shrine of the Codex!`.
     ///
+    /// The presentation "suspends the ordinary active objects and shows the
+    /// eleven-by-eleven Codex map from `MISCMAPS.DAT`, record 2", runs its
+    /// opening world step, prints its own approach record `46` (§8.1: "Every
+    /// Codex presentation begins with `MISCMSG.DAT` record `46`"), and walks
+    /// the avatar up seven rows: "**twelve** animation frames, and **sixty**
+    /// world steps ... between the Codex's own approach record and the
+    /// reader". The reader then waits on a key before each later record
+    /// (§8.2), which [`Self::step_codex_presentation`] serves one key at a
+    /// time; nothing is printed ahead.
+    ///
+    /// Not implemented from §8: the interred-party page the presentation
+    /// inserts inside the walk "if any party member carries the interred
+    /// sentinel". The spec names neither the sentinel nor the page's exact
+    /// lines, and the arm was not exercised (`OPEN-QUESTIONS.md`), so the
+    /// walk runs as the published nobody-interred case.
+    ///
     /// Measured 2026-09-09 (`qa/paired/codex-enter.tsv`) against the original,
-    /// seeded straight onto Britannia `(233, 233)`. The presentation prints
-    /// `MISCMSG.DAT` record `46`, then `37`, then `38`, then one page, each
-    /// with its own authored line feeds:
-    ///
-    /// ```text
-    /// The Codex of Ultimate Wisdom lies before thee...
-    /// The book is open to the page thou dost seek!
-    ///
-    /// Upon the hallowed page thou dost read:
-    ///
-    /// HOW DID YOU GET HERE?
-    /// ```
-    ///
-    /// §8 says the reader "walks the eight virtues in the standard virtue
-    /// order and considers only virtues whose ordained bit is set", and
-    /// publishes no line for the no-ordained branch. Record `39` is that
-    /// line, and the preamble prints whatever the quest state.
-    ///
-    /// The **ordained** page is not implemented. `formats/miscmsg-dat.md §3`
-    /// calls records `37-44` "Urn/Codex prophecy", and this engine read that
-    /// as eight per-virtue pages indexed by virtue - which cannot be right,
-    /// since `37` and `38` are the preamble above. Printing the wrong record
-    /// is worse than printing none, so the stamped branch stays silent until
-    /// `cleak/u5-spec#253` answers which record a quest page comes from. The
-    /// Codex-read bit is still stamped, so quest progress is unaffected.
+    /// seeded straight onto Britannia `(233, 233)`: record `46`, then `37`,
+    /// `38` and the page, each behind its own key.
     pub fn read_codex_urn_after_entry(&mut self, game_dir: &Path) -> io::Result<MoveOutcome> {
-        let outcome = read_codex_urn(self.shrine_ordained_mask, &mut self.shrine_codex_mask);
-        let Some(messages) = load_misc_messages(game_dir)? else {
-            // A profile without the file logs nothing rather than
-            // substituting engine prose.
-            return Ok(MoveOutcome::Observed);
-        };
-        let mut text = String::new();
-        for index in [
-            MISCMSG_CODEX_ENTRY_NARRATION,
-            MISCMSG_CODEX_PAGE_OPENED,
-            MISCMSG_CODEX_READS_PREFIX,
-        ] {
-            if let Some(record) = messages.record(index) {
-                text.push_str(&record.replace('\r', "\n"));
-            }
-        }
-        // The page itself. `formats/miscmsg-dat.md §3` calls records `37-44`
-        // "Urn/Codex prophecy" and this engine read that as eight per-virtue
-        // pages indexed by virtue, which cannot be right - `37` and `38` are
-        // the preamble above (`cleak/u5-spec#253`).
-        //
-        // The per-virtue pages are the aphorism range `20..27`, in the
-        // standard virtue order. Established from the shipped records
-        // themselves - `20` opens "A dishonest life brings unto thee
-        // temporary", `25` "It is the guilt, not the guillotine", `27` "Pride
-        // is a vice, which Pride itself inclines" - and corroborated against
-        // public Ultima V documentation, which summarises the eight Codex
-        // readings as Honesty teaching about dishonest gains, Honor about
-        // guilt and shame, Humility about pride, and so on, one per virtue in
-        // that same order.
-        //
-        // `12..19` are a different cluster: they complete the *shrine's* quest
-        // sentence (`karma.md §12`, record `32` plus the virtue's own), and
-        // read as fragments - "the failing of Dishonesty!" - not as pages.
-        // `karma.md` §8.1 / §8.2 and `miscmsg-dat.md` §3, published
-        // 2026-09-10 in answer to cleak/u5-spec#253.
-        //
-        // The per-virtue pages are the aphorism range `20..27` in the standard
-        // virtue order - Honesty `20` through Humility `27` - not the `37..44`
-        // cluster, whose `37`/`38` are the preamble above. That was already
-        // corrected here; the rest of the contract was not.
-        //
-        // The aphorism "is enclosed by an opening double quote and a closing
-        // double quote followed by two newlines, in addition to the record's
-        // own authored content".
-        let steps = match outcome {
-            CodexUrnReadOutcome::NoOrdained => {
-                if let Some(record) = messages.record(MISCMSG_CODEX_NO_QUEST_PAGE) {
-                    text.push_str(&record.replace('\r', "\n"));
-                }
-                crate::miscmsg_io::CODEX_PRESENTATION_KEY_STEPS_NO_ORDAINED
-            }
-            CodexUrnReadOutcome::Stamped {
-                virtue,
-                read_mask_complete,
-            } => {
-                let index = *MISCMSG_VIRTUE_APHORISM_RANGE.start() + virtue.index();
-                if let Some(record) = messages.record(index) {
-                    text.push('"');
-                    text.push_str(&record.replace('\r', "\n"));
-                    text.push_str("\"\n\n");
-                }
-                if read_mask_complete {
-                    // §8.1: "continue with three shared viewport flash/rumble
-                    // effects, then record `40` once as the page-turn
-                    // transition. After another key, print `Thou dost read:`
-                    // and the shared runic pages `41`, `42`, `43`, `44` in
-                    // that order [...] record `40` is not repeated between
-                    // them."
-                    //
-                    // The three flash/rumble effects are not emitted here.
-                    // This engine models a viewport flash as a playback record
-                    // a frontend replays (see `blackthorn_rescue_playback`),
-                    // and the Codex has no such record yet; the text and key
-                    // contract below is what a paired capture measures.
-                    // Tracked as unfinished rather than faked.
-                    if let Some(record) =
-                        messages.record(crate::miscmsg_io::MISCMSG_CODEX_PAGE_TURN)
-                    {
-                        text.push_str(&record.replace('\r', "\n"));
-                    }
-                    text.push_str(crate::miscmsg_io::CODEX_COMPLETION_READ_LEAD_IN);
-                    for index in crate::miscmsg_io::MISCMSG_CODEX_COMPLETION_PAGES {
-                        if let Some(record) = messages.record(index) {
-                            // §3 (`RETRACTIONS.md` R453): these are printed by
-                            // "the ordinary fixed-window message printer" with
-                            // the runic font selected, not by a separate
-                            // sign-stream path. The glyph stream is expanded
-                            // here; selecting the runic font for the row is a
-                            // presentation detail the message log cannot carry
-                            // yet.
-                            text.push_str(&render_miscmsg_tile_glyph_text(
-                                &record.replace('\r', "\n"),
-                            ));
-                        }
-                    }
-                    crate::miscmsg_io::CODEX_PRESENTATION_KEY_STEPS_COMPLETION
-                } else {
-                    crate::miscmsg_io::CODEX_PRESENTATION_KEY_STEPS_ORDAINED
-                }
-            }
-        };
-        if !text.is_empty() {
-            self.emit_message_line(text);
-        }
-        // Measured: the original draws record `46` and then waits, and each
-        // accepted key advances the presentation without reaching the command
-        // parser. This engine has already drawn the whole presentation, so the
-        // steps only owe the keys - which is what keeps a scripted Space from
-        // becoming a `Pass` the original never printed.
-        self.codex_presentation_steps = steps;
+        self.shrine_presentation_map =
+            load_miscmaps_cutscene_map(game_dir, CODEX_PRESENTATION_CUTSCENE_MAP_RECORD)?;
+        let mut walk = crate::shrine_presentation::ShrineApproachWalk::codex();
+        walk.seed_animator(self.prng_state);
+        self.shrine_approach_walk = Some(walk);
+        // §7's frame shape, shared by §8: build the display, run one world
+        // step, print the approach record, then walk.
+        self.advance_presentation_world_step();
+        self.emit_shrine_misc_record(game_dir, MISCMSG_CODEX_ENTRY_NARRATION)?;
+        // "There is no forty-sixth repaint step ... so the Codex interval is
+        // a flat sixty."
+        let steps = crate::shrine_presentation::PresentationArm::Codex.walk_world_steps();
+        self.staged_narration.push_ticks_counting_world_steps(
+            shrine_presentation_hold_bios_ticks(steps),
+            steps,
+            String::new(),
+        );
+        // §8.2: "The counts begin after the initial approach record `46`."
+        self.codex_presentation_steps = 1;
         Ok(MoveOutcome::Observed)
     }
 
-    /// Absorb one key owed to an open Codex presentation.
+    /// Serve one advance key owed to an open Codex reader, `karma.md §8.2`:
+    /// "Each accepted key advances the presentation; its command value is
+    /// discarded and produces no ordinary command echo or world command."
     ///
     /// Returns `true` when the key belonged to the presentation and must not
     /// reach the command parser.
-    pub fn step_codex_presentation(&mut self) -> bool {
-        if self.codex_presentation_steps == 0 {
-            return false;
+    pub fn step_codex_presentation(&mut self, game_dir: &Path) -> io::Result<bool> {
+        let key = self.codex_presentation_steps;
+        if key == 0 {
+            return Ok(false);
         }
-        self.codex_presentation_steps -= 1;
-        true
+        let mut finished = false;
+        match key {
+            // "1 | Print shared record `37`." / "2 | Print shared record `38`."
+            1 => self.emit_shrine_misc_record(game_dir, MISCMSG_CODEX_PAGE_OPENED)?,
+            2 => self.emit_shrine_misc_record(game_dir, MISCMSG_CODEX_READS_PREFIX)?,
+            // "3 | With no ordained virtue, print `39` and finish. Otherwise
+            // stamp the selected virtue and print its quoted aphorism
+            // `20`-`27`."
+            3 => match read_codex_urn(self.shrine_ordained_mask, &mut self.shrine_codex_mask) {
+                CodexUrnReadOutcome::NoOrdained => {
+                    self.emit_shrine_misc_record(game_dir, MISCMSG_CODEX_NO_QUEST_PAGE)?;
+                    finished = true;
+                }
+                CodexUrnReadOutcome::Stamped { virtue, .. } => {
+                    // §8.1: "The aphorism is enclosed by an opening double
+                    // quote and a closing double quote followed by two
+                    // newlines, in addition to the record's own authored
+                    // content."
+                    let index = *MISCMSG_VIRTUE_APHORISM_RANGE.start() + virtue.index();
+                    if let Some(record) = load_misc_messages(game_dir)?
+                        .and_then(|messages| messages.record(index).map(str::to_owned))
+                    {
+                        self.emit_message_line(format!(
+                            "\"{}\"\n\n",
+                            record.replace('\r', "\n")
+                        ));
+                    }
+                }
+            },
+            // "4, ordained path only | If the updated read mask is
+            // incomplete, finish. Otherwise perform the three flash/rumble
+            // effects and print page-turn record `40`."
+            4 => {
+                if self.shrine_codex_mask != 0xFF {
+                    finished = true;
+                } else {
+                    // §8.1: "Each of those three cycles sets a drawing colour
+                    // and inverts the gameplay viewport before running the
+                    // shared effect, and no restoring inversion follows them."
+                    for _ in 0..3 {
+                        self.presentation_viewport_inverted = !self.presentation_viewport_inverted;
+                        self.emit_major_flash();
+                    }
+                    self.emit_shrine_misc_record(game_dir, crate::miscmsg_io::MISCMSG_CODEX_PAGE_TURN)?;
+                }
+            }
+            // "5 | Print the ordinary-font read lead-in, then runic record
+            // `41`." / 6-8: runic `42`-`44`.
+            5..=8 => {
+                if key == 5 {
+                    self.emit_message_line(crate::miscmsg_io::CODEX_COMPLETION_READ_LEAD_IN);
+                }
+                let index = *crate::miscmsg_io::MISCMSG_CODEX_COMPLETION_PAGES.start()
+                    + usize::from(key - 5);
+                self.emit_codex_runic_page(game_dir, index)?;
+            }
+            // "9 | Finish and allow the enclosing presentation to restore the
+            // prior scene."
+            _ => finished = true,
+        }
+        if finished {
+            self.codex_presentation_steps = 0;
+            // §8: the Codex exit "is the shrine's - the same block, reached
+            // unconditionally after either handler returns".
+            self.begin_shrine_presentation_exit(0);
+        } else {
+            self.codex_presentation_steps = key + 1;
+        }
+        Ok(true)
+    }
+
+    /// One of the Codex's runic pages, `karma.md §8.2`: "Records `41`-`44`
+    /// use the ordinary message window with the runic font selected for each
+    /// record; the normal font is restored before each following key wait.
+    /// Preserve the stored glyphs and separators". The glyph stream goes to
+    /// the runic font as stored - `@`, `[`, `]` and `_` are runic cells
+    /// (`formats/miscmsg-dat.md §4`), not digraphs to expand.
+    fn emit_codex_runic_page(&mut self, game_dir: &Path, index: usize) -> io::Result<()> {
+        let Some(record) = load_misc_messages(game_dir)?
+            .and_then(|messages| messages.record(index).map(|record| record.replace('\r', "\n")))
+        else {
+            return Ok(());
+        };
+        let body = record.strip_suffix('\n').unwrap_or(&record);
+        for row in body.split('\n') {
+            if row.is_empty() {
+                self.push_producer_blank_message_entry();
+            } else {
+                self.push_runic_message_entry(row);
+            }
+        }
+        self.adopt_flushed_message(record.clone());
+        Ok(())
     }
 
     pub fn codex_urn_text_for_virtue(

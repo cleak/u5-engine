@@ -1442,30 +1442,51 @@ BRITANNIA 11 21
         assert_eq!(state.message, "Mixing...\n\nDone!");
     }
 
-    /// `karma.md §8` (`cleak/u5-spec#250`): "Use **E-Enter while standing on
-    /// live terrain tile `0x11`** to begin the Codex interaction ... The
-    /// command prints `Enter the Shrine of the Codex!\n` and immediately
-    /// starts the shrine/Codex presentation." The reader then "walks the eight
-    /// virtues in the standard virtue order and considers only virtues whose
-    /// ordained bit is set", stamps the first, and "displays that virtue's
-    /// prophecy/Codex text" from `MISCMSG.DAT`.
-    #[test]
-    fn codex_entry_stamps_the_first_ordained_virtue_and_prints_its_urn_text() {
-        let dir = debug_game_dir();
+    /// A synthetic `MISCMSG.DAT` whose every record reads `rec<index>`, with
+    /// the tile-glyph bytes of `formats/miscmsg-dat.md §4` in record `41`.
+    fn write_codex_miscmsg(dir: &Path) {
         let mut miscmsg = Vec::new();
         for index in 0..MISCMSG_DAT_RECORDS {
-            if index == MISCMSG_CODEX_NO_QUEST_PAGE {
-                miscmsg.extend_from_slice(b"JUS@[_");
+            if index == 41 {
+                miscmsg.extend_from_slice(b"[E@CODEX\n_ONE");
             } else {
                 miscmsg.extend_from_slice(format!("rec{index}").as_bytes());
             }
             miscmsg.push(0);
         }
         fs::write(dir.join(MISCMSG_DAT_FILE), miscmsg).unwrap();
+    }
 
+    fn codex_tile_state() -> PlayState {
         let mut grid = open_world_grid();
         grid[world_cell_index(10, 20)] = CODEX_SHRINE_ENTRY_TILE;
-        let mut state = britannia_state(grid, 10, 20);
+        britannia_state(grid, 10, 20)
+    }
+
+    /// Run the approach walk out and press one advance key, the way a shell
+    /// with no pump does.
+    fn press_codex_key(state: &mut PlayState, dir: &Path) {
+        state.flush_staged_narration();
+        assert_eq!(
+            handle_play_key_input(state, ' ', "", dir).unwrap(),
+            PlayInputDisposition::Continue
+        );
+    }
+
+    fn has_row(state: &PlayState, text: &str) -> bool {
+        transcript_texts(state).iter().any(|row| row.contains(text))
+    }
+
+    /// `karma.md §8` (`cleak/u5-spec#250`): "Use **E-Enter while standing on
+    /// live terrain tile `0x11`** to begin the Codex interaction". §8.1
+    /// selects "the **first ordained virtue in the standard virtue order**"
+    /// and §8.2 stamps it on the third advance key, printing its quoted
+    /// aphorism from records `20`-`27`.
+    #[test]
+    fn codex_entry_stamps_the_first_ordained_virtue_and_prints_its_urn_text() {
+        let dir = debug_game_dir();
+        write_codex_miscmsg(&dir);
+        let mut state = codex_tile_state();
         state.shrine_ordained_mask = ShrineVirtue::Honesty.bit() | ShrineVirtue::Justice.bit();
         state.shrine_codex_mask = 0;
 
@@ -1473,26 +1494,154 @@ BRITANNIA 11 21
             handle_play_key_input(&mut state, 'E', "", &dir).unwrap(),
             PlayInputDisposition::Continue
         );
-
-        assert_eq!(state.shrine_codex_mask, ShrineVirtue::Honesty.bit());
         assert!(
-            transcript_texts(&state)
-                .iter()
-                .any(|row| row.contains("Enter the Shrine of the Codex!")),
+            has_row(&state, "Enter the Shrine of the Codex!"),
             "the published entry line is missing from {:?}",
             transcript_texts(&state)
         );
-        // The **page** an ordained party reads is not implemented: see
-        // `read_codex_urn_after_entry` and `cleak/u5-spec#253`. What is
-        // asserted here is the quest-bit transition and the preamble, which
-        // prints whatever the quest state.
-        assert!(
-            transcript_texts(&state).iter().any(|row| row
-                .contains(&format!("rec{MISCMSG_CODEX_ENTRY_NARRATION}"))
-                && row.contains(&format!("rec{MISCMSG_CODEX_READS_PREFIX}"))),
-            "the Codex presentation preamble is missing from {:?}",
-            transcript_texts(&state)
+        for _ in 0..3 {
+            press_codex_key(&mut state, &dir);
+        }
+        assert_eq!(state.shrine_codex_mask, ShrineVirtue::Honesty.bit());
+        assert!(has_row(&state, &format!("\"rec{}\"", 20)));
+        let _ = fs::remove_dir_all(dir);
+    }
+
+    /// `karma.md §8.2`: "The counts begin after the initial approach record
+    /// `46`", and each key prints only its own row of the table - "with no
+    /// printing ahead". A no-ordained visit consumes three keys and the
+    /// fourth is an ordinary command again (after the exit pacing).
+    #[test]
+    fn codex_reader_prints_one_record_per_key_and_never_ahead() {
+        let dir = debug_game_dir();
+        write_codex_miscmsg(&dir);
+        let mut state = codex_tile_state();
+
+        handle_play_key_input(&mut state, 'E', "", &dir).unwrap();
+        state.flush_staged_narration();
+        assert!(has_row(&state, "rec46"));
+        assert!(!has_row(&state, "rec37"), "{:?}", transcript_texts(&state));
+
+        press_codex_key(&mut state, &dir);
+        assert!(has_row(&state, "rec37"));
+        assert!(!has_row(&state, "rec38"));
+        press_codex_key(&mut state, &dir);
+        assert!(has_row(&state, "rec38"));
+        assert!(!has_row(&state, "rec39"));
+        press_codex_key(&mut state, &dir);
+        assert!(has_row(&state, "rec39"));
+        assert_eq!(state.codex_presentation_steps, 0);
+        assert_eq!(state.shrine_codex_mask, 0);
+        // The exit pacing runs before the reader hands back the keyboard.
+        assert!(state.staged_narration_active());
+        let _ = fs::remove_dir_all(dir);
+    }
+
+    /// `karma.md §8.1`/`§8.2` completion extension: key 4 runs "three shared
+    /// viewport flash/rumble effects" - each preceded by an unrestored
+    /// inversion - then record `40`; key 5 prints the ordinary-font lead-in
+    /// and runic `41`; keys 6-8 runic `42`-`44`; key 9 finishes. "Records
+    /// `41`-`44` use the ordinary message window with the runic font
+    /// selected", keeping "the stored glyphs and separators".
+    #[test]
+    fn codex_completion_flashes_three_times_and_prints_runic_pages_per_key() {
+        let dir = debug_game_dir();
+        write_codex_miscmsg(&dir);
+        let mut state = codex_tile_state();
+        state.shrine_ordained_mask = ShrineVirtue::Humility.bit();
+        state.shrine_codex_mask = 0x7F;
+
+        handle_play_key_input(&mut state, 'E', "", &dir).unwrap();
+        for _ in 0..3 {
+            press_codex_key(&mut state, &dir);
+        }
+        assert_eq!(state.shrine_codex_mask, 0xFF);
+        assert!(!has_row(&state, "rec40"));
+        let serial = state.sound_effect_serial;
+        press_codex_key(&mut state, &dir);
+        let flashes = state
+            .sound_effects_after(serial)
+            .iter()
+            .filter(|effect| matches!(effect, SoundEffect::MajorFlash { .. }))
+            .count();
+        assert_eq!(flashes, 3);
+        assert!(state.presentation_viewport_inverted, "no restoring inversion");
+        assert!(has_row(&state, "rec40"));
+        assert!(!has_row(&state, "Thou dost read:"));
+
+        press_codex_key(&mut state, &dir);
+        assert!(has_row(&state, "Thou dost read:"));
+        let runic: Vec<_> = state
+            .message_entries()
+            .iter()
+            .filter(|entry| {
+                !entry.glyphs.is_empty()
+                    && entry
+                        .glyphs
+                        .iter()
+                        .all(|glyph| glyph.font == TlkGlyphFont::Runic)
+            })
+            .map(|entry| entry.text.clone())
+            .collect();
+        assert_eq!(runic, vec!["[E@CODEX".to_string(), "_ONE".to_string()]);
+        assert!(!has_row(&state, "rec42"));
+        for page in 42..=44 {
+            press_codex_key(&mut state, &dir);
+            assert!(has_row(&state, &format!("rec{page}")));
+        }
+        assert_ne!(state.codex_presentation_steps, 0);
+        press_codex_key(&mut state, &dir);
+        assert_eq!(state.codex_presentation_steps, 0);
+        let _ = fs::remove_dir_all(dir);
+    }
+
+    /// `karma.md §8`: the Codex walk is "**twelve** animation frames, and
+    /// **sixty** world steps" from `(5, 10)` up to `(5, 3)`, never kneeling;
+    /// the exit "is the shrine's - the same block": re-stamp at `(5, 3)`,
+    /// rows 4 through 10, four blank frames and the closing wait. The display
+    /// is held through the reader's key waits and released after the exit.
+    #[test]
+    fn codex_entry_walks_up_seven_rows_and_back_down_after_the_reader() {
+        use crate::shrine_presentation::{PresentationArm, ShrinePose};
+        let dir = debug_game_dir();
+        let mut state = codex_tile_state();
+        state.prng_state = 0x2468;
+        let mut reference = state.clone();
+
+        handle_play_key_input(&mut state, 'E', "", &dir).unwrap();
+        let walk = state.shrine_approach_walk.expect("the Codex walk runs");
+        assert_eq!(walk.arm(), PresentationArm::Codex);
+        state.flush_staged_narration();
+        // One opening step plus the flat sixty, each with its wind draw.
+        for _ in 0..61 {
+            let _ = reference.idle_wind_drift();
+        }
+        assert_eq!(state.prng_state, reference.prng_state);
+        assert_eq!(
+            state.shrine_approach_walk.unwrap().pose(),
+            ShrinePose::Walking { column: 5, row: 3 }
         );
+        // The reader's key waits keep the display up.
+        state.apply_exploration_turn_gate(&dir).unwrap();
+        assert!(state.shrine_approach_walk.is_some());
+
+        for _ in 0..3 {
+            press_codex_key(&mut state, &dir);
+        }
+        assert!(state.shrine_approach_walk.unwrap().is_exiting());
+        let mut cells = Vec::new();
+        for _ in 0..PresentationArm::Codex.exit_world_steps() {
+            state.advance_presentation_world_step();
+            if let ShrinePose::Walking { column, row } = state.shrine_approach_walk.unwrap().pose()
+                && cells.last() != Some(&(column, row))
+            {
+                cells.push((column, row));
+            }
+        }
+        assert_eq!(cells, (3..=10).map(|row| (5, row)).collect::<Vec<_>>());
+        state.staged_narration.clear();
+        state.apply_exploration_turn_gate(&dir).unwrap();
+        assert!(state.shrine_approach_walk.is_none());
         let _ = fs::remove_dir_all(dir);
     }
 

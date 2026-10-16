@@ -148,11 +148,11 @@ fn handle_play_key_input_inner(
     if state.active_blackthorn.is_some() {
         return handle_active_blackthorn_key_input(state, key, suffix, game_dir);
     }
-    // `karma.md §8`: the Codex presentation owns the keyboard until it has
-    // stepped through its records. Measured 2026-09-09
-    // (`qa/paired/codex-enter.tsv`): three keys after E-Enter print nothing of
-    // their own, and the fourth is an ordinary command again.
-    if state.step_codex_presentation() {
+    // `karma.md §8.2`: the Codex reader owns the keyboard until it has
+    // stepped through its records, one record per key. Measured 2026-09-09
+    // (`qa/paired/codex-enter.tsv`): with nothing ordained the fourth key
+    // after E-Enter is an ordinary command again.
+    if state.step_codex_presentation(game_dir)? {
         return Ok(PlayInputDisposition::Continue);
     }
     if state.active_yes_no_prompt.is_some() {

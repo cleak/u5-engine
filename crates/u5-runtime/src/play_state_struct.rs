@@ -754,14 +754,17 @@ pub struct PlayState {
     pub active_jimmy: Option<crate::z_stats::JimmySession>,
     pub active_surface_chest: Option<crate::z_stats::SurfaceChestSession>,
     pub active_shrine: Option<crate::z_stats::ShrineSession>,
-    /// Steps left in the Codex presentation, each released by one keypress.
+    /// The open Codex reader's key position.
     ///
     /// `karma.md §8`'s presentation is not instant. Measured 2026-09-09
     /// (`qa/paired/codex-enter.tsv`): after E-Enter the original draws its
     /// first record and then waits - sixteen seconds with no key advanced it
     /// no further - and the next three keys step it through the remaining
-    /// records without reaching the command parser. The fourth key is an
-    /// ordinary command again.
+    /// records without reaching the command parser.
+    ///
+    /// `karma.md §8.2`: the number of the advance key the open reader waits
+    /// for next (`1..=9` in that section's table), or `0` when no reader is
+    /// open. Each key prints its own record; nothing is printed ahead.
     pub codex_presentation_steps: u8,
     pub active_mix: Option<crate::z_stats::MixSession>,
     pub active_new_order: Option<crate::z_stats::NewOrderSession>,
