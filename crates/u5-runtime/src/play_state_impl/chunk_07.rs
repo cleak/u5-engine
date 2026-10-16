@@ -1510,13 +1510,20 @@ impl PlayState {
         Self::shadowlord_name_index(word).and_then(Self::shadowlord_title_for_index)
     }
 
+    /// `commands.md §11.3` (u5-spec#298 Q34): "Yell's Shadowlord branch
+    /// tests its three capitalised names in index order and the first match
+    /// wins", each through the shared text matcher, so the name may sit
+    /// anywhere in the typed line (subject to the matcher's restart quirk).
+    /// The keywords are `catalogs/quest-graph.md §5`'s Name column.
     pub fn shadowlord_name_index(word: &str) -> Option<usize> {
-        match word {
-            "FAULINEI" => Some(SHADOWLORD_FALSEHOOD_INDEX),
-            "ASTAROTH" => Some(SHADOWLORD_HATRED_INDEX),
-            "NOSFENTOR" => Some(SHADOWLORD_COWARDICE_INDEX),
-            _ => None,
-        }
+        [
+            (SHADOWLORD_NAME_FAULINEI, SHADOWLORD_FALSEHOOD_INDEX),
+            (SHADOWLORD_NAME_ASTAROTH, SHADOWLORD_HATRED_INDEX),
+            (SHADOWLORD_NAME_NOSFENTOR, SHADOWLORD_COWARDICE_INDEX),
+        ]
+        .into_iter()
+        .find(|(name, _)| crate::commands::shared_text_matcher_matches(word, name))
+        .map(|(_, index)| index)
     }
 
     pub fn shadowlord_title_for_index(index: usize) -> Option<&'static str> {

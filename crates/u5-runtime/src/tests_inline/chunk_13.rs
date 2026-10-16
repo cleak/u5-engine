@@ -11737,6 +11737,45 @@ fn shadowlord_names_match_quest_graph_md_section_5() {
 }
 
 #[test]
+fn shared_text_matcher_follows_commands_md_section_11_3() {
+    use crate::commands::{shared_text_matcher_find, shared_text_matcher_matches};
+    // u5-spec#298 Q34, `commands.md §11.3`'s published examples.
+    for line in ["FAULINEI", "SAY FAULINEI NOW", "XFAULINEI", "AFAULINEI", "FAXFAULINEI"] {
+        assert!(shared_text_matcher_matches(line, "FAULINEI"), "{line}");
+    }
+    for line in ["FAULINE", "FFAULINEI", "FAFAULINEI", "FAULFAULINEI"] {
+        assert!(!shared_text_matcher_matches(line, "FAULINEI"), "{line}");
+    }
+    for line in ["honesty", "I seek honesty", "HONE"] {
+        assert!(shared_text_matcher_matches(line, "hone"), "{line}");
+    }
+    for line in ["hhone", "hohone"] {
+        assert!(!shared_text_matcher_matches(line, "hone"), "{line}");
+    }
+    // Bit 7 is stripped on both sides.
+    assert_eq!(shared_text_matcher_find(&[b'x', b'h' | 0x80, b'O', b'n', b'E'], b"HONE"), Some(1));
+    assert_eq!(shared_text_matcher_find(b"abc", b""), None);
+}
+
+#[test]
+fn yell_shadowlord_names_use_the_shared_matcher_in_index_order() {
+    // u5-spec#298 Q34, `commands.md §11.3`.
+    assert_eq!(PlayState::shadowlord_name_index("FAULINEI"), Some(SHADOWLORD_FALSEHOOD_INDEX));
+    assert_eq!(
+        PlayState::shadowlord_name_index("SAY ASTAROTH NOW"),
+        Some(SHADOWLORD_HATRED_INDEX)
+    );
+    assert_eq!(PlayState::shadowlord_name_index("XNOSFENTOR"), Some(SHADOWLORD_COWARDICE_INDEX));
+    assert_eq!(PlayState::shadowlord_name_index("FFAULINEI"), None);
+    assert_eq!(PlayState::shadowlord_name_index("FAULINE"), None);
+    // Index order: the first name tested wins wherever it sits in the line.
+    assert_eq!(
+        PlayState::shadowlord_name_index("NOSFENTOR FAULINEI"),
+        Some(SHADOWLORD_FALSEHOOD_INDEX)
+    );
+}
+
+#[test]
 fn dungeon_word_of_power_matches_quest_graph_md_section_4() {
     // catalogs/quest-graph.md §4
     assert_eq!(dungeon_word_of_power(33), Some("FALLAX"));

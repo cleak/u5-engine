@@ -637,6 +637,48 @@ pub const WORD_OF_POWER_UTTERED_MESSAGE: &str = "\nA word of power is uttered";
 /// `No effect!`.
 pub const WORD_OF_POWER_NO_EFFECT_TAIL: &str = "\n\nNo effect!";
 
+/// `commands.md §11.3`, the shared text matcher (u5-spec#298 Q34). Yell's
+/// Shadowlord branch, the Word-of-Power scan (§11.1), the shrine meditation
+/// answers (`karma.md §7`) and the conversation code (`conversation.md
+/// §7.6`) all compare a typed line with a keyword through it:
+///
+/// - "Bit 7 is stripped and letter case is ignored on both sides."
+/// - "It searches for the keyword **anywhere** in the line."
+/// - "**Restart quirk.** When a partial match of k characters starting at
+///   position p fails, the next attempt starts at p + k + 1, never trying
+///   the positions in between." So `FFAULINEI` misses `FAULINEI` and
+///   `hhone` misses `hone`, where an ordinary substring search would hit.
+///
+/// Returns the position of the match the restart rule finds first, or
+/// `None`. An empty key never matches (the spec does not cover one, and no
+/// caller passes one).
+pub fn shared_text_matcher_find(line: &[u8], key: &[u8]) -> Option<usize> {
+    if key.is_empty() {
+        return None;
+    }
+    let fold = |byte: u8| (byte & 0x7F).to_ascii_uppercase();
+    let mut start = 0;
+    while start < line.len() {
+        let mut matched = 0;
+        while matched < key.len()
+            && start + matched < line.len()
+            && fold(line[start + matched]) == fold(key[matched])
+        {
+            matched += 1;
+        }
+        if matched == key.len() {
+            return Some(start);
+        }
+        start += matched + 1;
+    }
+    None
+}
+
+/// [`shared_text_matcher_find`] as a yes/no test on text.
+pub fn shared_text_matcher_matches(line: &str, key: &str) -> bool {
+    shared_text_matcher_find(line.as_bytes(), key.as_bytes()).is_some()
+}
+
 pub const READY_RING_VANISHES_MESSAGE: &str = "\n\nRing vanishes!\n";
 
 pub const READY_EMPTY_HANDED_REFUSAL: &str = "Thou art empty-\nhanded!";
