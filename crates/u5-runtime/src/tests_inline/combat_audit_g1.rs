@@ -608,3 +608,71 @@ fn an_active_target_spell_narrates_before_the_turn_advance() {
     assert!(saw_flee, "some seed must take the fleeing morale result");
     assert!(saw_extra_draws, "the day rollover must draw");
 }
+
+#[test]
+fn party_direction_melee_takes_the_flee_classifier_at_hit_time_not_in_the_narrator() {
+    // `combat.md §11.1`: the graded wound line shares the flee classifier,
+    // and "a score of 1 - and a score of 2 on the morale draw described in
+    // Section 9 - also raises the target's fleeing bit". The narration runs
+    // inside the swing, before the committed-action tail (field contact,
+    // magic-ring pass and its Regeneration roll), so the morale draw belongs
+    // to the swing entry and the later transcript assembly must not take it
+    // a second time (audit A042 follow-up).
+    //
+    // `combat.md §8.1` (R310) gives a bare direction key no bump attack, so
+    // the StepOrAttack `Attack` outcome is driven through the swing entry the
+    // dispatcher calls for it.
+    let inputs = CombatPlayerWeaponAttackInputs {
+        hit_raw_roll_0_to_60: 0,
+        damage_roll: Some(1),
+        forced_hit: Some(true),
+    };
+    let action = CombatPlayerCommandAction::StepOrAttack {
+        direction_code: COMBAT_DIRECTION_EAST,
+        outcome: CombatStepOrAttackPrimitiveOutcome::Attack { target_slot: 8 },
+    };
+    let max_hp = combat_class_stats(COMBAT_CLASS_GIANT_RAT).unwrap().max_hp;
+    let rat = combat_class_stats(COMBAT_CLASS_GIANT_RAT).unwrap().name;
+
+    // Score 1: the bit is already raised when the swing returns.
+    let mut state = combat_player_command_state(6, 5);
+    state.combat_actors[8].hp_or_wound = 2;
+    let attack = state
+        .apply_combat_player_weapon_attack_for_action(0, &action, inputs)
+        .unwrap();
+    assert_eq!(state.combat_actors[8].hp_or_wound, 1, "{attack:?}");
+    assert!(
+        state.combat_actors[8].is_fleeing(),
+        "the classifier runs at hit time, before the post-dispatch tail"
+    );
+    let line =
+        crate::input_dispatch::combat_weapon_attack_narrated_result_message(&mut state, 8, attack);
+    assert_eq!(line, Some(format!("{rat} critical!")));
+
+    // Score 2: the morale draw is spent by the swing; narrating the line
+    // afterwards takes no further draw.
+    let seed = (0..=u16::MAX)
+        .find(|&seed| {
+            let mut probe = seed;
+            u5_prng_range_u16(&mut probe, 0, 256) >= 252
+        })
+        .unwrap();
+    let mut state = combat_player_command_state(6, 5);
+    state.combat_actors[8].hp_or_wound = max_hp / 4 + 1;
+    state.prng_state = seed;
+    let mut expected_prng = seed;
+    let _ = u5_prng_range_u16(&mut expected_prng, 0, 256);
+    let attack = state
+        .apply_combat_player_weapon_attack_for_action(0, &action, inputs)
+        .unwrap();
+    assert_eq!(state.combat_actors[8].hp_or_wound, max_hp / 4);
+    assert_eq!(state.prng_state, expected_prng, "the swing takes the morale draw");
+    assert!(state.combat_actors[8].is_fleeing());
+    let line =
+        crate::input_dispatch::combat_weapon_attack_narrated_result_message(&mut state, 8, attack);
+    assert_eq!(line, Some(format!("{rat} heavily wounded!")));
+    assert_eq!(
+        state.prng_state, expected_prng,
+        "the narrator must not take the morale draw a second time"
+    );
+}

@@ -7467,7 +7467,44 @@ impl PlayState {
             .map(usize::from)
             .filter(|item| armaments.contains(item))
             .or_else(|| armaments.first().copied());
-        self.resolve_and_apply_combat_player_attack(actor_slot, target_slot, item_id, inputs)
+        let attack =
+            self.resolve_and_apply_combat_player_attack(actor_slot, target_slot, item_id, inputs);
+        if let Some(attack) = attack {
+            self.classify_combat_wound_at_hit(target_slot, attack);
+        }
+        attack
+    }
+
+    /// `combat.md §11.1`: a landed, surviving, non-grazed party hit on a
+    /// monster is narrated with a graded wound line, and "a score of 1 - and
+    /// a score of 2 on the morale draw described in Section 9 - also raises
+    /// the target's fleeing bit as a side effect of narrating the hit". That
+    /// narration belongs to the swing itself, so the classifier - morale
+    /// draw included - runs here, before the dispatcher's committed-action
+    /// tail (field contact, the magic-ring pass and its Regeneration roll)
+    /// takes any draw of its own. The transcript is assembled later; the
+    /// marker tells the narrator the classifier has already run.
+    fn classify_combat_wound_at_hit(
+        &mut self,
+        target_slot: usize,
+        attack: CombatWeaponAttackApplication,
+    ) {
+        self.combat_wound_classified_at_hit = None;
+        if !crate::input_dispatch::combat_weapon_resolution_reaches_generic_chain(
+            attack.resolution,
+        ) {
+            return;
+        }
+        let Some(CombatWeaponDamageApplication::Monster { damage, .. }) =
+            attack.damage_application
+        else {
+            return;
+        };
+        if damage.grazed || damage.killed || combat_class_stats(damage.class).is_none() {
+            return;
+        }
+        let _ = self.apply_combat_wound_score_classifier(target_slot);
+        self.combat_wound_classified_at_hit = Some(target_slot);
     }
 
     /// One player-side attack attempt against a known target with a known
