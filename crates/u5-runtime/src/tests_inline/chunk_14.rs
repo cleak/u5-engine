@@ -2630,51 +2630,32 @@
         assert!(!state.town_cell_visible_with_light_threshold(8, 3, 8, 6, 6, 0));
     }
 
+    /// `visibility.md §12.1` step 2 scans the map window's terrain only;
+    /// §6 keeps actor bytes in a separate domain, so a Dragon frame `0xDC`
+    /// or an Insect Swarm frame `0xBC` lights nothing (audit A186). These
+    /// tests used to pin the withdrawn actor-light loop.
     #[test]
-    fn active_object_local_light_sources_contribute_to_surface_visibility() {
-        let mut state = test_state(open_grid(), 10, 10);
-        state.ambient_light = DAWN_DUSK_LIGHT[1];
-        state.active_objects.push(ActiveObject {
-            type_byte: 0xDC,
-            tile: 0xDC,
-            x: 10,
-            y: 18,
-            z: 0,
-            phase: STEADY_PHASE,
-            aux1: 0,
-            aux3: 0,
-        });
-        state.rebuild_surface_local_light_mask();
+    fn active_object_frames_in_the_light_source_band_light_nothing() {
+        for frame in [0xDC, 0xBC, 0xDE, 0xB0] {
+            let mut state = test_state(open_grid(), 8, 3);
+            state.active_objects.push(ActiveObject {
+                type_byte: frame,
+                tile: frame,
+                x: 8,
+                y: 8,
+                z: 0,
+                phase: STEADY_PHASE,
+                aux1: 0,
+                aux3: 0,
+            });
+            state.rebuild_surface_local_light_mask();
 
-        assert!(state.town_cell_visible_with_light_threshold(10, 10, 10, 18, 10, 1));
-        assert_eq!(
-            state
-                .render_text_view(10)
-                .lines()
-                .nth(19)
-                .unwrap()
-                .chars()
-                .nth(10),
-            Some('^')
-        );
-    }
-
-    #[test]
-    fn active_object_flame_local_light_source_contributes_to_surface_visibility() {
-        let mut state = test_state(open_grid(), 8, 3);
-        state.active_objects.push(ActiveObject {
-            type_byte: 0xDE,
-            tile: 0xDE,
-            x: 8,
-            y: 8,
-            z: 0,
-            phase: STEADY_PHASE,
-            aux1: 0,
-            aux3: 0,
-        });
-        state.rebuild_surface_local_light_mask();
-
-        assert!(state.town_cell_visible_with_light_threshold(8, 3, 8, 6, 6, 0));
+            assert!(
+                !state.town_cell_visible_with_light_threshold(8, 3, 8, 6, 6, 0),
+                "actor frame {frame:#04x} must not carve a light disc"
+            );
+            assert!(state.local_light_mask.iter().all(|lit| !*lit));
+        }
     }
 
     #[test]

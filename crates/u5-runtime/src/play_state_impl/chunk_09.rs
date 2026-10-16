@@ -2796,23 +2796,11 @@ impl PlayState {
             }
         }
 
-        if let Some(floor) = self.current_floor() {
-            for object in &self.active_objects {
-                if object.is_empty()
-                    || object.z != floor
-                    || !is_local_light_source_tile(object.tile)
-                {
-                    continue;
-                }
-                let x = object.x as isize;
-                let y = object.y as isize;
-                if surface_local_light_mask_index(origin_x, origin_y, x, y, wrap_world).is_some() {
-                    self.carve_surface_local_light_source(
-                        x, y, origin_x, origin_y, wrap_world, &mut mask,
-                    );
-                }
-            }
-        }
+        // `visibility.md §12.1` step 2 scans only the map window's terrain
+        // ids. Actor bytes are a separate storage domain the classifier
+        // never sees (§6; `active-objects.md`): actor `0xDC` is a Dragon
+        // frame and `0xBC` an Insect Swarm frame, not a moon gate and a
+        // fireplace, so active objects contribute no light here.
         if self.local_light_mask.as_slice() != mask.as_slice() {
             self.local_light_mask.copy_from_slice(&mask);
             self.mark_visibility_dirty();
