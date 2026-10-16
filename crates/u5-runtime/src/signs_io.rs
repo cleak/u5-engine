@@ -9,10 +9,6 @@
 //! - `0x0D` becomes a [`crate::text_hold`] wait-key marker: §4 "pauses for
 //!   a keypress and then resumes printing", so the Look path holds the rest
 //!   of the sign behind a key;
-//! - a byte whose low seven bits are a line feed (`0x0A`/`0x8A`) prints as
-//!   a line feed, since §4 prints "other bytes ... as their low-seven-bit
-//!   character value" and §4 asks a decoder to "preserve explicit
-//!   newlines";
 //! - `0x29..=0x31` decoration-fragment bytes are emitted as a single ASCII
 //!   sentinel character because the resident macro pool is not in the public
 //!   spec; consumers that need the original glyph must resolve fragments at
@@ -290,7 +286,6 @@ pub fn decode_sign_payload(bytes: &[u8]) -> String {
         match low {
             0x00 => break,
             0x0d => out.push(char::from(crate::text_hold::TEXT_HOLD_WAIT_KEY_MARKER)),
-            0x0a => out.push('\n'),
             0x26 | 0x27 => out.push('-'),
             0x29..=0x31 => out.push('*'),
             ch if (0x20..=0x7e).contains(&ch) => out.push(ch as char),
