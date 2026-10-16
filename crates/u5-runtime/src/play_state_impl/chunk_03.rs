@@ -5588,16 +5588,21 @@ impl PlayState {
             return outcome;
         }
 
-        // audio.md §6 variant 8 is "the highest resurrection-mode
-        // presentation"; audio.md §8.3 puts the committed pre-effect after the
-        // spell's own gate and before the effect.
-        self.emit_sound_effect(SoundEffect::SharedVariant { variant: 8 });
-
+        // `magic.md` §8: "the ordinary spell/scroll path records a failed
+        // result and lets the dispatcher own the trailing failure narration";
+        // the verbose `Not dead!` refusal is never printed on this path.
+        // audio.md §6.1 id 42 calls the living-target arm "fully silent"; the
+        // variant is certainly absent, while the dispatcher's failure tail is
+        // kept until the two documents agree.
         if self.party[target_index].status != b'D' {
             self.advance_turn();
             self.fail_committed_spell_cast();
             return MoveOutcome::Blocked;
         }
+
+        // audio.md §6.1 id 42: Resurrect plays variant 8 "only if the target
+        // is dead".
+        self.emit_sound_effect(SoundEffect::SharedVariant { variant: 8 });
 
         let max_hp = self
             .resurrect_party_member_to_hp(target_index, 1)

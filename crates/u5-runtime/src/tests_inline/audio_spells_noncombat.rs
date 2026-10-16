@@ -277,12 +277,23 @@ fn committed_party_spells_play_their_published_variant_before_the_effect() {
     arm_spell(&mut resurrect, RESURRECT_SPELL_INDEX);
     let serial = resurrect.sound_effect_serial;
     assert_eq!(resurrect.cast_resurrect(0, 0), MoveOutcome::Blocked);
+    assert!(
+        !resurrect
+            .sound_effects_after(serial)
+            .contains(&SoundEffect::SharedVariant { variant: 8 }),
+        "audio.md §6.1 id 42: a living target never plays variant 8"
+    );
+    assert_ne!(resurrect.message, "Not dead!");
+
+    let mut dead = test_state(open_grid(), 1, 1);
+    dead.party.push(dead.party[0]);
+    dead.party[1].status = b'D';
+    arm_spell(&mut dead, RESURRECT_SPELL_INDEX);
+    let serial = dead.sound_effect_serial;
+    assert_eq!(dead.cast_resurrect(0, 1), MoveOutcome::Cast);
     assert_eq!(
-        resurrect.sound_effects_after(serial),
-        vec![
-            SoundEffect::SharedVariant { variant: 8 },
-            SoundEffect::CastFailure,
-        ]
+        dead.sound_effects_after(serial),
+        vec![SoundEffect::SharedVariant { variant: 8 }]
     );
 }
 
