@@ -7620,13 +7620,17 @@ impl PlayState {
     }
 
     pub fn apply_combat_escape_cleanup(&mut self) -> CombatEscapeCleanupApplication {
+        // `stats-panel.md §2.2.1` row 13: the Escape key in combat is a
+        // deferred site "on both the refused and the accepted outcome", and
+        // §2.2 "A raise does not depend on the change surviving" - so the
+        // request is raised directly, not through the end-of-command
+        // changed-counter test, which a refusal would never pass.
+        self.request_stats_panel_refresh();
+        self.stats_panel_command_refresh = crate::stats_panel::PanelRefreshMode::Deferred;
         let decision = self.combat_escape_cleanup_decision();
         if decision != CombatEscapeCleanupDecision::Accepted {
             return CombatEscapeCleanupApplication::refused(decision);
         }
-        // `stats-panel.md §2.2.1` row 13: the Escape key's accepted
-        // outcome is a deferred site.
-        self.stats_panel_command_refresh = crate::stats_panel::PanelRefreshMode::Deferred;
 
         let mut cleared_descriptor_slots = 0u8;
         for slot in 0..COMBAT_ACTOR_SLOTS {
