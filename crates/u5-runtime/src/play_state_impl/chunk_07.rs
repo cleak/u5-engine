@@ -74,6 +74,9 @@ impl PlayState {
     pub const TOWN_BURNING_MESSAGE: &'static str = "Burning!";
     /// `town-mode.md §10` poison-gas status line, stored like `Burning!`.
     pub const TOWN_POISONED_MESSAGE: &'static str = "Poisoned!";
+    /// `town-mode.md` "Floor transitions": the trapdoor's stored line,
+    /// terminated like `Burning!` and `Poisoned!`.
+    pub const TOWN_TRAPDOOR_MESSAGE: &'static str = "A TRAPDOOR!";
 
     /// `blackthorn.md §4`/`§8`: "Moral standing | Durable; debited five per
     /// correct interrogation answer". The subtraction is clamped and floored
@@ -3653,7 +3656,6 @@ impl PlayState {
             if let Some(entry) =
                 self.town_trap_door_at(game_dir, scene, floor, self.player.x, self.player.y, tile)?
             {
-                let pre_effect_message = self.message.clone();
                 self.apply_town_trapdoor_party_damage();
                 if scene.byte == STONEGATE_SCENE_BYTE {
                     // `town-mode.md §7.1` orders the script: the black fill
@@ -3681,11 +3683,7 @@ impl PlayState {
                     self.stats_panel_command_refresh =
                         crate::stats_panel::PanelRefreshMode::None;
                     self.apply_stonegate_trapdoor_script(floor);
-                    self.message = if pre_effect_message.is_empty() {
-                        "A TRAPDOOR!".to_string()
-                    } else {
-                        format!("{pre_effect_message} A TRAPDOOR!")
-                    };
+                    self.emit_town_underfoot_line(Self::TOWN_TRAPDOOR_MESSAGE);
                     // The line closes its own row. `text-output.md` §10.4
                     // then has the rescue's first beat spend its leading feed
                     // deriving the blank beneath rather than closing a row
@@ -3700,7 +3698,6 @@ impl PlayState {
                     // together and sat one row high from there on.
                     // `cleak/u5-spec#279` asks for the published framing;
                     // this is the capture.
-                    self.close_message_row();
                     return Ok(Some(MoveOutcome::Used));
                 }
                 let mut outcome =
@@ -3732,11 +3729,9 @@ impl PlayState {
                         )?
                         && next.to_floor != landed_floor
                     {
-                        let chained_message = self.message.clone();
                         self.apply_town_trapdoor_party_damage();
                         outcome =
                             self.apply_town_trap_door_transition(game_dir, scene, next, false)?;
-                        self.message = format!("{chained_message} {}", self.message);
                         continue;
                     }
                     if Self::is_town_burning_live_tile(landed_tile) {
@@ -3754,12 +3749,6 @@ impl PlayState {
                 self.append_town_poison_gas_message(game_dir, landed_scene, landed_floor)?;
                 self.apply_pending_town_status_provision_pass();
                 self.apply_pending_town_object_epilogue();
-                let transition_message = self.message.clone();
-                self.message = if pre_effect_message.is_empty() {
-                    transition_message
-                } else {
-                    format!("{pre_effect_message} {transition_message}")
-                };
                 return Ok(Some(outcome));
             }
         }
@@ -3857,13 +3846,26 @@ impl PlayState {
     /// damage to every non-Dead slot."
     pub fn apply_town_burning_underfoot_effect(&mut self) {
         self.mark_visibility_dirty();
-        let line = Self::TOWN_BURNING_MESSAGE;
-        self.message = if self.message.is_empty() {
-            line.to_string()
-        } else {
-            format!("{} {line}", self.message)
-        };
+        self.emit_town_underfoot_line(Self::TOWN_BURNING_MESSAGE);
         self.apply_town_burning_party_damage();
+    }
+
+    /// `town-mode.md §10` (issue #279): `A TRAPDOOR!`, `Burning!` and
+    /// `Poisoned!` are each "one terminated string ... with a single trailing
+    /// line feed and no leading one", printed as stored. Each therefore lands
+    /// on its own row and leaves the cursor at column 0 of the next one.
+    ///
+    /// They used to be space-joined into the message slot - onto the
+    /// command's own result and onto one another - which put several
+    /// published lines on one row. The command's verb echo, when one is
+    /// still pending, is committed first so the command's result stays on
+    /// its verb row above this line rather than being flushed onto a row of
+    /// its own. The row state is set explicitly rather than inferred from
+    /// the text.
+    pub(crate) fn emit_town_underfoot_line(&mut self, line: &str) {
+        self.commit_command_echo();
+        self.emit_message_line(line);
+        self.close_message_row();
     }
 
     /// The burning family's mass damage is the same independently rolled
@@ -4027,13 +4029,8 @@ impl PlayState {
             }
             self.party[index].status = b'P';
             poisoned += 1;
-            // Composed like the burning arm's stored line in this handler.
-            let line = Self::TOWN_POISONED_MESSAGE;
-            self.message = if self.message.is_empty() {
-                line.to_string()
-            } else {
-                format!("{} {line}", self.message)
-            };
+            // One terminated `Poisoned!\n` row per failing member.
+            self.emit_town_underfoot_line(Self::TOWN_POISONED_MESSAGE);
             self.repaint_stats_panel();
         }
         poisoned

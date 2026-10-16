@@ -1461,7 +1461,94 @@
             "two independent 1..8 rolls: {}",
             state.party[0].hp
         );
-        assert_eq!(state.message.matches("A TRAPDOOR!").count(), 2);
+        // `town-mode.md §10`: each trapdoor line is its own terminated row.
+        assert_eq!(
+            transcript_texts(&state)
+                .iter()
+                .filter(|row| row.as_str() == "A TRAPDOOR!")
+                .count(),
+            2
+        );
+        let _ = fs::remove_dir_all(dir);
+    }
+
+    /// `town-mode.md §10` (issue #279): `A TRAPDOOR!`, `Burning!` and
+    /// `Poisoned!` are "one terminated string each with a single trailing
+    /// line feed and no leading one", and each failed poison-gas save prints
+    /// `Poisoned!\n` once. So every underfoot line is its own closed row in
+    /// the window - never space-joined onto the command's line or onto each
+    /// other in the message slot (audit A166 follow-up).
+    #[test]
+    fn town_underfoot_lines_are_each_their_own_terminated_row() {
+        // Poison gas: two failing saves, two rows.
+        let seed = (0..=u16::MAX)
+            .find(|&seed| {
+                let mut probe = seed;
+                u5_prng_range_u16(&mut probe, 0, TOWN_GAS_DOORWAY_RANGE_MAX) > 0
+                    && u5_prng_range_u16(&mut probe, 0, TOWN_GAS_DOORWAY_RANGE_MAX) > 0
+            })
+            .unwrap();
+        let mut state = test_state(open_grid(), 0, 1);
+        state.prng_state = seed;
+        state.party[0].status = b'G';
+        state.party[0].climb_stat = 0;
+        let mut second = state.party[0];
+        second.slot = 1;
+        state.party.push(second);
+        state.emit_message_line("North");
+        let poisoned = state.apply_town_poison_gas(TownPoisonGasEntry {
+            scene: Scene::new(17).unwrap(),
+            floor: 0,
+            x: 0,
+            y: 1,
+            expected_tile: None,
+        });
+        assert_eq!(poisoned, 2);
+        assert_eq!(
+            transcript_texts(&state),
+            vec!["North".to_string(), "Poisoned!".to_string(), "Poisoned!".to_string()]
+        );
+        assert!(!state.message_row_open_mid_line, "each line is terminated");
+        assert!(!state.message.contains("Poisoned! Poisoned!"), "{:?}", state.message);
+
+        // Burning: its own row under the command's line.
+        let mut state = test_state(open_grid(), 0, 1);
+        state.emit_message_line("North");
+        state.apply_town_burning_underfoot_effect();
+        assert_eq!(
+            transcript_texts(&state),
+            vec!["North".to_string(), PlayState::TOWN_BURNING_MESSAGE.to_string()]
+        );
+        assert!(!state.message_row_open_mid_line);
+        assert!(!state.message.contains("North"), "{:?}", state.message);
+    }
+
+    #[test]
+    fn town_trapdoor_chain_prints_each_trapdoor_line_on_its_own_row() {
+        let dir = debug_game_dir();
+        let mut pages = location_pages();
+        pages[4 * 1024 + 1] = TOWN_TRAPDOOR_LIVE_TILE;
+        fs::write(dir.join("CASTLE.DAT"), pages).unwrap();
+        fs::write(dir.join(LOCATION_FLOOR_TABLE_FILE), "CASTLE:0 5\n").unwrap();
+        let mut grid = open_grid();
+        grid[1] = TOWN_TRAPDOOR_LIVE_TILE;
+        let mut state = test_state(grid, 0, 0);
+        state.party[0].hp = 40;
+        state.party[0].max_hp = 40;
+
+        handle_play_key_input(&mut state, 'd', "", &dir).unwrap();
+
+        let rows = transcript_texts(&state);
+        assert_eq!(
+            rows.iter().filter(|row| row.as_str() == "A TRAPDOOR!").count(),
+            2,
+            "{rows:?}"
+        );
+        assert!(
+            !rows.iter().any(|row| row.contains("A TRAPDOOR!") && row != "A TRAPDOOR!"),
+            "no trapdoor line is joined onto another: {rows:?}"
+        );
+        assert!(!state.message_row_open_mid_line);
         let _ = fs::remove_dir_all(dir);
     }
 
