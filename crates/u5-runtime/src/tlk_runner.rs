@@ -15,6 +15,7 @@
 
 use crate::karma::{KarmaAction, apply_karma_action};
 use crate::map_io::{TALK_BRANCH_FLAG_BANK_BITS, talk_branch_flag_is_set, talk_branch_flag_mask};
+use crate::text_hold::TextHoldKind;
 use crate::tlk_control_codes::*;
 
 /// Inputs the runner needs to interpret control codes that would otherwise
@@ -55,9 +56,15 @@ pub struct TlkRunInputs<'a> {
     /// `0x83` PAUSE / `0x8F` WAIT-KEY behaviour. When `true`, the runner
     /// stops at each pause/wait-key with [`TlkRunStop::PausedAt`] /
     /// [`TlkRunStop::WaitingKey`] so the caller can flush a page and
-    /// resume. When `false`, the runner treats pauses as no-ops and
-    /// wait-key as a single newline and keeps going.
+    /// resume. When `false`, the runner keeps going: with
+    /// [`Self::mark_holds`] it leaves a [`crate::text_hold`] marker where
+    /// the hold belongs, and without it both codes emit nothing.
     pub yield_on_pause: bool,
+    /// `conversation.md §7.3`: record each `0x83` PAUSE and `0x8F` WAIT-KEY
+    /// as an inline hold marker (see [`crate::text_hold`]) so the message
+    /// layer can hold the rest of the response behind it. Ignored when
+    /// [`Self::yield_on_pause`] is set.
+    pub mark_holds: bool,
     /// `0x88` ASK-WHO behaviour. When `true`, the runner stops
     /// immediately after the ask code so the interactive conversation
     /// wrapper can collect a free-text answer and resume the same stream
@@ -135,9 +142,12 @@ pub enum TlkRunEvent {
     AskedWho(u8),
     /// `0x8B` CURSE-CHECK was reached.
     CurseChecked { curse_seen: bool },
-    /// `0x8F` WAIT-KEY synthesised newline (when `yield_on_pause` false).
-    WaitKeyTreatedAsNewline,
-    /// `0x83` PAUSE encountered (when `yield_on_pause` false).
+    /// `0x8F` WAIT-KEY encountered (when `yield_on_pause` false). §7.3:
+    /// the code emits nothing; with `mark_holds` it leaves a wait-key
+    /// marker in the output.
+    WaitKeySkipped,
+    /// `0x83` PAUSE encountered (when `yield_on_pause` false); with
+    /// `mark_holds` it leaves a timed-pause marker in the output.
     PauseSkipped,
     /// `0x8C` IF-ELSE branch decision. `bit` is the engine-chosen branch
     /// flag index (the speaking NPC's roster slot), `target_label` is the
@@ -494,6 +504,9 @@ pub fn run_tlk_stream_from(bytes: &[u8], start: usize, inputs: &TlkRunInputs) ->
                     out.consumed = pos;
                     return out;
                 }
+                if inputs.mark_holds {
+                    emit_rendered_glyph(&mut out, TextHoldKind::TimedPause.marker_glyph());
+                }
                 out.events.push(TlkRunEvent::PauseSkipped);
             }
             TLK_CODE_WAIT_KEY => {
@@ -502,9 +515,13 @@ pub fn run_tlk_stream_from(bytes: &[u8], start: usize, inputs: &TlkRunInputs) ->
                     out.consumed = pos;
                     return out;
                 }
-                emit_rendered_glyph(&mut out, TlkRenderedGlyph::ordinary(b'\n'));
-                out.events.push(TlkRunEvent::WaitKeyTreatedAsNewline);
-                last_emitted = Some(b'\n');
+                // §7.3: "Block for exactly one command keystroke ... No
+                // world or panel redraw. The stream then continues." It
+                // prints nothing of its own.
+                if inputs.mark_holds {
+                    emit_rendered_glyph(&mut out, TextHoldKind::WaitKey.marker_glyph());
+                }
+                out.events.push(TlkRunEvent::WaitKeySkipped);
             }
             TLK_CODE_PROTECT_RUN => {
                 print_mask = print_mask.toggle();
@@ -1441,14 +1458,36 @@ mod tests {
         assert_eq!(curse_events, vec![true, false]);
     }
 
+    /// `conversation.md §7.3` (R520): `0x8F` blocks for a key and "emits
+    /// nothing"; it is not a line feed.
     #[test]
-    fn wait_key_treated_as_newline_when_yield_disabled() {
+    fn wait_key_emits_nothing_when_yield_disabled() {
         let mut bytes = enc("a");
         bytes.push(TLK_CODE_WAIT_KEY);
         bytes.extend_from_slice(&enc("b"));
         bytes.push(TLK_CODE_END_OF_RESPONSE);
         let out = render(&bytes);
-        assert_eq!(out.text, "a\nb");
+        assert_eq!(out.text, "ab");
+    }
+
+    #[test]
+    fn mark_holds_leaves_a_marker_for_each_pause_and_wait_key() {
+        let mut bytes = enc("a");
+        bytes.push(TLK_CODE_PAUSE);
+        bytes.extend_from_slice(&enc("b"));
+        bytes.push(TLK_CODE_WAIT_KEY);
+        bytes.extend_from_slice(&enc("c"));
+        bytes.push(TLK_CODE_END_OF_RESPONSE);
+        let out = run_tlk_stream(
+            &bytes,
+            &TlkRunInputs {
+                mark_holds: true,
+                ..Default::default()
+            },
+        );
+        assert_eq!(out.text, "a\u{1}b\u{2}c");
+        assert_eq!(out.rendered_glyphs.len(), out.text.len());
+        assert_eq!(out.stop, TlkRunStop::EndOfResponse);
     }
 
     #[test]

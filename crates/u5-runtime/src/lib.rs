@@ -79,6 +79,7 @@ pub mod moongate;
 pub mod moongate_phase;
 pub mod moongate_transit;
 pub mod narration;
+pub mod text_hold;
 pub mod npc_band;
 pub mod npc_runtime;
 pub mod ool_audit;

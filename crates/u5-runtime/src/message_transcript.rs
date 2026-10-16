@@ -708,10 +708,182 @@ impl PlayState {
         entry.glyphs.extend(ordinary_glyphs_from_engine_text(typed));
     }
 
+    /// Emit a font-preserving TLK response. A response carrying
+    /// [`crate::text_hold`] markers prints up to its first hold now and
+    /// leaves the rest in [`PlayState::pending_text_hold`]; while a hold is
+    /// already pending, the whole response queues behind it.
     pub fn emit_tlk_message(&mut self, rendered: TlkRenderedText) {
-        self.push_tlk_message_transcript_lines(&rendered);
-        self.message = rendered.text.clone();
-        self.message_flushed = rendered.text;
+        let (first, rest) = crate::text_hold::split_rendered_at_holds(&rendered);
+        if self.pending_text_hold.is_some() {
+            self.queue_behind_text_hold(first, rest);
+            return;
+        }
+        self.push_tlk_message_transcript_lines(&first);
+        let row_open = !first.text.is_empty() && !first.text.ends_with('\n');
+        self.message = first.text.clone();
+        self.message_flushed = first.text;
+        self.begin_text_hold(rest, row_open);
+    }
+
+    /// Hold `rest` behind the text the caller has just put in the slot.
+    /// `row_open` says whether that text left its row open.
+    pub fn begin_text_hold(
+        &mut self,
+        rest: Vec<(crate::text_hold::TextHoldKind, TlkRenderedText)>,
+        row_open: bool,
+    ) {
+        if rest.is_empty() {
+            return;
+        }
+        self.pending_text_hold = Some(crate::text_hold::PendingTextHold {
+            pages: rest
+                .into_iter()
+                .map(|(hold, text)| crate::text_hold::HeldPage { hold, text })
+                .collect(),
+            due_at_secs: None,
+            row_open,
+            then_message: None,
+        });
+    }
+
+    fn queue_behind_text_hold(
+        &mut self,
+        first: TlkRenderedText,
+        rest: Vec<(crate::text_hold::TextHoldKind, TlkRenderedText)>,
+    ) {
+        let Some(hold) = self.pending_text_hold.as_mut() else {
+            return;
+        };
+        if let Some(last) = hold.pages.back_mut() {
+            last.text.push_rendered(&first);
+        }
+        hold.pages.extend(
+            rest.into_iter()
+                .map(|(hold, text)| crate::text_hold::HeldPage { hold, text }),
+        );
+    }
+
+    /// Whether a message is waiting behind a pause or key wait.
+    pub fn text_hold_active(&self) -> bool {
+        self.pending_text_hold.is_some()
+    }
+
+    /// Print `prompt` once every held page is out, or now when nothing is
+    /// held.
+    pub fn set_message_after_text_hold(&mut self, prompt: String) {
+        match self.pending_text_hold.as_mut() {
+            Some(hold) => hold.then_message = Some(prompt),
+            None => self.message = prompt,
+        }
+    }
+
+    /// A key arrived while a hold was running. `conversation.md §7.3`: a
+    /// waiting key "is consumed and ends the pause at once", and `0x8F`
+    /// takes "exactly one command keystroke (any key; its value is
+    /// discarded)". Either way "the keyboard type-ahead buffer is emptied".
+    /// Returns whether the key was consumed by a hold.
+    pub fn consume_text_hold_key(&mut self) -> bool {
+        if self.pending_text_hold.is_none() {
+            return false;
+        }
+        self.release_next_held_page();
+        self.keys_buffered_during_hold.clear();
+        true
+    }
+
+    /// Advance a running timed pause to an absolute clock reading.
+    /// `conversation.md §7.3`: "after the 28th pass the pause ends by itself,
+    /// key or no key", one BIOS tick per pass. A key wait never times out.
+    /// Returns whether a hold is still running afterwards.
+    pub fn advance_text_hold_to(&mut self, now_secs: f64) -> bool {
+        while let Some(hold) = self.pending_text_hold.as_mut() {
+            if hold.current() != Some(crate::text_hold::TextHoldKind::TimedPause) {
+                break;
+            }
+            let due = *hold.due_at_secs.get_or_insert_with(|| {
+                now_secs
+                    + crate::narration::bios_ticks_secs(
+                        crate::text_hold::TEXT_HOLD_TIMED_PAUSE_PASSES,
+                    )
+            });
+            if now_secs < due {
+                break;
+            }
+            self.release_next_held_page();
+            self.keys_buffered_during_hold.clear();
+        }
+        self.text_hold_active()
+    }
+
+    /// End every remaining hold now. For frontends and harnesses with no
+    /// clock and no key to give.
+    pub fn flush_text_hold(&mut self) {
+        while self.pending_text_hold.is_some() {
+            self.release_next_held_page();
+        }
+    }
+
+    fn release_next_held_page(&mut self) {
+        let Some(hold) = self.pending_text_hold.as_mut() else {
+            return;
+        };
+        let Some(page) = hold.pages.pop_front() else {
+            self.pending_text_hold = None;
+            return;
+        };
+        hold.due_at_secs = None;
+        let continues_row = hold.row_open;
+        if !page.text.text.is_empty() {
+            hold.row_open = !page.text.text.ends_with('\n');
+        }
+        let then_message = if hold.pages.is_empty() {
+            let then = hold.then_message.take();
+            self.pending_text_hold = None;
+            then
+        } else {
+            None
+        };
+        self.emit_tlk_page(page.text, continues_row);
+        if let Some(prompt) = then_message {
+            self.message = prompt;
+            self.flush_message_slot();
+        }
+    }
+
+    /// Print one held page. A page whose hold fell mid-row continues that
+    /// row, exactly as the unbroken text would have.
+    fn emit_tlk_page(&mut self, page: TlkRenderedText, continues_row: bool) {
+        self.flush_message_slot();
+        let mut rest = page.clone();
+        if continues_row {
+            let first_len = page.text.find('\n').unwrap_or(page.text.len());
+            let first = &page.text[..first_len];
+            let continued = if first.is_empty() {
+                true
+            } else if let Some(last) = self
+                .message_transcript
+                .last_mut()
+                .filter(|entry| !entry.explicit_blank)
+            {
+                last.text.push_str(first);
+                last.glyphs.extend_from_slice(&page.glyphs[..first_len]);
+                self.message_transcript_revision = self.message_transcript_revision.wrapping_add(1);
+                true
+            } else {
+                false
+            };
+            if continued {
+                // The feed that ends the continued row only closes it.
+                let skip = (first_len + 1).min(page.text.len());
+                rest = TlkRenderedText {
+                    text: page.text[skip..].to_string(),
+                    glyphs: page.glyphs[skip..].to_vec(),
+                };
+            }
+        }
+        self.push_tlk_message_transcript_lines(&rest);
+        self.message = page.text.clone();
+        self.message_flushed = page.text;
     }
 
     /// `text-output.md §11`: append whatever the slot is holding, if the

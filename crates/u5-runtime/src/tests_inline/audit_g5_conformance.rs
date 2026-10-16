@@ -544,3 +544,114 @@ fn audit_a067_talk_stands_the_reached_waypoint_down_from_four_to_one() {
         .expect("the stand-down is a persisted schedule edit");
     assert_eq!(mutation.ai[0], 1);
 }
+
+/// A one-NPC town conversation whose `HOLD` keyword answers with `response`.
+fn audit_g5_conversation_with_response(response: Vec<u8>) -> PlayState {
+    let mut dialogue: HashMap<u16, Vec<String>> = HashMap::new();
+    dialogue.insert(
+        0x10,
+        ["Maris", "a quiet sage", "Greetings", "I read books", "Farewell", "HOLD", "x"]
+            .iter()
+            .map(|s| s.to_string())
+            .collect(),
+    );
+    let enc = |s: &str| s.bytes().map(|b| b ^ 0x80).collect::<Vec<u8>>();
+    let mut raw: HashMap<u16, Vec<Vec<u8>>> = HashMap::new();
+    raw.insert(
+        0x10,
+        vec![
+            enc("Maris"),
+            enc("a quiet sage"),
+            enc("Greetings"),
+            enc("I read books"),
+            enc("Farewell"),
+            enc("HOLD"),
+            response,
+        ],
+    );
+    let mut state = test_state(open_grid(), 1, 1);
+    state.party_names = vec![*b"AVATAR\0\0\0"];
+    state.player.facing = Direction::East;
+    state.load_scheduled_npcs(&[
+        NpcSlot { slot: 0, type_byte: 0, dialog_id: 0, schedule: [0; 16], name: None },
+        NpcSlot {
+            slot: 1,
+            type_byte: 1,
+            dialog_id: 0x10,
+            schedule: [0, 0, 0, 2, 2, 2, 1, 1, 1, 0, 0, 0, 0, 8, 16, 20],
+            name: None,
+        },
+    ]);
+    assert_eq!(
+        state.talk_facing_with_dialogue_and_keyword_raw(&dialogue, &raw, None),
+        MoveOutcome::Talked
+    );
+    state
+}
+
+fn audit_g5_held_response(first: &str, code: u8, second: &str) -> Vec<u8> {
+    let enc = |s: &str| s.bytes().map(|b| b ^ 0x80).collect::<Vec<u8>>();
+    let mut bytes = enc(first);
+    bytes.push(code);
+    bytes.extend(enc(second));
+    bytes.push(TLK_CODE_END_OF_RESPONSE);
+    bytes
+}
+
+/// Audit A071. `conversation.md §7.3`: `0x83` is "a **timed** pause of up to
+/// 28 passes" of one BIOS tick each; "after the 28th pass the pause ends by
+/// itself", and "Neither code ever stops a response".
+#[test]
+fn audit_a071_pause_holds_the_rest_of_the_reply_for_28_ticks() {
+    let mut state =
+        audit_g5_conversation_with_response(audit_g5_held_response("Wait.", TLK_CODE_PAUSE, " Then."));
+    handle_play_key_input(&mut state, 'H', "OLD", Path::new("")).unwrap();
+    let held = audit_g5_transcript(&state);
+    assert!(held.contains("\"Wait."), "{held:?}");
+    assert!(!held.contains("Then."), "the rest waits: {held:?}");
+    assert!(!held.ends_with(':'), "no prompt yet: {held:?}");
+    assert!(state.text_hold_active());
+
+    let start = 100.0;
+    assert!(state.advance_text_hold_to(start));
+    let ticks = crate::narration::bios_ticks_secs(28);
+    assert!(state.advance_text_hold_to(start + ticks - 0.01));
+    assert!(!state.advance_text_hold_to(start + ticks + 0.01));
+    let after = audit_g5_transcript(&state);
+    assert!(after.contains("\"Wait. Then.\""), "same row, closing quote after: {after:?}");
+    assert!(after.ends_with(':'), "the prompt follows the hold: {after:?}");
+    assert!(state.active_conversation.is_some());
+}
+
+/// Audit A071. §7.3: during a pause "a waiting key is consumed and ends the
+/// pause at once" - it is not typed into the next prompt.
+#[test]
+fn audit_a071_a_key_ends_the_pause_and_is_consumed() {
+    let mut state =
+        audit_g5_conversation_with_response(audit_g5_held_response("Wait.", TLK_CODE_PAUSE, " Then."));
+    handle_play_key_input(&mut state, 'H', "OLD", Path::new("")).unwrap();
+    let turns = state.active_conversation.as_ref().unwrap().keyword_turns;
+    handle_play_key_input(&mut state, 'J', "", Path::new("")).unwrap();
+    assert!(!state.text_hold_active());
+    assert_eq!(state.active_conversation.as_ref().unwrap().keyword_turns, turns);
+    let after = audit_g5_transcript(&state);
+    assert!(after.contains("\"Wait. Then.\""), "{after:?}");
+    assert!(!after.contains("I am"), "the key ran no keyword: {after:?}");
+    assert_eq!(state.message, TLK_KEYWORD_PROMPT);
+}
+
+/// Audit A071. §7.3: `0x8F` blocks "for exactly one command keystroke" and
+/// emits nothing - it is not a line feed and it never times out.
+#[test]
+fn audit_a071_wait_key_blocks_for_one_key_and_prints_nothing() {
+    let mut state =
+        audit_g5_conversation_with_response(audit_g5_held_response("One.", TLK_CODE_WAIT_KEY, "Two."));
+    handle_play_key_input(&mut state, 'H', "OLD", Path::new("")).unwrap();
+    assert!(state.advance_text_hold_to(0.0));
+    assert!(state.advance_text_hold_to(1_000.0), "a key wait never times out");
+    assert!(!audit_g5_transcript(&state).contains("Two."));
+    handle_play_key_input(&mut state, ' ', "", Path::new("")).unwrap();
+    assert!(!state.text_hold_active());
+    let after = audit_g5_transcript(&state);
+    assert!(after.contains("\"One.Two.\""), "{after:?}");
+}

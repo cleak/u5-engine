@@ -110,6 +110,13 @@ fn handle_play_key_input_inner(
     mut suffix: &str,
     game_dir: &Path,
 ) -> io::Result<PlayInputDisposition> {
+    // `conversation.md §7.3`: a key that arrives during a `0x83` pause "is
+    // consumed and ends the pause at once", and `0x8F` blocks for "exactly
+    // one command keystroke (any key; its value is discarded)". Whatever the
+    // key is, it belongs to the hold, not to a command.
+    if state.consume_text_hold_key() {
+        return Ok(PlayInputDisposition::Continue);
+    }
     if let Some(byte) = input_byte_from_char(key) {
         if matches!(input_byte_class(byte), InputByteClass::FunctionKey) {
             // Measured 2026-09-07: a function key is just an unassigned
@@ -4229,8 +4236,9 @@ fn handle_active_conversation_key_input(
                 // value, so the safety-net flush appended it a second time
                 // and every answer printed twice - `Greyson` / `Greyson`,
                 // `I am an adventurer!` / `I am an adventurer!`. The slot
-                // only owes the prompt that follows the reply.
-                state.message = prompt;
+                // only owes the prompt that follows the reply - and when the
+                // reply is held behind a pause, only once the hold is over.
+                state.set_message_after_text_hold(prompt);
             }
         }
     }

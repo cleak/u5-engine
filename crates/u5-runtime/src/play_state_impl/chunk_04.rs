@@ -4635,6 +4635,7 @@ impl PlayState {
             ask_who_response: 0,
             yield_on_pause: false,
             yield_on_ask: false,
+            mark_holds: false,
         };
 
         // Resolve which field(s) to run through the byte runner.
@@ -4999,6 +5000,7 @@ impl PlayState {
             ask_who_response: 0,
             yield_on_pause: false,
             yield_on_ask: false,
+            mark_holds: false,
         };
         let output = crate::tlk_runner::run_tlk_stream(bytes, &inputs);
         self.apply_tlk_action_grants(&output.action_grants);

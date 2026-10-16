@@ -864,25 +864,16 @@ fn make_inputs<'a>(
         gold_available: ctx.gold_available,
         npc_slot,
         ask_who_response,
-        // `conversation.md §7.3` gives `0x83` PAUSE and `0x8F` WAIT-KEY as
-        // the mechanism that chunks a long response "into reader-friendly
-        // pages", and 240 of the 4593 shipped conversation fields carry
-        // one (`cargo run -p u5-tui --example tlk_pause_census`). Running
-        // them as no-ops therefore hides a real wait.
-        //
-        // **Measured 2026-09-19, and the capture refuses the obvious
-        // implementation.** With the runner stopping at both codes and any
-        // key resuming, `qa/paired/dwelling-talk-after-entry.tsv` went from
-        // eight beats agreeing to five, differing on `talk`, `name` and
-        // `job`: at the `talk` sample the original is still showing the
-        // `0x88` ASK-WHO prompt `"What is thy name "` / `You respond-`
-        // while this engine had already printed the introduction past it.
-        // The original does not stop where a literal reading of §7.3 says
-        // it should, so the framing - which path the codes govern, and what
-        // satisfies them - is not something to guess at.
-        //
-        // `cleak/u5-spec#284` carries the measurement and the question.
+        // `conversation.md §7.3` (corrected 2026-10-12, R520): `0x83` is a
+        // timed pause of up to 28 passes that a key ends and consumes, and
+        // `0x8F` blocks for one key and emits nothing; "Every response
+        // stream ... goes through the same byte runner, so both codes behave
+        // identically on every path" and "Neither code ever stops a
+        // response". So the stream is not cut here: each code leaves a
+        // `text_hold` marker and the message layer holds the rest of the
+        // output behind it (`PlayState::emit_tlk_message`).
         yield_on_pause: false,
+        mark_holds: true,
         yield_on_ask: true,
     }
 }
