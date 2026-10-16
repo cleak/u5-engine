@@ -1001,6 +1001,31 @@ fn rough_seas_hits_each_non_dead_member_after_one_repaint_tick() {
 }
 
 #[test]
+fn rough_seas_fires_on_an_accepted_skiff_step_onto_deep_water() {
+    // `overworld.md §6.2.5`: "every otherwise eligible consumed action on
+    // that terrain triggers it", movement included.
+    let mut grid = open_world_grid();
+    grid[world_cell_index(5, 5)] = BRIT_DEEP_WATER_TILE;
+    grid[world_cell_index(5, 4)] = BRIT_DEEP_WATER_TILE;
+    let mut state = world_state(grid, 5, 5);
+    state.player.transport = TransportState::Skiff {
+        type_byte: TRANSPORT_MARKER_SKIFF_FIRST,
+        tile: TRANSPORT_MARKER_SKIFF_FIRST,
+    };
+    state.party = six_member_party(40);
+
+    assert_eq!(state.step(Direction::North), MoveOutcome::Moved);
+    assert_eq!((state.player.x, state.player.y), (5, 4));
+    assert!(
+        state
+            .message_entries()
+            .iter()
+            .any(|entry| entry.text == "Rough seas!"),
+        "an accepted skiff step onto deep water must run rough seas"
+    );
+}
+
+#[test]
 fn rough_seas_requires_exact_deep_water_and_skiff_or_carpet_marker() {
     for (tile, transport, expected) in [
         (

@@ -1017,6 +1017,12 @@ impl PlayState {
         self.append_world_damage_tile_message(game_dir, plane)?;
         self.append_world_status_tile_message(plane);
         self.append_pending_hourly_status_message();
+        // `overworld.md §6.2.5`: rough seas fires on "every otherwise
+        // eligible consumed action on that terrain", after the action's
+        // time increment and party cleanup and ahead of the encounter
+        // epilogue. An accepted step is such an action, so a skiff or carpet
+        // moving onto deep water takes it here as well.
+        let _ = self.apply_rough_seas_if_eligible();
         // `active-objects.md §8`: the walker that just ran inside
         // `advance_turn` *queues* its adjacency reactions - whirlpool
         // engagement, sea-serpent breath, the pirate broadside, a creature
