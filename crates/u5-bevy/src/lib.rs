@@ -582,6 +582,22 @@ const INTRO_PRESENTS_SKIPPED_HOLD_BIOS_TICKS: u16 = 1;
 /// Pending publication by the spec owner.
 const INTRO_START_MENU_ARCHIVE_LOAD_BIOS_TICKS: u16 = 16;
 
+/// **Measured**, not published (`cleak/u5-spec#298` item 39): after a key
+/// aborts subtitle ignition, stock shows the finished logo, a static flame
+/// band and the lower menu window's frame - with no `Select:` or copyright
+/// caption and no labels - for about 1.7 s before the captions and the six
+/// labels appear together. Sixteen paired captures (`chargen-prompts` and
+/// `cast-blink`, DOSBox at 3000 cycles, ~0.57 s per sampled frame) all show
+/// exactly three such frames between the frame band being drawn and the
+/// labels; 3 x 0.57 s = 1.71 s, rounded to whole BIOS ticks (31 x 54.9 ms =
+/// 1.70 s). Nothing in `intro.md §3/§5/§6` or `location-dat.md §11` accounts
+/// for it: no automatic Return-to-View content (chapter caption, revealed
+/// column, band tick) is ever visible in it, and a logo-dissolve abort, whose
+/// key is consumed, reaches the preview without it. The aborting key is still
+/// pending throughout (`intro.md §5` item 7) and keys typed in the window are
+/// kept queued, as the BIOS buffer would; no capture presses one there.
+const INTRO_IGNITION_ABORT_MENU_HOLD_BIOS_TICKS: u16 = 31;
+
 /// Visible phase 5: the bounded poll, then the measured archive load.
 const INTRO_COMPOSITION_HOLD_BIOS_TICKS: u16 =
     INTRO_TITLE_BOUNDED_POLL_BIOS_TICKS + INTRO_START_MENU_ARCHIVE_LOAD_BIOS_TICKS;
@@ -10403,6 +10419,15 @@ enum VisualIntroPanel {
     /// the gated logo dissolve, presented as successive prefixes of its visit
     /// order at the measured stock cadence before step 7's ignition.
     StartMenuReveal(Box<StartMenuRevealState>),
+    /// The measured pause after an ignition abort
+    /// ([`INTRO_IGNITION_ABORT_MENU_HOLD_BIOS_TICKS`]): the start/menu screen
+    /// with the lower window's frame but no captions or labels, the band
+    /// static. `queued_keys` holds the aborting key and anything typed since,
+    /// in order; they are dispatched when the hold ends.
+    MenuLabelHold {
+        ticks_left: u16,
+        queued_keys: Vec<char>,
+    },
     CharacterCreation {
         session: ChargenSession,
         input_line: String,
@@ -11785,6 +11810,9 @@ fn advance_visual_intro_animation_tick(intro: &mut VisualIntroState) -> bool {
     if matches!(intro.panel, VisualIntroPanel::StartMenuReveal(_)) {
         return advance_visual_intro_start_menu_reveal(intro);
     }
+    if matches!(intro.panel, VisualIntroPanel::MenuLabelHold { .. }) {
+        return advance_visual_intro_menu_label_hold(intro);
+    }
     if matches!(intro.panel, VisualIntroPanel::Menu) {
         let mut advanced = false;
         let title_phase = matches!(intro.dispatch.tick_title(), UnifiedMenuStep::PresentTitle);
@@ -11978,6 +12006,33 @@ fn abort_visual_intro_subtitle_ignition(intro: &mut VisualIntroState) -> bool {
     intro.title_tick_frame = next_frame;
     intro.panel = VisualIntroPanel::Menu;
     complete_visual_intro_start_menu_loader(intro);
+    intro.panel = VisualIntroPanel::MenuLabelHold {
+        ticks_left: INTRO_IGNITION_ABORT_MENU_HOLD_BIOS_TICKS,
+        queued_keys: Vec::new(),
+    };
+    true
+}
+
+/// One BIOS tick of the post-ignition-abort hold. When it runs out the menu
+/// takes over and the queued keys are dispatched in order, the first being the
+/// unconsumed ignition-abort key.
+fn advance_visual_intro_menu_label_hold(intro: &mut VisualIntroState) -> bool {
+    let VisualIntroPanel::MenuLabelHold {
+        ticks_left,
+        queued_keys,
+    } = &mut intro.panel
+    else {
+        return false;
+    };
+    *ticks_left = ticks_left.saturating_sub(1);
+    if *ticks_left > 0 {
+        return false;
+    }
+    let keys = std::mem::take(queued_keys);
+    intro.panel = VisualIntroPanel::Menu;
+    for ch in keys {
+        step_visual_intro(intro, ch);
+    }
     true
 }
 
@@ -12577,6 +12632,12 @@ fn step_visual_intro(intro: &mut VisualIntroState, ch: char) -> bool {
             return false;
         }
     }
+    if let VisualIntroPanel::MenuLabelHold { queued_keys, .. } = &mut intro.panel {
+        // The ignition-abort key, and anything typed during the measured
+        // hold, waits in the keyboard buffer until the menu takes over.
+        queued_keys.push(ch);
+        return true;
+    }
     if matches!(intro.panel, VisualIntroPanel::StartMenuReveal(_)) {
         // `systems/intro.md §3` step 4: the gated dissolve's status test
         // finds the key, the loader's immediate read consumes it, and the
@@ -12708,6 +12769,9 @@ fn step_visual_intro_panel(intro: &mut VisualIntroState, ch: char) -> bool {
         VisualIntroPanel::StartMenuReveal(_) => {
             unreachable!("start/menu reveal input is handled before panel dispatch")
         }
+        VisualIntroPanel::MenuLabelHold { .. } => {
+            unreachable!("post-ignition hold input is queued before panel dispatch")
+        }
         VisualIntroPanel::CharacterCreation {
             session,
             input_line,
@@ -12805,7 +12869,9 @@ fn cancel_visual_intro_panel(intro: &mut VisualIntroState) -> bool {
     intro.menu_cursor_blanked = true;
     if matches!(
         intro.panel,
-        VisualIntroPanel::SubtitleIgnition { .. } | VisualIntroPanel::StartMenuReveal(_)
+        VisualIntroPanel::SubtitleIgnition { .. }
+            | VisualIntroPanel::StartMenuReveal(_)
+            | VisualIntroPanel::MenuLabelHold { .. }
     ) {
         // Escape reaches the same non-consuming ignition status poll as every
         // other key, so let the ordinary step finish the loader and offer the
@@ -12836,6 +12902,9 @@ fn cancel_visual_intro_panel(intro: &mut VisualIntroState) -> bool {
         }
         VisualIntroPanel::StartMenuReveal(_) => {
             unreachable!("start/menu reveal Escape is handled above")
+        }
+        VisualIntroPanel::MenuLabelHold { .. } => {
+            unreachable!("the post-ignition hold queues Escape above")
         }
         VisualIntroPanel::CharacterCreation { .. } => Some((
             IntroSubflow::CharacterCreation,
@@ -13389,6 +13458,15 @@ fn held_direction_repeat_command(
 fn summarize_intro(intro: &mut VisualIntroState) -> String {
     match &intro.panel {
         VisualIntroPanel::Menu => {}
+        VisualIntroPanel::MenuLabelHold {
+            ticks_left,
+            queued_keys,
+        } => {
+            return format!(
+                "Start/menu screen without labels: {ticks_left} ticks left, {} keys queued.",
+                queued_keys.len()
+            );
+        }
         VisualIntroPanel::StartMenuReveal(reveal) => {
             return format!(
                 "Start/menu logo reveal: {} of {} pixels transferred.",
@@ -13604,6 +13682,9 @@ fn render_intro_frame(intro: &mut VisualIntroState) -> Vec<u8> {
         // dissolved prefix of the logo rectangle.
         return intro.surface.to_rgba();
     }
+    if matches!(intro.panel, VisualIntroPanel::MenuLabelHold { .. }) {
+        return render_menu_label_hold_intro_frame(intro);
+    }
     if matches!(intro.panel, VisualIntroPanel::ReturnToView { .. }) {
         return render_return_to_view_intro_frame(intro);
     }
@@ -13675,6 +13756,21 @@ fn render_intro_frame(intro: &mut VisualIntroState) -> Vec<u8> {
         let summary = summarize_intro(intro);
         panic!("unhandled visual intro panel fell through renderer: {summary}")
     }
+}
+
+/// The measured post-ignition-abort hold: logo, the band as the loader's tick
+/// left it, and the lower window's frame band, rectangle and cleared interior
+/// with neither border caption nor any label.
+fn render_menu_label_hold_intro_frame(intro: &mut VisualIntroState) -> Vec<u8> {
+    let game_dir = intro.game_dir.clone();
+    let raster_depth = intro.raster_depth;
+    let title_tick_frame = intro.title_tick_visible_frame;
+    let frames = ensure_title_tick_frames(&mut *intro).clone();
+    intro.surface.clear(0);
+    draw_visual_intro_start_menu_art_to_buffer(&mut intro.surface, &game_dir, raster_depth);
+    intro.surface.draw_title_tick(title_tick_frame, &frames);
+    draw_visual_intro_menu_window_chrome(&mut intro.surface);
+    intro.surface.to_rgba()
 }
 
 fn render_subtitle_ignition_intro_frame(intro: &mut VisualIntroState) -> Vec<u8> {
@@ -13750,33 +13846,10 @@ fn draw_visual_intro_menu_labels(
     }
 }
 
-/// `systems/intro.md §6.1` lower intro menu/text-window frame, as the
-/// original actually draws it (`cleak/u5-spec#78`).
-///
-/// §6.1 describes a single-line rectangle of five reserved
-/// box-drawing glyphs in the intro's bright foreground index. A
-/// black-box capture of the original running the shipped assets shows
-/// the same rounded blue chrome the gameplay border uses instead:
-///
-/// 1. pixel rows 120..=199 filled with EGA index 1, with the measured
-///    corner-rounding profile applied at both ends of the band and
-///    mirrored on the right edge;
-/// 2. a one-pixel index-15 rectangle - rules at y = 127 and y = 192
-///    spanning x = 7..=312, verticals at x = 7 and x = 312 spanning
-///    y = 128..=191;
-/// 3. the interior x = 8..=311, y = 128..=191 cleared to index 0;
-/// 4. two white-on-black fixed-cell captions drawn over the border
-///    rows, which visibly interrupt both rules.
-///
-/// §6.1's rule that the frame pass does not clear the *label* rows
-/// still holds: the interior clear happens here at frame
-/// construction, and the label pass runs afterwards. Message text is
-/// overlaid on the finished RGBA frame, not through this pass.
-fn draw_visual_intro_menu_text_window_frame(
-    buffer: &mut IntroDisplayBuffer,
-    font: &FixedCellFont,
-    cursor_glyph: u8,
-) {
+/// `systems/intro.md §6.1` passes 1 to 3 of the lower window: the blue frame
+/// band, the white one-pixel rectangle and the interior clear, without the two
+/// border captions.
+fn draw_visual_intro_menu_window_chrome(buffer: &mut IntroDisplayBuffer) {
     let top = usize::from(INTRO_MENU_FRAME_TOP_Y);
     let bottom = usize::from(INTRO_MENU_FRAME_BOTTOM_Y);
     assert!(
@@ -13825,6 +13898,36 @@ fn draw_visual_intro_menu_text_window_frame(
         buffer.pixels[row_start + usize::from(INTRO_MENU_FRAME_OUTLINE_RIGHT_X)] =
             INTRO_MENU_FRAME_OUTLINE_COLOR;
     }
+}
+
+/// `systems/intro.md §6.1` lower intro menu/text-window frame, as the
+/// original actually draws it (`cleak/u5-spec#78`).
+///
+/// §6.1 describes a single-line rectangle of five reserved
+/// box-drawing glyphs in the intro's bright foreground index. A
+/// black-box capture of the original running the shipped assets shows
+/// the same rounded blue chrome the gameplay border uses instead:
+///
+/// 1. pixel rows 120..=199 filled with EGA index 1, with the measured
+///    corner-rounding profile applied at both ends of the band and
+///    mirrored on the right edge;
+/// 2. a one-pixel index-15 rectangle - rules at y = 127 and y = 192
+///    spanning x = 7..=312, verticals at x = 7 and x = 312 spanning
+///    y = 128..=191;
+/// 3. the interior x = 8..=311, y = 128..=191 cleared to index 0;
+/// 4. two white-on-black fixed-cell captions drawn over the border
+///    rows, which visibly interrupt both rules.
+///
+/// §6.1's rule that the frame pass does not clear the *label* rows
+/// still holds: the interior clear happens here at frame
+/// construction, and the label pass runs afterwards. Message text is
+/// overlaid on the finished RGBA frame, not through this pass.
+fn draw_visual_intro_menu_text_window_frame(
+    buffer: &mut IntroDisplayBuffer,
+    font: &FixedCellFont,
+    cursor_glyph: u8,
+) {
+    draw_visual_intro_menu_window_chrome(buffer);
 
     // 3. Border captions, white-on-black over the blue rows.
     draw_visual_intro_menu_border_caption(
@@ -20899,6 +21002,159 @@ mod tests {
         let _ = fs::remove_dir_all(dir);
     }
 
+    /// Runs the post-ignition-abort hold to its end, one BIOS tick at a time,
+    /// and returns how many ticks it took.
+    fn finish_menu_label_hold(intro: &mut VisualIntroState) -> u16 {
+        assert!(
+            matches!(intro.panel, VisualIntroPanel::MenuLabelHold { .. }),
+            "an ignition abort enters the measured hold: {}",
+            summarize_intro(intro)
+        );
+        let mut ticks = 0u16;
+        while matches!(intro.panel, VisualIntroPanel::MenuLabelHold { .. }) {
+            assert_eq!(
+                visual_intro_animation_interval(intro),
+                INTRO_ANIMATION_TICK_INTERVAL_SECS,
+                "the hold is BIOS-tick paced"
+            );
+            advance_visual_intro_animation_tick(intro);
+            ticks += 1;
+            assert!(ticks <= INTRO_IGNITION_ABORT_MENU_HOLD_BIOS_TICKS);
+        }
+        ticks
+    }
+
+    fn intro_at_subtitle_ignition(dir: &Path) -> VisualIntroState {
+        install_intro_assets(dir);
+        let mut intro = visual_intro_state_with_panel(dir.to_path_buf(), VisualIntroPanel::Menu);
+        intro.dispatch = UnifiedMenuDispatch::new();
+        intro.title_flourish_complete = true;
+        intro.title_signature_complete = true;
+        let outcome = finish_visual_intro_title_to_menu(&mut intro, false);
+        assert!(outcome.animated_after_reveal);
+        assert!(matches!(
+            intro.panel,
+            VisualIntroPanel::SubtitleIgnition { .. }
+        ));
+        intro
+    }
+
+    /// P12 (measured, `cleak/u5-spec#298` item 39): after an ignition abort
+    /// the start/menu screen holds for 31 BIOS ticks (~1.70 s) showing the
+    /// lower window's frame with no captions and no labels over a static
+    /// band; the labels and captions appear together when it ends.
+    #[test]
+    #[cfg(feature = "original-asset-tests")]
+    fn an_ignition_abort_holds_the_unlabelled_menu_for_the_measured_time() {
+        let dir = debug_game_dir();
+        let mut intro = intro_at_subtitle_ignition(&dir);
+        assert!(step_visual_intro(&mut intro, ' '));
+        let VisualIntroPanel::MenuLabelHold {
+            ticks_left,
+            queued_keys,
+        } = &intro.panel
+        else {
+            panic!("expected the post-ignition hold");
+        };
+        assert_eq!(*ticks_left, INTRO_IGNITION_ABORT_MENU_HOLD_BIOS_TICKS);
+        assert_eq!(queued_keys, &vec![' '], "the abort key is still pending");
+        let held_secs = f64::from(INTRO_IGNITION_ABORT_MENU_HOLD_BIOS_TICKS)
+            * f64::from(BIOS_USER_TICK_INTERVAL_SECS);
+        assert!(
+            (1.6..=1.8).contains(&held_secs),
+            "measured stock hold is ~1.7 s, got {held_secs:.3} s"
+        );
+
+        let band_frame = intro.title_tick_visible_frame;
+        let held = render_intro_frame(&mut intro);
+        let width = INTRO_FRAMEBUFFER_WIDTH as usize;
+        let pixel = |rgba: &[u8], x: usize, y: usize| {
+            let o = (y * width + x) * 4;
+            [rgba[o], rgba[o + 1], rgba[o + 2]]
+        };
+        let interior_black =
+            |rgba: &[u8]| (128..=191).all(|y| (8..=311).all(|x| pixel(rgba, x, y) == [0, 0, 0]));
+        // The Select: caption's cells (row 15, columns 15..24) and the
+        // copyright's (row 24, columns 5..33) are still frame band and rule.
+        let caption_free = |rgba: &[u8]| {
+            let border = EGA_PALETTE_RGB[usize::from(INTRO_MENU_FRAME_BORDER_COLOR)];
+            let rule = EGA_PALETTE_RGB[usize::from(INTRO_MENU_FRAME_OUTLINE_COLOR)];
+            (120..=126).all(|y| (15 * 8..25 * 8).all(|x| pixel(rgba, x, y) == border))
+                && (15 * 8..25 * 8).all(|x| pixel(rgba, x, 127) == rule)
+                && (193..=199).all(|y| (5 * 8..34 * 8).all(|x| pixel(rgba, x, y) == border))
+        };
+        assert!(interior_black(&held), "no labels during the hold");
+        assert!(caption_free(&held), "no border captions during the hold");
+
+        for _ in 1..INTRO_IGNITION_ABORT_MENU_HOLD_BIOS_TICKS {
+            assert!(!advance_visual_intro_animation_tick(&mut intro));
+            assert!(matches!(
+                intro.panel,
+                VisualIntroPanel::MenuLabelHold { .. }
+            ));
+            assert_eq!(
+                intro.title_tick_visible_frame, band_frame,
+                "the band stays static during the hold"
+            );
+            assert_eq!(render_intro_frame(&mut intro), held);
+        }
+        assert!(advance_visual_intro_animation_tick(&mut intro));
+        assert!(matches!(intro.panel, VisualIntroPanel::Menu));
+        let settled = render_intro_frame(&mut intro);
+        assert!(!interior_black(&settled), "the labels appear");
+        assert!(!caption_free(&settled), "the captions appear with them");
+        let _ = fs::remove_dir_all(dir);
+    }
+
+    /// Keys typed during the hold stay queued behind the abort key and are
+    /// dispatched in order when it ends: the abort key is spent on the
+    /// automatic preview, the next one reaches the menu.
+    #[test]
+    #[cfg(feature = "original-asset-tests")]
+    fn keys_typed_during_the_post_ignition_hold_are_kept_in_order() {
+        let dir = debug_game_dir();
+        let mut intro = intro_at_subtitle_ignition(&dir);
+        assert!(step_visual_intro(&mut intro, ' '));
+        for _ in 0..5 {
+            advance_visual_intro_animation_tick(&mut intro);
+        }
+        assert!(step_visual_intro(
+            &mut intro,
+            char::from(u5_runtime::INPUT_CODE_SOUTH)
+        ));
+        // Escape takes the same buffered path rather than a panel shortcut.
+        assert!(cancel_visual_intro_panel(&mut intro));
+        let VisualIntroPanel::MenuLabelHold { queued_keys, .. } = &intro.panel else {
+            panic!("keys must not end the post-ignition hold");
+        };
+        assert_eq!(
+            queued_keys,
+            &vec![' ', char::from(u5_runtime::INPUT_CODE_SOUTH), '\x1b']
+        );
+        assert_eq!(
+            visual_intro_menu_highlight(&intro),
+            IntroSubflow::JourneyOnward,
+            "nothing is dispatched while the hold runs"
+        );
+
+        assert_eq!(
+            finish_menu_label_hold(&mut intro),
+            INTRO_IGNITION_ABORT_MENU_HOLD_BIOS_TICKS - 5
+        );
+        assert!(matches!(intro.panel, VisualIntroPanel::Menu));
+        assert!(
+            !intro.pending_auto_return_to_view,
+            "the space was spent on the preview"
+        );
+        assert_eq!(
+            visual_intro_menu_highlight(&intro),
+            IntroSubflow::CharacterCreation,
+            "the Down typed during the hold moved the highlight"
+        );
+        assert!(intro.launch_result.lock().unwrap().is_none());
+        let _ = fs::remove_dir_all(dir);
+    }
+
     #[test]
     #[cfg(feature = "original-asset-tests")]
     fn intro_subtitle_ignition_abort_key_is_spent_on_the_automatic_preview() {
@@ -20936,6 +21192,7 @@ mod tests {
             &mut intro,
             char::from(u5_runtime::INPUT_CODE_SOUTH)
         ));
+        finish_menu_label_hold(&mut intro);
         assert!(matches!(intro.panel, VisualIntroPanel::Menu));
         assert_eq!(intro.title_tick_visible_frame, 1);
         assert_eq!(intro.title_tick_frame, 3);
@@ -20969,6 +21226,7 @@ mod tests {
         ));
 
         assert!(step_visual_intro(&mut intro, ' '));
+        finish_menu_label_hold(&mut intro);
 
         assert!(matches!(intro.panel, VisualIntroPanel::Menu));
         assert!(!intro.message_waiting_for_key);
