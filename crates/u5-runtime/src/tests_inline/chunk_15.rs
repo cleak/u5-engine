@@ -2489,9 +2489,32 @@
         state.submit_blackthorn_audience_answer("", &dir).unwrap();
         assert_eq!(state.message, "authored capture line");
         state.submit_blackthorn_audience_answer("", &dir).unwrap();
+        // §4.1: record `11`, "then acknowledgement and two line feeds before
+        // the first demand" - one closes the preamble's open row, the other
+        // is the blank row between it and the demand.
         assert_eq!(
             state.message,
-            "authored demand for Honesty?\"\n\nYour response?"
+            "\n\nauthored demand for Honesty?\"\n\nYour response?"
+        );
+        state.flush_message_slot();
+        let rows: Vec<&str> = state
+            .message_transcript
+            .iter()
+            .map(|entry| entry.text.as_str())
+            .collect();
+        let preamble = rows
+            .iter()
+            .rposition(|row| *row == "authored capture line")
+            .expect("the preamble is in the transcript");
+        assert_eq!(
+            rows[preamble..],
+            [
+                "authored capture line",
+                "",
+                "authored demand for Honesty?\"",
+                "",
+                "Your response?",
+            ]
         );
         let _ = fs::remove_dir_all(dir);
     }

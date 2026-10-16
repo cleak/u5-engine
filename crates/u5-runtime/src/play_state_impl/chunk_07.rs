@@ -4855,7 +4855,18 @@ impl PlayState {
                     prompt,
                 } => {
                     let demand = self.blackthorn_demand_text(game_dir, ordinal, prompt)?;
-                    format!("{demand}\n\n{BLACKTHORN_INPUT_PROMPT}")
+                    if ordinal == 0 {
+                        // `blackthorn.md §4.1`: record `11`, "then
+                        // acknowledgement and two line feeds before the first
+                        // demand". The preamble leaves its row open, so the
+                        // first feed closes it and the second is the blank row
+                        // the stock game shows above `"What is the Mantra`.
+                        self.flush_message_slot();
+                        self.open_message_row();
+                        format!("\n\n{demand}\n\n{BLACKTHORN_INPUT_PROMPT}")
+                    } else {
+                        format!("{demand}\n\n{BLACKTHORN_INPUT_PROMPT}")
+                    }
                 }
                 _ => String::new(),
             };
