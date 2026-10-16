@@ -2112,7 +2112,9 @@ impl PlayState {
                 // "one unit is credited to the shared party food word with
                 // the 9999 cap, the shared moral-standing selector is debited
                 // when nonzero, the party-dirty bit is set, and the turn
-                // sentinel is set."
+                // sentinel is set." `stats-panel.md §2.2.1` row 22: "G Get on
+                // a crop" is a deferred site, like the shared grant tail.
+                self.stats_panel_command_refresh = crate::stats_panel::PanelRefreshMode::Deferred;
                 self.grid[idx] = GET_TILE_CROPS_REPLACEMENT;
                 self.food = self.food.saturating_add(1).min(PARTY_FOOD_CAP);
                 self.debit_crop_or_table_food_moral();

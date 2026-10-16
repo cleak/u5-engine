@@ -826,6 +826,11 @@
         assert_eq!(state.grid[32 + 2], GET_TILE_CROPS_REPLACEMENT);
         assert_eq!(state.food, 9999, "the 9999 cap");
         assert!(state.moral_standing < 5, "crop pick debits moral standing");
+        // `stats-panel.md §2.2.1` row 22: a crop Get is a deferred site.
+        assert_eq!(
+            state.stats_panel_command_refresh,
+            crate::stats_panel::PanelRefreshMode::Deferred
+        );
 
         let mut state = test_state(grid, 2, 2);
         state.player.facing = Direction::South;
