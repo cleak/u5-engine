@@ -330,6 +330,27 @@ pub const BLACKTHORN_COBBLE_TILE: u8 = 0x44;
 pub const BLACKTHORN_LOCKED_DOOR_TILE: u8 = 0xbb;
 pub const BLACKTHORN_PENDULUM_TILE: u8 = 0x82;
 pub const BLACKTHORN_HOURGLASS_TILE: u8 = 0xe9;
+
+/// `blackthorn.md §6.1`: "On any *later* wrong answer an open-coded stamp
+/// selected by question index writes the hourglass cell directly instead:
+/// index 1 writes `0xEB`, index 2 writes `0xE8`, and index 3 executes a
+/// companion (Section 5) rather than stamping. The visible sequence for an
+/// all-wrong run is therefore `0xE8` → `0xE9` → `0xEB` → `0xE8`."
+pub const BLACKTHORN_HOURGLASS_CELL: (usize, usize) = (5, 9);
+pub const BLACKTHORN_HOURGLASS_SPENT_TILE: u8 = 0xe8;
+pub const BLACKTHORN_HOURGLASS_SECOND_WRONG_TILE: u8 = 0xeb;
+
+/// `blackthorn.md §6.1`: the hourglass stamp for the wrong answer to
+/// question `index` (zero-based), or `None` where §6.1 publishes no stamp -
+/// index 0 takes the first-wrong script swap instead (its `0xEA` arm is
+/// unreachable) and index 3 executes a companion.
+pub const fn blackthorn_hourglass_stamp(index: u8) -> Option<u8> {
+    match index {
+        1 => Some(BLACKTHORN_HOURGLASS_SECOND_WRONG_TILE),
+        2 => Some(BLACKTHORN_HOURGLASS_SPENT_TILE),
+        _ => None,
+    }
+}
 pub const BLACKTHORN_RESCUE_LEFT_GUARDIAN_TILE: u8 = 0x5e;
 pub const BLACKTHORN_RESCUE_RIGHT_GUARDIAN_TILE: u8 = 0x5f;
 pub const BLACKTHORN_RESCUE_SPECTRAL_ACTOR_BYTE: u8 = 0x74;

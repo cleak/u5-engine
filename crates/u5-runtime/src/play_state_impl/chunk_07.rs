@@ -5006,6 +5006,15 @@ impl PlayState {
                             crate::MISCMSG_BLACKTHORN_FIRST_WRONG_REBUKE,
                             BLACKTHORN_FIRST_WRONG_LINE,
                         )?;
+                        // §4.1: record `8` comes "after its scene beat", and
+                        // §6.1: "The script swap listed in Section 6.3 (`0x80`
+                        // becomes `0x82`, `0xE8` becomes `0xE9`) runs on the
+                        // **first** wrong answer only" - the failed-challenge
+                        // vector, which §4.2's table names as this branch's
+                        // failure reaction.
+                        self.run_blackthorn_cutscene_beat(
+                            BlackthornCutsceneBeat::FailedChallengeReaction,
+                        );
                         let threat = self.blackthorn_reaction_text(
                             game_dir,
                             crate::MISCMSG_BLACKTHORN_SAND_THREAT_PREFIX,
@@ -5017,19 +5026,25 @@ impl PlayState {
                     // Second and third wrong answers: "Later wrong answers
                     // stamp a tile into the cutscene map". They do not run
                     // §5's execution beat or clear the victim actor; that
-                    // happens only on the fourth answer. The two published
-                    // punishment props are introduced in prompt order.
+                    // happens only on the fourth answer.
+                    //
+                    // `blackthorn.md §6.1`: "an open-coded stamp selected by
+                    // question index writes the hourglass cell directly ...
+                    // index 1 writes `0xEB`, index 2 writes `0xE8`". The
+                    // pendulum is not stamped here: the first wrong answer's
+                    // script swap already placed it. §5 also has these
+                    // answers "advance the clock and then repaint"; the
+                    // amount of that advance is not published, so only the
+                    // repaint is modelled.
                     Some(crate::blackthorn_session::BlackthornWrongEscalation::TileStamp) => {
-                        let (x, y, tile) = if ordinal == 1 {
-                            (5, 7, BLACKTHORN_PENDULUM_TILE)
-                        } else {
-                            (5, 9, BLACKTHORN_HOURGLASS_TILE)
-                        };
+                        let (x, y) = crate::blackthorn::BLACKTHORN_HOURGLASS_CELL;
+                        let mut commands = Vec::with_capacity(2);
+                        if let Some(tile) = crate::blackthorn::blackthorn_hourglass_stamp(ordinal) {
+                            commands.push(BlackthornCutsceneCommand::WriteTerrain { x, y, tile });
+                        }
+                        commands.push(BlackthornCutsceneCommand::ExplicitRedraw);
                         let mut vm = self.blackthorn_cutscene_vm_from_audience_state();
-                        vm.run(&[
-                            BlackthornCutsceneCommand::WriteTerrain { x, y, tile },
-                            BlackthornCutsceneCommand::ExplicitRedraw,
-                        ]);
+                        vm.run(&commands);
                         self.apply_blackthorn_cutscene_vm_to_audience_state(&vm);
                         let (next_ordinal, prompt) = challenge
                             .current_prompt()
@@ -5053,9 +5068,14 @@ impl PlayState {
                         // §5: the tail names "the actual removed member",
                         // read before the roster record is lifted out.
                         let victim_name = self.blackthorn_victim_display_name(victim);
-                        let vm = self.run_blackthorn_cutscene_beat(
-                            BlackthornCutsceneBeat::FailedChallengeReaction,
-                        );
+                        // `blackthorn.md §6.1`: the failed-challenge script
+                        // swap "runs on the **first** wrong answer only", and
+                        // "index 3 executes a companion (Section 5) rather
+                        // than stamping", so the hourglass stays on the `0xE8`
+                        // the third answer left. Re-running that vector here
+                        // would rewrite `0xE9`. §5's two-phase blade
+                        // animation has no published vector, so none plays.
+                        let vm = self.blackthorn_cutscene_vm_from_audience_state();
                         // `blackthorn.md §5` step 5: the routine "wait[s] for
                         // player acknowledgement before returning to the
                         // caller branch", and measured

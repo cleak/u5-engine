@@ -148,3 +148,55 @@ fn audit_a033_first_threat_names_the_fixed_second_roster_entry() {
     );
     let _ = fs::remove_dir_all(dir);
 }
+
+fn audit_g5_audience_tile(state: &PlayState, x: usize, y: usize) -> Option<u8> {
+    state
+        .blackthorn_audience_map
+        .as_ref()
+        .and_then(|map| map.tile(x, y))
+}
+
+/// Audit A037. `blackthorn.md §6.1`: the failed-challenge script swap "runs on
+/// the **first** wrong answer only. On any *later* wrong answer an open-coded
+/// stamp selected by question index writes the hourglass cell directly
+/// instead: index 1 writes `0xEB`, index 2 writes `0xE8` ... The visible
+/// sequence for an all-wrong run is therefore `0xE8` → `0xE9` → `0xEB` →
+/// `0xE8`."
+#[test]
+fn audit_a037_hourglass_runs_e9_eb_e8_and_the_first_wrong_plays_the_beat() {
+    let dir = debug_game_dir();
+    let mut state = test_state(open_grid(), 5, 5);
+    state.party.push(audit_g5_companion(1));
+    state.party.push(audit_g5_companion(2));
+    state.begin_blackthorn_audience_capture(&dir).unwrap();
+    while state.active_blackthorn.as_ref().is_some_and(|c| c.current_prompt().is_none()) {
+        state.submit_blackthorn_audience_answer("", &dir).unwrap();
+    }
+
+    let sound_before = state.sound_effect_serial;
+    state.submit_blackthorn_audience_answer("wrong", &dir).unwrap();
+    // §4.1: record 7, "after its scene beat", record 8.
+    assert!(
+        state
+            .sound_effects_after(sound_before)
+            .contains(&SoundEffect::BlackthornMovementStinger),
+        "the first wrong answer plays the failed-challenge beat"
+    );
+    assert_eq!(audit_g5_audience_tile(&state, 5, 7), Some(0x82));
+    assert_eq!(audit_g5_audience_tile(&state, 5, 9), Some(0xe9));
+    // Acknowledge the threat; the second ask follows.
+    state.submit_blackthorn_audience_answer("", &dir).unwrap();
+
+    state.submit_blackthorn_audience_answer("wrong", &dir).unwrap();
+    assert_eq!(audit_g5_audience_tile(&state, 5, 9), Some(0xeb));
+    assert_eq!(audit_g5_audience_tile(&state, 5, 7), Some(0x82));
+
+    state.submit_blackthorn_audience_answer("wrong", &dir).unwrap();
+    assert_eq!(audit_g5_audience_tile(&state, 5, 9), Some(0xe8));
+    assert_eq!(audit_g5_audience_tile(&state, 5, 7), Some(0x82));
+
+    // Index 3 executes rather than stamping, and does not replay the swap.
+    state.submit_blackthorn_audience_answer("wrong", &dir).unwrap();
+    assert_eq!(audit_g5_audience_tile(&state, 5, 9), Some(0xe8));
+    let _ = fs::remove_dir_all(dir);
+}
