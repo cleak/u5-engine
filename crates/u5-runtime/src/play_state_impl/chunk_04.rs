@@ -4885,8 +4885,11 @@ impl PlayState {
                 TlkActionDispatchVerb::RaiseTorches => {
                     self.torches = self.torches.saturating_add(1).min(PARTY_BYTE_STOCK_CAP);
                 }
+                // `conversation.md §7.6`: `F` is "`+1` (cap `99`)" like every
+                // counter letter; "Counter letters never assign a fixed final
+                // value".
                 TlkActionDispatchVerb::SetGrappleGate => {
-                    self.climbing_gear = 1;
+                    self.climbing_gear = self.climbing_gear.saturating_add(1).min(PARTY_BYTE_STOCK_CAP);
                 }
                 TlkActionDispatchVerb::RaiseCarpets => {
                     let slot = &mut self.special_items[SPECIAL_ITEM_MAGIC_CARPET_INDEX];
@@ -5718,7 +5721,10 @@ impl PlayState {
     pub fn apply_talk_action_grants(&mut self, actions: &[char]) {
         for action in actions {
             match *action {
-                'F' => self.climbing_gear = 1,
+                'F' => {
+                    self.climbing_gear =
+                        self.climbing_gear.saturating_add(1).min(PARTY_BYTE_STOCK_CAP)
+                }
                 'H' => {
                     self.special_items[SPECIAL_ITEM_SEXTANT_INDEX] =
                         SPECIAL_ITEM_TLK_CARRIED_FLAG_VALUE

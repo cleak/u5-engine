@@ -344,3 +344,20 @@ fn audit_a035_punishing_branch_runs_the_conditional_tableau_cleanup() {
     );
     let _ = fs::remove_dir_all(dir);
 }
+
+/// Audit A072. `conversation.md §7.6`: `F` grants "`+1` (cap `99`)", and
+/// "Counter letters never assign a fixed final value; they always perform a
+/// saturating add by one."
+#[test]
+fn audit_a072_f_grant_adds_one_with_the_shared_cap() {
+    use crate::tlk_control_codes::TlkActionDispatchVerb;
+    let mut state = test_state(open_grid(), 1, 1);
+    state.climbing_gear = 3;
+    state.apply_tlk_action_grants(&[TlkActionDispatchVerb::SetGrappleGate]);
+    assert_eq!(state.climbing_gear, 4);
+    state.apply_talk_action_grants(&['F', 'F']);
+    assert_eq!(state.climbing_gear, 6);
+    state.climbing_gear = 99;
+    state.apply_tlk_action_grants(&[TlkActionDispatchVerb::SetGrappleGate]);
+    assert_eq!(state.climbing_gear, 99);
+}
