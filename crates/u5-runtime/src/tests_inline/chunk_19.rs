@@ -1710,12 +1710,23 @@
         assert_eq!(state.party_strengths[1], 20);
         assert_eq!(state.party[1].climb_stat, 21);
         assert!(state.visibility_dirty);
-        assert!(state.message.contains("Lord British-in-disguise camp event."));
-        assert!(state.message.contains("P1 reached level 3 from 200 XP"));
-        assert!(state.message.contains("P2 reached level 3 from 200 XP"));
-        assert!(state.message.contains("Intelligence reward"));
-        assert!(state.message.contains("Dexterity reward"));
-        assert!(state.message.contains("Verdict: camp-top"));
+        // `rest-and-camp.md §7`: the published text is the `KARMA.DAT`
+        // verdict, printed as the record; the per-member summary is engine
+        // bookkeeping and stays out of the message slot.
+        assert!(state.message.ends_with(" camp-top"));
+        assert!(!state.message.contains("Verdict:"));
+        assert!(!state.message.contains("Lord British-in-disguise"));
+        assert!(!state.message.contains("reached level"));
+        let notes = state.diagnostics.join(" ");
+        assert!(notes.contains("Lord British-in-disguise camp event."));
+        assert!(notes.contains("P1 reached level 3 from 200 XP"));
+        assert!(notes.contains("P2 reached level 3 from 200 XP"));
+        assert!(notes.contains("Intelligence reward"));
+        assert!(notes.contains("Dexterity reward"));
+        // `rest-and-camp.md §7`: the event "advances the turn clock before
+        // normal play resumes", so the six-hour camp ends one turn past 06:00.
+        assert_eq!(state.clock.hour, 6);
+        assert!(state.clock.minute > 0);
         assert_eq!(state.camp_month_cookie, state.clock.month);
         let _ = fs::remove_dir_all(dir);
     }

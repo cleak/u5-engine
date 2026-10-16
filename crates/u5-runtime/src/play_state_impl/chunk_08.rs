@@ -383,8 +383,14 @@ impl PlayState {
             // The second condition is reserved and no shipped public
             // caller sets it; town-bed rest uses a separate handler.
             let event_message = self.resolve_lord_british_camp_event(Some(game_dir))?;
-            self.message.push(' ');
-            self.message.push_str(&event_message);
+            if !event_message.is_empty() {
+                self.message.push(' ');
+                self.message.push_str(&event_message);
+            }
+            // `rest-and-camp.md §7`: the event "removes the temporary
+            // old-man presentation state and advances the turn clock before
+            // normal play resumes".
+            self.advance_turn();
         }
         if let Some(monster) = ambush_monster {
             let z = match self.area {
@@ -456,6 +462,12 @@ impl PlayState {
         &mut self,
         game_dir: Option<&Path>,
     ) -> io::Result<String> {
+        // `rest-and-camp.md §7`: the event is "cinematic text plus
+        // party-stat mutation". Its published text is the `KARMA.DAT`
+        // verdict; the per-member summary below is engine bookkeeping and
+        // goes to diagnostics, not the message slot. The member level line,
+        // the old-man and class-keyed sprite tiles, and the sting recipe
+        // are not yet published, so none of them is invented here.
         self.normalize_party_progress_vectors();
         let mut notes = vec!["Lord British-in-disguise camp event.".to_string()];
         let mut level_changes = 0;
@@ -493,9 +505,20 @@ impl PlayState {
         if level_changes == 0 {
             notes.push("No living party member was ready for a new level.".to_string());
         }
-        notes.push(self.lord_british_camp_verdict_message(game_dir)?);
+        let verdict = self.lord_british_camp_verdict_message(game_dir)?;
+        let printed = match verdict {
+            Some(record) => record,
+            None => {
+                notes.push(format!(
+                    "KARMA.DAT verdict record {} unavailable.",
+                    lord_british_camp_karma_record_index(self.moral_standing)
+                ));
+                String::new()
+            }
+        };
+        self.diagnostics.push(notes.join(" "));
         self.mark_visibility_dirty();
-        Ok(notes.join(" "))
+        Ok(printed)
     }
 
     pub fn normalize_party_progress_vectors(&mut self) {
@@ -570,22 +593,20 @@ impl PlayState {
         }
     }
 
-    pub fn lord_british_camp_verdict_message(&self, game_dir: Option<&Path>) -> io::Result<String> {
+    /// The `KARMA.DAT` record the camp event prints, bare; `None` when the
+    /// file or record is unavailable.
+    pub fn lord_british_camp_verdict_message(
+        &self,
+        game_dir: Option<&Path>,
+    ) -> io::Result<Option<String>> {
         let record_index = lord_british_camp_karma_record_index(self.moral_standing);
         let Some(game_dir) = game_dir else {
-            return Ok(format!(
-                "KARMA.DAT verdict record {record_index} unavailable."
-            ));
+            return Ok(None);
         };
         let Some(records) = load_karma_records(game_dir)? else {
-            return Ok(format!(
-                "KARMA.DAT verdict record {record_index} unavailable."
-            ));
+            return Ok(None);
         };
-        Ok(records
-            .get(record_index)
-            .map(|record| format!("Verdict: {record}"))
-            .unwrap_or_else(|| format!("KARMA.DAT verdict record {record_index} unavailable.")))
+        Ok(records.get(record_index).cloned())
     }
 
     pub fn dangerous_rest_interrupted(&mut self) -> bool {
