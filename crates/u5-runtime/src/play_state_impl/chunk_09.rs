@@ -1562,8 +1562,12 @@ impl PlayState {
                 else {
                     continue;
                 };
-                let terrain_index = terrain_band_active_index(row, col).unwrap();
-                self.terrain_band[terrain_index] = terrain;
+                // `visibility.md §10`: "the path queries the world-tile
+                // getter at the cell's world coordinates and writes the
+                // resulting tile byte" into the grid, so the cell becomes a
+                // direct terrain tile (first bank, §9) and a stationary
+                // water-bound slot sees a nonzero byte and restamps.
+                self.visibility_grid[grid_index] = terrain;
             }
         }
         self.composite_active_objects_into_visibility_buffers(area, radius);

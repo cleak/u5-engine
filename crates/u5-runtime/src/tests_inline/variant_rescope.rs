@@ -835,3 +835,40 @@ fn a_0x5c_slot_on_a_visible_0x92_chair_stamps_its_own_frame_without_a_draw() {
     assert_eq!(state.terrain_band[cell_band], 0x5C, "own frame, not the 0x32 chair row");
     assert_eq!(state.prng_state, prng_before, "the seated branch takes no draw");
 }
+
+/// `visibility.md §10` (audit A185): the cheap path writes the world-tile
+/// getter's byte into the **grid**, so a refilled cell is a direct terrain
+/// tile, and a stationary water-bound slot (whose cell the previous pass
+/// left at `0x00`) sees a nonzero byte and restamps.
+#[test]
+fn cheap_path_refills_the_grid_with_a_direct_tile_and_water_bound_slots_restamp() {
+    let mut grid = open_grid();
+    grid[5 * TOWN_GRID_SIDE + 7] = 0x2A;
+    let mut state = test_state(grid, 5, 5);
+    state.active_objects.push(ActiveObject {
+        type_byte: 0xE8,
+        tile: 0xE8,
+        x: 6,
+        y: 5,
+        z: 0,
+        phase: STEADY_PHASE,
+        aux1: 0,
+        aux3: 0,
+    });
+    state.visibility_dirty = true;
+    state.refresh_top_down_visibility_buffers(TopDownRenderArea::Town, VIEWPORT_PLAYER_ROW);
+    let boat_grid = visibility_grid_active_index(VIEWPORT_PLAYER_ROW, VIEWPORT_PLAYER_COL + 1).unwrap();
+    let boat_band = terrain_band_active_index(VIEWPORT_PLAYER_ROW, VIEWPORT_PLAYER_COL + 1).unwrap();
+    assert_eq!(state.visibility_grid[boat_grid], VISIBILITY_USE_COMPANION);
+    assert_eq!(state.terrain_band[boat_band], 0xE8);
+
+    // A clean frame: the cheap path runs.
+    let empty_grid = visibility_grid_active_index(VIEWPORT_PLAYER_ROW, VIEWPORT_PLAYER_COL + 2).unwrap();
+    state.visibility_grid[empty_grid] = VISIBILITY_USE_COMPANION;
+    assert!(!state.visibility_dirty);
+    state.refresh_top_down_visibility_buffers(TopDownRenderArea::Town, VIEWPORT_PLAYER_ROW);
+
+    assert_eq!(state.visibility_grid[empty_grid], 0x2A, "a direct terrain tile");
+    assert_eq!(state.visibility_grid[boat_grid], VISIBILITY_USE_COMPANION, "the slot restamped");
+    assert_eq!(state.terrain_band[boat_band], 0xE8);
+}
