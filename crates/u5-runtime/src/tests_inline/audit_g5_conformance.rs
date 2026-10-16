@@ -71,3 +71,42 @@ fn audit_a030_defeated_party_in_the_palace_gets_no_surrender_question() {
     assert!(state.message.is_empty(), "{:?}", state.message);
     let _ = fs::remove_dir_all(dir);
 }
+
+fn audit_g5_companion(slot: u8) -> PartyMember {
+    PartyMember {
+        slot,
+        class_byte: b'F',
+        status: b'G',
+        climb_stat: 10,
+        mana: 0,
+        hp: 30,
+        max_hp: 30,
+        level: 2,
+    }
+}
+
+/// Audit A032. `blackthorn.md §4` (R440): "Avatar plus one living companion
+/// is enough for the execution branch; the earlier requirement for more than
+/// one living companion is withdrawn."
+#[test]
+fn audit_a032_avatar_plus_one_companion_is_enough_for_the_merciful_death() {
+    let dir = debug_game_dir();
+    let mut state = test_state(open_grid(), 5, 5);
+    state.party.push(audit_g5_companion(1));
+    state.begin_blackthorn_audience_capture(&dir).unwrap();
+    while state.active_blackthorn.as_ref().is_some_and(|c| c.current_prompt().is_none()) {
+        state.submit_blackthorn_audience_answer("", &dir).unwrap();
+    }
+
+    state.submit_blackthorn_audience_answer("Ahm", &dir).unwrap();
+    assert!(
+        state.message.contains("merciful death"),
+        "record 5 for two nondead members: {:?}",
+        state.message
+    );
+    // The exit-beat key, then the beat itself.
+    state.submit_blackthorn_audience_answer("", &dir).unwrap();
+    state.run_blackthorn_audience_exit_to_handoff(&dir).unwrap();
+    assert_eq!(state.party.len(), 1, "the second nondead member is executed");
+    let _ = fs::remove_dir_all(dir);
+}

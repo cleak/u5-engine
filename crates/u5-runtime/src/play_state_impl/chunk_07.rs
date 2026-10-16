@@ -5234,10 +5234,11 @@ impl PlayState {
     }
 
     /// `blackthorn.md §4`: "**A correct answer also decides a
-    /// companion's fate.** If more than one companion is still alive,
-    /// Blackthorn thanks the player for their honesty and **kills** one
-    /// companion as 'a merciful death'. If only one remains, he spares
-    /// the player instead."
+    /// companion's fate.** The threshold counts all nondead travelling party
+    /// members at audience setup, including Avatar when nondead. With at
+    /// least two, Blackthorn thanks the player and **kills** the second
+    /// nondead member as 'a merciful death'. With only one, he spares that
+    /// survivor instead." (R440 withdrew the more-than-one-companion rule.)
     ///
     /// §5 gives the execution's shape: the routine "erases that
     /// companion's on-screen actor; lifts their roster record out of the
@@ -5254,13 +5255,10 @@ impl PlayState {
     /// is still on screen; the roster itself is not touched until the player
     /// acknowledges (`blackthorn.md §5` step 5).
     pub fn blackthorn_correct_answer_companion_fate_preview(&self) -> String {
-        let living_companions = self
-            .party
-            .iter()
-            .skip(1)
-            .filter(|member| member.living())
-            .count();
-        if living_companions <= 1 {
+        // `blackthorn.md §4` (R440): the threshold "counts all nondead
+        // travelling party members ..., including Avatar when nondead. With at
+        // least two, Blackthorn ... **kills** the second nondead member".
+        if self.blackthorn_eligible_party_member_count() < 2 {
             return "only one companion remains, so Blackthorn spares the player".to_string(); // audit: not a player-facing line
         }
         match self.blackthorn_failure_victim_index() {
@@ -5272,13 +5270,10 @@ impl PlayState {
     }
 
     pub fn apply_blackthorn_correct_answer_companion_fate(&mut self) -> String {
-        let living_companions = self
-            .party
-            .iter()
-            .skip(1)
-            .filter(|member| member.living())
-            .count();
-        if living_companions <= 1 {
+        // `blackthorn.md §4` (R440): Avatar plus one living companion is
+        // enough for the execution branch; the earlier more-than-one-companion
+        // requirement is withdrawn.
+        if self.blackthorn_eligible_party_member_count() < 2 {
             // audit: not a player-facing line - the fate string is a harness
             // diagnostic, and the measured scene says only `merciful death!`.
             return "only one companion remains, so Blackthorn spares the player".to_string(); // audit: not a player-facing line
@@ -5292,7 +5287,7 @@ impl PlayState {
             return "only the Avatar remains, so Blackthorn spares the player".to_string(); // audit: not a player-facing line
         }
         // `blackthorn.md §5`: "The same execution runs on the *correct*-answer
-        // branch whenever more than one companion is alive, under a different
+        // branch whenever at least two travelling party members are nondead, under a different
         // message - Blackthorn thanking the player for their honesty and
         // granting the companion 'a merciful death'." Both branches therefore
         // share one execution routine.
