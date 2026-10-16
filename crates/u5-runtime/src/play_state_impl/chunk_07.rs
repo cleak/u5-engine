@@ -5667,11 +5667,11 @@ impl PlayState {
                 crate::blackthorn::BLACKTHORN_RESCUE_WAIT_ENVELOPE_SEQUENCE,
                 crate::blackthorn::BLACKTHORN_RESCUE_SHOUT,
             );
-        // The two Guardian reveals and the third are blocking in the original
-        // and free here. See [`crate::BLACKTHORN_RESCUE_WAIT_CELL_REVEALS`].
+        // The two Guardian reveals are blocking in the original and free
+        // here. See [`crate::BLACKTHORN_RESCUE_WAIT_CELL_REVEAL`].
         self.staged_narration.push_ticks(
             crate::blackthorn::BLACKTHORN_RESCUE_WAIT_BEFORE_THUNDER
-                + crate::blackthorn::BLACKTHORN_RESCUE_WAIT_CELL_REVEALS,
+                + 2 * crate::blackthorn::BLACKTHORN_RESCUE_WAIT_CELL_REVEAL,
             crate::blackthorn::BLACKTHORN_RESCUE_THUNDER,
         );
         // Step 15: the paired viewport flash.
@@ -5684,8 +5684,11 @@ impl PlayState {
         // Held for the paired flash above, which `audio.md §8.4` measures at
         // about 0.86 s per invocation on this harness's own emulator. See
         // [`crate::BLACKTHORN_RESCUE_WAIT_PAIRED_FLASH`].
+        // `§7.1` step 5: the third reveal, the crowned figure, follows the
+        // flash and precedes the verdict.
         self.staged_narration.push_ticks(
-            crate::blackthorn::BLACKTHORN_RESCUE_WAIT_PAIRED_FLASH,
+            crate::blackthorn::BLACKTHORN_RESCUE_WAIT_PAIRED_FLASH
+                + crate::blackthorn::BLACKTHORN_RESCUE_WAIT_CELL_REVEAL,
             format!(
                 "{}{verdict_message}{}",
                 crate::blackthorn::BLACKTHORN_RESCUE_VERDICT_OPEN,

@@ -1332,6 +1332,21 @@ pub const BLACKTHORN_RESCUE_WAIT_VIEWPORT_DISSOLVE: u16 = 60;
 /// Splitting it evenly is a choice the capture cannot decide between.
 pub const BLACKTHORN_RESCUE_WAIT_CELL_REVEALS: u16 = 60;
 
+/// One of `§7`'s three cell reveals: [`BLACKTHORN_RESCUE_WAIT_CELL_REVEALS`]
+/// split evenly, because `§7.1` does not run the three together. Steps 2 and
+/// 3 reveal the two Guardians before the thunder line; step 5 reveals the
+/// crowned figure *after* the paired flash, ahead of the verdict.
+///
+/// The engine paid all sixty ticks before the thunder line. Measured
+/// 2026-10-16 over three `stonegate-rescue-pacing` timelapses (2026-09-18,
+/// 2026-09-19, 2026-10-14): the original runs the shout to the thunder line
+/// in four to five frames and the thunder line to the verdict in five, where
+/// this engine took seven to eight and three; beat `t44` landed between the
+/// two sides' thunder lines (`offset-4`). Splitting the hold the way `§7.1`
+/// orders the reveals puts both intervals within a frame of the original and
+/// leaves the total, and so every other beat, where it was.
+pub const BLACKTHORN_RESCUE_WAIT_CELL_REVEAL: u16 = BLACKTHORN_RESCUE_WAIT_CELL_REVEALS / 3;
+
 /// `blackthorn.md §4.2`, the audience exit beat.
 ///
 /// `cleak/u5-spec#268`: the beat is "one blocking key wait followed by the

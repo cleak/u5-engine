@@ -404,3 +404,57 @@ fn stonegate_scripted_death_reaches_rescue_on_the_next_gate() {
     ));
     let _ = fs::remove_dir_all(dir);
 }
+
+/// `blackthorn.md §7.1`: the two Guardian reveals precede the thunder line and
+/// the crowned figure's reveal follows the paired flash, ahead of the verdict -
+/// so the reveal hold is split across the two waits rather than paid before
+/// the thunder. Measured 2026-10-16 (`stonegate-rescue-pacing`, beat `t44`,
+/// `offset-4`).
+#[test]
+fn blackthorn_rescue_splits_the_cell_reveal_hold_around_the_thunder() {
+    let dir = debug_game_dir();
+    let mut state = test_state(open_grid(), 1, 1);
+    state.party[0].status = b'D';
+    state.party[0].hp = 0;
+    state.apply_blackthorn_rescue_refuge(&dir).unwrap();
+    let mut beats: Vec<crate::narration::NarrationBeat> = Vec::new();
+    for _ in 0..64 {
+        beats.extend(state.staged_narration.beats().cloned());
+        if beats.iter().any(|beat| beat.text.contains("peal of thunder")) {
+            break;
+        }
+        state.step_blackthorn_rescue(&dir, false).unwrap();
+    }
+    let delay = |needle: &str| {
+        beats
+            .iter()
+            .find(|beat| beat.text.contains(needle))
+            .unwrap_or_else(|| panic!("{needle:?} never staged"))
+            .delay_secs
+    };
+    let reveal = crate::narration::bios_ticks_secs(crate::blackthorn::BLACKTHORN_RESCUE_WAIT_CELL_REVEAL);
+    let thunder = delay("peal of thunder");
+    assert!(
+        (thunder
+            - crate::narration::bios_ticks_secs(
+                crate::blackthorn::BLACKTHORN_RESCUE_WAIT_BEFORE_THUNDER + 2 * crate::blackthorn::BLACKTHORN_RESCUE_WAIT_CELL_REVEAL
+            ))
+        .abs()
+            < 1e-9
+    );
+    let verdict = beats
+        .iter()
+        .skip_while(|beat| !beat.text.contains("peal of thunder"))
+        .nth(1)
+        .expect("the verdict follows the thunder")
+        .delay_secs;
+    assert!(
+        (verdict
+            - crate::narration::bios_ticks_secs(crate::blackthorn::BLACKTHORN_RESCUE_WAIT_PAIRED_FLASH)
+            - reveal)
+            .abs()
+            < 1e-6
+    );
+    assert_eq!(3 * crate::blackthorn::BLACKTHORN_RESCUE_WAIT_CELL_REVEAL, crate::blackthorn::BLACKTHORN_RESCUE_WAIT_CELL_REVEALS);
+    let _ = fs::remove_dir_all(dir);
+}
