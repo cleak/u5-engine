@@ -1496,6 +1496,48 @@ BRITANNIA 11 21
         let _ = fs::remove_dir_all(dir);
     }
 
+    /// `karma.md §8.1`: a read that completes the Codex mask "continue[s]
+    /// with three shared viewport flash/rumble effects, then record `40`";
+    /// `audio.md §8.4` prices each at 1,856 gameplay-PRNG draws.
+    #[test]
+    fn codex_completion_runs_three_major_flashes() {
+        let dir = debug_game_dir();
+        let mut miscmsg = Vec::new();
+        for index in 0..MISCMSG_DAT_RECORDS {
+            miscmsg.extend_from_slice(format!("rec{index}").as_bytes());
+            miscmsg.push(0);
+        }
+        fs::write(dir.join(MISCMSG_DAT_FILE), miscmsg).unwrap();
+
+        let mut state = britannia_state(open_world_grid(), 10, 20);
+        state.shrine_ordained_mask = ShrineVirtue::Honesty.bit();
+        state.shrine_codex_mask = 0xFF & !ShrineVirtue::Honesty.bit();
+        let prng_before = state.prng_state;
+        let serial = state.sound_effect_serial;
+        state.read_codex_urn_after_entry(&dir).unwrap();
+
+        let flashes = state
+            .sound_effects_after(serial)
+            .into_iter()
+            .filter(|effect| matches!(effect, SoundEffect::MajorFlash { .. }))
+            .count();
+        assert_eq!(flashes, 3);
+        let mut prng = U5Prng::new(prng_before);
+        for _ in 0..3 {
+            let _ = audio::draw_major_flash_bands(&mut prng);
+        }
+        assert_eq!(state.prng_state, prng.state());
+
+        // An incomplete resulting mask finishes without the flashes.
+        let mut partial = britannia_state(open_world_grid(), 10, 20);
+        partial.shrine_ordained_mask = ShrineVirtue::Honesty.bit();
+        partial.shrine_codex_mask = 0;
+        let serial = partial.sound_effect_serial;
+        partial.read_codex_urn_after_entry(&dir).unwrap();
+        assert!(partial.sound_effects_after(serial).is_empty());
+        let _ = fs::remove_dir_all(dir);
+    }
+
     /// `karma.md §8` (`RETRACTIONS.md` R451): "`M` remains Mix Reagents at
     /// this location. The earlier statement that the M command owns Codex
     /// entry is retracted." So `M` on the Codex tile mixes and stamps nothing.

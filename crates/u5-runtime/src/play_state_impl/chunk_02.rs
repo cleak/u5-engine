@@ -3,6 +3,10 @@ use std::path::Path;
 
 use crate::*;
 
+/// `karma.md §8.1` / `audio.md §8.4`: the completed Codex read runs "three
+/// shared viewport flash/rumble effects" before page-turn record `40`.
+const CODEX_COMPLETION_MAJOR_FLASHES: usize = 3;
+
 impl PlayState {
     pub fn step_non_town(
         &mut self,
@@ -2442,12 +2446,13 @@ impl PlayState {
                     // that order [...] record `40` is not repeated between
                     // them."
                     //
-                    // The three flash/rumble effects are not emitted here.
-                    // This engine models a viewport flash as a playback record
-                    // a frontend replays (see `blackthorn_rescue_playback`),
-                    // and the Codex has no such record yet; the text and key
-                    // contract below is what a paired capture measures.
-                    // Tracked as unfinished rather than faked.
+                    // `audio.md §8.4`: "the Codex urn's completion beat
+                    // invokes [the shared flash/rumble] three times", each
+                    // drawing its 1,856 gameplay-PRNG bands whether or not
+                    // sound is audible.
+                    for _ in 0..CODEX_COMPLETION_MAJOR_FLASHES {
+                        self.emit_major_flash();
+                    }
                     if let Some(record) =
                         messages.record(crate::miscmsg_io::MISCMSG_CODEX_PAGE_TURN)
                     {
