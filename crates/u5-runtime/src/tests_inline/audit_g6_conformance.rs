@@ -309,3 +309,33 @@ fn a132_refused_on_floor_gate_installs_the_route_and_replays_it() {
     state.advance_npc_schedules();
     assert_eq!((state.npcs[0].x, state.npcs[0].y, state.npcs[0].z), (12, 12, 1));
 }
+
+#[test]
+fn a129_spent_search_latch_skips_a_blocked_state_two_npc() {
+    // npc-schedules.md §7: once one NPC has searched this tick, "every later
+    // slot in the same tick that would have searched is skipped until the
+    // next tick" - no cap-zero recovery step, no draw, no aging.
+    let mut grid = g6_open_grid();
+    // Both NPCs face a wall on their direct step east.
+    grid[2 * 32 + 3] = 0x4E;
+    grid[8 * 32 + 3] = 0x4E;
+    let mut state = test_state(grid, 30, 30);
+    let mut first = g6_npc(1, 2, 2, 0, (6, 2, 0));
+    first.state = NPC_STATE_INPLANE_MOVE;
+    let mut second = g6_npc(2, 2, 8, 0, (6, 8, 0));
+    second.state = NPC_STATE_INPLANE_MOVE;
+    state.npcs = vec![first, second];
+    state.relink_npc_objects();
+    let prng_before_second = {
+        let mut probe = state.clone();
+        probe.npcs.truncate(1);
+        probe.advance_npc_schedules();
+        probe.prng_state
+    };
+    state.advance_npc_schedules();
+    assert_ne!(g6_pos(&state, 0), (2, 2), "the first NPC searched and moved");
+    assert_eq!(g6_pos(&state, 1), (2, 8), "the latched NPC stands still");
+    assert_eq!(state.npcs[1].state, NPC_STATE_INPLANE_MOVE);
+    assert_eq!(state.npcs[1].stuck_counter, 0);
+    assert_eq!(state.prng_state, prng_before_second, "no draw is spent");
+}

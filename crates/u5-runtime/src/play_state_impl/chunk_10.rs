@@ -1049,31 +1049,22 @@ impl PlayState {
             ));
         }
         if *searched {
-            // `npc-schedules.md §9.1`, "The same stepper is reached with the
-            // cap switched off": one of the two route-recovery entries is
-            // "the state-2/3 arm whose queue is exhausted and whose replan
-            // either failed or **was not attempted**". This is the
-            // not-attempted arm - §7's per-tick latch, "at most one NPC per
-            // tick may start a fresh search", has already spent the tick's
-            // one search. No draw is spent here and, per `RETRACTIONS.md`
-            // R367, the counter is untouched: "the recovery stepper never
-            // touches the counter table on any of its three rejection
-            // paths."
+            // `npc-schedules.md §7`: "At most one NPC per tick may start a
+            // fresh search ... every later slot in the same tick that would
+            // have searched is skipped until the next tick." §9.1 agrees that
+            // the spent budget is taken before the replan draw and the aging
+            // arm, and that "an NPC so diverted stands still *without*
+            // aging". The cap-zero recovery stepper is not this arm: §9.1
+            // reaches it only from a refused queued step or a replan that
+            // "either failed or was not attempted because a queue pointer was
+            // still live".
             //
-            // **Unresolved mapping, not a published equivalence.** This
-            // engine folds its spent per-tick search latch into this arm, but
-            // §9.1's own budget condition - "the tick's heavy-work budget must
-            // still be unspent (a spent budget diverts the walker to the
-            // cached-waypoint escape hatch instead)" - names a *different*
-            // published arm: §6's cheap arm, "which re-checks the floor and
-            // then enters the AI dispatch after all - using its **cached**
-            // waypoint index rather than the freshly resolved one". That is
-            // not this cap-zero recovery stepper, and `RETRACTIONS.md` R369
-            // sharpens the difference - "a diverted NPC stands still
-            // *without* aging", where this stepper can commit a move.
-            // Whether the two arms coincide in the original is unresolved, so
-            // do not read this call site as implementing the escape hatch.
-            return self.npc_route_recovery_wander(npc_index, floor, target_x, target_y);
+            // Open question (not modelled): §9.1 names the diversion target
+            // "the cached-waypoint escape hatch" (§6's cheap arm into the AI
+            // dispatch). Whether an in-flight state-2 NPC, unlike §6's settled
+            // boundary-hour NPC, takes that arm is not published; skipping is
+            // the reading §7 states outright.
+            return NpcScheduleStepOutcome::Stalled;
         }
         // `npc-schedules.md §9.1`, "The replan gate and the stuck counter's
         // three bands": the counter "does not gate movement; it gates
