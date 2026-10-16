@@ -1314,9 +1314,9 @@ impl PlayState {
                 // same `On who: ` prompt a potion does, and the chosen
                 // member's name completes that row.
                 CastFollowupKind::PartyTarget => USE_POTION_TARGET_PROMPT.to_string(),
-                CastFollowupKind::GatePhase => {
-                    "To phase? _\nChoose moon phase 1-8; Esc cancels.".to_string()
-                }
+                // `magic.md §8` handler-family map: Gate Travel "prompts
+                // `To phase:_`". No key cancels it (see the reader below).
+                CastFollowupKind::GatePhase => "To phase:_".to_string(),
                 CastFollowupKind::CombatTarget { creature } => {
                     let label = if creature { "Creature" } else { "Target" };
                     let value = if session.buffer.is_empty() {
@@ -1428,19 +1428,22 @@ impl PlayState {
                     }
                 }
                 CastFollowupKind::GatePhase => {
-                    if matches!(ch, '\u{1b}' | ' ' | '\r' | '\n' | '0') {
-                        self.message = "None!".to_string();
-                        return Ok(None);
-                    }
-                    let Some(digit) = ch
+                    // `magic.md §8` handler-family map: the prompt "accepts a
+                    // digit `1`..`8` [...] A key outside `1`..`8` [...]
+                    // report[s] the ordinary `Failed!`". The charge and mana
+                    // were settled before the prompt opened (§5), so every
+                    // other key - Escape included - is a committed handler
+                    // failure, not a `None!` cancel and not ignored.
+                    let digit = ch
                         .to_digit(10)
                         .and_then(|digit| usize::try_from(digit).ok())
-                    else {
-                        continue;
+                        .filter(|digit| (1..=MOONSTONE_SLOT_COUNT).contains(digit));
+                    let Some(digit) = digit else {
+                        let combat = session
+                            .combat_actor_slot
+                            .map(|slot| (slot, session.combat_had_foe));
+                        return Ok(Some((self.fail_committed_gate_travel(), combat)));
                     };
-                    if !(1..=MOONSTONE_SLOT_COUNT).contains(&digit) {
-                        continue;
-                    }
                     return self.finish_active_cast_followup(session, &digit.to_string(), game_dir);
                 }
                 CastFollowupKind::CombatTarget { .. } => {

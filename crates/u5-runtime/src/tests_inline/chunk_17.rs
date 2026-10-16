@@ -744,19 +744,12 @@
         assert!(state.step_active_cast('P', "RV", Path::new("")).unwrap().is_none());
         assert!(state.step_active_cast(' ', "", Path::new("")).unwrap().is_none());
         assert!(state.active_cast_followup.is_some());
-        assert!(state.message.contains("To phase?"));
+        // `magic.md §8` handler-family map: "prompts `To phase:_`".
+        assert!(state.message.ends_with("To phase:_"), "{:?}", state.message);
         // `magic.md §5` (issue #277): spent before the phase prompt opens.
         assert_eq!(state.spell_charges[GATE_TRAVEL_SPELL_INDEX], 0);
         assert_eq!(state.party[0].mana, 0);
         assert_eq!(state.turn, 0);
-
-        assert!(
-            state
-                .step_active_cast_followup('9', "", Path::new(""))
-                .unwrap()
-                .is_none()
-        );
-        assert!(state.active_cast_followup.is_some());
 
         let result = state
             .step_active_cast_followup('1', "", Path::new(""))
@@ -768,6 +761,71 @@
         assert_eq!(state.party[0].mana, 0);
         assert_eq!(state.turn, 1);
         assert_eq!(state.message, "Failed!");
+    }
+
+    /// `magic.md §8` handler-family map, Gate travel: "A key outside
+    /// `1`..`8` [...] report[s] the ordinary `Failed!`" - neither a `None!`
+    /// cancel nor an ignored key - and the charge and mana stay spent.
+    #[test]
+    fn active_cast_gate_phase_key_outside_one_to_eight_fails() {
+        for key in ['9', '0', '\u{1b}', 'x'] {
+            let mut state = britannia_state(open_world_grid(), 1, 1);
+            state.spell_charges[GATE_TRAVEL_SPELL_INDEX] = 1;
+            state.party[0].mana = GATE_TRAVEL_COST;
+            state.party[0].level = GATE_TRAVEL_COST;
+            state.active_player = Some(0);
+            assert_eq!(state.start_cast_spell_prompt(), MoveOutcome::Observed);
+            assert!(state.step_active_cast('P', "RV", Path::new("")).unwrap().is_none());
+            assert!(state.step_active_cast(' ', "", Path::new("")).unwrap().is_none());
+            assert!(state.active_cast_followup.is_some());
+
+            let result = state
+                .step_active_cast_followup(key, "", Path::new(""))
+                .unwrap()
+                .unwrap_or_else(|| panic!("key {key:?} must end the phase prompt"));
+            assert_eq!(result.0, MoveOutcome::Blocked);
+            assert!(state.active_cast_followup.is_none());
+            assert_eq!(state.message, "Failed!", "key {key:?}");
+            assert_eq!(state.spell_charges[GATE_TRAVEL_SPELL_INDEX], 0);
+            assert_eq!(state.party[0].mana, 0);
+            assert_eq!(state.turn, 1);
+        }
+    }
+
+    /// `magic.md §8` handler-family map, Gate travel: "Refuses while the
+    /// party is aboard a frigate or a skiff **before** printing anything,
+    /// so that transcript is a bare `Failed!` with no `To phase:_` row."
+    #[test]
+    fn gate_travel_aboard_skiff_or_frigate_fails_before_phase_prompt() {
+        let transports = [
+            TransportState::Skiff {
+                type_byte: FIRST_PLAYABLE_SKIFF_TILE,
+                tile: FIRST_PLAYABLE_SKIFF_TILE,
+            },
+            TransportState::Ship {
+                type_byte: 0x20,
+                tile: 0x20,
+                sails_hoisted: false,
+                hull: 99,
+                skiffs: 1,
+            },
+        ];
+        for transport in transports {
+            let mut state = britannia_state(open_world_grid(), 1, 1);
+            state.player.transport = transport;
+            state.spell_charges[GATE_TRAVEL_SPELL_INDEX] = 1;
+            state.party[0].mana = GATE_TRAVEL_COST;
+            state.party[0].level = GATE_TRAVEL_COST;
+            state.active_player = Some(0);
+            assert_eq!(state.start_cast_spell_prompt(), MoveOutcome::Observed);
+            assert!(state.step_active_cast('P', "RV", Path::new("")).unwrap().is_none());
+            let finished = state.step_active_cast(' ', "", Path::new("")).unwrap();
+            assert!(finished.is_some(), "{transport:?} must not open the phase prompt");
+            assert!(state.active_cast_followup.is_none());
+            assert_eq!(state.message, "Failed!", "{transport:?}");
+            assert_eq!(state.spell_charges[GATE_TRAVEL_SPELL_INDEX], 0);
+            assert_eq!(state.party[0].mana, 0);
+        }
     }
 
     /// `magic.md §6` Step 6: "The handler prints `Mixing...`, pauses

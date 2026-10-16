@@ -280,6 +280,25 @@ impl PlayState {
         wind_status_message_from_state_and_save_byte(self.wind, self.wind_save_byte)
     }
 
+    /// `magic.md §8` handler-family map: Gate Travel refuses "while the
+    /// party is aboard a frigate or a skiff".
+    pub(crate) fn party_is_shipboard_for_gate_travel(&self) -> bool {
+        matches!(
+            self.player.transport,
+            TransportState::Ship { .. } | TransportState::Skiff { .. }
+        )
+    }
+
+    /// The ordinary handler failure for a committed Gate Travel cast:
+    /// `Failed!` with the failure sound, one turn, nothing refunded
+    /// (`magic.md §5` step 8, §8).
+    pub(crate) fn fail_committed_gate_travel(&mut self) -> MoveOutcome {
+        self.advance_turn();
+        self.message = "Failed!".to_string();
+        self.emit_sound_effect(SoundEffect::CastFailure);
+        MoveOutcome::Blocked
+    }
+
     pub fn cast_gate_travel(
         &mut self,
         caster_index: usize,
@@ -307,11 +326,8 @@ impl PlayState {
         // handler - §8 "requires the party not to be shipboard" - so it is an
         // ordinary handler failure and the dispatcher's own epilogue narrates
         // it. The engine-voice sentence that used to stand here was invented.
-        if matches!(self.player.transport, TransportState::Ship { .. }) {
-            self.advance_turn();
-            self.message = "Failed!".to_string();
-            self.emit_sound_effect(SoundEffect::CastFailure);
-            return Ok(MoveOutcome::Blocked);
+        if self.party_is_shipboard_for_gate_travel() {
+            return Ok(self.fail_committed_gate_travel());
         }
 
         // `audio.md §6.1` id 46: the variant (circle 8) plays "only after the

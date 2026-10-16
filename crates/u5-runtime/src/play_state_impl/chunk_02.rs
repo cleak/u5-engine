@@ -1366,6 +1366,13 @@ impl PlayState {
                     self.request_cast_argument(CastArgumentRequest::Caster);
                     return Ok(MoveOutcome::Blocked);
                 };
+                // `magic.md §8` handler-family map: Gate Travel "[r]efuses
+                // while the party is aboard a frigate or a skiff **before**
+                // printing anything, so that transcript is a bare `Failed!`
+                // with no `To phase:_` row".
+                if self.party_is_shipboard_for_gate_travel() {
+                    return Ok(self.fail_committed_gate_travel());
+                }
                 let Some(slot_index) = parse_inline_gate_phase_index(suffix) else {
                     self.request_cast_argument(CastArgumentRequest::GatePhase);
                     return Ok(MoveOutcome::Blocked);
