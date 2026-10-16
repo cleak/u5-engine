@@ -1810,20 +1810,23 @@ impl PlayState {
     /// threshold stops fleeing and can no longer leave the arena." That is
     /// what this does, so the flag is not latched.
     ///
-    /// Not implemented: §9.1's other half - "The same pre-step block also
-    /// rolls a one-in-four chance to restore one point of that actor's
-    /// health." The section does not say where that draw sits relative to
-    /// the conditional morale roll below, and the two orderings put a
-    /// different number of draws in front of the step's own random-cardinal
-    /// draws on exactly the turns a fleeing actor takes them.
-    /// `cleak/u5-spec#285` asks; adding it on a reading would move the
-    /// shared PRNG stream for every fleeing turn in the game.
+    /// `§9.1`'s other half (clarified 2026-10-12, issue #285): "The same
+    /// pre-step block, for a monster-side fleeing actor, **first** takes one
+    /// draw over the four values zero through three on every fleeing turn
+    /// ... and on a three adds exactly one to the actor's current health
+    /// with **no ceiling**". "That draw precedes the classifier's own
+    /// conditional draw", so the classifier reads the healed health.
     pub(crate) fn combat_ai_actor_fleeing(&mut self, actor_slot: usize) -> bool {
-        let Some(actor) = self.combat_actors.get(actor_slot).copied() else {
+        let Some(mut actor) = self.combat_actors.get(actor_slot).copied() else {
             return false;
         };
         if actor_slot < COMBAT_PARTY_ACTOR_SLOTS || !combat_actor_is_active_not_dead(actor) {
             return false;
+        }
+        if actor.is_fleeing() && self.random_range_u8(0, 3) == 3 {
+            // "a plain increment ... an engine must not clamp".
+            actor.hp_or_wound = actor.hp_or_wound.wrapping_add(1);
+            self.combat_actors[actor_slot].hp_or_wound = actor.hp_or_wound;
         }
         let Some(stats) = combat_class_stats(actor.owner_target_class) else {
             return actor.is_fleeing();

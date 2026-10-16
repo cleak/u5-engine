@@ -136,3 +136,44 @@ fn wound_band_morale_draw_spans_zero_through_two_fifty_six() {
         true
     );
 }
+
+#[test]
+fn fleeing_turn_heal_draw_comes_first_and_has_no_ceiling() {
+    // `combat.md §9.1` (issue #285): a monster-side fleeing actor "first
+    // takes one draw over the four values zero through three on every
+    // fleeing turn ... and on a three adds exactly one to the actor's
+    // current health with **no ceiling**", before the classifier's own
+    // conditional draw.
+    let find_seed = |want_three: bool| {
+        (0..=u16::MAX)
+            .find(|&seed| {
+                let mut probe = seed;
+                (u5_prng_range_u16(&mut probe, 0, 3) == 3) == want_three
+            })
+            .unwrap()
+    };
+    let max_hp = combat_class_stats(COMBAT_CLASS_GIANT_RAT).unwrap().max_hp;
+    for (want_three, expected_hp) in [(true, max_hp + 1), (false, max_hp)] {
+        let mut state = combat_ai_turn_state(8, 5);
+        state.combat_actors[8].hp_or_wound = max_hp;
+        state.combat_actors[8].set_fleeing(true);
+        let seed = find_seed(want_three);
+        state.prng_state = seed;
+        let mut expected_state = seed;
+        let _ = u5_prng_range_u16(&mut expected_state, 0, 3);
+
+        // At or above half health the classifier clears the bit and takes
+        // no morale draw, so the heal draw is the only one.
+        assert!(!state.combat_ai_actor_fleeing(8));
+        assert_eq!(state.combat_actors[8].hp_or_wound, expected_hp);
+        assert_eq!(state.prng_state, expected_state);
+    }
+
+    // A non-fleeing actor takes no heal draw.
+    let mut state = combat_ai_turn_state(8, 5);
+    state.combat_actors[8].hp_or_wound = max_hp;
+    state.prng_state = 1234;
+    assert!(!state.combat_ai_actor_fleeing(8));
+    assert_eq!(state.prng_state, 1234);
+    assert_eq!(state.combat_actors[8].hp_or_wound, max_hp);
+}
