@@ -22465,9 +22465,8 @@ fn chargen_questionnaire_floors_strength_to_twenty_over_seeded_tallies() {
     let few_str = chargen_stats_from_winners(&[ShrineVirtue::Valor, ShrineVirtue::Honor]);
     assert_eq!(few_str.strength, CHARGEN_STR_FLOOR);
 
-    // Best-case STR contribution: any seven full-STR virtues should
-    // still floor the result, since 7*max delta < 20 only if delta<3.
-    // Either way, the result must be >= floor.
+    // Whatever seven identical winners add to the seeded tally, the
+    // committed strength is never below the floor.
     for v in [
         ShrineVirtue::Honesty,
         ShrineVirtue::Compassion,
