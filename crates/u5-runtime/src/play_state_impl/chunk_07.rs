@@ -711,26 +711,6 @@ impl PlayState {
         self.random_range_u8(1, dungeon_chest_gold_upper(level))
     }
 
-    pub fn dungeon_chest_roll_seed(
-        &self,
-        level: u8,
-        x: usize,
-        y: usize,
-        tile: u8,
-        row: u8,
-        stage: u8,
-    ) -> u8 {
-        self.turn as u8
-            ^ self.clock.hour.wrapping_mul(3)
-            ^ self.clock.minute.wrapping_mul(5)
-            ^ level.wrapping_mul(17)
-            ^ (x as u8).wrapping_mul(19)
-            ^ (y as u8).wrapping_mul(23)
-            ^ tile.wrapping_mul(29)
-            ^ row.wrapping_mul(31)
-            ^ stage.wrapping_mul(37)
-    }
-
     pub fn consume_dungeon_chest_with_note(
         &mut self,
         scene: DungeonScene,
