@@ -2207,7 +2207,13 @@ fn handle_active_shop_key_input(
                 _ => None,
             };
             if let Some(letter) = shipwright_letter_echo {
+                // `§8.C` "Shipwrights": "F and S echo with `\n\n`" - the
+                // letter closes the menu's open prompt row and one blank row
+                // follows. The blank leaves the cursor at column 0, so the
+                // row state is set explicitly rather than inferred.
                 state.emit_message_line_continuing_row(letter.to_string());
+                state.push_explicit_blank_message_entry();
+                state.close_message_row();
             }
             // `§8.C` "Shipwrights": the ordinary offer's answer echoes `No` or
             // `Yes\n\n`; the dock-space and continuation answers echo a bare

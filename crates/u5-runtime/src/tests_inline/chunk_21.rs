@@ -6784,6 +6784,42 @@ fn end_to_end_shipwright_pending_frigate_dock_space_always_refuses() {
     );
 }
 
+/// `shops.md §8.C` "Shipwrights": "Record `119` is the F/S menu. F and S
+/// echo with `\n\n`". The letter lands on the menu's open prompt row, that
+/// row is closed and one blank row follows before the offer record.
+#[test]
+fn shipwright_menu_letter_echo_is_followed_by_a_blank_row() {
+    use crate::shop_runtime::ShipBrokerState;
+    use crate::shop_session::ActiveShopSession;
+
+    for letter in ['F', 'S'] {
+        let mut state = test_state(open_grid(), 3, 4);
+        state.gold = 50;
+        state.active_shop = Some(ActiveShopSession::ShipBroker(
+            ShipBrokerState::menu_for_shipwright(Shipwright::TheRustyBucket),
+        ));
+        state.return_world = None;
+        // Record `119` ends on its own prompt with the cursor mid-row.
+        state.emit_message_line_continuing_row("like to see?\" ");
+        state.open_message_row();
+
+        handle_play_key_input(&mut state, letter, "", Path::new("")).unwrap();
+        let rows: Vec<(String, bool)> = state
+            .message_transcript
+            .iter()
+            .map(|entry| (entry.text.clone(), entry.explicit_blank))
+            .collect();
+        let echo = rows
+            .iter()
+            .position(|(text, _)| text == &format!("like to see?\" {letter}"))
+            .unwrap_or_else(|| panic!("{letter} must echo onto the menu row: {rows:?}"));
+        assert!(
+            rows.get(echo + 1).is_some_and(|(text, blank)| *blank && text.is_empty()),
+            "{letter}'s `\\n\\n` echo leaves one blank row under it: {rows:?}"
+        );
+    }
+}
+
 /// `animation.md §6` (spec HEAD `c00bf63`): "These are render
 /// selectors, not map edits; the authored map byte remains the
 /// phase-zero tile id." The grid must never be rewritten for an
