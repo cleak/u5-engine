@@ -159,13 +159,15 @@ impl ActiveShopSession {
             | Self::Innkeeper(InnkeeperState::PickLeaveCompanion { inn, .. })
             | Self::Innkeeper(InnkeeperState::ConfirmLeaveCompanion { inn, .. })
             | Self::Innkeeper(InnkeeperState::PickUpCompanion { inn, .. })
-            | Self::Innkeeper(InnkeeperState::ConfirmPickUpCompanion { inn, .. }) => {
+            | Self::Innkeeper(InnkeeperState::ConfirmPickUpCompanion { inn, .. })
+            | Self::Innkeeper(InnkeeperState::Continuation { inn }) => {
                 inn.display_name()
             }
             Self::Innkeeper(InnkeeperState::Exited) => "Innkeeper",
             Self::Reagent(ReagentShopState::Greeting { herbalist })
             | Self::Reagent(ReagentShopState::PickReagent { herbalist })
-            | Self::Reagent(ReagentShopState::PickQuantity { herbalist, .. }) => {
+            | Self::Reagent(ReagentShopState::ConfirmBundle { herbalist, .. })
+            | Self::Reagent(ReagentShopState::CapRefusalWait { herbalist }) => {
                 herbalist.display_name()
             }
             Self::Reagent(ReagentShopState::Exited) => "Herbalist",
@@ -190,7 +192,7 @@ impl ActiveShopSession {
             Self::ShipBroker(ShipBrokerState::Exited) => "Shipwright",
             Self::Guild(GuildShopState::Greeting { shop })
             | Self::Guild(GuildShopState::PickItem { shop })
-            | Self::Guild(GuildShopState::PickQuantity { shop, .. }) => shop.display_name(),
+            | Self::Guild(GuildShopState::ConfirmBundle { shop, .. }) => shop.display_name(),
             Self::Guild(GuildShopState::Exited) => "Guildmaster",
         }
     }

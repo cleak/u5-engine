@@ -893,24 +893,19 @@ fn handle_active_shop_key_input(
                 None => None,
             };
             match (*s, yes, no, inline_digit) {
+                // `shops.md §8.B`: "The healer entry accepts Y/N only and
+                // ignores Space"; every No "exits through the appropriate
+                // closing-bark flow".
                 (HealerShopState::Greeting, _, true, _) => {
                     *s = HealerShopState::Exited;
-                    String::new()
+                    shop_closing_bark(state, SHOP_DIALOG_ID_HEALER, healer_name, game_dir)
                 }
                 (HealerShopState::Greeting, true, _, _) => {
                     *s = HealerShopState::PickService;
                     healer_service_menu(healer_name)
                 }
-                (HealerShopState::Greeting, _, _, _)
-                    if matches!(key_byte, b'H' | b'h' | b'Y' | b'y') =>
-                {
-                    *s = HealerShopState::PickService;
-                    healer_service_menu(healer_name)
-                }
-                (HealerShopState::Greeting, _, _, _) => {
-                    *s = HealerShopState::Exited;
-                    String::new()
-                }
+                // Other entry keys re-poll without output.
+                (HealerShopState::Greeting, _, _, _) => String::new(),
                 (HealerShopState::PickService, _, _, _) => match healer_service_action(key_byte) {
                     HealerServiceAction::Treatment(treatment) => {
                         let service = healer_service_for_treatment(treatment);
@@ -924,11 +919,6 @@ fn handle_active_shop_key_input(
                         // §8.B's question left open - `need?" Curing` - and a
                         // one-member party is then treated without a prompt
                         // of any kind: the refusal followed the echo directly.
-                        //
-                        // `shops.md §8` says "Each mode prompts for a party
-                        // member first"; with one member there is nobody to
-                        // choose between, and the engine asked anyway with an
-                        // invented `Who needs Cure? (1-6)`.
                         state.emit_message_line_continuing_row(healer_service_echo(treatment));
                         state.push_explicit_blank_message_entry();
                         if state.party.len() == 1 {
@@ -939,23 +929,28 @@ fn handle_active_shop_key_input(
                             };
                         }
                         *s = HealerShopState::PickPartyMember { service, cost };
-                        // §8.C publishes this after all: "A sole party member
-                        // is selected automatically; otherwise print
-                        // `\n\n"Who needs my aid?" ` and use the party
-                        // selector."
+                        // §8.C: "A sole party member is selected automatically;
+                        // otherwise print `\n\n"Who needs my aid?" ` and use
+                        // the party selector."
                         HEALER_WHO_NEEDS_AID.to_string()
                     }
+                    // §8.C: "Space/Return echo `Nothing` and leave through the
+                    // ordinary farewell."
                     HealerServiceAction::Exit => {
+                        state.emit_message_line_continuing_row("Nothing");
                         *s = HealerShopState::Exited;
-                        String::new()
+                        shop_closing_bark(state, SHOP_DIALOG_ID_HEALER, healer_name, game_dir)
                     }
-                    HealerServiceAction::Discard => healer_service_menu(healer_name),
+                    // §8.C: "Other keys silently wait without reprinting.
+                    // Earlier invalid-key menu-redraw claims are retracted
+                    // (R419)."
+                    HealerServiceAction::Discard => String::new(),
                 },
                 (HealerShopState::PickPartyMember { service, .. }, _, true, _) => {
-                    *s = HealerShopState::PickService;
+                    *s = HealerShopState::Continuation;
                     let _ = service;
                     // §8.C: "Cancellation adds `No one`, with no trailing line
-                    // feed", then the visit continues on its own question.
+                    // feed", then the continuation question.
                     format!("No one{HEALER_CONTINUATION}")
                 }
                 (HealerShopState::PickPartyMember { service, .. }, _, _, Some(d)) if d >= 1 => {
@@ -971,7 +966,10 @@ fn handle_active_shop_key_input(
                         };
                     };
                     if !active_healer_target_accepts(treatment, member) {
-                        *s = HealerShopState::PickService;
+                        // §8.3: "An untreatable selection prints the shared
+                        // healer refusal and asks the continuation Y/N
+                        // question".
+                        *s = HealerShopState::Continuation;
                         healer_no_need_refusal(healer_name)
                     } else {
                         match healer_treatment_fee(*healer, treatment) {
@@ -981,10 +979,15 @@ fn handle_active_shop_key_input(
                                     treatment,
                                     target_index,
                                 ) {
-                                    Ok(outcome) => format_healer_treatment_outcome(outcome),
+                                    // §8.C "Minoc free Cure/Heal |
+                                    // `\n\n"Receive now the Light!"`,
+                                    // followed by treatment effects".
+                                    Ok(_) => format!(
+                                        "{HEALER_RECEIVE_THE_LIGHT}{HEALER_CONTINUATION}"
+                                    ),
                                     Err(err) => format_healer_treatment_error(err, healer_name),
                                 };
-                                *s = HealerShopState::PickService;
+                                *s = HealerShopState::Continuation;
                                 message
                             }
                             HealerTreatmentFee::Price(cost) => {
@@ -1009,37 +1012,67 @@ fn handle_active_shop_key_input(
                     _,
                     _,
                 ) => {
+                    state.emit_message_line_continuing_row("Yes");
                     let treatment = healer_treatment_for_service(service);
-                    let message =
-                        match state.buy_healer_treatment(*healer, treatment, usize::from(slot)) {
-                            Ok(outcome) => {
-                                let surcharge =
-                                    if matches!(outcome.quote.fee, HealerTreatmentFee::Price(_)) {
-                                        apply_active_shop_surcharge(state)
-                                    } else {
-                                        None
-                                    };
-                                shop_message_ignoring_surcharge(
-                                    format_healer_treatment_outcome(outcome),
-                                    surcharge,
-                                )
-                            }
-                            Err(crate::shops::HealerTreatmentError::InsufficientGold {
-                                ..
-                            }) => {
-                                format!("Thou lackest the {cost} gold.")
-                            }
-                            Err(err) => format_healer_treatment_error(err, healer_name),
-                        };
-                    *s = HealerShopState::PickService;
-                    message
+                    match state.buy_healer_treatment(*healer, treatment, usize::from(slot)) {
+                        // §8.3: the paid branch "deducts gold, applies the
+                        // treatment, refreshes the visible character status,
+                        // and asks the continuation Y/N question".
+                        Ok(outcome) => {
+                            state.arms_transaction_completed = true;
+                            let surcharge =
+                                if matches!(outcome.quote.fee, HealerTreatmentFee::Price(_)) {
+                                    apply_active_shop_surcharge(state)
+                                } else {
+                                    None
+                                };
+                            *s = HealerShopState::Continuation;
+                            shop_message_ignoring_surcharge(
+                                HEALER_CONTINUATION[1..].to_string(),
+                                surcharge,
+                            )
+                        }
+                        // §8.C "Ordinary short funds | Record `173`"; like
+                        // every other kind's affordability record it ends
+                        // the visit without the ordinary farewell.
+                        Err(crate::shops::HealerTreatmentError::InsufficientGold {
+                            ..
+                        }) => {
+                            *s = HealerShopState::Exited;
+                            render_shared_shoppe_record(
+                                game_dir,
+                                HEALER_SHORT_FUNDS_RECORD,
+                                cost,
+                                healer_name,
+                                healer.display_name(),
+                            )
+                        }
+                        Err(err) => {
+                            *s = HealerShopState::Continuation;
+                            format_healer_treatment_error(err, healer_name)
+                        }
+                    }
                 }
                 (HealerShopState::Confirm { service, .. }, _, true, _) => {
-                    *s = HealerShopState::PickService;
+                    *s = HealerShopState::Continuation;
                     let _ = service;
                     // §8.C: the fee prompt echoes a bare `No`, and the visit
                     // continues on its own question.
                     format!("No{HEALER_CONTINUATION}")
+                }
+                // §8.C: "The continuation accepts Y/N, with the same entry
+                // echoes as Section 8.B. Yes repeats the service question; No
+                // ends the visit."
+                (HealerShopState::Continuation, true, _, _) => {
+                    state.emit_message_line_continuing_row("Yes");
+                    state.push_explicit_blank_message_entry();
+                    *s = HealerShopState::PickService;
+                    healer_service_menu(healer_name)
+                }
+                (HealerShopState::Continuation, _, true, _) => {
+                    state.emit_message_line_continuing_row("No");
+                    *s = HealerShopState::Exited;
+                    shop_closing_bark(state, SHOP_DIALOG_ID_HEALER, healer_name, game_dir)
                 }
                 (HealerShopState::Exited, _, _, _) => String::new(),
                 // `shops.md §8.B`/`§8.C`: every shop kind ignores a key it does
@@ -1055,83 +1088,111 @@ fn handle_active_shop_key_input(
             let innkeeper_name = area_scene_byte.and_then(|scene| {
                 crate::play_state_impl::shop_vendor_name_for_scene(SHOP_DIALOG_ID_INN, scene)
             });
+            let honorific = tavern_honorific(speaker_is_female);
+            let attribution = |verb: &str| {
+                innkeeper_name
+                    .map(|name| format!("\n{verb} {name}."))
+                    .unwrap_or_default()
+            };
+            let service_question = || match innkeeper_name {
+                Some(name) => format!("{name} asks,\n{INN_SERVICE_QUESTION}"),
+                None => INN_SERVICE_QUESTION.to_string(),
+            };
+            let who_will_stay = || match innkeeper_name {
+                Some(name) => format!("{name} asks,\n{INN_WHO_WILL_STAY_PROMPT}"),
+                None => INN_WHO_WILL_STAY_PROMPT.to_string(),
+            };
             match (*s, yes, no, inline_digit) {
                 // `shops.md §8`'s entry table, row `0x88`: the greeting takes
                 // `Y`, `N` or Space; Yes opens the service question and every
-                // other key leaves the greeting visible. `§8.B` publishes the
-                // question itself, which the engine had no state for - it read
-                // the entry key as a service letter instead.
+                // other key leaves the greeting visible.
                 (InnkeeperState::Greeting { inn }, true, _, _) => {
                     *s = InnkeeperState::ServiceMenu { inn };
-                    match innkeeper_name {
-                        Some(name) => format!("{name} asks,\n{INN_SERVICE_QUESTION}"),
-                        None => INN_SERVICE_QUESTION.to_string(),
-                    }
+                    service_question()
                 }
-                // `shops.md` §8's entry table gives the non-arms kinds' `N` or
-                // Space as "prints the resident refusal and exits". The inn
-                // declines through its own `SHOPPE.DAT` row - records
-                // `178..181`, the four `Then thou hast come to the wrong
-                // place.` / `Well, we can't help thee, then.` / `Perhaps
-                // another time...` / `Hmm. Well, don't bother me then.`
-                // responses - wrapped in the ordinary `says $.` attribution.
-                //
-                // This engine exited silently, so a declined inn visit
-                // printed nothing at all. Measured 2026-09-11
+                // `shops.md §8.B`: "Space means No where accepted. Every No
+                // response echoes `No` without a line feed, then exits through
+                // the appropriate closing-bark flow." Measured 2026-09-11
                 // (`shop-inn-after-entry/after-space`), where the original
                 // answers `No` and then `"Well, we can't help thee, then."`
                 // over `says Donya.`
                 (InnkeeperState::Greeting { .. }, _, true, _) => {
                     *s = InnkeeperState::Exited;
-                    inn_entry_decline_message(state, game_dir, innkeeper_name)
+                    shop_closing_bark(state, SHOP_DIALOG_ID_INN, innkeeper_name, game_dir)
                 }
-                (InnkeeperState::Greeting { inn }, _, _, _) => {
-                    if matches!(key_byte, b' ' | b'\r' | b'\n' | 0x1b) {
-                        *s = InnkeeperState::Exited;
-                        inn_entry_decline_message(state, game_dir, innkeeper_name)
-                    } else {
-                        // "Other initial keys leave the existing greeting
-                        // visible and re-poll", without redrawing it.
-                        *s = InnkeeperState::Greeting { inn };
-                        state.message.clone()
-                    }
+                (InnkeeperState::Greeting { .. }, _, _, _) if key_byte == b' ' => {
+                    state.emit_message_line_continuing_row("No");
+                    *s = InnkeeperState::Exited;
+                    shop_closing_bark(state, SHOP_DIALOG_ID_INN, innkeeper_name, game_dir)
                 }
+                // "Return, Escape and service letters such as R at the inn do
+                // not select a service at this initial prompt: unaccepted
+                // normalized keys wait silently".
+                (InnkeeperState::Greeting { .. }, _, _, _) => String::new(),
                 (InnkeeperState::ServiceMenu { inn }, _, _, _) => match inn_main_action(key_byte) {
                     InnMainAction::Rest => {
-                        let base_room_rate = inn_base_room_rate(inn);
-                        let total_price = quote_inn_rest_for_speaker(
-                            inn,
-                            state.party.len(),
-                            ctx.speaker_intelligence,
-                        )
-                        .map(|quote| quote.total_price)
-                        .unwrap_or(0);
-                        *s = InnkeeperState::ConfirmRest {
-                            inn,
-                            base_room_rate,
-                            total_price,
-                        };
-                        // **Measured** 2026-09-08 at Hotel Brittany
-                        // (`qa/paired/nb-inn-branches.tsv`): the quote ends on
-                        // the shipwright's prompt, quoted and without `(Y/N)`.
-                        // The room's own description is inn text this spec
-                        // does not publish, so the engine's sentence stands
-                        // above it for now.
-                        format!(
-                            "{} room and board costs {total_price} gold.\n\n{INN_CONFIRM_PROMPT}",
-                            inn.display_name()
-                        )
+                        // §8.C: "L and R echo those uppercase letters".
+                        state.emit_message_line_continuing_row("R");
+                        if crate::shops::inn_lodging_full(inn, &state.inn_registry, scene_marker)
+                        {
+                            *s = InnkeeperState::Continuation { inn };
+                            return_inn_capacity_refusal(honorific)
+                        } else {
+                            let base_room_rate = inn_base_room_rate(inn);
+                            let total_price = quote_inn_rest_for_speaker(
+                                inn,
+                                state.party.len(),
+                                ctx.speaker_intelligence,
+                            )
+                            .map(|quote| quote.total_price)
+                            .unwrap_or(0);
+                            *s = InnkeeperState::ConfirmRest {
+                                inn,
+                                base_room_rate,
+                                total_price,
+                            };
+                            // §8.C "Rest offer | Opening quote, room record,
+                            // then `\nWilt thou take\nit?" `. Records by inn
+                            // row are `186, 187, 188, 188, 189, 190`."
+                            format!(
+                                "\n\"{}{INN_TAKE_IT_PROMPT}",
+                                render_shared_shoppe_record(
+                                    game_dir,
+                                    inn_room_record(inn),
+                                    total_price,
+                                    innkeeper_name,
+                                    inn.display_name(),
+                                )
+                            )
+                        }
                     }
                     InnMainAction::LeaveCompanion => {
-                        // **Measured** 2026-09-08 at Hotel Brittany
-                        // (`qa/paired/nb-inn-refusals.tsv`): asking to leave a
-                        // companion with nobody to leave draws a refusal that
-                        // ends the visit, and it carries no attribution tail.
-                        // The engine printed `Thou must keep at least one
-                        // companion.` and stayed in the menu.
-                        if ctx.party_size <= 1 {
+                        state.emit_message_line_continuing_row("L");
+                        if crate::shops::inn_lodging_full(inn, &state.inn_registry, scene_marker)
+                        {
+                            *s = InnkeeperState::Continuation { inn };
+                            return_inn_capacity_refusal(honorific)
+                        } else if ctx.party_size <= 1 {
+                            // §8.C "Leave with only Avatar travelling | After
+                            // the lodging-capacity check, test party size
+                            // ... Record `191`; visit ends without an added
+                            // attribution or ordinary farewell". Measured
+                            // 2026-09-08 at Hotel Brittany
+                            // (`qa/paired/nb-inn-refusals.tsv`).
                             *s = InnkeeperState::Exited;
-                            INN_NOBODY_TO_LEAVE_REFUSAL.to_string()
+                            let record =
+                                render_shared_shoppe_record(
+                                game_dir,
+                                INN_SOLO_LEAVE_RECORD,
+                                0,
+                                innkeeper_name,
+                                inn.display_name(),
+                            );
+                            if record.is_empty() {
+                                format!("\n{INN_NOBODY_TO_LEAVE_REFUSAL}")
+                            } else {
+                                format!("\n{record}")
+                            }
                         } else {
                             let deposit = inn_leave_companion_deposit_for_speaker(
                                 inn,
@@ -1143,73 +1204,43 @@ fn handle_active_shop_key_input(
                             // the innkeeper asks in the message window while
                             // the *panel* becomes a framed `Select:` picker
                             // over the party rows. No deposit is quoted here.
-                            match innkeeper_name {
-                                Some(name) => {
-                                    format!("{name} asks,\n{INN_WHO_WILL_STAY_PROMPT}")
-                                }
-                                None => INN_WHO_WILL_STAY_PROMPT.to_string(),
-                            }
+                            format!("\n{}", who_will_stay())
                         }
                     }
+                    // §8.C: "P has no separate echo."
                     InnMainAction::PickUpCompanion => {
-                        let base_room_rate = inn_base_room_rate(inn);
                         let guests = inn_guest_indices_for_scene(&state.inn_registry, scene_marker);
-                        if guests.is_empty() {
-                            *s = InnkeeperState::ServiceMenu { inn };
-                            "No one here is from thy party!".to_string()
+                        if state.party.len() >= crate::INN_PARTY_CAP {
+                            // "Pickup with six travelling members |
+                            // `\n\nOne must first be left behind!\n\n`; this
+                            // check precedes the no-guests check".
+                            *s = InnkeeperState::Continuation { inn };
+                            format!("\nOne must first be left behind!\n\n{INN_ANYTHING_MORE_PROMPT}")
+                        } else if guests.is_empty() {
+                            // "Pickup with no guest at this inn |
+                            // Token-expanded `\n\n"No one here is from thy
+                            // party!"\nsays $.\n\n`".
+                            *s = InnkeeperState::Continuation { inn };
+                            format!(
+                                "\n\"No one here is from thy party!\"{}\n\n{INN_ANYTHING_MORE_PROMPT}",
+                                attribution("says")
+                            )
                         } else if guests.len() == 1 {
-                            let registry_index = guests[0];
-                            let bill = state
-                                .inn_registry
-                                .get(registry_index)
-                                .map(|guest| {
-                                    inn_pickup_bill_for_speaker(
-                                        inn,
-                                        guest.stay_counter,
-                                        ctx.speaker_intelligence,
-                                    )
-                                })
-                                .unwrap_or(0);
-                            // **Measured** 2026-09-08 at Hotel Brittany
-                            // (`qa/paired/nb-inn-pickup.tsv`): collecting the
-                            // only lodged companion charges the bill straight
-                            // away and returns them - there is no `(Y/N)`
-                            // confirmation and no picker. Gold fell 150 -> 117
-                            // on the keypress and the panel grew back to three
-                            // rows.
-                            let _ = base_room_rate;
-                            let result = state.pickup_inn_guest_with_bill(
+                            // "Single-guest Pickup selects automatically.
+                            // After guest selection, the bill and
+                            // affordability check proceed without a Y/N
+                            // confirmation." Measured 2026-09-08 at Hotel
+                            // Brittany (`qa/paired/nb-inn-pickup.tsv`).
+                            inn_pickup_selected_guest(
+                                state,
+                                s,
+                                inn,
                                 scene_marker,
-                                registry_index,
-                                bill,
-                            );
-                            *s = InnkeeperState::ServiceMenu { inn };
-                            match result {
-                                Ok(outcome) => {
-                                    let surcharge = apply_active_shop_surcharge(state);
-                                    // The poisoned-guest death note is this
-                                    // engine's own: the measured capture
-                                    // collected a living companion, and a
-                                    // player who is told nothing would not
-                                    // learn of the death until the panel is
-                                    // read. Kept, and marked, until measured.
-                                    let death_note = if outcome.returned_dead_from_poison {
-                                        "\nThy friend has died, by the way."
-                                    } else {
-                                        ""
-                                    };
-                                    let message = match innkeeper_name {
-                                        Some(name) => format!(
-                                            "\"That will be {bill} gold, please.\"{death_note}\n\n{INN_STAY_ENJOYABLE_LINE}\nsays {name}.\n\n{INN_ANYTHING_MORE_PROMPT}"
-                                        ),
-                                        None => format!(
-                                            "\"That will be {bill} gold, please.\"{death_note}\n\n{INN_STAY_ENJOYABLE_LINE}\n\n{INN_ANYTHING_MORE_PROMPT}"
-                                        ),
-                                    };
-                                    shop_message_ignoring_surcharge(message, surcharge)
-                                }
-                                Err(err) => format_inn_error(err, speaker_is_female),
-                            }
+                                guests[0],
+                                ctx.speaker_intelligence,
+                                innkeeper_name,
+                                game_dir,
+                            )
                         } else {
                             let mut guest_indices = [0usize; INN_REGISTRY_CAP];
                             for (slot, registry_index) in
@@ -1222,29 +1253,23 @@ fn handle_active_shop_key_input(
                                 inn,
                                 guest_indices,
                                 guest_count,
-                                base_lodging_charge: base_room_rate,
+                                base_lodging_charge: inn_base_room_rate(inn),
                             };
-                            format!(
-                                "Guest register has {guest_count} companion(s). Pick 1-{guest_count}."
-                            )
+                            // "Multiple-guest selection | `\n\n"Who will\ncheck
+                            // out?" `"; the framed register is the side panel.
+                            format!("\n{INN_WHO_WILL_CHECK_OUT_PROMPT}")
                         }
                     }
-                    // `shops.md §8.A` "Shared closing envelope": "There is
-                    // no universal `Farewell.` or `As you wish.` line." A
-                    // visit that bought nothing draws the no-sale row of the
-                    // inn's own four `SHOPPE.DAT` records, inside the
-                    // ordinary quote/attribution envelope - the same shape
-                    // the entry decline and the other shop kinds use.
+                    // `shops.md §8.A` "Shared closing envelope": the ordinary
+                    // farewell, drawn from the no-sale or purchase-completed
+                    // row for this visit.
                     InnMainAction::Exit => {
                         *s = InnkeeperState::Exited;
-                        inn_service_exit_message(state, game_dir, innkeeper_name)
+                        shop_closing_bark(state, SHOP_DIALOG_ID_INN, innkeeper_name, game_dir)
                     }
                     // `shops.md §8.B` "Inn actions": keys outside `L`/`P`/`R`
-                    // and Space "silently wait". The engine answered them
-                    // with a menu-letter reminder the original never prints,
-                    // which put every later row one line low. Measured
-                    // 2026-09-11 (`nb-inn/no` and `/esc`), where the original
-                    // leaves the cursor on the question's own trailing space.
+                    // and Space "silently wait". Measured 2026-09-11
+                    // (`nb-inn/no` and `/esc`).
                     InnMainAction::Discard => String::new(),
                 },
                 (
@@ -1255,45 +1280,125 @@ fn handle_active_shop_key_input(
                     _,
                     _,
                 ) => {
+                    state.emit_message_line_continuing_row("Yes");
+                    let poisoned: Vec<usize> = state
+                        .party
+                        .iter()
+                        .enumerate()
+                        .filter(|(_, member)| member.status == b'P')
+                        .map(|(index, _)| index)
+                        .collect();
                     let result = state.pay_inn_rest_total(inn, total_price);
-                    *s = InnkeeperState::ServiceMenu { inn };
+                    // §8.C: a paid Rest ends the visit "without the inn
+                    // continuation question or shared farewell"; the
+                    // Highwaymen refusal ends it too.
+                    *s = InnkeeperState::Exited;
                     match result {
                         Ok(outcome) => {
-                            let message =
-                                apply_paid_inn_rest(state, inn, outcome.quote.total_price);
+                            state.arms_transaction_completed = true;
+                            // "Paid Rest | `"Have a pleasant\nnight, `,
+                            // honorific, token-expanded `!"\nsays $.\n\n`, then
+                            // the rest sequence."
+                            let mut message = format!(
+                                "\n\"Have a pleasant\nnight, {honorific}!\"{}\n\n",
+                                attribution("says")
+                            );
+                            message.push_str(&apply_paid_inn_rest(
+                                state,
+                                inn,
+                                outcome.quote.total_price,
+                            ));
+                            // "A poisoned member's recovery death adds `\n`,
+                            // the member name, and ` has\npassed away.\n`."
+                            for index in poisoned {
+                                if state.party.get(index).is_some_and(|m| m.status == b'D') {
+                                    let name = state
+                                        .party_names
+                                        .get(index)
+                                        .and_then(|name| crate::party::party_name_to_string(name))
+                                        .unwrap_or_default();
+                                    message.push_str(&format!("\n{name} has\npassed away."));
+                                }
+                            }
                             let surcharge = apply_active_shop_surcharge(state);
                             shop_message_ignoring_surcharge(message, surcharge)
                         }
-                        Err(err) => format_inn_error(err, speaker_is_female),
+                        // "Accepted Rest, short funds | `"Highwaymen!\nCheap,
+                        // at that!\nOUT!" `, then token-expanded `screams\n$.\n`".
+                        Err(err) => format!(
+                            "\n{}{}",
+                            format_inn_error(err, speaker_is_female),
+                            innkeeper_name
+                                .map(|name| format!("screams\n{name}."))
+                                .unwrap_or_default()
+                        ),
                     }
                 }
-                (InnkeeperState::ConfirmRest { inn, .. }, _, true, _) => {
-                    // Measured: a declined room ends the visit on the
-                    // innkeeper's own attributed line, not a return to the
-                    // branch question.
-                    let _ = inn;
+                // "Declined Rest offer | After the bare `No` and two line
+                // feeds, end the visit through the ordinary farewell for the
+                // visit's existing outcome ... it does not return to the
+                // service question."
+                (InnkeeperState::ConfirmRest { .. }, _, true, _) => {
+                    state.emit_message_line_continuing_row("No");
                     *s = InnkeeperState::Exited;
-                    inn_declined_line(innkeeper_name)
-                }
-                (InnkeeperState::PickLeaveCompanion { inn, deposit: _ }, _, true, _) => {
-                    *s = InnkeeperState::ServiceMenu { inn };
-                    "As you wish.".to_string()
-                }
-                (InnkeeperState::PickLeaveCompanion { inn, deposit }, _, _, Some(d)) if d >= 1 => {
-                    let party_index = usize::from(d - 1);
-                    *s = InnkeeperState::ConfirmLeaveCompanion {
-                        inn,
-                        party_index,
-                        deposit,
-                    };
-                    // **Measured** 2026-09-08 (`qa/paired/nb-inn-commit.tsv`):
-                    // committing the panel selection quotes the deposit as a
-                    // monthly rate due at check-out, and ends on the same
-                    // prompt the room quote uses.
                     format!(
-                        "{} comfortable room will be {deposit} gold per month, due at check-out.\n\n{INN_CONFIRM_PROMPT}",
-                        inn.display_name()
+                        "\n{}",
+                        shop_closing_bark(state, SHOP_DIALOG_ID_INN, innkeeper_name, game_dir)
                     )
+                }
+                // `shops.md §8.C` "Leave-companion selection": Escape cancels
+                // and prints `Nobody\n\n`, then reaches the continuation.
+                (InnkeeperState::PickLeaveCompanion { inn, .. }, _, _, _) if key_byte == 0x1b => {
+                    state.emit_message_line_continuing_row("Nobody");
+                    *s = InnkeeperState::Continuation { inn };
+                    format!("\n{INN_ANYTHING_MORE_PROMPT}")
+                }
+                // "A valid party digit moves the highlight; Return or Space
+                // commits the indicated member", which starts on Avatar. `Y`,
+                // `P`, `0` and out-of-party digits leave the picker waiting.
+                (InnkeeperState::PickLeaveCompanion { inn, deposit }, _, _, digit)
+                    if matches!(key_byte, b' ' | b'\r' | b'\n')
+                        || digit.is_some_and(|d| d >= 1 && usize::from(d) <= state.party.len()) =>
+                {
+                    let party_index = digit.map_or(0, |d| usize::from(d - 1));
+                    if party_index == 0 {
+                        // "Leave selects Avatar | `\n\nThy friend`, plural `s`
+                        // only when more than two members travel, then ` will
+                        // not leave thee!\n\n`; repeat the target question".
+                        let plural = if state.party.len() > 2 { "s" } else { "" };
+                        format!(
+                            "\nThy friend{plural} will not leave thee!\n\n{}",
+                            who_will_stay()
+                        )
+                    } else if state.party[party_index].status == b'D' {
+                        // "Leave selects a dead companion | After the
+                        // selection's `\n\n`, record `192`; visit ends without
+                        // ordinary farewell".
+                        *s = InnkeeperState::Exited;
+                        format!(
+                            "\n{}",
+                            render_shared_shoppe_record(
+                                game_dir,
+                                INN_DEAD_COMPANION_RECORD,
+                                0,
+                                innkeeper_name,
+                                inn.display_name(),
+                            )
+                        )
+                    } else {
+                        *s = InnkeeperState::ConfirmLeaveCompanion {
+                            inn,
+                            party_index,
+                            deposit,
+                        };
+                        // "Leave rate | After `\n\n`, `"The rate for\nour most
+                        // comfortable room will be `, token-expanded `% gold
+                        // per month, due at check-out.`, then `\nWilt thou
+                        // take\nit?" `."
+                        format!(
+                            "\n\"The rate for\nour most comfortable room will be {deposit} gold per month, due at check-out.{INN_TAKE_IT_PROMPT}"
+                        )
+                    }
                 }
                 (
                     InnkeeperState::ConfirmLeaveCompanion {
@@ -1305,117 +1410,75 @@ fn handle_active_shop_key_input(
                     _,
                     _,
                 ) => {
+                    state.emit_message_line_continuing_row("Yes");
                     let result = state.leave_inn_companion(scene_marker, party_index, deposit);
-                    *s = InnkeeperState::ServiceMenu { inn };
+                    *s = InnkeeperState::Continuation { inn };
                     match result {
-                        Ok(outcome) => {
-                            // Measured: the innkeeper thanks the party and
-                            // then asks his own follow-up question; the engine
-                            // reported the slot and the deposit instead.
-                            let _ = outcome;
-                            let message = match innkeeper_name {
-                                Some(name) => format!(
-                                    "{INN_THANKS_LINE}\nsays {name}.\n\n{INN_ANYTHING_MORE_PROMPT}"
-                                ),
-                                None => format!("{INN_THANKS_LINE}\n\n{INN_ANYTHING_MORE_PROMPT}"),
-                            };
-                            let surcharge = apply_active_shop_surcharge(state);
-                            shop_message_ignoring_surcharge(message, surcharge)
+                        // "Leave accepted | Token-expanded `"I thank
+                        // thee."\nsays $.\n\n`", then the inn's continuation.
+                        Ok(_) => {
+                            state.arms_transaction_completed = true;
+                            format!(
+                                "\n{INN_THANKS_LINE}{}\n\n{INN_ANYTHING_MORE_PROMPT}",
+                                attribution("says")
+                            )
                         }
-                        Err(err) => format_inn_error(err, speaker_is_female),
+                        Err(err) => format!(
+                            "\n{}{INN_ANYTHING_MORE_PROMPT}",
+                            format_inn_error(err, speaker_is_female)
+                        ),
                     }
                 }
                 (InnkeeperState::ConfirmLeaveCompanion { inn, .. }, _, true, _) => {
-                    *s = InnkeeperState::ServiceMenu { inn };
-                    "As you wish.".to_string()
+                    state.emit_message_line_continuing_row("No");
+                    *s = InnkeeperState::Continuation { inn };
+                    format!("\n{INN_ANYTHING_MORE_PROMPT}")
+                }
+                // "Cancel guest selection | Escape prints `No one\n\n`;
+                // Space/Return instead select the highlighted guest".
+                (InnkeeperState::PickUpCompanion { inn, .. }, _, _, _) if key_byte == 0x1b => {
+                    state.emit_message_line_continuing_row("No one");
+                    *s = InnkeeperState::Continuation { inn };
+                    format!("\n{INN_ANYTHING_MORE_PROMPT}")
                 }
                 (
                     InnkeeperState::PickUpCompanion {
                         inn,
                         guest_indices,
                         guest_count,
-                        base_lodging_charge,
-                    },
-                    _,
-                    true,
-                    _,
-                ) => {
-                    let _ = (guest_indices, guest_count, base_lodging_charge);
-                    *s = InnkeeperState::ServiceMenu { inn };
-                    "As you wish.".to_string()
-                }
-                (
-                    InnkeeperState::PickUpCompanion {
-                        inn,
-                        guest_indices,
-                        guest_count,
-                        base_lodging_charge,
-                    },
-                    _,
-                    _,
-                    Some(d),
-                ) if d >= 1 && d <= guest_count => {
-                    let registry_index = guest_indices[usize::from(d - 1)];
-                    let bill = state
-                        .inn_registry
-                        .get(registry_index)
-                        .map(|guest| {
-                            let _ = base_lodging_charge;
-                            inn_pickup_bill_for_speaker(
-                                inn,
-                                guest.stay_counter,
-                                ctx.speaker_intelligence,
-                            )
-                        })
-                        .unwrap_or(0);
-                    *s = InnkeeperState::ConfirmPickUpCompanion {
-                        inn,
-                        registry_index,
-                        base_lodging_charge,
-                        bill,
-                    };
-                    format!("Pickup bill is {bill} gold. (Y/N)")
-                }
-                (
-                    InnkeeperState::ConfirmPickUpCompanion {
-                        inn,
-                        registry_index,
-                        base_lodging_charge: _,
-                        bill,
                         ..
                     },
-                    true,
                     _,
                     _,
-                ) => {
-                    let result =
-                        state.pickup_inn_guest_with_bill(scene_marker, registry_index, bill);
-                    *s = InnkeeperState::ServiceMenu { inn };
-                    match result {
-                        Ok(outcome) if outcome.returned_dead_from_poison => {
-                            let message = format!(
-                                "Picked up companion {} for {} gold. Thy friend has died, by the way.",
-                                outcome.party_index + 1,
-                                outcome.bill
-                            );
-                            let surcharge = apply_active_shop_surcharge(state);
-                            shop_message_ignoring_surcharge(message, surcharge)
-                        }
-                        Ok(outcome) => {
-                            let message = format!(
-                                "Picked up companion {} for {} gold.",
-                                outcome.party_index + 1,
-                                outcome.bill
-                            );
-                            let surcharge = apply_active_shop_surcharge(state);
-                            shop_message_ignoring_surcharge(message, surcharge)
-                        }
-                        Err(err) => format_inn_error(err, speaker_is_female),
-                    }
+                    digit,
+                ) if matches!(key_byte, b' ' | b'\r' | b'\n')
+                    || digit.is_some_and(|d| d >= 1 && d <= guest_count) =>
+                {
+                    let choice = digit.map_or(0, |d| usize::from(d - 1));
+                    inn_pickup_selected_guest(
+                        state,
+                        s,
+                        inn,
+                        scene_marker,
+                        guest_indices[choice],
+                        ctx.speaker_intelligence,
+                        innkeeper_name,
+                        game_dir,
+                    )
                 }
-                (InnkeeperState::ConfirmPickUpCompanion { inn, .. }, _, true, _) => {
+                // §8.C "Inn actions": "After a continuing action, print
+                // `"Is there\nanything more\nI can do for\nthee?" `; Y echoes
+                // `Yes` and repeats the service question, N or Space echoes
+                // `No` and exits. Other keys wait."
+                (InnkeeperState::Continuation { inn }, true, _, _) => {
+                    state.emit_message_line_continuing_row("Yes");
                     *s = InnkeeperState::ServiceMenu { inn };
-                    "As you wish.".to_string()
+                    format!("\n{}", service_question())
+                }
+                (InnkeeperState::Continuation { .. }, _, _, _) if no || key_byte == b' ' => {
+                    state.emit_message_line_continuing_row("No");
+                    *s = InnkeeperState::Exited;
+                    shop_closing_bark(state, SHOP_DIALOG_ID_INN, innkeeper_name, game_dir)
                 }
                 (InnkeeperState::Exited, _, _, _) => String::new(),
                 // `shops.md §8.B`/`§8.C`: every shop kind ignores a key it does
@@ -1798,41 +1861,46 @@ fn handle_active_shop_key_input(
             shop_message_ignoring_surcharge(message, surcharge)
         }
         ActiveShopSession::Reagent(s) => {
-            // The declined-quote arm redraws this herbalist's list, so the
-            // formatter needs to know whose shop it is even when the outcome
-            // does not carry it.
-            let declined_herbalist = match *s {
-                ReagentShopState::Greeting { herbalist }
-                | ReagentShopState::PickReagent { herbalist }
-                | ReagentShopState::PickQuantity { herbalist, .. } => Some(herbalist),
-                ReagentShopState::Exited => None,
-            };
+            let confirming = matches!(*s, ReagentShopState::ConfirmBundle { .. });
             let mut stock = state.reagents;
-            let outcome = match (*s, inline_digit) {
-                (ReagentShopState::Greeting { .. } | ReagentShopState::PickReagent { .. }, _) => {
-                    step_reagent_shop(
-                        s,
-                        ReagentShopInput::Key(key_byte),
-                        &mut state.gold,
-                        &mut stock,
-                    )
-                }
-                (ReagentShopState::PickQuantity { .. }, _) => {
-                    if let Some(q) = inline_quantity.and_then(|q| u8::try_from(q).ok()) {
-                        step_reagent_shop(
-                            s,
-                            ReagentShopInput::Quantity(q),
-                            &mut state.gold,
-                            &mut stock,
-                        )
-                    } else {
-                        ReagentShopOutcome::InvalidInput
-                    }
-                }
-                _ => ReagentShopOutcome::InvalidInput,
-            };
+            let outcome = step_reagent_shop(
+                s,
+                ReagentShopInput::Key(key_byte),
+                &mut state.gold,
+                &mut stock,
+                ctx.speaker_intelligence,
+            );
             state.reagents = stock;
-            format_reagent_outcome(outcome, declined_herbalist)
+            // `shops.md §8.A`: the offer's answer echoes a bare `Yes`/`No`.
+            match outcome {
+                ReagentShopOutcome::Bought { .. } | ReagentShopOutcome::RefusedShortFunds { .. }
+                    if confirming =>
+                {
+                    state.emit_message_line_continuing_row("Yes");
+                }
+                ReagentShopOutcome::Declined { .. } => {
+                    state.emit_message_line_continuing_row("No")
+                }
+                // `shops.md §8.B`: "Space means No where accepted. Every No
+                // response echoes `No`"; Y/N take the shared entry echo.
+                ReagentShopOutcome::DeclinedEntry if key_byte == b' ' => {
+                    state.emit_message_line_continuing_row("No")
+                }
+                _ => {}
+            }
+            if matches!(outcome, ReagentShopOutcome::Bought { .. }) {
+                state.arms_transaction_completed = true;
+            }
+            let vendor_name = area_scene_byte.and_then(|scene| {
+                crate::play_state_impl::shop_vendor_name_for_scene(SHOP_DIALOG_ID_HERBALIST, scene)
+            });
+            let message = match outcome {
+                ReagentShopOutcome::DeclinedEntry | ReagentShopOutcome::LeftMenu => {
+                    shop_closing_bark(state, SHOP_DIALOG_ID_HERBALIST, vendor_name, game_dir)
+                }
+                outcome => format_reagent_outcome(outcome, vendor_name, game_dir),
+            };
+            message
         }
         ActiveShopSession::HorseTrader(s) => {
             let outcome = match (*s, yes, no) {
@@ -2062,37 +2130,58 @@ fn handle_active_shop_key_input(
             let mut gems = state.gems;
             let mut keys = state.keys;
             let mut torches = state.torches;
-            let outcome = match (*s, inline_digit) {
-                (GuildShopState::Greeting { .. } | GuildShopState::PickItem { .. }, _) => {
-                    step_guild_shop(
-                        s,
-                        GuildShopInput::Key(key_byte),
-                        &mut state.gold,
-                        &mut gems,
-                        &mut keys,
-                        &mut torches,
-                    )
-                }
-                (GuildShopState::PickQuantity { .. }, _) => {
-                    if let Some(q) = inline_quantity.and_then(|q| u8::try_from(q).ok()) {
-                        step_guild_shop(
-                            s,
-                            GuildShopInput::Quantity(q),
-                            &mut state.gold,
-                            &mut gems,
-                            &mut keys,
-                            &mut torches,
-                        )
-                    } else {
-                        GuildShopOutcome::InvalidInput
-                    }
-                }
-                _ => GuildShopOutcome::InvalidInput,
-            };
+            let confirming = matches!(*s, GuildShopState::ConfirmBundle { .. });
+            let outcome = step_guild_shop(
+                s,
+                GuildShopInput::Key(key_byte),
+                &mut state.gold,
+                &mut gems,
+                &mut keys,
+                &mut torches,
+                ctx.speaker_intelligence,
+            );
             state.gems = gems;
             state.keys = keys;
             state.torches = torches;
-            format_guild_outcome(outcome)
+            // `shops.md §8.C`: "A/B/C echo the corresponding lowercase
+            // letter"; the offer's answer echoes a bare `Yes` or `No`.
+            match outcome {
+                GuildShopOutcome::Offered { .. } => {
+                    state.emit_message_line_continuing_row(
+                        (key_byte.to_ascii_lowercase() as char).to_string(),
+                    );
+                }
+                GuildShopOutcome::Bought { .. } | GuildShopOutcome::RefusedShortFunds { .. }
+                    if confirming =>
+                {
+                    state.emit_message_line_continuing_row("Yes");
+                }
+                GuildShopOutcome::Declined => state.emit_message_line_continuing_row("No"),
+                // `shops.md §8.B`: "Space means No where accepted. Every No
+                // response echoes `No`"; Y/N take the shared entry echo.
+                GuildShopOutcome::DeclinedEntry if key_byte == b' ' => {
+                    state.emit_message_line_continuing_row("No")
+                }
+                _ => {}
+            }
+            if matches!(outcome, GuildShopOutcome::Bought { .. }) {
+                state.arms_transaction_completed = true;
+            }
+            let vendor_name = area_scene_byte.and_then(|scene| {
+                crate::play_state_impl::shop_vendor_name_for_scene(SHOP_DIALOG_ID_GUILD, scene)
+            });
+            let message = match outcome {
+                GuildShopOutcome::DeclinedEntry | GuildShopOutcome::LeftMenu => {
+                    shop_closing_bark(state, SHOP_DIALOG_ID_GUILD, vendor_name, game_dir)
+                }
+                outcome => format_guild_outcome(
+                    outcome,
+                    vendor_name,
+                    speaker_is_female,
+                    game_dir,
+                ),
+            };
+            message
         }
     };
     if let Some((echo, opens_speech)) = arms_entry_echo {
@@ -2146,7 +2235,7 @@ fn horse_sale_position(state: &PlayState) -> Option<(usize, usize)> {
     })
 }
 
-fn active_speaker_intelligence(state: &PlayState) -> u8 {
+pub(crate) fn active_speaker_intelligence(state: &PlayState) -> u8 {
     let slot = state.active_player.unwrap_or(0);
     state
         .party_intelligence
@@ -2235,6 +2324,39 @@ fn healer_no_need_refusal(name: Option<&'static str>) -> String {
 /// and its trailing space are the published text's.
 const HEALER_CONTINUATION: &str = "\n\n\"Is there any other way in which I may\naid thee?\" ";
 
+/// §8.C "Minoc free Cure/Heal | `\n\n"Receive now the Light!"`".
+const HEALER_RECEIVE_THE_LIGHT: &str = "\"Receive now the Light!\"";
+
+/// §8.C "Ordinary short funds | Record `173`".
+const HEALER_SHORT_FUNDS_RECORD: usize = 173;
+
+/// Render one `SHOPPE.DAT` record with `%` set to `gold`, or nothing when the
+/// asset is unavailable.
+fn render_shared_shoppe_record(
+    game_dir: &Path,
+    record_id: usize,
+    gold: u16,
+    vendor_name: Option<&str>,
+    shop_name: &str,
+) -> String {
+    crate::shoppe_bark::ShoppeTextRenderer::load_from_game_dir(game_dir)
+        .ok()
+        .and_then(|renderer| {
+            renderer
+                .render_record(
+                    record_id,
+                    &crate::shoppe_bark::ShoppeBarkContext {
+                        gold,
+                        vendor_name: vendor_name.unwrap_or_default(),
+                        shop_name,
+                        ..Default::default()
+                    },
+                )
+                .ok()
+        })
+        .unwrap_or_default()
+}
+
 /// §8.C's three paid introductions. The fee row completes each of them.
 fn healer_paid_introduction(treatment: crate::shops::HealerTreatment) -> &'static str {
     match treatment {
@@ -2312,6 +2434,8 @@ pub(crate) fn arms_attribution_and_greeting(vendor_name: Option<&str>, variant_r
 const SHOP_DIALOG_ID_TAVERN: u8 = 0x82;
 const SHOP_DIALOG_ID_STABLE: u8 = 0x83;
 const SHOP_DIALOG_ID_SHIPWRIGHT: u8 = 0x84;
+const SHOP_DIALOG_ID_HERBALIST: u8 = 0x85;
+const SHOP_DIALOG_ID_GUILD: u8 = 0x86;
 const SHOP_DIALOG_ID_INN: u8 = 0x88;
 
 /// `systems/shops.md §8.0`: "Two resident name tables are indexed by the same
@@ -3053,11 +3177,10 @@ fn format_inn_error(err: InnError, speaker_is_female: bool) -> String {
         InnError::RegistryFull => {
             format!("\n\n\"I am sorry,\n{honorific}, but we\nhave no room\navailable.\"\n\n")
         }
-        // `shops.md §8.4`: "Only Rest and Pickup test affordability; there is
-        // no separate minimum-gold gate (R420)." The arm is unreachable and
-        // silent until the gate itself is removed.
+        // Leave's Avatar and dead-companion refusals are decided by the
+        // picker before the registry write; these are invariant guards.
         // audit: not a player-facing line
-        InnError::BelowMinimumGold { .. } => String::new(),
+        InnError::AvatarCannotLeave | InnError::DeadCompanion => String::new(),
         // "Accepted Rest, short funds | `"Highwaymen!\nCheap, at that!\nOUT!" `,
         // then token-expanded `screams\n$.\n`".
         InnError::InsufficientGold { .. } => "\"Highwaymen!\nCheap, at that!\nOUT!\" ".to_string(),
@@ -3321,21 +3444,6 @@ fn active_healer_target_accepts(treatment: HealerTreatment, member: PartyMember)
     }
 }
 
-fn format_healer_treatment_outcome(outcome: HealerTreatmentOutcome) -> String {
-    let slot = outcome.target_index + 1;
-    match outcome.quote.treatment {
-        HealerTreatment::Cure => format!("Cured party member {slot}."),
-        HealerTreatment::Heal => format!(
-            "Healed party member {slot} to {}/{}.",
-            outcome.hp_after, outcome.max_hp_after
-        ),
-        HealerTreatment::Resurrect => format!(
-            "Resurrected party member {slot} ({}/{}).",
-            outcome.hp_after, outcome.max_hp_after
-        ),
-    }
-}
-
 fn format_healer_treatment_error(
     error: crate::shops::HealerTreatmentError,
     healer_name: Option<&'static str>,
@@ -3389,30 +3497,120 @@ const fn tavern_honorific(speaker_is_female: bool) -> &'static str {
 /// attribution row - `yells `, vendor name, `.\n` - belongs to the
 /// SHOPPE-backed formatter, which knows the name.
 const TAVERN_NO_GOLD_NO_NEED_BARK: &str = "\n\n\"Thou hast\nneither gold nor\nneed! Out!\"";
-/// **Measured** 2026-09-08 at Hotel Brittany: the inn's room quote and the
-/// shipwright's hull quote end on the same prompt.
-const INN_CONFIRM_PROMPT: &str = "Wilt thou take it?\"";
+/// `shops.md §8.C` "Take-it confirmation wording": the inn's Rest and Leave
+/// offers share the resident tail `\nWilt thou take\nit?" `.
+const INN_TAKE_IT_PROMPT: &str = "\nWilt thou take\nit?\" ";
+/// `shops.md §8.C` "Multiple-guest selection".
+const INN_WHO_WILL_CHECK_OUT_PROMPT: &str = "\"Who will\ncheck out?\" ";
+/// `shops.md §8.C` inn records: solo Leave `191`, dead companion `192`, and
+/// Pickup short funds `193`.
+const INN_SOLO_LEAVE_RECORD: usize = 191;
+const INN_DEAD_COMPANION_RECORD: usize = 192;
+const INN_PICKUP_SHORT_FUNDS_RECORD: usize = 193;
+
+/// `shops.md §8.C` "Inn room-resource lookup": "Records by inn row are
+/// `186, 187, 188, 188, 189, 190`."
+const fn inn_room_record(inn: crate::shops::Inn) -> usize {
+    use crate::shops::Inn;
+    match inn {
+        Inn::TheWayfarerInn => 186,
+        Inn::TheWarriorsStead => 187,
+        Inn::TheHauntingInn | Inn::HotelBrittany => 188,
+        Inn::TheSmugglersInn => 189,
+        Inn::TheKingsRansomInn => 190,
+    }
+}
+
+/// `shops.md §8.C` "Capacity check before Rest or Leave | First `\n\n`. If
+/// full: `"I am sorry,\n`, honorific, then `, but we\nhave no room\n
+/// available."\n\n`", after which the visit continues on the inn's own
+/// question.
+fn return_inn_capacity_refusal(honorific: &str) -> String {
+    format!(
+        "\n\"I am sorry,\n{honorific}, but we\nhave no room\navailable.\"\n\n{INN_ANYTHING_MORE_PROMPT}"
+    )
+}
+
+/// `shops.md §8.C` Pickup after guest selection: "the bill and affordability
+/// check proceed without a Y/N confirmation. If affordable, payment and the
+/// guest's return occur before the next input wait, which is the inn
+/// continuation question."
+#[allow(clippy::too_many_arguments)]
+fn inn_pickup_selected_guest(
+    state: &mut PlayState,
+    shop_state: &mut crate::shop_runtime::InnkeeperState,
+    inn: crate::shops::Inn,
+    scene_marker: u8,
+    registry_index: usize,
+    speaker_intelligence: u8,
+    innkeeper_name: Option<&'static str>,
+    game_dir: &Path,
+) -> String {
+    use crate::shop_runtime::InnkeeperState;
+    let bill = state
+        .inn_registry
+        .get(registry_index)
+        .map(|guest| {
+            crate::shops::inn_pickup_bill_for_speaker(inn, guest.stay_counter, speaker_intelligence)
+        })
+        .unwrap_or(0);
+    // "Pickup bill | Token-expanded `\n\n"That will be % gold,
+    // please."\n\n"`".
+    let bill_line = format!("\n\"That will be {bill} gold, please.\"\n\n\"");
+    let attribution = innkeeper_name
+        .map(|name| format!("says {name}.\n\n"))
+        .unwrap_or_else(|| "\n".to_string());
+    match state.pickup_inn_guest_with_bill(scene_marker, registry_index, bill) {
+        Ok(outcome) => {
+            state.arms_transaction_completed = true;
+            *shop_state = InnkeeperState::Continuation { inn };
+            // "Paid healthy pickup | `I hope thou hast found thy stay
+            // enjoyable,"\n`, then token-expanded `says $.\n\n`"; "Paid
+            // poisoned pickup | `Thy friend has died, by the way."\n`, then the
+            // same attribution".
+            let body = if outcome.returned_dead_from_poison {
+                "Thy friend has died, by the way.\"\n"
+            } else {
+                "I hope thou hast found thy stay enjoyable,\"\n"
+            };
+            let message = format!("{bill_line}{body}{attribution}{INN_ANYTHING_MORE_PROMPT}");
+            let surcharge = apply_active_shop_surcharge(state);
+            shop_message_ignoring_surcharge(message, surcharge)
+        }
+        // "Pickup short funds | Record `193`, following the bill's opening
+        // quote; visit ends without ordinary farewell".
+        Err(InnError::InsufficientGold { .. }) => {
+            *shop_state = InnkeeperState::Exited;
+            format!(
+                "{bill_line}{}",
+                render_shared_shoppe_record(
+                    game_dir,
+                    INN_PICKUP_SHORT_FUNDS_RECORD,
+                    bill,
+                    innkeeper_name,
+                    inn.display_name(),
+                )
+            )
+        }
+        Err(err) => {
+            *shop_state = InnkeeperState::Continuation { inn };
+            format!(
+                "{}{INN_ANYTHING_MORE_PROMPT}",
+                format_inn_error(err, active_speaker_is_female(state))
+            )
+        }
+    }
+}
 /// **Measured** 2026-09-08 at Hotel Brittany with a party of one.
 /// **Measured**: the question the leave-companion branch asks.
-const INN_WHO_WILL_STAY_PROMPT: &str = "\"Who will stay?\"";
+const INN_WHO_WILL_STAY_PROMPT: &str = "\"Who will\nstay?\" ";
 /// **Measured**: what the innkeeper says once a companion is lodged, and the
 /// question the visit continues on.
 const INN_THANKS_LINE: &str = "\"I thank thee.\"";
-const INN_ANYTHING_MORE_PROMPT: &str = "\"Is there anything more I can do for thee?\"";
-/// **Measured**: the line that follows the pick-up bill, attributed. Note the
-/// comma inside the quotes - the attribution completes the sentence.
-const INN_STAY_ENJOYABLE_LINE: &str = "\"I hope thou hast found thy stay enjoyable,\"";
+const INN_ANYTHING_MORE_PROMPT: &str = "\"Is there\nanything more\nI can do for\nthee?\" ";
 const INN_NOBODY_TO_LEAVE_REFUSAL: &str =
     "\"Lord British is missing, and all ye plan to do is SLEEP for a month or so? Not in my inn!\"";
 
-/// **Measured**: the line a declined room draws, attributed to the innkeeper.
-fn inn_declined_line(innkeeper_name: Option<&'static str>) -> String {
-    let line = "\"Perhaps another time...\"";
-    match innkeeper_name {
-        Some(name) => format!("{line}\nsays {name}."),
-        None => line.to_string(),
-    }
-}
 
 /// `shops.md` §4's "Tavern count-word exception": the bill's count "is the
 /// number of nondead party members: two through six produce English number
@@ -3695,56 +3893,7 @@ fn tavern_accepted_menu_letter(
         .then_some(upper)
 }
 
-/// The inn's decline response, drawn from its own `SHOPPE.DAT` row.
-///
-/// `shops.md` §8's entry table gives the non-arms kinds' `N` or Space as
-/// "prints the resident refusal and exits". The inn's row is records
-/// `178..181` under a uniform `0..3` draw, the same shape every other shared
-/// row takes, and the result carries the ordinary `says $.` attribution.
-/// `shops.md §8.A`'s shared closing envelope for an inn visit that ends
-/// from the service menu without a completed transaction.
-///
-/// The no-sale row is the same one [`arms_closing_bark_record`] reads for a
-/// visit that bought nothing; only the shop-kind dialog id differs.
-fn inn_service_exit_message(
-    state: &mut crate::PlayState,
-    game_dir: &Path,
-    innkeeper_name: Option<&'static str>,
-) -> String {
-    let roll = state.random_range_u8(0, 3);
-    let record = crate::shoppe_records::shared_shop_bark_record(
-        SHOP_DIALOG_ID_INN,
-        crate::shoppe_records::SharedShopBarkKind::InitialGreeting,
-        roll,
-    );
-    record
-        .and_then(|record_id| render_shared_shoppe_flourish(game_dir, record_id))
-        .map(|line| match innkeeper_name {
-            Some(name) => format!("{line}\nsays {name}."),
-            None => line,
-        })
-        .unwrap_or_default()
-}
 
-fn inn_entry_decline_message(
-    state: &mut crate::PlayState,
-    game_dir: &Path,
-    innkeeper_name: Option<&'static str>,
-) -> String {
-    let roll = state.random_range_u8(0, 3);
-    let record = crate::shoppe_records::shared_shop_bark_record(
-        SHOP_DIALOG_ID_INN,
-        crate::shoppe_records::SharedShopBarkKind::InitialGreeting,
-        roll,
-    );
-    record
-        .and_then(|record_id| render_shared_shoppe_flourish(game_dir, record_id))
-        .map(|line| match innkeeper_name {
-            Some(name) => format!("{line}\nsays {name}."),
-            None => line,
-        })
-        .unwrap_or_default()
-}
 
 fn format_tavern_outcome_with_shoppe(
     outcome: crate::shop_runtime::TavernOutcome,
@@ -4002,11 +4151,49 @@ fn format_sage_outcome_with_shoppe(
     }
 }
 
+/// `shops.md §8.C` reagent records: offers `139..146` in the canonical
+/// eight-reagent order, and short funds `147`.
+const REAGENT_OFFER_RECORD_FIRST: usize = 139;
+const REAGENT_SHORT_FUNDS_RECORD: usize = 147;
+
+/// The stock rows and the closing question: "Each stock row is its
+/// uppercase compact letter, `...`, the short reagent name, and `\n`. After
+/// the list print `\nThy interest?" `."
+fn reagent_stock_menu(herbalist: crate::shops::Herbalist) -> String {
+    let mut rows = String::new();
+    for entry in crate::shops::herbalist_menu_entries(herbalist) {
+        rows.push_str(&format!(
+            "{}...{}\n",
+            entry.letter,
+            entry.reagent.display_name()
+        ));
+    }
+    format!("{rows}\n{REAGENT_MENU_QUESTION}")
+}
+
 fn format_reagent_outcome(
     outcome: crate::shop_runtime::ReagentShopOutcome,
-    declined_herbalist: Option<crate::shops::Herbalist>,
+    vendor_name: Option<&'static str>,
+    game_dir: &Path,
 ) -> String {
     use crate::shop_runtime::ReagentShopOutcome::*;
+    let render = |record_id: usize, gold: u16| {
+        crate::shoppe_bark::ShoppeTextRenderer::load_from_game_dir(game_dir)
+            .ok()
+            .and_then(|renderer| {
+                renderer
+                    .render_record(
+                        record_id,
+                        &crate::shoppe_bark::ShoppeBarkContext {
+                            gold,
+                            vendor_name: vendor_name.unwrap_or_default(),
+                            ..Default::default()
+                        },
+                    )
+                    .ok()
+            })
+            .unwrap_or_default()
+    };
     match outcome {
         // **Measured** 2026-09-07 at Cove (`qa/paired/cove-herbalist.tsv`):
         // the herbalist's list has the same shape as the arms listing - a
@@ -4024,51 +4211,46 @@ fn format_reagent_outcome(
         //
         // Thy interest?"
         // ```
-        //
-        // The engine printed `<herbalist> offers reagents A-E, or Space.`
         EnteredMenu { herbalist } => {
-            let mut rows = String::new();
-            for entry in crate::shops::herbalist_menu_entries(herbalist) {
-                rows.push_str(&format!(
-                    "{}...{}\n",
-                    entry.letter,
-                    entry.reagent.display_name()
-                ));
-            }
-            format!("{REAGENT_MENU_HEADING}\n\n{rows}\n{REAGENT_MENU_QUESTION}")
+            format!("{REAGENT_MENU_HEADING}\n\n{}", reagent_stock_menu(herbalist))
         }
-        QuotedUnit {
-            herbalist,
-            reagent,
-            unit_price,
-        } => format!(
-            "{} sells {} for {unit_price} gold each. Quantity?",
-            herbalist.display_name(),
-            reagent.display_name()
+        // `shops.md §8.C` "Offer": `\n\n"`, then record `139..146` in the
+        // canonical eight-reagent order, then ` Is this thy need?" `.
+        Offered { reagent, price, .. } => {
+            let ordinal = crate::shops::REAGENT_VENDOR_ORDER
+                .iter()
+                .position(|candidate| *candidate == reagent)
+                .unwrap_or_default();
+            format!(
+                "\n\"{} Is this thy need?\"",
+                render(REAGENT_OFFER_RECORD_FIRST + ordinal, price)
+            )
+        }
+        // "Already carrying 99 | `\n\n"Thou canst not carry any more!"\n\n`;
+        // consume one command key, then redraw stock".
+        RefusedAtCap { .. } => "\n\"Thou canst not carry any more!\"\n".to_string(),
+        RedrawStock { herbalist } => reagent_stock_menu(herbalist),
+        // "Paid | Token-expanded `\n"I thank thee!"\nsays $.\n`, then
+        // `"Anything else?\n\n`, then stock".
+        Bought { herbalist, .. } => {
+            let attribution = vendor_name
+                .map(|name| format!("\nsays {name}."))
+                .unwrap_or_default();
+            format!(
+                "\n\"I thank thee!\"{attribution}\n\"Anything else?\n\n{}",
+                reagent_stock_menu(herbalist)
+            )
+        }
+        // "Short funds | Record `147`; visit ends without ordinary farewell".
+        RefusedShortFunds { cost } => render(REAGENT_SHORT_FUNDS_RECORD, cost),
+        // "Decline | `No\n\n"What else?\n\n`, then stock".
+        Declined { herbalist } => format!(
+            "\n\"What else?\n\n{}",
+            reagent_stock_menu(herbalist)
         ),
-        Bought {
-            herbalist,
-            reagent,
-            quantity,
-            paid,
-        } => format!(
-            "{} sold {quantity} {} for {paid} gold.",
-            herbalist.display_name(),
-            reagent.display_name()
-        ),
-        RefusedShortFunds { cost } => format!("Thou lackest the {cost} gold."),
-        RefusedStockCap { cap, .. } => format!("Thou canst carry only {cap}."),
-        // Measured: declining a quote redraws the list and its question
-        // rather than printing a dismissal of its own.
-        Declined => match declined_herbalist {
-            Some(herbalist) => format_reagent_outcome(EnteredMenu { herbalist }, None),
-            None => String::new(),
-        },
-        // `shops.md §8.A`: "There is no universal `Farewell.` or `As you
-        // wish.` line." A shop that closes on a bark renders it through the
-        // shared envelope; this arm is the silent outcome, which "omits this
-        // entire sequence and its random draw".
-        Exited => String::new(),
+        // Closing barks are rendered by the caller through the shared
+        // envelope; these are the silent arms.
+        DeclinedEntry | LeftMenu | Exited => String::new(),
         // `shops.md §8.B`/`§8.C`: an unrecognised key waits; there is no
         // I-do-not-understand line anywhere in the shop family.
         InvalidInput => String::new(),
@@ -4243,48 +4425,120 @@ fn guild_menu_rows() -> String {
     rows
 }
 
-fn format_guild_outcome(outcome: crate::shop_runtime::GuildShopOutcome) -> String {
+/// `shops.md §8.C` guild records: offers `160`/`161`/`162` for Keys, Gems
+/// and Torches, short funds `163`, and the `D` description `164`.
+const GUILD_OFFER_RECORD_KEYS: usize = 160;
+const GUILD_SHORT_FUNDS_RECORD: usize = 163;
+const GUILD_DESCRIBE_RECORD: usize = 164;
+
+fn guild_offer_record(commodity: crate::shops::GuildCommodity) -> usize {
+    use crate::shops::GuildCommodity;
+    GUILD_OFFER_RECORD_KEYS
+        + match commodity {
+            GuildCommodity::Keys => 0,
+            GuildCommodity::Gems => 1,
+            GuildCommodity::Torches => 2,
+        }
+}
+
+fn guild_stock_menu() -> String {
+    format!("{}\n{GUILD_MENU_QUESTION}", guild_menu_rows())
+}
+
+fn format_guild_outcome(
+    outcome: crate::shop_runtime::GuildShopOutcome,
+    vendor_name: Option<&'static str>,
+    speaker_is_female: bool,
+    game_dir: &Path,
+) -> String {
     use crate::shop_runtime::GuildShopOutcome::*;
+    let render = |record_id: usize, shop: Option<crate::shops::GuildShop>, gold: u16| {
+        crate::shoppe_bark::ShoppeTextRenderer::load_from_game_dir(game_dir)
+            .ok()
+            .and_then(|renderer| {
+                renderer
+                    .render_record(
+                        record_id,
+                        &crate::shoppe_bark::ShoppeBarkContext {
+                            gold,
+                            vendor_name: vendor_name.unwrap_or_default(),
+                            shop_name: shop.map(|shop| shop.display_name()).unwrap_or_default(),
+                            ..Default::default()
+                        },
+                    )
+                    .ok()
+            })
+            .unwrap_or_default()
+    };
     match outcome {
-        EnteredMenu { .. } => format!(
-            "{GUILD_MENU_HEADING}\n\n{}\n{GUILD_MENU_QUESTION}",
-            guild_menu_rows()
-        ),
-        QuotedUnit {
+        // `shops.md §8.B`: `Yes\n\n"We sell:\n\n`, then the stock list.
+        EnteredMenu { .. } => format!("{GUILD_MENU_HEADING}\n\n{}", guild_stock_menu()),
+        // `shops.md §8.C` "Offer": `\n\n"`, then record `160`/`161`/`162`,
+        // then `\n\nInterested?" `.
+        Offered {
             shop,
             commodity,
-            unit_price,
+            price,
         } => format!(
-            "{} sells {} for {unit_price} gold each.\n\n{GUILD_QUOTE_PROMPT}",
-            shop.display_name(),
-            commodity.display_name()
+            "\n\"{}\n\n{GUILD_QUOTE_PROMPT}",
+            render(guild_offer_record(commodity), Some(shop), price)
         ),
-        Bought {
-            shop,
-            commodity,
-            quantity,
-            paid,
-        } => format!(
-            "{} sold {quantity} {} for {paid} gold.",
-            shop.display_name(),
-            commodity.display_name()
+        // "D renders record `164`, then redraws the stock menu."
+        Described { shop } => format!(
+            "{}\n\n{}",
+            render(GUILD_DESCRIBE_RECORD, Some(shop), 0),
+            guild_stock_menu()
         ),
-        RefusedShortFunds { cost } => format!("Thou lackest the {cost} gold."),
-        RefusedStockCap { cap, .. } => format!("Thou canst carry only {cap}."),
-        // Measured: a declined quote redraws the list under its own heading.
-        Declined => format!(
-            "{GUILD_MENU_AGAIN_HEADING}\n\n{}\n{GUILD_MENU_QUESTION}",
-            guild_menu_rows()
-        ),
-        // `shops.md §8.A`: "There is no universal `Farewell.` or `As you
-        // wish.` line." A shop that closes on a bark renders it through the
-        // shared envelope; this arm is the silent outcome, which "omits this
-        // entire sequence and its random draw".
-        Exited => String::new(),
+        // "Paid | Token-expanded `\n"Sold!"\nsays $.\n\n"What else, \n`, then
+        // `m'lady` for a female speaking member or `m'lord` otherwise, then
+        // `?\n\n`, then stock menu".
+        Bought { .. } => {
+            let attribution = vendor_name
+                .map(|name| format!("\nsays {name}."))
+                .unwrap_or_default();
+            format!(
+                "\n\"Sold!\"{attribution}\n\n\"What else, \n{}?\n\n{}",
+                if speaker_is_female { "m'lady" } else { "m'lord" },
+                guild_stock_menu()
+            )
+        }
+        // "Short funds | Record `163`; visit ends without ordinary farewell".
+        RefusedShortFunds { cost } => render(GUILD_SHORT_FUNDS_RECORD, None, cost),
+        // "Decline | `No\n\n"What else, then?\n\n`, then stock menu".
+        Declined => format!("\n{GUILD_MENU_AGAIN_HEADING}\n\n{}", guild_stock_menu()),
+        // Closing barks are rendered by the caller through the shared
+        // envelope; these are the silent arms.
+        DeclinedEntry | LeftMenu | Exited => String::new(),
         // `shops.md §8.B`/`§8.C`: an unrecognised key waits; there is no
         // I-do-not-understand line anywhere in the shop family.
         InvalidInput => String::new(),
     }
+}
+
+/// `shops.md §8` intro and `§8.A`'s shared closing envelope: an ordinary
+/// visit ending draws one record from the shop kind's nothing-bought row, or
+/// from its purchase-completed row when a purchase completed in this visit,
+/// and wraps it as `\n\n"`, the record, then `says $.\n`. Silent outcomes
+/// do not call this and so take no draw.
+fn shop_closing_bark(
+    state: &mut PlayState,
+    dialog_id: u8,
+    vendor_name: Option<&'static str>,
+    game_dir: &Path,
+) -> String {
+    let kind = if state.arms_transaction_completed {
+        crate::shoppe_records::SharedShopBarkKind::Farewell
+    } else {
+        crate::shoppe_records::SharedShopBarkKind::InitialGreeting
+    };
+    let roll = state.random_range_u8(0, 3);
+    crate::shoppe_records::shared_shop_bark_record(dialog_id, kind, roll)
+        .and_then(|record_id| render_shared_shoppe_flourish(game_dir, record_id))
+        .map(|line| match vendor_name {
+            Some(name) => format!("{line}\nsays {name}."),
+            None => line,
+        })
+        .unwrap_or_default()
 }
 
 fn handle_active_conversation_key_input(

@@ -4382,21 +4382,20 @@ fn town_talk_guild_shop_uses_scene_local_prices() {
     );
     assert!(state.message.contains("The Nemesis"));
 
+    // `shops.md §8.2`: The Nemesis's key bundle base is 185, adjusted by the
+    // speaker's Intelligence, and one offer sells three keys.
+    let price = crate::shops::guild_bundle_price(
+        GuildShop::TheNemesis,
+        crate::shops::GuildCommodity::Keys,
+        crate::input_dispatch::active_speaker_intelligence(&state),
+    );
+    handle_play_key_input(&mut state, 'Y', "", Path::new("")).unwrap();
     handle_play_key_input(&mut state, 'A', "", Path::new("")).unwrap();
-    assert!(
-        state
-            .message
-            .contains("The Nemesis sells keys for 185 gold each")
-    );
-    handle_play_key_input(&mut state, '2', "", Path::new("")).unwrap();
+    assert!(state.message.contains("Interested?"), "{:?}", state.message);
+    handle_play_key_input(&mut state, 'Y', "", Path::new("")).unwrap();
 
-    assert_eq!(state.gold, 130);
-    assert_eq!(state.keys, 2);
-    assert!(
-        state
-            .message
-            .contains("The Nemesis sold 2 keys for 370 gold")
-    );
+    assert_eq!(state.gold, 500 - price);
+    assert_eq!(state.keys, 3);
 }
 
 #[test]
@@ -4435,21 +4434,21 @@ fn town_talk_herbalist_uses_scene_local_reagent_menu() {
     );
     assert!(state.message.contains("Mysticism"));
 
+    // `shops.md §6`: Mysticism's first stocked reagent is Spider Silk, two
+    // for a base of 6.
+    let quote = crate::shops::quote_reagent_purchase(
+        Herbalist::Mysticism,
+        crate::shops::Reagent::SpiderSilk,
+        crate::input_dispatch::active_speaker_intelligence(&state),
+    )
+    .unwrap();
+    handle_play_key_input(&mut state, 'Y', "", Path::new("")).unwrap();
+    assert!(state.message.contains("A...Spider Silk"), "{:?}", state.message);
     handle_play_key_input(&mut state, 'A', "", Path::new("")).unwrap();
-    assert!(
-        state
-            .message
-            .contains("Mysticism sells Spider Silk for 6 gold each")
-    );
-    handle_play_key_input(&mut state, '3', "", Path::new("")).unwrap();
+    handle_play_key_input(&mut state, 'Y', "", Path::new("")).unwrap();
 
-    assert_eq!(state.gold, 82);
-    assert_eq!(state.reagents[REAGENT_SPIDER_SILK], 3);
-    assert!(
-        state
-            .message
-            .contains("Mysticism sold 3 Spider Silk for 18 gold")
-    );
+    assert_eq!(state.gold, 100 - quote.total_price);
+    assert_eq!(state.reagents[REAGENT_SPIDER_SILK], 2);
 }
 
 #[test]
@@ -4999,18 +4998,26 @@ fn end_to_end_innkeeper_session_through_input_dispatcher() {
     assert!(state.message.contains("Rest for the"), "{}", state.message);
     // Then 'R' selects inn rest.
     handle_play_key_input(&mut state, 'R', "", Path::new("")).unwrap();
-    assert!(state.message.contains("room"));
+    // `shops.md §8.C` "Rest offer | Opening quote, room record, then
+    // `\nWilt thou take\nit?" `".
+    assert!(state.message.ends_with("\nWilt thou take\nit?\" "), "{:?}", state.message);
     // 'Y' again to confirm.
     handle_play_key_input(&mut state, 'Y', "", Path::new("")).unwrap();
-    assert_eq!(
-        state.message,
-        format!(
-            "{}\n\n{}",
-            crate::commands::PAID_INN_REST_SLEEP_LINE,
-            crate::commands::PAID_INN_REST_MORNING_LINE
-        )
+    // "Paid Rest | `"Have a pleasant\nnight, `, honorific, token-expanded
+    // `!"\nsays $.\n\n`, then the rest sequence. On completion the visit
+    // ends without the inn continuation question or shared farewell."
+    assert!(
+        state.message.contains("\"Have a pleasant\nnight, "),
+        "{:?}",
+        state.message
     );
+    assert!(state.message.ends_with(&format!(
+        "{}\n\n{}",
+        crate::commands::PAID_INN_REST_SLEEP_LINE,
+        crate::commands::PAID_INN_REST_MORNING_LINE
+    )));
     assert!(state.gold < 100);
+    assert!(state.active_shop.is_none());
 }
 
 #[test]
@@ -5029,14 +5036,10 @@ fn end_to_end_innkeeper_decline_ends_the_visit_without_charge() {
     // session sees it.
     handle_play_key_input(&mut state, ' ', "n", Path::new("")).unwrap();
     assert_eq!(state.gold, 100);
-    // Measured 2026-09-08 at Hotel Brittany
-    // (`qa/paired/nb-inn-branches.tsv`): the declined room ends the visit on
-    // the innkeeper's own line, attributed when the scene names one.
-    assert!(
-        state.message.contains("Perhaps another time..."),
-        "decline message was: {}",
-        state.message
-    );
+    // `shops.md §8.C` "Declined Rest offer": the visit ends through the
+    // ordinary farewell - one of the no-sale records `178..181` (measured
+    // 2026-09-08 at Hotel Brittany as `Perhaps another time...`), which this
+    // asset-free fixture cannot render.
     assert!(state.active_shop.is_none());
 }
 
@@ -5086,7 +5089,7 @@ fn end_to_end_innkeeper_leave_companion_moves_roster_to_registry() {
     // Measured 2026-09-08 (`qa/paired/nb-inn-companion.tsv`): the branch asks
     // `"Who will stay?"` and quotes no deposit; the selection happens in the
     // panel's framed `Select:` picker.
-    assert!(state.message.contains("\"Who will stay?\""));
+    assert!(state.message.contains("\"Who will\nstay?\" "), "{:?}", state.message);
     handle_play_key_input(&mut state, '2', "", Path::new("")).unwrap();
     // Measured 2026-09-08 (`qa/paired/nb-inn-commit.tsv`): the deposit is
     // quoted as a monthly rate due at check-out, ending on the shared
@@ -5094,7 +5097,9 @@ fn end_to_end_innkeeper_leave_companion_moves_roster_to_registry() {
     assert!(state.message.contains("per month, due at check-out"));
     handle_play_key_input(&mut state, 'Y', "", Path::new("")).unwrap();
 
-    assert_eq!(state.gold, 67);
+    // `shops.md §8.4`: "Leave performs no affordability check or gold
+    // debit" (R420).
+    assert_eq!(state.gold, 100);
     assert_eq!(state.party.len(), 1);
     assert_eq!(state.party_names, vec![*b"AVATAR\0\0\0"]);
     assert_eq!(state.inn_registry.len(), 1);
@@ -5106,8 +5111,15 @@ fn end_to_end_innkeeper_leave_companion_moves_roster_to_registry() {
     assert!(
         state
             .message
-            .contains("\"Is there anything more I can do for thee?\"")
+            .contains("\"Is there\nanything more\nI can do for\nthee?\" ")
     );
+    assert!(matches!(
+        state.active_shop,
+        Some(ActiveShopSession::Innkeeper(InnkeeperState::Continuation { .. }))
+    ));
+    // §8.C: "N or Space echoes `No` and exits."
+    handle_play_key_input(&mut state, ' ', "", Path::new("")).unwrap();
+    assert!(state.active_shop.is_none());
 }
 
 #[test]
@@ -5292,8 +5304,16 @@ fn end_to_end_healer_mission_cure_bypasses_gold_path() {
     assert_eq!(state.gold, 0);
     assert_eq!(state.party[0].status, b'G');
     assert_eq!(state.party[0].hp, 7);
-    assert_eq!(state.message, "Cured party member 1.");
-    assert!(state.active_shop.is_some());
+    // `shops.md §8.C` "Minoc free Cure/Heal | `\n\n"Receive now the
+    // Light!"`, followed by treatment effects", then the continuation.
+    assert_eq!(
+        state.message,
+        "\"Receive now the Light!\"\n\n\"Is there any other way in which I may\naid thee?\" "
+    );
+    assert!(matches!(
+        state.active_shop,
+        Some(ActiveShopSession::Healer(HealerShopState::Continuation, _))
+    ));
 }
 
 #[test]
@@ -5323,7 +5343,10 @@ fn end_to_end_healer_mission_cure_bypasses_shadowlord_surcharge() {
 
     assert_eq!(state.gold, 50);
     assert_eq!(state.party[0].status, b'G');
-    assert_eq!(state.message, "Cured party member 1.");
+    assert_eq!(
+        state.message,
+        "\"Receive now the Light!\"\n\n\"Is there any other way in which I may\naid thee?\" "
+    );
     assert!(!state.message.contains("Surcharge"));
 }
 
@@ -5352,8 +5375,66 @@ fn end_to_end_paid_healer_uses_local_fee_and_play_state_treatment() {
     assert_eq!(state.gold, 0);
     assert_eq!(state.party[0].status, b'P');
     assert_eq!(state.party[0].hp, 22);
-    assert_eq!(state.message, "Healed party member 1 to 22/22.");
+    // `shops.md §8.3`: the paid branch applies the treatment "and asks the
+    // continuation Y/N question" - no invented treatment report.
+    assert_eq!(
+        state.message,
+        "\n\"Is there any other way in which I may\naid thee?\" "
+    );
     assert!(state.active_shop.is_some());
+
+    // §8.C: "Yes repeats the service question; No ends the visit."
+    handle_play_key_input(&mut state, 'Y', "", Path::new("")).unwrap();
+    assert!(
+        state.message.contains("What is the nature of thy need?"),
+        "{:?}",
+        state.message
+    );
+    handle_play_key_input(&mut state, 'Q', "", Path::new("")).unwrap();
+    assert!(state.message.is_empty(), "{:?}", state.message);
+    handle_play_key_input(&mut state, ' ', "", Path::new("")).unwrap();
+    assert!(state.active_shop.is_none());
+}
+
+/// `shops.md §8.B`: "The healer entry accepts Y/N only and ignores Space";
+/// other keys re-poll. §8.C: an untreatable selection leads to the
+/// continuation Y/N gate, whose `N` ends the visit.
+#[test]
+fn healer_entry_ignores_space_and_continuation_is_a_yes_no_gate() {
+    use crate::shop_runtime::HealerShopState;
+    use crate::shop_session::ActiveShopSession;
+
+    let mut state = test_state(open_grid(), 1, 1);
+    state.gold = 60;
+    state.party[0].status = b'G';
+    state.active_shop = Some(ActiveShopSession::Healer(
+        HealerShopState::Greeting,
+        Healer::TheShieldOfTruth,
+    ));
+
+    for key in [' ', 'H', '\r'] {
+        handle_play_key_input(&mut state, key, "", Path::new("")).unwrap();
+        assert!(matches!(
+            state.active_shop,
+            Some(ActiveShopSession::Healer(HealerShopState::Greeting, _))
+        ));
+    }
+    handle_play_key_input(&mut state, 'Y', "", Path::new("")).unwrap();
+    // A healthy member needs no cure: the refusal, then the continuation.
+    handle_play_key_input(&mut state, 'C', "", Path::new("")).unwrap();
+    assert!(state.message.contains("Thou hast no need of this art!"));
+    assert!(matches!(
+        state.active_shop,
+        Some(ActiveShopSession::Healer(HealerShopState::Continuation, _))
+    ));
+    handle_play_key_input(&mut state, 'C', "", Path::new("")).unwrap();
+    assert!(matches!(
+        state.active_shop,
+        Some(ActiveShopSession::Healer(HealerShopState::Continuation, _))
+    ));
+    handle_play_key_input(&mut state, 'N', "", Path::new("")).unwrap();
+    assert!(state.active_shop.is_none());
+    assert_eq!(state.gold, 60);
 }
 
 #[test]
@@ -5899,90 +5980,86 @@ fn shoppe_dat_with_records(records: &[(usize, &[u8])]) -> Vec<u8> {
     bytes
 }
 
+/// `shops.md §8.9`/`§8.C`: a displayed letter offers the herbalist's fixed
+/// bundle, `Y` buys it once at the adjusted price, and the stock list follows
+/// the thank-you.
 #[test]
-fn end_to_end_reagent_vendor_uses_compact_herbalist_letter_menu() {
+fn end_to_end_reagent_vendor_sells_one_bundle_per_offer() {
     use crate::shop_runtime::ReagentShopState;
     use crate::shop_session::ActiveShopSession;
 
     let mut state = test_state(open_grid(), 1, 1);
-    state.gold = 100;
+    let quote = crate::shops::quote_reagent_purchase(
+        Herbalist::Mysticism,
+        crate::shops::Reagent::SpiderSilk,
+        crate::input_dispatch::active_speaker_intelligence(&state),
+    )
+    .unwrap();
+    state.gold = quote.total_price + 5;
     state.reagents = [0; REAGENT_COUNT];
     state.active_shop = Some(ActiveShopSession::Reagent(ReagentShopState::for_herbalist(
         Herbalist::Mysticism,
     )));
 
+    handle_play_key_input(&mut state, 'Y', "", Path::new("")).unwrap();
+    assert!(state.message.contains("Spider Silk"), "{:?}", state.message);
     handle_play_key_input(&mut state, 'A', "", Path::new("")).unwrap();
-    assert!(state.message.contains("Spider Silk"));
-    handle_play_key_input(&mut state, '3', "", Path::new("")).unwrap();
+    assert!(state.message.contains("Is this thy need?"), "{:?}", state.message);
+    handle_play_key_input(&mut state, 'Y', "", Path::new("")).unwrap();
 
-    assert_eq!(state.gold, 82);
-    assert_eq!(state.reagents[REAGENT_SPIDER_SILK], 3);
-    assert!(state.message.contains("18 gold"));
+    assert_eq!(state.gold, 5);
+    assert_eq!(state.reagents[REAGENT_SPIDER_SILK], 2);
+    assert!(state.message.contains("\"I thank thee!\""), "{:?}", state.message);
+    assert!(state.message.contains("Thy interest?"), "{:?}", state.message);
     assert!(state.active_shop.is_some());
+
+    // Return leaves the list for the farewell path.
+    handle_play_key_input(&mut state, '\r', "", Path::new("")).unwrap();
+    assert!(state.active_shop.is_none());
 }
 
+/// `shops.md §8.2`/`§8.C`: the guild sells one fixed bundle per Y/N offer
+/// at the Intelligence-adjusted price, then returns to the stock menu.
 #[test]
-fn end_to_end_reagent_vendor_accepts_multi_digit_inline_quantity() {
-    use crate::shop_runtime::ReagentShopState;
-    use crate::shop_session::ActiveShopSession;
-
-    let mut state = test_state(open_grid(), 1, 1);
-    state.gold = 100;
-    state.reagents = [0; REAGENT_COUNT];
-    state.active_shop = Some(ActiveShopSession::Reagent(ReagentShopState::for_herbalist(
-        Herbalist::Mysticism,
-    )));
-
-    handle_play_key_input(&mut state, 'A', "", Path::new("")).unwrap();
-    handle_play_key_input(&mut state, '1', "2", Path::new("")).unwrap();
-
-    assert_eq!(state.gold, 28);
-    assert_eq!(state.reagents[REAGENT_SPIDER_SILK], 12);
-    assert!(state.message.contains("72 gold"));
-    assert!(state.active_shop.is_some());
-}
-
-#[test]
-fn end_to_end_guildmaster_uses_shop_letter_prices() {
+fn end_to_end_guildmaster_sells_one_bundle_per_offer() {
     use crate::shop_runtime::GuildShopState;
     use crate::shop_session::ActiveShopSession;
 
     let mut state = test_state(open_grid(), 1, 1);
     state.gold = 500;
     state.keys = 0;
+    let speaker_intelligence = crate::input_dispatch::active_speaker_intelligence(&state);
+    let price = crate::shops::guild_bundle_price(
+        GuildShop::TheDen,
+        crate::shops::GuildCommodity::Keys,
+        speaker_intelligence,
+    );
+    state.gold = price + 7;
     state.active_shop = Some(ActiveShopSession::Guild(GuildShopState::for_shop(
         GuildShop::TheDen,
     )));
 
+    handle_play_key_input(&mut state, 'Y', "", Path::new("")).unwrap();
+    assert!(state.message.contains("Thy concern?"), "{:?}", state.message);
     handle_play_key_input(&mut state, 'A', "", Path::new("")).unwrap();
-    assert!(state.message.contains("keys"));
-    handle_play_key_input(&mut state, '2', "", Path::new("")).unwrap();
+    assert!(state.message.contains("Interested?"), "{:?}", state.message);
+    handle_play_key_input(&mut state, 'Y', "", Path::new("")).unwrap();
 
-    assert_eq!(state.gold, 120);
-    assert_eq!(state.keys, 2);
-    assert!(state.message.contains("380 gold"));
-    assert!(state.active_shop.is_some());
-}
+    assert_eq!(state.gold, 7);
+    assert_eq!(state.keys, 3);
+    assert!(state.message.contains("\"Sold!\""), "{:?}", state.message);
+    assert!(state.message.contains("Thy concern?"), "{:?}", state.message);
+    assert!(matches!(
+        state.active_shop,
+        Some(ActiveShopSession::Guild(GuildShopState::PickItem { .. }))
+    ));
 
-#[test]
-fn end_to_end_guildmaster_accepts_multi_digit_inline_quantity() {
-    use crate::shop_runtime::GuildShopState;
-    use crate::shop_session::ActiveShopSession;
-
-    let mut state = test_state(open_grid(), 1, 1);
-    state.gold = 2000;
-    state.keys = 0;
-    state.active_shop = Some(ActiveShopSession::Guild(GuildShopState::for_shop(
-        GuildShop::TheDen,
-    )));
-
+    // A second offer the party cannot afford ends the visit.
     handle_play_key_input(&mut state, 'A', "", Path::new("")).unwrap();
-    handle_play_key_input(&mut state, '1', "0", Path::new("")).unwrap();
-
-    assert_eq!(state.gold, 100);
-    assert_eq!(state.keys, 10);
-    assert!(state.message.contains("1900 gold"));
-    assert!(state.active_shop.is_some());
+    handle_play_key_input(&mut state, 'Y', "", Path::new("")).unwrap();
+    assert_eq!(state.gold, 7);
+    assert_eq!(state.keys, 3);
+    assert!(state.active_shop.is_none());
 }
 
 #[test]
@@ -6756,14 +6833,11 @@ fn completed_inn_rest_sleeps_in_the_bed_cell_and_wakes_one_tile_east() {
 
     handle_play_key_input(&mut state, 'Y', "", Path::new("")).unwrap();
 
-    assert_eq!(
-        state.message,
-        format!(
-            "{}\n\n{}",
-            crate::commands::PAID_INN_REST_SLEEP_LINE,
-            crate::commands::PAID_INN_REST_MORNING_LINE
-        )
-    );
+    assert!(state.message.ends_with(&format!(
+        "{}\n\n{}",
+        crate::commands::PAID_INN_REST_SLEEP_LINE,
+        crate::commands::PAID_INN_REST_MORNING_LINE
+    )));
     let (wake_x, wake_y) = inn.bed_wake_cell();
     assert_eq!(
         (state.player.x, state.player.y),
@@ -6900,5 +6974,168 @@ fn tavern_unaffordable_round_prints_cant_pay_and_ends_the_visit() {
         state.message
     );
     assert!(state.message.contains("\"That will be"));
+    assert!(state.active_shop.is_none());
+}
+
+/// `shops.md §8.C`/`§8.4`: Rest and Leave first check this inn's lodged-guest
+/// capacity; Leave refuses Avatar (repeat the question) and a dead companion
+/// (record `192`, visit ends); Escape at the picker prints `Nobody`.
+#[test]
+fn inn_capacity_and_leave_target_refusals_follow_the_published_rules() {
+    use crate::shop_runtime::InnkeeperState;
+    use crate::shop_session::ActiveShopSession;
+
+    let companion = |slot: u8, status: u8| PartyMember {
+        slot,
+        class_byte: b'B',
+        status,
+        climb_stat: 7,
+        mana: 3,
+        hp: if status == b'D' { 0 } else { 12 },
+        max_hp: 28,
+        level: 3,
+    };
+    let fresh = || {
+        let mut state = test_state(open_grid(), 1, 1);
+        state.area = Area::Town {
+            scene: Scene::new(20).unwrap(),
+            floor: 0,
+        };
+        state.gold = 100;
+        let avatar = state.party[0];
+        state.party = vec![avatar, companion(1, b'G'), companion(2, b'D')];
+        state.party_names = vec![*b"AVATAR\0\0\0", *b"IOLO\0\0\0\0\0", *b"SHAMINO\0\0"];
+        state.party_stay_counters = vec![0; 3];
+        state.party_strengths = vec![30; 3];
+        state.party_intelligence = vec![30; 3];
+        state.party_experience = vec![0; 3];
+        state.party_equipment = default_party_equipment(3);
+        state.active_shop = Some(ActiveShopSession::Innkeeper(InnkeeperState::ServiceMenu {
+            inn: Inn::HotelBrittany,
+        }));
+        state
+    };
+
+    // Hotel Brittany lodges at most two guests.
+    let mut state = fresh();
+    let guest = InnGuestRecord {
+        registry_slot: 0,
+        scene_marker: 20,
+        name: *b"DUPRE\0\0\0\0",
+        member: companion(4, b'G'),
+        strength: 17,
+        intelligence: 19,
+        experience: 0,
+        equipment: [EQUIPMENT_EMPTY; EQUIPMENT_SLOT_COUNT],
+        stay_counter: 0,
+    };
+    state.inn_registry = vec![guest, InnGuestRecord { registry_slot: 1, ..guest }];
+    for key in ['R', 'L'] {
+        state.active_shop = Some(ActiveShopSession::Innkeeper(InnkeeperState::ServiceMenu {
+            inn: Inn::HotelBrittany,
+        }));
+        handle_play_key_input(&mut state, key, "", Path::new("")).unwrap();
+        assert!(
+            state.message.contains("but we\nhave no room\navailable."),
+            "{:?}",
+            state.message
+        );
+        assert!(matches!(
+            state.active_shop,
+            Some(ActiveShopSession::Innkeeper(InnkeeperState::Continuation { .. }))
+        ));
+    }
+    assert_eq!(state.gold, 100);
+
+    // Avatar cannot stay: the plural refusal, then the question again.
+    let mut state = fresh();
+    handle_play_key_input(&mut state, 'L', "", Path::new("")).unwrap();
+    handle_play_key_input(&mut state, '1', "", Path::new("")).unwrap();
+    assert!(
+        state.message.contains("Thy friends will not leave thee!"),
+        "{:?}",
+        state.message
+    );
+    assert!(state.message.contains("\"Who will\nstay?\" "));
+    assert!(matches!(
+        state.active_shop,
+        Some(ActiveShopSession::Innkeeper(InnkeeperState::PickLeaveCompanion { .. }))
+    ));
+    // Escape cancels with `Nobody` and reaches the continuation.
+    handle_play_key_input(&mut state, '\u{1b}', "", Path::new("")).unwrap();
+    assert!(matches!(
+        state.active_shop,
+        Some(ActiveShopSession::Innkeeper(InnkeeperState::Continuation { .. }))
+    ));
+
+    // A dead companion ends the visit (record 192) without leaving anyone.
+    let mut state = fresh();
+    handle_play_key_input(&mut state, 'L', "", Path::new("")).unwrap();
+    handle_play_key_input(&mut state, '3', "", Path::new("")).unwrap();
+    assert!(state.active_shop.is_none());
+    assert_eq!(state.party.len(), 3);
+    assert!(state.inn_registry.is_empty());
+}
+
+/// `shops.md §8.C`: multi-guest pickup asks "Who will check out?" over the
+/// register panel, takes no Y/N confirmation, and short funds render record
+/// `193` and end the visit.
+#[test]
+fn inn_multi_guest_pickup_bills_without_confirmation() {
+    use crate::shop_runtime::InnkeeperState;
+    use crate::shop_session::ActiveShopSession;
+
+    let mut state = test_state(open_grid(), 1, 1);
+    state.area = Area::Town {
+        scene: Scene::new(2).unwrap(),
+        floor: 0,
+    };
+    let member = PartyMember {
+        slot: 4,
+        class_byte: b'B',
+        status: b'G',
+        climb_stat: 7,
+        mana: 3,
+        hp: 12,
+        max_hp: 28,
+        level: 3,
+    };
+    let guest = InnGuestRecord {
+        registry_slot: 0,
+        scene_marker: 2,
+        name: *b"IOLO\0\0\0\0\0",
+        member,
+        strength: 17,
+        intelligence: 19,
+        experience: 0,
+        equipment: [EQUIPMENT_EMPTY; EQUIPMENT_SLOT_COUNT],
+        stay_counter: 0,
+    };
+    state.inn_registry = vec![guest, InnGuestRecord { registry_slot: 1, ..guest }];
+    let bill = crate::shops::inn_pickup_bill_for_speaker(
+        Inn::TheWayfarerInn,
+        0,
+        crate::input_dispatch::active_speaker_intelligence(&state),
+    );
+    state.gold = bill;
+    state.active_shop = Some(ActiveShopSession::Innkeeper(InnkeeperState::ServiceMenu {
+        inn: Inn::TheWayfarerInn,
+    }));
+
+    handle_play_key_input(&mut state, 'P', "", Path::new("")).unwrap();
+    assert!(state.message.contains("\"Who will\ncheck out?\" "), "{:?}", state.message);
+    handle_play_key_input(&mut state, '2', "", Path::new("")).unwrap();
+    assert_eq!(state.gold, 0);
+    assert_eq!(state.party.len(), 2);
+    assert!(state.message.contains("I hope thou hast found thy stay enjoyable,"));
+    assert!(matches!(
+        state.active_shop,
+        Some(ActiveShopSession::Innkeeper(InnkeeperState::Continuation { .. }))
+    ));
+
+    // Yes returns to the service question; the last guest's bill is short.
+    handle_play_key_input(&mut state, 'Y', "", Path::new("")).unwrap();
+    handle_play_key_input(&mut state, 'P', "", Path::new("")).unwrap();
+    assert_eq!(state.party.len(), 2);
     assert!(state.active_shop.is_none());
 }

@@ -847,9 +847,13 @@ fn guild_shop_prices_match_public_rows() {
     );
 }
 
+/// `shops.md §8.2`: one bundle at the adjusted price; "the inventory
+/// addition caps at 99, without reducing the price for overflow. There is no
+/// carry-cap refusal before a guild offer."
 #[test]
-fn guild_purchase_debits_gold_and_caps_stock_without_partial_mutation() {
-    let mut gold = 400;
+fn guild_purchase_charges_full_bundle_and_caps_stock_at_99() {
+    // Intelligence 30: 200 + trunc(200 * 10 / 100) = 220.
+    let mut gold = 440;
     let mut gems = 97;
 
     let bought = apply_guild_purchase(
@@ -857,32 +861,26 @@ fn guild_purchase_debits_gold_and_caps_stock_without_partial_mutation() {
         &mut gems,
         GuildShop::TheGuild,
         GuildCommodity::Gems,
-        2,
+        30,
     )
     .unwrap();
 
-    assert_eq!(bought.quote.total_price, 400);
-    assert_eq!(bought.gold_before, 400);
-    assert_eq!(bought.gold_after, 0);
+    assert_eq!(bought.quote.quantity, 4);
+    assert_eq!(bought.quote.total_price, 220);
     assert_eq!(bought.stock_before, 97);
     assert_eq!(bought.stock_after, 99);
-    assert_eq!(gold, 0);
+    assert_eq!(gold, 220);
     assert_eq!(gems, SHOP_COMMODITY_STOCK_CAP);
 
-    assert_eq!(
-        apply_guild_purchase(
-            &mut gold,
-            &mut gems,
-            GuildShop::TheGuild,
-            GuildCommodity::Gems,
-            1
-        ),
-        Err(GuildPurchaseError::StockCap {
-            current: 99,
-            requested: 1,
-            cap: SHOP_COMMODITY_STOCK_CAP,
-        })
-    );
+    // Already at 99: still sold, still full price.
+    apply_guild_purchase(
+        &mut gold,
+        &mut gems,
+        GuildShop::TheGuild,
+        GuildCommodity::Gems,
+        30,
+    )
+    .unwrap();
     assert_eq!(gold, 0);
     assert_eq!(gems, 99);
 
@@ -893,11 +891,11 @@ fn guild_purchase_debits_gold_and_caps_stock_without_partial_mutation() {
             &mut keys,
             GuildShop::TheGuild,
             GuildCommodity::Keys,
-            1,
+            30,
         ),
         Err(GuildPurchaseError::InsufficientGold {
             available: 0,
-            required: 160,
+            required: 176,
         })
     );
     assert_eq!(keys, 0);
@@ -909,13 +907,15 @@ fn play_state_guild_purchase_routes_to_selected_counter() {
     state.gold = 75;
     state.torches = 4;
 
+    // Intelligence 33: 25 + trunc(25 * 1 / 100) = 25 for five torches.
     let bought = state
-        .buy_guild_commodity(GuildShop::TheNemesis, GuildCommodity::Torches, 3)
+        .buy_guild_commodity(GuildShop::TheNemesis, GuildCommodity::Torches, 33)
         .unwrap();
 
     assert_eq!(bought.quote.unit_price, 25);
-    assert_eq!(state.gold, 0);
-    assert_eq!(state.torches, 7);
+    assert_eq!(bought.quote.total_price, 25);
+    assert_eq!(state.gold, 50);
+    assert_eq!(state.torches, 9);
     assert_eq!(state.keys, DEFAULT_KEY_STOCK);
     assert_eq!(state.gems, DEFAULT_GEM_STOCK);
 }
@@ -1585,17 +1585,17 @@ fn healer_refusals_preserve_gold_status_and_hp() {
 #[test]
 fn inn_rate_rows_and_rest_payment_use_supplied_adjusted_rate() {
     assert_eq!(inn_base_room_rate(Inn::TheWayfarerInn), 2);
-    assert_eq!(inn_minimum_gold(Inn::TheWayfarerInn), 3);
+    assert_eq!(inn_max_lodged_guests(Inn::TheWayfarerInn), 3);
     assert_eq!(inn_base_room_rate(Inn::TheWarriorsStead), 3);
-    assert_eq!(inn_minimum_gold(Inn::TheWarriorsStead), 4);
+    assert_eq!(inn_max_lodged_guests(Inn::TheWarriorsStead), 4);
     assert_eq!(inn_base_room_rate(Inn::TheHauntingInn), 2);
-    assert_eq!(inn_minimum_gold(Inn::TheHauntingInn), 3);
+    assert_eq!(inn_max_lodged_guests(Inn::TheHauntingInn), 3);
     assert_eq!(inn_base_room_rate(Inn::HotelBrittany), 3);
-    assert_eq!(inn_minimum_gold(Inn::HotelBrittany), 2);
+    assert_eq!(inn_max_lodged_guests(Inn::HotelBrittany), 2);
     assert_eq!(inn_base_room_rate(Inn::TheSmugglersInn), 2);
-    assert_eq!(inn_minimum_gold(Inn::TheSmugglersInn), 2);
+    assert_eq!(inn_max_lodged_guests(Inn::TheSmugglersInn), 2);
     assert_eq!(inn_base_room_rate(Inn::TheKingsRansomInn), 3);
-    assert_eq!(inn_minimum_gold(Inn::TheKingsRansomInn), 2);
+    assert_eq!(inn_max_lodged_guests(Inn::TheKingsRansomInn), 2);
 
     let mut state = test_state(open_grid(), 1, 1);
     state.party.push(PartyMember {
@@ -1708,15 +1708,11 @@ fn paid_inn_rest_night_recovery_restores_by_class_and_kills_poisoned() {
 
 #[test]
 fn inn_rest_refusals_preserve_gold() {
-    let mut gold = 1;
-    assert_eq!(
-        apply_inn_rest_payment(&mut gold, Inn::TheWayfarerInn, 1, 2),
-        Err(InnError::BelowMinimumGold {
-            available: 1,
-            minimum: 3,
-        })
-    );
-    assert_eq!(gold, 1);
+    // `shops.md §8.4`: there is no separate minimum-gold gate (R420); two
+    // gold buys a one-member Wayfarer room at the raw rate.
+    let mut gold = 2;
+    assert!(apply_inn_rest_payment(&mut gold, Inn::TheWayfarerInn, 1, 2).is_ok());
+    assert_eq!(gold, 0);
 
     gold = 5;
     assert_eq!(
@@ -1771,7 +1767,9 @@ fn inn_leave_moves_companion_to_registry_and_compacts_party() {
 
     assert_eq!(left.registry_index, 0);
     assert_eq!(left.deposit, 15);
-    assert_eq!(state.gold, 35);
+    // `shops.md §8.4`: "Leave performs no affordability check or gold debit"
+    // (R420).
+    assert_eq!(state.gold, 50);
     assert_eq!(state.party.len(), 1);
     assert_eq!(state.party[0].slot, 0);
     assert_eq!(state.party_stay_counters, vec![8]);
@@ -2017,9 +2015,12 @@ fn herbalist_reagent_prices_and_compact_menu_match_public_rows() {
     );
 }
 
+/// `shops.md §6`/`§8.9`: one fixed bundle per offer at the
+/// Intelligence-adjusted bundle price, the addition capped at 99.
 #[test]
-fn reagent_purchase_debits_gold_and_routes_to_reagent_counter() {
-    let mut gold = 90;
+fn reagent_purchase_sells_one_adjusted_bundle_to_the_reagent_counter() {
+    // The Alchemist's Blood Moss: six for 30, Intelligence 30 -> 33.
+    let mut gold = 40;
     let mut blood_moss = 4;
 
     let bought = apply_reagent_purchase(
@@ -2027,36 +2028,50 @@ fn reagent_purchase_debits_gold_and_routes_to_reagent_counter() {
         &mut blood_moss,
         Herbalist::TheAlchemist,
         Reagent::BloodMoss,
-        3,
+        30,
     )
     .unwrap();
 
     assert_eq!(bought.quote.unit_price, 30);
-    assert_eq!(bought.quote.total_price, 90);
-    assert_eq!(bought.gold_before, 90);
-    assert_eq!(bought.gold_after, 0);
+    assert_eq!(bought.quote.quantity, 6);
+    assert_eq!(bought.quote.total_price, 33);
     assert_eq!(bought.stock_before, 4);
-    assert_eq!(bought.stock_after, 7);
-    assert_eq!(gold, 0);
-    assert_eq!(blood_moss, 7);
+    assert_eq!(bought.stock_after, 10);
+    assert_eq!(gold, 7);
+    assert_eq!(blood_moss, 10);
 
     let mut state = world_state(open_world_grid(), 10, 10);
     state.gold = 24;
     state.reagents = [0; REAGENT_COUNT];
 
+    // Mysticism's Spider Silk: two for 6, Intelligence 30 -> 6.
     let silk = state
-        .buy_reagent(Herbalist::Mysticism, Reagent::SpiderSilk, 4)
+        .buy_reagent(Herbalist::Mysticism, Reagent::SpiderSilk, 30)
         .unwrap();
 
-    assert_eq!(silk.quote.total_price, 24);
-    assert_eq!(state.gold, 0);
-    assert_eq!(state.reagents[REAGENT_SPIDER_SILK], 4);
+    assert_eq!(silk.quote.total_price, 6);
+    assert_eq!(state.gold, 18);
+    assert_eq!(state.reagents[REAGENT_SPIDER_SILK], 2);
     assert_eq!(state.reagents[REAGENT_BLOOD_MOSS], 0);
+
+    // The addition caps at 99 without reducing the price.
+    let mut nightshade = 98;
+    let mut gold = 50;
+    apply_reagent_purchase(
+        &mut gold,
+        &mut nightshade,
+        Herbalist::TheSharperMage,
+        Reagent::Nightshade,
+        33,
+    )
+    .unwrap();
+    assert_eq!(nightshade, 99);
+    assert_eq!(gold, 20);
 }
 
 #[test]
 fn reagent_purchase_refusals_preserve_gold_and_stock() {
-    let mut gold = 50;
+    let mut gold = 10;
     let mut sulfur_ash = 0;
 
     assert_eq!(
@@ -2065,11 +2080,11 @@ fn reagent_purchase_refusals_preserve_gold_and_stock() {
             &mut sulfur_ash,
             Herbalist::TheHerbalist,
             Reagent::SulfurAsh,
-            1,
+            30,
         ),
         Err(ReagentPurchaseError::NotStocked)
     );
-    assert_eq!(gold, 50);
+    assert_eq!(gold, 10);
     assert_eq!(sulfur_ash, 0);
 
     assert_eq!(
@@ -2078,44 +2093,14 @@ fn reagent_purchase_refusals_preserve_gold_and_stock() {
             &mut sulfur_ash,
             Herbalist::HealersHerbs,
             Reagent::SulfurAsh,
-            0,
-        ),
-        Err(ReagentPurchaseError::ZeroQuantity)
-    );
-    assert_eq!(gold, 50);
-    assert_eq!(sulfur_ash, 0);
-
-    let mut nightshade = 98;
-    assert_eq!(
-        apply_reagent_purchase(
-            &mut gold,
-            &mut nightshade,
-            Herbalist::Mysticism,
-            Reagent::Nightshade,
-            2,
-        ),
-        Err(ReagentPurchaseError::StockCap {
-            current: 98,
-            requested: 2,
-            cap: SHOP_COMMODITY_STOCK_CAP,
-        })
-    );
-    assert_eq!(nightshade, 98);
-
-    assert_eq!(
-        apply_reagent_purchase(
-            &mut gold,
-            &mut sulfur_ash,
-            Herbalist::HealersHerbs,
-            Reagent::SulfurAsh,
-            5,
+            30,
         ),
         Err(ReagentPurchaseError::InsufficientGold {
-            available: 50,
-            required: 60,
+            available: 10,
+            required: 13,
         })
     );
-    assert_eq!(gold, 50);
+    assert_eq!(gold, 10);
     assert_eq!(sulfur_ash, 0);
 }
 

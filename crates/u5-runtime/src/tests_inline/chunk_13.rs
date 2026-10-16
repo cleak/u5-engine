@@ -7133,11 +7133,12 @@ fn sage_topic_matches_uses_space_boundary_prefix_per_spec() {
 }
 
 #[test]
-fn inn_per_instance_base_rate_and_gold_gate_match_published_table() {
-    // shops.md §8.4 stock inn rate rows. Spot-check every inn
-    // against the published base room rate and minimum-gold gate.
+fn inn_per_instance_base_rate_and_guest_capacity_match_published_table() {
+    // shops.md §8.4 stock inn rate rows. Spot-check every inn against the
+    // published base room rate and maximum lodged guests (not a gold gate,
+    // R420).
     let cases = [
-        (Inn::TheWayfarerInn, 2u16, 3u16),
+        (Inn::TheWayfarerInn, 2u16, 3usize),
         (Inn::TheWarriorsStead, 3, 4),
         (Inn::TheHauntingInn, 2, 3),
         (Inn::HotelBrittany, 3, 2),
@@ -7146,7 +7147,7 @@ fn inn_per_instance_base_rate_and_gold_gate_match_published_table() {
     ];
     for (inn, base, gate) in cases {
         assert_eq!(inn.base_room_rate(), base, "{:?} base", inn);
-        assert_eq!(inn.minimum_gold_gate(), gate, "{:?} gate", inn);
+        assert_eq!(inn.max_lodged_guests(), gate, "{:?} capacity", inn);
     }
 }
 
@@ -9714,8 +9715,8 @@ fn tavern_drink_prompt_routes_y_n_space_and_discards_others() {
 }
 
 #[test]
-fn guild_shop_action_routes_a_b_c_and_exits_on_anything_else() {
-    // shops.md §8.2
+fn guild_shop_action_routes_a_b_c_d_and_exits_only_on_space_or_escape() {
+    // shops.md §8.2 / §8.C
     assert_eq!(
         guild_shop_action(b'a'),
         GuildShopAction::Purchase(GuildCommodity::Keys)
@@ -9740,10 +9741,22 @@ fn guild_shop_action_routes_a_b_c_and_exits_on_anything_else() {
         guild_shop_action(b'C'),
         GuildShopAction::Purchase(GuildCommodity::Torches)
     );
-    for byte in [b'd', b'D', b' ', b'X', b'Y', b'N', b'\r', 0x00, 0x1B, 0xFF] {
+    // "D renders record `164`, then redraws the stock menu. Space or Escape
+    // exits; other keys, including Return, silently wait at the existing
+    // menu."
+    assert_eq!(guild_shop_action(b'd'), GuildShopAction::Describe);
+    assert_eq!(guild_shop_action(b'D'), GuildShopAction::Describe);
+    for byte in [b' ', 0x1B] {
         assert_eq!(
             guild_shop_action(byte),
             GuildShopAction::Exit,
+            "byte {byte:#04x}"
+        );
+    }
+    for byte in [b'X', b'Y', b'N', b'\r', 0x00, 0xFF] {
+        assert_eq!(
+            guild_shop_action(byte),
+            GuildShopAction::Ignore,
             "byte {byte:#04x}"
         );
     }

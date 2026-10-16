@@ -9,7 +9,7 @@ use std::fs;
 use std::path::Path;
 use std::time::{SystemTime, UNIX_EPOCH};
 
-use u5_runtime::shop_runtime::ReagentShopState;
+use u5_runtime::shop_runtime::TavernState;
 use u5_runtime::shop_session::ActiveShopSession;
 use u5_runtime::test_fixtures::*;
 use u5_runtime::*;
@@ -344,24 +344,20 @@ fn typeahead_buffer_pauses_during_modal_prompts() {
 
 #[test]
 fn typeahead_buffer_preserves_multi_digit_shop_quantity_lines() {
+    // `shops.md §8.C`, "Provision offer": the typed number allows two
+    // digits. (Reagents and guild bundles are Y/N offers, R418.)
     let mut state = test_state(open_grid(), 1, 1);
     state.typeahead_buffer_enabled = true;
-    state.gold = 100;
-    state.reagents = [0; REAGENT_COUNT];
-    state.active_shop = Some(ActiveShopSession::Reagent(ReagentShopState::for_herbalist(
-        Herbalist::Mysticism,
-    )));
-
-    assert_eq!(
-        handle_play_script_command(&mut state, "A", Path::new("")).unwrap(),
-        PlayInputDisposition::Continue
-    );
-    assert!(matches!(
-        state.active_shop.as_ref(),
-        Some(ActiveShopSession::Reagent(
-            ReagentShopState::PickQuantity { .. }
-        ))
+    state.gold = 300;
+    state.food = 0;
+    state.active_shop = Some(ActiveShopSession::Tavern(
+        TavernState::PickProvisionQuantity {
+            tavern: Tavern::TheWayfarerTavern,
+            unit_price: 15,
+            continuation_ready: false,
+        },
     ));
+
     assert!(!play_state_accepts_typeahead(&state));
     assert_eq!(play_input_typeahead_chars("12"), Some(vec!['1', '2']));
 
@@ -370,9 +366,8 @@ fn typeahead_buffer_preserves_multi_digit_shop_quantity_lines() {
         PlayInputDisposition::Continue
     );
 
-    assert_eq!(state.reagents[REAGENT_SPIDER_SILK], 12);
-    assert_eq!(state.gold, 28);
-    assert!(state.message.contains("72 gold"));
+    assert_eq!(state.food, 300);
+    assert_eq!(state.gold, 120);
 }
 
 // from chunk_18

@@ -1874,7 +1874,9 @@ pub fn route_smoke_cases() -> Vec<RouteSmokeCase> {
         RouteSmokeCase {
             name: "shop-reagent-buy-route",
             options: PlayOptions::default(),
-            script: &["A", "1", "N"],
+            // `shops.md §8.C`: enter, offer the first reagent, accept, then
+            // Space leaves the list.
+            script: &["Y", "A", "Y", " "],
             expected: RouteSmokeExpectation::Town(castle),
             min_turn: 0,
             expected_frame_kind: "tile viewport",
@@ -2042,7 +2044,8 @@ pub fn route_smoke_cases() -> Vec<RouteSmokeCase> {
         RouteSmokeCase {
             name: "shop-guild-buy-route",
             options: PlayOptions::default(),
-            script: &["A", "1", "D"],
+            // `shops.md §8.C`: enter, offer Keys, accept, then Space exits.
+            script: &["Y", "A", "Y", " "],
             expected: RouteSmokeExpectation::Town(castle),
             min_turn: 0,
             expected_frame_kind: "tile viewport",
