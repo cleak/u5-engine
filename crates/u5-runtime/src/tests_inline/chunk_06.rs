@@ -3250,6 +3250,56 @@
     }
 
     #[test]
+    fn outdoor_walker_random_fallback_rolls_a_fresh_cardinal_and_writes_no_facing() {
+        // `active-objects.md §8`: with no acceptable directed axis the slot
+        // "rolls one cardinal direction and makes a single attempt at it";
+        // §3: byte 6 "carries **no facing**", so it is neither read for the
+        // fallback nor written by the step.
+        let directions = [
+            Direction::North,
+            Direction::East,
+            Direction::South,
+            Direction::West,
+        ];
+        for seed in 0..32u16 {
+            let mut state = world_state_with_walker(12, 10, 0x98, 10, 10);
+            // The only directed candidate (East) is occupied.
+            state.active_objects.push(ActiveObject {
+                type_byte: 0x05,
+                tile: 0x05,
+                x: 11,
+                y: 10,
+                z: WorldPlane::Underworld.save_floor(),
+                phase: STEADY_PHASE,
+                aux1: 0,
+                aux3: 0,
+            });
+            // A stored West "facing" must not be replayed.
+            state.active_objects[1].phase = 0x60;
+            state.prng_state = 0x1357 ^ seed.wrapping_mul(0x9e37);
+            let mut expected_prng = state.prng_state;
+            let roll = u5_prng_range_u16(&mut expected_prng, 0, 3) as usize;
+            let expected = directions[roll];
+
+            let moved = state.try_wander_active_object(1);
+
+            assert_eq!(state.prng_state, expected_prng, "exactly one draw");
+            assert_eq!(state.active_objects[1].phase, 0x60);
+            if expected == Direction::East {
+                assert!(!moved);
+                assert_eq!((state.active_objects[1].x, state.active_objects[1].y), (10, 10));
+            } else {
+                let (dx, dy) = expected.delta();
+                assert!(moved);
+                assert_eq!(
+                    (state.active_objects[1].x, state.active_objects[1].y),
+                    ((10 + dx) as usize, (10 + dy) as usize)
+                );
+            }
+        }
+    }
+
+    #[test]
     fn outdoor_walker_chance_refusal_does_not_try_the_other_axis() {
         // The terrain chance gate is after validation. Once that gate refuses
         // the first valid directed candidate, the slot's attempt ends; only a

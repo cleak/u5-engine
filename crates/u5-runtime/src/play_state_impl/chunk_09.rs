@@ -5453,11 +5453,19 @@ impl PlayState {
             }
         }
 
-        let Some(direction) = direction_from_active_object_phase(object.phase)
-            .filter(|direction| direction.is_cardinal())
-        else {
-            return false;
-        };
+        // `active-objects.md §8`: "If neither directed axis can be accepted,
+        // the slot falls back to the random four-direction walker, which
+        // rolls one cardinal direction and makes a single attempt at it".
+        // Byte 6 "carries **no facing**" (§3, R340), so the fallback is a
+        // fresh shared-stream roll, not the slot's last step replayed. The
+        // spec does not publish the roll-to-direction order; one uniform
+        // draw over the four cardinals is used.
+        let direction = [
+            Direction::North,
+            Direction::East,
+            Direction::South,
+            Direction::West,
+        ][usize::from(self.random_mod_u8(4))];
         let (dx, dy) = direction.delta();
         self.try_step_outdoor_active_object(slot, object, dx, dy, direction, last_vacated)
     }
@@ -5572,8 +5580,9 @@ impl PlayState {
             self.active_objects[slot].type_byte = facing;
             self.active_objects[slot].tile = facing;
         }
-        self.active_objects[slot].phase =
-            active_object_phase_from_direction(direction, object.phase & 0x0f);
+        // `active-objects.md §3`: byte 6 "carries **no facing**. ... a
+        // producer that writes a facing into it is not byte-compatible"
+        // (R340). The committed step leaves the phase byte alone.
         self.active_objects[slot].x = nx;
         self.active_objects[slot].y = ny;
         self.mark_visibility_dirty();
