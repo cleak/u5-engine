@@ -6348,12 +6348,17 @@ impl PlayState {
             return MoveOutcome::Blocked;
         };
         self.mark_visibility_dirty();
-        // Unpublished (`cleak/u5-spec#262`).
         self.diagnostics.push(format!(
             "blinked to ({}, {})",
             commit.actor_position_after.0, commit.actor_position_after.1
         ));
-        self.message.clear();
+        // `magic.md §8` "What Blink prints": "An accepted arena step prints
+        // `Success!\n` with no sound". The same paragraph says combat Blink
+        // never prompts and tries "a fixed budget of seven candidate
+        // steps"; how those candidates are generated is unpublished, so the
+        // coordinate cursor stays as this engine's stand-in until the spec
+        // names the search.
+        self.message = crate::commands::SPELL_SUCCESS_LINE.to_string();
         MoveOutcome::Cast
     }
 

@@ -4863,6 +4863,9 @@
         assert_eq!(state.clock, GameClock::new(12, 2).unwrap());
         assert!(state.visibility_dirty);
         assert!(state.diagnostics.iter().any(|n| n.contains("blinked to (3, 1)")), "{:?}", state.diagnostics);
+        // `magic.md §8` "What Blink prints": an accepted arena step prints
+        // `Success!` (audit A122/A002).
+        assert_eq!(state.message, crate::commands::SPELL_SUCCESS_LINE);
     }
 
     #[test]
