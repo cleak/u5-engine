@@ -2676,6 +2676,9 @@ impl PlayState {
         // moral-standing selector, clamped at ninety-nine.
         let _ = self.add_moral_standing(digit);
         self.push_runic_message_entry("ALAKAZAM");
+        // The runic word leaves its row open for the normal-font `!`; the
+        // row state is stated here because the push above does not set it.
+        self.open_message_row();
         self.emit_message_line_continuing_row("!\n");
         self.adopt_flushed_message("ALAKAZAM!");
         // `karma.md §7.2` names §12's "local viewport/sound effect" on this

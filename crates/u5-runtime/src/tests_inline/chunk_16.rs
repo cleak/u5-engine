@@ -2532,6 +2532,26 @@ BRITANNIA 11 21
         let _ = fs::remove_dir_all(dir);
     }
 
+    /// `karma.md §12`: "Print `ALAKAZAM` using the runic font, restore the
+    /// normal font and append `!\n`" - the `!` lands on the runic word's own
+    /// row, not on a row of its own.
+    #[test]
+    fn completed_shrine_offering_appends_the_bang_to_the_runic_row() {
+        let dir = debug_game_dir();
+        let virtue = ShrineVirtue::Compassion;
+        let mut state = shrine_marker_state(&dir, virtue);
+        state.shrine_codex_mask = virtue.bit();
+        state.gold = 350;
+
+        meditate_through_shrine_session(&mut state, &dir, "Compassion", "Mu");
+        handle_play_key_input(&mut state, '1', "", &dir).unwrap();
+
+        let rows = transcript_texts(&state);
+        assert_eq!(rows.last().map(String::as_str), Some("ALAKAZAM!"), "{rows:?}");
+        assert!(!state.message_row_open_mid_line, "`!\\n` closes the row");
+        let _ = fs::remove_dir_all(dir);
+    }
+
     #[test]
     fn shrine_offering_and_turn_in_queue_one_unrestored_viewport_inversion() {
         // `audio.md §5.4.7` / `karma.md §7.2`: both shrine swell callers
