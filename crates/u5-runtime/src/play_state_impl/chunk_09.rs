@@ -4280,13 +4280,10 @@ impl PlayState {
         self.torch_counter != 0 || self.light_spell_counter != 0
     }
 
-    pub fn dungeon_torch_duration_roll(&self) -> u8 {
-        let roll = self.turn as u8
-            ^ self.clock.hour
-            ^ self.clock.minute
-            ^ self.player.x as u8
-            ^ (self.player.y as u8).wrapping_shl(1);
-        DUNGEON_TORCH_DURATION_MIN + (roll & 0x0f)
+    /// `dungeon-mode.md §7`: in dungeon scenes I-Ignite "adds a random
+    /// 112..127 counter units" - one draw on the shared gameplay PRNG.
+    pub fn dungeon_torch_duration_roll(&mut self) -> u8 {
+        self.random_range_u8(DUNGEON_TORCH_INCREMENT_MIN, DUNGEON_TORCH_INCREMENT_MAX)
     }
 
     pub fn turn_minute_increment(&self) -> u8 {

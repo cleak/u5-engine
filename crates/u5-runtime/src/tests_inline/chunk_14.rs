@@ -1766,6 +1766,18 @@
     }
 
     #[test]
+    fn dungeon_torch_duration_draws_from_the_shared_prng() {
+        // `dungeon-mode.md §7`: "a random 112..127", one shared-PRNG draw.
+        let mut state = dungeon_state(open_dungeon_record(), 0, 1, 1);
+        state.prng_state = 0x1234;
+        let mut expected_prng = state.prng_state;
+        let expected = u5_prng_range_u16(&mut expected_prng, 112, 127) as u8;
+
+        assert_eq!(state.dungeon_torch_duration_roll(), expected);
+        assert_eq!(state.prng_state, expected_prng);
+    }
+
+    #[test]
     fn ignite_torch_refuses_without_stock_or_turn() {
         let mut state = dungeon_state(open_dungeon_record(), 0, 1, 1);
         state.torches = 0;
