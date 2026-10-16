@@ -2369,7 +2369,7 @@ impl PlayState {
             // substituting engine prose.
             return Ok(MoveOutcome::Observed);
         };
-        let mut rendered = TlkRenderedText::default();
+        let mut runic_pages = String::new();
         let mut text = String::new();
         for index in [
             MISCMSG_CODEX_ENTRY_NARRATION,
@@ -2452,15 +2452,9 @@ impl PlayState {
                     // the authored glyph stream and line separators intact" -
                     // and the normal font restored afterwards. The pages are
                     // carried as runic cells rather than expanded to prose.
-                    rendered.push_plain(&text);
-                    text.clear();
                     for index in crate::miscmsg_io::MISCMSG_CODEX_COMPLETION_PAGES {
                         if let Some(record) = messages.record(index) {
-                            let page = record.replace('\r', "\n");
-                            rendered.text.push_str(&page);
-                            rendered
-                                .glyphs
-                                .extend(glyphs_from_engine_text(&page, TlkGlyphFont::Runic));
+                            runic_pages.push_str(&record.replace('\r', "\n"));
                         }
                     }
                     crate::miscmsg_io::CODEX_PRESENTATION_KEY_STEPS_COMPLETION
@@ -2469,13 +2463,36 @@ impl PlayState {
                 }
             }
         };
-        rendered.push_plain(&text);
-        if !rendered.glyphs.is_empty() {
-            // As `emit_message_line`, but keeping each cell's font.
+        if !text.is_empty() {
+            self.emit_message_line(text.clone());
+        }
+        if !runic_pages.is_empty() {
+            // The runic pages follow on the same printer with the same row
+            // rules as `emit_message_line` (a leading feed closes an open
+            // row; an embedded feed is a producer blank, not the derived
+            // turn blank), but each cell keeps the runic font. The ordinary
+            // text above stays on `emit_message_line` so its rows are
+            // unchanged.
             self.flush_message_slot();
-            let ends_with_feed = rendered.text.ends_with('\n');
-            self.emit_tlk_message(rendered);
-            self.message_row_open_mid_line = !ends_with_feed;
+            let row_open = self.message_row_open_mid_line;
+            let mut segments = runic_pages.split('\n').peekable();
+            let mut first = true;
+            while let Some(line) = segments.next() {
+                let is_last = segments.peek().is_none();
+                let closes_open_row = first && row_open;
+                first = false;
+                if line.is_empty() {
+                    if !is_last && !closes_open_row {
+                        self.push_producer_blank_message_entry();
+                    }
+                    continue;
+                }
+                self.push_runic_message_entry(line);
+            }
+            // Set explicitly for this caller: the last page decides whether
+            // the printer left its row open.
+            self.message_row_open_mid_line = !runic_pages.ends_with('\n');
+            self.adopt_flushed_message(format!("{text}{runic_pages}"));
         }
         // Measured: the original draws record `46` and then waits, and each
         // accepted key advances the presentation without reaching the command

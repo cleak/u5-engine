@@ -1600,6 +1600,52 @@ BRITANNIA 11 21
         let _ = fs::remove_dir_all(dir);
     }
 
+    /// The runic pages must not change how the Codex text's own line feeds
+    /// land: an embedded feed is a producer blank (`text-output.md §10.4`
+    /// still owes the derived turn blank after it), in the ordinary text and
+    /// inside a runic page alike.
+    #[test]
+    fn codex_presentation_blank_rows_stay_producer_blanks() {
+        let dir = debug_game_dir();
+        let mut miscmsg = Vec::new();
+        for index in 0..MISCMSG_DAT_RECORDS {
+            if crate::miscmsg_io::MISCMSG_CODEX_COMPLETION_PAGES.contains(&index) {
+                miscmsg.extend_from_slice(format!("TRU\n\n[@_{index}\n").as_bytes());
+            } else {
+                miscmsg.extend_from_slice(format!("rec{index}\n").as_bytes());
+            }
+            miscmsg.push(0);
+        }
+        fs::write(dir.join(MISCMSG_DAT_FILE), miscmsg).unwrap();
+
+        for codex_mask in [0, 0xFF & !ShrineVirtue::Honesty.bit()] {
+            let mut grid = open_world_grid();
+            grid[world_cell_index(10, 20)] = CODEX_SHRINE_ENTRY_TILE;
+            let mut state = britannia_state(grid, 10, 20);
+            state.shrine_ordained_mask = ShrineVirtue::Honesty.bit();
+            state.shrine_codex_mask = codex_mask;
+            handle_play_key_input(&mut state, 'E', "", &dir).unwrap();
+
+            let entries = state.message_entries();
+            let start = entries
+                .iter()
+                .position(|entry| entry.text.starts_with("rec"))
+                .expect("Codex narration printed");
+            let blanks = entries[start..]
+                .iter()
+                .filter(|entry| entry.explicit_blank)
+                .collect::<Vec<_>>();
+            assert!(!blanks.is_empty(), "mask {codex_mask:#x}: no blank rows");
+            assert!(
+                blanks.iter().all(|entry| entry.producer_blank),
+                "mask {codex_mask:#x}: {:?}",
+                transcript_texts(&state)
+            );
+            assert!(!state.message_row_open_mid_line);
+        }
+        let _ = fs::remove_dir_all(dir);
+    }
+
     /// `karma.md §8` (`RETRACTIONS.md` R451): "`M` remains Mix Reagents at
     /// this location. The earlier statement that the M command owns Codex
     /// entry is retracted." So `M` on the Codex tile mixes and stamps nothing.
