@@ -175,7 +175,16 @@ impl PlayState {
                 Ok(MoveOutcome::PromptDeclined)
             }
             Some(false) => {
-                self.message = "No.".to_string();
+                // `save-load.md §5.2` step 1: "On `N`, it prints `No`" and
+                // returns. Like the `Yes` reply it lands on the still-open
+                // `Save game?` line.
+                if !self.complete_open_direction_echo(
+                    SAVE_PROMPT_MESSAGE,
+                    &format!(" {SAVE_PROMPT_NO_REPLY}"),
+                ) && !self.complete_open_direction_echo(SAVE_PROMPT_LINE, SAVE_PROMPT_NO_REPLY)
+                {
+                    self.message = SAVE_PROMPT_NO_REPLY.to_string();
+                }
                 Ok(MoveOutcome::PromptDeclined)
             }
             Some(true) => {

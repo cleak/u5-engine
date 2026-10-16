@@ -1238,12 +1238,19 @@
         assert!(state.active_yes_no_prompt.is_some());
         assert_eq!(state.message, SAVE_PROMPT_MESSAGE);
 
+        // `save-load.md §5.2` step 1: "Only `Y` and `N` are accepted" -
+        // Escape is not a decline; the prompt stays open.
+        let _ = handle_play_key_input(&mut state, '\u{1b}', "", &dir).unwrap();
+        assert!(state.active_yes_no_prompt.is_some());
+        assert_eq!(state.message, SAVE_PROMPT_MESSAGE);
+
         assert_eq!(
             handle_play_key_input(&mut state, 'N', "", &dir).unwrap(),
             PlayInputDisposition::Continue
         );
         assert!(state.active_yes_no_prompt.is_none());
-        assert_eq!(state.message, "No.");
+        // "On `N`, it prints `No`" on the prompt's own row.
+        assert_eq!(state.message, format!("{SAVE_PROMPT_MESSAGE} {SAVE_PROMPT_NO_REPLY}"));
         assert!(!dir.join("SAVED.OOL").exists());
         assert_eq!(state.turn, 0);
 
@@ -1263,7 +1270,7 @@
             PlayInputDisposition::Continue
         );
         assert!(dungeon.active_yes_no_prompt.is_none());
-        assert_eq!(dungeon.message, "No.");
+        assert_eq!(dungeon.message, format!("{SAVE_PROMPT_MESSAGE} {SAVE_PROMPT_NO_REPLY}"));
         assert!(!dir.join("SAVED.OOL").exists());
         let _ = fs::remove_dir_all(dir);
     }

@@ -1142,7 +1142,8 @@ fn save_game_command_prompts_or_cancels_without_writing() {
         state.save_game_command(&dir, Some(false)).unwrap(),
         MoveOutcome::PromptDeclined
     );
-    assert_eq!(state.message, "No.");
+    // `save-load.md §5.2` step 1: "On `N`, it prints `No`".
+    assert_eq!(state.message, format!("{SAVE_PROMPT_MESSAGE} {SAVE_PROMPT_NO_REPLY}"));
     assert!(!dir.join("SAVED.OOL").exists());
     assert_eq!(state.turn, 0);
     let _ = fs::remove_dir_all(dir);

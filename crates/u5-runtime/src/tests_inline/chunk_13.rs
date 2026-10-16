@@ -26232,12 +26232,12 @@ fn dungeon_q_is_the_ordinary_save_route() {
     assert_eq!(state.turn, 0);
     assert!(!dir.join("SAVED.OOL").exists());
 
-    // "On `N`, it returns without writing."
+    // "On `N`, it prints `No`, returns" without writing.
     assert_eq!(
         handle_play_key_input(&mut state, 'N', "", &dir).unwrap(),
         PlayInputDisposition::Continue
     );
-    assert_eq!(state.message, "No.");
+    assert_eq!(state.message, format!("{SAVE_PROMPT_MESSAGE} {SAVE_PROMPT_NO_REPLY}"));
     assert_eq!(state.turn, 0);
     assert!(!dir.join("SAVED.OOL").exists());
     assert_eq!(fs::read(dir.join("SAVED.GAM")).unwrap(), template);

@@ -3176,9 +3176,15 @@ impl PlayState {
                     };
                 }
                 // §7.1 step 3: "only `Y` and `N` are accepted and every
-                // other key is ignored (**there is no abort**)" - unlike
-                // every other kind here, Escape does not stand in for `N`.
-                '\u{1b}' if matches!(session.kind, YesNoPromptKind::TrollBridgeToll { .. }) => {}
+                // other key is ignored (**there is no abort**)" - Escape
+                // does not stand in for `N`. `save-load.md §5.2` step 1
+                // gives the save confirm the same "Only `Y` and `N` are
+                // accepted" rule.
+                '\u{1b}'
+                    if matches!(
+                        session.kind,
+                        YesNoPromptKind::TrollBridgeToll { .. } | YesNoPromptKind::SaveGame
+                    ) => {}
                 'N' | '\u{1b}' => {
                     if let YesNoPromptKind::DungeonFountainDrink { party_index, focus } =
                         session.kind
@@ -3206,6 +3212,8 @@ impl PlayState {
                         // shares the combat entry with.
                         self.commit_prompt_reply(TROLL_BRIDGE_TOLL_QUESTION, "N");
                         self.enter_troll_bridge_ambush_combat(game_dir)?;
+                    } else if matches!(session.kind, YesNoPromptKind::SaveGame) {
+                        let _ = self.save_game_command(game_dir, Some(false))?;
                     } else {
                         self.message = "No.".to_string();
                     }
