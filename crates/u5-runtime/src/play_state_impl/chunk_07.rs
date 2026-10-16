@@ -4740,11 +4740,14 @@ impl PlayState {
             crate::blackthorn_session::BlackthornChallenge::awaiting_closing_acknowledgement,
         ) {
             let challenge = self.active_blackthorn.take().expect("checked above");
-            // `blackthorn.md §5` puts both executions before their held page,
-            // so no arm defers one to this key any more; these two drains
-            // only settle state staged by an older build.
+            // The correct-answer merciful death lands on this key, as the
+            // stock capture `bt-correct` shows (see the answer arm below:
+            // the spec's §5 ordering conflicts, cleak/u5-spec#298). The
+            // pendulum drain below only settles state staged by an older
+            // build.
             if std::mem::take(&mut self.pending_blackthorn_merciful_death) {
                 let fate = self.apply_blackthorn_correct_answer_companion_fate();
+                self.repaint_stats_panel();
                 self.push_diagnostic(format!("On acknowledgement: {fate}."));
             }
             if let Some(victim) = self.pending_blackthorn_execution_victim.take() {
@@ -4940,16 +4943,18 @@ impl PlayState {
                     )?
                 };
                 if nondead >= 2 {
-                    // `blackthorn.md §5`: "The correct-answer branch's
-                    // punishment has no key wait of its own - the key that
-                    // follows it belongs to the exit beat of Section 4.2", and
-                    // the roster edit and its repaint "both precede the held
-                    // page". So the execution lands at answer time, after
-                    // record `5`; deferring it to the acknowledgement "moves a
-                    // durable gameplay change for a presentation reason".
-                    let fate = self.apply_blackthorn_correct_answer_companion_fate();
-                    self.repaint_stats_panel();
-                    self.push_diagnostic(format!("At answer time: {fate}."));
+                    // SPEC CONFLICT, capture authoritative pending
+                    // cleak/u5-spec#298. `blackthorn.md §5` says "The roster
+                    // edit and its repaint both precede the held page", which
+                    // would lift the companion at answer time. The stock
+                    // DOSBox capture (paired scenario `bt-correct`, beats
+                    // `right` and `after`) contradicts it: the record-5 page
+                    // is held with the companion still listed on the panel,
+                    // and he leaves only with the key that follows. When the
+                    // spec text and a direct capture of the stock game
+                    // disagree the engine follows the capture, so the lift
+                    // waits for the acknowledgement (drained above).
+                    self.pending_blackthorn_merciful_death = true;
                 }
                 self.hold_blackthorn_closing(challenge, reward, nondead >= 2)
             }

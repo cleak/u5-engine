@@ -201,15 +201,19 @@ fn audit_a037_hourglass_runs_e9_eb_e8_and_the_first_wrong_plays_the_beat() {
     let _ = fs::remove_dir_all(dir);
 }
 
-/// Audit A036. `blackthorn.md §5`: "The roster edit and its repaint both
-/// precede the held page ... The correct-answer branch's punishment has no key
-/// wait of its own - the key that follows it belongs to the exit beat".
+/// Audit A036, correct-answer branch. `blackthorn.md §5` says "The roster
+/// edit and its repaint both precede the held page", but the stock DOSBox
+/// capture (paired scenario `bt-correct`, beats `right` and `after`) holds
+/// the record-5 page with the companion still listed and removes him only
+/// with the following key. The capture is authoritative pending
+/// cleak/u5-spec#298, so the lift waits for that key.
 #[test]
-fn audit_a036_merciful_death_lifts_the_roster_before_the_exit_key() {
+fn audit_a036_merciful_death_lifts_the_roster_on_the_acknowledgement_key() {
     let dir = debug_game_dir();
     let mut state = test_state(open_grid(), 5, 5);
     state.party.push(audit_g5_companion(1));
     state.party.push(audit_g5_companion(2));
+    state.repaint_stats_panel();
     state.begin_blackthorn_audience_capture(&dir).unwrap();
     while state.active_blackthorn.as_ref().is_some_and(|c| c.current_prompt().is_none()) {
         state.submit_blackthorn_audience_answer("", &dir).unwrap();
@@ -224,11 +228,19 @@ fn audit_a036_merciful_death_lifts_the_roster_before_the_exit_key() {
             .is_some_and(|c| c.awaiting_closing_acknowledgement()),
         "the exit beat's key is still to come"
     );
-    assert_eq!(state.party.len(), 2, "executed at answer time");
+    assert_eq!(state.party.len(), 3, "the held page still lists the companion");
     assert_eq!(
         state.stats_panel,
         crate::stats_panel::stats_panel_snapshot_of(&state),
-        "and repainted"
+        "and the panel shows the full party"
+    );
+
+    state.submit_blackthorn_audience_answer("", &dir).unwrap();
+    assert_eq!(state.party.len(), 2, "the key that follows lifts him");
+    assert_eq!(
+        state.stats_panel,
+        crate::stats_panel::stats_panel_snapshot_of(&state),
+        "and repaints the panel"
     );
     let _ = fs::remove_dir_all(dir);
 }
