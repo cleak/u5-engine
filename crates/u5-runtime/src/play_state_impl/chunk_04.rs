@@ -1192,10 +1192,10 @@ impl PlayState {
     /// Boundary: the exact heading, aloft, cast and destruction strings are
     /// not published — only their order, their completing words, and which of
     /// them are unconditional — so the literals below are engine voice. The
-    /// rising/falling pitch sweep of phase 2 has no published `audio.md §8`
-    /// row and no [`SoundEffect`] variant, so it is not emitted rather than
-    /// borrowing a neighbouring cue; the `§8.4` destruction flash below is
-    /// published and is preserved at its own boundary.
+    /// rising/falling sweep of phase 2 is `audio.md §5.4.7`'s 920-step swell
+    /// at the "Shadowlord destruction" row's parameters
+    /// ([`SoundEffect::ShardSwell`]); the `§8.4` destruction flash below is
+    /// preserved at its own boundary.
     pub fn use_shadowlord_shard(
         &mut self,
         index: usize,
@@ -1230,6 +1230,12 @@ impl PlayState {
         // original's row reads `Falsehood...` where this engine read
         // `Falsehood`.
         self.message = format!("{USE_SHARD_ALOFT_PREFIX}{name}...");
+
+        // Phase 2: `quest-graph.md §5` step 2's rise and fall, "again
+        // unconditionally" - ahead of every gate, so the destruction row and
+        // the silent actor/handshake refusals hear it too. `audio.md §5.4.7`
+        // prices it as the "Shadowlord destruction" row of the 920-step swell.
+        self.emit_sound_effect(SoundEffect::ShardSwell);
 
         // Phase 3: the position gate is the only one that speaks. The
         // published destruction rows (Lycaeum floor 2 (15,9); Empath Abbey
@@ -1266,9 +1272,8 @@ impl PlayState {
             // so this engine leaves the panel alone rather than guess.
             //
             // Only this branch is paced. On the destruction row the swell
-            // presumably precedes the cast line too, but that path has no
-            // capture, so it stays as it was.
-            self.emit_sound_effect(SoundEffect::ShardSwell);
+            // (emitted above) precedes the cast line too, but that path has no
+            // capture of its pauses, so its text is not held.
             self.staged_narration.push_secs_on_open_row(
                 SoundEffect::ShardSwell
                     .program(&mut crate::audio::RumbleJitter::default())
