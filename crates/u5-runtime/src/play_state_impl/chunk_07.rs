@@ -227,6 +227,12 @@ impl PlayState {
             self.message = "No keys!".to_string();
             return MoveOutcome::Blocked;
         }
+        // `combat.md §7.1` / `doors-and-z-transitions.md §3.1`: the roll uses
+        // the selected member's Dexterity. A descriptor index is not a roster
+        // index once a dead member has packed out, so resolve it first.
+        let member_index = self
+            .combat_roster_slot_for_actor_slot(actor_slot)
+            .unwrap_or(actor_slot);
         let tile = self.combat_terrain[y][x];
         if jimmy_magic_locked_door(tile) {
             self.message = "Key broke!".to_string();
@@ -237,7 +243,7 @@ impl PlayState {
             return MoveOutcome::LockTried;
         }
         if jimmy_restraint_tile(tile) {
-            if !self.jimmy_lock_pick_succeeds(actor_slot) {
+            if !self.jimmy_lock_pick_succeeds(member_index) {
                 self.message = "Key broke!".to_string();
                 // `audio.md §8.1`: failure only — print the break line,
                 // play the 40-update action snap, then decrement the key
@@ -262,7 +268,7 @@ impl PlayState {
             self.message = "No lock!".to_string();
             return MoveOutcome::Blocked;
         };
-        if !self.jimmy_lock_pick_succeeds(actor_slot) {
+        if !self.jimmy_lock_pick_succeeds(member_index) {
             self.message = "Key broke!".to_string();
             // `audio.md §8.1`: failure only — print the break line, play
             // the 40-update action snap, then decrement the key count.

@@ -11173,6 +11173,30 @@ fn combat_jimmy_restraints_use_flat_dexterity_roll_and_clear_on_success() {
     assert_eq!(failure.message, "Key broke!");
 }
 
+/// `combat.md §7.1`: Jimmy "rolls the selected member's Dexterity". With a
+/// dead member packed out, descriptor zero links to a later roster slot, and
+/// that member's Dexterity - not roster slot zero's - decides the pick.
+#[test]
+fn combat_jimmy_restraint_reads_the_linked_roster_members_dexterity() {
+    let mut state = combat_player_command_state(10, 10);
+    assert_ne!(state.combat_actors[0].flags, 0);
+    state.combat_actors[0].owner_target_class = 1;
+    let second = state.party[0].clone();
+    state.party.push(second);
+    state.keys = 1;
+    state.party[0].climb_stat = 0;
+    state.party[1].climb_stat = 30;
+    state.combat_terrain[5][6] = JIMMY_STOCKS_TILE;
+
+    assert_eq!(
+        state.jimmy_combat_actor_direction(0, Direction::East),
+        MoveOutcome::LockTried
+    );
+    assert_eq!(state.combat_terrain[5][6], TOWN_DOOR_CLEARED_TILE);
+    assert_eq!(state.keys, 1);
+    assert_eq!(state.message, "Unlocked");
+}
+
 #[test]
 fn combat_jimmy_magic_lock_breaks_key_without_dexterity_roll() {
     let mut state = combat_player_command_state(10, 10);
