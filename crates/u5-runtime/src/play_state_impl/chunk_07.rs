@@ -4726,8 +4726,9 @@ impl PlayState {
             crate::blackthorn_session::BlackthornChallenge::awaiting_closing_acknowledgement,
         ) {
             let challenge = self.active_blackthorn.take().expect("checked above");
-            // The merciful death owed by a correct answer lands here, with the
-            // reaction acknowledged (`blackthorn.md §5` step 5).
+            // `blackthorn.md §5` puts both executions before their held page,
+            // so no arm defers one to this key any more; these two drains
+            // only settle state staged by an older build.
             if std::mem::take(&mut self.pending_blackthorn_merciful_death) {
                 let fate = self.apply_blackthorn_correct_answer_companion_fate();
                 self.push_diagnostic(format!("On acknowledgement: {fate}."));
@@ -4749,12 +4750,18 @@ impl PlayState {
                 // supplies the quoted unfairness/treachery speech, including
                 // its leading two line feeds. The execution helper finishes
                 // with one line feed."
+                // That line feed ends the punishment routine, and the loop
+                // leaves through its own tail with no further key wait.
                 let speech = self.blackthorn_reaction_text(
                     game_dir,
                     crate::MISCMSG_BLACKTHORN_TREACHERY_SPEECH,
                     "",
                 )?;
-                return self.hold_blackthorn_closing_page(challenge, speech, true, false);
+                drop(challenge);
+                self.emit_message_line(speech);
+                self.push_explicit_blank_message_entry();
+                self.blackthorn_audience_punished = false;
+                return self.apply_blackthorn_captive_cell_handoff(game_dir, "");
             }
             // `blackthorn.md §4.2`, the audience exit beat. This key is the
             // acknowledgement *and* the beat's own trigger
@@ -4889,11 +4896,7 @@ impl PlayState {
                 // setup", which is the count the fate branch itself uses, so
                 // it is read before the fate resolves.
                 let nondead = self.blackthorn_eligible_party_member_count();
-                // The same deferral as the first correct-answer arm above: the
-                // roster is not lifted until the reaction is acknowledged
-                // (`blackthorn.md §5` step 5).
                 let fate = self.blackthorn_correct_answer_companion_fate_preview();
-                self.pending_blackthorn_merciful_death = true;
                 let vm = self
                     .run_blackthorn_cutscene_beat(BlackthornCutsceneBeat::ConditionalThroneCleanup);
                 self.push_diagnostic(format!(
@@ -4923,6 +4926,18 @@ impl PlayState {
                         "",
                     )?
                 };
+                if nondead >= 2 {
+                    // `blackthorn.md §5`: "The correct-answer branch's
+                    // punishment has no key wait of its own - the key that
+                    // follows it belongs to the exit beat of Section 4.2", and
+                    // the roster edit and its repaint "both precede the held
+                    // page". So the execution lands at answer time, after
+                    // record `5`; deferring it to the acknowledgement "moves a
+                    // durable gameplay change for a presentation reason".
+                    let fate = self.apply_blackthorn_correct_answer_companion_fate();
+                    self.repaint_stats_panel();
+                    self.push_diagnostic(format!("At answer time: {fate}."));
+                }
                 self.hold_blackthorn_closing(challenge, reward, nondead >= 2)
             }
             crate::blackthorn_session::BlackthornChallengeOutcome::Wrong { ordinal, expected } => {
@@ -5076,21 +5091,21 @@ impl PlayState {
                         // would rewrite `0xE9`. §5's two-phase blade
                         // animation has no published vector, so none plays.
                         let vm = self.blackthorn_cutscene_vm_from_audience_state();
-                        // `blackthorn.md §5` step 5: the routine "wait[s] for
-                        // player acknowledgement before returning to the
-                        // caller branch", and measured
-                        // (`qa/paired/bt-escalate.tsv`, beat `ask5`) the
-                        // original's roster still carries the victim while the
-                        // pendulum narration is held. The name above is
-                        // already read, so only the lift waits.
-                        self.pending_blackthorn_execution_victim = Some(victim);
+                        // `blackthorn.md §5`: "The roster edit and its repaint
+                        // both precede the held page ... the victim therefore
+                        // leaves the panel **between** the pendulum-narration
+                        // page and the page that names them, and it is that
+                        // later page which waits for the key." The record-4
+                        // narration is not itself a key wait.
+                        let executed = self
+                            .execute_blackthorn_companion(victim)
+                            .unwrap_or_else(|| "no companion remains to punish".to_string());
+                        self.repaint_stats_panel();
                         // This is the punishing branch, so no §4.2 exit beat
                         // follows its acknowledgement (`cleak/u5-spec#268`).
                         self.blackthorn_audience_punished = true;
-                        let report =
-                            format!("companion in slot {victim} is owed the pendulum blade"); // audit: not a player-facing line
                         self.push_diagnostic(format!(
-                            "Failed Blackthorn's prompt {}; expected {expected}; {report} by the pendulum blade; cutscene advanced {} world ticks.",
+                            "Failed Blackthorn's prompt {}; expected {expected}; {executed} by the pendulum blade; cutscene advanced {} world ticks.",
                             ordinal + 1,
                             vm.world_ticks
                         ));
@@ -5103,27 +5118,12 @@ impl PlayState {
                         // removal, print `\n\n`, the actual removed member's
                         // name, and ` is sliced in half! `. After
                         // acknowledgement, record `6` supplies the quoted
-                        // unfairness/treachery speech". The line feed belongs
-                        // to the end of that helper, not to this page - which
-                        // `bt-escalate`'s `ask5` beat shows, the stock game
-                        // ending on `falls!` with no blank row under it.
-                        // §5 holds three pages here, not two: this narration,
-                        // then the removed member's line, then record `6`.
-                        // Measured (`qa/paired/bt-escalate.tsv`, beat `ask5`):
-                        // the original's beat ends on `falls!`.
-                        self.pending_blackthorn_closing_page =
-                            Some(format!("\n\n{victim_name} is sliced in half! "));
-                        // `blackthorn.md §5`: "The execution helper finishes
-                        // with one line feed." One, not two: no blank row
-                        // appears under `falls!` - the feed just closes its
-                        // row, which is why the original draws no cursor
-                        // after it while records 9 and 10, which end on a
-                        // trailing space instead, do carry one. Measured
-                        // 2026-09-12 (`bt-escalate/ask5` against
-                        // `bt-password/passed`).
+                        // unfairness/treachery speech". One key wait, on the
+                        // page that names the victim (§5 step 6).
+                        self.emit_message_line(line);
                         self.hold_blackthorn_closing_page(
                             challenge,
-                            format!("{line}\n"),
+                            format!("\n\n{victim_name} is sliced in half! "),
                             false,
                             true,
                         )

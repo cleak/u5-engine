@@ -200,3 +200,66 @@ fn audit_a037_hourglass_runs_e9_eb_e8_and_the_first_wrong_plays_the_beat() {
     assert_eq!(audit_g5_audience_tile(&state, 5, 9), Some(0xe8));
     let _ = fs::remove_dir_all(dir);
 }
+
+/// Audit A036. `blackthorn.md §5`: "The roster edit and its repaint both
+/// precede the held page ... The correct-answer branch's punishment has no key
+/// wait of its own - the key that follows it belongs to the exit beat".
+#[test]
+fn audit_a036_merciful_death_lifts_the_roster_before_the_exit_key() {
+    let dir = debug_game_dir();
+    let mut state = test_state(open_grid(), 5, 5);
+    state.party.push(audit_g5_companion(1));
+    state.party.push(audit_g5_companion(2));
+    state.begin_blackthorn_audience_capture(&dir).unwrap();
+    while state.active_blackthorn.as_ref().is_some_and(|c| c.current_prompt().is_none()) {
+        state.submit_blackthorn_audience_answer("", &dir).unwrap();
+    }
+
+    state.submit_blackthorn_audience_answer("Ahm", &dir).unwrap();
+    assert!(state.message.contains("merciful death"), "{:?}", state.message);
+    assert!(
+        state
+            .active_blackthorn
+            .as_ref()
+            .is_some_and(|c| c.awaiting_closing_acknowledgement()),
+        "the exit beat's key is still to come"
+    );
+    assert_eq!(state.party.len(), 2, "executed at answer time");
+    assert_eq!(
+        state.stats_panel,
+        crate::stats_panel::stats_panel_snapshot_of(&state),
+        "and repainted"
+    );
+    let _ = fs::remove_dir_all(dir);
+}
+
+/// Audit A036. `blackthorn.md §5`, pendulum branch: one key wait, on the page
+/// that names the victim; after it record `6` and the helper's line feed
+/// print and the audience leaves without another wait.
+#[test]
+fn audit_a036_pendulum_branch_takes_one_key_and_leaves() {
+    let dir = debug_game_dir();
+    let mut state = test_state(open_grid(), 5, 5);
+    state.party.push(audit_g5_companion(1));
+    state.party.push(audit_g5_companion(2));
+    state.begin_blackthorn_audience_capture(&dir).unwrap();
+    while state.active_blackthorn.as_ref().is_some_and(|c| c.current_prompt().is_none()) {
+        state.submit_blackthorn_audience_answer("", &dir).unwrap();
+    }
+    for _ in 0..4 {
+        state.submit_blackthorn_audience_answer("wrong", &dir).unwrap();
+        if state.active_blackthorn.as_ref().is_some_and(|c| c.awaiting_acknowledgement()) {
+            state.submit_blackthorn_audience_answer("", &dir).unwrap();
+        }
+    }
+    assert_eq!(state.party.len(), 2, "the lift precedes the held page");
+    assert!(state.message.contains(" is sliced in half! "), "{:?}", state.message);
+
+    let outcome = state.submit_blackthorn_audience_answer("", &dir).unwrap();
+    assert!(matches!(
+        outcome,
+        MoveOutcome::Transition(AreaTransition::EnteredLocation(_))
+    ));
+    assert!(state.active_blackthorn.is_none());
+    let _ = fs::remove_dir_all(dir);
+}
