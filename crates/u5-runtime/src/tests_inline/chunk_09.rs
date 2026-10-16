@@ -26,6 +26,23 @@ fn animation_tick_never_advances_the_gate_presence_counter() {
     assert_ne!(state.animation.frame, 0);
 }
 
+#[test]
+fn combat_turn_advance_never_steps_the_gate_presence_counter() {
+    // `overworld.md §9.1`: "Any combat routine, and the combat round loop"
+    // does not touch the counter; the refresh runs "every non-combat scene".
+    let mut state = britannia_state(open_world_grid(), 5, 5);
+    state.clock = GameClock::new(21, 0).unwrap();
+    state.natural_moongate_counter = 7;
+    state.combat_active = true;
+
+    state.advance_turn_with_minutes(2);
+    assert_eq!(state.natural_moongate_counter, 7);
+
+    state.combat_active = false;
+    state.advance_turn_with_minutes(2);
+    assert_eq!(state.natural_moongate_counter, 8);
+}
+
 /// `stats-panel.md §2.2.1` row 18: continuing on a skiff or carpet after
 /// a ship is destroyed defers the panel; the 74-site table's total-loss
 /// (drown) arm is left at the Immediate default.

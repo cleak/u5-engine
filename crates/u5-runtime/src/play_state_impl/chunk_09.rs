@@ -3162,7 +3162,12 @@ impl PlayState {
         // revolution per world turn, gated on the ambient value the line above
         // just recomputed.
         self.advance_light_beacon();
-        self.refresh_natural_moongates();
+        // `overworld.md §9`/§9.1: the natural-gate refresh runs "once per
+        // world turn during the resident world tick, for non-combat scenes",
+        // and combat "neither reads nor writes" the presence counter.
+        if !self.combat_active {
+            self.refresh_natural_moongates();
+        }
         self.sync_player_object();
         self.world_walkers_ran_this_turn = false;
         if self.time_stop_counter != 0 {
