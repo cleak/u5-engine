@@ -477,6 +477,21 @@ impl PlayState {
         // lock/trap sub-type - not the low bit alone." There is no locked
         // outcome and no lock-difficulty read; the detection roll this used to
         // consult belongs to Search, not to Open.
+        // The dispatcher's `Open-` echo leaves its row open for the result,
+        // and `emit_command_echo_line` does not record that, so a flag left
+        // closed by the turn before (`Must open first!\n`) put the trap word
+        // on a row of its own and an untrapped chest's leading feed spent a
+        // blank under the echo. Measured 2026-10-16 (`dungeon-chest`, beat
+        // `opened`: stock `>Open-GAS!` / blank / `Chest opened`, this engine
+        // `>Open-` / `ACID!`; `dungeon-chest-jimmy`, beats `opened` and
+        // `again`: stock `>Open-` directly above `Chest opened`).
+        if self
+            .message_transcript
+            .last()
+            .is_some_and(|entry| entry.text == DUNGEON_CHEST_OPEN_ECHO)
+        {
+            self.open_message_row();
+        }
         let trap_note = if tile & DUNGEON_CHEST_TRAP_SUBTYPE_MASK != 0 {
             // The resolver prints its own word; "The dungeon chest site prints
             // no trap notice of its own."

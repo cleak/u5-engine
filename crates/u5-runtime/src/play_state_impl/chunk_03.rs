@@ -2941,7 +2941,14 @@ impl PlayState {
                     self.message = DIRECTION_PROMPT_LABEL_PASS.to_string();
                 }
                 if dungeon_klimb_pass {
-                    self.push_explicit_blank_message_entry();
+                    // `Pass\n\n` (`dungeon-mode.md §13`, `commands.md`): the
+                    // second feed is the producer's own blank row, so the
+                    // turn-closing blank still follows it. An explicit blank
+                    // was merged into that turn blank, losing a row -
+                    // measured 2026-10-16 (`dungeon-two-way-ladder`, beat
+                    // `pass`, reading `offset-1`: stock two blank rows under
+                    // `>Klimb-U/D-Pass`, this engine one).
+                    self.push_producer_blank_message_entry();
                 }
                 return Ok(Some(MoveOutcome::PromptDeclined));
             }

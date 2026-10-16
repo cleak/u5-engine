@@ -541,6 +541,10 @@
             Some(""),
             "and the second feed leaves a blank under it: {rows:?}"
         );
+        // That blank is the producer's own, so the turn-closing blank still
+        // follows it: two blank rows under the prompt, as the stock window
+        // reads (`dungeon-two-way-ladder`, beat `pass`, 2026-10-16).
+        assert!(state.message_transcript[prompt + 1].producer_blank);
     }
 
     #[test]
@@ -590,6 +594,20 @@
         assert_eq!(down.area, Area::Dungeon { scene, level: 3 });
         assert_eq!(down.active_objects[0].z, 3);
         assert_eq!(down.turn, 1);
+
+        // The direction word completes the prompt row once and is not
+        // flushed again as a row of its own (`dungeon-two-way-ladder`, beats
+        // `down` and `up`, 2026-10-16).
+        for (state, word) in [(&up, "Up!"), (&down, "Down!")] {
+            let rows: Vec<&str> = state
+                .message_transcript
+                .iter()
+                .map(|entry| entry.text.as_str())
+                .filter(|text| text.contains(word))
+                .collect();
+            assert_eq!(rows, [format!("{DUNGEON_KLIMB_PROMPT_BOTH}{word}")], "{word}");
+            assert!(!state.message_slot_needs_flush());
+        }
     }
 
     #[test]

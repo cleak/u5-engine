@@ -2935,3 +2935,40 @@ fn dungeon_look_flavour_class_prints_the_flavour_description() {
         format!("{DUNGEON_LOOK_PREAMBLE}an unfortunate software pirate.")
     );
 }
+
+/// `dungeon-mode.md §8.1`: the result continues the dispatcher's open
+/// `Open-` echo row even when the turn before closed its own row. Measured
+/// 2026-10-16: `dungeon-chest`, beat `opened` - stock `>Open-GAS!`, a blank,
+/// `Chest opened`; `dungeon-chest-jimmy`, beats `opened` and `again` - stock
+/// `>Open-` directly above `Chest opened`.
+#[test]
+fn dungeon_chest_result_continues_the_open_echo_row_after_a_closed_turn() {
+    fn rows_after_open(tile: u8) -> Vec<String> {
+        let mut grid = open_dungeon_record();
+        grid[dungeon_cell_index(0, 1, 1)] = tile;
+        let mut state = dungeon_state(grid, 0, 1, 1);
+        state.emit_message_line("Must open first!\n");
+        state.close_message_row();
+        state.emit_command_echo_line(DUNGEON_CHEST_OPEN_ECHO);
+        assert_eq!(state.open_facing(), MoveOutcome::ContainerOpened);
+        state.flush_message_slot();
+        let rows: Vec<String> = state
+            .message_transcript
+            .iter()
+            .map(|entry| entry.text.clone())
+            .collect();
+        let echo = rows
+            .iter()
+            .position(|row| row.starts_with(DUNGEON_CHEST_OPEN_ECHO))
+            .expect("echo row");
+        rows[echo..].to_vec()
+    }
+    let untrapped = rows_after_open(0x40);
+    assert_eq!(untrapped[..2], ["Open-", "Chest opened"], "{untrapped:?}");
+    let trapped = rows_after_open(0x4b);
+    assert!(
+        trapped[0].len() > DUNGEON_CHEST_OPEN_ECHO.len() && trapped[0].ends_with('!'),
+        "the trap word completes the echo row: {trapped:?}"
+    );
+    assert_eq!(trapped[1..3], ["", "Chest opened"], "{trapped:?}");
+}

@@ -1293,6 +1293,12 @@ impl PlayState {
             ClimbIntent::Down => DUNGEON_KLIMB_DOWN,
         }
         .to_string();
+        // The word is already on the transcript, so the refreshed slot is not
+        // a new emission. Left unmarked, the end-of-command flush printed it
+        // a second time on a row of its own - measured 2026-10-16
+        // (`dungeon-two-way-ladder`, beats `down` and `up`: stock
+        // `>Klimb-U/D-Down!` alone, this engine a second `Down!` under it).
+        self.message_flushed = self.message.clone();
         Ok(MoveOutcome::Transition(
             AreaTransition::ChangedDungeonLevel {
                 scene,
