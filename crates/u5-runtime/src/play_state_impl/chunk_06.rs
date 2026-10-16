@@ -3135,7 +3135,7 @@ impl PlayState {
             _ if is_dungeon_bomb_trap(tile) => {
                 self.search_dungeon_bomb_trap(scene, level, tx, ty, idx, tile, actor)
             }
-            _ if dungeon_search_wall_rewrite(tile).is_some() => {
+            _ if dungeon_search_wall_rewrite(tile, scene.presentation_flavour()).is_some() => {
                 self.search_dungeon_wall_rewrite(scene, level, tx, ty, idx, tile)
             }
             _ => self.search_dungeon_feature(scene, level, tx, ty, tile),
@@ -3238,12 +3238,12 @@ impl PlayState {
         idx: usize,
         tile: u8,
     ) -> MoveOutcome {
-        match dungeon_search_wall_rewrite(tile) {
+        match dungeon_search_wall_rewrite(tile, scene.presentation_flavour()) {
             Some(DungeonSearchWallRewrite::NarrateOnly) => {
                 self.search_dungeon_feature(scene, level, x, y, tile)
             }
             Some(DungeonSearchWallRewrite::ToFlavourFind(reveal_cell)) => {
-                // `dungeon-mode.md` Section 8: the Doom-flavour `0xC?` branch
+                // `dungeon-mode.md` Section 8: the flavour-three `0xC?` branch
                 // "print[s] that nothing is hidden on the skeleton and then
                 // that it crumbles away". Section 8.1 gives the two-line
                 // result exactly.
@@ -3297,7 +3297,7 @@ impl PlayState {
         // L-Look wording of this section" - keep the descriptive fallback
         // rather than having a line invented for them.
         let _ = (scene, level, x, y);
-        self.message = match dungeon_search_outcome_line(tile) {
+        self.message = match dungeon_search_outcome_line(tile, scene.presentation_flavour()) {
             Some(line) => line.to_string(),
             // Section 8, pit-family table: "Other `0x6?` values | No extra
             // Search-specific handling beyond the preamble."

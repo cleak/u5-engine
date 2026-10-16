@@ -13197,47 +13197,50 @@ fn dungeon_attack_post_combat_z_intent_translates_result_code() {
 
 #[test]
 fn dungeon_search_wall_rewrite_classifies_flavour_and_hidden_walls() {
-    // dungeon-mode.md §8
-    // Flavour 0xC1, 0xC2 narrate only.
+    use DungeonPresentationFlavour::{FlavourByte3, Mine, Normal};
+    // dungeon-mode.md §8: the `0xC?` branch keys on the dungeon flavour, not
+    // the cell's low nibble. Flavours one and two narrate only.
+    for tile in [0xC0, 0xC1, 0xC2, 0xC8] {
+        for flavour in [Normal, Mine] {
+            assert_eq!(
+                dungeon_search_wall_rewrite(tile, flavour),
+                Some(DungeonSearchWallRewrite::NarrateOnly)
+            );
+        }
+    }
+    // Other flavours rewrite to 0xB0, marker preserved.
     assert_eq!(
-        dungeon_search_wall_rewrite(0xC1),
-        Some(DungeonSearchWallRewrite::NarrateOnly)
-    );
-    assert_eq!(
-        dungeon_search_wall_rewrite(0xC2),
-        Some(DungeonSearchWallRewrite::NarrateOnly)
-    );
-    // Other 0xC? values rewrite to 0xB0, marker preserved.
-    assert_eq!(
-        dungeon_search_wall_rewrite(0xC0),
+        dungeon_search_wall_rewrite(0xC0, FlavourByte3),
         Some(DungeonSearchWallRewrite::ToFlavourFind(0xB0))
     );
     assert_eq!(
-        dungeon_search_wall_rewrite(0xC8),
+        dungeon_search_wall_rewrite(0xC1, FlavourByte3),
+        Some(DungeonSearchWallRewrite::ToFlavourFind(0xB0))
+    );
+    assert_eq!(
+        dungeon_search_wall_rewrite(0xCA, FlavourByte3),
         Some(DungeonSearchWallRewrite::ToFlavourFind(0xB8))
     );
-    assert_eq!(
-        dungeon_search_wall_rewrite(0xC3),
-        Some(DungeonSearchWallRewrite::ToFlavourFind(0xB0))
-    );
-    // Hidden-wall 0xD? rewrites to 0xE?, marker preserved.
-    assert_eq!(
-        dungeon_search_wall_rewrite(0xD0),
-        Some(DungeonSearchWallRewrite::ToHiddenWallReveal(0xE0))
-    );
-    assert_eq!(
-        dungeon_search_wall_rewrite(0xD8),
-        Some(DungeonSearchWallRewrite::ToHiddenWallReveal(0xE8))
-    );
-    assert_eq!(
-        dungeon_search_wall_rewrite(0xDF),
-        Some(DungeonSearchWallRewrite::ToHiddenWallReveal(0xE8))
-    );
-    // Other classes are not affected by Search.
-    assert_eq!(dungeon_search_wall_rewrite(0x00), None);
-    assert_eq!(dungeon_search_wall_rewrite(0xB0), None);
-    assert_eq!(dungeon_search_wall_rewrite(0xE0), None);
-    assert_eq!(dungeon_search_wall_rewrite(0xF0), None);
+    // Hidden-wall 0xD? rewrites to 0xE?, marker preserved, in any flavour.
+    for flavour in [Normal, Mine, FlavourByte3] {
+        assert_eq!(
+            dungeon_search_wall_rewrite(0xD0, flavour),
+            Some(DungeonSearchWallRewrite::ToHiddenWallReveal(0xE0))
+        );
+        assert_eq!(
+            dungeon_search_wall_rewrite(0xD8, flavour),
+            Some(DungeonSearchWallRewrite::ToHiddenWallReveal(0xE8))
+        );
+        assert_eq!(
+            dungeon_search_wall_rewrite(0xDF, flavour),
+            Some(DungeonSearchWallRewrite::ToHiddenWallReveal(0xE8))
+        );
+        // Other classes are not affected by Search.
+        assert_eq!(dungeon_search_wall_rewrite(0x00, flavour), None);
+        assert_eq!(dungeon_search_wall_rewrite(0xB0, flavour), None);
+        assert_eq!(dungeon_search_wall_rewrite(0xE0, flavour), None);
+        assert_eq!(dungeon_search_wall_rewrite(0xF0, flavour), None);
+    }
 }
 
 #[test]

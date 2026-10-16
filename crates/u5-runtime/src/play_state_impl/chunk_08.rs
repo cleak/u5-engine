@@ -1222,8 +1222,7 @@ impl PlayState {
             // uses" - not the falls-style descent.
             //
             // **Engine assignment, not a published pairing** - marked rather
-            // than hidden, the same way `dungeon_search_outcome_line` marks
-            // its stalactite/caved-in flavour pairing. Section 8.1 attaches
+            // than hidden. Section 8.1 attaches
             // `Failed!` to "an impassable **destination**", while §13.1 and
             // `doors-and-z-transitions.md §9` state a climb "never tests the
             // cell it lands on". No published sentence joins the line to the

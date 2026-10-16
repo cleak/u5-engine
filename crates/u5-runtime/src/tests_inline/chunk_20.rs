@@ -2117,17 +2117,30 @@ fn dungeon_search_flavour_rewrite_dissolves_but_narration_only_does_not() {
         } if recorded_scene == scene
     ));
 
-    let mut narration_grid = open_dungeon_record();
-    narration_grid[dungeon_cell_index(0, 2, 1)] = 0xC1;
-    let mut narration = dungeon_state(narration_grid, 0, 1, 1);
-    narration.player.facing = Direction::East;
-    narration.torch_counter = 5;
-    assert_eq!(
-        narration.search_facing_with_game_dir(&dir).unwrap(),
-        MoveOutcome::Searched
-    );
-    assert_eq!(narration.grid[dungeon_cell_index(0, 2, 1)], 0xC1);
-    assert!(narration.pending_map_viewport_dissolves.is_empty());
+    // `dungeon-mode.md §8` (audit A090): the branch keys on the dungeon
+    // flavour. Despise is the normal flavour and Shame the mine flavour,
+    // so the same `0xC0` byte only narrates there.
+    for (record, line) in [
+        (1, DUNGEON_SEARCH_NOTHING_ON_STALACTITE),
+        (5, DUNGEON_SEARCH_NOTHING_IN_CAVED_IN_PASSAGE),
+    ] {
+        let mut narration_grid = open_dungeon_record();
+        narration_grid[dungeon_cell_index(0, 2, 1)] = 0xC0;
+        let mut narration = dungeon_state(narration_grid, 0, 1, 1);
+        narration.area = Area::Dungeon {
+            scene: DungeonScene::from_record(record).unwrap(),
+            level: 0,
+        };
+        narration.player.facing = Direction::East;
+        narration.torch_counter = 5;
+        assert_eq!(
+            narration.search_facing_with_game_dir(&dir).unwrap(),
+            MoveOutcome::Searched
+        );
+        assert_eq!(narration.grid[dungeon_cell_index(0, 2, 1)], 0xC0);
+        assert_eq!(narration.message, line);
+        assert!(narration.pending_map_viewport_dissolves.is_empty());
+    }
     let _ = fs::remove_dir_all(dir);
 }
 
