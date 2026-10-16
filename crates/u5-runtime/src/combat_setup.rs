@@ -1076,16 +1076,12 @@ pub fn terrain_combat_place_monsters_after_party(
             roll_seed,
         );
         // `combat.md §5`: "A spawned actor's renderer-facing tile is
-        // then derived from whichever class was chosen." The base
-        // class keeps the triggering object's own tile byte so its
-        // animation frame survives; a substituted companion class
-        // derives its sprite from the class identity.
+        // then derived from whichever class was chosen", and the record
+        // "receives the class-derived tile in both its tile and
+        // tile-mirror bytes" - never the raw trigger tile (a ship
+        // trigger `0x2C..0x2F` seats class-1 crew, not ship sprites).
         let stats = combat_class_stats(chosen_class).unwrap_or(base_class);
-        let tile = if stats.class == base_class.class {
-            setup.base_tile
-        } else {
-            combat_class_sprite_byte(stats.class)
-        };
+        let tile = combat_class_sprite_byte(stats.class);
         // `active-objects.md §7`: the descriptor comes from the
         // monster-side scan that starts at index six, while the
         // renderer-facing record comes from the lowest free record.

@@ -20037,6 +20037,37 @@ fn terrain_combat_setup_from_record_copies_record_slices_and_base_class() {
     assert_eq!(base_class.name, "Orc");
 }
 
+/// `combat.md §5`: the renderer-facing record "receives the class-derived
+/// tile in both its tile and tile-mirror bytes". A pirate-ship trigger
+/// (`0x2C..0x2F`) maps to class 1, so its crew is drawn as `1*4+0x40`,
+/// and an animated trigger frame does not leak into the spawned sprite.
+#[test]
+fn terrain_combat_placement_tile_derives_from_class_not_trigger_tile() {
+    let record = CombatArenaRecord::from_record_bytes(&synthetic_combat_arena_record()).unwrap();
+    for (trigger_tile, expected_class) in [(0x2d_u8, OUTDOOR_PIRATE_COMBAT_CLASS), (0xc1, 32)] {
+        let trigger = ActiveObject {
+            type_byte: trigger_tile,
+            tile: trigger_tile,
+            x: 10,
+            y: 20,
+            z: 0,
+            phase: 0,
+            aux1: 0,
+            aux3: 0,
+        };
+        let setup =
+            terrain_combat_setup_from_record_at_arena(WorldPlane::Britannia, trigger, 4, &record)
+                .unwrap();
+        let instance = terrain_combat_instance_from_setup(&setup, 2, None, &[], &[]).unwrap();
+        let expected_tile = combat_class_sprite_byte(expected_class);
+        for slot in 6..8 {
+            assert_eq!(instance.actors[slot].owner_target_class, expected_class);
+            assert_eq!(instance.active_objects[slot].tile, expected_tile);
+            assert_eq!(instance.active_objects[slot].type_byte, expected_tile);
+        }
+    }
+}
+
 #[test]
 fn terrain_combat_instance_places_monsters_and_parallel_descriptors() {
     let record = CombatArenaRecord::from_record_bytes(&synthetic_combat_arena_record()).unwrap();
