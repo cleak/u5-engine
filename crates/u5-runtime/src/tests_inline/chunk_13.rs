@@ -1092,13 +1092,9 @@ fn town_rest_tick_budget_anchors_to_hours_per_day_times_ticks_per_hour() {
 
 #[test]
 fn rest_tick_minute_cadences_derive_from_minutes_per_hour() {
-    // rest-and-camp.md §5: wilderness camp uses five-minute steps,
-    // dungeon watch-rest uses twenty-minute steps, and town bed rest
-    // uses ten-minute steps.
-    assert_eq!(
-        REST_WATCH_MINUTES_PER_TICK,
-        MINUTES_PER_HOUR / REST_WATCH_TICKS_PER_HOUR,
-    );
+    // rest-and-camp.md §5 / dungeon-mode.md §11: the wilderness and dungeon
+    // camp loop uses five-minute steps, and town bed rest uses ten-minute
+    // steps.
     assert_eq!(
         WILDERNESS_CAMP_MINUTES_PER_TICK,
         MINUTES_PER_HOUR / WILDERNESS_CAMP_TICKS_PER_HOUR,
@@ -1107,7 +1103,6 @@ fn rest_tick_minute_cadences_derive_from_minutes_per_hour() {
         TOWN_REST_MINUTES_PER_TICK,
         MINUTES_PER_HOUR / TOWN_REST_TICKS_PER_HOUR,
     );
-    assert_eq!(REST_WATCH_MINUTES_PER_TICK, 20);
     assert_eq!(WILDERNESS_CAMP_MINUTES_PER_TICK, 5);
     assert_eq!(TOWN_REST_MINUTES_PER_TICK, 10);
 }
@@ -13197,47 +13192,50 @@ fn dungeon_attack_post_combat_z_intent_translates_result_code() {
 
 #[test]
 fn dungeon_search_wall_rewrite_classifies_flavour_and_hidden_walls() {
-    // dungeon-mode.md §8
-    // Flavour 0xC1, 0xC2 narrate only.
+    use DungeonPresentationFlavour::{FlavourByte3, Mine, Normal};
+    // dungeon-mode.md §8: the `0xC?` branch keys on the dungeon flavour, not
+    // the cell's low nibble. Flavours one and two narrate only.
+    for tile in [0xC0, 0xC1, 0xC2, 0xC8] {
+        for flavour in [Normal, Mine] {
+            assert_eq!(
+                dungeon_search_wall_rewrite(tile, flavour),
+                Some(DungeonSearchWallRewrite::NarrateOnly)
+            );
+        }
+    }
+    // Other flavours rewrite to 0xB0, marker preserved.
     assert_eq!(
-        dungeon_search_wall_rewrite(0xC1),
-        Some(DungeonSearchWallRewrite::NarrateOnly)
-    );
-    assert_eq!(
-        dungeon_search_wall_rewrite(0xC2),
-        Some(DungeonSearchWallRewrite::NarrateOnly)
-    );
-    // Other 0xC? values rewrite to 0xB0, marker preserved.
-    assert_eq!(
-        dungeon_search_wall_rewrite(0xC0),
+        dungeon_search_wall_rewrite(0xC0, FlavourByte3),
         Some(DungeonSearchWallRewrite::ToFlavourFind(0xB0))
     );
     assert_eq!(
-        dungeon_search_wall_rewrite(0xC8),
+        dungeon_search_wall_rewrite(0xC1, FlavourByte3),
+        Some(DungeonSearchWallRewrite::ToFlavourFind(0xB0))
+    );
+    assert_eq!(
+        dungeon_search_wall_rewrite(0xCA, FlavourByte3),
         Some(DungeonSearchWallRewrite::ToFlavourFind(0xB8))
     );
-    assert_eq!(
-        dungeon_search_wall_rewrite(0xC3),
-        Some(DungeonSearchWallRewrite::ToFlavourFind(0xB0))
-    );
-    // Hidden-wall 0xD? rewrites to 0xE?, marker preserved.
-    assert_eq!(
-        dungeon_search_wall_rewrite(0xD0),
-        Some(DungeonSearchWallRewrite::ToHiddenWallReveal(0xE0))
-    );
-    assert_eq!(
-        dungeon_search_wall_rewrite(0xD8),
-        Some(DungeonSearchWallRewrite::ToHiddenWallReveal(0xE8))
-    );
-    assert_eq!(
-        dungeon_search_wall_rewrite(0xDF),
-        Some(DungeonSearchWallRewrite::ToHiddenWallReveal(0xE8))
-    );
-    // Other classes are not affected by Search.
-    assert_eq!(dungeon_search_wall_rewrite(0x00), None);
-    assert_eq!(dungeon_search_wall_rewrite(0xB0), None);
-    assert_eq!(dungeon_search_wall_rewrite(0xE0), None);
-    assert_eq!(dungeon_search_wall_rewrite(0xF0), None);
+    // Hidden-wall 0xD? rewrites to 0xE?, marker preserved, in any flavour.
+    for flavour in [Normal, Mine, FlavourByte3] {
+        assert_eq!(
+            dungeon_search_wall_rewrite(0xD0, flavour),
+            Some(DungeonSearchWallRewrite::ToHiddenWallReveal(0xE0))
+        );
+        assert_eq!(
+            dungeon_search_wall_rewrite(0xD8, flavour),
+            Some(DungeonSearchWallRewrite::ToHiddenWallReveal(0xE8))
+        );
+        assert_eq!(
+            dungeon_search_wall_rewrite(0xDF, flavour),
+            Some(DungeonSearchWallRewrite::ToHiddenWallReveal(0xE8))
+        );
+        // Other classes are not affected by Search.
+        assert_eq!(dungeon_search_wall_rewrite(0x00, flavour), None);
+        assert_eq!(dungeon_search_wall_rewrite(0xB0, flavour), None);
+        assert_eq!(dungeon_search_wall_rewrite(0xE0, flavour), None);
+        assert_eq!(dungeon_search_wall_rewrite(0xF0, flavour), None);
+    }
 }
 
 #[test]
@@ -18968,12 +18966,8 @@ fn endgame_real_victory_requires_end_dat_resource() {
         .enter_endgame_from_game_dir(Some(&dir))
         .expect("ENDMSG.DAT should load");
 
-    assert_eq!(
-        state
-            .resolve_endgame_confirmation_from_game_dir(true, &dir)
-            .unwrap(),
-        MoveOutcome::Used
-    );
+    // `endgame.md §5`: a first Yes with the box owned resolves straight to
+    // the victory rite, so it is that answer which needs `END.DAT`.
     let err = state
         .resolve_endgame_confirmation_from_game_dir(true, &dir)
         .unwrap_err();
@@ -19399,7 +19393,36 @@ fn endgame_flow_uses_loaded_endmsg_records_for_prompts_rite_and_refusal() {
         ENDGAME_TABLEAU_BOX_ACTOR_BYTE
     );
     run_victory_tableau_to_first_narrative_window(&mut victory);
-    assert_eq!(victory.message, "Window one");
+    assert_eq!(victory.message, "{Window one");
+}
+
+/// `endgame.md §5` step 2: "**Only a first No** asks the second question
+/// ... A first Yes skips this question whether the party owns the box or
+/// not." With the box owned, a first Yes is the effective answer and goes
+/// straight to the victory rite (R404 withdrew the two-question flow).
+#[test]
+fn endgame_first_yes_with_box_skips_the_sandalwood_question() {
+    let mut state = dungeon_state(open_dungeon_record(), 0, 1, 1);
+    state.special_items[SPECIAL_ITEM_WOODEN_BOX_INDEX] = 1;
+    state.enter_endgame();
+    state.resolve_endgame_confirmation(true);
+    let endgame = state.endgame.as_ref().unwrap();
+    assert!(endgame.is_terminal());
+    assert_eq!(endgame.first_confirmation, Some(true));
+    assert_eq!(endgame.final_confirmation, Some(true));
+    assert_eq!(endgame.outcome, Some(EndgameOutcome::Victory));
+
+    // A first No still asks, and a Yes to the clarification wins.
+    let mut state = dungeon_state(open_dungeon_record(), 0, 1, 1);
+    state.special_items[SPECIAL_ITEM_WOODEN_BOX_INDEX] = 1;
+    state.enter_endgame();
+    state.resolve_endgame_confirmation(false);
+    assert!(!state.endgame.as_ref().unwrap().is_terminal());
+    state.resolve_endgame_confirmation(true);
+    assert_eq!(
+        state.endgame.as_ref().unwrap().outcome,
+        Some(EndgameOutcome::Victory)
+    );
 }
 
 #[test]
@@ -19409,7 +19432,7 @@ fn victory_endgame_cinematic_advances_through_all_panels_then_holds_terminal_sta
     state.party_names = vec![*b"AVATAR\0\0\0"];
     state.clock = GameClock::with_date(141, 5, 6, 12, 0).unwrap();
     state.enter_endgame();
-    state.resolve_endgame_confirmation(true);
+    // `endgame.md §5`: a first Yes skips the sandalwood question.
     state.resolve_endgame_confirmation(true);
     state.endgame.as_mut().unwrap().final_narrative = Some(synthetic_end_narrative());
 
@@ -19440,7 +19463,7 @@ fn victory_endgame_cinematic_advances_through_all_panels_then_holds_terminal_sta
 
     // The automatic tableau sequence includes the one silent fade and
     // publishes the first narrative window without consuming another key.
-    assert_eq!(state.message, "Window one");
+    assert_eq!(state.message, "{Window one");
 
     for expected in [
         "Window two",
@@ -19450,7 +19473,7 @@ fn victory_endgame_cinematic_advances_through_all_panels_then_holds_terminal_sta
         "Window six",
     ] {
         state.resolve_endgame_confirmation(true);
-        assert_eq!(state.message, expected);
+        assert_eq!(state.message, format!("{{{expected}"));
     }
     {
         // Advance the cinematic directly: routing this through
@@ -19483,7 +19506,7 @@ fn victory_gate_reuses_shared_moongate_phase_for_exact_rise_hold_and_sink() {
     let mut state = dungeon_state(endgame_tableau_test_grid(), 0, 1, 1);
     state.special_items[SPECIAL_ITEM_WOODEN_BOX_INDEX] = SPECIAL_ITEM_OWNED_VALUE;
     state.enter_endgame();
-    state.resolve_endgame_confirmation(true);
+    // `endgame.md §5`: a first Yes skips the sandalwood question.
     state.resolve_endgame_confirmation(true);
     state.endgame.as_mut().unwrap().final_narrative = Some(synthetic_end_narrative());
 
@@ -23869,6 +23892,30 @@ fn decode_end_window_strips_layout_markers_and_terminates_on_nul() {
     assert_eq!(decode_end_window(bytes), "AvatarStanding\natthecircle");
 }
 
+/// `formats/end-dat.md §3`/`§4`: the window handed to the endgame's
+/// proportional renderer keeps `{` (15-px first-line indent) and `_`
+/// (soft hyphen) so the layout can consume them.
+#[test]
+fn end_narrative_layout_window_keeps_brace_and_soft_hyphen() {
+    let raw = b"\n{Avatar_Standing\r\nat the circle\0pad".to_vec();
+    let end = raw.len();
+    let table = format!("1 0 {end}\n");
+    let ranges = parse_end_narrative_window_ranges(&table).unwrap();
+    let narrative = EndNarrative::new(raw).with_window_ranges(ranges);
+    assert_eq!(
+        narrative.layout_window_by_number(1).as_deref(),
+        Some("\n{Avatar_Standing\n\nat the circle")
+    );
+    assert_eq!(
+        decode_end_window_keeping_layout_markers(b"{a_b\0c"),
+        "{a_b"
+    );
+    // A window whose only bytes are markers has no renderable text.
+    let marker_only = EndNarrative::new(b"{_\0".to_vec())
+        .with_window_ranges(parse_end_narrative_window_ranges("1 0 3\n").unwrap());
+    assert_eq!(marker_only.layout_window_by_number(1), None);
+}
+
 #[test]
 fn end_narrative_window_returns_decoded_subslice() {
     let raw = b"{Hello\nWorld\0".to_vec();
@@ -23923,9 +23970,9 @@ fn end_narrative_window_ranges_select_pages_for_cinematic() {
     endgame.advance_cinematic();
     assert_eq!(endgame.current_cinematic_text(), "");
     assert!(endgame.advance_cinematic_frame_operation());
-    assert_eq!(endgame.current_cinematic_text(), "Window one");
+    assert_eq!(endgame.current_cinematic_text(), "{Window one");
     endgame.advance_cinematic();
-    assert_eq!(endgame.current_cinematic_text(), "Window two");
+    assert_eq!(endgame.current_cinematic_text(), "{Window two");
 }
 
 #[test]
@@ -24880,7 +24927,7 @@ fn endgame_rendering_does_not_repopulate_gameplay_player_object() {
     state.party = vec![state.party[0]; 2];
     state.special_items[SPECIAL_ITEM_WOODEN_BOX_INDEX] = SPECIAL_ITEM_OWNED_VALUE;
     state.enter_endgame();
-    state.resolve_endgame_confirmation(true);
+    // `endgame.md §5`: a first Yes skips the sandalwood question.
     state.resolve_endgame_confirmation(true);
     assert!(state.advance_endgame_display_frame());
     state.resolve_endgame_confirmation(false);
@@ -26010,10 +26057,9 @@ fn dungeon_post_turn_active_monster_greedy_steps_toward_party() {
 
     let object = state.active_objects[1];
     assert_eq!((object.x, object.y), (2, 1));
-    assert_eq!(
-        object.phase,
-        active_object_phase_from_direction(Direction::West, 0)
-    );
+    // `dungeon-mode.md §6.9`: the phase byte is packed sprite state; a
+    // committed step moves the record without writing a facing into it.
+    assert_eq!(object.phase, 0x20);
     // A monster's step prints nothing; the note is a diagnostic.
     assert!(
         state
@@ -26021,6 +26067,32 @@ fn dungeon_post_turn_active_monster_greedy_steps_toward_party() {
             .join(" ")
             .contains("Dungeon monster tile 192 moved West to (2, 1)")
     );
+}
+
+#[test]
+fn dungeon_active_monster_step_preserves_packed_sprite_state() {
+    // `dungeon-mode.md §6.9`: Ghost starts at `0x90` (complement symmetry);
+    // the symmetry and mode bits must survive a committed step.
+    let mut state = dungeon_state(open_dungeon_record(), 0, 1, 1);
+    state.active_objects.push(ActiveObject {
+        type_byte: 3,
+        tile: 3,
+        x: 3,
+        y: 1,
+        z: 0,
+        phase: 0x90,
+        aux1: 23,
+        aux3: 0,
+    });
+
+    assert_eq!(
+        state.pass_turn_with_game_dir(Some(Path::new(""))).unwrap(),
+        MoveOutcome::Passed
+    );
+
+    let object = state.active_objects[1];
+    assert_eq!((object.x, object.y), (2, 1));
+    assert_eq!(object.phase, 0x90);
 }
 
 #[test]
@@ -26288,13 +26360,35 @@ fn dungeon_command_letters_do_not_fall_through_to_diagonal_movement_refusal() {
         assert_eq!(state.turn, expected_turn, "{key} turn");
     }
 
-    let mut state = dungeon_state(open_dungeon_record(), 0, 1, 1);
+}
 
-    for key in ['7', '9', '1', '3'] {
+/// `dungeon-mode.md §4` step 3 and `§10` (audit A083): every digit goes to
+/// the solo-member selector and reports "no action"; none of them moves or
+/// turns the party underground.
+#[test]
+fn dungeon_digits_select_the_solo_member_and_never_move() {
+    for key in ['0', '1', '2', '3', '4', '5', '6', '7', '8', '9'] {
+        let mut state = dungeon_state(open_dungeon_record(), 0, 1, 1);
+        let facing = state.player.facing;
+
         assert!(state.handle_dungeon_key(key, Path::new("")).unwrap());
-        assert!(state.message.contains("forward, back, and turns only"));
-        assert_eq!((state.player.x, state.player.y), (1, 1));
-        assert_eq!(state.turn, 0);
+        assert_eq!((state.player.x, state.player.y), (1, 1), "{key} moved");
+        assert_eq!(state.player.facing, facing, "{key} turned");
+        assert_eq!(state.turn, 0, "{key} reports no action");
+        let expected = match key {
+            '0' => SET_ACTIVE_PLAYER_NONE_REPLY.to_string(),
+            '1' => state.party_member_display_name(0),
+            _ => SET_ACTIVE_PLAYER_INVALID_REPLY.to_string(),
+        };
+        assert!(
+            state.message_entries().iter().any(|entry| entry.text == expected)
+                || state.message == expected,
+            "{key} reported `{}`",
+            state.message
+        );
+        if key == '1' {
+            assert_eq!(state.active_player, Some(0));
+        }
     }
 }
 
@@ -27145,4 +27239,23 @@ fn probe_stray_key_echo_kind() {
             );
         }
     }
+}
+
+#[test]
+fn dungeon_turn_in_heavy_doorway_is_refused_with_not_in_doorway() {
+    // `dungeon-mode.md §8.1`: "Turn refused | `Not in doorway!\n`" fires
+    // when the party's own cell is the point-blank `0xE?` door class.
+    let mut grid = open_dungeon_record();
+    grid[dungeon_cell_index(0, 1, 1)] = 0xE0;
+    let mut state = dungeon_state(grid, 0, 1, 1);
+
+    assert_eq!(state.turn_dungeon(true), MoveOutcome::Blocked);
+    assert_eq!(state.message, DUNGEON_MOVEMENT_NOT_IN_DOORWAY_REFUSAL);
+    assert_eq!(state.player.facing, Direction::East);
+    assert_eq!(state.turn, 0);
+
+    // An open cell still turns.
+    let mut state = dungeon_state(open_dungeon_record(), 0, 1, 1);
+    assert_eq!(state.turn_dungeon(true), MoveOutcome::Moved);
+    assert_eq!(state.player.facing, Direction::South);
 }

@@ -433,9 +433,15 @@ fn handle_play_key_input_inner(
             }
         }
         SceneRoute::Dungeon => {
+            // `dungeon-mode.md §4` step 3: a byte the dungeon handler does
+            // not own goes to the resident dispatcher and "reports whatever
+            // the dispatcher decides". For unknown input the dispatcher
+            // prints the stock `What?\n` (`commands.md §5.2`, "any unmapped
+            // key") and reports "no action" (`commands.md §3`), so this
+            // falls through to the same refusal the top-down scenes print.
+            // The sleep line belongs to the party-capability check, never
+            // to a keystroke.
             state.advance_visual_tick();
-            state.message = "Zzzzzz...".to_string();
-            return Ok(PlayInputDisposition::Continue);
         }
         SceneRoute::IntroOrPreview | SceneRoute::CombatTemporary => {
             // Intro values are consumed before gameplay and combat returns

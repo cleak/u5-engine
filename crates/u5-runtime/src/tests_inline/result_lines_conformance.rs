@@ -270,43 +270,58 @@ fn the_published_dungeon_literals_keep_their_exact_punctuation_and_spacing() {
 fn the_dungeon_search_outcome_table_matches_the_published_classes() {
     // `dungeon-mode.md §8.1` "Search outcomes".
     assert_eq!(
-        dungeon_search_outcome_line(0x00),
+        dungeon_search_outcome_line(0x00, DungeonPresentationFlavour::Normal),
         Some(DUNGEON_SEARCH_NOTHING_OF_NOTE)
     );
     for ladder in [0x10, 0x20, 0x30] {
         assert_eq!(
-            dungeon_search_outcome_line(ladder),
+            dungeon_search_outcome_line(ladder, DungeonPresentationFlavour::Normal),
             Some(DUNGEON_SEARCH_NOTHING_ON_LADDER)
         );
     }
     assert_eq!(
-        dungeon_search_outcome_line(0x50),
+        dungeon_search_outcome_line(0x50, DungeonPresentationFlavour::Normal),
         Some(DUNGEON_SEARCH_NOTHING_ON_FOUNTAIN)
     );
     assert_eq!(
-        dungeon_search_outcome_line(0x70),
+        dungeon_search_outcome_line(0x70, DungeonPresentationFlavour::Normal),
         Some(DUNGEON_SEARCH_TREASURE)
     );
     assert_eq!(
-        dungeon_search_outcome_line(0x90),
+        dungeon_search_outcome_line(0x90, DungeonPresentationFlavour::Normal),
         Some(DUNGEON_SEARCH_IMPOSSIBLE_TILE)
     );
     // "for the heavy-door class and for both door-presentation/room classes".
     for door in [0xA0, 0xE0, 0xF0] {
         assert_eq!(
-            dungeon_search_outcome_line(door),
+            dungeon_search_outcome_line(door, DungeonPresentationFlavour::Normal),
             Some(DUNGEON_SEARCH_NOTHING_ON_DOOR)
         );
     }
     assert_eq!(
-        dungeon_search_outcome_line(0xB0),
+        dungeon_search_outcome_line(0xB0, DungeonPresentationFlavour::Normal),
         Some(DUNGEON_SEARCH_NOTHING_ON_WALL)
     );
     // The pit family, the chest class and the two rewriting wall branches own
     // their own arms and are deliberately absent from the table.
-    assert_eq!(dungeon_search_outcome_line(0x40), None);
-    assert_eq!(dungeon_search_outcome_line(0x61), None);
-    assert_eq!(dungeon_search_outcome_line(0xD0), None);
+    assert_eq!(dungeon_search_outcome_line(0x40, DungeonPresentationFlavour::Normal), None);
+    assert_eq!(dungeon_search_outcome_line(0x61, DungeonPresentationFlavour::Normal), None);
+    assert_eq!(dungeon_search_outcome_line(0xD0, DungeonPresentationFlavour::Normal), None);
+    // The flavour class keys on the dungeon flavour (`§8`): ordinary-flavour
+    // stalactite, mine-flavour caved-in passage; flavour three has its own
+    // skeleton arm.
+    assert_eq!(
+        dungeon_search_outcome_line(0xC0, DungeonPresentationFlavour::Normal),
+        Some(DUNGEON_SEARCH_NOTHING_ON_STALACTITE)
+    );
+    assert_eq!(
+        dungeon_search_outcome_line(0xC0, DungeonPresentationFlavour::Mine),
+        Some(DUNGEON_SEARCH_NOTHING_IN_CAVED_IN_PASSAGE)
+    );
+    assert_eq!(
+        dungeon_search_outcome_line(0xC1, DungeonPresentationFlavour::FlavourByte3),
+        None
+    );
 }
 
 #[test]

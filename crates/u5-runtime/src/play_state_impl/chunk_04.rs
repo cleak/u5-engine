@@ -2724,6 +2724,15 @@ impl PlayState {
             self.message.clear();
             return MoveOutcome::Blocked;
         };
+        // `dungeon-mode.md §8.1`: "Turn refused | `Not in doorway!\n`" - it
+        // "fires when the party's **own** cell is the point-blank door
+        // class", the `0xE?` heavy door of `§6.4` (the one door class that
+        // can be stood in and sets the point-blank flag). The facing is
+        // left unchanged.
+        if self.dungeon_cell(level, self.player.x, self.player.y) >> 4 == 0xE {
+            self.message = DUNGEON_MOVEMENT_NOT_IN_DOORWAY_REFUSAL.to_string();
+            return MoveOutcome::Blocked;
+        }
         self.player.facing = next;
         self.advance_turn();
         // `dungeon-mode.md §14`: a turn prints its verb and nothing else -
@@ -2758,7 +2767,7 @@ impl PlayState {
         party_index: Option<usize>,
         focus: DungeonLookFocus,
     ) -> MoveOutcome {
-        let Area::Dungeon { level, .. } = self.area else {
+        let Area::Dungeon { scene, level } = self.area else {
             // An internal invariant, not a player-facing path: the original
             // prints nothing here, so neither does this. `u5-engine#19`.
             self.message.clear();
@@ -2772,7 +2781,13 @@ impl PlayState {
         let (x, y) = self.dungeon_look_focus_coord(focus);
 
         let tile = self.dungeon_cell(level, x, y);
-        let description = dungeon_look_description(tile);
+        // `dungeon-mode.md §2`: the flavour-three `0xC?` corpse line becomes
+        // the software-pirate line "on a one-in-255 draw".
+        let flavour = scene.presentation_flavour();
+        let pirate = dungeon_look_description_byte(tile) >> 4 == 0xC
+            && flavour == DungeonPresentationFlavour::FlavourByte3
+            && self.random_mod_u8(255) == 0;
+        let description = dungeon_look_description_with_flavour(tile, flavour, pirate);
         if (tile >> 4) == 0x5 {
             // `dungeon-mode.md §12` step 6: the fountain class prints the
             // ordinary look line and then runs the drink question, whose

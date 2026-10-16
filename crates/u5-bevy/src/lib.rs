@@ -12570,11 +12570,15 @@ fn drive_visual(
     let modal_prompt_active = visual_line_prompt_active(&visual.state)
         || visual_modal_prompt_active(&visual.state)
         || combat_targeting_cursor_owns_keyboard(&visual.state);
+    // `dungeon-mode.md §10` / `input.md §5`: the dungeon does not run the
+    // shifted-digit-to-direction translation, so Shift is not a direction
+    // modifier for the top-row digits there.
+    let digit_translation = !dungeon_skips_digit_translation(&visual.state);
     let repeat_command = held_direction_repeat_command(
         &keyboard,
         time.delta(),
         &mut visual.held_direction_repeat,
-        shift_pressed,
+        shift_pressed && digit_translation,
         control_pressed,
         modal_prompt_active,
     );
@@ -12612,7 +12616,8 @@ fn drive_visual(
                 }
             }
         }
-        let Some(ch) = key_code_to_command_char(*key, shift_pressed, control_pressed) else {
+        let shift_for_key = shift_pressed && (digit_translation || !is_top_row_digit(*key));
+        let Some(ch) = key_code_to_command_char(*key, shift_for_key, control_pressed) else {
             continue;
         };
         let game_dir = visual.game_dir.clone();
@@ -12694,6 +12699,23 @@ fn drive_visual(
     );
     replace_visual_image_data(&mut images, &v.image_handle, rgba, "play input redraw");
     queue_pending_speaker_effects(v, &mut speaker);
+}
+
+/// `dungeon-mode.md §10`: "Dungeon mode is also the one mode that does not
+/// run the shifted-digit-to-direction translation of `input.md` Section 5.
+/// Shifted or NumLock-ed top-row digits stay ordinary digits underground and
+/// select a solo party member like any other digit." Combat keeps its own
+/// parser, so a dungeon-room fight still translates.
+fn dungeon_skips_digit_translation(state: &PlayState) -> bool {
+    matches!(state.area, u5_runtime::Area::Dungeon { .. }) && !state.combat_active
+}
+
+fn is_top_row_digit(key: KeyCode) -> bool {
+    use KeyCode::*;
+    matches!(
+        key,
+        Digit0 | Digit1 | Digit2 | Digit3 | Digit4 | Digit5 | Digit6 | Digit7 | Digit8 | Digit9
+    )
 }
 
 fn held_direction_key_to_command_char(
@@ -21848,7 +21870,7 @@ mod tests {
         );
         // Completing the fade publishes window one; the beat consumes
         // no input, so nothing else can publish it.
-        assert_eq!(state.message, "Window one");
+        assert_eq!(state.message, "{Window one");
     }
 
     #[test]
@@ -21956,7 +21978,7 @@ mod tests {
         let mut state = dungeon_state(open_dungeon_record(), 0, 1, 1);
         state.special_items[SPECIAL_ITEM_WOODEN_BOX_INDEX] = SPECIAL_ITEM_OWNED_VALUE;
         state.enter_endgame();
-        state.resolve_endgame_confirmation(true);
+        // `endgame.md §5`: a first Yes skips the sandalwood question.
         state.resolve_endgame_confirmation(true);
         // `endgame.md §8` narrative windows are END.DAT-backed; a
         // missing record is now a loud contract failure, so the beat

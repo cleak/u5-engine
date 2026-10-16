@@ -2952,7 +2952,7 @@ impl PlayState {
                 {
                     self.complete_dungeon_direction_echo(focus);
                     return self
-                        .search_dungeon_focus_with_game_dir(focus, game_dir)
+                        .search_dungeon_focus_with_game_dir_as(focus, game_dir, party_index)
                         .map(Some);
                 }
                 continue;

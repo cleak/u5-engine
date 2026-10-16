@@ -39,7 +39,11 @@
             PlayInputDisposition::Continue
         );
 
-        assert_eq!(state.message, "Zzzzzz...");
+        // `dungeon-mode.md §4`: the sleep line belongs to the
+        // party-capability check, not to an unknown key (audit A083). The
+        // key reaches the resident dispatcher, whose unmapped-key answer is
+        // `What?` (`commands.md §5.2`), as in town below.
+        assert_eq!(state.message, "What?");
         assert_eq!(state.turn, 0);
         assert_eq!(state.clock, GameClock::new(12, 35).unwrap());
         assert_eq!(state.torch_counter, 2);
@@ -1761,6 +1765,18 @@
         assert_eq!(state.turn, 1);
         assert_eq!(state.clock, GameClock::new(12, 1).unwrap());
         assert!(state.has_personal_light());
+    }
+
+    #[test]
+    fn dungeon_torch_duration_draws_from_the_shared_prng() {
+        // `dungeon-mode.md §7`: "a random 112..127", one shared-PRNG draw.
+        let mut state = dungeon_state(open_dungeon_record(), 0, 1, 1);
+        state.prng_state = 0x1234;
+        let mut expected_prng = state.prng_state;
+        let expected = u5_prng_range_u16(&mut expected_prng, 112, 127) as u8;
+
+        assert_eq!(state.dungeon_torch_duration_roll(), expected);
+        assert_eq!(state.prng_state, expected_prng);
     }
 
     #[test]

@@ -1394,11 +1394,11 @@ pub const fn dungeon_attack_post_combat_z_intent(result_code: u8) -> Option<i8> 
 /// matching revealed sub-class for the current dungeon visit.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum DungeonSearchWallRewrite {
-    /// Flavour class `0xC?` low nibbles `1` and `2` only narrate the
-    /// inspected feature; the cell is not rewritten.
+    /// Flavour class `0xC?` in flavours one and two (Normal, Mine) only
+    /// narrates the inspected feature; the cell is not rewritten.
     NarrateOnly,
-    /// Other flavour `0xC?` cells convert to `0xB0` or `0xB8`,
-    /// preserving the visit-marker bit.
+    /// Flavour class `0xC?` in any other flavour (the skeleton) converts to
+    /// `0xB0` or `0xB8`, preserving the visit-marker bit.
     ToFlavourFind(u8),
     /// Hidden-wall `0xD?` cells convert to `0xE0` or `0xE8`,
     /// preserving the visit-marker bit.
@@ -1409,14 +1409,26 @@ pub enum DungeonSearchWallRewrite {
 /// or hidden-wall cell. Returns `None` for any byte outside the
 /// `0xC?` and `0xD?` classes; those classes have no Search-specific
 /// rewrite.
-pub const fn dungeon_search_wall_rewrite(tile: u8) -> Option<DungeonSearchWallRewrite> {
+///
+/// "For flavour class `0xC?`, flavour values one and two only narrate the
+/// inspected feature. Other flavour values ... print that nothing is
+/// hidden on the skeleton" and rewrite the cell. The branch keys on the
+/// active dungeon's presentation flavour (Section 2), not on the cell's low
+/// nibble.
+pub const fn dungeon_search_wall_rewrite(
+    tile: u8,
+    flavour: crate::DungeonPresentationFlavour,
+) -> Option<DungeonSearchWallRewrite> {
     let marker = tile & DUNGEON_RUNTIME_VARIANT_BIT;
     match tile >> 4 {
-        0xC => match tile & 0x0F {
-            // Marker-form variants of "1" and "2" (0x09, 0x0A) also
-            // narrate only — the spec rewrite excludes those values.
-            0x01 | 0x02 | 0x09 | 0x0A => Some(DungeonSearchWallRewrite::NarrateOnly),
-            _ => Some(DungeonSearchWallRewrite::ToFlavourFind(0xB0 | marker)),
+        0xC => match flavour {
+            crate::DungeonPresentationFlavour::Normal
+            | crate::DungeonPresentationFlavour::Mine => {
+                Some(DungeonSearchWallRewrite::NarrateOnly)
+            }
+            crate::DungeonPresentationFlavour::FlavourByte3 => {
+                Some(DungeonSearchWallRewrite::ToFlavourFind(0xB0 | marker))
+            }
         },
         0xD => Some(DungeonSearchWallRewrite::ToHiddenWallReveal(0xE0 | marker)),
         _ => None,
@@ -1644,6 +1656,32 @@ pub fn dungeon_look_description(tile: u8) -> &'static str {
     }
 }
 
+/// `dungeon-mode.md` Sections 2 and 12 step 5: class `0xC?` is a
+/// flavour-presentation class. L-Look prints `a dripping stalactite.` for
+/// flavour one (Normal), `a caved in passage.` for flavour two (Mine), and
+/// for flavour three the corpse line `a less fortunate adventurer.` - or,
+/// when the caller's one-in-255 draw hit, `an unfortunate software
+/// pirate.`. Every other byte takes [`dungeon_look_description`]. The caller
+/// appends the terminal period, as it does for every description.
+pub fn dungeon_look_description_with_flavour(
+    tile: u8,
+    flavour: crate::DungeonPresentationFlavour,
+    pirate: bool,
+) -> &'static str {
+    let tile = dungeon_look_description_byte(tile);
+    if tile >> 4 != 0xC {
+        return dungeon_look_description(tile);
+    }
+    match flavour {
+        crate::DungeonPresentationFlavour::Normal => "a dripping stalactite",
+        crate::DungeonPresentationFlavour::Mine => "a caved in passage",
+        crate::DungeonPresentationFlavour::FlavourByte3 if pirate => {
+            "an unfortunate software pirate"
+        }
+        crate::DungeonPresentationFlavour::FlavourByte3 => "a less fortunate adventurer",
+    }
+}
+
 /// `dungeon-mode.md` Section 8.1, "Post-action underfoot consequences": the
 /// exact line an underfoot energy field prints, **before** its per-member
 /// rolls, so the line appears even when nobody is affected.
@@ -1684,12 +1722,13 @@ pub fn dungeon_chest_search_trap_line(detail: &str) -> &'static str {
 /// `DUNGEON_SEARCH_HIDDEN_DOOR` and the skeleton pair. `None` means "no
 /// published outcome literal for this class".
 ///
-/// One hedge, marked rather than hidden: Section 8.1 names both flavour
-/// lines - `Nothing on the stalactite.` and `Nothing in the caved in
-/// passage.` - and Section 8 names the two narrate-only flavour sub-values
-/// `1` and `2`, but the spec never joins one to the other. The pairing below
-/// is this engine's assignment, not a published fact.
-pub const fn dungeon_search_outcome_line(tile: u8) -> Option<&'static str> {
+/// The two narrate-only flavour lines key on the dungeon's presentation
+/// flavour: Section 8 joins "ordinary-flavour stalactites" and
+/// "mine-flavour caved-in passages" to flavour values one and two.
+pub const fn dungeon_search_outcome_line(
+    tile: u8,
+    flavour: crate::DungeonPresentationFlavour,
+) -> Option<&'static str> {
     match tile >> 4 {
         0x0 => Some(crate::DUNGEON_SEARCH_NOTHING_OF_NOTE),
         0x1 | 0x2 | 0x3 => Some(crate::DUNGEON_SEARCH_NOTHING_ON_LADDER),
@@ -1700,10 +1739,14 @@ pub const fn dungeon_search_outcome_line(tile: u8) -> Option<&'static str> {
         // classes".
         0xA | 0xE | 0xF => Some(crate::DUNGEON_SEARCH_NOTHING_ON_DOOR),
         0xB => Some(crate::DUNGEON_SEARCH_NOTHING_ON_WALL),
-        0xC => match tile & 0x07 {
-            0x01 => Some(crate::DUNGEON_SEARCH_NOTHING_ON_STALACTITE),
-            0x02 => Some(crate::DUNGEON_SEARCH_NOTHING_IN_CAVED_IN_PASSAGE),
-            _ => None,
+        0xC => match flavour {
+            crate::DungeonPresentationFlavour::Normal => {
+                Some(crate::DUNGEON_SEARCH_NOTHING_ON_STALACTITE)
+            }
+            crate::DungeonPresentationFlavour::Mine => {
+                Some(crate::DUNGEON_SEARCH_NOTHING_IN_CAVED_IN_PASSAGE)
+            }
+            crate::DungeonPresentationFlavour::FlavourByte3 => None,
         },
         _ => None,
     }

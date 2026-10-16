@@ -241,17 +241,12 @@ impl PlayState {
         let mut last_world_damage = None;
         let mut interrupted = false;
         let mut ambush_monster = None;
-        let wilderness_camp = matches!(self.area, Area::World { .. });
-        let ticks_per_hour = if wilderness_camp {
-            WILDERNESS_CAMP_TICKS_PER_HOUR
-        } else {
-            REST_WATCH_TICKS_PER_HOUR
-        };
-        let minutes_per_tick = if wilderness_camp {
-            WILDERNESS_CAMP_MINUTES_PER_TICK
-        } else {
-            REST_WATCH_MINUTES_PER_TICK
-        };
+        // `dungeon-mode.md §11` step 2: the dungeon H path elapses the rest
+        // "in five-minute steps, twelve steps per simulated hour", with one
+        // Ring of Regeneration roll per step - the same shared hole-up loop
+        // as the overworld camp.
+        let ticks_per_hour = WILDERNESS_CAMP_TICKS_PER_HOUR;
+        let minutes_per_tick = WILDERNESS_CAMP_MINUTES_PER_TICK;
         'resting: for _ in 0..hours {
             for _ in 0..ticks_per_hour {
                 let hour_before_tick = self.clock.hour;
@@ -276,15 +271,21 @@ impl PlayState {
                         last_world_damage = Some(report);
                     }
                 }
+                // `rest-and-camp.md §6`: the shared camp loop "invokes that
+                // predicate once when a five-minute step observes that the
+                // game-hour byte changed, not on every five-minute step";
+                // the dungeon reaches the same loop (`dungeon-mode.md §11`).
                 let interruption_probe_due = match self.area {
-                    Area::World { .. } => self.clock.hour != hour_before_tick,
-                    Area::Dungeon { .. } => true,
+                    Area::World { .. } | Area::Dungeon { .. } => {
+                        self.clock.hour != hour_before_tick
+                    }
                     Area::Town { .. } => false,
                 };
                 let ambush_row =
                     if matches!(self.area, Area::World { .. }) && interruption_probe_due {
                         self.wilderness_camp_hour_change_ambush_row(host_clock_prng_seed_now())
                     } else if matches!(self.area, Area::Dungeon { .. })
+                        && interruption_probe_due
                         && self.dangerous_rest_interrupted()
                     {
                         Some(self.sleep_ambush_monster_row())
@@ -1222,8 +1223,7 @@ impl PlayState {
             // uses" - not the falls-style descent.
             //
             // **Engine assignment, not a published pairing** - marked rather
-            // than hidden, the same way `dungeon_search_outcome_line` marks
-            // its stalactite/caved-in flavour pairing. Section 8.1 attaches
+            // than hidden. Section 8.1 attaches
             // `Failed!` to "an impassable **destination**", while §13.1 and
             // `doors-and-z-transitions.md §9` state a climb "never tests the
             // cell it lands on". No published sentence joins the line to the

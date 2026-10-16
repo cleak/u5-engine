@@ -1720,11 +1720,9 @@ pub const CARPET_BOARDING_LAST_ELIGIBLE_SCENE: u8 = 0x20;
 pub const CARPET_BOARDING_REJECTED_TILE: u8 = 0x0C;
 pub const DEFAULT_PARTY_HP: u16 = 60;
 pub const DEFAULT_PARTY_MAX_HP: u16 = 150;
-/// `rest-and-camp.md §5`: dungeon watch-rest retains its three passes per
-/// hour, while the distinct wilderness camp loop advances in five-minute
-/// steps. Town bed rest uses ten-minute steps.
-pub const REST_WATCH_TICKS_PER_HOUR: u8 = 3;
-pub const REST_WATCH_MINUTES_PER_TICK: u8 = crate::MINUTES_PER_HOUR / REST_WATCH_TICKS_PER_HOUR;
+/// `rest-and-camp.md §5` / `dungeon-mode.md §11`: the overworld and
+/// dungeon camp loop advances in five-minute steps, twelve per hour. Town
+/// bed rest uses ten-minute steps.
 pub const WILDERNESS_CAMP_TICKS_PER_HOUR: u8 = 12;
 pub const WILDERNESS_CAMP_MINUTES_PER_TICK: u8 =
     crate::MINUTES_PER_HOUR / WILDERNESS_CAMP_TICKS_PER_HOUR;

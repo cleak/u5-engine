@@ -1587,10 +1587,12 @@
         state.party[0].hp = 1;
         state.party[0].max_hp = 90;
         let mut expected_prng_state = state.prng_state;
-        // Eighteen five-minute danger checks, then one recovery draw for
-        // the fixture's sole living member. The context gate consumes no
-        // apparition draw.
-        for _ in 0..19 {
+        // `dungeon-mode.md §11` / `rest-and-camp.md §6` (audit A081): the
+        // dungeon camp takes twelve five-minute steps per hour and probes
+        // for interruption only when a step changes the hour - six probes
+        // over six hours - then one recovery draw for the fixture's sole
+        // living member. The context gate consumes no apparition draw.
+        for _ in 0..7 {
             expected_prng_state = u5_prng_advance_state(expected_prng_state);
         }
 
@@ -1754,7 +1756,8 @@
         );
 
         assert_eq!(state.clock, GameClock::new(2, 46).unwrap());
-        assert_eq!(state.turn, 3);
+        // `dungeon-mode.md §11`: twelve five-minute steps per hour.
+        assert_eq!(state.turn, 12);
         // `dungeon-mode.md §7`: "A dungeon turn spends one counter unit" and
         // the decay "is part of the world-clock advance call", so the
         // counters age by the same sixty-one minutes the clock did.

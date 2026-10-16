@@ -211,6 +211,29 @@ impl EndNarrative {
         self.window(range.start, range.end)
     }
 
+    /// The window text for the proportional renderer, with the `{`
+    /// first-line indent and `_` soft hyphen kept in place.
+    ///
+    /// `formats/end-dat.md §3`: both markers are layout hints the
+    /// proportional renderer consumes - the brace advances the pen 15
+    /// pixels, the soft hyphen marks a legal break that draws a hyphen
+    /// only when the line breaks there - so stripping them before layout
+    /// loses the indent and every soft-hyphen break.
+    pub fn layout_window_by_number(&self, number: u8) -> Option<String> {
+        let window = end_narrative_window(number)?;
+        let range = self.window_ranges[window.number() as usize - 1]?;
+        if range.end > self.raw.len() || range.start > range.end {
+            return None;
+        }
+        let bytes = &self.raw[range.start..range.end];
+        // Keep the "does not contain renderable text" test (§5) on the
+        // visible glyphs, not on the markers.
+        if decode_end_window(bytes).is_empty() {
+            return None;
+        }
+        Some(decode_end_window_keeping_layout_markers(bytes))
+    }
+
     pub fn with_window_ranges(
         mut self,
         ranges: [Option<EndNarrativeWindowRange>; END_DAT_WINDOW_COUNT],
@@ -389,6 +412,22 @@ fn parse_usize_literal(text: &str) -> io::Result<usize> {
         text.parse::<usize>()
     }
     .map_err(|err| io::Error::new(io::ErrorKind::InvalidData, err))
+}
+
+/// [`decode_end_window`] without the marker removal: NUL terminates,
+/// CR/LF become line feeds, and every printable byte - `{` and `_`
+/// included - is kept for the proportional layout (`formats/end-dat.md §3`).
+pub fn decode_end_window_keeping_layout_markers(bytes: &[u8]) -> String {
+    let mut out = String::with_capacity(bytes.len());
+    for &byte in bytes {
+        match byte {
+            0x00 => break,
+            0x0a | 0x0d => out.push('\n'),
+            ch if (0x20..=0x7e).contains(&ch) => out.push(ch as char),
+            _ => {}
+        }
+    }
+    out
 }
 
 pub fn decode_end_window(bytes: &[u8]) -> String {

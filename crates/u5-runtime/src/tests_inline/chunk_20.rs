@@ -781,9 +781,9 @@ fn town_jimmy_restraint_failure_preserves_actor_and_tile() {
 /// Mani - so it is **not** uniform over `1..30`: low values are markedly
 /// more likely."
 ///
-/// This site's deterministic seed is a raw 41, which halves with
-/// truncation to 20. Earlier revisions of this test expected 6 (the
-/// retracted uniform `1 + index % 30` draw from the same seed).
+/// The family and the raw roll are shared-PRNG draws (`traps.md §2`), so
+/// the test steers the PRNG to a state whose trap lands on Acid and then
+/// checks the reported damage against the hit points actually lost.
 #[test]
 fn town_open_object_chest_consumes_slot_trap_and_public_reward_pools() {
     let mut grid = open_grid();
@@ -815,13 +815,25 @@ fn town_open_object_chest_consumes_slot_trap_and_public_reward_pools() {
         aux3: 0,
     });
 
-    assert_eq!(state.open_facing(), MoveOutcome::Observed);
-    assert!(state.active_surface_chest.is_some());
-    assert_eq!(state.message, PARTY_SELECTION_PROMPT);
-    assert_eq!(
-        state.step_active_surface_chest('2', "").unwrap(),
-        Some(MoveOutcome::ContainerOpened)
-    );
+    let template = state.clone();
+    let mut damage = 0u16;
+    for seed in 0..=u16::MAX {
+        state = template.clone();
+        state.prng_state = seed;
+        assert_eq!(state.open_facing(), MoveOutcome::Observed);
+        assert!(state.active_surface_chest.is_some());
+        assert_eq!(state.message, PARTY_SELECTION_PROMPT);
+        assert_eq!(
+            state.step_active_surface_chest('2', "").unwrap(),
+            Some(MoveOutcome::ContainerOpened)
+        );
+        let notes = state.diagnostics.join(" ");
+        if let Some(rest) = notes.split("Acid trap hit party member 2 for ").nth(1) {
+            damage = rest.split(" HP.").next().unwrap().parse().unwrap();
+            break;
+        }
+    }
+    assert!((1..=30).contains(&damage), "acid damage {damage}");
 
     assert!(state.active_objects[1].is_empty());
     assert_eq!(state.grid[32 + 2], 16);
@@ -831,13 +843,7 @@ fn town_open_object_chest_consumes_slot_trap_and_public_reward_pools() {
     assert!(state.diagnostics.join(" ").contains("Opened object chest at (2, 1)"));
     // The resolver's own `ACID!` went to the transcript; this engine note
     // naming the slot and the damage is a diagnostic.
-    assert!(
-        state
-            .diagnostics
-            .join(" ")
-            .contains("Acid trap hit party member 2 for 20 HP.")
-    );
-    assert_eq!(state.party[1].hp, DEFAULT_PARTY_HP - 20);
+    assert_eq!(state.party[1].hp, DEFAULT_PARTY_HP - damage);
     let selected_name = party_name_to_string(&state.party_names[1]).unwrap();
     assert!(
         state
@@ -1965,7 +1971,10 @@ fn dungeon_search_bomb_trap_can_report_nothing_without_rewrite() {
     let mut state = dungeon_state(grid, 0, 1, 1);
     state.player.facing = Direction::East;
     state.torch_counter = 5;
-    state.party[0].class_byte = b'A';
+    // `dungeon-mode.md §8`: the threshold reads the acting member's
+    // Dexterity. 31 on level 0 makes `2 * Z - Dex + 30` wrap under the
+    // unsigned convention, so every `1..30` roll is at or below it.
+    state.party[0].climb_stat = 31;
 
     assert_eq!(
         state.search_facing_with_game_dir(&dir).unwrap(),
@@ -2114,17 +2123,30 @@ fn dungeon_search_flavour_rewrite_dissolves_but_narration_only_does_not() {
         } if recorded_scene == scene
     ));
 
-    let mut narration_grid = open_dungeon_record();
-    narration_grid[dungeon_cell_index(0, 2, 1)] = 0xC1;
-    let mut narration = dungeon_state(narration_grid, 0, 1, 1);
-    narration.player.facing = Direction::East;
-    narration.torch_counter = 5;
-    assert_eq!(
-        narration.search_facing_with_game_dir(&dir).unwrap(),
-        MoveOutcome::Searched
-    );
-    assert_eq!(narration.grid[dungeon_cell_index(0, 2, 1)], 0xC1);
-    assert!(narration.pending_map_viewport_dissolves.is_empty());
+    // `dungeon-mode.md §8` (audit A090): the branch keys on the dungeon
+    // flavour. Despise is the normal flavour and Shame the mine flavour,
+    // so the same `0xC0` byte only narrates there.
+    for (record, line) in [
+        (1, DUNGEON_SEARCH_NOTHING_ON_STALACTITE),
+        (5, DUNGEON_SEARCH_NOTHING_IN_CAVED_IN_PASSAGE),
+    ] {
+        let mut narration_grid = open_dungeon_record();
+        narration_grid[dungeon_cell_index(0, 2, 1)] = 0xC0;
+        let mut narration = dungeon_state(narration_grid, 0, 1, 1);
+        narration.area = Area::Dungeon {
+            scene: DungeonScene::from_record(record).unwrap(),
+            level: 0,
+        };
+        narration.player.facing = Direction::East;
+        narration.torch_counter = 5;
+        assert_eq!(
+            narration.search_facing_with_game_dir(&dir).unwrap(),
+            MoveOutcome::Searched
+        );
+        assert_eq!(narration.grid[dungeon_cell_index(0, 2, 1)], 0xC0);
+        assert_eq!(narration.message, line);
+        assert!(narration.pending_map_viewport_dissolves.is_empty());
+    }
     let _ = fs::remove_dir_all(dir);
 }
 
@@ -2194,9 +2216,7 @@ fn dungeon_search_field_reports_feature_without_applying_effect() {
 /// The roll is an inclusive `0..60` roll halved with truncation and
 /// floored to one - the same shape `systems/magic.md` publishes for Mani -
 /// so it is **not** uniform over `1..30`: low values are markedly more
-/// likely." The halve-and-floor shaping is what this fixture's seed now
-/// resolves to; an earlier uniform `1..30` reading gave a larger number
-/// for the same seed.
+/// likely." Both the family and the roll come from the shared PRNG.
 #[test]
 fn dungeon_open_chest_consumes_turn_and_marks_visit_local_open_chest() {
     let scene = DungeonScene::new(33).unwrap();
@@ -2206,11 +2226,25 @@ fn dungeon_open_chest_consumes_turn_and_marks_visit_local_open_chest() {
     state.ambient_light = FULL_DARKNESS;
     state.visibility_dirty = false;
 
-    assert_eq!(state.open_facing(), MoveOutcome::ContainerOpened);
+    // The trap family and the acid roll are shared-PRNG draws (`traps.md
+    // §2`): steer to a state whose trap lands on Acid.
+    let template = state.clone();
+    let mut damage = 0u16;
+    for seed in 0..=u16::MAX {
+        state = template.clone();
+        state.prng_state = seed;
+        assert_eq!(state.open_facing(), MoveOutcome::ContainerOpened);
+        let notes = state.diagnostics.join(" ");
+        if let Some(rest) = notes.split("Acid trap hit party member 1 for ").nth(1) {
+            damage = rest.split(" HP.").next().unwrap().parse().unwrap();
+            break;
+        }
+    }
+    assert!((1..=30).contains(&damage), "acid damage {damage}");
 
     assert_eq!(state.area, Area::Dungeon { scene, level: 0 });
     assert_eq!(state.grid[dungeon_cell_index(0, 1, 1)], 0x78);
-    assert_eq!(state.party[0].hp, DEFAULT_PARTY_HP - 5);
+    assert_eq!(state.party[0].hp, DEFAULT_PARTY_HP.saturating_sub(damage));
     assert_eq!(state.turn, 1);
     assert_eq!(state.door_tracker, None);
     assert!(state.visibility_dirty);
@@ -2219,7 +2253,7 @@ fn dungeon_open_chest_consumes_turn_and_marks_visit_local_open_chest() {
         state
             .diagnostics
             .iter()
-            .any(|note| note.contains("Acid trap hit party member 1 for 5 HP."))
+            .any(|note| note.contains(&format!("Acid trap hit party member 1 for {damage} HP.")))
     );
     assert!(
         state
@@ -2679,4 +2713,117 @@ fn dungeon_look_prints_the_two_row_you_see_line() {
 
     assert!(state.message.starts_with(DUNGEON_LOOK_PREAMBLE));
     assert!(!state.message.contains("You see: "));
+}
+
+/// `dungeon-mode.md §8` chest Search (audit A087): the threshold uses the
+/// *acting* member's Dexterity, and the `1..30` roll is a shared-PRNG draw.
+/// Member 2 with Dexterity 30 on level 0 gives threshold `(0 - 30 + 30) / 2
+/// = 0`, so any roll is above it and a plain closed chest reads `No trap`
+/// after exactly one draw. Member 1 (Dexterity 0) would give 15.
+#[test]
+fn dungeon_search_chest_rolls_acting_member_dexterity_from_shared_prng() {
+    let dir = debug_game_dir();
+    let mut grid = open_dungeon_record();
+    grid[dungeon_cell_index(0, 2, 1)] = 0x40;
+    let mut state = dungeon_state(grid, 0, 1, 1);
+    state.player.facing = Direction::East;
+    state.torch_counter = 5;
+    let mut second = state.party[0];
+    second.slot = 1;
+    second.climb_stat = 30;
+    state.party[0].climb_stat = 0;
+    state.party.push(second);
+    state.prng_state = 0x1234;
+    let mut expected_prng = state.prng_state;
+    let _ = u5_prng_range_u16(&mut expected_prng, 1, 30);
+
+    assert_eq!(
+        state
+            .search_dungeon_focus_with_game_dir_as(DungeonLookFocus::Ahead, &dir, Some(1))
+            .unwrap(),
+        MoveOutcome::Searched
+    );
+    assert_eq!(state.message, DUNGEON_SEARCH_NO_TRAP);
+    assert_eq!(state.prng_state, expected_prng);
+    let _ = fs::remove_dir_all(dir);
+}
+
+/// `dungeon-mode.md §8`, `0x62` Search row (audit A087): Dexterity 30 on
+/// level 0 gives threshold 0, so the shared-PRNG `1..30` roll is above it
+/// and the bomb springs, clearing the cell to `0x00`.
+#[test]
+fn dungeon_search_bomb_uses_acting_member_dexterity_and_shared_prng() {
+    let dir = debug_game_dir();
+    let mut grid = open_dungeon_record();
+    grid[dungeon_cell_index(0, 2, 1)] = 0x62;
+    let mut state = dungeon_state(grid, 0, 1, 1);
+    state.player.facing = Direction::East;
+    state.torch_counter = 5;
+    state.party[0].climb_stat = 30;
+    state.prng_state = 0x4321;
+    let mut expected_prng = state.prng_state;
+    let _ = u5_prng_range_u16(&mut expected_prng, 1, 30);
+
+    assert_eq!(
+        state
+            .search_dungeon_focus_with_game_dir_as(DungeonLookFocus::Ahead, &dir, Some(0))
+            .unwrap(),
+        MoveOutcome::Searched
+    );
+    assert_eq!(state.message, DUNGEON_SEARCH_A_BOMB_TRAP);
+    assert_eq!(state.grid[dungeon_cell_index(0, 2, 1)], 0x00);
+    assert_eq!(state.prng_state, expected_prng);
+    let _ = fs::remove_dir_all(dir);
+}
+
+/// `dungeon-mode.md §2` / `§12` step 5 (audit A082): L-Look on class `0xC?`
+/// prints the flavour's own description - stalactite for the normal
+/// flavour, caved-in passage for the mine flavour, and the corpse line for
+/// flavour byte 3, which becomes the software-pirate line on a one-in-255
+/// draw.
+#[test]
+fn dungeon_look_flavour_class_prints_the_flavour_description() {
+    let look = |record: u8, prng_state: u16| {
+        let mut grid = open_dungeon_record();
+        grid[dungeon_cell_index(0, 2, 1)] = 0xC0;
+        let mut state = dungeon_state(grid, 0, 1, 1);
+        state.area = Area::Dungeon {
+            scene: DungeonScene::from_record(record).unwrap(),
+            level: 0,
+        };
+        state.player.facing = Direction::East;
+        state.torch_counter = 5;
+        state.prng_state = prng_state;
+        assert_eq!(state.look_dungeon(), MoveOutcome::Observed);
+        (state.message.clone(), state.prng_state)
+    };
+    // Despise is Normal, Shame is Mine: no draw on either.
+    assert_eq!(
+        look(1, 7),
+        (format!("{DUNGEON_LOOK_PREAMBLE}a dripping stalactite."), 7)
+    );
+    assert_eq!(
+        look(5, 7),
+        (format!("{DUNGEON_LOOK_PREAMBLE}a caved in passage."), 7)
+    );
+    // Deceit is flavour byte 3: one shared-PRNG draw picks the line.
+    let hits = |seed: u16| {
+        let mut probe = seed;
+        u5_prng_range_u16(&mut probe, 0, 254) == 0
+    };
+    let miss = (0..=u16::MAX).find(|seed| !hits(*seed)).unwrap();
+    let hit = (0..=u16::MAX).find(|seed| hits(*seed)).unwrap();
+    let mut after_miss = miss;
+    let _ = u5_prng_range_u16(&mut after_miss, 0, 254);
+    assert_eq!(
+        look(0, miss),
+        (
+            format!("{DUNGEON_LOOK_PREAMBLE}a less fortunate adventurer."),
+            after_miss
+        )
+    );
+    assert_eq!(
+        look(0, hit).0,
+        format!("{DUNGEON_LOOK_PREAMBLE}an unfortunate software pirate.")
+    );
 }

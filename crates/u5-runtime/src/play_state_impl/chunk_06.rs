@@ -3038,6 +3038,7 @@ impl PlayState {
             scene,
             level,
             DungeonLookFocus::Ahead,
+            None,
         )
     }
 
@@ -3045,6 +3046,19 @@ impl PlayState {
         &mut self,
         focus: DungeonLookFocus,
         game_dir: &Path,
+    ) -> io::Result<MoveOutcome> {
+        self.search_dungeon_focus_with_game_dir_as(focus, game_dir, None)
+    }
+
+    /// As [`Self::search_dungeon_focus_with_game_dir`], with the party index
+    /// the shared acting-member prompt chose (`dungeon-mode.md` Section 8.1,
+    /// "Who acts"). `None` falls back to the member the prompt would pick
+    /// without asking.
+    pub fn search_dungeon_focus_with_game_dir_as(
+        &mut self,
+        focus: DungeonLookFocus,
+        game_dir: &Path,
+        actor: Option<usize>,
     ) -> io::Result<MoveOutcome> {
         let Area::Dungeon { scene, level } = self.area else {
             // An internal invariant, not a player-facing path: the original
@@ -3060,6 +3074,7 @@ impl PlayState {
             scene,
             level,
             focus,
+            actor,
         ))
     }
 
@@ -3070,6 +3085,7 @@ impl PlayState {
         scene: DungeonScene,
         level: u8,
         focus: DungeonLookFocus,
+        actor: Option<usize>,
     ) -> MoveOutcome {
         if !self.has_personal_light() {
             // `RETRACTIONS.md` R323: the unlit Search refusal is a *find*
@@ -3115,15 +3131,15 @@ impl PlayState {
         }
 
         match tile >> 4 {
-            0x4 => self.search_dungeon_chest(scene, level, tx, ty, tile),
+            0x4 => self.search_dungeon_chest(scene, level, tx, ty, tile, actor),
             _ if tile == 0x60 => self.search_dungeon_pit(scene, level, tx, ty),
             _ if dungeon_search_secret_pit_reveal(tile, level).is_some() => {
                 self.search_dungeon_secret_pit(scene, level, tx, ty, idx, tile)
             }
             _ if is_dungeon_bomb_trap(tile) => {
-                self.search_dungeon_bomb_trap(scene, level, tx, ty, idx, tile)
+                self.search_dungeon_bomb_trap(scene, level, tx, ty, idx, tile, actor)
             }
-            _ if dungeon_search_wall_rewrite(tile).is_some() => {
+            _ if dungeon_search_wall_rewrite(tile, scene.presentation_flavour()).is_some() => {
                 self.search_dungeon_wall_rewrite(scene, level, tx, ty, idx, tile)
             }
             _ => self.search_dungeon_feature(scene, level, tx, ty, tile),
@@ -3190,15 +3206,15 @@ impl PlayState {
         y: usize,
         idx: usize,
         tile: u8,
+        actor: Option<usize>,
     ) -> MoveOutcome {
-        let trap_detection_stat = self
-            .party
-            .iter()
-            .find(|member| member.living())
-            .map(|member| member.class_byte)
-            .unwrap_or_default();
-        let threshold = Self::dungeon_chest_pick_threshold(level, trap_detection_stat);
-        let roll = self.dungeon_chest_trap_roll(level, x, y, tile, 0, 30);
+        let _ = (x, y, tile);
+        // `dungeon-mode.md` Section 8, `0x62` row: roll `1..30` against
+        // `(2 * Z - member Dexterity + 30) / 2`, the member being the one
+        // the acting-member prompt chose; the roll is a shared-PRNG draw.
+        let dexterity = self.dungeon_search_actor_dexterity(actor);
+        let threshold = Self::dungeon_chest_pick_threshold(level, dexterity);
+        let roll = self.random_range_u8(1, 30);
         match dungeon_bomb_search_outcome(threshold, roll) {
             DungeonBombSearchOutcome::NothingOnPit => {
                 self.advance_turn();
@@ -3226,12 +3242,12 @@ impl PlayState {
         idx: usize,
         tile: u8,
     ) -> MoveOutcome {
-        match dungeon_search_wall_rewrite(tile) {
+        match dungeon_search_wall_rewrite(tile, scene.presentation_flavour()) {
             Some(DungeonSearchWallRewrite::NarrateOnly) => {
                 self.search_dungeon_feature(scene, level, x, y, tile)
             }
             Some(DungeonSearchWallRewrite::ToFlavourFind(reveal_cell)) => {
-                // `dungeon-mode.md` Section 8: the Doom-flavour `0xC?` branch
+                // `dungeon-mode.md` Section 8: the flavour-three `0xC?` branch
                 // "print[s] that nothing is hidden on the skeleton and then
                 // that it crumbles away". Section 8.1 gives the two-line
                 // result exactly.
@@ -3285,7 +3301,7 @@ impl PlayState {
         // L-Look wording of this section" - keep the descriptive fallback
         // rather than having a line invented for them.
         let _ = (scene, level, x, y);
-        self.message = match dungeon_search_outcome_line(tile) {
+        self.message = match dungeon_search_outcome_line(tile, scene.presentation_flavour()) {
             Some(line) => line.to_string(),
             // Section 8, pit-family table: "Other `0x6?` values | No extra
             // Search-specific handling beyond the preamble."
