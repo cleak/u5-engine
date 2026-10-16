@@ -361,3 +361,13 @@ fn audit_a072_f_grant_adds_one_with_the_shared_cap() {
     state.apply_tlk_action_grants(&[TlkActionDispatchVerb::SetGrappleGate]);
     assert_eq!(state.climbing_gear, 99);
 }
+
+/// Audit A073. `conversation.md §7.6`: "Only the **first** occurrence found
+/// is tested ... A typed line whose first hit is mid-word therefore fails
+/// even when a clean hit follows it later in the line."
+#[test]
+fn audit_a073_ask_who_tests_only_the_first_occurrence() {
+    let names: [&[u8]; 2] = [b"AVATAR", b"IOLO"];
+    assert_eq!(tlk_ask_who_match(b"triolo iolo", &names), 0);
+    assert_eq!(tlk_ask_who_match(b"iolo triolo", &names), 2);
+}
