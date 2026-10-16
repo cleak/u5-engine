@@ -288,7 +288,11 @@ fn dungeon_room_setup_sources_classify_sources_with_high_bit_mask() {
     );
     assert_eq!(
         dungeon_room_special_post_write(15),
-        DungeonRoomSpecialPostWrite::RandomRange { low: 1, high: 7 }
+        DungeonRoomSpecialPostWrite::RandomRangePlus {
+            base: 1,
+            low: 0,
+            high: 7
+        }
     );
     assert_eq!(
         dungeon_room_special_post_write(16),
@@ -553,7 +557,11 @@ fn dungeon_room_special_setup_ids_keep_public_post_write_shape() {
         setup.setup_sources[2].kind,
         DungeonRoomSetupSourceKind::SpecialPlacement(DungeonRoomSpecialPlacement {
             setup_id: 15,
-            post_write: DungeonRoomSpecialPostWrite::RandomRange { low: 1, high: 7 },
+            post_write: DungeonRoomSpecialPostWrite::RandomRangePlus {
+                base: 1,
+                low: 0,
+                high: 7,
+            },
         })
     );
     assert_eq!(
@@ -567,7 +575,7 @@ fn dungeon_room_special_setup_ids_keep_public_post_write_shape() {
     let mut expected_prng = 0;
     let _expected_random_ids = dungeon_room_random_special_setup_ids(true, &mut expected_prng);
     let expected_id2_aux = u5_prng_range_u16(&mut expected_prng, 1, 30) as u8;
-    let expected_id15_aux = u5_prng_range_u16(&mut expected_prng, 1, 7) as u8;
+    let expected_id15_aux = 1 + u5_prng_range_u16(&mut expected_prng, 0, 7) as u8;
     let mut actual_prng = 0;
     let instance = dungeon_room_combat_instance_from_setup_with_prng(&setup, 2, &mut actual_prng);
 
@@ -21108,4 +21116,24 @@ fn a_dungeon_room_arena_draws_its_terrain_through_the_red_green_plane_swap() {
     assert!(state.dungeon_room_arena_plane_swap_active());
     state.combat_active = false;
     assert!(!state.dungeon_room_arena_plane_swap_active());
+}
+
+#[test]
+fn dungeon_room_special_ids_7_8_13_15_draw_eight_ways_for_one_through_eight() {
+    // `formats/cbt.md §5`: ids 7, 8, 13, 15 write `1 + random_range(0, 7)`.
+    for id in [7u8, 8, 13, 15] {
+        let post_write = dungeon_room_special_post_write(id);
+        let mut seen = [false; 9];
+        for seed in 0..512u16 {
+            let mut state = seed;
+            let mut expected_state = seed;
+            let aux = dungeon_room_special_aux1(post_write, 1, &mut state);
+            let expected = 1 + u5_prng_range_u16(&mut expected_state, 0, 7) as u8;
+            assert_eq!(aux, expected);
+            assert_eq!(state, expected_state);
+            seen[usize::from(aux)] = true;
+        }
+        assert!(!seen[0]);
+        assert!(seen[1..=8].iter().all(|&hit| hit), "id {id}: {seen:?}");
+    }
 }

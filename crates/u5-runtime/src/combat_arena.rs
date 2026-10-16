@@ -587,7 +587,13 @@ pub const fn dungeon_room_special_post_write(setup_id: u8) -> DungeonRoomSpecial
             low: 0,
             high: 2,
         },
-        7 | 8 | 13 | 15 => DungeonRoomSpecialPostWrite::RandomRange { low: 1, high: 7 },
+        // `formats/cbt.md §5`: `1 + random_range(0, 7)` -- an eight-way draw
+        // giving 1..=8, not a seven-way `random_range(1, 7)`.
+        7 | 8 | 13 | 15 => DungeonRoomSpecialPostWrite::RandomRangePlus {
+            base: 1,
+            low: 0,
+            high: 7,
+        },
         9 => DungeonRoomSpecialPostWrite::RandomRange { low: 0, high: 3 },
         10 => DungeonRoomSpecialPostWrite::RandomRangePlus {
             base: 42,
