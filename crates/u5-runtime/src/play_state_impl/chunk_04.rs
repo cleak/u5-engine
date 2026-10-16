@@ -3791,7 +3791,7 @@ impl PlayState {
                 );
                 Ok(MoveOutcome::Observed)
             }
-            Area::World { plane } => {
+            Area::World { .. } => {
                 let (dx, dy) = direction.delta();
                 let raw_x = self.player.x as isize + dx;
                 let raw_y = self.player.y as isize + dy;
