@@ -27178,3 +27178,22 @@ fn probe_stray_key_echo_kind() {
         }
     }
 }
+
+#[test]
+fn dungeon_turn_in_heavy_doorway_is_refused_with_not_in_doorway() {
+    // `dungeon-mode.md §8.1`: "Turn refused | `Not in doorway!\n`" fires
+    // when the party's own cell is the point-blank `0xE?` door class.
+    let mut grid = open_dungeon_record();
+    grid[dungeon_cell_index(0, 1, 1)] = 0xE0;
+    let mut state = dungeon_state(grid, 0, 1, 1);
+
+    assert_eq!(state.turn_dungeon(true), MoveOutcome::Blocked);
+    assert_eq!(state.message, DUNGEON_MOVEMENT_NOT_IN_DOORWAY_REFUSAL);
+    assert_eq!(state.player.facing, Direction::East);
+    assert_eq!(state.turn, 0);
+
+    // An open cell still turns.
+    let mut state = dungeon_state(open_dungeon_record(), 0, 1, 1);
+    assert_eq!(state.turn_dungeon(true), MoveOutcome::Moved);
+    assert_eq!(state.player.facing, Direction::South);
+}

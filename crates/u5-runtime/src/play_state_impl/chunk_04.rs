@@ -2724,6 +2724,15 @@ impl PlayState {
             self.message.clear();
             return MoveOutcome::Blocked;
         };
+        // `dungeon-mode.md §8.1`: "Turn refused | `Not in doorway!\n`" - it
+        // "fires when the party's **own** cell is the point-blank door
+        // class", the `0xE?` heavy door of `§6.4` (the one door class that
+        // can be stood in and sets the point-blank flag). The facing is
+        // left unchanged.
+        if self.dungeon_cell(level, self.player.x, self.player.y) >> 4 == 0xE {
+            self.message = DUNGEON_MOVEMENT_NOT_IN_DOORWAY_REFUSAL.to_string();
+            return MoveOutcome::Blocked;
+        }
         self.player.facing = next;
         self.advance_turn();
         // `dungeon-mode.md §14`: a turn prints its verb and nothing else -
