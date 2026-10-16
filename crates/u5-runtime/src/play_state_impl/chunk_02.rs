@@ -1665,7 +1665,7 @@ impl PlayState {
         // `POISON!`, `BOMB!` or `GAS!` **before** its effect", and
         // `dungeon-mode.md §8.1` notes the dungeon chest site adds no notice
         // of its own, so the word lands directly after that command's prefix.
-        let family = self.shared_trap_effect_family(triggering_slot);
+        let family = self.shared_trap_effect_family();
         if continues_row {
             self.emit_message_line_continuing_row(trap_effect_message(family));
         } else {
@@ -1679,50 +1679,41 @@ impl PlayState {
         }
     }
 
-    pub fn shared_trap_effect_id(&self, triggering_slot: usize) -> u8 {
-        let seed = self.shared_trap_seed(triggering_slot, 0);
-        shared_trap_effect_id_from_index(seed, self.combat_active)
+    /// `traps.md §2` step 2: draw the effect id from the shared PRNG.
+    /// "Outside combat this selection rolls uniformly over an eight-entry
+    /// resident lookup table. During combat-class scenes the resolver
+    /// bypasses that lookup and chooses uniformly from the first two effect
+    /// ids only." The table order is the engine's; §3 publishes only the
+    /// per-id outcome counts.
+    pub fn shared_trap_effect_id(&mut self) -> u8 {
+        let index = self.shared_trap_effect_index_roll();
+        shared_trap_effect_id_from_index(index, self.combat_active)
     }
 
     /// `traps.md §3`: the effect family selected for this trigger, using
     /// the same combat/non-combat split as [`Self::shared_trap_effect_id`].
-    pub fn shared_trap_effect_family(&self, triggering_slot: usize) -> TrapEffect {
-        let seed = self.shared_trap_seed(triggering_slot, 0);
-        shared_trap_effect_family_from_index(seed, self.combat_active)
+    /// Consumes one PRNG draw.
+    pub fn shared_trap_effect_family(&mut self) -> TrapEffect {
+        let index = self.shared_trap_effect_index_roll();
+        shared_trap_effect_family_from_index(index, self.combat_active)
     }
 
-    pub fn shared_trap_seed(&self, triggering_slot: usize, salt: u8) -> u8 {
-        (self.turn as u8)
-            .wrapping_add((self.player.x as u8).wrapping_mul(3))
-            .wrapping_add((self.player.y as u8).wrapping_mul(5))
-            .wrapping_add((triggering_slot as u8).wrapping_mul(17))
-            .wrapping_add(salt)
-    }
-
-    pub fn shared_trap_damage_roll(
-        &self,
-        triggering_slot: usize,
-        target_slot: usize,
-        max_damage: u8,
-        salt: u8,
-    ) -> u8 {
-        let seed = self
-            .shared_trap_seed(triggering_slot, salt)
-            .wrapping_add((target_slot as u8).wrapping_mul(13));
-        shared_trap_damage_from_index(seed, max_damage)
+    fn shared_trap_effect_index_roll(&mut self) -> u8 {
+        let high = if self.combat_active {
+            1
+        } else {
+            (TRAP_NON_COMBAT_EFFECT_TABLE.len() - 1) as u8
+        };
+        self.random_range_u8(0, high)
     }
 
     pub fn apply_acid_trap_effect(&mut self, triggering_slot: usize) -> String {
         // `traps.md §3` effect id 0: "The roll is an inclusive `0..60`
         // roll halved with truncation and floored to one - the same
         // shape `systems/magic.md` publishes for Mani - so it is **not**
-        // uniform over `1..30`". The seed is derived exactly as
-        // `shared_trap_damage_roll` derives it (salt 3, target slot ==
-        // triggering slot); only the shaping differs.
-        let seed = self
-            .shared_trap_seed(triggering_slot, 3)
-            .wrapping_add((triggering_slot as u8).wrapping_mul(13));
-        let damage = shared_trap_acid_damage_from_index(seed);
+        // uniform over `1..30`". The raw roll is a shared-PRNG draw.
+        let raw = self.random_range_u8(0, TRAP_ACID_RAW_ROLL_MAX);
+        let damage = shared_trap_acid_damage_from_index(raw);
         let Some(member) = self.party.get_mut(triggering_slot) else {
             return format!(
                 "Acid trap found no party member in slot {}.",
@@ -1764,7 +1755,7 @@ impl PlayState {
     /// Dead skip. Ashes (`'A'`) is a distinct value from Dead and falls
     /// through, so [`PartyMember::living`] is deliberately *not* the predicate
     /// here.
-    pub fn apply_bomb_trap_effect(&mut self, triggering_slot: usize) -> String {
+    pub fn apply_bomb_trap_effect(&mut self, _triggering_slot: usize) -> String {
         let mut affected = 0usize;
         let mut total_applied = 0u16;
         let limit = self.party.len().min(COMBAT_PARTY_ACTOR_SLOTS);
@@ -1772,12 +1763,9 @@ impl PlayState {
             if !crate::traps::trap_party_sweep_accepts_status_byte(self.party[target_slot].status) {
                 continue;
             }
-            let damage = self.shared_trap_damage_roll(
-                triggering_slot,
-                target_slot,
-                TRAP_BOMB_DAMAGE_MAX,
-                11,
-            );
+            // `traps.md §3` effect id 2: an independent inclusive `1..8`
+            // shared-PRNG draw per accepted member, in slot order.
+            let damage = self.random_range_u8(1, TRAP_BOMB_DAMAGE_MAX);
             let applied = self.party[target_slot].apply_damage(damage);
             if applied != 0 {
                 affected += 1;

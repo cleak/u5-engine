@@ -781,9 +781,9 @@ fn town_jimmy_restraint_failure_preserves_actor_and_tile() {
 /// Mani - so it is **not** uniform over `1..30`: low values are markedly
 /// more likely."
 ///
-/// This site's deterministic seed is a raw 41, which halves with
-/// truncation to 20. Earlier revisions of this test expected 6 (the
-/// retracted uniform `1 + index % 30` draw from the same seed).
+/// The family and the raw roll are shared-PRNG draws (`traps.md §2`), so
+/// the test steers the PRNG to a state whose trap lands on Acid and then
+/// checks the reported damage against the hit points actually lost.
 #[test]
 fn town_open_object_chest_consumes_slot_trap_and_public_reward_pools() {
     let mut grid = open_grid();
@@ -815,13 +815,25 @@ fn town_open_object_chest_consumes_slot_trap_and_public_reward_pools() {
         aux3: 0,
     });
 
-    assert_eq!(state.open_facing(), MoveOutcome::Observed);
-    assert!(state.active_surface_chest.is_some());
-    assert_eq!(state.message, PARTY_SELECTION_PROMPT);
-    assert_eq!(
-        state.step_active_surface_chest('2', "").unwrap(),
-        Some(MoveOutcome::ContainerOpened)
-    );
+    let template = state.clone();
+    let mut damage = 0u16;
+    for seed in 0..=u16::MAX {
+        state = template.clone();
+        state.prng_state = seed;
+        assert_eq!(state.open_facing(), MoveOutcome::Observed);
+        assert!(state.active_surface_chest.is_some());
+        assert_eq!(state.message, PARTY_SELECTION_PROMPT);
+        assert_eq!(
+            state.step_active_surface_chest('2', "").unwrap(),
+            Some(MoveOutcome::ContainerOpened)
+        );
+        let notes = state.diagnostics.join(" ");
+        if let Some(rest) = notes.split("Acid trap hit party member 2 for ").nth(1) {
+            damage = rest.split(" HP.").next().unwrap().parse().unwrap();
+            break;
+        }
+    }
+    assert!((1..=30).contains(&damage), "acid damage {damage}");
 
     assert!(state.active_objects[1].is_empty());
     assert_eq!(state.grid[32 + 2], 16);
@@ -831,13 +843,7 @@ fn town_open_object_chest_consumes_slot_trap_and_public_reward_pools() {
     assert!(state.diagnostics.join(" ").contains("Opened object chest at (2, 1)"));
     // The resolver's own `ACID!` went to the transcript; this engine note
     // naming the slot and the damage is a diagnostic.
-    assert!(
-        state
-            .diagnostics
-            .join(" ")
-            .contains("Acid trap hit party member 2 for 20 HP.")
-    );
-    assert_eq!(state.party[1].hp, DEFAULT_PARTY_HP - 20);
+    assert_eq!(state.party[1].hp, DEFAULT_PARTY_HP - damage);
     let selected_name = party_name_to_string(&state.party_names[1]).unwrap();
     assert!(
         state
@@ -2210,9 +2216,7 @@ fn dungeon_search_field_reports_feature_without_applying_effect() {
 /// The roll is an inclusive `0..60` roll halved with truncation and
 /// floored to one - the same shape `systems/magic.md` publishes for Mani -
 /// so it is **not** uniform over `1..30`: low values are markedly more
-/// likely." The halve-and-floor shaping is what this fixture's seed now
-/// resolves to; an earlier uniform `1..30` reading gave a larger number
-/// for the same seed.
+/// likely." Both the family and the roll come from the shared PRNG.
 #[test]
 fn dungeon_open_chest_consumes_turn_and_marks_visit_local_open_chest() {
     let scene = DungeonScene::new(33).unwrap();
@@ -2222,11 +2226,25 @@ fn dungeon_open_chest_consumes_turn_and_marks_visit_local_open_chest() {
     state.ambient_light = FULL_DARKNESS;
     state.visibility_dirty = false;
 
-    assert_eq!(state.open_facing(), MoveOutcome::ContainerOpened);
+    // The trap family and the acid roll are shared-PRNG draws (`traps.md
+    // §2`): steer to a state whose trap lands on Acid.
+    let template = state.clone();
+    let mut damage = 0u16;
+    for seed in 0..=u16::MAX {
+        state = template.clone();
+        state.prng_state = seed;
+        assert_eq!(state.open_facing(), MoveOutcome::ContainerOpened);
+        let notes = state.diagnostics.join(" ");
+        if let Some(rest) = notes.split("Acid trap hit party member 1 for ").nth(1) {
+            damage = rest.split(" HP.").next().unwrap().parse().unwrap();
+            break;
+        }
+    }
+    assert!((1..=30).contains(&damage), "acid damage {damage}");
 
     assert_eq!(state.area, Area::Dungeon { scene, level: 0 });
     assert_eq!(state.grid[dungeon_cell_index(0, 1, 1)], 0x78);
-    assert_eq!(state.party[0].hp, DEFAULT_PARTY_HP - 5);
+    assert_eq!(state.party[0].hp, DEFAULT_PARTY_HP.saturating_sub(damage));
     assert_eq!(state.turn, 1);
     assert_eq!(state.door_tracker, None);
     assert!(state.visibility_dirty);
@@ -2235,7 +2253,7 @@ fn dungeon_open_chest_consumes_turn_and_marks_visit_local_open_chest() {
         state
             .diagnostics
             .iter()
-            .any(|note| note.contains("Acid trap hit party member 1 for 5 HP."))
+            .any(|note| note.contains(&format!("Acid trap hit party member 1 for {damage} HP.")))
     );
     assert!(
         state

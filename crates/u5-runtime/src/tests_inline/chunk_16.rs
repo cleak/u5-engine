@@ -1162,6 +1162,12 @@ BRITANNIA 11 21
         state.reagents = [0; REAGENT_COUNT];
         state.reagents[REAGENT_SULFUR_ASH] = 1;
         state.reagents[REAGENT_BLOOD_MOSS] = 1;
+        state.prng_state = trap_prng_state_for(TrapEffect::Acid);
+        let mut expected = state.prng_state;
+        let _ = u5_prng_range_u16(&mut expected, 0, 7);
+        let damage = u16::from(shared_trap_acid_damage_from_index(
+            u5_prng_range_u16(&mut expected, 0, 60) as u8,
+        ));
 
         assert_eq!(
             state.mix_reagents_from_suffix("AS/0x80/1"),
@@ -1181,7 +1187,7 @@ BRITANNIA 11 21
         // mixer's slot carries neither once both are where they belong.
         ""
         );
-        assert_eq!(state.party[0].hp, DEFAULT_PARTY_HP - 5);
+        assert_eq!(state.party[0].hp, DEFAULT_PARTY_HP.saturating_sub(damage));
     }
 
     #[test]
@@ -1267,25 +1273,39 @@ BRITANNIA 11 21
             },
         ];
 
-        let effects = (0..8)
-            .map(|turn| {
-                state.turn = turn;
-                state.shared_trap_effect_id(0)
-            })
-            .collect::<Vec<_>>();
-        assert_eq!(effects, vec![0, 0, 0, 1, 1, 2, 2, 3]);
+        // `traps.md §2`: the effect id is a shared-PRNG draw over the
+        // eight-entry table, so the resolver consumes the PRNG rather than
+        // reading the turn counter or the party's position.
+        let mut draws = Vec::new();
+        let mut prng = 0x1234u16;
+        for _ in 0..64 {
+            state.prng_state = prng;
+            let mut expected_state = prng;
+            let index = u5_prng_range_u16(&mut expected_state, 0, 7) as u8;
+            assert_eq!(state.shared_trap_effect_id(), TRAP_NON_COMBAT_EFFECT_TABLE[usize::from(index)]);
+            assert_eq!(state.prng_state, expected_state);
+            draws.push(index);
+            prng = expected_state;
+        }
+        assert!((0..8).all(|index| draws.contains(&index)));
 
         state.turn = 0;
         state.active_player = Some(0);
-        // `traps.md §3` effect id 0: the acid roll is the skewed
-        // halve-and-floor shape, so the same seed now yields half the
-        // old flat draw.
+        // `traps.md §3` effect id 0: the raw acid roll is an inclusive
+        // `0..60` shared-PRNG draw, halved and floored to one.
+        state.prng_state = trap_prng_state_for(TrapEffect::Acid);
+        let mut expected = state.prng_state;
+        let _ = u5_prng_range_u16(&mut expected, 0, 7);
+        let raw = u5_prng_range_u16(&mut expected, 0, 60) as u8;
+        let damage = shared_trap_acid_damage_from_index(raw);
         assert_eq!(
             state.apply_shared_trap_effect_to_slot(0),
-            "Acid trap hit party member 1 for 5 HP."
+            format!("Acid trap hit party member 1 for {damage} HP.")
         );
-        assert_eq!(state.party[0].hp, 5);
-        assert_eq!(state.party[0].status, b'G');
+        assert_eq!(state.prng_state, expected);
+        assert_eq!(state.party[0].hp, 10 - damage.min(10) as u16);
+        state.party[0].hp = 5;
+        state.party[0].status = b'G';
         assert_eq!(state.active_player, Some(0));
 
         // traps.md §3: effect id 1 is a poison primitive, not a revive.
@@ -1294,7 +1314,7 @@ BRITANNIA 11 21
         state.party[0].hp = 0;
         state.party[0].status = b'D';
         state.active_player = None;
-        state.turn = 3;
+        state.prng_state = trap_prng_state_for(TrapEffect::Poison);
         assert_eq!(
             state.apply_shared_trap_effect_to_slot(0),
             "Poison trap had no effect on party member 1."
@@ -1302,17 +1322,23 @@ BRITANNIA 11 21
         assert_eq!(state.party[0].status, b'D');
         assert_eq!(state.party[0].hp, 0);
 
-        state.turn = 5;
+        // Effect id 2: one independent inclusive `1..8` draw per accepted
+        // member, after the family draw.
+        state.prng_state = trap_prng_state_for(TrapEffect::Bomb);
+        let mut expected = state.prng_state;
+        let _ = u5_prng_range_u16(&mut expected, 0, 7);
+        let bomb = u5_prng_range_u16(&mut expected, 1, 8) as u16;
         assert_eq!(
             state.apply_shared_trap_effect_to_slot(1),
-            "Bomb trap dealt 7 HP across 1 party member(s)."
+            format!("Bomb trap dealt {bomb} HP across 1 party member(s).")
         );
-        assert_eq!(state.party[1].hp, 3);
+        assert_eq!(state.prng_state, expected);
+        assert_eq!(state.party[1].hp, 10 - bomb);
 
         // traps.md §3: effect id 3 poisons every living member of the
         // six-slot band. The two Dead slots (0 and 2) are skipped and
         // stay Dead; only the living slot 1 is rewritten.
-        state.turn = 7;
+        state.prng_state = trap_prng_state_for(TrapEffect::Gas);
         assert_eq!(
             state.apply_shared_trap_effect_to_slot(0),
             "Gas trap poisoned 1 party member(s)."
@@ -1325,7 +1351,7 @@ BRITANNIA 11 21
         // helper touches nothing else - hit points are unchanged.
         state.party[0].hp = 10;
         state.party[0].status = b'G';
-        state.turn = 3;
+        state.prng_state = trap_prng_state_for(TrapEffect::Poison);
         assert_eq!(
             state.apply_shared_trap_effect_to_slot(0),
             "Poison trap poisoned party member 1."
@@ -1333,6 +1359,37 @@ BRITANNIA 11 21
         assert_eq!(state.party[0].status, b'P');
         assert_eq!(state.party[0].hp, 10);
         assert_eq!(state.party[0].max_hp, 20);
+    }
+
+    /// A PRNG state whose next non-combat trap draw lands on `family`.
+    fn trap_prng_state_for(family: TrapEffect) -> u16 {
+        (0..=u16::MAX)
+            .find(|seed| {
+                let mut state = *seed;
+                let index = u5_prng_range_u16(&mut state, 0, 7) as u8;
+                shared_trap_effect_family_from_index(index, false) == family
+            })
+            .unwrap()
+    }
+
+    /// `traps.md §2`: combat-class scenes draw uniformly between effect ids
+    /// zero and one only, from the shared PRNG.
+    #[test]
+    fn combat_trap_effect_draw_is_a_two_way_prng_roll() {
+        let mut state = test_state(open_grid(), 1, 1);
+        state.combat_active = true;
+        let mut prng = 0x0BADu16;
+        let mut seen = [false; 2];
+        for _ in 0..32 {
+            state.prng_state = prng;
+            let mut expected = prng;
+            let id = u5_prng_range_u16(&mut expected, 0, 1) as u8;
+            assert_eq!(state.shared_trap_effect_id(), id);
+            assert_eq!(state.prng_state, expected);
+            seen[usize::from(id)] = true;
+            prng = expected;
+        }
+        assert_eq!(seen, [true, true]);
     }
 
     #[test]
@@ -1357,13 +1414,7 @@ BRITANNIA 11 21
         // Select an Acid family for the safe invalid sentinel used by the
         // forced-call edge. The stale active-player hint must not become an
         // arbitrary roster fallback.
-        state.turn = (0..=u8::MAX)
-            .find(|turn| {
-                state.turn = u64::from(*turn);
-                state.shared_trap_effect_family(usize::MAX) == TrapEffect::Acid
-            })
-            .map(u64::from)
-            .unwrap();
+        state.prng_state = trap_prng_state_for(TrapEffect::Acid);
         let before = state.party.clone();
         let _ = state.wrong_mix_trap_message();
         // The out-of-range guard's note is a diagnostic, not a line the
