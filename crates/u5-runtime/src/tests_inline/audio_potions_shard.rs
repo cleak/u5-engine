@@ -284,10 +284,11 @@ fn silent_wind_setter_commits_the_transition_without_a_cue() {
 }
 
 #[test]
-fn shadowlord_destruction_runs_the_shared_major_flash() {
-    // audio.md §8.4: Shadowlord destruction shares the turbulent full-viewport
-    // flash - 1,856 bands, each one gameplay-PRNG draw, each an inclusive
-    // 19..150 Hz frequency.
+fn shadowlord_destruction_plays_no_major_flash() {
+    // `audio.md §8.4` (u5-spec#296, `RETRACTIONS.md` R523): whether a
+    // successful destruction invokes the shared full-viewport flash "is **not
+    // established**", so the engine no longer runs it there - neither its
+    // sound nor its 1,856 gameplay-PRNG draws.
     let dir = debug_game_dir();
     let mut state = test_state(open_grid(), 15, 9);
     state.area = Area::Town {
@@ -313,33 +314,19 @@ fn shadowlord_destruction_runs_the_shared_major_flash() {
         MoveOutcome::Used
     );
 
-    let effects = state.sound_effects_after(serial);
-    assert_eq!(effects.len(), 2, "the swell, then one flash per destruction");
     assert_eq!(
-        effects[0],
-        SoundEffect::ShardSwell,
-        "quest-graph.md §5 step 2 plays before every gate"
+        state.sound_effects_after(serial),
+        vec![SoundEffect::ShardSwell],
+        "quest-graph.md §5 step 2's swell, and no flash"
     );
-    match &effects[1] {
-        SoundEffect::MajorFlash { bands } => {
-            assert_eq!(bands.len(), audio::FLASH_BAND_COUNT as usize);
-            assert!(bands.iter().all(|band| {
-                (audio::FLASH_MIN_FREQUENCY_HZ as u8..=audio::FLASH_MAX_FREQUENCY_HZ as u8)
-                    .contains(band)
-            }));
-        }
-        other => panic!("audio.md §8.4 expects the shared major flash, got {other:?}"),
-    }
-    // The 1,856 band draws come out of the gameplay stream, not a sound-only
-    // jitter state.
-    assert_ne!(state.prng_state, prng_before);
+    assert_eq!(state.prng_state, prng_before);
     let _ = fs::remove_dir_all(dir);
 }
 
 #[test]
 fn shadowlord_shard_refusals_never_flash() {
-    // audio.md §8.4 attaches the flash to destruction. Every gate above the
-    // commit returns Blocked and must stay silent.
+    // No refusal arm flashes: `audio.md §8.4` (R523) "On the no-effect arm no
+    // flash follows", and the silent gates add nothing after the swell.
     let dir = debug_game_dir();
 
     let mut no_shard = test_state(open_grid(), 15, 9);

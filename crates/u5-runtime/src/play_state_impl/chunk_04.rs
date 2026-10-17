@@ -1302,8 +1302,9 @@ impl PlayState {
     /// (`audio.md §5.4.7`'s 920-step swell, "Shard use" row; u5-spec#296,
     /// R522/R523) and plays before the position gate on every path; the text
     /// after it waits the swell out.
-    /// The `§8.4` destruction flash below is published and is preserved at
-    /// its own boundary.
+    /// No `§8.4` major flash runs at the destruction: R523 (u5-spec#296)
+    /// withdrew the attribution, and what the success arm plays and draws is
+    /// indexed as open in `OPEN-QUESTIONS.md`.
     pub fn use_shadowlord_shard(
         &mut self,
         index: usize,
@@ -1408,12 +1409,15 @@ impl PlayState {
 
         self.special_items[item_index] = 0;
         self.vanquish_shadowlord(index);
-        // `audio.md §8.4`: Shadowlord destruction shares the turbulent
-        // full-viewport flash. It runs at the destruction boundary — after the
-        // shard is consumed and the hideout slot flips to vanquished, before
-        // the encounter clearing, redraw, and turn advance — and it draws all
-        // 1,856 gameplay-PRNG bands there whether or not sound is audible.
-        self.emit_major_flash();
+        // `audio.md §8.4` (corrected 2026-10-16, u5-spec#296,
+        // `RETRACTIONS.md` R523) no longer names Shadowlord destruction as a
+        // caller of the shared full-viewport flash: "whether a successful
+        // Shadowlord destruction invokes this flash at all is **not
+        // established** (the destruction arm's presentation has not been
+        // traced; static reading shows a per-cell effect repeated seven times
+        // and no call identified as this flash)". The engine ran the flash
+        // here, with its 1,856 gameplay-PRNG draws, on the withdrawn text; it
+        // now plays and draws nothing it cannot cite.
         let cleared = self.clear_shadowlord_name_encounters(index);
         self.mark_visibility_dirty();
         self.advance_turn();

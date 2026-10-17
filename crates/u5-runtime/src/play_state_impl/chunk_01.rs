@@ -80,8 +80,10 @@ impl PlayState {
     /// frequency changes. Every band consumes one **gameplay** PRNG draw, so
     /// this must be called at the published boundary whether or not sound is
     /// audible — muting suppresses each tone start but skips none of the
-    /// advances. Shrine restoration, a recognized Word of Power, and
-    /// Shadowlord destruction all share it.
+    /// advances. Shrine restoration and a recognized Word of Power share it;
+    /// whether a successful Shadowlord destruction invokes it at all "is
+    /// **not established**" (u5-spec#296, `RETRACTIONS.md` R523), so the shard
+    /// handler does not call it.
     pub(crate) fn emit_major_flash(&mut self) {
         let mut prng = U5Prng::new(self.prng_state);
         let bands = audio::draw_major_flash_bands(&mut prng);
