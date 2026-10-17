@@ -40,6 +40,13 @@ impl PlayState {
                 *hull = repaired;
             }
             self.sync_player_object();
+            // `animation.md §13.5`: "the resident ship-repair hole-up" is one
+            // of the nine walker call sites, and "every one of the nine is a
+            // turn-consuming path that also advances the clock". Without the
+            // turn, repair was free and repeatable at will (playtest E27).
+            // The spec does not give the branch a minute charge of its own,
+            // so it takes the ordinary consumed outdoor turn.
+            self.advance_turn();
             self.message = format!("{HOLE_UP_REPAIR_BODY}\n{HOLE_UP_HULL_NOW_PREFIX}{repaired}!");
             return MoveOutcome::Rested;
         }

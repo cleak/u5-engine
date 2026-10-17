@@ -331,3 +331,27 @@ fn playfix_e26_sheets_in_irons_pass_prints_no_pass_echo() {
     );
     let _ = fs::remove_dir_all(dir);
 }
+
+/// E27: `animation.md §13.5` lists "the resident ship-repair hole-up" among
+/// the nine walker call sites and says "every one of the nine is a
+/// turn-consuming path that also advances the clock".
+#[test]
+fn playfix_e27_ship_repair_hole_up_consumes_a_turn_and_time() {
+    let mut state = world_state(vec![BRIT_DEEP_WATER_TILE; WORLD_CELLS], 5, 5);
+    state.player.transport = TransportState::Ship {
+        type_byte: TRANSPORT_MARKER_SHIP_FURLED_FIRST,
+        tile: FIRST_PLAYABLE_FRIGATE_TILE,
+        sails_hoisted: false,
+        hull: 77,
+        skiffs: 2,
+    };
+    state.sync_player_object();
+    state.clock = GameClock::new(12, 0).unwrap();
+    let turn = state.turn;
+
+    assert_eq!(state.start_rest_prompt(), MoveOutcome::Rested);
+
+    assert_eq!(state.turn, turn + 1);
+    assert_ne!(state.clock, GameClock::new(12, 0).unwrap());
+    assert!(matches!(state.player.transport, TransportState::Ship { hull, .. } if hull > 77));
+}
