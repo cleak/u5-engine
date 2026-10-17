@@ -159,25 +159,35 @@ fn town_bed_rest_burst_arrest_contact_ends_the_command_before_sleep() {
     state.relink_npc_objects();
 
     let turn_before = state.turn;
+    // Merge note (rc1): `npc-schedules.md §9.2` "Event lifetime" - the burst
+    // "never hands its events to the consumer ... every burst-recorded event
+    // is dropped and must be re-raised by a later ordinary pass", and "in
+    // town the ordinary epilogue always advances the clock by exactly one
+    // minute". The command therefore drops the burst's arrest event and runs
+    // the ordinary one-minute town turn, whose schedule pass re-raises the
+    // still-adjacent guard's contact for the post-turn consumer.
     assert_eq!(
         state.hole_up_command(&dir, Some(3)).unwrap(),
-        MoveOutcome::Used
+        MoveOutcome::Passed
     );
-    assert_eq!(state.clock, GameClock::new(8, 0).unwrap(), "no time passed");
+    let mut expected = GameClock::new(8, 0).unwrap();
+    expected.advance_minutes(MINUTES_PER_INDOOR_TURN);
+    assert_eq!(state.clock, expected, "no rest time passed, only the epilogue minute");
     assert_eq!(state.party[0].status, b'G', "no sleep status");
     assert!(state.message.is_empty(), "{:?}", state.message);
     // "it returns the ordinary acted result, so the normal town epilogue
-    // follows and re-evaluates contact": the arrest event is still there for
-    // the epilogue's contact handler, which consumes it.
+    // follows and re-evaluates contact": the epilogue's contact handler
+    // consumes the re-raised arrest contact.
     assert!(
-        state
-            .pending_town_npc_contact
-            .is_some_and(|event| event.behavior.raises_arrest_or_conflict_contact()),
+        state.pending_town_npc_schedule_pass
+            || state
+                .pending_town_npc_contact
+                .is_some_and(|event| event.behavior.raises_arrest_or_conflict_contact()),
         "{:?}",
         state.pending_town_npc_contact
     );
     let epilogue = state
-        .apply_post_turn_effects_after_outcome(turn_before, &dir, MoveOutcome::Used)
+        .apply_post_turn_effects_after_outcome(turn_before, &dir, MoveOutcome::Passed)
         .unwrap();
     assert!(epilogue.is_some(), "the epilogue handled the arrest contact");
     assert_eq!(state.pending_town_npc_contact, None);

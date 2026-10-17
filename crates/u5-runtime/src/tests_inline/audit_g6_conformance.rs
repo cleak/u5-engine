@@ -433,30 +433,19 @@ fn q30_town_bed_burst_aborts_only_on_an_arrest_or_conflict_contact() {
     // Issue #298 Q30, `town-mode.md §12`: "If any pass leaves an
     // arrest/conflict contact event (kind `0x61`), the command ends at once
     // ... A conversation-contact event (kind `0x74`) does not interrupt".
-    let bed = |state: &PlayState| {
-        let (scene, floor) = q30_town_scene(state);
-        vec![TownRestBedEntry {
-            scene,
-            floor,
-            x: state.player.x,
-            y: state.player.y,
-            expected_tile: None,
-        }]
-    };
+    // The burst does not re-test the bed (`town-mode.md §12`: "Otherwise
+    // the party sleeps"), so it takes no rest-surface inputs.
     let mut state = g6_town_with(vec![g6_npc(1, 6, 5, 7, (6, 5, 0))], 5, 5);
-    let entries = bed(&state);
-    let (scene, floor) = q30_town_scene(&state);
     let clock = state.clock;
     assert_eq!(
-        state.advance_town_rest_initial_schedule_burst(Some(&entries), scene, floor),
+        state.advance_town_rest_initial_schedule_burst(),
         TownRestBurstOutcome::ArrestOrConflictContact
     );
     assert_eq!(state.clock, clock, "no time passed");
 
     let mut state = g6_town_with(vec![g6_npc(1, 6, 5, 4, (6, 5, 0))], 5, 5);
-    let entries = bed(&state);
     assert_eq!(
-        state.advance_town_rest_initial_schedule_burst(Some(&entries), scene, floor),
+        state.advance_town_rest_initial_schedule_burst(),
         TownRestBurstOutcome::Completed
     );
 }
