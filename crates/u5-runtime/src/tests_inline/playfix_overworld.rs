@@ -216,3 +216,74 @@ fn playfix_e24_gate_rising_while_party_stands_still_reaches_live_window() {
         NATURAL_MOONGATE_TERRAIN_TILE
     );
 }
+
+fn playfix_gate_state(party_x: usize) -> PlayState {
+    let mut grid = open_world_grid();
+    grid[world_cell_index(5, 5)] = NATURAL_MOONGATE_TERRAIN_TILE;
+    let mut state = britannia_state(grid, party_x, 5);
+    state.clock = GameClock::new(11, 0).unwrap();
+    state.natural_moongate_counter = MOONGATE_PHASE_FULL;
+    state.set_cached_moon_glyph_slots(1, 0);
+    state.moonstone_slots[1] = MoonstoneGateSlot {
+        scene: 0,
+        x: 6,
+        y: 7,
+        z: WorldPlane::Britannia.save_floor() as u8,
+    };
+    state
+}
+
+/// E25: `overworld.md §9.2`: the live-gate hook "runs before normal input
+/// dispatch, on every iteration" and runs the transit "before the party is
+/// relocated and before any key is read". A step onto `0xDC` transits at
+/// the end of that step's iteration, not on the next key.
+#[test]
+fn playfix_e25_step_onto_a_live_gate_transits_without_waiting_for_a_key() {
+    let dir = debug_game_dir();
+    let mut state = playfix_gate_state(4);
+    let turn = state.turn;
+
+    handle_play_key_input(&mut state, '\u{2}', "", &dir).unwrap();
+
+    assert_eq!((state.player.x, state.player.y), (6, 7), "transited after the step");
+    assert_eq!(state.turn, turn + 1, "the step's own turn only");
+    let _ = fs::remove_dir_all(dir);
+}
+
+/// E25: a party already standing on a live gate when a key arrives transits
+/// first, and the key is then the next iteration's command - not eaten.
+#[test]
+fn playfix_e25_key_read_on_a_live_gate_is_dispatched_after_the_transit() {
+    let dir = debug_game_dir();
+    let mut state = playfix_gate_state(5);
+    let turn = state.turn;
+
+    handle_play_key_input(&mut state, ' ', "", &dir).unwrap();
+
+    assert_eq!((state.player.x, state.player.y), (6, 7));
+    assert_eq!(state.turn, turn + 1, "the Pass ran after the transit");
+    let _ = fs::remove_dir_all(dir);
+}
+
+/// E25: the transit and the warp print nothing and clear nothing; the
+/// message window still holds what the step left there.
+#[test]
+fn playfix_e25_gate_transit_keeps_the_message_window() {
+    let dir = debug_game_dir();
+    let mut state = playfix_gate_state(4);
+    state.emit_message_line("Earlier line\n");
+    state.message_row_open_mid_line = false;
+    let before = state.message_transcript.len();
+
+    handle_play_key_input(&mut state, '\u{2}', "", &dir).unwrap();
+
+    assert_eq!((state.player.x, state.player.y), (6, 7));
+    assert!(state.message_transcript.len() >= before);
+    assert!(
+        state
+            .message_transcript
+            .iter()
+            .any(|entry| entry.text.contains("Earlier line"))
+    );
+    let _ = fs::remove_dir_all(dir);
+}

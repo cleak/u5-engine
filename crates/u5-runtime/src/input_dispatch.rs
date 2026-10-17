@@ -90,6 +90,11 @@ pub fn handle_play_key_input(
     // the original would already have printed, so record it before the
     // next key can overwrite it.
     state.flush_message_slot();
+    if result.is_ok() {
+        if let Err(error) = run_overworld_loop_head_hooks(state, game_dir) {
+            result = Err(error);
+        }
+    }
     // The command's own panel mechanism, applied where the command ends.
     //
     // Not where the *change* happened, which is where §2.2's immediate sites
@@ -115,6 +120,69 @@ pub fn handle_play_key_input(
         }
     }
     result
+}
+
+/// Whether the next key the shell reads is an ordinary command key: no
+/// prompt, session, hold or cinematic owns it. Mirrors the gates that
+/// [`handle_play_key_input_inner`] tests before its command dispatch.
+fn next_key_is_a_command(state: &PlayState) -> bool {
+    state.pending_text_hold.is_none()
+        && state.endgame.is_none()
+        && state.pending_blackthorn_rescue.is_none()
+        && !state.cinematic_hold_owns_input()
+        && state.active_blackthorn.is_none()
+        && state.codex_presentation_steps == 0
+        && state.active_yes_no_prompt.is_none()
+        && state.active_direction_prompt.is_none()
+        && state.active_cast_followup.is_none()
+        && state.active_cast.is_none()
+        && state.active_rest.is_none()
+        && state.active_jimmy.is_none()
+        && state.active_surface_chest.is_none()
+        && state.active_shrine.is_none()
+        && state.active_shrine_restoration.is_none()
+        && state.active_mix.is_none()
+        && state.active_new_order.is_none()
+        && state.active_wishing_well.is_none()
+        && state.active_yell.is_none()
+        && state.active_view_overlay.is_none()
+        && state.active_ready.is_none()
+        && state.active_use.is_none()
+        && state.active_party_selector.is_none()
+        && state.active_z_stats.is_none()
+        && state.active_shop.is_none()
+        && state.active_conversation.is_none()
+        && state.active_blackthorn_guard_demand.is_none()
+}
+
+/// The overworld loop's head, between one command and the next key read.
+///
+/// `overworld.md §9.2`: "The overworld command loop has a live-gate entry
+/// hook that runs before normal input dispatch, on every iteration", and on
+/// `0xDC` it runs the transit "before the party is relocated and before any
+/// key is read". A step onto a gate therefore transits at once; running the
+/// hook only when the next key arrived made the transit wait for, and
+/// swallow, that key (playtest E25).
+pub fn run_overworld_loop_head_hooks(state: &mut PlayState, game_dir: &Path) -> io::Result<()> {
+    if !matches!(state.area, Area::World { .. })
+        || state.combat_active
+        || !next_key_is_a_command(state)
+    {
+        return Ok(());
+    }
+    // The loop comes straight back to the hook after a transit, still
+    // without reading a key, so an arrival on another live gate transits
+    // again. Each transit restores its own gate cell, so this ends; the
+    // bound only guards a fixture that never clears one.
+    for _ in 0..MOONSTONE_SLOT_COUNT {
+        if state.resolve_natural_moongate_entry(game_dir)?.is_none() {
+            break;
+        }
+        if !matches!(state.area, Area::World { .. }) || !next_key_is_a_command(state) {
+            break;
+        }
+    }
+    Ok(())
 }
 
 /// `timing.md §8.2` / `RETRACTIONS.md` R372: the cardinal direction a key
@@ -276,8 +344,15 @@ fn handle_play_key_input_inner(
     if state.resolve_town_arrest_prompt(key, game_dir)?.is_some() {
         return Ok(PlayInputDisposition::Continue);
     }
+    // `overworld.md §9.2`: the live-gate hook runs "before normal input
+    // dispatch, on every iteration", and "before any key is read". The
+    // ordinary place this engine runs it is the end of the previous command
+    // ([`run_overworld_loop_head_hooks`]); this catches a party that reached
+    // the command loop on a live gate any other way (a load, or a closed
+    // session). The transit consumes no key: once it has run, the key is
+    // dispatched from the top as the next iteration's command (playtest E25).
     if state.resolve_natural_moongate_entry(game_dir)?.is_some() {
-        return Ok(PlayInputDisposition::Continue);
+        return handle_play_key_input_inner(state, key, suffix, game_dir);
     }
     // `timing.md §8.2`, the under-sail pass's keyboard poll, and
     // `RETRACTIONS.md` R372: "a key whose translated code **equals the cached

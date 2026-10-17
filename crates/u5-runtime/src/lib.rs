@@ -473,7 +473,7 @@ pub use input_codes::{
 };
 pub use input_dispatch::{
     PlayInputDisposition, UNRECOGNISED_COMMAND_MESSAGE, advance_paced_combat_presentation,
-    handle_play_key_input,
+    handle_play_key_input, run_overworld_loop_head_hooks,
 };
 pub use intro::{
     BRITISH_PTH_PEN_ORIGINS, INTRO_MENU_COPYRIGHT_CAPTION, INTRO_MENU_COPYRIGHT_CAPTION_COLUMN,

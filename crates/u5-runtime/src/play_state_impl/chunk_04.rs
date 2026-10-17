@@ -2947,6 +2947,18 @@ impl PlayState {
         // session leaves odd parity again." A scene rebuild is none of those,
         // so a leaked highlight keeps the panel inverted across the entry.
         next.stats_panel_window_inverse = self.stats_panel_window_inverse;
+        // The message window is display state too: nothing in
+        // `overworld.md §9.2`'s transit or the Gate Travel warp clears it,
+        // and the rebuild used to arrive with an empty window (playtest
+        // E25). Carry the log, its cursor and its open-row flag across as
+        // they stood, the way a location entry does.
+        next.message_transcript = std::mem::take(&mut self.message_transcript);
+        next.message_transcript_revision = self.message_transcript_revision;
+        next.message_flushed = std::mem::take(&mut self.message_flushed);
+        next.message = std::mem::take(&mut self.message);
+        next.message_window_top_offset = self.message_window_top_offset;
+        next.message_row_open_mid_line = self.message_row_open_mid_line;
+        next.pending_command_echo = None;
         *self = next;
         Ok(())
     }

@@ -2390,10 +2390,9 @@
             z: WorldPlane::Britannia.save_floor() as u8,
         };
 
-        assert_eq!(
-            handle_play_key_input(&mut state, 'q', "", &dir).unwrap(),
-            PlayInputDisposition::Continue
-        );
+        // The hook runs at the loop head, before any key is read
+        // (`overworld.md §9.2`; playtest E25).
+        run_overworld_loop_head_hooks(&mut state, &dir).unwrap();
 
         assert_eq!(
             state.area,
@@ -2437,10 +2436,9 @@
             z: WorldPlane::Britannia.save_floor() as u8,
         };
 
-        assert_eq!(
-            handle_play_key_input(&mut state, 'q', "", &dir).unwrap(),
-            PlayInputDisposition::Continue
-        );
+        // The hook runs at the loop head, before any key is read
+        // (`overworld.md §9.2`; playtest E25).
+        run_overworld_loop_head_hooks(&mut state, &dir).unwrap();
 
         assert_eq!((state.player.x, state.player.y), (8, 9));
         assert_eq!(state.turn, 0);
@@ -2473,10 +2471,9 @@
         state.refresh_cached_moon_glyphs();
         state.natural_moongate_live_cells.push(origin_idx);
 
-        assert_eq!(
-            handle_play_key_input(&mut state, 'q', "", Path::new("")).unwrap(),
-            PlayInputDisposition::Continue
-        );
+        // The hook runs at the loop head, before any key is read
+        // (`overworld.md §9.2`; playtest E25).
+        run_overworld_loop_head_hooks(&mut state, Path::new("")).unwrap();
 
         assert_eq!((state.player.x, state.player.y), (5, 5));
         assert_eq!(state.turn, 0);
@@ -2506,10 +2503,9 @@
         state.refresh_cached_moon_glyphs();
         state.natural_moongate_live_cells.push(origin_idx);
 
-        assert_eq!(
-            handle_play_key_input(&mut state, 'q', "", Path::new("")).unwrap(),
-            PlayInputDisposition::Continue
-        );
+        // The hook runs at the loop head, before any key is read
+        // (`overworld.md §9.2`; playtest E25).
+        run_overworld_loop_head_hooks(&mut state, Path::new("")).unwrap();
 
         assert_eq!((state.player.x, state.player.y), (5, 5));
         assert_eq!(state.grid[origin_idx], NATURAL_MOONGATE_RESTORED_TERRAIN_TILE);
@@ -2532,10 +2528,9 @@
         state.set_cached_moon_glyph_bytes(b'1', b'0');
         state.natural_moongate_live_cells.push(origin_idx);
 
-        assert_eq!(
-            handle_play_key_input(&mut state, 'q', "", Path::new("")).unwrap(),
-            PlayInputDisposition::Continue
-        );
+        // The hook runs at the loop head, before any key is read
+        // (`overworld.md §9.2`; playtest E25).
+        run_overworld_loop_head_hooks(&mut state, Path::new("")).unwrap();
 
         assert!(state.message.is_empty());
     }
@@ -2597,10 +2592,9 @@
         let mut state = britannia_state(grid, 5, 5);
         state.clock = GameClock::new(0, 9).unwrap();
 
-        assert_eq!(
-            handle_play_key_input(&mut state, 'q', "", &dir).unwrap(),
-            PlayInputDisposition::Continue
-        );
+        // The hook runs at the loop head, before any key is read
+        // (`overworld.md §9.2`; playtest E25).
+        run_overworld_loop_head_hooks(&mut state, &dir).unwrap();
 
         assert_eq!(state.grid[origin_idx], NATURAL_MOONGATE_RESTORED_TERRAIN_TILE);
         assert!(state.active_shrine.is_some());
@@ -2626,10 +2620,9 @@
         state.clock = GameClock::new(0, 0).unwrap();
         state.shrine_ordained_mask = ShrineVirtue::Justice.bit();
 
-        assert_eq!(
-            handle_play_key_input(&mut state, 'q', "", &dir).unwrap(),
-            PlayInputDisposition::Continue
-        );
+        // The hook runs at the loop head, before any key is read
+        // (`overworld.md §9.2`; playtest E25).
+        run_overworld_loop_head_hooks(&mut state, &dir).unwrap();
 
         assert_eq!(state.grid[origin_idx], NATURAL_MOONGATE_RESTORED_TERRAIN_TILE);
         assert_eq!(state.shrine_codex_mask, 0);
@@ -2644,10 +2637,9 @@
         let mut state = britannia_state(grid, 5, 5);
         state.clock = GameClock::new(0, 9).unwrap();
 
-        assert_eq!(
-            handle_play_key_input(&mut state, 'q', "", Path::new("")).unwrap(),
-            PlayInputDisposition::Continue
-        );
+        // The hook runs at the loop head, before any key is read
+        // (`overworld.md §9.2`; playtest E25).
+        run_overworld_loop_head_hooks(&mut state, Path::new("")).unwrap();
 
         assert_eq!(state.grid[origin_idx], NATURAL_MOONGATE_RESTORED_TERRAIN_TILE);
         assert!(state.message.is_empty());
