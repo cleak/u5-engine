@@ -406,7 +406,11 @@ pub fn step_arms_shop(
                 return ArmsShopOutcome::BuyRefusedCapHit { item };
             }
             if *gold < quoted_price {
-                *state = ArmsShopState::Greeting;
+                // `shops.md §8.1`: "The short-funds branch ... **exits the
+                // whole arms buy flow** ... because leaving the buy list ends
+                // the visit the next thing the player sees is the farewell"
+                // (`§8.A`: "exits the shop flow"). Playtest E45.
+                *state = ArmsShopState::Exited;
                 return ArmsShopOutcome::BuyRefusedShortFunds { item, quoted_price };
             }
             *gold -= quoted_price;
@@ -2635,6 +2639,8 @@ mod tests {
         ));
         assert_eq!(gold, 1);
         assert_eq!(stock[5], 0);
+        // `shops.md §8.1`: short funds exits the whole arms flow (E45).
+        assert_eq!(state, ArmsShopState::Exited);
     }
 
     #[test]

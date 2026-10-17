@@ -3302,6 +3302,26 @@ fn handle_arms_shop_key_input(
                 .map(|flourish| format!("\n\n{}", speech.attribute(&flourish, "says")))
                 .unwrap_or_default()
         }
+        // `shops.md §8.1`: short funds "exits the whole arms buy flow ...
+        // the next thing the player sees is the farewell" - the bark, then
+        // the ordinary closing envelope the listing's Space exit prints, with
+        // its own draw after the bark's. Playtest E45: the visit stayed open
+        // on the Buy/Sell prompt.
+        (refusal @ ArmsShopOutcome::BuyRefusedShortFunds { .. }, _) => {
+            let bark = format_arms_outcome_with_rolls(
+                refusal,
+                game_dir,
+                confirmation_prompt_roll,
+                no_credit_roll,
+                speech,
+            );
+            let roll = state.random_range_u8(0, 3);
+            let farewell = arms_closing_bark_record(state.arms_transaction_completed, roll)
+                .and_then(|record| render_shared_shoppe_flourish(game_dir, record))
+                .map(|flourish| format!("\n\n{}", speech.attribute(&flourish, "says")))
+                .unwrap_or_default();
+            format!("{bark}{farewell}")
+        }
         (outcome, _) => format_arms_outcome_with_rolls(
             outcome,
             game_dir,

@@ -136,3 +136,43 @@ fn inn_pickup_from_a_far_slot_rotates_records_and_registry_slots() {
     assert_eq!(&registry[0].name[..4], b"Iolo");
     let _ = fs::remove_dir_all(dir);
 }
+
+fn arms_buy_list_state(gold: u16) -> PlayState {
+    let mut state = test_state(open_grid(), 1, 1);
+    state.gold = gold;
+    state.active_shop = Some(crate::shop_session::ActiveShopSession::ArmsStocked(
+        crate::shop_runtime::ArmsShopState::BuyPickItem,
+        ArmsShop::IolosBows.stock_table(),
+    ));
+    state
+}
+
+fn arms_state_after(
+    state: &mut PlayState,
+    keys: &[char],
+) -> Option<crate::shop_runtime::ArmsShopState> {
+    for &key in keys {
+        handle_play_key_input(state, key, "", Path::new("")).unwrap();
+    }
+    match state.active_shop {
+        Some(crate::shop_session::ActiveShopSession::ArmsStocked(arms, _)) => Some(arms),
+        _ => None,
+    }
+}
+
+/// Playtest E45. `systems/shops.md §8.1`: "The short-funds branch ... **exits
+/// the whole arms buy flow** ... the next thing the player sees is the
+/// farewell"; `§8.A`: short funds "exits the shop flow". The visit used to
+/// fall back to the Buy/Sell prompt, so a later `S` opened the sell browser.
+#[test]
+fn arms_short_funds_ends_the_visit() {
+    let mut state = arms_buy_list_state(0);
+    let quoted = arms_state_after(&mut state, &['a']);
+    assert!(matches!(
+        quoted,
+        Some(crate::shop_runtime::ArmsShopState::BuyConfirm { .. })
+    ));
+    assert_eq!(arms_state_after(&mut state, &['Y']), None);
+    assert!(state.active_shop.is_none());
+    assert_eq!(state.gold, 0);
+}
