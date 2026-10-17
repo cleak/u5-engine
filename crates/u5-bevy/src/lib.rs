@@ -12719,12 +12719,23 @@ fn step_visual_intro(intro: &mut VisualIntroState, ch: char) -> bool {
             intro.title_sequence_skipped = true;
             return true;
         }
-        if visual_intro_presents_hold_active(intro) {
+        if visual_intro_presents_hold_active(intro) && !intro.title_sequence_skipped {
             // A key during the step-2 hold skips from there: the slot-8
             // ornament, the whole BRITISH.PTH animation, BRITISH.BIT and
-            // slot 9 are not drawn at all.
-            intro.title_presents_hold_ticks = 0;
+            // slot 9 are not drawn at all. `intro.md §3` (u5-spec#298 Q38,
+            // R556): the key is consumed, sets the title-skip flag and skips
+            // every later hold, so the mark plus `Presents` - the last title
+            // image - stays up for the start/menu archive load alone (Q36).
+            intro.title_presents_hold_ticks = INTRO_START_MENU_ARCHIVE_LOAD_BIOS_TICKS;
             intro.title_sequence_skipped = true;
+            return true;
+        }
+        if visual_intro_presents_hold_active(intro) {
+            // Already skipped: the last title image is up for the archive load
+            // and nothing reads the keyboard there. The engine has no buffer
+            // to hold the key until the menu's poll, so it keeps the earlier
+            // behaviour of ending the load and consuming the key.
+            intro.title_presents_hold_ticks = 0;
             intro.title_signature_progress = 0;
             intro.title_signature_complete = true;
             intro.title_tick_frame = 0;
@@ -12736,17 +12747,34 @@ fn step_visual_intro(intro: &mut VisualIntroState, ch: char) -> bool {
             // A key during the ornament hold or the strokes abandons the
             // remaining segments but steps 5 and 6 still run, so the
             // finished signature and the slot-9 line still appear.
+            // `intro.md §3` (u5-spec#298 Q38, R556): "the finished-composition
+            // hold does not run, so the composition stays up only for the
+            // start/menu archive load".
             intro.title_sequence_skipped = true;
             intro.title_signature_progress = 0;
             intro.title_signature_complete = true;
-            intro.title_card_hold_ticks = 0;
+            intro.title_card_hold_ticks = INTRO_START_MENU_ARCHIVE_LOAD_BIOS_TICKS;
+            return true;
+        }
+        if !intro.title_sequence_skipped
+            && intro.title_card_hold_ticks > INTRO_START_MENU_ARCHIVE_LOAD_BIOS_TICKS
+        {
+            // `intro.md §3` (u5-spec#298 Q38, R556): a key during the
+            // finished-composition hold's bounded poll is consumed there and
+            // sets the title-skip flag. The rest of the hold is skipped, the
+            // composition stays up for the archive load, and the loader then
+            // takes its plain path with no automatic preview.
+            intro.title_sequence_skipped = true;
+            intro.title_card_hold_ticks = INTRO_START_MENU_ARCHIVE_LOAD_BIOS_TICKS;
             return true;
         }
         intro.title_tick_frame = 0;
         intro.title_tick_visible_frame = 0;
-        // The title sequence has already completed. This key is first seen by
-        // the start/menu dissolve's status poll, then consumed by the loader;
-        // it is not a title skip and must not fall through to the menu.
+        // The hold's poll has ended and the archive load is running. Nothing
+        // reads the keyboard there, so this key is first seen by the
+        // start/menu dissolve's status poll, then consumed by the loader; it
+        // is not a title skip and must not fall through to the menu. The
+        // engine ends the load at once rather than buffering the key.
         finish_visual_intro_title_to_menu(intro, true);
         return true;
     }
@@ -21618,7 +21646,10 @@ mod tests {
     }
 
     /// `intro.md §3` step 4: "A key during the hold, or during any segment,
-    /// abandons the remaining segments — but steps 5 and 6 still run".
+    /// abandons the remaining segments — but steps 5 and 6 still run. The
+    /// finished-composition hold after step 6 is then skipped" (u5-spec#298
+    /// Q38, R556): the composition "stays up only for the start/menu archive
+    /// load".
     #[test]
     fn a_key_during_the_ornament_hold_abandons_the_strokes() {
         let dir = debug_game_dir();
@@ -21661,13 +21692,121 @@ mod tests {
         assert!(intro.title_signature_complete);
         assert_eq!(intro.title_signature_progress, 0);
         assert_eq!(
-            intro.title_card_hold_ticks, 0,
-            "a skipped run leaves for the plain loader without the composition hold"
+            intro.title_card_hold_ticks, INTRO_START_MENU_ARCHIVE_LOAD_BIOS_TICKS,
+            "a skipped run keeps the composition up for the archive load alone"
         );
         assert!(matches!(
             intro.dispatch.tick_title(),
             UnifiedMenuStep::PresentTitle
         ));
+        for _ in 1..INTRO_START_MENU_ARCHIVE_LOAD_BIOS_TICKS {
+            assert!(advance_visual_intro_animation_tick(&mut intro));
+            assert!(matches!(
+                intro.dispatch.tick_title(),
+                UnifiedMenuStep::PresentTitle
+            ));
+        }
+        assert_eq!(intro.title_card_hold_ticks, 1);
+        let _ = fs::remove_dir_all(dir);
+    }
+
+    /// `intro.md §3` (u5-spec#298 Q38, R556): a key during the `Presents`
+    /// hold is consumed, sets the title-skip flag and skips every later hold;
+    /// the mark plus `Presents` stays up for the archive load alone (Q36).
+    #[test]
+    fn a_key_during_the_presents_hold_skips_to_the_archive_load() {
+        let dir = debug_game_dir();
+        let mut intro = visual_intro_state_with_panel(dir.clone(), VisualIntroPanel::Menu);
+        intro.dispatch = UnifiedMenuDispatch::new();
+        intro.title_flourish_step = intro_title_flourish_total_steps() - 1;
+        intro.title_flourish_complete = true;
+        intro.title_presents_hold_ticks = INTRO_PRESENTS_UNSKIPPED_HOLD_BIOS_TICKS - 20;
+        assert!(visual_intro_presents_hold_active(&intro));
+
+        assert!(step_visual_intro(&mut intro, 'x'));
+
+        assert!(intro.title_sequence_skipped);
+        assert!(visual_intro_presents_hold_active(&intro));
+        assert_eq!(
+            intro.title_presents_hold_ticks,
+            INTRO_START_MENU_ARCHIVE_LOAD_BIOS_TICKS
+        );
+        assert!(matches!(
+            intro.dispatch.tick_title(),
+            UnifiedMenuStep::PresentTitle
+        ));
+        for _ in 1..INTRO_START_MENU_ARCHIVE_LOAD_BIOS_TICKS {
+            assert!(advance_visual_intro_animation_tick(&mut intro));
+            assert!(visual_intro_presents_hold_active(&intro));
+        }
+        let _ = fs::remove_dir_all(dir);
+    }
+
+    /// `intro.md §3` (u5-spec#298 Q38, R556): a key during the
+    /// finished-composition hold's bounded poll is consumed there and sets
+    /// the title-skip flag; the rest of the poll is skipped and the
+    /// composition stays up for the archive load.
+    #[test]
+    fn a_key_during_the_composition_hold_sets_the_skip_flag() {
+        let dir = debug_game_dir();
+        let mut intro = visual_intro_state_with_panel(dir.clone(), VisualIntroPanel::Menu);
+        intro.dispatch = UnifiedMenuDispatch::new();
+        intro.title_flourish_step = intro_title_flourish_total_steps() - 1;
+        intro.title_flourish_complete = true;
+        intro.title_signature_complete = true;
+        intro.title_card_hold_ticks = INTRO_COMPOSITION_HOLD_BIOS_TICKS - 3;
+
+        assert!(step_visual_intro(&mut intro, 'x'));
+
+        assert!(intro.title_sequence_skipped);
+        assert_eq!(
+            intro.title_card_hold_ticks,
+            INTRO_START_MENU_ARCHIVE_LOAD_BIOS_TICKS
+        );
+        assert!(matches!(
+            intro.dispatch.tick_title(),
+            UnifiedMenuStep::PresentTitle
+        ));
+        assert!(!intro.pending_auto_return_to_view);
+        let _ = fs::remove_dir_all(dir);
+    }
+
+    /// The same key, end to end: after the archive load the loader takes its
+    /// plain path - instant logo, no carrier, no ignition - and the automatic
+    /// preview is suppressed, so the settled menu follows at once ("a key in
+    /// the composition hold gives the instant logo and the window, captions
+    /// and labels within about 0.2 s of the visible clear").
+    #[test]
+    #[cfg(feature = "original-asset-tests")]
+    fn a_composition_hold_key_reaches_the_menu_on_the_plain_path() {
+        let dir = debug_game_dir();
+        install_intro_assets(&dir);
+        let mut intro = visual_intro_state_with_panel(dir.clone(), VisualIntroPanel::Menu);
+        intro.dispatch = UnifiedMenuDispatch::new();
+        intro.title_flourish_step = intro_title_flourish_total_steps() - 1;
+        intro.title_flourish_complete = true;
+        intro.title_signature_complete = true;
+        intro.title_card_hold_ticks = INTRO_COMPOSITION_HOLD_BIOS_TICKS;
+
+        assert!(advance_visual_intro_animation_tick(&mut intro));
+        assert!(step_visual_intro(&mut intro, ' '));
+        for _ in 0..INTRO_START_MENU_ARCHIVE_LOAD_BIOS_TICKS {
+            assert!(advance_visual_intro_animation_tick(&mut intro));
+        }
+
+        assert!(matches!(intro.panel, VisualIntroPanel::Menu));
+        assert!(!matches!(
+            intro.dispatch.tick_title(),
+            UnifiedMenuStep::PresentTitle
+        ));
+        assert!(intro.pending_reveal_clicks.is_empty(), "no carrier");
+        assert!(!intro.pending_auto_return_to_view, "no preview");
+        assert!(intro.launch_result.lock().unwrap().is_none());
+        assert_eq!(
+            visual_intro_menu_highlight(&intro),
+            IntroSubflow::JourneyOnward,
+            "the consumed key never reaches the menu"
+        );
         let _ = fs::remove_dir_all(dir);
     }
 
