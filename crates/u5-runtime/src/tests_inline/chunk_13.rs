@@ -11771,6 +11771,17 @@ fn shared_text_matcher_follows_commands_md_section_11_3() {
 }
 
 #[test]
+fn shrine_answers_use_the_shared_matcher_restart_quirk() {
+    // u5-spec#298 Q34, `RETRACTIONS.md` R553, `karma.md §7.1`.
+    assert!(shrine_answer_matches("honesty", "hone"));
+    assert!(shrine_answer_matches("I seek honesty", "hone"));
+    assert!(shrine_answer_matches("HONESTY", "hone"));
+    assert!(!shrine_answer_matches("hhone", "hone"));
+    assert!(!shrine_answer_matches("hohone", "hone"));
+    assert!(!shrine_answer_matches("anything", ""));
+}
+
+#[test]
 fn yell_shadowlord_names_use_the_shared_matcher_in_index_order() {
     // u5-spec#298 Q34, `commands.md §11.3`.
     assert_eq!(PlayState::shadowlord_name_index("FAULINEI"), Some(SHADOWLORD_FALSEHOOD_INDEX));
