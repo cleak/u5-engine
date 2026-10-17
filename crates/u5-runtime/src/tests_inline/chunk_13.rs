@@ -17708,9 +17708,8 @@ fn ambient_audio_sub_tick_residues_are_zero_and_four_tested_before_the_advance()
         .collect();
     assert_eq!(firing, vec![0, 4], "two of every eight, at residues 0 and 4");
     // "The same two residues also pick the loud envelope in the tick's
-    // own lava/shrine effect branch, so one counter drives both
-    // behaviours and an implementation should not give them separate
-    // phases."
+    // grandfather-clock branch ... One counter drives both behaviours and
+    // an implementation should not give them separate phases." (R540)
     for residue in 0..AMBIENT_AUDIO_SUB_TICK_PERIOD {
         assert_eq!(
             ambient_audio_sub_tick_selects_loud_envelope(residue),

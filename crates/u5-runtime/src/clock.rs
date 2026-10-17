@@ -120,18 +120,20 @@ pub const fn sky_strip_renders(scene_byte: u8, below_surface: bool) -> bool {
 ///
 /// The same predicate is the loud-envelope selector for the tick's other
 /// branch: "The same two residues also pick the loud envelope in the
-/// tick's own lava/shrine effect branch, so one counter drives both
+/// tick's grandfather-clock branch (`systems/audio.md` Section 8.10): the
+/// non-zero countdown is the hour chime ... One counter drives both
 /// behaviours and an implementation should not give them separate
-/// phases." That branch is not modelled in this engine - it has no
-/// lava/shrine ambient effect - but when it is, it must read this
-/// predicate off the same counter rather than a second one.
+/// phases." (u5-spec#298 Q16 / `RETRACTIONS.md` R540 withdrew the earlier
+/// "lava/shrine effect branch" name: no lava or shrine tile is tested.)
+/// When that branch is modelled it must read this predicate off the same
+/// counter rather than a second one.
 pub const fn ambient_audio_sub_tick_decrements(sub_tick_on_entry: u8) -> bool {
     let residue = sub_tick_on_entry % AMBIENT_AUDIO_SUB_TICK_PERIOD;
     residue == AMBIENT_AUDIO_DECREMENT_RESIDUES[0] || residue == AMBIENT_AUDIO_DECREMENT_RESIDUES[1]
 }
 
-/// `time.md §11` (issue #190): the loud envelope of the ambient tick's
-/// lava/shrine effect branch is picked by the *same* two residues off
+/// `time.md §11` (issue #190; R540): the loud envelope of the ambient tick's
+/// grandfather-clock branch - the hour chime - is picked by the *same* two residues off
 /// the *same* counter. Alias rather than a second predicate, so the two
 /// behaviours cannot drift into separate phases.
 pub const fn ambient_audio_sub_tick_selects_loud_envelope(sub_tick_on_entry: u8) -> bool {
