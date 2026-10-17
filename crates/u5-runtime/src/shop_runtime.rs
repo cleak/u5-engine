@@ -1231,6 +1231,60 @@ pub fn step_reagent_shop(
 
 // ---------- Tavern ----------
 
+/// The echo buffer of `input.md §8`'s shared two-digit typed-number reader as
+/// the tavern provision question drives it (`shops.md §8.5`, "Which reader
+/// takes the number"): "two digits accepted and a third dropped", "a leading
+/// sign only in the first position", Backspace or the west code erasing one,
+/// Escape erasing the whole echo, and "Return the only exit with an empty
+/// entry submitting as zero".
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+pub struct TypedQuantityEntry {
+    bytes: [u8; 3],
+    len: u8,
+}
+
+impl TypedQuantityEntry {
+    pub const DIGITS: usize = 2;
+
+    pub fn as_str(&self) -> &str {
+        std::str::from_utf8(&self.bytes[..usize::from(self.len)]).unwrap_or("")
+    }
+
+    fn digit_count(&self) -> usize {
+        self.as_str().bytes().filter(u8::is_ascii_digit).count()
+    }
+
+    /// Apply one key the reader classifies; returns `true` for Return.
+    pub fn apply(&mut self, byte: u8) -> bool {
+        use crate::input_codes::{NumericPromptAction, numeric_prompt_action};
+        match numeric_prompt_action(byte) {
+            NumericPromptAction::Submit => return true,
+            NumericPromptAction::ClearEcho => self.len = 0,
+            NumericPromptAction::Pop => self.len = self.len.saturating_sub(1),
+            NumericPromptAction::AppendDigit(_) if self.digit_count() < Self::DIGITS => {
+                self.bytes[usize::from(self.len)] = byte;
+                self.len += 1;
+            }
+            NumericPromptAction::AppendSign(_) if self.len == 0 => {
+                self.bytes[0] = byte;
+                self.len = 1;
+            }
+            NumericPromptAction::AppendDigit(_)
+            | NumericPromptAction::AppendSign(_)
+            | NumericPromptAction::Discard => {}
+        }
+        false
+    }
+
+    /// The submitted quantity. An empty entry (or a bare sign) is zero. A
+    /// negative entry is passed on as the unsigned word the pay loop
+    /// compares - the reading `magic.md §6` publishes for the reader's other
+    /// caller; `shops.md §8.5` does not state the tavern's own.
+    pub fn quantity(&self) -> u16 {
+        self.as_str().parse::<i16>().unwrap_or(0) as u16
+    }
+}
+
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum TavernState {
     Greeting {
@@ -1252,6 +1306,7 @@ pub enum TavernState {
         tavern: Tavern,
         unit_price: u16,
         continuation_ready: bool,
+        entry: TypedQuantityEntry,
     },
     BlueBoarDrinkList {
         tavern: Tavern,
@@ -1467,6 +1522,7 @@ pub fn step_tavern(
                     tavern,
                     unit_price,
                     continuation_ready,
+                    entry: TypedQuantityEntry::default(),
                 };
                 return TavernOutcome::PickProvisionQuantity { tavern, unit_price };
             }
@@ -1484,6 +1540,7 @@ pub fn step_tavern(
                 tavern,
                 unit_price,
                 continuation_ready,
+                ..
             },
             TavernInput::Quantity(quantity),
         ) => {
@@ -3770,6 +3827,7 @@ mod tests {
                 tavern: Tavern::TheHonestMeal,
                 unit_price: 20,
                 continuation_ready: false,
+                entry: TypedQuantityEntry::default(),
             };
             assert_eq!(
                 step_tavern(

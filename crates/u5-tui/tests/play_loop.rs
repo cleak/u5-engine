@@ -355,6 +355,7 @@ fn typeahead_buffer_preserves_multi_digit_shop_quantity_lines() {
             tavern: Tavern::TheWayfarerTavern,
             unit_price: 15,
             continuation_ready: false,
+            entry: Default::default(),
         },
     ));
 

@@ -892,7 +892,6 @@ fn handle_active_shop_key_input(
         .find(|c| c.is_ascii_digit())
         .and_then(|c| c.to_digit(10).map(|d| d as u8))
         .or_else(|| key.to_digit(10).map(|d| d as u8));
-    let inline_quantity = parse_active_shop_inline_quantity(key, suffix);
     let yes = matches!(key_byte, b'Y' | b'y') || suffix.chars().any(|c| matches!(c, 'Y' | 'y'));
     let no = matches!(key_byte, b'N' | b'n') || suffix.chars().any(|c| matches!(c, 'N' | 'n'));
     let mut replacement_session: Option<ActiveShopSession> = None;
@@ -1638,9 +1637,48 @@ fn handle_active_shop_key_input(
             // continues. Measured 2026-09-19 (`paws-tavern/zero`): the
             // original reads `thou like?" 0`, this engine `thou like?" `
             // with no digit at all. `cleak/u5-engine#41`.
-            let tavern_quantity_echo =
-                matches!(*s, TavernState::PickProvisionQuantity { .. }).then_some(inline_quantity)
-                    .flatten();
+            //
+            // `shops.md §8.5`, "Which reader takes the number": the shared
+            // two-digit reader, with "Return the only exit with an empty
+            // entry submitting as zero" and "every other key discarded in
+            // silence". The engine committed the first digit it saw, so a
+            // two-digit quantity was impossible and a bare Return did nothing
+            // (playtest E47). Keys edit the echo on the prompt's own row; a
+            // line delivered whole (a script token such as `12`, or the
+            // visual shell's line editor) submits once its keys are read, as
+            // the mixer's quantity does.
+            let mut quantity_entry_pending = false;
+            let mut submitted_quantity = None;
+            if let TavernState::PickProvisionQuantity {
+                tavern,
+                unit_price,
+                continuation_ready,
+                mut entry,
+            } = *s
+            {
+                let mut submit = false;
+                for ch in std::iter::once(key).chain(suffix.chars()) {
+                    if entry.apply(ch as u8) {
+                        submit = true;
+                        break;
+                    }
+                }
+                submit |= !suffix.is_empty() && !entry.as_str().is_empty();
+                let row = format!("{TAVERN_PROVISION_QUANTITY_PROMPT_ROW}{}", entry.as_str());
+                state.flush_message_slot();
+                state.rewrite_open_prompt_row(TAVERN_PROVISION_QUANTITY_PROMPT_ROW, &row);
+                *s = TavernState::PickProvisionQuantity {
+                    tavern,
+                    unit_price,
+                    continuation_ready,
+                    entry,
+                };
+                if submit {
+                    submitted_quantity = Some(entry.quantity());
+                } else {
+                    quantity_entry_pending = true;
+                }
+            }
             let outcome = match (*s, yes, no, inline_digit) {
                 (TavernState::Greeting { .. }, _, _, _) => step_tavern(
                     s,
@@ -1726,12 +1764,8 @@ fn handle_active_shop_key_input(
                     &mut state.gold,
                     &mut food,
                 ),
-                (TavernState::PickProvisionQuantity { .. }, _, true, _) => {
-                    *s = TavernState::Exited;
-                    TavernOutcome::Exited
-                }
                 (TavernState::PickProvisionQuantity { .. }, _, _, _) => {
-                    if let Some(quantity) = inline_quantity {
+                    if let Some(quantity) = submitted_quantity {
                         step_tavern(
                             s,
                             TavernInput::Quantity(quantity),
@@ -1809,11 +1843,6 @@ fn handle_active_shop_key_input(
                     state.emit_message_line_continuing_row(letter.to_string());
                 }
             }
-            if let Some(quantity) = tavern_quantity_echo {
-                if !matches!(outcome, TavernOutcome::InvalidInput) {
-                    state.emit_message_line_continuing_row(quantity.to_string());
-                }
-            }
             // `shops.md §8.C`: "N prints `No` and runs the ordinary quoted
             // farewell with its `says $.\n` attribution" - no feeds of its
             // own, so `No` continues the continuation question's open row
@@ -1876,7 +1905,14 @@ fn handle_active_shop_key_input(
             // own - measured 2026-10-16 (`paws-sage`, beats `again` and
             // `rumour`): the original reads `for thee?" Yes`.
             prompt_row_open = shop_prompt_row_state(&tavern_message);
-            tavern_message
+            if quantity_entry_pending {
+                // Still reading: the slot holds the rewritten echo row the
+                // transcript already has, and the cursor stays on it.
+                prompt_row_open = Some(true);
+                state.message.clone()
+            } else {
+                tavern_message
+            }
         }
         ActiveShopSession::Sage(s) => {
             let mut sage_confirm_accepted = false;
@@ -2614,17 +2650,6 @@ fn active_shop_text_line(key: char, suffix: &str) -> String {
     }
     line.push_str(suffix);
     line
-}
-
-fn parse_active_shop_inline_quantity(key: char, suffix: &str) -> Option<u16> {
-    let digits: String = std::iter::once(key)
-        .chain(suffix.chars())
-        .filter(|ch| ch.is_ascii_digit())
-        .collect();
-    if digits.is_empty() {
-        return None;
-    }
-    digits.parse().ok()
 }
 
 fn active_inn_scene_marker(state: &PlayState) -> u8 {
@@ -3877,6 +3902,9 @@ const BLUE_BOAR_CHOICE_PROMPT: &str = "Thy choice?\"";
 /// follows the drawn quote record, carrying the offer's closing quote and the
 /// trailing space the typed number echoes into.
 const TAVERN_PROVISION_QUANTITY_PROMPT: &str = "\n\nHow many wouldst\nthou like?\" ";
+/// The row [`TAVERN_PROVISION_QUANTITY_PROMPT`] leaves open for the typed
+/// number's echo.
+const TAVERN_PROVISION_QUANTITY_PROMPT_ROW: &str = "thou like?\" ";
 
 const TAVERN_ANYTHING_ELSE_PROMPT: &str = "\"Anything else\nfor thee?\" ";
 
@@ -4348,6 +4376,33 @@ fn format_tavern_outcome_with_shoppe(
                 tavern_cant_pay_envelope(tavern_vendor_name)
             );
         }
+        // `shops.md §8.C`'s outcome table: a fully served quantity (or one
+        // that only stopped because the 9999 food ceiling was hit) prints
+        // `\n\n` and no sentence of its own. `§8.5`: "After any recognized
+        // branch that does not force an immediate exit, the tavern ... prints
+        // `"Anything else\nfor thee?" `", and `§8.C` names "a completed or
+        // partial purchase" among them. Both arms are resident text, so they
+        // no longer wait on `SHOPPE.DAT`, and the continuation question they
+        // left out is printed (playtest E47).
+        ProvisionsPurchased {
+            completion: crate::shops::ProvisionPurchaseCompletion::Completed,
+            ..
+        } => return format!("\n\n{TAVERN_ANYTHING_ELSE_PROMPT}"),
+        // `shops.md §8.C`, "Some requested packs afforded": gold ran out
+        // after at least one pack was served. `\n\n"Thou canst\nafford only
+        // `, the actual packs served, `!"\n\n` - resident text with no
+        // `SHOPPE.DAT` record, found unread by `qa/tools/unwired_literals.py`
+        // as `TAVERN_PARTIAL_AFFORD_PREFIX` (u5-engine#43).
+        ProvisionsPurchased {
+            completion: crate::shops::ProvisionPurchaseCompletion::GoldExhausted,
+            purchased_quantity,
+            ..
+        } => {
+            return format!(
+                "\n\n\"{}{purchased_quantity}!\"\n\n{TAVERN_ANYTHING_ELSE_PROMPT}",
+                crate::shops::TAVERN_PARTIAL_AFFORD_PREFIX
+            );
+        }
         // `shops.md §8.C`: "Fourth secondary drink attempt ... `\n\n"I beg
         // thy\npardon, `, honorific, `,"\nsays `, vendor name, `.\n"But
         // haven't\nye had enough\nto drink?" `". The vendor-less fallback
@@ -4449,27 +4504,6 @@ fn format_tavern_outcome_with_shoppe(
             )
             .ok()
             .map(|record| format!("\n\n{record}")),
-        // `shops.md §8.C`'s outcome table: a fully served quantity (or one
-        // that only stopped because the 9999 food ceiling was hit) prints a
-        // blank-line tail and then runs the surcharge - no sentence of its
-        // own.
-        ProvisionsPurchased {
-            completion: crate::shops::ProvisionPurchaseCompletion::Completed,
-            ..
-        } => Some(String::from("\n")),
-        // `shops.md §8.C`, "Some requested packs afforded": gold ran out
-        // after at least one pack was served. `\n\n"Thou canst\nafford only
-        // `, the actual packs served, `!"\n\n` - resident text with no
-        // `SHOPPE.DAT` record, found unread by `qa/tools/unwired_literals.py`
-        // as `TAVERN_PARTIAL_AFFORD_PREFIX` (u5-engine#43).
-        ProvisionsPurchased {
-            completion: crate::shops::ProvisionPurchaseCompletion::GoldExhausted,
-            purchased_quantity,
-            ..
-        } => Some(format!(
-            "\n\n\"{}{purchased_quantity}!\"\n\n",
-            crate::shops::TAVERN_PARTIAL_AFFORD_PREFIX
-        )),
         // `shops.md §8.C`, "No packs affordable, at least three food
         // servings": `\n\n"Thou hast\nneither gold nor\nneed! Out!"\nyells `,
         // vendor name, `.\n`; ends visit. The no-SHOPPE fallback prints the

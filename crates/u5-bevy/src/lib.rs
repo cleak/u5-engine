@@ -18765,7 +18765,17 @@ fn handle_visual_line_key(
             let (key, suffix) = match chars.next() {
                 Some(first) => {
                     let mut suffix = chars.collect::<String>();
-                    if state.active_shrine.is_some() {
+                    // The tavern's provision quantity is the shared two-digit
+                    // reader, whose only exit is Return (`shops.md §8.5`), so
+                    // the line editor's Enter is delivered with the digits.
+                    if state.active_shrine.is_some()
+                        || matches!(
+                            state.active_shop.as_ref(),
+                            Some(ActiveShopSession::Tavern(
+                                TavernState::PickProvisionQuantity { .. }
+                            ))
+                        )
+                    {
                         suffix.push('\n');
                     }
                     (first, suffix)
@@ -27538,6 +27548,7 @@ mod tests {
                 tavern: Tavern::TheWayfarerTavern,
                 unit_price: 15,
                 continuation_ready: false,
+                entry: Default::default(),
             },
         ));
         assert!(visual_line_prompt_active(&state));
@@ -27653,6 +27664,7 @@ mod tests {
                 tavern: Tavern::TheWayfarerTavern,
                 unit_price: 15,
                 continuation_ready: false,
+                entry: Default::default(),
             },
         ));
         assert!(visual_line_prompt_active(&tavern));
