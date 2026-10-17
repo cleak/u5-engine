@@ -1399,6 +1399,9 @@ pub const SLEEP_FIELD_SPELL_INDEX: usize = POISON_FIELD_SPELL_INDEX + 1;
 /// of 3. Anchored to the Sleep Field representative index.
 pub const FIELD_SPELL_COST: u8 = (SLEEP_FIELD_SPELL_INDEX / SPELLS_PER_CIRCLE) as u8 + 1;
 pub const BLINK_SPELL_INDEX: usize = 17;
+/// `magic.md §8`: Gate Travel "prompts `To phase:_`", the underscore being
+/// the spec's explicit trailing space.
+pub const GATE_TRAVEL_PHASE_PROMPT: &str = "To phase: ";
 pub const BLINK_COST: u8 = (BLINK_SPELL_INDEX / SPELLS_PER_CIRCLE) as u8 + 1;
 /// `magic.md §8` (u5-spec#298 Q3): combat Blink's budget of seven attempts
 /// of the shared random arena probe.

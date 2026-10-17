@@ -1463,7 +1463,12 @@ impl PlayState {
                 CastFollowupKind::PartyTarget => USE_POTION_TARGET_PROMPT.to_string(),
                 // `magic.md §8` handler-family map: Gate Travel "prompts
                 // `To phase:_`". No key cancels it (see the reader below).
-                CastFollowupKind::GatePhase => "To phase:_".to_string(),
+                // The underscore is the spec's explicit-space convention
+                // (`commands.md §5`: "an underscore stands for a literal
+                // space"; `Player:_` and `Item:_` render the same way), so
+                // the prompt reads `To phase: ` - it printed a visible
+                // underscore (playtest E41).
+                CastFollowupKind::GatePhase => GATE_TRAVEL_PHASE_PROMPT.to_string(),
                 CastFollowupKind::CombatTarget { creature } => {
                     let label = if creature { "Creature" } else { "Target" };
                     let value = if session.buffer.is_empty() {
