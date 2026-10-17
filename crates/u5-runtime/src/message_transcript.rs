@@ -753,12 +753,36 @@ impl PlayState {
         self.pending_text_hold = Some(crate::text_hold::PendingTextHold {
             pages: rest
                 .into_iter()
-                .map(|(hold, text)| crate::text_hold::HeldPage { hold, text })
+                .map(|(hold, text)| crate::text_hold::HeldPage {
+                    hold,
+                    text,
+                    release_sounds: Vec::new(),
+                })
                 .collect(),
             due_at_secs: None,
             row_open,
             then_message: None,
         });
+    }
+
+    /// Play each `(page, sound)` when that page is released: page `0` is the
+    /// one already printed, so its sounds play now; page `k` is the `k`th
+    /// held page. A page index past the held pages plays now as well.
+    pub fn attach_sounds_to_held_pages(
+        &mut self,
+        sounds: Vec<(usize, crate::audio::SoundEffect)>,
+    ) {
+        for (page, effect) in sounds {
+            let target = page.checked_sub(1).and_then(|index| {
+                self.pending_text_hold
+                    .as_mut()
+                    .and_then(|hold| hold.pages.get_mut(index))
+            });
+            match target {
+                Some(held) => held.release_sounds.push(effect),
+                None => self.emit_sound_effect(effect),
+            }
+        }
     }
 
     fn queue_behind_text_hold(
@@ -774,7 +798,11 @@ impl PlayState {
         }
         hold.pages.extend(
             rest.into_iter()
-                .map(|(hold, text)| crate::text_hold::HeldPage { hold, text }),
+                .map(|(hold, text)| crate::text_hold::HeldPage {
+                    hold,
+                    text,
+                    release_sounds: Vec::new(),
+                }),
         );
     }
 
@@ -848,6 +876,7 @@ impl PlayState {
         };
         hold.due_at_secs = None;
         let continues_row = hold.row_open;
+        let release_sounds = page.release_sounds.clone();
         if !page.text.text.is_empty() {
             hold.row_open = !page.text.text.ends_with('\n');
         }
@@ -858,6 +887,9 @@ impl PlayState {
         } else {
             None
         };
+        for effect in release_sounds {
+            self.emit_sound_effect(effect);
+        }
         self.emit_tlk_page(page.text, continues_row);
         if let Some(prompt) = then_message {
             self.message = prompt;

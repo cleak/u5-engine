@@ -1735,12 +1735,32 @@
         assert!(held[0].ends_with("Thou art now level 3, and\nquicker!\" "), "{held:?}");
         assert_eq!(held[1], "\n\n\"camp-top\"");
         assert_eq!(held[2], LORD_BRITISH_CAMP_VANISH_LINE);
-        assert!(state.sound_effect_history.iter().any(|(_, effect)| {
-            *effect
-                == SoundEffect::LordBritishCampEnvelope(
-                    crate::lord_british_camp::LORD_BRITISH_CAMP_STING_LONG,
-                )
-        }));
+        // `rest-and-camp.md §7.1` step 4 / `audio.md §8.6`: each living
+        // member's sting pair runs inline, so the second member's pair sounds
+        // only once the first member's level-line key wait has ended.
+        let short = SoundEffect::LordBritishCampEnvelope(
+            crate::lord_british_camp::LORD_BRITISH_CAMP_STING_SHORT,
+        );
+        let long = SoundEffect::LordBritishCampEnvelope(
+            crate::lord_british_camp::LORD_BRITISH_CAMP_STING_LONG,
+        );
+        let longs = |state: &PlayState| {
+            state
+                .sound_effect_history
+                .iter()
+                .filter(|(_, effect)| *effect == long)
+                .count()
+        };
+        assert_eq!(longs(&state), 1, "only the first member's sting before the key");
+        let release: Vec<Vec<SoundEffect>> = state
+            .pending_text_hold
+            .as_ref()
+            .unwrap()
+            .pages
+            .iter()
+            .map(|page| page.release_sounds.clone())
+            .collect();
+        assert_eq!(release, vec![vec![short.clone(), long.clone()], vec![], vec![]]);
         assert!(!state.message.contains("Verdict:"));
         assert!(!state.message.contains("Lord British-in-disguise"));
         assert!(!state.message.contains("reached level"));
@@ -1755,6 +1775,8 @@
         assert_eq!(state.clock.hour, 6);
         assert!(state.clock.minute > 0);
         assert_eq!(state.camp_month_cookie, state.clock.month);
+        assert!(state.consume_text_hold_key());
+        assert_eq!(longs(&state), 2, "the key releases the second member's sting");
         let _ = fs::remove_dir_all(dir);
     }
 

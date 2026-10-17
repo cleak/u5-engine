@@ -383,7 +383,8 @@ impl PlayState {
             // above implements its suppression before the PRNG draw.
             // The second condition is reserved and no shipped public
             // caller sets it; town-bed rest uses a separate handler.
-            let event_message = self.resolve_lord_british_camp_event(Some(game_dir))?;
+            let (event_message, event_sounds) =
+                self.resolve_lord_british_camp_event_paged(Some(game_dir))?;
             // `rest-and-camp.md §7.1` (u5-spec#298 Q10): the event's rows
             // follow the camp line, whose stored record ends in its own line
             // feed. Its key waits are hold markers: the first page prints
@@ -395,6 +396,10 @@ impl PlayState {
             let row_open = !first.text.is_empty() && !first.text.ends_with('\n');
             self.message = first.text;
             self.begin_text_hold(rest, row_open);
+            // §7.1: every envelope blocks where it stands in the event, so a
+            // later member's sting sounds only after the previous level
+            // line's key wait has ended.
+            self.attach_sounds_to_held_pages(event_sounds);
             // `rest-and-camp.md §7`: the event "removes the temporary
             // old-man presentation state and advances the turn clock before
             // normal play resumes".
@@ -470,6 +475,22 @@ impl PlayState {
         &mut self,
         game_dir: Option<&Path>,
     ) -> io::Result<String> {
+        let (text, sounds) = self.resolve_lord_british_camp_event_paged(game_dir)?;
+        for (_, effect) in sounds {
+            self.emit_sound_effect(effect);
+        }
+        Ok(text)
+    }
+
+    /// [`Self::resolve_lord_british_camp_event`] with its envelopes returned
+    /// rather than played: each is tagged with the page of the returned text
+    /// it belongs in front of, counted in key-wait markers (`0` before the
+    /// first wait). `rest-and-camp.md §7.1` runs them inline, so member
+    /// `n + 1`'s sting follows member `n`'s level-line key wait.
+    pub fn resolve_lord_british_camp_event_paged(
+        &mut self,
+        game_dir: Option<&Path>,
+    ) -> io::Result<(String, Vec<(usize, SoundEffect)>)> {
         // `rest-and-camp.md §7`: the event is "cinematic text plus
         // party-stat mutation". §7.1 (u5-spec#298 Q10) publishes its order:
         // the apparition line and envelope, the six-note figure, then per
@@ -481,16 +502,28 @@ impl PlayState {
         // Not implemented, and not established by §7.1/§7.2: where the class
         // tile lands ("not fully established"; in an outdoor camp, by static
         // reading, the party's own map record), the inversion's highlight pen
-        // and whether the world-tick pauses repaint it. The old man's two
-        // converges are driver-side blits, like the summon flashes.
+        // and whether the world-tick pauses repaint it. The per-member
+        // viewport inversion is left out with them: "No paired restoring
+        // inversion is issued", but how long each one stays on screen turns
+        // on that unestablished repaint, so the engine draws none rather than
+        // guess its lifetime. The old man's two converges are driver-side
+        // blits, like the summon flashes.
         let wait_key = crate::text_hold::TextHoldKind::WaitKey.marker_str();
         let mut text = String::from(LORD_BRITISH_CAMP_APPARITION_LINE);
-        self.emit_sound_effect(SoundEffect::LordBritishCampEnvelope(
-            crate::lord_british_camp::LORD_BRITISH_CAMP_APPARITION_ENVELOPE,
+        let mut sounds: Vec<(usize, SoundEffect)> = Vec::new();
+        let page_of = |text: &str| text.matches(wait_key).count();
+        sounds.push((
+            page_of(&text),
+            SoundEffect::LordBritishCampEnvelope(
+                crate::lord_british_camp::LORD_BRITISH_CAMP_APPARITION_ENVELOPE,
+            ),
         ));
         for period in crate::lord_british_camp::LORD_BRITISH_CAMP_FIGURE_PERIODS {
-            self.emit_sound_effect(SoundEffect::LordBritishCampEnvelope(
-                crate::lord_british_camp::lord_british_camp_figure_note(period),
+            sounds.push((
+                page_of(&text),
+                SoundEffect::LordBritishCampEnvelope(
+                    crate::lord_british_camp::lord_british_camp_figure_note(period),
+                ),
             ));
         }
         self.normalize_party_progress_vectors();
@@ -512,11 +545,17 @@ impl PlayState {
             // §7.1 step 4: "the envelope `(13, 200, 5000, 1, 5500)`, one
             // inversion of the whole gameplay viewport ..., the envelope
             // `(1, 2500, 60000, 1, 5500)`", for every living member.
-            self.emit_sound_effect(SoundEffect::LordBritishCampEnvelope(
-                crate::lord_british_camp::LORD_BRITISH_CAMP_STING_SHORT,
+            sounds.push((
+                page_of(&text),
+                SoundEffect::LordBritishCampEnvelope(
+                    crate::lord_british_camp::LORD_BRITISH_CAMP_STING_SHORT,
+                ),
             ));
-            self.emit_sound_effect(SoundEffect::LordBritishCampEnvelope(
-                crate::lord_british_camp::LORD_BRITISH_CAMP_STING_LONG,
+            sounds.push((
+                page_of(&text),
+                SoundEffect::LordBritishCampEnvelope(
+                    crate::lord_british_camp::LORD_BRITISH_CAMP_STING_LONG,
+                ),
             ));
             let experience = self.party_experience[index];
             let level = level_for_experience(u32::from(experience));
@@ -574,7 +613,7 @@ impl PlayState {
         text.push_str(&format!("\n\"{verdict}\"{wait_key}{LORD_BRITISH_CAMP_VANISH_LINE}"));
         self.push_diagnostic(notes.join(" "));
         self.mark_visibility_dirty();
-        Ok(text)
+        Ok((text, sounds))
     }
 
     pub fn normalize_party_progress_vectors(&mut self) {
