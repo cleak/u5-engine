@@ -19,6 +19,17 @@
 # has left Calm measured something else. The opening waits match
 # drowning-collision's, which a loaded host needs to get the stock game past
 # its title menu.
+# Wind lottery, measured 2026-10-16 over six runs with this seed and these
+# keys: the stock side's `start` banner read North, Calm, South, South and
+# East (the sixth run never left the title), and within one run it went from
+# Calm at `start` to West at `hoisted`, 1.5 s later; the engine side read East,
+# West, East, Calm and West. Neither side holds the seed's Calm byte through
+# the opening waits, so a run is only comparable where both banners agree at
+# `hoisted`, and the Calm premise itself has not yet been measured. What the
+# non-Calm runs do measure: stock prints `>Yell HOIST!` / blank /
+# `>BREAKING UP!` when the key's step is refused on the same command - the
+# refusal is written on the marker row the prompt drew before the
+# (echo-less) hoisted key.
 # requires-seed: profile `seed-sail-calm` (seed-drowning-collision with the wind byte set to Calm)
 both	wait	15000
 both	key	space
