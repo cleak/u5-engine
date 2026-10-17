@@ -1678,6 +1678,11 @@ pub fn dungeon_cell_class(tile: u8) -> &'static str {
     }
 }
 
+/// `dungeon-mode.md` Section 12 step 5 (u5-spec#298 Q6): the per-class
+/// L-Look line after `You see:\n`; the caller appends the period. `0xC?`
+/// is the flavour class of [`dungeon_look_description_with_flavour`];
+/// `0x84..0x8F` keep the generic energy-field description, whose literal
+/// the table does not spell out.
 pub fn dungeon_look_description(tile: u8) -> &'static str {
     let tile = if tile == 0x61 { 0x00 } else { tile };
     match tile {
@@ -1686,19 +1691,18 @@ pub fn dungeon_look_description(tile: u8) -> &'static str {
         0x82 => "a wall of fire",
         0x83 => "an electric field",
         _ => match tile >> 4 {
-            0x0 => "passage",
+            0x0 => "a passage",
             0x1 => "an up ladder",
             0x2 => "a down ladder",
-            0x3 => "a two-way ladder",
+            0x3 => "a ladder",
             0x4 => "a wooden chest",
             0x5 => "a fountain",
-            0x6 => "a pit or trap",
-            0x7 => "passage",
-            0x8 | 0x9 => "an energy field",
-            0xA => "a cleared room trigger",
+            0x6 => "a pit",
+            0x7 => "an open chest",
+            0x8 => "an energy field",
+            0x9 => "nothing of note",
+            0xA | 0xE | 0xF => "a heavy door",
             0xB..=0xD => "a wall",
-            0xE => "a heavy-door variant",
-            0xF => "a room trigger",
             _ => "unknown dungeon cell",
         },
     }

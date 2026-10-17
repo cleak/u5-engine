@@ -27575,3 +27575,39 @@ fn dungeon_turn_in_heavy_doorway_is_refused_with_not_in_doorway() {
     assert_eq!(state.turn_dungeon(true), MoveOutcome::Moved);
     assert_eq!(state.player.facing, Direction::South);
 }
+
+#[test]
+fn dungeon_look_prints_the_published_per_class_line() {
+    // `dungeon-mode.md` Section 12 step 5 (u5-spec#298 Q6): the open chest
+    // is `an open chest.` (confirmed on the original), and the rest of the
+    // class table follows the published lines.
+    for (tile, line) in [
+        (0x00u8, "a passage."),
+        (0x61, "a passage."),
+        (0x10, "an up ladder."),
+        (0x20, "a down ladder."),
+        (0x30, "a ladder."),
+        (0x40, "a wooden chest."),
+        (0x62, "a pit."),
+        (0x70, "an open chest."),
+        (0x90, "nothing of note."),
+        (0xa0, "a heavy door."),
+        (0xe0, "a heavy door."),
+        (0xf1, "a heavy door."),
+        (0xb0, "a wall."),
+        (0xd0, "a wall."),
+    ] {
+        let mut grid = open_dungeon_record();
+        grid[dungeon_cell_index(0, 2, 1)] = tile;
+        let mut state = dungeon_state(grid, 0, 1, 1);
+        state.player.facing = Direction::East;
+        state.torch_counter = 5;
+
+        assert_eq!(state.look_dungeon(), MoveOutcome::Observed);
+        assert_eq!(
+            state.message,
+            format!("{DUNGEON_LOOK_PREAMBLE}{line}"),
+            "{tile:#04x}"
+        );
+    }
+}
