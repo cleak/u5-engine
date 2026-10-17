@@ -1237,6 +1237,9 @@ pub const BLACKTHORN_RESCUE_WAIT_BEFORE_DARKNESS: u16 = 10;
 pub const BLACKTHORN_RESCUE_WAIT_BEFORE_REFUGE_SECOND: u16 = 14;
 pub const BLACKTHORN_RESCUE_WAIT_BEFORE_REFUGE_THIRD: u16 = 28;
 /// Steps 11 to 13: six ticks after the shout, then four after each Guardian
+/// reveal, all before the thunder line.
+pub const BLACKTHORN_RESCUE_WAIT_BEFORE_THUNDER: u16 = 6 + 4 + 4;
+
 /// How long `§7.1`'s six software envelopes hold the cinematic.
 ///
 /// `§7` step 9 runs them between beat 4 and beat 5, and `§7.1` publishes each
@@ -1258,6 +1261,18 @@ pub const BLACKTHORN_RESCUE_WAIT_BEFORE_REFUGE_THIRD: u16 = 28;
 /// 11.18 s at `narration::BIOS_TICK_SECS` is 204 ticks. The muted figure is
 /// 8.67 s; this takes the audible one, which is what a capture with sound
 /// records. The dissolve, the two Guardian cell reveals and the twice-run
+/// viewport flash were still unmodelled then, and were the rest of that issue.
+///
+/// Published since (`blackthorn.md §7.1`, `audio.md §8.6.2`; issue #298 Q44):
+/// "Between the slumber line and the shout there is nothing but the
+/// party-actor install with one redraw, the six envelopes and the shout's own
+/// print - no wait, tick or other work", and at a fixed 3000-cycle emulator
+/// setting "slumber to shout measured 11.65 s, 11.58 s of it envelopes,
+/// against the 11.18 s static figure". The 11.18 s figure is the reference
+/// machine's; the paired harness runs an emulator, so the hold is the
+/// published emulator interval: 11.65 s is 212 ticks.
+pub const BLACKTHORN_RESCUE_WAIT_ENVELOPE_SEQUENCE: u16 = 212;
+
 /// How long `§7` step 15's paired viewport flash holds the cinematic.
 ///
 /// `§7.1`: the thunder beat is followed by "the shared full-viewport
@@ -1277,14 +1292,12 @@ pub const BLACKTHORN_RESCUE_WAIT_BEFORE_REFUGE_THIRD: u16 = 28;
 ///
 /// Unlike the tick waits beside it this is an *observed* figure rather than
 /// a published count, and `audio.md §8.4` is explicit that it "is not a
-/// measurement on period reference hardware".
+/// measurement on period reference hardware". `blackthorn.md §6.2` (issue
+/// #298 Q44) has since published "1.67 to 1.72 s for the two flashes
+/// together" at a fixed 3000-cycle emulator setting; 31 ticks (1.70 s) lies
+/// inside it.
 pub const BLACKTHORN_RESCUE_WAIT_PAIRED_FLASH: u16 = 31;
 
-/// viewport flash are still unmodelled, and are the rest of that issue.
-pub const BLACKTHORN_RESCUE_WAIT_ENVELOPE_SEQUENCE: u16 = 204;
-
-/// reveal, all before the thunder line.
-pub const BLACKTHORN_RESCUE_WAIT_BEFORE_THUNDER: u16 = 6 + 4 + 4;
 /// Steps 21 and 24: four ticks after the intoned beat before the restoration
 /// loop, and four after the vertigo beat before the handoff.
 pub const BLACKTHORN_RESCUE_WAIT_AFTER_INTONED: u16 = 4;
@@ -1330,12 +1343,21 @@ pub const BLACKTHORN_RESCUE_WAIT_VIEWPORT_DISSOLVE: u16 = 60;
 /// Bracketed with [`BLACKTHORN_RESCUE_WAIT_VIEWPORT_DISSOLVE`] over the same
 /// four runs; the two were raised together, so what is measured is their sum.
 /// Splitting it evenly is a choice the capture cannot decide between.
-pub const BLACKTHORN_RESCUE_WAIT_CELL_REVEALS: u16 = 60;
+///
+/// Now three times the published single reveal
+/// ([`BLACKTHORN_RESCUE_WAIT_CELL_REVEAL`]); the bracketed sixty is withdrawn.
+pub const BLACKTHORN_RESCUE_WAIT_CELL_REVEALS: u16 = 3 * BLACKTHORN_RESCUE_WAIT_CELL_REVEAL;
 
-/// One of `§7`'s three cell reveals: [`BLACKTHORN_RESCUE_WAIT_CELL_REVEALS`]
-/// split evenly, because `§7.1` does not run the three together. Steps 2 and
-/// 3 reveal the two Guardians before the thunder line; step 5 reveals the
-/// crowned figure *after* the paired flash, ahead of the verdict.
+/// One of `§7`'s three cell reveals. `§7.1` does not run the three together:
+/// steps 2 and 3 reveal the two Guardians before the thunder line; step 5
+/// reveals the crowned figure *after* the paired flash, ahead of the verdict.
+///
+/// Published (`blackthorn.md §6.2`, issue #298 Q44): each reveal is CPU-bound
+/// with no BIOS-tick wait, and "in an emulator at a fixed 3000-cycle setting
+/// the three reveals took 0.90 s, 0.935 s and 0.935 s" - "about 16-17 tick
+/// periods, not 20". Seventeen ticks is 0.934 s, and three of them (2.80 s)
+/// match the published 2.77 s total within a tick. This was twenty, an even
+/// split of the bracketed sixty below.
 ///
 /// The engine paid all sixty ticks before the thunder line. Measured
 /// 2026-10-16 over three `stonegate-rescue-pacing` timelapses (2026-09-18,
@@ -1345,7 +1367,7 @@ pub const BLACKTHORN_RESCUE_WAIT_CELL_REVEALS: u16 = 60;
 /// two sides' thunder lines (`offset-4`). Splitting the hold the way `§7.1`
 /// orders the reveals puts both intervals within a frame of the original and
 /// leaves the total, and so every other beat, where it was.
-pub const BLACKTHORN_RESCUE_WAIT_CELL_REVEAL: u16 = BLACKTHORN_RESCUE_WAIT_CELL_REVEALS / 3;
+pub const BLACKTHORN_RESCUE_WAIT_CELL_REVEAL: u16 = 17;
 
 /// `blackthorn.md §4.2`, the audience exit beat.
 ///
