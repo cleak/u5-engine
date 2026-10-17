@@ -1221,6 +1221,12 @@ pub const PLAYER_SUMMON_ENVELOPE: EnvelopeSegment = EnvelopeSegment::new(5, 500,
 /// `audio.md §8.3` accepted moongate transit.
 pub const MOONGATE_TRANSIT_ENVELOPE: EnvelopeSegment =
     EnvelopeSegment::new(2, 2000, 30_000, 1, 5900);
+/// `commands.md §11` (u5-spec#298 Q11): the Shadowlord summon "runs the
+/// blocking software envelope `(2, 2000, 30000, 1, 10400)` ..., the same
+/// shape as the moongate-transit and possession envelopes at a higher
+/// period".
+pub const SHADOWLORD_APPEARS_ENVELOPE: EnvelopeSegment =
+    EnvelopeSegment::new(2, 2000, 30_000, 1, 10_400);
 /// `audio.md §6.1`'s absorb cue, the manual envelope every absorbed cast
 /// plays: "phase increment 9800, idle count 1, 28000 iterations, initial
 /// comparison 1000 and comparison increment 2."
@@ -1888,6 +1894,9 @@ pub enum SoundEffect {
     PlayerSummon,
     /// `§8.3` accepted moongate transit.
     MoongateTransit,
+    /// `commands.md §11` / `§8.3` (u5-spec#298 Q11): a successful Yell of a
+    /// Shadowlord's name, after `\nA_shadowlord_appears\n`.
+    ShadowlordAppears,
     /// `§8.4` shared major full-viewport flash. `bands` holds the 1,856
     /// gameplay-PRNG-drawn frequencies, already consumed from the gameplay
     /// stream by [`draw_major_flash_bands`].
@@ -2012,6 +2021,7 @@ impl SoundEffect {
             SoundEffect::MonsterSummon => envelope_program(MONSTER_SUMMON_ENVELOPE),
             SoundEffect::PlayerSummon => envelope_program(PLAYER_SUMMON_ENVELOPE),
             SoundEffect::MoongateTransit => envelope_program(MOONGATE_TRANSIT_ENVELOPE),
+            SoundEffect::ShadowlordAppears => envelope_program(SHADOWLORD_APPEARS_ENVELOPE),
             SoundEffect::MajorFlash { bands } => major_flash_program(bands),
             SoundEffect::StonegateDescent => stonegate_descent_program(),
             SoundEffect::StonegateMemberDeath => trap_rumble(jitter),
@@ -2924,6 +2934,7 @@ mod tests {
             SoundEffect::MonsterSummon,
             SoundEffect::PlayerSummon,
             SoundEffect::MoongateTransit,
+            SoundEffect::ShadowlordAppears,
             SoundEffect::MajorFlash {
                 bands: vec![19u8, 150].into(),
             },

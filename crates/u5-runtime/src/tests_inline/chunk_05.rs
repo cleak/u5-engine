@@ -1498,9 +1498,9 @@ fn y_yell_shadowlord_name_spawns_in_any_eternal_flame_keep() {
     );
 
     assert_eq!(town.turn, 1);
-    // `commands.md` §11 publishes no appearance text, so the summon is
-    // visible as the installed actor below, not as an engine sentence.
-    assert!(!town.message.contains("appears"), "{:?}", town.message);
+    // `commands.md` §11 (u5-spec#298 Q11): "it prints
+    // `\nA_shadowlord_appears\n`".
+    assert!(town.message.contains("A shadowlord appears"), "{:?}", town.message);
     assert_eq!(town.summoned_shadowlord, Some(SHADOWLORD_FALSEHOOD_INDEX));
     assert_eq!(town.active_objects.len(), OOL_SLOTS);
     assert_eq!(
@@ -1615,10 +1615,10 @@ fn shadowlord_name_allocation_detaches_an_empty_descriptor_from_stale_npc_owners
 }
 
 /// `commands.md` §11: a matched Shadowlord name "installs the Shadowlord as
-/// an active object exactly two cells north of the party ... and plays the
-/// appearance line together with the long warble and the fade-in effect".
-/// The spec publishes no text naming the word, the Shadowlord or the
-/// active-object slot, so the summon must not print one (audit F9).
+/// an active object exactly two cells north of the party". u5-spec#298 Q11
+/// publishes what follows: "it prints `\nA_shadowlord_appears\n` ... it runs
+/// the blocking software envelope `(2, 2000, 30000, 1, 10400)`". No text names
+/// the word or the active-object slot (audit F9).
 #[test]
 fn shadowlord_name_summon_prints_no_invented_slot_diagnostic() {
     let mut town = test_state(open_grid(), 5, 5);
@@ -1631,10 +1631,14 @@ fn shadowlord_name_summon_prints_no_invented_slot_diagnostic() {
 
     assert_eq!(town.yell_command(Some("faulinei")), MoveOutcome::Used);
     assert_eq!(town.summoned_shadowlord, Some(SHADOWLORD_FALSEHOOD_INDEX));
-    assert!(
-        !town.message.contains("slot") && !town.message.contains("appears"),
-        "the summon printed an unpublished diagnostic: {:?}",
-        town.message
+    assert_eq!(town.message, "\nA shadowlord appears\n");
+    assert_eq!(
+        town.sound_effect_history.last().map(|(_, effect)| effect),
+        Some(&SoundEffect::ShadowlordAppears)
+    );
+    assert_eq!(
+        crate::audio::SHADOWLORD_APPEARS_ENVELOPE,
+        crate::audio::EnvelopeSegment::new(2, 2000, 30_000, 1, 10_400)
     );
     assert!(
         !town.message.contains("No effect"),

@@ -1311,17 +1311,20 @@ impl PlayState {
                 if let Some(index) = Self::shadowlord_name_index(&word) {
                     let shadowlord =
                         Self::shadowlord_title_for_index(index).unwrap_or("Shadowlord");
-                    // `commands.md` §11: a successful summon "plays the
-                    // appearance line together with the long warble and the
-                    // fade-in effect". That line's text is not published, so
-                    // the window gets nothing beyond the colon echo rather
-                    // than an invented sentence naming the slot; the
-                    // accounting goes to the diagnostics.
+                    // `commands.md` §11 (u5-spec#298 Q11): after the actor
+                    // is installed, "three steps one after another, not
+                    // together": the appearance line, the blocking envelope
+                    // `(2, 2000, 30000, 1, 10400)`, then the fade-in - the
+                    // shared single-cell converge on tile `0x1FC` at viewport
+                    // (5, 3) with the actor byte held at `0x16`. As with the
+                    // summon flashes in `combat_frame.rs`, the converge is a
+                    // driver-side blit that no runtime channel carries yet.
                     self.message = if let Some(slot) = self.place_shadowlord_name_encounter(index) {
                         self.diagnostics.push(format!(
                             "Yelled {word}, the name of {shadowlord}; summoned into active-object slot {slot}"
                         ));
-                        String::new()
+                        self.emit_sound_effect(SoundEffect::ShadowlordAppears);
+                        crate::commands::SHADOWLORD_APPEARS_LINE.to_string()
                     } else {
                         format!("\n{YELL_NO_EFFECT_MESSAGE}")
                     };
