@@ -279,9 +279,10 @@ fn endgame_waiting_branch_walks_the_tableau_after_record_ten() {
 
 #[test]
 fn endgame_absorption_and_greeting_holds_bracket_the_tableau_walk() {
-    // Measured holds (see the constants): the absorption is followed by a
-    // thirty-three-tick hold before Lord British's arrival pause, and the
-    // greeting by a forty-tick hold after the last member settles.
+    // `endgame.md §5.2`'s published holds (see the constants): the absorption
+    // is followed by the untimed block's thirty-three-tick stand-in before
+    // Lord British's forty paced iterations, and the greeting by forty paced
+    // iterations after the last member's three-iteration tail.
     let mut state = endgame_window_walked_in_state();
     assert!(state.advance_endgame_display_frame());
     assert!(state.staged_narration_active(), "absorption hold");

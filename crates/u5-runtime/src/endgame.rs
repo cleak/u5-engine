@@ -232,11 +232,11 @@ pub struct EndgameState {
     /// `endgame.md §7`: display-owned state for the victory tableau's
     /// Orb hold, shared-moongate rise/hold/sink sequence, and actor exits.
     pub victory_tableau_phase: EndgameVictoryTableauPhase,
-    /// The measured hold between the absorption line and the tableau,
-    /// still owed. See [`ENDGAME_ABSORPTION_HOLD_BIOS_TICKS`].
+    /// `endgame.md §5.2`'s hold between the absorption line and the
+    /// tableau, still owed. See [`ENDGAME_ABSORPTION_HOLD_BIOS_TICKS`].
     pub entry_absorption_hold_owed: bool,
-    /// The measured hold between the last party member settling and Lord
-    /// British's greeting, still owed. See
+    /// `endgame.md §5.2`'s hold between the last party member settling and
+    /// Lord British's greeting, still owed. See
     /// [`ENDGAME_GREETING_HOLD_BIOS_TICKS`].
     pub entry_greeting_hold_owed: bool,
     /// `endgame.md §5.1`/`§6`: the waiting branch's display-driven beats.
@@ -1278,34 +1278,48 @@ pub const ENDGAME_TABLEAU_STING_HOLD_BIOS_TICKS: u16 =
 
 /// `audio.md §8.7`: "plus ... the fixed 40-tick pause after Lord British
 /// appears" - paid once, with him on stage at his starting cell and before
-/// his first step (measured; see `advance_endgame_entry_tableau_step`).
+/// his first step. `endgame.md §5.2`/`§7` step 1 (issue #298 Q41): "Let the
+/// display settle" is "forty paced iterations, after the untimed entry
+/// work", the first of which draws the tableau.
 pub const ENDGAME_TABLEAU_LORD_BRITISH_ARRIVAL_HOLD_BIOS_TICKS: u16 = 40;
 
 /// `audio.md §8.7`: "Each member also has a separate one-tick placement
 /// pause before walking."
 pub const ENDGAME_TABLEAU_PLACEMENT_HOLD_BIOS_TICKS: u16 = 1;
 
-/// The hold between the absorption line and the tableau. **Measured, not
-/// published.** Over every `doom-endgame-audio` capture from 2026-09-06 to
-/// 2026-10-16 (forty runs, one-member party) the original's action snap
-/// precedes Lord British's first movement sting by 4.08 s, within 10 ms,
-/// where this engine - paying `§8.7`'s forty-tick arrival pause and the
-/// step's two leading ticks - took 2.27 s. The timelapses of
-/// `doom-final-room` place the difference before the tableau appears: the
-/// stock arena stays on screen, the Avatar already gone, for three to four
-/// frames after `Avatar is absorbed!` prints. 1.81 s is thirty-three BIOS
-/// ticks. Spec question: `endgame.md §3` lists the bitmap loads at this
-/// point but gives them no duration.
+/// The hold between the absorption line and the tableau: the stand-in for
+/// `endgame.md §5.2`'s untimed entry block.
+///
+/// Published (`endgame.md §5.2`, issue #298 Q41): after the absorption snap
+/// comes "untimed, CPU-bound work" - the absorbed actor's removal and a bare
+/// world tick that draws the room without it, the combat exit, the overlay
+/// load, the whole-tileset colour remap that dominates it, the file reads
+/// and Lord British's placement - with "no tick wait or key poll", and only
+/// then "**forty paced iterations**; the first of them is what first draws
+/// the tableau", then the first step's two pre-sting iterations. "A frontend
+/// that stands a fixed hold in for the untimed block should treat it as a
+/// host-dependent cost: at the 3000-cycle setting it is about 1.8 s, roughly
+/// thirty-three BIOS ticks, and the forty-two paced iterations follow it."
+/// The whole snap-to-first-sting interval measured 4.08 s there. So this is
+/// thirty-three ticks, with the arena still on screen
+/// ([`PlayState::endgame_absorption_arena`]); the forty iterations are
+/// [`ENDGAME_TABLEAU_LORD_BRITISH_ARRIVAL_HOLD_BIOS_TICKS`] and the two are
+/// [`ENDGAME_TABLEAU_STING_LEADING_TICKS`]. (Previously a measured value:
+/// over forty `doom-endgame-audio` captures the original's snap preceded the
+/// first sting by 4.08 s where this engine took 2.27 s.)
 pub const ENDGAME_ABSORPTION_HOLD_BIOS_TICKS: u16 = 33;
 
 /// The hold between the last party member settling and Lord British's
-/// greeting. **Measured, not published.** `endgame.md §5.1` prints the
-/// greeting straight after the tableau walk, and this engine did; the
-/// `doom-final-room`, `-refusal` and `-waiting` timelapses (2026-10-14 and
-/// 2026-10-16) show the original's leader standing settled for 1.9 to 2.4 s
-/// before `Lord British says:` prints, which is the forty-tick pause the
-/// sequence uses elsewhere (`§5.1`'s waiting and rite pauses). Spec question
-/// recorded with the scenario.
+/// greeting.
+///
+/// Published (`endgame.md §5.2`, issue #298 Q41): "The last party member's
+/// final step ends with its own tail of **three paced iterations** ... Then
+/// come **forty paced iterations**, and the greeting prints" - forty-three
+/// after the last sting, measured 2.38 s and 2.39 s at a fixed 3000-cycle
+/// emulator setting. The three are that step's
+/// [`ENDGAME_TABLEAU_STING_TRAILING_TICKS`]; this is the forty. (Previously
+/// a measured value read off the `doom-final-room` timelapses; the reported
+/// 1.9 s lower bound did not reproduce.)
 pub const ENDGAME_GREETING_HOLD_BIOS_TICKS: u16 = 40;
 
 /// The actor byte the scene compositor actually stamps for one tableau
@@ -1774,8 +1788,8 @@ impl PlayState {
                 if let Some(endgame) = self.endgame.as_mut()
                     && endgame.entry_party_slot == ENDGAME_ENTRY_COMPLETE_SLOT
                 {
-                    // The greeting waits out the measured settle hold first
-                    // ([`ENDGAME_GREETING_HOLD_BIOS_TICKS`]).
+                    // The greeting waits out `§5.2`'s forty paced
+                    // iterations first ([`ENDGAME_GREETING_HOLD_BIOS_TICKS`]).
                     endgame.entry_party_slot = ENDGAME_ENTRY_GREETING_SLOT;
                     endgame.entry_greeting_hold_owed = true;
                 }
