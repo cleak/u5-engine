@@ -5086,7 +5086,7 @@ pub fn drain_buffered_hold_key(
     state: &mut PlayState,
     game_dir: &Path,
 ) -> io::Result<Option<PlayInputDisposition>> {
-    if state.cinematic_hold_owns_input() {
+    if !state.buffered_hold_key_ready() {
         return Ok(None);
     }
     let Some((key, suffix)) = state.keys_buffered_during_hold.pop_front() else {
@@ -5117,6 +5117,17 @@ fn handle_endgame_key_input(
     game_dir: &Path,
 ) -> io::Result<PlayInputDisposition> {
     state.ensure_endgame_messages_loaded(game_dir)?;
+    // `endgame.md §7` steps 4-6 - slot 0's walk up and back, the box, then
+    // record `3` - read no key. A key that arrives while they run stays in
+    // the type-ahead buffer until they finish, and is then read by whatever
+    // follows (`drain_buffered_hold_key`). It used to finish the hand-over at
+    // once and land on record `3`.
+    if state.endgame_victory_staging_pending() {
+        state
+            .keys_buffered_during_hold
+            .push_back((key, suffix.to_string()));
+        return Ok(PlayInputDisposition::Continue);
+    }
     // `endgame.md §5.1`'s blocking key read between pages. The greeting
     // is one page; the question that follows it is the next, and the
     // confirmation only reads once both are on screen.

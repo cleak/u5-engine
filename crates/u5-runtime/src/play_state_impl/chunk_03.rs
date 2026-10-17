@@ -485,6 +485,15 @@ impl PlayState {
             || self.pending_shrine_third_mantra.is_some()
     }
 
+    /// Whether a key typed during a hold may be replayed now: one is
+    /// buffered, no cinematic hold owns the loop, and no keyless endgame
+    /// beat (`endgame.md §7` steps 4-6) is still running.
+    pub fn buffered_hold_key_ready(&self) -> bool {
+        !self.keys_buffered_during_hold.is_empty()
+            && !self.cinematic_hold_owns_input()
+            && !self.endgame_victory_staging_pending()
+    }
+
     /// Whether a staged presentation currently owns the screen.
     ///
     /// While it does the frontend runs no turn gate and reads no command

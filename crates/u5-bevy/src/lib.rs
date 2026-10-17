@@ -11218,7 +11218,7 @@ fn animate_static_tiles(
         visual.prompt_cursor_frame = visual.prompt_cursor_frame.wrapping_add(1);
         pump.accumulator = 0.0;
         advanced = true;
-    } else if !visual.state.keys_buffered_during_hold.is_empty() {
+    } else if visual.state.buffered_hold_key_ready() {
         // The hold is over. Anything typed during it was buffered rather
         // than dropped, the way the BIOS buffer holds it for the next
         // reader; replay one per frame.

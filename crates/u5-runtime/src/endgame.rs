@@ -3047,9 +3047,10 @@ impl PlayState {
             // keystroke until the closer is finished, then keeps the terminal
             // final panel active.
             if matches!(current.outcome, Some(EndgameOutcome::Victory)) {
-                // `§7` steps 4-6 read no key: a key that arrives while the
-                // hand-over is still owed (a shell with no pump) finishes it
-                // and lands on record `3`, which is what it then shows.
+                // `§7` steps 4-6 read no key, so the key dispatcher buffers
+                // one that arrives during the hand-over until it finishes.
+                // A direct caller that resolves the terminal step while the
+                // hand-over is still owed finishes it here instead.
                 if self.endgame_victory_staging_pending() {
                     self.finish_endgame_victory_staging();
                     return MoveOutcome::Observed;

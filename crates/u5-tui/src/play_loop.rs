@@ -111,6 +111,10 @@ pub fn run_interactive_play_loop<R: BufRead>(
         state.run_blackthorn_rescue_to_handoff(game_dir)?;
         state.run_blackthorn_audience_exit_to_handoff(game_dir)?;
         state.run_shrine_third_mantra_resolution_to_completion(game_dir)?;
+        // `endgame.md §7` steps 4-6 read no key and this shell has no pump,
+        // so the box hand-over is run to record `3` here; a key typed during
+        // it waits in the buffer and is replayed below.
+        state.finish_endgame_victory_staging();
         // Anything typed while a hold owned the loop is replayed now.
         while u5_runtime::input_dispatch::drain_buffered_hold_key(state, game_dir)?.is_some() {}
         if play_state_accepts_typeahead(state) {
