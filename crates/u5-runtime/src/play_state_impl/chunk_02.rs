@@ -205,7 +205,7 @@ impl PlayState {
                     '>' => self.climb(game_dir, ClimbIntent::Down)?,
                     _ => self.klimb_command(game_dir)?,
                 };
-                self.apply_post_turn_effects_after_dungeon_climb(turn_before, game_dir, outcome)?;
+                self.apply_post_turn_effects_after_dungeon_level_change(turn_before, game_dir, outcome)?;
                 return Ok(true);
             }
             'l' => {

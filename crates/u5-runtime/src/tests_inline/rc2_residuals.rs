@@ -393,3 +393,61 @@ fn rc2_acting_member_pickers_commit_the_indicated_row_on_space() {
     assert!(state.active_surface_chest.is_none());
     assert_ne!(state.message, "None!");
 }
+
+/// Item 6: `dungeon-mode.md §13.1` - a level change "reports \"acted\" to
+/// the dungeon loop, so the turn's post-action pass runs", and Uus Por /
+/// Des Por are the same transition (they print the climb's own word and
+/// nothing else). The pass ran for K-Klimb (playtest E08) but the cast
+/// paths sent the spell's level change through the generic hook, which
+/// skips every transition. The pass's immediate panel repaint
+/// (`stats-panel.md §2.2.1`) and its underfoot read now follow the spell.
+#[test]
+fn rc2_level_change_spells_run_the_post_action_pass() {
+    let scene = DungeonScene::new(33).unwrap();
+    for (route, interactive) in [("suffix", false), ("prompt", true)] {
+        let mut state = dungeon_state(open_dungeon_record(), 0, 1, 1);
+        arm_spell(&mut state, DES_POR_SPELL_INDEX);
+        state.repaint_stats_panel();
+        let stale = state.displayed_stats_panel().clone();
+        // A change the panel has not been repainted for: only a repaint
+        // shows it.
+        state.gold += 5;
+        if interactive {
+            handle_play_key_input(&mut state, 'C', "", Path::new("")).unwrap();
+            for key in ['D', 'P', '\r'] {
+                if state.active_cast.is_none() && state.active_cast_followup.is_none() {
+                    break;
+                }
+                handle_play_key_input(&mut state, key, "", Path::new("")).unwrap();
+            }
+        } else {
+            handle_play_key_input(&mut state, 'C', "1DP", Path::new("")).unwrap();
+        }
+        assert_eq!(state.area, Area::Dungeon { scene, level: 1 }, "{route}");
+        assert_ne!(state.party[0].mana, 8, "{route}: the cast spent mana");
+        assert_ne!(state.displayed_stats_panel(), &stale, "{route}");
+        assert_eq!(
+            state.displayed_stats_panel(),
+            &crate::stats_panel::stats_panel_snapshot_of(&state),
+            "{route}: the post-action pass repainted the panel"
+        );
+    }
+}
+
+/// Item 6: the shared pass, driven with a spell's level-change outcome,
+/// reads the landing cell the same way it does for K-Klimb.
+#[test]
+fn rc2_level_change_pass_reads_the_landing_cell() {
+    let scene = DungeonScene::new(33).unwrap();
+    let mut grid = open_dungeon_record();
+    grid[dungeon_cell_index(1, 1, 1)] = 0xF2;
+    let mut state = dungeon_state(grid, 1, 1, 1);
+    let turn_before = state.turn;
+    state.advance_turn();
+    let outcome = MoveOutcome::Transition(AreaTransition::ChangedDungeonLevel { scene, level: 1 });
+    state
+        .apply_post_turn_effects_after_dungeon_level_change(turn_before, Path::new(""), outcome)
+        .unwrap();
+    assert_eq!(state.message, DUNGEON_ROOM_ENTRY_NARRATION);
+    assert_eq!(state.dungeon_cell(1, 1, 1), 0xA2, "the room helper ran");
+}

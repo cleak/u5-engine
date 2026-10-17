@@ -3528,11 +3528,20 @@ impl PlayState {
         }
     }
 
-    /// The post-action pass after a dungeon K-Klimb.
+    /// The post-action pass after a dungeon K-Klimb, or after an Uus Por /
+    /// Des Por cast that changed the level.
     ///
     /// `dungeon-mode.md §13.1`: "A K that applies something - a climb up, a
     /// climb down, a pit fall ... - reports \"acted\" to the dungeon loop, so
-    /// the turn's post-action pass runs." That pass (`§4` step 6) reads the
+    /// the turn's post-action pass runs." The level-change spells are the
+    /// same transition - §13.1 "What a level change prints" gives them the
+    /// climb's own word and nothing else - and a completed cast is an acted
+    /// command too, so the same pass follows them (rc2 residual, cf.
+    /// playtest E08). The spells accept only an open-passage destination
+    /// ("The dungeon level-change spells"), so for them the underfoot arms
+    /// find nothing, but the rest of the pass - the active monster's step,
+    /// the immediate panel repaint, the hourly status line - ran a command
+    /// late. That pass (`§4` step 6) reads the
     /// new underfoot cell, so a climb that lands on a fall trap falls and one
     /// that lands on a room cell enters it (`§8.1`, "Post-action underfoot
     /// consequences") before the next key is read. The generic
@@ -3540,7 +3549,7 @@ impl PlayState {
     /// transition, which deferred both to the next command (playtest E08).
     /// A climb that left the level stack is not in the dungeon any more and
     /// keeps that skip.
-    pub fn apply_post_turn_effects_after_dungeon_climb(
+    pub fn apply_post_turn_effects_after_dungeon_level_change(
         &mut self,
         turn_before: u64,
         game_dir: &Path,

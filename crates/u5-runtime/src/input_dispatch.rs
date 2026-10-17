@@ -458,7 +458,9 @@ fn handle_play_key_input_inner(
         state.begin_command_echo_for(Command::Cast);
         let turn_before = state.turn;
         let outcome = state.cast_spell_from_suffix(suffix, game_dir)?;
-        state.apply_post_turn_effects_after_outcome(turn_before, game_dir, outcome)?;
+        // An Uus Por / Des Por level change runs the climb's post-action
+        // pass; every other outcome falls through to the generic hook.
+        state.apply_post_turn_effects_after_dungeon_level_change(turn_before, game_dir, outcome)?;
         return Ok(PlayInputDisposition::Continue);
     }
     if state.combat_active {
@@ -666,7 +668,14 @@ fn handle_active_cast_key_input(
         }
         return Ok(PlayInputDisposition::Continue);
     };
-    state.apply_post_turn_effects_after_outcome(turn_before, game_dir, outcome)?;
+    if combat.is_none() {
+        // `dungeon-mode.md §13.1`: an Uus Por / Des Por level change is a
+        // climbing transition, so the post-action pass reads the landing
+        // cell before the next key, as after K-Klimb (playtest E08).
+        state.apply_post_turn_effects_after_dungeon_level_change(turn_before, game_dir, outcome)?;
+    } else {
+        state.apply_post_turn_effects_after_outcome(turn_before, game_dir, outcome)?;
+    }
     if let Some((actor_slot, had_foe)) = combat {
         finish_combat_cast_actor_action(state, actor_slot, had_foe);
     }
@@ -913,7 +922,7 @@ fn handle_active_direction_prompt_key_input(
         } else if dungeon_klimb {
             // `dungeon-mode.md §13.1`: the up-or-down answer is a climbing
             // arm, so the post-action pass reads the landing cell.
-            state.apply_post_turn_effects_after_dungeon_climb(turn_before, game_dir, outcome)?;
+            state.apply_post_turn_effects_after_dungeon_level_change(turn_before, game_dir, outcome)?;
         } else {
             state.apply_post_turn_effects_after_outcome(turn_before, game_dir, outcome)?;
         }
