@@ -5352,6 +5352,8 @@ fn end_to_end_innkeeper_leave_companion_moves_roster_to_registry() {
     // panel's framed `Select:` picker.
     assert!(state.message.contains("\"Who will\nstay?\" "), "{:?}", state.message);
     handle_play_key_input(&mut state, '2', "", Path::new("")).unwrap();
+    // `inventory.md §4.3`: the digit only moves the highlight; Return commits.
+    handle_play_key_input(&mut state, '\r', "", Path::new("")).unwrap();
     // Measured 2026-09-08 (`qa/paired/nb-inn-commit.tsv`): the deposit is
     // quoted as a monthly rate due at check-out, ending on the shared
     // `Wilt thou take it?"` prompt.
@@ -7614,6 +7616,8 @@ fn inn_capacity_and_leave_target_refusals_follow_the_published_rules() {
     let mut state = fresh();
     handle_play_key_input(&mut state, 'L', "", Path::new("")).unwrap();
     handle_play_key_input(&mut state, '1', "", Path::new("")).unwrap();
+    // `inventory.md §4.3`: the digit only moves the highlight; Return commits.
+    handle_play_key_input(&mut state, '\r', "", Path::new("")).unwrap();
     assert!(
         state.message.contains("Thy friends will not leave thee!"),
         "{:?}",
@@ -7635,6 +7639,8 @@ fn inn_capacity_and_leave_target_refusals_follow_the_published_rules() {
     let mut state = fresh();
     handle_play_key_input(&mut state, 'L', "", Path::new("")).unwrap();
     handle_play_key_input(&mut state, '3', "", Path::new("")).unwrap();
+    // `inventory.md §4.3`: the digit only moves the highlight; Return commits.
+    handle_play_key_input(&mut state, '\r', "", Path::new("")).unwrap();
     assert!(state.active_shop.is_none());
     assert_eq!(state.party.len(), 3);
     assert!(state.inn_registry.is_empty());

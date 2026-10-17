@@ -255,3 +255,149 @@ fn guild_stock_rows_print_capitalised_names() {
         "a.........Keys\nb.........Gems\nc......Torches\n"
     );
 }
+
+fn three_member_party(state: &mut PlayState) {
+    let avatar = state.party[0];
+    let mut shamino = avatar;
+    shamino.slot = 1;
+    shamino.class_byte = b'R';
+    let mut iolo = avatar;
+    iolo.slot = 2;
+    iolo.class_byte = b'B';
+    state.party = vec![avatar, shamino, iolo];
+    state.party_names = vec![*b"AVATAR\0\0\0", *b"SHAMINO\0\0", *b"IOLO\0\0\0\0\0"];
+    state.party_stay_counters = vec![0; 3];
+    state.party_strengths = vec![30; 3];
+    state.party_intelligence = vec![30; 3];
+    state.party_experience = vec![0; 3];
+    state.party_equipment = default_party_equipment(3);
+}
+
+fn keys(state: &mut PlayState, keys: &[char]) {
+    for &key in keys {
+        handle_play_key_input(state, key, "", Path::new("")).unwrap();
+    }
+}
+
+/// Playtest E49. `systems/shops.md §8.C` "Leave-companion selection": "A
+/// valid party digit moves the highlight; **Return or Space commits** the
+/// indicated member. The direction keys move within the travelling roster's
+/// bounds." `inventory.md §4.3`: "The message window is untouched apart from
+/// the caller's prompt itself."
+#[test]
+fn inn_leave_picker_digits_and_arrows_move_and_only_return_commits() {
+    use crate::shop_runtime::InnkeeperState;
+    use crate::shop_session::ActiveShopSession;
+    let mut state = test_state(open_grid(), 1, 1);
+    state.area = Area::Town {
+        scene: Scene::new(20).unwrap(),
+        floor: 0,
+    };
+    three_member_party(&mut state);
+    state.active_shop = Some(ActiveShopSession::Innkeeper(InnkeeperState::ServiceMenu {
+        inn: Inn::HotelBrittany,
+    }));
+    keys(&mut state, &['L']);
+    let question = state.message.clone();
+    assert!(question.contains("stay?"), "{question:?}");
+    assert_eq!(state.selector_highlight(), Some(0));
+    assert_eq!(state.roster_box_label().as_deref(), Some("Select:"));
+
+    // A digit moves without committing; the window keeps the question.
+    keys(&mut state, &['3']);
+    assert_eq!(state.selector_highlight(), Some(2));
+    assert_eq!(state.message, question);
+    // Direction keys move within the roster's bounds.
+    keys(&mut state, &[char::from(INPUT_CODE_SOUTH)]);
+    assert_eq!(state.selector_highlight(), Some(2));
+    keys(&mut state, &[char::from(INPUT_CODE_NORTH)]);
+    assert_eq!(state.selector_highlight(), Some(1));
+    assert_eq!(state.message, question);
+    // `Y`, `P`, `0` and out-of-party digits wait.
+    keys(&mut state, &['Y', 'P', '0', '6']);
+    assert_eq!(state.selector_highlight(), Some(1));
+    assert!(matches!(
+        state.active_shop,
+        Some(ActiveShopSession::Innkeeper(
+            InnkeeperState::PickLeaveCompanion { .. }
+        ))
+    ));
+
+    keys(&mut state, &['\r']);
+    assert!(matches!(
+        state.active_shop,
+        Some(ActiveShopSession::Innkeeper(
+            InnkeeperState::ConfirmLeaveCompanion { party_index: 1, .. }
+        ))
+    ));
+    assert!(
+        state.message.contains("The rate for"),
+        "{:?}",
+        state.message
+    );
+}
+
+/// Playtest E48. `systems/shops.md §8.C`: the healer prints `Who needs my
+/// aid?` "and use[s] the party selector"; `inventory.md §4.3`: "A digit moves
+/// the indicator; it does not commit ... Only Return or Space commits the
+/// indicated row, Escape cancels". The healer committed on a digit, ignored
+/// the arrows, Return, Space and Escape, and cancelled on `N`.
+#[test]
+fn healer_member_selector_moves_on_digits_and_commits_on_return() {
+    use crate::shop_runtime::HealerShopState;
+    use crate::shop_session::ActiveShopSession;
+    let fresh = || {
+        let mut state = test_state(open_grid(), 1, 1);
+        three_member_party(&mut state);
+        state.gold = 1000;
+        state.party[1].status = b'D';
+        state.party[1].hp = 0;
+        state.active_shop = Some(ActiveShopSession::Healer(
+            HealerShopState::PickService,
+            Healer::TheHealersMission,
+        ));
+        state
+    };
+
+    let mut state = fresh();
+    keys(&mut state, &['R']);
+    let question = state.message.clone();
+    assert!(question.contains("Who needs my aid?"), "{question:?}");
+    keys(&mut state, &['2', 'N', 'Y', 'H']);
+    assert_eq!(state.selector_highlight(), Some(1));
+    assert_eq!(state.message, question);
+    assert!(matches!(
+        state.active_shop,
+        Some(ActiveShopSession::Healer(
+            HealerShopState::PickPartyMember { highlight: 1, .. },
+            _
+        ))
+    ));
+    keys(
+        &mut state,
+        &[char::from(INPUT_CODE_SOUTH), char::from(INPUT_CODE_NORTH)],
+    );
+    assert_eq!(state.selector_highlight(), Some(1));
+    keys(&mut state, &[' ']);
+    assert!(
+        matches!(
+            state.active_shop,
+            Some(ActiveShopSession::Healer(
+                HealerShopState::Confirm { slot: 1, .. },
+                _
+            ))
+        ),
+        "{:?} {:?}",
+        state.active_shop,
+        state.message
+    );
+
+    // Escape cancels with `No one` and the continuation question.
+    let mut state = fresh();
+    keys(&mut state, &['R', '\u{1b}']);
+    assert!(state.message.starts_with("No one"), "{:?}", state.message);
+    assert!(matches!(
+        state.active_shop,
+        Some(ActiveShopSession::Healer(HealerShopState::Continuation, _))
+    ));
+}

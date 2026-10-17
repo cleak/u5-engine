@@ -583,6 +583,9 @@ pub enum HealerShopState {
     PickPartyMember {
         service: HealerService,
         cost: u16,
+        /// `inventory.md §4.3`'s shared selector: the indicated row. Digits
+        /// and direction keys move it; only Return or Space commits.
+        highlight: u8,
     },
     Confirm {
         service: HealerService,
@@ -661,10 +664,14 @@ pub fn step_healer_shop(
         },
         (HealerShopState::PickService, HealerShopInput::Service(service)) => {
             let cost = healer_service_cost(service);
-            *state = HealerShopState::PickPartyMember { service, cost };
+            *state = HealerShopState::PickPartyMember {
+                service,
+                cost,
+                highlight: 0,
+            };
             HealerOutcome::QuotedCost { service, cost }
         }
-        (HealerShopState::PickPartyMember { service, cost }, HealerShopInput::Slot(slot)) => {
+        (HealerShopState::PickPartyMember { service, cost, .. }, HealerShopInput::Slot(slot)) => {
             let slot_idx = slot as usize;
             if slot_idx >= members.len() {
                 return HealerOutcome::InvalidInput;
@@ -775,6 +782,10 @@ pub enum InnkeeperState {
     PickLeaveCompanion {
         inn: Inn,
         deposit: u16,
+        /// `shops.md §8.C` "Leave-companion selection": the indicated member,
+        /// initially Avatar. Digits and direction keys move it; Return or
+        /// Space commits.
+        highlight: usize,
     },
     ConfirmLeaveCompanion {
         inn: Inn,
@@ -911,7 +922,11 @@ pub fn step_innkeeper(
             InnMainAction::LeaveCompanion => {
                 let deposit =
                     inn_leave_companion_deposit_for_speaker(inn, ctx.speaker_intelligence);
-                *state = InnkeeperState::PickLeaveCompanion { inn, deposit };
+                *state = InnkeeperState::PickLeaveCompanion {
+                    inn,
+                    deposit,
+                    highlight: 0,
+                };
                 InnkeeperOutcome::PickLeaveCompanion { deposit }
             }
             InnMainAction::PickUpCompanion => {
@@ -949,7 +964,7 @@ pub fn step_innkeeper(
             InnkeeperOutcome::Declined
         }
         (
-            InnkeeperState::PickLeaveCompanion { inn, deposit },
+            InnkeeperState::PickLeaveCompanion { inn, deposit, .. },
             InnkeeperInput::Slot(party_index),
         ) => {
             *state = InnkeeperState::ConfirmLeaveCompanion {

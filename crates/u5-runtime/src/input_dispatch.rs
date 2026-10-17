@@ -1018,13 +1018,23 @@ fn handle_active_shop_key_input(
                         state.emit_message_line_continuing_row(healer_service_echo(treatment));
                         state.push_explicit_blank_message_entry();
                         if state.party.len() == 1 {
-                            *s = HealerShopState::PickPartyMember { service, cost };
+                            *s = HealerShopState::PickPartyMember {
+                                service,
+                                cost,
+                                highlight: 0,
+                            };
+                            // The automatic selection commits the one row the
+                            // selector can indicate.
                             return {
                                 state.active_shop = Some(session);
-                                handle_active_shop_key_input(state, '1', "", game_dir)
+                                handle_active_shop_key_input(state, '\r', "", game_dir)
                             };
                         }
-                        *s = HealerShopState::PickPartyMember { service, cost };
+                        *s = HealerShopState::PickPartyMember {
+                            service,
+                            cost,
+                            highlight: 0,
+                        };
                         // §8.C: "A sole party member is selected automatically;
                         // otherwise print `\n\n"Who needs my aid?" ` and use
                         // the party selector."
@@ -1042,14 +1052,46 @@ fn handle_active_shop_key_input(
                     // (R419)."
                     HealerServiceAction::Discard => String::new(),
                 },
-                (HealerShopState::PickPartyMember { service, .. }, _, true, _) => {
+                // `inventory.md §4.3`, the shared selector §8.C's healer uses:
+                // "Only Return or Space commits the indicated row, Escape
+                // cancels". `N` is not a cancel key there (playtest E48).
+                (HealerShopState::PickPartyMember { .. }, _, _, _) if key_byte == 0x1b => {
                     *s = HealerShopState::Continuation;
-                    let _ = service;
                     // §8.C: "Cancellation adds `No one`, with no trailing line
                     // feed", then the continuation question.
                     format!("No one{HEALER_CONTINUATION}")
                 }
-                (HealerShopState::PickPartyMember { service, .. }, _, _, Some(d)) if d >= 1 => {
+                // "A digit moves the indicator; it does not commit ... the
+                // four direction keys move the indicator"; other keys leave
+                // the message window untouched.
+                (
+                    HealerShopState::PickPartyMember {
+                        service,
+                        cost,
+                        highlight,
+                    },
+                    _,
+                    _,
+                    digit,
+                ) if !matches!(key_byte, b'\r' | b'\n' | b' ') => {
+                    let highlight = usize::from(highlight);
+                    let moved = shop_party_selector_move(state, highlight, key, digit);
+                    *s = HealerShopState::PickPartyMember {
+                        service,
+                        cost,
+                        highlight: moved as u8,
+                    };
+                    state.message.clone()
+                }
+                (
+                    HealerShopState::PickPartyMember {
+                        service, highlight, ..
+                    },
+                    _,
+                    _,
+                    _,
+                ) => {
+                    let d = highlight + 1;
                     let target_index = usize::from(d - 1);
                     let treatment = healer_treatment_for_service(service);
                     let Some(member) = state.party.get(target_index).copied() else {
@@ -1319,7 +1361,11 @@ fn handle_active_shop_key_input(
                                 inn,
                                 ctx.speaker_intelligence,
                             );
-                            *s = InnkeeperState::PickLeaveCompanion { inn, deposit };
+                            *s = InnkeeperState::PickLeaveCompanion {
+                                inn,
+                                deposit,
+                                highlight: 0,
+                            };
                             // **Measured** 2026-09-08 at Hotel Brittany with a
                             // party of three (`qa/paired/nb-inn-companion.tsv`):
                             // the innkeeper asks in the message window while
@@ -1482,13 +1528,40 @@ fn handle_active_shop_key_input(
                     format!("\n{INN_ANYTHING_MORE_PROMPT}")
                 }
                 // "A valid party digit moves the highlight; Return or Space
-                // commits the indicated member", which starts on Avatar. `Y`,
-                // `P`, `0` and out-of-party digits leave the picker waiting.
-                (InnkeeperState::PickLeaveCompanion { inn, deposit }, _, _, digit)
-                    if matches!(key_byte, b' ' | b'\r' | b'\n')
-                        || digit.is_some_and(|d| d >= 1 && usize::from(d) <= state.party.len()) =>
-                {
-                    let party_index = digit.map_or(0, |d| usize::from(d - 1));
+                // commits the indicated member", which starts on Avatar. "The
+                // direction keys move within the travelling roster's bounds.
+                // `Y`, `P`, `0` and out-of-party digits leave the picker
+                // waiting", and `inventory.md §4.3` leaves the message window
+                // untouched meanwhile. A digit used to commit at once and
+                // Down blanked the window (playtest E49).
+                (
+                    InnkeeperState::PickLeaveCompanion {
+                        inn,
+                        deposit,
+                        highlight,
+                    },
+                    _,
+                    _,
+                    digit,
+                ) if !matches!(key_byte, b' ' | b'\r' | b'\n') => {
+                    *s = InnkeeperState::PickLeaveCompanion {
+                        inn,
+                        deposit,
+                        highlight: shop_party_selector_move(state, highlight, key, digit),
+                    };
+                    state.message.clone()
+                }
+                (
+                    InnkeeperState::PickLeaveCompanion {
+                        inn,
+                        deposit,
+                        highlight,
+                    },
+                    _,
+                    _,
+                    _,
+                ) => {
+                    let party_index = highlight;
                     if party_index == 0 {
                         // "Leave selects Avatar | `\n\nThy friend`, plural `s`
                         // only when more than two members travel, then ` will
@@ -2558,6 +2631,31 @@ fn handle_active_shop_key_input(
         state.active_shop = Some(session);
     }
     PlayInputDisposition::Continue
+}
+
+/// `inventory.md §4.3`'s shared member selector, for the shop callers that
+/// keep its highlight in their own state (inn Leave, the healer): "`1`
+/// through `6`, bounded by the party size, reposition the inverted row
+/// exactly as the direction keys do and leave the prompt open". Any other
+/// key leaves the highlight where it is.
+fn shop_party_selector_move(
+    state: &PlayState,
+    highlight: usize,
+    key: char,
+    digit: Option<u8>,
+) -> usize {
+    let last = state.party.len().saturating_sub(1);
+    if let Some(forward) = crate::z_stats::party_selector_direction_step(key) {
+        return if forward {
+            highlight.saturating_add(1).min(last)
+        } else {
+            highlight.saturating_sub(1)
+        };
+    }
+    match digit {
+        Some(d) if d >= 1 && usize::from(d) <= state.party.len() => usize::from(d - 1),
+        _ => highlight,
+    }
 }
 
 fn horse_sale_position(state: &PlayState) -> Option<(usize, usize)> {
