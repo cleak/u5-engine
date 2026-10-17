@@ -508,7 +508,20 @@ impl PlayState {
     /// reflects the session the panel is about to show, since
     /// [`crate::stats_panel::active_panel_picker`] reads the live field
     /// rather than taking a session argument.
+    ///
+    /// The same pass also runs `inventory.md §4.4`'s inverse-video toggles
+    /// (u5-spec#296), which flip the panel window's persistent inverse bit
+    /// when the highlight sits on a two-line entry
+    /// ([`crate::stats_panel::PanelPickerView::inverse_pass`]). Only U-Use can
+    /// flip it: R-Ready's and M-Mix's vocabularies never take a second
+    /// display line (§4.5), so their passes always toggle an even number of
+    /// times.
     fn register_use_picker_render_scroll(&mut self) {
+        if crate::stats_panel::active_panel_picker(self)
+            .is_some_and(|view| view.inverse_pass_flips_window())
+        {
+            self.stats_panel_window_inverse = !self.stats_panel_window_inverse;
+        }
         if !crate::stats_panel::active_panel_picker(self)
             .is_some_and(|view| view.overflowed_last_row_entry())
         {
@@ -1376,10 +1389,10 @@ impl PlayState {
             // two line feeds, so a blank row stands between the aloft line and
             // the refusal. This engine spent one.
             //
-            // Not reproduced: the stock side also draws the stats panel
-            // inverted from the aloft line onward, and it is still inverted
-            // after a following Pass. When it is restored is not measured,
-            // so this engine leaves the panel alone rather than guess.
+            // The stock capture's stats panel, inverted from the aloft line
+            // onward, is not drawn by this handler: u5-spec#296 traced it to
+            // the picker's highlight leak (`inventory.md §4.4`,
+            // `PlayState::stats_panel_window_inverse`).
             self.staged_narration
                 .push_secs_on_open_row(swell_secs, "\n\nNo effect!\n");
             // `quest-graph.md §5` step 3 (u5-spec#296): "On that arm the

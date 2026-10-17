@@ -516,3 +516,152 @@ fn on_position_shard_holds_the_cast_line_until_the_swell_ends() {
     assert_eq!(state.special_items[SPECIAL_ITEM_SHARD_FALSEHOOD_INDEX], 1);
     assert_eq!(state.turn, 0);
 }
+
+/// `inventory.md §4.4` "The highlight can leak into the panel" (u5-spec#296):
+/// a stock of counted Amulet and Crown, a counted Shard of Falsehood (two
+/// display lines) and a game-written Shard of Hatred (one line).
+fn shard_leak_picker_state(falsehood: u8) -> PlayState {
+    let mut state = test_state(open_grid(), 4, 4);
+    state.scroll_stock = [0; SCROLL_COUNT];
+    state.potion_stock = [0; POTION_COUNT];
+    state.special_items = [0; SPECIAL_ITEM_COUNT];
+    // Every Moonstone still lies buried, so no Moonstone row is offered.
+    state.moonstone_slots = [MoonstoneGateSlot {
+        scene: 0,
+        x: 0,
+        y: 0,
+        z: 0,
+    }; MOONSTONE_SLOT_COUNT];
+    state.special_items[SPECIAL_ITEM_AMULET_LB_INDEX] = 1;
+    state.special_items[SPECIAL_ITEM_CROWN_LB_INDEX] = 1;
+    state.special_items[SPECIAL_ITEM_SHARD_FALSEHOOD_INDEX] = falsehood;
+    state.special_items[SPECIAL_ITEM_SHARD_HATRED_INDEX] = 255;
+    state
+}
+
+fn run_use_picker_downs_then(state: &mut PlayState, downs: usize, finish: char) {
+    assert_eq!(state.start_use_item(), MoveOutcome::Observed);
+    for _ in 0..downs {
+        assert!(state.step_active_use('>', "", Path::new("")).unwrap());
+    }
+    assert!(state.step_active_use(finish, "", Path::new("")).unwrap());
+}
+
+#[test]
+fn picker_highlight_on_a_two_line_entry_leaks_inverse_into_the_panel() {
+    // §4.4 worked cases: "two Downs then accept leaves the panel inverted;
+    // three Downs leaves it normal; a game-written shard (the no-quantity
+    // marker) lists as one line and never leaks." Cancel leaves it the same
+    // way ("the full stats-panel repaint that U-Use performs after the picker
+    // returns (also on cancel)").
+    let probe = shard_leak_picker_state(1);
+    let lines: Vec<usize> = probe
+        .use_item_picker_rows()
+        .iter()
+        .map(|row| {
+            crate::stats_panel::PanelPickerRow {
+                quantity: row.quantity,
+                selector: crate::stats_panel::PANEL_PICKER_SELECTOR_BLANK,
+                selector_runic: false,
+                name: row.decoration.decorate(&row.label),
+                zero_padded: false,
+            }
+            .lines()
+            .len()
+        })
+        .collect();
+    assert_eq!(lines, vec![1, 1, 2, 1], "Amulet, Crown, Shard/Falsehd, Shard/Hatred");
+
+    let mut two = shard_leak_picker_state(1);
+    run_use_picker_downs_then(&mut two, 2, '\u{1b}');
+    assert!(two.stats_panel_window_inverse, "two Downs leave it set");
+
+    let mut three = shard_leak_picker_state(1);
+    run_use_picker_downs_then(&mut three, 3, '\u{1b}');
+    assert!(!three.stats_panel_window_inverse, "three Downs leave it clear");
+
+    let mut written = shard_leak_picker_state(255);
+    run_use_picker_downs_then(&mut written, 2, '\u{1b}');
+    assert!(!written.stats_panel_window_inverse, "an uncounted shard never leaks");
+
+    // Turns do not clear it, and the next panel repaint draws inverted.
+    two.advance_turn();
+    assert!(two.stats_panel_window_inverse);
+    two.repaint_stats_panel();
+    let mut system = TextWindowSystem::new();
+    configure_play_text_windows(&mut system);
+    paint_stats_panel_text_window(&mut system, &two, None);
+    let panel = system.window(STATS_PANEL_TEXT_WINDOW_INDEX).unwrap();
+    let roster = system
+        .cell(panel.top_left_x, panel.top_left_y)
+        .expect("roster row 0 is painted");
+    assert!(roster.inverse, "the roster box draws inverted");
+    let counter_row = STATS_COUNTER_TOP - STATS_PANEL_TEXT_TOP;
+    let counters = system
+        .cell(panel.top_left_x, panel.top_left_y + counter_row)
+        .expect("the counter box is painted");
+    assert!(counters.inverse, "the food/gold box draws inverted");
+
+    let mut normal = TextWindowSystem::new();
+    configure_play_text_windows(&mut normal);
+    paint_stats_panel_text_window(&mut normal, &three, None);
+    let cell = normal.cell(panel.top_left_x, panel.top_left_y).unwrap();
+    assert!(!cell.inverse);
+
+    // A later session that leaves odd parity again flips it back.
+    run_use_picker_downs_then(&mut two, 2, '\u{1b}');
+    assert!(!two.stats_panel_window_inverse);
+}
+
+#[test]
+fn picker_pass_toggles_follow_the_highlight_row_not_the_entry() {
+    // §4.4: the toggle goes "before any entry that begins on the highlight
+    // row, and again after any entry whose rendering leaves the cursor
+    // exactly one row below the highlight row". With the shard on rows 2-3,
+    // a highlight on row 3 sits on its continuation line: an off with no on,
+    // so the Shard/Hatred entry beginning on row 4 is drawn inverted from a
+    // clear start and nothing else is.
+    let row = |quantity: Option<u8>, name: &str| crate::stats_panel::PanelPickerRow {
+        quantity,
+        selector: crate::stats_panel::PANEL_PICKER_SELECTOR_BLANK,
+        selector_runic: false,
+        name: name.to_string(),
+        zero_padded: false,
+    };
+    let mut view = crate::stats_panel::PanelPickerView {
+        label: String::new(),
+        rows: vec![
+            row(Some(1), "Amulet"),
+            row(Some(1), "Crown"),
+            row(Some(1), "Shard/Falsehd"),
+            row(None, "Shard/Hatred"),
+        ],
+        selected: 0,
+        ornamental_frame: true,
+    };
+    let flips: Vec<bool> = (0..4)
+        .map(|selected| {
+            view.selected = selected;
+            view.inverse_pass_flips_window()
+        })
+        .collect();
+    assert_eq!(flips, vec![false, false, true, true]);
+
+    view.selected = 2;
+    assert_eq!(
+        view.inverse_pass(false),
+        (vec![false, false, true, true, true], true),
+        "the leak inverts every entry the pass renders after it"
+    );
+    view.selected = 3;
+    assert_eq!(
+        view.inverse_pass(true),
+        (vec![true, true, true, true, false], false)
+    );
+    // An ordinary highlight from a clear start is the one selected entry.
+    view.selected = 1;
+    assert_eq!(
+        view.inverse_pass(false),
+        (vec![false, true, false, false, false], false)
+    );
+}

@@ -388,6 +388,17 @@ pub struct PlayState {
     /// overworld's per-entry initialiser sets the flag **unconditionally**"
     /// (`RETRACTIONS.md` R497, amended by R526, u5-spec#297).
     pub overworld_prompt_pair_suppressed: bool,
+    /// The stats-panel text window's own, persistent inverse-video bit
+    /// (`inventory.md §4.4` "The highlight can leak into the panel",
+    /// u5-spec#296; `text-output.md` control bytes: the `0xFD` toggle "flips
+    /// both the cache and the active window's own inverse bit ... an inverse
+    /// state left set in a window survives the reset helper"). Each picker
+    /// list pass flips it once per emitted toggle; it is set after a pass
+    /// whose highlight sits on a two-line entry's first or continuation line.
+    /// While set, every panel repaint draws inverted. "Turns, movement and
+    /// messages do not clear it ... It flips back only when a later picker
+    /// session leaves odd parity again."
+    pub stats_panel_window_inverse: bool,
     /// Narration this presentation is printing on a timer rather than all at
     /// once. `main-loop.md §9`: "presentations, cutscene beats and paced turn
     /// loops call [the world tick] directly", so a handler with waits between
