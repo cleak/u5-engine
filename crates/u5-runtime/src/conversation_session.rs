@@ -121,6 +121,18 @@ pub struct ConversationSessionOutput {
     /// the nested gold-refusal loop propagates this stop through the whole
     /// conversation without synthesising a Bye line.
     pub response_signalled_stop: bool,
+    /// The step's stream ended on `0x82` END-STREAM, directly or through a
+    /// nested label head or alias. `conversation.md §7.2`: the code "Stop[s]
+    /// the current stream and signal[s] the caller 'this stream is
+    /// finished'", and §7.7 has a nested response that "reaches a
+    /// byte-runner stop condition" report stop to the label handler.
+    ///
+    /// `0xFF` is deliberately not counted: §7.2 has it "return control to
+    /// the keyword input loop", and the dwelling rat's Description entry,
+    /// which resumes after its ASK-WHO and ends on `0xFF`, reaches
+    /// `Your interest?` in the original (`dwelling-talk-after-entry`, beat
+    /// `name`).
+    pub end_stream_reached: bool,
     /// Shared moral-standing selector after any `0x89` / `0x8A` writes in
     /// this step's streams, or `None` when none ran. `conversation.md
     /// §7.4` makes those two codes the byte runner's only direct writers
@@ -246,6 +258,12 @@ pub struct ConversationSession {
     /// Labelled records currently executing after a GOTO, innermost last,
     /// with the blob position each one was entered at.
     label_records_running: Vec<(u8, usize)>,
+    /// The pending `0x88` ASK-WHO was reached by the opening's Description
+    /// entry (directly or through a label head it transferred to), so the
+    /// resumed stream is still the Description entry's: `conversation.md
+    /// §9` step 2, "If the Description entry signals a stop, the opener
+    /// returns and nothing further is printed."
+    opening_ask_who: bool,
 }
 
 impl ConversationSession {
@@ -260,6 +278,7 @@ impl ConversationSession {
             npc_slot: None,
             recruit_speaker_pending: false,
             label_records_running: Vec::new(),
+            opening_ask_who: false,
         }
     }
 
@@ -287,7 +306,9 @@ impl ConversationSession {
         &mut self,
         ctx: &ConversationContext<'_>,
     ) -> ConversationSessionOutput {
-        self.run_field_from(1, 0, ctx, 0)
+        let out = self.run_field_from(1, 0, ctx, 0);
+        self.opening_ask_who = self.awaiting_ask_who();
+        out
     }
 
     /// Whether the opening has already suspended for input, so the
@@ -341,6 +362,7 @@ impl ConversationSession {
                 // start or immediately after a space.
                 let input = capped_tlk_input_bytes(line);
                 let slot = tlk_ask_who_match(&input, ctx.party_member_names);
+                let from_opening = std::mem::take(&mut self.opening_ask_who);
                 self.phase = ConversationSessionPhase::AwaitingKeyword;
                 let mut out = self.run_field_from(field_idx, cursor, ctx, slot);
                 // §7.6: on a match ASK-WHO "sets the active scene's
@@ -376,6 +398,26 @@ impl ConversationSession {
                 out.text = rendered.text;
                 out.rendered_glyphs = rendered.glyphs;
                 out.asked_who = Some(slot);
+                // `conversation.md §9` step 2: "If the Description entry
+                // signals a stop, the opener returns and nothing further is
+                // printed", and §7.7 has a label head that "reaches a
+                // byte-runner stop condition" report stop to its caller. A
+                // Britain wizard's description GOTOs a head that asks the
+                // name and, unacquainted, prints `Good day!"`, a feed and
+                // `0x82`. Measured (`town-talk-speaker`, beat `name`): the
+                // original ends the conversation there - no Bye entry, no
+                // `Your interest?`, the command prompt on the next row -
+                // where this engine ran on into the keyword loop.
+                if from_opening {
+                    if self.awaiting_ask_who() {
+                        self.opening_ask_who = true;
+                    } else if out.end_stream_reached
+                        && matches!(self.phase, ConversationSessionPhase::AwaitingKeyword)
+                    {
+                        self.phase = ConversationSessionPhase::PresentingBye;
+                        out.ended = true;
+                    }
+                }
                 return out;
             }
             ConversationSessionPhase::AwaitingGoldRefusalKeyword => {
@@ -748,6 +790,7 @@ impl ConversationSession {
         out.signal_flags.extend(run.signal_flags.iter().copied());
         out.alarm_sweeps = out.alarm_sweeps.saturating_add(tlk_run_alarm_count(run));
         out.response_signalled_stop |= matches!(run.stop, TlkRunStop::EndOfResponse);
+        out.end_stream_reached |= matches!(run.stop, TlkRunStop::EndOfStream);
         self.absorb_moral_standing(run, out);
         self.absorb_recruit_speaker(run, ctx, out);
         match run.stop {
@@ -963,6 +1006,7 @@ fn merge_session_output(out: &mut ConversationSessionOutput, nested: Conversatio
     out.asked_who = nested.asked_who.or(out.asked_who);
     out.moral_standing = nested.moral_standing.or(out.moral_standing);
     out.response_signalled_stop |= nested.response_signalled_stop;
+    out.end_stream_reached |= nested.end_stream_reached;
     out.ended |= nested.ended;
 }
 
@@ -2117,6 +2161,73 @@ mod tests {
         assert_eq!(field_idx, 9, "the prompt resumes inside the labelled record");
         let answer = s.submit_keyword("", &ctx());
         assert!(answer.text.contains("Good."), "{:?}", answer.text);
+    }
+
+    /// `conversation.md §9` step 2 and §7.7: a Description entry that
+    /// GOTOs an ASK-WHO head whose resumed stream reaches `0x82` signals a
+    /// stop, and the opener returns - the conversation ends with no Bye and
+    /// no keyword prompt. A head that runs on to its NUL keeps the
+    /// conversation open. Shape of `town-talk-speaker`'s Britain wizard and
+    /// `dwelling-talk-after-entry`'s rat respectively.
+    fn opening_ask_who_session(head_tail: Vec<u8>) -> ConversationSession {
+        let mut description = enc("a grave wizard.");
+        description.push(0x91);
+        let mut head = vec![TLK_CODE_LABEL_RECORD, 0x91, TLK_CODE_ASK_WHO];
+        head.extend(head_tail);
+        let raw = vec![
+            enc("Annon"),
+            description,
+            Vec::new(),
+            enc("I served."),
+            enc("Good luck!"),
+            head,
+        ];
+        let decoded = raw
+            .iter()
+            .map(|field| field.iter().map(|b| char::from(b ^ TLK_TEXT_XOR_MASK)).collect())
+            .collect();
+        ConversationSession::new(raw, decoded)
+    }
+
+    #[test]
+    fn an_opening_ask_who_whose_stream_ends_on_end_stream_ends_the_conversation() {
+        let mut s = opening_ask_who_session(enc_with_stop("Good day!", TLK_CODE_END_STREAM));
+        s.present_description(&ctx());
+        assert!(s.opening_suspended(), "{:?}", s.phase);
+        let answer = s.submit_keyword("NAME", &ctx());
+        assert!(answer.text.ends_with("Good day!"), "{:?}", answer.text);
+        assert!(answer.ended, "the Description entry signalled a stop");
+        assert_eq!(s.phase, ConversationSessionPhase::PresentingBye);
+        assert!(!answer.text.contains("Good luck!"), "no Bye entry runs");
+    }
+
+    #[test]
+    fn an_opening_ask_who_whose_stream_reaches_its_nul_keeps_the_conversation_open() {
+        let mut s = opening_ask_who_session(enc("Squeek..."));
+        s.present_description(&ctx());
+        let answer = s.submit_keyword("NAME", &ctx());
+        assert!(!answer.ended);
+        assert_eq!(s.phase, ConversationSessionPhase::AwaitingKeyword);
+    }
+
+    #[test]
+    fn an_opening_ask_who_whose_stream_ends_on_end_of_response_keeps_the_conversation_open() {
+        let mut s = opening_ask_who_session(enc_with_stop("Squeek...", TLK_CODE_END_OF_RESPONSE));
+        s.present_description(&ctx());
+        let answer = s.submit_keyword("NAME", &ctx());
+        assert!(!answer.ended, "0xFF returns to the keyword loop");
+        assert_eq!(s.phase, ConversationSessionPhase::AwaitingKeyword);
+    }
+
+    #[test]
+    fn a_keyword_ask_who_whose_stream_ends_on_end_stream_reprompts() {
+        let mut head = vec![TLK_CODE_LABEL_RECORD, 0x91, TLK_CODE_ASK_WHO];
+        head.extend(enc_with_stop("Good day!", TLK_CODE_END_STREAM));
+        let mut s = label_session(vec![0x91], vec![enc("OTHER"), enc("x"), head]);
+        s.submit_keyword("ask", &ctx());
+        assert!(s.awaiting_ask_who(), "{:?}", s.phase);
+        let answer = s.submit_keyword("NAME", &ctx());
+        assert!(!answer.ended, "only the opener's stop ends the conversation");
     }
 
     #[test]
