@@ -559,3 +559,123 @@ fn endgame_lord_british_pauses_forty_ticks_on_stage_before_his_first_step() {
         ENDGAME_TABLEAU_LORD_BRITISH_THRONE_TARGET
     );
 }
+
+/// `audio.md §8.10` (added 2026-10-16, u5-spec#298 Q16): one ambient
+/// scenery tick from a town at (10, 10) with the given cells stamped.
+fn ambient_scenery_town(cells: &[((usize, usize), u8)]) -> PlayState {
+    let mut grid = open_grid();
+    for &((x, y), tile) in cells {
+        grid[y * 32 + x] = tile;
+    }
+    let mut state = test_state(grid, 10, 10);
+    state.twelve_hour_audio_repeats = 0;
+    state.ambient_audio_sub_tick = 0;
+    state
+}
+
+fn ambient_tick_sounds(state: &mut PlayState) -> Vec<SoundEffect> {
+    let serial = state.sound_effect_serial;
+    state.tick_ambient_audio_repeats();
+    state.sound_effects_after(serial)
+}
+
+#[test]
+fn ambient_clock_tick_tocks_on_residues_zero_and_four_only() {
+    // audio.md §8.10: a grandfather clock (`0xFA..0xFB`) plays 3000 Hz at
+    // residue 0, 2000 Hz at residue 4 and silence on the other six.
+    let mut state = ambient_scenery_town(&[((12, 10), 0xfa)]);
+    let mut sounds = Vec::new();
+    for _ in 0..8 {
+        sounds.push(ambient_tick_sounds(&mut state));
+    }
+    assert_eq!(sounds[0], vec![SoundEffect::AmbientClockTick { residue: 0 }]);
+    assert_eq!(sounds[4], vec![SoundEffect::AmbientClockTick { residue: 4 }]);
+    for residue in [1, 2, 3, 5, 6, 7] {
+        assert!(sounds[residue].is_empty(), "residue {residue}: {:?}", sounds[residue]);
+    }
+    assert_eq!(
+        crate::audio::ambient_clock_tick_frequency(0),
+        Some(3000)
+    );
+    assert_eq!(crate::audio::ambient_clock_tick_frequency(4), Some(2000));
+}
+
+#[test]
+fn ambient_clock_chimes_while_the_hour_countdown_is_nonzero() {
+    // audio.md §8.10: while save byte `0x02DE` is non-zero, residues 0 and 4
+    // play the chime envelope (-10, 20000, 2000, 1, 3116) instead, and the
+    // countdown still drops by one on that call.
+    let mut state = ambient_scenery_town(&[((10, 15), 0xfb)]);
+    state.twelve_hour_audio_repeats = 2;
+    assert_eq!(ambient_tick_sounds(&mut state), vec![SoundEffect::AmbientClockChime]);
+    assert_eq!(state.twelve_hour_audio_repeats, 1);
+    assert_eq!(
+        crate::audio::AMBIENT_CLOCK_CHIME_ENVELOPE,
+        crate::audio::EnvelopeSegment::new(-10, 20_000, 2_000, 1, 3116)
+    );
+}
+
+#[test]
+fn ambient_waterfall_and_fountain_rumble_on_every_call_and_nearest_wins() {
+    // audio.md §8.10: waterfall `0xD4..0xD7` and fountain `0xD8..0xDB`
+    // rumble on every call with no residue gate; the nearest source in the
+    // window wins and exactly one sounds.
+    let mut state = ambient_scenery_town(&[((11, 11), 0xd5), ((13, 10), 0xd9), ((10, 8), 0xfa)]);
+    state.ambient_audio_sub_tick = 3;
+    assert_eq!(ambient_tick_sounds(&mut state), vec![SoundEffect::AmbientWaterfallRumble]);
+
+    let mut fountain = ambient_scenery_town(&[((14, 14), 0xdb)]);
+    fountain.ambient_audio_sub_tick = 5;
+    assert_eq!(ambient_tick_sounds(&mut fountain), vec![SoundEffect::AmbientFountainRumble]);
+
+    // A source one cell outside the 11-by-11 window is not heard, and no
+    // shrine, flame or lava tile is a source (R540).
+    let mut outside = ambient_scenery_town(&[((16, 10), 0xd4)]);
+    assert!(ambient_tick_sounds(&mut outside).is_empty());
+}
+
+#[test]
+fn ambient_scenery_tie_goes_to_the_west_column_and_a_minstrel_silences_farther_sources() {
+    // audio.md §8.10: ties go to the cell met first - west before east, and
+    // north before south within a column. A clock west of the party ties a
+    // fountain north of it at distance 1, and the clock wins, so a residue-1
+    // call is silent.
+    let mut tie = ambient_scenery_town(&[((9, 10), 0xfa), ((10, 9), 0xd8)]);
+    tie.ambient_audio_sub_tick = 1;
+    assert!(ambient_tick_sounds(&mut tie).is_empty());
+    assert_eq!(
+        tie.ambient_scenery_source(),
+        Some(crate::audio::AmbientScenerySource::GrandfatherClock)
+    );
+
+    // A drawn minstrel (actor-half `0x5C..0x5F`) nearer than a waterfall
+    // wins; its tune is withheld data, so nothing plays.
+    let mut minstrel = ambient_scenery_town(&[((14, 10), 0xd4)]);
+    minstrel.active_objects.push(ActiveObject {
+        type_byte: 0x5c,
+        tile: 0x5d,
+        x: 11,
+        y: 10,
+        z: 0,
+        ..ActiveObject::empty()
+    });
+    assert_eq!(
+        minstrel.ambient_scenery_source(),
+        Some(crate::audio::AmbientScenerySource::Minstrel)
+    );
+    assert!(ambient_tick_sounds(&mut minstrel).is_empty());
+}
+
+#[test]
+fn ambient_scenery_scan_centres_on_the_arena_in_combat() {
+    // audio.md §8.10: in combat-class scenes the centre is the arena centre
+    // (5, 5), so the window is exactly the arena.
+    let mut state = world_state(open_world_grid(), 40, 40);
+    state.combat_active = true;
+    state.combat_terrain = [[0x04; COMBAT_ARENA_SIDE]; COMBAT_ARENA_SIDE];
+    state.combat_terrain[0][10] = 0xd8;
+    assert_eq!(
+        state.ambient_scenery_source(),
+        Some(crate::audio::AmbientScenerySource::Fountain)
+    );
+}

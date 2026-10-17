@@ -1227,6 +1227,11 @@ pub const PLAYER_SUMMON_ENVELOPE: EnvelopeSegment = EnvelopeSegment::new(5, 500,
 /// `audio.md §8.3` accepted moongate transit.
 pub const MOONGATE_TRANSIT_ENVELOPE: EnvelopeSegment =
     EnvelopeSegment::new(2, 2000, 30_000, 1, 5900);
+/// `audio.md §8.3` "Shadowlord summoned by Yell" (u5-spec#298 Q11): the
+/// blocking envelope `(2, 2000, 30000, 1, 10400)`, the moongate-transit
+/// shape at a higher period.
+pub const SHADOWLORD_YELL_SUMMON_ENVELOPE: EnvelopeSegment =
+    EnvelopeSegment::new(2, 2000, 30_000, 1, 10_400);
 /// `audio.md §6.1`'s absorb cue, the manual envelope every absorbed cast
 /// plays: "phase increment 9800, idle count 1, 28000 iterations, initial
 /// comparison 1000 and comparison increment 2."
@@ -1578,6 +1583,87 @@ pub const fn return_to_view_strip3_frequency(phase: u8) -> Option<u32> {
         4 => Some(RETURN_TO_VIEW_STRIP3_PHASE4_HZ),
         _ => None,
     }
+}
+
+// ---------------------------------------------------------------------------
+// Ambient scenery tick (audio.md §8.10)
+// ---------------------------------------------------------------------------
+
+/// `audio.md §8.10` (added 2026-10-16, u5-spec#298 Q16): the four source
+/// classes of the ambient scenery tick, formerly mis-named the "ambient
+/// shrine/flame tick" (`RETRACTIONS.md` R540). No shrine, flame or lava
+/// tile is a source.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum AmbientScenerySource {
+    /// Live tile `0xFA` or `0xFB`.
+    GrandfatherClock,
+    /// Live tile `0xD4..0xD7`.
+    Waterfall,
+    /// Live tile `0xD8..0xDB`.
+    Fountain,
+    /// A drawn actor whose sprite is in the band `348..351` (actor-half
+    /// `0x5C..0x5F`).
+    Minstrel,
+}
+
+/// `§8.10`: half-width of the 11-by-11 scan window.
+pub const AMBIENT_SCENERY_WINDOW_RADIUS: i32 = 5;
+/// `§8.10` minstrel actor band, as the actor-half displayed tile byte.
+pub const AMBIENT_MINSTREL_ACTOR_TILES: std::ops::RangeInclusive<u8> = 0x5c..=0x5f;
+/// `§8.10` clock tick-tock: 3 units at 3000 Hz (residue 0) or 2000 Hz
+/// (residue 4).
+pub const AMBIENT_CLOCK_TICK_HOLD_UNITS: u32 = 3;
+pub const AMBIENT_CLOCK_TICK_RESIDUE0_HZ: u32 = 3000;
+pub const AMBIENT_CLOCK_TICK_RESIDUE4_HZ: u32 = 2000;
+/// `§8.10` clock hour chime: "delta -10, initial comparison 20000, 2000
+/// iterations, idle 1, period 3116".
+pub const AMBIENT_CLOCK_CHIME_ENVELOPE: EnvelopeSegment =
+    EnvelopeSegment::new(-10, 20_000, 2_000, 1, 3116);
+
+/// `§8.10`: only residues 0 and 4 of the eight-phase sub-counter tick.
+pub const fn ambient_clock_tick_frequency(residue: u8) -> Option<u32> {
+    match residue {
+        0 => Some(AMBIENT_CLOCK_TICK_RESIDUE0_HZ),
+        4 => Some(AMBIENT_CLOCK_TICK_RESIDUE4_HZ),
+        _ => None,
+    }
+}
+
+/// `§8.10` terrain classifiers, tested in order on the live tile.
+pub const fn ambient_scenery_terrain_source(tile: u8) -> Option<AmbientScenerySource> {
+    match tile {
+        0xfa | 0xfb => Some(AmbientScenerySource::GrandfatherClock),
+        0xd4..=0xd7 => Some(AmbientScenerySource::Waterfall),
+        0xd8..=0xdb => Some(AmbientScenerySource::Fountain),
+        _ => None,
+    }
+}
+
+/// `§8.10` window scan. `cell_source(dx, dy)` classifies the cell at that
+/// offset from the centre (terrain first, then the drawn actor). Cells are
+/// scanned column by column west to east and north to south within a
+/// column; a cell is taken only when its squared Euclidean distance is
+/// **strictly** below the best so far, so the nearest wins and ties go to
+/// the cell met first. The starting bound admits every cell of the window.
+pub fn select_ambient_scenery_source(
+    mut cell_source: impl FnMut(i32, i32) -> Option<AmbientScenerySource>,
+) -> Option<AmbientScenerySource> {
+    let radius = AMBIENT_SCENERY_WINDOW_RADIUS;
+    let mut best_distance = 2 * radius * radius + 1;
+    let mut best = None;
+    for dx in -radius..=radius {
+        for dy in -radius..=radius {
+            let distance = dx * dx + dy * dy;
+            if distance >= best_distance {
+                continue;
+            }
+            if let Some(source) = cell_source(dx, dy) {
+                best_distance = distance;
+                best = Some(source);
+            }
+        }
+    }
+    best
 }
 
 // ---------------------------------------------------------------------------
@@ -2009,6 +2095,24 @@ pub enum SoundEffect {
     /// `§10.6` the overworld falls chain's descending sweep — one site, played
     /// once per fall on every waterfall brink of either plane.
     SurfaceFallsDescent,
+    /// `§8.3` (added 2026-10-16, u5-spec#298 Q11): the Shadowlord summoned by
+    /// Yell, after `\nA_shadowlord_appears\n` prints and before the
+    /// single-cell converge. See [`SHADOWLORD_YELL_SUMMON_ENVELOPE`].
+    ShadowlordYellSummon,
+    /// `§8.10` ambient scenery tick, grandfather-clock tick-tock: a blocking
+    /// tone of 3000 Hz for 3 units at sub-counter residue 0 and 2000 Hz at
+    /// residue 4, while the hour-chime countdown is zero.
+    AmbientClockTick { residue: u8 },
+    /// `§8.10` ambient scenery tick, grandfather-clock hour chime: the
+    /// envelope that replaces the tick-tock at residues 0 and 4 while the
+    /// countdown at save byte `0x02DE` is non-zero.
+    AmbientClockChime,
+    /// `§8.10` ambient scenery tick, waterfall: random rumble
+    /// `(20, 60, 10000)` on every call.
+    AmbientWaterfallRumble,
+    /// `§8.10` ambient scenery tick, fountain: random rumble
+    /// `(10, 30, 25000)` on every call.
+    AmbientFountainRumble,
 }
 
 impl SoundEffect {
@@ -2092,6 +2196,16 @@ impl SoundEffect {
             SoundEffect::CombatCommandRefused => combat_command_refused(),
             SoundEffect::LongDescent => long_descent(),
             SoundEffect::SurfaceFallsDescent => surface_falls_descent(),
+            SoundEffect::AmbientClockTick { residue } => {
+                match ambient_clock_tick_frequency(*residue) {
+                    Some(frequency) => blocking_tone(AMBIENT_CLOCK_TICK_HOLD_UNITS, frequency),
+                    None => SpeakerProgram::new(vec![SpeakerOp::Stop]),
+                }
+            }
+            SoundEffect::ShadowlordYellSummon => envelope_program(SHADOWLORD_YELL_SUMMON_ENVELOPE),
+            SoundEffect::AmbientClockChime => envelope_program(AMBIENT_CLOCK_CHIME_ENVELOPE),
+            SoundEffect::AmbientWaterfallRumble => random_rumble(20, 60, 10_000, jitter),
+            SoundEffect::AmbientFountainRumble => random_rumble(10, 30, 25_000, jitter),
         }
     }
 

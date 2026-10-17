@@ -1409,17 +1409,24 @@ impl PlayState {
                 if let Some(index) = Self::shadowlord_name_index(&word) {
                     let shadowlord =
                         Self::shadowlord_title_for_index(index).unwrap_or("Shadowlord");
-                    // `commands.md` §11: a successful summon "plays the
-                    // appearance line together with the long warble and the
-                    // fade-in effect". That line's text is not published, so
-                    // the window gets nothing beyond the colon echo rather
-                    // than an invented sentence naming the slot; the
-                    // accounting goes to the diagnostics.
+                    // `commands.md` §11 (added 2026-10-16, u5-spec#298 Q11):
+                    // after the install the handler runs three steps in
+                    // order - it prints `\nA_shadowlord_appears\n`, runs the
+                    // blocking envelope `(2, 2000, 30000, 1, 10400)`
+                    // (`audio.md §8.3`), then fades the actor in with the
+                    // shared single-cell converge on tile `0x1FC` at
+                    // viewport column 5, row 3, the actor byte parked at
+                    // `0x16` and restored to `0xFC` afterwards. No runtime
+                    // channel carries the converge (see the monster summon
+                    // flash in `combat_frame.rs`), so it is recorded in the
+                    // diagnostics only; the actor byte ends as `0xFC`.
                     self.message = if let Some(slot) = self.place_shadowlord_name_encounter(index) {
+                        self.emit_sound_effect(SoundEffect::ShadowlordYellSummon);
                         self.diagnostics.push(format!(
-                            "Yelled {word}, the name of {shadowlord}; summoned into active-object slot {slot}"
+                            "Yelled {word}, the name of {shadowlord}; summoned into active-object slot {slot}; converge tile 0x{:03X} at viewport (5, 3)",
+                            crate::commands::SHADOWLORD_YELL_SUMMON_CONVERGE_TILE
                         ));
-                        String::new()
+                        format!("\n{}\n", crate::commands::SHADOWLORD_YELL_SUMMON_LINE)
                     } else {
                         format!("\n{YELL_NO_EFFECT_MESSAGE}")
                     };

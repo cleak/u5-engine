@@ -2198,8 +2198,14 @@ impl PlayState {
             return MoveOutcome::Blocked;
         }
         if self.party[target_index].status != b'D' {
+            // `magic.md §8` healing effects (corrected 2026-10-16, u5-spec#298
+            // Q23, `RETRACTIONS.md` R542): the scroll is the resurrect
+            // helper's verbose caller, so a living target prints `Not dead!`,
+            // after which the U-Use tail adds `Failed!` with the shared
+            // failure glissando.
             self.advance_turn();
-            self.message = "Failed!".to_string();
+            self.message = format!("{}\nFailed!", crate::commands::SCROLL_RESURRECTION_NOT_DEAD);
+            self.emit_sound_effect(SoundEffect::CastFailure);
             return MoveOutcome::Blocked;
         }
 

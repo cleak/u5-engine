@@ -86,7 +86,8 @@ fn ambient_audio_tick_decrements_two_calls_in_every_eight() {
 /// duration nothing advances: no water rotation, no fire flicker, no
 /// fountain, no banner, no clock or bellows, no object animation, no AI
 /// roll, no wind check, no moongate refresh, no beacon step, and **no
-/// shrine/lava ambience tick**." `§13.2` identifies that ambience tick as
+/// ambient scenery tick**" (renamed from "shrine/lava ambience tick" by
+/// u5-spec#298 Q16, R540). `§13.2` identifies that ambience tick as
 /// the pass that "on two of every eight enabled steps, decrements a
 /// shared countdown byte", which `time.md §11` owns as save byte
 /// `0x02DE`. So a world tick taken while Negate Time runs must leave the

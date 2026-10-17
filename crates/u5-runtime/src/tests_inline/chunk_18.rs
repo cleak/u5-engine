@@ -831,6 +831,58 @@
     }
 
     #[test]
+    fn cast_time_stop_absorbed_by_any_shadow_lord_base_tile_record() {
+        // `magic.md §8` (added 2026-10-16, u5-spec#298 Q15): the sentinel is
+        // an active-object record whose base tile is exactly `0xFC`, anywhere
+        // in the table. The variant still plays first; the match prints
+        // `Magic absorbed!`, plays the absorption envelope, then the shared
+        // `Failed!` and glissando, and the effect is not set.
+        let mut state = britannia_state(open_world_grid(), 5, 5);
+        state.active_objects = vec![ActiveObject::empty(); OOL_SLOTS];
+        state.active_objects[29] = ActiveObject {
+            type_byte: SHADOWLORD_ACTOR_TILE,
+            tile: 0xfe,
+            x: 31,
+            y: 31,
+            ..ActiveObject::empty()
+        };
+        state.spell_charges[TIME_STOP_SPELL_INDEX] = 1;
+        state.party[0].mana = 8;
+        state.party[0].level = 8;
+        let serial = state.sound_effect_serial;
+
+        assert_eq!(state.cast_time_stop(0), MoveOutcome::Blocked);
+        assert_eq!(state.message, "Magic absorbed!\nFailed!");
+        assert_eq!(state.active_effect_tag, None);
+        assert_eq!(state.active_effect_counter, 0);
+        assert_eq!(state.spell_charges[TIME_STOP_SPELL_INDEX], 0);
+        assert_eq!(state.party[0].mana, 0);
+        assert_eq!(
+            state.sound_effects_after(serial),
+            vec![
+                SoundEffect::SharedVariant { variant: 8 },
+                SoundEffect::MagicAbsorbed,
+                SoundEffect::CastFailure,
+            ]
+        );
+
+        // Other Shadow Lord frames as the base tile do not match, and the
+        // displayed tile is not consulted.
+        let mut frame = britannia_state(open_world_grid(), 5, 5);
+        frame.active_objects = vec![ActiveObject::empty(); OOL_SLOTS];
+        frame.active_objects[3] = ActiveObject {
+            type_byte: 0xfd,
+            tile: SHADOWLORD_ACTOR_TILE,
+            ..ActiveObject::empty()
+        };
+        frame.spell_charges[TIME_STOP_SPELL_INDEX] = 1;
+        frame.party[0].mana = 8;
+        frame.party[0].level = 8;
+        assert_eq!(frame.cast_time_stop(0), MoveOutcome::Cast);
+        assert_eq!(frame.active_effect_tag, Some(NEGATE_TIME_ACTIVE_EFFECT_TAG));
+    }
+
+    #[test]
     fn cast_time_stop_scene_absorption_uses_special_message_without_resources() {
         let mut stonegate = test_state(open_grid(), 5, 5);
         stonegate.area = Area::Town {

@@ -1161,6 +1161,49 @@
         }
     }
 
+    /// `combat.md` §8.1 / §6.2 (corrected 2026-10-16, u5-spec#298 Q25,
+    /// `RETRACTIONS.md` R543): a prompted asleep slot takes the command
+    /// handler's arm - one `0..255` draw, waking below 16 - and prints
+    /// `Zzzzz...` whether or not it woke. The self-acting `0..16` draw would
+    /// leave a `0..15` value asleep.
+    #[test]
+    fn the_command_handler_asleep_arm_draws_0_to_255_and_wakes_below_16() {
+        for wakes in [true, false] {
+            let seed = (0..=u16::MAX)
+                .find(|candidate| {
+                    let mut prng = *candidate;
+                    let roll = u5_prng_range_u16(&mut prng, 0, 255);
+                    if wakes { roll == 9 } else { roll == 200 }
+                })
+                .unwrap();
+            let mut state = combat_player_command_state(8, 5);
+            state.combat_actors[0].flags |= COMBAT_ACTOR_FLAG_STATUS_DISABLED;
+            state.combat_actors[0].phase_counter = 1;
+            state.message_transcript.clear();
+            state.prng_state = seed;
+            let mut expected_prng = seed;
+            let _ = u5_prng_range_u16(&mut expected_prng, 0, 255);
+
+            let application = state.apply_combat_actor_slot_dispatch(0, 30);
+
+            let CombatActorSlotDispatchApplication::Slot { action, .. } = application else {
+                panic!("the party slot should dispatch");
+            };
+            let CombatActorDispatchAction::StatusDisabledWake { wake } = action else {
+                panic!("asleep slot should take the asleep arm, got {action:?}");
+            };
+            assert_eq!(wake.woke, wakes);
+            assert_eq!(wake.roll, if wakes { 9 } else { 200 });
+            assert_eq!(state.combat_actors[0].is_status_disabled(), !wakes);
+            assert_eq!(state.prng_state, expected_prng, "exactly one draw");
+            let printed = spec_9057c0d_transcript(&state);
+            assert!(
+                printed.contains(COMBAT_ASLEEP_TURN_LINE),
+                "Zzzzz... prints either way, got {printed:?}"
+            );
+        }
+    }
+
     /// `combat.md` §8.1: the two re-prompt shapes. "Short re-prompt, banner not
     /// reprinted: an unrecognised key (`What?`), the two toggles Ctrl-S and
     /// Ctrl-B, and a refused step or refused climb." "Full re-prompt, the whole

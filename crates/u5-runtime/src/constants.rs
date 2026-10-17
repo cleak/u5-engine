@@ -625,9 +625,11 @@ pub const AMBIENT_AUDIO_SUB_TICK_PERIOD: u8 = 8;
 /// order and the counter's phase origin, both of which are pinned where
 /// they are implemented, on `PlayState::tick_ambient_audio_repeats`.
 ///
-/// "The same two residues also pick the loud envelope in the tick's own
-/// lava/shrine effect branch, so one counter drives both behaviours and
-/// an implementation should not give them separate phases."
+/// "The same two residues also pick the loud envelope in the tick's
+/// grandfather-clock branch (`systems/audio.md` Section 8.10) ... One
+/// counter drives both behaviours and an implementation should not give
+/// them separate phases." (Corrected 2026-10-16, u5-spec#298 Q16: the
+/// earlier "lava/shrine effect branch" is withdrawn, R540.)
 pub const AMBIENT_AUDIO_DECREMENT_RESIDUES: [u8; 2] = [0, 4];
 
 /// `formats/saved-gam.md §10`: durable dungeon room-clear bitmap. The
@@ -1001,6 +1003,9 @@ pub const SHADOWLORD_COWARDICE_STONEGATE_NPC_SLOT: usize = 3;
 /// `town-mode.md §13` / `commands.md §11`: shared Shadow Lord actor
 /// class used by both resident-town installation and name/Yell summons.
 pub const SHADOWLORD_ACTOR_TILE: u8 = 0xfc;
+/// `magic.md §8` (u5-spec#298 Q15): Negate Time's absorption line when an
+/// active-object record carries base tile [`SHADOWLORD_ACTOR_TILE`].
+pub const NEGATE_TIME_MAGIC_ABSORBED_LINE: &str = "Magic absorbed!";
 /// Backward-compatible public name retained for callers that previously
 /// treated the three Shadowlords as consecutive tile ids. Identity is
 /// carried separately; every Shadowlord actor uses [`SHADOWLORD_ACTOR_TILE`].
@@ -1395,6 +1400,9 @@ pub const SLEEP_FIELD_SPELL_INDEX: usize = POISON_FIELD_SPELL_INDEX + 1;
 pub const FIELD_SPELL_COST: u8 = (SLEEP_FIELD_SPELL_INDEX / SPELLS_PER_CIRCLE) as u8 + 1;
 pub const BLINK_SPELL_INDEX: usize = 17;
 pub const BLINK_COST: u8 = (BLINK_SPELL_INDEX / SPELLS_PER_CIRCLE) as u8 + 1;
+/// `magic.md §8` (u5-spec#298 Q3): combat Blink's budget of seven attempts
+/// of the shared random arena probe.
+pub const COMBAT_BLINK_PROBE_ATTEMPTS: usize = 7;
 pub const DISPEL_FIELD_SPELL_INDEX: usize = 18;
 pub const DISPEL_FIELD_COST: u8 = (DISPEL_FIELD_SPELL_INDEX / SPELLS_PER_CIRCLE) as u8 + 1;
 pub const PROTECTION_SPELL_INDEX: usize = 19;
