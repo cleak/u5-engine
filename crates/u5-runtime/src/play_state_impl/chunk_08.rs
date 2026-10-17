@@ -40,6 +40,13 @@ impl PlayState {
                 *hull = repaired;
             }
             self.sync_player_object();
+            // `animation.md §13.5`: "the resident ship-repair hole-up" is one
+            // of the nine walker call sites, and "every one of the nine is a
+            // turn-consuming path that also advances the clock". Without the
+            // turn, repair was free and repeatable at will (playtest E27).
+            // The spec does not give the branch a minute charge of its own,
+            // so it takes the ordinary consumed outdoor turn.
+            self.advance_turn();
             self.message = format!("{HOLE_UP_REPAIR_BODY}\n{HOLE_UP_HULL_NOW_PREFIX}{repaired}!");
             return MoveOutcome::Rested;
         }
@@ -94,10 +101,9 @@ impl PlayState {
         for ch in std::iter::once(key).chain(suffix.chars()) {
             match session.phase {
                 RestPhase::Hours => {
-                    if ch == '\u{1b}' {
-                        self.message = "None!".to_string();
-                        return Ok(None);
-                    }
+                    // `dungeon-mode.md §11`: the hours prompt "loops until a
+                    // digit or Space" - Escape is neither, so it is read past
+                    // like any other rejected key (playtest E31).
                     let duration_input = if ch.is_ascii() {
                         rest_duration_input(ch as u8)
                     } else {
@@ -123,7 +129,14 @@ impl PlayState {
                             return self.finish_active_rest(hours, None, game_dir);
                         }
                         RestDurationInput::Cancel => {
-                            self.message = "None!".to_string();
+                            // `dungeon-mode.md §11` / `rest-and-camp.md §4`:
+                            // the prompt "echoes the key plus a line feed -
+                            // Space or `0` aborts with no further output".
+                            // The generic `None!` belongs to the selection
+                            // prompts (`commands.md §5.6`), not this one
+                            // (playtest E31).
+                            self.commit_prompt_reply(REST_HOURS_PROMPT, &ch.to_string());
+                            self.message_row_open_mid_line = false;
                             return Ok(None);
                         }
                         RestDurationInput::Discard => {}
@@ -145,23 +158,33 @@ impl PlayState {
                     _ => {}
                 },
                 RestPhase::WatchSlot => {
-                    if matches!(ch, '\u{1b}' | ' ' | '0' | '\r' | '\n') {
+                    // `dungeon-mode.md §11` (the resident Hole-up prompts the
+                    // overworld shares, `commands.md §5.5`): "after `Yes`,
+                    // `Who will stand guard? `, where a cancel or an
+                    // ineligible pick prints `None posted!\n\n` and re-asks
+                    // the watch question". Neither starts the camp
+                    // (playtest E30).
+                    let watcher = if matches!(ch, '\u{1b}' | ' ' | '0' | '\r' | '\n') {
+                        None
+                    } else {
+                        let Some(digit) = ch
+                            .to_digit(10)
+                            .and_then(|digit| usize::try_from(digit).ok())
+                        else {
+                            continue;
+                        };
+                        if !(1..=self.party.len().min(6)).contains(&digit) {
+                            continue;
+                        }
+                        self.rest_prompt_watcher(digit - 1)
+                    };
+                    let Some(watcher) = watcher else {
                         self.emit_message_line(REST_NO_WATCH_LITERAL);
-                        let hours = session.hours.unwrap_or(1);
-                        return self.finish_active_rest(hours, None, game_dir);
-                    }
-                    let Some(digit) = ch
-                        .to_digit(10)
-                        .and_then(|digit| usize::try_from(digit).ok())
-                    else {
+                        session.phase = RestPhase::WatchYesNo;
                         continue;
                     };
-                    if !(1..=self.party.len().min(6)).contains(&digit) {
-                        continue;
-                    }
                     let hours = session.hours.unwrap_or(1);
-                    let watcher = self.rest_prompt_watcher(digit - 1);
-                    return self.finish_active_rest(hours, watcher, game_dir);
+                    return self.finish_active_rest(hours, Some(watcher), game_dir);
                 }
             }
         }
@@ -354,7 +377,13 @@ impl PlayState {
                 &rest_entry_statuses,
             );
         }
-        self.message = if refused {
+        // `rest-and-camp.md §6`: an interruption "stops immediately and
+        // branches to the mode-appropriate interruption result" - the ambush
+        // line below, not the completed-camp result. Printing `Party rested!`
+        // there told the player the camp finished (playtest E29).
+        self.message = if interrupted {
+            String::new()
+        } else if refused {
             camp_messages.no_effect
         } else {
             camp_messages.success
@@ -431,9 +460,12 @@ impl PlayState {
             // reads combat state (the Lord British block above cannot run
             // on an interrupted camp), so the move is behaviour-neutral
             // apart from the message ordering it fixes.
-            self.message.push_str(" Ambushed!");
-            let narration = self.message.clone();
-            self.emit_message_line(narration);
+            // `dungeon-mode.md §11`: "The rest concludes either with `Party
+            // rested!\n` or `Ambushed!\n\n`". Emitted straight from the
+            // literal: writing it into the slot first let the emitter's own
+            // flush commit the slot and then print it again, so the
+            // transcript carried the line twice (playtest E29).
+            self.emit_message_line(CAMP_AMBUSHED_LINE);
             // Setup's own return value is an engine diagnostic, not a
             // published line; the slot is left holding the conflict banner,
             // which is what the original's pane shows on entry.

@@ -343,7 +343,7 @@ impl PendingVehicleAcquisition {
         match self {
             Self::Frigate { x, y, skiffs } => ActiveObject {
                 type_byte: SHIP_PARKED_FIRST,
-                tile: FIRST_PLAYABLE_FRIGATE_TILE,
+                tile: SHIP_PARKED_FIRST,
                 x,
                 y,
                 z,
@@ -355,7 +355,7 @@ impl PendingVehicleAcquisition {
             },
             Self::Skiff { x, y, aux3 } => ActiveObject {
                 type_byte: SKIFF_PARKED_FIRST,
-                tile: FIRST_PLAYABLE_SKIFF_TILE,
+                tile: SKIFF_PARKED_FIRST,
                 x,
                 y,
                 z,
@@ -538,8 +538,17 @@ impl TransportState {
         }
     }
 
+    /// The stand-in object X-Xit leaves behind (`vehicles.md §1`, §5).
+    ///
+    /// Byte 1 of the record is the displayed-frame byte, an actor byte
+    /// (`active-objects.md`), so the parked object is drawn and Looked at
+    /// as its own object byte: `0x10/0x11` riderless horse, `0x1B` carpet
+    /// on the ground, `0x24..0x27` furled frigate, `0x28..0x2B` skiff
+    /// (`vehicles.md §2`, "those are the objects ... exiting leaves
+    /// behind"). The transport's `tile` is this engine's internal visual
+    /// index and must not be written into the record.
     pub fn parked_object(self, x: usize, y: usize, z: i8) -> Option<ActiveObject> {
-        let (type_byte, tile, aux1, aux3) = match self {
+        let (type_byte, _internal_tile, aux1, aux3) = match self {
             Self::Foot | Self::SpriteSuppressed => return None,
             Self::Horse { type_byte, tile } => {
                 let parked_type = if (HORSE_MOUNTED_FIRST..=HORSE_MOUNTED_LAST).contains(&type_byte)
@@ -582,7 +591,7 @@ impl TransportState {
         };
         Some(ActiveObject {
             type_byte,
-            tile,
+            tile: type_byte,
             x,
             y,
             z,

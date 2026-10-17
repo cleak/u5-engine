@@ -136,7 +136,7 @@ fn world_load_consumes_pending_frigate_into_first_free_object_slot() {
         state.active_objects[2],
         ActiveObject {
             type_byte: SHIP_PARKED_FIRST,
-            tile: FIRST_PLAYABLE_FRIGATE_TILE,
+            tile: SHIP_PARKED_FIRST,
             x: 12,
             y: 21,
             z: WorldPlane::Underworld.save_floor(),
@@ -186,7 +186,7 @@ fn world_load_consumes_pending_skiff_by_appending_slot() {
         state.active_objects[1],
         ActiveObject {
             type_byte: SKIFF_PARKED_FIRST,
-            tile: FIRST_PLAYABLE_SKIFF_TILE,
+            tile: SKIFF_PARKED_FIRST,
             x: 12,
             y: 21,
             z: WorldPlane::Underworld.save_floor(),

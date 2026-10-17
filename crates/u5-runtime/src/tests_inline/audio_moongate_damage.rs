@@ -205,7 +205,9 @@ fn the_transit_envelope_survives_the_destination_warp() {
     let serial = state.sound_effect_serial;
 
     assert_eq!(
-        handle_play_key_input(&mut state, 'q', "", &dir).unwrap(),
+        // The transit consumes no key (playtest E25): the Pass
+            // is dispatched after it.
+            handle_play_key_input(&mut state, ' ', "", &dir).unwrap(),
         PlayInputDisposition::Continue
     );
 

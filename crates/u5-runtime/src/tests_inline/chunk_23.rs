@@ -1230,7 +1230,7 @@ fn play_state_shipwright_purchase_restores_pending_delivery_to_world() {
     );
     assert_eq!(state.active_objects.len(), 2);
     assert_eq!(state.active_objects[1].type_byte, SHIP_PARKED_FIRST);
-    assert_eq!(state.active_objects[1].tile, FIRST_PLAYABLE_FRIGATE_TILE);
+    assert_eq!(state.active_objects[1].tile, SHIP_PARKED_FIRST);
     assert_eq!(
         (state.active_objects[1].x, state.active_objects[1].y),
         (12, 21)
@@ -1263,7 +1263,7 @@ fn horse_purchase_debits_gold_and_places_boardable_horse_object() {
         bought.horse,
         ActiveObject {
             type_byte: HORSE_PARKED_FIRST,
-            tile: FIRST_PLAYABLE_HORSE_TILE,
+            tile: HORSE_PARKED_FIRST,
             x: 9,
             y: 8,
             z: 0,
@@ -21478,7 +21478,10 @@ fn overworld_prompt_pair_is_suppressed_once_after_a_shipboard_direction() {
         .map(|entry| (entry.text.clone(), entry.prompt_pair_suppressed))
         .collect();
     assert_eq!(echoes.len(), 1, "the hoisted key echoes nothing: {echoes:?}");
-    assert!(echoes[0].0.starts_with("Pass"), "{echoes:?}");
+    // The calm-wind consume left a heading cached, so this Pass is the
+    // stalled one: `weather.md §5` "That Pass adds no ordinary `Pass` echo"
+    // (playtest E26).
+    assert!(echoes[0].0.starts_with(SHIP_SAIL_STALLED_LINE), "{echoes:?}");
     assert!(echoes[0].1, "the prompt after the direction is suppressed");
     // Pass is not a direction, and the helper re-armed the flag on its test.
     assert!(!overworld_prompt_pair_is_suppressed(&state));

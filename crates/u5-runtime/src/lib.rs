@@ -245,7 +245,7 @@ pub use commands::{
 };
 pub use commands::{
     AN_SANCT_CHEST_OPENED_LINE, AN_SANCT_DISARM_BIT, AN_SANCT_DISARMED_LINE,
-    ATTACK_NOTHING_TO_ATTACK_REFUSAL, CAMP_BODY_SLEEP_LINE, CODEX_SHRINE_ENTER_ECHO_TAIL,
+    ATTACK_NOTHING_TO_ATTACK_REFUSAL, CAMP_AMBUSHED_LINE, CAMP_BODY_SLEEP_LINE, CODEX_SHRINE_ENTER_ECHO_TAIL,
     COMBAT_CREATURE_TARGET_PROMPT, COMBAT_JIMMY_NO_KEYS_MESSAGE, Command, CommandEcho,
     CommandEchoJoin, CommandEchoMode, DEATH_VISION_DEATH_LINE, DEATH_VISION_LOOK_TILE, LOOK_REDIRECT_EAST_TILE, LOOK_REDIRECT_NORTH_TILE,
     LOOK_REDIRECT_WEST_TILE,
@@ -473,7 +473,7 @@ pub use input_codes::{
 };
 pub use input_dispatch::{
     PlayInputDisposition, UNRECOGNISED_COMMAND_MESSAGE, advance_paced_combat_presentation,
-    handle_play_key_input,
+    handle_play_key_input, run_overworld_loop_head_hooks,
 };
 pub use intro::{
     BRITISH_PTH_PEN_ORIGINS, INTRO_MENU_COPYRIGHT_CAPTION, INTRO_MENU_COPYRIGHT_CAPTION_COLUMN,
@@ -1158,4 +1158,5 @@ mod tests {
     include!("tests_inline/shop_closing_envelope.rs");
     include!("tests_inline/endgame_handover_keys.rs");
     include!("tests_inline/rc1_paired_fixes.rs");
+    include!("tests_inline/playfix_overworld.rs");
 }

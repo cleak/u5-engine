@@ -1180,23 +1180,20 @@ impl PlayState {
         // skiff aboard, and the party becomes the launched skiff in place.
         if exit_position.is_none() {
             if let TransportState::Ship {
-                type_byte,
-                tile,
                 sails_hoisted: false,
-                hull,
                 skiffs,
+                ..
             } = transport
             {
+                // `vehicles.md §5`: the hull is parked as the furled-frigate
+                // object, drawn by its own object byte.
+                let parked_ship = transport
+                    .parked_object(old_x, old_y, z)
+                    .expect("a ship transport always parks an object");
                 if skiffs > 0 {
                     let parked_with_one_less_skiff = ActiveObject {
-                        type_byte,
-                        tile,
-                        x: old_x,
-                        y: old_y,
-                        z,
-                        phase: STEADY_PHASE,
-                        aux1: hull,
                         aux3: skiffs - 1,
+                        ..parked_ship
                     };
                     if self
                         .allocate_active_object_slot(parked_with_one_less_skiff)
@@ -1223,16 +1220,6 @@ impl PlayState {
                     return Ok(MoveOutcome::ExitedVehicle);
                 }
                 if self.special_items[SPECIAL_ITEM_MAGIC_CARPET_INDEX] > 0 {
-                    let parked_ship = ActiveObject {
-                        type_byte,
-                        tile,
-                        x: old_x,
-                        y: old_y,
-                        z,
-                        phase: STEADY_PHASE,
-                        aux1: hull,
-                        aux3: skiffs,
-                    };
                     if self.allocate_active_object_slot(parked_ship).is_none() {
                         self.message.clear();
                         return Ok(MoveOutcome::Blocked);
@@ -3428,7 +3415,19 @@ impl PlayState {
         // pass still had a heading cached and still clears it.
         if matches!(self.area, Area::World { .. }) && self.sail_cached_direction.is_some() {
             self.sail_cached_direction = None;
-            self.message = SHIP_SAIL_STALLED_LINE.to_string();
+            // `weather.md §5`: "That Pass adds no ordinary `Pass` echo", and
+            // `vehicles.md §6`: it "does not also print `Pass`". The stalled
+            // line takes the echo's place on the command row rather than
+            // following it (playtest E26).
+            if self.pending_command_echo.is_some() {
+                self.replace_command_echo(CommandEcho {
+                    text: SHIP_SAIL_STALLED_LINE,
+                    join: CommandEchoJoin::Complete,
+                });
+                self.message = String::new();
+            } else {
+                self.message = SHIP_SAIL_STALLED_LINE.to_string();
+            }
         } else {
             // `commands.md §8.1` row B: `Pass` completes its own echo and
             // "no result line follows"; `text-output.md §10.3` lists the
@@ -3598,7 +3597,19 @@ impl PlayState {
                     // Immediate reaction lines were emitted to the transcript
                     // as they occurred; preserve the command result in the
                     // compatibility message slot.
+                    //
+                    // A reaction line that replaced the slot was emitted
+                    // through `emit_message_line`, which flushed the command's
+                    // own result to the transcript first. The restored result
+                    // is therefore already printed: mark it so, or the next
+                    // flush prints it a second time - a pirate's `* BOOOM! *`
+                    // was followed by an unmarked copy of `Fire-East`
+                    // (playtest E28).
+                    let reaction_replaced_slot = self.message != pre_effect_message;
                     self.message = pre_effect_message;
+                    if reaction_replaced_slot {
+                        self.message_flushed = self.message.clone();
+                    }
                     nonterminal_outcome = Some(outcome);
                 }
                 if outcome.is_transition() || self.combat_active {
@@ -6346,9 +6357,16 @@ impl PlayState {
                     if self.party[slot].status == b'D' {
                         self.resurrect_party_member_to_hp(slot, 1);
                     }
-                }
-                for member in &mut self.party {
+                    // `blackthorn.md §7` "Party restoration": per slot the
+                    // cinematic revives, "copies the member's maximum hit
+                    // points into their current hit points, and repaints the
+                    // whole stats panel, before moving to the next slot" -
+                    // the immediate repaint of `stats-panel.md §2.2`. Without
+                    // it the panel kept the rescue's `0D` roster (playtest
+                    // E23).
+                    let member = &mut self.party[slot];
                     member.hp = member.max_hp.max(1);
+                    self.repaint_stats_panel();
                 }
                 self.pending_blackthorn_rescue = Some(BlackthornRescuePhase::Restoration);
                 Ok(None)

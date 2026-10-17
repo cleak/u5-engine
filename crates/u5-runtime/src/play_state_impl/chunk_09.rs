@@ -3839,6 +3839,17 @@ impl PlayState {
         }
 
         if changed {
+            // `overworld.md §9`: "Any actual tile change marks the viewport
+            // dirty and refreshes local light." Outdoors the viewport and the
+            // light pass read the live chunk window, not the full plane, so
+            // the stamp has to reach it; otherwise a gate rising while the
+            // party stands still is Lookable but never drawn or lit until a
+            // step reloads the window (playtest E24).
+            if let (Area::World { plane }, true) = (self.area, self.world_live_chunks.is_some()) {
+                if let Err(err) = self.rebuild_world_live_chunks_from_grid(plane) {
+                    self.push_diagnostic(err.to_string());
+                }
+            }
             self.mark_visibility_dirty();
             self.recompute_daylight();
         }
