@@ -971,6 +971,9 @@ pub const USE_SHARD_DOOM_SUFFIX: &str = " is wrought!\n";
 
 pub const SCROLL_WIND_CHANGE_RESULT: &str = "Wind change!";
 pub const SCROLL_RESURRECTION_RESULT: &str = "Resurrection!";
+/// `magic.md §8` (u5-spec#298 Q23): the Resurrection scroll's verbose
+/// refusal for a living target, ahead of the U-Use tail's `Failed!`.
+pub const SCROLL_RESURRECTION_NOT_DEAD: &str = "Not dead!";
 
 /// **Measured** (`qa/paired/use-potions.tsv`, a stocked save built with the
 /// `seed_inventory` probe): each potion answers with one short line under

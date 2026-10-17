@@ -5708,12 +5708,11 @@ impl PlayState {
             return outcome;
         }
 
-        // `magic.md` §8: "the ordinary spell/scroll path records a failed
-        // result and lets the dispatcher own the trailing failure narration";
-        // the verbose `Not dead!` refusal is never printed on this path.
-        // audio.md §6.1 id 42 calls the living-target arm "fully silent"; the
-        // variant is certainly absent, while the dispatcher's failure tail is
-        // kept until the two documents agree.
+        // `magic.md` §8 / `audio.md` §6.1 id 42 (corrected 2026-10-16,
+        // u5-spec#298 Q23, `RETRACTIONS.md` R542): the spell is the helper's
+        // silent caller, so a living target plays no variant and prints no
+        // `Not dead!`, but the cast epilogue prints `Failed!` with the
+        // failure glissando. Only a cancelled member prompt is fully silent.
         if self.party[target_index].status != b'D' {
             self.advance_turn();
             self.fail_committed_spell_cast();

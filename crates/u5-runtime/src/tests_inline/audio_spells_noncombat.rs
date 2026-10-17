@@ -966,3 +966,20 @@ fn dungeon_open_sounds_variant_two_only_after_the_chest_test() {
         vec![SoundEffect::SharedVariant { variant: 2 }]
     );
 }
+
+#[test]
+fn resurrect_spell_on_a_living_target_prints_failed_with_the_glissando() {
+    // audio.md §6.1 id 42 / magic.md §8 (corrected 2026-10-16, u5-spec#298
+    // Q23, `RETRACTIONS.md` R542): a living target plays no variant and the
+    // silent caller suppresses `Not dead!`, but the dispatcher prints
+    // `Failed!` and plays the shared failure glissando.
+    let mut state = test_state(open_grid(), 1, 1);
+    arm_spell(&mut state, RESURRECT_SPELL_INDEX);
+    let serial = state.sound_effect_serial;
+    assert_eq!(state.cast_resurrect(0, 0), MoveOutcome::Blocked);
+    assert_eq!(state.message, "Failed!");
+    assert_eq!(
+        state.sound_effects_after(serial),
+        vec![SoundEffect::CastFailure]
+    );
+}

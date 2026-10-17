@@ -484,6 +484,24 @@ fn scroll_wind_and_resurrection_debit_before_branch_gates() {
     assert_eq!(town.party[0].hp, 1);
     assert_eq!(town.turn, 1);
     assert_eq!(town.message, "");
+
+    // `magic.md §8` (u5-spec#298 Q23, R542): the scroll is the verbose
+    // caller - a living target prints `Not dead!`, then the U-Use tail's
+    // `Failed!` with the failure glissando, and plays no scroll variant.
+    let mut living = test_state(open_grid(), 1, 1);
+    living.scroll_stock[SCROLL_RESURRECTION_INDEX] = 1;
+    let serial = living.sound_effect_serial;
+    assert_eq!(
+        living.use_scroll(SCROLL_RESURRECTION_INDEX, None, Some(0)),
+        MoveOutcome::Blocked
+    );
+    assert_eq!(living.scroll_stock[SCROLL_RESURRECTION_INDEX], 0);
+    assert_eq!(living.party[0].status, b'G');
+    assert_eq!(living.message, "Not dead!\nFailed!");
+    assert_eq!(
+        living.sound_effects_after(serial),
+        vec![SoundEffect::CastFailure]
+    );
 }
 
 #[test]
