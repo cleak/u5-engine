@@ -6287,28 +6287,10 @@ impl PlayState {
                 // "prints beat 8a once per non-Dead in-party slot". The status
                 // read is the pre-restoration one - §7 notes the beat is
                 // unreachable on an all-Dead roster, which is what the
-                // cinematic's own entry condition normally leaves.
-                let not_dead = self
-                    .party
-                    .iter()
-                    .filter(|member| member.status != b'D')
-                    .count();
+                // cinematic's own entry condition normally leaves. The loop
+                // itself runs below, one staged step per slot, so each slot's
+                // panel repaint lands after its own beat.
                 let mut wait = crate::blackthorn::BLACKTHORN_RESCUE_WAIT_AFTER_INTONED;
-                for _ in 0..not_dead {
-                    self.staged_narration
-                        .push_ticks(wait, crate::blackthorn::BLACKTHORN_RESCUE_NOT_DEAD);
-                    wait = 0;
-                }
-                // Step 23: beat 9. If no `Not dead!` line fired, the
-                // four-tick wait of step 21 still precedes it.
-                self.staged_narration
-                    .push_ticks(wait, crate::blackthorn::BLACKTHORN_RESCUE_VERTIGO);
-                // Step 24: four ticks before the handoff, with nothing to
-                // print - an empty beat is a pure hold.
-                self.staged_narration.push_ticks(
-                    crate::blackthorn::BLACKTHORN_RESCUE_WAIT_AFTER_VERTIGO,
-                    String::new(),
-                );
                 // Step 22's durable half. `RETRACTIONS.md` R493 withdraws
                 // **both halves** of the sentence this used to quote - "the
                 // member's status is reset to able-bodied and their current
@@ -6336,6 +6318,15 @@ impl PlayState {
                 // cinematic's own current-equals-maximum copy still heals it
                 // to full" - which is why that copy runs over every slot below
                 // and the revive dispatch does not.
+                // §7 "Party restoration": each slot's copy is followed by
+                // "repaints the whole stats panel" - the immediate repaint of
+                // `stats-panel.md §2.2`, once per restored member. The
+                // cinematic runs outside the command dispatcher's snapshot
+                // test, so nothing else repainted it and the panel kept the
+                // dead roster past the handoff (playtest E59). The painted
+                // body is staged so a paced frontend shows it at the slot's
+                // own step rather than during beat 8.
+                self.stats_panel_hold = Some(self.displayed_stats_panel().clone());
                 for slot in 0..self.party.len() {
                     // `audio.md §8.6.2` / R494: one envelope per in-party
                     // slot, in ascending slot order, immediately before that
@@ -6345,11 +6336,28 @@ impl PlayState {
                     ));
                     if self.party[slot].status == b'D' {
                         self.resurrect_party_member_to_hp(slot, 1);
+                    } else {
+                        self.staged_narration
+                            .push_ticks(wait, crate::blackthorn::BLACKTHORN_RESCUE_NOT_DEAD);
+                        wait = 0;
                     }
+                    self.party[slot].hp = self.party[slot].max_hp.max(1);
+                    self.repaint_stats_panel();
+                    self.staged_stats_panels.push_back(self.stats_panel.clone());
+                    self.staged_narration
+                        .push_secs_repainting_panel(crate::narration::bios_ticks_secs(wait));
+                    wait = 0;
                 }
-                for member in &mut self.party {
-                    member.hp = member.max_hp.max(1);
-                }
+                // Step 23: beat 9. The four-tick wait of step 21 went
+                // to the first slot's step above.
+                self.staged_narration
+                    .push_ticks(wait, crate::blackthorn::BLACKTHORN_RESCUE_VERTIGO);
+                // Step 24: four ticks before the handoff, with nothing to
+                // print - an empty beat is a pure hold.
+                self.staged_narration.push_ticks(
+                    crate::blackthorn::BLACKTHORN_RESCUE_WAIT_AFTER_VERTIGO,
+                    String::new(),
+                );
                 self.pending_blackthorn_rescue = Some(BlackthornRescuePhase::Restoration);
                 Ok(None)
             }
