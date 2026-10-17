@@ -2347,15 +2347,14 @@ fn hourly_status_pass_spends_food_at_public_decrement_hours() {
 /// unconditional walk, and the counter floors at zero rather than wrapping. No
 /// food is spent at other hour changes."
 ///
-/// The gate is not read off the cascade: "The pass keeps its own previous-hour
-/// snapshot and compares it with the current hour", so a fixture that installs
-/// a clock has to install that snapshot alongside it or the crossing it is
-/// trying to test never registers.
+/// The gate is not read off the cascade: the pass "compares the shared
+/// pre-cascade hour snapshot ... with the current hour" (R548), so a fixture
+/// that installs a clock installs that snapshot alongside it.
 #[test]
 fn hourly_status_pass_only_spends_food_on_decrement_hours_and_floors() {
     let mut off_hour = world_state(open_world_grid(), 10, 20);
     off_hour.clock = GameClock::with_date(139, 4, 5, 6, 59).unwrap();
-    off_hour.status_pass_previous_hour = off_hour.clock.hour;
+    off_hour.cleanup_previous_hour = off_hour.clock.hour;
     off_hour.food = 1;
 
     off_hour.advance_turn_with_minutes(1);
@@ -2365,7 +2364,7 @@ fn hourly_status_pass_only_spends_food_on_decrement_hours_and_floors() {
 
     let mut noon = world_state(open_world_grid(), 10, 20);
     noon.clock = GameClock::with_date(139, 4, 5, 11, 59).unwrap();
-    noon.status_pass_previous_hour = noon.clock.hour;
+    noon.cleanup_previous_hour = noon.clock.hour;
     noon.food = 1;
     noon.party.push(PartyMember {
         slot: 1,

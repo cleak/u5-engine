@@ -125,6 +125,45 @@ pub const CODEX_TURNIN_STAT_INCREMENT: u8 = 1;
 /// (thirty). Anchored to [`crate::AVATAR_STAT_MAX`] so the
 /// turn-in cap and the global stat ceiling stay one value.
 pub const CODEX_TURNIN_STAT_CAP: u8 = crate::AVATAR_STAT_MAX;
+/// `karma.md §8` (u5-spec#298 Q5, `RETRACTIONS.md` R545/R546): the
+/// whereabouts value Blackthorn's execution parks a companion under, which
+/// "the shrine/Codex presentation reads".
+pub const INTERRED_WHEREABOUTS: u8 = 0x7F;
+
+/// `karma.md §8`: the scan "covers roster slots 1..15 (every record but the
+/// Avatar's) whether travelling or not".
+pub const INTERRED_SCAN_SLOTS: std::ops::RangeInclusive<usize> = 1..=15;
+
+/// `karma.md §8` (u5-spec#298 Q5): the Codex interred-party page. "the
+/// presentation prints `\n\nThou_dost_see\n`, then `an_urn_marked:\n\n`
+/// when exactly one record matches or `urns_marked:\n\n` for two or more,
+/// then each matching record's name in roster-slot order, upper-cased byte
+/// by byte, each followed by one line feed. The name is copied up to its
+/// first zero byte", and the page "is skipped entirely when the count is
+/// zero". `names` are the matching records' name fields in slot order.
+///
+/// Not reproduced: "a name that fills all nine bytes runs on into the record
+/// bytes after the name field until a zero byte is met"; this copy stops at
+/// the nine-byte field.
+pub fn codex_interred_party_page(names: &[[u8; crate::SAVE_CHARACTER_NAME_LEN]]) -> Option<String> {
+    if names.is_empty() {
+        return None;
+    }
+    let mut page = String::from("\n\nThou dost see\n");
+    page.push_str(if names.len() == 1 {
+        "an urn marked:\n\n"
+    } else {
+        "urns marked:\n\n"
+    });
+    for name in names {
+        for byte in name.iter().copied().take_while(|byte| *byte != 0) {
+            page.push(char::from(byte.to_ascii_uppercase()));
+        }
+        page.push('\n');
+    }
+    Some(page)
+}
+
 pub const fn codex_turnin_stat_reward(virtue: ShrineVirtue) -> (u8, u8, u8) {
     match virtue {
         ShrineVirtue::Honesty => (0, 0, 1),
@@ -187,5 +226,39 @@ pub fn apply_karma_action(standing: u8, action: KarmaAction) -> u8 {
             let next = i16::from(standing).saturating_add(action.signed_delta());
             next.clamp(0, MORAL_STANDING_MAX as i16) as u8
         }
+    }
+}
+
+#[cfg(test)]
+mod codex_interred_page_spec_tests {
+    use super::*;
+
+    fn name(text: &str) -> [u8; crate::SAVE_CHARACTER_NAME_LEN] {
+        let mut out = [0; crate::SAVE_CHARACTER_NAME_LEN];
+        out[..text.len()].copy_from_slice(text.as_bytes());
+        out
+    }
+
+    /// `karma.md §8` (u5-spec#298 Q5): `\n\nThou_dost_see\n`, then
+    /// `an_urn_marked:\n\n` for one record or `urns_marked:\n\n` for two or
+    /// more, then each name upper-cased with one line feed; nothing at all
+    /// when the count is zero.
+    #[test]
+    fn interred_page_literals_and_plural_split() {
+        assert_eq!(codex_interred_party_page(&[]), None);
+        assert_eq!(
+            codex_interred_party_page(&[name("Iolo")]).as_deref(),
+            Some("\n\nThou dost see\nan urn marked:\n\nIOLO\n")
+        );
+        assert_eq!(
+            codex_interred_party_page(&[name("Shamino"), name("Jaana")]).as_deref(),
+            Some("\n\nThou dost see\nurns marked:\n\nSHAMINO\nJAANA\n")
+        );
+        // "a matching record whose name starts with a zero byte prints only
+        // the line feed".
+        assert_eq!(
+            codex_interred_party_page(&[[0; crate::SAVE_CHARACTER_NAME_LEN]]).as_deref(),
+            Some("\n\nThou dost see\nan urn marked:\n\n\n")
+        );
     }
 }

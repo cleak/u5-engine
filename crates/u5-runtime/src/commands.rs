@@ -1559,6 +1559,32 @@ pub const SEARCH_NOTHING_FOUND: &str = "\nThou dost find\nnothing of note.\n";
 /// `\nThou_dost_find\n`". A furniture or fixture cell replaces the preamble
 /// with its own prefix; every other tile uses this one.
 pub const SEARCH_PREAMBLE: &str = "\nThou dost find\n";
+/// The treasure scan's own miss row, which follows whichever preamble the
+/// searched cell selects.
+pub const SEARCH_NOTHING_OF_NOTE_ROW: &str = "nothing of note.\n";
+
+/// `commands.md §5.8` furniture Search prefixes (u5-spec#298 Q4,
+/// `RETRACTIONS.md` R544): "Each piece is the noun, one line feed, then `t`
+/// (`\nIn_the_stump\nt` ...), so with the shared tail `hou_dost_find\n` the
+/// location phrase and a lower-case `thou dost find` are two separate rows,
+/// after the ordinary leading line feed." Every other tile takes the default
+/// prefix, which splices to the ordinary [`SEARCH_PREAMBLE`]. "The prefix
+/// depends only on the live tile, so it applies to overworld (both planes),
+/// town-family and combat Search; dungeon Search is a separate routine."
+pub fn search_preamble_for_tile(tile: u8) -> String {
+    match crate::search_location_prefix(tile) {
+        Some(prefix) => format!("\n{}\nthou dost find\n", prefix.phrase()),
+        None => SEARCH_PREAMBLE.to_string(),
+    }
+}
+
+/// `commands.md §5.8`: "The prefix is chosen before the Moonstone, reagent
+/// and treasure tables run, so it precedes both a find and
+/// `nothing_of_note.\n`." For an ordinary tile this is
+/// [`SEARCH_NOTHING_FOUND`].
+pub fn search_nothing_found_for_tile(tile: u8) -> String {
+    format!("{}{SEARCH_NOTHING_OF_NOTE_ROW}", search_preamble_for_tile(tile))
+}
 /// The container-object branch: "`\nThou_dost_find\n` then `no trap!` /
 /// `a simple trap!` / `a complex trap!` / `a trap!`".
 pub const SEARCH_TRAP_NONE_LINE: &str = "no trap!";

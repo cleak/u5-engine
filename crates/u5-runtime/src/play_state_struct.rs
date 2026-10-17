@@ -45,18 +45,13 @@ pub struct PlayState {
     pub grid: Vec<u8>,
     pub world_live_chunks: Option<WorldLiveChunkBuffer>,
     pub clock: GameClock,
-    /// `time.md §5`: "The pass keeps its own previous-hour snapshot and
-    /// compares it with the current hour." The party status/provision pass
-    /// runs once per turn-consuming action, so it cannot share the per-turn
-    /// cleanup's local snapshot — only its food/starvation branch is gated on
-    /// the hour changing, and the camp loop advances the clock without
-    /// entering the pass at all.
-    pub status_pass_previous_hour: u8,
     /// `formats/saved-gam.md §5` / `time.md §2`: the per-turn cleanup's
     /// pre-cascade hour snapshot at save offset `0x02DA`, "taken at the
     /// start of every cleanup pass" and compared against the post-cascade
-    /// hour. Distinct from [`Self::status_pass_previous_hour`], which is the
-    /// status/provision pass's own snapshot (`time.md §5`).
+    /// hour. `time.md §5` (u5-spec#298 Q27, `RETRACTIONS.md` R548): the party
+    /// upkeep pass "compares and then rewrites the shared pre-cascade hour
+    /// snapshot, save byte `0x02DA`" and "has no snapshot of its own" - "an
+    /// implementation must keep one byte for both uses".
     pub cleanup_previous_hour: u8,
     /// `formats/saved-gam.md §5` / `time.md §11` (spec `0170809`): save
     /// byte `0x02DE`. "On a cleanup call whose snapshot at `0x02DA`

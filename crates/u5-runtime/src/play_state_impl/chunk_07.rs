@@ -174,7 +174,11 @@ impl PlayState {
         // It is also the frame-sequence evidence `cleak/u5-spec#231` asks for
         // to reconcile its G/S/X absence report with the original's output
         // calls.
-        self.message = SEARCH_NOTHING_FOUND.to_string();
+        //
+        // `commands.md §5.8` (u5-spec#298 Q4): combat's S "reaches the same
+        // routine", so a furniture cell in the arena takes its location
+        // phrase and the lower-case `thou dost find` row.
+        self.message = format!("{}{SEARCH_NOTHING_OF_NOTE_ROW}", self.search_preamble_at(x, y));
         MoveOutcome::Searched
     }
 
@@ -5684,8 +5688,10 @@ impl PlayState {
     /// withdrawn text said, unread: "the shrine and Codex presentation counts
     /// roster records holding it" (`karma.md` Section 8). The engine had
     /// chosen its own no-scene sentinel `0xFF` while the value was
-    /// unpublished.
-    pub const BLACKTHORN_EXECUTED_WHEREABOUTS: u8 = 0x7f;
+    /// unpublished. The value is published in `formats/saved-gam.md §3.1`
+    /// (row `0x1F`) and shared with the Codex scan as
+    /// [`crate::INTERRED_WHEREABOUTS`].
+    pub const BLACKTHORN_EXECUTED_WHEREABOUTS: u8 = crate::INTERRED_WHEREABOUTS;
 
     /// `blackthorn.md §5`: "**The punishment is an execution, and it is
     /// durable.** ... the routine:
@@ -5768,8 +5774,22 @@ impl PlayState {
             // an unmatchable marker there is what makes the record
             // unretrievable by any inn while still surviving save/reload.
             if self.inn_registry.len() < INN_REGISTRY_CAP {
-                let registry_slot =
-                    crate::free_inn_registry_slot(&self.inn_registry).unwrap_or_default();
+                // Registry slot `k`'s marker is roster record `k`'s byte
+                // `0x1F` (`formats/saved-gam.md §3.1`), so the parked record's
+                // whereabouts sits at the park slot when that slot is free -
+                // the byte `karma.md §8`'s scan of roster slots 1..15 reads
+                // (u5-spec#298 Q5).
+                let registry_slot = u8::try_from(park_slot)
+                    .ok()
+                    .filter(|slot| {
+                        usize::from(*slot) < SAVE_INN_REGISTRY_COUNT
+                            && !self
+                                .inn_registry
+                                .iter()
+                                .any(|guest| guest.registry_slot == *slot)
+                    })
+                    .or_else(|| crate::free_inn_registry_slot(&self.inn_registry))
+                    .unwrap_or_default();
                 self.inn_registry.push(InnGuestRecord {
                     registry_slot,
                     scene_marker: Self::BLACKTHORN_EXECUTED_WHEREABOUTS,
@@ -6517,7 +6537,7 @@ impl PlayState {
         // `0x61`), the command ends at once: no sleep status, no time passed,
         // no further message; it returns the ordinary acted result, so the
         // normal town epilogue follows and re-evaluates contact."
-        match self.advance_town_rest_initial_schedule_burst(entries.as_deref(), scene, floor) {
+        match self.advance_town_rest_initial_schedule_burst() {
             TownRestBurstOutcome::Completed => {}
             TownRestBurstOutcome::ArrestOrConflictContact => {
                 // `npc-schedules.md §9.2` "Event lifetime": the burst "never
@@ -6532,16 +6552,6 @@ impl PlayState {
                 self.message.clear();
                 self.advance_turn();
                 return Ok(MoveOutcome::Passed);
-            }
-            TownRestBurstOutcome::SurfaceRejected => {
-                // `rest-and-camp.md §6`: "Town/inn rest can instead produce a
-                // local refusal or \"thrown out\" style result depending on
-                // the caller context" - the wording is not published, so the
-                // engine records what happened rather than inventing a
-                // sentence.
-                self.diagnostics.push("town-bed rest interrupted".to_string());
-                self.message.clear();
-                return Ok(MoveOutcome::Blocked);
             }
         }
         // `npc-schedules.md §9.2`: every burst-recorded event is dropped,
@@ -6628,12 +6638,16 @@ impl PlayState {
         self.clock.hour == target_hour
     }
 
-    pub fn advance_town_rest_initial_schedule_burst(
-        &mut self,
-        entries: Option<&[TownRestBedEntry]>,
-        scene: Scene,
-        floor: i8,
-    ) -> TownRestBurstOutcome {
+    /// The town-bed burst of up to sixteen schedule/world-tick passes
+    /// (`town-mode.md §12`, R538: "If any pass leaves an arrest/conflict
+    /// contact event (kind `0x61`), the command ends at once ... A
+    /// conversation-contact event (kind `0x74`) does not interrupt; the next
+    /// burst pass clears it ... Otherwise the party sleeps"). The burst does
+    /// not re-test the bed tile, which the spec does not describe. Per
+    /// `npc-schedules.md §9.2` the burst "never hands its events to the
+    /// consumer": the caller drops a returned arrest event too, and the
+    /// ordinary town epilogue's own schedule pass re-raises it.
+    pub fn advance_town_rest_initial_schedule_burst(&mut self) -> TownRestBurstOutcome {
         for _ in 0..TOWN_REST_INITIAL_SCHEDULE_BURST_TICKS {
             // `karma.md §4.1`: these zero-minute schedule-only setup
             // ticks are not one of the ten-minute rest ticks that age the
@@ -6650,9 +6664,7 @@ impl PlayState {
             {
                 return TownRestBurstOutcome::ArrestOrConflictContact;
             }
-            if !self.town_rest_bed_still_accepts(entries, scene, floor) {
-                return TownRestBurstOutcome::SurfaceRejected;
-            }
+            self.pending_town_npc_contact = None;
         }
         TownRestBurstOutcome::Completed
     }
@@ -6680,8 +6692,6 @@ pub enum TownRestBurstOutcome {
     Completed,
     /// A pass left an arrest/conflict contact event (kind `0x61`).
     ArrestOrConflictContact,
-    /// Engine guard: the party no longer stands on an accepted rest surface.
-    SurfaceRejected,
 }
 
 pub const fn shadowlord_stonegate_npc_slot(index: usize) -> Option<usize> {

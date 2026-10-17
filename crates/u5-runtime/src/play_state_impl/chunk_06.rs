@@ -1403,7 +1403,7 @@ impl PlayState {
                 && self.stage_surface_chest_grant(
                     x,
                     y,
-                    INVENTORY_ADD_CLASS_CODE_EQUIPMENT,
+                    chest_secondary_pool_family_id(row),
                     row as u8,
                 )
             {
@@ -1423,6 +1423,13 @@ impl PlayState {
     /// out, and a full table yields no slot - and write the family's
     /// class byte and the rolled value into it at the chest's coordinate.
     /// Returns `false` when the row is dropped.
+    ///
+    /// `containers.md §4.1` (u5-spec#298 Q18): "both tile bytes of the new
+    /// active-object record hold the family id, so it renders as the
+    /// actor-half tile at atlas index `0x100 + id`"; "The quantity or
+    /// subtype rides in the record's fifth byte"; "The record's last byte is
+    /// cleared outside combat and set to `0x20` when the scene byte is `0x80`
+    /// or above."
     pub fn stage_surface_chest_grant(
         &mut self,
         x: usize,
@@ -1439,7 +1446,11 @@ impl PlayState {
             z,
             phase: STEADY_PHASE,
             aux1: value,
-            aux3: 0,
+            aux3: if self.combat_active {
+                CHEST_GRANT_COMBAT_LAST_BYTE
+            } else {
+                0
+            },
         })
         .is_some()
     }
@@ -2316,7 +2327,9 @@ impl PlayState {
             self.message = SEARCH_NOTHING_FOUND.to_string();
             return MoveOutcome::Blocked;
         }
-        self.message = SEARCH_NOTHING_FOUND.to_string();
+        // `commands.md §5.8` (u5-spec#298 Q4): the furniture prefix "applies
+        // to overworld (both planes)" Search as well.
+        self.message = search_nothing_found_for_tile(target_tile.unwrap_or_default());
         MoveOutcome::Blocked
     }
 
@@ -2415,13 +2428,10 @@ impl PlayState {
                 // the Moonstone scan is engine detail, not a row.
                 self.diagnostics
                     .push("searched a generic find marker; no Moonstone scan ran".to_string());
-                self.message = town_search_live_tile_miss_message(tile)
-                    .unwrap_or(SEARCH_NOTHING_FOUND)
-                    .to_string();
+                self.message = search_nothing_found_for_tile(tile);
                 return MoveOutcome::Blocked;
             }
-            let miss_message =
-                town_search_live_tile_miss_message(tile).unwrap_or(SEARCH_NOTHING_FOUND);
+            let miss_message = search_nothing_found_for_tile(tile);
             if let Some(outcome) = self.search_moonstone_pickup_at(tx, ty, |slot| {
                 moonstone_slot_matches_town(slot, scene, floor, tx, ty)
             }) {
@@ -2435,7 +2445,7 @@ impl PlayState {
             ) {
                 return outcome;
             }
-            self.message = miss_message.to_string();
+            self.message = miss_message;
             return MoveOutcome::Blocked;
         };
         if !(24..=63).contains(&tile) {
@@ -2454,13 +2464,10 @@ impl PlayState {
                 // the Moonstone scan is engine detail, not a row.
                 self.diagnostics
                     .push("searched a generic find marker; no Moonstone scan ran".to_string());
-                self.message = town_search_live_tile_miss_message(tile)
-                    .unwrap_or(SEARCH_NOTHING_FOUND)
-                    .to_string();
+                self.message = search_nothing_found_for_tile(tile);
                 return MoveOutcome::Blocked;
             }
-            let miss_message =
-                town_search_live_tile_miss_message(tile).unwrap_or(SEARCH_NOTHING_FOUND);
+            let miss_message = search_nothing_found_for_tile(tile);
             if let Some(outcome) = self.search_moonstone_pickup_at(tx, ty, |slot| {
                 moonstone_slot_matches_town(slot, scene, floor, tx, ty)
             }) {
@@ -2474,7 +2481,7 @@ impl PlayState {
             ) {
                 return outcome;
             }
-            self.message = miss_message.to_string();
+            self.message = miss_message;
             return MoveOutcome::Blocked;
         }
 
@@ -2494,6 +2501,24 @@ impl PlayState {
         self.push_diagnostic(format!("Revealed secret door at ({tx}, {ty})."));
         self.message.clear();
         MoveOutcome::Searched
+    }
+
+    /// `commands.md §5.8` (u5-spec#298 Q4): the Search preamble the searched
+    /// cell's live tile selects. "The classification reads only the searched
+    /// cell's live tile and never tests the scene", so the overworld, the
+    /// town family and the combat arena all route through it; the dungeon
+    /// "is diverted before the prefix choice to its own routine".
+    pub fn search_preamble_at(&self, x: usize, y: usize) -> String {
+        let tile = if self.combat_active {
+            self.combat_terrain.get(y).and_then(|row| row.get(x)).copied()
+        } else {
+            match self.area {
+                Area::World { .. } => self.grid.get(y * WORLD_SIDE + x).copied(),
+                Area::Town { .. } => self.grid.get(y * 32 + x).copied(),
+                Area::Dungeon { .. } => None,
+            }
+        };
+        tile.map_or_else(|| SEARCH_PREAMBLE.to_string(), search_preamble_for_tile)
     }
 
     pub fn search_moonstone_at<F>(
@@ -2544,7 +2569,10 @@ impl PlayState {
                 "Moonstone phase {} is already surfaced as a strange rock.",
                 slot_index + 1
             ));
-            self.message = SEARCH_NOTHING_FOUND.to_string();
+            self.message = format!(
+                "{}{SEARCH_NOTHING_OF_NOTE_ROW}",
+                self.search_preamble_at(x, y)
+            );
             return Some(MoveOutcome::Blocked);
         }
 
@@ -2568,7 +2596,7 @@ impl PlayState {
             "Found a strange rock for Moonstone phase {}.",
             slot_index + 1
         ));
-        self.message = format!("{SEARCH_PREAMBLE}{SEARCH_STRANGE_ROCK_LINE}");
+        self.message = format!("{}{SEARCH_STRANGE_ROCK_LINE}", self.search_preamble_at(x, y));
         Some(MoveOutcome::Searched)
     }
 
@@ -2600,7 +2628,8 @@ impl PlayState {
         self.diagnostics
             .push(format!("Found {amount} sprigs of {}.", point.label));
         self.message = format!(
-            "{SEARCH_PREAMBLE}{amount}{SEARCH_REAGENT_SPRIGS_FRAGMENT}{}",
+            "{}{amount}{SEARCH_REAGENT_SPRIGS_FRAGMENT}{}",
+            self.search_preamble_at(x, y),
             point.line
         );
         Some(MoveOutcome::Searched)
@@ -2643,7 +2672,10 @@ impl PlayState {
                 "{} is already surfaced here.",
                 entry.pickup.label()
             ));
-            self.message = SEARCH_NOTHING_FOUND.to_string();
+            self.message = format!(
+                "{}{SEARCH_NOTHING_OF_NOTE_ROW}",
+                self.search_preamble_at(x, y)
+            );
             return Some(MoveOutcome::Blocked);
         }
         let pickup = ActiveObject::fixed_hidden_treasure_pickup(entry.record, x, y, floor);
@@ -2661,7 +2693,7 @@ impl PlayState {
         // `commands.md §5.8`: "Fixed hidden treasure | `[blank]` then
         // `Thou dost find` then the staged object's name from the found-object
         // vocabulary in `systems/hidden-treasures.md`".
-        self.message = format!("{SEARCH_PREAMBLE}{}", entry.pickup.narrated_row());
+        self.message = format!("{}{}", self.search_preamble_at(x, y), entry.pickup.narrated_row());
         Some(MoveOutcome::Searched)
     }
 
@@ -3605,10 +3637,36 @@ pub const INVENTORY_ADD_CLASS_CODE_KEY: u8 = 0x07;
 pub const INVENTORY_ADD_CLASS_CODE_GEM: u8 = 0x08;
 pub const INVENTORY_ADD_CLASS_CODE_TORCH: u8 = 0x0d;
 /// `§8` lists `0x05`, `0x06` and `0x09..0x0C` as one Equipment arm that
-/// adds stock "by the supplied equipment id"; which of them the chest
-/// stages per family is not published, and the grant is the same for
-/// every one of them, so the staged equipment row carries this one.
+/// adds stock "by the supplied equipment id". `containers.md §4.1`
+/// (u5-spec#298 Q18) now publishes which family id each grant stages -
+/// weapon 5, shield 6, helm 9, ring 10, armour 11, amulet 12 - and the
+/// secondary pool stages through [`chest_secondary_pool_family_id`]; this
+/// is the helm's.
 pub const INVENTORY_ADD_CLASS_CODE_EQUIPMENT: u8 = 0x09;
+pub const INVENTORY_ADD_CLASS_CODE_WEAPON: u8 = 0x05;
+pub const INVENTORY_ADD_CLASS_CODE_SHIELD: u8 = 0x06;
+pub const INVENTORY_ADD_CLASS_CODE_HELM: u8 = 0x09;
+pub const INVENTORY_ADD_CLASS_CODE_RING: u8 = 0x0a;
+pub const INVENTORY_ADD_CLASS_CODE_ARMOUR: u8 = 0x0b;
+pub const INVENTORY_ADD_CLASS_CODE_AMULET: u8 = 0x0c;
+
+/// `containers.md §4.1` (u5-spec#298 Q18): the staged record's last byte
+/// "set to `0x20` when the scene byte is `0x80` or above" (combat).
+pub const CHEST_GRANT_COMBAT_LAST_BYTE: u8 = 0x20;
+
+/// `containers.md §4.1` (u5-spec#298 Q18): the family id - and so the
+/// drawn tile `0x100 + id` - of a secondary-pool equipment row, grouped as
+/// [`chest_secondary_pool_transcript_line`] groups the names.
+pub const fn chest_secondary_pool_family_id(row: usize) -> u8 {
+    match row {
+        0..=3 => INVENTORY_ADD_CLASS_CODE_HELM,
+        4..=8 => INVENTORY_ADD_CLASS_CODE_SHIELD,
+        9..=15 => INVENTORY_ADD_CLASS_CODE_ARMOUR,
+        16..=41 => INVENTORY_ADD_CLASS_CODE_WEAPON,
+        42..=44 => INVENTORY_ADD_CLASS_CODE_RING,
+        _ => INVENTORY_ADD_CLASS_CODE_AMULET,
+    }
+}
 
 /// `containers.md §4.1`: the Gold and Chest-marker rows' first quantity
 /// draws, `1..90` and `1..10`, are discarded.
@@ -4915,25 +4973,6 @@ pub const FIXED_HIDDEN_TREASURES: &[FixedHiddenTreasureEntry] = &[
     ),
 ];
 
-pub fn town_search_live_tile_miss_message(tile: u8) -> Option<&'static str> {
-    match tile {
-        0x2b => Some("Searched stump; nothing found."),
-        0x4f => Some("Searched wall; nothing found."),
-        0x5a => Some("Searched shelf; nothing found."),
-        0x5c | 0x5d => Some("Searched bookshelf; nothing found."),
-        0xa1 => Some("Searched well; nothing found."),
-        0xa5 => Some("Searched desk; nothing found."),
-        0xa6 => Some("Searched barrel; nothing found."),
-        0xa8 => Some("Searched vanity; nothing found."),
-        0xab | 0xac => Some("Searched under bed; nothing found."),
-        0xad => Some("Searched dresser; nothing found."),
-        0xaf => Some("Searched trunk; nothing found."),
-        0xb2 => Some("Searched brazier; nothing found."),
-        0xbc => Some("Searched fireplace; nothing found."),
-        _ => None,
-    }
-}
-
 #[cfg(test)]
 mod hidden_treasure_record_15_spec_tests {
     use super::{FIXED_HIDDEN_TREASURES, FixedHiddenTreasureEntry, HiddenTreasurePickup};
@@ -5007,5 +5046,120 @@ mod hidden_treasure_record_15_spec_tests {
         // Even a stale bit (e.g. from an older save) does not close it.
         state.set_fixed_hidden_treasure_found(entry.record);
         assert!(state.fixed_hidden_treasure_rule_allows(entry, entry.x, entry.y));
+    }
+}
+
+#[cfg(test)]
+mod furniture_search_prefix_spec_tests {
+    use crate::test_fixtures::{open_grid, open_world_grid, test_state, world_state};
+    use crate::*;
+
+    /// `commands.md §5.8` (u5-spec#298 Q4, `RETRACTIONS.md` R544): "Each
+    /// piece is the noun, one line feed, then `t` ..., so with the shared
+    /// tail `hou_dost_find\n` the location phrase and a lower-case `thou dost
+    /// find` are two separate rows, after the ordinary leading line feed."
+    #[test]
+    fn town_search_of_a_stump_prints_the_location_row_then_lower_case_thou() {
+        let mut grid = open_grid();
+        grid[2 * 32 + 1] = 0x2B;
+        let mut state = test_state(grid, 1, 1);
+        let Area::Town { scene, floor } = state.area else {
+            unreachable!()
+        };
+        state.search_town_secret_direction(&[], scene, floor, Direction::South);
+        assert_eq!(
+            state.message,
+            "\nIn the stump\nthou dost find\nnothing of note.\n"
+        );
+    }
+
+    #[test]
+    fn every_furniture_piece_splits_into_phrase_and_thou_rows() {
+        assert_eq!(
+            search_preamble_for_tile(0xA1),
+            "\nNear the well\nthou dost find\n"
+        );
+        assert_eq!(
+            search_preamble_for_tile(0xAB),
+            "\nUnder the bed\nthou dost find\n"
+        );
+        assert_eq!(
+            search_preamble_for_tile(0x5A),
+            "\nOn the shelf\nthou dost find\n"
+        );
+        // "Every other tile, the cask included, uses the two-byte default
+        // prefix ... the ordinary `\nThou_dost_find\n`."
+        assert_eq!(search_preamble_for_tile(0x01), SEARCH_PREAMBLE);
+        assert_eq!(search_nothing_found_for_tile(0x01), SEARCH_NOTHING_FOUND);
+    }
+
+    /// "The prefix depends only on the live tile, so it applies to overworld
+    /// (both planes), town-family and combat Search".
+    #[test]
+    fn overworld_search_of_a_stump_takes_the_prefix_too() {
+        let mut grid = open_world_grid();
+        let (x, y) = (10, 10);
+        grid[(y + 1) * WORLD_SIDE + x] = 0x2B;
+        let mut state = world_state(grid, x, y);
+        state.search_world_moonstone_direction(WorldPlane::Britannia, Direction::South);
+        assert_eq!(
+            state.message,
+            "\nIn the stump\nthou dost find\nnothing of note.\n"
+        );
+    }
+}
+
+#[cfg(test)]
+mod staged_chest_loot_tile_spec_tests {
+    use super::*;
+    use crate::test_fixtures::{open_grid, test_state};
+
+    /// `containers.md §4.1` (u5-spec#298 Q18): "both tile bytes of the new
+    /// active-object record hold the family id ... weapon 5 (261), shield 6
+    /// (262) ... helm 9 (265), ring 10 (266), armour 11 (267), amulet 12
+    /// (268)". The engine staged every equipment row as `0x09`, the helm.
+    #[test]
+    fn secondary_pool_rows_stage_their_own_family_tile() {
+        for (row, family) in [
+            (0, 9),
+            (3, 9),
+            (4, 6),
+            (9, 11),
+            (16, 5),
+            (41, 5),
+            (42, 10),
+            (45, 12),
+        ] {
+            assert_eq!(chest_secondary_pool_family_id(row), family, "row {row}");
+        }
+    }
+
+    /// "The record's last byte is cleared outside combat and set to `0x20`
+    /// when the scene byte is `0x80` or above"; the quantity rides in the
+    /// fifth byte.
+    #[test]
+    fn staged_grant_carries_family_tile_and_combat_last_byte() {
+        let mut state = test_state(open_grid(), 1, 1);
+        assert!(state.stage_surface_chest_grant(3, 4, INVENTORY_ADD_CLASS_CODE_RING, 43));
+        let staged = state
+            .active_objects
+            .iter()
+            .rev()
+            .find(|object| !object.is_empty() && object.x == 3 && object.y == 4)
+            .copied()
+            .expect("staged");
+        assert_eq!((staged.type_byte, staged.tile), (0x0a, 0x0a));
+        assert_eq!(staged.aux1, 43);
+        assert_eq!(staged.aux3, 0);
+
+        state.combat_active = true;
+        assert!(state.stage_surface_chest_grant(5, 6, INVENTORY_ADD_CLASS_CODE_GOLD, 7));
+        let staged = state
+            .active_objects
+            .iter()
+            .find(|object| !object.is_empty() && object.x == 5 && object.y == 6)
+            .copied()
+            .expect("staged");
+        assert_eq!(staged.aux3, CHEST_GRANT_COMBAT_LAST_BYTE);
     }
 }

@@ -1091,8 +1091,13 @@ fn handle_active_shop_key_input(
                         // and asks the continuation Y/N question".
                         Ok(outcome) => {
                             state.arms_transaction_completed = true;
-                            let surcharge =
-                                if matches!(outcome.quote.fee, HealerTreatmentFee::Price(_)) {
+                            // §8.C (u5-spec#298 Q19): on the low-fee charity
+                            // "the post-payment surcharge step does not run".
+                            let surcharge = if matches!(
+                                outcome.quote.fee,
+                                HealerTreatmentFee::Price(_)
+                            ) && !outcome.charity
+                            {
                                     apply_active_shop_surcharge(state)
                                 } else {
                                     None
@@ -1103,20 +1108,22 @@ fn handle_active_shop_key_input(
                                 surcharge,
                             )
                         }
-                        // §8.C "Ordinary short funds | Record `173`"; like
-                        // every other kind's affordability record it ends
-                        // the visit without the ordinary farewell.
+                        // §8.C "Ordinary short funds | Record `173`, then the
+                        // continuation question below, exactly as after a
+                        // declined fee; no gold, status or HP changes"
+                        // (u5-spec#298 Q19: the visit continues).
                         Err(crate::shops::HealerTreatmentError::InsufficientGold {
                             ..
                         }) => {
-                            *s = HealerShopState::Exited;
-                            render_shared_shoppe_record(
+                            *s = HealerShopState::Continuation;
+                            let record = render_shared_shoppe_record(
                                 game_dir,
                                 HEALER_SHORT_FUNDS_RECORD,
                                 cost,
                                 healer_name,
                                 healer.display_name(),
-                            )
+                            );
+                            format!("{record}{HEALER_CONTINUATION}")
                         }
                         Err(err) => {
                             *s = HealerShopState::Continuation;

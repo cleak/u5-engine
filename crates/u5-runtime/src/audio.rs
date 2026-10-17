@@ -1229,7 +1229,10 @@ pub const MOONGATE_TRANSIT_ENVELOPE: EnvelopeSegment =
     EnvelopeSegment::new(2, 2000, 30_000, 1, 5900);
 /// `audio.md §8.3` "Shadowlord summoned by Yell" (u5-spec#298 Q11): the
 /// blocking envelope `(2, 2000, 30000, 1, 10400)`, the moongate-transit
-/// shape at a higher period.
+/// shape at a higher period. `commands.md §11`: the summon "runs the
+/// blocking software envelope `(2, 2000, 30000, 1, 10400)` ..., the same
+/// shape as the moongate-transit and possession envelopes at a higher
+/// period".
 pub const SHADOWLORD_YELL_SUMMON_ENVELOPE: EnvelopeSegment =
     EnvelopeSegment::new(2, 2000, 30_000, 1, 10_400);
 /// `audio.md §6.1`'s absorb cue, the manual envelope every absorbed cast
@@ -1996,6 +1999,10 @@ pub enum SoundEffect {
     PlayerSummon,
     /// `§8.3` accepted moongate transit.
     MoongateTransit,
+    /// `rest-and-camp.md §7.1` (u5-spec#298 Q10): one of the Lord British
+    /// camp event's software envelopes - the apparition call, the six-note
+    /// figure and each living member's two-envelope sting.
+    LordBritishCampEnvelope(EnvelopeSegment),
     /// `§8.4` shared major full-viewport flash. `bands` holds the 1,856
     /// gameplay-PRNG-drawn frequencies, already consumed from the gameplay
     /// stream by [`draw_major_flash_bands`].
@@ -2143,6 +2150,7 @@ impl SoundEffect {
             SoundEffect::MonsterSummon => envelope_program(MONSTER_SUMMON_ENVELOPE),
             SoundEffect::PlayerSummon => envelope_program(PLAYER_SUMMON_ENVELOPE),
             SoundEffect::MoongateTransit => envelope_program(MOONGATE_TRANSIT_ENVELOPE),
+            SoundEffect::LordBritishCampEnvelope(segment) => envelope_program(*segment),
             SoundEffect::MajorFlash { bands } => major_flash_program(bands),
             SoundEffect::StonegateDescent => stonegate_descent_program(),
             SoundEffect::StonegateMemberDeath => trap_rumble(jitter),
@@ -3070,6 +3078,8 @@ mod tests {
             SoundEffect::MonsterSummon,
             SoundEffect::PlayerSummon,
             SoundEffect::MoongateTransit,
+            SoundEffect::ShadowlordYellSummon,
+            SoundEffect::LordBritishCampEnvelope(crate::lord_british_camp::LORD_BRITISH_CAMP_STING_LONG),
             SoundEffect::MajorFlash {
                 bands: vec![19u8, 150].into(),
             },

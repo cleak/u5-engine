@@ -515,6 +515,31 @@ pub enum SearchLocationPrefix {
     Fireplace,
 }
 
+impl SearchLocationPrefix {
+    /// `commands.md §5.8` (u5-spec#298 Q4, `RETRACTIONS.md` R544): the
+    /// location phrase of the stored piece, which is "the noun, one line
+    /// feed, then the lower-case `t` that opens the next word"
+    /// (`\nIn_the_stump\nt` ...). The phrase is the row between the two
+    /// line feeds.
+    pub const fn phrase(self) -> &'static str {
+        match self {
+            Self::Stump => "In the stump",
+            Self::Wall => "In the wall",
+            Self::Shelf => "On the shelf",
+            Self::Bookshelf => "In the bookshelf",
+            Self::Well => "Near the well",
+            Self::Desk => "In the desk",
+            Self::Barrel => "In the barrel",
+            Self::Vanity => "In the vanity",
+            Self::UnderBed => "Under the bed",
+            Self::Dresser => "In the dresser",
+            Self::Trunk => "In the trunk",
+            Self::Brazier => "In the brazier",
+            Self::Fireplace => "In the fireplace",
+        }
+    }
+}
+
 /// `containers.md §5`: classify a live tile as one of the named
 /// location-prefix scenery cells. Returns `None` for ordinary tiles
 /// (the search narration uses the generic find prefix).

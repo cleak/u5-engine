@@ -1498,9 +1498,10 @@ fn y_yell_shadowlord_name_spawns_in_any_eternal_flame_keep() {
     );
 
     assert_eq!(town.turn, 1);
-    // `commands.md` §11 (u5-spec#298 Q11): the appearance line is
-    // `\nA_shadowlord_appears\n`.
+    // `commands.md` §11 (u5-spec#298 Q11): "it prints
+    // `\nA_shadowlord_appears\n`".
     assert_eq!(town.message, "\nA shadowlord appears\n");
+    assert!(town.message.contains("A shadowlord appears"), "{:?}", town.message);
     assert_eq!(town.summoned_shadowlord, Some(SHADOWLORD_FALSEHOOD_INDEX));
     assert_eq!(town.active_objects.len(), OOL_SLOTS);
     assert_eq!(
@@ -1617,9 +1618,9 @@ fn shadowlord_name_allocation_detaches_an_empty_descriptor_from_stale_npc_owners
 /// `commands.md` §11: a matched Shadowlord name "installs the Shadowlord as
 /// an active object exactly two cells north of the party". The spec
 /// publishes no text naming the word, the Shadowlord or the active-object
-/// slot, so the summon must not print one (audit F9). Since u5-spec#298 Q11
-/// it prints `\nA_shadowlord_appears\n` and then runs the envelope
-/// `(2, 2000, 30000, 1, 10400)`.
+/// slot, so the summon must not print one (audit F9). u5-spec#298 Q11
+/// publishes what follows: "it prints `\nA_shadowlord_appears\n` ... it runs
+/// the blocking software envelope `(2, 2000, 30000, 1, 10400)`".
 #[test]
 fn shadowlord_name_summon_prints_no_invented_slot_diagnostic() {
     let mut town = test_state(open_grid(), 5, 5);
@@ -1637,6 +1638,10 @@ fn shadowlord_name_summon_prints_no_invented_slot_diagnostic() {
     assert_eq!(
         town.sound_effects_after(serial),
         vec![SoundEffect::ShadowlordYellSummon]
+    );
+    assert_eq!(
+        town.sound_effect_history.last().map(|(_, effect)| effect),
+        Some(&SoundEffect::ShadowlordYellSummon)
     );
     assert_eq!(
         crate::audio::SHADOWLORD_YELL_SUMMON_ENVELOPE,

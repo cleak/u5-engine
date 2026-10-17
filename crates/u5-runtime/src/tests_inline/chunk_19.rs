@@ -1714,10 +1714,33 @@
         assert_eq!(state.party_strengths[1], 20);
         assert_eq!(state.party[1].climb_stat, 21);
         assert!(state.visibility_dirty);
-        // `rest-and-camp.md §7`: the published text is the `KARMA.DAT`
-        // verdict, printed as the record; the per-member summary is engine
-        // bookkeeping and stays out of the message slot.
-        assert!(state.message.ends_with(" camp-top"));
+        // `rest-and-camp.md §7.1` (u5-spec#298 Q10): `An_apparition!\n`, a
+        // level line per member whose level changed, each behind a key wait,
+        // then the quoted `KARMA.DAT` verdict, a key wait and the vanish
+        // line. The per-member summary is engine bookkeeping.
+        assert!(state.message.contains("An apparition!\n\n\"Hail, "), "{:?}", state.message);
+        assert!(state.message.ends_with(
+            "!\nFor thy valiant deeds, I shall reward thee!\nThou art now level 3, and\nwiser!\" "
+        ));
+        let held: Vec<String> = state
+            .pending_text_hold
+            .as_ref()
+            .expect("the level lines and the verdict wait on keys")
+            .pages
+            .iter()
+            .map(|page| page.text.text.clone())
+            .collect();
+        assert_eq!(held.len(), 3, "{held:?}");
+        assert!(held[0].starts_with("\n\n\"Hail, "), "{held:?}");
+        assert!(held[0].ends_with("Thou art now level 3, and\nquicker!\" "), "{held:?}");
+        assert_eq!(held[1], "\n\n\"camp-top\"");
+        assert_eq!(held[2], LORD_BRITISH_CAMP_VANISH_LINE);
+        assert!(state.sound_effect_history.iter().any(|(_, effect)| {
+            *effect
+                == SoundEffect::LordBritishCampEnvelope(
+                    crate::lord_british_camp::LORD_BRITISH_CAMP_STING_LONG,
+                )
+        }));
         assert!(!state.message.contains("Verdict:"));
         assert!(!state.message.contains("Lord British-in-disguise"));
         assert!(!state.message.contains("reached level"));

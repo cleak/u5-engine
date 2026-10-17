@@ -7698,3 +7698,77 @@ fn inn_multi_guest_pickup_bills_without_confirmation() {
     assert_eq!(state.party.len(), 2);
     assert!(state.active_shop.is_none());
 }
+
+/// `shops.md §8.C` / §8.3 (u5-spec#298 Q19): "Ordinary short funds | Record
+/// `173`, then the continuation question below, exactly as after a declined
+/// fee; no gold, status or HP changes." The visit continues.
+#[test]
+fn paid_healer_short_of_funds_asks_the_continuation_question() {
+    use crate::shop_runtime::HealerShopState;
+    use crate::shop_session::ActiveShopSession;
+
+    let mut state = test_state(open_grid(), 1, 1);
+    state.gold = 59;
+    state.party[0].status = b'G';
+    state.party[0].hp = 5;
+    state.party[0].max_hp = 22;
+    state.active_shop = Some(ActiveShopSession::Healer(
+        HealerShopState::Greeting,
+        Healer::TheShieldOfTruth,
+    ));
+
+    handle_play_key_input(&mut state, 'Y', "", Path::new("")).unwrap();
+    handle_play_key_input(&mut state, 'H', "", Path::new("")).unwrap();
+    assert!(state.message.contains("60 gold"));
+    handle_play_key_input(&mut state, 'Y', "", Path::new("")).unwrap();
+
+    assert_eq!(state.gold, 59);
+    assert_eq!(state.party[0].hp, 5);
+    assert_eq!(state.party[0].status, b'G');
+    assert!(
+        state
+            .message
+            .ends_with("\n\n\"Is there any other way in which I may\naid thee?\" "),
+        "{:?}",
+        state.message
+    );
+    assert!(matches!(
+        state.active_shop,
+        Some(ActiveShopSession::Healer(HealerShopState::Continuation, _))
+    ));
+    // "Yes returns to the service question".
+    handle_play_key_input(&mut state, 'Y', "", Path::new("")).unwrap();
+    assert!(state.message.contains("What is the nature of thy need?"));
+}
+
+/// `shops.md §8.C` (u5-spec#298 Q19): "in Skara Brae (scene `7`, The Spirit
+/// Healers) only, when the fee is at most 100 and party gold is below it,
+/// record `173` is not printed, the treatment is applied with no gold
+/// deducted, the post-payment surcharge step does not run".
+#[test]
+fn spirit_healers_low_fee_charity_treats_without_charging() {
+    let mut state = test_state(open_grid(), 1, 1);
+    state.gold = 44;
+    state.party[0].status = b'G';
+    state.party[0].hp = 5;
+    state.party[0].max_hp = 22;
+
+    let outcome = state
+        .buy_healer_treatment(Healer::TheSpiritHealers, HealerTreatment::Heal, 0)
+        .expect("the charity treats the member");
+    assert!(outcome.charity);
+    assert_eq!(state.gold, 44);
+    assert_eq!(state.party[0].hp, 22);
+
+    // A fee above 100 is an ordinary short-funds refusal, even there.
+    state.party[0].status = b'D';
+    state.party[0].hp = 0;
+    assert!(matches!(
+        state.buy_healer_treatment(Healer::TheSpiritHealers, HealerTreatment::Resurrect, 0),
+        Err(HealerTreatmentError::InsufficientGold { .. })
+    ));
+    // And no other healer is charitable.
+    state.party[0].status = b'G';
+    state.party[0].hp = 5;
+    assert!(!healer_low_fee_charity_applies(Healer::TheShieldOfTruth, 60, 0));
+}

@@ -1455,7 +1455,9 @@
         );
 
         assert_eq!(state.turn, 0);
-        assert_eq!(state.message, "Searched barrel; nothing found.");
+        // `commands.md §5.8` (u5-spec#298 Q4, R544): the location phrase,
+        // then a lower-case `thou dost find` row.
+        assert_eq!(state.message, "\nIn the barrel\nthou dost find\nnothing of note.\n");
     }
 
     #[test]

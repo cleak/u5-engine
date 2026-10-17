@@ -134,7 +134,10 @@ fn save_writes_the_cleanup_pre_cascade_hour_snapshot() {
     state.cleanup_previous_hour = 0;
 
     state.advance_turn();
-    assert_eq!(state.cleanup_previous_hour, 8);
+    // `time.md §5` (u5-spec#298 Q27, R548): the turn's upkeep pass compares
+    // the shared byte (8) with the hour (9) and then "writes the current hour
+    // into that shared snapshot".
+    assert_eq!(state.cleanup_previous_hour, 9);
     assert_eq!(state.clock.hour, 9);
     state.advance_turn();
     assert_eq!(state.cleanup_previous_hour, 9);
@@ -633,4 +636,31 @@ fn preserving_entry_resumes_the_cast_the_save_image_carried() {
     );
     assert_eq!(state.npcs[0].stuck_counter, 5);
     let _ = fs::remove_dir_all(dir);
+}
+
+/// `time.md §5` (u5-spec#298 Q27, R548): the upkeep pass shares `0x02DA`
+/// with the time-advancing path, which "writes it at its head ... a
+/// zero-minute call returns before that write". The dungeon loop charges its
+/// minute at the iteration head and the command's own turn advances zero
+/// minutes, so that zero-minute advance must leave the crossing for the
+/// pass: the 12:00 meal is still spent underground, and the hour bundle does
+/// not refire.
+#[test]
+fn dungeon_zero_minute_turn_keeps_the_shared_snapshot_for_the_upkeep_pass() {
+    let mut state = dungeon_state(open_dungeon_record(), 0, 4, 4);
+    state.clock = GameClock::with_date(139, 4, 5, 11, 59).unwrap();
+    state.cleanup_previous_hour = 11;
+    state.food = 100;
+    state.advance_dungeon_loop_minute();
+    assert_eq!(state.clock.hour, 12);
+    assert_eq!(state.cleanup_previous_hour, 11);
+    let repeats = state.twelve_hour_audio_repeats;
+    state.advance_turn();
+    assert!(state.food < 100, "the 12:00 meal is spent in the dungeon");
+    assert_eq!(state.cleanup_previous_hour, 12);
+    assert_eq!(state.twelve_hour_audio_repeats, repeats, "no second bundle");
+    let food = state.food;
+    state.advance_dungeon_loop_minute();
+    state.advance_turn();
+    assert_eq!(state.food, food, "one meal per crossing");
 }

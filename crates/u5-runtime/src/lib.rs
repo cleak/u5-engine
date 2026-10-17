@@ -303,7 +303,8 @@ pub use commands::{
     READY_REMOVE_ARMOUR_REFUSAL, READY_REMOVE_HELM_REFUSAL, READY_REMOVE_PRESENT_PREFIX,
     REST_HOURS_PROMPT, REST_NO_WATCH_LITERAL, REST_WATCH_MEMBER_PROMPT, REST_WATCH_NO_LITERAL,
     REST_WATCH_PROMPT, REST_WATCH_YES_LITERAL, SCROLL_RESURRECTION_RESULT,
-    SCROLL_WIND_CHANGE_RESULT, SEARCH_FOUND_NOTHING_OF_NOTE, SEARCH_NOTHING_FOUND, SEARCH_PREAMBLE,
+    SCROLL_WIND_CHANGE_RESULT, SEARCH_FOUND_NOTHING_OF_NOTE, SEARCH_NOTHING_FOUND, SEARCH_NOTHING_OF_NOTE_ROW, SEARCH_PREAMBLE,
+    search_nothing_found_for_tile, search_preamble_for_tile,
     SEARCH_REAGENT_MANDRAKE_LINE, SEARCH_REAGENT_NIGHTSHADE_LINE, SEARCH_REAGENT_SPRIGS_FRAGMENT,
     SEARCH_STRANGE_ROCK_LINE, SEARCH_TRAP_COMPLEX_LINE, SEARCH_TRAP_GENERIC_LINE,
     SEARCH_TRAP_NONE_LINE, SEARCH_TRAP_SIMPLE_LINE, SELECTION_CANCELLED_LITERAL,
@@ -550,6 +551,7 @@ pub use karma::{
     KARMA_HELPED_NPC_THANK_YOU_GAIN, KARMA_TOLL_MILESTONE_GAIN,
     KARMA_TOLL_MILESTONE_ZERO_GOLD_BONUS, KarmaAction, RESURRECTION_PENALTY_PERCENT_DIVISOR,
     RESURRECTION_PENALTY_SKIP_THRESHOLD, SHRINE_MANTRA_INPUT_LIMIT, apply_karma_action,
+    INTERRED_SCAN_SLOTS, INTERRED_WHEREABOUTS, codex_interred_party_page,
     codex_turnin_stat_reward, resurrection_penalty_skipped, resurrection_scaled_xp,
     shrine_mantra_for,
 };
@@ -574,10 +576,12 @@ pub use lighting::{
 };
 pub use location_audit::*;
 pub use lord_british_camp::{
+    LORD_BRITISH_CAMP_APPARITION_LINE, LORD_BRITISH_CAMP_VANISH_LINE,
     LORD_BRITISH_CAMP_EVENT_ROLL_BOUND, LORD_BRITISH_CAMP_EVENT_THRESHOLD,
     LORD_BRITISH_CAMP_STAT_REWARD_CAP, LordBritishCampStatReward, level_for_experience,
     lord_british_camp_event_hp_for_level, lord_british_camp_event_triggered,
-    lord_british_camp_refreshed_mana, lord_british_camp_stat_reward,
+    lord_british_camp_level_line, lord_british_camp_refreshed_mana,
+    lord_british_camp_stat_reward,
 };
 pub use lzw::*;
 pub use magic::{
