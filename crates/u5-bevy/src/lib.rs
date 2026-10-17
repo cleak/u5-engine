@@ -21740,6 +21740,7 @@ mod tests {
     /// hold is consumed, sets the title-skip flag and skips every later hold;
     /// the mark plus `Presents` stays up for the archive load alone (Q36).
     #[test]
+    #[cfg(feature = "original-asset-tests")]
     fn a_key_during_the_presents_hold_skips_to_the_archive_load() {
         let dir = debug_game_dir();
         let mut intro = visual_intro_state_with_panel(dir.clone(), VisualIntroPanel::Menu);
@@ -21773,6 +21774,7 @@ mod tests {
     /// the title-skip flag; the rest of the poll is skipped and the
     /// composition stays up for the archive load.
     #[test]
+    #[cfg(feature = "original-asset-tests")]
     fn a_key_during_the_composition_hold_sets_the_skip_flag() {
         let dir = debug_game_dir();
         let mut intro = visual_intro_state_with_panel(dir.clone(), VisualIntroPanel::Menu);
