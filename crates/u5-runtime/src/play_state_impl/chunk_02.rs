@@ -345,16 +345,17 @@ impl PlayState {
             TransportState::Horse { .. } => MovementEchoPrefix::Ride,
             TransportState::Carpet { .. } => MovementEchoPrefix::Fly,
             TransportState::Skiff { .. } => MovementEchoPrefix::Row,
-            // A frigate turns in place only under sail, when the heading
-            // differs from the cached one (`weather.md §5`: "the ship turns
-            // ... that action does not also move the ship"); town-family
-            // scenes never prefix a frigate.
-            TransportState::Ship {
-                sails_hoisted: true,
-                ..
-            } if matches!(self.area, Area::World { .. })
-                && direction.is_cardinal()
-                && self.sail_cached_direction != Some(direction) =>
+            // `vehicles.md §6` (u5-spec#297, `RETRACTIONS.md` R524/R525): on
+            // the overworld a frigate key that changes the ship's *facing* -
+            // not the cached sail heading - prints `Head <Dir>`, in either
+            // sail state; town-family scenes never prefix a frigate. A
+            // hoisted key that keeps the facing prints nothing at all
+            // ([`Self::frigate_movement_key_prints_nothing`]).
+            TransportState::Ship { .. }
+                if direction.is_cardinal()
+                    && self
+                        .overworld_frigate_facing()
+                        .is_some_and(|facing| facing != direction) =>
             {
                 MovementEchoPrefix::Head
             }
@@ -378,7 +379,9 @@ impl PlayState {
         if matches!(self.area, Area::Dungeon { .. }) {
             return Ok(false);
         }
-        if let Some(echo) = top_down_command_echo(key) {
+        if let Some(echo) = top_down_command_echo(key)
+            && !self.frigate_movement_key_prints_nothing(key)
+        {
             let echo = self.vehicle_prefixed_movement_echo(key).unwrap_or(echo);
             self.begin_command_echo(echo);
         }

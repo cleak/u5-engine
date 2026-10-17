@@ -8351,7 +8351,9 @@ fn validate_route_smoke_case_state(
             if !state
                 .message_entries()
                 .iter()
-                .any(|entry| entry.text.contains(OUTDOOR_BROADSIDE_BOOM_MESSAGE))
+                .any(|entry| {
+                    entry.text == OUTDOOR_BROADSIDE_BOOM_MESSAGE.trim_end_matches('\n')
+                })
             {
                 return Err(io::Error::other(format!(
                     "route smoke `{case_name}` lost the broadside announcement before the player could see it"

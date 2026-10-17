@@ -336,15 +336,13 @@ pub enum MoveOutcome {
     ExitedVehicle,
     SailToggled,
     SailStalled,
-    /// `weather.md §5`: "If the requested heading differs from the current
-    /// cached sail direction, the ship turns and clears the sailing counter;
-    /// that action does not also move the ship." The heading-establishing
-    /// command is its own accepted command action - `weather.md §4`:
-    /// "Turning to a new heading is observable as a command action, and
-    /// movement along the current heading is handled by the movement routines
-    /// after the heading/state gate accepts it" - so it is neither a move nor
-    /// a wind refusal, and it gets its own outcome rather than borrowing
-    /// [`MoveOutcome::SailStalled`].
+    /// `vehicles.md §6` / `weather.md §5` (u5-spec#297, `RETRACTIONS.md`
+    /// R525): a frigate key that changes the ship's **facing** "turns the
+    /// ship in place without moving it, and consumes a full turn", in either
+    /// sail state. The turn is its own accepted command action - `weather.md
+    /// §4`: "Turning to a new heading is observable as a command action" - so
+    /// it is neither a move nor a wind refusal, and it gets its own outcome
+    /// rather than borrowing [`MoveOutcome::SailStalled`].
     SailTurned,
     Fired,
     Pushed,

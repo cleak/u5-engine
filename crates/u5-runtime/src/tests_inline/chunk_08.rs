@@ -16,6 +16,9 @@
             hull: 20,
             skiffs: 1,
         };
+        // `vehicles.md §6` (u5-spec#297): a frigate key that changes the
+        // facing only turns the ship, so face the step's direction first.
+        state.player.transport = state.player.transport.with_facing(Direction::East);
         state.sync_player_object();
 
         assert_eq!(
@@ -409,6 +412,9 @@
             hull: 20,
             skiffs: 1,
         };
+        // `vehicles.md §6` (u5-spec#297): a frigate key that changes the
+        // facing only turns the ship, so face the step's direction first.
+        state.player.transport = state.player.transport.with_facing(Direction::East);
         state.sync_player_object();
         state.party[0].hp = 12;
 

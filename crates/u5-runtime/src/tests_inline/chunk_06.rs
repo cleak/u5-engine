@@ -3063,6 +3063,34 @@
     }
 
     #[test]
+    fn hostile_broadside_prints_the_published_boom_literal_and_a_blank_row() {
+        // `overworld.md §6.2.1` (u5-spec#297): the hostile-ship announcement
+        // is "`* BOOOM! *` followed by a blank line, before the shot", and it
+        // "is not the F-Fire `BOOOM!` literal".
+        let mut state = world_state_with_walker(5, 5, 0x2C, 8, 5);
+        block_projectile_at(&mut state, 7, 5);
+        state.turn = 1;
+        handle_play_key_input(&mut state, ' ', "", Path::new("")).unwrap();
+
+        let texts: Vec<&str> = state
+            .message_entries()
+            .iter()
+            .map(|entry| entry.text.as_str())
+            .collect();
+        let boom = texts
+            .iter()
+            .position(|text| text.contains("BOOOM"))
+            .unwrap_or_else(|| panic!("no broadside announcement in {texts:?}"));
+        assert_eq!(texts[boom], "* BOOOM! *");
+        assert_eq!(
+            texts.get(boom + 1).copied(),
+            Some(""),
+            "a blank row follows the literal: {texts:?}"
+        );
+        assert_ne!(texts[boom], crate::commands::CANNON_BOOOM_LINE);
+    }
+
+    #[test]
     fn outdoor_walker_broadside_fires_and_suppresses_cleanup_movement() {
         // active-objects.md §8: "Ship-like water-creature and pirate frames
         // aligned with the player on the same row or column within three

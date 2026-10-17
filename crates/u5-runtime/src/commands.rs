@@ -2056,12 +2056,22 @@ pub const DUNGEON_CHEST_GET_MUST_OPEN_FIRST: &str = "Must open first!\n";
 pub const DUNGEON_CHEST_GET_NOT_HERE: &str = "Not here!\n";
 pub const DUNGEON_CHEST_GET_CONTENTS: &str = "contents\nof chest\nYou find:\n";
 
+/// `vehicles.md §6` "Hull warning" (u5-spec#297): "Immediately after a
+/// `Head <Dir>` line, if the hull condition is below 50 (0 to 49), the game
+/// prints `Hull weak!`."
+pub const FRIGATE_HULL_WEAK_THRESHOLD: u8 = 50;
+pub const FRIGATE_HULL_WEAK_LINE: &str = "Hull weak!\n";
+/// `commands.md §5.2` / `vehicles.md §6` (u5-spec#297): "a furled frigate
+/// prints the compass word and then `Rowing!` on the next line".
+pub const FRIGATE_ROWING_LINE: &str = "Rowing!\n";
+
 /// `vehicles.md §6` "Movement Announcements And Facing Frames": "Each
 /// announced directional step in a vehicle prints a vehicle prefix in front
 /// of the direction word" - `Ride` (horse), `Fly` (carpet), `Row` (skiff);
-/// a frigate has none, except that "on the overworld a frigate turning in
-/// place announces with "Head"". `movement.md §8.1` spells the prefix with
-/// its trailing space (`Ride `, `Fly `).
+/// a frigate has none in town-family scenes, and on the overworld "a key
+/// that changes the facing prints `Head ` plus the direction word" in either
+/// sail state (u5-spec#297). `movement.md §8.1` spells the prefix with its
+/// trailing space (`Ride `, `Fly `).
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum MovementEchoPrefix {
     None,

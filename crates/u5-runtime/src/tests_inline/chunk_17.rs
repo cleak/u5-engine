@@ -3655,6 +3655,58 @@
     }
 
     #[test]
+    fn ready_equipment_in_an_initially_empty_arena_changes_armour_silently() {
+        // `inventory.md §5.2` (u5-spec#231 captures, 2026-10-16): "In an arena
+        // that started with no foes, unequipping the worn body armour and
+        // readying a carried one into the empty slot were both silent and both
+        // took effect; a second body armour over a worn one gave the ordinary
+        // `Thou must first remove thine other armour!`."
+        let mut state = test_state(open_grid(), 1, 1);
+        state.combat_active = true;
+        state.combat_frame_snapshot = Some(CombatFrameSnapshot {
+            area: state.area,
+            player: state.player,
+            active_objects: state.active_objects.clone(),
+            active_player: state.active_player,
+            combat_terrain: state.combat_terrain,
+            dungeon_room_clear_on_success: None,
+            enter_endgame_after_successful_combat: false,
+            endgame_messages: None,
+            endgame_tableau_map: None,
+            encounter_mode_high_bit: false,
+            suppress_controlled_faint_sleep_tick: false,
+            exit_announced: false,
+            established_exit_direction_code: None,
+            any_foe_seated: false,
+        });
+        state.party_strengths = vec![60];
+        state.party_equipment = default_party_equipment(1);
+        state.party_equipment[0][EQUIP_SLOT_ARMOUR] = 9;
+        state.equipment_stock[9] = 0;
+        state.equipment_stock[10] = 1;
+        state.message.clear();
+
+        // A second body armour over the worn one: the ordinary refusal.
+        assert_eq!(
+            state.ready_equipment_from_suffix("1/10"),
+            MoveOutcome::Blocked
+        );
+        assert_eq!(state.message, format!("\n\n{READY_REMOVE_ARMOUR_REFUSAL}"));
+
+        // Unequip the worn armour: silent and effective.
+        state.message.clear();
+        assert_eq!(state.ready_equipment_from_suffix("1/9"), MoveOutcome::Used);
+        assert_eq!(state.party_equipment[0][EQUIP_SLOT_ARMOUR], EQUIPMENT_EMPTY);
+        assert_eq!(state.equipment_stock[9], 1);
+        assert!(!state.message.contains(READY_COMBAT_ARMOUR_LOCK_REFUSAL));
+
+        // Ready a carried one into the empty slot: silent and effective.
+        assert_eq!(state.ready_equipment_from_suffix("1/10"), MoveOutcome::Used);
+        assert_eq!(state.party_equipment[0][EQUIP_SLOT_ARMOUR], 10);
+        assert!(!state.message.contains(READY_COMBAT_ARMOUR_LOCK_REFUSAL));
+    }
+
+    #[test]
     fn cast_reveal_clears_combat_hidden_flags_and_marks_redraw() {
         let mut state = test_state(open_grid(), 1, 1);
         state.combat_active = true;
@@ -3737,6 +3789,15 @@
         assert_eq!(state.active_objects[0].tile, COMBAT_HIDDEN_ACTIVE_OBJECT_TILE);
         assert!(state.visibility_dirty);
         // `magic.md §8` issue-#225 table: Sanct Lor prints `Success!`.
+        assert_eq!(state.message, crate::commands::SPELL_SUCCESS_LINE);
+
+        // `magic.md §8` (issue #231 captures, 2026-10-16): casts "with the
+        // caster visible or already hidden" all print `Success!`.
+        state.party[0].mana = INVISIBILITY_COST;
+        state.spell_charges[INVISIBILITY_SPELL_INDEX] = 1;
+        state.message.clear();
+        assert_eq!(state.cast_invisibility(0), MoveOutcome::Cast);
+        assert!(state.combat_actors[0].is_phase_suppressed());
         assert_eq!(state.message, crate::commands::SPELL_SUCCESS_LINE);
     }
 

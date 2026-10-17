@@ -986,16 +986,26 @@ impl PlayState {
         self.begin_command_echo(echo);
     }
 
-    /// `text-output.md §10.2` / `overworld.md §5` step 3: "A direction taken
-    /// while the party is aboard a ship - pressed or synthesised, repeating
-    /// the current heading or turning to a new one - also clears the one-byte
-    /// flag that gates the next prompt's line feed and marker". On foot (and
-    /// off the overworld) the flag is never touched.
+    /// `text-output.md §10.2` / `overworld.md §5` step 3 (corrected
+    /// 2026-10-16, u5-spec#297, `RETRACTIONS.md` R526): "A direction taken
+    /// while the sails are hoisted clears the one-byte flag that gates the
+    /// next prompt's line feed and marker ... a furled ship never touches the
+    /// flag". On foot (and off the overworld) the flag is never touched
+    /// either. The same-command writes that set it again are
+    /// [`Self::rearm_overworld_prompt_pair_in_command`].
     pub fn note_overworld_direction_taken(&mut self) {
-        if matches!(self.area, Area::World { .. })
-            && matches!(self.player.transport, TransportState::Ship { .. })
-        {
+        if matches!(self.area, Area::World { .. }) && self.player.transport.is_ship_under_sail() {
             self.overworld_prompt_pair_suppressed = true;
+        }
+    }
+
+    /// `text-output.md §10.2` (R526): "a frigate facing change (either sail
+    /// state) and an under-sail refusal (`BREAKING UP!`, `COLLISION!`,
+    /// `Docked!`) set it again within the same command", so "a course change
+    /// is followed by an ordinary prompt pair".
+    pub fn rearm_overworld_prompt_pair_in_command(&mut self) {
+        if matches!(self.area, Area::World { .. }) {
+            self.overworld_prompt_pair_suppressed = false;
         }
     }
 

@@ -508,7 +508,20 @@ impl PlayState {
     /// reflects the session the panel is about to show, since
     /// [`crate::stats_panel::active_panel_picker`] reads the live field
     /// rather than taking a session argument.
+    ///
+    /// The same pass also runs `inventory.md §4.4`'s inverse-video toggles
+    /// (u5-spec#296), which flip the panel window's persistent inverse bit
+    /// when the highlight sits on a two-line entry
+    /// ([`crate::stats_panel::PanelPickerView::inverse_pass`]). Only U-Use can
+    /// flip it: R-Ready's and M-Mix's vocabularies never take a second
+    /// display line (§4.5), so their passes always toggle an even number of
+    /// times.
     fn register_use_picker_render_scroll(&mut self) {
+        if crate::stats_panel::active_panel_picker(self)
+            .is_some_and(|view| view.inverse_pass_flips_window())
+        {
+            self.stats_panel_window_inverse = !self.stats_panel_window_inverse;
+        }
         if !crate::stats_panel::active_panel_picker(self)
             .is_some_and(|view| view.overflowed_last_row_entry())
         {
@@ -1277,8 +1290,10 @@ impl PlayState {
     ///    describing the party holding the evil shard aloft, completed by the
     ///    shard's own virtue word (Falsehood, Hatred, or Cowardice). This
     ///    happens before any gate is evaluated."
-    /// 2. "It then plays a rising pitch sweep, followed by a falling one,
-    ///    again unconditionally."
+    /// 2. "It then plays the 920-step envelope swell of `systems/audio.md`
+    ///    Section 5.4.7, again unconditionally: one held pitch" (corrected
+    ///    2026-10-16, u5-spec#296, `RETRACTIONS.md` R522: "The pitch does not
+    ///    move").
     /// 3. "Only the **position** gate produces the shared no-effect result."
     /// 4. "Once the position matches, it pauses, prints a line describing the
     ///    shard being cast into the Eternal Flame completed by the opposed
@@ -1296,12 +1311,13 @@ impl PlayState {
     /// Boundary: the exact heading, aloft, cast and destruction strings are
     /// not published — only their order, their completing words, and which of
     /// them are unconditional — so the literals below are engine voice. The
-    /// rising/falling sweep of phase 2 is [`SoundEffect::ShardSwell`]
-    /// (`audio.md §5.4.7`'s 920-step swell at the "Shadowlord destruction"
-    /// row's parameters) and plays before the
-    /// position gate on every path; the text after it waits the swell out.
-    /// The `§8.4` destruction flash below is published and is preserved at
-    /// its own boundary.
+    /// one-pitch swell of phase 2 is [`SoundEffect::ShardSwell`]
+    /// (`audio.md §5.4.7`'s 920-step swell, "Shard use" row; u5-spec#296,
+    /// R522/R523) and plays before the position gate on every path; the text
+    /// after it waits the swell out.
+    /// No `§8.4` major flash runs at the destruction: R523 (u5-spec#296)
+    /// withdrew the attribution, and what the success arm plays and draws is
+    /// indexed as open in `OPEN-QUESTIONS.md`.
     pub fn use_shadowlord_shard(
         &mut self,
         index: usize,
@@ -1349,13 +1365,15 @@ impl PlayState {
             self.published_eternal_flame_at_current_position()
         };
         let on_position = flame_entry.is_some_and(|entry| entry.flame == required_flame);
-        // Phase 2, the unconditional rise-and-fall. `quest-graph.md §5`
-        // step 2: "It then plays a rising pitch sweep, followed by a falling
-        // one, again unconditionally" - before the position gate, so the
-        // destruction row hears it too. Measured pending u5-spec#296
-        // (`qa/paired/use-shard-sweep.tsv`, stock side): the aloft line is up
-        // within ~0.1 s of Return, the swell runs 8.25-8.27 s, and the next
-        // text is on screen by the first sample after it ends. The engine
+        // Phase 2, the unconditional swell. `quest-graph.md §5` step 2
+        // (corrected 2026-10-16, u5-spec#296, R522): "the 920-step envelope
+        // swell ... again unconditionally: one held pitch ... It draws
+        // nothing, reads no key and runs no world tick or animation pass" -
+        // before the position gate, so the destruction row hears it too.
+        // Consistent with `qa/paired/use-shard-sweep.tsv` (stock side): the
+        // aloft line is up within ~0.1 s of Return, the swell runs 8.25-8.27 s
+        // there, and the next text is on screen by the first sample after it
+        // ends. The engine
         // printed everything at once (`use-specials/sceptre`, four rows
         // apart, `cleak/u5-engine#25`). Whatever follows waits out the swell:
         // the stock window ends on the aloft row itself during it, and that
@@ -1371,12 +1389,18 @@ impl PlayState {
             // two line feeds, so a blank row stands between the aloft line and
             // the refusal. This engine spent one.
             //
-            // Not reproduced: the stock side also draws the stats panel
-            // inverted from the aloft line onward, and it is still inverted
-            // after a following Pass. When it is restored is not measured,
-            // so this engine leaves the panel alone rather than guess.
+            // The stock capture's stats panel, inverted from the aloft line
+            // onward, is not drawn by this handler: u5-spec#296 traced it to
+            // the picker's highlight leak (`inventory.md §4.4`,
+            // `PlayState::stats_panel_window_inverse`).
             self.staged_narration
                 .push_secs_on_open_row(swell_secs, "\n\nNo effect!\n");
+            // `quest-graph.md §5` step 3 (u5-spec#296): "On that arm the
+            // result line prints first and the 50-update cast-failure
+            // glissando of `systems/audio.md` Section 5.2 (about 52 ms) plays
+            // after it." Speaker effects play in order, so queued behind the
+            // swell it starts as the swell's hold releases the line.
+            self.emit_sound_effect(SoundEffect::CastFailure);
             return Ok(MoveOutcome::Blocked);
         }
 
@@ -1404,12 +1428,15 @@ impl PlayState {
 
         self.special_items[item_index] = 0;
         self.vanquish_shadowlord(index);
-        // `audio.md §8.4`: Shadowlord destruction shares the turbulent
-        // full-viewport flash. It runs at the destruction boundary — after the
-        // shard is consumed and the hideout slot flips to vanquished, before
-        // the encounter clearing, redraw, and turn advance — and it draws all
-        // 1,856 gameplay-PRNG bands there whether or not sound is audible.
-        self.emit_major_flash();
+        // `audio.md §8.4` (corrected 2026-10-16, u5-spec#296,
+        // `RETRACTIONS.md` R523) no longer names Shadowlord destruction as a
+        // caller of the shared full-viewport flash: "whether a successful
+        // Shadowlord destruction invokes this flash at all is **not
+        // established** (the destruction arm's presentation has not been
+        // traced; static reading shows a per-cell effect repeated seven times
+        // and no call identified as this flash)". The engine ran the flash
+        // here, with its 1,856 gameplay-PRNG draws, on the withdrawn text; it
+        // now plays and draws nothing it cannot cite.
         let cleared = self.clear_shadowlord_name_encounters(index);
         self.mark_visibility_dirty();
         self.advance_turn();
@@ -4319,7 +4346,7 @@ impl PlayState {
     /// automatic contact alike. Returns whether the rewrite happened, which
     /// skips the guard gate.
     pub(crate) fn talk_dispatcher_stand_down(&mut self, x: usize, y: usize) -> bool {
-        let Some(slot) = self.npc_at_current_floor(x, y).map(|npc| npc.slot) else {
+        let Some(slot) = self.talk_record_at(x, y).map(|npc| npc.slot) else {
             return false;
         };
         let Some(index) = self.npcs.iter().position(|npc| npc.slot == slot) else {
@@ -4339,7 +4366,7 @@ impl PlayState {
 
     fn shop_keeper_is_open_for_business(&self, x: usize, y: usize) -> bool {
         const SHOP_WORKING_WAYPOINT: usize = 1;
-        let Some(npc) = self.npc_at_current_floor(x, y) else {
+        let Some(npc) = self.talk_record_at(x, y) else {
             return true;
         };
         npc.cached_wp == SHOP_WORKING_WAYPOINT
@@ -4463,11 +4490,65 @@ impl PlayState {
     /// adjacent record that reads as all zero, so the bare `No response!` is
     /// printed for any sprite." An object with no NPC record therefore
     /// resolves with dialog index zero.
+    ///
+    /// Which record owns the object is published too (added 2026-10-16,
+    /// issue #216): "The owning record is the lowest-numbered occupied record
+    /// linked to the faced object with a nonzero type and state; the faced
+    /// object is the highest-numbered active object at that cell." A record
+    /// standing on the cell but linked to another object does not own it -
+    /// that is the reporter's Minoc guard (`blackthorn.md §7a`,
+    /// `saved-gam.md §12`).
+    ///
+    /// Engine boundary: a record with no object link at all (only the
+    /// harness builds those; town entry links every placed record) is still
+    /// found by its position, as before.
     fn talk_target_at(&self, x: usize, y: usize) -> Option<(u8, usize, usize)> {
-        if let Some(npc) = self.npc_at_current_floor(x, y) {
+        if let Some(npc) = self.talk_record_at(x, y) {
             return Some((npc.dialog_id, x, y));
         }
-        self.object_at_current_floor(x, y).map(|_| (0, x, y))
+        self.talk_faced_object_slot(x, y).map(|_| (0, x, y))
+    }
+
+    /// `conversation.md §2`: "the faced object is the highest-numbered active
+    /// object at that cell" (slot 0, the party, is never a Talk target).
+    fn talk_faced_object_slot(&self, x: usize, y: usize) -> Option<usize> {
+        self.active_objects
+            .iter()
+            .enumerate()
+            .skip(1)
+            .rev()
+            .find(|(_, object)| self.object_occupies(**object, x, y))
+            .map(|(slot, _)| slot)
+    }
+
+    /// The NPC record the Talk dispatcher runs with at a resolved cell:
+    /// "the lowest-numbered occupied record linked to the faced object with a
+    /// nonzero type and state" (`conversation.md §2`, issue #216). `None` when
+    /// no record owns the faced object - the dispatcher then reads "an
+    /// unrelated adjacent record that reads as all zero", so no waypoint,
+    /// guard-sprite, shop or regime test may consult a record merely standing
+    /// on the cell. Every later lookup on the Talk path goes through this, so
+    /// the dialogue word and the record those tests read are the same one.
+    ///
+    /// Engine boundary: a record with no object link at all (only the harness
+    /// builds those; town entry links every placed record) is still found by
+    /// its position, as is any record when no object stands on the cell.
+    pub(crate) fn talk_record_at(&self, x: usize, y: usize) -> Option<&RuntimeNpc> {
+        let Some(faced) = self.talk_faced_object_slot(x, y) else {
+            return self.npc_at_current_floor(x, y);
+        };
+        self.npcs
+            .iter()
+            .filter(|npc| {
+                npc.active_object == Some(faced)
+                    && npc.type_byte != 0
+                    && npc.state != NPC_STATE_EMPTY
+            })
+            .min_by_key(|npc| npc.slot)
+            .or_else(|| {
+                self.npc_at_current_floor(x, y)
+                    .filter(|npc| npc.active_object.is_none())
+            })
     }
 
     #[cfg(test)]
@@ -4611,7 +4692,7 @@ impl PlayState {
         // The approach-and-converse waypoint behaviour is checked first: that
         // arm stands the guard down and dispatches on the dialog index instead.
         if !stood_down
-            && let Some(npc) = self.npc_at_current_floor(target_x, target_y)
+            && let Some(npc) = self.talk_record_at(target_x, target_y)
             && npc.type_byte == crate::tlk_control_codes::TALK_GUARD_SPRITE
             && !crate::talk_guard_sprite_dispatches(npc.cached_wp, dialog_id as u8)
         {
@@ -4647,7 +4728,7 @@ impl PlayState {
             // prints the bare line whatever its sprite (§2's decision tree,
             // arm 1).
             self.message = crate::talk_non_speaker_refusal_for_sprite(
-                self.npc_at_current_floor(target_x, target_y)
+                self.talk_record_at(target_x, target_y)
                     .map(|npc| npc.type_byte)
                     .filter(|_| !stood_down),
             );
@@ -4762,7 +4843,7 @@ impl PlayState {
             return self.consume_ordinary_town_talk();
         };
         let conversation_npc_slot = self
-            .npc_at_current_floor(target_x, target_y)
+            .talk_record_at(target_x, target_y)
             .map(|npc| npc.slot);
 
         // `conversation.md §2` step 4: the status-tile gate reads the live map
@@ -4850,7 +4931,7 @@ impl PlayState {
         // original refuses the palace guard where this engine opened the
         // password demand.
         if !stood_down
-            && let Some(npc) = self.npc_at_current_floor(target_x, target_y)
+            && let Some(npc) = self.talk_record_at(target_x, target_y)
             && npc.type_byte == crate::tlk_control_codes::TALK_GUARD_SPRITE
             && !crate::talk_guard_sprite_dispatches(npc.cached_wp, dialog_id as u8)
         {
@@ -4879,7 +4960,7 @@ impl PlayState {
             // prints the bare line whatever its sprite (§2's decision tree,
             // arm 1).
             self.message = crate::talk_non_speaker_refusal_for_sprite(
-                self.npc_at_current_floor(target_x, target_y)
+                self.talk_record_at(target_x, target_y)
                     .map(|npc| npc.type_byte)
                     .filter(|_| !stood_down),
             );
@@ -5322,7 +5403,7 @@ impl PlayState {
         ) {
             let text = if dialog_id == TOWN_NPC_BRUSHOFF_DIALOG_ID {
                 let target_slot = self
-                    .npc_at_current_floor(target_x, target_y)
+                    .talk_record_at(target_x, target_y)
                     .map(|npc| npc.slot);
                 if let Some(index) = self
                     .npcs
@@ -5350,7 +5431,7 @@ impl PlayState {
             crate::conversation_session::ConversationSession::new(raw.clone(), fields.clone());
         self.active_conversation = Some(Box::new(session));
         self.active_conversation_npc_slot = self
-            .npc_at_current_floor(target_x, target_y)
+            .talk_record_at(target_x, target_y)
             .map(|npc| npc.slot);
         // `conversation.md §7.6` / §10: the branch-flag bit `0x8C`
         // tests and `0x88` sets is the speaking NPC's roster slot,
@@ -6049,7 +6130,7 @@ impl PlayState {
             TOWN_NPC_COWERING_DIALOG_ID => TOWN_NPC_COWERING_RESPONSE,
             TOWN_NPC_BRUSHOFF_DIALOG_ID => {
                 let target_slot = self
-                    .npc_at_current_floor(target_x, target_y)
+                    .talk_record_at(target_x, target_y)
                     .map(|npc| npc.slot);
                 if let Some(index) = self
                     .npcs
@@ -6079,7 +6160,7 @@ impl PlayState {
             return Ok(self.consume_ordinary_town_talk());
         };
         let npc_slot = self
-            .npc_at_current_floor(target_x, target_y)
+            .talk_record_at(target_x, target_y)
             .map_or(0, |npc| npc.slot);
         let arrest = TownArrestPrompt {
             scene_byte: scene.byte,

@@ -2697,9 +2697,10 @@ fn vehicle_movement_echo_carries_the_vehicle_prefix() {
     };
     assert_eq!(text(&state, 'a'), Some("Row West"));
 
-    // A furled frigate has no prefix; a hoisted one turning in place on the
-    // overworld announces `Head`, and one already on its cached heading
-    // does not.
+    // `vehicles.md §6` (u5-spec#297, R524/R525): on the overworld a frigate
+    // key that changes the *facing* announces `Head`, in either sail state,
+    // whatever the cached sail heading holds. A furled frigate keeping its
+    // facing prints the plain compass word; a hoisted one prints nothing.
     state.player.transport = TransportState::Ship {
         type_byte: SHIP_PARKED_FIRST,
         tile: FIRST_PLAYABLE_FRIGATE_TILE,
@@ -2707,7 +2708,10 @@ fn vehicle_movement_echo_carries_the_vehicle_prefix() {
         hull: 77,
         skiffs: 2,
     };
+    assert_eq!(state.overworld_frigate_facing(), Some(Direction::North));
     assert_eq!(text(&state, 'w'), Some("North"));
+    assert!(!state.frigate_movement_key_prints_nothing('w'));
+    assert_eq!(text(&state, 'd'), Some("Head East"));
     state.player.transport = TransportState::Ship {
         type_byte: SHIP_TRANSPORT_HOISTED_FIRST,
         tile: FIRST_PLAYABLE_FRIGATE_TILE,
@@ -2716,8 +2720,12 @@ fn vehicle_movement_echo_carries_the_vehicle_prefix() {
         skiffs: 2,
     };
     state.sail_cached_direction = Some(Direction::East);
-    assert_eq!(text(&state, 'w'), Some("Head North"));
-    assert_eq!(text(&state, 'd'), Some("East"));
+    assert_eq!(text(&state, 'd'), Some("Head East"));
+    assert!(!state.frigate_movement_key_prints_nothing('d'));
+    assert!(state.frigate_movement_key_prints_nothing('w'));
+    state.sail_cached_direction = None;
+    assert_eq!(text(&state, 'd'), Some("Head East"));
+    assert!(state.frigate_movement_key_prints_nothing('w'));
 }
 
 #[test]

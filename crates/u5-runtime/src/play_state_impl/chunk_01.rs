@@ -80,8 +80,10 @@ impl PlayState {
     /// frequency changes. Every band consumes one **gameplay** PRNG draw, so
     /// this must be called at the published boundary whether or not sound is
     /// audible — muting suppresses each tone start but skips none of the
-    /// advances. Shrine restoration, a recognized Word of Power, and
-    /// Shadowlord destruction all share it.
+    /// advances. Shrine restoration and a recognized Word of Power share it;
+    /// whether a successful Shadowlord destruction invokes it at all "is
+    /// **not established**" (u5-spec#296, `RETRACTIONS.md` R523), so the shard
+    /// handler does not call it.
     pub(crate) fn emit_major_flash(&mut self) {
         let mut prng = U5Prng::new(self.prng_state);
         let bands = audio::draw_major_flash_bands(&mut prng);
@@ -900,6 +902,7 @@ impl PlayState {
             view_overlay_idle_polls: 0,
             surface_command_row_follows_history: false,
             overworld_prompt_pair_suppressed: false,
+            stats_panel_window_inverse: false,
             staged_narration: Default::default(),
             pending_text_hold: None,
             pending_blackthorn_rescue: None,
@@ -1309,6 +1312,7 @@ impl PlayState {
             view_overlay_idle_polls: 0,
             surface_command_row_follows_history: false,
             overworld_prompt_pair_suppressed: false,
+            stats_panel_window_inverse: false,
             staged_narration: Default::default(),
             pending_text_hold: None,
             pending_blackthorn_rescue: None,
@@ -1729,6 +1733,7 @@ impl PlayState {
             view_overlay_idle_polls: 0,
             surface_command_row_follows_history: false,
             overworld_prompt_pair_suppressed: false,
+            stats_panel_window_inverse: false,
             staged_narration: Default::default(),
             pending_text_hold: None,
             pending_blackthorn_rescue: None,
@@ -1883,15 +1888,23 @@ impl PlayState {
         if !direction.is_cardinal() && !matches!(self.area, Area::Dungeon { .. }) {
             return Ok(MoveOutcome::Blocked);
         }
-        // `text-output.md §10.2`: any direction taken aboard a ship, keyed or
-        // synthesised, turning or repeating, clears the overworld prompt flag.
+        // `text-output.md §10.2` (R526): a direction taken under hoisted sail,
+        // keyed or synthesised, clears the overworld prompt flag; a facing
+        // change or an under-sail refusal sets it again below.
         self.note_overworld_direction_taken();
+        // `vehicles.md §6` (u5-spec#297): a frigate key that changes the
+        // facing turns the ship in place and does not move it, in either sail
+        // state. Read the facing before this step rewrites it.
+        let previous_frigate_facing = self.overworld_frigate_facing();
         self.player.facing = direction;
         let previous_avatar_tile = self.player.transport.avatar_tile();
         self.player.transport = self.player.transport.with_facing(direction);
         if self.player.transport.avatar_tile() != previous_avatar_tile {
             self.sync_player_object();
             self.mark_visibility_dirty();
+        }
+        if previous_frigate_facing.is_some_and(|facing| facing != direction) {
+            return Ok(self.turn_overworld_frigate_in_place(direction));
         }
         let (dx, dy) = direction.delta();
         let nx = self.player.x as isize + dx;

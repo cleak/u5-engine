@@ -880,6 +880,56 @@ impl PanelPickerView {
         false
     }
 
+    /// One list pass's inverse-video toggles, emulated (`inventory.md §4.4`,
+    /// "The highlight can leak into the panel", u5-spec#296): "During each
+    /// list pass the picker emits the toggle before any entry that begins on
+    /// the highlight row, and again after any entry whose rendering leaves the
+    /// cursor exactly one row below the highlight row; each toggle flips the
+    /// panel window's own, persistent inverse state."
+    ///
+    /// The highlight row is the selection's offset from the page top (§4.4:
+    /// "the highlight stays parked on row four"), which is a row of the
+    /// panel, not an entry: once an entry above it takes two display lines the
+    /// entry that begins there is a later one, or none. The loop runs while
+    /// the cursor is on a list row, so an entry that begins on the last row
+    /// and wraps still runs (§4.4: "The loop terminates on the cursor's row").
+    ///
+    /// Returns the inverse state of each of [`Self::visible_lines`], in order,
+    /// and the window's state when the pass ends. With `start_inverse` false
+    /// and no wrapping entry this is the ordinary one highlighted entry.
+    pub fn inverse_pass(&self, start_inverse: bool) -> (Vec<bool>, bool) {
+        let start = self.page_start().min(self.rows.len());
+        let highlight_row = self.selected.saturating_sub(start);
+        let mut inverse = start_inverse;
+        let mut row = 0usize;
+        let mut line_inverse = Vec::with_capacity(PANEL_PICKER_ROWS);
+        for entry in &self.rows[start..] {
+            if row >= PANEL_PICKER_ROWS {
+                break;
+            }
+            if row == highlight_row {
+                inverse = !inverse;
+            }
+            let lines = entry.lines().len();
+            // Mirrors `visible_lines`: the overflowing entry runs, but its
+            // lines are not part of the page this engine draws.
+            if row + lines <= PANEL_PICKER_ROWS {
+                line_inverse.extend(std::iter::repeat_n(inverse, lines));
+            }
+            row += lines;
+            if row == highlight_row + 1 {
+                inverse = !inverse;
+            }
+        }
+        (line_inverse, inverse)
+    }
+
+    /// Whether one list pass flips the panel window's persistent inverse bit
+    /// (an odd number of toggles); see [`Self::inverse_pass`].
+    pub fn inverse_pass_flips_window(&self) -> bool {
+        self.inverse_pass(false).1
+    }
+
     /// Divider-band page badge, using the arms browser's published glyphs
     /// (`inventory.md §4.4` places the same `↓`/`↑` badge under the picker).
     pub fn page_indicator(&self) -> crate::shop_runtime::ArmsSellPageIndicator {
@@ -1072,8 +1122,15 @@ pub fn paint_panel_picker_text_window(system: &mut TextWindowSystem, state: &Pla
     if picker.ornamental_frame {
         paint_panel_picker_frame(system);
     }
-    for (line, (entry, line_column, text)) in picker.visible_lines().iter().enumerate() {
-        let selected = *entry == picker.selected;
+    // `inventory.md §4.4` (u5-spec#296): the highlight is the inverse-video
+    // toggle against the panel window's persistent bit, so what is drawn
+    // inverted is the emulated pass, not "the selected entry". The stored bit
+    // already includes this pass, so the pass began from it undone.
+    let start_inverse = state.stats_panel_window_inverse ^ picker.inverse_pass_flips_window();
+    let (line_inverse, _) = picker.inverse_pass(start_inverse);
+    let mut window_inverse = false;
+    for (line, (_entry, line_column, text)) in picker.visible_lines().iter().enumerate() {
+        let selected = line_inverse.get(line).copied().unwrap_or(start_inverse);
         // Without the frame there are no side rules to leave clear, so
         // the highlight starts in window column 0 and the text is padded
         // into columns 1..=13 instead of being cursored there.
@@ -1083,8 +1140,9 @@ pub fn paint_panel_picker_text_window(system: &mut TextWindowSystem, state: &Pla
             0
         };
         system.set_active_cursor(column, (line + 1) as u8);
-        if selected {
+        if selected != window_inverse {
             system.emit_byte(TEXT_CTRL_INVERSE_TOGGLE);
+            window_inverse = selected;
         }
         if !picker.ornamental_frame {
             system.emit_byte(b' ');
@@ -1111,10 +1169,8 @@ pub fn paint_panel_picker_text_window(system: &mut TextWindowSystem, state: &Pla
         if !picker.ornamental_frame {
             system.emit_byte(b' ');
         }
-        if selected {
-            system.emit_byte(TEXT_CTRL_INVERSE_TOGGLE);
-        }
     }
+    system.clear_active_flags();
     system.set_active_window(MESSAGE_TEXT_WINDOW_INDEX);
     true
 }
@@ -1310,6 +1366,15 @@ pub fn paint_stats_panel_text_window(
     system.set_active_window(STATS_PANEL_TEXT_WINDOW_INDEX);
     system.emit_byte(TEXT_CTRL_CLEAR_WINDOW);
     system.clear_active_flags();
+    // `inventory.md §4.4` (u5-spec#296): a picker pass that left the panel
+    // window's own inverse bit set makes "the full stats-panel repaint ...
+    // draw the roster and the food, gold and date boxes inverted; and so does
+    // every later panel repaint". A highlighted roster row's own toggles then
+    // flip against it.
+    let window_inverse = state.stats_panel_window_inverse;
+    if window_inverse {
+        system.emit_byte(TEXT_CTRL_INVERSE_TOGGLE);
+    }
 
     for index in 0..STATS_PANEL_PARTY_ROWS {
         system.set_active_cursor(0, index.min(u8::MAX as usize) as u8);
@@ -1336,8 +1401,14 @@ pub fn paint_stats_panel_text_window(
     ] {
         system.set_active_cursor(0, row);
         // `stats-panel.md §6`: only the ship variant's three-digit hull is
-        // longer than the field, and it writes column 39 (`§3`).
-        for byte in line.trim_end().bytes().take(STATS_PANEL_WIDTH + 1) {
+        // longer than the field, and it writes column 39 (`§3`). Inverted,
+        // the box's blanks are drawn too so the whole field reads inverted.
+        let line = if window_inverse {
+            format!("{:<width$}", line.trim_end(), width = STATS_PANEL_WIDTH)
+        } else {
+            line.trim_end().to_string()
+        };
+        for byte in line.bytes().take(STATS_PANEL_WIDTH + 1) {
             system.emit_byte(byte);
         }
     }
@@ -1357,6 +1428,7 @@ pub fn paint_stats_panel_text_window(
 
     // §2.1: a full refresh always returns to the message window without
     // repositioning that descriptor's saved cursor.
+    system.clear_active_flags();
     system.set_active_window(MESSAGE_TEXT_WINDOW_INDEX);
 }
 

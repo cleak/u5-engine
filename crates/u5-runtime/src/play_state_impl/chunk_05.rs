@@ -848,6 +848,9 @@ impl PlayState {
             // marker to the same-facing furled frigate, clears the sailing
             // cache, refuses the coordinate step".
             self.sail_cached_direction = None;
+            // `text-output.md §10.2` (R526): `Docked!` is an under-sail
+            // refusal, which sets the prompt flag again.
+            self.rearm_overworld_prompt_pair_in_command();
             self.sync_player_object();
             self.mark_visibility_dirty();
             self.message = "Docked!".to_string();
@@ -1028,6 +1031,20 @@ impl PlayState {
         // result line.
         let _ = direction;
         self.message = String::new();
+        // `commands.md §5.2` / `vehicles.md §6` (u5-spec#297, R524): a
+        // furled frigate "prints the plain compass word followed by a
+        // `Rowing!` line" on every accepted step. Under hoisted sail an
+        // accepted step on open water prints nothing.
+        if matches!(
+            self.player.transport,
+            TransportState::Ship {
+                sails_hoisted: false,
+                ..
+            }
+        ) {
+            self.emit_message_line(FRIGATE_ROWING_LINE);
+            self.message_row_open_mid_line = false;
+        }
         // Measured 2026-09-07 (`qa/paired/slow-terrain.tsv`): brush answers a
         // step with `Slow progress!` and trees/foothills with `Very slow!`,
         // under the direction echo and without refusing the step. `§8.1` adds

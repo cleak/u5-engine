@@ -284,10 +284,11 @@ fn silent_wind_setter_commits_the_transition_without_a_cue() {
 }
 
 #[test]
-fn shadowlord_destruction_runs_the_shared_major_flash() {
-    // audio.md §8.4: Shadowlord destruction shares the turbulent full-viewport
-    // flash - 1,856 bands, each one gameplay-PRNG draw, each an inclusive
-    // 19..150 Hz frequency.
+fn shadowlord_destruction_plays_no_major_flash() {
+    // `audio.md §8.4` (u5-spec#296, `RETRACTIONS.md` R523): whether a
+    // successful destruction invokes the shared full-viewport flash "is **not
+    // established**", so the engine no longer runs it there - neither its
+    // sound nor its 1,856 gameplay-PRNG draws.
     let dir = debug_game_dir();
     let mut state = test_state(open_grid(), 15, 9);
     state.area = Area::Town {
@@ -313,33 +314,19 @@ fn shadowlord_destruction_runs_the_shared_major_flash() {
         MoveOutcome::Used
     );
 
-    let effects = state.sound_effects_after(serial);
-    assert_eq!(effects.len(), 2, "the swell, then one flash per destruction");
     assert_eq!(
-        effects[0],
-        SoundEffect::ShardSwell,
-        "quest-graph.md §5 step 2 plays before every gate"
+        state.sound_effects_after(serial),
+        vec![SoundEffect::ShardSwell],
+        "quest-graph.md §5 step 2's swell, and no flash"
     );
-    match &effects[1] {
-        SoundEffect::MajorFlash { bands } => {
-            assert_eq!(bands.len(), audio::FLASH_BAND_COUNT as usize);
-            assert!(bands.iter().all(|band| {
-                (audio::FLASH_MIN_FREQUENCY_HZ as u8..=audio::FLASH_MAX_FREQUENCY_HZ as u8)
-                    .contains(band)
-            }));
-        }
-        other => panic!("audio.md §8.4 expects the shared major flash, got {other:?}"),
-    }
-    // The 1,856 band draws come out of the gameplay stream, not a sound-only
-    // jitter state.
-    assert_ne!(state.prng_state, prng_before);
+    assert_eq!(state.prng_state, prng_before);
     let _ = fs::remove_dir_all(dir);
 }
 
 #[test]
 fn shadowlord_shard_refusals_never_flash() {
-    // audio.md §8.4 attaches the flash to destruction. Every gate above the
-    // commit returns Blocked and must stay silent.
+    // No refusal arm flashes: `audio.md §8.4` (R523) "On the no-effect arm no
+    // flash follows", and the silent gates add nothing after the swell.
     let dir = debug_game_dir();
 
     let mut no_shard = test_state(open_grid(), 15, 9);
@@ -362,15 +349,17 @@ fn shadowlord_shard_refusals_never_flash() {
             .unwrap(),
         MoveOutcome::Blocked
     );
-    // Off any destruction row, so step 2's swell plays; no flash does.
+    // Off any destruction row, so step 2's swell plays, then step 3's
+    // cast-failure glissando (u5-spec#296); no flash does.
     assert_eq!(
         vanquished.sound_effects_after(serial),
-        vec![SoundEffect::ShardSwell]
+        vec![SoundEffect::ShardSwell, SoundEffect::CastFailure]
     );
 
     // Correct shard, live Shadowlord, but no Eternal Flame underfoot. The
     // position gate's refusal follows `quest-graph.md §5` step 2's swell,
-    // which is unconditional; what must not play is the flash.
+    // which is unconditional, and "the 50-update cast-failure glissando ...
+    // plays after it" (step 3, u5-spec#296); what must not play is the flash.
     let mut no_flame = test_state(open_grid(), 1, 1);
     no_flame.special_items[SPECIAL_ITEM_SHARD_FALSEHOOD_INDEX] = 1;
     no_flame.shadowlord_hideouts[SHADOWLORD_FALSEHOOD_INDEX] = 1;
@@ -383,7 +372,7 @@ fn shadowlord_shard_refusals_never_flash() {
     );
     assert_eq!(
         no_flame.sound_effects_after(serial),
-        vec![SoundEffect::ShardSwell]
+        vec![SoundEffect::ShardSwell, SoundEffect::CastFailure]
     );
 
     // On the flame, but the Shadowlord is not present to the north.
@@ -415,11 +404,12 @@ fn shadowlord_shard_refusals_never_flash() {
 }
 
 #[test]
-fn shard_swell_matches_the_published_shadowlord_destruction_row() {
-    // `audio.md §5.4.7`: "Shadowlord destruction | 2640 | 200 | 184,000 |
-    // about 937 Hz | 7.91 s / 6.13 s". The stock capture
-    // (`qa/paired/use-shard-sweep.tsv`, 891 Hz, 8.25-8.27 s) sits inside the
-    // calibration band of those approximations.
+fn shard_swell_matches_the_published_shard_use_row() {
+    // `audio.md §5.4.7` (u5-spec#296, R523 relabelled the row): "Shard use
+    // ... | 2640 | 200 | 184,000 | about 937 Hz | 7.91 s / 6.13 s". The stock
+    // capture (`qa/paired/use-shard-sweep.tsv`, 891 Hz, 8.25-8.27 s) sits
+    // inside the calibration band of those approximations. `quest-graph.md
+    // §5` step 2 (R522): "one held pitch", not a pitch sweep.
     assert_eq!(audio::SHARD_SWELL_PERIOD, 2640);
     assert_eq!(audio::SHARD_SWELL_ITERATIONS, 200);
     let program = SoundEffect::ShardSwell.program(&mut crate::audio::RumbleJitter::default());
@@ -481,8 +471,8 @@ fn off_position_shard_holds_no_effect_until_the_swell_ends() {
 
 #[test]
 fn on_position_shard_holds_the_cast_line_until_the_swell_ends() {
-    // `quest-graph.md §5` steps 1-4: the aloft line, then the rising and
-    // falling sweep "unconditionally" - before the position gate - and only
+    // `quest-graph.md §5` steps 1-4: the aloft line, then the one-pitch
+    // swell "unconditionally" (R522) - before the position gate - and only
     // then, on the matching row, the cast-into-the-flame line. The engine
     // used to play the swell on the refusal branch alone and print the cast
     // line at once (audit A001).
@@ -525,4 +515,153 @@ fn on_position_shard_holds_the_cast_line_until_the_swell_ends() {
     // The silent actor gate failed: the shard stays and no turn passes.
     assert_eq!(state.special_items[SPECIAL_ITEM_SHARD_FALSEHOOD_INDEX], 1);
     assert_eq!(state.turn, 0);
+}
+
+/// `inventory.md §4.4` "The highlight can leak into the panel" (u5-spec#296):
+/// a stock of counted Amulet and Crown, a counted Shard of Falsehood (two
+/// display lines) and a game-written Shard of Hatred (one line).
+fn shard_leak_picker_state(falsehood: u8) -> PlayState {
+    let mut state = test_state(open_grid(), 4, 4);
+    state.scroll_stock = [0; SCROLL_COUNT];
+    state.potion_stock = [0; POTION_COUNT];
+    state.special_items = [0; SPECIAL_ITEM_COUNT];
+    // Every Moonstone still lies buried, so no Moonstone row is offered.
+    state.moonstone_slots = [MoonstoneGateSlot {
+        scene: 0,
+        x: 0,
+        y: 0,
+        z: 0,
+    }; MOONSTONE_SLOT_COUNT];
+    state.special_items[SPECIAL_ITEM_AMULET_LB_INDEX] = 1;
+    state.special_items[SPECIAL_ITEM_CROWN_LB_INDEX] = 1;
+    state.special_items[SPECIAL_ITEM_SHARD_FALSEHOOD_INDEX] = falsehood;
+    state.special_items[SPECIAL_ITEM_SHARD_HATRED_INDEX] = 255;
+    state
+}
+
+fn run_use_picker_downs_then(state: &mut PlayState, downs: usize, finish: char) {
+    assert_eq!(state.start_use_item(), MoveOutcome::Observed);
+    for _ in 0..downs {
+        assert!(state.step_active_use('>', "", Path::new("")).unwrap());
+    }
+    assert!(state.step_active_use(finish, "", Path::new("")).unwrap());
+}
+
+#[test]
+fn picker_highlight_on_a_two_line_entry_leaks_inverse_into_the_panel() {
+    // §4.4 worked cases: "two Downs then accept leaves the panel inverted;
+    // three Downs leaves it normal; a game-written shard (the no-quantity
+    // marker) lists as one line and never leaks." Cancel leaves it the same
+    // way ("the full stats-panel repaint that U-Use performs after the picker
+    // returns (also on cancel)").
+    let probe = shard_leak_picker_state(1);
+    let lines: Vec<usize> = probe
+        .use_item_picker_rows()
+        .iter()
+        .map(|row| {
+            crate::stats_panel::PanelPickerRow {
+                quantity: row.quantity,
+                selector: crate::stats_panel::PANEL_PICKER_SELECTOR_BLANK,
+                selector_runic: false,
+                name: row.decoration.decorate(&row.label),
+                zero_padded: false,
+            }
+            .lines()
+            .len()
+        })
+        .collect();
+    assert_eq!(lines, vec![1, 1, 2, 1], "Amulet, Crown, Shard/Falsehd, Shard/Hatred");
+
+    let mut two = shard_leak_picker_state(1);
+    run_use_picker_downs_then(&mut two, 2, '\u{1b}');
+    assert!(two.stats_panel_window_inverse, "two Downs leave it set");
+
+    let mut three = shard_leak_picker_state(1);
+    run_use_picker_downs_then(&mut three, 3, '\u{1b}');
+    assert!(!three.stats_panel_window_inverse, "three Downs leave it clear");
+
+    let mut written = shard_leak_picker_state(255);
+    run_use_picker_downs_then(&mut written, 2, '\u{1b}');
+    assert!(!written.stats_panel_window_inverse, "an uncounted shard never leaks");
+
+    // Turns do not clear it, and the next panel repaint draws inverted.
+    two.advance_turn();
+    assert!(two.stats_panel_window_inverse);
+    two.repaint_stats_panel();
+    let mut system = TextWindowSystem::new();
+    configure_play_text_windows(&mut system);
+    paint_stats_panel_text_window(&mut system, &two, None);
+    let panel = system.window(STATS_PANEL_TEXT_WINDOW_INDEX).unwrap();
+    let roster = system
+        .cell(panel.top_left_x, panel.top_left_y)
+        .expect("roster row 0 is painted");
+    assert!(roster.inverse, "the roster box draws inverted");
+    let counter_row = STATS_COUNTER_TOP - STATS_PANEL_TEXT_TOP;
+    let counters = system
+        .cell(panel.top_left_x, panel.top_left_y + counter_row)
+        .expect("the counter box is painted");
+    assert!(counters.inverse, "the food/gold box draws inverted");
+
+    let mut normal = TextWindowSystem::new();
+    configure_play_text_windows(&mut normal);
+    paint_stats_panel_text_window(&mut normal, &three, None);
+    let cell = normal.cell(panel.top_left_x, panel.top_left_y).unwrap();
+    assert!(!cell.inverse);
+
+    // A later session that leaves odd parity again flips it back.
+    run_use_picker_downs_then(&mut two, 2, '\u{1b}');
+    assert!(!two.stats_panel_window_inverse);
+}
+
+#[test]
+fn picker_pass_toggles_follow_the_highlight_row_not_the_entry() {
+    // §4.4: the toggle goes "before any entry that begins on the highlight
+    // row, and again after any entry whose rendering leaves the cursor
+    // exactly one row below the highlight row". With the shard on rows 2-3,
+    // a highlight on row 3 sits on its continuation line: an off with no on,
+    // so the Shard/Hatred entry beginning on row 4 is drawn inverted from a
+    // clear start and nothing else is.
+    let row = |quantity: Option<u8>, name: &str| crate::stats_panel::PanelPickerRow {
+        quantity,
+        selector: crate::stats_panel::PANEL_PICKER_SELECTOR_BLANK,
+        selector_runic: false,
+        name: name.to_string(),
+        zero_padded: false,
+    };
+    let mut view = crate::stats_panel::PanelPickerView {
+        label: String::new(),
+        rows: vec![
+            row(Some(1), "Amulet"),
+            row(Some(1), "Crown"),
+            row(Some(1), "Shard/Falsehd"),
+            row(None, "Shard/Hatred"),
+        ],
+        selected: 0,
+        ornamental_frame: true,
+    };
+    let flips: Vec<bool> = (0..4)
+        .map(|selected| {
+            view.selected = selected;
+            view.inverse_pass_flips_window()
+        })
+        .collect();
+    assert_eq!(flips, vec![false, false, true, true]);
+
+    view.selected = 2;
+    assert_eq!(
+        view.inverse_pass(false),
+        (vec![false, false, true, true, true], true),
+        "the leak inverts every entry the pass renders after it"
+    );
+    view.selected = 3;
+    assert_eq!(
+        view.inverse_pass(true),
+        (vec![true, true, true, true, false], false)
+    );
+    // An ordinary highlight from a clear start is the one selected entry.
+    view.selected = 1;
+    assert_eq!(
+        view.inverse_pass(false),
+        (vec![false, true, false, false, false], false)
+    );
 }

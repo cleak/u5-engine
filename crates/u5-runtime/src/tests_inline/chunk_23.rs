@@ -21425,11 +21425,15 @@ fn dungeon_room_special_ids_7_8_13_15_draw_eight_ways_for_one_through_eight() {
     }
 }
 
-/// `text-output.md §10.2` (`RETRACTIONS.md` R497): the overworld prompt flag
-/// "is cleared by **any direction taken while the party is aboard a ship** -
-/// whether the requested direction repeats the heading the ship already
-/// carries or turns it to a new one - so exactly one following prompt pair is
-/// suppressed. On foot the flag is never touched."
+/// `text-output.md §10.2` (corrected 2026-10-16, u5-spec#297, `RETRACTIONS.md`
+/// R526 amending R497): the overworld prompt flag "is cleared by any direction
+/// taken while the sails are **hoisted**, but a frigate facing change (either
+/// sail state) and an under-sail refusal (`BREAKING UP!`, `COLLISION!`,
+/// `Docked!`) set it again within the same command. So exactly one following
+/// prompt pair is suppressed only after a hoisted direction that keeps the
+/// facing and is not refused - an accepted step or a calm-wind silent consume
+/// - and a course change is followed by an ordinary prompt pair. A furled
+/// ship, like a party on foot, never touches the flag."
 #[test]
 fn overworld_prompt_pair_is_suppressed_once_after_a_shipboard_direction() {
     fn frigate_state(sails_hoisted: bool) -> PlayState {
@@ -21445,14 +21449,16 @@ fn overworld_prompt_pair_is_suppressed_once_after_a_shipboard_direction() {
         state
     }
 
-    // Aboard a furled frigate: the first echo is an ordinary command row, the
-    // echo after the direction loses both the feed and the end cap.
-    let mut state = frigate_state(false);
+    // Under hoisted sail, a key that keeps the facing (calm wind: the silent
+    // consume) prints nothing and clears the flag, so the next echo loses both
+    // the feed and the end cap.
+    let mut state = frigate_state(true);
+    assert_eq!(state.overworld_frigate_facing(), Some(Direction::North));
     assert!(!overworld_prompt_pair_is_suppressed(&state));
     handle_play_key_input(&mut state, 'w', "", Path::new("")).unwrap();
     assert!(
         overworld_prompt_pair_is_suppressed(&state),
-        "a direction aboard a ship clears the flag"
+        "a hoisted direction that keeps the facing clears the flag"
     );
     handle_play_key_input(&mut state, ' ', "", Path::new("")).unwrap();
     let echoes: Vec<_> = state
@@ -21461,29 +21467,47 @@ fn overworld_prompt_pair_is_suppressed_once_after_a_shipboard_direction() {
         .filter(|entry| entry.is_command_echo)
         .map(|entry| (entry.text.clone(), entry.prompt_pair_suppressed))
         .collect();
-    assert_eq!(echoes[0], ("North".to_string(), false));
-    assert!(echoes[1].0.starts_with("Pass"), "{echoes:?}");
-    assert!(echoes[1].1, "the prompt after the direction is suppressed");
+    assert_eq!(echoes.len(), 1, "the hoisted key echoes nothing: {echoes:?}");
+    assert!(echoes[0].0.starts_with("Pass"), "{echoes:?}");
+    assert!(echoes[0].1, "the prompt after the direction is suppressed");
     // Pass is not a direction, and the helper re-armed the flag on its test.
     assert!(!overworld_prompt_pair_is_suppressed(&state));
-    let log = message_log_from_entries(state.message_entries(), |text| Some(text.to_string()));
-    let kinds: Vec<_> = log.lines().iter().map(|line| line.kind).collect();
-    assert!(
-        !kinds.contains(&MessageLineKind::Blank),
-        "no derived blank between the two echoes: {kinds:?}"
-    );
-    assert_eq!(
-        kinds.iter().filter(|kind| kind.prefixed()).count(),
-        1,
-        "only the first echo carries the end cap: {kinds:?}"
-    );
 
-    // Under sail, a pressed direction that turns the ship also clears it.
+    // A course change sets the flag again in the same command, in either sail
+    // state, so the next prompt pair is ordinary.
+    for hoisted in [true, false] {
+        let mut turning = frigate_state(hoisted);
+        handle_play_key_input(&mut turning, 'd', "", Path::new("")).unwrap();
+        assert!(
+            !overworld_prompt_pair_is_suppressed(&turning),
+            "Head East (hoisted {hoisted}) re-arms the flag"
+        );
+    }
+
+    // An under-sail refusal sets it again too.
+    let mut refused = frigate_state(true);
+    refused.wind = WindState::East;
+    refused.grid[world_cell_index(100, 99)] = 0x05;
+    handle_play_key_input(&mut refused, 'w', "", Path::new("")).unwrap();
+    assert!(
+        refused
+            .message_entries()
+            .iter()
+            .any(|entry| entry.text == "COLLISION!"),
+        "{:?}",
+        refused.message_entries()
+    );
+    assert!(!overworld_prompt_pair_is_suppressed(&refused));
+
+    // A furled frigate never touches the flag.
+    let mut furled = frigate_state(false);
+    handle_play_key_input(&mut furled, 'w', "", Path::new("")).unwrap();
+    assert!(!overworld_prompt_pair_is_suppressed(&furled));
+
+    // Overworld entry arms the flag unconditionally.
     let mut sailing = frigate_state(true);
-    sailing.sail_cached_direction = Some(Direction::South);
     handle_play_key_input(&mut sailing, 'w', "", Path::new("")).unwrap();
     assert!(overworld_prompt_pair_is_suppressed(&sailing));
-    // Overworld entry arms the flag unconditionally.
     sailing.arm_overworld_prompt_pair_on_entry();
     assert!(!overworld_prompt_pair_is_suppressed(&sailing));
 

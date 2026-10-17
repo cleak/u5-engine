@@ -380,14 +380,25 @@ pub struct PlayState {
     /// `text-output.md §10.2`'s overworld prompt gate, stored inverted: set
     /// means the one-byte flag is **clear**, so the next overworld prompt
     /// emits neither its leading line feed nor its end-cap marker. "It is
-    /// cleared by **any direction taken while the party is aboard a ship** -
-    /// whether the requested direction repeats the heading the ship already
-    /// carries or turns it to a new one - so exactly one following prompt
-    /// pair is suppressed. On foot the flag is never touched." The helper
-    /// re-arms it as soon as it has tested it, and "the overworld's
-    /// per-entry initialiser sets the flag **unconditionally**"
-    /// (`RETRACTIONS.md` R497).
+    /// cleared by any direction taken while the sails are **hoisted**, but a
+    /// frigate facing change (either sail state) and an under-sail refusal
+    /// (`BREAKING UP!`, `COLLISION!`, `Docked!`) set it again within the same
+    /// command ... A furled ship, like a party on foot, never touches the
+    /// flag." The helper re-arms it as soon as it has tested it, and "the
+    /// overworld's per-entry initialiser sets the flag **unconditionally**"
+    /// (`RETRACTIONS.md` R497, amended by R526, u5-spec#297).
     pub overworld_prompt_pair_suppressed: bool,
+    /// The stats-panel text window's own, persistent inverse-video bit
+    /// (`inventory.md §4.4` "The highlight can leak into the panel",
+    /// u5-spec#296; `text-output.md` control bytes: the `0xFD` toggle "flips
+    /// both the cache and the active window's own inverse bit ... an inverse
+    /// state left set in a window survives the reset helper"). Each picker
+    /// list pass flips it once per emitted toggle; it is set after a pass
+    /// whose highlight sits on a two-line entry's first or continuation line.
+    /// While set, every panel repaint draws inverted. "Turns, movement and
+    /// messages do not clear it ... It flips back only when a later picker
+    /// session leaves odd parity again."
+    pub stats_panel_window_inverse: bool,
     /// Narration this presentation is printing on a timer rather than all at
     /// once. `main-loop.md §9`: "presentations, cutscene beats and paced turn
     /// loops call [the world tick] directly", so a handler with waits between

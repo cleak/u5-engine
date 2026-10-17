@@ -5034,6 +5034,10 @@ impl PlayState {
     ) -> OutdoorRangedAttackReport {
         if let Some(announcement) = announcement {
             self.push_impact_line(announcement);
+            // `overworld.md §6.2.1`: the broadside's `* BOOOM! *` is
+            // "followed by a blank line", so the cursor stands at column 0
+            // of a fresh row when the shot is drawn.
+            self.message_row_open_mid_line = false;
         }
 
         let attacker_cell = outdoor_ranged_attacker_viewport_cell(wrapped_dx, wrapped_dy);
@@ -5107,6 +5111,9 @@ impl PlayState {
         // coordinates do not change, and the cached sail direction is
         // cleared." That is what stops the auto-advance route on impact.
         self.sail_cached_direction = None;
+        // `text-output.md §10.2` (R526): an under-sail refusal sets the
+        // prompt flag again within the same command.
+        self.rearm_overworld_prompt_pair_in_command();
         self.mark_visibility_dirty();
         self.emit_sound_effect(SoundEffect::ShipCollisionRumble);
         self.apply_outdoor_impact_absorption()

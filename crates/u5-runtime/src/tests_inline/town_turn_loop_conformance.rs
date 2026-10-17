@@ -552,10 +552,10 @@ fn a_steered_ship_keeps_sailing_with_no_keypress_at_the_published_cadence() {
     assert_eq!((state.player.x, state.player.y), (5, 5));
 
     // One keyed movement command establishes the cache (`weather.md §5`: a
-    // movement command "first establishes or changes the ship's heading"),
-    // and that command turns without moving: "If the requested heading
-    // differs from the current cached sail direction, the ship turns and
-    // clears the sailing counter; that action does not also move the ship."
+    // movement command "stores the requested heading in the cached sail
+    // direction"), and because East changes the north-facing ship's facing it
+    // turns without moving: "If the key changes the facing, the ship turns in
+    // place, prints `Head <Dir>` ... and does not move" (u5-spec#297, R525).
     assert_eq!(state.step(Direction::East), MoveOutcome::SailTurned);
     assert_eq!(state.sail_cached_direction, Some(Direction::East));
     assert_eq!((state.player.x, state.player.y), (5, 5));
@@ -626,8 +626,8 @@ fn an_auto_advance_pass_into_the_wind_pays_the_published_wait_ticks() {
     // is the pass that increments the counter.
     let mut state = under_sail_world(5, 5, WindState::East);
 
-    // The keyed command that establishes the heading turns without moving and
-    // leaves the counter at zero - `weather.md §5.1`: the store "is the same
+    // The keyed command that changes the facing turns without moving
+    // (`weather.md §5`, R525) and leaves the counter at zero - `weather.md §5.1`: the store "is the same
     // step that zeroes the sailing counter".
     assert_eq!(state.step(Direction::East), MoveOutcome::SailTurned);
     assert_eq!(state.sail_cadence, 0);
@@ -689,7 +689,8 @@ fn a_sailing_collision_clears_the_cache_and_ends_the_auto_advance_route() {
     };
     state.wind = WindState::North;
 
-    // The keyed command turns without moving (`weather.md §5`); the crosswind
+    // The keyed command changes the facing, so it turns without moving
+    // (`weather.md §5`, R525); the crosswind
     // release lands on the auto-advance pass that follows it.
     assert_eq!(state.step(Direction::East), MoveOutcome::SailTurned);
     assert_eq!((state.player.x, state.player.y), (5, 5));
@@ -1168,9 +1169,10 @@ fn a_repeated_heading_neither_rewrites_the_cache_nor_restarts_the_wait() {
     // `weather.md §5`, so the counter is observable between passes.
     let mut state = under_sail_world(5, 5, WindState::East);
 
-    // The differing-heading step is the setter, and `weather.md §5` bounds
-    // what it may do on the same command: "the ship turns and clears the
-    // sailing counter; that action does not also move the ship."
+    // The differing-heading step is the setter. It also changes the
+    // north-facing ship's facing, so `weather.md §5` (R525) turns the ship in
+    // place: "If the key changes the facing, the ship turns in place ... and
+    // does not move."
     assert_eq!(state.step(Direction::East), MoveOutcome::SailTurned);
     assert_eq!(state.sail_cached_direction, Some(Direction::East));
     assert_eq!(state.sail_cadence, 0);
@@ -1211,7 +1213,8 @@ fn a_wind_change_zeroes_the_sailing_counter_but_a_re_announcement_does_not() {
     // wind already in force. So a ship one pass into a two-pass upwind wait
     // restarts that wait when the wind shifts."
     let mut state = under_sail_world(5, 5, WindState::East);
-    // The heading-establishing turn leaves the counter at zero; the wait pass
+    // The facing-changing turn (`weather.md §5`, R525) leaves the counter at
+    // zero; the wait pass
     // after it is what puts the ship one pass into the two-pass upwind wait.
     assert_eq!(state.step(Direction::East), MoveOutcome::SailTurned);
     assert_eq!(state.sail_cadence, 0);
@@ -1286,9 +1289,9 @@ fn the_same_direction_key_is_swallowed_under_sail() {
     // the arrow you are already sailing does nothing. Any other key ends the
     // loop and becomes that turn's command."
     let mut state = under_sail_world(5, 5, WindState::North);
-    // `weather.md §5`: the heading-establishing command "turns and clears the
-    // sailing counter; that action does not also move the ship". It is the
-    // command that fills the cache the swallow tests against.
+    // `weather.md §5` (R525): a key that changes the facing "turns in place
+    // ... and does not move", and as a hoisted movement command it fills the
+    // cache the swallow tests against.
     assert_eq!(state.step(Direction::East), MoveOutcome::SailTurned);
     assert_eq!(state.sail_cached_direction, Some(Direction::East));
 
@@ -1370,3 +1373,237 @@ fn the_same_direction_key_is_swallowed_under_sail() {
     );
 }
 
+
+// ---------------------------------------------------------------------------
+// u5-spec#297: frigate heading keys, the hull warning and `Rowing!`
+// (`commands.md §5.2`, `vehicles.md §6`, `weather.md §5`; R524, R525).
+// ---------------------------------------------------------------------------
+
+fn frigate_world(sails_hoisted: bool, hull: u8, wind: WindState) -> PlayState {
+    let mut state = under_sail_world(5, 5, wind);
+    state.player.transport = TransportState::Ship {
+        type_byte: if sails_hoisted {
+            TRANSPORT_MARKER_SHIP_HOISTED_FIRST
+        } else {
+            TRANSPORT_MARKER_SHIP_FURLED_FIRST
+        },
+        tile: FIRST_PLAYABLE_FRIGATE_TILE,
+        sails_hoisted,
+        hull,
+        skiffs: 1,
+    };
+    state.sync_player_object();
+    state
+}
+
+fn frigate_transcript_texts(state: &PlayState) -> Vec<String> {
+    state
+        .message_entries()
+        .iter()
+        .map(|entry| entry.text.clone())
+        .collect()
+}
+
+#[test]
+fn a_frigate_key_that_changes_the_facing_turns_in_place_in_either_sail_state() {
+    // `vehicles.md §6`: "a key that changes the facing prints `Head ` plus the
+    // direction word and a line feed (for example `Head West`), turns the ship
+    // in place without moving it, and consumes a full turn, in calm wind too."
+    for hoisted in [true, false] {
+        for wind in [WindState::Calm, WindState::North] {
+            let mut state = frigate_world(hoisted, 77, wind);
+            assert_eq!(state.overworld_frigate_facing(), Some(Direction::North));
+            let turn_before = state.turn;
+            handle_play_key_input(&mut state, 'a', "", Path::new("")).unwrap();
+            let texts = frigate_transcript_texts(&state);
+            assert_eq!(
+                texts.last().map(String::as_str),
+                Some("Head West"),
+                "hoisted {hoisted}, wind {wind:?}: {texts:?}"
+            );
+            assert_eq!((state.player.x, state.player.y), (5, 5));
+            assert_eq!(state.overworld_frigate_facing(), Some(Direction::West));
+            assert!(state.turn > turn_before, "the turn costs a full turn");
+            // Under hoisted sail it is still the one setter of `weather.md
+            // §5.1`; a furled ship leaves the cache alone (the marker guard
+            // clears it anyway).
+            assert_eq!(
+                state.sail_cached_direction,
+                hoisted.then_some(Direction::West)
+            );
+        }
+    }
+}
+
+#[test]
+fn hull_weak_follows_a_head_line_below_hull_fifty_and_nothing_else() {
+    // `vehicles.md §6` "Hull warning": "Immediately after a `Head <Dir>` line,
+    // if the hull condition is below 50 (0 to 49), the game prints `Hull
+    // weak!`. It prints on every frigate facing change in either sail state,
+    // and on nothing else."
+    for hoisted in [true, false] {
+        let mut weak = frigate_world(hoisted, 49, WindState::North);
+        handle_play_key_input(&mut weak, 'd', "", Path::new("")).unwrap();
+        let texts = frigate_transcript_texts(&weak);
+        let head = texts
+            .iter()
+            .position(|text| text == "Head East")
+            .unwrap_or_else(|| panic!("no Head line in {texts:?}"));
+        assert_eq!(texts.get(head + 1).map(String::as_str), Some("Hull weak!"));
+
+        let mut sound = frigate_world(hoisted, 50, WindState::North);
+        handle_play_key_input(&mut sound, 'd', "", Path::new("")).unwrap();
+        assert!(!frigate_transcript_texts(&sound).iter().any(|t| t == "Hull weak!"));
+
+        // A key that keeps the facing never warns, even on a weak hull.
+        let mut keep = frigate_world(hoisted, 1, WindState::North);
+        handle_play_key_input(&mut keep, 'w', "", Path::new("")).unwrap();
+        assert!(!frigate_transcript_texts(&keep).iter().any(|t| t == "Hull weak!"));
+    }
+}
+
+#[test]
+fn a_just_hoisted_frigate_steps_at_once_on_a_key_that_keeps_its_facing() {
+    // `weather.md §5` (R525): "If the facing is unchanged, the step is
+    // attempted on that same command in any non-calm wind, even upwind, and in
+    // calm wind the command is consumed silently. That same-command step is
+    // reachable only while the cache is empty". A north wind against a
+    // north-facing ship is upwind.
+    let mut upwind = frigate_world(true, 77, WindState::North);
+    assert!(upwind.sail_cached_direction.is_none());
+    assert_eq!(upwind.step(Direction::North), MoveOutcome::Moved);
+    assert_eq!((upwind.player.x, upwind.player.y), (5, 4));
+    assert_eq!(upwind.sail_cached_direction, Some(Direction::North));
+
+    let mut calm = frigate_world(true, 77, WindState::Calm);
+    let turn_before = calm.turn;
+    assert_eq!(calm.step(Direction::North), MoveOutcome::SailStalled);
+    assert_eq!((calm.player.x, calm.player.y), (5, 5));
+    assert!(calm.turn > turn_before);
+    assert!(calm.message.is_empty());
+}
+
+#[test]
+fn a_hoisted_frigate_key_that_keeps_the_facing_prints_no_compass_word() {
+    // `commands.md §5.2` (R524): "a frigate with sails hoisted never prints
+    // the compass word, for a pressed or a synthesised step". Open water
+    // prints nothing at all.
+    let mut state = frigate_world(true, 77, WindState::East);
+    let before = state.message_entries().len();
+    handle_play_key_input(&mut state, 'w', "", Path::new("")).unwrap();
+    assert_eq!((state.player.x, state.player.y), (5, 4));
+    let texts = frigate_transcript_texts(&state);
+    assert_eq!(texts.len(), before, "nothing printed: {texts:?}");
+}
+
+#[test]
+fn a_furled_frigate_step_prints_the_compass_word_then_rowing() {
+    // `commands.md §5.2` / `vehicles.md §6`: "Furled, it prints the plain
+    // compass word followed by a `Rowing!` line".
+    let mut state = frigate_world(false, 77, WindState::Calm);
+    handle_play_key_input(&mut state, 'w', "", Path::new("")).unwrap();
+    assert_eq!((state.player.x, state.player.y), (5, 4));
+    let texts = frigate_transcript_texts(&state);
+    let echo = texts
+        .iter()
+        .position(|text| text == "North")
+        .unwrap_or_else(|| panic!("no compass word in {texts:?}"));
+    assert_eq!(texts.get(echo + 1).map(String::as_str), Some("Rowing!"));
+    assert!(!state.message_row_open_mid_line);
+}
+
+#[test]
+fn talk_resolves_the_owning_record_of_the_highest_numbered_faced_object() {
+    // `conversation.md §2` "No-owner Talk" (added 2026-10-16, issue #216):
+    // "The owning record is the lowest-numbered occupied record linked to the
+    // faced object with a nonzero type and state; the faced object is the
+    // highest-numbered active object at that cell." A record standing there
+    // but linked to another object owns nothing, so Talk takes the bare
+    // `No response!` (dialog word zero).
+    let mut state = test_state(open_grid(), 5, 5);
+    let floor = state.current_floor().unwrap();
+    state.active_objects.resize(3, ActiveObject::empty());
+    for slot in [1usize, 2] {
+        state.active_objects[slot] = ActiveObject {
+            type_byte: 0x50,
+            tile: 0x50,
+            x: 5,
+            y: 4,
+            z: floor,
+            phase: 0,
+            aux1: 0,
+            aux3: 0,
+        };
+    }
+    let npc = |slot: usize, dialog_id: u8, link: Option<usize>| RuntimeNpc {
+        slot,
+        dialog_id,
+        active_object: link,
+        ..wandering_npc(0, 5, 4, (5, 4))
+    };
+
+    // Slot 2 is the faced object; record 2 owns it, record 3 owns slot 1.
+    state.npcs = vec![npc(3, 0x11, Some(1)), npc(2, 0x22, Some(2))];
+    assert_eq!(state.talk_target_in_direction(Direction::North), Some((0x22, 5, 4)));
+
+    // The guard's record now points at another object: nobody owns slot 2.
+    state.npcs = vec![npc(3, 0x11, Some(1)), npc(2, 0x22, Some(9))];
+    assert_eq!(state.talk_target_in_direction(Direction::North), Some((0, 5, 4)));
+
+    // Two records linked to the faced object: the lowest-numbered wins, and
+    // an empty (state zero) or typeless record is passed over.
+    let mut empty = npc(1, 0x33, Some(2));
+    empty.state = NPC_STATE_EMPTY;
+    let mut typeless = npc(2, 0x44, Some(2));
+    typeless.type_byte = 0;
+    state.npcs = vec![npc(6, 0x66, Some(2)), empty, typeless, npc(4, 0x55, Some(2))];
+    assert_eq!(state.talk_target_in_direction(Direction::North), Some((0x55, 5, 4)));
+}
+
+#[test]
+fn talk_with_an_unowned_faced_object_ignores_a_guard_record_standing_on_the_cell() {
+    // `conversation.md §2` "No-owner Talk" (issue #216): with no record
+    // linked to the faced object, the dispatcher "runs ... with an unrelated
+    // adjacent record that reads as all zero, so the bare `No response!` is
+    // printed for any sprite". A guard record that merely stands on the cell
+    // (linked to another object, at an even waypoint) must not take the guard
+    // arm, nor have its waypoint behaviour rewritten.
+    let mut state = test_state(open_grid(), 5, 5);
+    state.player.facing = Direction::North;
+    let floor = state.current_floor().unwrap();
+    state.active_objects.resize(3, ActiveObject::empty());
+    state.active_objects[2] = ActiveObject {
+        type_byte: crate::tlk_control_codes::TALK_GUARD_SPRITE,
+        tile: crate::tlk_control_codes::TALK_GUARD_SPRITE,
+        x: 5,
+        y: 4,
+        z: floor,
+        phase: 0,
+        aux1: 0,
+        aux3: 0,
+    };
+    let mut guard = wandering_npc(4, 5, 4, (5, 4));
+    guard.slot = 2;
+    guard.type_byte = crate::tlk_control_codes::TALK_GUARD_SPRITE;
+    guard.dialog_id = 0x22;
+    guard.cached_wp = 0;
+    guard.active_object = Some(9);
+    state.npcs = vec![guard];
+
+    state.talk_facing_with_dialogue(&HashMap::new());
+    assert_eq!(
+        state.message,
+        crate::tlk_control_codes::talk_non_speaker_refusal_for_sprite(None)
+    );
+    assert_eq!(
+        state.npcs[0].schedule[NPC_SCHEDULE_AI_OFFSET], 4,
+        "the stand-down reads the owning record, and there is none"
+    );
+
+    // Linked to the faced object, the same record is the owner again: the
+    // behaviour-4 stand-down runs and its live word dispatches.
+    state.npcs[0].active_object = Some(2);
+    state.npcs[0].dialog_id = 0;
+    state.talk_facing_with_dialogue(&HashMap::new());
+    assert_eq!(state.npcs[0].schedule[NPC_SCHEDULE_AI_OFFSET], 1);
+}
