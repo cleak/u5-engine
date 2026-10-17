@@ -4875,14 +4875,15 @@ const GUILD_QUOTE_PROMPT: &str = "Interested?\"";
 const GUILD_MENU_AGAIN_HEADING: &str = "\"What else, then?";
 const GUILD_MENU_ROW_WIDTH: usize = 14;
 
-fn guild_menu_rows() -> String {
+pub(crate) fn guild_menu_rows() -> String {
     let mut rows = String::new();
     for (letter, commodity) in [
         ('a', crate::shops::GuildCommodity::Keys),
         ('b', crate::shops::GuildCommodity::Gems),
         ('c', crate::shops::GuildCommodity::Torches),
     ] {
-        let name = commodity.display_name();
+        // Capitalised, as measured and as §8.C prints them (playtest E56).
+        let name = commodity.menu_label();
         let dots = GUILD_MENU_ROW_WIDTH.saturating_sub(1 + name.len());
         rows.push_str(&format!("{letter}{}{name}\n", ".".repeat(dots)));
     }

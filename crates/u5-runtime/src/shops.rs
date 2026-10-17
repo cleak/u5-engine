@@ -564,6 +564,16 @@ impl GuildCommodity {
             Self::Torches => "torches",
         }
     }
+
+    /// `shops.md §8.C`: the guild stock rows print `Keys`, `Gems` and
+    /// `Torches` - "the guild's exact three rows ... are authoritative".
+    pub const fn menu_label(self) -> &'static str {
+        match self {
+            Self::Keys => "Keys",
+            Self::Gems => "Gems",
+            Self::Torches => "Torches",
+        }
+    }
 }
 
 /// `shops.md §8.2` / `§8.C` guildmaster stock-menu key.

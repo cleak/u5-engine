@@ -244,3 +244,14 @@ fn arms_invalid_key_at_the_buy_confirmation_keeps_the_drawn_prompt() {
     arms_state_after(&mut state, &['x']);
     assert_eq!(state.message, quoted);
 }
+
+/// Playtest E56. `systems/shops.md §8.C`: "Print `a.........Keys\n`,
+/// `b.........Gems\n`, `c......Torches\n\n`". The rows printed the lowercase
+/// commodity names.
+#[test]
+fn guild_stock_rows_print_capitalised_names() {
+    assert_eq!(
+        crate::input_dispatch::guild_menu_rows(),
+        "a.........Keys\nb.........Gems\nc......Torches\n"
+    );
+}
