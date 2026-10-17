@@ -574,10 +574,12 @@ pub use lighting::{
 };
 pub use location_audit::*;
 pub use lord_british_camp::{
+    LORD_BRITISH_CAMP_APPARITION_LINE, LORD_BRITISH_CAMP_VANISH_LINE,
     LORD_BRITISH_CAMP_EVENT_ROLL_BOUND, LORD_BRITISH_CAMP_EVENT_THRESHOLD,
     LORD_BRITISH_CAMP_STAT_REWARD_CAP, LordBritishCampStatReward, level_for_experience,
     lord_british_camp_event_hp_for_level, lord_british_camp_event_triggered,
-    lord_british_camp_refreshed_mana, lord_british_camp_stat_reward,
+    lord_british_camp_level_line, lord_british_camp_refreshed_mana,
+    lord_british_camp_stat_reward,
 };
 pub use lzw::*;
 pub use magic::{

@@ -384,10 +384,17 @@ impl PlayState {
             // The second condition is reserved and no shipped public
             // caller sets it; town-bed rest uses a separate handler.
             let event_message = self.resolve_lord_british_camp_event(Some(game_dir))?;
-            if !event_message.is_empty() {
-                self.message.push(' ');
-                self.message.push_str(&event_message);
-            }
+            // `rest-and-camp.md §7.1` (u5-spec#298 Q10): the event's rows
+            // follow the camp line, whose stored record ends in its own line
+            // feed. Its key waits are hold markers: the first page prints
+            // now and each later page waits for its key.
+            let composed = format!("{}{event_message}", self.message);
+            let (first, rest) = crate::text_hold::split_rendered_at_holds(
+                &crate::tlk_runner::TlkRenderedText::plain(composed),
+            );
+            let row_open = !first.text.is_empty() && !first.text.ends_with('\n');
+            self.message = first.text;
+            self.begin_text_hold(rest, row_open);
             // `rest-and-camp.md §7`: the event "removes the temporary
             // old-man presentation state and advances the turn clock before
             // normal play resumes".
@@ -464,11 +471,28 @@ impl PlayState {
         game_dir: Option<&Path>,
     ) -> io::Result<String> {
         // `rest-and-camp.md §7`: the event is "cinematic text plus
-        // party-stat mutation". Its published text is the `KARMA.DAT`
-        // verdict; the per-member summary below is engine bookkeeping and
-        // goes to diagnostics, not the message slot. The member level line,
-        // the old-man and class-keyed sprite tiles, and the sting recipe
-        // are not yet published, so none of them is invented here.
+        // party-stat mutation". §7.1 (u5-spec#298 Q10) publishes its order:
+        // the apparition line and envelope, the six-note figure, then per
+        // member the heal, the class stamp, the two-envelope sting around a
+        // viewport inversion and the level line, then the quoted verdict and
+        // the vanish line. The per-member summary below is engine
+        // bookkeeping for diagnostics.
+        //
+        // Not implemented, and not established by §7.1/§7.2: where the class
+        // tile lands ("not fully established"; in an outdoor camp, by static
+        // reading, the party's own map record), the inversion's highlight pen
+        // and whether the world-tick pauses repaint it. The old man's two
+        // converges are driver-side blits, like the summon flashes.
+        let wait_key = crate::text_hold::TextHoldKind::WaitKey.marker_str();
+        let mut text = String::from(LORD_BRITISH_CAMP_APPARITION_LINE);
+        self.emit_sound_effect(SoundEffect::LordBritishCampEnvelope(
+            crate::lord_british_camp::LORD_BRITISH_CAMP_APPARITION_ENVELOPE,
+        ));
+        for period in crate::lord_british_camp::LORD_BRITISH_CAMP_FIGURE_PERIODS {
+            self.emit_sound_effect(SoundEffect::LordBritishCampEnvelope(
+                crate::lord_british_camp::lord_british_camp_figure_note(period),
+            ));
+        }
         self.normalize_party_progress_vectors();
         let mut notes = vec!["Lord British-in-disguise camp event.".to_string()];
         let mut level_changes = 0;
@@ -485,6 +509,15 @@ impl PlayState {
             // agrees with experience and no reward follows.
             self.party[index].hp = self.party[index].max_hp;
             self.party[index].status = b'G';
+            // §7.1 step 4: "the envelope `(13, 200, 5000, 1, 5500)`, one
+            // inversion of the whole gameplay viewport ..., the envelope
+            // `(1, 2500, 60000, 1, 5500)`", for every living member.
+            self.emit_sound_effect(SoundEffect::LordBritishCampEnvelope(
+                crate::lord_british_camp::LORD_BRITISH_CAMP_STING_SHORT,
+            ));
+            self.emit_sound_effect(SoundEffect::LordBritishCampEnvelope(
+                crate::lord_british_camp::LORD_BRITISH_CAMP_STING_LONG,
+            ));
             let experience = self.party_experience[index];
             let level = level_for_experience(u32::from(experience));
             if self.party[index].level != level {
@@ -492,7 +525,26 @@ impl PlayState {
                 let hp = lord_british_camp_event_hp_for_level(level);
                 self.party[index].hp = hp;
                 self.party[index].max_hp = hp;
-                let reward = self.apply_lord_british_camp_stat_reward(index);
+                let roll = self.lord_british_camp_stat_roll(index);
+                let reward_kind = lord_british_camp_stat_reward(roll)
+                    .expect("Lord British camp stat roll is constrained to 1..=3");
+                let reward = self.apply_lord_british_camp_stat_reward_kind(index, reward_kind);
+                // §7.1 step 5: the level line, "Then a blocking key wait,
+                // then one line feed."
+                let name: String = self
+                    .party_names
+                    .get(index)
+                    .map(|name| {
+                        name.iter()
+                            .copied()
+                            .take_while(|byte| *byte != 0)
+                            .map(char::from)
+                            .collect()
+                    })
+                    .unwrap_or_default();
+                text.push_str(&lord_british_camp_level_line(&name, level, reward_kind));
+                text.push_str(wait_key);
+                text.push('\n');
                 level_changes += 1;
                 notes.push(format!(
                     "P{} reached level {level} from {experience} XP and received {reward}.",
@@ -507,7 +559,9 @@ impl PlayState {
             notes.push("No living party member was ready for a new level.".to_string());
         }
         let verdict = self.lord_british_camp_verdict_message(game_dir)?;
-        let printed = match verdict {
+        // §7.1 step 7: "`\n"`, the `KARMA.DAT` verdict record, `"`, a key
+        // wait, then `\n\nThe_strangely_familiar_old_man_vanishes...\n`".
+        let verdict = match verdict {
             Some(record) => record,
             None => {
                 notes.push(format!(
@@ -517,9 +571,10 @@ impl PlayState {
                 String::new()
             }
         };
+        text.push_str(&format!("\n\"{verdict}\"{wait_key}{LORD_BRITISH_CAMP_VANISH_LINE}"));
         self.push_diagnostic(notes.join(" "));
         self.mark_visibility_dirty();
-        Ok(printed)
+        Ok(text)
     }
 
     pub fn normalize_party_progress_vectors(&mut self) {
@@ -537,8 +592,18 @@ impl PlayState {
     }
 
     pub fn apply_lord_british_camp_stat_reward(&mut self, member_index: usize) -> &'static str {
-        match lord_british_camp_stat_reward(self.lord_british_camp_stat_roll(member_index)) {
-            Some(LordBritishCampStatReward::Strength) => {
+        let reward = lord_british_camp_stat_reward(self.lord_british_camp_stat_roll(member_index))
+            .expect("Lord British camp stat roll is constrained to 1..=3");
+        self.apply_lord_british_camp_stat_reward_kind(member_index, reward)
+    }
+
+    pub fn apply_lord_british_camp_stat_reward_kind(
+        &mut self,
+        member_index: usize,
+        reward: LordBritishCampStatReward,
+    ) -> &'static str {
+        match reward {
+            LordBritishCampStatReward::Strength => {
                 if member_index == 0 {
                     self.avatar_stats.increase_strength();
                     self.party_strengths[0] = self.avatar_stats.strength;
@@ -547,7 +612,7 @@ impl PlayState {
                 }
                 "Strength reward"
             }
-            Some(LordBritishCampStatReward::Dexterity) => {
+            LordBritishCampStatReward::Dexterity => {
                 if member_index == 0 {
                     self.avatar_stats.increase_dexterity();
                     if let Some(member) = self.party.get_mut(0) {
@@ -558,7 +623,7 @@ impl PlayState {
                 }
                 "Dexterity reward"
             }
-            Some(LordBritishCampStatReward::Intelligence) => {
+            LordBritishCampStatReward::Intelligence => {
                 if member_index == 0 {
                     self.avatar_stats.increase_intelligence();
                     self.party_intelligence[0] = self.avatar_stats.intelligence;
@@ -567,7 +632,6 @@ impl PlayState {
                 }
                 "Intelligence reward"
             }
-            None => unreachable!("Lord British camp stat roll is constrained to 1..=3"),
         }
     }
 

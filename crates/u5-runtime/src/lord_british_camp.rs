@@ -81,3 +81,59 @@ pub const fn lord_british_camp_refreshed_mana(class_byte: u8, intelligence: u8) 
         _ => None,
     }
 }
+
+/// `rest-and-camp.md §7.1` step 1 (u5-spec#298 Q10): "Print
+/// `An_apparition!\n`".
+pub const LORD_BRITISH_CAMP_APPARITION_LINE: &str = "An apparition!\n";
+
+/// `rest-and-camp.md §7.1` step 7: after the verdict's key wait,
+/// "`\n\nThe_strangely_familiar_old_man_vanishes...\n`".
+pub const LORD_BRITISH_CAMP_VANISH_LINE: &str = "\n\nThe strangely familiar old man vanishes...\n";
+
+impl LordBritishCampStatReward {
+    /// `rest-and-camp.md §7.1` step 5: "exactly one of `stronger!`,
+    /// `quicker!` or `wiser!` (the `random(1, 3)` roll: Strength,
+    /// Dexterity, Intelligence)".
+    pub const fn level_line_word(self) -> &'static str {
+        match self {
+            Self::Strength => "stronger!",
+            Self::Dexterity => "quicker!",
+            Self::Intelligence => "wiser!",
+        }
+    }
+}
+
+/// `rest-and-camp.md §7.1` step 5 (u5-spec#298 Q10): the level line, "only
+/// when that member's level changed: `\n"Hail,_`, the member's name,
+/// `!\nFor_thy_valiant_deeds,_I_shall_reward_thee!\n`, `Thou_art_now_level_`,
+/// the new level as a plain decimal number, `,_and\n`, then exactly one of
+/// `stronger!`, `quicker!` or `wiser!` ..., then `"_` (the closing quote and a
+/// space, on the stat word's own row). Then a blocking key wait, then one line
+/// feed." The key wait is the caller's.
+pub fn lord_british_camp_level_line(
+    name: &str,
+    level: u8,
+    reward: LordBritishCampStatReward,
+) -> String {
+    format!(
+        "\n\"Hail, {name}!\nFor thy valiant deeds, I shall reward thee!\nThou art now level {level}, and\n{}\" ",
+        reward.level_line_word()
+    )
+}
+
+/// `rest-and-camp.md §7.1` software envelopes, in the `audio.md` tuple order
+/// `(delta, initial comparison, iterations, idle, period)`.
+pub const LORD_BRITISH_CAMP_APPARITION_ENVELOPE: crate::audio::EnvelopeSegment =
+    crate::audio::EnvelopeSegment::new(6, 2500, 10_000, 1, 2620);
+/// Step 2: "the envelope `(13, 200, 5000, 1, P)` for P = 2620, 2620, 2620,
+/// 3700, 3900, 4160, in that order."
+pub const LORD_BRITISH_CAMP_FIGURE_PERIODS: [u16; 6] = [2620, 2620, 2620, 3700, 3900, 4160];
+pub const fn lord_british_camp_figure_note(period: u16) -> crate::audio::EnvelopeSegment {
+    crate::audio::EnvelopeSegment::new(13, 200, 5_000, 1, period)
+}
+/// Step 4: "The published 'two-tone sting' is that pair of envelopes, both at
+/// period 5500, a short one of 5,000 iterations and a long one of 60,000."
+pub const LORD_BRITISH_CAMP_STING_SHORT: crate::audio::EnvelopeSegment =
+    crate::audio::EnvelopeSegment::new(13, 200, 5_000, 1, 5500);
+pub const LORD_BRITISH_CAMP_STING_LONG: crate::audio::EnvelopeSegment =
+    crate::audio::EnvelopeSegment::new(1, 2500, 60_000, 1, 5500);

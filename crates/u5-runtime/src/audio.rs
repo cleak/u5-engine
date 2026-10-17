@@ -1897,6 +1897,10 @@ pub enum SoundEffect {
     /// `commands.md §11` / `§8.3` (u5-spec#298 Q11): a successful Yell of a
     /// Shadowlord's name, after `\nA_shadowlord_appears\n`.
     ShadowlordAppears,
+    /// `rest-and-camp.md §7.1` (u5-spec#298 Q10): one of the Lord British
+    /// camp event's software envelopes - the apparition call, the six-note
+    /// figure and each living member's two-envelope sting.
+    LordBritishCampEnvelope(EnvelopeSegment),
     /// `§8.4` shared major full-viewport flash. `bands` holds the 1,856
     /// gameplay-PRNG-drawn frequencies, already consumed from the gameplay
     /// stream by [`draw_major_flash_bands`].
@@ -2022,6 +2026,7 @@ impl SoundEffect {
             SoundEffect::PlayerSummon => envelope_program(PLAYER_SUMMON_ENVELOPE),
             SoundEffect::MoongateTransit => envelope_program(MOONGATE_TRANSIT_ENVELOPE),
             SoundEffect::ShadowlordAppears => envelope_program(SHADOWLORD_APPEARS_ENVELOPE),
+            SoundEffect::LordBritishCampEnvelope(segment) => envelope_program(*segment),
             SoundEffect::MajorFlash { bands } => major_flash_program(bands),
             SoundEffect::StonegateDescent => stonegate_descent_program(),
             SoundEffect::StonegateMemberDeath => trap_rumble(jitter),
@@ -2935,6 +2940,7 @@ mod tests {
             SoundEffect::PlayerSummon,
             SoundEffect::MoongateTransit,
             SoundEffect::ShadowlordAppears,
+            SoundEffect::LordBritishCampEnvelope(crate::lord_british_camp::LORD_BRITISH_CAMP_STING_LONG),
             SoundEffect::MajorFlash {
                 bands: vec![19u8, 150].into(),
             },
