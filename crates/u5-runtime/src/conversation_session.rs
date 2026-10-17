@@ -127,6 +127,11 @@ pub struct ConversationSessionOutput {
     /// of the selector; the caller assigns this value rather than
     /// re-deriving a delta.
     pub moral_standing: Option<u8>,
+    /// `conversation.md §7.5` / §10 "Town alarm" (u5-spec#298 Q14): how many
+    /// `0x8B` ALARM codes this step's streams reached. The caller runs the
+    /// town alarm sweep once for each; "conversation passes no arguments and
+    /// reads no result".
+    pub alarm_sweeps: u8,
 }
 
 impl ConversationSessionOutput {
@@ -462,6 +467,7 @@ impl ConversationSession {
         out.action_grants.extend(response.action_grants);
         out.gold_payments.extend(response.gold_payments);
         out.signal_flags.extend(response.signal_flags);
+        out.alarm_sweeps = out.alarm_sweeps.saturating_add(response.alarm_sweeps);
         out.recruit_speaker |= response.recruit_speaker;
         out.asked_party_name = response.asked_party_name;
         out.asked_who = response.asked_who;
@@ -735,6 +741,7 @@ impl ConversationSession {
                 _ => None,
             }));
         out.signal_flags.extend(run.signal_flags.iter().copied());
+        out.alarm_sweeps = out.alarm_sweeps.saturating_add(tlk_run_alarm_count(run));
         out.response_signalled_stop |= matches!(run.stop, TlkRunStop::EndOfResponse);
         self.absorb_moral_standing(run, out);
         self.absorb_recruit_speaker(run, ctx, out);
@@ -847,6 +854,7 @@ impl ConversationSession {
                 _ => None,
             }));
         out.signal_flags.extend(run.signal_flags.iter().copied());
+        out.alarm_sweeps = out.alarm_sweeps.saturating_add(tlk_run_alarm_count(run));
         out.response_signalled_stop |= matches!(run.stop, TlkRunStop::EndOfResponse);
         self.absorb_moral_standing(run, out);
         self.absorb_recruit_speaker(run, ctx, out);
@@ -924,6 +932,16 @@ fn find_label_declaration(blob: &[u8], label: u8) -> Option<usize> {
         .map(|pos| pos + 2)
 }
 
+/// `conversation.md §7.5`: each `0x8B` the runner reached is one alarm sweep.
+pub fn tlk_run_alarm_count(run: &TlkRunOutput) -> u8 {
+    let count = run
+        .events
+        .iter()
+        .filter(|event| matches!(event, TlkRunEvent::Alarm))
+        .count();
+    u8::try_from(count).unwrap_or(u8::MAX)
+}
+
 fn merge_session_output(out: &mut ConversationSessionOutput, nested: ConversationSessionOutput) {
     out.text.push_str(&nested.text);
     out.rendered_glyphs.extend(nested.rendered_glyphs);
@@ -931,6 +949,7 @@ fn merge_session_output(out: &mut ConversationSessionOutput, nested: Conversatio
     out.action_grants.extend(nested.action_grants);
     out.gold_payments.extend(nested.gold_payments);
     out.signal_flags.extend(nested.signal_flags);
+    out.alarm_sweeps = out.alarm_sweeps.saturating_add(nested.alarm_sweeps);
     out.recruit_speaker |= nested.recruit_speaker;
     out.asked_party_name = nested.asked_party_name.or(out.asked_party_name);
     out.asked_who = nested.asked_who.or(out.asked_who);
@@ -988,7 +1007,6 @@ fn make_inputs<'a>(
         branch_flags: ctx.branch_flags,
         moral_standing,
         dictionary: ctx.dictionary,
-        curse_seen: false,
         gold_available: ctx.gold_available,
         npc_slot,
         ask_who_response,

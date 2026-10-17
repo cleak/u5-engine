@@ -744,3 +744,72 @@ fn audit_a012_sign_pause_byte_waits_for_a_key_before_the_rest() {
     );
     let _ = fs::remove_dir_all(dir);
 }
+
+/// u5-spec#298 Q14 (`RETRACTIONS.md` R531). `conversation.md §7.5`: `0x8B` is
+/// ALARM - "Run the town alarm sweep of `systems/town-mode.md` Section 14:
+/// forced pursuit for every occupied guard ... slot". A guard standing in the
+/// roster is put into pursuit by a reply that reaches the code, and the reply
+/// text is untouched.
+#[test]
+fn q14_alarm_code_in_a_reply_runs_the_town_alarm_sweep() {
+    let mut dialogue: HashMap<u16, Vec<String>> = HashMap::new();
+    dialogue.insert(
+        0x10,
+        ["Maris", "a quiet sage", "Greetings", "I read books", "Farewell", "HOLD", "x"]
+            .iter()
+            .map(|s| s.to_string())
+            .collect(),
+    );
+    let enc = |s: &str| s.bytes().map(|b| b ^ 0x80).collect::<Vec<u8>>();
+    let mut raw: HashMap<u16, Vec<Vec<u8>>> = HashMap::new();
+    raw.insert(
+        0x10,
+        vec![
+            enc("Maris"),
+            enc("a quiet sage"),
+            enc("Greetings"),
+            enc("I read books"),
+            enc("Farewell"),
+            enc("HOLD"),
+            audit_g5_held_response("Guards!", TLK_CODE_ALARM, " Seize them!"),
+        ],
+    );
+    let mut state = test_state(open_grid(), 1, 1);
+    state.party_names = vec![*b"AVATAR\0\0\0"];
+    state.player.facing = Direction::East;
+    state.load_scheduled_npcs(&[
+        NpcSlot { slot: 0, type_byte: 0, dialog_id: 0, schedule: [0; 16], name: None },
+        NpcSlot {
+            slot: 1,
+            type_byte: 1,
+            dialog_id: 0x10,
+            schedule: [0, 0, 0, 2, 2, 2, 1, 1, 1, 0, 0, 0, 0, 8, 16, 20],
+            name: None,
+        },
+        NpcSlot {
+            slot: 2,
+            type_byte: TOWN_NPC_ALARM_GUARD_TYPE,
+            dialog_id: 0,
+            schedule: [0, 0, 0, 9, 9, 9, 9, 9, 9, 0, 0, 0, 0, 8, 16, 20],
+            name: None,
+        },
+    ]);
+    assert_eq!(
+        state.talk_facing_with_dialogue_and_keyword_raw(&dialogue, &raw, None),
+        MoveOutcome::Talked
+    );
+    let guard = state.npcs.iter().position(|npc| npc.slot == 2).unwrap();
+    let before = state.npcs[guard].schedule;
+    assert!(state.town_npc_mutations.iter().all(|mutation| mutation.npc_slot != 2));
+    handle_play_key_input(&mut state, 'H', "OLD", Path::new("")).unwrap();
+    assert!(
+        audit_g5_transcript(&state).contains("Guards! Seize them!"),
+        "{}",
+        audit_g5_transcript(&state)
+    );
+    assert_ne!(state.npcs[guard].schedule, before, "the guard is forced into pursuit");
+    assert!(
+        state.town_npc_mutations.iter().any(|mutation| mutation.npc_slot == 2),
+        "the sweep's rewrite is persisted"
+    );
+}

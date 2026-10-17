@@ -581,8 +581,13 @@ pub const TLK_CODE_STANDING_DOWN: u8 = 0x8A;
 /// reading.
 pub const TLK_CODE_LITERAL_NEWLINE: u8 = 0x8D;
 
-// §7.5 print-mask and curse codes
-pub const TLK_CODE_CURSE_CHECK: u8 = 0x8B;
+// §7.5 print-mask and alarm codes
+/// `conversation.md §7.5` ALARM (u5-spec#298 Q14, `RETRACTIONS.md` R531):
+/// "Run the town alarm sweep of `systems/town-mode.md` Section 14". The code
+/// takes no arguments, prints nothing and leaves the text stream alone; the
+/// earlier CURSE-CHECK reading, with its per-character curse counters, is
+/// withdrawn.
+pub const TLK_CODE_ALARM: u8 = 0x8B;
 pub const TLK_CODE_PROTECT_RUN: u8 = 0x8E;
 
 // §7.6 branching, recruitment, and transactional codes

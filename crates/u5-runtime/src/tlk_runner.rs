@@ -31,11 +31,6 @@ pub struct TlkRunInputs<'a> {
     /// Common-word dictionary (128 slots; index by token byte `0x01..=0x80`).
     /// `None` is acceptable — token bytes then expand to `"[w<n>]"`.
     pub dictionary: Option<&'a [&'a str; COMMON_WORD_DICTIONARY_ENTRIES]>,
-    /// `0x8B` curse-check result. `true` means the player typed something
-    /// the engine treats as a curse during the current conversation; the
-    /// runner uses it to gate the immediately following control byte the
-    /// same way the original does (per `conversation.md` §7.5).
-    pub curse_seen: bool,
     /// Optional party gold available to `0x85` GOLD-PAYMENT. The authored
     /// surrounding record already represents the player's yes answer; the
     /// control byte reads no additional confirmation. When supplied, a
@@ -140,8 +135,10 @@ pub enum TlkRunEvent {
     RecruitSpeaker,
     /// `0x88` ASK-WHO: 1-based slot match (0 = cancel/no match).
     AskedWho(u8),
-    /// `0x8B` CURSE-CHECK was reached.
-    CurseChecked { curse_seen: bool },
+    /// `0x8B` ALARM was reached (`conversation.md §7.5`, u5-spec#298 Q14):
+    /// the caller runs the town alarm sweep once per event. The stream
+    /// itself is untouched.
+    Alarm,
     /// `0x8F` WAIT-KEY encountered (when `yield_on_pause` false). §7.3:
     /// the code emits nothing; with `mark_holds` it leaves a wait-key
     /// marker in the output.
@@ -434,8 +431,6 @@ pub fn run_tlk_stream_from(bytes: &[u8], start: usize, inputs: &TlkRunInputs) ->
     // can collapse the on-disk `""` double-quote artefact per §7.5.
     let mut last_emitted: Option<u8> = None;
     let mut leading_space_pending = false;
-    // Curse check is reset when the runner starts and may flip later.
-    let mut curse_pending = inputs.curse_seen;
     // §7.4: `0x89` and `0x8A` write the shared moral-standing selector
     // in-stream, so a later `0xFE` threshold test in the same stream must
     // read the updated value rather than the caller's entry snapshot.
@@ -526,14 +521,11 @@ pub fn run_tlk_stream_from(bytes: &[u8], start: usize, inputs: &TlkRunInputs) ->
             TLK_CODE_PROTECT_RUN => {
                 print_mask = print_mask.toggle();
             }
-            TLK_CODE_CURSE_CHECK => {
-                out.events.push(TlkRunEvent::CurseChecked {
-                    curse_seen: curse_pending,
-                });
-                // The original engine resets the curse flag after the check
-                // so a subsequent CURSE-CHECK only fires if a new curse word
-                // was typed in the meantime.
-                curse_pending = false;
+            // `conversation.md §7.5`: "`0x8B` does not affect the stream;
+            // its only effects are the alarm sweep's persisted schedule
+            // rewrites and its random draws." Each occurrence is one sweep.
+            TLK_CODE_ALARM => {
+                out.events.push(TlkRunEvent::Alarm);
             }
             TLK_CODE_KEYWORD_ALIAS => {
                 out.stop = TlkRunStop::KeywordAlias(pos);
@@ -1474,29 +1466,23 @@ mod tests {
         assert_eq!(out.branch_flags_set, 0);
     }
 
+    /// `conversation.md §7.5` (u5-spec#298 Q14, R531): `0x8B` is ALARM. Every
+    /// occurrence asks for one town alarm sweep and the stream is untouched -
+    /// no curse flag gates or resets anything.
     #[test]
-    fn curse_check_emitted_once_and_then_resets() {
-        let bytes = vec![
-            TLK_CODE_CURSE_CHECK,
-            TLK_CODE_CURSE_CHECK,
-            TLK_CODE_END_OF_RESPONSE,
-        ];
-        let out = run_tlk_stream(
-            &bytes,
-            &TlkRunInputs {
-                curse_seen: true,
-                ..Default::default()
-            },
-        );
-        let curse_events: Vec<_> = out
+    fn alarm_code_requests_one_sweep_per_occurrence_and_prints_nothing() {
+        let mut bytes = vec![TLK_CODE_ALARM];
+        bytes.extend("Guards!".bytes().map(|b| b ^ 0x80));
+        bytes.push(TLK_CODE_ALARM);
+        bytes.push(TLK_CODE_END_OF_RESPONSE);
+        let out = run_tlk_stream(&bytes, &TlkRunInputs::default());
+        let alarms = out
             .events
             .iter()
-            .filter_map(|e| match e {
-                TlkRunEvent::CurseChecked { curse_seen } => Some(*curse_seen),
-                _ => None,
-            })
-            .collect();
-        assert_eq!(curse_events, vec![true, false]);
+            .filter(|e| matches!(e, TlkRunEvent::Alarm))
+            .count();
+        assert_eq!(alarms, 2);
+        assert_eq!(out.text, "Guards!");
     }
 
     /// `conversation.md §7.3` (R520): `0x8F` blocks for a key and "emits
