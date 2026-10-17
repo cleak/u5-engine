@@ -71,6 +71,9 @@ pub enum ArmsShopState {
         quoted_price: u16,
         quote_record_id: usize,
     },
+    /// `shops.md §8.1`: the carry-cap refusal is on screen; the shop "waits
+    /// for one key, and returns to the buy list". The key is consumed.
+    BuyCapRefusalWait,
     /// Sell browser open. The selected id and first visible id survive
     /// redraws and quote/refusal continuations.
     SellPickItem(ArmsSellBrowser),
@@ -402,7 +405,9 @@ pub fn step_arms_shop(
         ) => {
             let item_idx = item as usize;
             if stock[item_idx] >= EQUIPMENT_STOCK_CAP {
-                *state = ArmsShopState::Greeting;
+                // `shops.md §8.1`: the refusal "waits for one key, and returns
+                // to the buy list" - not to the Buy/Sell greeting (E46).
+                *state = ArmsShopState::BuyCapRefusalWait;
                 return ArmsShopOutcome::BuyRefusedCapHit { item };
             }
             if *gold < quoted_price {

@@ -2949,6 +2949,24 @@ fn handle_arms_shop_key_input(
         let roll = state.random_range_u8(0, 1);
         return arms_attribution_and_greeting(vendor, roll);
     }
+    // `shops.md §8.1`: after the carry-cap refusal the shop "waits for one
+    // key, and returns to the buy list"; "A purchase, decline, or carry-cap
+    // refusal prints the post-item prompt and then the whole listing with a
+    // new stock-call draw; the next valid item letter starts another quote
+    // without another `B`." The waited key is consumed (playtest E46).
+    if matches!(prior_state, ArmsShopState::BuyCapRefusalWait) {
+        *shop_state = ArmsShopState::BuyPickItem;
+        let Some(table) = stock_table else {
+            return String::new();
+        };
+        let post = arms_post_item_prompt(
+            active_speaker_is_female(state),
+            state.arms_transaction_completed,
+        );
+        let listing = format_arms_stock_buy_menu(table, None);
+        let call = arms_stock_call_for_roll(state.random_range_u8(0, 3));
+        return format!("{post}\n\n{listing}\n{call}");
+    }
     let outcome = match (prior_state, yes, no, inline_digit) {
         (ArmsShopState::Welcome | ArmsShopState::Greeting, _, _, _) => step_arms_shop(
             shop_state,
@@ -3200,24 +3218,6 @@ fn handle_arms_shop_key_input(
             let call = arms_stock_call_for_roll(state.random_range_u8(0, 3));
             format!("{post}\n\n{listing}\n{call}")
         }
-        // `shops.md` §8.1 groups the carry-cap refusal with the decline: "A
-        // decline or carry-cap refusal uses this same prompt, retaining
-        // whether an earlier purchase completed." The refusal line itself is
-        // the fixed `Thou canst not carry any more!` over its attribution
-        // tail, and the prompt, repeated list and stock call follow it in the
-        // shape the declined quote takes. Not separately measured - reaching
-        // the cap needs 99 of an item - so it follows the spec sentence and
-        // the decline's measured shape rather than a capture of its own.
-        (ArmsShopOutcome::BuyRefusedCapHit { .. }, Some(table)) => {
-            let post =
-                arms_post_item_prompt(speech.speaker_is_female, state.arms_transaction_completed);
-            let listing = format_arms_stock_buy_menu(table, None);
-            let call = arms_stock_call_for_roll(state.random_range_u8(0, 3));
-            format!(
-                "{}\n{post}\n\n{listing}\n{call}",
-                speech.attribute("Thou canst not carry any more!", "says")
-            )
-        }
         (ArmsShopOutcome::Declined, _) if matches!(shop_state, ArmsShopState::SellPickItem(_)) => {
             // The `No` is echoed onto the open `Deal?" ` row above, not
             // printed here on a row of its own, and the continuation prompt
@@ -3332,6 +3332,9 @@ fn handle_arms_shop_key_input(
     };
     shop_message_ignoring_surcharge(message, surcharge)
 }
+
+/// `shops.md §8.1` / `§8.A` "Arms carry-cap refusal (verbatim)".
+const ARMS_CARRY_CAP_REFUSAL: &str = "\"Thou canst not carry any more!\"";
 
 /// **Measured** 2026-09-07 (`qa/paired/shop-arms-menus.tsv`,
 /// `shop-arms-sell.tsv`): the sell-entry prompt is *quoted* -
@@ -3685,7 +3688,10 @@ fn format_arms_outcome_with_rolls(
         // not carry any more!` followed by the shopkeeper-attribution tail
         // `says <shopkeeper>.`" (`§8.A` row "Arms carry-cap refusal
         // (verbatim)" repeats both halves).
-        BuyRefusedCapHit { .. } => speech.attribute("Thou canst not carry any more!", "says"),
+        // The `§8.A` verbatim row quotes the refusal:
+        // `"Thou canst not carry any more!"` (playtest E46). The post-item
+        // prompt and listing follow only after the one-key wait.
+        BuyRefusedCapHit { .. } => speech.attribute(ARMS_CARRY_CAP_REFUSAL, "says"),
         // `shops.md §8.B`/`§8.C`: an unrecognised key waits; there is no
         // I-do-not-understand line anywhere in the shop family.
         InvalidInput => String::new(),
@@ -7170,7 +7176,7 @@ mod arms_shop_resident_literal_tests {
             None,
             speech,
         );
-        assert_eq!(rendered, "Thou canst not carry any more!\nsays Kitiara.");
+        assert_eq!(rendered, "\"Thou canst not carry any more!\"\nsays Kitiara.");
     }
 
     /// The two tails use different verbs; neither may borrow the other's.
@@ -7198,7 +7204,7 @@ mod arms_shop_resident_literal_tests {
                 None,
                 speech,
             ),
-            "Thou canst not carry any more!"
+            "\"Thou canst not carry any more!\""
         );
         assert_eq!(
             format_arms_outcome_with_rolls(

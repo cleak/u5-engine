@@ -176,3 +176,54 @@ fn arms_short_funds_ends_the_visit() {
     assert!(state.active_shop.is_none());
     assert_eq!(state.gold, 0);
 }
+
+/// Playtest E46. `systems/shops.md §8.1`: at the cap the shop prints
+/// `"Thou canst not carry any more!"` and `says <shopkeeper>.`, "waits for one
+/// key, and returns to the buy list"; the listing comes back with the
+/// post-item prompt and "the next valid item letter starts another quote
+/// without another `B`".
+#[test]
+fn arms_carry_cap_refusal_waits_one_key_then_returns_to_the_buy_list() {
+    use crate::shop_runtime::ArmsShopState;
+    let mut state = arms_buy_list_state(500);
+    let dagger = ArmsShop::IolosBows.stock_table().item_ids[0];
+    state.equipment_stock[usize::from(dagger)] = 99;
+
+    assert_eq!(
+        arms_state_after(&mut state, &['a', 'Y']),
+        Some(ArmsShopState::BuyCapRefusalWait)
+    );
+    let refusal = state
+        .message_entries()
+        .iter()
+        .map(|entry| entry.text.clone())
+        .collect::<Vec<_>>()
+        .join("\n")
+        + &state.message;
+    assert!(
+        refusal.contains("\"Thou canst not carry any more!\""),
+        "{refusal:?}"
+    );
+    assert!(
+        !state.message.contains("Anything else"),
+        "{:?}",
+        state.message
+    );
+
+    // The waited key is consumed, whatever it is, and the list comes back.
+    assert_eq!(
+        arms_state_after(&mut state, &['a']),
+        Some(ArmsShopState::BuyPickItem)
+    );
+    assert!(
+        state.message.contains("Anything else"),
+        "{:?}",
+        state.message
+    );
+    assert!(state.message.contains("a...Dagger"), "{:?}", state.message);
+    // The next letter quotes without another `B`.
+    assert!(matches!(
+        arms_state_after(&mut state, &['b']),
+        Some(ArmsShopState::BuyConfirm { .. })
+    ));
+}
