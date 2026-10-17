@@ -2645,7 +2645,7 @@ fn visual_route_reload_checkpoints(case_label: &str) -> &'static [usize] {
         | "route-reload-dungeon-surface-exit-return-world" => &[1],
         "route-reload-underworld-fixed-hidden-stack-search-get-search"
         | "route-reload-horse-trader-horse-and-rider-buy-pass" => &[2],
-        "route-reload-castle-jimmy-prisoner-release" => &[3],
+        "route-reload-castle-jimmy-prisoner-release" => &[2],
         _ => &[],
     }
 }
@@ -4528,14 +4528,16 @@ fn visual_route_suite_cases() -> Vec<VisualRouteSuiteCase> {
             label: "route-castle-jimmy-prisoner-release",
             frame_kind: "visual route town frame",
             options: town_jimmy_release.clone(),
-            script: &["J", "6", "1"],
+            // One-member party: `commands.md §5.8` picks the lone
+            // eligible member silently, so no picker digit follows.
+            script: &["J", "6"],
             configure: None,
         },
         VisualRouteSuiteCase {
             label: "route-reload-castle-jimmy-prisoner-release",
             frame_kind: "visual route town frame",
             options: town_jimmy_release,
-            script: &["J", "6", "1", "empty"],
+            script: &["J", "6", "empty"],
             configure: None,
         },
         VisualRouteSuiteCase {
@@ -25640,7 +25642,9 @@ mod tests {
         // Yes (`endgame.md §5`, -2) and the stray Jimmy member keys
         // (`dungeon-mode.md §11`, -3). The victory route's box hand-over
         // (`endgame.md §7` steps 4-5) added five display frames (+5).
-        assert_eq!(reports.len(), 2064);
+        // The two town prisoner-release routes lost their member key: a
+        // one-member party's Jimmy picks silently (`commands.md §5.8`, -2).
+        assert_eq!(reports.len(), 2062);
         for report in &reports {
             assert!(report.path.exists());
             assert_eq!(report.width, VISUAL_PLAY_FRAME_WIDTH);
@@ -25655,7 +25659,7 @@ mod tests {
             }
         }
         let manifest = fs::read_to_string(dir.join("manifest.txt")).unwrap();
-        assert!(manifest.contains("coverage\tvisual-route-steps\t2064"));
+        assert!(manifest.contains("coverage\tvisual-route-steps\t2062"));
         assert!(manifest.contains("coverage\tvisual-key-route-steps\t90"));
         assert!(manifest.contains("coverage\tvisual-route-combat-steps\t"));
         assert!(manifest.contains("route-world-movement-01-d\t320x200\t"));
@@ -25686,8 +25690,8 @@ mod tests {
         assert!(manifest.contains("route-castle-pass-and-idle-01-empty"));
         assert!(manifest.contains("route-castle-jimmy-magic-lock-no-picker-01-j"));
         assert!(manifest.contains("route-castle-jimmy-empty-restraint-no-picker-01-j"));
-        assert!(manifest.contains("route-castle-jimmy-prisoner-release-03-1"));
-        assert!(manifest.contains("route-reload-castle-jimmy-prisoner-release-04-empty"));
+        assert!(manifest.contains("route-castle-jimmy-prisoner-release-02-6"));
+        assert!(manifest.contains("route-reload-castle-jimmy-prisoner-release-03-empty"));
         assert!(manifest.contains("route-town-status-modal-01-z"));
         assert!(manifest.contains("route-castle-z-stats-modal-01-z"));
         assert!(manifest.contains("route-town-view-overlay-01-v"));
