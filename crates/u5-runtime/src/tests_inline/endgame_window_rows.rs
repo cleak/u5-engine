@@ -329,3 +329,88 @@ fn endgame_tableau_actors_on_the_bed_and_chair_draw_occupied() {
     leader.y = 4;
     assert_eq!(endgame_tableau_actor_drawn_byte(&grid, leader), Some(0x32));
 }
+
+#[test]
+fn endgame_tableau_script_a_steps_frames_then_snaps_or_restarts() {
+    // `active-objects.md §8` script A - f2, f3, f4, snap, restart - as the
+    // tableau sprites run it (`endgame.md §4`, issue #298 Q43).
+    let mut king = ActiveObject::empty();
+    king.type_byte = ENDGAME_TABLEAU_LORD_BRITISH_ACTOR_BYTE;
+    king.tile = ENDGAME_TABLEAU_LORD_BRITISH_ACTOR_BYTE;
+    let never = || -> bool { panic!("only the snap step draws") };
+    let mut frames = Vec::new();
+    for _ in 0..3 {
+        endgame_tableau_script_a_decision(&mut king, never);
+        frames.push(king.tile);
+    }
+    assert_eq!(frames, [0x7D, 0x7E, 0x7F], "tiles 381, 382, 383");
+    // A refused snap (three times in four) restarts at frame 2 in the same pass.
+    endgame_tableau_script_a_decision(&mut king, || false);
+    assert_eq!(king.tile, 0x7D);
+    assert_eq!(king.phase & 0x0f, 0);
+    endgame_tableau_script_a_decision(&mut king, never);
+    endgame_tableau_script_a_decision(&mut king, never);
+    // An accepted snap returns him to the seated 380 and holds six ticks,
+    // with the position kept on the snap step.
+    endgame_tableau_script_a_decision(&mut king, || true);
+    assert_eq!(king.tile, ENDGAME_TABLEAU_LORD_BRITISH_ACTOR_BYTE);
+    assert_eq!(king.phase & 0x0f, ENDGAME_TABLEAU_SNAP_HOLD_TICKS);
+    assert_eq!(
+        endgame_tableau_role_for_slot(ENDGAME_TABLEAU_LORD_BRITISH_SLOT, king),
+        Some(EndgameTableauActorRole::LordBritish)
+    );
+}
+
+#[test]
+fn endgame_lord_british_and_the_party_animate_while_the_box_stays_static() {
+    // `endgame.md §4` (issue #298 Q43, `RETRACTIONS.md` R559): the tableau
+    // sprites run on the ordinary per-slot animator through every hold and
+    // key wait; the box and the Orb lie below the animator's class floor.
+    let mut state = endgame_window_walked_in_state();
+    endgame_window_settle(&mut state);
+    assert!(state.endgame.as_ref().unwrap().greeting_page_pending);
+    if let Some(slot) = state.active_objects.get_mut(ENDGAME_TABLEAU_BOX_SLOT) {
+        *slot = endgame_tableau_object_from_placement(endgame_tableau_box_placement());
+    }
+    let mut king_tiles = std::collections::BTreeSet::new();
+    let mut leader_tiles = std::collections::BTreeSet::new();
+    for _ in 0..200 {
+        state.animate_endgame_tableau_sprites();
+        let king = state.active_objects[ENDGAME_TABLEAU_LORD_BRITISH_SLOT];
+        assert_eq!(
+            endgame_tableau_role_for_slot(ENDGAME_TABLEAU_LORD_BRITISH_SLOT, king),
+            Some(EndgameTableauActorRole::LordBritish)
+        );
+        king_tiles.insert(king.tile);
+        leader_tiles.insert(state.active_objects[0].tile);
+        assert_eq!(
+            state.active_objects[ENDGAME_TABLEAU_BOX_SLOT].tile,
+            ENDGAME_TABLEAU_BOX_ACTOR_BYTE
+        );
+    }
+    assert_eq!(king_tiles.into_iter().collect::<Vec<_>>(), [0x7C, 0x7D, 0x7E, 0x7F]);
+    assert!(leader_tiles.len() > 1, "the party sprite cycles too");
+}
+
+#[test]
+fn endgame_tableau_animation_runs_one_world_tick_per_bios_tick() {
+    // The wall-clock pump: the first look anchors, later looks run one
+    // animator tick per BIOS tick, and nothing runs while the absorption
+    // hold still shows the arena (`endgame.md §5.2`).
+    let mut state = endgame_window_walked_in_state();
+    endgame_window_settle(&mut state);
+    let tick = crate::narration::BIOS_TICK_SECS;
+    assert!(!state.advance_endgame_tableau_animation_to(10.0 * tick + tick / 2.0));
+    let prng_before = state.prng_state;
+    state.advance_endgame_tableau_animation_to(10.0 * tick + tick / 2.0);
+    assert_eq!(state.prng_state, prng_before, "no tick has passed");
+    state.advance_endgame_tableau_animation_to(12.0 * tick + tick / 2.0);
+    assert_ne!(state.prng_state, prng_before, "two ticks ran the animator");
+
+    let mut arena = endgame_window_walked_in_state();
+    arena.endgame_absorption_arena = Some(Box::new(arena.clone()));
+    assert!(!arena.advance_endgame_tableau_animation_to(0.0));
+    assert!(!arena.advance_endgame_tableau_animation_to(100.0));
+    assert!(arena.endgame.as_ref().unwrap().tableau_animation_tick.is_none());
+}
+

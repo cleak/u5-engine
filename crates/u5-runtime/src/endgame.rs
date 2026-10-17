@@ -241,6 +241,10 @@ pub struct EndgameState {
     pub entry_greeting_hold_owed: bool,
     /// `endgame.md §5.1`/`§6`: the waiting branch's display-driven beats.
     pub refusal_phase: EndgameRefusalPhase,
+    /// The BIOS tick the tableau sprite animator last ran on
+    /// ([`PlayState::advance_endgame_tableau_animation_to`]); `None` until
+    /// the first look anchors it.
+    pub tableau_animation_tick: Option<u64>,
 }
 
 /// `endgame.md §5.1` and `§6`: the waiting branch, beat by beat. The
@@ -417,6 +421,7 @@ impl EndgameState {
             entry_absorption_hold_owed: false,
             entry_greeting_hold_owed: false,
             refusal_phase: EndgameRefusalPhase::Inactive,
+            tableau_animation_tick: None,
         }
     }
 
@@ -446,6 +451,7 @@ impl EndgameState {
             entry_absorption_hold_owed: false,
             entry_greeting_hold_owed: false,
             refusal_phase: EndgameRefusalPhase::Inactive,
+            tableau_animation_tick: None,
         }
     }
 
@@ -488,6 +494,7 @@ impl EndgameState {
             entry_absorption_hold_owed: false,
             entry_greeting_hold_owed: false,
             refusal_phase: EndgameRefusalPhase::Inactive,
+            tableau_animation_tick: None,
         }
     }
 
@@ -1401,7 +1408,7 @@ pub fn endgame_tableau_role_for_slot(
         return None;
     }
     if slot < SAVE_PARTY_SIZE_MAX as usize
-        && object.type_byte == object.tile
+        && endgame_tableau_sprite_frame_of(object)
         && endgame_tableau_party_tile(object.type_byte)
     {
         Some(EndgameTableauActorRole::PartyMember(slot as u8))
@@ -1415,12 +1422,72 @@ pub fn endgame_tableau_role_for_slot(
         Some(EndgameTableauActorRole::SandalwoodBox)
     } else if slot == ENDGAME_TABLEAU_LORD_BRITISH_SLOT
         && object.type_byte == ENDGAME_TABLEAU_LORD_BRITISH_ACTOR_BYTE
-        && object.tile == ENDGAME_TABLEAU_LORD_BRITISH_ACTOR_BYTE
+        && endgame_tableau_sprite_frame_of(object)
     {
         Some(EndgameTableauActorRole::LordBritish)
     } else {
         None
     }
+}
+
+/// Whether `object`'s displayed frame is one of the four frames of its own
+/// class: the class byte itself (frame 1) or one of the three after it.
+///
+/// `endgame.md §4` (issue #298 Q43, `RETRACTIONS.md` R559): the tableau's
+/// party sprites and Lord British are ordinary animated active objects, so
+/// their frame byte cycles through the class's four-frame run while the slot
+/// keeps its class byte - Lord British through tiles 380 to 383.
+pub const fn endgame_tableau_sprite_frame_of(object: ActiveObject) -> bool {
+    object.tile & !0x03 == object.type_byte
+}
+
+/// The snap step's pause, `active-objects.md §8`: "for every class but `0x5C`
+/// the delay is set to six and the position is held".
+pub const ENDGAME_TABLEAU_SNAP_HOLD_TICKS: u8 = 6;
+
+/// The most world ticks one look at the clock catches up
+/// ([`PlayState::advance_endgame_tableau_animation_to`]), so a host stall
+/// does not replay as a burst of frames.
+pub const ENDGAME_TABLEAU_ANIMATION_CATCH_UP_TICKS: u64 = 8;
+
+/// One decision point of `active-objects.md §8` **script A** (f2, f3, f4,
+/// snap, restart) for an endgame tableau sprite, after the eligibility coin
+/// has been accepted. The script position lives in the phase byte's high
+/// nibble; `snap_accepted` is the snap step's one draw, "accepted one time in
+/// four", and is consulted only at that step.
+///
+/// "values one to four select that frame of the class's four-frame run and
+/// advance the position"; on an accepted snap "the displayed frame is set to
+/// the slot's own type byte; ... the delay is set to six and the position is
+/// held, so the pass ends and the snap step is retried after the pause.
+/// Otherwise the position advances and the pass continues with the next
+/// step", and restart "go[es] to step 0 and continue[s]".
+pub fn endgame_tableau_script_a_decision(
+    object: &mut ActiveObject,
+    mut snap_accepted: impl FnMut() -> bool,
+) {
+    const SNAP_STEP: u8 = 3;
+    let base = object.type_byte;
+    let mut position = object.phase >> 4;
+    loop {
+        match position {
+            0..=2 => {
+                object.tile = base + position + 1;
+                position += 1;
+                break;
+            }
+            SNAP_STEP => {
+                if snap_accepted() {
+                    object.tile = base;
+                    object.phase = (SNAP_STEP << 4) | ENDGAME_TABLEAU_SNAP_HOLD_TICKS;
+                    return;
+                }
+                position += 1;
+            }
+            _ => position = 0,
+        }
+    }
+    object.phase = position << 4;
 }
 
 pub fn endgame_tableau_object_from_placement(
@@ -1899,6 +1966,89 @@ impl PlayState {
             }
         }
         frames
+    }
+
+    /// `endgame.md §4` (issue #298 Q43, `RETRACTIONS.md` R559): one world
+    /// tick of the shared per-slot animator over the tableau sprites.
+    ///
+    /// "The shared per-slot animator of `systems/active-objects.md` Section 8
+    /// runs inside every world tick of the endgame ... and the endgame does
+    /// not suspend it. Lord British (`0x7C`) and the four party sprites ...
+    /// all select script A". The box (`0x0E`) and the Orb (`0x08`) "lie below
+    /// the animator's class floor and stay static", so only the party and
+    /// Lord British roles are walked, slot zero to slot thirty-one.
+    ///
+    /// Each slot takes `active-objects.md §8`'s per-tick rule: a non-zero
+    /// delay nibble is decremented and nothing else; at a decision point the
+    /// coin ("an inclusive `0..255` draw accepted at 128 or above") gates one
+    /// step of [`endgame_tableau_script_a_decision`]. Returns whether any
+    /// displayed frame changed.
+    pub fn animate_endgame_tableau_sprites(&mut self) -> bool {
+        let mut changed = false;
+        for slot in 0..self.active_objects.len() {
+            let mut object = self.active_objects[slot];
+            if !matches!(
+                endgame_tableau_role_for_slot(slot, object),
+                Some(EndgameTableauActorRole::PartyMember(_) | EndgameTableauActorRole::LordBritish)
+            ) {
+                continue;
+            }
+            match object.tick_phase() {
+                PhaseTick::Steady => continue,
+                PhaseTick::Countdown => {
+                    self.active_objects[slot] = object;
+                    continue;
+                }
+                PhaseTick::DecisionPoint => {}
+            }
+            if self.random_range_u8(0, 255) < 128 {
+                continue;
+            }
+            let before = object.tile;
+            endgame_tableau_script_a_decision(&mut object, || {
+                self.random_range_u8(0, 255) % 4 == 0
+            });
+            changed |= object.tile != before;
+            self.active_objects[slot] = object;
+        }
+        if changed {
+            self.mark_visibility_dirty();
+        }
+        changed
+    }
+
+    /// Run [`Self::animate_endgame_tableau_sprites`] once for every BIOS tick
+    /// that has passed since the last call, so the tableau keeps animating
+    /// "through every hold, key wait and the terminal loop"
+    /// (`endgame.md §4`) whatever the frontend is waiting on.
+    ///
+    /// `endgame.md §5` (`RETRACTIONS.md` R558): while the greeting's any-key
+    /// read and both yes/no reads wait, "world-animation ticks **do** run",
+    /// while gameplay turns, NPC schedules and time advancement do not - so
+    /// this touches the tableau sprites and nothing else. The paced
+    /// iterations of `§5.2` are one world tick per BIOS tick above the
+    /// slow-CPU gate, which is the rate taken here. Nothing runs while the
+    /// absorption hold still shows the arena: `§5.2`'s forty paced
+    /// iterations, the first of which draws the tableau, follow it.
+    pub fn advance_endgame_tableau_animation_to(&mut self, now_secs: f64) -> bool {
+        if self.endgame_absorption_arena.is_some() {
+            return false;
+        }
+        let tick = (now_secs.max(0.0) / crate::narration::BIOS_TICK_SECS) as u64;
+        let Some(endgame) = self.endgame.as_mut() else {
+            return false;
+        };
+        let Some(last) = endgame.tableau_animation_tick.replace(tick) else {
+            return false;
+        };
+        let due = tick
+            .saturating_sub(last)
+            .min(ENDGAME_TABLEAU_ANIMATION_CATCH_UP_TICKS);
+        let mut changed = false;
+        for _ in 0..due {
+            changed |= self.animate_endgame_tableau_sprites();
+        }
+        changed
     }
 
     /// The final-room frame the absorption hold keeps on screen, while it
