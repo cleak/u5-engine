@@ -584,9 +584,10 @@ impl PlayState {
         let target_slot = match acting_member {
             ActingMemberSelection::Selected(slot) => slot,
             ActingMemberSelection::Prompt => {
-                self.active_surface_chest = Some(SurfaceChestSession::new_dungeon(
-                    scene, level, x, y, idx, tile,
-                ));
+                self.active_surface_chest = Some(SurfaceChestSession {
+                    highlight: self.acting_member_picker_initial_highlight(),
+                    ..SurfaceChestSession::new_dungeon(scene, level, x, y, idx, tile)
+                });
                 self.message = self.render_active_surface_chest();
                 return MoveOutcome::Observed;
             }

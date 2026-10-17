@@ -1038,8 +1038,10 @@ fn town_object_chest_member_prompt_can_cancel_without_consuming() {
     });
 
     assert_eq!(state.open_facing(), MoveOutcome::Observed);
+    // `commands.md §5.8`: Escape is the picker's cancel; Space commits
+    // the indicated row (`inventory.md §4.3`).
     assert_eq!(
-        state.step_active_surface_chest(' ', "").unwrap(),
+        state.step_active_surface_chest('\u{1b}', "").unwrap(),
         Some(MoveOutcome::PromptDeclined)
     );
 
@@ -2481,8 +2483,10 @@ fn dungeon_chest_picker_reprompts_disabled_and_cancel_leaves_chest_closed() {
     assert_eq!(state.grid[index], 0x4b);
     assert_eq!(state.turn, 0);
 
+    // `commands.md §5.8`: Escape is the picker's cancel; Space commits
+    // the indicated row (`inventory.md §4.3`).
     assert_eq!(
-        state.step_active_surface_chest(' ', "").unwrap(),
+        state.step_active_surface_chest('\u{1b}', "").unwrap(),
         Some(MoveOutcome::PromptDeclined)
     );
     assert!(state.active_surface_chest.is_none());

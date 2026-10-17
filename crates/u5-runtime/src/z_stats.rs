@@ -277,6 +277,9 @@ pub enum RestPhase {
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub struct JimmySession {
     pub direction: Direction,
+    /// The roster row the shared picker indicates (`inventory.md §4.3`),
+    /// which Return or Space commits.
+    pub highlight: usize,
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -284,6 +287,9 @@ pub struct SurfaceChestSession {
     pub x: usize,
     pub y: usize,
     pub verb: SurfaceChestVerb,
+    /// The roster row the shared picker indicates (`inventory.md §4.3`),
+    /// which Return or Space commits.
+    pub highlight: usize,
     /// Present when the shared container picker was opened by the dungeon
     /// chest site. `traps.md §2.1` requires the same interactive picker at
     /// both sites; keeping the pending cell here lets the existing modal
@@ -772,7 +778,10 @@ impl RestSession {
 
 impl JimmySession {
     pub const fn new(direction: Direction) -> Self {
-        Self { direction }
+        Self {
+            direction,
+            highlight: 0,
+        }
     }
 }
 
@@ -782,6 +791,7 @@ impl SurfaceChestSession {
             x,
             y,
             verb,
+            highlight: 0,
             dungeon: None,
         }
     }
@@ -798,6 +808,7 @@ impl SurfaceChestSession {
             x,
             y,
             verb: SurfaceChestVerb::Open,
+            highlight: 0,
             dungeon: Some(DungeonChestSelection {
                 scene,
                 level,
@@ -980,6 +991,53 @@ pub fn ready_first_input_key(key: char, suffix: &str) -> char {
 /// and North/West step back, matching the R-Ready picker's own
 /// North/South scan (`§5` step 4) and a capture of the original, where
 /// `RIGHT` moves the `Select:` bar from the Avatar down to Shamino.
+/// What one key does at the acting-member picker the trap-bearing commands
+/// open at their chest sites (Jimmy, Open, Get, Search).
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum ActingMemberPickerKey {
+    /// Escape: "Escape prints `None!\n` on the prompt row and aborts"
+    /// (`commands.md §5.8`).
+    Cancel,
+    /// Pick this roster row.
+    Pick(usize),
+    /// Move the indicated row here; the prompt stays open.
+    Move(usize),
+    /// Read past: `0`, out-of-range digits and every other key.
+    Ignore,
+}
+
+/// `commands.md §5.8`'s conditional acting-member exchange runs the shared
+/// roster picker (`inventory.md §4.3`) with the chest sites' argument:
+///
+/// - Escape cancels.
+/// - "Number keys `1` through `6` select directly, bounded by the current
+///   party size", the way this engine's pickers have always taken them.
+/// - "Only Return or Space commits the indicated row", and "the four
+///   direction keys move the indicator". Neither is a cancel.
+/// - `0` "commits the explicit 'no one' answer only in the callers that
+///   allow it ... other callers ignore `0`", and at the chest sites "the
+///   digit `0` the reader would need is simply ignored".
+pub fn acting_member_picker_key(key: char, highlight: usize, party_len: usize) -> ActingMemberPickerKey {
+    let rows = party_len.min(6);
+    match key {
+        '\u{1b}' => return ActingMemberPickerKey::Cancel,
+        '\r' | '\n' | ' ' if highlight < rows => return ActingMemberPickerKey::Pick(highlight),
+        _ => {}
+    }
+    if let Some(forward) = party_selector_direction_step(key) {
+        let last = rows.saturating_sub(1);
+        return ActingMemberPickerKey::Move(if forward {
+            highlight.saturating_add(1).min(last)
+        } else {
+            highlight.saturating_sub(1)
+        });
+    }
+    match key.to_digit(10).map(|digit| digit as usize) {
+        Some(digit) if (1..=rows).contains(&digit) => ActingMemberPickerKey::Pick(digit - 1),
+        _ => ActingMemberPickerKey::Ignore,
+    }
+}
+
 pub fn party_selector_direction_step(key: char) -> Option<bool> {
     let byte = u8::try_from(key as u32).ok()?;
     if byte == INPUT_CODE_SOUTH || byte == INPUT_CODE_EAST {

@@ -268,3 +268,128 @@ fn rc2_attack_cursor_table_matches_the_spell_cursor() {
         );
     }
 }
+
+/// Item 5: the dungeon Jimmy picker runs `commands.md §5.8`'s exchange
+/// (`dungeon-mode.md §8.1`, "Who acts"): "A pick whose status is neither
+/// Good nor Poisoned answers `Disabled!\n\n` and re-prompts from
+/// `Player: `"; `0` is ignored at the chest sites; Escape answers `None!`.
+#[test]
+fn rc2_dungeon_jimmy_picker_rejects_ineligible_and_ignores_zero() {
+    let scene = DungeonScene::new(33).unwrap();
+    let mut grid = open_dungeon_record();
+    let index = dungeon_cell_index(0, 1, 1);
+    grid[index] = 0x4b;
+    let mut state = dungeon_state(grid, 0, 1, 1);
+    let _ = scene;
+    state.keys = 3;
+    let mut second = state.party[0];
+    second.slot = 1;
+    state.party.push(second);
+    let mut asleep = state.party[0];
+    asleep.slot = 2;
+    asleep.status = b'S';
+    state.party.push(asleep);
+
+    assert_eq!(
+        state
+            .jimmy_direction_with_game_dir_and_member(Direction::North, None, None)
+            .unwrap(),
+        MoveOutcome::Observed
+    );
+    assert!(state.active_jimmy.is_some());
+    let dir = std::path::Path::new("");
+
+    // `0` is read past; the prompt stays open and nothing is spent.
+    assert_eq!(state.step_active_jimmy('0', "", dir).unwrap(), None);
+    assert!(state.active_jimmy.is_some());
+    assert_eq!(state.turn, 0);
+
+    // The Asleep member is refused with `Disabled!` and the prompt repeats.
+    assert_eq!(state.step_active_jimmy('3', "", dir).unwrap(), None);
+    assert!(state.active_jimmy.is_some());
+    assert_eq!(state.message, DUNGEON_ACTING_MEMBER_DISABLED);
+    assert_eq!(state.grid[index], 0x4b);
+    assert_eq!(state.keys, 3);
+
+    // Escape cancels with `None!`.
+    assert_eq!(
+        state.step_active_jimmy('\u{1b}', "", dir).unwrap(),
+        Some(MoveOutcome::PromptDeclined)
+    );
+    assert!(state.active_jimmy.is_none());
+    assert_eq!(state.message, "None!");
+    assert_eq!(state.grid[index], 0x4b);
+}
+
+/// Item 5: Return and Space commit the picker's indicated row
+/// (`inventory.md §4.3`, the roster picker the exchange opens); the
+/// direction keys move it. Neither is a cancel at the Jimmy or chest sites.
+#[test]
+fn rc2_acting_member_pickers_commit_the_indicated_row_on_space() {
+    assert_eq!(
+        acting_member_picker_key(' ', 1, 3),
+        ActingMemberPickerKey::Pick(1)
+    );
+    assert_eq!(
+        acting_member_picker_key('\r', 0, 3),
+        ActingMemberPickerKey::Pick(0)
+    );
+    assert_eq!(
+        acting_member_picker_key('0', 0, 3),
+        ActingMemberPickerKey::Ignore
+    );
+    assert_eq!(
+        acting_member_picker_key('4', 0, 3),
+        ActingMemberPickerKey::Ignore
+    );
+    assert_eq!(
+        acting_member_picker_key('2', 0, 3),
+        ActingMemberPickerKey::Pick(1)
+    );
+    assert_eq!(
+        acting_member_picker_key('\u{1b}', 0, 3),
+        ActingMemberPickerKey::Cancel
+    );
+    assert_eq!(
+        acting_member_picker_key(char::from(INPUT_CODE_SOUTH), 2, 3),
+        ActingMemberPickerKey::Move(2)
+    );
+    assert_eq!(
+        acting_member_picker_key(char::from(INPUT_CODE_SOUTH), 0, 3),
+        ActingMemberPickerKey::Move(1)
+    );
+
+    // The town chest picker: move to the second member and commit on Space.
+    let mut grid = open_grid();
+    grid[32 + 2] = 0x4f;
+    let mut state = test_state(grid, 1, 1);
+    state.player.facing = Direction::East;
+    let mut second = state.party[0];
+    second.slot = 1;
+    state.party.push(second);
+    state.active_objects.push(ActiveObject {
+        type_byte: 0x4f,
+        tile: 0x4f,
+        x: 2,
+        y: 1,
+        z: 0,
+        phase: STEADY_PHASE,
+        aux1: 0x7f,
+        aux3: 0,
+    });
+    assert_eq!(state.open_facing(), MoveOutcome::Observed);
+    assert_eq!(state.selector_highlight(), Some(0));
+    assert_eq!(
+        state
+            .step_active_surface_chest(char::from(INPUT_CODE_SOUTH), "")
+            .unwrap(),
+        None
+    );
+    assert_eq!(state.selector_highlight(), Some(1));
+    assert_ne!(
+        state.step_active_surface_chest(' ', "").unwrap(),
+        Some(MoveOutcome::PromptDeclined)
+    );
+    assert!(state.active_surface_chest.is_none());
+    assert_ne!(state.message, "None!");
+}

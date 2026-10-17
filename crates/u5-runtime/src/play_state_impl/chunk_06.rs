@@ -442,7 +442,10 @@ impl PlayState {
     }
 
     pub fn start_jimmy_party_prompt(&mut self, direction: Direction) -> MoveOutcome {
-        self.active_jimmy = Some(JimmySession::new(direction));
+        self.active_jimmy = Some(JimmySession {
+            highlight: self.acting_member_picker_initial_highlight(),
+            ..JimmySession::new(direction)
+        });
         self.message = self.render_active_jimmy();
         MoveOutcome::Observed
     }
@@ -457,24 +460,28 @@ impl PlayState {
         suffix: &str,
         game_dir: &Path,
     ) -> io::Result<Option<MoveOutcome>> {
-        let Some(session) = self.active_jimmy.take() else {
+        let Some(mut session) = self.active_jimmy.take() else {
             return Ok(None);
         };
         for ch in std::iter::once(key).chain(suffix.chars()) {
-            if matches!(ch, '\u{1b}' | ' ' | '0' | '\r' | '\n') {
-                self.advance_turn();
-                self.message = "None!".to_string();
-                return Ok(Some(MoveOutcome::PromptDeclined));
-            }
-            let Some(digit) = ch
-                .to_digit(10)
-                .and_then(|digit| usize::try_from(digit).ok())
-            else {
-                continue;
+            // `commands.md §5.8`, the conditional acting-member exchange, at
+            // every Jimmy site the dungeon's included (`dungeon-mode.md
+            // §8.1`, "Who acts"): Escape answers `None!`; `0` is ignored;
+            // Return and Space commit the indicated row rather than cancel
+            // ([`acting_member_picker_key`]).
+            let digit = match acting_member_picker_key(ch, session.highlight, self.party.len()) {
+                ActingMemberPickerKey::Cancel => {
+                    self.advance_turn();
+                    self.message = "None!".to_string();
+                    return Ok(Some(MoveOutcome::PromptDeclined));
+                }
+                ActingMemberPickerKey::Move(row) => {
+                    session.highlight = row;
+                    continue;
+                }
+                ActingMemberPickerKey::Ignore => continue,
+                ActingMemberPickerKey::Pick(index) => index + 1,
             };
-            if !(1..=self.party.len().min(6)).contains(&digit) {
-                continue;
-            }
             // `commands.md §5.8`: "a confirmed eligible pick completes that
             // row with the member's name. An ineligible pick prints
             // `Disabled!\n\n` and repeats the prompt". Eligible means Good
@@ -541,7 +548,10 @@ impl PlayState {
         y: usize,
         verb: SurfaceChestVerb,
     ) -> MoveOutcome {
-        self.active_surface_chest = Some(SurfaceChestSession::new(x, y, verb));
+        self.active_surface_chest = Some(SurfaceChestSession {
+            highlight: self.acting_member_picker_initial_highlight(),
+            ..SurfaceChestSession::new(x, y, verb)
+        });
         self.message = self.render_active_surface_chest();
         MoveOutcome::Observed
     }
@@ -555,24 +565,27 @@ impl PlayState {
         key: char,
         suffix: &str,
     ) -> io::Result<Option<MoveOutcome>> {
-        let Some(session) = self.active_surface_chest.take() else {
+        let Some(mut session) = self.active_surface_chest.take() else {
             return Ok(None);
         };
         for ch in std::iter::once(key).chain(suffix.chars()) {
-            if matches!(ch, '\u{1b}' | ' ' | '0' | '\r' | '\n') {
-                self.message = "None!".to_string();
-                return Ok(Some(MoveOutcome::PromptDeclined));
-            }
-            let Some(digit) = ch
-                .to_digit(10)
-                .and_then(|digit| usize::try_from(digit).ok())
-            else {
-                continue;
-            };
-            if !(1..=self.party.len().min(6)).contains(&digit) {
-                continue;
-            }
-            let member_index = digit - 1;
+            // `commands.md §5.8`: at the chest sites Escape answers `None!`,
+            // "the digit `0` the reader would need is simply ignored", and
+            // Return and Space commit the indicated row
+            // ([`acting_member_picker_key`]).
+            let member_index =
+                match acting_member_picker_key(ch, session.highlight, self.party.len()) {
+                    ActingMemberPickerKey::Cancel => {
+                        self.message = "None!".to_string();
+                        return Ok(Some(MoveOutcome::PromptDeclined));
+                    }
+                    ActingMemberPickerKey::Move(row) => {
+                        session.highlight = row;
+                        continue;
+                    }
+                    ActingMemberPickerKey::Ignore => continue,
+                    ActingMemberPickerKey::Pick(index) => index,
+                };
             if !self.surface_chest_member_available(member_index) {
                 // `traps.md §2.1`: a confirmed pick that is not
                 // Good-or-Poisoned is rejected with the short "disabled"
@@ -825,9 +838,12 @@ impl PlayState {
                 None => match self.dungeon_container_acting_member() {
                     ActingMemberSelection::Selected(slot) => Some(slot),
                     ActingMemberSelection::Prompt => None,
+                    // `dungeon-mode.md §8.1`, "Who acts": "a party with no
+                    // eligible member at all, answers `None!\n` and the
+                    // command aborts" - Jimmy as well as Open (E12).
                     ActingMemberSelection::NoneAble => {
                         self.advance_turn();
-                        self.message.clear(); // audit: not a player-facing line
+                        self.message = DUNGEON_ACTING_MEMBER_NONE.to_string();
                         return Ok(MoveOutcome::Blocked);
                     }
                 },

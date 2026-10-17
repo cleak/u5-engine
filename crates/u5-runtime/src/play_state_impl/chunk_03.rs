@@ -69,6 +69,14 @@ impl PlayState {
         if let Some(highlight) = self.shop_member_selector_highlight() {
             return Some(highlight);
         }
+        // `commands.md §5.8`: the acting-member exchange "opens the roster
+        // picker" at the Jimmy and chest sites, the same surface.
+        if let Some(session) = self.active_jimmy.as_ref() {
+            return Some(session.highlight);
+        }
+        if let Some(session) = self.active_surface_chest.as_ref() {
+            return Some(session.highlight);
+        }
         // `inventory.md §5` step 1: R-Ready "selects a party member with
         // the same party-member selection surface used by Z-stats".
         self.active_ready
@@ -117,7 +125,11 @@ impl PlayState {
     /// the stat sheet and above the `Arms` list. The four inventory
     /// pages keep their published page literals.
     pub fn roster_box_label(&self) -> Option<String> {
-        if self.active_party_selector.is_some() || self.shop_member_selector_highlight().is_some() {
+        if self.active_party_selector.is_some()
+            || self.shop_member_selector_highlight().is_some()
+            || self.active_jimmy.is_some()
+            || self.active_surface_chest.is_some()
+        {
             return Some(PARTY_SELECTOR_ROSTER_BOX_LABEL.to_string());
         }
         if let Some(session) = self.active_use.as_ref() {
@@ -1225,6 +1237,13 @@ impl PlayState {
         }
         self.message = self.render_active_z_stats();
         MoveOutcome::Observed
+    }
+
+    /// The row the acting-member picker indicates when it opens: the shared
+    /// selector's own starting row ([`Self::start_party_selector`]).
+    pub fn acting_member_picker_initial_highlight(&self) -> usize {
+        self.z_stats_initial_party_index()
+            .min(self.party.len().min(6).saturating_sub(1))
     }
 
     pub fn z_stats_initial_party_index(&self) -> usize {
