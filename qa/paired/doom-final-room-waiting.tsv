@@ -16,6 +16,7 @@
 # branch reads no key, stock leaves the cell after `here a while."` empty in
 # every capture, and this engine drew the barber pole there. Fixed
 # (`endgame_waiting_branch_draws_no_cursor_after_record_ten`).
+#
 # Variant of `doom-final-room-refusal` that answers **No** a second time, to
 # the explicit sandalwood question, and so reaches `endgame.md` §5's waiting
 # branch: the fixed `"I see...` lead-in, the forty-tick pause, `ENDMSG.DAT`

@@ -16,6 +16,7 @@
 # branch reads no key, stock leaves the cell after `here a while."` empty in
 # every capture, and this engine drew the barber pole there. Fixed
 # (`endgame_waiting_branch_draws_no_cursor_after_record_ten`).
+#
 # `endgame.md §2` steps 4-6: Doom's final room, the handoff that reaches the
 # terminal sequence. The room trigger sits at level seven `(5,7)` with three
 # wall neighbours, so a fall from the level above is the only way onto it -
