@@ -1340,7 +1340,7 @@ impl PlayState {
                 && self.stage_surface_chest_grant(
                     x,
                     y,
-                    INVENTORY_ADD_CLASS_CODE_EQUIPMENT,
+                    chest_secondary_pool_family_id(row),
                     row as u8,
                 )
             {
@@ -1360,6 +1360,13 @@ impl PlayState {
     /// out, and a full table yields no slot - and write the family's
     /// class byte and the rolled value into it at the chest's coordinate.
     /// Returns `false` when the row is dropped.
+    ///
+    /// `containers.md §4.1` (u5-spec#298 Q18): "both tile bytes of the new
+    /// active-object record hold the family id, so it renders as the
+    /// actor-half tile at atlas index `0x100 + id`"; "The quantity or
+    /// subtype rides in the record's fifth byte"; "The record's last byte is
+    /// cleared outside combat and set to `0x20` when the scene byte is `0x80`
+    /// or above."
     pub fn stage_surface_chest_grant(
         &mut self,
         x: usize,
@@ -1376,7 +1383,11 @@ impl PlayState {
             z,
             phase: STEADY_PHASE,
             aux1: value,
-            aux3: 0,
+            aux3: if self.combat_active {
+                CHEST_GRANT_COMBAT_LAST_BYTE
+            } else {
+                0
+            },
         })
         .is_some()
     }
@@ -3563,10 +3574,36 @@ pub const INVENTORY_ADD_CLASS_CODE_KEY: u8 = 0x07;
 pub const INVENTORY_ADD_CLASS_CODE_GEM: u8 = 0x08;
 pub const INVENTORY_ADD_CLASS_CODE_TORCH: u8 = 0x0d;
 /// `§8` lists `0x05`, `0x06` and `0x09..0x0C` as one Equipment arm that
-/// adds stock "by the supplied equipment id"; which of them the chest
-/// stages per family is not published, and the grant is the same for
-/// every one of them, so the staged equipment row carries this one.
+/// adds stock "by the supplied equipment id". `containers.md §4.1`
+/// (u5-spec#298 Q18) now publishes which family id each grant stages -
+/// weapon 5, shield 6, helm 9, ring 10, armour 11, amulet 12 - and the
+/// secondary pool stages through [`chest_secondary_pool_family_id`]; this
+/// is the helm's.
 pub const INVENTORY_ADD_CLASS_CODE_EQUIPMENT: u8 = 0x09;
+pub const INVENTORY_ADD_CLASS_CODE_WEAPON: u8 = 0x05;
+pub const INVENTORY_ADD_CLASS_CODE_SHIELD: u8 = 0x06;
+pub const INVENTORY_ADD_CLASS_CODE_HELM: u8 = 0x09;
+pub const INVENTORY_ADD_CLASS_CODE_RING: u8 = 0x0a;
+pub const INVENTORY_ADD_CLASS_CODE_ARMOUR: u8 = 0x0b;
+pub const INVENTORY_ADD_CLASS_CODE_AMULET: u8 = 0x0c;
+
+/// `containers.md §4.1` (u5-spec#298 Q18): the staged record's last byte
+/// "set to `0x20` when the scene byte is `0x80` or above" (combat).
+pub const CHEST_GRANT_COMBAT_LAST_BYTE: u8 = 0x20;
+
+/// `containers.md §4.1` (u5-spec#298 Q18): the family id - and so the
+/// drawn tile `0x100 + id` - of a secondary-pool equipment row, grouped as
+/// [`chest_secondary_pool_transcript_line`] groups the names.
+pub const fn chest_secondary_pool_family_id(row: usize) -> u8 {
+    match row {
+        0..=3 => INVENTORY_ADD_CLASS_CODE_HELM,
+        4..=8 => INVENTORY_ADD_CLASS_CODE_SHIELD,
+        9..=15 => INVENTORY_ADD_CLASS_CODE_ARMOUR,
+        16..=41 => INVENTORY_ADD_CLASS_CODE_WEAPON,
+        42..=44 => INVENTORY_ADD_CLASS_CODE_RING,
+        _ => INVENTORY_ADD_CLASS_CODE_AMULET,
+    }
+}
 
 /// `containers.md §4.1`: the Gold and Chest-marker rows' first quantity
 /// draws, `1..90` and `1..10`, are discarded.
@@ -5009,3 +5046,57 @@ mod furniture_search_prefix_spec_tests {
     }
 }
 
+#[cfg(test)]
+mod staged_chest_loot_tile_spec_tests {
+    use super::*;
+    use crate::test_fixtures::{open_grid, test_state};
+
+    /// `containers.md §4.1` (u5-spec#298 Q18): "both tile bytes of the new
+    /// active-object record hold the family id ... weapon 5 (261), shield 6
+    /// (262) ... helm 9 (265), ring 10 (266), armour 11 (267), amulet 12
+    /// (268)". The engine staged every equipment row as `0x09`, the helm.
+    #[test]
+    fn secondary_pool_rows_stage_their_own_family_tile() {
+        for (row, family) in [
+            (0, 9),
+            (3, 9),
+            (4, 6),
+            (9, 11),
+            (16, 5),
+            (41, 5),
+            (42, 10),
+            (45, 12),
+        ] {
+            assert_eq!(chest_secondary_pool_family_id(row), family, "row {row}");
+        }
+    }
+
+    /// "The record's last byte is cleared outside combat and set to `0x20`
+    /// when the scene byte is `0x80` or above"; the quantity rides in the
+    /// fifth byte.
+    #[test]
+    fn staged_grant_carries_family_tile_and_combat_last_byte() {
+        let mut state = test_state(open_grid(), 1, 1);
+        assert!(state.stage_surface_chest_grant(3, 4, INVENTORY_ADD_CLASS_CODE_RING, 43));
+        let staged = state
+            .active_objects
+            .iter()
+            .rev()
+            .find(|object| !object.is_empty() && object.x == 3 && object.y == 4)
+            .copied()
+            .expect("staged");
+        assert_eq!((staged.type_byte, staged.tile), (0x0a, 0x0a));
+        assert_eq!(staged.aux1, 43);
+        assert_eq!(staged.aux3, 0);
+
+        state.combat_active = true;
+        assert!(state.stage_surface_chest_grant(5, 6, INVENTORY_ADD_CLASS_CODE_GOLD, 7));
+        let staged = state
+            .active_objects
+            .iter()
+            .find(|object| !object.is_empty() && object.x == 5 && object.y == 6)
+            .copied()
+            .expect("staged");
+        assert_eq!(staged.aux3, CHEST_GRANT_COMBAT_LAST_BYTE);
+    }
+}
