@@ -1,6 +1,22 @@
 # Ready a weapon and a shield, then reopen the equipment picker, to measure
 # what `inventory.md` section 4.5 calls "a runic glyph for a readied one" in
 # the selector cell - the engine leaves that cell blank for every row.
+#
+# Strength dice on the three ready beats. Character creation draws its virtue
+# pairs at random (`chargen.md`; the generator is host-clock seeded,
+# `prng.md §3`), so seven `a` answers do not fix the Avatar's attributes,
+# and the R-Ready gate compares the readied burden against the Strength byte
+# (`inventory.md §2.1`). Whether the Dagger readies or answers `Thou art not
+# strong enough!` therefore depends on the draw. Measured from the Z-stats
+# frames of the timelapses: rc1 (`20261017-031225`) engine Str=20, stock
+# Str=20, both refused and all beats agreed; rc2 (`20261017-150213`) engine
+# Str=21, stock Str=20, the engine readied the Dagger silently (panel row
+# `5` with the readied glyph), the next Return unreadied it, and from there
+# `dagger`, `shield` and `reopened` differed by one refusal block. A
+# headless repro of the same keys at Str=20 still refuses. `picker` and
+# `arms` do not depend on the draw and stay compared. The scenario wants a
+# seeded save with fixed attributes to measure the readied glyph reliably.
+# dice-beats: dagger shield reopened
 both	wait	15000
 both	key	space
 both	wait	4000

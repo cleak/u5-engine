@@ -475,14 +475,7 @@ impl ConversationSession {
                 .unwrap_or(usize::MAX),
         };
         if field_idx == usize::MAX {
-            // `conversation.md §6` step 7: "the engine prints `I cannot
-            // help thee with that.\n\n`". This is a fixed engine literal,
-            // not a response stream, so the quote framing that §6 gives
-            // stream responses (and spells out for the NAME prefix and the
-            // rebuke) does not apply. It keeps the same leading line feed
-            // a framed response opens with. Playtest E05.
-            out.push_plain_text("\n");
-            out.push_plain_text(TLK_NO_KEYWORD_MATCH_MESSAGE);
+            out.set_framed_text(TLK_NO_KEYWORD_MATCH_MESSAGE);
             return out;
         }
         // `conversation.md §5` step 3 and §7's result table both tie the
@@ -1880,9 +1873,7 @@ mod tests {
         let mut s = baseline_session();
         s.present_greeting(&ctx());
         let out = s.submit_keyword("xyzzy", &ctx());
-        // §6 step 7's literal carries no quote characters (playtest E05).
-        assert_eq!(out.text, format!("\n{TLK_NO_KEYWORD_MATCH_MESSAGE}"));
-        assert!(!out.text.contains('"'));
+        assert_eq!(out.text, framed_response(TLK_NO_KEYWORD_MATCH_MESSAGE));
         assert!(out.text.ends_with("\n\n"));
     }
 
