@@ -1015,6 +1015,40 @@ pub const BLACKTHORN_CAPTIVE_CELL_FLOOR: i8 = -1;
 pub const BLACKTHORN_CAPTURE_NARRATION: &str =
     "\n\nThou art subdued and blindfolded!\n\n\nStrong guards drag thee away!";
 
+/// `blackthorn.md §3` step 8 (u5-spec#298 Q8): "After the quiet 8-tick pause
+/// that follows the throne reveal, print `\n\nBlackthorn says:\n\n"Ah, `, then
+/// the name in **roster record 0** ..., then `!\n'Tis indeed an honour to meet
+/// thee at last! ` (one trailing space, no line feed)."
+pub const BLACKTHORN_GREETING_PREFIX: &str = "\n\nBlackthorn says:\n\n\"Ah, ";
+pub const BLACKTHORN_GREETING_SUFFIX: &str = "!\n'Tis indeed an honour to meet thee at last! ";
+
+/// `blackthorn.md §3` step 8 (u5-spec#298 Q8), after the greeting's key: "Print
+/// `\n\nGUARD! Release this good`, then pick a piece by record 0's gender byte
+/// ...: ` lady ` ... if it is female (`0x0C`), `man ` (no leading space) if it
+/// is male (`0x0B`), or nothing for any other value; then print `at once!"`
+/// (closing quote, no trailing space, no line feed)." The male form "really
+/// joins into `goodman`".
+pub const BLACKTHORN_RELEASE_PREFIX: &str = "\n\nGUARD! Release this good";
+pub const BLACKTHORN_RELEASE_FEMALE_PIECE: &str = " lady ";
+pub const BLACKTHORN_RELEASE_MALE_PIECE: &str = "man ";
+pub const BLACKTHORN_RELEASE_SUFFIX: &str = "at once!\"";
+
+/// `blackthorn.md §3` step 8: the greeting addressed to roster record 0's name.
+pub fn blackthorn_greeting_line(avatar_name: &str) -> String {
+    format!("{BLACKTHORN_GREETING_PREFIX}{avatar_name}{BLACKTHORN_GREETING_SUFFIX}")
+}
+
+/// `blackthorn.md §3` step 8: the release order for roster record 0's gender
+/// byte.
+pub fn blackthorn_release_line(gender: u8) -> String {
+    let piece = match gender {
+        crate::SAVE_GENDER_FEMALE_BYTE => BLACKTHORN_RELEASE_FEMALE_PIECE,
+        crate::SAVE_GENDER_MALE_BYTE => BLACKTHORN_RELEASE_MALE_PIECE,
+        _ => "",
+    };
+    format!("{BLACKTHORN_RELEASE_PREFIX}{piece}{BLACKTHORN_RELEASE_SUFFIX}")
+}
+
 /// `blackthorn.md §2` two player-visible Blackthorn cinematic
 /// families. Both replace the ordinary map loop and hand control
 /// back through an explicit scene/position transition.

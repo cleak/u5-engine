@@ -4526,15 +4526,18 @@ impl PlayState {
         self.install_blackthorn_audience_actors();
         let approach =
             self.run_blackthorn_cutscene_beat(BlackthornCutsceneBeat::AudienceThroneApproach);
-        // `blackthorn.md §3` step 8: "Greet the addressed member by name,
-        // **wait for an acknowledgement key**, then print the gendered release
-        // lines and run the guard-release route script". The audience "takes
-        // **two** blocking key presses before the first demand is ever asked,
-        // one after the greeting page and one after the preamble record".
-        //
-        // The greeting and release literals are resident strings §3 names
-        // but does not publish, so this engine prints neither and holds the
-        // page it has; the two key waits are the published contract.
+        // `blackthorn.md §3` step 8 (u5-spec#298 Q8): after the approach's
+        // closing quiet 8-tick pause, the greeting to roster record 0 - "the
+        // Avatar's record, never a member chosen any other way" - ending on
+        // one trailing space and no line feed, then "**Wait for an
+        // acknowledgement key.**" The audience "takes **two** blocking key
+        // presses before the first demand is ever asked, one after the
+        // greeting page and one after the preamble record".
+        let greeting =
+            crate::blackthorn::blackthorn_greeting_line(&self.blackthorn_roster_record_zero_name());
+        self.emit_message_line(greeting);
+        // The greeting ends mid-row (its trailing space, no feed).
+        self.open_message_row();
         challenge.await_greeting_acknowledgement();
         self.active_blackthorn = Some(challenge);
         // `blackthorn.md §4.1`: "Do not append an answer, prompt ordinal,
@@ -4882,6 +4885,15 @@ impl PlayState {
                 // the guard-release route, then record `11` is printed and
                 // held for the audience's second acknowledgement.
                 crate::blackthorn_session::BlackthornChallengeOutcome::GreetingAcknowledged => {
+                    // §3 step 8 (u5-spec#298 Q8): the release order, chosen by
+                    // roster record 0's gender byte, printed before the
+                    // guard-release route and ending mid-row ("no trailing
+                    // space, no line feed").
+                    let release_line = crate::blackthorn::blackthorn_release_line(
+                        self.blackthorn_roster_record_zero_gender(),
+                    );
+                    self.emit_message_line(release_line);
+                    self.open_message_row();
                     let release =
                         self.run_blackthorn_cutscene_beat(BlackthornCutsceneBeat::GuardReleaseRoute);
                     self.push_diagnostic(format!(
@@ -5243,6 +5255,31 @@ impl PlayState {
                 Ok(MoveOutcome::PromptDeclined)
             }
         }
+    }
+
+    /// `blackthorn.md §3` step 8: "the name in **roster record 0** (the
+    /// Avatar's record ...)". The saved roster's first record when one is
+    /// loaded, else the leader's panel name.
+    fn blackthorn_roster_record_zero_name(&self) -> String {
+        let raw = self
+            .party_roster
+            .first()
+            .map(|record| record.name)
+            .or_else(|| self.party_names.first().copied());
+        raw.map(|name| {
+            String::from_utf8_lossy(&name)
+                .trim_end_matches('\0')
+                .trim()
+                .to_string()
+        })
+        .unwrap_or_default()
+    }
+
+    /// `blackthorn.md §3` step 8: "record 0's gender byte
+    /// (`formats/saved-gam.md`)". With no roster loaded there is no byte to
+    /// read, which takes the spec's "nothing for any other value" arm.
+    fn blackthorn_roster_record_zero_gender(&self) -> u8 {
+        self.party_roster.first().map_or(0, |record| record.gender)
     }
 
     /// The name Blackthorn's threat uses for the companion at risk, read

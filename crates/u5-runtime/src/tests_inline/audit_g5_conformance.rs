@@ -813,3 +813,41 @@ fn q14_alarm_code_in_a_reply_runs_the_town_alarm_sweep() {
         "the sweep's rewrite is persisted"
     );
 }
+
+fn q8_audience_with_avatar_gender(gender: u8) -> (PlayState, std::path::PathBuf) {
+    let dir = debug_game_dir();
+    let mut state = test_state(open_grid(), 5, 5);
+    audit_g5_named(&mut state, &["Shalla"]);
+    let mut roster = state.synced_party_roster();
+    roster[0].gender = gender;
+    state.party_roster = roster;
+    state.begin_blackthorn_audience_capture(&dir).unwrap();
+    (state, dir)
+}
+
+/// u5-spec#298 Q8. `blackthorn.md §3` step 8: the greeting to roster record
+/// 0, held for a key, then the release order by record 0's gender byte - the
+/// three published forms, `goodman` really joined.
+#[test]
+fn q8_greeting_and_release_lines_follow_record_zero() {
+    for (gender, expected) in [
+        (SAVE_GENDER_FEMALE_BYTE, "GUARD! Release this good lady at once!\""),
+        (SAVE_GENDER_MALE_BYTE, "GUARD! Release this goodman at once!\""),
+        (0x00, "GUARD! Release this goodat once!\""),
+    ] {
+        let (mut state, dir) = q8_audience_with_avatar_gender(gender);
+        let held = audit_g5_transcript(&state);
+        assert!(
+            held.ends_with("Blackthorn says:\n\n\"Ah, Shalla!\n'Tis indeed an honour to meet thee at last! "),
+            "{held:?}"
+        );
+        assert!(!held.contains("GUARD!"), "the release waits for the greeting's key");
+        assert!(state.message_row_open_mid_line, "the greeting ends mid-row");
+
+        state.submit_blackthorn_audience_answer("", &dir).unwrap();
+        state.flush_message_slot();
+        let after = audit_g5_transcript(&state);
+        assert!(after.contains(expected), "{gender:#04x}: {after:?}");
+        let _ = fs::remove_dir_all(dir);
+    }
+}
