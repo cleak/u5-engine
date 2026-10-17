@@ -114,6 +114,13 @@ fn flushing_the_staged_narration_releases_the_spell_flash_hold() {
     state.flush_staged_narration();
     assert!(!state.message_window_flash_hold_active());
     assert!(!state.staged_narration_active());
+    // The hold prints nothing of its own, so the cast's result is still the
+    // slot's text for a pump-less harness to read.
+    assert!(
+        state.message.starts_with(crate::commands::SPELL_SUCCESS_LINE),
+        "{:?}",
+        state.message
+    );
 }
 
 #[test]

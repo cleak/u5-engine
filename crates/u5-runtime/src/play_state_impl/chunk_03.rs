@@ -555,8 +555,15 @@ impl PlayState {
     /// Print every remaining beat now. For frontends and tests with no pump.
     pub fn flush_staged_narration(&mut self) {
         let drained = self.staged_narration.drain_all();
+        // A spell flash's holds are always at the head of the queue (they are
+        // only pushed onto an empty one) and print nothing: emitting their
+        // empty text would clear the slot that still holds the cast's result.
+        let flash_beats = usize::from(self.message_window_flash_hold.pending_beats);
         self.release_message_window_flash_beats(drained.len());
-        for beat in drained {
+        for (index, beat) in drained.into_iter().enumerate() {
+            if index < flash_beats && beat.text.is_empty() {
+                continue;
+            }
             self.release_blackthorn_execution_hold();
             self.run_presentation_world_steps(beat.world_steps);
             self.presentation_viewport_inverted = false;
