@@ -7848,3 +7848,33 @@ fn shop_entry_answer_echoes_onto_the_greeting_row() {
         .collect();
     assert!(rows.contains(&":Yes"), "{rows:?}");
 }
+
+/// `shops.md §8.B`: "Space means No where accepted. Every No response echoes
+/// `No` without a line feed", appended to the greeting's continuation row.
+/// Measured 2026-10-16 (`shop-inn-after-entry`, beat `after-space`): the
+/// original reads `:No`; this engine put `No` on a row of its own.
+#[test]
+fn inn_entry_space_echoes_no_onto_the_greeting_row() {
+    use crate::shop_runtime::InnkeeperState;
+    use crate::shop_session::ActiveShopSession;
+
+    let mut state = test_state(open_grid(), 1, 1);
+    state.area = Area::Town {
+        scene: Scene::new(1).unwrap(),
+        floor: 0,
+    };
+    state.active_shop = Some(ActiveShopSession::Innkeeper(InnkeeperState::Greeting {
+        inn: Inn::TheWayfarerInn,
+    }));
+    state.emit_message_line("\n\"Welcome!\"\n\n:");
+    state.close_message_row();
+
+    handle_play_key_input(&mut state, ' ', "", Path::new("")).unwrap();
+
+    let rows: Vec<&str> = state
+        .message_transcript
+        .iter()
+        .map(|entry| entry.text.as_str())
+        .collect();
+    assert!(rows.contains(&":No"), "{rows:?}");
+}

@@ -1210,14 +1210,25 @@ fn handle_active_shop_key_input(
                 // (`shop-inn-after-entry/after-space`), where the original
                 // answers `No` and then `"Well, we can't help thee, then."`
                 // over `says Donya.`
+                //
+                // The bark rides §8's shared closing envelope, which opens
+                // `\n\n"`: the first feed closes the `:No` row, the second is
+                // the blank under it. Measured 2026-10-16 (same beat): the
+                // original reads `:No`, a blank row, then the quoted bark;
+                // this engine put `No` on a row of its own under the `:` and
+                // the bark directly beneath it.
                 (InnkeeperState::Greeting { .. }, _, true, _) => {
                     *s = InnkeeperState::Exited;
-                    shop_closing_bark(state, SHOP_DIALOG_ID_INN, innkeeper_name, game_dir)
+                    inn_entry_closing_bark(state, innkeeper_name, game_dir)
                 }
                 (InnkeeperState::Greeting { .. }, _, _, _) if key_byte == b' ' => {
+                    // §8.B: the answer appends to the greeting's continuation
+                    // row, which is open whatever the slot's text ended on.
+                    state.flush_message_slot();
+                    state.open_message_row();
                     state.emit_message_line_continuing_row("No");
                     *s = InnkeeperState::Exited;
-                    shop_closing_bark(state, SHOP_DIALOG_ID_INN, innkeeper_name, game_dir)
+                    inn_entry_closing_bark(state, innkeeper_name, game_dir)
                 }
                 // "Return, Escape and service letters such as R at the inn do
                 // not select a service at this initial prompt: unaccepted
@@ -4825,6 +4836,21 @@ pub(crate) const fn tavern_closing_bark_records(purchase_completed: bool) -> (us
 /// from its purchase-completed row when a purchase completed in this visit,
 /// and wraps it as `\n\n"`, the record, then `says $.\n`. Silent outcomes
 /// do not call this and so take no draw.
+/// The inn's entry `No`/Space exit: [`shop_closing_bark`] inside the shared
+/// closing envelope's leading `\n\n` (`shops.md §8`).
+fn inn_entry_closing_bark(
+    state: &mut PlayState,
+    innkeeper_name: Option<&'static str>,
+    game_dir: &Path,
+) -> String {
+    let bark = shop_closing_bark(state, SHOP_DIALOG_ID_INN, innkeeper_name, game_dir);
+    if bark.is_empty() {
+        bark
+    } else {
+        format!("\n\n{bark}")
+    }
+}
+
 fn shop_closing_bark(
     state: &mut PlayState,
     dialog_id: u8,
