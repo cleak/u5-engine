@@ -105,6 +105,29 @@ impl PartyRosterRecord {
     pub fn is_female(&self) -> bool {
         self.gender == SAVE_GENDER_FEMALE_BYTE
     }
+
+    /// The record's bytes from the name field through the per-character
+    /// month counter (`formats/saved-gam.md §3.1`, offsets `0x00..=0x17`),
+    /// laid out as the save writer lays out a non-Avatar record. The combat
+    /// defense byte at `0x18` and what follows are template bytes this
+    /// record does not model, so they are not included.
+    pub fn leading_record_bytes(&self) -> [u8; SAVE_CHARACTER_LEVEL_OFFSET + 2] {
+        let mut bytes = [0u8; SAVE_CHARACTER_LEVEL_OFFSET + 2];
+        bytes[..SAVE_CHARACTER_NAME_LEN].copy_from_slice(&self.name);
+        bytes[SAVE_CHARACTER_GENDER_OFFSET] = self.gender;
+        bytes[SAVE_CHARACTER_CLASS_OFFSET] = self.member.class_byte;
+        bytes[SAVE_CHARACTER_STATUS_OFFSET] = self.member.status;
+        bytes[SAVE_CHARACTER_STR_OFFSET] = self.strength;
+        bytes[SAVE_CHARACTER_DEX_OFFSET] = self.member.climb_stat;
+        bytes[SAVE_CHARACTER_INT_OFFSET] = self.intelligence;
+        bytes[SAVE_CHARACTER_MANA_OFFSET] = self.member.mana;
+        write_u16_at(&mut bytes, SAVE_CHARACTER_HP_OFFSET, self.member.hp);
+        write_u16_at(&mut bytes, SAVE_CHARACTER_MAX_HP_OFFSET, self.member.max_hp);
+        write_u16_at(&mut bytes, SAVE_CHARACTER_EXPERIENCE_OFFSET, self.experience);
+        bytes[SAVE_CHARACTER_LEVEL_OFFSET] = self.member.level;
+        bytes[SAVE_CHARACTER_STAY_COUNTER_OFFSET] = self.stay_counter;
+        bytes
+    }
 }
 
 /// Resolve the roster record that belongs to an active-party slot.

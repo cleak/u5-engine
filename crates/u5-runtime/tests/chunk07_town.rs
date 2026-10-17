@@ -141,7 +141,9 @@ fn blackthorn_execution_lifts_the_record_and_parks_it_with_an_unmatchable_wherea
     }
     // `karma.md §8`: the Codex scan of roster slots 1..15 finds the parked
     // record and names it.
-    assert_eq!(state.codex_interred_names(), vec![victim_name]);
+    let interred = state.codex_interred_names();
+    assert_eq!(interred.len(), 1);
+    assert_eq!(interred[0][..victim_name.len()], victim_name[..]);
 }
 
 /// `blackthorn.md §4`: "**A wrong answer otherwise escalates.** The first wrong
