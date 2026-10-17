@@ -7113,6 +7113,12 @@ fn combat_command_branch_labels_include_only_exactly_published_strings() {
         combat_scene_abort_verb_prefix(CombatSceneAbortVerb::HoleUp),
         "Hole up"
     );
+    // combat.md §8 Shape B: `I` Ignite is "printed as `Ignite torch`"
+    // (playtest E37).
+    assert_eq!(
+        combat_scene_abort_verb_prefix(CombatSceneAbortVerb::IgniteTorch),
+        "Ignite torch"
+    );
     assert_eq!(
         combat_scene_abort_tail(CombatSceneAbortVerb::Board),
         CombatSceneAbortTail::What

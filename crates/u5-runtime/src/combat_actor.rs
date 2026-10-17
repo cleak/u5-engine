@@ -752,7 +752,7 @@ pub const fn combat_scene_abort_verb_prefix(verb: CombatSceneAbortVerb) -> &'sta
         CombatSceneAbortVerb::Enter => "Enter",
         CombatSceneAbortVerb::Fire => "Fire",
         CombatSceneAbortVerb::HoleUp => "Hole up",
-        CombatSceneAbortVerb::IgniteTorch => "Ignite",
+        CombatSceneAbortVerb::IgniteTorch => "Ignite torch",
         CombatSceneAbortVerb::Look => "Look",
         CombatSceneAbortVerb::Mix => "Mix",
         CombatSceneAbortVerb::NewOrder => "New order",
