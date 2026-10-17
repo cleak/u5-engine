@@ -1511,3 +1511,51 @@ fn a_furled_frigate_step_prints_the_compass_word_then_rowing() {
     assert_eq!(texts.get(echo + 1).map(String::as_str), Some("Rowing!"));
     assert!(!state.message_row_open_mid_line);
 }
+
+#[test]
+fn talk_resolves_the_owning_record_of_the_highest_numbered_faced_object() {
+    // `conversation.md §2` "No-owner Talk" (added 2026-10-16, issue #216):
+    // "The owning record is the lowest-numbered occupied record linked to the
+    // faced object with a nonzero type and state; the faced object is the
+    // highest-numbered active object at that cell." A record standing there
+    // but linked to another object owns nothing, so Talk takes the bare
+    // `No response!` (dialog word zero).
+    let mut state = test_state(open_grid(), 5, 5);
+    let floor = state.current_floor().unwrap();
+    state.active_objects.resize(3, ActiveObject::empty());
+    for slot in [1usize, 2] {
+        state.active_objects[slot] = ActiveObject {
+            type_byte: 0x50,
+            tile: 0x50,
+            x: 5,
+            y: 4,
+            z: floor,
+            phase: 0,
+            aux1: 0,
+            aux3: 0,
+        };
+    }
+    let npc = |slot: usize, dialog_id: u8, link: Option<usize>| RuntimeNpc {
+        slot,
+        dialog_id,
+        active_object: link,
+        ..wandering_npc(0, 5, 4, (5, 4))
+    };
+
+    // Slot 2 is the faced object; record 2 owns it, record 3 owns slot 1.
+    state.npcs = vec![npc(3, 0x11, Some(1)), npc(2, 0x22, Some(2))];
+    assert_eq!(state.talk_target_in_direction(Direction::North), Some((0x22, 5, 4)));
+
+    // The guard's record now points at another object: nobody owns slot 2.
+    state.npcs = vec![npc(3, 0x11, Some(1)), npc(2, 0x22, Some(9))];
+    assert_eq!(state.talk_target_in_direction(Direction::North), Some((0, 5, 4)));
+
+    // Two records linked to the faced object: the lowest-numbered wins, and
+    // an empty (state zero) or typeless record is passed over.
+    let mut empty = npc(1, 0x33, Some(2));
+    empty.state = NPC_STATE_EMPTY;
+    let mut typeless = npc(2, 0x44, Some(2));
+    typeless.type_byte = 0;
+    state.npcs = vec![npc(6, 0x66, Some(2)), empty, typeless, npc(4, 0x55, Some(2))];
+    assert_eq!(state.talk_target_in_direction(Direction::North), Some((0x55, 5, 4)));
+}

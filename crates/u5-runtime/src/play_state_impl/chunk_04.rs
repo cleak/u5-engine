@@ -4488,11 +4488,51 @@ impl PlayState {
     /// adjacent record that reads as all zero, so the bare `No response!` is
     /// printed for any sprite." An object with no NPC record therefore
     /// resolves with dialog index zero.
+    ///
+    /// Which record owns the object is published too (added 2026-10-16,
+    /// issue #216): "The owning record is the lowest-numbered occupied record
+    /// linked to the faced object with a nonzero type and state; the faced
+    /// object is the highest-numbered active object at that cell." A record
+    /// standing on the cell but linked to another object does not own it -
+    /// that is the reporter's Minoc guard (`blackthorn.md §7a`,
+    /// `saved-gam.md §12`).
+    ///
+    /// Engine boundary: a record with no object link at all (only the
+    /// harness builds those; town entry links every placed record) is still
+    /// found by its position, as before.
     fn talk_target_at(&self, x: usize, y: usize) -> Option<(u8, usize, usize)> {
-        if let Some(npc) = self.npc_at_current_floor(x, y) {
+        let faced = self
+            .active_objects
+            .iter()
+            .enumerate()
+            .skip(1)
+            .rev()
+            .find(|(_, object)| self.object_occupies(**object, x, y))
+            .map(|(slot, _)| slot);
+        let Some(faced) = faced else {
+            return self
+                .npc_at_current_floor(x, y)
+                .map(|npc| (npc.dialog_id, x, y));
+        };
+        if let Some(owner) = self
+            .npcs
+            .iter()
+            .filter(|npc| {
+                npc.active_object == Some(faced)
+                    && npc.type_byte != 0
+                    && npc.state != NPC_STATE_EMPTY
+            })
+            .min_by_key(|npc| npc.slot)
+        {
+            return Some((owner.dialog_id, x, y));
+        }
+        if let Some(npc) = self
+            .npc_at_current_floor(x, y)
+            .filter(|npc| npc.active_object.is_none())
+        {
             return Some((npc.dialog_id, x, y));
         }
-        self.object_at_current_floor(x, y).map(|_| (0, x, y))
+        Some((0, x, y))
     }
 
     #[cfg(test)]
