@@ -5849,6 +5849,9 @@ impl PlayState {
         if let Some(record) = lifted {
             let park_slot = (SAVE_ROSTER_SLOT_COUNT - 1).min(roster.len());
             roster.insert(park_slot, record.clone());
+            // Lodged guests are whole roster records, so the records the
+            // park shifts down carry their registry slots with them.
+            self.shift_inn_registry_for_roster_move(index, park_slot);
             // The whereabouts byte lives in the shifted inn-guest view that
             // overlaps the roster (`formats/saved-gam.md`: the registry starts
             // one record-length minus one past the roster, so guest slot `k`'s

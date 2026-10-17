@@ -5972,6 +5972,9 @@ impl PlayState {
             let joining = self.party_roster.remove(target_index);
             let joining_name = joining.name;
             self.party_roster.insert(active_len, joining);
+            // Lodged guests are whole roster records; the reserve records
+            // this rotation shifts carry their registry slots with them.
+            self.shift_inn_registry_for_roster_move(target_index, active_len);
             // §7.6: "that record's inn-lodging marker is cleared". This engine
             // keeps the shifted inn-guest view of `formats/saved-gam.md` §9 as
             // its own registry, so the marker to clear is the scene marker of

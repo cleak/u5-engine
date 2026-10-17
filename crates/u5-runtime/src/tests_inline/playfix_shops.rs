@@ -401,3 +401,88 @@ fn healer_member_selector_moves_on_digits_and_commits_on_return() {
         Some(ActiveShopSession::Healer(HealerShopState::Continuation, _))
     ));
 }
+
+/// Review follow-up to E43: a lodged guest is a whole roster record, so a
+/// recruitment that pulls a reserve record into the next active slot
+/// (`conversation.md §7.6`) shifts the records between - and the guests' registry
+/// slots must shift with them, or the save writer stores the guest over
+/// whichever companion now sits at its stale slot.
+#[test]
+fn recruitment_rotation_carries_lodged_guest_registry_slots() {
+    let mut template = saved_game_seed_bytes(0, 0, 15, 15);
+    write_shipped_roster_layout(&mut template);
+    template[SAVE_PARTY_SIZE_OFFSET] = 1;
+    // Iolo (record 2) is lodged at scene 7.
+    template[inn_registry_marker_offset(2)] = 7;
+    let dir = shipped_layout_save_dir(&template);
+
+    let options = load_play_options_from_save(&dir).unwrap();
+    let mut state = PlayState::load_scene(&dir, options).unwrap();
+    assert_eq!(state.inn_registry[0].registry_slot, 2);
+    assert!(state.apply_conversation_join_candidate("Mariah", 0).is_some());
+    // Mariah moved from record 3 to record 1; Shamino and Iolo moved down one.
+    assert_eq!(state.inn_registry[0].registry_slot, 3);
+    assert_eq!(
+        state.save_game_command(&dir, Some(true)).unwrap(),
+        MoveOutcome::Saved
+    );
+    let saved = fs::read(dir.join(SAVED_GAM_FILENAME)).unwrap();
+    let tail = SAVE_CHARACTER_RECORD_LEN - 1;
+    assert_eq!(saved[SAVE_PARTY_SIZE_OFFSET], 2);
+    for (saved_slot, template_slot) in [(1, 3), (2, 1), (3, 2)] {
+        assert_eq!(
+            &roster_record_bytes(&saved, saved_slot)[..tail],
+            &roster_record_bytes(&template, template_slot)[..tail],
+            "saved roster record {saved_slot}"
+        );
+    }
+    assert_eq!(saved[inn_registry_marker_offset(3)], 7);
+    let registry = decode_inn_registry(&saved);
+    assert_eq!(registry.len(), 1);
+    assert_eq!(registry[0].registry_slot, 3);
+    assert_eq!(&registry[0].name[..4], b"Iolo");
+    let _ = fs::remove_dir_all(dir);
+}
+
+/// Review follow-up to E43: the Blackthorn execution parks the lifted record in
+/// the last roster slot (`blackthorn.md §5`), shifting the records after it up
+/// one; a lodged guest among them keeps its own record.
+#[test]
+fn blackthorn_execution_park_carries_lodged_guest_registry_slots() {
+    let mut template = saved_game_seed_bytes(0, 0, 15, 15);
+    write_shipped_roster_layout(&mut template);
+    template[SAVE_PARTY_SIZE_OFFSET] = 3;
+    // Mariah (record 3) is lodged at scene 20.
+    template[inn_registry_marker_offset(3)] = 20;
+    let dir = shipped_layout_save_dir(&template);
+
+    let options = load_play_options_from_save(&dir).unwrap();
+    let mut state = PlayState::load_scene(&dir, options).unwrap();
+    assert!(state.execute_blackthorn_companion(1).is_some());
+    let mariah = state
+        .inn_registry
+        .iter()
+        .find(|guest| guest.name[..6] == *b"Mariah")
+        .unwrap();
+    assert_eq!(mariah.registry_slot, 2);
+    assert_eq!(
+        state.save_game_command(&dir, Some(true)).unwrap(),
+        MoveOutcome::Saved
+    );
+    let saved = fs::read(dir.join(SAVED_GAM_FILENAME)).unwrap();
+    let tail = SAVE_CHARACTER_RECORD_LEN - 1;
+    assert_eq!(saved[SAVE_PARTY_SIZE_OFFSET], 2);
+    assert_eq!(
+        &roster_record_bytes(&saved, 2)[..tail],
+        &roster_record_bytes(&template, 3)[..tail]
+    );
+    assert_eq!(saved[inn_registry_marker_offset(2)], 20);
+    assert_eq!(&roster_record_bytes(&saved, 15)[..7], b"Shamino");
+    let registry = decode_inn_registry(&saved);
+    let lodged = registry
+        .iter()
+        .find(|guest| guest.scene_marker == 20)
+        .unwrap();
+    assert_eq!(&lodged.name[..6], b"Mariah");
+    let _ = fs::remove_dir_all(dir);
+}

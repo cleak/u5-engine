@@ -3597,6 +3597,38 @@ impl PlayState {
         self.party_roster.insert(to, record);
     }
 
+    /// Keep the inn registry in step with a roster rotation that moves the
+    /// record at `from` to `to` and shifts the records between by one.
+    ///
+    /// A lodged guest of registry slot `N` *is* roster record `N`
+    /// ([`crate::inn_registry_guest_record_offset`]), so any other caller that
+    /// rotates roster records - recruitment pulling a reserve record into the
+    /// next active slot (`conversation.md §7.6`), the Blackthorn execution
+    /// parking the lifted record in the last slot (`blackthorn.md §5`) - must
+    /// move the guests' registry slots with their records. Otherwise the save
+    /// writer stores a guest over whichever companion now sits at its stale
+    /// slot.
+    pub(crate) fn shift_inn_registry_for_roster_move(&mut self, from: usize, to: usize) {
+        if from == to {
+            return;
+        }
+        for guest in self.inn_registry.iter_mut() {
+            let slot = usize::from(guest.registry_slot);
+            let moved = if slot == from {
+                to
+            } else if from < to && (from + 1..=to).contains(&slot) {
+                slot - 1
+            } else if to < from && (to..from).contains(&slot) {
+                slot + 1
+            } else {
+                slot
+            };
+            if let Ok(moved) = u8::try_from(moved) {
+                guest.registry_slot = moved;
+            }
+        }
+    }
+
     pub fn pickup_inn_guest(
         &mut self,
         scene_marker: u8,
