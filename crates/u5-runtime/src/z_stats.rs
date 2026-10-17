@@ -441,6 +441,27 @@ pub fn dungeon_look_focus_from_key(key: char) -> Option<DungeonLookFocus> {
     }
 }
 
+/// The interactive `Dir-` chooser's reading of a key: the four cardinal
+/// input codes and nothing else.
+///
+/// `input.md §5`: "Dungeon mode is the one exception ... it does not run the
+/// digit-to-direction translation at all, so shifted or NumLock-ed top-row
+/// digits stay ordinary digits there", and `dungeon-mode.md §12` gives the
+/// chooser only Up/Left/Right/Down and Space, every other key "ignored
+/// without echo". [`dungeon_look_focus_from_key`] keeps the compass digits
+/// for the harness's inline `L`/`S` operands, which are not keystrokes at
+/// the chooser (playtest E19).
+pub fn dungeon_chooser_focus_from_key(key: char) -> Option<DungeonLookFocus> {
+    let byte = u8::try_from(u32::from(key)).ok()?;
+    match crate::input_code_direction(byte)? {
+        crate::InputDirection::North => Some(DungeonLookFocus::Ahead),
+        crate::InputDirection::West => Some(DungeonLookFocus::Left),
+        crate::InputDirection::East => Some(DungeonLookFocus::Right),
+        crate::InputDirection::South => Some(DungeonLookFocus::Here),
+        _ => None,
+    }
+}
+
 /// The word the chosen focus writes onto the open `Dir-` line.
 pub const fn dungeon_look_focus_label(focus: DungeonLookFocus) -> &'static str {
     match focus {

@@ -389,3 +389,27 @@ fn playtest_e18_fountain_drink_prompt_ignores_escape() {
     handle_play_key_input(&mut state, 'n', "", Path::new("")).unwrap();
     assert!(state.active_yes_no_prompt.is_none(), "`N` still answers");
 }
+
+/// E19: `input.md §5` - dungeon mode "does not run the digit-to-direction
+/// translation at all" - and `dungeon-mode.md §12`: the `Dir-` chooser takes
+/// Up/Left/Right/Down and Space, other keys "ignored without echo; the
+/// chooser remains open".
+#[test]
+fn playtest_e19_dungeon_dir_chooser_ignores_top_row_digits() {
+    for digit in ['8', '4', '6', '2'] {
+        let mut state = dungeon_state(open_dungeon_record(), 0, 1, 1);
+        state.torch_counter = 5;
+        handle_play_key_input(&mut state, 'l', "", Path::new("")).unwrap();
+        assert!(state.active_direction_prompt.is_some());
+        handle_play_key_input(&mut state, digit, "", Path::new("")).unwrap();
+        assert!(
+            state.active_direction_prompt.is_some(),
+            "`{digit}` is not a direction underground"
+        );
+        let rows = playtest_transcript_rows(&state);
+        assert!(!rows.iter().any(|row| row == "You see:"), "{rows:?}");
+
+        handle_play_key_input(&mut state, char::from(INPUT_CODE_NORTH), "", Path::new("")).unwrap();
+        assert!(state.active_direction_prompt.is_none(), "Up still answers");
+    }
+}

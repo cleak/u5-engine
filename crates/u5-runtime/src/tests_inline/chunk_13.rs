@@ -25431,7 +25431,7 @@ fn dungeon_l_key_looks_instead_of_turning() {
     );
     assert_eq!(state.message, DUNGEON_DIRECTION_PROMPT);
     assert_eq!(
-        handle_play_key_input(&mut state, '8', "", Path::new("")).unwrap(),
+        handle_play_key_input(&mut state, char::from(INPUT_CODE_NORTH), "", Path::new("")).unwrap(),
         PlayInputDisposition::Continue
     );
     assert!(state.message.contains("passage"));
@@ -25481,7 +25481,7 @@ fn dungeon_l_key_relative_focus_prompt_uses_selected_party_member() {
     );
 
     assert_eq!(
-        handle_play_key_input(&mut state, '6', "", Path::new("")).unwrap(),
+        handle_play_key_input(&mut state, char::from(INPUT_CODE_EAST), "", Path::new("")).unwrap(),
         PlayInputDisposition::Continue
     );
     assert!(state.message.contains(DUNGEON_FOUNTAIN_DRINK_PROMPT));

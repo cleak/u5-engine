@@ -3114,7 +3114,7 @@ impl PlayState {
                     }
                 }
                 if let Some(index) = party_index.filter(|_| !selected_member_now) {
-                    if let Some(focus) = dungeon_look_focus_from_key(ch) {
+                    if let Some(focus) = dungeon_chooser_focus_from_key(ch) {
                         self.complete_dungeon_direction_echo(focus);
                         return Ok(Some(self.look_dungeon_with_focus(
                             drink,
@@ -3152,7 +3152,7 @@ impl PlayState {
                 }
                 if !selected_member_now
                     && party_index.is_some()
-                    && let Some(focus) = dungeon_look_focus_from_key(ch)
+                    && let Some(focus) = dungeon_chooser_focus_from_key(ch)
                 {
                     self.complete_dungeon_direction_echo(focus);
                     return self
