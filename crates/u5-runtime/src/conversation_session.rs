@@ -201,7 +201,11 @@ impl ConversationSessionOutput {
         self.text.push_str(&rendered.text[..body_len]);
         self.rendered_glyphs
             .extend(rendered.glyphs.iter().take(body_len).copied());
-        if !already_quoted {
+        // `conversation.md §9`: "The renderer drops a quote that would
+        // immediately follow another quote" - a response whose stream
+        // ends on its own closing quote keeps just that one. Playtest E02
+        // (`thank thee!""`).
+        if !already_quoted && !rendered.text[..body_len].ends_with('"') {
             self.push_plain_text("\"");
         }
         if body_len < rendered.text.len() {
@@ -1108,7 +1112,8 @@ mod tests {
         } else {
             let body = text.trim_end_matches('\n');
             let tail = &text[body.len()..];
-            format!("{prefix}{lead}\"{body}\"{tail}")
+            let close = if body.ends_with('"') { "" } else { "\"" };
+            format!("{prefix}{lead}\"{body}{close}{tail}")
         };
         while !out.ends_with("\n\n") {
             out.push('\n');
@@ -1162,6 +1167,35 @@ mod tests {
             "Long answer.".to_string(),
         ];
         ConversationSession::new(raw, decoded)
+    }
+
+    #[test]
+    fn keyword_response_ending_in_its_own_quote_is_not_doubled() {
+        // `conversation.md §9`: "The renderer drops a quote that would
+        // immediately follow another quote". Playtest E02
+        // (`"Iolo and I both thank thee!""`).
+        let raw = vec![
+            enc("Ada"),
+            enc("a quiet smith"),
+            enc("Hi."),
+            enc("I mend gear."),
+            enc("Farewell."),
+            enc("JOIN"),
+            enc("We thank thee!\""),
+        ];
+        let decoded = vec![
+            "Ada".to_string(),
+            "a quiet smith".to_string(),
+            "Hi.".to_string(),
+            "I mend gear.".to_string(),
+            "Farewell.".to_string(),
+            "JOIN".to_string(),
+            "We thank thee!\"".to_string(),
+        ];
+        let mut s = ConversationSession::new(raw, decoded);
+        s.present_greeting(&ctx());
+        let out = s.submit_keyword("join", &ctx());
+        assert_eq!(out.text, "\n\"We thank thee!\"\n\n");
     }
 
     #[test]

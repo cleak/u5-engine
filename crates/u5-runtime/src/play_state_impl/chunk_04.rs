@@ -5618,7 +5618,13 @@ impl PlayState {
             } else {
                 opening.push_plain("\"");
                 opening.push_rendered(&trimmed);
-                opening.push_plain("\"");
+                // `conversation.md §9`: "The renderer drops a quote that
+                // would immediately follow another quote", so an entry that
+                // ends with its own closing quote is not doubled.
+                // Playtest E02 (`"I am called Eb""`).
+                if !trimmed.text.ends_with('"') {
+                    opening.push_plain("\"");
+                }
             }
         }
         (opening, false)

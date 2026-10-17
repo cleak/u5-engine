@@ -4889,6 +4889,51 @@ fn conversation_opening_reseeds_only_for_strangers_and_uses_name_coin_flip() {
 }
 
 #[test]
+fn conversation_opening_drops_a_quote_that_follows_the_entry_closing_quote() {
+    // `conversation.md §9`: "The renderer drops a quote that would
+    // immediately follow another quote, so a Greeting entry that ends
+    // with its own closing quote does not produce a doubled one".
+    // Playtest E02 (`"I am called Eb""`).
+    let enc = |s: &str| s.bytes().map(|b| b ^ 0x80).collect::<Vec<u8>>();
+    let raw = vec![
+        enc("Eb\""),
+        enc("a farmer"),
+        enc("Hail\""),
+        enc("I farm"),
+        enc("Bye"),
+    ];
+    let decoded = vec![
+        "Eb\"".to_string(),
+        "a farmer".to_string(),
+        "Hail\"".to_string(),
+        "I farm".to_string(),
+        "Bye".to_string(),
+    ];
+    let mut state = test_state(open_grid(), 1, 1);
+    state.active_conversation_npc_slot = Some(1);
+    state.set_active_talk_branch_flag(1);
+    state.active_conversation = Some(Box::new(
+        crate::conversation_session::ConversationSession::new(raw.clone(), decoded.clone()),
+    ));
+    let known = state.active_conversation_greeting_rendered_with_host_seed(0x0123);
+    assert_eq!(known.text, "a farmer\n\n\"Hail\"");
+
+    // Find a host seed whose coin flip takes the self-introduction.
+    let seed = (0u16..64)
+        .find(|seed| {
+            let mut stream = *seed;
+            u5_prng_range_u16(&mut stream, 0, 1) != 0
+        })
+        .expect("some seed introduces");
+    state.talk_branch_flags.clear();
+    state.active_conversation = Some(Box::new(
+        crate::conversation_session::ConversationSession::new(raw, decoded),
+    ));
+    let stranger = state.active_conversation_greeting_rendered_with_host_seed(seed);
+    assert_eq!(stranger.text, "a farmer\n\n\"I am called Eb\"");
+}
+
+#[test]
 fn raw_conversation_session_expands_loaded_common_word_dictionary() {
     let mut dialogue: HashMap<u16, Vec<String>> = HashMap::new();
     dialogue.insert(
