@@ -438,14 +438,19 @@ pub fn word_of_power_seal_for_word(word: &str) -> Option<WordOfPowerSeal> {
         .find(|seal| seal.word.eq_ignore_ascii_case(word))
 }
 
-/// `commands.md §11.1`: the scanner walks the fixed word table and accepts
-/// the first row whose complete word is a prefix of the normalized input.
+/// `commands.md §11.1`: the scanner walks the fixed word table and "takes
+/// the first one the shared text matcher of Section 11.3 finds anywhere in
+/// the typed line - a substring match, not a prefix match".
+///
+/// *Corrected* (u5-spec#298 Q34, `RETRACTIONS.md` R552): this accepted only
+/// a row whose word was a prefix of the input. The name is kept for its
+/// callers.
 pub fn word_of_power_seal_prefix_match(word: &str) -> Option<(usize, WordOfPowerSeal)> {
     WORD_OF_POWER_SEALS
         .iter()
         .copied()
         .enumerate()
-        .find(|(_, seal)| word.starts_with(seal.word))
+        .find(|(_, seal)| crate::commands::shared_text_matcher_matches(word, seal.word))
 }
 
 /// `catalogs/gazetteer.md §7`: shrine coordinates in the same fixed order as

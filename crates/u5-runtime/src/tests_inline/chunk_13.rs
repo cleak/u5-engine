@@ -10919,6 +10919,19 @@ fn word_of_power_scanner_accepts_the_first_complete_word_prefix() {
 }
 
 #[test]
+fn word_of_power_scanner_finds_a_word_anywhere_through_the_shared_matcher() {
+    // u5-spec#298 Q34, `RETRACTIONS.md` R552: `commands.md §11.1` takes the
+    // first word the §11.3 shared matcher finds anywhere in the line.
+    let found = |line: &str| word_of_power_seal_prefix_match(line).map(|(_, seal)| seal.word);
+    assert_eq!(found("I SAY FALLAX"), Some("FALLAX"));
+    assert_eq!(found("XVERAMOCOR"), Some("VERAMOCOR"));
+    // Restart quirk: a failed partial match of the word hides it.
+    assert_eq!(found("FFALLAX"), None);
+    // Table order decides between two words in the line.
+    assert_eq!(found("VILIS FALLAX"), Some("FALLAX"));
+}
+
+#[test]
 fn world_quest_tile_substitution_uses_chunk_owners_and_opposite_defaults() {
     let mut grid = vec![5; WORLD_CELLS];
     let fallax = WORD_OF_POWER_SEALS[0];
