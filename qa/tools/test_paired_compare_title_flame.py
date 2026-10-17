@@ -25,6 +25,12 @@ class TitleFlameMaskTest(unittest.TestCase):
             pc.title_flame_beats("chargen-journey-basics"),
             {"menu", "chargen-name", "chargen-gender", "menu-after-chargen"},
         )
+        # chargen-prompts' three beats sit on the same title screen (rc2's
+        # sweep, `20261017-131714`, differed on the flame rows alone).
+        self.assertEqual(
+            pc.title_flame_beats("chargen-prompts"),
+            {"name-prompt", "name-typed", "sex-prompt"},
+        )
         # Only a header that says so is masked.
         self.assertEqual(pc.title_flame_beats("sail-calm"), frozenset())
         self.assertEqual(pc.title_flame_beats("no-such-scenario"), frozenset())
@@ -64,6 +70,14 @@ class DiceBeatsTest(unittest.TestCase):
         # its deterministic beats still have to report a difference.
         self.assertFalse(pc.is_lottery("sail-heading-echo"))
         self.assertEqual(pc.dice_beats("no-such-scenario"), frozenset())
+
+    def test_hut_ready_picker_skips_only_its_strength_beats(self) -> None:
+        # The ready beats hinge on the chargen Strength draw; the picker as it
+        # opens and the Arms page do not, and stay compared.
+        self.assertEqual(
+            pc.dice_beats("hut-ready-picker"), {"dagger", "shield", "reopened"}
+        )
+        self.assertFalse(pc.is_lottery("hut-ready-picker"))
 
 
 if __name__ == "__main__":
