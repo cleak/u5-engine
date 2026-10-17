@@ -1562,7 +1562,11 @@ pub fn route_smoke_cases() -> Vec<RouteSmokeCase> {
             options: PlayOptions::default(),
             script: &["A6"],
             expected: RouteSmokeExpectation::Town(castle),
-            min_turn: 1,
+            // `town-mode.md §7` step 4 (u5-spec#298 Q40): an A-Attack that
+            // fights in the arena spends "nothing of the turn ... before the
+            // arena"; its single epilogue minute runs after the fight, so a
+            // route that ends inside the combat raster is still at turn 0.
+            min_turn: 0,
             expected_frame_kind: "combat viewport",
         },
         RouteSmokeCase {
