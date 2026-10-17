@@ -549,6 +549,7 @@ pub use karma::{
     KARMA_HELPED_NPC_THANK_YOU_GAIN, KARMA_TOLL_MILESTONE_GAIN,
     KARMA_TOLL_MILESTONE_ZERO_GOLD_BONUS, KarmaAction, RESURRECTION_PENALTY_PERCENT_DIVISOR,
     RESURRECTION_PENALTY_SKIP_THRESHOLD, SHRINE_MANTRA_INPUT_LIMIT, apply_karma_action,
+    INTERRED_SCAN_SLOTS, INTERRED_WHEREABOUTS, codex_interred_party_page,
     codex_turnin_stat_reward, resurrection_penalty_skipped, resurrection_scaled_xp,
     shrine_mantra_for,
 };

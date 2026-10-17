@@ -121,16 +121,21 @@ fn blackthorn_execution_lifts_the_record_and_parks_it_with_an_unmatchable_wherea
         executed.scene_marker,
         PlayState::BLACKTHORN_EXECUTED_WHEREABOUTS,
     );
-    assert!(
-        Scene::new(PlayState::BLACKTHORN_EXECUTED_WHEREABOUTS).is_err(),
-        "the parked whereabouts value matches no scene",
-    );
+    // u5-spec#298 Q5 / R546: "The value is `0x7F`", and the shrine/Codex
+    // presentation reads it back (`karma.md §8`).
+    assert_eq!(PlayState::BLACKTHORN_EXECUTED_WHEREABOUTS, 0x7f);
     for marker in 1u8..=0xfeu8 {
+        if u5_runtime::shop_session::inn_for_scene(marker).is_none() {
+            continue;
+        }
         assert!(
             inn_guest_indices_for_scene(&state.inn_registry, marker).is_empty(),
             "no inn scene marker {marker:#04x} can retrieve the executed companion",
         );
     }
+    // `karma.md §8`: the Codex scan of roster slots 1..15 finds the parked
+    // record and names it.
+    assert_eq!(state.codex_interred_names(), vec![victim_name]);
 }
 
 /// `blackthorn.md §4`: "**A wrong answer otherwise escalates.** The first wrong

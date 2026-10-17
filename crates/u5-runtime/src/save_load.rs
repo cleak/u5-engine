@@ -530,7 +530,9 @@ pub const INN_REGISTRY_EMPTY_MARKER: u8 = 0;
 /// therefore the conservative reading: it can only drop records no published
 /// consumer can reach, and `systems/blackthorn.md` §5 confirms the one engine
 /// producer of an unmatchable marker is a tombstone that "no inn can ever
-/// retrieve" and that "nothing else in the game reads it back".
+/// retrieve". (u5-spec#298 Q5 / `RETRACTIONS.md` R546: that tombstone is
+/// `0x7F`, which the shrine/Codex presentation does read back, so it is
+/// decoded as an ordinary registry record; no inn scene ever matches it.)
 pub const INN_REGISTRY_UNMATCHABLE_MARKER: u8 = 0xff;
 
 /// Whether a registry slot's leading marker byte denotes a lodged guest.

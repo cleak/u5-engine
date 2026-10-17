@@ -5424,15 +5424,13 @@ impl PlayState {
     /// with a **whereabouts value that matches no location**. That
     /// whereabouts field is the same one the innkeeper uses when a companion
     /// is left at an inn; the value written here matches no inn and no scene,
-    /// so no inn can ever retrieve them".
+    /// so no inn can ever retrieve them. The value is `0x7F`".
     ///
-    /// The spec pins the *property* of that byte - it matches no inn and no
-    /// scene - and leaves the exact value with the data, so the engine reuses
-    /// the no-scene sentinel it already has: [`Scene::new`] rejects `0xFF`,
-    /// and no inn's scene marker can equal it, so
-    /// [`crate::inn_guest_indices_for_scene`] can never select the parked
-    /// record.
-    pub const BLACKTHORN_EXECUTED_WHEREABOUTS: u8 = 0xff;
+    /// u5-spec#298 Q5 published the value (`formats/saved-gam.md §3.1` row
+    /// `0x1F`) and `RETRACTIONS.md` R546 withdrew "nothing else in the game
+    /// reads it back": the shrine/Codex presentation counts the records
+    /// holding it (`karma.md §8`). The engine's earlier stand-in was `0xFF`.
+    pub const BLACKTHORN_EXECUTED_WHEREABOUTS: u8 = crate::INTERRED_WHEREABOUTS;
 
     /// `blackthorn.md §5`: "**The punishment is an execution, and it is
     /// durable.** ... the routine:
@@ -5514,8 +5512,22 @@ impl PlayState {
             // an unmatchable marker there is what makes the record
             // unretrievable by any inn while still surviving save/reload.
             if self.inn_registry.len() < INN_REGISTRY_CAP {
-                let registry_slot =
-                    crate::free_inn_registry_slot(&self.inn_registry).unwrap_or_default();
+                // Registry slot `k`'s marker is roster record `k`'s byte
+                // `0x1F` (`formats/saved-gam.md §3.1`), so the parked record's
+                // whereabouts sits at the park slot when that slot is free -
+                // the byte `karma.md §8`'s scan of roster slots 1..15 reads
+                // (u5-spec#298 Q5).
+                let registry_slot = u8::try_from(park_slot)
+                    .ok()
+                    .filter(|slot| {
+                        usize::from(*slot) < SAVE_INN_REGISTRY_COUNT
+                            && !self
+                                .inn_registry
+                                .iter()
+                                .any(|guest| guest.registry_slot == *slot)
+                    })
+                    .or_else(|| crate::free_inn_registry_slot(&self.inn_registry))
+                    .unwrap_or_default();
                 self.inn_registry.push(InnGuestRecord {
                     registry_slot,
                     scene_marker: Self::BLACKTHORN_EXECUTED_WHEREABOUTS,

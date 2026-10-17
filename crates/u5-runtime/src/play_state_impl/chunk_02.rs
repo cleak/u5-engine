@@ -2443,11 +2443,13 @@ impl PlayState {
     /// (§8.2), which [`Self::step_codex_presentation`] serves one key at a
     /// time; nothing is printed ahead.
     ///
-    /// Not implemented from §8: the interred-party page the presentation
-    /// inserts inside the walk "if any party member carries the interred
-    /// sentinel". The spec names neither the sentinel nor the page's exact
-    /// lines, and the arm was not exercised (`OPEN-QUESTIONS.md`), so the
-    /// walk runs as the published nobody-interred case.
+    /// §8 (u5-spec#298 Q5, `RETRACTIONS.md` R545): when any roster record in
+    /// slots 1 through 15 holds whereabouts `0x7F`, the interred-party page
+    /// "is emitted **inside** the walk, between the frame that first draws
+    /// the avatar and the stepping frames" - after frame 5, the first walking
+    /// pose (`shrine_presentation.rs`), and before frame 6. Not implemented:
+    /// the "one temporary active object per matching record ... with actor
+    /// tile `0x03`", whose "per-count positions are not published".
     ///
     /// Measured 2026-09-09 (`qa/paired/codex-enter.tsv`) against the original,
     /// seeded straight onto Britannia `(233, 233)`: record `46`, then `37`,
@@ -2465,14 +2467,57 @@ impl PlayState {
         // "There is no forty-sixth repaint step ... so the Codex interval is
         // a flat sixty."
         let steps = crate::shrine_presentation::PresentationArm::Codex.walk_world_steps();
-        self.staged_narration.push_ticks_counting_world_steps(
-            shrine_presentation_hold_bios_ticks(steps),
-            steps,
-            String::new(),
-        );
+        match codex_interred_party_page(&self.codex_interred_names()) {
+            Some(page) => {
+                // The page has "no key wait and no pause of its own": it
+                // rides on the end of the frames up to the first avatar
+                // frame, and the stepping frames follow.
+                let first_pose_steps = u16::from(
+                    crate::shrine_presentation::SHRINE_APPROACH_WALK_FIRST_POSE_FRAME,
+                ) * u16::from(crate::shrine_presentation::SHRINE_APPROACH_WALK_STEPS_PER_FRAME);
+                self.staged_narration.push_ticks_counting_world_steps(
+                    shrine_presentation_hold_bios_ticks(first_pose_steps),
+                    first_pose_steps,
+                    page,
+                );
+                let rest = steps - first_pose_steps;
+                self.staged_narration.push_ticks_counting_world_steps(
+                    shrine_presentation_hold_bios_ticks(rest),
+                    rest,
+                    String::new(),
+                );
+            }
+            None => self.staged_narration.push_ticks_counting_world_steps(
+                shrine_presentation_hold_bios_ticks(steps),
+                steps,
+                String::new(),
+            ),
+        }
         // §8.2: "The counts begin after the initial approach record `46`."
         self.codex_presentation_steps = 1;
         Ok(MoveOutcome::Observed)
+    }
+
+    /// `karma.md §8` (u5-spec#298 Q5): the names on the interred-party page.
+    /// "The scan covers roster slots 1..15 (every record but the Avatar's)
+    /// whether travelling or not, testing for whereabouts value `0x7F`".
+    /// A record's whereabouts byte is its byte `0x1F`, which this engine
+    /// holds as the marker of inn-registry slot `k` (`formats/saved-gam.md
+    /// §3.1`); the name is roster record `k`'s own.
+    pub fn codex_interred_names(&self) -> Vec<[u8; SAVE_CHARACTER_NAME_LEN]> {
+        INTERRED_SCAN_SLOTS
+            .filter_map(|slot| {
+                let guest = self.inn_registry.iter().find(|guest| {
+                    usize::from(guest.registry_slot) == slot
+                        && guest.scene_marker == INTERRED_WHEREABOUTS
+                })?;
+                Some(
+                    self.party_roster
+                        .get(slot)
+                        .map_or(guest.name, |record| record.name),
+                )
+            })
+            .collect()
     }
 
     /// Serve one advance key owed to an open Codex reader, `karma.md §8.2`:
@@ -3127,5 +3172,51 @@ mod movement_magic_karma_traps_spec_tests {
         assert_eq!(state.turn, 0);
         assert_eq!(state.clock.minute, minute_before + 1);
         let _ = std::fs::remove_dir_all(dir);
+    }
+}
+
+#[cfg(test)]
+mod codex_interred_scan_spec_tests {
+    use crate::test_fixtures::{open_grid, test_state};
+    use crate::*;
+
+    fn guest(registry_slot: u8, scene_marker: u8, state: &PlayState) -> InnGuestRecord {
+        InnGuestRecord {
+            registry_slot,
+            scene_marker,
+            name: [0; SAVE_CHARACTER_NAME_LEN],
+            member: state.party[0],
+            strength: 10,
+            intelligence: 10,
+            experience: 0,
+            equipment: [EQUIPMENT_EMPTY; EQUIPMENT_SLOT_COUNT],
+            stay_counter: 0,
+        }
+    }
+
+    /// `karma.md §8` (u5-spec#298 Q5, `RETRACTIONS.md` R545): "The scan
+    /// covers roster slots 1..15 (every record but the Avatar's) whether
+    /// travelling or not, testing for whereabouts value `0x7F`".
+    #[test]
+    fn scan_covers_slots_one_to_fifteen_for_0x7f_only() {
+        let mut state = test_state(open_grid(), 1, 1);
+        state.party_roster = state.synced_party_roster();
+        let template = state.party_roster[0].clone();
+        state.party_roster.resize(SAVE_ROSTER_SLOT_COUNT, template);
+        for (slot, text) in [(0, b"AVATAR".as_slice()), (3, b"Dupre"), (9, b"Katrina")] {
+            let mut name = [0; SAVE_CHARACTER_NAME_LEN];
+            name[..text.len()].copy_from_slice(text);
+            state.party_roster[slot].name = name;
+        }
+        state.inn_registry = vec![
+            guest(0, INTERRED_WHEREABOUTS, &state),
+            guest(9, INTERRED_WHEREABOUTS, &state),
+            guest(5, 0x02, &state),
+            guest(3, INTERRED_WHEREABOUTS, &state),
+        ];
+        let names = state.codex_interred_names();
+        assert_eq!(names.len(), 2, "the Avatar's slot 0 is outside the scan");
+        assert_eq!(&names[0][..5], b"Dupre");
+        assert_eq!(&names[1][..7], b"Katrina");
     }
 }
