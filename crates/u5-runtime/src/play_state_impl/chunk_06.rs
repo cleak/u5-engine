@@ -150,6 +150,75 @@ impl PlayState {
         self.random_range_u8(1, 5)
     }
 
+    /// The frigate's facing on the overworld, read from the transport
+    /// marker's low two bits (`vehicles.md §2`); `None` off the overworld or
+    /// off a frigate. `vehicles.md §6`: "No prefix in town-family scenes."
+    pub fn overworld_frigate_facing(&self) -> Option<Direction> {
+        if !matches!(self.area, Area::World { .. })
+            || !matches!(self.player.transport, TransportState::Ship { .. })
+        {
+            return None;
+        }
+        transport_marker_facing(self.player.transport.save_marker())
+    }
+
+    /// `vehicles.md §6` / `commands.md §5.2` (u5-spec#297, `RETRACTIONS.md`
+    /// R524): "Under hoisted sail a key that keeps the facing prints
+    /// nothing" - no compass word, pressed or synthesised. Such a key opens
+    /// no verb echo at all.
+    pub fn frigate_movement_key_prints_nothing(&self, key: char) -> bool {
+        if key == ' ' || key.is_ascii_uppercase() || !self.player.transport.is_ship_under_sail() {
+            return false;
+        }
+        let Some(direction) = Direction::from_play_key(key) else {
+            return false;
+        };
+        direction.is_cardinal() && self.overworld_frigate_facing() == Some(direction)
+    }
+
+    /// `vehicles.md §6` (u5-spec#297): on the overworld "a key that changes
+    /// the facing prints `Head ` plus the direction word and a line feed (for
+    /// example `Head West`), turns the ship in place without moving it, and
+    /// consumes a full turn, in calm wind too", in either sail state. The
+    /// `Head <Dir>` row is the verb echo
+    /// ([`Self::vehicle_prefixed_movement_echo`]); this is the handler's half.
+    ///
+    /// "**Hull warning.** Immediately after a `Head <Dir>` line, if the hull
+    /// condition is below 50 (0 to 49), the game prints `Hull weak!`. It
+    /// prints on every frigate facing change in either sail state, and on
+    /// nothing else."
+    ///
+    /// Under hoisted sail the same command is still a movement command, so
+    /// `weather.md §5.1`'s one setter stores the heading in the cache and
+    /// zeroes the counter when it differs. The caller has already written the
+    /// new facing into the marker.
+    pub(crate) fn turn_overworld_frigate_in_place(&mut self, direction: Direction) -> MoveOutcome {
+        let TransportState::Ship {
+            sails_hoisted,
+            hull,
+            ..
+        } = self.player.transport
+        else {
+            unreachable!("only a frigate turns in place");
+        };
+        if sails_hoisted {
+            if self.sail_cached_direction != Some(direction) {
+                self.sail_cached_direction = Some(direction);
+                self.sail_cadence = 0;
+            }
+            self.advance_sailing_wait_turn();
+        } else {
+            self.advance_turn();
+        }
+        if hull < FRIGATE_HULL_WEAK_THRESHOLD {
+            self.message = FRIGATE_HULL_WEAK_LINE.to_string();
+            self.message_row_open_mid_line = false;
+        } else {
+            self.message.clear();
+        }
+        MoveOutcome::SailTurned
+    }
+
     pub fn resolve_sailed_ship_wind_gate(&mut self, direction: Direction) -> Option<MoveOutcome> {
         if !self.player.transport.is_ship_under_sail() {
             return None;
@@ -178,40 +247,31 @@ impl PlayState {
         // the synthesized repeat always matches the cache, which is exactly
         // why it must not reset the wait counter.
         //
-        // `weather.md §5` bounds what that store may do on the same command:
-        // "When sails are hoisted, a movement command first establishes or
-        // changes the ship's heading. If the requested heading differs from
-        // the current cached sail direction, the ship turns and clears the
-        // sailing counter; **that action does not also move the ship.** Once
-        // the requested direction matches the cached heading, the input
-        // helper can synthesize repeated movement commands from the cached
-        // direction until the cache is cleared or replaced." So the
-        // heading-establishing command returns here without reaching the
-        // release test below - which matters most on a crosswind heading,
-        // where §5's "**Why crosswind is the fastest point of sail**" fold
-        // makes `player_sail_wait_ticks` zero and the release test would
-        // otherwise fire on the turning command itself.
-        //
-        // `weather.md §4`: "Turning to a new heading is observable as a
-        // command action, and movement along the current heading is handled
-        // by the movement routines after the heading/state gate accepts it."
-        // The turn is an accepted command action, not a refusal, so it
-        // consumes the sailing turn like the wait passes around it; the
-        // per-turn tail of a heading change is not separately published (see
-        // the spec question raised with this change). Note that `step` has
-        // already applied the facing to the transport marker, whose low two
-        // bits are the ship heading (`weather.md §4`), so the visible turn is
-        // done by the time this gate runs.
+        // `weather.md §5` (corrected 2026-10-16, u5-spec#297, `RETRACTIONS.md`
+        // R525): "Whether the ship turns or moves is decided against the
+        // ship's **facing**, not the cache." A key that changes the facing
+        // never reaches this gate - [`Self::turn_overworld_frigate_in_place`]
+        // takes it in `step_with_game_dir` - so the facing is unchanged here.
+        // "If the facing is unchanged, the step is attempted on that same
+        // command in any non-calm wind, even upwind, and in calm wind the
+        // command is consumed silently. That same-command step is reachable
+        // only while the cache is empty - just after hoisting, after an
+        // under-sail refusal, or after Sheets in irons - because in steady
+        // sailing the cache equals the facing and a pressed key equal to it is
+        // swallowed by the input helper's auto-advance loop", where the
+        // cadence table below decides the move. The engine used to turn
+        // without moving on any key that differed from the cache (R525's
+        // withdrawn text), which made a just-hoisted ship spend a turn on a
+        // key equal to its facing.
         if self.sail_cached_direction != Some(direction) {
             self.sail_cached_direction = Some(direction);
             self.sail_cadence = 0;
-            self.advance_sailing_wait_turn();
-            // No result line is published for a heading change, and
-            // `weather.md §6`'s stalled-sailing feedback belongs to "an
-            // invalid or stalled wind condition", which a turn is not. The
-            // slot is left empty rather than invented.
-            self.message = String::new();
-            return Some(MoveOutcome::SailTurned);
+            if self.wind.player_sail_wait_ticks(direction).is_none() {
+                self.advance_sailing_wait_turn();
+                self.message.clear();
+                return Some(MoveOutcome::SailStalled);
+            }
+            return None;
         }
 
         let Some(wait_ticks) = self.wind.player_sail_wait_ticks(direction) else {

@@ -1886,12 +1886,19 @@ impl PlayState {
         // `text-output.md §10.2`: any direction taken aboard a ship, keyed or
         // synthesised, turning or repeating, clears the overworld prompt flag.
         self.note_overworld_direction_taken();
+        // `vehicles.md §6` (u5-spec#297): a frigate key that changes the
+        // facing turns the ship in place and does not move it, in either sail
+        // state. Read the facing before this step rewrites it.
+        let previous_frigate_facing = self.overworld_frigate_facing();
         self.player.facing = direction;
         let previous_avatar_tile = self.player.transport.avatar_tile();
         self.player.transport = self.player.transport.with_facing(direction);
         if self.player.transport.avatar_tile() != previous_avatar_tile {
             self.sync_player_object();
             self.mark_visibility_dirty();
+        }
+        if previous_frigate_facing.is_some_and(|facing| facing != direction) {
+            return Ok(self.turn_overworld_frigate_in_place(direction));
         }
         let (dx, dy) = direction.delta();
         let nx = self.player.x as isize + dx;

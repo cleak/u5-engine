@@ -1885,6 +1885,9 @@ fn ship_transport_can_move_over_water_that_blocks_foot() {
         hull: 0,
         skiffs: 0,
     };
+    // `vehicles.md §6` (u5-spec#297): a frigate key that changes the
+    // facing only turns the ship, so face the step's direction first.
+    ship.player.transport = ship.player.transport.with_facing(Direction::East);
     ship.sync_player_object();
 
     assert_eq!(ship.step(Direction::East), MoveOutcome::Moved);
@@ -1909,8 +1912,8 @@ fn hoisted_ship_stalls_in_calm_wind_and_consumes_turn() {
     };
     state.sync_player_object();
 
-    // The heading-establishing turn comes first and does not move the ship
-    // (`weather.md §5`), and `§4` makes it "observable as a command action",
+    // The facing-changing turn comes first and does not move the ship
+    // (`weather.md §5`, R525; `vehicles.md §6`: it "consumes a full turn"),
     // so it consumes its turn like the wait passes after it.
     assert_eq!(state.step(Direction::East), MoveOutcome::SailTurned);
 
@@ -1958,7 +1961,7 @@ fn rigged_hoisted_ship_wait_uses_one_minute_cleanup() {
     // `weather.md §5`, the rigging paragraph: "With the rigging flag active,
     // **every** sailing wait pass uses the one-minute increment, while the
     // outdoor per-turn epilogue is run on **alternate** passes only". The
-    // heading-establishing turn is the first such pass.
+    // facing-changing turn (`weather.md §5`, R525) is the first such pass.
     assert_eq!(state.step(Direction::East), MoveOutcome::SailTurned);
 
     assert_eq!((state.player.x, state.player.y), (10, 10));
@@ -1998,8 +2001,8 @@ fn pass_reports_and_clears_sail_stall_feedback() {
     // `weather.md §5.1`, clear three: the Pass report is conditioned on the
     // cache, not on a separate refusal flag - "Only while the outdoor scene is
     // current and the cache is non-zero; it prints the stalled-sailing line
-    // first, then clears." The heading-establishing turn is what fills the
-    // cache here.
+    // first, then clears." The facing-changing turn (`weather.md §5`, R525)
+    // is what fills the cache here.
     assert_eq!(state.step(Direction::East), MoveOutcome::SailTurned);
     assert_eq!(state.sail_cached_direction, Some(Direction::East));
 
@@ -2029,8 +2032,8 @@ fn hoisted_ship_advances_immediately_with_perpendicular_wind() {
     // A north wind against an easterly heading is the crosswind fold of
     // `weather.md §5` ("A crosswind heading therefore releases on the very
     // first pass"), so the wait is zero passes. It is still not the turning
-    // command that moves: "the ship turns and clears the sailing counter;
-    // that action does not also move the ship".
+    // command that moves: "If the key changes the facing, the ship turns in
+    // place ... and does not move" (`weather.md §5`, u5-spec#297, R525).
     assert_eq!(state.step(Direction::East), MoveOutcome::SailTurned);
     assert_eq!((state.player.x, state.player.y), (10, 10));
     assert_eq!(state.sail_cadence, 0);
@@ -2134,9 +2137,9 @@ fn save_after_wind_driven_ship_move_persists_wind_and_ship_marker() {
     };
     state.sync_player_object();
 
-    // The heading-establishing turn does not move (`weather.md §5`); the
-    // crosswind release lands on the next command.
-    assert_eq!(state.step(Direction::East), MoveOutcome::SailTurned);
+    // The ship already faces east and the cache is empty, so `weather.md §5`
+    // (u5-spec#297, R525) attempts the step on this same command in a
+    // non-calm wind.
     assert_eq!(state.step(Direction::East), MoveOutcome::Moved);
     assert_eq!(
         state.save_game_command(&dir, Some(true)).unwrap(),
@@ -3039,6 +3042,9 @@ fn world_waterfall_sidecar_does_not_sweep_after_successful_water_movement() {
         hull: 20,
         skiffs: 1,
     };
+    // `vehicles.md §6` (u5-spec#297): a frigate key that changes the
+    // facing only turns the ship, so face the step's direction first.
+    state.player.transport = state.player.transport.with_facing(Direction::East);
     state.sync_player_object();
 
     assert_eq!(
@@ -3079,6 +3085,9 @@ fn ordinary_water_movement_does_not_queue_waterfall_sweep_or_lava_sidecar() {
         hull: 20,
         skiffs: 1,
     };
+    // `vehicles.md §6` (u5-spec#297): a frigate key that changes the
+    // facing only turns the ship, so face the step's direction first.
+    state.player.transport = state.player.transport.with_facing(Direction::East);
     state.sync_player_object();
 
     assert_eq!(
@@ -3116,6 +3125,9 @@ fn waterfall_sidecar_does_not_apply_clean_plane_transition() {
         hull: 20,
         skiffs: 1,
     };
+    // `vehicles.md §6` (u5-spec#297): a frigate key that changes the
+    // facing only turns the ship, so face the step's direction first.
+    state.player.transport = state.player.transport.with_facing(Direction::East);
     state.sync_player_object();
 
     assert_eq!(
@@ -3159,6 +3171,9 @@ fn world_waterfall_tile_guard_mismatch_keeps_normal_movement() {
         hull: 20,
         skiffs: 1,
     };
+    // `vehicles.md §6` (u5-spec#297): a frigate key that changes the
+    // facing only turns the ship, so face the step's direction first.
+    state.player.transport = state.player.transport.with_facing(Direction::East);
     state.sync_player_object();
 
     assert_eq!(
@@ -3186,6 +3201,9 @@ fn malformed_retired_waterfall_sidecar_is_ignored_by_runtime_movement() {
         hull: 20,
         skiffs: 1,
     };
+    // `vehicles.md §6` (u5-spec#297): a frigate key that changes the
+    // facing only turns the ship, so face the step's direction first.
+    state.player.transport = state.player.transport.with_facing(Direction::East);
     state.sync_player_object();
 
     assert_eq!(

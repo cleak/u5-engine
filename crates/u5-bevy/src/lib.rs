@@ -26643,11 +26643,10 @@ mod tests {
         assert!(visual_idle_tick(&mut state, Path::new(".")));
         assert_eq!((state.player.x, state.player.y), (10, 20));
 
-        // One keyed command establishes the cache. `weather.md §5`: "If the
-        // requested heading differs from the current cached sail direction,
-        // the ship turns and clears the sailing counter; that action does not
-        // also move the ship." From there the pump alone keeps the ship
-        // sailing, one cell per two pumps.
+        // One keyed command establishes the cache. `weather.md §5`
+        // (u5-spec#297, R525): "If the key changes the facing, the ship turns
+        // in place, prints `Head <Dir>` ... and does not move." From there
+        // the pump alone keeps the ship sailing, one cell per two pumps.
         assert_eq!(
             state
                 .step_with_game_dir(Direction::East, None)

@@ -136,6 +136,9 @@ fn world_step_uses_clean_plane_transition_table_without_falls_narration() {
     };
     state.sail_cadence = 1;
     state.active_objects[0].z = WorldPlane::Britannia.save_floor();
+    // `vehicles.md §6` (u5-spec#297): a frigate key that changes the
+    // facing only turns the ship, so face the step's direction first.
+    state.player.transport = state.player.transport.with_facing(Direction::East);
     state.sync_player_object();
     state.party = vec![
         PartyMember {
