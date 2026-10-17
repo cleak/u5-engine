@@ -855,6 +855,17 @@ pub struct HealerTreatmentQuote {
     pub fee: HealerTreatmentFee,
 }
 
+/// `shops.md §8.C` (u5-spec#298 Q19): the low-fee charity exception "is not
+/// a short-funds outcome: in Skara Brae (scene `7`, The Spirit Healers)
+/// only, when the fee is at most 100 and party gold is below it".
+pub const HEALER_LOW_FEE_CHARITY_MAX_FEE: u16 = 100;
+
+pub const fn healer_low_fee_charity_applies(healer: Healer, fee: u16, gold: u16) -> bool {
+    matches!(healer, Healer::TheSpiritHealers)
+        && fee <= HEALER_LOW_FEE_CHARITY_MAX_FEE
+        && gold < fee
+}
+
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub struct HealerTreatmentOutcome {
     pub quote: HealerTreatmentQuote,
@@ -866,6 +877,10 @@ pub struct HealerTreatmentOutcome {
     pub hp_before: u16,
     pub hp_after: u16,
     pub max_hp_after: u16,
+    /// `shops.md §8.C` low-fee charity (u5-spec#298 Q19): the treatment was
+    /// applied with no gold deducted, so "the post-payment surcharge step
+    /// does not run".
+    pub charity: bool,
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -3386,12 +3401,21 @@ impl PlayState {
         }
 
         let quote = quote_healer_treatment(healer, treatment);
+        let mut charity = false;
         if let HealerTreatmentFee::Price(required) = quote.fee {
             if self.gold < required {
-                return Err(HealerTreatmentError::InsufficientGold {
-                    available: self.gold,
-                    required,
-                });
+                // `shops.md §8.C` (u5-spec#298 Q19): "in Skara Brae (scene
+                // `7`, The Spirit Healers) only, when the fee is at most 100
+                // and party gold is below it, record `173` is not printed,
+                // the treatment is applied with no gold deducted".
+                if healer_low_fee_charity_applies(healer, required, self.gold) {
+                    charity = true;
+                } else {
+                    return Err(HealerTreatmentError::InsufficientGold {
+                        available: self.gold,
+                        required,
+                    });
+                }
             }
         }
 
@@ -3399,7 +3423,9 @@ impl PlayState {
         let status_before = member.status;
         let hp_before = member.hp;
 
-        if let HealerTreatmentFee::Price(required) = quote.fee {
+        if let HealerTreatmentFee::Price(required) = quote.fee
+            && !charity
+        {
             self.gold -= required;
         }
 
@@ -3428,6 +3454,7 @@ impl PlayState {
             hp_before,
             hp_after: self.party[target_index].hp,
             max_hp_after: self.party[target_index].max_hp,
+            charity,
         })
     }
 
