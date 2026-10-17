@@ -538,14 +538,38 @@ fn speaker_effects_after(
         .collect()
 }
 
-/// Wall-clock seconds for one driver-local calibrated unit of the subtitle
-/// ignition's publication wait. `timing.md §5.1` scopes the 14 ms modernised
-/// cadence to the `TITLE.BIT` flourish only; the ignition row waits "45 full
-/// calibration units" sounded or "50" silent, and `§7.4` prices the
-/// title-sequence (driver-local) unit at "about 0.92 ms" under the normative
-/// `§7.1` anchor - about 41.4 ms and 46 ms per publication.
+/// Wall-clock seconds for one calibrated unit of the subtitle ignition's
+/// publication wait. `timing.md §5.1` scopes the 14 ms modernised cadence to
+/// the `TITLE.BIT` flourish only; the ignition row waits "45 full calibration
+/// units" sounded or "50" silent. `intro.md §5` "Duration" (`cleak/u5-spec#298`
+/// Q37) finds the measured per-publication time "consistent with the 0.88 ms
+/// calibrated unit of `timing.md` section 7 plus the burst holds".
 const INTRO_SUBTITLE_IGNITION_UNIT_SECS: f32 =
-    u5_runtime::audio::DRIVER_LOCAL_UNIT_NANOS as f32 / 1_000_000_000.0;
+    u5_runtime::audio::OUTER_CALIBRATED_UNIT_NANOS as f32 / 1_000_000_000.0;
+
+/// `intro.md §5` "Duration" (`cleak/u5-spec#298` Q37): "A fresh uninterrupted
+/// run at the normal cadence makes 220 publications ...: 101 sounded at 45
+/// calibrated outer units and 119 silent at 50, which is 10,495 outer units",
+/// measured uninterrupted "as emulator timings under DOSBox 0.74-3: **12.03 s
+/// at fixed 3000 cycles**". "The calibrated part alone ... must not be used as
+/// the total": the bursts' pitch holds and host-speed-dependent per-position
+/// work come on top. The period-hardware total is not established.
+const INTRO_SUBTITLE_IGNITION_FRESH_RUN_NANOS: u64 = 12_030_000_000;
+const INTRO_SUBTITLE_IGNITION_FRESH_RUN_PUBLICATIONS: u64 = 220;
+const INTRO_SUBTITLE_IGNITION_FRESH_RUN_SOUNDED: u64 = 101;
+const INTRO_SUBTITLE_IGNITION_FRESH_RUN_OUTER_UNITS: u64 = 10_495;
+
+/// The host-speed-dependent work each publication carries on top of its
+/// calibrated wait and burst: the published 12.03 s fresh run less its 10,495
+/// calibrated units and 101 bursts (`audio.md §10.1`, about 3.7 ms each),
+/// spread over its 220 publications - about 11.0 ms, against the "about
+/// 11.6 ms per publication at 3000 cycles" `intro.md §5` gives for the same
+/// remainder from its own split.
+const INTRO_SUBTITLE_IGNITION_PUBLICATION_WORK_NANOS: u64 = (INTRO_SUBTITLE_IGNITION_FRESH_RUN_NANOS
+    - INTRO_SUBTITLE_IGNITION_FRESH_RUN_OUTER_UNITS
+        * u5_runtime::audio::OUTER_CALIBRATED_UNIT_NANOS
+    - INTRO_SUBTITLE_IGNITION_FRESH_RUN_SOUNDED * u5_runtime::audio::IGNITION_BURST_TOTAL_NANOS)
+    / INTRO_SUBTITLE_IGNITION_FRESH_RUN_PUBLICATIONS;
 
 /// `systems/intro.md §3` step 2 (`cleak/u5-spec#77`): after the
 /// flourish returns, the finished mark plus the slot-7 "Presents"
@@ -566,39 +590,42 @@ const INTRO_PRESENTS_UNSKIPPED_HOLD_BIOS_TICKS: u16 =
     INTRO_PRESENTS_HOLD_BIOS_TICKS + INTRO_TITLE_BOUNDED_POLL_BIOS_TICKS;
 
 /// `systems/timing.md §5.1`: "On a run where the flourish was aborted the
-/// hold is skipped entirely and the frame flashes past." One tick is the
-/// shortest interval that still presents the finished mark plus `Presents`
-/// once, which `intro.md §3` requires ("`Presents` is briefly visible either
-/// way").
-const INTRO_PRESENTS_SKIPPED_HOLD_BIOS_TICKS: u16 = 1;
+/// hold is skipped entirely and the frame flashes past." Nothing waits
+/// between that frame and the start/menu loader, so the mark plus `Presents`
+/// - "on a skipped run, the last title image" - stays on the visible page
+/// through the loader's archive load alone (`intro.md §3`, "How long the last
+/// title image stays up", `cleak/u5-spec#298` Q36).
+const INTRO_PRESENTS_SKIPPED_HOLD_BIOS_TICKS: u16 = INTRO_START_MENU_ARCHIVE_LOAD_BIOS_TICKS;
 
-/// **Measured**, not published: the start/menu loader's step 1 (load the
-/// `ULTIMA` archive) runs while the finished composition is still on screen,
-/// because the visible page is only cleared at step 2. The spec gives the
-/// load no duration. Stock captures (forty paired runs, DOSBox at 3000
-/// cycles) show the composition for about 2.0 s from first appearance to the
-/// first dissolved logo pixel, against the 1.1 s of its bounded poll; this is
-/// the remaining ~0.9 s, rounded to whole BIOS ticks (16 x 54.9 ms = 0.88 s).
-/// Pending publication by the spec owner.
-const INTRO_START_MENU_ARCHIVE_LOAD_BIOS_TICKS: u16 = 16;
+/// `systems/intro.md §3` "Start/menu screen composition", "How long the last
+/// title image stays up" (`cleak/u5-spec#298` Q36): the loader's step 1 loads
+/// and unpacks the `ULTIMA` archive while the last title image is still on the
+/// visible page, because "the visible clear of step 2 is the first change".
+/// "As emulator timings under DOSBox 0.74-3, that load-and-unpack span is
+/// about 1.07 s at fixed 3000 cycles" (also `timing.md §5.1`); the engine's
+/// stock reference is 3000 cycles. In whole BIOS ticks that is 19 (19 x
+/// 54.9 ms = 1.04 s; 20 would be 1.10 s), which with the twenty-tick bounded
+/// poll keeps an unskipped composition up for 39 ticks, 2.14 s, against the
+/// published "about 2.15 s in total". The period-hardware load time is not
+/// established.
+const INTRO_START_MENU_ARCHIVE_LOAD_BIOS_TICKS: u16 = 19;
 
-/// **Measured**, not published (`cleak/u5-spec#298` item 39): after a key
-/// aborts subtitle ignition, stock shows the finished logo, a static flame
-/// band and the lower menu window's frame - with no `Select:` or copyright
-/// caption and no labels - for about 1.7 s before the captions and the six
-/// labels appear together. Sixteen paired captures (`chargen-prompts` and
-/// `cast-blink`, DOSBox at 3000 cycles, ~0.57 s per sampled frame) all show
-/// exactly three such frames between the frame band being drawn and the
-/// labels; 3 x 0.57 s = 1.71 s, rounded to whole BIOS ticks (31 x 54.9 ms =
-/// 1.70 s). Nothing in `intro.md §3/§5/§6` or `location-dat.md §11` accounts
-/// for it: no automatic Return-to-View content (chapter caption, revealed
-/// column, band tick) is ever visible in it, and a logo-dissolve abort, whose
-/// key is consumed, reaches the preview without it. The aborting key is still
-/// pending throughout (`intro.md §5` item 7) and keys typed in the window are
-/// kept queued, as the BIOS buffer would; no capture presses one there.
+/// `systems/intro.md §5`, "A key first seen inside subtitle ignition"
+/// (`cleak/u5-spec#298` Q39): the automatic Return-to-View preview's start-up
+/// on its first entry from the title page - it blanks the caption area, loads
+/// its script data, snapshots the screen, loads and converts the tile archive
+/// and restores the snapshot - during which "the lower window frame is up with
+/// no captions or labels over a static flame band". "This is not a published
+/// wait: it is the preview's start-up cost, measured as an emulator timing
+/// under DOSBox 0.74-3 at about 1.70 s at fixed 3000 cycles". "The same
+/// start-up cost precedes the preview's first visible output on an unskipped
+/// start", and after a logo-dissolve key "the preview runs in full after the
+/// same start-up cost". 31 x 54.9 ms = 1.70 s. The period-hardware start-up
+/// time is not established.
 const INTRO_IGNITION_ABORT_MENU_HOLD_BIOS_TICKS: u16 = 31;
 
-/// Visible phase 5: the bounded poll, then the measured archive load.
+/// Visible phase 5: the bounded poll, then the archive load (`intro.md §3`,
+/// `cleak/u5-spec#298` Q36: "twenty tick waits ... plus the load").
 const INTRO_COMPOSITION_HOLD_BIOS_TICKS: u16 =
     INTRO_TITLE_BOUNDED_POLL_BIOS_TICKS + INTRO_START_MENU_ARCHIVE_LOAD_BIOS_TICKS;
 
@@ -10422,13 +10449,15 @@ enum VisualIntroPanel {
     },
     /// `systems/intro.md §3` start/menu loader step 4 on the animated path:
     /// the gated logo dissolve, presented as successive prefixes of its visit
-    /// order at the measured stock cadence before step 7's ignition.
+    /// order at the published emulator cadence before step 7's ignition.
     StartMenuReveal(Box<StartMenuRevealState>),
-    /// The measured pause after an ignition abort
-    /// ([`INTRO_IGNITION_ABORT_MENU_HOLD_BIOS_TICKS`]): the start/menu screen
-    /// with the lower window's frame but no captions or labels, the band
-    /// static. `queued_keys` holds the aborting key and anything typed since,
-    /// in order; they are dispatched when the hold ends.
+    /// The automatic preview's start-up before its first tick
+    /// ([`INTRO_IGNITION_ABORT_MENU_HOLD_BIOS_TICKS`], `intro.md §5`,
+    /// u5-spec#298 Q39): the start/menu screen with the lower window's frame
+    /// but no captions or labels, the band static. `queued_keys` holds a
+    /// pending ignition-abort key and anything typed since, in order; they are
+    /// dispatched when the hold ends, the first being taken by the preview's
+    /// first consuming read.
     MenuLabelHold {
         ticks_left: u16,
         queued_keys: Vec<char>,
@@ -11583,7 +11612,7 @@ fn queue_start_menu_reveal_clicks(
         return;
     }
     // The carrier runs on between retunes, so each pitch sounds for the
-    // measured per-visit period and the run lasts exactly as long as the
+    // published per-visit period (`audio.md §8.6.1`, u5-spec#298 Q35) and the run lasts exactly as long as the
     // reveal is on screen.
     // Tagged: in the original the carrier is retuned from inside the dissolve
     // loop, so a key that stops the loop also reaches the shared exit's stop.
@@ -11739,12 +11768,12 @@ fn visual_intro_animation_interval(intro: &VisualIntroState) -> f32 {
         publish_index,
     } = &intro.panel
     {
-        let wait_units = playback
+        let (wait_units, sounded) = playback
             .publishes
             .get(*publish_index)
-            .map(|publish| publish.wait_units)
+            .map(|publish| (publish.wait_units, publish.speaker_burst))
             .expect("subtitle ignition interval requires a current publish");
-        return subtitle_ignition_publish_interval(wait_units);
+        return subtitle_ignition_publish_interval(wait_units, sounded);
     }
     if matches!(intro.panel, VisualIntroPanel::StartMenuReveal(_)) {
         return INTRO_START_MENU_REVEAL_SLICE_NANOS as f32 / 1_000_000_000.0;
@@ -11759,8 +11788,17 @@ fn visual_intro_animation_interval(intro: &VisualIntroState) -> f32 {
     }
 }
 
-fn subtitle_ignition_publish_interval(wait_units: u8) -> f32 {
+/// One ignition publication on screen: its calibrated wait, its burst's
+/// pitch holds when it sounds, and the per-publication host work
+/// (`intro.md §5` "Duration", `cleak/u5-spec#298` Q37).
+fn subtitle_ignition_publish_interval(wait_units: u8, sounded: bool) -> f32 {
+    let burst_nanos = if sounded {
+        u5_runtime::audio::IGNITION_BURST_TOTAL_NANOS
+    } else {
+        0
+    };
     INTRO_SUBTITLE_IGNITION_UNIT_SECS * f32::from(wait_units)
+        + (burst_nanos + INTRO_SUBTITLE_IGNITION_PUBLICATION_WORK_NANOS) as f32 / 1_000_000_000.0
 }
 
 fn advance_intro_animation_pump(pump: &mut VisualIntroAnimationPump, delta: f32) -> bool {
@@ -12012,17 +12050,15 @@ fn abort_visual_intro_subtitle_ignition(intro: &mut VisualIntroState) -> bool {
     };
     intro.title_tick_frame = next_frame;
     intro.panel = VisualIntroPanel::Menu;
+    // The skip flag is still clear, so this enters the preview start-up hold.
     complete_visual_intro_start_menu_loader(intro);
-    intro.panel = VisualIntroPanel::MenuLabelHold {
-        ticks_left: INTRO_IGNITION_ABORT_MENU_HOLD_BIOS_TICKS,
-        queued_keys: Vec::new(),
-    };
     true
 }
 
-/// One BIOS tick of the post-ignition-abort hold. When it runs out the menu
-/// takes over and the queued keys are dispatched in order, the first being the
-/// unconsumed ignition-abort key.
+/// One BIOS tick of the automatic preview's start-up. When it runs out the
+/// queued keys are dispatched in order, the first (normally the unconsumed
+/// ignition-abort key) being read by the preview's first tick; with none
+/// queued the preview starts at once (`intro.md §5`, u5-spec#298 Q39).
 fn advance_visual_intro_menu_label_hold(intro: &mut VisualIntroState) -> bool {
     let VisualIntroPanel::MenuLabelHold {
         ticks_left,
@@ -12037,6 +12073,9 @@ fn advance_visual_intro_menu_label_hold(intro: &mut VisualIntroState) -> bool {
     }
     let keys = std::mem::take(queued_keys);
     intro.panel = VisualIntroPanel::Menu;
+    if keys.is_empty() {
+        advance_visual_intro_auto_return_to_view(intro);
+    }
     for ch in keys {
         step_visual_intro(intro, ch);
     }
@@ -12183,7 +12222,8 @@ fn begin_visual_intro_subtitle_ignition(intro: &mut VisualIntroState) {
 /// memory as fast as the machine allows. `display-driver-abi.md §9.6` permits
 /// a frontend to present successive prefixes of the published visit order
 /// instead, provided order and final raster are kept and no tick, consuming
-/// read or abort point is added. The cadence is the measured stock one,
+/// read or abort point is added. The cadence is the published emulator one
+/// (`timing.md §5.1`, u5-spec#298 Q35: 2.90 s at fixed 3000 cycles),
 /// [`u5_runtime::GATED_DISSOLVE_MEASURED_CLICK_PERIOD_NANOS`] per checked
 /// visit.
 #[derive(Debug)]
@@ -12294,7 +12334,7 @@ fn abort_visual_intro_start_menu_reveal(intro: &mut VisualIntroState) -> bool {
     intro.surface.copy_rect_from(&source, u5_runtime::INTRO_START_MENU_REVEAL_RECT);
     // `intro.md §3` step 4 / `audio.md §8.6.1`: the carrier is retuned from
     // inside the dissolve and silenced at its exit, so the click run stops
-    // here with the transfer instead of playing out its ~2.8 s.
+    // here with the transfer instead of playing out its ~2.9 s.
     // The run is queued in the same system call that starts the reveal, so
     // nothing is normally left here; anything that is never sounded at all.
     intro.pending_reveal_clicks.clear();
@@ -12331,6 +12371,16 @@ fn complete_visual_intro_start_menu_loader(intro: &mut VisualIntroState) {
     intro.modal_backing = None;
     intro.message_waiting_for_key = false;
     intro.message.clear();
+    if intro.pending_auto_return_to_view {
+        // `intro.md §5` (u5-spec#298 Q39): the automatic preview's start-up
+        // runs before its first tick on every path that reaches it - an
+        // unskipped start, an ignition abort and a logo-dissolve abort - with
+        // the window frame up and no captions or labels.
+        intro.panel = VisualIntroPanel::MenuLabelHold {
+            ticks_left: INTRO_IGNITION_ABORT_MENU_HOLD_BIOS_TICKS,
+            queued_keys: Vec::new(),
+        };
+    }
 }
 
 /// `systems/save-load.md §4.2` pre-load wait indicator. Painted into
@@ -12680,12 +12730,32 @@ fn step_visual_intro(intro: &mut VisualIntroState, ch: char) -> bool {
             intro.title_sequence_skipped = true;
             return true;
         }
-        if visual_intro_presents_hold_active(intro) {
+        if visual_intro_presents_hold_active(intro) && !intro.title_sequence_skipped {
             // A key during the step-2 hold skips from there: the slot-8
             // ornament, the whole BRITISH.PTH animation, BRITISH.BIT and
-            // slot 9 are not drawn at all.
-            intro.title_presents_hold_ticks = 0;
+            // slot 9 are not drawn at all. `intro.md §3` (u5-spec#298 Q38,
+            // R556): the key is consumed, sets the title-skip flag and skips
+            // every later hold, so the mark plus `Presents` - the last title
+            // image - stays up for the start/menu archive load alone (Q36).
+            // `timing.md §5.1`: the hold's first eighteen ticks are an
+            // unconditional wait and only "the second returns as soon as a
+            // key arrives", so a key typed during the unconditional part is
+            // read when the bounded poll starts; the rest of that wait still
+            // runs before the load.
+            let unconditional_left = intro
+                .title_presents_hold_ticks
+                .saturating_sub(INTRO_TITLE_BOUNDED_POLL_BIOS_TICKS);
+            intro.title_presents_hold_ticks =
+                unconditional_left + INTRO_START_MENU_ARCHIVE_LOAD_BIOS_TICKS;
             intro.title_sequence_skipped = true;
+            return true;
+        }
+        if visual_intro_presents_hold_active(intro) {
+            // Already skipped: the last title image is up for the archive load
+            // and nothing reads the keyboard there. The engine has no buffer
+            // to hold the key until the menu's poll, so it keeps the earlier
+            // behaviour of ending the load and consuming the key.
+            intro.title_presents_hold_ticks = 0;
             intro.title_signature_progress = 0;
             intro.title_signature_complete = true;
             intro.title_tick_frame = 0;
@@ -12697,17 +12767,34 @@ fn step_visual_intro(intro: &mut VisualIntroState, ch: char) -> bool {
             // A key during the ornament hold or the strokes abandons the
             // remaining segments but steps 5 and 6 still run, so the
             // finished signature and the slot-9 line still appear.
+            // `intro.md §3` (u5-spec#298 Q38, R556): "the finished-composition
+            // hold does not run, so the composition stays up only for the
+            // start/menu archive load".
             intro.title_sequence_skipped = true;
             intro.title_signature_progress = 0;
             intro.title_signature_complete = true;
-            intro.title_card_hold_ticks = 0;
+            intro.title_card_hold_ticks = INTRO_START_MENU_ARCHIVE_LOAD_BIOS_TICKS;
+            return true;
+        }
+        if !intro.title_sequence_skipped
+            && intro.title_card_hold_ticks > INTRO_START_MENU_ARCHIVE_LOAD_BIOS_TICKS
+        {
+            // `intro.md §3` (u5-spec#298 Q38, R556): a key during the
+            // finished-composition hold's bounded poll is consumed there and
+            // sets the title-skip flag. The rest of the hold is skipped, the
+            // composition stays up for the archive load, and the loader then
+            // takes its plain path with no automatic preview.
+            intro.title_sequence_skipped = true;
+            intro.title_card_hold_ticks = INTRO_START_MENU_ARCHIVE_LOAD_BIOS_TICKS;
             return true;
         }
         intro.title_tick_frame = 0;
         intro.title_tick_visible_frame = 0;
-        // The title sequence has already completed. This key is first seen by
-        // the start/menu dissolve's status poll, then consumed by the loader;
-        // it is not a title skip and must not fall through to the menu.
+        // The hold's poll has ended and the archive load is running. Nothing
+        // reads the keyboard there, so this key is first seen by the
+        // start/menu dissolve's status poll, then consumed by the loader; it
+        // is not a title skip and must not fall through to the menu. The
+        // engine ends the load at once rather than buffering the key.
         finish_visual_intro_title_to_menu(intro, true);
         return true;
     }
@@ -20970,19 +21057,34 @@ mod tests {
     }
 
     #[test]
-    fn subtitle_ignition_wait_units_use_the_calibrated_unit_anchor() {
-        // `timing.md §5.1`/`§6.3`: 50 silent and 45 sounded driver-local units
-        // per publication; `§7.1` makes 0.79-0.97 ms per unit normative and
-        // `§7.4` puts the driver-local unit at about 0.92 ms. The 14 ms
-        // cadence belongs to the flourish alone.
-        let silent =
-            subtitle_ignition_publish_interval(u5_runtime::SUBTITLE_IGNITION_SILENT_WAIT_UNITS);
-        assert!((silent - 0.046).abs() < 1e-6, "silent publication {silent} s");
-        assert!((50.0 * 0.00079..=50.0 * 0.00097).contains(&silent));
-        let burst =
-            subtitle_ignition_publish_interval(u5_runtime::SUBTITLE_IGNITION_SPEAKER_WAIT_UNITS);
-        assert!((burst - 0.0414).abs() < 1e-6, "sounded publication {burst} s");
-        assert!((45.0 * 0.00079..=45.0 * 0.00097).contains(&burst));
+    fn subtitle_ignition_publications_add_up_to_the_published_fresh_run() {
+        // `timing.md §5.1`/`§6.3`: 50 silent and 45 sounded calibrated units
+        // per publication. `intro.md §5` "Duration" (u5-spec#298 Q37): a
+        // fresh run is 119 silent and 101 sounded publications, 10,495 outer
+        // units, and lasts 12.03 s at fixed 3000 cycles; the calibrated part
+        // alone (about 9.2 s) "must not be used as the total".
+        let silent = f64::from(subtitle_ignition_publish_interval(
+            u5_runtime::SUBTITLE_IGNITION_SILENT_WAIT_UNITS,
+            false,
+        ));
+        let sounded = f64::from(subtitle_ignition_publish_interval(
+            u5_runtime::SUBTITLE_IGNITION_SPEAKER_WAIT_UNITS,
+            true,
+        ));
+        assert_eq!(
+            119 * u64::from(u5_runtime::SUBTITLE_IGNITION_SILENT_WAIT_UNITS)
+                + 101 * u64::from(u5_runtime::SUBTITLE_IGNITION_SPEAKER_WAIT_UNITS),
+            INTRO_SUBTITLE_IGNITION_FRESH_RUN_OUTER_UNITS
+        );
+        let total = 119.0 * silent + 101.0 * sounded;
+        assert!((total - 12.03).abs() < 0.01, "fresh ignition run {total:.3} s");
+        // "Per publication about 42.8 ms does not depend on the cycle setting
+        // ... the CPU-bound remainder is about 11.6 ms per publication".
+        let mean = total / 220.0;
+        assert!((mean - (0.0428 + 0.0116)).abs() < 0.002, "{mean:.4} s");
+        let calibrated = 10_495.0 * f64::from(INTRO_SUBTITLE_IGNITION_UNIT_SECS);
+        assert!((calibrated - 9.2).abs() < 0.05);
+        assert!(total > calibrated + 2.0);
     }
 
     #[test]
@@ -21037,7 +21139,9 @@ mod tests {
         // the current copied pixel and any publication it caused", so that one
         // visit still clicks.
         assert_eq!(outcome.reveal_clicks.len(), 1);
-        assert!(matches!(intro.panel, VisualIntroPanel::Menu));
+        // `intro.md §5` (u5-spec#298 Q39): "the preview runs in full after
+        // the same start-up cost".
+        assert!(matches!(intro.panel, VisualIntroPanel::MenuLabelHold { .. }));
         assert!(!intro.title_sequence_skipped);
         assert!(intro.pending_auto_return_to_view);
         assert_eq!(
@@ -21076,7 +21180,8 @@ mod tests {
             char::from(u5_runtime::INPUT_CODE_SOUTH)
         ));
 
-        assert!(matches!(intro.panel, VisualIntroPanel::Menu));
+        // The preview start-up (u5-spec#298 Q39) follows the loader.
+        assert!(matches!(intro.panel, VisualIntroPanel::MenuLabelHold { .. }));
         assert_eq!(
             visual_intro_menu_highlight(&intro),
             IntroSubflow::JourneyOnward
@@ -21123,10 +21228,11 @@ mod tests {
         intro
     }
 
-    /// P12 (measured, `cleak/u5-spec#298` item 39): after an ignition abort
-    /// the start/menu screen holds for 31 BIOS ticks (~1.70 s) showing the
-    /// lower window's frame with no captions and no labels over a static
-    /// band; the labels and captions appear together when it ends.
+    /// P12 (`intro.md §5`, `cleak/u5-spec#298` Q39): after an ignition abort
+    /// the preview's start-up holds the start/menu screen for 31 BIOS ticks
+    /// (the published 1.70 s at fixed 3000 cycles) showing the lower window's
+    /// frame with no captions and no labels over a static band; the labels
+    /// and captions appear together when it ends.
     #[test]
     #[cfg(feature = "original-asset-tests")]
     fn an_ignition_abort_holds_the_unlabelled_menu_for_the_measured_time() {
@@ -21146,7 +21252,7 @@ mod tests {
             * f64::from(BIOS_USER_TICK_INTERVAL_SECS);
         assert!(
             (1.6..=1.8).contains(&held_secs),
-            "measured stock hold is ~1.7 s, got {held_secs:.3} s"
+            "published start-up is 1.70 s, got {held_secs:.3} s"
         );
 
         let band_frame = intro.title_tick_visible_frame;
@@ -21345,9 +21451,10 @@ mod tests {
     }
 
     /// `timing.md §5.1` phase by phase, from the flourish's first step to the
-    /// settled menu, on an unskipped run with no key. Published rates are
-    /// asserted exactly (to one host frame); the two measured constants are
-    /// asserted against their stock captures.
+    /// preview's first tick, on an unskipped run with no key. Published rates
+    /// are asserted exactly (to one host frame); the emulator timings of
+    /// u5-spec#298 Q35-Q37 and Q39 are asserted against their published
+    /// figures.
     #[test]
     #[cfg(feature = "original-asset-tests")]
     fn unskipped_intro_phases_run_at_their_published_and_measured_rates() {
@@ -21394,49 +21501,85 @@ mod tests {
         let composition = simulate_visual_intro_until(&mut intro, &mut pump, frame, |i| {
             matches!(i.panel, VisualIntroPanel::StartMenuReveal(_))
         });
-        // Bounded poll (20) plus the measured archive load (16).
-        close(composition, 36.0 * tick, "composition hold");
-        // Measured stock: about 2.0 s from the composition to the first
-        // dissolved logo pixel.
-        assert!((1.8..=2.2).contains(&composition));
+        // Bounded poll (20) plus the archive load (19), `intro.md §3`
+        // (u5-spec#298 Q36): "an unskipped composition is visible about
+        // 2.15 s in total".
+        close(composition, 39.0 * tick, "composition hold");
+        assert!((2.10..=2.20).contains(&composition));
 
         let reveal = simulate_visual_intro_until(&mut intro, &mut pump, frame, |i| {
             matches!(i.panel, VisualIntroPanel::SubtitleIgnition { .. })
         });
-        // 16,160 checked visits at the measured cadence, in 20 ms slices.
-        close(reveal, 140.0 * 0.020, "logo reveal");
-        assert!((2.7..=2.9).contains(&reveal), "measured stock reveal is 2.7..2.9 s");
+        // 16,160 checked visits at the published cadence, in 20 ms slices:
+        // `timing.md §5.1` (u5-spec#298 Q35), 2.90 s at fixed 3000 cycles.
+        close(reveal, 145.0 * 0.020, "logo reveal");
+        assert!((2.88..=2.92).contains(&reveal), "published reveal is 2.90 s");
         assert_eq!(intro.pending_reveal_clicks.len(), 16_160);
 
         let expected_ignition: f64 = match &intro.panel {
             VisualIntroPanel::SubtitleIgnition { playback, .. } => playback
                 .publishes
                 .iter()
-                .map(|publish| f64::from(subtitle_ignition_publish_interval(publish.wait_units)))
+                .map(|publish| {
+                    f64::from(subtitle_ignition_publish_interval(
+                        publish.wait_units,
+                        publish.speaker_burst,
+                    ))
+                })
                 .sum(),
             _ => unreachable!(),
         };
         let ignition = simulate_visual_intro_until(&mut intro, &mut pump, frame, |i| {
-            matches!(i.panel, VisualIntroPanel::Menu)
-                && !matches!(i.dispatch.tick_title(), UnifiedMenuStep::PresentTitle)
+            !matches!(i.panel, VisualIntroPanel::SubtitleIgnition { .. })
         });
-        // One publication per 45- or 50-unit wait at the 0.92 ms driver unit.
+        // One publication per 45- or 50-unit wait plus its burst and host
+        // work: `intro.md §5` (u5-spec#298 Q37), 12.03 s at fixed 3000 cycles.
         assert!(
             (ignition - expected_ignition).abs() <= 0.25,
             "ignition: {ignition:.3} s, expected {expected_ignition:.3} s"
         );
+        assert!((ignition - 12.03).abs() <= 0.25, "ignition: {ignition:.3} s");
+
+        // `intro.md §5` (u5-spec#298 Q39): the preview's start-up, 1.70 s at
+        // fixed 3000 cycles, before its first visible output.
+        let start_up = simulate_visual_intro_until(&mut intro, &mut pump, frame, |i| {
+            matches!(i.panel, VisualIntroPanel::ReturnToView { .. })
+        });
+        close(start_up, 31.0 * tick, "preview start-up");
+        assert!((1.65..=1.75).contains(&start_up));
 
         eprintln!(
             "intro timeline: flourish {flourish:.3} s, Presents {presents:.3} s, \
              ornament {ornament:.3} s, signature {signature:.3} s ({signature_ticks} ticks), \
              composition {composition:.3} s, logo reveal {reveal:.3} s, \
-             ignition {ignition:.3} s"
+             ignition {ignition:.3} s, preview start-up {start_up:.3} s"
         );
         let _ = fs::remove_dir_all(dir);
     }
 
+    /// `intro.md §3` "How long the last title image stays up" (u5-spec#298
+    /// Q36): the last title image stays up through the start/menu archive
+    /// load, "about 1.07 s at fixed 3000 cycles", so an unskipped composition
+    /// is visible "about 2.15 s in total"; on a skipped flourish the mark plus
+    /// `Presents` is that last image and stays up for the load alone.
+    #[test]
+    fn the_last_title_image_stays_up_through_the_published_archive_load() {
+        let tick = f64::from(BIOS_USER_TICK_INTERVAL_SECS);
+        let load = f64::from(INTRO_START_MENU_ARCHIVE_LOAD_BIOS_TICKS) * tick;
+        assert!((load - 1.07).abs() <= tick / 2.0, "archive load {load:.3} s");
+        let composition = f64::from(INTRO_COMPOSITION_HOLD_BIOS_TICKS) * tick;
+        assert!(
+            (composition - 2.15).abs() <= tick / 2.0,
+            "composition visible {composition:.3} s"
+        );
+        assert_eq!(
+            INTRO_PRESENTS_SKIPPED_HOLD_BIOS_TICKS,
+            INTRO_START_MENU_ARCHIVE_LOAD_BIOS_TICKS
+        );
+    }
+
     /// The gated logo reveal presents growing prefixes of the published visit
-    /// order, one 20 ms slice at a time at the measured per-visit cost, and
+    /// order, one 20 ms slice at a time at the published per-visit cost, and
     /// ends on the exact source raster before ignition.
     #[test]
     #[cfg(feature = "original-asset-tests")]
@@ -21466,7 +21609,8 @@ mod tests {
             assert!(advance_visual_intro_animation_tick(&mut intro));
             slices += 1;
         }
-        assert_eq!(slices, 140);
+        // 2.90 s at fixed 3000 cycles (`timing.md §5.1`, u5-spec#298 Q35).
+        assert_eq!(slices, 145);
         assert!(matches!(
             intro.panel,
             VisualIntroPanel::SubtitleIgnition { .. }
@@ -21505,7 +21649,10 @@ mod tests {
             char::from(u5_runtime::INPUT_CODE_SOUTH)
         ));
 
-        assert!(matches!(intro.panel, VisualIntroPanel::Menu));
+        // `intro.md §5` (u5-spec#298 Q39): "a key inside the logo dissolve is
+        // consumed by the loader, so the preview runs in full after the same
+        // start-up cost".
+        assert!(matches!(intro.panel, VisualIntroPanel::MenuLabelHold { .. }));
         // P11: the click run stops with the transfer rather than playing out.
         assert_eq!(
             intro.pending_speaker_cancels,
@@ -21534,7 +21681,10 @@ mod tests {
     }
 
     /// `intro.md §3` step 4: "A key during the hold, or during any segment,
-    /// abandons the remaining segments — but steps 5 and 6 still run".
+    /// abandons the remaining segments — but steps 5 and 6 still run. The
+    /// finished-composition hold after step 6 is then skipped" (u5-spec#298
+    /// Q38, R556): the composition "stays up only for the start/menu archive
+    /// load".
     #[test]
     fn a_key_during_the_ornament_hold_abandons_the_strokes() {
         let dir = debug_game_dir();
@@ -21577,13 +21727,138 @@ mod tests {
         assert!(intro.title_signature_complete);
         assert_eq!(intro.title_signature_progress, 0);
         assert_eq!(
-            intro.title_card_hold_ticks, 0,
-            "a skipped run leaves for the plain loader without the composition hold"
+            intro.title_card_hold_ticks, INTRO_START_MENU_ARCHIVE_LOAD_BIOS_TICKS,
+            "a skipped run keeps the composition up for the archive load alone"
         );
         assert!(matches!(
             intro.dispatch.tick_title(),
             UnifiedMenuStep::PresentTitle
         ));
+        for _ in 1..INTRO_START_MENU_ARCHIVE_LOAD_BIOS_TICKS {
+            assert!(advance_visual_intro_animation_tick(&mut intro));
+            assert!(matches!(
+                intro.dispatch.tick_title(),
+                UnifiedMenuStep::PresentTitle
+            ));
+        }
+        assert_eq!(intro.title_card_hold_ticks, 1);
+        let _ = fs::remove_dir_all(dir);
+    }
+
+    /// `intro.md §3` (u5-spec#298 Q38, R556): a key during the `Presents`
+    /// hold is consumed, sets the title-skip flag and skips every later hold;
+    /// the mark plus `Presents` stays up for the archive load alone (Q36).
+    #[test]
+    #[cfg(feature = "original-asset-tests")]
+    fn a_key_during_the_presents_hold_skips_to_the_archive_load() {
+        let dir = debug_game_dir();
+        let mut intro = visual_intro_state_with_panel(dir.clone(), VisualIntroPanel::Menu);
+        intro.dispatch = UnifiedMenuDispatch::new();
+        intro.title_flourish_step = intro_title_flourish_total_steps() - 1;
+        intro.title_flourish_complete = true;
+        intro.title_presents_hold_ticks = INTRO_PRESENTS_UNSKIPPED_HOLD_BIOS_TICKS - 20;
+        assert!(visual_intro_presents_hold_active(&intro));
+
+        assert!(step_visual_intro(&mut intro, 'x'));
+
+        assert!(intro.title_sequence_skipped);
+        assert!(visual_intro_presents_hold_active(&intro));
+        assert_eq!(
+            intro.title_presents_hold_ticks,
+            INTRO_START_MENU_ARCHIVE_LOAD_BIOS_TICKS
+        );
+        assert!(matches!(
+            intro.dispatch.tick_title(),
+            UnifiedMenuStep::PresentTitle
+        ));
+        for _ in 1..INTRO_START_MENU_ARCHIVE_LOAD_BIOS_TICKS {
+            assert!(advance_visual_intro_animation_tick(&mut intro));
+            assert!(visual_intro_presents_hold_active(&intro));
+        }
+
+        // `timing.md §5.1`: the first eighteen ticks are an unconditional
+        // wait; a key typed there is only read when the bounded poll starts,
+        // so the rest of the unconditional wait still runs before the load.
+        let mut intro = visual_intro_state_with_panel(dir.clone(), VisualIntroPanel::Menu);
+        intro.dispatch = UnifiedMenuDispatch::new();
+        intro.title_flourish_step = intro_title_flourish_total_steps() - 1;
+        intro.title_flourish_complete = true;
+        intro.title_presents_hold_ticks = INTRO_PRESENTS_UNSKIPPED_HOLD_BIOS_TICKS - 5;
+        assert!(step_visual_intro(&mut intro, 'x'));
+        assert!(intro.title_sequence_skipped);
+        assert_eq!(
+            intro.title_presents_hold_ticks,
+            INTRO_PRESENTS_HOLD_BIOS_TICKS - 5 + INTRO_START_MENU_ARCHIVE_LOAD_BIOS_TICKS
+        );
+        let _ = fs::remove_dir_all(dir);
+    }
+
+    /// `intro.md §3` (u5-spec#298 Q38, R556): a key during the
+    /// finished-composition hold's bounded poll is consumed there and sets
+    /// the title-skip flag; the rest of the poll is skipped and the
+    /// composition stays up for the archive load.
+    #[test]
+    #[cfg(feature = "original-asset-tests")]
+    fn a_key_during_the_composition_hold_sets_the_skip_flag() {
+        let dir = debug_game_dir();
+        let mut intro = visual_intro_state_with_panel(dir.clone(), VisualIntroPanel::Menu);
+        intro.dispatch = UnifiedMenuDispatch::new();
+        intro.title_flourish_step = intro_title_flourish_total_steps() - 1;
+        intro.title_flourish_complete = true;
+        intro.title_signature_complete = true;
+        intro.title_card_hold_ticks = INTRO_COMPOSITION_HOLD_BIOS_TICKS - 3;
+
+        assert!(step_visual_intro(&mut intro, 'x'));
+
+        assert!(intro.title_sequence_skipped);
+        assert_eq!(
+            intro.title_card_hold_ticks,
+            INTRO_START_MENU_ARCHIVE_LOAD_BIOS_TICKS
+        );
+        assert!(matches!(
+            intro.dispatch.tick_title(),
+            UnifiedMenuStep::PresentTitle
+        ));
+        assert!(!intro.pending_auto_return_to_view);
+        let _ = fs::remove_dir_all(dir);
+    }
+
+    /// The same key, end to end: after the archive load the loader takes its
+    /// plain path - instant logo, no carrier, no ignition - and the automatic
+    /// preview is suppressed, so the settled menu follows at once ("a key in
+    /// the composition hold gives the instant logo and the window, captions
+    /// and labels within about 0.2 s of the visible clear").
+    #[test]
+    #[cfg(feature = "original-asset-tests")]
+    fn a_composition_hold_key_reaches_the_menu_on_the_plain_path() {
+        let dir = debug_game_dir();
+        install_intro_assets(&dir);
+        let mut intro = visual_intro_state_with_panel(dir.clone(), VisualIntroPanel::Menu);
+        intro.dispatch = UnifiedMenuDispatch::new();
+        intro.title_flourish_step = intro_title_flourish_total_steps() - 1;
+        intro.title_flourish_complete = true;
+        intro.title_signature_complete = true;
+        intro.title_card_hold_ticks = INTRO_COMPOSITION_HOLD_BIOS_TICKS;
+
+        assert!(advance_visual_intro_animation_tick(&mut intro));
+        assert!(step_visual_intro(&mut intro, ' '));
+        for _ in 0..INTRO_START_MENU_ARCHIVE_LOAD_BIOS_TICKS {
+            assert!(advance_visual_intro_animation_tick(&mut intro));
+        }
+
+        assert!(matches!(intro.panel, VisualIntroPanel::Menu));
+        assert!(!matches!(
+            intro.dispatch.tick_title(),
+            UnifiedMenuStep::PresentTitle
+        ));
+        assert!(intro.pending_reveal_clicks.is_empty(), "no carrier");
+        assert!(!intro.pending_auto_return_to_view, "no preview");
+        assert!(intro.launch_result.lock().unwrap().is_none());
+        assert_eq!(
+            visual_intro_menu_highlight(&intro),
+            IntroSubflow::JourneyOnward,
+            "the consumed key never reaches the menu"
+        );
         let _ = fs::remove_dir_all(dir);
     }
 
@@ -21705,7 +21980,8 @@ mod tests {
         assert!(intro.title_sequence_skipped);
         assert!(visual_intro_presents_hold_active(&intro));
         // `timing.md §5.1`: after an aborted flourish the hold "is skipped
-        // entirely and the frame flashes past".
+        // entirely and the frame flashes past"; the frame then stays up for
+        // the archive load alone (`intro.md §3`, u5-spec#298 Q36).
         assert_eq!(
             intro.title_presents_hold_ticks,
             INTRO_PRESENTS_SKIPPED_HOLD_BIOS_TICKS
@@ -22280,6 +22556,20 @@ mod tests {
             intro.pending_auto_return_to_view,
             "an unskipped run arms the automatic preview after ignition returns"
         );
+        // `intro.md §5` (u5-spec#298 Q39): "The same start-up cost precedes
+        // the preview's first visible output on an unskipped start: 1.70 s
+        // at fixed 3000 cycles", with the window frame up and no captions or
+        // labels; the preview then starts with no key to end it.
+        assert_eq!(
+            finish_menu_label_hold(&mut intro),
+            INTRO_IGNITION_ABORT_MENU_HOLD_BIOS_TICKS
+        );
+        assert!(
+            matches!(intro.panel, VisualIntroPanel::ReturnToView { .. }),
+            "the preview starts when its start-up ends: {}",
+            summarize_intro(&mut intro)
+        );
+        assert!(!intro.pending_auto_return_to_view);
         let _ = fs::remove_dir_all(dir);
     }
 
@@ -26267,7 +26557,7 @@ mod tests {
 
     /// P11: a cancel cuts the sounding interruptible program at once, and the
     /// blocking effect queued behind it starts on the same update instead of
-    /// waiting out the ~2.8 s run.
+    /// waiting out the ~2.9 s run.
     #[test]
     fn a_cancel_cuts_the_sounding_interruptible_program_and_frees_the_voice() {
         let mut app = speaker_test_app();
