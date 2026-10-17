@@ -1114,6 +1114,9 @@ pub const fn dungeon_klimb_apply(tile: u8) -> DungeonKlimbApply {
 /// index derives from the dungeon record layout.
 pub const DUNGEON_DEEPEST_LEVEL: u8 = crate::DUNGEON_LEVELS_PER_RECORD as u8 - 1;
 pub const DUNGEON_VISIT_MARKER_BIT: u8 = 0x08;
+/// `dungeon-mode.md §13.1` (u5-spec#298 Q26): the climbable-with-equipment
+/// mark is raw bit `0x08` - the same bit a pit fall sets on its landing cell.
+pub const DUNGEON_KLIMB_GEAR_MARK_BIT: u8 = DUNGEON_VISIT_MARKER_BIT;
 
 /// `dungeon-mode.md §8`: stepping into an automatic fall trap
 /// (`0x61`/`0x69`) lands the party at the same X/Y on the next level

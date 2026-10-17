@@ -1024,12 +1024,31 @@ impl PlayState {
             // contract directly; that is withdrawn."
             Area::Dungeon { level, .. } => {
                 let tile = self.dungeon_cell(level, self.player.x, self.player.y);
-                match dungeon_klimb_apply(tile) {
+                // `dungeon-mode.md §13.1` (u5-spec#298 Q26): Up is also
+                // offered when the raw byte carries the climbable-with-gear
+                // mark `0x08` and the Grapple byte is non-zero, at any class;
+                // a marked pit with the Grapple offers both directions.
+                let gear_up = self.dungeon_klimb_gear_up(tile);
+                let apply = match dungeon_klimb_apply(tile) {
+                    DungeonKlimbApply::DownLadder | DungeonKlimbApply::PitDescent if gear_up => {
+                        DungeonKlimbApply::TwoWayPrompt
+                    }
+                    DungeonKlimbApply::NoLevelChange if gear_up => DungeonKlimbApply::UpLadder,
+                    apply => apply,
+                };
+                match apply {
                     DungeonKlimbApply::UpLadder => self.climb(game_dir, ClimbIntent::Up),
                     DungeonKlimbApply::DownLadder | DungeonKlimbApply::PitDescent => {
                         self.climb(game_dir, ClimbIntent::Down)
                     }
                     DungeonKlimbApply::TwoWayPrompt => Ok(self.start_klimb_direction_prompt()),
+                    DungeonKlimbApply::NoLevelChange if tile & DUNGEON_KLIMB_GEAR_MARK_BIT != 0 => {
+                        // `§13.1` table: "K, neither offered, cell carries the
+                        // gear mark" - `Klimb-\nWith What?\n`, the no-grapple
+                        // refusal, reporting no action (Q26).
+                        self.message = DUNGEON_KLIMB_WITH_WHAT_REFUSAL.to_string();
+                        Ok(MoveOutcome::Blocked)
+                    }
                     DungeonKlimbApply::NoLevelChange => {
                         // `dungeon-mode.md` Section 8.1 Klimb prompts:
                         // `Klimb-what?` "when neither [direction] is [available]
@@ -1198,6 +1217,13 @@ impl PlayState {
         Ok(())
     }
 
+    /// `dungeon-mode.md §13.1` (u5-spec#298 Q26): the gear route offers Up
+    /// when the **raw** cell byte carries bit `0x08` and the Grapple byte
+    /// (`formats/saved-gam.md §7`, offset `0x0209`) is non-zero.
+    pub fn dungeon_klimb_gear_up(&self, tile: u8) -> bool {
+        tile & DUNGEON_KLIMB_GEAR_MARK_BIT != 0 && self.climbing_gear != 0
+    }
+
     pub fn climb_dungeon(
         &mut self,
         game_dir: &Path,
@@ -1238,7 +1264,8 @@ impl PlayState {
         {
             self.emit_message_line(word);
         }
-        let Some(delta) = dungeon_ladder_delta(tile, intent) else {
+        let gear_delta = (intent == ClimbIntent::Up && self.dungeon_klimb_gear_up(tile)).then_some(-1);
+        let Some(delta) = dungeon_ladder_delta(tile, intent).or(gear_delta) else {
             // "an impassable destination then adds `Failed!` with the short
             // **rising** sweep ... the same recipe the spell-failure tail
             // uses" - not the falls-style descent.

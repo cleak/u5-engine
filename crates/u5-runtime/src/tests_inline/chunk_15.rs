@@ -416,6 +416,51 @@
         assert_eq!(state.turn, 0);
     }
 
+    /// `dungeon-mode.md §13.1` (u5-spec#298 Q26): the climbable-with-gear
+    /// mark is raw bit `0x08`; with the Grapple a marked passage climbs up,
+    /// without it K prints the no-grapple refusal `Klimb-\nWith What?\n`
+    /// and reports no action.
+    #[test]
+    fn dungeon_k_on_gear_marked_cell_needs_the_grapple() {
+        let scene = DungeonScene::new(33).unwrap();
+        let mut grid = open_dungeon_record();
+        grid[dungeon_cell_index(1, 1, 1)] = 0x08;
+
+        let mut state = dungeon_state(grid.clone(), 1, 1, 1);
+        state.climbing_gear = 0;
+        assert!(state.handle_dungeon_key('k', Path::new("")).unwrap());
+        assert_eq!(state.message, DUNGEON_KLIMB_WITH_WHAT_REFUSAL);
+        assert_eq!(state.area, Area::Dungeon { scene, level: 1 });
+        assert_eq!(state.turn, 0);
+
+        let mut state = dungeon_state(grid, 1, 1, 1);
+        state.climbing_gear = 1;
+        assert!(state.handle_dungeon_key('k', Path::new("")).unwrap());
+        assert_eq!(state.area, Area::Dungeon { scene, level: 0 });
+        assert_eq!(state.message, DUNGEON_KLIMB_UP);
+        assert_eq!(state.turn, 1);
+    }
+
+    /// `dungeon-mode.md §13.1` (Q26): "a gear-marked **pit** cell carried
+    /// with the gear offers *both* directions and raises the up-or-down
+    /// prompt rather than descending."
+    #[test]
+    fn dungeon_k_on_gear_marked_pit_with_grapple_prompts_up_or_down() {
+        let scene = DungeonScene::new(33).unwrap();
+        let mut grid = open_dungeon_record();
+        grid[dungeon_cell_index(1, 1, 1)] = 0x68;
+        let mut state = dungeon_state(grid, 1, 1, 1);
+        state.climbing_gear = 1;
+
+        assert!(state.handle_dungeon_key('k', Path::new("")).unwrap());
+        assert_eq!(state.area, Area::Dungeon { scene, level: 1 });
+        assert!(state.active_direction_prompt.is_some());
+        assert_eq!(
+            state.climb_dungeon(Path::new(""), ClimbIntent::Up).unwrap(),
+            MoveOutcome::Transition(AreaTransition::ChangedDungeonLevel { scene, level: 0 })
+        );
+    }
+
     /// `dungeon-mode.md §8`: "Under K-Klimb the pit family behaves as an
     /// ordinary climb-*down* feature: the dispatcher masks the underfoot cell
     /// to its high nibble before any comparison, so the whole `0x6?` family -
