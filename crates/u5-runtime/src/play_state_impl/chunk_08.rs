@@ -94,7 +94,12 @@ impl PlayState {
         for ch in std::iter::once(key).chain(suffix.chars()) {
             match session.phase {
                 RestPhase::Hours => {
-                    if ch == '\u{1b}' {
+                    // `dungeon-mode.md §11`: the camp's hours prompt "loops
+                    // until a digit or Space"; Escape is neither, so off
+                    // the town-bed path it is re-read like any other key
+                    // (playtest E15).
+                    let camp = !matches!(self.area, Area::Town { .. });
+                    if ch == '\u{1b}' && !camp {
                         self.message = "None!".to_string();
                         return Ok(None);
                     }
@@ -121,6 +126,13 @@ impl PlayState {
                                 return Ok(None);
                             }
                             return self.finish_active_rest(hours, None, game_dir);
+                        }
+                        // `dungeon-mode.md §11`: the camp prompt "echoes
+                        // the key plus a line feed - Space or `0` aborts with
+                        // no further output" (playtest E15).
+                        RestDurationInput::Cancel if camp => {
+                            self.commit_prompt_reply(REST_HOURS_PROMPT, &ch.to_string());
+                            return Ok(None);
                         }
                         RestDurationInput::Cancel => {
                             self.message = "None!".to_string();

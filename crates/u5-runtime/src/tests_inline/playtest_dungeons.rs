@@ -271,3 +271,33 @@ fn playtest_e14_unlit_dungeon_look_refuses_before_the_dir_chooser() {
         .unwrap_or_else(|| panic!("the pick is echoed: {rows:?}"));
     assert_eq!(rows[name + 1..], ["You see:", "darkness."], "{rows:?}");
 }
+
+/// E15: `dungeon-mode.md §11` - the hours prompt "loops until a digit or
+/// Space and echoes the key plus a line feed - Space or `0` aborts with no
+/// further output". Escape is neither, so the prompt keeps waiting.
+#[test]
+fn playtest_e15_camp_hours_prompt_zero_is_silent_and_escape_is_reread() {
+    let mut state = dungeon_state(open_dungeon_record(), 0, 1, 1);
+    handle_play_key_input(&mut state, 'h', "", Path::new("")).unwrap();
+    assert!(state.active_rest.is_some());
+
+    handle_play_key_input(&mut state, '\u{1b}', "", Path::new("")).unwrap();
+    assert!(state.active_rest.is_some(), "Escape is re-read");
+    assert!(
+        !playtest_transcript_rows(&state)
+            .iter()
+            .any(|row| row.contains("None!")),
+        "{:?}",
+        playtest_transcript_rows(&state)
+    );
+
+    handle_play_key_input(&mut state, '0', "", Path::new("")).unwrap();
+    assert!(state.active_rest.is_none(), "`0` aborts");
+    let rows = playtest_transcript_rows(&state);
+    assert_eq!(
+        rows.last().map(String::as_str),
+        Some(format!("{REST_HOURS_PROMPT}0").as_str()),
+        "the key is echoed and nothing follows: {rows:?}"
+    );
+    assert!(!state.message_slot_needs_flush());
+}
