@@ -62,6 +62,9 @@ pub struct NarrationBeat {
     /// is the number of those steps not yet handed out by
     /// [`StagedNarration::take_due_world_steps`].
     pub world_steps: u16,
+    /// The beat's release repaints the stats panel from the next body queued
+    /// in `PlayState::staged_stats_panels`.
+    pub panel_repaint: bool,
 }
 
 /// The queue plus how far into the current beat's wait we are.
@@ -96,6 +99,20 @@ impl StagedNarration {
             continues_open_row: false,
             chained: false,
             world_steps: 0,
+            panel_repaint: false,
+        });
+    }
+
+    /// Push a pure hold whose release repaints the stats panel from the next
+    /// queued body (`PlayState::staged_stats_panels`).
+    pub fn push_secs_repainting_panel(&mut self, delay_secs: f64) {
+        self.beats.push_back(NarrationBeat {
+            delay_secs,
+            text: String::new(),
+            continues_open_row: false,
+            chained: false,
+            world_steps: 0,
+            panel_repaint: true,
         });
     }
 
@@ -108,6 +125,7 @@ impl StagedNarration {
             continues_open_row: true,
             chained: false,
             world_steps: 0,
+            panel_repaint: false,
         });
     }
 
@@ -148,6 +166,7 @@ impl StagedNarration {
             continues_open_row: false,
             chained: true,
             world_steps: 0,
+            panel_repaint: false,
         });
     }
 
@@ -165,6 +184,7 @@ impl StagedNarration {
             continues_open_row: false,
             chained: false,
             world_steps,
+            panel_repaint: false,
         });
     }
 

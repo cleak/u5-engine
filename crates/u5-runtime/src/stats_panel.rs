@@ -1396,8 +1396,8 @@ pub fn paint_stats_panel_text_window(
     let counter_row = STATS_COUNTER_TOP - STATS_PANEL_TEXT_TOP;
     let date_row = STATS_COUNTER_BOTTOM - STATS_PANEL_TEXT_TOP;
     for (row, line) in [
-        (counter_row, state.stats_panel.counter_row.clone()),
-        (date_row, state.stats_panel.date_row.clone()),
+        (counter_row, state.displayed_stats_panel().counter_row.clone()),
+        (date_row, state.displayed_stats_panel().date_row.clone()),
     ] {
         system.set_active_cursor(0, row);
         // `stats-panel.md §6`: only the ship variant's three-digit hull is
@@ -1420,7 +1420,7 @@ pub fn paint_stats_panel_text_window(
         STATS_PANEL_TIMED_EFFECT_LOCAL_COLUMN,
         STATS_PANEL_TIMED_EFFECT_LOCAL_ROW,
     );
-    if let Some(effect) = state.stats_panel.effect_tag {
+    if let Some(effect) = state.displayed_stats_panel().effect_tag {
         system.emit_byte(crate::gameplay_chrome::RIBBON_CAP_RIGHT_SOURCE_GLYPH);
         system.emit_byte(effect);
         system.emit_byte(crate::gameplay_chrome::RIBBON_CAP_LEFT_SOURCE_GLYPH);
@@ -1556,12 +1556,12 @@ fn paint_stats_panel_party_row(
     // [`StatsPanelSnapshot`]. The marker cell and the highlight below are the
     // exception: `stats-panel.md §9` has member selection "leave the body
     // alone", so they are read live and injected here.
-    let (line, overlay) = match state.stats_panel.rows.get(index) {
+    let (line, overlay) = match state.displayed_stats_panel().rows.get(index) {
         Some(line) => (line.clone(), stats_panel_combat_row_overlay(state, index)),
         None => stats_panel_party_row(state, active_cursor, index),
     };
     let status = state
-        .stats_panel
+        .displayed_stats_panel()
         .statuses
         .get(index)
         .copied()

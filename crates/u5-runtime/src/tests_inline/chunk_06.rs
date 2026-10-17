@@ -4026,6 +4026,7 @@
                 .all(|member| member.status == PARTY_STATUS_DEAD && member.hp == 0)
         );
         assert!(!state.party_has_drowning_loop_survivor());
+        state.flush_staged_narration();
         let lines = state
             .message_entries()
             .iter()

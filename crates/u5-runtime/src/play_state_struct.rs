@@ -495,6 +495,14 @@ pub struct PlayState {
     /// [`crate::stats_panel::StatsPanelSnapshot`] for why the panel is not
     /// painted from live state.
     pub stats_panel: crate::stats_panel::StatsPanelSnapshot,
+    /// A panel body a staged presentation keeps on screen in place of
+    /// [`Self::stats_panel`] while its beats run - the drowning loop's
+    /// per-pass repaints (`audio.md §8.9`), which the engine applies at once
+    /// but the original paints one damage pass at a time.
+    pub stats_panel_hold: Option<crate::stats_panel::StatsPanelSnapshot>,
+    /// Panel bodies still owed to [`Self::stats_panel_hold`], one per staged
+    /// beat that carries a repaint, in release order.
+    pub staged_stats_panels: std::collections::VecDeque<crate::stats_panel::StatsPanelSnapshot>,
     /// `stats-panel.md §2.2`'s one-byte panel refresh request: "a plain
     /// boolean ... written only 'set' or 'clear', ... no second value, no
     /// bitmask, no priority and no partial-refresh encoding". Raised by a

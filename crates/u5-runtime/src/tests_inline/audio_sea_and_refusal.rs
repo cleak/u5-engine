@@ -329,6 +329,15 @@ fn drowning_sounds_the_long_descent_before_the_death_loop() {
     assert!(effects[1..].iter().all(|effect| *effect
         == SoundEffect::DamageRumble));
     assert_eq!(state.player.transport, TransportState::SpriteSuppressed);
+    // `DROWNING!!!` follows the descent: it is staged behind it.
+    assert!(state.staged_narration_active());
+    let held = state
+        .message_entries()
+        .iter()
+        .map(|entry| entry.text.clone())
+        .collect::<Vec<_>>();
+    assert_eq!(held.last().map(String::as_str), Some(SHIP_SUNK_MESSAGE));
+    state.flush_staged_narration();
     let lines = state
         .message_entries()
         .iter()

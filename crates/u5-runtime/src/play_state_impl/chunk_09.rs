@@ -5516,9 +5516,26 @@ impl PlayState {
                 // this arm and not after the match.
                 self.sync_player_object();
                 self.mark_visibility_dirty();
-                self.emit_sound_effect(SoundEffect::LongDescent);
-                self.push_impact_line(DROWNING_MESSAGE);
-                drowning = self.apply_ship_loss_drowning();
+                // The refreshed panel - the ship gone from the counter row,
+                // the party still whole - holds through the descent.
+                self.repaint_stats_panel();
+                let descent = SoundEffect::LongDescent;
+                self.emit_sound_effect(descent.clone());
+                // The descent is a blocking sound: `DROWNING!!!` prints when
+                // it ends, and each pass of the death loop costs its own
+                // damage rumbles, with the panel repainted pass by pass.
+                // Measured 2026-10-17 (`sail-heading-echo`, beat `sailing`):
+                // the stock game still shows `Ship sunk!` and the whole party
+                // about four seconds after the sinking, then `DROWNING!!!`,
+                // then the hit points falling over several samples; this
+                // engine printed `DROWNING!!!` and the dead party at once.
+                let descent_secs = descent
+                    .program(&mut crate::audio::RumbleJitter::default())
+                    .duration(true)
+                    .as_secs_f64();
+                self.stats_panel_hold = Some(self.stats_panel.clone());
+                self.staged_narration.push_secs(descent_secs, DROWNING_MESSAGE);
+                drowning = self.apply_ship_loss_drowning_paced();
             }
         }
 
@@ -5543,6 +5560,30 @@ impl PlayState {
         while self.party_has_drowning_loop_survivor() {
             self.outdoor_impact_presentation();
             iterations.push(self.apply_outdoor_impact_party_damage());
+        }
+        iterations
+    }
+
+    /// [`Self::apply_ship_loss_drowning`], with each pass staged for the
+    /// length of the sounds it played and its panel repaint released when
+    /// that hold ends (`audio.md §8.9`: "the loop alternates the damage
+    /// presentation, which plays its own rumble on every pass, with
+    /// unavoidable damage to every non-Dead member").
+    fn apply_ship_loss_drowning_paced(&mut self) -> Vec<Vec<OutdoorImpactMemberDamage>> {
+        let mut iterations = Vec::new();
+        while self.party_has_drowning_loop_survivor() {
+            let serial = self.sound_effect_serial;
+            self.outdoor_impact_presentation();
+            iterations.push(self.apply_outdoor_impact_party_damage());
+            let mut jitter = crate::audio::RumbleJitter::default();
+            let secs: f64 = self
+                .sound_effects_after(serial)
+                .iter()
+                .map(|effect| effect.program(&mut jitter).duration(true).as_secs_f64())
+                .sum();
+            self.staged_stats_panels
+                .push_back(crate::stats_panel::stats_panel_snapshot_of(self));
+            self.staged_narration.push_secs_repainting_panel(secs);
         }
         iterations
     }

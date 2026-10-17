@@ -534,6 +534,9 @@ impl PlayState {
             }
         }
         for beat in released {
+            if beat.panel_repaint {
+                self.release_staged_stats_panel();
+            }
             // `blackthorn.md §5`: an execution's roster edit lands as its
             // blade hold ends (u5-spec#298 Q31).
             self.release_blackthorn_execution_hold();
@@ -549,11 +552,34 @@ impl PlayState {
             }
             self.emit_staged_beat(beat);
         }
+        if self.staged_narration.is_empty() {
+            self.end_stats_panel_hold();
+        }
         self.staged_narration_active()
+    }
+
+    /// The panel body on screen: a staged presentation's held repaint, or
+    /// the last ordinary refresh.
+    pub fn displayed_stats_panel(&self) -> &crate::stats_panel::StatsPanelSnapshot {
+        self.stats_panel_hold.as_ref().unwrap_or(&self.stats_panel)
+    }
+
+    /// One staged repaint: the next queued panel body goes on screen.
+    fn release_staged_stats_panel(&mut self) {
+        if let Some(panel) = self.staged_stats_panels.pop_front() {
+            self.stats_panel_hold = Some(panel);
+        }
+    }
+
+    /// The presentation is over: the ordinary panel is on screen again.
+    fn end_stats_panel_hold(&mut self) {
+        self.staged_stats_panels.clear();
+        self.stats_panel_hold = None;
     }
 
     /// Print every remaining beat now. For frontends and tests with no pump.
     pub fn flush_staged_narration(&mut self) {
+        self.end_stats_panel_hold();
         let drained = self.staged_narration.drain_all();
         // A spell flash's holds are always at the head of the queue (they are
         // only pushed onto an empty one) and print nothing: emitting their
@@ -561,7 +587,8 @@ impl PlayState {
         let flash_beats = usize::from(self.message_window_flash_hold.pending_beats);
         self.release_message_window_flash_beats(drained.len());
         for (index, beat) in drained.into_iter().enumerate() {
-            if index < flash_beats && beat.text.is_empty() {
+            // A staged panel repaint is a pure hold as well; it prints nothing.
+            if (index < flash_beats || beat.panel_repaint) && beat.text.is_empty() {
                 continue;
             }
             self.release_blackthorn_execution_hold();

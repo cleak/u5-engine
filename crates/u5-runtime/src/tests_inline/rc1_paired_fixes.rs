@@ -123,3 +123,63 @@ fn rc1_healer_declined_fee_echoes_no_on_the_prompt_row() {
         state.message
     );
 }
+
+/// `audio.md §8.9`, drowning: `Ship sunk!`, the panel refresh, **then** the
+/// long descent, then `DROWNING!!!`, then the death loop, whose passes each
+/// play their own damage rumble. Stock capture (`sail-heading-echo`, beat
+/// `sailing`, 2026-10-17): about four seconds after the sinking the window
+/// still ends on `Ship sunk!` with the whole party listed, and the hit points
+/// fall over the following samples. The engine printed `DROWNING!!!` and the
+/// dead party at once.
+#[test]
+fn rc1_drowning_holds_ship_sunk_through_the_descent_then_paces_the_loop() {
+    let mut state = world_state(open_world_grid(), 5, 5);
+    state.party = six_member_party(40);
+    state.special_items[SPECIAL_ITEM_MAGIC_CARPET_INDEX] = 0;
+    aboard_frigate(&mut state, 1, 0);
+    let full_row = crate::stats_panel::stats_panel_snapshot_of(&state).rows[0].clone();
+    let OutdoorImpactAbsorption::ShipDestroyed { drowning, .. } = state.apply_outdoor_impact()
+    else {
+        panic!("hull one is always destroyed");
+    };
+    assert!(drowning.len() > 1, "a hardy party survives several passes");
+    let last_row = |state: &PlayState| {
+        state
+            .message_entries()
+            .last()
+            .map(|entry| entry.text.clone())
+            .unwrap_or_default()
+    };
+    // Through the descent: `Ship sunk!` is the last row and the panel still
+    // shows the party whole, although the live roster is already dead.
+    let descent = SoundEffect::LongDescent
+        .program(&mut crate::audio::RumbleJitter::default())
+        .duration(true)
+        .as_secs_f64();
+    assert!(descent > 6.0);
+    assert!(state.advance_staged_narration_to(100.0));
+    assert!(state.advance_staged_narration_to(100.0 + descent - 0.1));
+    assert_eq!(last_row(&state), SHIP_SUNK_MESSAGE);
+    assert_eq!(state.displayed_stats_panel().rows[0], full_row);
+    assert!(state.party.iter().all(|member| member.hp == 0));
+
+    // Then `DROWNING!!!`, and the passes repaint the panel one at a time.
+    assert!(state.advance_staged_narration_to(100.0 + descent + 0.01));
+    assert_eq!(last_row(&state), DROWNING_MESSAGE);
+    let mut shown = vec![state.displayed_stats_panel().rows[0].clone()];
+    let mut now = 100.0 + descent + 0.01;
+    while state.staged_narration_active() {
+        now += 0.05;
+        state.advance_staged_narration_to(now);
+        let row = state.displayed_stats_panel().rows[0].clone();
+        if shown.last() != Some(&row) {
+            shown.push(row);
+        }
+    }
+    assert!(
+        shown.len() > 2,
+        "the hit points fall pass by pass: {shown:?}"
+    );
+    assert!(now - (100.0 + descent) > 0.5, "the loop takes time");
+    assert_eq!(state.displayed_stats_panel(), &state.stats_panel);
+}
