@@ -23329,7 +23329,7 @@ fn chargen_questionnaire_round_structure_matches_spec_section_six() {
 fn npc_dynamic_obstacle_radius_matches_published_threshold() {
     // npc-schedules.md §10: occupied cells are blocked only when the
     // occupant is within Manhattan distance less than four from the
-    // NPC's runtime destination.
+    // NPC's current (x, y) (issue #298 Q22, R536).
     assert_eq!(NPC_DYNAMIC_OBSTACLE_MANHATTAN_RADIUS, 4);
 }
 

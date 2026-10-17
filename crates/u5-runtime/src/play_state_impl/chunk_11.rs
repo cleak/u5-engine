@@ -180,10 +180,14 @@ impl PlayState {
         self.npc_cell_open(npc_index, x, y, floor, destination_x, destination_y, false)
     }
 
-    /// `npc-schedules.md §8.3` phase 4: the pathfinding workspace's
-    /// dynamic-obstacle overlay stamps only occupants whose "Manhattan
-    /// distance from the NPC's runtime destination is strictly less than
-    /// four"; farther occupants are treated as walkable by the search.
+    /// `npc-schedules.md §8.3` phase 4 (issue #298 Q22, `RETRACTIONS.md`
+    /// R536): the pathfinding workspace's dynamic-obstacle overlay "walks the
+    /// active-object table from record 31 down to record 1 and, for each
+    /// record whose type byte is above `0x3F` and whose Manhattan distance
+    /// from the NPC's current (x, y) is strictly less than four, stamps the
+    /// object's cell as an obstacle ... The player's position is then
+    /// included through the same distance rule." The destination arguments
+    /// feed only the §10 waypoint-match rule.
     pub fn npc_workspace_cell_open(
         &self,
         npc_index: usize,
@@ -218,7 +222,11 @@ impl PlayState {
             return false;
         }
 
-        if (x, y) == (self.player.x, self.player.y) {
+        let origin = (self.npcs[npc_index].x as i32, self.npcs[npc_index].y as i32);
+        if (x, y) == (self.player.x, self.player.y)
+            && (!destination_cutoff
+                || npc_dynamic_obstacle_blocks(x as i32, y as i32, origin.0, origin.1))
+        {
             return false;
         }
 
@@ -234,12 +242,13 @@ impl PlayState {
                     && object.y == y
                     && object.z == floor as i8
                     && (!destination_cutoff
-                        || npc_dynamic_obstacle_blocks(
-                            object.x as i32,
-                            object.y as i32,
-                            destination_x as i32,
-                            destination_y as i32,
-                        ))
+                        || npc_workspace_overlay_stamps(slot, object.type_byte)
+                            && npc_dynamic_obstacle_blocks(
+                                object.x as i32,
+                                object.y as i32,
+                                origin.0,
+                                origin.1,
+                            ))
             })
     }
 }

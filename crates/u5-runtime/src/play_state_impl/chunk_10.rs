@@ -1637,13 +1637,17 @@ impl PlayState {
                 return false;
             }
             *searched = true;
-            // npc-schedules.md §8.5, states 4/5: "The search runs first; if
-            // no link cell is reachable within the search budget the NPC does
-            // nothing this tick." Route selection is "nearest reachable cell
-            // carrying the selected marker, measured by the same
-            // breadth-first search used for ordinary movement", started, as
-            // that search always is, from the NPC's own runtime cell.
-            let start = (self.npcs[npc_index].x, self.npcs[npc_index].y);
+            // npc-schedules.md §8.5, states 4/5 (issue #298 Q22): "The search
+            // runs first, starting from the active waypoint's (x, y) on the
+            // displayed floor. The NPC's own coordinates belong to another
+            // floor and are not used, so the link chosen is the one the
+            // search reaches first from the waypoint. If no link cell is
+            // reachable within the search budget the NPC does nothing this
+            // tick." The follow-up link-to-waypoint search records one step
+            // that this engine does not replay: the NPC is placed on the link
+            // and re-enters in-plane movement, whose own search plans from
+            // there.
+            let start = (target_x, target_y);
             let Some((x, y)) = self
                 .npc_path_route_to_floor_link_marker(
                     npc_index,
@@ -1794,7 +1798,14 @@ impl PlayState {
             return false;
         }
 
-        if (x, y) == (self.player.x, self.player.y) {
+        // `npc-schedules.md §8.3` phase 4 (issue #298 Q22, R536): the same
+        // overlay as the coordinate search - records 1..31 above type `0x3F`
+        // and the party, each within four of the NPC's current (x, y).
+        let _ = destination;
+        let origin = (self.npcs[npc_index].x as i32, self.npcs[npc_index].y as i32);
+        if (x, y) == (self.player.x, self.player.y)
+            && npc_dynamic_obstacle_blocks(x as i32, y as i32, origin.0, origin.1)
+        {
             return false;
         }
 
@@ -1809,11 +1820,12 @@ impl PlayState {
                     && object.x == x
                     && object.y == y
                     && object.z == floor as i8
+                    && npc_workspace_overlay_stamps(slot, object.type_byte)
                     && npc_dynamic_obstacle_blocks(
                         object.x as i32,
                         object.y as i32,
-                        destination.0 as i32,
-                        destination.1 as i32,
+                        origin.0,
+                        origin.1,
                     )
             })
     }

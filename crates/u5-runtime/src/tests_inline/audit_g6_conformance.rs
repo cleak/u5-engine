@@ -204,24 +204,69 @@ fn a136_guard_sprite_arrests_and_low_sprite_clears_the_slot() {
 #[test]
 fn a127_per_step_gate_refuses_any_occupant_but_the_workspace_keeps_the_cutoff() {
     // npc-schedules.md §10: "the per-step gate applies no cutoff", while
-    // the workspace builder ignores occupants four or more from the
-    // destination (§8.3 phase 4).
+    // the workspace builder ignores occupants four or more from the NPC's
+    // current (x, y) (§8.3 phase 4 as corrected by issue #298 Q22, R536 -
+    // the radius used to be measured from the destination).
     let mut state = g6_town_with(
         vec![
             g6_npc(1, 1, 1, 0, (20, 20, 0)),
-            g6_npc(2, 2, 1, 0, (2, 1, 0)),
+            g6_npc(2, 8, 1, 0, (8, 1, 0)),
         ],
         30,
         30,
     );
-    // The occupant at (2, 1) is far from the destination (20, 20).
-    assert!(!state.npc_can_step_toward(0, 2, 1, 0, 20, 20));
-    assert!(state.npc_workspace_cell_open(0, 2, 1, 0, 20, 20));
-    // Within the cutoff both refuse.
-    assert!(!state.npc_workspace_cell_open(0, 2, 1, 0, 3, 1));
+    // The occupant at (8, 1) is seven from the NPC at (1, 1), even though
+    // it sits within four of a destination at (9, 1).
+    assert!(!state.npc_can_step_toward(0, 8, 1, 0, 9, 1));
+    assert!(state.npc_workspace_cell_open(0, 8, 1, 0, 9, 1));
+    // Within four of the NPC the workspace refuses whatever the destination.
+    state.npcs[1].x = 3;
+    state.relink_npc_objects();
+    assert!(!state.npc_workspace_cell_open(0, 3, 1, 0, 20, 20));
     state.npcs.truncate(1);
     state.relink_npc_objects();
-    assert!(state.npc_can_step_toward(0, 2, 1, 0, 20, 20));
+    assert!(state.npc_can_step_toward(0, 3, 1, 0, 20, 20));
+}
+
+#[test]
+fn r536_workspace_overlay_stamps_only_person_and_creature_art() {
+    // Issue #298 Q22 / R536: "Only person and creature art is stamped;
+    // items, vehicles, horses and furniture below that type value are not."
+    let mut state = g6_town_with(vec![g6_npc(1, 1, 1, 0, (20, 20, 0))], 30, 30);
+    let mut item = ActiveObject::empty();
+    item.type_byte = 0x3f;
+    item.tile = 0x3f;
+    item.x = 2;
+    item.y = 1;
+    let slot = state
+        .active_objects
+        .iter()
+        .position(|object| object.is_empty() && !std::ptr::eq(object, &state.active_objects[0]))
+        .unwrap_or(state.active_objects.len());
+    if slot == state.active_objects.len() {
+        state.active_objects.push(item);
+    } else {
+        state.active_objects[slot] = item;
+    }
+    assert!(state.npc_workspace_cell_open(0, 2, 1, 0, 20, 20));
+    assert!(!state.npc_can_step_toward(0, 2, 1, 0, 20, 20));
+    state.active_objects[slot].type_byte = 0x40;
+    assert!(!state.npc_workspace_cell_open(0, 2, 1, 0, 20, 20));
+    assert!(npc_workspace_overlay_stamps(31, 0x40));
+    assert!(!npc_workspace_overlay_stamps(0, 0x40));
+    assert!(!npc_workspace_overlay_stamps(5, NPC_WORKSPACE_OVERLAY_MIN_TYPE_EXCLUSIVE));
+}
+
+#[test]
+fn r536_player_is_stamped_only_within_four_of_the_npc() {
+    // Issue #298 Q22 / R536: "The player is therefore stamped only within
+    // that radius; the overlay alone does not keep an NPC out of the
+    // player's cell." The per-step gate still refuses it.
+    let state = g6_town_with(vec![g6_npc(1, 1, 1, 0, (20, 20, 0))], 9, 1);
+    assert!(state.npc_workspace_cell_open(0, 9, 1, 0, 20, 20));
+    assert!(!state.npc_can_step_toward(0, 9, 1, 0, 20, 20));
+    let state = g6_town_with(vec![g6_npc(1, 1, 1, 0, (20, 20, 0))], 3, 1);
+    assert!(!state.npc_workspace_cell_open(0, 3, 1, 0, 20, 20));
 }
 
 #[test]
@@ -260,8 +305,9 @@ fn a130_floor_link_search_goals_are_exactly_the_marker_and_reachable() {
         vec![(9, 5)]
     );
 
-    // States 4/5 take the nearest *reachable* marker by BFS from the NPC's
-    // cell: the marker nearer the waypoint is walled off.
+    // States 4/5 take the nearest *reachable* marker by BFS from the active
+    // waypoint (issue #298 Q22): the marker nearer the waypoint is walled
+    // off, so the search reaches the far one.
     let mut grid = g6_open_grid();
     grid[10 * 32 + 10] = NPC_FLOOR_LINK_TILE_C8;
     for (x, y) in [(9, 10), (11, 10), (10, 9), (10, 11)] {
@@ -277,6 +323,27 @@ fn a130_floor_link_search_goals_are_exactly_the_marker_and_reachable() {
     assert!(state.advance_npc_floor_transition_step(0, 0, 11, 11, 0, 0, &mut searched));
     assert_eq!((state.npcs[0].x, state.npcs[0].y, state.npcs[0].z), (2, 2, 0));
     assert_eq!(state.npcs[0].state, NPC_STATE_INPLANE_MOVE);
+}
+
+#[test]
+fn q22_states_four_five_search_from_the_waypoint_not_the_off_floor_npc() {
+    // Issue #298 Q22, `npc-schedules.md §8.5`: "The search runs first,
+    // starting from the active waypoint's (x, y) on the displayed floor.
+    // The NPC's own coordinates belong to another floor and are not used,
+    // so the link chosen is the one the search reaches first from the
+    // waypoint." Here the link at (2, 2) is nearest the NPC's stored cell
+    // and the link at (12, 12) is nearest the waypoint.
+    let mut grid = g6_open_grid();
+    grid[2 * 32 + 2] = NPC_FLOOR_LINK_TILE_C8;
+    grid[12 * 32 + 12] = NPC_FLOOR_LINK_TILE_C8;
+    let mut state = test_state(grid, 30, 30);
+    let mut npc = g6_npc(1, 3, 2, 0, (11, 11, 0));
+    npc.z = 1;
+    npc.state = NPC_STATE_DESCEND_TOWARD_TARGET;
+    state.npcs = vec![npc];
+    let mut searched = false;
+    assert!(state.advance_npc_floor_transition_step(0, 0, 11, 11, 0, 0, &mut searched));
+    assert_eq!((state.npcs[0].x, state.npcs[0].y, state.npcs[0].z), (12, 12, 0));
 }
 
 #[test]

@@ -723,16 +723,30 @@ pub const NPC_STUCK_HIGH_BAND_LAST: u16 = 204;
 /// Per `npc-schedules.md §10` movement constraint: dynamic-obstacle scan
 /// radius. An occupied active-object cell is reported as blocked only when
 /// the occupant is within Manhattan distance less than this value from the
-/// NPC's runtime destination. Cells outside this radius are treated as
-/// walkable by the pathfinding workspace.
+/// NPC's **current** (x, y) (issue #298 Q22, `RETRACTIONS.md` R536 withdrew
+/// "the NPC's runtime destination"). Cells outside this radius are treated
+/// as walkable by the pathfinding workspace.
 pub const NPC_DYNAMIC_OBSTACLE_MANHATTAN_RADIUS: usize = 4;
+
+/// `npc-schedules.md §8.3` phase 4 (issue #298 Q22, R536): the overlay
+/// stamps only "records 31 down to 1" whose "type byte is above `0x3F`.
+/// Only person and creature art is stamped; items, vehicles, horses and
+/// furniture below that type value are not."
+pub const NPC_WORKSPACE_OVERLAY_MIN_TYPE_EXCLUSIVE: u8 = 0x3F;
+
+/// Whether the phase-4 overlay considers active-object record `slot` with
+/// type byte `type_byte` at all (before the distance rule).
+pub const fn npc_workspace_overlay_stamps(slot: usize, type_byte: u8) -> bool {
+    slot >= 1 && slot <= 31 && type_byte > NPC_WORKSPACE_OVERLAY_MIN_TYPE_EXCLUSIVE
+}
 
 /// `npc-schedules.md §10`: returns `true` when an occupied active-
 /// object cell falls within the dynamic-obstacle scan radius around
-/// the NPC's runtime destination. Occupants strictly inside the
-/// radius (Manhattan distance `<` the radius) are reported as
-/// blocked; occupants at or beyond the radius are treated as
-/// walkable by the pathfinding workspace.
+/// the given origin, which callers pass as the NPC's current (x, y)
+/// (R536; the parameter names predate that correction). Occupants
+/// strictly inside the radius (Manhattan distance `<` the radius) are
+/// reported as blocked; occupants at or beyond the radius are treated
+/// as walkable by the pathfinding workspace.
 pub const fn npc_dynamic_obstacle_blocks(
     occupant_x: i32,
     occupant_y: i32,
