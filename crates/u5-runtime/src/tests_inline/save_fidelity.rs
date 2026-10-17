@@ -133,7 +133,10 @@ fn save_writes_the_cleanup_pre_cascade_hour_snapshot() {
     state.cleanup_previous_hour = 0;
 
     state.advance_turn();
-    assert_eq!(state.cleanup_previous_hour, 8);
+    // `time.md §5` (u5-spec#298 Q27, R548): the turn's upkeep pass compares
+    // the shared byte (8) with the hour (9) and then "writes the current hour
+    // into that shared snapshot".
+    assert_eq!(state.cleanup_previous_hour, 9);
     assert_eq!(state.clock.hour, 9);
     state.advance_turn();
     assert_eq!(state.cleanup_previous_hour, 9);

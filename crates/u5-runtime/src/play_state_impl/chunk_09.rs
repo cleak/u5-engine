@@ -3155,8 +3155,9 @@ impl PlayState {
         // turn-consuming action in overworld mode, town mode, and dungeon
         // mode", not once per hour. "Only the food and starvation branch is
         // gated on an hour change; everything else in the pass runs on every
-        // invocation." The pass owns its own previous-hour snapshot, so it is
-        // invoked here unconditionally and decides the hour gate itself.
+        // invocation." The pass reads the shared `0x02DA` snapshot written at
+        // the head of this path (R548), so it is invoked here unconditionally
+        // and decides the hour gate itself.
         if apply_hourly_party_status {
             // `town-mode.md §7`/§10 puts this pass at the *end* of the
             // underfoot handler. Ordinary town actions are one-minute turns;
@@ -3339,14 +3340,17 @@ impl PlayState {
     }
 
     /// `time.md §5` party status/provision pass, entered once per
-    /// turn-consuming action. The pass "keeps its own previous-hour snapshot
-    /// and compares it with the current hour", and updates that snapshot
-    /// after the branch "so the branch cannot repeat until the clock crosses
-    /// another hour".
+    /// turn-consuming action. "The pass compares the shared pre-cascade hour
+    /// snapshot (Section 2; save byte `0x02DA`, Section 11) with the current
+    /// hour; it has no snapshot of its own", and "After the branch is
+    /// handled, the pass writes the current hour into that shared snapshot,
+    /// so neither this branch nor a following mode-zero cleanup refires until
+    /// the clock crosses another hour" (u5-spec#298 Q27, `RETRACTIONS.md`
+    /// R548, which withdrew the pass's own snapshot).
     pub fn apply_hourly_status_provision_pass(&mut self) -> u16 {
-        let hour_changed = self.clock.hour != self.status_pass_previous_hour;
+        let hour_changed = self.clock.hour != self.cleanup_previous_hour;
         let consumers = self.apply_status_provision_pass(hour_changed);
-        self.status_pass_previous_hour = self.clock.hour;
+        self.cleanup_previous_hour = self.clock.hour;
         consumers
     }
 
@@ -6393,12 +6397,39 @@ mod time_cascade_and_daylight_spec_tests {
     /// `time.md §5`: "Only the food and starvation branch is gated on an hour
     /// change" - so provisions must not be spent by ordinary turns inside the
     /// same hour.
+    /// `time.md §5` (u5-spec#298 Q27, `RETRACTIONS.md` R548): the pass
+    /// "compares and then rewrites the shared pre-cascade hour snapshot, save
+    /// byte `0x02DA`", so after it "neither this branch nor a following
+    /// mode-zero cleanup refires until the clock crosses another hour".
+    #[test]
+    fn upkeep_pass_reads_and_rewrites_the_shared_0x02da_snapshot() {
+        let mut state = test_state(open_grid(), 10, 10);
+        state.clock.hour = 12;
+        state.clock.minute = 0;
+        state.cleanup_previous_hour = 11;
+        state.food = 100;
+        state.twelve_hour_audio_repeats = 0;
+
+        state.apply_hourly_status_provision_pass();
+        assert_eq!(state.food, 99, "the 12:00 meal is spent once");
+        assert_eq!(state.cleanup_previous_hour, 12);
+
+        // The shared byte now matches the hour: a mode-zero cleanup does not
+        // fire the hour bundle that writes the chime count.
+        state.mode_zero_cleanup();
+        assert_eq!(state.twelve_hour_audio_repeats, 0);
+
+        // And a second pass inside the same hour spends nothing.
+        state.apply_hourly_status_provision_pass();
+        assert_eq!(state.food, 99);
+    }
+
     #[test]
     fn provisions_are_not_spent_by_turns_inside_the_same_hour() {
         let mut state = test_state(open_grid(), 10, 10);
         state.clock.hour = 12;
         state.clock.minute = 10;
-        state.status_pass_previous_hour = 12;
+        state.cleanup_previous_hour = 12;
         state.food = 100;
 
         for _ in 0..5 {
