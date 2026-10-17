@@ -26204,19 +26204,53 @@ fn dungeon_turn_does_not_animate_top_down_active_objects() {
     assert_eq!(state.clock, GameClock::new(12, 1).unwrap());
 }
 
-#[test]
-fn dungeon_post_turn_active_monster_greedy_steps_toward_party() {
-    let mut state = dungeon_state(open_dungeon_record(), 0, 1, 1);
-    state.active_objects.push(ActiveObject {
-        type_byte: 192,
-        tile: 192,
-        x: 3,
-        y: 1,
+/// `dungeon-mode.md §14` (u5-spec#298 Q33): wall in every neighbour of
+/// `(x, y)` except `open`, so the random walk has one acceptable cell.
+fn dungeon_grid_with_single_open_neighbour(x: usize, y: usize, open: Direction) -> Vec<u8> {
+    let mut grid = open_dungeon_record();
+    for direction in [
+        Direction::North,
+        Direction::East,
+        Direction::South,
+        Direction::West,
+    ] {
+        if direction == open {
+            continue;
+        }
+        let (dx, dy) = direction.delta();
+        let nx = (x as isize + dx).rem_euclid(DUNGEON_SIDE as isize) as usize;
+        let ny = (y as isize + dy).rem_euclid(DUNGEON_SIDE as isize) as usize;
+        grid[dungeon_cell_index(0, nx, ny)] = 0xb0;
+    }
+    grid
+}
+
+fn dungeon_test_monster(type_byte: u8, x: usize, y: usize, phase: u8, aux1: u8) -> ActiveObject {
+    ActiveObject {
+        type_byte,
+        tile: type_byte,
+        x,
+        y,
         z: 0,
-        phase: 0x20,
-        aux1: 0,
+        phase,
+        aux1,
         aux3: 0,
-    });
+    }
+}
+
+#[test]
+fn dungeon_post_turn_active_monster_random_walk_is_not_a_pursuit() {
+    // `dungeon-mode.md §14` (u5-spec#298 Q33, R551): no distance test. With
+    // only the cell *away* from the party open, the monster still steps
+    // there; the retracted greedy walk would have stayed put.
+    let grid = dungeon_grid_with_single_open_neighbour(3, 1, Direction::East);
+    let mut state = dungeon_state(grid, 0, 1, 1);
+    state.active_objects.push(dungeon_test_monster(192, 3, 1, 0x20, 0));
+    // A seed whose first `0..3` draw is 1 (east). The dungeon turn makes
+    // no earlier gameplay draw in this fixture.
+    state.prng_state = (1..=u16::MAX)
+        .find(|&seed| u5_prng_range_u16(&mut seed.clone(), 0, 3) == 1)
+        .unwrap();
 
     assert_eq!(
         state.pass_turn_with_game_dir(Some(Path::new(""))).unwrap(),
@@ -26224,7 +26258,8 @@ fn dungeon_post_turn_active_monster_greedy_steps_toward_party() {
     );
 
     let object = state.active_objects[1];
-    assert_eq!((object.x, object.y), (2, 1));
+    assert_eq!((object.x, object.y), (4, 1));
+    assert_eq!(state.dungeon_monster_previous_cell, Some((3, 1)));
     // `dungeon-mode.md §6.9`: the phase byte is packed sprite state; a
     // committed step moves the record without writing a facing into it.
     assert_eq!(object.phase, 0x20);
@@ -26233,7 +26268,7 @@ fn dungeon_post_turn_active_monster_greedy_steps_toward_party() {
         state
             .diagnostics
             .join(" ")
-            .contains("Dungeon monster tile 192 moved West to (2, 1)")
+            .contains("Dungeon monster tile 192 moved East to (4, 1)")
     );
 }
 
@@ -26241,17 +26276,9 @@ fn dungeon_post_turn_active_monster_greedy_steps_toward_party() {
 fn dungeon_active_monster_step_preserves_packed_sprite_state() {
     // `dungeon-mode.md §6.9`: Ghost starts at `0x90` (complement symmetry);
     // the symmetry and mode bits must survive a committed step.
-    let mut state = dungeon_state(open_dungeon_record(), 0, 1, 1);
-    state.active_objects.push(ActiveObject {
-        type_byte: 3,
-        tile: 3,
-        x: 3,
-        y: 1,
-        z: 0,
-        phase: 0x90,
-        aux1: 23,
-        aux3: 0,
-    });
+    let grid = dungeon_grid_with_single_open_neighbour(3, 1, Direction::West);
+    let mut state = dungeon_state(grid, 0, 1, 1);
+    state.active_objects.push(dungeon_test_monster(3, 3, 1, 0x90, 23));
 
     assert_eq!(
         state.pass_turn_with_game_dir(Some(Path::new(""))).unwrap(),
@@ -26264,34 +26291,134 @@ fn dungeon_active_monster_step_preserves_packed_sprite_state() {
 }
 
 #[test]
-fn dungeon_post_turn_active_monster_rejects_sleep_field_step() {
-    let mut grid = open_dungeon_record();
-    grid[dungeon_cell_index(0, 2, 1)] = 0x80;
-    let mut state = dungeon_state(grid, 0, 1, 1);
-    state.active_objects.push(ActiveObject {
-        type_byte: 192,
-        tile: 192,
-        x: 3,
-        y: 1,
-        z: 0,
-        phase: 0x20,
-        aux1: 0,
-        aux3: 0,
-    });
+fn dungeon_active_monster_first_draw_names_the_cardinal() {
+    // `dungeon-mode.md §14` (Q33): `random_range(0, 3)` from the shared
+    // generator, 0 north, 1 east, 2 south, 3 west, wrapping on 8 by 8; on
+    // an open level the first attempt is accepted with no second draw.
+    for seed in [0x0001u16, 0x1234, 0x5555, 0xbeef, 0x7f00, 0x0042] {
+        let mut state = dungeon_state(open_dungeon_record(), 0, 5, 5);
+        state.active_objects.push(dungeon_test_monster(0, 0, 0, 0x60, 20));
+        state.prng_state = seed;
+        let mut expected_state = seed;
+        let draw = u5_prng_range_u16(&mut expected_state, 0, 3);
+        let expected = [(0, 7), (1, 0), (0, 1), (7, 0)][draw as usize];
 
-    assert_eq!(
-        state.pass_turn_with_game_dir(Some(Path::new(""))).unwrap(),
-        MoveOutcome::Passed
-    );
+        let object = state.active_objects[1];
+        let step = state.dungeon_active_monster_step(1, object, 0).unwrap();
+
+        assert_eq!((step.x, step.y), expected, "seed {seed:#06x} draw {draw}");
+        assert!(!step.contact);
+        assert_eq!(state.prng_state, expected_state, "exactly one draw");
+        assert_eq!(state.dungeon_monster_previous_cell, Some((0, 0)));
+    }
+}
+
+#[test]
+fn dungeon_post_turn_active_monster_rejects_pit_field_and_wall_classes() {
+    // `dungeon-mode.md §14` (Q33): `0x6?`, every `0x8?` field (not only
+    // sleep) and `0xA?` and up are rejected with no further draw, so four
+    // rejected neighbours cost exactly eight draws and the monster stays.
+    let mut grid = open_dungeon_record();
+    grid[dungeon_cell_index(0, 2, 1)] = 0x81;
+    grid[dungeon_cell_index(0, 4, 1)] = 0x63;
+    grid[dungeon_cell_index(0, 3, 0)] = 0x82;
+    grid[dungeon_cell_index(0, 3, 2)] = 0xa0;
+    let mut state = dungeon_state(grid, 0, 1, 1);
+    state.active_objects.push(dungeon_test_monster(192, 3, 1, 0x20, 0));
+    let mut expected_state = state.prng_state;
+    for _ in 0..8 {
+        u5_prng_range_u16(&mut expected_state, 0, 3);
+    }
 
     let object = state.active_objects[1];
-    assert_eq!((object.x, object.y), (3, 1));
-    assert!(!state.message.contains("Dungeon monster tile 192 moved"));
+    assert_eq!(state.dungeon_active_monster_step(1, object, 0), None);
+    assert_eq!(state.prng_state, expected_state);
+    assert_eq!((state.active_objects[1].x, state.active_objects[1].y), (3, 1));
+
+    // "Nothing else is rejected": `0x9?`, open chests and fountains pass.
+    for open_class in [0x90u8, 0x70, 0x50, 0x40, 0x30] {
+        let mut grid = dungeon_grid_with_single_open_neighbour(3, 1, Direction::South);
+        grid[dungeon_cell_index(0, 3, 2)] = open_class;
+        let mut state = dungeon_state(grid, 0, 6, 6);
+        state.active_objects.push(dungeon_test_monster(192, 3, 1, 0x20, 0));
+        let object = state.active_objects[1];
+        let step = state.dungeon_active_monster_step(1, object, 0);
+        assert_eq!(step.map(|step| (step.x, step.y)), Some((3, 2)), "{open_class:#04x}");
+    }
+}
+
+#[test]
+fn dungeon_active_monster_backtrack_needs_a_one_in_eight_roll() {
+    // `dungeon-mode.md §14` (Q33): a candidate equal to the stored previous
+    // cell takes a second `random_range(0, 7)` draw and is accepted only on
+    // exactly 1. Three walls and the previous cell west of the monster.
+    for seed in [0x0001u16, 0x2468, 0x9abc, 0xfff0] {
+        let grid = dungeon_grid_with_single_open_neighbour(3, 1, Direction::West);
+        let mut state = dungeon_state(grid, 0, 6, 6);
+        state.active_objects.push(dungeon_test_monster(0, 3, 1, 0x60, 20));
+        state.dungeon_monster_previous_cell = Some((2, 1));
+        state.prng_state = seed;
+
+        let mut expected_state = seed;
+        let mut accepted = false;
+        for _ in 0..8 {
+            if u5_prng_range_u16(&mut expected_state, 0, 3) == 3
+                && u5_prng_range_u16(&mut expected_state, 0, 7) == 1
+            {
+                accepted = true;
+                break;
+            }
+        }
+
+        let object = state.active_objects[1];
+        let step = state.dungeon_active_monster_step(1, object, 0);
+        assert_eq!(state.prng_state, expected_state, "seed {seed:#06x}");
+        if accepted {
+            assert_eq!(step.map(|step| (step.x, step.y)), Some((2, 1)));
+            assert_eq!(state.dungeon_monster_previous_cell, Some((3, 1)));
+        } else {
+            assert_eq!(step, None);
+            assert_eq!(state.dungeon_monster_previous_cell, Some((2, 1)));
+        }
+    }
+}
+
+#[test]
+fn dungeon_active_monster_contact_restores_the_previous_cell() {
+    // `dungeon-mode.md §14` (Q33): contact fires only when the accepted
+    // step lands on the party's cell; the stored previous cell is copied
+    // back into the current cell, so the monster never occupies it.
+    let grid = dungeon_grid_with_single_open_neighbour(2, 1, Direction::West);
+    let mut state = dungeon_state(grid, 0, 1, 1);
+    state.active_objects.push(dungeon_test_monster(0, 2, 1, 0x60, 20));
+
+    let object = state.active_objects[1];
+    let step = state.dungeon_active_monster_step(1, object, 0).unwrap();
+    assert!(step.contact);
+    assert_eq!((step.x, step.y), (2, 1));
+    assert_eq!(state.dungeon_monster_previous_cell, Some((2, 1)));
+}
+
+#[test]
+fn dungeon_active_monster_adjacent_to_party_need_not_attack() {
+    // `dungeon-mode.md §14` (Q33, R551): "The step itself has no adjacency
+    // test." Adjacent, with the party's cell an energy field (rejected
+    // class), the monster cannot contact the party.
+    let mut grid = dungeon_grid_with_single_open_neighbour(2, 1, Direction::West);
+    grid[dungeon_cell_index(0, 1, 1)] = 0x82;
+    let mut state = dungeon_state(grid, 0, 1, 1);
+    state.active_objects.push(dungeon_test_monster(0, 2, 1, 0x60, 20));
+
+    let object = state.active_objects[1];
+    assert_eq!(state.dungeon_active_monster_step(1, object, 0), None);
 }
 
 #[test]
 fn dungeon_post_turn_active_monster_contact_faces_threat_and_consumes_monster() {
-    let mut state = dungeon_state(open_dungeon_record(), 0, 1, 1);
+    // `dungeon-mode.md §14` (Q33): only the party's cell is open, so the
+    // random walk's accepted step is onto it.
+    let grid = dungeon_grid_with_single_open_neighbour(2, 1, Direction::West);
+    let mut state = dungeon_state(grid, 0, 1, 1);
     state.player.facing = Direction::North;
     state.active_objects.push(ActiveObject {
         type_byte: 0,
@@ -26312,9 +26439,16 @@ fn dungeon_post_turn_active_monster_contact_faces_threat_and_consumes_monster() 
     assert_eq!(state.player.facing, Direction::East);
     assert!(state.combat_active);
     assert!(state.combat_frame_snapshot.as_ref().unwrap().active_objects[1].is_empty());
-    assert_eq!(state.active_objects[6].tile, combat_class_sprite_byte(20));
-    assert_eq!(state.combat_actors[6].owner_target_class, 20);
-    assert!(!state.combat_actors[6].is_empty());
+    // The arena's monster layout follows the combat setup's own draws,
+    // which now start after the §14 random walk's draws (Q33).
+    assert!(state
+        .combat_actors
+        .iter()
+        .any(|actor| !actor.is_empty() && actor.owner_target_class == 20));
+    assert!(state
+        .active_objects
+        .iter()
+        .any(|object| object.tile == combat_class_sprite_byte(20)));
     // `dungeon-mode.md §14`: the printed line is the fragment-built
     // `Attacked from the <lower-case compass word>!`; the setup report
     // is a diagnostic.
@@ -26330,7 +26464,10 @@ fn dungeon_post_turn_active_monster_contact_faces_threat_and_consumes_monster() 
 
 #[test]
 fn dungeon_post_turn_non_class_contact_reports_no_combat_class() {
-    let mut state = dungeon_state(open_dungeon_record(), 0, 1, 1);
+    // `dungeon-mode.md §14` (Q33): only the party's cell is open, so the
+    // random walk's accepted step is onto it.
+    let grid = dungeon_grid_with_single_open_neighbour(2, 1, Direction::West);
+    let mut state = dungeon_state(grid, 0, 1, 1);
     state.player.facing = Direction::North;
     state.active_objects.push(ActiveObject {
         type_byte: 0x42,

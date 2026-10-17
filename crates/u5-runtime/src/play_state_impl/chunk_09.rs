@@ -1287,6 +1287,10 @@ impl PlayState {
             }
             object.x = x;
             object.y = y;
+            // `dungeon-mode.md §4.1`: "the same X/Y is written to the
+            // active-object slot and the first dungeon creature slot" - the
+            // stored previous cell of the §14 random walk.
+            self.dungeon_monster_previous_cell = Some((x, y));
             placed = true;
             break;
         }

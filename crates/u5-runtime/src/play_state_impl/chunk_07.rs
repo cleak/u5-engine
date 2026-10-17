@@ -6057,7 +6057,7 @@ impl PlayState {
         };
         if step.contact {
             let direction = self
-                .dungeon_direction_from_player_to(object.x, object.y)
+                .dungeon_direction_from_player_to(step.x, step.y)
                 .unwrap_or(self.player.facing);
             // `dungeon-mode.md §14`: the feedback "is assembled from fragments
             // rather than stored whole. The line is `Attacked`, then - only
@@ -6123,57 +6123,61 @@ impl PlayState {
         Ok(None)
     }
 
+    /// `dungeon-mode.md §14` (u5-spec#298 Q33, R551): the active monster's
+    /// step is a random walk with no distance test. Up to eight attempts,
+    /// each one `random_range(0, 3)` shared-generator draw (0 north, 1 east,
+    /// 2 south, 3 west) naming a wrapped neighbour; a candidate of class
+    /// `0x6?`, `0x8?` or `0xA?` and up is rejected with no further draw; a
+    /// candidate equal to the stored previous cell needs a `random_range(0,
+    /// 7)` result of exactly 1. The first acceptance moves current to
+    /// previous and the candidate to current. Contact fires only when the
+    /// current cell is then the party's cell, and copies the previous cell
+    /// back into the current one, so the monster never occupies the party's
+    /// cell. The one stationary presentation value is not yet published
+    /// (`OPEN-QUESTIONS.md` section 3), so no family is treated as
+    /// stationary here.
     pub fn dungeon_active_monster_step(
-        &self,
-        slot: usize,
+        &mut self,
+        _slot: usize,
         object: ActiveObject,
         level: u8,
     ) -> Option<DungeonActiveMonsterStep> {
-        if object.phase & 0x0f == STEADY_PHASE {
+        let mut current = (object.x, object.y);
+        let mut previous = self.dungeon_monster_previous_cell.unwrap_or(current);
+        let mut moved = None;
+        for _ in 0..DUNGEON_MONSTER_STEP_ATTEMPTS {
+            let direction = dungeon_monster_step_direction(self.random_range_u8(0, 3));
+            let (dx, dy) = direction.delta();
+            let nx = (current.0 as isize + dx).rem_euclid(DUNGEON_SIDE as isize) as usize;
+            let ny = (current.1 as isize + dy).rem_euclid(DUNGEON_SIDE as isize) as usize;
+            if !dungeon_active_monster_class_accepts(self.dungeon_cell(level, nx, ny)) {
+                continue;
+            }
+            if (nx, ny) == previous && self.random_range_u8(0, 7) != 1 {
+                continue;
+            }
+            previous = current;
+            current = (nx, ny);
+            moved = Some(direction);
+            break;
+        }
+        let contact = current == (self.player.x, self.player.y);
+        if contact {
+            current = previous;
+        }
+        self.dungeon_monster_previous_cell = Some(previous);
+        if moved.is_none() && !contact {
             return None;
         }
-        let current_distance =
-            dungeon_wrapped_manhattan_distance(object.x, object.y, self.player.x, self.player.y);
-        let directions = dungeon_monster_step_directions(self.dungeon_monster_step_seed(slot));
-        for direction in directions {
-            let (dx, dy) = direction.delta();
-            let nx = (object.x as isize + dx).rem_euclid(DUNGEON_SIDE as isize) as usize;
-            let ny = (object.y as isize + dy).rem_euclid(DUNGEON_SIDE as isize) as usize;
-            if (nx, ny) == (self.player.x, self.player.y) {
-                return Some(DungeonActiveMonsterStep {
-                    direction,
-                    x: nx,
-                    y: ny,
-                    contact: true,
-                });
-            }
-            if self
-                .active_objects
-                .iter()
-                .enumerate()
-                .any(|(other_slot, other)| {
-                    other_slot != slot
-                        && other_slot != ACTIVE_OBJECT_PLAYER_SLOT
-                        && self.object_occupies(*other, nx, ny)
-                })
-            {
-                continue;
-            }
-            let tile = self.dungeon_cell(level, nx, ny);
-            if !dungeon_active_monster_can_step_on(tile) {
-                continue;
-            }
-            let distance = dungeon_wrapped_manhattan_distance(nx, ny, self.player.x, self.player.y);
-            if distance < current_distance {
-                return Some(DungeonActiveMonsterStep {
-                    direction,
-                    x: nx,
-                    y: ny,
-                    contact: false,
-                });
-            }
-        }
-        None
+        // Without an accepted step the contact rule still applies (Q33:
+        // inferred unreachable in normal play); the caller reads no
+        // direction on the contact arm.
+        Some(DungeonActiveMonsterStep {
+            direction: moved.unwrap_or(Direction::North),
+            x: current.0,
+            y: current.1,
+            contact,
+        })
     }
 
     pub fn dungeon_active_monster(&self) -> Option<(usize, ActiveObject)> {
@@ -6186,10 +6190,6 @@ impl PlayState {
             .copied()?;
         (dungeon_monster_record_active(object) && object.z == level as i8)
             .then_some((DUNGEON_ACTIVE_MONSTER_SLOT, object))
-    }
-
-    pub fn dungeon_monster_step_seed(&self, slot: usize) -> u8 {
-        self.turn as u8 ^ self.player.x as u8 ^ ((self.player.y as u8) << 2) ^ ((slot as u8) << 4)
     }
 
     pub fn dungeon_direction_from_player_to(&self, x: usize, y: usize) -> Option<Direction> {
@@ -6395,47 +6395,23 @@ pub struct DungeonActiveMonsterStep {
     pub contact: bool,
 }
 
-pub fn dungeon_active_monster_can_step_on(tile: u8) -> bool {
-    !matches!(tile >> 4, 0x06 | 0x0b..=0x0f)
-        && !matches!(dungeon_field_effect(tile), Some(DungeonFieldEffect::Sleep))
+/// `dungeon-mode.md §14` (u5-spec#298 Q33): at most eight step attempts.
+pub const DUNGEON_MONSTER_STEP_ATTEMPTS: usize = 8;
+
+/// `dungeon-mode.md §14`: the draw is a cardinal in the party-facing
+/// convention of Section 3 - 0 north, 1 east, 2 south, 3 west.
+pub fn dungeon_monster_step_direction(draw: u8) -> Direction {
+    match draw & 0x03 {
+        0 => Direction::North,
+        1 => Direction::East,
+        2 => Direction::South,
+        _ => Direction::West,
+    }
 }
 
-pub fn dungeon_wrapped_manhattan_distance(ax: usize, ay: usize, bx: usize, by: usize) -> usize {
-    dungeon_wrapped_axis_distance(ax, bx) + dungeon_wrapped_axis_distance(ay, by)
-}
-
-pub fn dungeon_wrapped_axis_distance(a: usize, b: usize) -> usize {
-    let forward = (a + DUNGEON_SIDE - b) % DUNGEON_SIDE;
-    let backward = (b + DUNGEON_SIDE - a) % DUNGEON_SIDE;
-    forward.min(backward)
-}
-
-pub fn dungeon_monster_step_directions(seed: u8) -> [Direction; 4] {
-    const ORDERS: [[Direction; 4]; 4] = [
-        [
-            Direction::North,
-            Direction::East,
-            Direction::South,
-            Direction::West,
-        ],
-        [
-            Direction::East,
-            Direction::South,
-            Direction::West,
-            Direction::North,
-        ],
-        [
-            Direction::South,
-            Direction::West,
-            Direction::North,
-            Direction::East,
-        ],
-        [
-            Direction::West,
-            Direction::North,
-            Direction::East,
-            Direction::South,
-        ],
-    ];
-    ORDERS[(seed as usize) & 0x03]
+/// `dungeon-mode.md §14`: reject the pit/trap family `0x6?`, every
+/// energy field `0x8?` and anything from `0xA?` up; everything else
+/// (`0x9?`, chests, open chests, fountains, ladders, passage) is accepted.
+pub fn dungeon_active_monster_class_accepts(tile: u8) -> bool {
+    !matches!(tile >> 4, 0x06 | 0x08 | 0x0a..=0x0f)
 }

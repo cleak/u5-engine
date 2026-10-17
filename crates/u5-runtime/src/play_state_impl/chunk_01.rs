@@ -785,6 +785,7 @@ impl PlayState {
             // carried.
             fire_flicker: FireFlickerClock::default(),
             dungeon_fountain_frame: 0,
+            dungeon_monster_previous_cell: None,
             natural_moongate_counter: options.natural_moongate_counter,
             natural_moongate_live_cells: Vec::new(),
             last_natural_moongate_transit: None,
@@ -1194,6 +1195,7 @@ impl PlayState {
             // carried.
             fire_flicker: FireFlickerClock::default(),
             dungeon_fountain_frame: 0,
+            dungeon_monster_previous_cell: None,
             natural_moongate_counter: options.natural_moongate_counter,
             natural_moongate_live_cells: Vec::new(),
             last_natural_moongate_transit: None,
@@ -1614,6 +1616,7 @@ impl PlayState {
             // carried.
             fire_flicker: FireFlickerClock::default(),
             dungeon_fountain_frame: 0,
+            dungeon_monster_previous_cell: None,
             natural_moongate_counter: options.natural_moongate_counter,
             natural_moongate_live_cells: Vec::new(),
             last_natural_moongate_transit: None,
