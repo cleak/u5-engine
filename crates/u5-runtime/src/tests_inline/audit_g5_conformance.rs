@@ -201,14 +201,13 @@ fn audit_a037_hourglass_runs_e9_eb_e8_and_the_first_wrong_plays_the_beat() {
     let _ = fs::remove_dir_all(dir);
 }
 
-/// Audit A036, correct-answer branch. `blackthorn.md §5` says "The roster
-/// edit and its repaint both precede the held page", but the stock DOSBox
-/// capture (paired scenario `bt-correct`, beats `right` and `after`) holds
-/// the record-5 page with the companion still listed and removes him only
-/// with the following key. The capture is authoritative pending
-/// cleak/u5-spec#298, so the lift waits for that key.
+/// Audit A036, correct-answer branch, as u5-spec#298 Q31 answers it
+/// (`blackthorn.md §5`): "on a correct answer the companion leaves the stats
+/// panel at the end of the blade-and-impact hold, in the same screenshot
+/// sample ... in which the exit beat's key-wait cursor first appears". The
+/// hold is "not a key wait", so the lift lands when it ends, not on the key.
 #[test]
-fn audit_a036_merciful_death_lifts_the_roster_on_the_acknowledgement_key() {
+fn audit_a036_merciful_death_lifts_the_roster_at_the_end_of_the_blade_hold() {
     let dir = debug_game_dir();
     let mut state = test_state(open_grid(), 5, 5);
     state.party.push(audit_g5_companion(1));
@@ -219,8 +218,39 @@ fn audit_a036_merciful_death_lifts_the_roster_on_the_acknowledgement_key() {
         state.submit_blackthorn_audience_answer("", &dir).unwrap();
     }
 
+    let sound_before = state.sound_effect_serial;
     state.submit_blackthorn_audience_answer("Ahm", &dir).unwrap();
     assert!(state.message.contains("merciful death"), "{:?}", state.message);
+    // §5 step 2: "A quiet 10-tick redraw pause. Nothing else happens between
+    // the record and the swell".
+    assert!(state.staged_narration_active(), "the blade hold is running");
+    assert!(
+        !state.sound_effects_after(sound_before).contains(&SoundEffect::BlackthornExecutionSwell),
+        "the swell waits for the quiet pause"
+    );
+    state.advance_staged_narration_to(0.0);
+    state.advance_staged_narration_to(crate::narration::bios_ticks_secs(10) + 0.01);
+    // Steps 3-4: then the swell and the impact rumble, with the hold still
+    // running.
+    let effects = state.sound_effects_after(sound_before);
+    assert!(effects.contains(&SoundEffect::BlackthornExecutionSwell), "{effects:?}");
+    assert!(effects.contains(&SoundEffect::RoughSeasImpactRumble), "{effects:?}");
+    assert!(state.staged_narration_active(), "the blade hold is running");
+    assert_eq!(state.party.len(), 3, "the hold still lists the companion");
+    assert_eq!(
+        state.stats_panel,
+        crate::stats_panel::stats_panel_snapshot_of(&state),
+        "and the panel shows the full party"
+    );
+
+    // The hold ends: the companion leaves the panel before any key.
+    state.flush_staged_narration();
+    assert_eq!(state.party.len(), 2, "the end of the hold lifts him");
+    assert_eq!(
+        state.stats_panel,
+        crate::stats_panel::stats_panel_snapshot_of(&state),
+        "and repaints the panel"
+    );
     assert!(
         state
             .active_blackthorn
@@ -228,30 +258,19 @@ fn audit_a036_merciful_death_lifts_the_roster_on_the_acknowledgement_key() {
             .is_some_and(|c| c.awaiting_closing_acknowledgement()),
         "the exit beat's key is still to come"
     );
-    assert_eq!(state.party.len(), 3, "the held page still lists the companion");
-    assert_eq!(
-        state.stats_panel,
-        crate::stats_panel::stats_panel_snapshot_of(&state),
-        "and the panel shows the full party"
-    );
-
-    state.submit_blackthorn_audience_answer("", &dir).unwrap();
-    assert_eq!(state.party.len(), 2, "the key that follows lifts him");
-    assert_eq!(
-        state.stats_panel,
-        crate::stats_panel::stats_panel_snapshot_of(&state),
-        "and repaints the panel"
-    );
+    // §5 step 6: the pendulum cell is reset to the unoccupied member.
+    assert_eq!(audit_g5_audience_tile(&state, 5, 7), Some(0x80));
     let _ = fs::remove_dir_all(dir);
 }
 
-/// Audit A036, pendulum branch, reconciled with the stock capture. The
-/// `bt-escalate` beat `ask5` holds the record-4 narration (ending on `falls!`)
-/// with the victim still listed on the panel. The key after it lifts the
-/// victim and repaints, and holds the page that names them; the key after
-/// that prints record `6` and leaves without another wait.
+/// Audit A036, pendulum branch, as u5-spec#298 Q31 and Q24 answer it
+/// (`blackthorn.md §5`): "on the fourth wrong answer the panel lists the whole
+/// party through the pendulum-narration page and the blade, and the reduced
+/// party first appears in the same screenshot sample as the `... is sliced in
+/// half!` page, which then waits for the key"; the key after it prints record
+/// `6` and leaves without another wait.
 #[test]
-fn audit_a036_pendulum_narration_is_held_with_the_victim_still_listed() {
+fn audit_a036_pendulum_narration_is_not_a_key_wait() {
     let dir = debug_game_dir();
     let mut state = test_state(open_grid(), 5, 5);
     state.party.push(audit_g5_companion(1));
@@ -261,28 +280,50 @@ fn audit_a036_pendulum_narration_is_held_with_the_victim_still_listed() {
     while state.active_blackthorn.as_ref().is_some_and(|c| c.current_prompt().is_none()) {
         state.submit_blackthorn_audience_answer("", &dir).unwrap();
     }
-    for _ in 0..4 {
+    for _ in 0..3 {
         state.submit_blackthorn_audience_answer("wrong", &dir).unwrap();
         if state.active_blackthorn.as_ref().is_some_and(|c| c.awaiting_acknowledgement()) {
             state.submit_blackthorn_audience_answer("", &dir).unwrap();
         }
     }
+    let stingers_before = state.sound_effect_serial;
+    state.submit_blackthorn_audience_answer("wrong", &dir).unwrap();
     assert!(state.message.contains("pendulum blade falls!"), "{:?}", state.message);
-    assert!(!state.message.contains(" is sliced in half! "), "{:?}", state.message);
-    assert_eq!(state.party.len(), 3, "the held narration still lists the victim");
+    assert_eq!(
+        audit_g5_stingers_after(&state, stingers_before),
+        0,
+        "Q24: the execution runs no cutscene script"
+    );
+    assert!(state.staged_narration_active(), "the blade hold is running");
+    assert_eq!(state.party.len(), 3, "the narration still lists the victim");
     assert_eq!(
         state.stats_panel,
         crate::stats_panel::stats_panel_snapshot_of(&state),
         "and the panel shows the full party"
     );
 
-    state.submit_blackthorn_audience_answer("", &dir).unwrap();
+    state.flush_staged_narration();
     assert!(state.message.contains(" is sliced in half! "), "{:?}", state.message);
-    assert_eq!(state.party.len(), 2, "the narration's key lifts the victim");
+    // §5: record `4` (`... falls!`, no line feed of its own), then step 8's
+    // `\n\n` + name: the first feed closes the narration's row and the
+    // second is the one blank row above the sliced line.
+    let transcript = audit_g5_transcript(&state);
+    let falls = transcript.rfind("falls!").expect("record 4 is on screen");
+    let sliced = transcript.rfind(" is sliced in half! ").expect("sliced line");
+    let between = &transcript[falls + "falls!".len()..sliced];
+    assert_eq!(between.matches('\n').count(), 2, "{between:?}");
+    assert_eq!(state.party.len(), 2, "the hold's end lifts the victim");
     assert_eq!(
         state.stats_panel,
         crate::stats_panel::stats_panel_snapshot_of(&state),
-        "and repaints the panel"
+        "and repaints the panel before the sliced page"
+    );
+    assert!(
+        state
+            .active_blackthorn
+            .as_ref()
+            .is_some_and(|c| c.awaiting_closing_acknowledgement()),
+        "the sliced page waits for the key"
     );
 
     let outcome = state.submit_blackthorn_audience_answer("", &dir).unwrap();
@@ -361,9 +402,9 @@ fn audit_a035_punishing_branch_runs_the_conditional_tableau_cleanup() {
             state.submit_blackthorn_audience_answer("", &dir).unwrap();
         }
     }
-    // The held pendulum narration's key (stock `bt-escalate` beat `ask5`)
-    // brings up the page that names the victim; the tail follows its key.
-    state.submit_blackthorn_audience_answer("", &dir).unwrap();
+    // The blade hold ends and brings up the page that names the victim
+    // (u5-spec#298 Q31); the tail follows its key.
+    state.flush_staged_narration();
     let before = state.sound_effect_serial;
     state.submit_blackthorn_audience_answer("", &dir).unwrap();
     let mut cleanup = BlackthornCutsceneVm::with_audience_setup(Vec::new());
@@ -754,4 +795,189 @@ fn audit_a012_sign_pause_byte_waits_for_a_key_before_the_rest() {
         audit_g5_transcript(&state)
     );
     let _ = fs::remove_dir_all(dir);
+}
+
+/// u5-spec#298 Q14 (`RETRACTIONS.md` R531). `conversation.md §7.5`: `0x8B` is
+/// ALARM - "Run the town alarm sweep of `systems/town-mode.md` Section 14:
+/// forced pursuit for every occupied guard ... slot". A guard standing in the
+/// roster is put into pursuit by a reply that reaches the code, and the reply
+/// text is untouched.
+#[test]
+fn q14_alarm_code_in_a_reply_runs_the_town_alarm_sweep() {
+    let mut dialogue: HashMap<u16, Vec<String>> = HashMap::new();
+    dialogue.insert(
+        0x10,
+        ["Maris", "a quiet sage", "Greetings", "I read books", "Farewell", "HOLD", "x"]
+            .iter()
+            .map(|s| s.to_string())
+            .collect(),
+    );
+    let enc = |s: &str| s.bytes().map(|b| b ^ 0x80).collect::<Vec<u8>>();
+    let mut raw: HashMap<u16, Vec<Vec<u8>>> = HashMap::new();
+    raw.insert(
+        0x10,
+        vec![
+            enc("Maris"),
+            enc("a quiet sage"),
+            enc("Greetings"),
+            enc("I read books"),
+            enc("Farewell"),
+            enc("HOLD"),
+            audit_g5_held_response("Guards!", TLK_CODE_ALARM, " Seize them!"),
+        ],
+    );
+    let mut state = test_state(open_grid(), 1, 1);
+    state.party_names = vec![*b"AVATAR\0\0\0"];
+    state.player.facing = Direction::East;
+    state.load_scheduled_npcs(&[
+        NpcSlot { slot: 0, type_byte: 0, dialog_id: 0, schedule: [0; 16], name: None },
+        NpcSlot {
+            slot: 1,
+            type_byte: 1,
+            dialog_id: 0x10,
+            schedule: [0, 0, 0, 2, 2, 2, 1, 1, 1, 0, 0, 0, 0, 8, 16, 20],
+            name: None,
+        },
+        NpcSlot {
+            slot: 2,
+            type_byte: TOWN_NPC_ALARM_GUARD_TYPE,
+            dialog_id: 0,
+            schedule: [0, 0, 0, 9, 9, 9, 9, 9, 9, 0, 0, 0, 0, 8, 16, 20],
+            name: None,
+        },
+    ]);
+    assert_eq!(
+        state.talk_facing_with_dialogue_and_keyword_raw(&dialogue, &raw, None),
+        MoveOutcome::Talked
+    );
+    let guard = state.npcs.iter().position(|npc| npc.slot == 2).unwrap();
+    let before = state.npcs[guard].schedule;
+    assert!(state.town_npc_mutations.iter().all(|mutation| mutation.npc_slot != 2));
+    handle_play_key_input(&mut state, 'H', "OLD", Path::new("")).unwrap();
+    assert!(
+        audit_g5_transcript(&state).contains("Guards! Seize them!"),
+        "{}",
+        audit_g5_transcript(&state)
+    );
+    assert_ne!(state.npcs[guard].schedule, before, "the guard is forced into pursuit");
+    assert!(
+        state.town_npc_mutations.iter().any(|mutation| mutation.npc_slot == 2),
+        "the sweep's rewrite is persisted"
+    );
+}
+
+fn q8_audience_with_avatar_gender(gender: u8) -> (PlayState, std::path::PathBuf) {
+    let dir = debug_game_dir();
+    let mut state = test_state(open_grid(), 5, 5);
+    audit_g5_named(&mut state, &["Shalla"]);
+    let mut roster = state.synced_party_roster();
+    roster[0].gender = gender;
+    state.party_roster = roster;
+    state.begin_blackthorn_audience_capture(&dir).unwrap();
+    (state, dir)
+}
+
+/// u5-spec#298 Q8. `blackthorn.md §3` step 8: the greeting to roster record
+/// 0, held for a key, then the release order by record 0's gender byte - the
+/// three published forms, `goodman` really joined.
+#[test]
+fn q8_greeting_and_release_lines_follow_record_zero() {
+    for (gender, expected) in [
+        (SAVE_GENDER_FEMALE_BYTE, "GUARD! Release this good lady at once!\""),
+        (SAVE_GENDER_MALE_BYTE, "GUARD! Release this goodman at once!\""),
+        (0x00, "GUARD! Release this goodat once!\""),
+    ] {
+        let (mut state, dir) = q8_audience_with_avatar_gender(gender);
+        let held = audit_g5_transcript(&state);
+        assert!(
+            held.ends_with("Blackthorn says:\n\n\"Ah, Shalla!\n'Tis indeed an honour to meet thee at last! "),
+            "{held:?}"
+        );
+        assert!(!held.contains("GUARD!"), "the release waits for the greeting's key");
+        assert!(state.message_row_open_mid_line, "the greeting ends mid-row");
+
+        state.submit_blackthorn_audience_answer("", &dir).unwrap();
+        state.flush_message_slot();
+        let after = audit_g5_transcript(&state);
+        assert!(after.contains(expected), "{gender:#04x}: {after:?}");
+        let _ = fs::remove_dir_all(dir);
+    }
+}
+
+/// u5-spec#298 Q8. `blackthorn.md §5`: "Wrong answers past the first advance
+/// the clock by two minutes ...; the first wrong answer makes no cleanup
+/// call, so the interrogation itself adds six minutes on an all-wrong run".
+#[test]
+fn q8_wrong_answers_past_the_first_each_cost_two_minutes() {
+    let dir = debug_game_dir();
+    let mut state = test_state(open_grid(), 5, 5);
+    state.party.push(audit_g5_companion(1));
+    state.party.push(audit_g5_companion(2));
+    state.clock = GameClock::new(10, 0).unwrap();
+    state.begin_blackthorn_audience_capture(&dir).unwrap();
+    while state.active_blackthorn.as_ref().is_some_and(|c| c.current_prompt().is_none()) {
+        state.submit_blackthorn_audience_answer("", &dir).unwrap();
+    }
+    let minutes = |state: &PlayState| u32::from(state.clock.hour) * 60 + u32::from(state.clock.minute);
+    let start = minutes(&state);
+    let mut after = Vec::new();
+    for _ in 0..4 {
+        state.submit_blackthorn_audience_answer("wrong", &dir).unwrap();
+        after.push(minutes(&state) - start);
+        if state.active_blackthorn.as_ref().is_some_and(|c| c.awaiting_acknowledgement()) {
+            state.submit_blackthorn_audience_answer("", &dir).unwrap();
+        }
+    }
+    assert_eq!(after, vec![0, 2, 4, 6]);
+    let _ = fs::remove_dir_all(dir);
+}
+
+/// u5-spec#298 Q9. `blackthorn.md §6.3`, "Audience exit vector, full command
+/// list": the actors start every exit beat from slot 0 `(3,5)`, slot 6
+/// `(1,5)`, slot 7 `(9,9)` and slot 8 `(5,5)`; the door write is exposed after
+/// 14 stings, and the vector ends with the Avatar at `(0,2)` and the rest
+/// cleared after 36 stings, 73 world ticks and 72 BIOS-tick delays.
+#[test]
+fn q9_audience_exit_vector_runs_the_published_command_list() {
+    // Each beat is its own script run from the actors the last one left.
+    let next_beat = |from: &BlackthornCutsceneVm, beat| {
+        let mut vm = BlackthornCutsceneVm::new(from.tile_buffer.clone());
+        vm.actors = from.actors;
+        vm.visible_actors = from.actors;
+        vm.run(blackthorn_cutscene_beat_commands(beat));
+        vm
+    };
+    let setup = BlackthornCutsceneVm::with_audience_setup(vec![0; 32 * 11]);
+    let approach = next_beat(&setup, BlackthornCutsceneBeat::AudienceThroneApproach);
+    let vm = next_beat(&approach, BlackthornCutsceneBeat::GuardReleaseRoute);
+    let cell = |vm: &BlackthornCutsceneVm, actor| vm.actor(actor).map(|a| (a.x, a.y));
+    assert_eq!(cell(&vm, BlackthornCutsceneActor::Avatar), Some((3, 5)));
+    assert_eq!(cell(&vm, BlackthornCutsceneActor::LeftGuard), Some((1, 5)));
+    assert_eq!(cell(&vm, BlackthornCutsceneActor::RightGuard), Some((9, 9)));
+    assert_eq!(cell(&vm, BlackthornCutsceneActor::SeatedBlackthorn), Some((5, 5)));
+
+    let exit = next_beat(&vm, BlackthornCutsceneBeat::AudienceExit);
+    let stings_before_door = exit
+        .presentation_events
+        .iter()
+        .take_while(|event| {
+            !matches!(
+                event,
+                BlackthornCutscenePresentationEvent::TerrainBuffered { tile: BLACKTHORN_LOCKED_DOOR_TILE, .. }
+            )
+        })
+        .filter(|event| matches!(event, BlackthornCutscenePresentationEvent::Stinger))
+        .count();
+    assert_eq!(stings_before_door, 14);
+    assert_eq!(exit.stinger_count, 36);
+    assert_eq!(exit.world_ticks, 73);
+    assert_eq!(exit.bios_ticks, 72);
+    assert_eq!(cell(&exit, BlackthornCutsceneActor::Avatar), Some((0, 2)));
+    for actor in [
+        BlackthornCutsceneActor::LeftGuard,
+        BlackthornCutsceneActor::RightGuard,
+        BlackthornCutsceneActor::SeatedBlackthorn,
+    ] {
+        assert_eq!(cell(&exit, actor), None);
+    }
 }

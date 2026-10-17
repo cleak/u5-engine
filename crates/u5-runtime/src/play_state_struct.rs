@@ -289,16 +289,20 @@ pub struct PlayState {
     pub time_stop_counter: u8,
     pub active_effect_tag: Option<u8>,
     /// A correct Blackthorn answer has been given and the companion's
-    /// "merciful death" is owed, but the reaction is still on screen.
+    /// "merciful death" is owed: the execution's blade hold is staged and
+    /// the roster edit lands when it ends.
     ///
-    /// `blackthorn.md §5` step 5: the punishment routine ends by "wait[ing]
-    /// for player acknowledgement before returning to the caller branch", and
-    /// measured (`qa/paired/bt-correct.tsv`) the original's roster still shows
-    /// the companion while that reaction is held - it drops on the
-    /// acknowledgement, not on the answer.
+    /// `blackthorn.md §5` (u5-spec#298 Q31): "on a correct answer the
+    /// companion leaves the stats panel at the end of the blade-and-impact
+    /// hold", which "is not a key wait"; the key that follows belongs to the
+    /// §4.2 exit beat.
     pub(crate) pending_blackthorn_merciful_death: bool,
-    /// The fourth-wrong-answer execution's victim, owed once the pendulum
-    /// narration is acknowledged. Same deferral, same reason.
+    /// The execution's quiet 10-tick pause is staged and its swell and
+    /// impact rumble (`blackthorn.md §5` steps 3-4) are still to sound, at
+    /// the end of that pause.
+    pub(crate) pending_blackthorn_execution_swell: bool,
+    /// The fourth-wrong-answer execution's victim, lifted at the end of the
+    /// blade hold, before the sliced page (u5-spec#298 Q31).
     pub(crate) pending_blackthorn_execution_victim: Option<usize>,
     /// A closing page the Blackthorn interrogation still owes, printed on the
     /// next acknowledgement.

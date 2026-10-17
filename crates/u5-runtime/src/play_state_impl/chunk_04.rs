@@ -5042,7 +5042,6 @@ impl PlayState {
             branch_flags,
             moral_standing: self.moral_standing,
             dictionary: Some(&dictionary_refs),
-            curse_seen: false,
             gold_available: Some(self.gold),
             npc_slot: self.active_conversation_npc_slot.map(|slot| slot as u8),
             ask_who_response: 0,
@@ -5067,6 +5066,7 @@ impl PlayState {
         let mut applied_payments: Vec<crate::conversation_session::ConversationGoldPayment> =
             Vec::new();
         let mut applied_signal_flags: Vec<u8> = Vec::new();
+        let mut applied_alarms: u8 = 0;
         let mut applied_flags: u32 = 0;
         let mut applied_standing: Option<u8> = None;
 
@@ -5080,6 +5080,9 @@ impl PlayState {
                 if let Some(output) = run_field(idx) {
                     applied_grants.extend(output.action_grants.iter().copied());
                     applied_signal_flags.extend(output.signal_flags.iter().copied());
+                    applied_alarms = applied_alarms.saturating_add(
+                        crate::conversation_session::tlk_run_alarm_count(&output),
+                    );
                     applied_payments.extend(output.events.iter().filter_map(|event| match event {
                         crate::tlk_runner::TlkRunEvent::GoldPayment { amount, accepted } => {
                             Some(crate::conversation_session::ConversationGoldPayment {
@@ -5110,6 +5113,7 @@ impl PlayState {
             self.apply_tlk_gold_payments(&applied_payments);
             self.apply_tlk_moral_standing(applied_standing);
             self.record_tlk_signal_flags(&applied_signal_flags);
+            self.apply_tlk_alarm_sweeps(applied_alarms);
             self.apply_talk_action_grants(&legacy_actions);
             if let Some(scene) = scene_for_flags {
                 self.merge_talk_branch_flags(scene, applied_flags);
@@ -5130,6 +5134,8 @@ impl PlayState {
             let greeting_text = if let Some(output) = run_field(2) {
                 applied_grants.extend(output.action_grants.iter().copied());
                 applied_signal_flags.extend(output.signal_flags.iter().copied());
+                applied_alarms = applied_alarms
+                    .saturating_add(crate::conversation_session::tlk_run_alarm_count(&output));
                 applied_payments.extend(output.events.iter().filter_map(|event| match event {
                     crate::tlk_runner::TlkRunEvent::GoldPayment { amount, accepted } => {
                         Some(crate::conversation_session::ConversationGoldPayment {
@@ -5158,6 +5164,7 @@ impl PlayState {
             self.apply_tlk_gold_payments(&applied_payments);
             self.apply_tlk_moral_standing(applied_standing);
             self.record_tlk_signal_flags(&applied_signal_flags);
+            self.apply_tlk_alarm_sweeps(applied_alarms);
             self.apply_talk_action_grants(&legacy_actions);
             if let Some(scene) = scene_for_flags {
                 self.merge_talk_branch_flags(scene, applied_flags);
@@ -5537,6 +5544,7 @@ impl PlayState {
             self.apply_tlk_gold_payments(&output.gold_payments);
             self.apply_tlk_moral_standing(output.moral_standing);
             self.record_tlk_signal_flags(&output.signal_flags);
+            self.apply_tlk_alarm_sweeps(output.alarm_sweeps);
             if let Area::Town { scene, .. } = self.area {
                 self.merge_talk_branch_flags(scene, output.branch_flags_set);
             }
@@ -5565,6 +5573,7 @@ impl PlayState {
             self.apply_tlk_gold_payments(&output.gold_payments);
             self.apply_tlk_moral_standing(output.moral_standing);
             self.record_tlk_signal_flags(&output.signal_flags);
+            self.apply_tlk_alarm_sweeps(output.alarm_sweeps);
             if let Area::Town { scene, .. } = self.area {
                 self.merge_talk_branch_flags(scene, output.branch_flags_set);
             }
@@ -5692,6 +5701,7 @@ impl PlayState {
             self.apply_tlk_gold_payments(&output.gold_payments);
             self.apply_tlk_moral_standing(output.moral_standing);
             self.record_tlk_signal_flags(&output.signal_flags);
+            self.apply_tlk_alarm_sweeps(output.alarm_sweeps);
             if let Area::Town { scene, .. } = self.area {
                 self.merge_talk_branch_flags(scene, output.branch_flags_set);
             }
@@ -6029,6 +6039,20 @@ impl PlayState {
             if let Some(slot) = self.conversation_signal_flags.get_mut(index) {
                 *slot = slot.saturating_add(1).min(TLK_GENERIC_SIGNAL_CAP);
             }
+        }
+    }
+
+    /// `conversation.md §7.5` / §10 "Town alarm" (u5-spec#298 Q14, R531):
+    /// each `0x8B` ALARM "runs the town alarm sweep owned by
+    /// `systems/town-mode.md` Section 14; conversation passes no arguments and
+    /// reads no result". The sweep is the town roster's, so outside a town
+    /// there is nothing for it to rewrite.
+    pub fn apply_tlk_alarm_sweeps(&mut self, count: u8) {
+        let Area::Town { scene, floor } = self.area else {
+            return;
+        };
+        for _ in 0..count {
+            self.town_alarm_sweep(scene, floor, None);
         }
     }
 

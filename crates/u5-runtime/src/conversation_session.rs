@@ -127,6 +127,11 @@ pub struct ConversationSessionOutput {
     /// of the selector; the caller assigns this value rather than
     /// re-deriving a delta.
     pub moral_standing: Option<u8>,
+    /// `conversation.md §7.5` / §10 "Town alarm" (u5-spec#298 Q14): how many
+    /// `0x8B` ALARM codes this step's streams reached. The caller runs the
+    /// town alarm sweep once for each; "conversation passes no arguments and
+    /// reads no result".
+    pub alarm_sweeps: u8,
 }
 
 impl ConversationSessionOutput {
@@ -462,6 +467,7 @@ impl ConversationSession {
         out.action_grants.extend(response.action_grants);
         out.gold_payments.extend(response.gold_payments);
         out.signal_flags.extend(response.signal_flags);
+        out.alarm_sweeps = out.alarm_sweeps.saturating_add(response.alarm_sweeps);
         out.recruit_speaker |= response.recruit_speaker;
         out.asked_party_name = response.asked_party_name;
         out.asked_who = response.asked_who;
@@ -679,11 +685,16 @@ impl ConversationSession {
     /// PAUSE and ASK-WHO - and only then can the labelled block's scoped
     /// prompt open.
     ///
-    /// `from` is the blob position just past the GOTO byte. A GOTO back to
-    /// the declaration whose record is executing is the block's own
-    /// sub-record separator ("inside labelled blocks, repeated label bytes
-    /// mark records and sub-records", `formats/tlk.md §9`), so the record
-    /// ends there rather than rewinding onto itself.
+    /// u5-spec#298 Q20, "What a GOTO runs first": the head is the stream
+    /// "up to the first NUL ... A repeated label is not a boundary. Inside
+    /// the head every byte keeps its ordinary meaning: a label byte in
+    /// `0x91..0x9F` met as a code is a live GOTO at that point, including one
+    /// to the block's own label, which restarts the block". "A self-GOTO
+    /// re-enters the label handler as a nested call, and the outer call
+    /// returns as soon as the inner one stops, so a retry loop never opens a
+    /// second scoped prompt for the outer level." The earlier reading here -
+    /// a GOTO back to the running block was its sub-record separator - is
+    /// withdrawn. `from` is kept for the caller's record position only.
     fn follow_label_transfer(
         &mut self,
         blob: &[u8],
@@ -692,14 +703,14 @@ impl ConversationSession {
         ctx: &ConversationContext<'_>,
         out: &mut ConversationSessionOutput,
     ) {
+        let _ = from;
         let Some(resume) = find_label_declaration(blob, label) else {
             return;
         };
-        let entered_here = self
-            .label_records_running
-            .iter()
-            .any(|(running_label, entry)| *running_label == label && *entry <= from);
-        if !entered_here && self.label_records_running.len() < TLK_LABEL_TRANSFER_DEPTH_LIMIT {
+        // The depth bound only stops a head that GOTOs itself with nothing
+        // in between that stops the stream; shipped content has no such head
+        // (§7.7's census: the one self-GOTO head asks ASK-WHO first).
+        if self.label_records_running.len() < TLK_LABEL_TRANSFER_DEPTH_LIMIT {
             let phase_before = self.phase;
             self.label_records_running.push((label, resume));
             let nested = self.run_blob_from(resume, ctx, 0);
@@ -735,6 +746,7 @@ impl ConversationSession {
                 _ => None,
             }));
         out.signal_flags.extend(run.signal_flags.iter().copied());
+        out.alarm_sweeps = out.alarm_sweeps.saturating_add(tlk_run_alarm_count(run));
         out.response_signalled_stop |= matches!(run.stop, TlkRunStop::EndOfResponse);
         self.absorb_moral_standing(run, out);
         self.absorb_recruit_speaker(run, ctx, out);
@@ -791,22 +803,20 @@ impl ConversationSession {
             .any(|bytes| find_next_label_record(bytes, label, 0).is_some())
     }
 
+    /// The scoped keyword records a block's prompt matches against.
+    ///
+    /// u5-spec#298 Q20 settles only the head: it runs "up to the first NUL"
+    /// and "A repeated label is not a boundary", so nothing inside the
+    /// declaration's own record can be a scoped keyword/response pair - the
+    /// engine's earlier split of that record at repeated label bytes is
+    /// withdrawn. "What the scoped prompt does with the records after the
+    /// head is described ... from static reading only; `OPEN-QUESTIONS.md`
+    /// carries it" ("which arm is the default and when it falls back to the
+    /// top-level keyword loop"), so no post-head matcher is invented here:
+    /// every scoped answer takes §7.7's published fallback, "the ordinary
+    /// top-level keyword loop".
     fn find_scoped_label_response(&self, label: u8, input_upper: &[u8]) -> Option<Vec<u8>> {
-        for bytes in &self.fields {
-            let mut search_from = 0usize;
-            while let Some((record_start, record_end)) =
-                find_next_label_record(bytes, label, search_from)
-            {
-                if let Some(response) = find_scoped_response_in_record(
-                    &bytes[record_start..record_end],
-                    label,
-                    input_upper,
-                ) {
-                    return Some(response);
-                }
-                search_from = record_end.saturating_add(1);
-            }
-        }
+        let _ = (label, input_upper);
         None
     }
 
@@ -847,6 +857,7 @@ impl ConversationSession {
                 _ => None,
             }));
         out.signal_flags.extend(run.signal_flags.iter().copied());
+        out.alarm_sweeps = out.alarm_sweeps.saturating_add(tlk_run_alarm_count(run));
         out.response_signalled_stop |= matches!(run.stop, TlkRunStop::EndOfResponse);
         self.absorb_moral_standing(run, out);
         self.absorb_recruit_speaker(run, ctx, out);
@@ -919,9 +930,24 @@ fn find_label_declaration(blob: &[u8], label: u8) -> Option<usize> {
     if !is_tlk_label_byte(label) {
         return None;
     }
+    // u5-spec#298 Q20: "The declaration search also accepts the final-marker
+    // value `0x9F` in place of the declaration marker before the label; no
+    // shipped record contains that pairing".
     blob.windows(2)
-        .position(|pair| pair[0] == TLK_CODE_LABEL_RECORD && pair[1] == label)
+        .position(|pair| {
+            (pair[0] == TLK_CODE_LABEL_RECORD || pair[0] == TLK_LABEL_LAST) && pair[1] == label
+        })
         .map(|pos| pos + 2)
+}
+
+/// `conversation.md §7.5`: each `0x8B` the runner reached is one alarm sweep.
+pub fn tlk_run_alarm_count(run: &TlkRunOutput) -> u8 {
+    let count = run
+        .events
+        .iter()
+        .filter(|event| matches!(event, TlkRunEvent::Alarm))
+        .count();
+    u8::try_from(count).unwrap_or(u8::MAX)
 }
 
 fn merge_session_output(out: &mut ConversationSessionOutput, nested: ConversationSessionOutput) {
@@ -931,6 +957,7 @@ fn merge_session_output(out: &mut ConversationSessionOutput, nested: Conversatio
     out.action_grants.extend(nested.action_grants);
     out.gold_payments.extend(nested.gold_payments);
     out.signal_flags.extend(nested.signal_flags);
+    out.alarm_sweeps = out.alarm_sweeps.saturating_add(nested.alarm_sweeps);
     out.recruit_speaker |= nested.recruit_speaker;
     out.asked_party_name = nested.asked_party_name.or(out.asked_party_name);
     out.asked_who = nested.asked_who.or(out.asked_who);
@@ -958,25 +985,6 @@ fn find_next_label_record(bytes: &[u8], label: u8, from: usize) -> Option<(usize
     None
 }
 
-fn find_scoped_response_in_record(record: &[u8], label: u8, input_upper: &[u8]) -> Option<Vec<u8>> {
-    // The record's head - everything before its first repeated label byte -
-    // is the stream a GOTO runs (`follow_label_transfer`); the scoped
-    // keyword/response sub-records follow it.
-    let head_end = record.iter().position(|byte| *byte == label)?;
-    let mut segments = record[head_end + 1..]
-        .split(|byte| *byte == label)
-        .filter(|segment| !segment.is_empty());
-    while let Some(keyword) = segments.next() {
-        let Some(response) = segments.next() else {
-            break;
-        };
-        if tlk_keyword_matches(keyword, input_upper) {
-            return Some(response.to_vec());
-        }
-    }
-    None
-}
-
 fn make_inputs<'a>(
     ctx: &'a ConversationContext<'a>,
     moral_standing: u8,
@@ -988,7 +996,6 @@ fn make_inputs<'a>(
         branch_flags: ctx.branch_flags,
         moral_standing,
         dictionary: ctx.dictionary,
-        curse_seen: false,
         gold_available: ctx.gold_available,
         npc_slot,
         ask_who_response,
@@ -1809,20 +1816,15 @@ mod tests {
     }
 
     #[test]
-    fn label_transfer_enters_scoped_prompt_and_matches_local_keyword() {
+    fn label_transfer_enters_scoped_prompt_and_unmatched_answer_falls_back() {
         let mut scoped = enc("Topic?");
         scoped.push(0x91);
-        scoped.push(TLK_CODE_END_OF_RESPONSE);
         scoped.push(TLK_CODE_LABEL_RECORD);
         scoped.push(0x91);
-        // The record's head runs when the GOTO lands (§7.7); the repeated
-        // label then separates the scoped keyword sub-records.
+        // u5-spec#298 Q20: the head the GOTO runs is everything up to the
+        // record's NUL, and a repeated label inside it would be a live GOTO,
+        // not a sub-record separator.
         scoped.extend_from_slice(&enc(" Pick one."));
-        scoped.push(0x91);
-        scoped.extend_from_slice(&enc("APPLE"));
-        scoped.push(0x91);
-        scoped.extend_from_slice(&enc("Local answer."));
-        scoped.push(TLK_CODE_END_OF_RESPONSE);
         let raw = vec![
             enc("Ada"),
             enc("a quiet smith"),
@@ -1852,9 +1854,45 @@ mod tests {
         );
         assert_eq!(s.prompt_message(), TLK_KEYWORD_PROMPT);
 
+        // §7.7: the post-head scoped matcher is not established
+        // (`OPEN-QUESTIONS.md`), so the answer takes the published fallback,
+        // the ordinary top-level keyword loop.
         let second = s.submit_keyword("apple", &ctx());
-        assert_eq!(second.text, "Local answer.");
+        assert!(second.text.starts_with(TLK_NO_KEYWORD_MATCH_MESSAGE), "{:?}", second.text);
         assert_eq!(s.phase, ConversationSessionPhase::AwaitingKeyword);
+    }
+
+    /// u5-spec#298 Q20 (`conversation.md §7.7`, "What a GOTO runs first"): a
+    /// label byte inside the head "is a live GOTO at that point, including
+    /// one to the block's own label, which restarts the block", as a nested
+    /// call whose stop ends the outer one. The shipped name-challenge block
+    /// asks ASK-WHO, prints a retry line and GOTOs itself; a wrong name
+    /// re-asks rather than opening the scoped prompt.
+    #[test]
+    fn a_self_goto_in_the_head_restarts_the_block_instead_of_ending_it() {
+        let mut response = enc("Listen.");
+        response.push(0x93);
+        let mut record = vec![TLK_CODE_LABEL_RECORD, 0x93];
+        record.extend(enc(" Thy name?"));
+        record.push(TLK_CODE_ASK_WHO);
+        record.extend(enc(" Nay."));
+        record.push(0x93);
+        let mut s = label_session(response, vec![enc("OTHER"), enc("x"), record]);
+
+        let out = s.submit_keyword("ask", &ctx());
+        assert!(out.text.contains("Listen. Thy name?"), "{:?}", out.text);
+        assert!(matches!(s.phase, ConversationSessionPhase::AwaitingAskWho { .. }));
+
+        // A wrong name: the retry line, then the self-GOTO re-runs the head
+        // and stops at its ASK-WHO again - no scoped prompt opens.
+        let retry = s.submit_keyword("nobody", &ctx());
+        assert!(retry.text.contains("Nay."), "{:?}", retry.text);
+        assert!(retry.text.contains("Thy name?"), "the block restarts: {:?}", retry.text);
+        assert!(
+            matches!(s.phase, ConversationSessionPhase::AwaitingAskWho { .. }),
+            "{:?}",
+            s.phase
+        );
     }
 
     #[test]
@@ -1863,14 +1901,10 @@ mod tests {
         scoped.push(0x91);
         scoped.push(TLK_CODE_LABEL_RECORD);
         scoped.push(0x91);
-        // The record's head runs when the GOTO lands (§7.7); the repeated
-        // label then separates the scoped keyword sub-records.
+        // u5-spec#298 Q20: the head the GOTO runs is everything up to the
+        // record's NUL, and a repeated label inside it would be a live GOTO,
+        // not a sub-record separator.
         scoped.extend_from_slice(&enc(" Pick one."));
-        scoped.push(0x91);
-        scoped.extend_from_slice(&enc("APPLE"));
-        scoped.push(0x91);
-        scoped.extend_from_slice(&enc("Local answer."));
-        scoped.push(TLK_CODE_END_OF_RESPONSE);
         let raw = vec![
             enc("Ada"),
             enc("a quiet smith"),
@@ -1908,14 +1942,10 @@ mod tests {
         scoped.push(0x91);
         scoped.push(TLK_CODE_LABEL_RECORD);
         scoped.push(0x91);
-        // The record's head runs when the GOTO lands (§7.7); the repeated
-        // label then separates the scoped keyword sub-records.
+        // u5-spec#298 Q20: the head the GOTO runs is everything up to the
+        // record's NUL, and a repeated label inside it would be a live GOTO,
+        // not a sub-record separator.
         scoped.extend_from_slice(&enc(" Pick one."));
-        scoped.push(0x91);
-        scoped.extend_from_slice(&enc("APPLE"));
-        scoped.push(0x91);
-        scoped.extend_from_slice(&enc("Local answer."));
-        scoped.push(TLK_CODE_END_OF_RESPONSE);
         let raw = vec![
             enc("Ada"),
             enc("a quiet smith"),
@@ -1951,14 +1981,10 @@ mod tests {
         scoped.push(0x91);
         scoped.push(TLK_CODE_LABEL_RECORD);
         scoped.push(0x91);
-        // The record's head runs when the GOTO lands (§7.7); the repeated
-        // label then separates the scoped keyword sub-records.
+        // u5-spec#298 Q20: the head the GOTO runs is everything up to the
+        // record's NUL, and a repeated label inside it would be a live GOTO,
+        // not a sub-record separator.
         scoped.extend_from_slice(&enc(" Pick one."));
-        scoped.push(0x91);
-        scoped.extend_from_slice(&enc("APPLE"));
-        scoped.push(0x91);
-        scoped.extend_from_slice(&enc("Local answer."));
-        scoped.push(TLK_CODE_END_OF_RESPONSE);
         let raw = vec![
             enc("Ada"),
             enc("a quiet smith"),
@@ -1988,6 +2014,36 @@ mod tests {
         let fallback = s.submit_keyword("gran", &ctx());
         assert_eq!(fallback.text, "Top-level answer.");
         assert_eq!(s.phase, ConversationSessionPhase::AwaitingKeyword);
+    }
+
+    /// u5-spec#298 Q20: "A repeated label is not a boundary." A head that
+    /// reaches its own label while it is still running restarts the block
+    /// rather than ending there and opening the scoped prompt (the withdrawn
+    /// reading). Nothing in this synthetic head stops the stream, so only
+    /// the engine's nesting bound ends the loop.
+    #[test]
+    fn a_repeated_label_in_a_running_head_is_a_goto_not_a_boundary() {
+        let mut response = enc("Listen.");
+        response.push(0x93);
+        let mut record = vec![TLK_CODE_LABEL_RECORD, 0x93];
+        record.extend(enc(" Again."));
+        record.push(0x93);
+        let mut s = label_session(response, vec![enc("OTHER"), enc("x"), record]);
+
+        let out = s.submit_keyword("ask", &ctx());
+        assert!(
+            out.text.matches("Again.").count() > 1,
+            "the self-GOTO restarts the head: {:?}",
+            out.text
+        );
+    }
+
+    /// u5-spec#298 Q20: the declaration search "also accepts the final-marker
+    /// value `0x9F` in place of the declaration marker before the label".
+    #[test]
+    fn the_final_marker_also_declares_a_label() {
+        let blob = [0x00, TLK_LABEL_LAST, 0x93, 0xC1];
+        assert_eq!(find_label_declaration(&blob, 0x93), Some(3));
     }
 
     fn label_session(response: Vec<u8>, records: Vec<Vec<u8>>) -> ConversationSession {
