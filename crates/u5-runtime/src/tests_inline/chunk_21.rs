@@ -7772,3 +7772,79 @@ fn spirit_healers_low_fee_charity_treats_without_charging() {
     state.party[0].hp = 5;
     assert!(!healer_low_fee_charity_applies(Healer::TheShieldOfTruth, 60, 0));
 }
+
+/// `shops.md §8.C`: after a paid round the continuation question
+/// `"Anything else\nfor thee?" ` waits on its own row, and "Y prints `Yes`"
+/// onto it. The round's text carries embedded blank rows, and flushing them
+/// left the row-open flag closed, so once the continuing-row emitter honoured
+/// that flag `Yes` dropped to a row of its own. Measured 2026-10-16
+/// (`paws-sage`, beat `again`): the original reads `for thee?" Yes`.
+#[test]
+fn tavern_continuation_yes_echoes_onto_the_question_row() {
+    use crate::shop_runtime::TavernState;
+    use crate::shop_session::ActiveShopSession;
+
+    let mut state = test_state(open_grid(), 1, 1);
+    state.area = Area::Town {
+        scene: Scene::new(22).unwrap(),
+        floor: 0,
+    };
+    state.gold = 200;
+    state.active_shop = Some(ActiveShopSession::Tavern(TavernState::Menu {
+        tavern: Tavern::TheCatsLair,
+        continuation_ready: false,
+    }));
+    let round = crate::shops::tavern_menu_letters(Tavern::TheCatsLair).round;
+    handle_play_key_input(&mut state, round, "", Path::new("")).unwrap();
+    assert!(
+        state.message.ends_with("Anything else\nfor thee?\" "),
+        "{:?}",
+        state.message
+    );
+
+    handle_play_key_input(&mut state, 'Y', "", Path::new("")).unwrap();
+
+    let rows: Vec<&str> = state
+        .message_transcript
+        .iter()
+        .map(|entry| entry.text.as_str())
+        .collect();
+    assert!(
+        rows.iter().any(|row| row.ends_with("for thee?\" Yes")),
+        "{rows:?}"
+    );
+    let question = rows
+        .iter()
+        .position(|row| *row == "\"Anything else")
+        .expect("the continuation question is on the transcript");
+    assert_eq!(rows[question + 1], "for thee?\" Yes", "{rows:?}");
+}
+
+/// `shops.md §8.B`: "the accepted answer appends directly after" the entry
+/// greeting's continuation, so `Y` at a `:` row reads `:Yes`.
+#[test]
+fn shop_entry_answer_echoes_onto_the_greeting_row() {
+    use crate::shop_runtime::TavernState;
+    use crate::shop_session::ActiveShopSession;
+
+    let mut state = test_state(open_grid(), 1, 1);
+    state.area = Area::Town {
+        scene: Scene::new(22).unwrap(),
+        floor: 0,
+    };
+    state.gold = 200;
+    state.active_shop = Some(ActiveShopSession::Tavern(TavernState::Greeting {
+        tavern: Tavern::TheCatsLair,
+    }));
+    state.emit_message_line("\n\"Welcome!\"\n\n:");
+    state.close_message_row();
+
+    handle_play_key_input(&mut state, 'Y', "", Path::new("")).unwrap();
+
+    let rows: Vec<&str> = state
+        .message_transcript
+        .iter()
+        .map(|entry| entry.text.as_str())
+        .collect();
+    assert!(rows.contains(&":Yes"), "{rows:?}");
+}

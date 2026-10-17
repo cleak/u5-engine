@@ -896,6 +896,10 @@ fn handle_active_shop_key_input(
     let yes = matches!(key_byte, b'Y' | b'y') || suffix.chars().any(|c| matches!(c, 'Y' | 'y'));
     let no = matches!(key_byte, b'N' | b'n') || suffix.chars().any(|c| matches!(c, 'N' | 'n'));
     let mut replacement_session: Option<ActiveShopSession> = None;
+    // Row state a tavern or sage message leaves for the next key's echo,
+    // stated once that message is on the transcript (see
+    // [`shop_prompt_row_state`]).
+    let mut prompt_row_open: Option<bool> = None;
     // Measured 2026-09-07/08 at all eight overlays: the answer to the entry
     // question echoes as a word - `Yes` or `No` - onto the row the greeting
     // left the cursor on. A Paws capture shows it appended to the greeting's
@@ -1828,13 +1832,16 @@ fn handle_active_shop_key_input(
             // than inferring it for every tavern outcome's text, which
             // regressed the mixer's own unrelated row accounting when tried
             // generically (`cleak/u5-engine#41`).
-            if tavern_quantity_echo.is_some() {
-                if tavern_message.ends_with('\n') {
-                    state.close_message_row();
-                } else if !tavern_message.is_empty() {
-                    state.open_message_row();
-                }
-            }
+            //
+            // The continuation question is the other transition a later key
+            // echoes onto: `shops.md §8.C` "Y prints `Yes`" on the row
+            // `Anything else for thee?" ` left open. Since the
+            // continuing-row emitter started honouring this flag
+            // (`6493e0d9`), a continuation reached by any outcome other than
+            // a quantity left it closed, and `Yes` dropped to a row of its
+            // own - measured 2026-10-16 (`paws-sage`, beats `again` and
+            // `rumour`): the original reads `for thee?" Yes`.
+            prompt_row_open = shop_prompt_row_state(&tavern_message);
             tavern_message
         }
         ActiveShopSession::Sage(s) => {
@@ -1963,6 +1970,10 @@ fn handle_active_shop_key_input(
             } else {
                 None
             };
+            // The fee question `Fair 'nuff?" ` and the tavern continuation
+            // it returns to both leave their row open for the `Yes`/`No`
+            // echo; see the tavern arm above.
+            prompt_row_open = shop_prompt_row_state(&message);
             shop_message_ignoring_surcharge(message, surcharge)
         }
         ActiveShopSession::Reagent(s) => {
@@ -2394,6 +2405,16 @@ fn handle_active_shop_key_input(
         // the bare word either way; the engine used to supply a space of its
         // own and so double-spaced the tavern's row and put the healer's
         // answer on a row with no colon.
+        //
+        // Every continuation the greeting can end on - `\n:`, one space,
+        // `\n\n:` - leaves the cursor on that row, so the row is stated open
+        // here rather than inferred from text. Since the continuing-row
+        // emitter started honouring the flag (`6493e0d9`) the greeting's
+        // producer blanks left it closed, and `Yes` dropped to a row of its
+        // own - measured 2026-10-16 (`paws-tavern`, beat `menu`): the
+        // original reads `afternoon?" Yes`.
+        state.flush_message_slot();
+        state.open_message_row();
         state.emit_message_line_continuing_row(echo);
         if echo == "Yes" {
             // `§8.B`'s per-kind table gives every Yes branch `Yes\n\n` before
@@ -2402,6 +2423,18 @@ fn handle_active_shop_key_input(
         }
     }
     state.message = message;
+    // The flag describes the row the message *ends* on, so it is stated
+    // after the message is on the transcript: flushing a message with
+    // embedded blank rows rewrites it on the way (each producer blank closes
+    // the row), and a flag set before the flush was lost there.
+    if let Some(open) = prompt_row_open {
+        state.flush_message_slot();
+        if open {
+            state.open_message_row();
+        } else {
+            state.close_message_row();
+        }
+    }
 
     if let Some(next_session) = replacement_session {
         state.active_shop = Some(next_session);
@@ -4087,6 +4120,24 @@ fn tavern_accepted_menu_letter(
 
 
 
+/// State the row a tavern or sage message leaves for the next key's echo.
+///
+/// `shops.md §8.A`'s shared Y/N primitive and §8.C's tavern prompts end on a
+/// closing quote and a space, the cursor waiting on that row for the answer
+/// that `emit_message_line_continuing_row` echoes there; a message ending in
+/// a line feed has closed its row. Anything else is left as it was - the
+/// flag is set per caller, never inferred for every direct assignment
+/// (`518ca559`).
+fn shop_prompt_row_state(message: &str) -> Option<bool> {
+    if message.ends_with('\n') {
+        Some(false)
+    } else if message.ends_with(' ') {
+        Some(true)
+    } else {
+        None
+    }
+}
+
 fn format_tavern_outcome_with_shoppe(
     outcome: crate::shop_runtime::TavernOutcome,
     provision_quote_record_id: Option<usize>,
@@ -4254,13 +4305,21 @@ fn format_tavern_outcome_with_shoppe(
         // `No` is echoed onto the continuation question's own open row by
         // the caller, the same way `Yes` is - it is not part of this
         // record's own text (`cleak/u5-engine#41`).
+        //
+        // `shops.md §8.C`: N "runs the ordinary quoted farewell", and §8's
+        // shared closing envelope is "`\n\n\"`, the selected record, a line
+        // feed only when the resulting local cursor column is nonzero, then
+        // token-expanded `says $.\n`. The record owns its closing quote."
+        // The engine printed the record bare under the `No` row. Measured
+        // 2026-10-16 (`paws-tavern`, beat `no`): the original reads
+        // `for thee?" No`, a blank row, then `"What's wrong / with ye? ...`.
         DeclinedContinuation | NoSaleExit => no_sale_record_id.and_then(|record_id| {
             renderer
                 .render_record(record_id, &crate::shoppe_bark::ShoppeBarkContext::default())
                 .ok()
                 .map(|rendered| match tavern_vendor_name {
-                    Some(name) => format!("{rendered}\nsays {name}."),
-                    None => rendered,
+                    Some(name) => format!("\n\n\"{rendered}\nsays {name}."),
+                    None => format!("\n\n\"{rendered}"),
                 })
         }),
         _ => None,
