@@ -538,14 +538,38 @@ fn speaker_effects_after(
         .collect()
 }
 
-/// Wall-clock seconds for one driver-local calibrated unit of the subtitle
-/// ignition's publication wait. `timing.md §5.1` scopes the 14 ms modernised
-/// cadence to the `TITLE.BIT` flourish only; the ignition row waits "45 full
-/// calibration units" sounded or "50" silent, and `§7.4` prices the
-/// title-sequence (driver-local) unit at "about 0.92 ms" under the normative
-/// `§7.1` anchor - about 41.4 ms and 46 ms per publication.
+/// Wall-clock seconds for one calibrated unit of the subtitle ignition's
+/// publication wait. `timing.md §5.1` scopes the 14 ms modernised cadence to
+/// the `TITLE.BIT` flourish only; the ignition row waits "45 full calibration
+/// units" sounded or "50" silent. `intro.md §5` "Duration" (`cleak/u5-spec#298`
+/// Q37) finds the measured per-publication time "consistent with the 0.88 ms
+/// calibrated unit of `timing.md` section 7 plus the burst holds".
 const INTRO_SUBTITLE_IGNITION_UNIT_SECS: f32 =
-    u5_runtime::audio::DRIVER_LOCAL_UNIT_NANOS as f32 / 1_000_000_000.0;
+    u5_runtime::audio::OUTER_CALIBRATED_UNIT_NANOS as f32 / 1_000_000_000.0;
+
+/// `intro.md §5` "Duration" (`cleak/u5-spec#298` Q37): "A fresh uninterrupted
+/// run at the normal cadence makes 220 publications ...: 101 sounded at 45
+/// calibrated outer units and 119 silent at 50, which is 10,495 outer units",
+/// measured uninterrupted "as emulator timings under DOSBox 0.74-3: **12.03 s
+/// at fixed 3000 cycles**". "The calibrated part alone ... must not be used as
+/// the total": the bursts' pitch holds and host-speed-dependent per-position
+/// work come on top. The period-hardware total is not established.
+const INTRO_SUBTITLE_IGNITION_FRESH_RUN_NANOS: u64 = 12_030_000_000;
+const INTRO_SUBTITLE_IGNITION_FRESH_RUN_PUBLICATIONS: u64 = 220;
+const INTRO_SUBTITLE_IGNITION_FRESH_RUN_SOUNDED: u64 = 101;
+const INTRO_SUBTITLE_IGNITION_FRESH_RUN_OUTER_UNITS: u64 = 10_495;
+
+/// The host-speed-dependent work each publication carries on top of its
+/// calibrated wait and burst: the published 12.03 s fresh run less its 10,495
+/// calibrated units and 101 bursts (`audio.md §10.1`, about 3.7 ms each),
+/// spread over its 220 publications - about 11.0 ms, against the "about
+/// 11.6 ms per publication at 3000 cycles" `intro.md §5` gives for the same
+/// remainder from its own split.
+const INTRO_SUBTITLE_IGNITION_PUBLICATION_WORK_NANOS: u64 = (INTRO_SUBTITLE_IGNITION_FRESH_RUN_NANOS
+    - INTRO_SUBTITLE_IGNITION_FRESH_RUN_OUTER_UNITS
+        * u5_runtime::audio::OUTER_CALIBRATED_UNIT_NANOS
+    - INTRO_SUBTITLE_IGNITION_FRESH_RUN_SOUNDED * u5_runtime::audio::IGNITION_BURST_TOTAL_NANOS)
+    / INTRO_SUBTITLE_IGNITION_FRESH_RUN_PUBLICATIONS;
 
 /// `systems/intro.md §3` step 2 (`cleak/u5-spec#77`): after the
 /// flourish returns, the finished mark plus the slot-7 "Presents"
@@ -11744,12 +11768,12 @@ fn visual_intro_animation_interval(intro: &VisualIntroState) -> f32 {
         publish_index,
     } = &intro.panel
     {
-        let wait_units = playback
+        let (wait_units, sounded) = playback
             .publishes
             .get(*publish_index)
-            .map(|publish| publish.wait_units)
+            .map(|publish| (publish.wait_units, publish.speaker_burst))
             .expect("subtitle ignition interval requires a current publish");
-        return subtitle_ignition_publish_interval(wait_units);
+        return subtitle_ignition_publish_interval(wait_units, sounded);
     }
     if matches!(intro.panel, VisualIntroPanel::StartMenuReveal(_)) {
         return INTRO_START_MENU_REVEAL_SLICE_NANOS as f32 / 1_000_000_000.0;
@@ -11764,8 +11788,17 @@ fn visual_intro_animation_interval(intro: &VisualIntroState) -> f32 {
     }
 }
 
-fn subtitle_ignition_publish_interval(wait_units: u8) -> f32 {
+/// One ignition publication on screen: its calibrated wait, its burst's
+/// pitch holds when it sounds, and the per-publication host work
+/// (`intro.md §5` "Duration", `cleak/u5-spec#298` Q37).
+fn subtitle_ignition_publish_interval(wait_units: u8, sounded: bool) -> f32 {
+    let burst_nanos = if sounded {
+        u5_runtime::audio::IGNITION_BURST_TOTAL_NANOS
+    } else {
+        0
+    };
     INTRO_SUBTITLE_IGNITION_UNIT_SECS * f32::from(wait_units)
+        + (burst_nanos + INTRO_SUBTITLE_IGNITION_PUBLICATION_WORK_NANOS) as f32 / 1_000_000_000.0
 }
 
 fn advance_intro_animation_pump(pump: &mut VisualIntroAnimationPump, delta: f32) -> bool {
@@ -20976,19 +21009,34 @@ mod tests {
     }
 
     #[test]
-    fn subtitle_ignition_wait_units_use_the_calibrated_unit_anchor() {
-        // `timing.md §5.1`/`§6.3`: 50 silent and 45 sounded driver-local units
-        // per publication; `§7.1` makes 0.79-0.97 ms per unit normative and
-        // `§7.4` puts the driver-local unit at about 0.92 ms. The 14 ms
-        // cadence belongs to the flourish alone.
-        let silent =
-            subtitle_ignition_publish_interval(u5_runtime::SUBTITLE_IGNITION_SILENT_WAIT_UNITS);
-        assert!((silent - 0.046).abs() < 1e-6, "silent publication {silent} s");
-        assert!((50.0 * 0.00079..=50.0 * 0.00097).contains(&silent));
-        let burst =
-            subtitle_ignition_publish_interval(u5_runtime::SUBTITLE_IGNITION_SPEAKER_WAIT_UNITS);
-        assert!((burst - 0.0414).abs() < 1e-6, "sounded publication {burst} s");
-        assert!((45.0 * 0.00079..=45.0 * 0.00097).contains(&burst));
+    fn subtitle_ignition_publications_add_up_to_the_published_fresh_run() {
+        // `timing.md §5.1`/`§6.3`: 50 silent and 45 sounded calibrated units
+        // per publication. `intro.md §5` "Duration" (u5-spec#298 Q37): a
+        // fresh run is 119 silent and 101 sounded publications, 10,495 outer
+        // units, and lasts 12.03 s at fixed 3000 cycles; the calibrated part
+        // alone (about 9.2 s) "must not be used as the total".
+        let silent = f64::from(subtitle_ignition_publish_interval(
+            u5_runtime::SUBTITLE_IGNITION_SILENT_WAIT_UNITS,
+            false,
+        ));
+        let sounded = f64::from(subtitle_ignition_publish_interval(
+            u5_runtime::SUBTITLE_IGNITION_SPEAKER_WAIT_UNITS,
+            true,
+        ));
+        assert_eq!(
+            119 * u64::from(u5_runtime::SUBTITLE_IGNITION_SILENT_WAIT_UNITS)
+                + 101 * u64::from(u5_runtime::SUBTITLE_IGNITION_SPEAKER_WAIT_UNITS),
+            INTRO_SUBTITLE_IGNITION_FRESH_RUN_OUTER_UNITS
+        );
+        let total = 119.0 * silent + 101.0 * sounded;
+        assert!((total - 12.03).abs() < 0.01, "fresh ignition run {total:.3} s");
+        // "Per publication about 42.8 ms does not depend on the cycle setting
+        // ... the CPU-bound remainder is about 11.6 ms per publication".
+        let mean = total / 220.0;
+        assert!((mean - (0.0428 + 0.0116)).abs() < 0.002, "{mean:.4} s");
+        let calibrated = 10_495.0 * f64::from(INTRO_SUBTITLE_IGNITION_UNIT_SECS);
+        assert!((calibrated - 9.2).abs() < 0.05);
+        assert!(total > calibrated + 2.0);
     }
 
     #[test]
@@ -21419,7 +21467,12 @@ mod tests {
             VisualIntroPanel::SubtitleIgnition { playback, .. } => playback
                 .publishes
                 .iter()
-                .map(|publish| f64::from(subtitle_ignition_publish_interval(publish.wait_units)))
+                .map(|publish| {
+                    f64::from(subtitle_ignition_publish_interval(
+                        publish.wait_units,
+                        publish.speaker_burst,
+                    ))
+                })
                 .sum(),
             _ => unreachable!(),
         };
@@ -21427,11 +21480,13 @@ mod tests {
             matches!(i.panel, VisualIntroPanel::Menu)
                 && !matches!(i.dispatch.tick_title(), UnifiedMenuStep::PresentTitle)
         });
-        // One publication per 45- or 50-unit wait at the 0.92 ms driver unit.
+        // One publication per 45- or 50-unit wait plus its burst and host
+        // work: `intro.md §5` (u5-spec#298 Q37), 12.03 s at fixed 3000 cycles.
         assert!(
             (ignition - expected_ignition).abs() <= 0.25,
             "ignition: {ignition:.3} s, expected {expected_ignition:.3} s"
         );
+        assert!((ignition - 12.03).abs() <= 0.25, "ignition: {ignition:.3} s");
 
         eprintln!(
             "intro timeline: flourish {flourish:.3} s, Presents {presents:.3} s, \
