@@ -7268,15 +7268,76 @@ fn conversation_opening_rendered(
     // then `You see a pretty young girl.` (`cleak/u5-engine#5`).
     let mut rendered = crate::tlk_runner::TlkRenderedText::plain("\n");
     rendered.push_plain(TLK_OPENING_DESCRIPTION_PREFIX);
-    rendered.push_rendered(&opening.trimmed());
     // A blank row separates the opening from the prompt that closes it,
     // the same shape §6's response framing carries. Two line feeds,
     // because `text-output.md §5`'s feed is a combined CR+LF.
-    while !rendered.text.ends_with("\n\n") {
+    //
+    // `conversation.md §7.3`'s own example is this path: a dwelling rat's
+    // description ends `"Squeek..."`, two feeds, a `0x83` PAUSE, then the
+    // `0x88` prompt. The pause leaves a hold marker (`crate::text_hold`),
+    // which is not whitespace, so trimming the opening stopped at it and
+    // the padding below then fed two more rows on top of the stream's own
+    // two - `dwelling-talk-after-entry`'s `talk` beat read three blank rows
+    // above `"What is thy name?"` where the original shows one. The tail
+    // is therefore read through the markers: its feeds count towards the
+    // two and stay in front of the hold, where the stream put them.
+    let leading = opening
+        .glyphs
+        .iter()
+        .take_while(|glyph| glyph.byte.is_ascii_whitespace())
+        .count();
+    let (body, tail) = opening_body_and_hold_tail(&opening.without_leading_bytes(leading));
+    rendered.push_rendered(&body);
+    let mut feeds = 0usize;
+    for glyph in tail {
+        if glyph.byte == b'\n' {
+            if feeds < 2 {
+                feeds += 1;
+                rendered.text.push('\n');
+                rendered.glyphs.push(glyph);
+            }
+        } else {
+            rendered.text.push(char::from(glyph.byte));
+            rendered.glyphs.push(glyph);
+        }
+    }
+    for _ in feeds..2 {
         rendered.push_plain("\n");
     }
     rendered.push_plain(prompt);
     rendered
+}
+
+/// Split an opening into its body and the trailing run that follows the
+/// last printed glyph. The tail keeps only the line feeds and hold markers
+/// that come before the last hold; whitespace after it, and any other
+/// whitespace in the run, is dropped the way trimming dropped it before
+/// holds existed.
+fn opening_body_and_hold_tail(
+    opening: &crate::tlk_runner::TlkRenderedText,
+) -> (
+    crate::tlk_runner::TlkRenderedText,
+    Vec<crate::tlk_runner::TlkRenderedGlyph>,
+) {
+    let is_hold = |byte: u8| crate::text_hold::TextHoldKind::from_marker(byte).is_some();
+    let body_end = opening
+        .glyphs
+        .iter()
+        .rposition(|glyph| !glyph.byte.is_ascii_whitespace() && !is_hold(glyph.byte))
+        .map_or(0, |index| index + 1);
+    let tail_glyphs = &opening.glyphs[body_end..];
+    let last_hold = tail_glyphs.iter().rposition(|glyph| is_hold(glyph.byte));
+    let tail = match last_hold {
+        Some(last) => tail_glyphs[..=last]
+            .iter()
+            .filter(|glyph| glyph.byte == b'\n' || is_hold(glyph.byte))
+            .copied()
+            .collect(),
+        None => Vec::new(),
+    };
+    let glyphs = opening.glyphs[..body_end].to_vec();
+    let text = glyphs.iter().map(|glyph| char::from(glyph.byte)).collect();
+    (crate::tlk_runner::TlkRenderedText { text, glyphs }, tail)
 }
 
 #[cfg(test)]
@@ -7392,4 +7453,64 @@ pub enum UseTargetStep {
     Waiting,
     /// Return or Space committed the indicated row.
     Committed(usize),
+}
+
+#[cfg(test)]
+mod conversation_opening_hold_tests {
+    use super::conversation_opening_rendered;
+    use crate::tlk_runner::TlkRenderedText;
+
+    /// `conversation.md §7.3`'s example: the dwelling rat's description
+    /// ends `"Squeek..."`, two feeds, a `0x83` PAUSE, then the `0x88`
+    /// prompt. The stream's own two feeds already leave the one blank row
+    /// above the prompt, so the hold marker must not stop the opening from
+    /// seeing them - `dwelling-talk-after-entry`'s `talk` beat read three
+    /// blank rows there after the hold layer landed, against one in the
+    /// original.
+    #[test]
+    fn a_pause_after_the_openings_own_feeds_adds_no_rows() {
+        let pause = crate::text_hold::TextHoldKind::TimedPause.marker_str();
+        let opening = TlkRenderedText::plain(format!("a giant rat!\n\n\"Squeek...\"\n\n{pause}"));
+        let rendered = conversation_opening_rendered(&opening, crate::TLK_ASK_WHO_PROMPT);
+        assert_eq!(
+            rendered.text,
+            format!(
+                "\nYou see a giant rat!\n\n\"Squeek...\"\n\n{pause}{}",
+                crate::TLK_ASK_WHO_PROMPT
+            )
+        );
+        assert_eq!(rendered.glyphs.len(), rendered.text.len());
+        assert_eq!(
+            crate::text_hold::strip_hold_markers(&rendered.text),
+            conversation_opening_rendered(
+                &TlkRenderedText::plain("a giant rat!\n\n\"Squeek...\"\n\n"),
+                crate::TLK_ASK_WHO_PROMPT
+            )
+            .text,
+            "once the hold is over the window reads as it did without one"
+        );
+    }
+
+    /// A pause with no feeds in front of it still gets the blank row, and
+    /// feeds after the last hold are trimmed as before.
+    #[test]
+    fn the_blank_row_is_padded_after_a_bare_pause_and_trailing_feeds_are_trimmed() {
+        let pause = crate::text_hold::TextHoldKind::TimedPause.marker_str();
+        let bare = conversation_opening_rendered(
+            &TlkRenderedText::plain(format!("a rat.{pause}")),
+            crate::TLK_KEYWORD_PROMPT,
+        );
+        assert_eq!(
+            bare.text,
+            format!("\nYou see a rat.{pause}\n\n{}", crate::TLK_KEYWORD_PROMPT)
+        );
+        let plain = conversation_opening_rendered(
+            &TlkRenderedText::plain("a rat.\n\n\n\n"),
+            crate::TLK_KEYWORD_PROMPT,
+        );
+        assert_eq!(
+            plain.text,
+            format!("\nYou see a rat.\n\n{}", crate::TLK_KEYWORD_PROMPT)
+        );
+    }
 }
