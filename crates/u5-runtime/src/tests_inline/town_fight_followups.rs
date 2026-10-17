@@ -136,3 +136,34 @@ fn p16_killed_town_merchant_leaves_a_chest_or_a_corpse_by_the_drop_roll() {
         "{accepted} of 4096 seeds leave a chest"
     );
 }
+
+/// `rest-and-camp.md §4` / `commands.md §10` (u5-spec#298 Q30,
+/// `RETRACTIONS.md` R538): the town-bed burst "runs once, at the current hour
+/// with no clock advance, after the digit is echoed and before anyone
+/// sleeps". "An arrest/conflict event (`0x61`) left by any pass ends the
+/// command at once with no sleep status, no time passed and no further
+/// message, returning the ordinary acted result".
+#[test]
+fn town_bed_rest_burst_arrest_contact_ends_the_command_before_sleep() {
+    let dir = crate::test_fixtures::debug_game_dir();
+    let _ = std::fs::remove_file(dir.join(TOWN_REST_BED_TABLE_FILE));
+    let mut grid = g6_open_grid();
+    grid[32 + 1] = 0x48;
+    let mut state = test_state(grid, 1, 1);
+    state.area = Area::Town {
+        scene: Scene::new(2).unwrap(),
+        floor: 0,
+    };
+    state.clock = GameClock::new(8, 0).unwrap();
+    state.npcs = vec![g6_npc(1, 2, 1, 6, (2, 1, 0))];
+    state.relink_npc_objects();
+
+    assert_eq!(
+        state.hole_up_command(&dir, Some(3)).unwrap(),
+        MoveOutcome::Used
+    );
+    assert_eq!(state.clock, GameClock::new(8, 0).unwrap(), "no time passed");
+    assert_eq!(state.party[0].status, b'G', "no sleep status");
+    assert!(state.message.is_empty(), "{:?}", state.message);
+    assert_eq!(state.pending_town_npc_contact, None, "burst events are dropped");
+}

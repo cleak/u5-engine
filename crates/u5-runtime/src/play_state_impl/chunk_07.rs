@@ -6270,19 +6270,20 @@ impl PlayState {
             return Ok(MoveOutcome::Blocked);
         }
 
-        self.mark_town_rest_sleepers();
-        if !self.advance_town_rest_initial_schedule_burst(entries.as_deref(), scene, floor) {
-            let woke = self.wake_town_rest_sleepers();
-            // `rest-and-camp.md §6`: "Town/inn rest can instead produce a
-            // local refusal or \"thrown out\" style result depending on the
-            // caller context" - the wording is not published, so the engine
-            // records what happened rather than inventing a sentence.
-            self.diagnostics.push(format!(
-                "town-bed rest interrupted; woke {woke} asleep member(s)"
-            ));
+        // `rest-and-camp.md §4` / `commands.md §10` (u5-spec#298 Q30,
+        // `RETRACTIONS.md` R538): the burst "runs once, at the current hour
+        // with no clock advance, after the digit is echoed and before anyone
+        // sleeps", and an arrest/conflict contact during it "ends the command
+        // at once with no sleep status, no time passed and no further
+        // message, returning the ordinary acted result so the town epilogue
+        // re-evaluates contact".
+        if self.advance_town_rest_initial_schedule_burst() {
+            self.diagnostics
+                .push("town-bed rest ended by an arrest/conflict contact".to_string());
             self.message.clear();
-            return Ok(MoveOutcome::Blocked);
+            return Ok(MoveOutcome::Used);
         }
+        self.mark_town_rest_sleepers();
         if !self.advance_town_rest_until_target_hour(hours, entries.as_deref(), scene, floor) {
             let woke = self.wake_town_rest_sleepers();
             // `rest-and-camp.md §6`: "Town/inn rest can instead produce a
@@ -6354,12 +6355,12 @@ impl PlayState {
         self.clock.hour == target_hour
     }
 
-    pub fn advance_town_rest_initial_schedule_burst(
-        &mut self,
-        entries: Option<&[TownRestBedEntry]>,
-        scene: Scene,
-        floor: i8,
-    ) -> bool {
+    /// The town-bed burst of up to sixteen schedule/world-tick passes.
+    /// Returns `true` when an arrest/conflict contact event ended it
+    /// (`town-mode.md §7`, R538: "It checks only for the arrest/conflict
+    /// kind ... A conversation-contact event does not interrupt the rest.
+    /// Every event recorded during the burst is dropped").
+    pub fn advance_town_rest_initial_schedule_burst(&mut self) -> bool {
         for _ in 0..TOWN_REST_INITIAL_SCHEDULE_BURST_TICKS {
             // `karma.md §4.1`: these zero-minute schedule-only setup
             // ticks are not one of the ten-minute rest ticks that age the
@@ -6368,11 +6369,15 @@ impl PlayState {
             // callers, and among rest only "the town-bed rest loop's
             // ten-minute step" (`rest-and-camp.md §5`).
             self.advance_turn_with_minutes_policy(0, true, true, false, false);
-            if !self.town_rest_bed_still_accepts(entries, scene, floor) {
-                return false;
+            let arrest = self
+                .pending_town_npc_contact
+                .take()
+                .is_some_and(|event| event.behavior.raises_arrest_or_conflict_contact());
+            if arrest {
+                return true;
             }
         }
-        true
+        false
     }
 
     pub fn town_rest_bed_still_accepts(
