@@ -780,15 +780,16 @@ fn the_town_animator_is_not_one_of_the_two_gated_walkers() {
     let mut state = test_state(open_grid(), 5, 5);
     state.player.transport = mounted_horse_transport();
     state.npcs.push(wandering_npc(1, 9, 9, (9, 9)));
-    // Type `192` is outside the loose-horse family `0x10..0x11`, so it is the
-    // animator's slot and not the town object walker's.
+    // Type `0x5C` is outside the loose-horse family `0x10..0x11`, so it is
+    // the animator's slot and not the town object walker's; issue #298 Q29
+    // makes it animate without the coin, script A starting on f2.
     state.active_objects.push(ActiveObject {
-        type_byte: 192,
-        tile: 192,
+        type_byte: 0x5c,
+        tile: 0x5c,
         x: 3,
         y: 3,
         z: 0,
-        phase: 0x22,
+        phase: 0x00,
         aux1: 0,
         aux3: 0,
     });
@@ -803,11 +804,11 @@ fn the_town_animator_is_not_one_of_the_two_gated_walkers() {
         "the transport gate skipped the schedule processor this turn"
     );
     assert_eq!(
-        state.active_objects[1].phase, 0x21,
-        "the animator still ticked the countdown on a gated turn"
+        state.active_objects[1].phase, 0x10,
+        "the animator still ran the script on a gated turn"
     );
     assert_eq!(
-        state.active_objects[1].tile, 193,
+        state.active_objects[1].tile, 0x5d,
         "the animator still advanced the displayed frame on a gated turn"
     );
     assert_eq!(

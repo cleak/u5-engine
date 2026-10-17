@@ -15455,9 +15455,9 @@ fn outdoor_movement_chance_gate_classifies_destination_per_spec() {
         );
     }
 
-    // Auto-clear destination tile / age cap constants.
+    // Auto-clear destination tile / Shadow Lord exact type byte.
     assert_eq!(OUTDOOR_STEP_CLEAR_DESTINATION_TILE, 0xDC);
-    assert_eq!(FC_PROXIMITY_AGE_CAP, 20);
+    assert_eq!(SHADOW_LORD_PROXIMITY_TYPE_BYTE, 0xFC);
 }
 
 #[test]
@@ -23392,7 +23392,7 @@ fn chargen_questionnaire_round_structure_matches_spec_section_six() {
 fn npc_dynamic_obstacle_radius_matches_published_threshold() {
     // npc-schedules.md §10: occupied cells are blocked only when the
     // occupant is within Manhattan distance less than four from the
-    // NPC's runtime destination.
+    // NPC's current (x, y) (issue #298 Q22, R536).
     assert_eq!(NPC_DYNAMIC_OBSTACLE_MANHATTAN_RADIUS, 4);
 }
 

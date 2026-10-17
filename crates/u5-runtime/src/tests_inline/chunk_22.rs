@@ -843,6 +843,9 @@
         let mut grid = open_world_grid();
         grid[world_cell_index(4, 5)] = 1;
         let mut state = world_state(grid, 0, 5);
+        // `weather.md §7`: calm wind suppresses the ship family's movement;
+        // an east wind makes this north frame perpendicular ("every turn").
+        state.wind = WindState::East;
         state.active_objects.push(ActiveObject {
             type_byte: 0x2c,
             tile: 0x2c,

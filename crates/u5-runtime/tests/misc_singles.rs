@@ -160,21 +160,35 @@ fn underworld_setup_pass_is_underworld_only() {
 // `systems/weather.md §7` — active-ship wind cadence.
 // ---------------------------------------------------------------------------
 
-fn ship_drift_moves_over(wind: WindState, frame_phase: u8, turns: usize) -> usize {
-    let mut state = world_state(vec![0x01; WORLD_CELLS], 4, 5);
+/// A pirate ship of frame `type_byte` (`0x2C` north .. `0x2F` west) with
+/// the party forty cells ahead along that heading, so the directed planner
+/// keeps stepping the way the frame faces and the heading rewrite of issue
+/// #298 Q32 leaves the cadence row unchanged.
+fn ship_state(wind: WindState, type_byte: u8, aux3: u8) -> PlayState {
+    let (px, py) = match type_byte & 0x03 {
+        0 => (100, 60),
+        1 => (140, 100),
+        2 => (100, 140),
+        _ => (60, 100),
+    };
+    let mut state = world_state(vec![0x01; WORLD_CELLS], px, py);
     state.wind = wind;
     state.active_objects.truncate(1);
     state.active_objects.push(ActiveObject {
-        type_byte: 168,
-        tile: 168,
+        type_byte,
+        tile: type_byte,
         x: 100,
         y: 100,
         z: WorldPlane::Underworld.save_floor(),
-        phase: frame_phase,
-        aux1: 0,
-        aux3: 0,
+        phase: 0x00,
+        aux1: 100,
+        aux3,
     });
+    state
+}
 
+fn ship_drift_moves_over(wind: WindState, type_byte: u8, turns: usize) -> usize {
+    let mut state = ship_state(wind, type_byte, 0);
     let mut moves = 0;
     for _ in 0..turns {
         let before = (state.active_objects[1].x, state.active_objects[1].y);
@@ -193,67 +207,91 @@ fn ship_drift_moves_over(wind: WindState, frame_phase: u8, turns: usize) -> usiz
 /// `systems/weather.md §7` cadence table. A frame facing the wind source
 /// moves "2 of 3 turns"; a frame facing away moves "3 of 4 turns"; a
 /// perpendicular frame moves "every turn" and "bypasses the counter".
+/// Frames are the issue #298 Q32 headings: `0x2C` N, `0x2D` E, `0x2E` S,
+/// `0x2F` W.
 #[test]
 fn active_ship_wind_cadence_counts_match_the_weather_table() {
     // North-facing frame, north wind: 2 of 3.
-    assert_eq!(ship_drift_moves_over(WindState::North, 0x00, 3), 2);
-    assert_eq!(ship_drift_moves_over(WindState::North, 0x00, 6), 4);
+    assert_eq!(ship_drift_moves_over(WindState::North, 0x2c, 3), 2);
+    assert_eq!(ship_drift_moves_over(WindState::North, 0x2c, 6), 4);
 
     // South-facing frame, north wind: 3 of 4.
-    assert_eq!(ship_drift_moves_over(WindState::North, 0x40, 4), 3);
-    assert_eq!(ship_drift_moves_over(WindState::North, 0x40, 8), 6);
+    assert_eq!(ship_drift_moves_over(WindState::North, 0x2e, 4), 3);
+    assert_eq!(ship_drift_moves_over(WindState::North, 0x2e, 8), 6);
 
-    // East-facing frame, north wind: perpendicular, every turn. This is
-    // the row the previous heading-versus-wind test stalled forever.
-    assert_eq!(ship_drift_moves_over(WindState::North, 0x20, 6), 6);
+    // East-facing frame, north wind: perpendicular, every turn.
+    assert_eq!(ship_drift_moves_over(WindState::North, 0x2d, 6), 6);
 
     // "Calm wind suppresses this movement."
-    assert_eq!(ship_drift_moves_over(WindState::Calm, 0x20, 6), 0);
+    assert_eq!(ship_drift_moves_over(WindState::Calm, 0x2d, 6), 0);
 }
 
-/// §7: "The cadence counter is stored per active-object slot ... and is
-/// persisted with the object, so it survives save and reload." It lives
-/// in the slot's own bytes, not in shared engine state.
+/// Issue #298 Q32: "The cadence counter is the whole of active-object record
+/// byte 7, read as one unsigned byte; byte 6 and every other byte play no
+/// part." It is "incremented first, with byte wrap (255 becomes 0). If the
+/// new value is no greater than the cap ... the slot moves; otherwise the
+/// counter is set to zero and the slot does not move on that pass."
 #[test]
-fn active_ship_cadence_counter_lives_in_the_object_slot() {
-    let mut state = world_state(vec![0x01; WORLD_CELLS], 4, 5);
-    state.wind = WindState::North;
-    state.active_objects.truncate(1);
-    state.active_objects.push(ActiveObject {
-        type_byte: 168,
-        tile: 168,
-        x: 100,
-        y: 100,
-        z: WorldPlane::Underworld.save_floor(),
-        phase: 0x00,
-        aux1: 0,
-        aux3: 0,
-    });
-
-    let counter = |state: &PlayState| {
-        (state.active_objects[1].phase & ACTIVE_SHIP_CADENCE_PHASE_MASK)
-            >> ACTIVE_SHIP_CADENCE_PHASE_SHIFT
-    };
-
+fn active_ship_cadence_counter_is_record_byte_seven() {
+    let mut state = ship_state(WindState::North, 0x2c, 0);
     state.advance_outdoor_active_objects();
-    assert_eq!(
-        state.active_objects[1].phase & 0xf0,
-        0x00,
-        "frame heading is preserved"
-    );
-    assert_eq!(
-        state.active_objects[1].phase & 0x03,
-        0x00,
-        "the drawn frame selector is untouched"
-    );
-    assert_eq!(counter(&state), 1, "one move of the 2-of-3 cycle spent");
-
+    assert_eq!(state.active_objects[1].phase, 0x00, "byte 6 plays no part");
+    assert_eq!(state.active_objects[1].aux3, 1, "one move of the 2-of-3 cycle spent");
+    assert_eq!(state.active_objects[1].aux1, 100, "hull untouched");
     state.advance_outdoor_active_objects();
-    assert_eq!(counter(&state), 2);
-
+    assert_eq!(state.active_objects[1].aux3, 2);
     // Third pass is the skip; the counter resets.
+    let before = (state.active_objects[1].x, state.active_objects[1].y);
     state.advance_outdoor_active_objects();
-    assert_eq!(counter(&state), 0);
+    assert_eq!(state.active_objects[1].aux3, 0);
+    assert_eq!((state.active_objects[1].x, state.active_objects[1].y), before);
+
+    // An inherited value at or above the cap skips and resets.
+    let mut state = ship_state(WindState::North, 0x2c, 7);
+    state.advance_outdoor_active_objects();
+    assert_eq!(state.active_objects[1].aux3, 0);
+    assert_eq!((state.active_objects[1].x, state.active_objects[1].y), (100, 100));
+
+    // "An inherited 255 wraps to 0, so the ship moves on that pass."
+    let mut state = ship_state(WindState::North, 0x2c, 255);
+    state.advance_outdoor_active_objects();
+    assert_eq!(state.active_objects[1].aux3, 0);
+    assert_eq!((state.active_objects[1].x, state.active_objects[1].y), (100, 99));
+
+    // Calm and "every turn" leave the counter alone.
+    let mut state = ship_state(WindState::Calm, 0x2c, 1);
+    state.advance_outdoor_active_objects();
+    assert_eq!(state.active_objects[1].aux3, 1);
+    let mut state = ship_state(WindState::North, 0x2d, 1);
+    state.advance_outdoor_active_objects();
+    assert_eq!(state.active_objects[1].aux3, 1);
+    assert_eq!((state.active_objects[1].x, state.active_objects[1].y), (101, 100));
+}
+
+/// Issue #298 Q32: once the cadence permits movement the ship takes the
+/// directed step planner, and "every step a ship commits rewrites both the
+/// type byte and the displayed-tile byte to the family base plus that
+/// step's heading".
+#[test]
+fn active_ship_step_rewrites_both_tile_bytes_to_its_heading() {
+    // A north frame with the party due west: the planner steps west.
+    let mut state = ship_state(WindState::East, 0x2c, 0);
+    state.player.x = 60;
+    state.player.y = 100;
+    state.advance_outdoor_active_objects();
+    assert_eq!((state.active_objects[1].x, state.active_objects[1].y), (99, 100));
+    assert_eq!(state.active_objects[1].type_byte, 0x2f);
+    assert_eq!(state.active_objects[1].tile, 0x2f);
+}
+
+/// `0xA8..0xAF` is the mimic and reaper sprite run, not a ship family; the
+/// wind never drives it (issue #298 Q32).
+#[test]
+fn the_mimic_band_is_not_wind_driven() {
+    let mut state = ship_state(WindState::North, 0x2c, 0);
+    state.active_objects[1].type_byte = 0xa8;
+    state.active_objects[1].tile = 0xa8;
+    assert!(!state.slot_is_wind_driven_ship(1, 0));
 }
 
 // ---------------------------------------------------------------------------
@@ -328,8 +366,8 @@ fn the_idle_visual_tick_does_not_drift_a_wind_driven_ship() {
     state.wind = WindState::North;
     state.active_objects.truncate(1);
     state.active_objects.push(ActiveObject {
-        type_byte: 168,
-        tile: 168,
+        type_byte: 0x2d,
+        tile: 0x2d,
         x: 120,
         y: 120,
         z: WorldPlane::Underworld.save_floor(),

@@ -789,9 +789,10 @@ pub const ENCOUNTER_SPAWNER_RETRY_LIMIT: u8 = 128;
 
 /// `encounters.md §4` sea-creature spawner auxiliary seed. The
 /// pirate-ship / water-creature facing-frame family `0x2C..=0x2F`
-/// initialises its auxiliary byte to this value, which seeds the
-/// outdoor animation/wander counter. Every other spawned monster
-/// class initialises the auxiliary byte to zero.
+/// initialises record byte 5, the ship's hull condition, to this value
+/// (issue #298 Q32, `RETRACTIONS.md` R550 withdrew "seeds the outdoor
+/// animation/wander counter"; the wind cadence counter is byte 7). Every
+/// other spawned monster class initialises the byte to zero.
 pub const SEA_CREATURE_SPAWN_AUX_SEED: u8 = 100;
 
 /// `encounters.md §4`: returns `true` when a newly-spawned

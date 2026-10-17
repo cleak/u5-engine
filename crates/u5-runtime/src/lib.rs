@@ -89,6 +89,7 @@ pub mod play_options;
 pub mod play_state_impl;
 pub mod play_state_struct;
 pub use play_state_impl::ExplorationTurnGateOutcome;
+pub use play_state_impl::TownRestBurstOutcome;
 pub mod predicates;
 pub mod prng;
 pub mod pth;
@@ -697,7 +698,8 @@ pub use npc_runtime::{
     NPC_TYPE_SHADOWLORD_ACTOR, NpcAiBehavior, NpcDialogIdKind, NpcLinkAction, NpcScheduleState,
     NpcScheduleStepOutcome, NpcShopTrigger, NpcStuckBand, NpcTypeByteClass, RuntimeNpc,
     TownNpcContactEvent,
-    npc_ai_behavior, npc_dialog_id_kind, npc_dynamic_obstacle_blocks, npc_floor_is_above,
+    npc_ai_behavior, npc_dialog_id_kind, npc_dynamic_obstacle_blocks, npc_workspace_overlay_stamps,
+    NPC_WORKSPACE_OVERLAY_MIN_TYPE_EXCLUSIVE, npc_floor_is_above,
     npc_floor_link_arrival_accepts, npc_floor_link_gate_accepts, npc_floor_link_marker_toward,
     npc_hidden_sprite_slot, npc_link_action, npc_path_direction_offset,
     npc_path_direction_opposite, npc_path_tile_obstacle, npc_pathfind_visit_stamp,

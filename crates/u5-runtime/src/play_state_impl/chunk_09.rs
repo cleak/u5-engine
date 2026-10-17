@@ -3074,6 +3074,30 @@ impl PlayState {
         apply_hourly_party_status: bool,
         age_payment_cooldown: bool,
     ) {
+        self.advance_turn_with_minutes_policy_and_schedules(
+            minutes,
+            tick_doors,
+            advance_active_objects,
+            apply_hourly_party_status,
+            age_payment_cooldown,
+            true,
+        );
+    }
+
+    /// [`Self::advance_turn_with_minutes_policy`] with the town schedule pass
+    /// optional. `town-mode.md §7`/§12 (issue #298 Q30, `RETRACTIONS.md`
+    /// R538): the town-bed Hole-up's "ten-minute elapsed-time loop that
+    /// follows runs no schedule pass"; it is the only caller that passes
+    /// `run_town_schedules = false`.
+    pub(crate) fn advance_turn_with_minutes_policy_and_schedules(
+        &mut self,
+        minutes: u8,
+        tick_doors: bool,
+        advance_active_objects: bool,
+        apply_hourly_party_status: bool,
+        age_payment_cooldown: bool,
+        run_town_schedules: bool,
+    ) {
         // `combat.md §7`, "The middle tier's flag is a stats-panel refresh
         // request" (`RETRACTIONS.md` R358): the outdoor, town and dungeon
         // mode loops share this per-turn entry point, and each "reads it
@@ -3283,7 +3307,9 @@ impl PlayState {
                     if advance_active_objects {
                         self.advance_active_object_walkers();
                     }
-                    self.advance_npc_schedules();
+                    if run_town_schedules {
+                        self.advance_npc_schedules();
+                    }
                 }
             }
             if run_town_animator && deferred_town_tail {
@@ -4553,43 +4579,21 @@ impl PlayState {
     /// town object walker ..., or the outdoor per-turn creature walker.
     /// **Exceptions: none.**"
     ///
-    /// # Declared divergence: the random-stream accounting is not reproduced
+    /// # Random-stream accounting
     ///
-    /// `active-objects.md §8`, "**Random-stream accounting**", is the other
-    /// half of issue #189's answer about what a turn-based frontend must carry
-    /// beyond drawing, and this pass does **not** carry it. The published per
-    /// pass cost is "one advance for every slot that survives early-outs 1-5
-    /// and whose class is neither of the two exempt classes - spent whether or
-    /// not the slot then goes on to animate, because the draw is taken before
-    /// the skip decision it feeds", "no advance at all for the two exempt
-    /// classes", and "plus one advance for each execution of the two random
-    /// script steps - the reseed step and the redirect step". Those draws come
-    /// off the shared generator: "the generator it draws from is the one
-    /// shared by the wander coin, the NPC replan gate, the encounter roll and
-    /// every combat roll", which is why the section calls this "the animator's
-    /// main coupling into gameplay". This engine's pass draws nothing at all.
+    /// `active-objects.md §8`'s per-pass cost - "one advance for every slot
+    /// that survives early-outs 1-5 and whose class is neither of the two
+    /// exempt classes", none for the exempt classes, "plus one advance for
+    /// each execution of the two random script steps" - is reproduced now
+    /// that §3 publishes the values (issue #298 Q29): the class floor `0x34`,
+    /// the excluded field `0xE8` and regalia `0xB4` bands, the exempt classes
+    /// `0x5C` and `0xA8`, the coin "accepted at 128 or above" on an inclusive
+    /// `0..255` draw, and the snap and 6-step draws. See
+    /// [`Self::animate_active_object_decision_point`].
     ///
-    /// It is **not implemented because the published text does not carry the
-    /// values it needs.** Early-out 5 is "A slot whose class lies **below the
-    /// sprite-class floor**, or in either of two excluded classes, is skipped"
-    /// and early-out 6 is "unless the class is one of two exempt classes, the
-    /// animator draws one random value and skips the slot on the low half of
-    /// the range" - the floor, the two excluded classes, the two exempt
-    /// classes, the width of "the low half of the range", and the trigger and
-    /// loop structure of the two random script steps are all named but never
-    /// given as values anywhere in `§8`. Guessing any of them would put draws
-    /// on the shared stream in the wrong quantity, which is worse for the
-    /// coupled systems than drawing none. Early-out 4's hidden and
-    /// prone/sleeping frame values are unpublished for the same reason.
-    ///
-    /// The divergence is bounded by the section itself: "no cadence choice
-    /// reconciles this with the original, which fires the animator from a
-    /// wall-clock idle pump: **full-session roll-sequence parity is
-    /// unachievable**, and an engine should not distort its animation cadence
-    /// chasing it". So the missing draws cost stream *phase*, which was never
-    /// recoverable, not a published gameplay rule - but the per-pass count is
-    /// published and this engine's count is zero, so it is recorded here
-    /// rather than left to be read off the code.
+    /// The section still bounds the value of this: "full-session
+    /// roll-sequence parity is unachievable" because the original fires the
+    /// animator from a wall-clock idle pump.
     pub fn animate_active_objects(&mut self) {
         // `active-objects.md §8`: the animator walks "the table from slot zero
         // to slot thirty-one", and `§3` is explicit that the walk is not
@@ -4599,11 +4603,11 @@ impl PlayState {
         // decrement into a class gate the player's class fails."
         //
         // Reaching slot zero costs nothing in a world scene: every transport
-        // marker the slot-zero refresh writes is below
-        // [`OUTDOOR_COMBAT_TYPE_FIRST`] (foot `0x1C`, carpet `0x14`, horse
+        // marker the slot-zero refresh writes is below the script class floor
+        // [`ANIMATION_SCRIPT_CLASS_FIRST`] (foot `0x1C`, carpet `0x14`, horse
         // `0x10`, ship `0x20`/`0x24`, skiff `0x28`), so
-        // [`active_object_next_frame_tile`] finds no family, nothing is
-        // rewritten and no coin is drawn. It matters in an arena, where
+        // [`active_object_animation_script`] selects no script, nothing is
+        // rewritten and no coin is drawn (issue #298 Q29). It matters in an arena, where
         // `active-objects.md §9` gives record zero to the party seating -
         // "record zero is overwritten because it is the first record the party
         // seating allocates, not because combat reserves a player slot" - so
@@ -4630,147 +4634,104 @@ impl PlayState {
             // early-out 3 published under issue #189 does not suppress it.
             // Suppressing it here would freeze the countdown animation the
             // same sentence says the renderer keeps deriving.
+            //
+            // Issue #298 Q29 settles it the other way: a pause step sets the
+            // delay nibble "and end[s] the pass; the frame is unchanged. The
+            // next *n* passes only decrement the delay". The frame byte is the
+            // script's, so the countdown arm writes only the phase byte.
             let tick = self.active_objects[slot].tick_phase();
-            match tick {
-                PhaseTick::Steady => {}
-                // The beggar family's countdown is its six-tick base hold
-                // (`animation.md §5`): its frame is the script's, not the
-                // phase's, so the countdown leaves the displayed tile alone.
-                PhaseTick::Countdown
-                    if is_beggar_frame_family(self.active_objects[slot].type_byte) => {}
-                PhaseTick::Countdown => {
-                    if let Some(tile) = active_object_frame_tile(
-                        self.active_objects[slot].type_byte,
-                        self.active_objects[slot].phase,
-                    ) && self.active_objects[slot].tile != tile
-                    {
-                        self.active_objects[slot].tile = tile;
-                        self.mark_visibility_dirty();
-                    }
-                }
-                PhaseTick::DecisionPoint => self.animate_active_object_decision_point(slot),
+            if tick == PhaseTick::DecisionPoint {
+                self.animate_active_object_decision_point(slot);
             }
         }
     }
 
-    /// `active-objects.md §3` gate 3 and `animation.md §4` case 4: the
-    /// decision-point arm of the per-slot pass.
+    /// `active-objects.md §3` gate 3 and the per-class scripts (issue #298
+    /// Q29, `RETRACTIONS.md` R535): the decision-point arm of the per-slot
+    /// pass, replacing the earlier one-step-per-coin frame cycle.
     ///
-    /// A slot whose low nibble is zero does not decrement. It "fall[s] through
-    /// to the eligibility gates ..., which may advance the script step and
-    /// rewrite the byte", and `animation.md §5` names the gate this engine
-    /// implements: "Some classes are gated by a random roll, so they change
-    /// facing only on a fraction of eligible ticks; **one common form is a
-    /// fair coin that decides whether this slot's animation advances at all
-    /// this pass.**" On the advancing arm the slot "rewrite[s] [its] displayed
-    /// frame" (`animation.md §4`) one step through its own frame family
-    /// ([`active_object_next_frame_tile`]); no coordinate is touched, which is
-    /// `animation.md §5` R316's whole point.
+    /// Gates, in order: "a non-zero frame byte that is not the reserved
+    /// transparent value, a tile class at or above the animator's threshold,
+    /// a class that is neither the field family nor the regalia band, and -
+    /// for every class except the two that animate unconditionally - a
+    /// one-in-two draw from the shared generator" ("an inclusive `0..255`
+    /// draw accepted at 128 or above"). Then the script runs from the
+    /// position in the high nibble of byte 6: "Frame and pause steps end the
+    /// slot's pass; restart, jump-to-two, both outcomes of the six step and
+    /// the advancing outcome of the five step continue with the next step in
+    /// the same pass."
     ///
-    /// **The coin is a draw from the shared gameplay stream, and that is
-    /// published.** `visibility.md §8.4` lists the three per-tick consumers an
-    /// engine "must reproduce ... in this order" and puts this one first: "The
-    /// **active-object animator**, first. It draws from within its per-record
-    /// loop at three separate points. *This consumer was omitted from this
-    /// document's earlier inventory entirely.* Its per-pass count is
-    /// record-dependent and has not been characterised here." Because the
-    /// count is *not* characterised, this engine takes **exactly one** draw,
-    /// and only on the decision-point arm - the narrowest reading of §5's
-    /// "fair coin ... this pass" that still reproduces the measured cadence.
-    /// The two other draw points §8.4 counts are deliberately not invented
-    /// here; see the package report.
-    ///
-    /// **Two disclosed inferences, both unresolved by the published text.**
-    ///
-    /// 1. *Byte 6 is never rewritten on this arm.* `active-objects.md §3`
-    ///    gate 3 says a zero low nibble falls through to gates "which **may**
-    ///    advance the script step and rewrite the byte", and `animation.md §5`
-    ///    says the decision "rewrites the slot's stored facing and its
-    ///    displayed frame byte, and it **can reseed the phase counter**".
-    ///    Neither says when. This engine rewrites only byte 1 and leaves byte
-    ///    6 alone, so a record placed at a decision point stays at one
-    ///    forever: every tick is a decision point and every eligible tick pays
-    ///    a coin. That choice - not the coin alone - is what produces the
-    ///    measured ~2-tick cadence; an arm that reseeded a non-zero low nibble
-    ///    would give a longer dwell and would need the reseed distribution the
-    ///    spec does not give. **Inference, not spec.** It is asked as a spec
-    ///    question by this package. Note also that §5's "stored facing" is in
-    ///    tension with §3's R340 ("byte 6 carries **no facing**"), which is
-    ///    part of the same question.
-    /// 2. *One draw, not three.* §8.4 says the animator "draws from within its
-    ///    per-record loop at **three** separate points" and that "**usually
-    ///    more**" than one draw comes from it on an idle pass. This engine
-    ///    draws at one point and draws nothing at all for a record with no
-    ///    frame family, so its per-pass count is a lower bound on the
-    ///    original's. §8.4 explicitly leaves the count uncharacterised, so
-    ///    this is the conservative reading, not a measurement.
-    ///
-    /// **Scope of the new consumer, and it is wider than "arenas".** The
-    /// animator is mode-independent (`active-objects.md §8`: "**Exceptions:
-    /// none.**"), so this coin is taken on the idle world step and the town
-    /// epilogue too, for any record whose type byte has a frame family and
-    /// whose low nibble is zero. *Measured:* across every shipped object
-    /// list - `BRIT.OOL`, `UNDER.OOL`, `INIT.OOL` and the pristine
-    /// `SAVED.OOL`/`SAVED.GAM` live table - **no** record has a type byte at or above
-    /// [`OUTDOOR_COMBAT_TYPE_FIRST`] with a zero low nibble, so loading a
-    /// shipped world costs no new draw. *Asserted, not measured:*
-    /// runtime-spawned outdoor and town creatures do reach it -
-    /// [`active_object_phase_toward_player`] returns a zero low nibble - so an
-    /// overworld with a live spawned monster now draws one coin per animator
-    /// pass per such record. Any expectation elsewhere that pins the shared
-    /// stream across idle world ticks with a spawned creature on the map
-    /// shifts by that count.
-    ///
-    /// **Measured, not guessed.** A black-box capture of the original in a
-    /// sixteen-bat outdoor arena (200 PrintWindow samples over 7.97 s, one ROI
-    /// per arena cell) gives its eighteen animated non-cursor cells **1.73 to
-    /// 2.74 ticks per frame change, mean 2.05**, against the 54.9254 ms step
-    /// of `animation.md §2` - the dwell a per-pass fair coin produces - with
-    /// each cell visiting the **four** frames of its family. The same capture
-    /// shows the sixteen bats spread 5/5/4/2 over those four frames at entry
-    /// rather than moving in lockstep, which only a per-slot random gate
-    /// produces. The engine after this change measures 1.73 to 2.39, mean
-    /// 2.00, over the same eighteen cells.
+    /// The one-in-four snap and three-in-four 6-step acceptances are tested
+    /// on the draw's low two bits, as the beggar trace's "modulo 256" draw
+    /// already was; which residue the original accepts is not published.
+    /// *Inference:* a position past the end of a script (a high nibble a
+    /// pre-script producer wrote) reads as a restart.
     fn animate_active_object_decision_point(&mut self, slot: usize) {
         let object = self.active_objects[slot];
-        let Some(next) = active_object_next_frame_tile(object.type_byte, object.tile) else {
-            // No frame family: `animation.md §4` case 4's "Some slots do
-            // nothing". Costs no draw, exactly as an ineligible slot must.
+        if object.tile == 0 || object.tile == ACTOR_TILE_TRANSPARENT_BYTE {
+            return;
+        }
+        let Some(script) = active_object_animation_script(object.type_byte) else {
             return;
         };
-        if !self.active_object_animation_coin() {
+        if !active_object_animates_unconditionally(object.type_byte)
+            && !self.active_object_animation_coin()
+        {
             return;
         }
-        if is_beggar_frame_family(object.type_byte) {
-            // `animation.md §5`'s named family: ascending successors, then
-            // from the third a one-in-four re-base held for six ticks, else a
-            // rewind to the first. "Both rolls reduce a fifteen-bit generator
-            // value modulo 256", so the re-base is drawn from the same
-            // gameplay stream as the coin; the hold reseeds the phase
-            // counter's low nibble, which §5 says the decision "can" do.
-            let (tile, hold) = beggar_script_next_frame(object.tile, || {
-                self.random_range_u8(0, 255) % 4 == 0
-            });
-            if hold > 0 {
-                self.active_objects[slot].phase = (object.phase & 0xf0) | hold;
+        let class = object.type_byte & 0xfc;
+        let mut position = usize::from(object.phase >> 4);
+        let mut delay = object.phase & 0x0f;
+        let mut tile = object.tile;
+        // Every shipped script reaches a frame or pause step within its own
+        // length after any jump, so this bound only guards malformed input.
+        for _ in 0..=2 * script.len() {
+            match script.get(position).copied().unwrap_or(AnimationScriptStep::Restart) {
+                AnimationScriptStep::Frame(n) => {
+                    tile = class + n - 1;
+                    position += 1;
+                    break;
+                }
+                AnimationScriptStep::Pause(n) => {
+                    delay = n;
+                    position += 1;
+                    break;
+                }
+                AnimationScriptStep::Snap => {
+                    if self.random_range_u8(0, 255) % 4 == 0 {
+                        tile = object.type_byte;
+                        if class == ANIMATION_SNAP_ADVANCING_CLASS {
+                            position += 1;
+                        } else {
+                            delay = ANIMATION_SNAP_HOLD_TICKS;
+                        }
+                        break;
+                    }
+                    position += 1;
+                }
+                AnimationScriptStep::SixStep => {
+                    if self.random_range_u8(0, 255) % 4 != 0 {
+                        position = 0;
+                    } else {
+                        position += 1;
+                    }
+                }
+                AnimationScriptStep::Restart => position = 0,
+                AnimationScriptStep::GotoTwo => position = 2,
             }
-            if self.active_objects[slot].tile != tile {
-                self.active_objects[slot].tile = tile;
-                self.mark_visibility_dirty();
-            }
-            return;
         }
-        if self.active_objects[slot].tile != next {
-            self.active_objects[slot].tile = next;
+        self.active_objects[slot].phase = ((position as u8 & 0x0f) << 4) | (delay & 0x0f);
+        if self.active_objects[slot].tile != tile {
+            self.active_objects[slot].tile = tile;
             self.mark_visibility_dirty();
         }
     }
 
-    /// `animation.md §5`'s "fair coin that decides whether this slot's
-    /// animation advances at all this pass", drawn from the shared gameplay
-    /// stream (`visibility.md §8.4` consumer one).
+    /// `active-objects.md §3` (issue #298 Q29): the eligibility coin is "an
+    /// inclusive `0..255` draw accepted at 128 or above", drawn from the
+    /// shared gameplay stream (`visibility.md §8.4` consumer one).
     fn active_object_animation_coin(&mut self) -> bool {
-        self.random_range_u8(0, 1) == 1
+        self.random_range_u8(0, 255) >= 128
     }
 
     pub fn advance_outdoor_active_objects(&mut self) {
@@ -4785,7 +4746,7 @@ impl PlayState {
                 continue;
             }
             let phase_before_tick = self.active_objects[slot].phase;
-            let tick = self.active_objects[slot].tick_phase();
+            let steady = matches!(self.active_objects[slot].tick_phase(), PhaseTick::Steady);
             // Orthogonal adjacency is consumed before any ranged class test.
             // Its I/O-bearing combat/transition effect is completed by the
             // post-turn handler, but it claims the walker slot here so neither
@@ -4798,13 +4759,9 @@ impl PlayState {
             let movement_allowed = reaction_count == 0;
             let ship_wind =
                 if movement_allowed && self.slot_is_wind_driven_ship(slot, phase_before_tick) {
-                    // `weather.md §7`: see `animate_active_objects` — the cadence
-                    // counter lives in the slot and is not the shared countdown.
-                    self.active_objects[slot].phase = merge_active_ship_cadence_phase(
-                        self.active_objects[slot].phase,
-                        phase_before_tick,
-                    );
-                    self.try_drift_active_ship(slot)
+                    // `weather.md §7` (issue #298 Q32): the cadence counter is
+                    // record byte 7, not the shared phase countdown.
+                    self.try_drift_active_ship(slot, &mut last_vacated)
                 } else {
                     ActiveShipWind::None
                 };
@@ -4826,9 +4783,8 @@ impl PlayState {
             // committed step - a two-turn pacing gate applied to every class,
             // which is exactly the "do I move at all" test the section
             // denies. The class pacing that survives is the ship wind cadence
-            // handled above. The whirlpool parity bit is not modelled: the
-            // spec does not publish which byte/bit holds it or how the clear
-            // turn chooses between the random and directed steps.
+            // handled above and the whirlpool parity bit
+            // ([`Self::try_whirlpool_dispatch`], issue #298 Q2).
             //
             // What survives of the old phase test is only the steady marker.
             // §8's phase table gives the all-ones nibble as "Steady; do not
@@ -4840,22 +4796,16 @@ impl PlayState {
             // left.
             let wandered = movement_allowed
                 && !ship_wind_changed
-                && !matches!(tick, PhaseTick::Steady)
-                && self.try_wander_active_object_with_last_vacated(slot, &mut last_vacated);
-            if ship_wind_changed
-                || wandered
-                || matches!(tick, PhaseTick::Countdown | PhaseTick::DecisionPoint)
-            {
-                if let Some(tile) = active_object_frame_tile(
-                    self.active_objects[slot].type_byte,
-                    self.active_objects[slot].phase,
-                ) {
-                    if self.active_objects[slot].tile != tile {
-                        self.active_objects[slot].tile = tile;
-                        self.mark_visibility_dirty();
-                    }
-                }
-            }
+                && !steady
+                && if is_whirlpool_family_type_byte(self.active_objects[slot].type_byte) {
+                    self.try_whirlpool_dispatch(slot, &mut last_vacated)
+                } else {
+                    self.try_wander_active_object_with_last_vacated(slot, &mut last_vacated)
+                };
+            // The displayed frame is the animator script's (issue #298 Q29);
+            // the only frame write on this dispatch is the ship family's
+            // heading rewrite inside the step committer (Q32).
+            let _ = wandered;
         }
     }
 
@@ -5449,13 +5399,14 @@ impl PlayState {
         self.emit_message_line(line);
     }
 
-    /// `weather.md §7`: is this slot one of the wind-driven "ship-like
-    /// water-creature class" records the overworld per-slot movement
-    /// dispatch applies prevailing wind to?
+    /// `weather.md §7`: is this slot one of the wind-driven ship-family
+    /// records the overworld per-slot movement dispatch applies prevailing
+    /// wind to? Issue #298 Q32: the family is the pirate-ship frames
+    /// `0x2C..0x2F` ([`is_ship_object`]), and "the row is selected by the
+    /// type byte (record byte 0), not by the displayed-tile byte".
     ///
-    /// `phase_before_tick` is the slot's phase byte as it stood before
-    /// the shared animation countdown ran this turn; see
-    /// [`merge_active_ship_cadence_phase`].
+    /// `phase_before_tick` is the slot's phase byte as it stood before the
+    /// walker's countdown read; a steady-marked slot is not walked at all.
     pub fn slot_is_wind_driven_ship(&self, slot: usize, phase_before_tick: u8) -> bool {
         let Area::World { plane } = self.area else {
             return false;
@@ -5466,43 +5417,41 @@ impl PlayState {
         object.z == plane.save_floor()
             && is_ship_object(object)
             // `STEADY_PHASE` is this engine's "slot does not animate"
-            // marker (see `ActiveObject::tick_phase`), which is what a
-            // parked vehicle object carries. Weather drives *active*
-            // ship-like slots; a steady slot is not one, and
-            // `merge_active_ship_cadence_phase` guarantees the cadence
-            // encoding never produces that value.
+            // marker (see `ActiveObject::tick_phase`); the walker skips such
+            // slots for every class.
             && (phase_before_tick & 0x0f) != STEADY_PHASE
-            && cardinal_direction_from_active_object_phase(phase_before_tick).is_some()
     }
 
-    /// `weather.md §7` Active Ships.
+    /// `weather.md §7` Active Ships, with the issue #298 Q32 additions.
     ///
-    /// "Calm wind suppresses this movement. For non-calm wind, the object
-    /// uses its current frame and the prevailing wind to select a cadence
-    /// cap" — perpendicular frames move every turn, a frame facing the
-    /// wind source moves 2 of 3 turns, a frame facing away moves 3 of 4.
-    /// [`WindState::active_ship_cadence`] owns that table.
+    /// "The four frames are the ship family's four headings, in the frigate
+    /// convention: the low two bits of the type byte are `0` north (`0x2C`),
+    /// `1` east (`0x2D`), `2` south (`0x2E`), `3` west (`0x2F`)." The heading
+    /// and the prevailing wind select the cadence cap from
+    /// [`WindState::active_ship_cadence`].
     ///
-    /// "The cadence counter is stored per active-object slot. A '2 of 3'
-    /// entry means the slot moves on two eligible passes, then resets and
-    /// skips one. A '3 of 4' entry moves on three eligible passes, then
-    /// resets and skips one. The cadence counter is persisted with the
-    /// object, so it survives save and reload. 'Every turn' bypasses the
-    /// counter and immediately allows the slot's movement helper to run."
+    /// "The cadence counter is the whole of active-object record byte 7, read
+    /// as one unsigned byte", and each pass runs in this order:
     ///
-    /// The counter lives in bits `2..3` of the object's phase byte —
-    /// `formats/saved-gam.md §8.1` byte `+6`, the "animation phase /
-    /// direction-step counter ... compositor reads it for water
-    /// creatures" — whose high nibble carries the frame heading and
-    /// whose bits `0..1` select the drawn frame. See
-    /// [`ACTIVE_SHIP_CADENCE_PHASE_MASK`]. The callers hand this
-    /// function the pre-tick phase so the shared animation countdown
-    /// cannot decrement the cadence count.
+    /// 1. "Calm wind: no move, and the counter is not touched."
+    /// 2. "An 'every turn' entry: the slot moves, and the counter is not
+    ///    touched."
+    /// 3. "Any other entry: the counter is incremented first, with byte wrap
+    ///    (255 becomes 0). If the new value is no greater than the cap (2 for
+    ///    '2 of 3', 3 for '3 of 4') the slot moves; otherwise the counter is
+    ///    set to zero and the slot does not move on that pass."
     ///
-    /// This replaces an ad-hoc heading-versus-wind test that stalled every
-    /// perpendicular frame forever, which is the opposite of the table's
-    /// "every turn" row.
-    pub fn try_drift_active_ship(&mut self, slot: usize) -> ActiveShipWind {
+    /// Once the cadence permits movement, `active-objects.md §8`: "they use
+    /// the same directed step planner as land monsters. On this dispatch,
+    /// each committed step rewrites the ship's type and displayed-tile bytes
+    /// to the step's heading". This replaces a drift along the frame heading
+    /// that was not published. The heading rewrite itself is the step
+    /// committer's ([`Self::try_step_outdoor_active_object`]).
+    pub fn try_drift_active_ship(
+        &mut self,
+        slot: usize,
+        last_vacated: &mut Option<(usize, usize)>,
+    ) -> ActiveShipWind {
         let Area::World { plane } = self.area else {
             return ActiveShipWind::None;
         };
@@ -5510,9 +5459,7 @@ impl PlayState {
         if object.z != plane.save_floor() || !is_ship_object(object) {
             return ActiveShipWind::None;
         }
-        let Some(heading) = cardinal_direction_from_active_object_phase(object.phase) else {
-            return ActiveShipWind::None;
-        };
+        let heading = active_ship_frame_heading(object.type_byte);
         // Calm returns `None` from the cadence table as well, but keep the
         // explicit wind read so a calm slot reports `Stalled` rather than
         // "not a ship".
@@ -5524,63 +5471,59 @@ impl PlayState {
             return ActiveShipWind::Stalled;
         };
 
-        let counter =
-            (object.phase & ACTIVE_SHIP_CADENCE_PHASE_MASK) >> ACTIVE_SHIP_CADENCE_PHASE_SHIFT;
-        let moves_per_cycle = cadence.0;
         if cadence != ACTIVE_SHIP_CADENCE_EVERY_TURN {
-            let next = if counter >= moves_per_cycle {
-                // The cycle's moves are spent: skip this pass and reset.
-                0
-            } else {
-                counter + 1
-            };
-            self.active_objects[slot].phase = (object.phase & !ACTIVE_SHIP_CADENCE_PHASE_MASK)
-                | (next << ACTIVE_SHIP_CADENCE_PHASE_SHIFT);
-            if counter >= moves_per_cycle {
+            let cap = cadence.0;
+            let counter = object.aux3.wrapping_add(1);
+            if counter > cap {
+                self.active_objects[slot].aux3 = 0;
                 return ActiveShipWind::Stalled;
             }
+            self.active_objects[slot].aux3 = counter;
         }
 
-        let (dx, dy) = heading.delta();
-        let nx = (object.x as isize + dx).rem_euclid(WORLD_SIDE as isize) as usize;
-        let ny = (object.y as isize + dy).rem_euclid(WORLD_SIDE as isize) as usize;
-        if (nx, ny) == (self.player.x, self.player.y) {
-            return ActiveShipWind::Stalled;
+        // The step committer owns the heading rewrite of both tile bytes.
+        if self.try_wander_active_object_with_last_vacated(slot, last_vacated) {
+            ActiveShipWind::Drifted
+        } else {
+            ActiveShipWind::Stalled
         }
-        if self
-            .active_objects
-            .iter()
-            .enumerate()
-            .any(|(other_slot, other)| {
-                other_slot != slot
-                    && other_slot != ACTIVE_OBJECT_PLAYER_SLOT
-                    && self.object_occupies(*other, nx, ny)
-            })
-        {
-            return ActiveShipWind::Stalled;
-        }
-        let tile = self.grid[world_cell_index(nx, ny)];
-        if !is_tile_walkable_for_transport(
-            tile,
-            self.passability.as_ref(),
-            TransportState::Ship {
-                type_byte: object.type_byte,
-                tile: object.tile,
-                sails_hoisted: true,
-                hull: object.aux1,
-                skiffs: object.aux3,
-            },
-        ) {
-            return ActiveShipWind::Stalled;
-        }
+    }
 
-        self.active_objects[slot].x = nx;
-        self.active_objects[slot].y = ny;
-        // The cadence counter written above stays: `weather.md §7` counts
-        // the passes the cadence allowed, and validation of the step it
-        // allowed belongs to `active-objects.md`.
-        self.mark_visibility_dirty();
-        ActiveShipWind::Drifted
+    /// `active-objects.md §8` movement dispatch, whirlpool branch (issue #298
+    /// Q2, `RETRACTIONS.md` R533): "Whirlpool-family slots (type byte
+    /// `0xEC..0xEF`, a masked family test) toggle bit 0 of record byte 5 on
+    /// every dispatch and move only on the turns where the byte is non-zero
+    /// after the toggle; on the turn it becomes zero they take no draw and do
+    /// not move. ... On a move turn one inclusive `0..1` draw from the shared
+    /// generator picks the step: 1 runs the directed step planner below,
+    /// including its own random-walker fallback, and 0 runs the random
+    /// four-direction walker directly. The branch has no distance test."
+    pub fn try_whirlpool_dispatch(
+        &mut self,
+        slot: usize,
+        last_vacated: &mut Option<(usize, usize)>,
+    ) -> bool {
+        let Area::World { plane } = self.area else {
+            return false;
+        };
+        let object = self.active_objects[slot];
+        if object.z != plane.save_floor() || !is_whirlpool_family_type_byte(object.type_byte) {
+            return false;
+        }
+        let parity = object.aux1 ^ 0x01;
+        self.active_objects[slot].aux1 = parity;
+        if parity == 0 {
+            return false;
+        }
+        if self.random_range_u8(0, 1) == 1 {
+            return self.try_wander_active_object_with_last_vacated(slot, last_vacated);
+        }
+        // The random four-direction walker, as the directed planner's own
+        // fallback runs it: one cardinal draw and a single attempt.
+        let object = self.active_objects[slot];
+        let direction = OUTDOOR_RANDOM_WALK_DIRECTIONS[usize::from(self.random_range_u8(0, 3))];
+        let (dx, dy) = direction.delta();
+        self.try_step_outdoor_active_object(slot, object, dx, dy, direction, last_vacated)
     }
 
     pub fn try_wander_active_object(&mut self, slot: usize) -> bool {
@@ -5601,15 +5544,14 @@ impl PlayState {
             return false;
         }
 
-        // `active-objects.md §8` `0xFC` proximity-mask branch: at a listed
-        // wrapped `(dy, dx)` cell the slot's first auxiliary byte is
-        // incremented as an age counter. Both exits of that branch reach
-        // the same directed step planner ("one branch's two exits were found
-        // to reach the same movement call with a dead argument, so no
-        // behavioural difference should be modelled between them beyond the
-        // counter byte one of them increments"), so the counter is the only
-        // effect modelled here; movement continues below either way.
-        if object.type_byte & 0xfc == 0xfc {
+        // `active-objects.md §8` Shadow Lord proximity-mask branch (issue
+        // #298 Q21, `RETRACTIONS.md` R534): "On a listed cell the slot
+        // increments record byte 5 (unsigned, wrapping at 256) and then takes
+        // the same directed step it would take anyway ... whatever the
+        // counter's value". The mask test takes no draw. "The branch is taken
+        // only for type byte exactly `0xFC`, an exact-byte comparison rather
+        // than a masked family; `0xFD..0xFF` take the default arm."
+        if object.type_byte == SHADOW_LORD_PROXIMITY_TYPE_BYTE {
             let (dx, dy) = wrapped_deltas_to_player(
                 object.x as u8,
                 object.y as u8,
@@ -5771,6 +5713,10 @@ impl PlayState {
             self.mark_visibility_dirty();
             return OutdoorActiveObjectStepAttempt::Committed;
         }
+        // `weather.md §7` (issue #298 Q32): "every step a ship commits
+        // rewrites both the type byte and the displayed-tile byte to the
+        // family base plus that step's heading ... before the position
+        // changes".
         if sea_creature_spawn_seeds_aux(object.type_byte) {
             let facing = match direction {
                 Direction::North => 0x2c,
@@ -6284,28 +6230,22 @@ pub fn cardinal_direction_from_delta(dx: i8, dy: i8) -> Option<Direction> {
     }
 }
 
-/// `systems/weather.md §7`: "The cadence counter is stored per
-/// active-object slot ... and is persisted with the object."
-///
-/// This engine keeps that counter in bits `2..3` of the slot's phase
-/// byte ([`ACTIVE_SHIP_CADENCE_PHASE_MASK`]), which the shared
-/// animation countdown in [`ActiveObject::tick_phase`] would otherwise
-/// decrement as part of the low nibble. Rejoin the two: the frame
-/// selector and heading come from the post-tick byte, the cadence count
-/// from the pre-tick byte.
-///
-/// The one forbidden result is a low nibble equal to [`STEADY_PHASE`],
-/// which is the "slot does not animate" marker a parked vehicle
-/// carries; clearing the two cosmetic frame bits keeps the encoding out
-/// of it.
-pub const fn merge_active_ship_cadence_phase(post_tick: u8, pre_tick: u8) -> u8 {
-    let merged =
-        (post_tick & !ACTIVE_SHIP_CADENCE_PHASE_MASK) | (pre_tick & ACTIVE_SHIP_CADENCE_PHASE_MASK);
-    if (merged & 0x0f) == STEADY_PHASE {
-        merged & !0x03
-    } else {
-        merged
+/// `weather.md §7` (issue #298 Q32): "the low two bits of the type byte are
+/// `0` north (`0x2C`), `1` east (`0x2D`), `2` south (`0x2E`), `3` west
+/// (`0x2F`)".
+pub const fn active_ship_frame_heading(type_byte: u8) -> Direction {
+    match type_byte & 0x03 {
+        0 => Direction::North,
+        1 => Direction::East,
+        2 => Direction::South,
+        _ => Direction::West,
     }
+}
+
+/// `active-objects.md §8` (issue #298 Q2): the whirlpool family `0xEC..0xEF`
+/// is "a masked family test" on the type byte.
+pub const fn is_whirlpool_family_type_byte(type_byte: u8) -> bool {
+    type_byte & 0xfc == 0xec
 }
 
 /// `active-objects.md §8`: the outdoor walker "applies only to the outdoor
