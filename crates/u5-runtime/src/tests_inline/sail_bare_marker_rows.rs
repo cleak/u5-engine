@@ -128,3 +128,43 @@ fn a_held_sailing_pass_leaves_the_overworld_prompt_flag_alone() {
     assert_eq!((state.player.x, state.player.y), (100, 100));
     assert!(state.message_entries().iter().all(|entry| !entry.bare_marker));
 }
+
+/// The transcript is capped at [`MESSAGE_TRANSCRIPT_CAPACITY`], and a long
+/// session keeps it full. A released step that is refused must still write
+/// its refusal on the marker row the pair drew before the release, however
+/// many old entries the refusal pushes off the front: a sinking hull pushes
+/// `BREAKING UP!` and `Ship sunk!` straight into the transcript, and an
+/// insertion index taken before the step then lands after them.
+#[test]
+fn a_released_refusal_with_a_full_transcript_is_written_on_the_marker_row() {
+    let mut state = bare_marker_frigate(WindState::West, 5, "Yell HOIST!");
+    for index in 0..MESSAGE_TRANSCRIPT_CAPACITY {
+        state.push_message_entry(format!("old {index}"), true);
+    }
+    // A shoal one tile west of the ship.
+    state.grid[world_cell_index(99, 100)] = 0x03;
+    handle_play_key_input(&mut state, 'a', "", Path::new("")).unwrap();
+    assert_eq!(state.message_entries().len(), MESSAGE_TRANSCRIPT_CAPACITY);
+
+    for _ in 0..12 {
+        state.idle_wait_pass(None).unwrap();
+        if state.message.contains("BREAKING UP!")
+            || state.message_entries().iter().any(|entry| entry.text.contains("BREAKING UP!"))
+        {
+            break;
+        }
+    }
+    state.flush_message_slot();
+    let rows = bare_marker_layout(&state);
+    let head = rows
+        .iter()
+        .position(|row| row.1 == "Head West")
+        .unwrap_or_else(|| panic!("{rows:?}"));
+    assert_eq!(rows[head + 1], (false, "Hull weak!".to_string()), "{rows:?}");
+    assert_eq!(rows[head + 2], (false, String::new()), "{rows:?}");
+    assert_eq!(
+        rows[head + 3],
+        (true, "BREAKING UP!".to_string()),
+        "the released refusal continues the marker row: {rows:?}"
+    );
+}

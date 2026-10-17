@@ -792,7 +792,7 @@ def compare_cached(artifact: pathlib.Path, cache: dict) -> tuple:
 
 
 # Bump when a classifier change would alter a cached verdict.
-CACHE_VERSION = 33
+CACHE_VERSION = 34
 
 
 # A scenario whose *roster panel* is a lottery and whose message window is
@@ -931,6 +931,35 @@ def mask_title_flame(
     return masked(left), masked(right)
 
 
+# Beats a scenario's own header declares to be dice, one by one:
+#
+#     # dice-beats: sailing-more same-key
+#
+# The scenario-wide markers in `LOTTERY_MARKERS` turn *every* difference into
+# RERUN, which is right when the premise itself is a draw (`sail-calm`'s wind)
+# but hides a real regression on the beats that are not. `sail-heading-echo`
+# is the case: its `hoisted`, `heading` and `sailing` beats are deterministic
+# and carry the prompt-row contract, while from `sailing-more` on each wait
+# pass is a consumed turn with its own encounter roll (`weather.md §5`). The
+# named beats are skipped, and every other beat is compared as usual. The
+# directive's name avoids the words `is_lottery` matches.
+DICE_BEATS_MARKER = "# dice-beats:"
+
+
+def dice_beats(scenario: str) -> frozenset[str]:
+    """The beats `# dice-beats:` declares in the scenario's header."""
+    path = SCENARIOS / f"{scenario}.tsv"
+    try:
+        lines = path.read_text().splitlines()
+    except OSError:
+        return frozenset()
+    beats: set[str] = set()
+    for line in lines:
+        if line.lower().startswith(DICE_BEATS_MARKER):
+            beats.update(line[len(DICE_BEATS_MARKER):].split())
+    return frozenset(beats)
+
+
 def is_probe(scenario: str) -> bool:
     """Is this scenario a probe rather than a comparison?
 
@@ -968,6 +997,10 @@ def compare(artifact: pathlib.Path) -> tuple[int, int, int, int, int]:
             and f"dosbox-{label[len('engine-'):]}" in labels
         ):
             skipped += 1
+            continue
+        if label in dice_beats(scenario):
+            skipped += 1
+            print(f"  dice   {scenario}/{label}: declared a dice beat, not compared")
             continue
         stock = artifact / f"dosbox-{label}.png"
         engine = artifact / f"engine-{label}.png"

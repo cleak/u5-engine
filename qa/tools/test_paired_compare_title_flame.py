@@ -55,5 +55,16 @@ class TitleFlameMaskTest(unittest.TestCase):
         self.assertEqual(differing, list(range(0, 9)))
 
 
+class DiceBeatsTest(unittest.TestCase):
+    def test_sail_heading_echo_skips_only_its_encounter_beats(self) -> None:
+        self.assertEqual(
+            pc.dice_beats("sail-heading-echo"), {"sailing-more", "same-key"}
+        )
+        # The per-beat directive must not make the whole scenario a lottery:
+        # its deterministic beats still have to report a difference.
+        self.assertFalse(pc.is_lottery("sail-heading-echo"))
+        self.assertEqual(pc.dice_beats("no-such-scenario"), frozenset())
+
+
 if __name__ == "__main__":
     unittest.main()

@@ -1065,6 +1065,23 @@ impl PlayState {
         self.message_transcript_revision = self.message_transcript_revision.wrapping_add(1);
     }
 
+    /// Take back the newest [`MessageEntry::bare_marker`] row: the wind held
+    /// the synthesised pass it was drawn for, so no direction was taken.
+    pub(crate) fn withdraw_overworld_bare_marker_entry(&mut self) {
+        let Some(index) = self.message_transcript.iter().rposition(|entry| entry.bare_marker) else {
+            return;
+        };
+        let was_last = index + 1 == self.message_transcript.len();
+        self.message_transcript.remove(index);
+        // Only a withdrawal with nothing written after it undoes its push
+        // outright; anything later was a real push and keeps its bump.
+        self.message_transcript_revision = if was_last {
+            self.message_transcript_revision.wrapping_sub(1)
+        } else {
+            self.message_transcript_revision.wrapping_add(1)
+        };
+    }
+
     /// `text-output.md §10.2`: "The overworld's per-entry initialiser sets
     /// the flag **unconditionally**, before the turn loop runs".
     pub fn arm_overworld_prompt_pair_on_entry(&mut self) {

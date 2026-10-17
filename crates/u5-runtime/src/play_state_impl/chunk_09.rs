@@ -4315,15 +4315,28 @@ impl PlayState {
             // stock game shows a blank row and the end-cap row under it while
             // the ship waits upwind, where this engine let the held passes
             // clear the flag and drew the cursor under `Hull weak!`.
+            //
+            // The marker row is appended *before* the step and withdrawn if
+            // the wind holds the pass. Inserting it afterwards at an index
+            // taken before the step put it after the step's own output once
+            // the transcript was full: every push then drains the oldest
+            // entry, so the saved index pointed past `BREAKING UP!` /
+            // `Ship sunk!` and the refusal landed under the history.
             self.flush_message_slot();
             let flag_before = self.overworld_prompt_pair_suppressed;
-            let marker_index = self.message_entries().len();
-            let suppressed = self.take_overworld_prompt_pair_suppression();
+            let marker_drawn = !self.take_overworld_prompt_pair_suppression()
+                && matches!(self.area, Area::World { .. });
+            if marker_drawn {
+                self.push_overworld_bare_marker_entry(self.message_entries().len());
+            }
             let outcome = self.step_with_game_dir(direction, game_dir)?;
             if outcome == MoveOutcome::SailStalled {
                 self.overworld_prompt_pair_suppressed = flag_before;
-            } else if !suppressed && matches!(self.area, Area::World { .. }) {
-                self.push_overworld_bare_marker_entry(marker_index);
+            }
+            if marker_drawn
+                && (outcome == MoveOutcome::SailStalled || !matches!(self.area, Area::World { .. }))
+            {
+                self.withdraw_overworld_bare_marker_entry();
             }
             self.apply_outdoor_sail_cache_marker_guard();
             return Ok(IdleWaitPass::UnderSailCursorPoll);
