@@ -38,17 +38,29 @@ pub fn handle_play_key_input(
     // `town-mode.md §14`: drain the town NPC-conflict chain's exit -
     // "On exit the town chain clears the NPC slot, reloads the town map,
     // and re-runs the Shadowlord install pass of Section 13".
+    let town_attack_epilogue_owed = state
+        .pending_town_conflict
+        .is_some_and(|pending| pending.owes_turn_epilogue);
+    let mut town_conflict_drained = false;
     if result.is_ok() && !state.combat_active && state.pending_town_conflict.is_some() {
-        if let Err(error) = state.drain_pending_town_conflict(game_dir) {
-            result = Err(error);
+        match state.drain_pending_town_conflict(game_dir) {
+            Ok(drained) => town_conflict_drained = drained,
+            Err(error) => result = Err(error),
         }
     }
     // `town-mode.md §7` step 4: the town turn's walker and schedule tail runs
-    // after the command handler returns, and for a town A-Attack that is
-    // after the fight. It is drained only on the key that ended a fight, so
-    // a town command that leaves the tail deliberately owed is untouched.
+    // after the command handler returns. It is drained only on the key that
+    // ended a fight, so a town command that leaves the tail deliberately owed
+    // is untouched. A town A-Attack's whole epilogue - minute, underfoot,
+    // walkers, schedule, post-action cleanup - runs here once, after the
+    // fight and the conflict chain's reload (issue #298 Q40).
     if result.is_ok() && combat_was_active && !state.combat_active {
         state.drain_town_tail_after_combat();
+    }
+    if result.is_ok() && town_attack_epilogue_owed && town_conflict_drained {
+        if let Err(error) = state.run_town_attack_epilogue_after_combat(game_dir) {
+            result = Err(error);
+        }
     }
     if result.is_ok() && !state.combat_active && !state.pending_outdoor_reaction_slots.is_empty() {
         if let Area::World { plane } = state.area {

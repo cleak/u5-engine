@@ -2198,7 +2198,16 @@ impl PlayState {
                 self.message = ATTACK_NOTHING_TO_ATTACK_REFUSAL.to_string();
                 return Ok(MoveOutcome::Used);
             }
-            self.advance_turn();
+            // `town-mode.md §7` step 4 (issue #298 Q40): a town A-Attack that
+            // fights in the arena spends nothing of its turn before the
+            // arena - "the whole fight ... finish[es] inside the dispatch,
+            // before any of this epilogue" - so in town the turn is advanced
+            // on each non-arena arm below, and the arena arm leaves it owed
+            // to the post-fight epilogue
+            // ([`Self::run_town_attack_epilogue_after_combat`]).
+            if !matches!(self.area, Area::Town { .. }) {
+                self.advance_turn();
+            }
             if let Area::Town { scene, floor } = self.area {
                 if let Some((npc_index, npc_slot, object_slot, type_byte)) =
                     self.town_attack_target_at(floor, x, y)
@@ -2257,6 +2266,7 @@ impl PlayState {
                                     npc_slot,
                                     type_byte,
                                     awaiting_floor_reload: false,
+                                    owes_turn_epilogue: true,
                                 });
                                 let hostile_terrain = self.grid[y * TOWN_GRID_SIDE + x];
                                 let _setup_report = self
@@ -2273,6 +2283,7 @@ impl PlayState {
                             }
                         }
                     }
+                    self.advance_turn();
                     match town_npc_attack_resolution(type_byte) {
                         TownNpcAttackResolution::DeathMask => {
                             self.free_active_object_slot(object_slot);
@@ -2306,6 +2317,7 @@ impl PlayState {
                         }
                     }
                 }
+                self.advance_turn();
                 self.push_diagnostic(format!(
                     "Attacked object tile {} at ({x}, {y}) to the {}; no attackable town NPC.",
                     object.tile,
@@ -3822,9 +3834,8 @@ impl PlayState {
         // an arena fight runs: during combat the active-object table holds
         // the arena's actors (`combat.md §4`), and the walkers would move
         // them and the schedule processor would write town NPCs into it.
-        // A town A-Attack enters the arena with this pass still owed, so it
-        // stays owed until the frame is restored
-        // ([`Self::drain_town_tail_after_combat`]).
+        // Anything still owed when an arena opens stays owed until the
+        // frame is restored ([`Self::drain_town_tail_after_combat`]).
         if self.combat_active {
             return;
         }
@@ -3846,22 +3857,53 @@ impl PlayState {
         }
     }
 
-    /// Run the town epilogue a fight left owed, once the arena frame has been
-    /// restored.
+    /// Run any town walker tail a fight left owed, once the arena frame has
+    /// been restored.
     ///
-    /// A town A-Attack advances its turn and enters the arena from inside the
-    /// same command, so the turn's object walker and schedule pass were still
-    /// pending when combat began, and [`Self::apply_pending_town_object_epilogue`]
-    /// refuses to run them against the arena's actor table. `town-mode.md §7`
-    /// step 4 places both after the command handler has returned, which for
-    /// an attack is after the fight, and `town-mode.md §14`'s conflict chain
-    /// clears the NPC slot and reloads the map before the handler returns -
-    /// so this drains after [`Self::drain_pending_town_conflict`].
+    /// [`Self::apply_pending_town_object_epilogue`] refuses to run against
+    /// the arena's actor table, so a pass still pending when combat began
+    /// waits for this. A town A-Attack no longer leaves one: its turn is
+    /// spent after the fight ([`Self::run_town_attack_epilogue_after_combat`]).
+    /// `town-mode.md §14`'s conflict chain clears the NPC slot and reloads
+    /// the map before the handler returns, so this drains after
+    /// [`Self::drain_pending_town_conflict`].
     pub fn drain_town_tail_after_combat(&mut self) {
         if self.combat_active || !matches!(self.area, Area::Town { .. }) {
             return;
         }
         self.apply_pending_town_object_epilogue();
+    }
+
+    /// `town-mode.md §7` step 4, "An A-Attack that fights in the arena"
+    /// (issue #298 Q40): the whole fight, the slot clear, the town-map reload
+    /// and the attach rerun finish inside the command, and only then does the
+    /// turn's epilogue run - **once**: "one indoor minute, dawn/dusk if due,
+    /// the underfoot and status pass, the auto-close countdown, the slot-zero
+    /// copy, the three gates, the object walker, the schedule pass, and
+    /// post-action cleanup if a contact was raised". Victory and flight look
+    /// the same here.
+    ///
+    /// Ahead of it the town loop re-runs the party-capability check: "If
+    /// nobody can act and nobody is asleep, the **whole** epilogue is skipped
+    /// ... The next iteration's opening check then enters the total-party-
+    /// defeat rescue", and "an all-asleep result skips nothing here".
+    ///
+    /// The auto-close step is a no-op after the fight on its own: the round
+    /// loop and the post-fight reload both clear the tracker's gating byte
+    /// (`doors-and-z-transitions.md §5`).
+    pub fn run_town_attack_epilogue_after_combat(
+        &mut self,
+        game_dir: &Path,
+    ) -> io::Result<Option<MoveOutcome>> {
+        if self.combat_active || !matches!(self.area, Area::Town { .. }) {
+            return Ok(None);
+        }
+        if matches!(self.party_capability(), PartyCapability::Defeated) {
+            return Ok(None);
+        }
+        let turn_before = self.turn;
+        self.advance_turn();
+        self.apply_top_down_post_turn_effects_after_turn(turn_before, game_dir)
     }
 
     /// `town-mode.md §10`: the live town tiles in the burning family — the
@@ -4261,6 +4303,11 @@ impl PlayState {
                         npc_slot,
                         type_byte,
                         awaiting_floor_reload: false,
+                        // `town-mode.md §7` step 4 (issue #298 Q40): a fight
+                        // raised by post-action cleanup "comes after its
+                        // turn's clock minute, underfoot pass and both
+                        // walkers, and none of them runs again after it".
+                        owes_turn_epilogue: false,
                     });
                     let hostile_terrain = self.grid[object.y * TOWN_GRID_SIDE + object.x];
                     let _setup_report = self
