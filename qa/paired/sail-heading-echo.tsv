@@ -1,25 +1,42 @@
 # What a hoisted-sail heading key and the synthesized repeats print.
 #
 # `commands.md §5.2`: "Outdoor movement prints its compass word followed by a
-# newline." `weather.md §5`: under hoisted sail the first heading key only
-# sets the cached direction, and "the input helper can synthesize repeated
-# movement commands from the cached direction". `text-output.md §10.2`: any
-# shipboard direction suppresses exactly one following prompt pair.
+# newline." Under hoisted sail that is narrowed by u5-spec#297: the
+# turn-or-move test is against the ship's **facing**, not the cached sail
+# direction (`weather.md §5`, `RETRACTIONS.md` R525). A key that changes the
+# facing turns the ship in place and prints `Head <Dir>` (plus `Hull weak!`
+# below hull 50) without moving; a key that keeps the facing prints nothing
+# (`vehicles.md §6`) and attempts the step on that same command in any
+# non-calm wind. The input helper then synthesizes repeated movement from the
+# cached direction, and a wait pass prints nothing from the sailing logic.
+#
+# The overworld prompt pair (`text-output.md §10.2`, R526 amending R497): the
+# flag is cleared only by a direction taken under hoisted sail, and a frigate
+# facing change or an under-sail refusal sets it again in the same command.
+# So `heading` - a course change - is followed by an ordinary pair: a blank
+# row under `Hull weak!` and the end-cap row with the cursor, which stays put
+# while the ship waits upwind. Each released step that keeps the facing
+# suppresses exactly one following pair, so the synthesized repeats draw no
+# new rows of their own; output a released step prints lands on the bare
+# marker row its pair drew (`BREAKING UP!`, as `sail-calm` shows), except an
+# encounter line, which starts the row below it.
 #
 # `sail-calm` (2026-10-16) caught the stock game, wind drifted to South,
-# printing `>BREAKING UP!` straight under `>Yell HOIST!` - no `East` for the
-# heading key or for the released step into the shoal - where this engine
-# printed `>East` first. This scenario sails away from the coast instead, so
-# the released steps are ordinary moves, and samples the window as they go.
+# printing `>BREAKING UP!` straight under `>Yell HOIST!` - no `East` for a
+# key that kept the facing or for the released step into the shoal. This
+# scenario sails away from the coast instead, so the released steps are
+# ordinary moves, and samples the window as they go.
+#
 # Encounter and wind dice from `sailing-more` on, measured 2026-10-16 over
 # the four runs with this seed and these keys: by 8 s the stock side was hit
 # by `* BOOM! *` and sunk (031944), attacked by SHARKS (204248) and by SEA
 # HORSES (222947) - one run's stock capture never reached the game - and the
-# engine's wind drifted to South on 222947 and ran it onto a shoal. Each wait
-# pass is a consumed turn with its own encounter roll (`weather.md §5`), so
-# only `hoisted`, `heading` and `sailing` are comparable, and
-# `paired_compare.py` skips the later two beats by name - the deterministic
-# three still report a difference as one.
+# engine's wind drifted to South on 222947 and ran it onto a shoal. Both
+# stock attacks read `Hull weak!` / blank / the bare `>` row / `Attacked!`.
+# Each wait pass is a consumed turn with its own encounter roll
+# (`weather.md §5`), so only `hoisted`, `heading` and `sailing` are
+# comparable, and `paired_compare.py` skips the later two beats by name - the
+# deterministic three still report a difference as one.
 # dice-beats: sailing-more same-key
 # requires-seed: profile `seed-drowning-collision` (frigate west of a coast)
 both	wait	15000
