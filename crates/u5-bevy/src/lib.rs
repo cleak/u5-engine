@@ -18779,6 +18779,14 @@ fn handle_visual_line_key(
             Ok(Some(PlayInputDisposition::Continue))
         }
         u5_runtime::FreeTextInputAction::Append(byte) => {
+            // `conversation.md §6` step 2: the keyword reader "accepts up
+            // to fifteen characters"; a byte past the cap is not accepted
+            // and so not echoed (`input.md §8`). Playtest E04.
+            if state.active_conversation.is_some()
+                && input_line.chars().count() >= u5_runtime::TLK_INPUT_MAX_LEN
+            {
+                return Ok(Some(PlayInputDisposition::Continue));
+            }
             input_line.push(char::from(byte));
             Ok(Some(PlayInputDisposition::Continue))
         }
@@ -27238,6 +27246,27 @@ mod tests {
         handle_play_key_input(&mut state, PLAY_MUSIC_TOGGLE_KEY, "", Path::new("")).unwrap();
 
         assert!(summarize(&mut state, "", "").contains("music off"));
+    }
+
+    #[test]
+    fn visual_line_input_caps_conversation_keyword_at_fifteen() {
+        // `conversation.md §6` step 2: "accepts up to fifteen characters".
+        // Playtest E04.
+        let mut state = test_state(open_grid(), 1, 1);
+        install_test_conversation(&mut state);
+        let mut input_line = String::new();
+        for _ in 0..17 {
+            handle_visual_line_key(
+                &mut state,
+                &mut input_line,
+                KeyCode::KeyA,
+                false,
+                false,
+                Path::new(""),
+            )
+            .unwrap();
+        }
+        assert_eq!(input_line.len(), u5_runtime::TLK_INPUT_MAX_LEN);
     }
 
     #[test]

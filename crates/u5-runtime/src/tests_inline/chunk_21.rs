@@ -4934,6 +4934,38 @@ fn conversation_opening_drops_a_quote_that_follows_the_entry_closing_quote() {
 }
 
 #[test]
+fn conversation_keyword_line_is_capped_at_fifteen_characters() {
+    // `conversation.md §6` step 2: the reader "accepts up to fifteen
+    // characters", and `input.md §8` echoes only accepted bytes.
+    // Playtest E04: seventeen typed characters echoed over two rows.
+    let enc = |s: &str| s.bytes().map(|b| b ^ 0x80).collect::<Vec<u8>>();
+    let fields = ["Ada", "a smith", "Hail", "I mend gear", "Farewell"];
+    let raw = fields.iter().map(|f| enc(f)).collect::<Vec<_>>();
+    let decoded = fields.iter().map(|f| f.to_string()).collect::<Vec<_>>();
+    let mut state = test_state(open_grid(), 1, 1);
+    state.active_conversation = Some(Box::new(
+        crate::conversation_session::ConversationSession::new(raw, decoded),
+    ));
+    state.advance_active_conversation_greeting();
+
+    state.submit_active_conversation_keyword("abcdefghijklmnopq");
+
+    assert!(transcript_has(&state, "ABCDEFGHIJKLMNO"));
+    assert!(
+        !state
+            .message_entries()
+            .iter()
+            .any(|entry| entry.text.contains('P') && entry.text.contains('Q')),
+        "{:?}",
+        state
+            .message_entries()
+            .iter()
+            .map(|entry| entry.text.clone())
+            .collect::<Vec<_>>()
+    );
+}
+
+#[test]
 fn raw_conversation_session_expands_loaded_common_word_dictionary() {
     let mut dialogue: HashMap<u16, Vec<String>> = HashMap::new();
     dialogue.insert(
