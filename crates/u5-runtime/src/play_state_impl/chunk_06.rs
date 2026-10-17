@@ -475,6 +475,13 @@ impl PlayState {
             if !(1..=self.party.len().min(6)).contains(&digit) {
                 continue;
             }
+            // `dungeon-mode.md §8.1`, "Who acts": the shared acting-member
+            // prompt "prints `Player: ` otherwise, echoing the chosen
+            // member's name" - as Open, Look and Search already do
+            // (playtest E13).
+            if matches!(self.area, Area::Dungeon { .. }) {
+                self.record_container_picker_name_echo(digit - 1);
+            }
             let outcome = self.jimmy_direction_with_game_dir_and_member(
                 session.direction,
                 Some(game_dir),

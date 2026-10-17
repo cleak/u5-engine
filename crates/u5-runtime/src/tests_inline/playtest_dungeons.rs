@@ -208,3 +208,30 @@ fn playtest_e12_dungeon_open_asks_who_acts_on_any_cell() {
     handle_play_key_input(&mut open, '1', "", Path::new("")).unwrap();
     assert_eq!(open.message, DUNGEON_CHEST_OPEN_ALREADY_OPEN);
 }
+
+/// E13: `dungeon-mode.md §8.1`, "Who acts" - the shared acting-member prompt
+/// "prints `Player: ` otherwise, echoing the chosen member's name", and the
+/// paragraph names Jimmy among its users.
+#[test]
+fn playtest_e13_dungeon_jimmy_echoes_the_chosen_member() {
+    let mut state = dungeon_state(open_dungeon_record(), 0, 1, 1);
+    state.party.push(audit_g5_companion(1));
+    state.party.push(audit_g5_companion(2));
+    state.party_names = vec![*b"AVATAR\0\0\0", *b"IOLO\0\0\0\0\0", *b"SHAMINO\0\0"];
+    state.keys = 1;
+    let name = party_name_to_string(&state.party_names[1]).expect("named member");
+
+    handle_play_key_input(&mut state, 'j', "", Path::new("")).unwrap();
+    assert!(state.active_jimmy.is_some(), "the member prompt is open");
+    handle_play_key_input(&mut state, '2', "", Path::new("")).unwrap();
+
+    let rows = playtest_transcript_rows(&state);
+    let prompt = rows
+        .iter()
+        .rposition(|row| row.ends_with(PARTY_SELECTION_PROMPT))
+        .unwrap_or_else(|| panic!("the prompt row: {rows:?}"));
+    assert!(
+        rows[prompt].ends_with(&name) || rows.get(prompt + 1) == Some(&name),
+        "the chosen member's name follows `Player: `: {rows:?}"
+    );
+}
