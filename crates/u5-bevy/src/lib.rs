@@ -16838,7 +16838,7 @@ fn render_visual_play_frame_with_input_and_cursor(
     default_message: &str,
     prompt_cursor_visible: bool,
 ) -> Vec<u8> {
-    let rgba = if state.endgame.is_some() {
+    let mut rgba = if state.endgame.is_some() {
         render_endgame_framebuffer(state, atlas, input_line, default_message, ctx)
     } else {
         render_visual_play_frame_over_viewport(
@@ -16851,6 +16851,16 @@ fn render_visual_play_frame_with_input_and_cursor(
             EndgameViewport::World,
         )
     };
+    // `audio.md §6` steps 2-5: a spell's shared variant inverts the whole
+    // gameplay viewport for its envelopes and inverts it back at the end -
+    // the flash `magic.md §8`'s window hold waits on. Stock captures
+    // (`cast-results` In Xen Mani, `cast-blink-overworld` In Por, 2026-10-17)
+    // show the inverted view for most of the hold; this engine drew none.
+    if state.message_window_flash_hold_active()
+        && let Some(playback) = u5_runtime::potion_flash_playback(0)
+    {
+        let _ = apply_visual_potion_flash_xor(&mut rgba, playback);
+    }
     // The runtime exhausts these self-paced blocking driver calls before
     // returning. Presenting the caller-composed end state acknowledges every
     // completed record in order; retaining them would only grow transient
@@ -23749,6 +23759,41 @@ mod tests {
         assert_eq!(u5_runtime::MESSAGE_WINDOW_TOP, 11);
         assert_eq!(u5_runtime::MESSAGE_WINDOW_RIGHT, 39);
         assert_eq!(u5_runtime::MESSAGE_WINDOW_BOTTOM, 23);
+    }
+
+    /// `audio.md §6` steps 2-5 / `magic.md §8`: while a spell's flash holds
+    /// the window, the gameplay viewport is drawn inverted; the stock
+    /// captures of `cast-results` and `cast-blink-overworld` show it.
+    #[test]
+    fn a_spell_flash_hold_draws_the_viewport_inverted() {
+        let font = parse_ch_font(&vec![0xff; CH_FONT_LEN], IBM_CH_FILE).unwrap();
+        let atlas = synthetic_tile_atlas(TileGraphicsDepth::Ega16);
+        let mut state = world_state(open_world_grid(), 10, 20);
+        state.party[0].mana = 1;
+        state.party[0].level = 1;
+        state.party[0].status = b'P';
+        state.spell_charges[spell_index_from_code("AN").unwrap()] = 1;
+        state
+            .cast_spell_from_suffix("1AN1", std::path::Path::new(""))
+            .unwrap();
+        assert!(state.message_window_flash_hold_active());
+        let held = render_visual_play_frame(&mut state, &atlas, play_ctx(&font));
+        let width = VISUAL_PLAY_FRAME_WIDTH as usize;
+        let (x, y) = (
+            VIEWPORT_ORIGIN_X + 2 * TILE_ATLAS_SIDE + 3,
+            VIEWPORT_ORIGIN_Y + 2 * TILE_ATLAS_SIDE + 3,
+        );
+        state.flush_staged_narration();
+        assert!(!state.message_window_flash_hold_active());
+        let after = render_visual_play_frame(&mut state, &atlas, play_ctx(&font));
+        // The flash's second inversion restores the view.
+        assert_ne!(rgba_pixel(&held, width, x, y), rgba_pixel(&after, width, x, y));
+        let mut again = after.clone();
+        assert!(apply_visual_potion_flash_xor(
+            &mut again,
+            u5_runtime::potion_flash_playback(0).unwrap()
+        ));
+        assert_eq!(rgba_pixel(&held, width, x, y), rgba_pixel(&again, width, x, y));
     }
 
     #[test]
