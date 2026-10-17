@@ -678,6 +678,46 @@
     }
 
     #[test]
+    fn town_boundary_exit_answer_lands_on_the_prompt_row_with_no_marker_row() {
+        // `doors-and-z-transitions.md §12.1`: `\nDost thou wish to leave? `
+        // has "trailing space, no line feed", the reader "does **not**
+        // echo", and the rendered rows are `Dost thou wish` / `to leave?
+        // Yes`. `text-output.md §10.2`: a prompt parked mid-command draws no
+        // marker row under it. Playtest E03.
+        for (answer, word) in [('N', "No"), ('Y', "Yes")] {
+            let dir = debug_game_dir();
+            fs::write(
+                dir.join(WORLD_LOCATION_TABLE_FILE),
+                "BRITANNIA 10 20 CASTLE:0\n",
+            )
+            .unwrap();
+            let mut state = test_state(open_grid(), 31, 0);
+            // A completed command turn leaves the row closed.
+            state.emit_message_line("Ahead");
+            state.close_message_row();
+            state
+                .step_with_game_dir(Direction::East, Some(&dir))
+                .unwrap();
+            assert_eq!(state.message, TOWN_EXIT_PROMPT);
+            assert!(state.message_window_live_row_suppressed());
+
+            handle_play_key_input(&mut state, answer, "", &dir).unwrap();
+            let texts: Vec<String> = state
+                .message_entries()
+                .iter()
+                .map(|entry| entry.text.clone())
+                .collect();
+            let expected = format!("Dost thou wish to leave? {word}");
+            assert!(
+                texts.iter().any(|text| text.trim_end() == expected),
+                "{texts:?}"
+            );
+            assert!(!texts.iter().any(|text| text == word), "{texts:?}");
+            let _ = fs::remove_dir_all(dir);
+        }
+    }
+
+    #[test]
     fn ordinary_town_exit_ignores_conflicting_underworld_return_snapshot() {
         let dir = debug_game_dir();
         fs::write(
