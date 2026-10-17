@@ -436,10 +436,10 @@ mod moongate_gate_presence_phase {
         // Both gates are mid-rise on the one shared counter.
         state.natural_moongate_counter = 11;
 
-        assert_eq!(
-            handle_play_key_input(&mut state, 'q', "", &dir).unwrap(),
-            PlayInputDisposition::Continue
-        );
+        // `overworld.md §9.2`: the live-gate hook runs ahead of the next
+        // key's own dispatch, which no longer swallows that key (playtest
+        // E42), so the hook is driven directly here.
+        assert!(state.resolve_natural_moongate_entry(&dir).unwrap().is_some());
 
         assert_eq!(
             state.natural_moongate_counter, 0,
@@ -974,10 +974,10 @@ mod moongate_transit_transition {
         assert!(state.last_natural_moongate_transit.is_none());
         let transport_before = state.player.transport;
 
-        assert_eq!(
-            handle_play_key_input(&mut state, 'q', "", &dir).unwrap(),
-            PlayInputDisposition::Continue
-        );
+        // `overworld.md §9.2`: the live-gate hook runs ahead of the next
+        // key's own dispatch, which no longer swallows that key (playtest
+        // E42), so the hook is driven directly here.
+        assert!(state.resolve_natural_moongate_entry(&dir).unwrap().is_some());
 
         assert_eq!(
             state.last_natural_moongate_transit,

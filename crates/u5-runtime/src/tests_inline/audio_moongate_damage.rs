@@ -204,10 +204,10 @@ fn the_transit_envelope_survives_the_destination_warp() {
     };
     let serial = state.sound_effect_serial;
 
-    assert_eq!(
-        handle_play_key_input(&mut state, 'q', "", &dir).unwrap(),
-        PlayInputDisposition::Continue
-    );
+    // `overworld.md §9.2`: the live-gate hook runs ahead of the next
+    // key's own dispatch, which no longer swallows that key (playtest
+    // E42), so the hook is driven directly here.
+    assert!(state.resolve_natural_moongate_entry(&dir).unwrap().is_some());
 
     assert_eq!((state.player.x, state.player.y), (6, 7));
     assert_eq!(

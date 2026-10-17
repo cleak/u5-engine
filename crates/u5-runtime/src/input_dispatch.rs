@@ -276,8 +276,18 @@ fn handle_play_key_input_inner(
     if state.resolve_town_arrest_prompt(key, game_dir)?.is_some() {
         return Ok(PlayInputDisposition::Continue);
     }
+    // `overworld.md §9.2`: the live-gate entry hook "runs before normal
+    // input dispatch, on every iteration", and its transition completes
+    // "before the party is relocated and before any key is read". The engine
+    // only learns of a new iteration when a key arrives, so it runs the hook
+    // here - but the key was never the hook's: it is the next command of
+    // whichever loop runs after the hook, so it is dispatched afterwards
+    // against the post-hook state. The hook rewrites the gate cell to
+    // terrain 5, so it cannot fire twice for the same cell. Playtest E42:
+    // after a Gate Travel onto a live gate cell the key was discarded, so
+    // `North` did nothing and `Q`/`Y` ran as `Y`.
     if state.resolve_natural_moongate_entry(game_dir)?.is_some() {
-        return Ok(PlayInputDisposition::Continue);
+        return handle_play_key_input_inner(state, key, suffix, game_dir);
     }
     // `timing.md §8.2`, the under-sail pass's keyboard poll, and
     // `RETRACTIONS.md` R372: "a key whose translated code **equals the cached

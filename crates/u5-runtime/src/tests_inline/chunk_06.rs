@@ -2390,10 +2390,10 @@
             z: WorldPlane::Britannia.save_floor() as u8,
         };
 
-        assert_eq!(
-            handle_play_key_input(&mut state, 'q', "", &dir).unwrap(),
-            PlayInputDisposition::Continue
-        );
+        // `overworld.md §9.2`: the live-gate hook runs ahead of the next
+        // key's own dispatch, which no longer swallows that key (playtest
+        // E42), so the hook is driven directly here.
+        assert!(state.resolve_natural_moongate_entry(&dir).unwrap().is_some());
 
         assert_eq!(
             state.area,
@@ -2437,10 +2437,10 @@
             z: WorldPlane::Britannia.save_floor() as u8,
         };
 
-        assert_eq!(
-            handle_play_key_input(&mut state, 'q', "", &dir).unwrap(),
-            PlayInputDisposition::Continue
-        );
+        // `overworld.md §9.2`: the live-gate hook runs ahead of the next
+        // key's own dispatch, which no longer swallows that key (playtest
+        // E42), so the hook is driven directly here.
+        assert!(state.resolve_natural_moongate_entry(&dir).unwrap().is_some());
 
         assert_eq!((state.player.x, state.player.y), (8, 9));
         assert_eq!(state.turn, 0);
@@ -2473,10 +2473,10 @@
         state.refresh_cached_moon_glyphs();
         state.natural_moongate_live_cells.push(origin_idx);
 
-        assert_eq!(
-            handle_play_key_input(&mut state, 'q', "", Path::new("")).unwrap(),
-            PlayInputDisposition::Continue
-        );
+        // `overworld.md §9.2`: the live-gate hook runs ahead of the next
+        // key's own dispatch, which no longer swallows that key (playtest
+        // E42), so the hook is driven directly here.
+        assert!(state.resolve_natural_moongate_entry(Path::new("")).unwrap().is_some());
 
         assert_eq!((state.player.x, state.player.y), (5, 5));
         assert_eq!(state.turn, 0);
@@ -2506,10 +2506,10 @@
         state.refresh_cached_moon_glyphs();
         state.natural_moongate_live_cells.push(origin_idx);
 
-        assert_eq!(
-            handle_play_key_input(&mut state, 'q', "", Path::new("")).unwrap(),
-            PlayInputDisposition::Continue
-        );
+        // `overworld.md §9.2`: the live-gate hook runs ahead of the next
+        // key's own dispatch, which no longer swallows that key (playtest
+        // E42), so the hook is driven directly here.
+        assert!(state.resolve_natural_moongate_entry(Path::new("")).unwrap().is_some());
 
         assert_eq!((state.player.x, state.player.y), (5, 5));
         assert_eq!(state.grid[origin_idx], NATURAL_MOONGATE_RESTORED_TERRAIN_TILE);
@@ -2532,10 +2532,10 @@
         state.set_cached_moon_glyph_bytes(b'1', b'0');
         state.natural_moongate_live_cells.push(origin_idx);
 
-        assert_eq!(
-            handle_play_key_input(&mut state, 'q', "", Path::new("")).unwrap(),
-            PlayInputDisposition::Continue
-        );
+        // `overworld.md §9.2`: the live-gate hook runs ahead of the next
+        // key's own dispatch, which no longer swallows that key (playtest
+        // E42), so the hook is driven directly here.
+        assert!(state.resolve_natural_moongate_entry(Path::new("")).unwrap().is_some());
 
         assert!(state.message.is_empty());
     }
@@ -2597,10 +2597,10 @@
         let mut state = britannia_state(grid, 5, 5);
         state.clock = GameClock::new(0, 9).unwrap();
 
-        assert_eq!(
-            handle_play_key_input(&mut state, 'q', "", &dir).unwrap(),
-            PlayInputDisposition::Continue
-        );
+        // `overworld.md §9.2`: the live-gate hook runs ahead of the next
+        // key's own dispatch, which no longer swallows that key (playtest
+        // E42), so the hook is driven directly here.
+        assert!(state.resolve_natural_moongate_entry(&dir).unwrap().is_some());
 
         assert_eq!(state.grid[origin_idx], NATURAL_MOONGATE_RESTORED_TERRAIN_TILE);
         assert!(state.active_shrine.is_some());
@@ -2644,10 +2644,10 @@
         let mut state = britannia_state(grid, 5, 5);
         state.clock = GameClock::new(0, 9).unwrap();
 
-        assert_eq!(
-            handle_play_key_input(&mut state, 'q', "", Path::new("")).unwrap(),
-            PlayInputDisposition::Continue
-        );
+        // `overworld.md §9.2`: the live-gate hook runs ahead of the next
+        // key's own dispatch, which no longer swallows that key (playtest
+        // E42), so the hook is driven directly here.
+        assert!(state.resolve_natural_moongate_entry(Path::new("")).unwrap().is_some());
 
         assert_eq!(state.grid[origin_idx], NATURAL_MOONGATE_RESTORED_TERRAIN_TILE);
         assert!(state.message.is_empty());

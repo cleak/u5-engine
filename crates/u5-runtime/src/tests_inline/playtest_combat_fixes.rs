@@ -295,3 +295,41 @@ fn playtest_e32_arena_probe_spells_never_place_on_the_void() {
     }
     assert!(placed > 0, "some probe reached the floor row");
 }
+
+/// `overworld.md §9.2`: the live-gate entry hook "runs before normal input
+/// dispatch, on every iteration" and completes "before any key is read" - so
+/// the key that arrives is the next command, not the hook's. Playtest E42:
+/// after a Gate Travel onto a live gate cell the first key did nothing (North
+/// did not move; `Q` was lost, so `Q`,`Y` ran as Yell).
+#[test]
+fn playtest_e42_the_live_gate_hook_does_not_swallow_the_next_command_key() {
+    let dir = debug_game_dir();
+    let idx = world_cell_index(5, 5);
+    let mut grid = open_world_grid();
+    grid[idx] = NATURAL_MOONGATE_TERRAIN_TILE;
+    let mut state = britannia_state(grid, 5, 5);
+    state.clock = GameClock::new(23, 0).unwrap();
+    state.natural_moongate_counter = MOONGATE_PHASE_FULL;
+    // An empty saved slot: the hook plays the transit and warps nowhere.
+    state.set_cached_moon_glyph_slots(1, 1);
+    state.moonstone_slots[1] = MoonstoneGateSlot {
+        scene: MOONSTONE_INVALID_SCENE,
+        x: 0,
+        y: 0,
+        z: 0,
+    };
+
+    handle_play_key_input(&mut state, '\u{3}', "", &dir).unwrap();
+
+    assert!(
+        state.last_natural_moongate_transit.is_some(),
+        "the hook ran first"
+    );
+    assert_eq!(state.grid[idx], NATURAL_MOONGATE_RESTORED_TERRAIN_TILE);
+    assert_eq!(
+        (state.player.x, state.player.y),
+        (5, 4),
+        "the key was then dispatched as the North command"
+    );
+    let _ = fs::remove_dir_all(dir);
+}
