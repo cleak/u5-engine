@@ -315,7 +315,7 @@
         let view = state.render_text_view(5);
 
         assert!(view.contains("First-person dungeon view"));
-        assert!(view.contains("0: here passage"));
+        assert!(view.contains("0: here a passage"));
         assert!(view.contains("1: ahead a wooden chest; left a wall; right a fountain"));
         assert!(view.contains("2: ahead a sleep field"));
         assert!(!view.contains('$'));
@@ -507,7 +507,9 @@
 
             assert_eq!(state.look_dungeon(), MoveOutcome::Observed);
 
-            assert!(state.message.contains("pit or trap"));
+            // `dungeon-mode.md` Section 12 step 5 (u5-spec#298 Q6): the
+            // `0x6?` class line is `a pit.`.
+            assert!(state.message.ends_with("a pit."));
             assert_eq!(state.turn, 0);
         }
     }

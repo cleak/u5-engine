@@ -38,6 +38,13 @@ pub fn handle_play_key_input(
     // `town-mode.md §14`: drain the town NPC-conflict chain's exit -
     // "On exit the town chain clears the NPC slot, reloads the town map,
     // and re-runs the Shadowlord install pass of Section 13".
+    // `dungeon-mode.md §14.1` (u5-spec#298 Q1): a post-combat code 5 or 6
+    // past the level stack takes the `§13.2` surface exit.
+    if result.is_ok() && !state.combat_active && state.pending_dungeon_surface_exit.is_some() {
+        if let Err(error) = state.drain_pending_dungeon_surface_exit(game_dir) {
+            result = Err(error);
+        }
+    }
     if result.is_ok() && !state.combat_active && state.pending_town_conflict.is_some() {
         if let Err(error) = state.drain_pending_town_conflict(game_dir) {
             result = Err(error);

@@ -125,10 +125,15 @@ fn dungeon_active_monster_combat_synthesises_published_ambush_arena() {
 
     assert!(note.contains("active monster"));
     assert!(state.combat_active);
-    assert!(state.combat_terrain.iter().all(|row| {
-        row.iter()
-            .all(|tile| *tile == DUNGEON_AMBUSH_ARENA_FLOOR_TILE)
-    }));
+    // `dungeon-mode.md §14.1` step 3 (u5-spec#298 Q13): the room floor
+    // byte (`0x05` outside the flavour-3 dungeons) with `0xFF` in the four
+    // outer corners. This fixture is not a dungeon scene, so the centre
+    // carries whatever icon its underfoot byte's class selects.
+    let mut terrain = state.combat_terrain;
+    terrain[5][5] = DUNGEON_AMBUSH_ARENA_FLOOR_TILE;
+    assert_eq!(terrain, DUNGEON_AMBUSH_ARENA_TERRAIN);
+    assert_eq!(state.combat_terrain[0][0], 0xFF);
+    assert_eq!(state.combat_terrain[10][10], 0xFF);
 
     // Giant Rat's spawn-count stat byte is ten and is not one of the
     // exact-count sentinels, so the launch rolls `[1, 10]`.
@@ -5579,6 +5584,7 @@ fn combat_post_dispatch_absorbable_field_contact_sets_armed_result_marker() {
         suppress_controlled_faint_sleep_tick: false,
         exit_announced: false,
         established_exit_direction_code: None,
+        dungeon_post_combat: None,
         any_foe_seated: true,
     });
 
@@ -5671,6 +5677,7 @@ fn armed_absorption_holds_the_arena_without_the_avatar_until_the_tableau_setup()
         suppress_controlled_faint_sleep_tick: false,
         exit_announced: false,
         established_exit_direction_code: None,
+        dungeon_post_combat: None,
         any_foe_seated: true,
     });
 
@@ -5738,6 +5745,7 @@ fn combat_absorbable_field_contact_without_armed_snapshot_does_not_set_result_ma
         suppress_controlled_faint_sleep_tick: false,
         exit_announced: false,
         established_exit_direction_code: None,
+        dungeon_post_combat: None,
         any_foe_seated: true,
     });
 
@@ -9966,6 +9974,7 @@ fn combat_ai_turn_doom_context_bypasses_suppressed_phase_targets() {
         suppress_controlled_faint_sleep_tick: false,
         exit_announced: false,
         established_exit_direction_code: None,
+        dungeon_post_combat: None,
         any_foe_seated: true,
     });
 
@@ -12275,6 +12284,7 @@ fn combat_player_command_handles_digits_pass_branches_and_escape_cleanup() {
         suppress_controlled_faint_sleep_tick: false,
         exit_announced: true,
         established_exit_direction_code: None,
+        dungeon_post_combat: None,
         any_foe_seated: true,
     });
     let allowed_escape = state
@@ -15734,6 +15744,7 @@ fn combat_monster_vanish_faint_tail_disarms_and_sleeps_first_controlled_party_ac
         suppress_controlled_faint_sleep_tick: true,
         exit_announced: false,
         established_exit_direction_code: None,
+        dungeon_post_combat: None,
         any_foe_seated: true,
     });
     let suppressed_animation_before = suppressed.animation.frame;
@@ -21398,6 +21409,7 @@ fn a_dungeon_room_arena_draws_its_terrain_through_the_red_green_plane_swap() {
         suppress_controlled_faint_sleep_tick: false,
         exit_announced: false,
         established_exit_direction_code: None,
+        dungeon_post_combat: None,
         any_foe_seated: true,
     });
     assert!(state.dungeon_room_arena_plane_swap_active());
@@ -21520,4 +21532,219 @@ fn overworld_prompt_pair_is_suppressed_once_after_a_shipboard_direction() {
         .message_entries()
         .iter()
         .all(|entry| !entry.prompt_pair_suppressed));
+}
+
+/// `dungeon-mode.md §14.1` (u5-spec#298 Q1): a one-member dungeon arena whose
+/// actor stands at `(x, y)`, launched by `applier`.
+fn dungeon_post_combat_state(
+    level: u8,
+    applier: DungeonPostCombatApplier,
+    x: u8,
+    y: u8,
+    room_encounter: bool,
+) -> PlayState {
+    let mut state = dungeon_state(open_dungeon_record(), level, 1, 1);
+    state.player.facing = Direction::North;
+    let mut combat_objects = vec![ActiveObject::empty(); OOL_SLOTS];
+    combat_objects[0] = ActiveObject {
+        type_byte: 0x80,
+        tile: 0x80,
+        x: x as usize,
+        y: y as usize,
+        ..ActiveObject::empty()
+    };
+    let mut combat_actors = [CombatActorDescriptor::empty(); COMBAT_ACTOR_SLOTS];
+    combat_actors[0] =
+        CombatActorDescriptor::from_row([20, 1, COMBAT_ACTOR_FLAG_SELECTABLE_80, 0, 0, 0, x, y]);
+    state
+        .enter_combat_frame(combat_objects, combat_actors)
+        .unwrap();
+    state.set_dungeon_post_combat_applier(applier);
+    if let Some(snapshot) = &mut state.combat_frame_snapshot {
+        snapshot.encounter_mode_high_bit = room_encounter;
+    }
+    state.pending_combat_actor_slot = Some(0);
+    state
+}
+
+#[test]
+fn dungeon_contact_and_room_fights_step_the_party_by_the_first_exit() {
+    // `dungeon-mode.md §14.1` (Q1, R527/R528): codes 1-4 move the party one
+    // cell, wrapping, with no passability test, and set the facing.
+    let game_dir = std::path::Path::new(".");
+    let mut state =
+        dungeon_post_combat_state(1, DungeonPostCombatApplier::MovementApplier, 10, 5, true);
+    state.grid[dungeon_cell_index(1, 2, 1)] = 0xb0;
+
+    handle_play_key_input(&mut state, '6', "", game_dir).unwrap();
+
+    assert!(!state.combat_active);
+    assert_eq!((state.player.x, state.player.y), (2, 1));
+    assert_eq!(state.player.facing, Direction::East);
+    assert!(matches!(state.area, Area::Dungeon { level: 1, .. }));
+
+    let mut state =
+        dungeon_post_combat_state(1, DungeonPostCombatApplier::MovementApplier, 5, 0, false);
+    state.combat_frame_snapshot.as_mut().unwrap().player.y = 0;
+    handle_play_key_input(&mut state, '8', "", game_dir).unwrap();
+    assert_eq!((state.player.x, state.player.y), (1, 7), "wraps north");
+    assert_eq!(state.player.facing, Direction::North);
+}
+
+#[test]
+fn dungeon_attack_fight_ignores_edge_exit_codes() {
+    // `dungeon-mode.md §14.1` (Q1): "Codes 1-4 are ignored there, so the
+    // party stays where it was."
+    let game_dir = std::path::Path::new(".");
+    let mut state =
+        dungeon_post_combat_state(1, DungeonPostCombatApplier::AttackLevelsOnly, 10, 5, false);
+
+    handle_play_key_input(&mut state, '6', "", game_dir).unwrap();
+
+    assert!(!state.combat_active);
+    assert_eq!((state.player.x, state.player.y), (1, 1));
+    assert_eq!(state.player.facing, Direction::North);
+}
+
+#[test]
+fn dungeon_arena_klimb_on_a_ladder_departs_with_codes_five_and_six() {
+    // `combat.md §8` K row and `dungeon-mode.md §14.1` (Q1): `Up!` on `0xC8`
+    // stores 5, `Down!` on `0xC9` stores 6, then the ordinary departure
+    // line; the caller then changes the level.
+    let game_dir = std::path::Path::new(".");
+    for applier in [
+        DungeonPostCombatApplier::MovementApplier,
+        DungeonPostCombatApplier::AttackLevelsOnly,
+    ] {
+        for (tile, suffix, level_after, word) in [(0xc8u8, "<", 1u8, "Up!"), (0xc9, ">", 3, "Down!")]
+        {
+            let mut state = dungeon_post_combat_state(2, applier, 4, 4, false);
+            state.combat_terrain[4][4] = tile;
+
+            handle_play_key_input(&mut state, 'K', suffix, game_dir).unwrap();
+
+            assert!(!state.combat_active, "{applier:?} {word}");
+            assert!(
+                matches!(state.area, Area::Dungeon { level, .. } if level == level_after),
+                "{applier:?} {word}: {:?}",
+                state.area
+            );
+            assert_eq!((state.player.x, state.player.y), (1, 1));
+            assert_eq!(state.player.facing, Direction::North, "5/6 keep the facing");
+            let texts: Vec<_> = state
+                .message_transcript
+                .iter()
+                .map(|entry| entry.text.as_str())
+                .collect();
+            assert!(texts.iter().any(|text| text.contains(word)), "{texts:?}");
+            assert!(texts.iter().any(|text| text.contains("Leave!")), "{texts:?}");
+        }
+    }
+}
+
+#[test]
+fn dungeon_arena_grate_is_a_down_exit_only_in_a_room_encounter() {
+    // `dungeon-mode.md §14.1` (Q1): "6 on a down ladder (`0xC9`) or, only in
+    // a dungeon-room encounter, on a metal grate (`0x86`)".
+    let game_dir = std::path::Path::new(".");
+    let mut state =
+        dungeon_post_combat_state(2, DungeonPostCombatApplier::MovementApplier, 4, 4, false);
+    state.combat_terrain[4][4] = 0x86;
+    handle_play_key_input(&mut state, 'K', ">", game_dir).unwrap();
+    assert!(state.combat_active, "ambush arena: no grate exit");
+
+    let mut state =
+        dungeon_post_combat_state(2, DungeonPostCombatApplier::MovementApplier, 4, 4, true);
+    state.combat_terrain[4][4] = 0x86;
+    handle_play_key_input(&mut state, 'K', ">", game_dir).unwrap();
+    assert!(!state.combat_active);
+    assert!(matches!(state.area, Area::Dungeon { level: 3, .. }));
+}
+
+#[test]
+fn dungeon_post_combat_up_from_the_top_level_owes_the_surface_exit() {
+    // `dungeon-mode.md §14.1` (Q1): codes 5 and 6 change the level
+    // "including both surface exits".
+    let mut state = dungeon_state(open_dungeon_record(), 0, 1, 1);
+    state.apply_dungeon_post_combat_record(DungeonPostCombatApplier::MovementApplier, Some(5));
+    assert!(matches!(state.area, Area::Dungeon { level: 0, .. }));
+    assert!(state.pending_dungeon_surface_exit.is_some());
+
+    // Zero and the absorption marker do nothing.
+    for record in [None, Some(DUNGEON_FIRST_PARTY_EXIT_ABSORBED)] {
+        let mut state = dungeon_state(open_dungeon_record(), 3, 1, 1);
+        state.apply_dungeon_post_combat_record(DungeonPostCombatApplier::MovementApplier, record);
+        assert!(matches!(state.area, Area::Dungeon { level: 3, .. }));
+        assert_eq!((state.player.x, state.player.y), (1, 1));
+        assert!(state.pending_dungeon_surface_exit.is_none());
+    }
+}
+
+#[test]
+fn dungeon_attack_fight_leaving_the_level_stack_rolls_no_replacement_monster() {
+    // `dungeon-mode.md §14.1`: "The A-Attack path gates both the replacement
+    // roll and the viewport redraw on the scene byte still reporting a
+    // dungeon; the contact path rolls unconditionally."
+    for (applier, rolls) in [
+        (DungeonPostCombatApplier::AttackLevelsOnly, false),
+        (DungeonPostCombatApplier::MovementApplier, true),
+    ] {
+        let mut state = dungeon_post_combat_state(0, applier, 4, 4, false);
+        let mut snapshot = state.combat_frame_snapshot.take().unwrap();
+        snapshot.established_exit_direction_code = Some(5);
+        let prng_before = state.prng_state;
+
+        state.restore_combat_frame(snapshot);
+
+        assert!(state.pending_dungeon_surface_exit.is_some(), "{applier:?}");
+        assert_eq!(state.prng_state != prng_before, rolls, "{applier:?}");
+    }
+}
+
+#[test]
+fn dungeon_ambush_arena_uses_the_published_floor_corners_and_centre_icons() {
+    // `dungeon-mode.md §14.1` step 3 (u5-spec#298 Q13): floor `0x45` in the
+    // flavour-3 dungeons (scene 33 is Deceit) and `0x05` elsewhere (34 is
+    // Despise), `0xFF` corners, and the underfoot class's centre icon.
+    let object = ActiveObject {
+        type_byte: 0,
+        tile: 0,
+        x: 2,
+        y: 1,
+        z: 0,
+        phase: 0x60,
+        aux1: 20,
+        aux3: DUNGEON_MONSTER_FLOOR_DEP3,
+    };
+    for (scene, floor) in [(33u8, 0x45u8), (34, 0x05)] {
+        for (underfoot, centre) in [
+            (0x00u8, floor),
+            (0x10, 0xC8),
+            (0x20, 0xC9),
+            (0x30, 0xC8),
+            (0x50, 0xD8),
+            (0x70, floor),
+            (0x90, floor),
+        ] {
+            let mut grid = open_dungeon_record();
+            grid[dungeon_cell_index(0, 1, 1)] = underfoot;
+            let mut state = dungeon_state(grid, 0, 1, 1);
+            state.area = Area::Dungeon {
+                scene: DungeonScene::new(scene).unwrap(),
+                level: 0,
+            };
+            state.player.facing = Direction::North;
+            state
+                .enter_dungeon_active_monster_combat(0, object)
+                .unwrap();
+
+            let terrain = state.combat_terrain;
+            assert_eq!(terrain[5][5], centre, "scene {scene} underfoot {underfoot:#04x}");
+            for (x, y) in [(0, 0), (10, 0), (0, 10), (10, 10)] {
+                assert_eq!(terrain[y][x], 0xFF);
+            }
+            assert_eq!(terrain[1][1], floor);
+            assert_eq!(terrain[2][7], floor);
+        }
+    }
 }

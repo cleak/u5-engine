@@ -1972,14 +1972,15 @@ pub const fn troll_bridge_toll_for_strength(strength: u8) -> i16 {
 /// known, disclosed gap and an unmarked one with no reader as a defect.
 ///
 /// Unwired here: the three prompt forms and the Space answer.
-/// `DUNGEON_KLIMB_WHAT_REFUSAL`, `DUNGEON_KLIMB_UP`, `DUNGEON_KLIMB_DOWN` and
-/// `DUNGEON_KLIMB_FAILED` below **are** wired.
+/// `DUNGEON_KLIMB_WHAT_REFUSAL`, `DUNGEON_KLIMB_WITH_WHAT_REFUSAL`,
+/// `DUNGEON_KLIMB_UP`, `DUNGEON_KLIMB_DOWN` and `DUNGEON_KLIMB_FAILED` below
+/// **are** wired.
 ///
 /// `dungeon-mode.md §8.1` Klimb prompts. `Klimb-U/D-` blocks until up or down
 /// is chosen and Space answers `Pass\n\n`; `Klimb-` is the one-direction form;
-/// `Klimb-\nWith What?\n` is the climb-with-equipment refusal — whether it is
-/// specifically the *no-grapple* refusal is **probable, not established**, so
-/// no caller may treat the gating byte as confirmed to be the grapple count.
+/// `Klimb-\nWith What?\n` is the *no-grapple* refusal for a cell carrying the
+/// climbable-with-equipment mark when the Grapple byte is zero (established,
+/// u5-spec#298 Q26; `§13.1`).
 pub const DUNGEON_KLIMB_PROMPT_BOTH: &str = "Klimb-U/D-";
 pub const DUNGEON_KLIMB_PROMPT_ONE: &str = "Klimb-";
 pub const DUNGEON_KLIMB_WITH_WHAT_REFUSAL: &str = "Klimb-\nWith What?\n";

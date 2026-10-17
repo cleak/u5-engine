@@ -846,6 +846,12 @@ pub fn rough_seas_impact_rumble(jitter: &mut RumbleJitter) -> SpeakerProgram {
     random_rumble(10, 3000, 2000, jitter)
 }
 
+/// `audio.md §5.3` (u5-spec#298 Q7): dungeon sleep or poison field hit,
+/// step 1, target 50, 100..3500 Hz - 50 updates.
+pub fn status_field_rumble(jitter: &mut RumbleJitter) -> SpeakerProgram {
+    random_rumble(1, 50, 3500, jitter)
+}
+
 /// `audio.md §5.3` shared potion/wind lead for variant `v`: 10 + 2v updates in
 /// 100..700 Hz.
 pub fn shared_variant_lead(variant: u8, jitter: &mut RumbleJitter) -> SpeakerProgram {
@@ -1853,6 +1859,9 @@ pub enum SoundEffect {
     ShipCollisionRumble,
     /// `§7.4` rough-seas impact before party damage.
     RoughSeasImpactRumble,
+    /// `§5.3` dungeon sleep or poison field hit, once per member whose save
+    /// fails (u5-spec#298 Q7; `dungeon-mode.md §8.1`).
+    StatusFieldRumble,
     /// `§6` shared potion/wind/spell variant `0..=8`.
     SharedVariant { variant: u8 },
     /// `§6.1` the circle-scaled rumble lead alone, with the viewport inversion
@@ -2007,6 +2016,7 @@ impl SoundEffect {
             SoundEffect::DamageRumble => damage_rumble(jitter),
             SoundEffect::ShipCollisionRumble => ship_collision_rumble(jitter),
             SoundEffect::RoughSeasImpactRumble => rough_seas_impact_rumble(jitter),
+            SoundEffect::StatusFieldRumble => status_field_rumble(jitter),
             SoundEffect::SharedVariant { variant } => shared_variant(*variant, jitter),
             SoundEffect::CircleRumbleLead { circle } => circle_rumble_lead(*circle, jitter),
             SoundEffect::CombatTemplateImpact => combat_template_impact(),
@@ -2921,6 +2931,7 @@ mod tests {
             SoundEffect::DamageRumble,
             SoundEffect::ShipCollisionRumble,
             SoundEffect::RoughSeasImpactRumble,
+            SoundEffect::StatusFieldRumble,
             SoundEffect::CorpsePlagueRumble,
             SoundEffect::SharedVariant { variant: 0 },
             SoundEffect::SharedVariant { variant: 8 },

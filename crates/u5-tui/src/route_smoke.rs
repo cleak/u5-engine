@@ -46,7 +46,8 @@ use u5_runtime::{
     CREATE_FOOD_SPELL_INDEX, CURE_COST, CURE_SPELL_INDEX, CombatActorDescriptor,
     CombatArenaFieldKind, DEATH_VISION_LOOK_TILE, DEATH_WIND_COST, DEATH_WIND_SPELL_INDEX,
     DEFAULT_FOOD_STOCK, DEFAULT_KEY_STOCK, DES_POR_SPELL_INDEX, DISPEL_FIELD_COST,
-    DISPEL_FIELD_SPELL_INDEX, DUNGEON_AMBUSH_ARENA_FLOOR_TILE, DUNGEON_AMBUSH_PARTY_ENTRY_X,
+    DISPEL_FIELD_SPELL_INDEX, DUNGEON_AMBUSH_ARENA_FLAVOUR3_FLOOR_TILE,
+    DUNGEON_AMBUSH_ARENA_FLOOR_TILE, DUNGEON_AMBUSH_PARTY_ENTRY_X,
     DUNGEON_AMBUSH_PARTY_ENTRY_Y, DUNGEON_LEVEL_SPELL_COST, DUNGEON_MONSTER_COMBAT_CLASSES,
     DUNGEON_ROOM_SOURCE_COUNT, Direction, DungeonScene, ENERGY_FIELD_COST,
     ENERGY_FIELD_SPELL_INDEX, EQUIP_SLOT_RING, EQUIP_SLOT_WEAPON, EQUIPMENT_EMPTY,
@@ -8225,6 +8226,17 @@ fn validate_route_smoke_case_state(
             let expected_tile = combat_class_sprite_byte(DUNGEON_MONSTER_COMBAT_CLASSES[0]);
             let monster_on_published_source = (0..DUNGEON_ROOM_SOURCE_COUNT)
                 .any(|slot| source_x[slot] == monster_actor.x && source_y[slot] == monster_actor.y);
+            // `dungeon-mode.md §14.1` step 3 (u5-spec#298 Q13): the room
+            // floor byte (by flavour), `0xFF` corners, and the centre icon.
+            let ambush_floor = state.combat_terrain[1][1];
+            let ambush_terrain_ok = matches!(
+                ambush_floor,
+                DUNGEON_AMBUSH_ARENA_FLOOR_TILE | DUNGEON_AMBUSH_ARENA_FLAVOUR3_FLOOR_TILE
+            ) && {
+                let mut terrain = state.combat_terrain;
+                terrain[5][5] = ambush_floor;
+                terrain == u5_runtime::dungeon_ambush_arena_terrain(ambush_floor)
+            };
             let party_slots = state.party.len().min(COMBAT_PARTY_ACTOR_SLOTS);
             let party_on_entry_row = state
                 .combat_actors
@@ -8248,16 +8260,13 @@ fn validate_route_smoke_case_state(
                 || monster_object.tile != expected_tile
                 || !monster_on_published_source
                 || !party_on_entry_row
-                || !state.combat_terrain.iter().all(|row| {
-                    row.iter()
-                        .all(|tile| *tile == DUNGEON_AMBUSH_ARENA_FLOOR_TILE)
-                })
+                || !ambush_terrain_ok
             {
                 let bad_terrain = state
                     .combat_terrain
                     .iter()
                     .flat_map(|row| row.iter())
-                    .filter(|tile| **tile != DUNGEON_AMBUSH_ARENA_FLOOR_TILE)
+                    .filter(|tile| **tile != ambush_floor)
                     .count();
                 return Err(io::Error::other(format!(
                     "route smoke `{case_name}` did not enter the public #21 dungeon ambush frame: \

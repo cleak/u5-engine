@@ -25,7 +25,17 @@ pub struct CombatFrameSnapshot {
     /// One-shot out-of-arena exit announcement state sampled by Escape.
     pub exit_announced: bool,
     /// First party-side cardinal edge direction accepted in this combat.
+    ///
+    /// `dungeon-mode.md §14.1` (u5-spec#298 Q1): this is the arena's
+    /// **first-party-exit record** - the first accepted party-side departure,
+    /// an edge (1 west, 2 east, 3 north, 4 south) or, in a dungeon arena, an
+    /// in-arena K (5 up ladder, 6 down ladder or room grate). The dungeon
+    /// callers read it after the fight; see [`DungeonPostCombatApplier`].
     pub established_exit_direction_code: Option<u8>,
+    /// `dungeon-mode.md §14.1` (u5-spec#298 Q1): set by the dungeon caller
+    /// that launched the fight, and so how the first-party-exit record is
+    /// applied once the frame is restored. `None` for every other caller.
+    pub dungeon_post_combat: Option<DungeonPostCombatApplier>,
     /// Whether a hostile actor has ever been seated in this combat.
     ///
     /// `combat.md §7` gates `VICTORY!` on "party actors remain and foes do
@@ -39,6 +49,33 @@ pub struct CombatFrameSnapshot {
     /// is.
     pub any_foe_seated: bool,
 }
+
+/// `dungeon-mode.md §14.1` post-combat bracket (u5-spec#298 Q1, R527,
+/// R528): the three dungeon launchers read the first-party-exit record
+/// differently.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum DungeonPostCombatApplier {
+    /// A-Attack: "reads only codes 5 and 6"; codes 1-4 leave the party
+    /// where it was.
+    AttackLevelsOnly,
+    /// The contact path and the room path run the dungeon movement applier:
+    /// codes 1-4 step the party one cell (wrapping, no passability test,
+    /// facing set), 5 and 6 change the level including both surface exits.
+    MovementApplier,
+}
+
+/// `dungeon-mode.md §14.1`: "The one other writer is the final Doom
+/// absorption hook, which replaces whatever is there with the absorption
+/// marker ...; the movement applier ignores that marker." The marker's value
+/// is not published; any value outside `1..=6` behaves the same.
+pub const DUNGEON_FIRST_PARTY_EXIT_ABSORBED: u8 = 0xFF;
+
+/// `combat.md §3`/`§8`: the departure lines an accepted party departure
+/// prints (an edge step or, in a dungeon arena, an in-arena K), and the
+/// room-encounter refusal.
+pub const COMBAT_DEPARTURE_LEAVE_LINE: &str = "Leave!\n";
+pub const COMBAT_DEPARTURE_ESCAPE_LINE: &str = "Escape!\n";
+pub const COMBAT_ALL_MUST_USE_SAME_EXIT_LINE: &str = "All must use the same exit!\n";
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub struct PendingDungeonRoomClear {
@@ -2391,7 +2428,11 @@ impl PlayState {
             // the arena leaves the combat terrain underneath it, so the
             // tableau's own floor never appears. The original's room
             // changes colour at this moment, which is that floor.
-            if let Some(snapshot) = self.combat_frame_snapshot.take() {
+            if let Some(mut snapshot) = self.combat_frame_snapshot.take() {
+                // `dungeon-mode.md §14.1` (u5-spec#298 Q1): the absorption
+                // hook replaces the first-party-exit record with its marker,
+                // which the movement applier ignores.
+                snapshot.established_exit_direction_code = Some(DUNGEON_FIRST_PARTY_EXIT_ABSORBED);
                 // The arena the hold keeps on screen: this frame, the
                 // absorbed actor gone (`endgame.md §3`; see
                 // `PlayState::endgame_absorption_arena`).
@@ -4322,6 +4363,7 @@ impl PlayState {
             suppress_controlled_faint_sleep_tick: false,
             exit_announced: false,
             established_exit_direction_code: None,
+            dungeon_post_combat: None,
             any_foe_seated: combat_side_census(&actors).foes_remain(),
         };
         self.active_objects = active_objects;
@@ -4415,6 +4457,8 @@ impl PlayState {
             self.pending_driver_tile_graphics_restores += 1;
         }
         let pending_terrain_trigger = self.pending_combat_terrain_trigger_slot.take();
+        let dungeon_post_combat = snapshot.dungeon_post_combat;
+        let first_party_exit = snapshot.established_exit_direction_code;
         self.area = snapshot.area;
         self.player = snapshot.player;
         self.active_objects = snapshot.active_objects;
@@ -4453,7 +4497,19 @@ impl PlayState {
                 body_retrieval_exit,
             );
         }
-        if matches!(self.area, Area::Dungeon { .. }) {
+        if let Some(applier) = dungeon_post_combat {
+            self.apply_dungeon_post_combat_record(applier, first_party_exit);
+        }
+        // `dungeon-mode.md §14.1`: "The A-Attack path gates both the
+        // replacement roll and the viewport redraw on the scene byte still
+        // reporting a dungeon; the contact path rolls unconditionally". An
+        // A-Attack code 5/6 past the level stack has already left the
+        // dungeon there (this engine drains that surface exit at the input
+        // boundary), so it rolls no replacement monster.
+        let attack_surface_exit_owed = dungeon_post_combat
+            == Some(DungeonPostCombatApplier::AttackLevelsOnly)
+            && self.pending_dungeon_surface_exit.is_some();
+        if matches!(self.area, Area::Dungeon { .. }) && !attack_surface_exit_owed {
             self.setup_dungeon_active_monster_fresh();
         }
         // `town-mode.md §14`: "On exit the town chain clears the NPC

@@ -100,6 +100,18 @@ pub struct PlayState {
     /// `dungeon-mode.md §6.7`: shared three-frame fountain-water phase,
     /// advanced once per point-blank corridor paint.
     pub dungeon_fountain_frame: u8,
+    /// `dungeon-mode.md §14` (u5-spec#298 Q33): the wandering monster's
+    /// stored **previous** cell, the second of its two stored positions.
+    /// Fresh setup (`§4.1`) writes the placed X/Y to both; an accepted
+    /// step moves the current cell here. Where the original keeps this
+    /// across a save is not published, so `None` (a resumed game) reads
+    /// as the monster's current cell, the value setup would have written.
+    pub dungeon_monster_previous_cell: Option<(usize, usize)>,
+    /// `dungeon-mode.md §14.1` (u5-spec#298 Q1): a post-combat code 5 or 6
+    /// that leaves the level stack takes the surface exit of `§13.2`, which
+    /// needs the game directory; the framer's restore owes it to the input
+    /// boundary as (scene, level the edge was reached at).
+    pub pending_dungeon_surface_exit: Option<(DungeonScene, u8)>,
     pub natural_moongate_counter: u8,
     pub natural_moongate_live_cells: Vec<usize>,
     /// `overworld.md §9.2` (spec HEAD `c00bf63`): what the last blocking

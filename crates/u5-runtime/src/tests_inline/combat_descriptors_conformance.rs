@@ -189,6 +189,7 @@
             suppress_controlled_faint_sleep_tick: false,
             exit_announced: false,
             established_exit_direction_code: None,
+            dungeon_post_combat: None,
             any_foe_seated: true,
         });
 

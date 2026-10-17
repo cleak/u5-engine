@@ -1024,12 +1024,31 @@ impl PlayState {
             // contract directly; that is withdrawn."
             Area::Dungeon { level, .. } => {
                 let tile = self.dungeon_cell(level, self.player.x, self.player.y);
-                match dungeon_klimb_apply(tile) {
+                // `dungeon-mode.md §13.1` (u5-spec#298 Q26): Up is also
+                // offered when the raw byte carries the climbable-with-gear
+                // mark `0x08` and the Grapple byte is non-zero, at any class;
+                // a marked pit with the Grapple offers both directions.
+                let gear_up = self.dungeon_klimb_gear_up(tile);
+                let apply = match dungeon_klimb_apply(tile) {
+                    DungeonKlimbApply::DownLadder | DungeonKlimbApply::PitDescent if gear_up => {
+                        DungeonKlimbApply::TwoWayPrompt
+                    }
+                    DungeonKlimbApply::NoLevelChange if gear_up => DungeonKlimbApply::UpLadder,
+                    apply => apply,
+                };
+                match apply {
                     DungeonKlimbApply::UpLadder => self.climb(game_dir, ClimbIntent::Up),
                     DungeonKlimbApply::DownLadder | DungeonKlimbApply::PitDescent => {
                         self.climb(game_dir, ClimbIntent::Down)
                     }
                     DungeonKlimbApply::TwoWayPrompt => Ok(self.start_klimb_direction_prompt()),
+                    DungeonKlimbApply::NoLevelChange if tile & DUNGEON_KLIMB_GEAR_MARK_BIT != 0 => {
+                        // `§13.1` table: "K, neither offered, cell carries the
+                        // gear mark" - `Klimb-\nWith What?\n`, the no-grapple
+                        // refusal, reporting no action (Q26).
+                        self.message = DUNGEON_KLIMB_WITH_WHAT_REFUSAL.to_string();
+                        Ok(MoveOutcome::Blocked)
+                    }
                     DungeonKlimbApply::NoLevelChange => {
                         // `dungeon-mode.md` Section 8.1 Klimb prompts:
                         // `Klimb-what?` "when neither [direction] is [available]
@@ -1198,6 +1217,78 @@ impl PlayState {
         Ok(())
     }
 
+    /// `dungeon-mode.md §14.1` post-combat bracket (u5-spec#298 Q1, R527,
+    /// R528): apply the arena's first-party-exit record to the restored
+    /// dungeon position. A-Attack reads only 5 and 6; the contact and room
+    /// paths run the movement applier, where codes 1-4 move the party one
+    /// cell in that direction, "wrapping on the eight-by-eight grid with **no
+    /// passability test**, and set the facing to that direction". Codes 5
+    /// and 6 change the level "exactly as above, including both surface
+    /// exits, and leave the facing alone". Zero and the absorption marker do
+    /// nothing.
+    pub fn apply_dungeon_post_combat_record(
+        &mut self,
+        applier: DungeonPostCombatApplier,
+        record: Option<u8>,
+    ) {
+        let Area::Dungeon { scene, level } = self.area else {
+            return;
+        };
+        let code = record.unwrap_or(0);
+        let step = match code {
+            COMBAT_DIRECTION_WEST => Some(Direction::West),
+            COMBAT_DIRECTION_EAST => Some(Direction::East),
+            COMBAT_DIRECTION_NORTH => Some(Direction::North),
+            COMBAT_DIRECTION_SOUTH => Some(Direction::South),
+            _ => None,
+        };
+        if let Some(direction) = step {
+            if applier != DungeonPostCombatApplier::MovementApplier {
+                return;
+            }
+            let (dx, dy) = direction.delta();
+            self.player.x = (self.player.x as isize + dx).rem_euclid(DUNGEON_SIDE as isize) as usize;
+            self.player.y = (self.player.y as isize + dy).rem_euclid(DUNGEON_SIDE as isize) as usize;
+            self.player.facing = direction;
+            self.sync_player_object();
+            self.mark_visibility_dirty();
+            return;
+        }
+        let Some(delta) = dungeon_attack_post_combat_z_intent(code) else {
+            return;
+        };
+        let next_level = level as i8 + delta;
+        if !(0..DUNGEON_SIDE as i8).contains(&next_level) {
+            self.pending_dungeon_surface_exit = Some((scene, level));
+            return;
+        }
+        self.area = Area::Dungeon {
+            scene,
+            level: next_level as u8,
+        };
+        self.sync_player_object();
+        self.mark_visibility_dirty();
+    }
+
+    /// Drain [`Self::apply_dungeon_post_combat_record`]'s owed surface exit.
+    pub fn drain_pending_dungeon_surface_exit(&mut self, game_dir: &Path) -> io::Result<bool> {
+        let Some((scene, level)) = self.pending_dungeon_surface_exit.take() else {
+            return Ok(false);
+        };
+        if !matches!(self.area, Area::Dungeon { scene: current, .. } if current == scene) {
+            return Ok(false);
+        }
+        self.resolve_dungeon_surface_reset(game_dir, scene, level)?;
+        Ok(true)
+    }
+
+    /// `dungeon-mode.md §13.1` (u5-spec#298 Q26): the gear route offers Up
+    /// when the **raw** cell byte carries bit `0x08` and the Grapple byte
+    /// (`formats/saved-gam.md §7`, offset `0x0209`) is non-zero.
+    pub fn dungeon_klimb_gear_up(&self, tile: u8) -> bool {
+        tile & DUNGEON_KLIMB_GEAR_MARK_BIT != 0 && self.climbing_gear != 0
+    }
+
     pub fn climb_dungeon(
         &mut self,
         game_dir: &Path,
@@ -1238,7 +1329,8 @@ impl PlayState {
         {
             self.emit_message_line(word);
         }
-        let Some(delta) = dungeon_ladder_delta(tile, intent) else {
+        let gear_delta = (intent == ClimbIntent::Up && self.dungeon_klimb_gear_up(tile)).then_some(-1);
+        let Some(delta) = dungeon_ladder_delta(tile, intent).or(gear_delta) else {
             // "an impassable destination then adds `Failed!` with the short
             // **rising** sweep ... the same recipe the spell-failure tail
             // uses" - not the falls-style descent.

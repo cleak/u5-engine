@@ -1831,3 +1831,55 @@ fn dungeon_fire_field_damage_uses_shared_party_damage_presentation() {
     assert_eq!(state.party[0].status, b'D');
     assert_eq!(state.active_player, None);
 }
+
+#[test]
+fn dungeon_sleep_and_poison_fields_rumble_once_per_failed_save() {
+    // `dungeon-mode.md §8` and `§8.1` (u5-spec#298 Q7, R529): one status
+    // rumble (step 1, target 50, 100..3500 Hz) per member whose save fails,
+    // whether or not the status changes; only Dead is skipped. Dexterity 1
+    // always fails the inclusive `1..30` roll, Dexterity 31 always saves.
+    for (field, already, status) in [
+        (DungeonFieldEffect::Sleep, b'S', b'S'),
+        (DungeonFieldEffect::Sleep, b'P', b'S'),
+        (DungeonFieldEffect::PoisonGas, b'P', b'P'),
+        (DungeonFieldEffect::PoisonGas, b'S', b'P'),
+    ] {
+        let mut state = dungeon_state(open_dungeon_record(), 0, 1, 1);
+        let member = |slot, status, climb_stat| PartyMember {
+            slot,
+            class_byte: b'A',
+            status,
+            climb_stat,
+            mana: 0,
+            hp: 20,
+            max_hp: 20,
+            level: 1,
+        };
+        state.party = vec![
+            member(0, already, 1),
+            member(1, b'G', 1),
+            member(2, b'D', 1),
+            member(3, b'G', 31),
+        ];
+
+        let _ = state.apply_dungeon_field_effect(field);
+
+        let rumbles = state
+            .sound_effects_after(0)
+            .into_iter()
+            .filter(|effect| *effect == SoundEffect::StatusFieldRumble)
+            .count();
+        assert_eq!(rumbles, 2, "{field:?} on {}", already as char);
+        assert_eq!(state.party[0].status, status);
+        assert_eq!(state.party[1].status, status);
+        assert_eq!(state.party[2].status, b'D');
+        assert_eq!(state.party[3].status, b'G');
+    }
+
+    let mut jitter = crate::audio::RumbleJitter::new();
+    let program = SoundEffect::StatusFieldRumble.program(&mut jitter);
+    assert_eq!(program, {
+        let mut jitter = crate::audio::RumbleJitter::new();
+        crate::audio::random_rumble(1, 50, 3500, &mut jitter)
+    });
+}

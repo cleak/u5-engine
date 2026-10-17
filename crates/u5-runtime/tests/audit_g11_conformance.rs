@@ -268,6 +268,7 @@ fn combat_snapshot(state: &PlayState, exit_announced: bool, any_foe_seated: bool
         suppress_controlled_faint_sleep_tick: false,
         exit_announced,
         established_exit_direction_code: None,
+        dungeon_post_combat: None,
         any_foe_seated,
     }
 }

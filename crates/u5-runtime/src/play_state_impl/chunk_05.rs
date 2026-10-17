@@ -285,8 +285,16 @@ impl PlayState {
                     DUNGEON_FIELD_STATUS_ROLL_HIGH,
                 );
                 if dungeon_field_status_applies(self.party[index].climb_stat, roll) {
+                    // `dungeon-mode.md §8` (u5-spec#298 Q7, R529): only
+                    // Dead is tested, so a member already in the status is
+                    // hit again, presentation and all.
                     self.party[index].status = status;
                     affected += 1;
+                    // `§8.1` Sleep/Poison rows: one short status rumble per
+                    // failed save (`audio.md §5.3`). Sleep also inverts the
+                    // member's row first; the engine has no row-inversion
+                    // surface, and the repaint request below removes it.
+                    self.emit_sound_effect(SoundEffect::StatusFieldRumble);
                     // `stats-panel.md §2.2.1` row 17: a dungeon sleep
                     // field's status change is deferred, per member that
                     // falls asleep - unlike the non-combat poison field,
@@ -447,6 +455,10 @@ impl PlayState {
                 !helper_state,
                 doom_final_room,
             )?;
+            // `dungeon-mode.md §14` room cells (u5-spec#298 Q1, R528): the
+            // party is put back on the room cell and the movement applier
+            // then runs on the first-party-exit record.
+            self.set_dungeon_post_combat_applier(DungeonPostCombatApplier::MovementApplier);
             self.message = DUNGEON_ROOM_ENTRY_NARRATION.to_string();
             return Ok(MoveOutcome::Moved);
         }
