@@ -1570,11 +1570,11 @@ impl PlayState {
         } else {
             virtue.mantra()
         };
+        // `karma.md §7.1` / `commands.md §11.3`: the shared matcher, restart
+        // quirk included - `hhonesty` and `aahm` fail. A plain substring
+        // search accepted both (playtest E62).
         let matches = !session.buffer.is_empty()
-            && session
-                .buffer
-                .to_ascii_lowercase()
-                .contains(&required.to_ascii_lowercase());
+            && crate::shrine_virtue::shrine_answer_matches(&session.buffer, required);
         session.all_responses_match &= matches;
         session.transcript.push_str(&session.buffer);
         session.buffer.clear();
