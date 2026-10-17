@@ -1988,3 +1988,43 @@ fn town_climb_relinks_npcs_for_reloaded_floor() {
     assert_eq!(state.turn, 1);
     let _ = fs::remove_dir_all(dir);
 }
+
+/// Playtest E63: `commands.md §5.5` - the Doom ambush prints
+/// `Enter_cave\nAttacked_at_entrance!\n`, "the refusal follows `cave`", even
+/// when an arena exists and the ambush combat begins. The combat entry used to
+/// flush the slot under an uncommitted echo, splitting it into `Enter`, a
+/// blank row and `cave`.
+#[test]
+fn doom_entrance_ambush_keeps_enter_cave_on_one_row_before_combat() {
+    let dir = debug_game_dir();
+    fs::write(
+        dir.join(WORLD_LOCATION_TABLE_FILE),
+        "UNDERWORLD 12 34 DUNGEON:7 0x16 CAVE\n",
+    )
+    .unwrap();
+    fs::write(
+        dir.join(BRIT_CBT_FILE),
+        synthetic_combat_arena_record().repeat(BRIT_CBT_RECORDS),
+    )
+    .unwrap();
+    let mut doom_grid = open_world_grid();
+    doom_grid[world_cell_index(12, 34)] = 0x16;
+    let mut state = world_state(doom_grid, 12, 34);
+    state.begin_command_echo_for(Command::Enter);
+
+    assert_eq!(state.enter_current_location(&dir).unwrap(), MoveOutcome::Blocked);
+    state.commit_command_echo();
+
+    assert!(state.combat_active);
+    let texts: Vec<String> = state
+        .message_entries()
+        .iter()
+        .map(|entry| entry.text.clone())
+        .collect();
+    let at = texts
+        .iter()
+        .position(|text| text == "Enter cave")
+        .unwrap_or_else(|| panic!("no `Enter cave` row: {texts:?}"));
+    assert_eq!(texts[at + 1], "Attacked at entrance!", "{texts:?}");
+    let _ = fs::remove_dir_all(dir);
+}

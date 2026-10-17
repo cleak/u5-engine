@@ -1662,6 +1662,39 @@ fn shadowlord_name_summon_prints_no_invented_slot_diagnostic() {
     );
 }
 
+/// Playtest E64: `commands.md §11` summons when "that Shadowlord's slot is
+/// not vanquished", and `quest-graph.md §5` defines vanquished as the high
+/// bit, with `0` meaning "Not yet placed". A factory-zero slot summons; a
+/// vanquished one does not.
+#[test]
+fn shadowlord_name_summon_accepts_a_not_yet_placed_zero_slot() {
+    for (slot_value, summons) in [(0u8, true), (SHADOWLORD_VANQUISHED, false), (0x80, false)] {
+        let mut town = test_state(open_grid(), 5, 5);
+        town.area = Area::Town {
+            scene: Scene::new(SCENE_THE_LYCAEUM).unwrap(),
+            floor: 0,
+        };
+        town.shadowlord_hideouts = [slot_value, 0, 0];
+        town.active_objects.resize(OOL_SLOTS, ActiveObject::empty());
+
+        assert_eq!(town.yell_command(Some("faulinei")), MoveOutcome::Used);
+
+        assert_eq!(
+            town.summoned_shadowlord == Some(SHADOWLORD_FALSEHOOD_INDEX),
+            summons,
+            "slot {slot_value:#04x}: {:?}",
+            town.message
+        );
+        if summons {
+            assert_eq!(town.message, "\nA shadowlord appears\n");
+            // The destruction path's own gate is the same test, so the
+            // summoned Shadowlord can be retired.
+            assert!(town.vanquish_shadowlord(SHADOWLORD_FALSEHOOD_INDEX));
+            assert!(town.shadowlord_vanquished(SHADOWLORD_FALSEHOOD_INDEX));
+        }
+    }
+}
+
 #[test]
 fn shadowlord_helpers_track_living_vanquished_and_all_done() {
     let mut state = world_state(open_world_grid(), 5, 5);

@@ -2526,7 +2526,10 @@ impl PlayState {
     /// A record's whereabouts byte is its byte `0x1F`, which this engine
     /// holds as the marker of inn-registry slot `k` (`formats/saved-gam.md
     /// §3.1`); the name is roster record `k`'s own.
-    pub fn codex_interred_names(&self) -> Vec<[u8; SAVE_CHARACTER_NAME_LEN]> {
+    /// The matching records' bytes from the name field onward, for
+    /// [`codex_interred_party_page`]'s run-on copy (`karma.md §8`). A slot
+    /// with no roster record contributes its guest name field alone.
+    pub fn codex_interred_names(&self) -> Vec<Vec<u8>> {
         INTERRED_SCAN_SLOTS
             .filter_map(|slot| {
                 let guest = self.inn_registry.iter().find(|guest| {
@@ -2536,7 +2539,9 @@ impl PlayState {
                 Some(
                     self.party_roster
                         .get(slot)
-                        .map_or(guest.name, |record| record.name),
+                        .map_or(guest.name.to_vec(), |record| {
+                            record.leading_record_bytes().to_vec()
+                        }),
                 )
             })
             .collect()
@@ -3263,5 +3268,35 @@ mod codex_interred_scan_spec_tests {
         assert_eq!(names.len(), 2, "the Avatar's slot 0 is outside the scan");
         assert_eq!(&names[0][..5], b"Dupre");
         assert_eq!(&names[1][..7], b"Katrina");
+    }
+
+    /// Playtest E65: `karma.md §8` - "The name is copied up to its first
+    /// zero byte with no nine-character limit, so a name that fills all nine
+    /// bytes runs on into the record bytes after the name field until a zero
+    /// byte is met."
+    #[test]
+    fn a_nine_byte_name_runs_on_into_the_record_bytes() {
+        let mut state = test_state(open_grid(), 1, 1);
+        state.party_roster = state.synced_party_roster();
+        let template = state.party_roster[0].clone();
+        state.party_roster.resize(SAVE_ROSTER_SLOT_COUNT, template);
+        let record = &mut state.party_roster[1];
+        record.name = *b"abcdefghi";
+        record.gender = SAVE_GENDER_FEMALE_BYTE;
+        record.member.class_byte = b'F';
+        record.member.status = b'G';
+        record.strength = 0x41;
+        record.member.climb_stat = 0x42;
+        record.intelligence = 0x43;
+        record.member.mana = 0;
+        state.inn_registry = vec![guest(1, INTERRED_WHEREABOUTS, &state)];
+
+        let page = codex_interred_party_page(&state.codex_interred_names()).unwrap();
+
+        let run_on = format!(
+            "ABCDEFGHI{}FGABC\n",
+            char::from(SAVE_GENDER_FEMALE_BYTE)
+        );
+        assert!(page.ends_with(&run_on), "{page:?}");
     }
 }

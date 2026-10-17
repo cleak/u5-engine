@@ -140,12 +140,11 @@ pub const INTERRED_SCAN_SLOTS: std::ops::RangeInclusive<usize> = 1..=15;
 /// then each matching record's name in roster-slot order, upper-cased byte
 /// by byte, each followed by one line feed. The name is copied up to its
 /// first zero byte", and the page "is skipped entirely when the count is
-/// zero". `names` are the matching records' name fields in slot order.
-///
-/// Not reproduced: "a name that fills all nine bytes runs on into the record
-/// bytes after the name field until a zero byte is met"; this copy stops at
-/// the nine-byte field.
-pub fn codex_interred_party_page(names: &[[u8; crate::SAVE_CHARACTER_NAME_LEN]]) -> Option<String> {
+/// zero". `names` are the matching records' bytes from the name field
+/// onward, in slot order: "with no nine-character limit, so a name that fills
+/// all nine bytes runs on into the record bytes after the name field until a
+/// zero byte is met" (playtest E65).
+pub fn codex_interred_party_page<N: AsRef<[u8]>>(names: &[N]) -> Option<String> {
     if names.is_empty() {
         return None;
     }
@@ -156,7 +155,7 @@ pub fn codex_interred_party_page(names: &[[u8; crate::SAVE_CHARACTER_NAME_LEN]])
         "urns marked:\n\n"
     });
     for name in names {
-        for byte in name.iter().copied().take_while(|byte| *byte != 0) {
+        for byte in name.as_ref().iter().copied().take_while(|byte| *byte != 0) {
             page.push(char::from(byte.to_ascii_uppercase()));
         }
         page.push('\n');
@@ -245,7 +244,7 @@ mod codex_interred_page_spec_tests {
     /// when the count is zero.
     #[test]
     fn interred_page_literals_and_plural_split() {
-        assert_eq!(codex_interred_party_page(&[]), None);
+        assert_eq!(codex_interred_party_page::<[u8; crate::SAVE_CHARACTER_NAME_LEN]>(&[]), None);
         assert_eq!(
             codex_interred_party_page(&[name("Iolo")]).as_deref(),
             Some("\n\nThou dost see\nan urn marked:\n\nIOLO\n")

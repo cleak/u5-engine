@@ -641,6 +641,51 @@ fn write_rgba_png(out: &Path, width: u32, height: u32, rgba: Vec<u8>) -> io::Res
     Ok(())
 }
 
+/// The `--save-screen` live-row classification. It mirrors the Bevy shell's
+/// message-window assembly, so a key wait that is not a command (the
+/// endgame's greeting page) takes no end cap here either (playtest E66).
+pub(crate) fn save_screen_live_row_kind(
+    state: &PlayState,
+    spell_echo_present: bool,
+) -> u5_runtime::LiveRowKind {
+    if spell_echo_present
+        || u5_runtime::sage_topic_row_is_continuation(state)
+        || u5_runtime::shop_pause_row_is_continuation(state)
+        || u5_runtime::selector_prompt_row_is_continuation(state)
+        || u5_runtime::dungeon_fountain_prompt_row_is_continuation(state)
+        || state.defeated_party_row_is_continuation()
+        || u5_runtime::overworld_prompt_pair_is_suppressed(state)
+    {
+        u5_runtime::LiveRowKind::Continuation
+    } else if u5_runtime::endgame_page_row_is_key_wait(state) {
+        u5_runtime::LiveRowKind::KeyWaitRow
+    } else {
+        u5_runtime::LiveRowKind::CommandRow
+    }
+}
+
+/// Where `--save-screen` paints the input cursor. A surface that reads no
+/// key draws none - the Bevy shell's `message_window_cursor_suppressed`
+/// test. Without it the fallback put the cursor after the endgame's
+/// `"I see...` during its forty-tick pause, which reads no key
+/// (`endgame.md §5.1`, playtest E66).
+pub(crate) fn save_screen_cursor_cell(
+    state: &PlayState,
+    layout: &u5_runtime::MessageWindowLayout,
+) -> Option<(u8, u8)> {
+    if state.message_window_cursor_suppressed() {
+        return None;
+    }
+    layout.inline_cursor.or_else(|| {
+        layout.rows.last().map(|live| {
+            (
+                (live.column + live.glyphs.len().min(15) as u8).min(MESSAGE_WINDOW_RIGHT),
+                live.row,
+            )
+        })
+    })
+}
+
 #[cfg(test)]
 mod tests {
     use std::fs;
@@ -655,6 +700,64 @@ mod tests {
             .unwrap()
             .as_nanos();
         std::env::temp_dir().join(format!("u5-save-frame-{name}-{nonce}"))
+    }
+
+    /// Playtest E66: the `--save-screen` compositor follows the Bevy shell's
+    /// message-window rules. `endgame.md §5.1`'s greeting page waits for a key
+    /// that is not a command (a bare cursor, no end cap), and the waiting
+    /// branch's `"I see...` lead-in is followed by a forty-tick pause that
+    /// reads no key, so no cursor is drawn there.
+    #[test]
+    fn save_screen_follows_the_shell_on_endgame_key_waits_and_pauses() {
+        use u5_runtime::test_fixtures::{debug_game_dir, dungeon_state, open_dungeon_record};
+        let records: [&str; 11] = [
+            "\nLord British says:\n\n\"Well met,\n",
+            "\"Didst thou bring my box?\"\n\nYou reply: ",
+            "\"The box!\"\n\n\"Didst thou bring it?\"\n\nYou reply: ",
+            "Rite 1",
+            "Rite 2\n\n",
+            "Rite 3\n\n",
+            "Rite 4\n\n",
+            "Rite 5\n\n",
+            "Rite 6\n\n",
+            "Rite 7\n",
+            "\n\"Pull up a chair.\"\n\n\"A while.\"\n",
+        ];
+        let mut bytes = Vec::new();
+        for record in records {
+            bytes.extend_from_slice(record.as_bytes());
+            bytes.push(0);
+        }
+        let dir = debug_game_dir();
+        let mut state = dungeon_state(open_dungeon_record(), 0, 1, 1);
+        state.party_names = vec![*b"Avatar\0\0\0"];
+        state.enter_endgame_with_messages(Some(
+            u5_runtime::parse_endgame_messages(&bytes).unwrap(),
+        ));
+        state.endgame_entry_redraw_pending = true;
+        for _ in 0..500 {
+            if !state.advance_endgame_display_frame() {
+                break;
+            }
+        }
+
+        // The greeting page's key wait.
+        state.flush_staged_narration();
+        assert_eq!(
+            save_screen_live_row_kind(&state, false),
+            u5_runtime::LiveRowKind::KeyWaitRow
+        );
+
+        for key in ['y', 'n', 'n'] {
+            u5_runtime::handle_play_key_input(&mut state, key, "", &dir).unwrap();
+        }
+        assert!(state.message.contains("I see..."), "{:?}", state.message);
+        let layout = u5_runtime::MessageWindowLayout {
+            rows: Vec::new(),
+            inline_cursor: Some((30, 20)),
+        };
+        assert_eq!(save_screen_cursor_cell(&state, &layout), None);
+        let _ = fs::remove_dir_all(dir);
     }
 
     #[test]
@@ -898,14 +1001,7 @@ pub fn compose_gameplay_screen(
     } else {
         Some(spell_echo.as_deref().unwrap_or(""))
     };
-    let live_row_kind = if spell_echo.is_some()
-        || u5_runtime::dungeon_fountain_prompt_row_is_continuation(state)
-        || u5_runtime::overworld_prompt_pair_is_suppressed(state)
-    {
-        u5_runtime::LiveRowKind::Continuation
-    } else {
-        u5_runtime::LiveRowKind::CommandRow
-    };
+    let live_row_kind = save_screen_live_row_kind(state, spell_echo.is_some());
     let layout = u5_runtime::layout_message_window_with_continuation(
         &log,
         live_row,
@@ -913,14 +1009,7 @@ pub fn compose_gameplay_screen(
         u5_runtime::combat_prompt_row_follows_history(state),
         live_row_kind,
     );
-    let cursor_cell = layout.inline_cursor.or_else(|| {
-        layout.rows.last().map(|live| {
-            (
-                (live.column + live.glyphs.len().min(15) as u8).min(MESSAGE_WINDOW_RIGHT),
-                live.row,
-            )
-        })
-    });
+    let cursor_cell = save_screen_cursor_cell(state, &layout);
     for row in layout.rows {
         if row.prefixed {
             paint_message_line_cap(&mut rgba, width, height, ibm, row.row, ChromePalette::EGA);

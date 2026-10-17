@@ -1682,3 +1682,41 @@ fn terminal_input_wait_pass_runs_once_per_entry_and_skips_modal_prompts() {
     assert!(run_terminal_input_wait_pass(&mut idle, &dir).unwrap());
     assert_eq!((idle.player.x, idle.player.y), (x, y + 2));
 }
+
+/// Playtest E58: `karma.md §7` returns to the command prompt after the third
+/// nonblank mantra. `--play-script` never walked the third mantra's
+/// resolution, so the exploration gate stayed shut and every later command
+/// was silently dropped.
+#[test]
+fn play_script_runner_resolves_the_third_shrine_mantra_and_keeps_playing() {
+    let dir = debug_game_dir();
+    let mut grid = open_world_grid();
+    grid[world_cell_index(10, 20)] = u5_runtime::shrine_virtue::SHRINE_ALTAR_TILE_LAST;
+    let mut state = world_state(grid, 10, 20);
+    state.area = Area::World {
+        plane: WorldPlane::Britannia,
+    };
+    state.active_objects[0].z = WorldPlane::Britannia.save_floor();
+    state
+        .rebuild_world_live_chunks_from_grid(WorldPlane::Britannia)
+        .unwrap();
+    state
+        .start_shrine_prompt_at_current_position(&dir)
+        .unwrap()
+        .expect("the altar tile names its own shrine");
+    for _ in 0..2 {
+        handle_play_key_input(&mut state, 'L', "um\r", &dir).unwrap();
+        state.flush_staged_narration();
+        state.adopt_shrine_prompt_row();
+    }
+    let commands: Vec<String> = ["L", "u", "m", "return"]
+        .iter()
+        .map(|s| s.to_string())
+        .collect();
+
+    run_play_script_commands(&mut state, &dir, &commands, None).unwrap();
+
+    assert!(state.pending_shrine_third_mantra.is_none());
+    assert_eq!(state.shrine_ordained_mask, ShrineVirtue::Humility.bit());
+    let _ = fs::remove_dir_all(dir);
+}

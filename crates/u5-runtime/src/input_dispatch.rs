@@ -354,6 +354,12 @@ fn handle_play_key_input_inner(
     // Swallowing that key also broke `North` and `Q`/`Y` after a Gate Travel
     // onto a live gate cell (playtest E42).
     if state.resolve_natural_moongate_entry(game_dir)?.is_some() {
+        // The key that brought this loop iteration here is still the turn's
+        // command, so it is dispatched from the post-transit state - into the
+        // meditation prompt when the hook opened one. Returning here instead
+        // dropped every other command while the party stood on a re-rising
+        // gate (playtest E61). The transit rewrote the cell to terrain `5`,
+        // so this re-entry cannot run the same transit again.
         return handle_play_key_input_inner(state, key, suffix, game_dir);
     }
     // `timing.md §8.2`, the under-sail pass's keyboard poll, and

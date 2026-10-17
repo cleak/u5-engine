@@ -1641,7 +1641,8 @@
         assert_eq!(state.turn, 2);
         assert_eq!(state.clock, GameClock::new(12, 4).unwrap());
         assert!(state.diagnostics.iter().any(|n| n.contains("recovered Moonstone phase 4; Gate Travel slot cleared")), "{:?}", state.diagnostics);
-        assert!(state.message.is_empty(), "message: {}", state.message);
+        // `commands.md §5.8`: the Get prints `A_moonstone!` (playtest E60).
+        assert_eq!(state.message, "\nA moonstone!");
         let _ = fs::remove_dir_all(dir);
     }
 
@@ -2193,7 +2194,8 @@
         assert_eq!(state.turn, 2);
         assert_eq!(state.clock, GameClock::new(12, 2).unwrap());
         assert!(state.diagnostics.iter().any(|n| n.contains("recovered Moonstone phase 1; Gate Travel slot cleared")), "{:?}", state.diagnostics);
-        assert!(state.message.is_empty(), "message: {}", state.message);
+        // `commands.md §5.8`: the Get prints `A_moonstone!` (playtest E60).
+        assert_eq!(state.message, "\nA moonstone!");
         let _ = fs::remove_dir_all(dir);
     }
 
@@ -2599,6 +2601,49 @@
         assert_eq!(state.grid[origin_idx], NATURAL_MOONGATE_RESTORED_TERRAIN_TILE);
         assert!(state.active_shrine.is_some());
         assert_eq!(state.message, SHRINE_MANTRA_PROMPT);
+        assert_eq!(state.turn, 0);
+        let _ = fs::remove_dir_all(dir);
+    }
+
+    /// Playtest E61: `overworld.md §9.2` runs the live-gate transit "before
+    /// the party is relocated and before any key is read", and the transit
+    /// reads no key. The key that reached the hook is still the turn's
+    /// command, so it is dispatched after the transit instead of dropped.
+    #[test]
+    fn natural_moongate_transit_dispatches_the_key_that_reached_the_hook() {
+        let dir = debug_game_dir();
+        let origin_idx = world_cell_index(5, 5);
+        let mut grid = open_world_grid();
+        grid[origin_idx] = NATURAL_MOONGATE_TERRAIN_TILE;
+        let mut state = britannia_state(grid, 5, 5);
+        state.clock = GameClock::new(2, 0).unwrap();
+        state.set_cached_moon_glyph_bytes(0xAA, 0xBB);
+        state.natural_moongate_live_cells.push(origin_idx);
+
+        assert_eq!(
+            handle_play_key_input(&mut state, char::from(INPUT_CODE_NORTH), "", &dir).unwrap(),
+            PlayInputDisposition::Continue
+        );
+
+        assert_eq!(state.grid[origin_idx], NATURAL_MOONGATE_RESTORED_TERRAIN_TILE);
+        assert_eq!((state.player.x, state.player.y), (5, 4));
+        assert_eq!(state.turn, 1);
+
+        // At midnight the hook opens the meditation prompt, and the key goes
+        // into it as the first typed character.
+        fs::write(dir.join(SHRINE_TABLE_FILE), "BRITANNIA 5 5 HONESTY 5\n").unwrap();
+        let mut grid = open_world_grid();
+        grid[origin_idx] = NATURAL_MOONGATE_TERRAIN_TILE;
+        let mut state = britannia_state(grid, 5, 5);
+        state.clock = GameClock::new(0, 9).unwrap();
+
+        assert_eq!(
+            handle_play_key_input(&mut state, 'A', "", &dir).unwrap(),
+            PlayInputDisposition::Continue
+        );
+
+        let shrine = state.active_shrine.as_ref().expect("the prompt opened");
+        assert_eq!(shrine.mantra_buffer, "A");
         assert_eq!(state.turn, 0);
         let _ = fs::remove_dir_all(dir);
     }

@@ -476,3 +476,64 @@ fn blackthorn_rescue_holds_take_the_published_emulator_spans() {
     let flashes = crate::narration::bios_ticks_secs(crate::blackthorn::BLACKTHORN_RESCUE_WAIT_PAIRED_FLASH);
     assert!((1.67..=1.72).contains(&flashes), "paired flash hold {flashes} s");
 }
+
+/// Playtest E59: `blackthorn.md §7` "Party restoration" - for each slot the
+/// cinematic revives the member, copies the maximum into current hit points
+/// "and repaints the whole stats panel". The panel used to keep showing the
+/// dead roster row after the handoff.
+#[test]
+fn blackthorn_rescue_restoration_repaints_the_stats_panel_per_slot() {
+    let dir = debug_game_dir();
+    let mut state = test_state(open_grid(), 1, 1);
+    state.party[0].status = b'D';
+    state.party[0].hp = 0;
+    state.repaint_stats_panel();
+    let dead_row = state.displayed_stats_panel().rows[0].clone();
+
+    state.apply_blackthorn_rescue_refuge(&dir).unwrap();
+    state.run_blackthorn_rescue_to_handoff(&dir).unwrap();
+
+    assert_eq!(state.party[0].status, b'G');
+    let live = crate::stats_panel::stats_panel_snapshot_of(&state);
+    assert_ne!(state.displayed_stats_panel().rows[0], dead_row);
+    assert_eq!(state.displayed_stats_panel().rows, live.rows);
+    assert_eq!(state.displayed_stats_panel().statuses, live.statuses);
+}
+
+/// Playtest E62: `karma.md §7.1` and `commands.md §11.3` - the restoration
+/// matches its virtue and mantras through the shared matcher, restart quirk
+/// included, so an answer that starts inside a failed partial match of the
+/// key fails ("against the shrine key `hone`, `hhone` and `hohone` fail").
+#[test]
+fn ruined_shrine_restoration_applies_the_shared_matchers_restart_quirk() {
+    let (shrine_x, shrine_y) = WORLD_SHRINE_COORDINATES[0];
+    for (virtue, first_mantra, restores) in [
+        ("hhonesty", "ahm", false),
+        ("honesty", "aahm", false),
+        ("I seek honesty", "say ahm", true),
+    ] {
+        let mut world = world_state(open_world_grid(), shrine_x + 1, shrine_y);
+        world.area = Area::World {
+            plane: WorldPlane::Britannia,
+        };
+        let shrine_index = world_cell_index(shrine_x, shrine_y);
+        world.grid[shrine_index] = WORLD_RUINED_SHRINE_TILE;
+        world.shrine_ruin_flags[0] = 0x81;
+
+        assert_eq!(world.yell_command(Some("FALLAX")), MoveOutcome::Used);
+        world.step_active_shrine_restoration('\r', virtue);
+        world.step_active_shrine_restoration('\r', first_mantra);
+        world.step_active_shrine_restoration('\r', "ahm");
+        assert_eq!(
+            world.step_active_shrine_restoration('\r', "ahm"),
+            Some(MoveOutcome::Used)
+        );
+
+        assert_eq!(
+            world.grid[shrine_index] == WORLD_SHRINE_TILE,
+            restores,
+            "{virtue:?} / {first_mantra:?}"
+        );
+        assert_eq!(world.shrine_ruin_flags[0] == 0x01, restores);
+    }
+}
