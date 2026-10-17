@@ -444,9 +444,10 @@ pub fn tlk_ask_who_match(typed: &[u8], party_member_names: &[&[u8]]) -> u8 {
             .iter()
             .map(|byte| (byte & 0x7F).to_ascii_uppercase())
             .collect();
-        let accepted = folded
-            .windows(prefix_len)
-            .position(|window| window == prefix.as_slice())
+        // §7.6 (u5-spec#298 Q34): the search runs through `commands.md
+        // §11.3`'s shared matcher, "whose restart rule decides which
+        // occurrence is found first".
+        let accepted = crate::commands::shared_text_matcher_find(&folded, &prefix)
             .is_some_and(|at| at == 0 || folded[at - 1] == b' ');
         if accepted {
             return (zero_index + 1) as u8;
