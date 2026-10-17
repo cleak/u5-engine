@@ -21657,6 +21657,27 @@ fn dungeon_post_combat_up_from_the_top_level_owes_the_surface_exit() {
 }
 
 #[test]
+fn dungeon_attack_fight_leaving_the_level_stack_rolls_no_replacement_monster() {
+    // `dungeon-mode.md §14.1`: "The A-Attack path gates both the replacement
+    // roll and the viewport redraw on the scene byte still reporting a
+    // dungeon; the contact path rolls unconditionally."
+    for (applier, rolls) in [
+        (DungeonPostCombatApplier::AttackLevelsOnly, false),
+        (DungeonPostCombatApplier::MovementApplier, true),
+    ] {
+        let mut state = dungeon_post_combat_state(0, applier, 4, 4, false);
+        let mut snapshot = state.combat_frame_snapshot.take().unwrap();
+        snapshot.established_exit_direction_code = Some(5);
+        let prng_before = state.prng_state;
+
+        state.restore_combat_frame(snapshot);
+
+        assert!(state.pending_dungeon_surface_exit.is_some(), "{applier:?}");
+        assert_eq!(state.prng_state != prng_before, rolls, "{applier:?}");
+    }
+}
+
+#[test]
 fn dungeon_ambush_arena_uses_the_published_floor_corners_and_centre_icons() {
     // `dungeon-mode.md §14.1` step 3 (u5-spec#298 Q13): floor `0x45` in the
     // flavour-3 dungeons (scene 33 is Deceit) and `0x05` elsewhere (34 is

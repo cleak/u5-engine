@@ -4500,7 +4500,16 @@ impl PlayState {
         if let Some(applier) = dungeon_post_combat {
             self.apply_dungeon_post_combat_record(applier, first_party_exit);
         }
-        if matches!(self.area, Area::Dungeon { .. }) {
+        // `dungeon-mode.md §14.1`: "The A-Attack path gates both the
+        // replacement roll and the viewport redraw on the scene byte still
+        // reporting a dungeon; the contact path rolls unconditionally". An
+        // A-Attack code 5/6 past the level stack has already left the
+        // dungeon there (this engine drains that surface exit at the input
+        // boundary), so it rolls no replacement monster.
+        let attack_surface_exit_owed = dungeon_post_combat
+            == Some(DungeonPostCombatApplier::AttackLevelsOnly)
+            && self.pending_dungeon_surface_exit.is_some();
+        if matches!(self.area, Area::Dungeon { .. }) && !attack_surface_exit_owed {
             self.setup_dungeon_active_monster_fresh();
         }
         // `town-mode.md §14`: "On exit the town chain clears the NPC
