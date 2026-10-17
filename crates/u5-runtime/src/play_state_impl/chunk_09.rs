@@ -3017,8 +3017,15 @@ impl PlayState {
         let previous_hour = self.clock.hour;
         // `time.md §2`: "A pre-cascade snapshot of the hour, taken at the
         // start of every cleanup pass." `formats/saved-gam.md §5` persists it
-        // at `0x02DA`.
-        self.cleanup_previous_hour = previous_hour;
+        // at `0x02DA`. `time.md §5` (u5-spec#298 Q27, R548): the
+        // time-advancing path writes it "after the Quickness halving, before
+        // the minute increment; a zero-minute call returns before that
+        // write". The byte is shared with the upkeep pass, so a zero-minute
+        // advance (the dungeon command after its loop-head minute, Negate
+        // Time) must not erase a crossing the pass has not yet seen.
+        if effective_minutes != 0 {
+            self.cleanup_previous_hour = previous_hour;
+        }
         self.clock.advance_minutes(effective_minutes);
         if self.clock.day != previous_day {
             self.reroll_shadowlord_hideouts();
@@ -3037,7 +3044,7 @@ impl PlayState {
         // pre-cascade hour a few lines above, so here it is the ordinary
         // hour-crossing test; the stale-snapshot case the published rule
         // turns on is the mode-zero call in [`Self::mode_zero_cleanup`].
-        if self.cleanup_previous_hour != self.clock.hour {
+        if effective_minutes != 0 && self.cleanup_previous_hour != self.clock.hour {
             self.fire_hour_change_bundle();
             self.camp_cooldown = camp_cooldown_after_hour_rollover(self.camp_cooldown);
         }
@@ -3114,8 +3121,15 @@ impl PlayState {
         let previous_hour = self.clock.hour;
         // `time.md §2`: "A pre-cascade snapshot of the hour, taken at the
         // start of every cleanup pass." `formats/saved-gam.md §5` persists it
-        // at `0x02DA`.
-        self.cleanup_previous_hour = previous_hour;
+        // at `0x02DA`. `time.md §5` (u5-spec#298 Q27, R548): the
+        // time-advancing path writes it "after the Quickness halving, before
+        // the minute increment; a zero-minute call returns before that
+        // write". The byte is shared with the upkeep pass, so a zero-minute
+        // advance (the dungeon command after its loop-head minute, Negate
+        // Time) must not erase a crossing the pass has not yet seen.
+        if effective_minutes != 0 {
+            self.cleanup_previous_hour = previous_hour;
+        }
         self.clock.advance_minutes(effective_minutes);
         if self.clock.day != previous_day {
             self.reroll_shadowlord_hideouts();
@@ -3145,7 +3159,7 @@ impl PlayState {
         // test coincide. The case that separates them - a snapshot the
         // pass never refreshed - belongs to the mode-zero call, and lives
         // in [`Self::mode_zero_cleanup`].
-        if self.cleanup_previous_hour != self.clock.hour {
+        if effective_minutes != 0 && self.cleanup_previous_hour != self.clock.hour {
             self.fire_hour_change_bundle();
             // `rest-and-camp.md §5`: the camp cooldown counter is
             // "reduced by one, floored at zero, at every hour rollover".

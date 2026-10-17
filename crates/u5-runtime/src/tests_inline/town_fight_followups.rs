@@ -158,6 +158,7 @@ fn town_bed_rest_burst_arrest_contact_ends_the_command_before_sleep() {
     state.npcs = vec![g6_npc(1, 2, 1, 6, (2, 1, 0))];
     state.relink_npc_objects();
 
+    let turn_before = state.turn;
     assert_eq!(
         state.hole_up_command(&dir, Some(3)).unwrap(),
         MoveOutcome::Used
@@ -165,5 +166,19 @@ fn town_bed_rest_burst_arrest_contact_ends_the_command_before_sleep() {
     assert_eq!(state.clock, GameClock::new(8, 0).unwrap(), "no time passed");
     assert_eq!(state.party[0].status, b'G', "no sleep status");
     assert!(state.message.is_empty(), "{:?}", state.message);
-    assert_eq!(state.pending_town_npc_contact, None, "burst events are dropped");
+    // "it returns the ordinary acted result, so the normal town epilogue
+    // follows and re-evaluates contact": the arrest event is still there for
+    // the epilogue's contact handler, which consumes it.
+    assert!(
+        state
+            .pending_town_npc_contact
+            .is_some_and(|event| event.behavior.raises_arrest_or_conflict_contact()),
+        "{:?}",
+        state.pending_town_npc_contact
+    );
+    let epilogue = state
+        .apply_post_turn_effects_after_outcome(turn_before, &dir, MoveOutcome::Used)
+        .unwrap();
+    assert!(epilogue.is_some(), "the epilogue handled the arrest contact");
+    assert_eq!(state.pending_town_npc_contact, None);
 }

@@ -6357,9 +6357,13 @@ impl PlayState {
 
     /// The town-bed burst of up to sixteen schedule/world-tick passes.
     /// Returns `true` when an arrest/conflict contact event ended it
-    /// (`town-mode.md §7`, R538: "It checks only for the arrest/conflict
-    /// kind ... A conversation-contact event does not interrupt the rest.
-    /// Every event recorded during the burst is dropped").
+    /// (`town-mode.md §12`, R538: "If any pass leaves an arrest/conflict
+    /// contact event (kind `0x61`), the command ends at once ... it returns
+    /// the ordinary acted result, so the normal town epilogue follows and
+    /// re-evaluates contact. A conversation-contact event (kind `0x74`) does
+    /// not interrupt; the next burst pass clears it."). The arrest event is
+    /// left pending so the town epilogue's contact handler sees it; a
+    /// conversation event is cleared rather than handed to that epilogue.
     pub fn advance_town_rest_initial_schedule_burst(&mut self) -> bool {
         for _ in 0..TOWN_REST_INITIAL_SCHEDULE_BURST_TICKS {
             // `karma.md §4.1`: these zero-minute schedule-only setup
@@ -6371,11 +6375,11 @@ impl PlayState {
             self.advance_turn_with_minutes_policy(0, true, true, false, false);
             let arrest = self
                 .pending_town_npc_contact
-                .take()
                 .is_some_and(|event| event.behavior.raises_arrest_or_conflict_contact());
             if arrest {
                 return true;
             }
+            self.pending_town_npc_contact = None;
         }
         false
     }
