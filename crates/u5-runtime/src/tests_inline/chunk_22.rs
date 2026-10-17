@@ -82,8 +82,9 @@
         //
         // This test previously asserted the opposite - that a slot with a
         // non-zero animation countdown "animates without wandering" - which
-        // is the pacing gate that sentence withdraws. The countdown still
-        // ticks; it just does not decide whether the actor moves.
+        // is the pacing gate that sentence withdraws. The countdown does not
+        // decide whether the actor moves, and the walker does not touch it:
+        // byte 6 is the animator's (`§3`).
         let mut state = world_state(open_world_grid(), 0, 0);
         state.active_objects.push(ActiveObject {
             type_byte: 192,
@@ -106,7 +107,7 @@
             .find(|object| object.type_byte == 192)
             .unwrap();
         assert_eq!((object.x, object.y), (4, 5));
-        assert_eq!(object.phase & 0x0f, 0x01, "the countdown still ticked");
+        assert_eq!(object.phase, 0x22, "the walker leaves the animator's countdown");
     }
 
     #[test]
@@ -174,12 +175,12 @@
         assert_eq!(state.active_objects[1].tile, 192);
         assert_eq!((state.active_objects[1].x, state.active_objects[1].y), (5, 5));
 
-        // On the alternate turn the whole block runs: the countdown ticks and
-        // the walker takes its step, with no separate "do I move" roll
-        // (`active-objects.md §8`).
+        // On the alternate turn the whole block runs: the walker takes its
+        // step, with no separate "do I move" roll, and leaves byte 6 to the
+        // animator (`active-objects.md §3`/`§8`).
         state.advance_turn();
         state.apply_pending_world_object_walker_pass();
-        assert_eq!(state.active_objects[1].phase & 0x0f, 0x01);
+        assert_eq!(state.active_objects[1].phase, 0x22);
         assert_ne!((state.active_objects[1].x, state.active_objects[1].y), (5, 5));
     }
 

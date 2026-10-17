@@ -74,6 +74,15 @@ pub struct PlayState {
     /// a turn-consuming dungeon handler's own `advance_turn` bumps the action
     /// counter and runs its epilogues without charging the clock twice.
     pub dungeon_loop_minute_charged: bool,
+    /// Dungeon loop iterations begun in this scene (one per
+    /// [`PlayState::advance_dungeon_loop_minute`]). `dungeon-mode.md §10`'s
+    /// inner loop paints the first-person view once per iteration, in its
+    /// render-and-poll step; this counter is what lets a frontend that
+    /// repaints every frame still render "once" per iteration.
+    pub dungeon_loop_iteration: u32,
+    /// `dungeon-mode.md §6.4`'s flavour-3 flourish draw for the iteration it
+    /// was taken in, and whether it lit the skeleton's eyes.
+    pub dungeon_flourish_draw: Option<(u32, bool)>,
     pub prng_state: u16,
     pub animation: AnimationClock,
     /// The one global water-surface scroll counter.
@@ -299,15 +308,6 @@ pub struct PlayState {
     /// The fourth-wrong-answer execution's victim, lifted at the end of the
     /// blade hold, before the sliced page (u5-spec#298 Q31).
     pub(crate) pending_blackthorn_execution_victim: Option<usize>,
-    /// A closing page the Blackthorn interrogation still owes, printed on the
-    /// next acknowledgement.
-    ///
-    /// `blackthorn.md §5` gives the fourth-wrong-answer branch three held
-    /// pages, not two: the pendulum narration, then the removed member's
-    /// `is sliced in half!` line, then record `6`'s treachery speech. Measured
-    /// (`qa/paired/bt-escalate.tsv`, beat `ask5`): the original ends that beat
-    /// on `falls!`, with the sliced line still to come.
-    pub(crate) pending_blackthorn_closing_page: Option<String>,
     pub active_effect_counter: u8,
     pub fortunes_of_war: u8,
     /// `rest-and-camp.md §5` camp cooldown counter. Armed at
@@ -799,6 +799,15 @@ pub struct PlayState {
     /// How many of `blackthorn.md §7` step 4's three cell reveals are on
     /// screen: the two Guardians, then the spectral figure.
     pub blackthorn_rescue_reveals_shown: u8,
+    /// The rescue's crowned spectral figure (`blackthorn.md §7.1` step 5:
+    /// actor byte `0x74` at `(5,2)`) as an animated record, live from the
+    /// verdict's key wait. `endgame.md §4` (issue #298 Q43): it selects
+    /// script A and "likewise animates during its verdict key wait". Empty
+    /// while no animated figure is on screen.
+    pub blackthorn_rescue_spectral_actor: ActiveObject,
+    /// The BIOS tick the rescue figure's animator last ran on; `None` until
+    /// the first look anchors it.
+    pub blackthorn_rescue_animation_tick: Option<u64>,
     pub shrine_presentation_map: Option<MiscmapsCutsceneMap>,
     /// `karma.md §7`'s approach walk, while the shrine presentation is up.
     pub shrine_approach_walk: Option<crate::shrine_presentation::ShrineApproachWalk>,

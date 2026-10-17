@@ -147,21 +147,24 @@ const HARPSICHORD_TUNE_SCRIPT: [&str; 13] = [
     "6", "7", "8", "9", "8", "7", "8", "7", "6", "7", "6", "5", "3",
 ];
 
-/// Full victory route: the 40-tick rite lead-in, six rite acknowledgements,
-/// one Orb presentation, one Orb acknowledgement, 40 automatic tableau
-/// frames, and eight ending acknowledgements through the terminal hold.
-const ENDGAME_FULL_VICTORY_CINEMATIC_SCRIPT: [&str; 98] = {
-    let mut script = ["empty"; 98];
+/// Full victory route: `endgame.md §5`'s first Yes (with the box owned it is
+/// the effective answer, R404), the five box hand-over frames of `§7` steps
+/// 4-5 (the eight-iteration lead, slot 0's step up, its step back, the
+/// four-iteration pause, the box and record 3), the 40-tick rite lead-in,
+/// six rite acknowledgements, one Orb presentation, one Orb acknowledgement,
+/// 40 automatic tableau frames, and eight ending acknowledgements through the
+/// terminal hold.
+const ENDGAME_FULL_VICTORY_CINEMATIC_SCRIPT: [&str; 102] = {
+    let mut script = ["empty"; 102];
     script[0] = "Y";
-    script[1] = "Y";
-    let mut index = 2;
-    while index < 42 {
+    let mut index = 1;
+    while index < 46 {
         script[index] = "endgame:frame";
         index += 1;
     }
-    script[48] = "endgame:frame";
-    index = 50;
-    while index < 90 {
+    script[52] = "endgame:frame";
+    index = 54;
+    while index < 94 {
         script[index] = "endgame:frame";
         index += 1;
     }

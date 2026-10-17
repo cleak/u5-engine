@@ -241,6 +241,14 @@ pub struct EndgameState {
     pub entry_greeting_hold_owed: bool,
     /// `endgame.md §5.1`/`§6`: the waiting branch's display-driven beats.
     pub refusal_phase: EndgameRefusalPhase,
+    /// `endgame.md §7` steps 4-6: the victory branch's box hand-over, beat
+    /// by beat, before record `3` prints.
+    pub victory_staging: EndgameVictoryStagingPhase,
+    /// `endgame.md §6` step 3: the index into
+    /// [`ENDGAME_TABLEAU_JITTER_SLOTS`] of the terminal loop's next wander
+    /// call. Each call is its own paced iteration, so the loop is pumped one
+    /// call per display frame.
+    pub terminal_jitter_next_call: u8,
     /// The BIOS tick the tableau sprite animator last ran on
     /// ([`PlayState::advance_endgame_tableau_animation_to`]); `None` until
     /// the first look anchors it.
@@ -279,6 +287,39 @@ pub enum EndgameRefusalPhase {
     /// `§6` step 3: the terminal jitter loop.
     Jitter,
 }
+
+/// `endgame.md §7` steps 4-6 (issue #298 Q41): the victory branch's box
+/// hand-over, between the effective Yes and record `3`. "Step slot 0 from its
+/// settled position to (5, 4), then back to (5, 5) ... Eight paced iterations
+/// precede the first step. After four more paced iterations, create the
+/// **sandalwood box** in slot 6 with actor byte `0x0E` at (5, 4)", and only
+/// then "Print the seven rite messages with the pacing of section 5.1 (record
+/// 3, forty paced iterations, `He says:`, then the key-paced pages)".
+///
+/// The engine had stepped slot 0 up and back and placed the box inside the
+/// answering key, and printed record `3` with it.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+pub enum EndgameVictoryStagingPhase {
+    /// Not on the victory branch, or the hand-over has finished.
+    #[default]
+    Inactive,
+    /// The eight paced iterations before slot 0's first step are owed.
+    LeadPauseOwed,
+    /// Slot 0 steps toward `(5, 4)`, one cell (and one sting beat) a frame.
+    WalkUp,
+    /// Slot 0 steps back toward `(5, 5)`.
+    WalkBack,
+    /// The four paced iterations before the box appears are owed.
+    BoxPauseOwed,
+    /// The box is placed and record `3` prints on the next frame.
+    BoxOwed,
+}
+
+/// `endgame.md §7` step 4: "Eight paced iterations precede the first step."
+pub const ENDGAME_VICTORY_HANDOVER_LEAD_TICKS: u16 = 8;
+/// `endgame.md §7` step 5: "After four more paced iterations, create the
+/// **sandalwood box**".
+pub const ENDGAME_VICTORY_BOX_PLACEMENT_TICKS: u16 = 4;
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum EndgameOutcome {
@@ -436,6 +477,8 @@ impl EndgameState {
             entry_absorption_hold_owed: false,
             entry_greeting_hold_owed: false,
             refusal_phase: EndgameRefusalPhase::Inactive,
+            victory_staging: EndgameVictoryStagingPhase::Inactive,
+            terminal_jitter_next_call: 0,
             tableau_animation_tick: None,
         }
     }
@@ -466,6 +509,8 @@ impl EndgameState {
             entry_absorption_hold_owed: false,
             entry_greeting_hold_owed: false,
             refusal_phase: EndgameRefusalPhase::Inactive,
+            victory_staging: EndgameVictoryStagingPhase::Inactive,
+            terminal_jitter_next_call: 0,
             tableau_animation_tick: None,
         }
     }
@@ -509,6 +554,8 @@ impl EndgameState {
             entry_absorption_hold_owed: false,
             entry_greeting_hold_owed: false,
             refusal_phase: EndgameRefusalPhase::Inactive,
+            victory_staging: EndgameVictoryStagingPhase::Inactive,
+            terminal_jitter_next_call: 0,
             tableau_animation_tick: None,
         }
     }
@@ -1599,6 +1646,9 @@ impl PlayState {
         if self.advance_endgame_entry_presentation() {
             return true;
         }
+        if self.advance_endgame_victory_staging_frame() {
+            return true;
+        }
         if self.advance_endgame_victory_tableau_frame() {
             self.message = self
                 .endgame
@@ -1617,7 +1667,7 @@ impl PlayState {
             if self.advance_endgame_refusal_staging_frame() {
                 return true;
             }
-            self.advance_endgame_terminal_tableau_jitter();
+            self.advance_endgame_terminal_tableau_jitter_call();
             return true;
         }
         let advanced_rite_pause = self
@@ -2008,28 +2058,33 @@ impl PlayState {
             ) {
                 continue;
             }
-            match object.tick_phase() {
-                PhaseTick::Steady => continue,
-                PhaseTick::Countdown => {
-                    self.active_objects[slot] = object;
-                    continue;
-                }
-                PhaseTick::DecisionPoint => {}
-            }
-            if self.random_range_u8(0, 255) < 128 {
-                continue;
-            }
-            let before = object.tile;
-            endgame_tableau_script_a_decision(&mut object, || {
-                self.random_range_u8(0, 255) % 4 == 0
-            });
-            changed |= object.tile != before;
+            changed |= self.animate_script_a_object_tick(&mut object);
             self.active_objects[slot] = object;
         }
         if changed {
             self.mark_visibility_dirty();
         }
         changed
+    }
+
+    /// One world tick of `active-objects.md §8`'s per-slot rule for one
+    /// **script A** sprite: a non-zero delay nibble is decremented and nothing
+    /// else; at a decision point the coin ("an inclusive `0..255` draw
+    /// accepted at 128 or above") gates one step of
+    /// [`endgame_tableau_script_a_decision`]. Returns whether the displayed
+    /// frame changed. Shared by the endgame tableau and the Blackthorn
+    /// rescue's crowned figure (`endgame.md §4`).
+    pub(crate) fn animate_script_a_object_tick(&mut self, object: &mut ActiveObject) -> bool {
+        match object.tick_phase() {
+            PhaseTick::Steady | PhaseTick::Countdown => return false,
+            PhaseTick::DecisionPoint => {}
+        }
+        if self.random_range_u8(0, 255) < 128 {
+            return false;
+        }
+        let before = object.tile;
+        endgame_tableau_script_a_decision(object, || self.random_range_u8(0, 255) % 4 == 0);
+        object.tile != before
     }
 
     /// Run [`Self::animate_endgame_tableau_sprites`] once for every BIOS tick
@@ -2496,15 +2551,95 @@ impl PlayState {
         }
     }
 
-    pub fn prepare_endgame_victory_tableau(&mut self) {
-        self.step_endgame_tableau_slot_to_target(0, ENDGAME_TABLEAU_VICTORY_EXIT_TARGET);
-        self.step_endgame_tableau_slot_to_target(0, ENDGAME_TABLEAU_PARTY_TARGETS[0]);
-        if self.active_objects.len() < OOL_SLOTS {
-            self.active_objects.resize(OOL_SLOTS, ActiveObject::empty());
+    /// `endgame.md §7` steps 4-6: one display frame of the victory branch's
+    /// box hand-over ([`EndgameVictoryStagingPhase`]). Returns `false` once
+    /// nothing is owed, so the rite pages take over.
+    ///
+    /// Each actual step is the shared step helper's, with its two-iteration,
+    /// sting, three-iteration beat (`audio.md §8.7`: "Later target-directed
+    /// walks use the same cue"); a slot already at its target steps nothing.
+    pub fn advance_endgame_victory_staging_frame(&mut self) -> bool {
+        loop {
+            let Some(phase) = self.endgame.as_ref().map(|endgame| endgame.victory_staging) else {
+                return false;
+            };
+            let set_phase = |state: &mut Self, phase| {
+                if let Some(endgame) = state.endgame.as_mut() {
+                    endgame.victory_staging = phase;
+                }
+            };
+            match phase {
+                EndgameVictoryStagingPhase::Inactive => return false,
+                EndgameVictoryStagingPhase::LeadPauseOwed => {
+                    self.staged_narration
+                        .push_ticks(ENDGAME_VICTORY_HANDOVER_LEAD_TICKS, String::new());
+                    set_phase(self, EndgameVictoryStagingPhase::WalkUp);
+                    return true;
+                }
+                EndgameVictoryStagingPhase::WalkUp => {
+                    if self.step_endgame_tableau_slot_once_with_sting(
+                        0,
+                        ENDGAME_TABLEAU_VICTORY_EXIT_TARGET,
+                    ) {
+                        return true;
+                    }
+                    set_phase(self, EndgameVictoryStagingPhase::WalkBack);
+                }
+                EndgameVictoryStagingPhase::WalkBack => {
+                    if self.step_endgame_tableau_slot_once_with_sting(
+                        0,
+                        ENDGAME_TABLEAU_PARTY_TARGETS[0],
+                    ) {
+                        return true;
+                    }
+                    set_phase(self, EndgameVictoryStagingPhase::BoxPauseOwed);
+                }
+                EndgameVictoryStagingPhase::BoxPauseOwed => {
+                    self.staged_narration
+                        .push_ticks_chained(ENDGAME_VICTORY_BOX_PLACEMENT_TICKS);
+                    set_phase(self, EndgameVictoryStagingPhase::BoxOwed);
+                    return true;
+                }
+                EndgameVictoryStagingPhase::BoxOwed => {
+                    if self.active_objects.len() < OOL_SLOTS {
+                        self.active_objects.resize(OOL_SLOTS, ActiveObject::empty());
+                    }
+                    if let Some(slot) = self.active_objects.get_mut(ENDGAME_TABLEAU_BOX_SLOT) {
+                        write_endgame_tableau_placement(slot, endgame_tableau_box_placement());
+                    }
+                    self.mark_visibility_dirty();
+                    set_phase(self, EndgameVictoryStagingPhase::Inactive);
+                    // Step 6: record `3` prints now, after the box, and the
+                    // forty paced iterations of `§5.1` run from here
+                    // ([`crate::endgame_cinematic::EndgameCinematic`]). A
+                    // file without rite records opens on the throne tableau,
+                    // which has no prose of its own.
+                    self.message = self
+                        .endgame
+                        .as_ref()
+                        .map(EndgameState::current_cinematic_text)
+                        .unwrap_or_default();
+                    return true;
+                }
+            }
         }
-        if let Some(slot) = self.active_objects.get_mut(ENDGAME_TABLEAU_BOX_SLOT) {
-            write_endgame_tableau_placement(slot, endgame_tableau_box_placement());
+    }
+
+    /// Run the box hand-over through to record `3` at once, for callers that
+    /// drive keystrokes only.
+    pub fn finish_endgame_victory_staging(&mut self) {
+        for _ in 0..ENDGAME_TABLEAU_SETTLE_STEP_CAP {
+            if !self.advance_endgame_victory_staging_frame() {
+                break;
+            }
         }
+    }
+
+    /// Whether the victory branch's box hand-over still owes frames.
+    pub fn endgame_victory_staging_pending(&self) -> bool {
+        self.endgame
+            .as_ref()
+            .is_some_and(|endgame| endgame.victory_staging != EndgameVictoryStagingPhase::Inactive)
     }
 
     pub fn complete_endgame_victory_tableau(&mut self) {
@@ -2747,42 +2882,52 @@ impl PlayState {
     }
 
     /// `endgame.md §6` step 3: one round of the terminal loop - one wander
-    /// call for each of slots 1, 3, 4 and 5.
+    /// call for each of slots 1, 3, 4 and 5 - for callers that drive
+    /// keystrokes only. Each call still carries its own one-tick hold.
+    pub fn advance_endgame_terminal_tableau_jitter(&mut self) -> bool {
+        let mut moved = false;
+        for slot in ENDGAME_TABLEAU_JITTER_SLOTS {
+            moved |= self.run_endgame_terminal_tableau_jitter_call(slot);
+        }
+        moved
+    }
+
+    /// `endgame.md §6` step 3: one wander call of the terminal loop, the
+    /// next of slots 1, 3, 4 and 5 in turn ([`EndgameState::terminal_jitter_next_call`]).
+    pub fn advance_endgame_terminal_tableau_jitter_call(&mut self) -> bool {
+        let call = self.endgame.as_mut().map_or(0, |endgame| {
+            let call = usize::from(endgame.terminal_jitter_next_call)
+                % ENDGAME_TABLEAU_JITTER_SLOTS.len();
+            endgame.terminal_jitter_next_call =
+                ((call + 1) % ENDGAME_TABLEAU_JITTER_SLOTS.len()) as u8;
+            call
+        });
+        self.run_endgame_terminal_tableau_jitter_call(ENDGAME_TABLEAU_JITTER_SLOTS[call])
+    }
+
+    /// One terminal wander call for `slot`.
     ///
     /// `§6` (issue #298 Q42): each call's display-tick advance "is exactly
     /// **one paced iteration** - a world tick plus a one-tick wait request -
     /// and it is paid by every call, for an empty slot and on a refused coin
-    /// alike, so a terminal round of four calls always costs four paced
-    /// iterations whatever the party size". The round therefore holds for
-    /// four BIOS ticks, chained so consecutive rounds run at that rate; an
-    /// empty slot still takes no coin draw.
-    pub fn advance_endgame_terminal_tableau_jitter(&mut self) -> bool {
-        self.staged_narration
-            .push_ticks_chained(ENDGAME_TABLEAU_JITTER_SLOTS.len() as u16);
+    /// alike". The tick sits **between** consecutive calls, so a mover's step
+    /// shows a tick before the next slot's: each call pushes its own chained
+    /// BIOS tick rather than one four-tick block per round, which had every
+    /// round's movers step on the same frame. An empty slot (or one beyond
+    /// the party) takes no coin draw.
+    fn run_endgame_terminal_tableau_jitter_call(&mut self, slot: usize) -> bool {
+        self.staged_narration.push_ticks_chained(1);
         let party_slots = self.party.len().min(SAVE_PARTY_SIZE_MAX as usize);
-        let eligible = ENDGAME_TABLEAU_JITTER_SLOTS
-            .iter()
-            .copied()
-            .filter(|slot| *slot < party_slots)
-            .filter(|slot| {
-                self.active_objects
-                    .get(*slot)
-                    .copied()
-                    .is_some_and(|object| {
-                        endgame_tableau_role_for_slot(*slot, object)
-                            == Some(EndgameTableauActorRole::PartyMember(*slot as u8))
-                    })
-            })
-            .collect::<Vec<_>>();
-        if eligible.is_empty() {
+        let occupied = slot < party_slots
+            && self.active_objects.get(slot).copied().is_some_and(|object| {
+                endgame_tableau_role_for_slot(slot, object)
+                    == Some(EndgameTableauActorRole::PartyMember(slot as u8))
+            });
+        if !occupied {
             self.animation.tick_static_tiles();
             return false;
         }
-        let mut moved = false;
-        for actor_slot in eligible {
-            moved |= self.advance_endgame_tableau_jitter_slot(actor_slot);
-        }
-        moved
+        self.advance_endgame_tableau_jitter_slot(slot)
     }
 
     fn advance_endgame_tableau_jitter_slot(&mut self, actor_slot: usize) -> bool {
@@ -2897,6 +3042,13 @@ impl PlayState {
             // keystroke until the closer is finished, then keeps the terminal
             // final panel active.
             if matches!(current.outcome, Some(EndgameOutcome::Victory)) {
+                // `§7` steps 4-6 read no key: a key that arrives while the
+                // hand-over is still owed (a shell with no pump) finishes it
+                // and lands on record `3`, which is what it then shows.
+                if self.endgame_victory_staging_pending() {
+                    self.finish_endgame_victory_staging();
+                    return MoveOutcome::Observed;
+                }
                 if matches!(
                     current.cinematic.step,
                     crate::endgame_cinematic::EndgameCinematicStep::ThroneTableau
@@ -3024,14 +3176,15 @@ impl PlayState {
             final_narrative,
         );
         let mut next = next;
-        if next.outcome == Some(EndgameOutcome::Victory) {
-            self.prepare_endgame_victory_tableau();
-        }
         self.message = match next.outcome {
-            // The victory branch opens on the first rite beat, or on
-            // the throne tableau when `ENDMSG.DAT` carried no rite
-            // records; neither composes certificate prose here.
-            Some(EndgameOutcome::Victory) => next.current_cinematic_text(),
+            // `§7` steps 4-6: the box hand-over comes first, as display
+            // frames ([`EndgameVictoryStagingPhase`]); the first rite beat -
+            // or the throne tableau, when `ENDMSG.DAT` carried no rite
+            // records - prints only after the box is placed.
+            Some(EndgameOutcome::Victory) => {
+                next.victory_staging = EndgameVictoryStagingPhase::LeadPauseOwed;
+                String::new()
+            }
             // `§5.1`: the lead-in alone. The forty-tick pause, record 10
             // and `§6`'s staging are display frames
             // ([`EndgameRefusalPhase`]).
