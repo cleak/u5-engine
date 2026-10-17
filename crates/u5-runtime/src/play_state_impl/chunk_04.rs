@@ -4344,7 +4344,7 @@ impl PlayState {
     /// automatic contact alike. Returns whether the rewrite happened, which
     /// skips the guard gate.
     pub(crate) fn talk_dispatcher_stand_down(&mut self, x: usize, y: usize) -> bool {
-        let Some(slot) = self.npc_at_current_floor(x, y).map(|npc| npc.slot) else {
+        let Some(slot) = self.talk_record_at(x, y).map(|npc| npc.slot) else {
             return false;
         };
         let Some(index) = self.npcs.iter().position(|npc| npc.slot == slot) else {
@@ -4364,7 +4364,7 @@ impl PlayState {
 
     fn shop_keeper_is_open_for_business(&self, x: usize, y: usize) -> bool {
         const SHOP_WORKING_WAYPOINT: usize = 1;
-        let Some(npc) = self.npc_at_current_floor(x, y) else {
+        let Some(npc) = self.talk_record_at(x, y) else {
             return true;
         };
         npc.cached_wp == SHOP_WORKING_WAYPOINT
@@ -4501,21 +4501,41 @@ impl PlayState {
     /// harness builds those; town entry links every placed record) is still
     /// found by its position, as before.
     fn talk_target_at(&self, x: usize, y: usize) -> Option<(u8, usize, usize)> {
-        let faced = self
-            .active_objects
+        if let Some(npc) = self.talk_record_at(x, y) {
+            return Some((npc.dialog_id, x, y));
+        }
+        self.talk_faced_object_slot(x, y).map(|_| (0, x, y))
+    }
+
+    /// `conversation.md §2`: "the faced object is the highest-numbered active
+    /// object at that cell" (slot 0, the party, is never a Talk target).
+    fn talk_faced_object_slot(&self, x: usize, y: usize) -> Option<usize> {
+        self.active_objects
             .iter()
             .enumerate()
             .skip(1)
             .rev()
             .find(|(_, object)| self.object_occupies(**object, x, y))
-            .map(|(slot, _)| slot);
-        let Some(faced) = faced else {
-            return self
-                .npc_at_current_floor(x, y)
-                .map(|npc| (npc.dialog_id, x, y));
+            .map(|(slot, _)| slot)
+    }
+
+    /// The NPC record the Talk dispatcher runs with at a resolved cell:
+    /// "the lowest-numbered occupied record linked to the faced object with a
+    /// nonzero type and state" (`conversation.md §2`, issue #216). `None` when
+    /// no record owns the faced object - the dispatcher then reads "an
+    /// unrelated adjacent record that reads as all zero", so no waypoint,
+    /// guard-sprite, shop or regime test may consult a record merely standing
+    /// on the cell. Every later lookup on the Talk path goes through this, so
+    /// the dialogue word and the record those tests read are the same one.
+    ///
+    /// Engine boundary: a record with no object link at all (only the harness
+    /// builds those; town entry links every placed record) is still found by
+    /// its position, as is any record when no object stands on the cell.
+    pub(crate) fn talk_record_at(&self, x: usize, y: usize) -> Option<&RuntimeNpc> {
+        let Some(faced) = self.talk_faced_object_slot(x, y) else {
+            return self.npc_at_current_floor(x, y);
         };
-        if let Some(owner) = self
-            .npcs
+        self.npcs
             .iter()
             .filter(|npc| {
                 npc.active_object == Some(faced)
@@ -4523,16 +4543,10 @@ impl PlayState {
                     && npc.state != NPC_STATE_EMPTY
             })
             .min_by_key(|npc| npc.slot)
-        {
-            return Some((owner.dialog_id, x, y));
-        }
-        if let Some(npc) = self
-            .npc_at_current_floor(x, y)
-            .filter(|npc| npc.active_object.is_none())
-        {
-            return Some((npc.dialog_id, x, y));
-        }
-        Some((0, x, y))
+            .or_else(|| {
+                self.npc_at_current_floor(x, y)
+                    .filter(|npc| npc.active_object.is_none())
+            })
     }
 
     #[cfg(test)]
@@ -4676,7 +4690,7 @@ impl PlayState {
         // The approach-and-converse waypoint behaviour is checked first: that
         // arm stands the guard down and dispatches on the dialog index instead.
         if !stood_down
-            && let Some(npc) = self.npc_at_current_floor(target_x, target_y)
+            && let Some(npc) = self.talk_record_at(target_x, target_y)
             && npc.type_byte == crate::tlk_control_codes::TALK_GUARD_SPRITE
             && !crate::talk_guard_sprite_dispatches(npc.cached_wp, dialog_id as u8)
         {
@@ -4712,7 +4726,7 @@ impl PlayState {
             // prints the bare line whatever its sprite (§2's decision tree,
             // arm 1).
             self.message = crate::talk_non_speaker_refusal_for_sprite(
-                self.npc_at_current_floor(target_x, target_y)
+                self.talk_record_at(target_x, target_y)
                     .map(|npc| npc.type_byte)
                     .filter(|_| !stood_down),
             );
@@ -4827,7 +4841,7 @@ impl PlayState {
             return self.consume_ordinary_town_talk();
         };
         let conversation_npc_slot = self
-            .npc_at_current_floor(target_x, target_y)
+            .talk_record_at(target_x, target_y)
             .map(|npc| npc.slot);
 
         // `conversation.md §2` step 4: the status-tile gate reads the live map
@@ -4915,7 +4929,7 @@ impl PlayState {
         // original refuses the palace guard where this engine opened the
         // password demand.
         if !stood_down
-            && let Some(npc) = self.npc_at_current_floor(target_x, target_y)
+            && let Some(npc) = self.talk_record_at(target_x, target_y)
             && npc.type_byte == crate::tlk_control_codes::TALK_GUARD_SPRITE
             && !crate::talk_guard_sprite_dispatches(npc.cached_wp, dialog_id as u8)
         {
@@ -4944,7 +4958,7 @@ impl PlayState {
             // prints the bare line whatever its sprite (§2's decision tree,
             // arm 1).
             self.message = crate::talk_non_speaker_refusal_for_sprite(
-                self.npc_at_current_floor(target_x, target_y)
+                self.talk_record_at(target_x, target_y)
                     .map(|npc| npc.type_byte)
                     .filter(|_| !stood_down),
             );
@@ -5387,7 +5401,7 @@ impl PlayState {
         ) {
             let text = if dialog_id == TOWN_NPC_BRUSHOFF_DIALOG_ID {
                 let target_slot = self
-                    .npc_at_current_floor(target_x, target_y)
+                    .talk_record_at(target_x, target_y)
                     .map(|npc| npc.slot);
                 if let Some(index) = self
                     .npcs
@@ -5415,7 +5429,7 @@ impl PlayState {
             crate::conversation_session::ConversationSession::new(raw.clone(), fields.clone());
         self.active_conversation = Some(Box::new(session));
         self.active_conversation_npc_slot = self
-            .npc_at_current_floor(target_x, target_y)
+            .talk_record_at(target_x, target_y)
             .map(|npc| npc.slot);
         // `conversation.md §7.6` / §10: the branch-flag bit `0x8C`
         // tests and `0x88` sets is the speaking NPC's roster slot,
@@ -6114,7 +6128,7 @@ impl PlayState {
             TOWN_NPC_COWERING_DIALOG_ID => TOWN_NPC_COWERING_RESPONSE,
             TOWN_NPC_BRUSHOFF_DIALOG_ID => {
                 let target_slot = self
-                    .npc_at_current_floor(target_x, target_y)
+                    .talk_record_at(target_x, target_y)
                     .map(|npc| npc.slot);
                 if let Some(index) = self
                     .npcs
@@ -6144,7 +6158,7 @@ impl PlayState {
             return Ok(self.consume_ordinary_town_talk());
         };
         let npc_slot = self
-            .npc_at_current_floor(target_x, target_y)
+            .talk_record_at(target_x, target_y)
             .map_or(0, |npc| npc.slot);
         let arrest = TownArrestPrompt {
             scene_byte: scene.byte,

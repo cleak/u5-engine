@@ -1559,3 +1559,51 @@ fn talk_resolves_the_owning_record_of_the_highest_numbered_faced_object() {
     state.npcs = vec![npc(6, 0x66, Some(2)), empty, typeless, npc(4, 0x55, Some(2))];
     assert_eq!(state.talk_target_in_direction(Direction::North), Some((0x55, 5, 4)));
 }
+
+#[test]
+fn talk_with_an_unowned_faced_object_ignores_a_guard_record_standing_on_the_cell() {
+    // `conversation.md §2` "No-owner Talk" (issue #216): with no record
+    // linked to the faced object, the dispatcher "runs ... with an unrelated
+    // adjacent record that reads as all zero, so the bare `No response!` is
+    // printed for any sprite". A guard record that merely stands on the cell
+    // (linked to another object, at an even waypoint) must not take the guard
+    // arm, nor have its waypoint behaviour rewritten.
+    let mut state = test_state(open_grid(), 5, 5);
+    state.player.facing = Direction::North;
+    let floor = state.current_floor().unwrap();
+    state.active_objects.resize(3, ActiveObject::empty());
+    state.active_objects[2] = ActiveObject {
+        type_byte: crate::tlk_control_codes::TALK_GUARD_SPRITE,
+        tile: crate::tlk_control_codes::TALK_GUARD_SPRITE,
+        x: 5,
+        y: 4,
+        z: floor,
+        phase: 0,
+        aux1: 0,
+        aux3: 0,
+    };
+    let mut guard = wandering_npc(4, 5, 4, (5, 4));
+    guard.slot = 2;
+    guard.type_byte = crate::tlk_control_codes::TALK_GUARD_SPRITE;
+    guard.dialog_id = 0x22;
+    guard.cached_wp = 0;
+    guard.active_object = Some(9);
+    state.npcs = vec![guard];
+
+    state.talk_facing_with_dialogue(&HashMap::new());
+    assert_eq!(
+        state.message,
+        crate::tlk_control_codes::talk_non_speaker_refusal_for_sprite(None)
+    );
+    assert_eq!(
+        state.npcs[0].schedule[NPC_SCHEDULE_AI_OFFSET], 4,
+        "the stand-down reads the owning record, and there is none"
+    );
+
+    // Linked to the faced object, the same record is the owner again: the
+    // behaviour-4 stand-down runs and its live word dispatches.
+    state.npcs[0].active_object = Some(2);
+    state.npcs[0].dialog_id = 0;
+    state.talk_facing_with_dialogue(&HashMap::new());
+    assert_eq!(state.npcs[0].schedule[NPC_SCHEDULE_AI_OFFSET], 1);
+}
