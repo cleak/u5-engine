@@ -21478,7 +21478,10 @@ fn overworld_prompt_pair_is_suppressed_once_after_a_shipboard_direction() {
         .map(|entry| (entry.text.clone(), entry.prompt_pair_suppressed))
         .collect();
     assert_eq!(echoes.len(), 1, "the hoisted key echoes nothing: {echoes:?}");
-    assert!(echoes[0].0.starts_with("Pass"), "{echoes:?}");
+    // The calm-wind consume left a heading cached, so this Pass is the
+    // stalled one: `weather.md §5` "That Pass adds no ordinary `Pass` echo"
+    // (playtest E26).
+    assert!(echoes[0].0.starts_with(SHIP_SAIL_STALLED_LINE), "{echoes:?}");
     assert!(echoes[0].1, "the prompt after the direction is suppressed");
     // Pass is not a direction, and the helper re-armed the flag on its test.
     assert!(!overworld_prompt_pair_is_suppressed(&state));

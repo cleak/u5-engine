@@ -3415,7 +3415,19 @@ impl PlayState {
         // pass still had a heading cached and still clears it.
         if matches!(self.area, Area::World { .. }) && self.sail_cached_direction.is_some() {
             self.sail_cached_direction = None;
-            self.message = SHIP_SAIL_STALLED_LINE.to_string();
+            // `weather.md §5`: "That Pass adds no ordinary `Pass` echo", and
+            // `vehicles.md §6`: it "does not also print `Pass`". The stalled
+            // line takes the echo's place on the command row rather than
+            // following it (playtest E26).
+            if self.pending_command_echo.is_some() {
+                self.replace_command_echo(CommandEcho {
+                    text: SHIP_SAIL_STALLED_LINE,
+                    join: CommandEchoJoin::Complete,
+                });
+                self.message = String::new();
+            } else {
+                self.message = SHIP_SAIL_STALLED_LINE.to_string();
+            }
         } else {
             // `commands.md §8.1` row B: `Pass` completes its own echo and
             // "no result line follows"; `text-output.md §10.3` lists the

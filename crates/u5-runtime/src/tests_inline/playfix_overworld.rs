@@ -287,3 +287,47 @@ fn playfix_e25_gate_transit_keeps_the_message_window() {
     );
     let _ = fs::remove_dir_all(dir);
 }
+
+/// E26: `weather.md §5`: "A later Pass command reports the stalled-sailing
+/// feedback `Sheets in irons!\n` and clears the cached sailing state. That
+/// Pass adds no ordinary `Pass` echo" (`vehicles.md §6` likewise).
+#[test]
+fn playfix_e26_sheets_in_irons_pass_prints_no_pass_echo() {
+    let dir = debug_game_dir();
+    let mut state = britannia_state(vec![BRIT_DEEP_WATER_TILE; WORLD_CELLS], 5, 5);
+    state.player.transport = TransportState::Ship {
+        type_byte: TRANSPORT_MARKER_SHIP_HOISTED_FIRST,
+        tile: FIRST_PLAYABLE_FRIGATE_TILE,
+        sails_hoisted: true,
+        hull: 77,
+        skiffs: 2,
+    };
+    state.sync_player_object();
+    state.sail_cached_direction = Some(Direction::North);
+    let before = state.message_transcript.len();
+
+    handle_play_key_input(&mut state, ' ', "", &dir).unwrap();
+
+    let rows: Vec<&str> = state.message_transcript[before..]
+        .iter()
+        .map(|entry| entry.text.as_str())
+        .collect();
+    assert!(state.sail_cached_direction.is_none());
+    assert!(rows.iter().any(|row| row.contains(SHIP_SAIL_STALLED_LINE)), "{rows:?}");
+    assert!(!rows.iter().any(|row| row.contains("Pass")), "{rows:?}");
+    let stalled = state.message_transcript[before..]
+        .iter()
+        .find(|entry| entry.text.contains(SHIP_SAIL_STALLED_LINE))
+        .unwrap();
+    assert!(stalled.is_command_echo, "the stalled line sits on the command row");
+
+    // The next Pass, with the cache clear, is an ordinary Pass again.
+    let before = state.message_transcript.len();
+    handle_play_key_input(&mut state, ' ', "", &dir).unwrap();
+    assert!(
+        state.message_transcript[before..]
+            .iter()
+            .any(|entry| entry.text.contains("Pass"))
+    );
+    let _ = fs::remove_dir_all(dir);
+}
