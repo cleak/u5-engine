@@ -2244,7 +2244,10 @@ pub const fn tavern_follow_up_record_id(tavern: Tavern) -> usize {
 }
 
 pub const TAVERN_PROVISION_QUOTE_RECORD_FIRST: usize = 77;
-pub const TAVERN_PROVISION_QUOTE_RECORD_LAST: usize = 82;
+/// `shops.md §8.5`: "one quote record drawn uniformly from a seven-record pool
+/// - `SHOPPE.DAT` ordinals `77` through `83`" (R432); the bound is inclusive
+/// (playtest E57).
+pub const TAVERN_PROVISION_QUOTE_RECORD_LAST: usize = 83;
 pub const TAVERN_NO_SALE_RECORD_FIRST: usize = 61;
 pub const TAVERN_NO_SALE_RECORD_LAST: usize = 64;
 /// `shops.md §8.A` shared closing-bark table, tavern purchase-completed row.

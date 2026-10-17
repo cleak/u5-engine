@@ -6121,6 +6121,25 @@ fn brush_off_talk_skips_tlk_loading_and_attempts_forced_flight() {
     let _ = fs::remove_dir_all(dir);
 }
 
+/// `shops.md §8.5` (R432): the provision quote is "drawn uniformly from a
+/// seven-record pool - `SHOPPE.DAT` ordinals `77` through `83`", so every one
+/// of the seven is reachable. The pool's upper bound was `82` (playtest E57).
+#[test]
+fn tavern_provision_quote_draw_reaches_all_seven_records() {
+    use crate::shops::{TAVERN_PROVISION_QUOTE_RECORD_FIRST, TAVERN_PROVISION_QUOTE_RECORD_LAST};
+
+    let mut state = test_state(open_grid(), 1, 1);
+    state.prng_state = 0x1357;
+    let mut seen = std::collections::BTreeSet::new();
+    for _ in 0..500 {
+        seen.insert(usize::from(state.random_range_u8(
+            TAVERN_PROVISION_QUOTE_RECORD_FIRST as u8,
+            TAVERN_PROVISION_QUOTE_RECORD_LAST as u8,
+        )));
+    }
+    assert_eq!(seen.into_iter().collect::<Vec<_>>(), (77..=83).collect::<Vec<_>>());
+}
+
 #[test]
 fn end_to_end_tavern_renders_state_menu_quote_and_follow_up_records() {
     use crate::shop_runtime::TavernState;
@@ -6136,6 +6155,7 @@ fn end_to_end_tavern_renders_state_menu_quote_and_follow_up_records() {
         (80, b"Asset pack costs % gold.".as_slice()),
         (81, b"Asset pack costs % gold.".as_slice()),
         (82, b"Asset pack costs % gold.".as_slice()),
+        (83, b"Asset pack costs % gold.".as_slice()),
     ]);
     std::fs::write(dir.join("SHOPPE.DAT"), shoppe).unwrap();
     let mut state = test_state(open_grid(), 1, 1);
