@@ -1482,8 +1482,11 @@ fn a_lodged_inn_guest_round_trips_at_its_own_registry_slot() {
 fn inn_registry_decodes_nonzero_scene_markers_from_shifted_save_view() {
     let mut bytes = saved_game_seed_bytes(17, 0, 5, 5);
     bytes[SAVE_AVATAR_NAME_OFFSET] = b'A';
-    let record = SAVE_INN_REGISTRY_OFFSET + SAVE_CHARACTER_RECORD_LEN;
-    bytes[record] = 0x12;
+    // `formats/saved-gam.md` §3.1: registry slot 1's marker is roster record
+    // 1's own byte `0x1F`, and its guest is roster record 1 itself.
+    bytes[SAVE_PARTY_SIZE_OFFSET] = 1;
+    let record = inn_registry_guest_record_offset(1);
+    bytes[inn_registry_marker_offset(1)] = 0x12;
     bytes[record + SAVE_CHARACTER_CLASS_OFFSET] = b'B';
     bytes[record + SAVE_CHARACTER_STATUS_OFFSET] = b'P';
     bytes[record + SAVE_CHARACTER_STR_OFFSET] = 17;
@@ -1521,8 +1524,9 @@ fn inn_registry_decodes_nonzero_scene_markers_from_shifted_save_view() {
 #[test]
 fn inn_registry_encoding_writes_known_guest_fields_and_clears_markers() {
     let mut bytes = vec![0xff; SAVED_GAM_LEN];
+    bytes[SAVE_PARTY_SIZE_OFFSET] = 1;
     let guest = InnGuestRecord {
-        registry_slot: 0,
+        registry_slot: 1,
         scene_marker: 0x11,
         name: [0; SAVE_CHARACTER_NAME_LEN],
         member: PartyMember {
@@ -1544,8 +1548,9 @@ fn inn_registry_encoding_writes_known_guest_fields_and_clears_markers() {
 
     encode_inn_registry(&mut bytes, &[guest]);
 
-    let record = SAVE_INN_REGISTRY_OFFSET;
-    assert_eq!(bytes[record], 0x11);
+    let record = inn_registry_guest_record_offset(1);
+    assert_eq!(bytes[record + SAVE_CHARACTER_RECORD_LEN - 1], 0x11);
+    assert_eq!(bytes[inn_registry_marker_offset(1)], 0x11);
     assert_eq!(bytes[record + SAVE_CHARACTER_CLASS_OFFSET], b'M');
     assert_eq!(bytes[record + SAVE_CHARACTER_STATUS_OFFSET], b'G');
     assert_eq!(bytes[record + SAVE_CHARACTER_STR_OFFSET], 14);
@@ -1565,13 +1570,10 @@ fn inn_registry_encoding_writes_known_guest_fields_and_clears_markers() {
             ..record + SAVE_CHARACTER_EQUIPMENT_OFFSET + EQUIPMENT_SLOT_COUNT],
         &[6, 5, 4, 3, 2, 1]
     );
-    // Slot 1 holds no guest. Its marker byte is `0xFF`, which is the opaque
+    // Slot 2 holds no guest. Its marker byte is `0xFF`, which is the opaque
     // roster padding of `formats/saved-gam.md` §3.1 and matches no inn scene,
     // so the encoder leaves it exactly as loaded rather than clearing it.
-    assert_eq!(
-        bytes[SAVE_INN_REGISTRY_OFFSET + SAVE_CHARACTER_RECORD_LEN],
-        0xff
-    );
+    assert_eq!(bytes[inn_registry_marker_offset(2)], 0xff);
 }
 
 #[test]

@@ -515,6 +515,14 @@ impl PlayState {
                 continue;
             }
             save[record..record + SAVE_CHARACTER_NAME_LEN].copy_from_slice(&roster_record.name);
+            // `formats/saved-gam.md §3.1` gender byte. The inn's Leave/Pickup
+            // compaction moves whole records between roster slots, so a
+            // record's gender must travel with it rather than stay at the
+            // slot the template had it in (playtest E43). Only a roster that
+            // came from a save carries real bytes to write.
+            if !self.party_roster.is_empty() {
+                save[record + SAVE_CHARACTER_GENDER_OFFSET] = roster_record.gender;
+            }
             save[record + SAVE_CHARACTER_STR_OFFSET] = if party_index == 0 {
                 self.avatar_stats.strength
             } else {
