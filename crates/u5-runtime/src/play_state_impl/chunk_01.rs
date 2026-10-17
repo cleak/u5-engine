@@ -753,6 +753,8 @@ impl PlayState {
             twelve_hour_audio_repeats: options.twelve_hour_audio_repeats,
             ambient_audio_sub_tick: 0,
             dungeon_loop_minute_charged: false,
+            dungeon_loop_iteration: 0,
+            dungeon_flourish_draw: None,
             prng_state: host_clock_prng_seed_now(),
             // Neither counter restarts on area entry, but for two
             // different published reasons.
@@ -883,7 +885,6 @@ impl PlayState {
             pending_blackthorn_merciful_death: false,
             pending_blackthorn_execution_swell: false,
             pending_blackthorn_execution_victim: None,
-            pending_blackthorn_closing_page: None,
             active_effect_tag: options.active_effect_tag,
             active_effect_counter: options.active_effect_counter,
             fortunes_of_war: options.fortunes_of_war,
@@ -984,6 +985,8 @@ impl PlayState {
             blackthorn_audience_map: None,
             cutscene_black_viewport: false,
         blackthorn_rescue_reveals_shown: 0,
+        blackthorn_rescue_spectral_actor: ActiveObject::empty(),
+        blackthorn_rescue_animation_tick: None,
         shrine_presentation_map: None,
         shrine_approach_walk: None,
         presentation_viewport_inverted: false,
@@ -1165,6 +1168,8 @@ impl PlayState {
             twelve_hour_audio_repeats: options.twelve_hour_audio_repeats,
             ambient_audio_sub_tick: 0,
             dungeon_loop_minute_charged: false,
+            dungeon_loop_iteration: 0,
+            dungeon_flourish_draw: None,
             prng_state: host_clock_prng_seed_now(),
             // Neither counter restarts on area entry, but for two
             // different published reasons.
@@ -1295,7 +1300,6 @@ impl PlayState {
             pending_blackthorn_merciful_death: false,
             pending_blackthorn_execution_swell: false,
             pending_blackthorn_execution_victim: None,
-            pending_blackthorn_closing_page: None,
             active_effect_tag: options.active_effect_tag,
             active_effect_counter: options.active_effect_counter,
             fortunes_of_war: options.fortunes_of_war,
@@ -1397,6 +1401,8 @@ impl PlayState {
             blackthorn_audience_map: None,
             cutscene_black_viewport: false,
         blackthorn_rescue_reveals_shown: 0,
+        blackthorn_rescue_spectral_actor: ActiveObject::empty(),
+        blackthorn_rescue_animation_tick: None,
         shrine_presentation_map: None,
         shrine_approach_walk: None,
         presentation_viewport_inverted: false,
@@ -1588,6 +1594,8 @@ impl PlayState {
             twelve_hour_audio_repeats: options.twelve_hour_audio_repeats,
             ambient_audio_sub_tick: 0,
             dungeon_loop_minute_charged: false,
+            dungeon_loop_iteration: 0,
+            dungeon_flourish_draw: None,
             prng_state: host_clock_prng_seed_now(),
             // Neither counter restarts on area entry, but for two
             // different published reasons.
@@ -1718,7 +1726,6 @@ impl PlayState {
             pending_blackthorn_merciful_death: false,
             pending_blackthorn_execution_swell: false,
             pending_blackthorn_execution_victim: None,
-            pending_blackthorn_closing_page: None,
             active_effect_tag: options.active_effect_tag,
             active_effect_counter: options.active_effect_counter,
             fortunes_of_war: options.fortunes_of_war,
@@ -1815,6 +1822,8 @@ impl PlayState {
             blackthorn_audience_map: None,
             cutscene_black_viewport: false,
         blackthorn_rescue_reveals_shown: 0,
+        blackthorn_rescue_spectral_actor: ActiveObject::empty(),
+        blackthorn_rescue_animation_tick: None,
         shrine_presentation_map: None,
         shrine_approach_walk: None,
         presentation_viewport_inverted: false,

@@ -19534,6 +19534,8 @@ fn endgame_flow_uses_loaded_endmsg_records_for_prompts_rite_and_refusal() {
     victory.resolve_endgame_confirmation(true);
     victory.resolve_endgame_confirmation(true);
     victory.endgame.as_mut().unwrap().final_narrative = Some(synthetic_end_narrative());
+    // `endgame.md §7` steps 4-6: record 3 waits for the box hand-over, which
+    // a key with no display pump (the second confirmation here) runs through.
     assert_eq!(victory.message, "Rite 1");
     for _ in 0..crate::endgame_cinematic::ENDGAME_RITE_LEAD_IN_PAUSE_TICKS {
         assert!(victory.advance_endgame_display_frame());
@@ -19594,6 +19596,8 @@ fn victory_endgame_cinematic_advances_through_all_panels_then_holds_terminal_sta
     // `endgame.md §5`: a first Yes skips the sandalwood question.
     state.resolve_endgame_confirmation(true);
     state.endgame.as_mut().unwrap().final_narrative = Some(synthetic_end_narrative());
+    // `endgame.md §7` steps 4-6: the box hand-over runs first.
+    state.finish_endgame_victory_staging();
 
     // Victory now active. Each additional confirmation advances
     // the cinematic by one panel until it reaches the terminal final
@@ -19668,6 +19672,8 @@ fn victory_gate_reuses_shared_moongate_phase_for_exact_rise_hold_and_sink() {
     // `endgame.md §5`: a first Yes skips the sandalwood question.
     state.resolve_endgame_confirmation(true);
     state.endgame.as_mut().unwrap().final_narrative = Some(synthetic_end_narrative());
+    // `endgame.md §7` steps 4-6: the box hand-over runs first.
+    state.finish_endgame_victory_staging();
 
     // The Orb is the one post-rite frame that waits for a key.
     assert!(state.advance_endgame_display_frame());
@@ -25096,6 +25102,7 @@ fn endgame_rendering_does_not_repopulate_gameplay_player_object() {
     state.enter_endgame();
     // `endgame.md §5`: a first Yes skips the sandalwood question.
     state.resolve_endgame_confirmation(true);
+    state.finish_endgame_victory_staging();
     assert!(state.advance_endgame_display_frame());
     state.resolve_endgame_confirmation(false);
     for _ in 0..(ENDGAME_TABLEAU_WIDTH * ENDGAME_TABLEAU_HEIGHT * 2) {

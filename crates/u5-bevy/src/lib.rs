@@ -9314,28 +9314,30 @@ fn seed_visual_route_ruined_honesty_shrine(state: &mut PlayState) {
 /// `endgame.md §7.1` fade to black, all six `END.DAT` narrative windows,
 /// the certificate and elapsed-time report, finishing in the `§9.5`
 /// terminal hold.
-const ENDGAME_FULL_VICTORY_CINEMATIC_SCRIPT: [&str; 97] = {
-    let mut script = [""; 97];
+const ENDGAME_FULL_VICTORY_CINEMATIC_SCRIPT: [&str; 102] = {
+    let mut script = [""; 102];
     // `endgame.md §5` step 2: "**Only a first No** asks the second question
     // ... A first Yes skips this question whether the party owns the box or
     // not" (R404). With the box owned the first Yes opens the rite, so the
     // second `Y` this script used to send is gone.
     script[0] = "Y";
-    // Forty display frames occupy 1..=40 for the rite lead-in, whose last
-    // tick advances to "He says". Six dismissal keys occupy 41..=46. The
-    // next display frame publishes the Orb, index 48 acknowledges it, and
-    // the 40 automatic
+    // Five display frames occupy 1..=5 for `endgame.md §7` steps 4-5's box
+    // hand-over (the eight-iteration lead, slot 0's step up and back, the
+    // four-iteration pause, then the box with record 3). Forty more occupy
+    // 6..=45 for the rite lead-in, whose last tick advances to "He says".
+    // Six dismissal keys occupy 46..=51. The next display frame publishes
+    // the Orb, index 53 acknowledges it, and the 40 automatic
     // frames cover the 15-phase rise, four full-height ticks,
     // one-member/Lord-British exits, 15-phase sink, floor restore, and
     // fade. The remaining eight keys reach terminal hold.
     let mut index = 1;
-    while index < 41 {
+    while index < 46 {
         script[index] = "endgame:frame";
         index += 1;
     }
-    script[47] = "endgame:frame";
-    index = 49;
-    while index < 89 {
+    script[52] = "endgame:frame";
+    index = 54;
+    while index < 94 {
         script[index] = "endgame:frame";
         index += 1;
     }
@@ -9689,7 +9691,7 @@ fn visual_route_frame_is_intentionally_black(label: &str) -> bool {
 /// `§7.1` fade. Pinned so a change in the beat ordering fails the suite
 /// rather than silently moving the black frame somewhere else.
 const ENDGAME_FADE_TO_BLACK_FRAME_LABEL: &str =
-    "route-endgame-box-full-victory-cinematic-88-endgame_frame";
+    "route-endgame-box-full-victory-cinematic-93-endgame_frame";
 
 fn visual_route_allows_unchanged_step(route_label: &str, step: usize) -> bool {
     // `endgame.md §4`: the restoration beat is a held frame - a short
@@ -9710,7 +9712,7 @@ fn visual_route_allows_unchanged_step(route_label: &str, step: usize) -> bool {
     (route_label == "route-endgame-missing-box-terminal-jitter" && (2..=3).contains(&step))
         || (route_label == "route-endgame-missing-box-confirmation" && step == 2)
         || (route_label == "route-endgame-tableau-walk-in")
-        || (route_label == "route-endgame-box-full-victory-cinematic" && (2..=97).contains(&step))
+        || (route_label == "route-endgame-box-full-victory-cinematic" && (2..=102).contains(&step))
         || (route_label == "route-doom-combat-multi-round-pass" && (2..=5).contains(&step))
         // `animation.md §13.2`: "The shipped initial value of the byte is the
         // freeze state, so the very first world step of a session is a bare
@@ -11041,6 +11043,13 @@ fn animate_static_tiles(
         && visual
             .state
             .advance_endgame_tableau_animation_to(real_time.elapsed_secs_f64());
+    // `endgame.md §4` (issue #298 Q43): "The Blackthorn rescue's crowned
+    // spectral figure (`0x74`, also script A) likewise animates during its
+    // verdict key wait", on the same wall-clock world ticks.
+    let endgame_animated = visual
+        .state
+        .advance_blackthorn_rescue_animation_to(real_time.elapsed_secs_f64())
+        || endgame_animated;
 
     if visual.sweep_idle_redraw_pending {
         visual.state.advance_visual_tick();
@@ -17630,11 +17639,13 @@ fn render_pending_blackthorn_rescue_viewport(
             )?;
         }
         if shown >= playback.guardian_reveals.len() + 1 {
+            // The revealed `0x174` until the verdict's key wait, then the
+            // animated record's frame (`endgame.md §4`, issue #298 Q43).
             let reveal = &playback.spectral_reveal;
             blit_tile_id_to_viewport(
                 &mut viewport,
                 atlas,
-                usize::from(reveal.atlas_index),
+                usize::from(state.blackthorn_rescue_spectral_atlas_index()),
                 usize::from(reveal.cell.0),
                 usize::from(reveal.cell.1),
             )?;
@@ -23767,6 +23778,8 @@ mod tests {
         // missing record is now a loud contract failure, so the beat
         // needs real text to walk through.
         state.endgame.as_mut().unwrap().final_narrative = Some(bevy_test_end_narrative());
+        // `endgame.md §7` steps 4-6: the box hand-over comes first.
+        state.finish_endgame_victory_staging();
         assert!(state.advance_endgame_display_frame());
         state.resolve_endgame_confirmation(true);
         for _ in 0..(ENDGAME_TABLEAU_WIDTH * ENDGAME_TABLEAU_HEIGHT * 2) {
@@ -25553,8 +25566,9 @@ mod tests {
         // acknowledgements (`blackthorn.md §3`, +4), the shop-list exit on
         // the four reagent/guild routes (+4), and dropped the second endgame
         // Yes (`endgame.md §5`, -2) and the stray Jimmy member keys
-        // (`dungeon-mode.md §11`, -3).
-        assert_eq!(reports.len(), 2059);
+        // (`dungeon-mode.md §11`, -3). The victory route's box hand-over
+        // (`endgame.md §7` steps 4-5) added five display frames (+5).
+        assert_eq!(reports.len(), 2064);
         for report in &reports {
             assert!(report.path.exists());
             assert_eq!(report.width, VISUAL_PLAY_FRAME_WIDTH);
@@ -25569,7 +25583,7 @@ mod tests {
             }
         }
         let manifest = fs::read_to_string(dir.join("manifest.txt")).unwrap();
-        assert!(manifest.contains("coverage\tvisual-route-steps\t2059"));
+        assert!(manifest.contains("coverage\tvisual-route-steps\t2064"));
         assert!(manifest.contains("coverage\tvisual-key-route-steps\t90"));
         assert!(manifest.contains("coverage\tvisual-route-combat-steps\t"));
         assert!(manifest.contains("route-world-movement-01-d\t320x200\t"));
@@ -25875,7 +25889,7 @@ mod tests {
         assert!(manifest.contains("route-endgame-missing-box-confirmation-02-y"));
         assert!(manifest.contains("route-endgame-box-victory-confirmation-01-y"));
         assert!(manifest.contains(ENDGAME_FADE_TO_BLACK_FRAME_LABEL));
-        assert!(manifest.contains("route-endgame-box-full-victory-cinematic-97-empty"));
+        assert!(manifest.contains("route-endgame-box-full-victory-cinematic-102-empty"));
         assert!(manifest.contains("route-doom-combat-trigger-01-empty"));
         assert!(manifest.contains("route-doom-room-combat-trigger-01-empty"));
         assert!(manifest.contains("route-doom-combat-pass-02-empty"));

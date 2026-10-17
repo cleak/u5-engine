@@ -469,9 +469,13 @@ fn endgame_terminal_jitter_round_costs_four_paced_iterations() {
     state.flush_staged_narration();
     assert!(!state.staged_narration_active());
     state.advance_endgame_terminal_tableau_jitter();
+    // One paced iteration per call, between the calls rather than one block
+    // after the round.
     let holds: Vec<f64> = state.staged_narration.beats().map(|beat| beat.delay_secs).collect();
-    assert_eq!(holds.len(), 1);
-    assert!((holds[0] - crate::narration::bios_ticks_secs(4)).abs() < 1e-9);
+    assert_eq!(holds.len(), 4);
+    for hold in holds {
+        assert!((hold - crate::narration::bios_ticks_secs(1)).abs() < 1e-9);
+    }
     let _ = fs::remove_dir_all(dir);
 }
 

@@ -6662,11 +6662,11 @@ fn terrain_combat_victory_rewrites_water_trigger_slot_after_restore() {
             y: 20,
             z: WorldPlane::Underworld.save_floor(),
             // `combat.md §5.3`, closing line: the post-combat turn-clock
-            // advance runs after the restore, and its active-object pass
-            // steps this slot's animation phase byte once
-            // (`active-objects.md §8`: the pass "writes nothing but the
-            // displayed tile and the packed phase/facing byte").
-            phase: 0x06,
+            // advance runs after the restore. Its outdoor walker pass
+            // "performs no drawing, no frame advance and no cleanup at all"
+            // (`active-objects.md §8`) and byte 6 is "Advanced by the
+            // animator" (`§3`), so the countdown is left as restored.
+            phase: 0x07,
             aux1: WATER_CREATURE_BODY_AUX1,
             aux3: WATER_CREATURE_BODY_AUX3,
         }
@@ -12778,11 +12778,9 @@ fn combat_input_dispatch_escape_cleanup_restores_stored_frame_snapshot() {
         PostCombatTriggerReconcile::BodyRetrieval
     );
     // `combat.md §5.3`, closing line: the post-combat turn-clock advance
-    // runs after the framer restored the snapshot, and its active-object
-    // pass steps the surviving slot's animation phase byte once
-    // (`active-objects.md §8`). Everything the framer restores is still
-    // byte-for-byte the pre-combat table.
-    expected_objects[2].phase = expected_objects[2].phase.wrapping_sub(1);
+    // runs after the framer restored the snapshot; its outdoor walker leaves
+    // byte 6 to the animator (`active-objects.md §3`/`§8`), so everything
+    // the framer restores is byte-for-byte the pre-combat table.
     assert_eq!(state.active_objects, expected_objects);
     assert_eq!(
         state.combat_actors,

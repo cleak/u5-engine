@@ -442,6 +442,8 @@ fn endgame_orb_sting_lands_on_the_acknowledgement_not_on_the_box_to_orb_swap() {
     // `endgame.md §5`: a first Yes skips the sandalwood question.
     state.resolve_endgame_confirmation(true);
     state.endgame.as_mut().unwrap().final_narrative = Some(synthetic_end_narrative());
+    // `endgame.md §7` steps 4-6: the box hand-over runs first.
+    state.finish_endgame_victory_staging();
     assert_eq!(
         endgame_tableau_role_for_slot(
             ENDGAME_TABLEAU_BOX_SLOT,

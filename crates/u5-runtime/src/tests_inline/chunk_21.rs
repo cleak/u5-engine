@@ -7043,7 +7043,10 @@ fn active_object_walker_countdown_leaves_the_frame_to_the_animator() {
         .iter()
         .find(|object| object.type_byte == 168)
         .unwrap();
-    assert_eq!(object.phase, 0x21);
+    // `active-objects.md §3`/`§8`: byte 6 is "Advanced by the animator"; the
+    // walker "performs no drawing, no frame advance and no cleanup at all",
+    // so neither the countdown nor the frame moves on a walker pass.
+    assert_eq!(object.phase, 0x22);
     assert_eq!(object.tile, 168);
 }
 

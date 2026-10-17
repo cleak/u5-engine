@@ -1150,4 +1150,5 @@ mod tests {
     include!("tests_inline/audit_g8_magic_view.rs");
     include!("tests_inline/town_fight_followups.rs");
     include!("tests_inline/sail_bare_marker_rows.rs");
+    include!("tests_inline/triage_leftovers_b.rs");
 }

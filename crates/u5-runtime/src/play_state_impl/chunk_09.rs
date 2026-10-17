@@ -1082,12 +1082,31 @@ impl PlayState {
                 // cell ahead in a flavour-3 dungeon takes one gameplay draw
                 // over `0..64`, hit or miss, and a result below 4 lights the
                 // chained skeleton's eyes.
+                //
+                // "The draw is consumed on every render that tests such a
+                // wall", and the original renders once per loop iteration
+                // (`§10` inner loop, step 2 "Render and poll"). A frontend
+                // repaints far more often than that, so the draw is taken on
+                // the iteration's first render and its result reused by every
+                // repaint until the next iteration begins.
                 if role == DungeonBillboardRole::ForwardFlavourWall
                     && band == 1
                     && scene.presentation_flavour() == DungeonPresentationFlavour::FlavourByte3
                 {
-                    let roll = u5_prng_range_u16(&mut self.prng_state, 0, DUNGEON_FLOURISH_ROLL_HIGH);
-                    if roll < DUNGEON_FLOURISH_HIT_BELOW {
+                    let lit = match self.dungeon_flourish_draw {
+                        Some((iteration, lit)) if iteration == self.dungeon_loop_iteration => lit,
+                        _ => {
+                            let roll = u5_prng_range_u16(
+                                &mut self.prng_state,
+                                0,
+                                DUNGEON_FLOURISH_ROLL_HIGH,
+                            );
+                            let lit = roll < DUNGEON_FLOURISH_HIT_BELOW;
+                            self.dungeon_flourish_draw = Some((self.dungeon_loop_iteration, lit));
+                            lit
+                        }
+                    };
+                    if lit {
                         for &(y, first, last) in DUNGEON_FLOURISH_RUNS.iter() {
                             for x in first..=last {
                                 Self::plot_dungeon_screen_pixel(viewport, x, y, DUNGEON_FLOURISH_PEN);
@@ -3022,6 +3041,7 @@ impl PlayState {
                 .effective_minutes(minutes)
         };
         self.dungeon_loop_minute_charged = true;
+        self.dungeon_loop_iteration = self.dungeon_loop_iteration.wrapping_add(1);
         self.advance_clock_half(effective_minutes);
     }
 
@@ -4887,8 +4907,15 @@ impl PlayState {
             if self.active_objects[slot].is_empty() {
                 continue;
             }
+            // `active-objects.md §3`/`§8`: byte 6 is the animator's - "Advanced
+            // by the animator" - and the walker "performs no drawing, no frame
+            // advance and no cleanup at all". It only *reads* the steady
+            // marker, so the countdown nibble is left for the world-tick
+            // animator ([`Self::animate_active_objects`]) to decrement. This
+            // walker used to decrement it on every consumed turn as well,
+            // which ran a slot's frame-delay pauses fast outdoors.
             let phase_before_tick = self.active_objects[slot].phase;
-            let steady = matches!(self.active_objects[slot].tick_phase(), PhaseTick::Steady);
+            let steady = phase_before_tick & 0x0f == STEADY_PHASE;
             // Orthogonal adjacency is consumed before any ranged class test.
             // Its I/O-bearing combat/transition effect is completed by the
             // post-turn handler, but it claims the walker slot here so neither

@@ -4786,31 +4786,29 @@ impl PlayState {
         &mut self,
         challenge: crate::blackthorn_session::BlackthornChallenge,
         line: String,
-        executes: bool,
     ) -> io::Result<MoveOutcome> {
-        self.hold_blackthorn_closing_page(challenge, line, executes, false)
+        self.hold_blackthorn_closing_page(challenge, line, false)
     }
 
+    /// Print a closing record and wait for its acknowledgement.
+    ///
+    /// No line feed follows here. `blackthorn.md §5`'s executions "finish
+    /// with one line feed" as their **last** step (step 9), after the blade
+    /// hold and the roster edit, so the correct-answer arm's feed is printed
+    /// by [`Self::release_blackthorn_execution_hold`] when that hold ends; the
+    /// wrong-answer arm's comes after record `6`. The two branches that
+    /// execute nobody, records `9` and `10`, end on "acknowledgement and the
+    /// closing scene beat" with no such row: `bt-audience`'s `ask3` beat has
+    /// the next command echo directly under `thee!"`.
     fn hold_blackthorn_closing_page(
         &mut self,
         mut challenge: crate::blackthorn_session::BlackthornChallenge,
         line: String,
-        executes: bool,
         epilogue: bool,
     ) -> io::Result<MoveOutcome> {
         challenge.await_closing_acknowledgement(epilogue);
         self.active_blackthorn = Some(challenge);
-        // `blackthorn.md §5`: "The execution helper finishes with one line
-        // feed", and the correct-answer execution "also finishes with one
-        // line feed" - the blank row under the outcome that `bt-correct`'s
-        // `right` beat shows the stock game carrying. The two branches that
-        // execute nobody, records `9` and `10`, end on "acknowledgement and
-        // the closing scene beat" with no such row: `bt-audience`'s `ask3`
-        // beat has the next command echo directly under `thee!"`.
         self.emit_message_line(line.clone());
-        if executes {
-            self.push_explicit_blank_message_entry();
-        }
         self.message = line;
         Ok(MoveOutcome::PromptDeclined)
     }
@@ -5004,12 +5002,6 @@ impl PlayState {
             // edit still precedes whatever the key does.
             if self.blackthorn_execution_hold_pending() {
                 self.flush_staged_narration();
-            }
-            // §5: "After the execution and roster removal, print `\n\n`, the
-            // actual removed member's name, and ` is sliced in half! `." That
-            // is its own held page; record `6` follows the next key.
-            if let Some(page) = self.pending_blackthorn_closing_page.take() {
-                return self.hold_blackthorn_closing_page(challenge, page, false, true);
             }
             if challenge.closing_epilogue_pending() {
                 // `blackthorn.md §5`: "After acknowledgement, record `6`
@@ -5207,7 +5199,7 @@ impl PlayState {
                 // the blade-and-impact hold", before the exit beat's key wait
                 // begins. The engine previously deferred the lift to that key
                 // after a stock capture taken with a key sent during the hold.
-                let outcome = self.hold_blackthorn_closing(challenge, reward, executes)?;
+                let outcome = self.hold_blackthorn_closing(challenge, reward)?;
                 if executes {
                     self.pending_blackthorn_merciful_death = true;
                     self.stage_blackthorn_execution_hold(None);
@@ -5249,7 +5241,7 @@ impl PlayState {
                         crate::MISCMSG_BLACKTHORN_DUNGEON_THREAT,
                         BLACKTHORN_DUNGEON_THREAT,
                     )?;
-                    return self.hold_blackthorn_closing(challenge, line, false);
+                    return self.hold_blackthorn_closing(challenge, line);
                 };
                 match challenge.wrong_escalation() {
                     // First wrong answer: a threat only. No tile is stamped
@@ -5407,7 +5399,7 @@ impl PlayState {
                         // page (§5 step 8), so the session waits for its
                         // closing key from here, with record `6` behind it.
                         let outcome =
-                            self.hold_blackthorn_closing_page(challenge, line, false, true)?;
+                            self.hold_blackthorn_closing_page(challenge, line, true)?;
                         self.open_message_row();
                         // §5 step 8: "On the wrong-answer arm only: print
                         // `\n\n`, the removed member's name and ` is sliced
@@ -5543,6 +5535,15 @@ impl PlayState {
                 .unwrap_or_else(|| "no companion remains to punish".to_string())
         };
         self.repaint_stats_panel();
+        // §5 step 9: the correct-answer execution "also finishes with one
+        // line feed" - the last thing it does, after the blade hold and the
+        // roster edit, so the blank row under record `5` appears with the
+        // reduced panel, not while the hold is still running (u5-spec#298
+        // Q31: the drop and the exit beat's key-wait cursor arrive in the
+        // same sample). The wrong-answer arm's feed follows record `6`.
+        if merciful {
+            self.push_explicit_blank_message_entry();
+        }
         self.push_diagnostic(format!(
             "Blackthorn execution at the end of the blade hold (impact at {impact:?}): {report}."
         ));
@@ -6057,6 +6058,57 @@ impl PlayState {
         Ok(MoveOutcome::Observed)
     }
 
+    /// One world tick of the rescue figure's animator while the verdict's
+    /// key wait runs. `endgame.md §4` (issue #298 Q43): "The Blackthorn
+    /// rescue's crowned spectral figure (`0x74`, also script A) likewise
+    /// animates during its verdict key wait" - `blackthorn.md §7` step 19:
+    /// "The world keeps running while it blocks". Returns whether the
+    /// displayed frame changed.
+    pub fn animate_blackthorn_rescue_spectral(&mut self) -> bool {
+        if !self.blackthorn_rescue_awaiting_acknowledgement()
+            || self.blackthorn_rescue_spectral_actor.is_empty()
+        {
+            return false;
+        }
+        let mut figure = self.blackthorn_rescue_spectral_actor;
+        let changed = self.animate_script_a_object_tick(&mut figure);
+        self.blackthorn_rescue_spectral_actor = figure;
+        changed
+    }
+
+    /// Run [`Self::animate_blackthorn_rescue_spectral`] once for every BIOS
+    /// tick since the last call - the ordinary reader's idle arm ticks the
+    /// world at that rate - catching up at most
+    /// [`crate::ENDGAME_TABLEAU_ANIMATION_CATCH_UP_TICKS`] at once.
+    pub fn advance_blackthorn_rescue_animation_to(&mut self, now_secs: f64) -> bool {
+        if !self.blackthorn_rescue_awaiting_acknowledgement() {
+            return false;
+        }
+        let tick = (now_secs.max(0.0) / crate::narration::BIOS_TICK_SECS) as u64;
+        let Some(last) = self.blackthorn_rescue_animation_tick.replace(tick) else {
+            return false;
+        };
+        let due = tick
+            .saturating_sub(last)
+            .min(crate::ENDGAME_TABLEAU_ANIMATION_CATCH_UP_TICKS);
+        let mut changed = false;
+        for _ in 0..due {
+            changed |= self.animate_blackthorn_rescue_spectral();
+        }
+        changed
+    }
+
+    /// The tile the rescue's crowned figure is drawn with: `0x100` plus the
+    /// animated record's frame byte (`endgame.md §4`'s `+256` rule), or the
+    /// revealed atlas tile `0x174` before the record goes live.
+    pub fn blackthorn_rescue_spectral_atlas_index(&self) -> u16 {
+        if self.blackthorn_rescue_spectral_actor.is_empty() {
+            crate::blackthorn::BLACKTHORN_RESCUE_SPECTRAL_ATLAS_INDEX
+        } else {
+            0x100 + u16::from(self.blackthorn_rescue_spectral_actor.tile)
+        }
+    }
+
     /// Whether the rescue is at step 19, its one blocking key read.
     /// Whether `blackthorn.md §7`'s rescue cinematic owns the viewport.
     pub fn blackthorn_rescue_active(&self) -> bool {
@@ -6086,6 +6138,22 @@ impl PlayState {
             Some(BlackthornRescuePhase::Narration) => {
                 self.pending_blackthorn_rescue =
                     Some(BlackthornRescuePhase::AwaitingAcknowledgement);
+                // `blackthorn.md §7.1` step 5 committed actor byte `0x74` at
+                // `(5,2)`; `endgame.md §4` (issue #298 Q43): that crowned
+                // figure is script A and "likewise animates during its
+                // verdict key wait".
+                let (x, y) = crate::blackthorn::BLACKTHORN_RESCUE_SPECTRAL_CELL;
+                self.blackthorn_rescue_spectral_actor = ActiveObject {
+                    type_byte: crate::blackthorn::BLACKTHORN_RESCUE_SPECTRAL_ACTOR_BYTE,
+                    tile: crate::blackthorn::BLACKTHORN_RESCUE_SPECTRAL_ACTOR_BYTE,
+                    x: usize::from(x),
+                    y: usize::from(y),
+                    z: 0,
+                    phase: 0,
+                    aux1: 0,
+                    aux3: 0,
+                };
+                self.blackthorn_rescue_animation_tick = None;
                 Ok(None)
             }
             // Step 19: "any key satisfies it, no typed character is echoed,
@@ -6249,6 +6317,8 @@ impl PlayState {
         // The cinematic is over; the handoff's own scene is an ordinary map.
         self.cutscene_black_viewport = false;
         self.blackthorn_rescue_reveals_shown = 0;
+        self.blackthorn_rescue_spectral_actor = ActiveObject::empty();
+        self.blackthorn_rescue_animation_tick = None;
         self.moral_standing = blackthorn_rescue_post_print_standing(self.moral_standing);
         self.clear_active_effect_slot();
         // `blackthorn.md §7` step 11 / §7.1: the handoff comes "with the
