@@ -174,7 +174,11 @@ impl PlayState {
         // It is also the frame-sequence evidence `cleak/u5-spec#231` asks for
         // to reconcile its G/S/X absence report with the original's output
         // calls.
-        self.message = SEARCH_NOTHING_FOUND.to_string();
+        //
+        // `commands.md §5.8` (u5-spec#298 Q4): combat's S "reaches the same
+        // routine", so a furniture cell in the arena takes its location
+        // phrase and the lower-case `thou dost find` row.
+        self.message = format!("{}{SEARCH_NOTHING_OF_NOTE_ROW}", self.search_preamble_at(x, y));
         MoveOutcome::Searched
     }
 

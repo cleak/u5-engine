@@ -2253,7 +2253,9 @@ impl PlayState {
             self.message = SEARCH_NOTHING_FOUND.to_string();
             return MoveOutcome::Blocked;
         }
-        self.message = SEARCH_NOTHING_FOUND.to_string();
+        // `commands.md §5.8` (u5-spec#298 Q4): the furniture prefix "applies
+        // to overworld (both planes)" Search as well.
+        self.message = search_nothing_found_for_tile(target_tile.unwrap_or_default());
         MoveOutcome::Blocked
     }
 
@@ -2352,13 +2354,10 @@ impl PlayState {
                 // the Moonstone scan is engine detail, not a row.
                 self.diagnostics
                     .push("searched a generic find marker; no Moonstone scan ran".to_string());
-                self.message = town_search_live_tile_miss_message(tile)
-                    .unwrap_or(SEARCH_NOTHING_FOUND)
-                    .to_string();
+                self.message = search_nothing_found_for_tile(tile);
                 return MoveOutcome::Blocked;
             }
-            let miss_message =
-                town_search_live_tile_miss_message(tile).unwrap_or(SEARCH_NOTHING_FOUND);
+            let miss_message = search_nothing_found_for_tile(tile);
             if let Some(outcome) = self.search_moonstone_pickup_at(tx, ty, |slot| {
                 moonstone_slot_matches_town(slot, scene, floor, tx, ty)
             }) {
@@ -2372,7 +2371,7 @@ impl PlayState {
             ) {
                 return outcome;
             }
-            self.message = miss_message.to_string();
+            self.message = miss_message;
             return MoveOutcome::Blocked;
         };
         if !(24..=63).contains(&tile) {
@@ -2391,13 +2390,10 @@ impl PlayState {
                 // the Moonstone scan is engine detail, not a row.
                 self.diagnostics
                     .push("searched a generic find marker; no Moonstone scan ran".to_string());
-                self.message = town_search_live_tile_miss_message(tile)
-                    .unwrap_or(SEARCH_NOTHING_FOUND)
-                    .to_string();
+                self.message = search_nothing_found_for_tile(tile);
                 return MoveOutcome::Blocked;
             }
-            let miss_message =
-                town_search_live_tile_miss_message(tile).unwrap_or(SEARCH_NOTHING_FOUND);
+            let miss_message = search_nothing_found_for_tile(tile);
             if let Some(outcome) = self.search_moonstone_pickup_at(tx, ty, |slot| {
                 moonstone_slot_matches_town(slot, scene, floor, tx, ty)
             }) {
@@ -2411,7 +2407,7 @@ impl PlayState {
             ) {
                 return outcome;
             }
-            self.message = miss_message.to_string();
+            self.message = miss_message;
             return MoveOutcome::Blocked;
         }
 
@@ -2431,6 +2427,24 @@ impl PlayState {
         self.push_diagnostic(format!("Revealed secret door at ({tx}, {ty})."));
         self.message.clear();
         MoveOutcome::Searched
+    }
+
+    /// `commands.md §5.8` (u5-spec#298 Q4): the Search preamble the searched
+    /// cell's live tile selects. "The classification reads only the searched
+    /// cell's live tile and never tests the scene", so the overworld, the
+    /// town family and the combat arena all route through it; the dungeon
+    /// "is diverted before the prefix choice to its own routine".
+    pub fn search_preamble_at(&self, x: usize, y: usize) -> String {
+        let tile = if self.combat_active {
+            self.combat_terrain.get(y).and_then(|row| row.get(x)).copied()
+        } else {
+            match self.area {
+                Area::World { .. } => self.grid.get(y * WORLD_SIDE + x).copied(),
+                Area::Town { .. } => self.grid.get(y * 32 + x).copied(),
+                Area::Dungeon { .. } => None,
+            }
+        };
+        tile.map_or_else(|| SEARCH_PREAMBLE.to_string(), search_preamble_for_tile)
     }
 
     pub fn search_moonstone_at<F>(
@@ -2481,7 +2495,10 @@ impl PlayState {
                 "Moonstone phase {} is already surfaced as a strange rock.",
                 slot_index + 1
             ));
-            self.message = SEARCH_NOTHING_FOUND.to_string();
+            self.message = format!(
+                "{}{SEARCH_NOTHING_OF_NOTE_ROW}",
+                self.search_preamble_at(x, y)
+            );
             return Some(MoveOutcome::Blocked);
         }
 
@@ -2505,7 +2522,7 @@ impl PlayState {
             "Found a strange rock for Moonstone phase {}.",
             slot_index + 1
         ));
-        self.message = format!("{SEARCH_PREAMBLE}{SEARCH_STRANGE_ROCK_LINE}");
+        self.message = format!("{}{SEARCH_STRANGE_ROCK_LINE}", self.search_preamble_at(x, y));
         Some(MoveOutcome::Searched)
     }
 
@@ -2537,7 +2554,8 @@ impl PlayState {
         self.diagnostics
             .push(format!("Found {amount} sprigs of {}.", point.label));
         self.message = format!(
-            "{SEARCH_PREAMBLE}{amount}{SEARCH_REAGENT_SPRIGS_FRAGMENT}{}",
+            "{}{amount}{SEARCH_REAGENT_SPRIGS_FRAGMENT}{}",
+            self.search_preamble_at(x, y),
             point.line
         );
         Some(MoveOutcome::Searched)
@@ -2580,7 +2598,10 @@ impl PlayState {
                 "{} is already surfaced here.",
                 entry.pickup.label()
             ));
-            self.message = SEARCH_NOTHING_FOUND.to_string();
+            self.message = format!(
+                "{}{SEARCH_NOTHING_OF_NOTE_ROW}",
+                self.search_preamble_at(x, y)
+            );
             return Some(MoveOutcome::Blocked);
         }
         let pickup = ActiveObject::fixed_hidden_treasure_pickup(entry.record, x, y, floor);
@@ -2598,7 +2619,7 @@ impl PlayState {
         // `commands.md §5.8`: "Fixed hidden treasure | `[blank]` then
         // `Thou dost find` then the staged object's name from the found-object
         // vocabulary in `systems/hidden-treasures.md`".
-        self.message = format!("{SEARCH_PREAMBLE}{}", entry.pickup.narrated_row());
+        self.message = format!("{}{}", self.search_preamble_at(x, y), entry.pickup.narrated_row());
         Some(MoveOutcome::Searched)
     }
 
@@ -4852,25 +4873,6 @@ pub const FIXED_HIDDEN_TREASURES: &[FixedHiddenTreasureEntry] = &[
     ),
 ];
 
-pub fn town_search_live_tile_miss_message(tile: u8) -> Option<&'static str> {
-    match tile {
-        0x2b => Some("Searched stump; nothing found."),
-        0x4f => Some("Searched wall; nothing found."),
-        0x5a => Some("Searched shelf; nothing found."),
-        0x5c | 0x5d => Some("Searched bookshelf; nothing found."),
-        0xa1 => Some("Searched well; nothing found."),
-        0xa5 => Some("Searched desk; nothing found."),
-        0xa6 => Some("Searched barrel; nothing found."),
-        0xa8 => Some("Searched vanity; nothing found."),
-        0xab | 0xac => Some("Searched under bed; nothing found."),
-        0xad => Some("Searched dresser; nothing found."),
-        0xaf => Some("Searched trunk; nothing found."),
-        0xb2 => Some("Searched brazier; nothing found."),
-        0xbc => Some("Searched fireplace; nothing found."),
-        _ => None,
-    }
-}
-
 #[cfg(test)]
 mod hidden_treasure_record_15_spec_tests {
     use super::{FIXED_HIDDEN_TREASURES, FixedHiddenTreasureEntry, HiddenTreasurePickup};
@@ -4946,3 +4948,64 @@ mod hidden_treasure_record_15_spec_tests {
         assert!(state.fixed_hidden_treasure_rule_allows(entry, entry.x, entry.y));
     }
 }
+
+#[cfg(test)]
+mod furniture_search_prefix_spec_tests {
+    use crate::test_fixtures::{open_grid, open_world_grid, test_state, world_state};
+    use crate::*;
+
+    /// `commands.md §5.8` (u5-spec#298 Q4, `RETRACTIONS.md` R544): "Each
+    /// piece is the noun, one line feed, then `t` ..., so with the shared
+    /// tail `hou_dost_find\n` the location phrase and a lower-case `thou dost
+    /// find` are two separate rows, after the ordinary leading line feed."
+    #[test]
+    fn town_search_of_a_stump_prints_the_location_row_then_lower_case_thou() {
+        let mut grid = open_grid();
+        grid[2 * 32 + 1] = 0x2B;
+        let mut state = test_state(grid, 1, 1);
+        let Area::Town { scene, floor } = state.area else {
+            unreachable!()
+        };
+        state.search_town_secret_direction(&[], scene, floor, Direction::South);
+        assert_eq!(
+            state.message,
+            "\nIn the stump\nthou dost find\nnothing of note.\n"
+        );
+    }
+
+    #[test]
+    fn every_furniture_piece_splits_into_phrase_and_thou_rows() {
+        assert_eq!(
+            search_preamble_for_tile(0xA1),
+            "\nNear the well\nthou dost find\n"
+        );
+        assert_eq!(
+            search_preamble_for_tile(0xAB),
+            "\nUnder the bed\nthou dost find\n"
+        );
+        assert_eq!(
+            search_preamble_for_tile(0x5A),
+            "\nOn the shelf\nthou dost find\n"
+        );
+        // "Every other tile, the cask included, uses the two-byte default
+        // prefix ... the ordinary `\nThou_dost_find\n`."
+        assert_eq!(search_preamble_for_tile(0x01), SEARCH_PREAMBLE);
+        assert_eq!(search_nothing_found_for_tile(0x01), SEARCH_NOTHING_FOUND);
+    }
+
+    /// "The prefix depends only on the live tile, so it applies to overworld
+    /// (both planes), town-family and combat Search".
+    #[test]
+    fn overworld_search_of_a_stump_takes_the_prefix_too() {
+        let mut grid = open_world_grid();
+        let (x, y) = (10, 10);
+        grid[(y + 1) * WORLD_SIDE + x] = 0x2B;
+        let mut state = world_state(grid, x, y);
+        state.search_world_moonstone_direction(WorldPlane::Britannia, Direction::South);
+        assert_eq!(
+            state.message,
+            "\nIn the stump\nthou dost find\nnothing of note.\n"
+        );
+    }
+}
+
