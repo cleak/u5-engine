@@ -4221,6 +4221,8 @@
         assert_eq!(heal.message, crate::commands::SPELL_SUCCESS_LINE);
         assert!(heal.diagnostics.iter().any(|d| d.starts_with("Healed party member 2")));
 
+        // `magic.md §8`: the heal's flash holds the loop until it ends.
+        heal.flush_staged_narration();
         let mut great_heal = heal.clone();
         great_heal.turn = 0;
         great_heal.party[0].mana = GREAT_HEAL_COST;

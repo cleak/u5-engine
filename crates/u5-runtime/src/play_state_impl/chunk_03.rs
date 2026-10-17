@@ -275,6 +275,9 @@ impl PlayState {
         // nothing at all when the text stopped part-way along a row.
         (self.staged_narration_active()
             && (self.message_row_open_mid_line || self.staged_narration.head_continues_open_row()))
+            // `magic.md §8`: "A frame taken mid-flash shows the three rows
+            // alone" - no command row under the frozen spell row.
+            || self.message_window_flash_hold_active()
             || self.mix_reagent_selection_active()
             // `endgame.md §6`: the waiting branch is terminal and reads no
             // command, so no command row opens under record 10. Measured
@@ -507,6 +510,7 @@ impl PlayState {
         let due = self.staged_narration.take_due_world_steps(now_secs);
         self.run_presentation_world_steps(due);
         let released = self.staged_narration.advance_to(now_secs);
+        self.release_message_window_flash_beats(released.len());
         // `blackthorn.md §7` step 4 runs "the audio-envelope sequence, three
         // cell reveals, and paired viewport flash between" the shout and the
         // thunder line. Measured 2026-09-18
@@ -541,7 +545,9 @@ impl PlayState {
 
     /// Print every remaining beat now. For frontends and tests with no pump.
     pub fn flush_staged_narration(&mut self) {
-        for beat in self.staged_narration.drain_all() {
+        let drained = self.staged_narration.drain_all();
+        self.release_message_window_flash_beats(drained.len());
+        for beat in drained {
             self.release_blackthorn_execution_hold();
             self.run_presentation_world_steps(beat.world_steps);
             self.presentation_viewport_inverted = false;

@@ -768,7 +768,11 @@ impl PlayState {
         // resources already settled by the first entry; anything else
         // starts unpaid. The flag never outlives one dispatch.
         let already_spent = std::mem::take(&mut self.cast_resources_spent);
+        // `magic.md §8`: a shared variant played inside the dispatch is the
+        // spell's whole-view flash ([`MessageWindowFlashHold`]).
+        let was_casting = std::mem::replace(&mut self.message_window_flash_hold.casting, true);
         let outcome = self.dispatch_cast_spell_from_suffix(suffix, game_dir, already_spent);
+        self.message_window_flash_hold.casting = was_casting;
         self.cast_resources_spent = false;
         outcome
     }

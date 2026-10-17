@@ -755,7 +755,8 @@ pub use play_state_impl::{
     town_free_roaming_pen_tile_blocks,
 };
 pub use play_state_struct::{
-    MESSAGE_TRANSCRIPT_CAPACITY, MessageEntry, PlayState, SOUND_EFFECT_HISTORY_CAPACITY,
+    MESSAGE_TRANSCRIPT_CAPACITY, MessageEntry, MessageWindowFlashHold, PlayState,
+    SOUND_EFFECT_HISTORY_CAPACITY,
     SoundEffect, ViewOverlay, ViewOverlayKind, ViewOverlayMode, VisibilitySweep, WorldOverlayCache,
     WorldReturn,
 };
@@ -1151,4 +1152,5 @@ mod tests {
     include!("tests_inline/town_fight_followups.rs");
     include!("tests_inline/sail_bare_marker_rows.rs");
     include!("tests_inline/triage_leftovers_b.rs");
+    include!("tests_inline/spell_flash_hold.rs");
 }

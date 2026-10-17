@@ -18284,19 +18284,21 @@ fn render_integrated_status_framebuffer(
         let keep = |text: &str| {
             (!text.trim().is_empty()).then(|| visual_display_line(&display_state, text))
         };
-        let mut log = message_log_from_entries(display_state.message_entries(), keep);
+        // `magic.md §8`: while a spell's flash holds the window it shows the
+        // rows from before the flash, not the result composed behind it.
+        let mut log = message_log_from_entries(display_state.displayed_message_entries(), keep);
         log.set_top_offset(usize::from(display_state.message_window_top_offset()));
-        if let Some(text) = display_state
-            .message_slot_needs_flush()
-            .then(|| keep(&message))
-            .flatten()
-        {
+        if let Some(text) = display_state.displayed_unflushed_message().and_then(keep) {
             log.push_output(&text);
         }
+        let flash_hold = display_state.message_window_flash_hold_active();
         // `text-output.md §10.6`: a prompt that is waiting for a key
         // keeps its own line open and carries the cursor inline, so no
         // fresh live row (and no end-cap triangle) is drawn for it.
-        let open_prompt = display_state.open_prompt_line().or_else(|| {
+        let open_prompt = display_state.open_prompt_line().filter(|_| !flash_hold).or_else(|| {
+            if flash_hold {
+                return None;
+            }
             // A shop's typed quantity prompt has no literal of its own to
             // match: its question is already in the log, wrapped, with the
             // authored trailing space trimmed off the last row and recorded
@@ -18314,7 +18316,7 @@ fn render_integrated_status_framebuffer(
         });
         // The spell-name colon line is a live row whose text comes from
         // the cast/mix session rather than the shell's own input buffer.
-        let spell_echo = display_state.typed_prompt_echo();
+        let spell_echo = display_state.typed_prompt_echo().filter(|_| !flash_hold);
         // The runtime's echo is the row's *stored* text; the shell's
         // `input_line` is what the player has typed since the last submit.
         // The two are both live, and preferring one dropped the other: the

@@ -10,12 +10,86 @@ impl PlayState {
     /// runtime records every effect unconditionally and never consults the
     /// Ctrl-S boolean here. A frontend decides audibility.
     pub(crate) fn emit_sound_effect(&mut self, effect: SoundEffect) {
+        // `magic.md §8`: a spell's shared variant is its whole-view flash,
+        // and the window holds the cast rows alone until it ends.
+        if self.message_window_flash_hold.casting
+            && matches!(effect, SoundEffect::SharedVariant { .. })
+        {
+            let flash_secs = effect
+                .program(&mut audio::RumbleJitter::default())
+                .duration(true)
+                .as_secs_f64();
+            self.hold_message_window_for_spell_flash(flash_secs);
+        }
         self.sound_effect_serial = self.sound_effect_serial.wrapping_add(1);
         self.sound_effect_history
             .push((self.sound_effect_serial, effect));
         if self.sound_effect_history.len() > SOUND_EFFECT_HISTORY_CAPACITY {
             self.sound_effect_history.remove(0);
         }
+    }
+
+    /// Freeze the message window for one spell flash of `flash_secs`; see
+    /// [`MessageWindowFlashHold`].
+    ///
+    /// The window is captured as it stands - the transcript plus whatever the
+    /// slot still shows on top of it - because the flash starts before the
+    /// handler has printed anything of its result. The hold is a staged pure
+    /// hold, so the loop buffers keys for its length the way the original's
+    /// synchronous flash does. A presentation already staging its own beats
+    /// is left alone: the hold must release first to know its snapshot is
+    /// stale, and nothing else may be queued ahead of it.
+    pub(crate) fn hold_message_window_for_spell_flash(&mut self, flash_secs: f64) {
+        let hold = &mut self.message_window_flash_hold;
+        if !hold.is_active() {
+            if !self.staged_narration.is_empty() {
+                return;
+            }
+            hold.entries = Some(self.message_transcript.clone());
+            hold.slot = (!self.message.is_empty() && self.message != self.message_flushed)
+                .then(|| self.message.clone());
+        }
+        hold.pending_beats = hold.pending_beats.saturating_add(1);
+        self.staged_narration.push_secs(flash_secs, String::new());
+    }
+
+    /// Count `released` staged beats against the flash hold and drop the
+    /// snapshot once its last hold has run.
+    pub(crate) fn release_message_window_flash_beats(&mut self, released: usize) {
+        let hold = &mut self.message_window_flash_hold;
+        if !hold.is_active() {
+            return;
+        }
+        let released = u16::try_from(released).unwrap_or(u16::MAX);
+        hold.pending_beats = hold.pending_beats.saturating_sub(released);
+        if hold.pending_beats == 0 || self.staged_narration.is_empty() {
+            hold.entries = None;
+            hold.slot = None;
+            hold.pending_beats = 0;
+        }
+    }
+
+    /// The transcript rows the message window shows: the frozen rows while
+    /// a spell flash holds it, the live transcript otherwise.
+    pub fn displayed_message_entries(&self) -> &[MessageEntry] {
+        self.message_window_flash_hold
+            .entries
+            .as_deref()
+            .unwrap_or(&self.message_transcript)
+    }
+
+    /// The unflushed slot text the window draws under
+    /// [`Self::displayed_message_entries`], if any.
+    pub fn displayed_unflushed_message(&self) -> Option<&str> {
+        if self.message_window_flash_hold.is_active() {
+            return self.message_window_flash_hold.slot.as_deref();
+        }
+        self.message_slot_needs_flush().then_some(self.message.as_str())
+    }
+
+    /// Whether a spell flash currently freezes the message window.
+    pub fn message_window_flash_hold_active(&self) -> bool {
+        self.message_window_flash_hold.is_active()
     }
 
     /// `audio.md §6.1` scroll presentation: the variant is the scroll index.
@@ -797,6 +871,7 @@ impl PlayState {
             pending_blackthorn_rescue_playbacks: Vec::new(),
             pending_combat_terrain_reveals: Vec::new(),
             pending_potion_flash: None,
+            message_window_flash_hold: MessageWindowFlashHold::default(),
             session_start_world_step_frozen: false,
             pending_stonegate_trapdoor_playback: None,
             pending_town_status_provision_pass: false,
@@ -1212,6 +1287,7 @@ impl PlayState {
             pending_blackthorn_rescue_playbacks: Vec::new(),
             pending_combat_terrain_reveals: Vec::new(),
             pending_potion_flash: None,
+            message_window_flash_hold: MessageWindowFlashHold::default(),
             session_start_world_step_frozen: false,
             pending_stonegate_trapdoor_playback: None,
             pending_town_status_provision_pass: false,
@@ -1638,6 +1714,7 @@ impl PlayState {
             pending_blackthorn_rescue_playbacks: Vec::new(),
             pending_combat_terrain_reveals: Vec::new(),
             pending_potion_flash: None,
+            message_window_flash_hold: MessageWindowFlashHold::default(),
             session_start_world_step_frozen: false,
             pending_stonegate_trapdoor_playback: None,
             pending_town_status_provision_pass: false,

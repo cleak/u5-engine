@@ -139,6 +139,10 @@ pub struct PlayState {
     /// frontend to present it. This is transient presentation state, never
     /// resumable or saved gameplay state.
     pub pending_potion_flash: Option<PotionFlashPlayback>,
+    /// `magic.md §8`: the message window frozen while a spell's whole-view
+    /// flash plays. See [`MessageWindowFlashHold`]. Transient presentation
+    /// state, never saved.
+    pub message_window_flash_hold: MessageWindowFlashHold,
     /// `animation.md §13.2`: "The shipped initial value of the byte is the
     /// freeze state, so the very first world step of a session is a bare
     /// repaint." Set by [`PlayState::load_scene`]; the first world step
@@ -977,6 +981,41 @@ pub struct WorldReturn {
     pub grid: Vec<u8>,
     pub active_objects: Vec<ActiveObject>,
     pub pending_vehicle: Option<PendingVehicleAcquisition>,
+}
+
+/// `magic.md §8` (issue #231 captures, 2026-10-16): "while the spell's
+/// whole-view flash effect plays, the message window holds only the cast,
+/// spell-name and spell rows; then `Success!` and a newline print, followed
+/// by the next actor's prompt". The flash is `audio.md §6`'s shared variant
+/// sequence - the viewport inversion around the envelope pair - and it is
+/// synchronous, so nothing a cast prints after it can be on screen before it
+/// ends.
+///
+/// The cast's handler still composes its whole result in one call, so rather
+/// than restaging every spell's text, the hold freezes what the window *shows*:
+/// the transcript (and any unflushed slot text) as it stood when the flash
+/// started, until a staged pure hold of the flash's own length releases. The
+/// staged hold is also what makes the loop buffer keys for that time, as the
+/// original's blocking flash does. One mechanism for every spell whose result
+/// follows its flash.
+#[derive(Clone, Debug, Default, PartialEq, Eq)]
+pub struct MessageWindowFlashHold {
+    /// A C-Cast dispatch is running, so a shared variant is a spell's flash
+    /// (scrolls and potions reach the same sound through their own paths).
+    pub(crate) casting: bool,
+    /// The transcript as the window showed it when the flash began.
+    pub(crate) entries: Option<Vec<MessageEntry>>,
+    /// The slot text the window was showing on top of `entries`, if any.
+    pub(crate) slot: Option<String>,
+    /// Staged flash holds not yet released; the snapshot is dropped when the
+    /// last one releases.
+    pub(crate) pending_beats: u16,
+}
+
+impl MessageWindowFlashHold {
+    pub fn is_active(&self) -> bool {
+        self.entries.is_some()
+    }
 }
 
 /// One line of the scrolling message-window transcript.

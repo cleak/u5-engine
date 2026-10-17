@@ -60,13 +60,9 @@ town_arrest={} endgame={} rescue={} conversation={}",
         state.pending_blackthorn_rescue.is_some(),
         state.active_conversation.is_some(),
     );
-    let mut log = message_log_from_entries(state.message_entries(), keep);
+    let mut log = message_log_from_entries(state.displayed_message_entries(), keep);
     log.set_top_offset(usize::from(state.message_window_top_offset()));
-    if let Some(text) = state
-        .message_slot_needs_flush()
-        .then(|| keep(&state.message))
-        .flatten()
-    {
+    if let Some(text) = state.displayed_unflushed_message().and_then(keep) {
         log.push_output(&text);
     }
     let open_prompt = state.open_prompt_line();

@@ -877,24 +877,22 @@ pub fn compose_gameplay_screen(
     fn keep(text: &str) -> Option<String> {
         (!text.trim().is_empty()).then(|| text.to_string())
     }
-    let mut log = message_log_from_entries(state.message_entries(), keep);
+    // `magic.md §8`: a spell flash freezes the window on its pre-flash rows.
+    let mut log = message_log_from_entries(state.displayed_message_entries(), keep);
     log.set_top_offset(usize::from(state.message_window_top_offset()));
-    if let Some(text) = state
-        .message_slot_needs_flush()
-        .then(|| keep(&state.message))
-        .flatten()
-    {
+    if let Some(text) = state.displayed_unflushed_message().and_then(keep) {
         log.push_output(&text);
     }
+    let flash_hold = state.message_window_flash_hold_active();
     // `text-output.md §10.6`: a prompt awaiting a key keeps its own line
     // open and carries the input cursor inline, so the headless
     // composition places it exactly where the Bevy renderer does.
-    let open_prompt = state.open_prompt_line();
+    let open_prompt = state.open_prompt_line().filter(|_| !flash_hold);
     // The spell-name colon line is a live row served from the cast/mix
     // session rather than from the log, so the oracle has to ask for it
     // the same way the shell does. There is no typed-input buffer here,
     // which is the one live-row source this path cannot mirror.
-    let spell_echo = state.typed_prompt_echo();
+    let spell_echo = state.typed_prompt_echo().filter(|_| !flash_hold);
     let live_row = if state.message_window_live_row_suppressed() {
         None
     } else {

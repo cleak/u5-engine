@@ -994,6 +994,9 @@ BRITANNIA 11 21
             state.party[0].mana = CREATE_FOOD_COST + 1;
             state.spell_charges[CREATE_FOOD_SPELL_INDEX] = 1;
             handle_play_key_input(&mut state, 'C', "1IMX", Path::new("")).unwrap();
+            // `magic.md §8`: each cast's flash holds the loop; a frontend
+            // with no pump runs it out before the next key.
+            state.flush_staged_narration();
             let grant = state.food - before;
             assert!(grant >= CREATE_FOOD_MIN_GRANT);
             assert!(grant <= CREATE_FOOD_MAX_GRANT);
