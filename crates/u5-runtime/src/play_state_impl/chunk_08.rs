@@ -1217,6 +1217,71 @@ impl PlayState {
         Ok(())
     }
 
+    /// `dungeon-mode.md §14.1` post-combat bracket (u5-spec#298 Q1, R527,
+    /// R528): apply the arena's first-party-exit record to the restored
+    /// dungeon position. A-Attack reads only 5 and 6; the contact and room
+    /// paths run the movement applier, where codes 1-4 move the party one
+    /// cell in that direction, "wrapping on the eight-by-eight grid with **no
+    /// passability test**, and set the facing to that direction". Codes 5
+    /// and 6 change the level "exactly as above, including both surface
+    /// exits, and leave the facing alone". Zero and the absorption marker do
+    /// nothing.
+    pub fn apply_dungeon_post_combat_record(
+        &mut self,
+        applier: DungeonPostCombatApplier,
+        record: Option<u8>,
+    ) {
+        let Area::Dungeon { scene, level } = self.area else {
+            return;
+        };
+        let code = record.unwrap_or(0);
+        let step = match code {
+            COMBAT_DIRECTION_WEST => Some(Direction::West),
+            COMBAT_DIRECTION_EAST => Some(Direction::East),
+            COMBAT_DIRECTION_NORTH => Some(Direction::North),
+            COMBAT_DIRECTION_SOUTH => Some(Direction::South),
+            _ => None,
+        };
+        if let Some(direction) = step {
+            if applier != DungeonPostCombatApplier::MovementApplier {
+                return;
+            }
+            let (dx, dy) = direction.delta();
+            self.player.x = (self.player.x as isize + dx).rem_euclid(DUNGEON_SIDE as isize) as usize;
+            self.player.y = (self.player.y as isize + dy).rem_euclid(DUNGEON_SIDE as isize) as usize;
+            self.player.facing = direction;
+            self.sync_player_object();
+            self.mark_visibility_dirty();
+            return;
+        }
+        let Some(delta) = dungeon_attack_post_combat_z_intent(code) else {
+            return;
+        };
+        let next_level = level as i8 + delta;
+        if !(0..DUNGEON_SIDE as i8).contains(&next_level) {
+            self.pending_dungeon_surface_exit = Some((scene, level));
+            return;
+        }
+        self.area = Area::Dungeon {
+            scene,
+            level: next_level as u8,
+        };
+        self.sync_player_object();
+        self.mark_visibility_dirty();
+    }
+
+    /// Drain [`Self::apply_dungeon_post_combat_record`]'s owed surface exit.
+    pub fn drain_pending_dungeon_surface_exit(&mut self, game_dir: &Path) -> io::Result<bool> {
+        let Some((scene, level)) = self.pending_dungeon_surface_exit.take() else {
+            return Ok(false);
+        };
+        if !matches!(self.area, Area::Dungeon { scene: current, .. } if current == scene) {
+            return Ok(false);
+        }
+        self.resolve_dungeon_surface_reset(game_dir, scene, level)?;
+        Ok(true)
+    }
+
     /// `dungeon-mode.md §13.1` (u5-spec#298 Q26): the gear route offers Up
     /// when the **raw** cell byte carries bit `0x08` and the Grapple byte
     /// (`formats/saved-gam.md §7`, offset `0x0209`) is non-zero.

@@ -325,6 +325,29 @@ impl PlayState {
             return MoveOutcome::Blocked;
         };
         let tile = self.combat_terrain[actor.y as usize][actor.x as usize];
+        if let Some((encounter_mode_high_bit, two_way_centre)) = self
+            .combat_frame_snapshot
+            .as_ref()
+            .filter(|snapshot| matches!(snapshot.area, Area::Dungeon { .. }))
+            .map(|snapshot| {
+                (
+                    snapshot.encounter_mode_high_bit,
+                    // `dungeon-mode.md §14.1`: the two-way flag the ambush
+                    // painter raises for a two-way-ladder dungeon cell.
+                    self.tile_restoration_pending
+                        && !snapshot.encounter_mode_high_bit
+                        && (actor.x, actor.y) == (5, 5),
+                )
+            })
+        {
+            return self.klimb_dungeon_arena_departure(
+                actor_slot,
+                tile,
+                intent,
+                encounter_mode_high_bit,
+                two_way_centre,
+            );
+        }
         if !combat_klimb_tile_accepts_vertical(tile, intent) {
             self.message = DUNGEON_KLIMB_WHAT_REFUSAL.trim_end().to_string();
             return MoveOutcome::Blocked;
@@ -352,6 +375,85 @@ impl PlayState {
             }
         };
         self.apply_combat_round_loop_exit(exit);
+        MoveOutcome::Moved
+    }
+
+    /// `combat.md §8` K row and `dungeon-mode.md §14.1` (u5-spec#298 Q1): in
+    /// a dungeon arena `Up!` on an up ladder (`0xC8`) departs with exit code
+    /// 5 and `Down!` on a down ladder (`0xC9`), or on a metal grate (`0x86`)
+    /// in a dungeon-room encounter, with code 6; on the ambush centre built on
+    /// a two-way ladder, down counts as the `0xC9` case. The code is stored
+    /// in the first-party-exit record only if it is still empty; in a room
+    /// encounter a later party departure must match it or is refused with
+    /// `All must use the same exit!`. The climb word is followed by the
+    /// ordinary `Leave!` or `Escape!` departure line, and the departure
+    /// releases only this actor, as an edge departure does (`combat.md §3`).
+    fn klimb_dungeon_arena_departure(
+        &mut self,
+        actor_slot: usize,
+        tile: u8,
+        intent: ClimbIntent,
+        room_encounter: bool,
+        two_way_centre: bool,
+    ) -> MoveOutcome {
+        let code = match intent {
+            ClimbIntent::Up if tile == TOWN_KLIMB_ASCEND_TILE => 5,
+            ClimbIntent::Down if tile == TOWN_KLIMB_DESCEND_TILE => 6,
+            ClimbIntent::Down if tile == TOWN_KLIMB_DESCEND_GRATE_TILE && room_encounter => 6,
+            ClimbIntent::Down if tile == TOWN_KLIMB_ASCEND_TILE && two_way_centre => 6,
+            _ => {
+                self.message = DUNGEON_KLIMB_WHAT_REFUSAL.trim_end().to_string();
+                return MoveOutcome::Blocked;
+            }
+        };
+        let word = if code == 5 {
+            DUNGEON_KLIMB_UP
+        } else {
+            DUNGEON_KLIMB_DOWN
+        };
+        let party_side = self
+            .combat_actors
+            .get(actor_slot)
+            .is_some_and(|actor| actor.is_party_side());
+        let record = self
+            .combat_frame_snapshot
+            .as_ref()
+            .and_then(|snapshot| snapshot.established_exit_direction_code);
+        if !self.complete_open_direction_echo(DUNGEON_KLIMB_PROMPT_ONE, word.trim_end()) {
+            self.emit_message_line(word);
+        }
+        self.message.clear();
+        if party_side && room_encounter && record.is_some_and(|stored| stored != code) {
+            self.emit_message_line(COMBAT_ALL_MUST_USE_SAME_EXIT_LINE);
+            self.emit_sound_effect(SoundEffect::BlockedStep);
+            return MoveOutcome::Blocked;
+        }
+        if party_side && record.is_none() {
+            if let Some(snapshot) = &mut self.combat_frame_snapshot {
+                snapshot.established_exit_direction_code = Some(code);
+            }
+        }
+        let departure = if combat_has_active_not_dead_non_party_actor(&self.combat_actors) {
+            COMBAT_DEPARTURE_ESCAPE_LINE
+        } else {
+            COMBAT_DEPARTURE_LEAVE_LINE
+        };
+        self.emit_message_line(departure);
+        self.active_player = None;
+        if let Some(actor) = self.combat_actors.get_mut(actor_slot) {
+            let active_object_slot = usize::from(actor.active_object_slot);
+            if !actor.is_empty() {
+                actor.release_preserving_owner_target_class();
+            }
+            if let Some(object) = self.active_objects.get_mut(active_object_slot)
+                && !object.is_empty()
+            {
+                object.clear_record_prefix();
+            }
+        }
+        self.advance_visual_tick();
+        self.mark_visibility_dirty();
+        self.emit_sound_effect(SoundEffect::ActionSnap);
         MoveOutcome::Moved
     }
 
@@ -2137,6 +2239,7 @@ impl PlayState {
             // the tile id, the cell and the level.
             if combat_class_stats(object.aux1).is_some() {
                 let note = self.enter_dungeon_active_monster_combat(level, object)?;
+                self.set_dungeon_post_combat_applier(DungeonPostCombatApplier::AttackLevelsOnly);
                 self.push_diagnostic(format!(
                     "attacked dungeon monster tile {} at ({x}, {y}) on {} level {level}; {note}",
                     object.tile,
@@ -6079,6 +6182,7 @@ impl PlayState {
             self.mark_visibility_dirty();
             if combat_class_stats(object.aux1).is_some() {
                 let note = self.enter_dungeon_active_monster_combat(level, object)?;
+                self.set_dungeon_post_combat_applier(DungeonPostCombatApplier::MovementApplier);
                 // The setup report is an engine diagnostic, not a line the
                 // original prints; §14's `Attacked` line above is.
                 self.push_diagnostic(format!(

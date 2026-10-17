@@ -1236,6 +1236,14 @@ impl PlayState {
         ))
     }
 
+    /// `dungeon-mode.md §14.1` (u5-spec#298 Q1): record which dungeon
+    /// launcher owns the fight just framed.
+    pub fn set_dungeon_post_combat_applier(&mut self, applier: DungeonPostCombatApplier) {
+        if let Some(snapshot) = &mut self.combat_frame_snapshot {
+            snapshot.dungeon_post_combat = Some(applier);
+        }
+    }
+
     /// `dungeon-mode.md §14.1`: "a shuffled permutation of the sixteen
     /// slot indices is built" before the source band is written.
     pub fn dungeon_ambush_source_permutation(&mut self) -> [u8; DUNGEON_ROOM_SOURCE_COUNT] {

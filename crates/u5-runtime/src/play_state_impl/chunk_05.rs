@@ -455,6 +455,10 @@ impl PlayState {
                 !helper_state,
                 doom_final_room,
             )?;
+            // `dungeon-mode.md §14` room cells (u5-spec#298 Q1, R528): the
+            // party is put back on the room cell and the movement applier
+            // then runs on the first-party-exit record.
+            self.set_dungeon_post_combat_applier(DungeonPostCombatApplier::MovementApplier);
             self.message = DUNGEON_ROOM_ENTRY_NARRATION.to_string();
             return Ok(MoveOutcome::Moved);
         }
