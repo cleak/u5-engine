@@ -812,6 +812,12 @@ pub struct PlayState {
     /// The BIOS tick the rescue figure's animator last ran on; `None` until
     /// the first look anchors it.
     pub blackthorn_rescue_animation_tick: Option<u64>,
+    /// The last `visibility.md §8` variant drawn for each audience actor slot
+    /// (`0..=8`) standing on a selecting terrain row - the cutscene's party
+    /// actors start on the manacles `0x85` and are drawn as the prisoner set.
+    pub blackthorn_audience_actor_variants: [u8; 9],
+    /// The BIOS tick the audience's composite pass last ran on.
+    pub blackthorn_audience_composite_tick: Option<u64>,
     pub shrine_presentation_map: Option<MiscmapsCutsceneMap>,
     /// `karma.md §7`'s approach walk, while the shrine presentation is up.
     pub shrine_approach_walk: Option<crate::shrine_presentation::ShrineApproachWalk>,

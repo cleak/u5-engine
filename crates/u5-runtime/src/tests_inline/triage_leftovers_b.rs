@@ -32,13 +32,13 @@ fn triage_b_outdoor_walker_leaves_the_animator_phase_byte_alone() {
     assert_eq!(state.active_objects[1].phase, 0x23);
 }
 
-/// W12. `blackthorn.md §5`: the correct-answer execution is record `5`, the
-/// quiet pause, the swell, the impact, the sprite clear, the pendulum reset,
-/// the roster edit and its repaint, and it "also finishes with one line feed"
-/// - step 9, the last step. The feed (the blank row under record `5`) comes at
-/// the end of the blade hold with the reduced panel, not with the record.
+/// `blackthorn.md §5`: the correct-answer execution "also finishes with one
+/// line feed". Stock capture (`bt-correct` beat `right`, 2026-10-17) shows
+/// that feed - the blank row under record `5` - already on screen during the
+/// blade hold, while the panel still lists the whole party. The roster edit
+/// still waits for the hold's end, and no second feed follows it.
 #[test]
-fn triage_b_merciful_death_closing_feed_follows_the_blade_hold() {
+fn triage_b_merciful_death_closing_feed_is_on_screen_during_the_blade_hold() {
     let dir = debug_game_dir();
     let mut state = test_state(open_grid(), 5, 5);
     state.party.push(audit_g5_companion(1));
@@ -52,21 +52,22 @@ fn triage_b_merciful_death_closing_feed_follows_the_blade_hold() {
     state.submit_blackthorn_audience_answer("Ahm", &dir).unwrap();
     assert!(state.staged_narration_active(), "the blade hold is running");
     assert!(state.message.contains("merciful death"), "{:?}", state.message);
-    let record_tail = state.message_entries().last().expect("record 5 is on screen").clone();
+    assert_eq!(state.party.len(), 3, "the panel still lists the whole party");
+    let held = state.message_entries();
+    let last = held.last().expect("record 5 is on screen").clone();
+    assert!(last.text.is_empty(), "the closing feed is already printed: {last:?}");
+    let record_tail = held[held.len() - 2].clone();
     assert!(
-        !record_tail.text.is_empty(),
-        "no feed yet: the last row is still record 5's, {record_tail:?}"
+        record_tail.text.contains("death!"),
+        "the blank row sits directly under record 5: {record_tail:?}"
     );
+    let held_len = held.len();
 
     state.flush_staged_narration();
     assert_eq!(state.party.len(), 2, "the hold's end lifts the companion");
     let entries = state.message_entries();
-    let last = entries.last().unwrap();
-    assert!(last.text.is_empty(), "step 9's feed closes the routine: {last:?}");
-    assert_eq!(
-        entries[entries.len() - 2].text, record_tail.text,
-        "and it sits directly under record 5"
-    );
+    assert_eq!(entries.len(), held_len, "the hold's end prints no second feed");
+    assert!(entries.last().unwrap().text.is_empty());
     let _ = fs::remove_dir_all(dir);
 }
 

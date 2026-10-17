@@ -4793,10 +4793,9 @@ impl PlayState {
     /// Print a closing record and wait for its acknowledgement.
     ///
     /// No line feed follows here. `blackthorn.md §5`'s executions "finish
-    /// with one line feed" as their **last** step (step 9), after the blade
-    /// hold and the roster edit, so the correct-answer arm's feed is printed
-    /// by [`Self::release_blackthorn_execution_hold`] when that hold ends; the
-    /// wrong-answer arm's comes after record `6`. The two branches that
+    /// with one line feed"; the correct-answer arm's caller prints it right
+    /// after record `5`, where the stock capture shows it (during the blade
+    /// hold), and the wrong-answer arm's comes after record `6`. The two branches that
     /// execute nobody, records `9` and `10`, end on "acknowledgement and the
     /// closing scene beat" with no such row: `bt-audience`'s `ask3` beat has
     /// the next command echo directly under `thee!"`.
@@ -5201,6 +5200,15 @@ impl PlayState {
                 // after a stock capture taken with a key sent during the hold.
                 let outcome = self.hold_blackthorn_closing(challenge, reward)?;
                 if executes {
+                    // §5: the correct-answer execution "also finishes with one
+                    // line feed". The stock capture puts that feed on screen
+                    // *during* the blade hold: `bt-correct`'s `right` beat
+                    // (2026-10-17, artifact bt-correct-20261017-004820) shows
+                    // the blank row under `merciful death!"` while the panel
+                    // still lists the whole party and no key-wait cursor is
+                    // drawn. Stock wins over §5's step order here, so the
+                    // row is fed with the record, not at the hold's end.
+                    self.push_explicit_blank_message_entry();
                     self.pending_blackthorn_merciful_death = true;
                     self.stage_blackthorn_execution_hold(None);
                 }
@@ -5535,15 +5543,9 @@ impl PlayState {
                 .unwrap_or_else(|| "no companion remains to punish".to_string())
         };
         self.repaint_stats_panel();
-        // §5 step 9: the correct-answer execution "also finishes with one
-        // line feed" - the last thing it does, after the blade hold and the
-        // roster edit, so the blank row under record `5` appears with the
-        // reduced panel, not while the hold is still running (u5-spec#298
-        // Q31: the drop and the exit beat's key-wait cursor arrive in the
-        // same sample). The wrong-answer arm's feed follows record `6`.
-        if merciful {
-            self.push_explicit_blank_message_entry();
-        }
+        // The correct-answer arm's closing feed was already printed with
+        // record `5` (the stock capture shows it during the hold); the
+        // wrong-answer arm's follows record `6`.
         self.push_diagnostic(format!(
             "Blackthorn execution at the end of the blade hold (impact at {impact:?}): {report}."
         ));
@@ -6107,6 +6109,121 @@ impl PlayState {
         } else {
             0x100 + u16::from(self.blackthorn_rescue_spectral_actor.tile)
         }
+    }
+
+    /// The audience actor in `slot`, as `(column, row, effective tile byte,
+    /// map terrain, previous-row terrain, next-row terrain)`, or `None` when
+    /// the slot holds no cutscene actor on the grid.
+    fn blackthorn_audience_actor_cell(
+        &self,
+        slot: usize,
+    ) -> Option<(usize, usize, ActiveObject, u8, Option<u8>, Option<u8>)> {
+        let map = self.blackthorn_audience_map.as_ref()?;
+        let object = *self.active_objects.get(slot)?;
+        if object.is_empty()
+            || object.aux3 != BLACKTHORN_CUTSCENE_AUX3_ROLE_MARKER
+            || crate::blackthorn::blackthorn_cutscene_actor(slot as u8).is_none()
+        {
+            return None;
+        }
+        let terrain = map.tile(object.x, object.y)?;
+        let previous = object.y.checked_sub(1).and_then(|y| map.tile(object.x, y));
+        let next = map.tile(object.x, object.y + 1);
+        Some((object.x, object.y, object, terrain, previous, next))
+    }
+
+    /// The full atlas index the audience viewport draws for the actor in
+    /// `slot`, or `None` to draw nothing there.
+    ///
+    /// `blackthorn.md §6`'s explicit redraw is "one unconditional world
+    /// tick", so the audience's actors go through the shared `visibility.md
+    /// §8` compositor like any world actor: the Avatar (`0x1C`) and the
+    /// second member start on the manacles `0x85` at `(3,5)` and `(7,5)`
+    /// and are drawn as "one of `0x64..0x67`" - the prisoner set. Stock
+    /// capture (`bt-correct`, every audience beat) shows exactly that
+    /// prisoner on both cells. The draw-nothing sentinel `0x16` (§6.1) still
+    /// draws nothing.
+    pub fn blackthorn_audience_actor_atlas_tile(&self, slot: usize) -> Option<usize> {
+        let (_, row, object, terrain, previous, next) =
+            self.blackthorn_audience_actor_cell(slot)?;
+        if object.tile == crate::ACTOR_TILE_TRANSPARENT_BYTE {
+            return None;
+        }
+        let variant = self
+            .blackthorn_audience_actor_variants
+            .get(slot)
+            .copied()
+            .unwrap_or(0);
+        let tile = match active_object_composite(
+            object.type_byte,
+            object.tile,
+            terrain,
+            terrain,
+            previous,
+            next,
+            row,
+            variant,
+        ) {
+            ActiveObjectCompositeResult::Suppress | ActiveObjectCompositeResult::Direct(_) => {
+                return None
+            }
+            ActiveObjectCompositeResult::Companion(tile)
+            | ActiveObjectCompositeResult::PreviousRowDirectAndCompanion { tile, .. } => tile,
+        };
+        crate::actor_tile_for_byte(tile)
+    }
+
+    /// One composite pass over the audience actors: every actor that lands
+    /// on a selecting row takes a fresh variant draw (`visibility.md §8.1`:
+    /// "once per composite pass ... never cached"), walking slot eight down
+    /// to slot zero; every other actor takes none. Returns whether any drawn
+    /// variant changed.
+    pub fn run_blackthorn_audience_composite_pass(&mut self) -> bool {
+        let mut changed = false;
+        for slot in (0..self.blackthorn_audience_actor_variants.len()).rev() {
+            let Some((_, _, object, terrain, previous, next)) =
+                self.blackthorn_audience_actor_cell(slot)
+            else {
+                continue;
+            };
+            if !composite_active_object_slot_draws_variant(
+                object.type_byte,
+                object.tile,
+                terrain,
+                terrain,
+                previous,
+                next,
+            ) {
+                continue;
+            }
+            let variant = self.draw_active_object_composite_variant();
+            changed |= self.blackthorn_audience_actor_variants[slot] != variant;
+            self.blackthorn_audience_actor_variants[slot] = variant;
+        }
+        changed
+    }
+
+    /// Run [`Self::run_blackthorn_audience_composite_pass`] once for every
+    /// BIOS tick since the last call while the audience map is up - the
+    /// world-tick rate of the audience's pauses and key waits - catching up
+    /// at most [`crate::ENDGAME_TABLEAU_ANIMATION_CATCH_UP_TICKS`] at once.
+    pub fn advance_blackthorn_audience_composite_to(&mut self, now_secs: f64) -> bool {
+        if self.blackthorn_audience_map.is_none() {
+            self.blackthorn_audience_composite_tick = None;
+            return false;
+        }
+        let tick = (now_secs.max(0.0) / crate::narration::BIOS_TICK_SECS) as u64;
+        let Some(last) = self.blackthorn_audience_composite_tick.replace(tick) else {
+            return self.run_blackthorn_audience_composite_pass();
+        };
+        let due = tick
+            .saturating_sub(last)
+            .min(crate::ENDGAME_TABLEAU_ANIMATION_CATCH_UP_TICKS);
+        let mut changed = false;
+        for _ in 0..due {
+            changed |= self.run_blackthorn_audience_composite_pass();
+        }
+        changed
     }
 
     /// Whether the rescue is at step 19, its one blocking key read.

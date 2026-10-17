@@ -1156,4 +1156,5 @@ mod tests {
     include!("tests_inline/shop_menu_cursor_rows.rs");
     include!("tests_inline/shop_closing_envelope.rs");
     include!("tests_inline/endgame_handover_keys.rs");
+    include!("tests_inline/rc1_paired_fixes.rs");
 }

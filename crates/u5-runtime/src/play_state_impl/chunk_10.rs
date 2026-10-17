@@ -56,6 +56,20 @@ impl PlayState {
         if self.combat_active {
             return;
         }
+        // `blackthorn.md §6`/`§6.3`: while the audience cutscene runs, slot
+        // zero is the Avatar's cinematic actor - it starts at `(3,5)` and the
+        // exit beat walks it to `(0,2)` - and its cells are "used as given
+        // with no viewport translation" (§5 step 4). Refreshing it from the
+        // party's town position moved it off the cutscene grid, so the
+        // engine drew no Avatar where the stock game (`bt-correct`, all
+        // beats) draws the manacled prisoner at `(3,5)`.
+        if self.blackthorn_audience_map.is_some()
+            && self.active_objects.first().is_some_and(|object| {
+                object.aux3 == crate::BLACKTHORN_CUTSCENE_AUX3_ROLE_MARKER
+            })
+        {
+            return;
+        }
         let z = match self.area {
             Area::Town { floor, .. } => floor,
             Area::Dungeon { level, .. } => level as i8,

@@ -11050,6 +11050,12 @@ fn animate_static_tiles(
         .state
         .advance_blackthorn_rescue_animation_to(real_time.elapsed_secs_f64())
         || endgame_animated;
+    // `visibility.md §8.3`: the audience's manacled party actors re-roll
+    // their prisoner frame on every world tick.
+    let endgame_animated = visual
+        .state
+        .advance_blackthorn_audience_composite_to(real_time.elapsed_secs_f64())
+        || endgame_animated;
 
     if visual.sweep_idle_redraw_pending {
         visual.state.advance_visual_tick();
@@ -17499,15 +17505,13 @@ fn render_blackthorn_audience_viewport(
         }
     }
 
+    // `visibility.md §8` through the runtime: actors on the manacles are
+    // drawn as the prisoner set, the sentinel `0x16` as nothing.
     for (slot, object) in state.active_objects.iter().copied().enumerate().rev() {
-        if object.aux3 != u5_runtime::BLACKTHORN_CUTSCENE_AUX3_ROLE_MARKER
-            || u5_runtime::blackthorn_cutscene_actor(slot as u8).is_none()
-            || object.x >= cells
-            || object.y >= rows
-        {
+        if object.x >= cells || object.y >= rows {
             continue;
         }
-        let Some(tile) = u5_runtime::actor_tile_for_byte(object.tile) else {
+        let Some(tile) = state.blackthorn_audience_actor_atlas_tile(slot) else {
             continue;
         };
         blit_tile_id_to_viewport(&mut viewport, atlas, tile, object.x, object.y)?;
