@@ -73,6 +73,20 @@
 # the window scrolls - and reading it that way made the 30-tick and 45-tick
 # runs look like noise when they were in fact ordered.
 #
+# **`t44` sits on a beat boundary and is a capture lottery.** Re-measured
+# 2026-10-16 over 22 runs: stock's `t44` window ends on `AVENTARI"` in most
+# runs, on `of thunder!` in four (2026-09-18 12:09 and 22:24, 2026-10-14,
+# 2026-10-16 21:00) and part-way into the thunder line once (`There is a
+# peal`, 22:42), and the engine's ends on `AVENTARI"` or `of thunder!` the
+# same way. The thunder beat lands within a screenshot's cost of the sample,
+# so a one-beat `text` difference at `t44` alone is the sample, not the hold.
+#
+# The `t24` cursor (`cursor`, 2026-10-16 rc1, and three 2026-09-18 runs): with
+# the sweep over and the rescue not begun, the engine drew the barber pole
+# under `A TRAPDOOR!` on the frames before the turn gate handed the defeated
+# party to the rescue; stock's row is empty in all 22. Fixed - a defeated
+# party's row draws no cursor (`a_defeated_party_awaiting_the_rescue_*`).
+#
 # What is left after the pacing is row accounting, and one row of it is
 # `cleak/u5-spec#279`: through t24 the original keeps a blank row under
 # `A TRAPDOOR!` and this engine does not, which is that issue's question

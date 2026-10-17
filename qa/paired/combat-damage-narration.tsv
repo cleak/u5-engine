@@ -18,6 +18,16 @@
 # on the other is not a difference (`p16_` test in
 # `tests_inline/town_fight_followups.rs`).
 #
+# Which swing lands which word is the same lottery. Re-measured 2026-10-16
+# over six stock runs: `Merchant missed!` lands on a different swing each
+# run (or not at all), the merchant sometimes steps out of reach for a run of
+# `Nothing!` mid-sequence (2026-10-16 13:46 and 20:16), and the kill fell on
+# swing 9, 10, 12, 13 or 14. Every run on both sides climbs the same ladder -
+# `barely`, `lightly`, `heavily wounded!`, `critical!`, `killed!` then
+# `VICT0RY!` - about two hits a rung, so a beat-by-beat `text` difference is
+# where the misses fell, and the Avatar HP row (`panel`) is the merchant's
+# own hits.
+#
 # The seat is the town attack, not the dungeon room: the room the dungeon
 # seed enters is empty, so every swing there answers `Attack-Aim!` and
 # `Nothing!` and no damage word is reachable at all. Attacking the

@@ -243,6 +243,49 @@ fn endgame_first_yes_without_the_box_ends_on_record_ten_with_no_command_row() {
 }
 
 #[test]
+fn endgame_waiting_branch_draws_no_cursor_after_record_ten() {
+    // `§6`: the waiting branch is terminal and reads no key, so no cursor
+    // follows record 10's last row - on the answering frame, after the
+    // record, through the tableau walk and in the terminal jitter.
+    // Measured 2026-10-16 on rc1
+    // (`doom-final-room/answered`, `doom-final-room-waiting/waiting` and
+    // `tableau1`): stock leaves the cell after `here a while."` empty.
+    let dir = debug_game_dir();
+    for answers in [&['y'][..], &['n', 'n'][..]] {
+        let mut state = endgame_window_at_first_question(&dir);
+        for &answer in answers {
+            handle_play_key_input(&mut state, answer, "", &dir).unwrap();
+        }
+        let mut frames = 0;
+        loop {
+            assert!(state.message_window_cursor_suppressed(), "{answers:?}: frame {frames}");
+            // A row left open mid-line must not bring the cursor back.
+            let open = state.message_row_open_mid_line;
+            state.message_row_open_mid_line = true;
+            assert!(state.message_window_cursor_suppressed(), "{answers:?}: open row");
+            state.message_row_open_mid_line = open;
+            frames += 1;
+            if frames > 500 || !state.advance_endgame_display_frame() {
+                break;
+            }
+        }
+        assert_eq!(
+            state.endgame.as_ref().unwrap().refusal_phase,
+            EndgameRefusalPhase::Jitter
+        );
+        // Between jitter beats nothing is staged, which is when the shell
+        // drew the cursor.
+        state.flush_staged_narration();
+        assert!(!state.staged_narration_active());
+        assert!(state.message_window_cursor_suppressed(), "{answers:?}: jitter");
+        handle_play_key_input(&mut state, ' ', "", &dir).unwrap();
+        state.flush_staged_narration();
+        assert!(state.message_window_cursor_suppressed(), "{answers:?}: after a key");
+    }
+    let _ = fs::remove_dir_all(dir);
+}
+
+#[test]
 fn endgame_waiting_branch_walks_the_tableau_after_record_ten() {
     // `§6` steps 1-2, staged as display frames after the record: the
     // leader's nudge carries one movement beat, then Lord British walks to

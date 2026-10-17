@@ -17,6 +17,22 @@
 # shared resolver's draw, and the contents are `containers.md`'s gated
 # rows. The shape is what this measures - which literal lands on which
 # row, and whether the pick leaves the chest shut.
+#
+# **The whole run is also a wandering-monster lottery.** Measured
+# 2026-10-16: the seed's active-monster record is all zeros - live, stamped
+# level 0, at `(0,0)`, combat class 0 (the Mage) - and a load reuses it whole
+# (`dungeon-mode.md §4.1`). `(0,0)` is the cell west of the party, so §14's
+# random walk can step straight onto it on the torch's turn: stock printed
+# `Attacked from the west!` under `Ignite torch!` and fought three Mages in
+# 4 of 9 runs (2026-09-19 14:57 and all three of 2026-10-16), after which
+# every beat compares an arena with a dungeon. This engine was attacked in
+# none until its stamped-level gate went (headless after the fix: 2 of 10).
+# A beat that differs because one side was attacked has measured the walk.
+#
+# The row shape itself agrees: the untrapped `0pen-` / `Chest opened` pair
+# (no blank row - `\nChest opened\n` after a bare prefix) that read `scroll`
+# on 2026-10-14 was fixed before rc1, and the rc1 run's `Key broke!` /
+# `0pen-ACID!` / blank / `Chest opened` matches stock's 2026-09-19 15:09 run.
 # requires-seed: the party standing on the Shame wooden chest, with a torch
 both	wait	15000
 both	key	space

@@ -658,3 +658,30 @@ fn the_trapdoor_line_leaves_one_blank_row_before_the_rescue() {
         "one blank row, not none and not two"
     );
 }
+
+/// `blackthorn.md §7`: between the end of the Stonegate death sweep and the
+/// rescue's first beat the party is defeated and no key is read, so the row
+/// under `A TRAPDOOR!` carries neither end-cap nor cursor. Once the rescue
+/// reaches its one key read the cursor is back.
+///
+/// Measured 2026-10-16 on rc1 (`qa/paired/stonegate-rescue-pacing.tsv`, beat
+/// `t24`): the original's row is empty in every capture and this engine drew
+/// the barber pole in its column 0.
+#[test]
+fn a_defeated_party_awaiting_the_rescue_draws_no_cursor() {
+    let mut state = test_state(open_grid(), 1, 1);
+    assert!(!state.message_window_cursor_suppressed(), "a party that can act");
+    for member in &mut state.party {
+        member.hp = 0;
+        member.status = CharacterStatus::Dead.save_byte();
+    }
+    state.emit_message_line("A TRAPDOOR!\n");
+    state.message_row_open_mid_line = false;
+    assert!(state.defeated_party_row_is_continuation());
+    assert!(!state.staged_narration_active());
+    assert!(state.message_window_cursor_suppressed(), "sweep over, rescue not begun");
+    state.pending_blackthorn_rescue =
+        Some(crate::blackthorn::BlackthornRescuePhase::AwaitingAcknowledgement);
+    state.message_row_open_mid_line = true;
+    assert!(!state.message_window_cursor_suppressed(), "the rescue's key read");
+}

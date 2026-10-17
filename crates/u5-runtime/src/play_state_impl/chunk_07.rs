@@ -2477,19 +2477,10 @@ impl PlayState {
         Some((x, y))
     }
 
+    /// [`Self::dungeon_active_monster`] when it stands on `(x, y)`.
     pub fn dungeon_active_monster_at(&self, x: usize, y: usize) -> Option<(usize, ActiveObject)> {
-        let Area::Dungeon { level, .. } = self.area else {
-            return None;
-        };
-        let object = self
-            .active_objects
-            .get(DUNGEON_ACTIVE_MONSTER_SLOT)
-            .copied()?;
-        (dungeon_monster_record_active(object)
-            && object.z == level as i8
-            && object.x == x
-            && object.y == y)
-            .then_some((DUNGEON_ACTIVE_MONSTER_SLOT, object))
+        self.dungeon_active_monster()
+            .filter(|(_, object)| object.x == x && object.y == y)
     }
 
     /// `town-mode.md §14`: the first half of the NPC-conflict chain's
@@ -6506,16 +6497,28 @@ impl PlayState {
         })
     }
 
+    /// The dungeon's single active monster, when its record is live.
+    ///
+    /// The record's stamped level is **not** consulted. `dungeon-mode.md
+    /// §4.1` stamps it on a fresh roll, and every level change, entry and
+    /// fight return rolls fresh, so in play it always names the party's
+    /// level; the one way in with a different one is a load, which the
+    /// setup table makes a *reuse* that "preserves the whole active record",
+    /// and §14's step "runs over the current 8-by-8 level" with no level
+    /// test. Measured 2026-10-16 (`dungeon-chest-jimmy`, `dungeon-two-way-
+    /// ladder`): from saves whose record is all zeros - live, level 0, at
+    /// `(0,0)` - the original's monster walked level 3 and attacked "from
+    /// the west" in 8 of 22 runs, and this engine, gating on the level,
+    /// never did.
     pub fn dungeon_active_monster(&self) -> Option<(usize, ActiveObject)> {
-        let Area::Dungeon { level, .. } = self.area else {
+        let Area::Dungeon { .. } = self.area else {
             return None;
         };
         let object = self
             .active_objects
             .get(DUNGEON_ACTIVE_MONSTER_SLOT)
             .copied()?;
-        (dungeon_monster_record_active(object) && object.z == level as i8)
-            .then_some((DUNGEON_ACTIVE_MONSTER_SLOT, object))
+        dungeon_monster_record_active(object).then_some((DUNGEON_ACTIVE_MONSTER_SLOT, object))
     }
 
     pub fn dungeon_direction_from_player_to(&self, x: usize, y: usize) -> Option<Direction> {

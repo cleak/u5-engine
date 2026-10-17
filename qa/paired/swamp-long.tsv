@@ -10,7 +10,15 @@
 # and was in combat by the `after30` shot, showing its actor banner, while
 # this engine was still walking and printing `Slow progress!`.
 #
-# The early beats are the comparable part: `after20` agrees step for step.
+# The early beats are usually the comparable part, but not always: re-measured
+# 2026-10-16 across the 21 stock runs since 2026-09-07, the original was already
+# in its `SPIDERS` conflict by `after20` in three (2026-09-10 12:18, 2026-09-13
+# 07:50, 2026-10-16 21:02), and by `after40` it had died to the fight and been
+# rescued (`Strange words are intoned.`) in two. The rc1 engine run of
+# 2026-10-16 22:44 met the spiders before `after20` while stock that run did
+# not. Every one of those windows has the same shape on both sides - only which
+# turn the probe fires on differs - so a difference here is the probe, not the
+# swamp.
 #
 # Seeded rather than walked to. The walk-up form of this scenario scripted its
 # way in from the town gate, and the resident walks its own schedule while

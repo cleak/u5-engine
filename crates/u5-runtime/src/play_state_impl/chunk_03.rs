@@ -591,6 +591,34 @@ impl PlayState {
         if self.staged_narration_active() {
             return true;
         }
+        // `endgame.md §6`: the waiting branch is terminal and reads no key,
+        // so - like its suppressed command row in
+        // [`Self::message_window_live_row_suppressed`] - it draws no cursor
+        // either. Without this the shell's fallback put the barber pole in
+        // the cell after record 10's last row. Measured 2026-10-16 on rc1
+        // (`doom-final-room`, beat `answered`; `doom-final-room-waiting`,
+        // beats `waiting` and `tableau1`, all reading `cursor`): the stock
+        // window ends `here a while."` with the cell after it empty in every
+        // capture since 2026-09-05, and this engine drew the cursor there.
+        // Checked before the open-row arm below, which would otherwise keep
+        // a cursor on a row left open mid-line.
+        if self.endgame.as_ref().is_some_and(|endgame| {
+            endgame.outcome == Some(crate::EndgameOutcome::MissingBoxOrRefused)
+        }) {
+            return true;
+        }
+        // `blackthorn.md §7`: a defeated party is never offered a command
+        // prompt - the loop's next turn hands it to the rescue - so the row
+        // [`Self::defeated_party_row_is_continuation`] keeps waits on no key
+        // and carries no cursor. Measured 2026-10-16 on rc1
+        // (`stonegate-rescue-pacing`, beat `t24`, reading `cursor`; also
+        // three 2026-09-18 runs): with the sweep over and the rescue not yet
+        // begun, the original's row under `A TRAPDOOR!` is empty in all
+        // twenty-two captures, and this engine drew the barber pole in its
+        // column 0 for the frames before the gate handed off.
+        if self.defeated_party_row_is_continuation() {
+            return true;
+        }
         // A held page *is* reading a key, so the cursor sits wherever its
         // text left it - inline after a line that stopped part-way along a
         // row, and nowhere when the line opened a fresh one. See
