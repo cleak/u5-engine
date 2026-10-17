@@ -346,6 +346,10 @@
         prompt_grid[32 + 2] = TOWN_DOOR_PLAIN_LOCKED_TILE;
         let mut prompt = test_state(prompt_grid, 1, 1);
         prompt.player.facing = Direction::East;
+        // Two eligible members, so the shared selector prompts rather than
+        // picking silently (`commands.md §5.8`).
+        let second = prompt.party[0].clone();
+        prompt.party.push(PartyMember { slot: 1, ..second });
         let serial = prompt.sound_effect_serial;
         assert_eq!(
             prompt

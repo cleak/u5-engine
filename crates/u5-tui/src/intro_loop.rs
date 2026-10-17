@@ -12,10 +12,11 @@ use std::path::Path;
 use u5_runtime::intro_menu::{IntroSubflow, IntroSubflowResult};
 use u5_runtime::menu_dispatch::{UnifiedMenuDispatch, UnifiedMenuStep};
 use u5_runtime::{
-    DisplayDriverFamily, JOURNEY_ONWARD_SHORTCUT_BANNER, MISCMAPS_DAT_FILE, PreFlourishOutcome,
+    DisplayDriverFamily, JOURNEY_ONWARD_SHORTCUT_BANNER, LOAD_EMPTY_SAVE_LINE_1,
+    LOAD_EMPTY_SAVE_LINE_2, LOAD_EMPTY_SAVE_LINE_3, MISCMAPS_DAT_FILE, PreFlourishOutcome,
     SAVED_GAM_FILENAME, STORY_DAT_FILE, TextWindowSystem, TileGraphicsDepth, disk_io_error_message,
     load_play_options_from_save, read_u4_transfer_source_from_party_sav,
-    run_intro_pre_flourish_phase,
+    run_intro_pre_flourish_phase, save_image_has_active_avatar,
 };
 
 use crate::cli::run_interactive_create_character;
@@ -114,6 +115,20 @@ fn drive_intro_subflow(
     match subflow {
         IntroSubflow::JourneyOnward => {
             println!("Journey Onward");
+            // `save-load.md §4.2` step 2: an uninitialised save is the
+            // empty-save guard, not a disk failure - "The intro prints a
+            // three-line message ... waits for any keystroke, and returns
+            // to the title menu". Playtest E06.
+            if fs::read(game_dir.join(SAVED_GAM_FILENAME))
+                .is_ok_and(|image| !save_image_has_active_avatar(&image))
+            {
+                println!("{LOAD_EMPTY_SAVE_LINE_1}");
+                println!("{LOAD_EMPTY_SAVE_LINE_2}");
+                println!("{LOAD_EMPTY_SAVE_LINE_3}");
+                dispatch.complete_subflow(subflow, IntroSubflowResult::Cancelled);
+                prompt_continue()?;
+                return Ok(IntroLoopControl::Continue);
+            }
             match load_play_options_from_save(game_dir) {
                 Ok(options) => {
                     if matches!(

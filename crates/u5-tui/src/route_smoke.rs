@@ -1057,7 +1057,9 @@ pub fn route_smoke_cases() -> Vec<RouteSmokeCase> {
         RouteSmokeCase {
             name: "castle-jimmy-prisoner-release",
             options: town_jimmy_release.clone(),
-            script: &["J", "6", "1"],
+            // One-member party: `commands.md §5.8` picks the lone
+            // eligible member silently, so no picker digit follows.
+            script: &["J", "6"],
             expected: RouteSmokeExpectation::Town(castle),
             min_turn: 1,
             expected_frame_kind: "tile viewport",
@@ -1065,7 +1067,7 @@ pub fn route_smoke_cases() -> Vec<RouteSmokeCase> {
         RouteSmokeCase {
             name: "reload-castle-jimmy-prisoner-release",
             options: town_jimmy_release,
-            script: &["J", "6", "1", "empty"],
+            script: &["J", "6", "empty"],
             expected: RouteSmokeExpectation::Town(castle),
             min_turn: 1,
             expected_frame_kind: "tile viewport",
@@ -3709,7 +3711,7 @@ fn route_reload_checkpoints(case_name: &str) -> &'static [usize] {
         "reload-underworld-fixed-hidden-stack-search-get-search"
         | "reload-minoc-fixed-hidden-daily-search-get-repeat"
         | "reload-horse-trader-horse-and-rider-buy-pass" => &[2],
-        "reload-castle-jimmy-prisoner-release" => &[3],
+        "reload-castle-jimmy-prisoner-release" => &[2],
         // The reload fires after the thirteenth note, so the checkpoint sits
         // on the command that has just opened the passage.
         "reload-castle-harpsichord-passage-lost-on-reload" => HARPSICHORD_RELOAD_CHECKPOINTS,

@@ -475,13 +475,19 @@ impl PlayState {
             if !(1..=self.party.len().min(6)).contains(&digit) {
                 continue;
             }
-            // `dungeon-mode.md §8.1`, "Who acts": the shared acting-member
-            // prompt "prints `Player: ` otherwise, echoing the chosen
-            // member's name" - as Open, Look and Search already do
-            // (playtest E13).
-            if matches!(self.area, Area::Dungeon { .. }) {
-                self.record_container_picker_name_echo(digit - 1);
+            // `commands.md §5.8`: "a confirmed eligible pick completes that
+            // row with the member's name. An ineligible pick prints
+            // `Disabled!\n\n` and repeats the prompt". Eligible means Good
+            // or Poisoned (`traps.md §2.1`), the same gate the surface
+            // chest picker uses - not the wider `conscious()`. The dungeon's
+            // shared acting-member prompt echoes the name the same way
+            // (`dungeon-mode.md §8.1`, "Who acts"; playtest E13).
+            if !self.surface_chest_member_available(digit - 1) {
+                self.message = DUNGEON_ACTING_MEMBER_DISABLED.to_string();
+                self.active_jimmy = Some(session);
+                return Ok(None);
             }
+            self.record_container_picker_name_echo(digit - 1);
             let outcome = self.jimmy_direction_with_game_dir_and_member(
                 session.direction,
                 Some(game_dir),
@@ -853,8 +859,9 @@ impl PlayState {
                     self.message = "No lock!".to_string();
                     return Ok(MoveOutcome::Blocked);
                 }
-                let Some(member_index) = member_index else {
-                    return Ok(self.start_jimmy_party_prompt(direction));
+                let member_index = match self.jimmy_surface_acting_member(member_index, direction) {
+                    Ok(index) => index,
+                    Err(outcome) => return Ok(outcome),
                 };
                 let Some(member_index) = self.resolve_jimmy_member_index(Some(member_index)) else {
                     self.advance_turn();
@@ -922,14 +929,39 @@ impl PlayState {
             return Ok(MoveOutcome::Blocked);
         }
 
-        let Some(member_index) = member_index else {
-            return Ok(self.start_jimmy_party_prompt(direction));
+        let member_index = match self.jimmy_surface_acting_member(member_index, direction) {
+            Ok(index) => index,
+            Err(outcome) => return Ok(outcome),
         };
         let Some(member_index) = self.resolve_jimmy_member_index(Some(member_index)) else {
             self.advance_turn();
             return Ok(MoveOutcome::PromptDeclined);
         };
         self.jimmy_town_direction(game_dir, scene, floor, member_index, direction)
+    }
+
+    /// `commands.md §5.8` (conditional acting-member exchange): once the
+    /// town/overworld Jimmy preflight has found a lock, the shared selector
+    /// decides who picks it. A combat or active-member override, or exactly
+    /// one Good-or-Poisoned member, is chosen silently with no `Player: `
+    /// and no name echo; nobody eligible prints `None!` and aborts; only two
+    /// or more open the picker. `Err` carries the outcome the caller returns.
+    fn jimmy_surface_acting_member(
+        &mut self,
+        member_index: Option<usize>,
+        direction: Direction,
+    ) -> Result<usize, MoveOutcome> {
+        if let Some(index) = member_index {
+            return Ok(index);
+        }
+        match self.surface_container_acting_member() {
+            ActingMemberSelection::Selected(slot) => Ok(slot),
+            ActingMemberSelection::Prompt => Err(self.start_jimmy_party_prompt(direction)),
+            ActingMemberSelection::NoneAble => {
+                self.message = DUNGEON_ACTING_MEMBER_NONE.to_string();
+                Err(MoveOutcome::Blocked)
+            }
+        }
     }
 
     pub fn resolve_jimmy_member_index(&mut self, member_index: Option<usize>) -> Option<usize> {

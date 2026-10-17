@@ -5632,7 +5632,13 @@ impl PlayState {
             } else {
                 opening.push_plain("\"");
                 opening.push_rendered(&trimmed);
-                opening.push_plain("\"");
+                // `conversation.md §9`: "The renderer drops a quote that
+                // would immediately follow another quote", so an entry that
+                // ends with its own closing quote is not doubled.
+                // Playtest E02 (`"I am called Eb""`).
+                if !trimmed.text.ends_with('"') {
+                    opening.push_plain("\"");
+                }
             }
         }
         (opening, false)
@@ -5642,6 +5648,17 @@ impl PlayState {
     /// Returns the rendered response text and a flag indicating
     /// whether the session has ended.
     pub fn submit_active_conversation_keyword(&mut self, line: &str) -> (String, bool) {
+        // `conversation.md §6` step 2: the free-text reader "accepts up to
+        // fifteen characters", and `input.md §8`'s reader echoes only the
+        // bytes it accepted. Anything typed past the cap was never taken,
+        // so it is neither echoed nor submitted. Playtest E04.
+        let capped_line: String;
+        let line = if line.trim_end_matches(['\r', '\n']).chars().count() > TLK_INPUT_MAX_LEN {
+            capped_line = line.chars().take(TLK_INPUT_MAX_LEN).collect();
+            capped_line.as_str()
+        } else {
+            line
+        };
         let join_keyword = line.trim().eq_ignore_ascii_case("join");
         let join_candidate = self
             .active_conversation

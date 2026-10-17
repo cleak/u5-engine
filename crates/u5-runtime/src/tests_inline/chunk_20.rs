@@ -709,6 +709,23 @@ fn town_jimmy_native_magic_lock_skips_picker_roll_and_breaks_key() {
     assert_eq!(state.message, "Key broke!");
 }
 
+/// A second Good member, so the shared acting-member selection is a real
+/// choice and Jimmy opens its picker (`commands.md §5.8`).
+fn push_second_jimmy_member(state: &mut PlayState) {
+    state.party.push(PartyMember {
+        slot: 1,
+        class_byte: b'B',
+        status: b'G',
+        climb_stat: DEFAULT_CLIMB_STAT,
+        mana: 8,
+        hp: DEFAULT_PARTY_HP,
+        max_hp: DEFAULT_PARTY_MAX_HP,
+        level: 8,
+    });
+    state.party_names = default_party_names(2);
+    state.party_names[1][..4].copy_from_slice(b"Iolo");
+}
+
 #[test]
 fn town_jimmy_restraint_release_updates_live_npc_and_native_removal_mask() {
     let mut grid = open_grid();
@@ -716,6 +733,7 @@ fn town_jimmy_restraint_release_updates_live_npc_and_native_removal_mask() {
     let mut state = test_state(grid, 1, 1);
     state.player.facing = Direction::East;
     state.party[0].climb_stat = 30;
+    push_second_jimmy_member(&mut state);
     state.moral_standing = 98;
     let slots = [
         NpcSlot {
@@ -1327,6 +1345,7 @@ fn town_jimmy_prompts_for_direction_then_party_without_turn() {
     grid[32 + 2] = TOWN_DOOR_PLAIN_LOCKED_TILE;
     let mut state = test_state(grid, 1, 1);
     state.player.facing = Direction::East;
+    push_second_jimmy_member(&mut state);
 
     assert_eq!(
         handle_play_key_input(&mut state, 'J', "", &dir).unwrap(),
@@ -1359,6 +1378,7 @@ fn active_town_jimmy_picker_unlocks_with_selected_member() {
     grid[32 + 2] = TOWN_DOOR_PLAIN_LOCKED_TILE;
     let mut state = test_state(grid, 1, 1);
     state.player.facing = Direction::East;
+    push_second_jimmy_member(&mut state);
 
     handle_play_key_input(&mut state, 'J', "", &dir).unwrap();
     assert!(state.active_direction_prompt.is_some());
@@ -1374,6 +1394,80 @@ fn active_town_jimmy_picker_unlocks_with_selected_member() {
     );
 
     assert!(state.active_jimmy.is_none());
+    assert_eq!(state.grid[32 + 2], TOWN_DOOR_PLAIN_UNLOCKED_TILE);
+    assert_eq!(state.turn, 1);
+    assert_eq!(state.message, "Unlocked!");
+    let _ = fs::remove_dir_all(dir);
+}
+
+#[test]
+fn active_town_jimmy_picker_rejects_ineligible_pick_and_echoes_eligible_name() {
+    // `commands.md §5.8`: "a confirmed eligible pick completes that row
+    // with the member's name. An ineligible pick prints `Disabled!\n\n`
+    // and repeats the prompt." Eligible is Good or Poisoned only
+    // (`traps.md §2.1`): a Charmed member is conscious but not eligible.
+    let dir = debug_game_dir();
+    fs::write(dir.join(TOWN_LOCK_TABLE_FILE), "CASTLE:0 0 2 1 185 184\n").unwrap();
+    let mut grid = open_grid();
+    grid[32 + 2] = TOWN_DOOR_PLAIN_LOCKED_TILE;
+    let mut state = test_state(grid, 1, 1);
+    state.player.facing = Direction::East;
+    push_second_jimmy_member(&mut state);
+    let mut charmed = state.party[1];
+    charmed.slot = 2;
+    charmed.status = b'C';
+    state.party.push(charmed);
+    state.party_names = default_party_names(3);
+    state.party_names[1][..4].copy_from_slice(b"Iolo");
+    assert!(state.party[2].conscious());
+
+    handle_play_key_input(&mut state, 'J', "", &dir).unwrap();
+    handle_play_key_input(&mut state, '6', "", &dir).unwrap();
+    assert!(state.active_jimmy.is_some());
+
+    handle_play_key_input(&mut state, '3', "", &dir).unwrap();
+    assert!(state.active_jimmy.is_some());
+    assert_eq!(state.message, DUNGEON_ACTING_MEMBER_DISABLED);
+    assert_eq!(state.grid[32 + 2], TOWN_DOOR_PLAIN_LOCKED_TILE);
+    assert_eq!(state.turn, 0);
+
+    handle_play_key_input(&mut state, '2', "", &dir).unwrap();
+    assert!(state.active_jimmy.is_none());
+    assert_eq!(state.grid[32 + 2], TOWN_DOOR_PLAIN_UNLOCKED_TILE);
+    assert!(
+        state
+            .message_entries()
+            .iter()
+            .any(|entry| entry.text.contains("Iolo")),
+        "{:?}",
+        state
+            .message_entries()
+            .iter()
+            .map(|entry| entry.text.clone())
+            .collect::<Vec<_>>()
+    );
+    let _ = fs::remove_dir_all(dir);
+}
+
+#[test]
+fn town_jimmy_one_member_party_picks_silently() {
+    // `commands.md §5.8`: "Exactly one is chosen silently: no prompt and
+    // no name echo", and the exchange "applies whenever Get, Jimmy, Open
+    // or dungeon Look reaches the shared selector". Playtest E01.
+    let dir = debug_game_dir();
+    fs::write(dir.join(TOWN_LOCK_TABLE_FILE), "CASTLE:0 0 2 1 185 184\n").unwrap();
+    let mut grid = open_grid();
+    grid[32 + 2] = TOWN_DOOR_PLAIN_LOCKED_TILE;
+    let mut state = test_state(grid, 1, 1);
+    state.player.facing = Direction::East;
+    state.party[0].climb_stat = 30;
+    assert_eq!(state.party.len(), 1);
+
+    handle_play_key_input(&mut state, 'J', "", &dir).unwrap();
+    handle_play_key_input(&mut state, '6', "", &dir).unwrap();
+
+    assert!(state.active_jimmy.is_none());
+    assert_ne!(state.message, PARTY_SELECTION_PROMPT);
     assert_eq!(state.grid[32 + 2], TOWN_DOOR_PLAIN_UNLOCKED_TILE);
     assert_eq!(state.turn, 1);
     assert_eq!(state.message, "Unlocked!");

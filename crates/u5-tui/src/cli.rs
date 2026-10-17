@@ -914,8 +914,9 @@ pub fn run_interactive_create_character(game_dir: &Path) -> io::Result<Option<Ch
             ChargenSessionStep::PromptName => {
                 print!("By what name shalt thou be known? ");
                 io::stdout().flush()?;
-                input.clear();
-                io::stdin().read_line(&mut input)?;
+                if !read_chargen_line(&mut input)? {
+                    return Ok(chargen_end_of_input());
+                }
                 match session.submit_name(&input) {
                     ChargenSessionStep::Aborted => {
                         println!("Character creation aborted; returning to the intro menu.");
@@ -928,8 +929,9 @@ pub fn run_interactive_create_character(game_dir: &Path) -> io::Result<Option<Ch
             ChargenSessionStep::PromptGender => {
                 print!("Art thou Male or Female? ");
                 io::stdout().flush()?;
-                input.clear();
-                io::stdin().read_line(&mut input)?;
+                if !read_chargen_line(&mut input)? {
+                    return Ok(chargen_end_of_input());
+                }
                 if let Some(byte) = input.bytes().next() {
                     if !matches!(
                         session.submit_gender_key(byte),
@@ -962,8 +964,9 @@ pub fn run_interactive_create_character(game_dir: &Path) -> io::Result<Option<Ch
                 loop {
                     print!("Choose A or B: ");
                     io::stdout().flush()?;
-                    input.clear();
-                    io::stdin().read_line(&mut input)?;
+                    if !read_chargen_line(&mut input)? {
+                        return Ok(chargen_end_of_input());
+                    }
                     let Some(byte) = input.bytes().next() else {
                         continue;
                     };
@@ -991,6 +994,21 @@ pub fn run_interactive_create_character(game_dir: &Path) -> io::Result<Option<Ch
             }
         }
     }
+}
+
+/// Read one line of chargen input into `input`. Returns `false` at end
+/// of input: `chargen.md §4`'s silent re-loop on an invalid key assumes
+/// keys keep arriving, so the terminal harness must stop asking once
+/// stdin is closed instead of spinning on empty reads (playtest E07).
+fn read_chargen_line(input: &mut String) -> io::Result<bool> {
+    input.clear();
+    Ok(io::stdin().read_line(input)? != 0)
+}
+
+fn chargen_end_of_input() -> Option<ChargenAvatar> {
+    println!();
+    println!("Character creation aborted at end of input; nothing was saved.");
+    None
 }
 
 fn prompt_continue() -> io::Result<()> {

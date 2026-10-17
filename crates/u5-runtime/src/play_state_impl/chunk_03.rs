@@ -340,6 +340,14 @@ impl PlayState {
                 .is_some_and(|session| session.phase == MixPhase::Quantity)
             || self.active_blackthorn_guard_demand.is_some()
             || self.pending_town_arrest.is_some()
+            // `doors-and-z-transitions.md §12.1`: the boundary exit's
+            // `\nDost thou wish to leave? ` has "trailing space, no line
+            // feed" and its reader "does **not** echo", so the cursor waits
+            // after `to leave? ` and `text-output.md §10.2`'s mid-command
+            // prompt draws no marker row beneath it. Playtest E03.
+            || self
+                .active_yes_no_prompt
+                .is_some_and(|session| matches!(session.kind, YesNoPromptKind::TownExit { .. }))
             // `commands.md §5.6` / `inventory.md §4.3`: a U-Use item that asks
             // for a target ends its question with a trailing space -
             // `On who: ` - so `§10.6` keeps the cursor on that row. Measured
@@ -3527,7 +3535,11 @@ impl PlayState {
                     } else if matches!(session.kind, YesNoPromptKind::TownExit { .. }) {
                         let turn_before = self.turn;
                         // Section 12.1, declined arm: "`No` and nothing else",
-                        // and it too lands on the prompt's own row.
+                        // and it too lands on the prompt's own row. The
+                        // prompt `\nDost thou wish to leave? ` ends with no
+                        // line feed, so its row is open: say so rather than
+                        // let the flag be guessed (playtest E03).
+                        self.open_message_row();
                         self.emit_message_line_continuing_row(TOWN_EXIT_DECLINED_NARRATION);
                         self.advance_turn();
                         let _ = self

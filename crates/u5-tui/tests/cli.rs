@@ -786,8 +786,14 @@ fn cli_intro_journey_onward_without_active_save_returns_to_menu() {
     assert!(output.status.success());
     let stdout = String::from_utf8(output.stdout).unwrap();
     assert!(stdout.contains("Journey Onward"));
-    assert!(stdout.contains("Disk read failed for SAVED.GAM"));
-    assert!(stdout.contains("No active game"));
+    // `save-load.md §4.2` step 2: the empty-save guard prints its own
+    // three lines, not a disk failure (playtest E06).
+    assert!(!stdout.contains("Disk read failed"), "{stdout}");
+    assert!(!stdout.contains("Check the mounted"), "{stdout}");
+    assert!(
+        stdout.contains("No active game\nPlease create a character\nor transfer one from Ultima IV\n"),
+        "{stdout}"
+    );
     assert!(stdout.contains("Intro Menu"));
     assert!(String::from_utf8(output.stderr).unwrap().is_empty());
     let _ = fs::remove_dir_all(dir);
@@ -1252,4 +1258,82 @@ fn cli_usage_lists_documented_smoke_commands() {
     assert!(CLI_USAGE.contains("--scene"));
     assert!(CLI_USAGE.contains("--floor"));
     assert!(CLI_USAGE.contains("--create-character"));
+}
+
+/// Run the engine with `stdin_bytes` and then a closed stdin, failing if
+/// it has not exited within a generous bound.
+fn run_engine_until_eof(args: &[&str], stdin_bytes: &[u8]) -> (std::process::ExitStatus, String) {
+    let mut child = Command::new(env!("CARGO_BIN_EXE_u5-engine"))
+        .args(args)
+        .stdin(Stdio::piped())
+        .stdout(Stdio::piped())
+        .stderr(Stdio::null())
+        .spawn()
+        .unwrap();
+    {
+        let mut stdin = child.stdin.take().unwrap();
+        stdin.write_all(stdin_bytes).unwrap();
+    }
+    let mut stdout = child.stdout.take().unwrap();
+    let reader = std::thread::spawn(move || {
+        use std::io::Read;
+        // Bounded read: a spinning prompt loop writes without end.
+        let mut buf = Vec::new();
+        let _ = (&mut stdout).take(1 << 20).read_to_end(&mut buf);
+        buf
+    });
+    let deadline = std::time::Instant::now() + std::time::Duration::from_secs(30);
+    let status = loop {
+        if let Some(status) = child.try_wait().unwrap() {
+            break status;
+        }
+        if std::time::Instant::now() > deadline {
+            let _ = child.kill();
+            let _ = child.wait();
+            panic!("u5-engine {args:?} did not exit at end of input");
+        }
+        std::thread::sleep(std::time::Duration::from_millis(50));
+    };
+    let out = String::from_utf8_lossy(&reader.join().unwrap()).into_owned();
+    (status, out)
+}
+
+fn write_synthetic_question_dat(dir: &std::path::Path) {
+    let mut bytes = Vec::new();
+    for index in 0..QUESTION_DAT_RECORDS {
+        bytes.extend_from_slice(format!("Record {index}").as_bytes());
+        bytes.push(0);
+    }
+    fs::write(dir.join(QUESTION_DAT_FILE), bytes).unwrap();
+}
+
+#[test]
+fn cli_interactive_chargen_stops_at_end_of_input() {
+    // Playtest E07: `printf 'x\n' | u5-engine --create-character-interactive`
+    // spun on `Art thou Male or Female?` forever once stdin closed.
+    let dir = debug_game_dir();
+    write_synthetic_question_dat(&dir);
+    let (status, stdout) = run_engine_until_eof(
+        &["--create-character-interactive", dir.to_str().unwrap()],
+        b"x\n",
+    );
+    assert!(status.success(), "{stdout}");
+    assert!(stdout.matches("Art thou Male or Female?").count() <= 1, "{stdout}");
+    assert!(!dir.join(SAVED_GAM_FILENAME).exists());
+    let _ = fs::remove_dir_all(dir);
+}
+
+#[test]
+fn cli_intro_questionnaire_stops_at_end_of_input() {
+    // Playtest E07: the `--intro` questionnaire repeated `Choose A or B:`
+    // without end once stdin closed.
+    let dir = debug_game_dir();
+    write_synthetic_question_dat(&dir);
+    let (status, stdout) = run_engine_until_eof(
+        &["--intro", dir.to_str().unwrap()],
+        b"x\nc\nIolo\nf\n",
+    );
+    assert!(status.success(), "{stdout}");
+    assert!(stdout.matches("Choose A or B:").count() <= 1, "{stdout}");
+    let _ = fs::remove_dir_all(dir);
 }

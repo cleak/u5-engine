@@ -2282,7 +2282,9 @@ impl PlayState {
         // the only town-family location on the underworld plane.
         // The prompt left the cursor after its trailing space, so `Yes` lands
         // on that same row - "to leave? Yes" - and the blank row the data
-        // carries then falls before `Exit to`.
+        // carries then falls before `Exit to`. The row state is set here
+        // explicitly rather than inferred (playtest E03).
+        self.open_message_row();
         self.emit_message_line_continuing_row(format!(
             "{TOWN_EXIT_ACCEPTED_NARRATION}{}",
             match plane {

@@ -201,7 +201,11 @@ impl ConversationSessionOutput {
         self.text.push_str(&rendered.text[..body_len]);
         self.rendered_glyphs
             .extend(rendered.glyphs.iter().take(body_len).copied());
-        if !already_quoted {
+        // `conversation.md §9`: "The renderer drops a quote that would
+        // immediately follow another quote" - a response whose stream
+        // ends on its own closing quote keeps just that one. Playtest E02
+        // (`thank thee!""`).
+        if !already_quoted && !rendered.text[..body_len].ends_with('"') {
             self.push_plain_text("\"");
         }
         if body_len < rendered.text.len() {
@@ -471,7 +475,14 @@ impl ConversationSession {
                 .unwrap_or(usize::MAX),
         };
         if field_idx == usize::MAX {
-            out.set_framed_text(TLK_NO_KEYWORD_MATCH_MESSAGE);
+            // `conversation.md §6` step 7: "the engine prints `I cannot
+            // help thee with that.\n\n`". This is a fixed engine literal,
+            // not a response stream, so the quote framing that §6 gives
+            // stream responses (and spells out for the NAME prefix and the
+            // rebuke) does not apply. It keeps the same leading line feed
+            // a framed response opens with. Playtest E05.
+            out.push_plain_text("\n");
+            out.push_plain_text(TLK_NO_KEYWORD_MATCH_MESSAGE);
             return out;
         }
         // `conversation.md §5` step 3 and §7's result table both tie the
@@ -1108,7 +1119,8 @@ mod tests {
         } else {
             let body = text.trim_end_matches('\n');
             let tail = &text[body.len()..];
-            format!("{prefix}{lead}\"{body}\"{tail}")
+            let close = if body.ends_with('"') { "" } else { "\"" };
+            format!("{prefix}{lead}\"{body}{close}{tail}")
         };
         while !out.ends_with("\n\n") {
             out.push('\n');
@@ -1162,6 +1174,35 @@ mod tests {
             "Long answer.".to_string(),
         ];
         ConversationSession::new(raw, decoded)
+    }
+
+    #[test]
+    fn keyword_response_ending_in_its_own_quote_is_not_doubled() {
+        // `conversation.md §9`: "The renderer drops a quote that would
+        // immediately follow another quote". Playtest E02
+        // (`"Iolo and I both thank thee!""`).
+        let raw = vec![
+            enc("Ada"),
+            enc("a quiet smith"),
+            enc("Hi."),
+            enc("I mend gear."),
+            enc("Farewell."),
+            enc("JOIN"),
+            enc("We thank thee!\""),
+        ];
+        let decoded = vec![
+            "Ada".to_string(),
+            "a quiet smith".to_string(),
+            "Hi.".to_string(),
+            "I mend gear.".to_string(),
+            "Farewell.".to_string(),
+            "JOIN".to_string(),
+            "We thank thee!\"".to_string(),
+        ];
+        let mut s = ConversationSession::new(raw, decoded);
+        s.present_greeting(&ctx());
+        let out = s.submit_keyword("join", &ctx());
+        assert_eq!(out.text, "\n\"We thank thee!\"\n\n");
     }
 
     #[test]
@@ -1839,7 +1880,9 @@ mod tests {
         let mut s = baseline_session();
         s.present_greeting(&ctx());
         let out = s.submit_keyword("xyzzy", &ctx());
-        assert_eq!(out.text, framed_response(TLK_NO_KEYWORD_MATCH_MESSAGE));
+        // §6 step 7's literal carries no quote characters (playtest E05).
+        assert_eq!(out.text, format!("\n{TLK_NO_KEYWORD_MATCH_MESSAGE}"));
+        assert!(!out.text.contains('"'));
         assert!(out.text.ends_with("\n\n"));
     }
 

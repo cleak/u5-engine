@@ -2645,7 +2645,7 @@ fn visual_route_reload_checkpoints(case_label: &str) -> &'static [usize] {
         | "route-reload-dungeon-surface-exit-return-world" => &[1],
         "route-reload-underworld-fixed-hidden-stack-search-get-search"
         | "route-reload-horse-trader-horse-and-rider-buy-pass" => &[2],
-        "route-reload-castle-jimmy-prisoner-release" => &[3],
+        "route-reload-castle-jimmy-prisoner-release" => &[2],
         _ => &[],
     }
 }
@@ -4528,14 +4528,16 @@ fn visual_route_suite_cases() -> Vec<VisualRouteSuiteCase> {
             label: "route-castle-jimmy-prisoner-release",
             frame_kind: "visual route town frame",
             options: town_jimmy_release.clone(),
-            script: &["J", "6", "1"],
+            // One-member party: `commands.md §5.8` picks the lone
+            // eligible member silently, so no picker digit follows.
+            script: &["J", "6"],
             configure: None,
         },
         VisualRouteSuiteCase {
             label: "route-reload-castle-jimmy-prisoner-release",
             frame_kind: "visual route town frame",
             options: town_jimmy_release,
-            script: &["J", "6", "1", "empty"],
+            script: &["J", "6", "empty"],
             configure: None,
         },
         VisualRouteSuiteCase {
@@ -18793,6 +18795,14 @@ fn handle_visual_line_key(
             Ok(Some(PlayInputDisposition::Continue))
         }
         u5_runtime::FreeTextInputAction::Append(byte) => {
+            // `conversation.md §6` step 2: the keyword reader "accepts up
+            // to fifteen characters"; a byte past the cap is not accepted
+            // and so not echoed (`input.md §8`). Playtest E04.
+            if state.active_conversation.is_some()
+                && input_line.chars().count() >= u5_runtime::TLK_INPUT_MAX_LEN
+            {
+                return Ok(Some(PlayInputDisposition::Continue));
+            }
             input_line.push(char::from(byte));
             Ok(Some(PlayInputDisposition::Continue))
         }
@@ -25647,8 +25657,10 @@ mod tests {
         // (`dungeon-mode.md §11`, -3). The victory route's box hand-over
         // (`endgame.md §7` steps 4-5) added five display frames (+5). The two
         // tavern drink-and-food routes end the provision quantity with
-        // Return (`shops.md §8.5`, +2).
-        assert_eq!(reports.len(), 2066);
+        // Return (`shops.md §8.5`, +2). The two town prisoner-release routes
+        // lost their member key: a one-member party's Jimmy picks silently
+        // (`commands.md §5.8`, -2).
+        assert_eq!(reports.len(), 2064);
         for report in &reports {
             assert!(report.path.exists());
             assert_eq!(report.width, VISUAL_PLAY_FRAME_WIDTH);
@@ -25663,7 +25675,7 @@ mod tests {
             }
         }
         let manifest = fs::read_to_string(dir.join("manifest.txt")).unwrap();
-        assert!(manifest.contains("coverage\tvisual-route-steps\t2066"));
+        assert!(manifest.contains("coverage\tvisual-route-steps\t2064"));
         assert!(manifest.contains("coverage\tvisual-key-route-steps\t90"));
         assert!(manifest.contains("coverage\tvisual-route-combat-steps\t"));
         assert!(manifest.contains("route-world-movement-01-d\t320x200\t"));
@@ -25694,8 +25706,8 @@ mod tests {
         assert!(manifest.contains("route-castle-pass-and-idle-01-empty"));
         assert!(manifest.contains("route-castle-jimmy-magic-lock-no-picker-01-j"));
         assert!(manifest.contains("route-castle-jimmy-empty-restraint-no-picker-01-j"));
-        assert!(manifest.contains("route-castle-jimmy-prisoner-release-03-1"));
-        assert!(manifest.contains("route-reload-castle-jimmy-prisoner-release-04-empty"));
+        assert!(manifest.contains("route-castle-jimmy-prisoner-release-02-6"));
+        assert!(manifest.contains("route-reload-castle-jimmy-prisoner-release-03-empty"));
         assert!(manifest.contains("route-town-status-modal-01-z"));
         assert!(manifest.contains("route-castle-z-stats-modal-01-z"));
         assert!(manifest.contains("route-town-view-overlay-01-v"));
@@ -27254,6 +27266,27 @@ mod tests {
         handle_play_key_input(&mut state, PLAY_MUSIC_TOGGLE_KEY, "", Path::new("")).unwrap();
 
         assert!(summarize(&mut state, "", "").contains("music off"));
+    }
+
+    #[test]
+    fn visual_line_input_caps_conversation_keyword_at_fifteen() {
+        // `conversation.md §6` step 2: "accepts up to fifteen characters".
+        // Playtest E04.
+        let mut state = test_state(open_grid(), 1, 1);
+        install_test_conversation(&mut state);
+        let mut input_line = String::new();
+        for _ in 0..17 {
+            handle_visual_line_key(
+                &mut state,
+                &mut input_line,
+                KeyCode::KeyA,
+                false,
+                false,
+                Path::new(""),
+            )
+            .unwrap();
+        }
+        assert_eq!(input_line.len(), u5_runtime::TLK_INPUT_MAX_LEN);
     }
 
     #[test]
