@@ -336,3 +336,30 @@ fn playtest_e16_cancelled_guard_pick_reasks_the_watch_question() {
     assert_eq!(state.message, REST_WATCH_PROMPT);
     assert_eq!(state.turn, 0);
 }
+
+/// E17: `dungeon-mode.md §15` - the minute advance "sits at the head of each
+/// iteration ... so a command the dispatcher reports as \"no action\" (a
+/// digit solo-select, a refused Push, the typeahead toggle) still costs a
+/// minute underground"; `§4` step 3 routes the Control bindings through the
+/// same iteration. None of them takes a turn.
+#[test]
+fn playtest_e17_dungeon_control_bindings_cost_the_loop_minute() {
+    for key in [
+        PLAY_TYPEAHEAD_TOGGLE_KEY,
+        PLAY_MUSIC_TOGGLE_KEY,
+        PLAY_MORAL_STANDING_KEY,
+        PLAY_VERSION_BANNER_KEY,
+        PLAY_EXIT_TO_DOS_KEY,
+    ] {
+        let mut state = dungeon_state(open_dungeon_record(), 0, 1, 1);
+        let before = state.clock;
+        handle_play_key_input(&mut state, key, "", Path::new("")).unwrap();
+        assert_eq!(
+            (state.clock.hour, state.clock.minute),
+            (before.hour, before.minute + 1),
+            "key {:#04x}",
+            key as u32
+        );
+        assert_eq!(state.turn, 0, "key {:#04x} takes no turn", key as u32);
+    }
+}

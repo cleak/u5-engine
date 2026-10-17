@@ -317,6 +317,25 @@ fn handle_play_key_input_inner(
         .to_string();
         return Ok(PlayInputDisposition::Continue);
     }
+    // `dungeon-mode.md §15`: the dungeon's minute advance "sits at the head
+    // of each iteration ... so a command the dispatcher reports as \"no
+    // action\" (a digit solo-select, a refused Push, the typeahead toggle)
+    // still costs a minute underground", and `§4` step 3 dispatches the
+    // four shared Control bindings from that same iteration. The bindings
+    // still take no *turn* (`commands.md §9`); only the clock moves
+    // (playtest E17).
+    if matches!(
+        key,
+        PLAY_TYPEAHEAD_TOGGLE_KEY
+            | PLAY_MUSIC_TOGGLE_KEY
+            | PLAY_MORAL_STANDING_KEY
+            | PLAY_VERSION_BANNER_KEY
+            | PLAY_EXIT_TO_DOS_KEY
+    ) && matches!(state.area, Area::Dungeon { .. })
+        && !state.combat_active
+    {
+        state.advance_dungeon_loop_minute();
+    }
     if key == PLAY_TYPEAHEAD_TOGGLE_KEY {
         state.toggle_typeahead_buffer();
         return Ok(PlayInputDisposition::Continue);
