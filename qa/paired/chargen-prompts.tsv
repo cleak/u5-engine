@@ -31,6 +31,14 @@
 # animation, so the two sides catch it in different phases and the beat
 # cannot agree. That is the title screen rather than anything this scenario
 # covers.
+#
+# The same flame reaches into the message-window rect on every beat here
+# too: rows 13-14 are flame cells, not text. rc1's sweep (`20261017-010924`)
+# happened to catch both sides in decoding-equivalent phases; rc2's
+# (`20261017-131714`) did not, and read 0 of 3 with rows 13-14 as the only
+# difference while the prompt rows agreed cell for cell. Masked the same
+# way `chargen-journey-basics` masks its title-screen beats.
+# title-flame-band: name-prompt name-typed sex-prompt
 # no-roster-panel: character creation draws gypsy artwork in the right-hand
 # strip, so decoding it as the roster panel compares art against blank
 #
