@@ -5573,15 +5573,14 @@ impl PlayState {
             return false;
         }
 
-        // `active-objects.md §8` `0xFC` proximity-mask branch: at a listed
-        // wrapped `(dy, dx)` cell the slot's first auxiliary byte is
-        // incremented as an age counter. Both exits of that branch reach
-        // the same directed step planner ("one branch's two exits were found
-        // to reach the same movement call with a dead argument, so no
-        // behavioural difference should be modelled between them beyond the
-        // counter byte one of them increments"), so the counter is the only
-        // effect modelled here; movement continues below either way.
-        if object.type_byte & 0xfc == 0xfc {
+        // `active-objects.md §8` Shadow Lord proximity-mask branch (issue
+        // #298 Q21, `RETRACTIONS.md` R534): "On a listed cell the slot
+        // increments record byte 5 (unsigned, wrapping at 256) and then takes
+        // the same directed step it would take anyway ... whatever the
+        // counter's value". The mask test takes no draw. "The branch is taken
+        // only for type byte exactly `0xFC`, an exact-byte comparison rather
+        // than a masked family; `0xFD..0xFF` take the default arm."
+        if object.type_byte == SHADOW_LORD_PROXIMITY_TYPE_BYTE {
             let (dx, dy) = wrapped_deltas_to_player(
                 object.x as u8,
                 object.y as u8,

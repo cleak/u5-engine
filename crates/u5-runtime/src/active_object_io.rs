@@ -97,11 +97,12 @@ pub const fn outdoor_step_clears_on_destination(destination_tile: u8) -> bool {
     destination_tile == OUTDOOR_STEP_CLEAR_DESTINATION_TILE
 }
 
-/// `active-objects.md §8` `0xFC` proximity-mask age cap. Listed
-/// proximity cells increment the slot's first auxiliary byte as an
-/// age counter; while the counter remains below twenty, the slot
-/// requests a directed step toward the player.
-pub const FC_PROXIMITY_AGE_CAP: u8 = 20;
+/// `active-objects.md §8` (issue #298 Q21): the proximity-mask branch is
+/// "taken only for type byte exactly `0xFC`"; on a listed cell it increments
+/// record byte 5 and then runs the ordinary directed step planner. The
+/// earlier "while that counter remains below twenty" gate is withdrawn
+/// (`RETRACTIONS.md` R534): the comparison has no behavioural effect.
+pub const SHADOW_LORD_PROXIMITY_TYPE_BYTE: u8 = 0xFC;
 
 /// `active-objects.md §8` outdoor sea-serpent / dragon near-range
 /// trigger. The outdoor per-turn walker rolls a **one-in-eight** gate

@@ -15392,9 +15392,9 @@ fn outdoor_movement_chance_gate_classifies_destination_per_spec() {
         );
     }
 
-    // Auto-clear destination tile / age cap constants.
+    // Auto-clear destination tile / Shadow Lord exact type byte.
     assert_eq!(OUTDOOR_STEP_CLEAR_DESTINATION_TILE, 0xDC);
-    assert_eq!(FC_PROXIMITY_AGE_CAP, 20);
+    assert_eq!(SHADOW_LORD_PROXIMITY_TYPE_BYTE, 0xFC);
 }
 
 #[test]

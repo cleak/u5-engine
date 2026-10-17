@@ -3442,6 +3442,36 @@
         state.active_objects[1].aux1 = 4;
         state.try_wander_active_object(1);
         assert_eq!(state.active_objects[1].aux1, 4);
+        // Issue #298 Q21 / R534: the branch is "taken only for type byte
+        // exactly `0xFC` ... `0xFD..0xFF` take the default arm".
+        for type_byte in [0xfd, 0xfe, 0xff] {
+            let mut state = world_state_with_walker(1, 40, type_byte, 254, 40);
+            state.active_objects[1].aux1 = 4;
+            state.try_wander_active_object(1);
+            assert_eq!(state.active_objects[1].aux1, 4, "{type_byte:#x}");
+        }
+    }
+
+    #[test]
+    fn outdoor_walker_shadowlord_counter_has_no_twenty_gate_and_wraps() {
+        // Issue #298 Q21 / R534: the slot "increments record byte 5
+        // (unsigned, wrapping at 256) and then takes the same directed step
+        // it would take anyway ... whatever the counter's value".
+        for start in [19u8, 20, 21, 200, 255] {
+            let mut state = world_state_with_walker(1, 40, 0xfc, 254, 40);
+            let mut baseline = world_state_with_walker(1, 40, 0xf8, 254, 40);
+            state.active_objects[1].aux1 = start;
+            baseline.prng_state = state.prng_state;
+            let moved = state.try_wander_active_object(1);
+            let baseline_moved = baseline.try_wander_active_object(1);
+            assert_eq!(state.active_objects[1].aux1, start.wrapping_add(1));
+            assert_eq!(moved, baseline_moved, "start {start}");
+            assert_eq!(
+                (state.active_objects[1].x, state.active_objects[1].y),
+                (baseline.active_objects[1].x, baseline.active_objects[1].y),
+                "start {start}"
+            );
+        }
     }
 
     #[test]
