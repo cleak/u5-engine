@@ -4843,9 +4843,12 @@ impl PlayState {
             // announced". §5.2 voices it, and the issue #231 note keeps the
             // voiced refusal: "An arena that starts empty already has its
             // announcement guard set (combat Section 7), so that gate is
-            // lifted". The silent pick measured 2026-09-07 in
-            // `qa/paired/combat-ready-armour.tsv` is that reconciliation's
-            // open evidence, not the contract.
+            // lifted". Settled by full-game captures (2026-10-16, u5-spec
+            // d586ac4 on #231): a foe arena voices this line for the worn and
+            // for a different body armour; an initially empty arena is silent
+            // and the change takes effect. The silent pick measured
+            // 2026-09-07 in `qa/paired/combat-ready-armour.tsv` was such a
+            // successful change, not a refusal.
             self.message = self.ready_refusal(READY_COMBAT_ARMOUR_LOCK_REFUSAL);
             return MoveOutcome::Blocked;
         }
