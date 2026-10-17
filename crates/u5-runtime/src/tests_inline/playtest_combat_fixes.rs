@@ -181,3 +181,45 @@ fn playtest_e34_field_spells_use_the_shared_aim_cursor_without_help_text() {
     assert!(state.active_cast_followup.is_none());
     assert_eq!(state.message, "");
 }
+
+/// `combat.md §8.3`: with the numpad flag clear "typed digits keep their
+/// ASCII meaning and reach the active-player-selection handler"; with it set
+/// all eight of `1`-`4`/`6`-`9` are remapped. `§8.4` lists "Valid digit 1-6
+/// selection". Playtest E36: `2`, `4`, `6` and `8` stepped the actor while
+/// `1`, `3` and `5` selected a member - a mix of the two modes.
+#[test]
+fn playtest_e36_every_typed_combat_digit_selects_a_member() {
+    let game_dir = std::path::Path::new(".");
+    for digit in ['2', '4', '6', '8'] {
+        let mut state = combat_state_after_the_conflict_banner(8, 5);
+        state.ensure_pending_combat_player_turn();
+        let before = (state.combat_actors[0].x, state.combat_actors[0].y);
+
+        handle_play_key_input(&mut state, digit, "", game_dir).unwrap();
+
+        assert_eq!(
+            (state.combat_actors[0].x, state.combat_actors[0].y),
+            before,
+            "{digit} must not step the actor"
+        );
+        let rows = combat_message_window_rows(&state);
+        // `8` is outside `§8`'s "Digits `1`-`6`" and is refused like any
+        // other unmapped key.
+        let expected = if digit == '8' {
+            "What?"
+        } else {
+            COMBAT_SET_ACTIVE_PLAYER_LABEL.trim_end()
+        };
+        assert!(
+            rows.iter().any(|row| row.contains(expected)),
+            "{digit} answers with {expected:?}: {rows:?}"
+        );
+        assert!(
+            !rows.iter().any(|row| row.contains("North")
+                || row.contains("South")
+                || row.contains("East")
+                || row.contains("West")),
+            "{digit} printed a direction: {rows:?}"
+        );
+    }
+}

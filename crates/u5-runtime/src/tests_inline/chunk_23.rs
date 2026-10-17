@@ -12831,7 +12831,7 @@ fn combat_input_dispatch_out_of_arena_move_restores_stored_frame_snapshot() {
     state.player.x = 99;
 
     assert_eq!(
-        handle_play_key_input(&mut state, '6', "", game_dir).unwrap(),
+        handle_play_key_input(&mut state, '\u{2}', "", game_dir).unwrap(),
         PlayInputDisposition::Continue
     );
 
@@ -12977,7 +12977,7 @@ fn combat_input_dispatch_prompts_a_controlled_non_party_actor() {
     ));
 
     assert_eq!(
-        handle_play_key_input(&mut state, '6', "", game_dir).unwrap(),
+        handle_play_key_input(&mut state, '\u{2}', "", game_dir).unwrap(),
         PlayInputDisposition::Continue
     );
 
@@ -12995,7 +12995,7 @@ fn combat_input_dispatch_prompts_a_controlled_non_party_actor() {
     selected.next_combat_actor_slot = 9;
 
     assert_eq!(
-        handle_play_key_input(&mut selected, '6', "", game_dir).unwrap(),
+        handle_play_key_input(&mut selected, '\u{2}', "", game_dir).unwrap(),
         PlayInputDisposition::Continue
     );
     assert_eq!(selected.message, "");
@@ -13011,7 +13011,7 @@ fn combat_input_dispatch_prompts_a_controlled_non_party_actor() {
     driven.next_combat_actor_slot = 9;
 
     assert_eq!(
-        handle_play_key_input(&mut driven, '6', "", game_dir).unwrap(),
+        handle_play_key_input(&mut driven, '\u{2}', "", game_dir).unwrap(),
         PlayInputDisposition::Continue
     );
 
@@ -21595,7 +21595,7 @@ fn dungeon_contact_and_room_fights_step_the_party_by_the_first_exit() {
         dungeon_post_combat_state(1, DungeonPostCombatApplier::MovementApplier, 10, 5, true);
     state.grid[dungeon_cell_index(1, 2, 1)] = 0xb0;
 
-    handle_play_key_input(&mut state, '6', "", game_dir).unwrap();
+    handle_play_key_input(&mut state, '\u{2}', "", game_dir).unwrap();
 
     assert!(!state.combat_active);
     assert_eq!((state.player.x, state.player.y), (2, 1));
@@ -21605,7 +21605,7 @@ fn dungeon_contact_and_room_fights_step_the_party_by_the_first_exit() {
     let mut state =
         dungeon_post_combat_state(1, DungeonPostCombatApplier::MovementApplier, 5, 0, false);
     state.combat_frame_snapshot.as_mut().unwrap().player.y = 0;
-    handle_play_key_input(&mut state, '8', "", game_dir).unwrap();
+    handle_play_key_input(&mut state, '\u{3}', "", game_dir).unwrap();
     assert_eq!((state.player.x, state.player.y), (1, 7), "wraps north");
     assert_eq!(state.player.facing, Direction::North);
 }
@@ -21618,7 +21618,7 @@ fn dungeon_attack_fight_ignores_edge_exit_codes() {
     let mut state =
         dungeon_post_combat_state(1, DungeonPostCombatApplier::AttackLevelsOnly, 10, 5, false);
 
-    handle_play_key_input(&mut state, '6', "", game_dir).unwrap();
+    handle_play_key_input(&mut state, '\u{2}', "", game_dir).unwrap();
 
     assert!(!state.combat_active);
     assert_eq!((state.player.x, state.player.y), (1, 1));

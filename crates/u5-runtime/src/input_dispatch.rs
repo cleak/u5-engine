@@ -6012,6 +6012,17 @@ fn combat_player_command_input_from_key(key: char) -> CombatPlayerCommandInput {
     if key.is_ascii_uppercase() {
         return CombatPlayerCommandInput::Key(key);
     }
+    // `combat.md §8.3`: a typed digit becomes a direction only through the
+    // shared reader's numpad flag, which remaps all eight of `1`-`4` and
+    // `6`-`9` at once; with the flag clear "typed digits keep their ASCII
+    // meaning and reach the active-player-selection handler". A plain digit
+    // here is the flag-clear case - the frontend delivers a remapped keypad
+    // digit as a direction input code, exactly as the world loops'
+    // `Set Active Plr:` path assumes. Playtest E36: `2`/`4`/`6`/`8` stepped
+    // the actor while `1`/`3`/`5` selected a member, which is neither mode.
+    if key.is_ascii_digit() {
+        return CombatPlayerCommandInput::Key(key);
+    }
     if let Some(direction_code) =
         Direction::from_play_key(key).and_then(combat_direction_code_for_direction)
     {
