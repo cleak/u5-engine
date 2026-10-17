@@ -268,8 +268,14 @@ pub enum EndgameRefusalPhase {
     RecordOwed,
     /// `§6` step 1: slot 0's Y decrement and its sting beat.
     NudgeOwed,
-    /// `§6` step 2: the three scripted walks, one round per frame.
-    Walking,
+    /// `§6` step 2: the three scripted walks. Each round is "one call per
+    /// actor in exactly that order (slot 2, slot 31, slot 0), and every
+    /// actual one-cell step carries its own two-iteration, sting,
+    /// three-iteration beat", so one display frame runs calls until one
+    /// actor has actually stepped: `next_call` indexes
+    /// [`ENDGAME_TABLEAU_REFUSAL_WALK_ORDER`] and `moved_this_round`
+    /// remembers whether the round has stepped anyone yet.
+    Walking { next_call: u8, moved_this_round: bool },
     /// `§6` step 3: the terminal jitter loop.
     Jitter,
 }
@@ -367,6 +373,15 @@ const ENDGAME_TABLEAU_LORD_BRITISH_POS: (usize, usize) = (5, 4);
 const ENDGAME_TABLEAU_LORD_BRITISH_START: (usize, usize) = (5, 8);
 const ENDGAME_TABLEAU_REFUSAL_SLOT0_TARGET: (usize, usize) = (8, 4);
 const ENDGAME_TABLEAU_REFUSAL_SLOT2_TARGET: (usize, usize) = (8, 6);
+
+/// `endgame.md §6` step 2 (issue #298 Q42): one walk round is one call per
+/// actor "in exactly that order (slot 2, slot 31, slot 0)", each with its
+/// target.
+const ENDGAME_TABLEAU_REFUSAL_WALK_ORDER: [(usize, (usize, usize)); 3] = [
+    (2, ENDGAME_TABLEAU_REFUSAL_SLOT2_TARGET),
+    (ENDGAME_TABLEAU_LORD_BRITISH_SLOT, ENDGAME_TABLEAU_REFUSAL_LORD_BRITISH_TARGET),
+    (0, ENDGAME_TABLEAU_REFUSAL_SLOT0_TARGET),
+];
 const ENDGAME_TABLEAU_REFUSAL_LORD_BRITISH_TARGET: (usize, usize) = (4, 1);
 const ENDGAME_TABLEAU_VICTORY_EXIT_TARGET: (usize, usize) = (5, 4);
 const ENDGAME_TABLEAU_SETTLE_STEP_CAP: usize = ENDGAME_TABLEAU_WIDTH * ENDGAME_TABLEAU_HEIGHT * 2;
@@ -2397,27 +2412,49 @@ impl PlayState {
                     object.y = object.y.saturating_sub(1);
                 }
                 self.run_endgame_tableau_sting_beat();
-                set_phase(self, EndgameRefusalPhase::Walking);
+                set_phase(
+                    self,
+                    EndgameRefusalPhase::Walking {
+                        next_call: 0,
+                        moved_this_round: false,
+                    },
+                );
                 true
             }
-            EndgameRefusalPhase::Walking => {
-                // `§6` step 2: one round of the three scripted walks per
-                // frame, each actual step carrying the movement beat.
-                let moved = self.step_endgame_tableau_slot_once_with_sting(
-                    2,
-                    ENDGAME_TABLEAU_REFUSAL_SLOT2_TARGET,
-                ) | self.step_endgame_tableau_slot_once_with_sting(
-                    ENDGAME_TABLEAU_LORD_BRITISH_SLOT,
-                    ENDGAME_TABLEAU_REFUSAL_LORD_BRITISH_TARGET,
-                ) | self.step_endgame_tableau_slot_once_with_sting(
-                    0,
-                    ENDGAME_TABLEAU_REFUSAL_SLOT0_TARGET,
-                );
-                if !moved {
-                    set_phase(self, EndgameRefusalPhase::Jitter);
-                    return false;
+            EndgameRefusalPhase::Walking {
+                mut next_call,
+                mut moved_this_round,
+            } => {
+                // `§6` step 2 (issue #298 Q42): "Each round is one call per
+                // actor in exactly that order (slot 2, slot 31, slot 0), and
+                // every actual one-cell step carries its own two-iteration,
+                // sting, three-iteration beat; an actor already arrived, or
+                // an empty slot, adds nothing." So a frame makes calls until
+                // one actor actually steps - its beat's hold then separates
+                // it from the next actor's step - and a round in which nobody
+                // stepped ends the walk.
+                loop {
+                    if usize::from(next_call) >= ENDGAME_TABLEAU_REFUSAL_WALK_ORDER.len() {
+                        if !moved_this_round {
+                            set_phase(self, EndgameRefusalPhase::Jitter);
+                            return false;
+                        }
+                        next_call = 0;
+                        moved_this_round = false;
+                    }
+                    let (slot, target) = ENDGAME_TABLEAU_REFUSAL_WALK_ORDER[usize::from(next_call)];
+                    next_call += 1;
+                    if self.step_endgame_tableau_slot_once_with_sting(slot, target) {
+                        set_phase(
+                            self,
+                            EndgameRefusalPhase::Walking {
+                                next_call,
+                                moved_this_round: true,
+                            },
+                        );
+                        return true;
+                    }
                 }
-                true
             }
         }
     }

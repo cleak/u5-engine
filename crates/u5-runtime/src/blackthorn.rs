@@ -1354,10 +1354,10 @@ pub const BLACKTHORN_RESCUE_WAIT_CELL_REVEALS: u16 = 3 * BLACKTHORN_RESCUE_WAIT_
 ///
 /// Published (`blackthorn.md §6.2`, issue #298 Q44): each reveal is CPU-bound
 /// with no BIOS-tick wait, and "in an emulator at a fixed 3000-cycle setting
-/// the three reveals took 0.90 s, 0.935 s and 0.935 s" - "about 16-17 tick
-/// periods, not 20". Seventeen ticks is 0.934 s, and three of them (2.80 s)
-/// match the published 2.77 s total within a tick. This was twenty, an even
-/// split of the bracketed sixty below.
+/// the three reveals took 0.90 s, 0.935 s and 0.935 s" - about 16.4, 17.0
+/// and 17.0 BIOS tick periods. Seventeen ticks is 0.934 s, and three of them
+/// (2.80 s) match the published 2.77 s total within a tick. This was twenty,
+/// an even split of the bracketed sixty above.
 ///
 /// The engine paid all sixty ticks before the thunder line. Measured
 /// 2026-10-16 over three `stonegate-rescue-pacing` timelapses (2026-09-18,

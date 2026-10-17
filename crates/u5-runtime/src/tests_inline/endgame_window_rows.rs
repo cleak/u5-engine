@@ -431,3 +431,52 @@ fn endgame_terminal_jitter_round_costs_four_paced_iterations() {
     assert!((holds[0] - crate::narration::bios_ticks_secs(4)).abs() < 1e-9);
     let _ = fs::remove_dir_all(dir);
 }
+
+#[test]
+fn endgame_waiting_walk_steps_one_actor_per_beat_in_round_order() {
+    // `endgame.md §6` step 2 (issue #298 Q42): "Each round is one call per
+    // actor in exactly that order (slot 2, slot 31, slot 0), and every actual
+    // one-cell step carries its own two-iteration, sting, three-iteration
+    // beat". One walk frame therefore moves exactly one actor and leaves its
+    // beat's hold pending, so no two actors step at the same instant.
+    let dir = debug_game_dir();
+    let mut state = endgame_window_at_first_question(&dir);
+    handle_play_key_input(&mut state, 'y', "", &dir).unwrap();
+    assert!(state.advance_endgame_display_frame()); // pause
+    assert!(state.advance_endgame_display_frame()); // record 10
+    assert!(state.advance_endgame_display_frame()); // nudge
+    let walkers = [2usize, ENDGAME_TABLEAU_LORD_BRITISH_SLOT, 0];
+    let positions = |state: &PlayState| {
+        walkers.map(|slot| (state.active_objects[slot].x, state.active_objects[slot].y))
+    };
+    let mut movers = Vec::new();
+    loop {
+        state.flush_staged_narration();
+        let before = positions(&state);
+        if !state.advance_endgame_refusal_staging_frame() {
+            assert_eq!(positions(&state), before, "the closing round steps nobody");
+            break;
+        }
+        let after = positions(&state);
+        let moved: Vec<usize> = (0..walkers.len()).filter(|&i| before[i] != after[i]).collect();
+        assert_eq!(moved.len(), 1, "one actor per walk frame");
+        assert!(state.staged_narration_active(), "each step carries its beat");
+        movers.push(walkers[moved[0]]);
+    }
+    assert!(!movers.is_empty());
+    // Lord British's first step precedes the leader's first step, and any
+    // slot-2 step of the first round precedes both.
+    let first_king = movers.iter().position(|&slot| slot == ENDGAME_TABLEAU_LORD_BRITISH_SLOT);
+    let first_leader = movers.iter().position(|&slot| slot == 0);
+    if let (Some(king), Some(leader)) = (first_king, first_leader) {
+        assert!(king < leader);
+    }
+    if movers.contains(&2) {
+        assert_eq!(movers[0], 2);
+    }
+    assert_eq!(
+        state.endgame.as_ref().unwrap().refusal_phase,
+        EndgameRefusalPhase::Jitter
+    );
+    let _ = fs::remove_dir_all(dir);
+}

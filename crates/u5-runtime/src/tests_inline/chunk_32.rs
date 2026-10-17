@@ -461,8 +461,8 @@ fn blackthorn_rescue_splits_the_cell_reveal_hold_around_the_thunder() {
 
 /// `blackthorn.md §6.2`/`§7.1` (issue #298 Q44): at a fixed 3000-cycle emulator
 /// setting slumber to shout measured 11.65 s and the three reveals 0.90 s,
-/// 0.935 s and 0.935 s ("about 16-17 tick periods, not 20"). The holds are
-/// those published spans, each within one BIOS tick.
+/// 0.935 s and 0.935 s. The holds are those published spans, each within one
+/// BIOS tick, and the paired flash lies inside the published 1.67 to 1.72 s.
 #[test]
 fn blackthorn_rescue_holds_take_the_published_emulator_spans() {
     let tick = crate::narration::BIOS_TICK_SECS;
