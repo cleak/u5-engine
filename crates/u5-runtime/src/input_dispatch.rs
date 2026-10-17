@@ -2271,6 +2271,9 @@ fn handle_active_shop_key_input(
                     state.emit_message_line_continuing_row("No");
                 }
                 ShipBrokerState::Greeting { .. } if key_byte == b' ' => {
+                    // The greeting's `" ` row is open; see the entry echo below.
+                    state.flush_message_slot();
+                    state.open_message_row();
                     state.emit_message_line_continuing_row("No");
                 }
                 _ => {}
@@ -2278,8 +2281,21 @@ fn handle_active_shop_key_input(
             let message = match outcome {
                 // `§8.A`/`§8.C`: "Ordinary ship endings use the shared
                 // farewell", nothing-bought or purchase-completed by the visit.
+                //
+                // The bark follows the `No` echo on the row the question left
+                // open, so it opens with two feeds: the close and the blank.
+                // Measured 2026-10-16 (`bd-shipwright-20261016-215905`, beat
+                // `no`, and every stock capture back to 2026-09-18): the
+                // original reads `take it?" No`, a blank row, then the bark;
+                // this engine had the `No` on its own row and no blank.
                 ShipBrokerOutcome::Declined => {
-                    shop_closing_bark(state, SHOP_DIALOG_ID_SHIPWRIGHT, vendor_name, game_dir)
+                    let bark =
+                        shop_closing_bark(state, SHOP_DIALOG_ID_SHIPWRIGHT, vendor_name, game_dir);
+                    if bark.is_empty() {
+                        bark
+                    } else {
+                        format!("\n\n{bark}")
+                    }
                 }
                 // `§8.C` "Affordability failure | Record `122`, then
                 // token-expanded `yells $.\n`; suppress ordinary farewell".
@@ -2394,10 +2410,25 @@ fn handle_active_shop_key_input(
         // the bare word either way; the engine used to supply a space of its
         // own and so double-spaced the tavern's row and put the healer's
         // answer on a row with no colon.
+        //
+        // The greeting's tail - `" ` or the colon - leaves its row open, so
+        // the slot that printed it is flushed and the row stated open here
+        // rather than read from whatever the last `emit_*` call left. Measured
+        // 2026-10-16 (`bd-shipwright-20261016-215905`, beat `yes`): the
+        // original reads `vessels?" Yes`; this engine put the `Yes` on a row
+        // of its own from the 2026-10-13 runs on.
+        state.flush_message_slot();
+        state.open_message_row();
         state.emit_message_line_continuing_row(echo);
-        if echo == "Yes" {
-            // `§8.B`'s per-kind table gives every Yes branch `Yes\n\n` before
-            // its service text.
+        // `§8.B`'s per-kind table gives the Yes branches `Yes\n\n` before
+        // their service text - except the shipwright, which prints "`Yes`,
+        // then record `119` ... the record carries its own leading spacing".
+        // Measured 2026-10-16 (`bd-shipwright-20261016-215905`, beat `yes`, and
+        // every engine capture back to 2026-09-18): the original has one blank
+        // row between `Yes` and the menu; this engine had three, its own blank
+        // plus the record's two feeds spent against a closed row.
+        let record_owns_spacing = matches!(session, ActiveShopSession::ShipBroker(_));
+        if echo == "Yes" && !record_owns_spacing {
             state.push_explicit_blank_message_entry();
         }
     }
@@ -2422,6 +2453,7 @@ fn handle_active_shop_key_input(
             ActiveShopSession::Arms(_)
                 | ActiveShopSession::ArmsLocal(..)
                 | ActiveShopSession::ArmsStocked(..)
+                | ActiveShopSession::ShipBroker(_)
         )
         && session.keeps_cursor_inline()
         && !state.message.is_empty();

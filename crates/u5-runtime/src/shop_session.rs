@@ -69,11 +69,16 @@ impl ActiveShopSession {
         }
         // `shops.md §8.B`/`§8.C`: record `119`, the dock-space record `125`
         // and the continuation's `?" ` all leave their row open on a closing
-        // quote and a space, as the entry greeting does.
+        // quote and a space, as the entry greeting does. The ordinary offer's
+        // record `126` ends the same way: measured 2026-10-16
+        // (`bd-shipwright-20261016-215905`, beat `frigate`), the original's
+        // cursor sits after `take it?" ` and `N` echoes there, where this
+        // engine drew a fresh command row under the question.
         if matches!(
             self,
             Self::ShipBroker(
                 ShipBrokerState::Menu { .. }
+                    | ShipBrokerState::ConfirmPurchase { .. }
                     | ShipBrokerState::ConfirmDockSpace { .. }
                     | ShipBrokerState::Continuation { .. }
             )

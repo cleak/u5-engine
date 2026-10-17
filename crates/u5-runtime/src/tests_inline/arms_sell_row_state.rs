@@ -143,3 +143,90 @@ fn arms_buy_stock_letter_continues_the_stock_call_row() {
     assert!(rows[echo + 2].starts_with('"'), "{rows:#?}");
     assert!(!rows.iter().any(|row| row == "a"), "{rows:#?}");
 }
+
+fn shipwright_rows_after(keys: &[char], game_dir: &Path) -> Vec<String> {
+    let mut grid = open_grid();
+    grid[2 * 32 + 1] = 0x05;
+    let mut state = test_state(grid, 1, 1);
+    state.area = Area::Town {
+        scene: Scene::new(24).unwrap(),
+        floor: 0,
+    };
+    state.player.facing = Direction::East;
+    state.gold = 150;
+    state.load_scheduled_npcs(&[
+        NpcSlot {
+            slot: 0,
+            type_byte: 0,
+            dialog_id: 0,
+            schedule: [0; 16],
+            name: None,
+        },
+        NpcSlot {
+            slot: 1,
+            type_byte: 1,
+            dialog_id: 0x84,
+            schedule: [0, 0, 0, 2, 2, 2, 1, 1, 1, 0, 0, 0, 0, 8, 16, 20],
+            name: None,
+        },
+    ]);
+    assert_eq!(
+        state.talk_facing_with_dialogue(&HashMap::new()),
+        MoveOutcome::Talked
+    );
+    state.flush_message_slot();
+    for &key in keys {
+        handle_play_key_input(&mut state, key, "", game_dir).unwrap();
+    }
+    arms_sell_rows(&state)
+        .into_iter()
+        .map(|row| row.trim_end().to_string())
+        .collect()
+}
+
+/// `shops.md` §8.B: the shipwright's Yes is bare `Yes` and record `119`
+/// "carries its own leading spacing"; §8.C: `F` echoes with `\n\n`. Stock
+/// captures of `bd-shipwright` (2026-09-18 through 2026-10-16): `?" Yes`, one
+/// blank row, the menu; `see?" F`, one blank, the offer; `take it?" No`, one
+/// blank, the bark. This engine had three blank rows under `Yes`, a fresh
+/// command row under the offer, and `No` on a row of its own with no blank.
+#[test]
+fn shipwright_echoes_continue_their_rows_and_take_one_blank() {
+    let Some(dir) = crate::test_fixtures::configured_original_asset_dir() else {
+        return;
+    };
+    let rows = shipwright_rows_after(&['Y', 'F', 'N'], &dir);
+    let yes = rows
+        .iter()
+        .position(|row| row.ends_with("Yes"))
+        .unwrap_or_else(|| panic!("{rows:#?}"));
+    assert_eq!(rows[yes + 1], "", "{rows:#?}");
+    assert!(rows[yes + 2].starts_with("\"We sell"), "{rows:#?}");
+    let f = rows
+        .iter()
+        .position(|row| row.ends_with("?\" F"))
+        .unwrap_or_else(|| panic!("{rows:#?}"));
+    assert_eq!(rows[f + 1], "", "{rows:#?}");
+    assert!(!rows[f + 2].is_empty(), "{rows:#?}");
+    let no = rows
+        .iter()
+        .position(|row| row.ends_with("take it?\" No"))
+        .unwrap_or_else(|| panic!("{rows:#?}"));
+    assert_eq!(rows[no + 1], "", "{rows:#?}");
+    assert!(rows[no + 2].starts_with('"'), "{rows:#?}");
+    assert!(rows[no + 3].starts_with("says "), "{rows:#?}");
+    assert_eq!(rows.len(), no + 4, "{rows:#?}");
+}
+
+/// The offer's question keeps the cursor inline, so `N` echoes onto it -
+/// asset-free, through the fallback offer text.
+#[test]
+fn shipwright_offer_question_keeps_the_cursor_inline() {
+    let rows = shipwright_rows_after(&['Y', 'F', 'N'], Path::new(""));
+    assert!(
+        rows.iter()
+            .any(|row| row.starts_with("Wilt thou take it?") && row.ends_with("No")),
+        "{rows:#?}"
+    );
+    assert!(!rows.iter().any(|row| row == "No"), "{rows:#?}");
+}
