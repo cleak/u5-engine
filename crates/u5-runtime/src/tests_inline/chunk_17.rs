@@ -4999,8 +4999,26 @@
         assert_eq!(missing_row.message, "Failed!");
     }
 
+    /// A seed whose first shared random arena probe (`magic.md §8`) draws an
+    /// in-arena cell other than `avoid`, with that cell.
+    fn combat_blink_first_probe_seed(avoid: (u16, u16)) -> (u16, (u8, u8)) {
+        (0..=u16::MAX)
+            .find_map(|candidate| {
+                let mut prng = candidate;
+                let cell = (
+                    u5_prng_range_u16(&mut prng, 0, 15),
+                    u5_prng_range_u16(&mut prng, 0, 15),
+                );
+                (cell.0 <= 10 && cell.1 <= 10 && cell != avoid)
+                    .then_some((candidate, (cell.0 as u8, cell.1 as u8)))
+            })
+            .unwrap()
+    }
+
     #[test]
-    fn combat_allowed_blink_moves_linked_actor_to_selected_coordinate() {
+    fn combat_allowed_blink_moves_linked_actor_to_first_probe_cell() {
+        // magic.md §8 (u5-spec#298 Q3): the inline combat cast ignores any
+        // coordinate suffix; the destination is the first accepted probe.
         let mut state = britannia_state(open_world_grid(), 1, 1);
         state.combat_active = true;
         state.combat_terrain = [[0x04; COMBAT_ARENA_SIDE]; COMBAT_ARENA_SIDE];
@@ -5018,6 +5036,8 @@
         state.party[0].mana = BLINK_COST;
         state.party[0].level = BLINK_COST;
         state.visibility_dirty = false;
+        let (seed, landing) = combat_blink_first_probe_seed((1, 1));
+        state.prng_state = seed;
 
         assert_eq!(
             state.cast_spell_from_suffix("1IP3,1", Path::new("")).unwrap(),
@@ -5025,14 +5045,18 @@
         );
 
         assert_eq!((state.player.x, state.player.y), (1, 1));
-        assert_eq!((state.combat_actors[0].x, state.combat_actors[0].y), (3, 1));
-        assert_eq!((state.active_objects[0].x, state.active_objects[0].y), (3, 1));
+        assert_eq!((state.combat_actors[0].x, state.combat_actors[0].y), landing);
+        assert_eq!(
+            (state.active_objects[0].x, state.active_objects[0].y),
+            (usize::from(landing.0), usize::from(landing.1))
+        );
         assert_eq!(state.spell_charges[BLINK_SPELL_INDEX], 0);
         assert_eq!(state.party[0].mana, 0);
         assert_eq!(state.turn, 1);
         assert_eq!(state.clock, GameClock::new(12, 2).unwrap());
         assert!(state.visibility_dirty);
-        assert!(state.diagnostics.iter().any(|n| n.contains("blinked to (3, 1)")), "{:?}", state.diagnostics);
+        let line = format!("blinked to ({}, {})", landing.0, landing.1);
+        assert!(state.diagnostics.iter().any(|n| n.contains(&line)), "{:?}", state.diagnostics);
         // `magic.md §8` "What Blink prints": an accepted arena step prints
         // `Success!` (audit A122/A002).
         assert_eq!(state.message, crate::commands::SPELL_SUCCESS_LINE);
@@ -5042,8 +5066,8 @@
     fn combat_blink_failure_spends_resources_without_moving_actor() {
         let mut state = test_state(open_grid(), 1, 1);
         state.combat_active = true;
-        state.combat_terrain = [[0x04; COMBAT_ARENA_SIDE]; COMBAT_ARENA_SIDE];
-        state.combat_terrain[1][2] = 0x0c;
+        state.combat_terrain = [[0x0c; COMBAT_ARENA_SIDE]; COMBAT_ARENA_SIDE];
+        state.combat_terrain[1][1] = 0x04;
         state.combat_actors[0] = CombatActorDescriptor::from_row([
             20,
             1,
@@ -5060,9 +5084,7 @@
         state.visibility_dirty = false;
 
         assert_eq!(
-            state
-                .cast_spell_from_suffix("1IP2,1", Path::new(""))
-                .unwrap(),
+            state.cast_spell_from_suffix("1IP", Path::new("")).unwrap(),
             MoveOutcome::Blocked
         );
 
@@ -5075,7 +5097,8 @@
     }
 
     #[test]
-    fn active_combat_blink_followup_moves_cursor_and_confirms_coordinate() {
+    fn active_combat_blink_finishes_without_a_coordinate_cursor() {
+        // magic.md §8 (u5-spec#298 Q3): "Combat Blink ... never prompts".
         let mut state = britannia_state(open_world_grid(), 1, 1);
         state.combat_active = true;
         state.combat_terrain = [[0x04; COMBAT_ARENA_SIDE]; COMBAT_ARENA_SIDE];
@@ -5092,6 +5115,8 @@
         state.spell_charges[BLINK_SPELL_INDEX] = 1;
         state.party[0].mana = BLINK_COST;
         state.party[0].level = BLINK_COST;
+        let (seed, landing) = combat_blink_first_probe_seed((5, 5));
+        state.prng_state = seed;
 
         assert_eq!(
             state.start_combat_cast_spell_prompt(0, false),
@@ -5101,26 +5126,13 @@
             .step_active_cast('I', "P", Path::new(""))
             .unwrap()
             .is_none());
-        assert!(state
+        let result = state
             .step_active_cast(' ', "", Path::new(""))
             .unwrap()
-            .is_none());
-        assert!(state.active_cast_followup.is_some());
-        assert!(state.message.contains("Target?"));
-
-        assert!(state
-            .step_active_cast_followup('6', "", Path::new(""))
-            .unwrap()
-            .is_none());
-        assert!(state.message.contains("(6, 5)"));
-        let result = state
-            .step_active_cast_followup(' ', "", Path::new(""))
-            .unwrap()
-            .expect("coordinate confirmation should finish Blink");
+            .expect("combat Blink should finish without a cursor");
+        assert!(state.active_cast_followup.is_none());
         assert_eq!(result.0, MoveOutcome::Cast);
-        assert_eq!(result.1, Some((0, false)));
-        assert_eq!((state.combat_actors[0].x, state.combat_actors[0].y), (6, 5));
-        assert!(state.diagnostics.iter().any(|n| n.contains("blinked to (6, 5)")), "{:?}", state.diagnostics);
+        assert_eq!((state.combat_actors[0].x, state.combat_actors[0].y), landing);
     }
 
     #[test]

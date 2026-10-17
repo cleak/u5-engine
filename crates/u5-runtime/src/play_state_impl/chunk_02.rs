@@ -1224,10 +1224,9 @@ impl PlayState {
                     return Ok(MoveOutcome::Blocked);
                 };
                 if self.combat_active {
-                    return Ok(self.cast_combat_blink_to_coordinate(
-                        caster_index,
-                        parse_inline_blink_combat_coordinate(suffix),
-                    ));
+                    // magic.md §8 (u5-spec#298 Q3): combat Blink never
+                    // prompts; it runs seven shared random arena probes.
+                    return Ok(self.cast_combat_blink(caster_index));
                 }
                 self.cast_blink(
                     caster_index,

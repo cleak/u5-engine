@@ -1409,6 +1409,9 @@ pub const SLEEP_FIELD_SPELL_INDEX: usize = POISON_FIELD_SPELL_INDEX + 1;
 pub const FIELD_SPELL_COST: u8 = (SLEEP_FIELD_SPELL_INDEX / SPELLS_PER_CIRCLE) as u8 + 1;
 pub const BLINK_SPELL_INDEX: usize = 17;
 pub const BLINK_COST: u8 = (BLINK_SPELL_INDEX / SPELLS_PER_CIRCLE) as u8 + 1;
+/// `magic.md §8` (u5-spec#298 Q3): combat Blink's budget of seven attempts
+/// of the shared random arena probe.
+pub const COMBAT_BLINK_PROBE_ATTEMPTS: usize = 7;
 pub const DISPEL_FIELD_SPELL_INDEX: usize = 18;
 pub const DISPEL_FIELD_COST: u8 = (DISPEL_FIELD_SPELL_INDEX / SPELLS_PER_CIRCLE) as u8 + 1;
 pub const PROTECTION_SPELL_INDEX: usize = 19;

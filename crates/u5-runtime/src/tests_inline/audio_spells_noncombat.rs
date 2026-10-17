@@ -640,42 +640,76 @@ fn combat_cursor_state(spell_index: usize) -> PlayState {
     state
 }
 
+/// A seed whose first combat-Blink probe falls off the arena (a coordinate
+/// above 10) and whose second lands on `(x, y)`.
+fn combat_blink_seed_landing_on_second_probe(x: u16, y: u16) -> u16 {
+    (0..=u16::MAX)
+        .find(|candidate| {
+            let mut prng = *candidate;
+            let first_x = u5_prng_range_u16(&mut prng, 0, 15);
+            let first_y = u5_prng_range_u16(&mut prng, 0, 15);
+            let second_x = u5_prng_range_u16(&mut prng, 0, 15);
+            let second_y = u5_prng_range_u16(&mut prng, 0, 15);
+            (first_x > 10 || first_y > 10) && (second_x, second_y) == (x, y)
+        })
+        .unwrap()
+}
+
 #[test]
-fn combat_blink_confirmation_sounds_before_the_coordinate_resolver() {
-    // audio.md §8.3: "For combat cursor spells, confirmation plays the spell
-    // effect before the coordinate/projectile-impact resolver." The same
-    // confirmed coordinate therefore opens with audio.md §6's variant 3
-    // whether the resolver then accepts or rejects it.
+fn combat_blink_plays_variant_three_then_lands_on_the_first_probe_cell() {
+    // magic.md §8 (added 2026-10-16, u5-spec#298 Q3): combat Blink never
+    // prompts. Variant 3 plays, then up to seven shared random arena probes
+    // run, each an X and a Y from `0..15` (two generator advances), an
+    // off-arena coordinate spending the attempt. The first accepted cell
+    // takes the caster and the descriptor and linked object both move.
     let mut accepted = combat_cursor_state(BLINK_SPELL_INDEX);
+    let seed = combat_blink_seed_landing_on_second_probe(2, 8);
+    accepted.prng_state = seed;
+    let mut expected_prng = seed;
+    for _ in 0..4 {
+        let _ = u5_prng_range_u16(&mut expected_prng, 0, 15);
+    }
     let serial = accepted.sound_effect_serial;
-    assert_eq!(
-        accepted.cast_combat_blink_to_coordinate(0, Some((5, 6))),
-        MoveOutcome::Cast
-    );
+    assert_eq!(accepted.cast_combat_blink(0), MoveOutcome::Cast);
+    assert_eq!(accepted.pending_cast_argument, None, "no target prompt");
+    assert_eq!(accepted.message, crate::commands::SPELL_SUCCESS_LINE);
     assert_eq!(
         (accepted.combat_actors[0].x, accepted.combat_actors[0].y),
-        (5, 6)
+        (2, 8)
     );
+    assert_eq!(
+        (accepted.active_objects[0].x, accepted.active_objects[0].y),
+        (2, 8)
+    );
+    assert_eq!(accepted.prng_state, expected_prng, "two advances per attempt");
     assert_eq!(
         accepted.sound_effects_after(serial),
         vec![SoundEffect::SharedVariant { variant: 3 }]
     );
+}
 
-    // The identical confirmed coordinate, now illegal terrain: the resolver
-    // rejects it, but the variant has already sounded and the §8.3 failure
-    // tail follows `Failed!`.
+#[test]
+fn combat_blink_fails_after_seven_rejected_probes_with_fourteen_draws() {
+    // magic.md §8 (u5-spec#298 Q3): range and validator rejections share the
+    // seven-attempt budget; a failed Blink consumes exactly fourteen
+    // generator advances and reports `Failed!` with the failure glissando.
+    // The caster's own cell is always rejected, so a walled arena fails.
     let mut rejected = combat_cursor_state(BLINK_SPELL_INDEX);
-    rejected.combat_terrain[6][5] = 0x01;
+    rejected.combat_terrain = [[0x01; COMBAT_ARENA_SIDE]; COMBAT_ARENA_SIDE];
+    rejected.combat_terrain[5][5] = 0x04;
+    rejected.prng_state = 0x1234;
+    let mut expected_prng = 0x1234;
+    for _ in 0..14 {
+        let _ = u5_prng_range_u16(&mut expected_prng, 0, 15);
+    }
     let serial = rejected.sound_effect_serial;
-    assert_eq!(
-        rejected.cast_combat_blink_to_coordinate(0, Some((5, 6))),
-        MoveOutcome::Blocked
-    );
+    assert_eq!(rejected.cast_combat_blink(0), MoveOutcome::Blocked);
     assert_eq!(rejected.message, "Failed!");
     assert_eq!(
         (rejected.combat_actors[0].x, rejected.combat_actors[0].y),
         (5, 5)
     );
+    assert_eq!(rejected.prng_state, expected_prng);
     assert_eq!(
         rejected.sound_effects_after(serial),
         vec![
@@ -686,49 +720,28 @@ fn combat_blink_confirmation_sounds_before_the_coordinate_resolver() {
 }
 
 #[test]
-fn combat_blink_cursor_and_caster_refusals_stay_silent() {
-    // audio.md §8.3: "A direction or combat-cursor cancellation that the
-    // spell spec places before its sound skips the shared variant." The
-    // missing-target prompt, the scene refusal, and the dead-caster refusal
-    // all sit ahead of the confirmation, so none of them sound.
-    let mut prompt = combat_cursor_state(BLINK_SPELL_INDEX);
-    let serial = prompt.sound_effect_serial;
-    assert_eq!(
-        prompt.cast_combat_blink_to_coordinate(0, None),
-        MoveOutcome::Blocked
-    );
-    assert_eq!(
-        prompt.pending_cast_argument,
-        Some(CastArgumentRequest::Target)
-    );
-    assert!(prompt.sound_effects_after(serial).is_empty());
-    assert_eq!(
-        prompt.spell_charges[BLINK_SPELL_INDEX], 1,
-        "the cursor prompt spends nothing"
-    );
-
+fn combat_blink_scene_and_caster_refusals_stay_silent() {
+    // The scene refusal and the dead-caster refusal sit ahead of the
+    // variant, so neither sounds nor draws.
     let mut not_here = combat_cursor_state(BLINK_SPELL_INDEX);
     not_here.combat_active = false;
     let serial = not_here.sound_effect_serial;
-    assert_eq!(
-        not_here.cast_combat_blink_to_coordinate(0, Some((5, 6))),
-        MoveOutcome::Blocked
-    );
+    assert_eq!(not_here.cast_combat_blink(0), MoveOutcome::Blocked);
     assert_eq!(not_here.message, "Not here!");
     assert!(not_here.sound_effects_after(serial).is_empty());
 
     let mut no_caster = combat_cursor_state(BLINK_SPELL_INDEX);
     no_caster.combat_actors[0] = CombatActorDescriptor::default();
+    let prng_before = no_caster.prng_state;
     let serial = no_caster.sound_effect_serial;
+    assert_eq!(no_caster.cast_combat_blink(0), MoveOutcome::Blocked);
     assert_eq!(
-        no_caster.cast_combat_blink_to_coordinate(0, Some((5, 6))),
-        MoveOutcome::Blocked
+        no_caster.pending_cast_argument,
+        Some(CastArgumentRequest::Caster)
     );
-    assert_eq!(
-            no_caster.pending_cast_argument,
-            Some(CastArgumentRequest::Caster)
-        );
     assert!(no_caster.sound_effects_after(serial).is_empty());
+    assert_eq!(no_caster.prng_state, prng_before);
+    assert_eq!(no_caster.spell_charges[BLINK_SPELL_INDEX], 1);
 }
 
 #[test]

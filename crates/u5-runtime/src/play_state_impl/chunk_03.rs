@@ -1783,17 +1783,6 @@ impl PlayState {
                     None => Some(CastFollowupKind::CombatTarget { creature: true }),
                 }
             }
-            Some(CastArgumentRequest::Target) if spell_code == "IP" && self.combat_active => self
-                .combat_actors
-                .get(caster_index)
-                .copied()
-                .filter(|actor| combat_actor_is_active_not_dead(*actor))
-                .map(|actor| CastFollowupKind::CombatCoordinate {
-                    x: actor.x,
-                    y: actor.y,
-                    range_origin: None,
-                    max_range: None,
-                }),
             Some(CastArgumentRequest::Target)
                 if matches!(spell_code.as_str(), "FGI" | "GIN" | "GIZ" | "GIS")
                     && self.combat_active =>
@@ -6410,19 +6399,26 @@ impl PlayState {
         farthest
     }
 
-    pub fn cast_combat_blink_to_coordinate(
-        &mut self,
-        caster_index: usize,
-        target: Option<(u8, u8)>,
-    ) -> MoveOutcome {
+    /// Combat Blink (`magic.md §8`, added 2026-10-16, u5-spec#298 Q3): no
+    /// prompt. After the shared cast gate the spell plays variant 3 and then
+    /// makes up to seven attempts of the shared random arena probe - an X and
+    /// then a Y drawn from `0..15` on the gameplay generator, spent when
+    /// either exceeds 10, otherwise put to the shared combat spawn-cell
+    /// validator. The first accepted cell receives the caster (descriptor and
+    /// linked active object) and the cast reports `Success!`; seven spent
+    /// attempts report `Failed!` with the failure glissando. Every attempt
+    /// makes exactly two generator advances, so a failure consumes fourteen.
+    ///
+    /// The spec's "combat refusal state", tested before the variant, is
+    /// "named here only by its effect"; this engine models no such state yet.
+    /// The validator stand-in is the same legal-cell mask Conjure, Swarm and
+    /// Summon use; its exact occupancy contract is still open
+    /// (`OPEN-QUESTIONS.md` section 3, issue #298 Q3).
+    pub fn cast_combat_blink(&mut self, caster_index: usize) -> MoveOutcome {
         if !self.combat_active || !self.spell_allowed_in_current_cast_context(BLINK_SPELL_INDEX) {
             self.message = "Not here!".to_string();
             return MoveOutcome::Blocked;
         }
-        let Some((tx, ty)) = target else {
-            self.request_cast_argument(CastArgumentRequest::Target);
-            return MoveOutcome::Blocked;
-        };
         let Some(caster_actor) = self.combat_actors.get(caster_index).copied() else {
             self.request_cast_argument(CastArgumentRequest::Caster);
             return MoveOutcome::Blocked;
@@ -6437,36 +6433,34 @@ impl PlayState {
             return outcome;
         }
 
-        // audio.md §6: Blink is variant 3; audio.md §8.3: "For combat cursor
-        // spells, confirmation plays the spell effect before the
-        // coordinate/projectile-impact resolver."
+        // audio.md §6: Blink is variant 3; magic.md §8: it plays after the
+        // refusal-state test and before the probe attempts.
         self.emit_sound_effect(SoundEffect::SharedVariant { variant: 3 });
 
+        // The caster is present, so its own cell is rejected by the mask.
         let legal_cells = self.combat_legal_cell_mask();
-        let legal = combat_arena_coordinate_in_bounds(i16::from(tx), i16::from(ty))
-            && legal_cells[usize::from(ty)][usize::from(tx)]
-            && find_combat_actor_at_field_coordinate_skipping(
-                &self.combat_actors,
-                &self.active_objects,
-                tx,
-                ty,
-                Some(caster_index),
-            )
-            .is_none();
+        let mut accepted = None;
+        for _ in 0..COMBAT_BLINK_PROBE_ATTEMPTS {
+            let x = self.random_range_u8(0, 15);
+            let y = self.random_range_u8(0, 15);
+            if usize::from(x) >= COMBAT_ARENA_SIDE || usize::from(y) >= COMBAT_ARENA_SIDE {
+                continue;
+            }
+            if legal_cells[usize::from(y)][usize::from(x)] {
+                accepted = Some((x, y));
+                break;
+            }
+        }
 
         self.advance_turn();
-        if !legal {
+        let Some((tx, ty)) = accepted else {
             self.fail_committed_spell_cast();
             return MoveOutcome::Blocked;
-        }
+        };
 
         // Defensive, and unreachable from here: the only `None` cases are an
         // empty or marked-dead actor, both already excluded by the
-        // `combat_actor_is_active_not_dead` gate above. It stays silent -
-        // audio.md §8.3 attaches the cast-failure glissando to `Failed!`, and
-        // this arm prints a bare `Who casts?` refusal instead, which audio.md
-        // §9 gives no acknowledgement sound. The §8.3 confirmation variant has
-        // already sounded; nothing published adds a second cue here.
+        // `combat_actor_is_active_not_dead` gate above.
         let Some(commit) = commit_combat_actor_linked_position(
             &mut self.combat_actors[caster_index],
             &mut self.active_objects,
@@ -6482,11 +6476,7 @@ impl PlayState {
             commit.actor_position_after.0, commit.actor_position_after.1
         ));
         // `magic.md §8` "What Blink prints": "An accepted arena step prints
-        // `Success!\n` with no sound". The same paragraph says combat Blink
-        // never prompts and tries "a fixed budget of seven candidate
-        // steps"; how those candidates are generated is unpublished, so the
-        // coordinate cursor stays as this engine's stand-in until the spec
-        // names the search.
+        // `Success!\n` with no sound".
         self.message = crate::commands::SPELL_SUCCESS_LINE.to_string();
         MoveOutcome::Cast
     }
