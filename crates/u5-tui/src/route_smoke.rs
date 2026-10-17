@@ -6545,7 +6545,13 @@ fn validate_route_smoke_case_state(
                 || state.spell_charges[UUS_POR_SPELL_INDEX] != 0
                 || state.spell_charges[DES_POR_SPELL_INDEX] != 0
                 || state.party.first().is_none_or(|member| member.mana != 0)
-                || !state.message.contains("Down!")
+                // The climb word is printed once, onto its own transcript
+                // row (`dungeon-mode.md §13.1`, playtest E09); a refused
+                // destination leaves `Failed!` in the slot beneath it.
+                || !state
+                    .message_entries()
+                    .iter()
+                    .any(|entry| entry.text == "Down!")
             {
                 return Err(io::Error::other(format!(
                     "route smoke `{case_name}` did not move dungeon levels up then down"

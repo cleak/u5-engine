@@ -591,13 +591,12 @@ impl PlayState {
                 return MoveOutcome::Observed;
             }
             ActingMemberSelection::NoneAble => {
-                // No published refusal covers "nobody in the party can act"
-                // on the chest path, and the shop and combat families all
-                // answer an impossible selection with silence, so this one
-                // does too rather than inventing a sentence. Reported on
-                // cleak/u5-spec#247.
-                // audit: not a player-facing line
-                self.message.clear();
+                // `dungeon-mode.md §8.1`, "Who acts": Open runs the shared
+                // acting-member prompt "before anything else", and "a party
+                // with no eligible member at all, answers `None!\n` and the
+                // command aborts" - on any cell, now that the cell is read
+                // only after the pick (playtest E12).
+                self.message = DUNGEON_ACTING_MEMBER_NONE.to_string();
                 return MoveOutcome::Blocked;
             }
         };
@@ -615,6 +614,16 @@ impl PlayState {
         target_slot: usize,
     ) -> MoveOutcome {
         if self.grid.get(idx).copied() != Some(tile) || tile >> 4 != 0x4 {
+            // `dungeon-mode.md §8.1` chest-command table: "already-open
+            // cell: `Already Open!\n` - capital `O`, a **different** literal
+            // from Jimmy's; anything else: `What?\n`. Because those last two
+            // carry no leading line feed they render on the prefix's own
+            // row, as `Open-Already Open!` and `Open-What?`"
+            if self.grid.get(idx).copied() == Some(tile) && tile >> 4 == 0x7 {
+                self.advance_turn();
+                self.message = DUNGEON_CHEST_OPEN_ALREADY_OPEN.to_string();
+                return MoveOutcome::ContainerOpened;
+            }
             self.message = DUNGEON_CHEST_OPEN_WHAT.to_string();
             return MoveOutcome::Blocked;
         }
@@ -3493,6 +3502,54 @@ impl PlayState {
         } else {
             self.apply_top_down_post_turn_effects_after_turn(turn_before, game_dir)
         }
+    }
+
+    /// The post-action pass after a dungeon K-Klimb.
+    ///
+    /// `dungeon-mode.md §13.1`: "A K that applies something - a climb up, a
+    /// climb down, a pit fall ... - reports \"acted\" to the dungeon loop, so
+    /// the turn's post-action pass runs." That pass (`§4` step 6) reads the
+    /// new underfoot cell, so a climb that lands on a fall trap falls and one
+    /// that lands on a room cell enters it (`§8.1`, "Post-action underfoot
+    /// consequences") before the next key is read. The generic
+    /// [`Self::apply_post_turn_effects_after_outcome`] skips every
+    /// transition, which deferred both to the next command (playtest E08).
+    /// A climb that left the level stack is not in the dungeon any more and
+    /// keeps that skip.
+    pub fn apply_post_turn_effects_after_dungeon_climb(
+        &mut self,
+        turn_before: u64,
+        game_dir: &Path,
+        outcome: MoveOutcome,
+    ) -> io::Result<Option<MoveOutcome>> {
+        let level_changed = matches!(
+            outcome,
+            MoveOutcome::Transition(AreaTransition::ChangedDungeonLevel { .. })
+        );
+        if !level_changed || !matches!(self.area, Area::Dungeon { .. }) {
+            return self.apply_post_turn_effects_after_outcome(turn_before, game_dir, outcome);
+        }
+        // The climb word is already on the transcript (`climb_dungeon`), so
+        // it is not a pending result the consequence lines must be joined to.
+        // A pass that adds nothing leaves the word in the slot.
+        let climb_word = (self.message == self.message_flushed).then(|| {
+            (
+                std::mem::take(&mut self.message),
+                std::mem::take(&mut self.message_flushed),
+            )
+        });
+        let mut outcome =
+            self.apply_top_down_post_turn_effects_after_turn(turn_before, game_dir)?;
+        if outcome.is_none() {
+            outcome = self.resolve_current_dungeon_room_trigger(Some(game_dir))?;
+        }
+        if let Some((message, flushed)) = climb_word
+            && self.message.is_empty()
+        {
+            self.message = message;
+            self.message_flushed = flushed;
+        }
+        Ok(outcome)
     }
 
     pub fn apply_world_post_turn_effects_after_turn(

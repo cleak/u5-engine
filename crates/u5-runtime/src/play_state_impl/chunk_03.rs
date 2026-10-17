@@ -927,18 +927,18 @@ impl PlayState {
             // `Invalid!` in the original, where this engine set the slot and
             // answered `Shamino`.
             //
-            // Only the dead case is measured. `inventory.md` §4.2 suppresses
-            // the roster marker for a dead *or* sleeping active player, which
-            // reads as a member changing status while selected rather than as
-            // a second rejection, so the sleeping letter is left accepted
-            // here until a capture settles it.
+            // `commands.md §5` key table, the `0`/digit row: digits "reject
+            // Dead or Asleep members with `Invalid!`", and `stats-panel.md`
+            // has `1`..`6` "select a living, awake member" (playtest E20).
             Some(slot)
                 if slot <= self.party.len()
                     && slot <= SAVE_PARTY_SIZE_MAX as usize
-                    && self
-                        .party
-                        .get(slot - 1)
-                        .is_some_and(|member| member.status != crate::PARTY_STATUS_DEAD) =>
+                    && self.party.get(slot - 1).is_some_and(|member| {
+                        !matches!(
+                            character_status_for_byte(member.status),
+                            Some(CharacterStatus::Dead | CharacterStatus::Sleeping)
+                        )
+                    }) =>
             {
                 let index = slot - 1;
                 self.active_player = Some(index);
@@ -2776,6 +2776,17 @@ impl PlayState {
     /// the open `Player: ` line and the relative-focus prompt opens beneath
     /// it; an ineligible pick answers `Disabled!` and re-prompts.
     fn accept_dungeon_acting_member(&mut self, index: usize) -> bool {
+        self.accept_dungeon_acting_member_then(index, true)
+    }
+
+    /// [`Self::accept_dungeon_acting_member`] for a caller that may stop
+    /// before the relative-focus prompt: with `opens_direction_prompt`
+    /// false only the name is echoed and the `Dir-` row is left unprinted.
+    fn accept_dungeon_acting_member_then(
+        &mut self,
+        index: usize,
+        opens_direction_prompt: bool,
+    ) -> bool {
         let eligible = self
             .party
             .get(index)
@@ -2788,7 +2799,9 @@ impl PlayState {
         }
         let name = self.party_member_display_name(index);
         let _ = self.complete_open_direction_echo(PARTY_SELECTION_PROMPT, &name);
-        self.emit_message_line(DUNGEON_DIRECTION_PROMPT);
+        if opens_direction_prompt {
+            self.emit_message_line(DUNGEON_DIRECTION_PROMPT);
+        }
         true
     }
 
@@ -2824,6 +2837,14 @@ impl PlayState {
         let Some(party_index) = self.resolve_dungeon_acting_member(party_index) else {
             return MoveOutcome::Blocked;
         };
+        // `dungeon-mode.md §12` L-Look: step 1 picks the member, step 2
+        // "[c]hecks the lighting gate: if both torch and light-spell counters
+        // are zero, prints exactly `You see:\ndarkness.\n` and returns", and
+        // only step 3 opens the relative-focus chooser (playtest E14).
+        if party_index.is_some() && !self.has_personal_light() {
+            self.message = DUNGEON_LOOK_DARKNESS_REFUSAL.to_string();
+            return MoveOutcome::Observed;
+        }
         self.active_direction_prompt = Some(DirectionPromptSession::new(
             DirectionPromptKind::DungeonLook { party_index, drink },
         ));
@@ -3185,7 +3206,14 @@ impl PlayState {
                             // relative-focus prompt reads the next one,
                             // even though both accept digits.
                             selected_member_now = true;
-                            if self.accept_dungeon_acting_member(index) {
+                            // `§12` step 2: the lighting gate sits between
+                            // the member pick and the `Dir-` chooser.
+                            let lit = self.has_personal_light();
+                            if self.accept_dungeon_acting_member_then(index, lit) {
+                                if !lit {
+                                    self.emit_message_line(DUNGEON_LOOK_DARKNESS_REFUSAL);
+                                    return Ok(Some(MoveOutcome::Observed));
+                                }
                                 party_index = Some(index);
                                 session.kind =
                                     DirectionPromptKind::DungeonLook { party_index, drink };
@@ -3194,7 +3222,7 @@ impl PlayState {
                     }
                 }
                 if let Some(index) = party_index.filter(|_| !selected_member_now) {
-                    if let Some(focus) = dungeon_look_focus_from_key(ch) {
+                    if let Some(focus) = dungeon_chooser_focus_from_key(ch) {
                         self.complete_dungeon_direction_echo(focus);
                         return Ok(Some(self.look_dungeon_with_focus(
                             drink,
@@ -3232,7 +3260,7 @@ impl PlayState {
                 }
                 if !selected_member_now
                     && party_index.is_some()
-                    && let Some(focus) = dungeon_look_focus_from_key(ch)
+                    && let Some(focus) = dungeon_chooser_focus_from_key(ch)
                 {
                     self.complete_dungeon_direction_echo(focus);
                     return self
@@ -3481,10 +3509,15 @@ impl PlayState {
                 // does not stand in for `N`. `save-load.md §5.2` step 1
                 // gives the save confirm the same "Only `Y` and `N` are
                 // accepted" rule.
+                // `dungeon-mode.md §8.1`, "Fountain drink flow": "`Will you
+                // drink?\n` blocks until `Y` or `N`" - Escape is not a third
+                // answer there either (playtest E18).
                 '\u{1b}'
                     if matches!(
                         session.kind,
-                        YesNoPromptKind::TrollBridgeToll { .. } | YesNoPromptKind::SaveGame
+                        YesNoPromptKind::TrollBridgeToll { .. }
+                            | YesNoPromptKind::SaveGame
+                            | YesNoPromptKind::DungeonFountainDrink { .. }
                     ) => {}
                 'N' | '\u{1b}' => {
                     if let YesNoPromptKind::DungeonFountainDrink { party_index, focus } =
@@ -6310,15 +6343,16 @@ impl PlayState {
         } else {
             DUNGEON_KLIMB_DOWN
         };
-        self.message = climb_word.to_string();
+        // Printed once, here: both later arms add their own line beneath it
+        // rather than re-printing it (playtest E09, where the slot copy was
+        // flushed and then prefixed again, doubling the word).
+        self.emit_message_line(climb_word);
 
         let next_level = level as i8 + delta;
         if !(0..=7).contains(&next_level) {
             // "Any route that leaves the level stack | the climb word, then
             // the shared exit line of Section 13.2".
-            let outcome = self.resolve_dungeon_surface_reset(game_dir, scene, level)?;
-            self.message.insert_str(0, climb_word);
-            return Ok(outcome);
+            return self.resolve_dungeon_surface_reset(game_dir, scene, level);
         }
 
         let next_level = next_level as u8;
@@ -6328,7 +6362,6 @@ impl PlayState {
             // error tone".
             self.advance_turn();
             self.fail_committed_spell_cast();
-            self.message.insert_str(0, climb_word);
             return Ok(MoveOutcome::Blocked);
         }
         self.area = Area::Dungeon {

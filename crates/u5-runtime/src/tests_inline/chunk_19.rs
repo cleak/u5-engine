@@ -970,10 +970,12 @@
         handle_play_key_input(&mut state, 'Y', "", &dir).unwrap();
         handle_play_key_input(&mut state, '2', "", &dir).unwrap();
         // `dungeon-mode.md §11`: an ineligible pick "prints `None
-        // posted!\n\n` and re-asks the watch question" (playtest E30); the
-        // camp only runs once that question is answered.
+        // posted!\n\n` and re-asks the watch question" (playtest E16, E30);
+        // the resident handler is the overworld camp's too, and the camp
+        // only runs once that question is answered.
         assert!(state.active_rest.is_some(), "the watch question is asked again");
         assert_eq!(state.turn, 0);
+        assert_eq!(state.message, REST_WATCH_PROMPT);
         handle_play_key_input(&mut state, 'N', "", &dir).unwrap();
 
         assert!(state.active_rest.is_none());

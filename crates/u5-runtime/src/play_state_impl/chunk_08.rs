@@ -101,9 +101,15 @@ impl PlayState {
         for ch in std::iter::once(key).chain(suffix.chars()) {
             match session.phase {
                 RestPhase::Hours => {
-                    // `dungeon-mode.md §11`: the hours prompt "loops until a
-                    // digit or Space" - Escape is neither, so it is read past
-                    // like any other rejected key (playtest E31).
+                    // `dungeon-mode.md §11`: the camp's hours prompt "loops
+                    // until a digit or Space"; Escape is neither, so off
+                    // the town-bed path it is re-read like any other key
+                    // (playtest E15 dungeon, E31 overworld camp).
+                    let camp = !matches!(self.area, Area::Town { .. });
+                    if ch == '\u{1b}' && !camp {
+                        self.message = "None!".to_string();
+                        return Ok(None);
+                    }
                     let duration_input = if ch.is_ascii() {
                         rest_duration_input(ch as u8)
                     } else {
@@ -128,15 +134,19 @@ impl PlayState {
                             }
                             return self.finish_active_rest(hours, None, game_dir);
                         }
-                        RestDurationInput::Cancel => {
-                            // `dungeon-mode.md §11` / `rest-and-camp.md §4`:
-                            // the prompt "echoes the key plus a line feed -
-                            // Space or `0` aborts with no further output".
-                            // The generic `None!` belongs to the selection
-                            // prompts (`commands.md §5.6`), not this one
-                            // (playtest E31).
+                        // `dungeon-mode.md §11`: the camp prompt "echoes
+                        // the key plus a line feed - Space or `0` aborts with
+                        // no further output" (playtest E15).
+                        // The generic `None!` belongs to the selection
+                        // prompts (`commands.md §5.6`), not this one
+                        // (playtest E31).
+                        RestDurationInput::Cancel if camp => {
                             self.commit_prompt_reply(REST_HOURS_PROMPT, &ch.to_string());
                             self.message_row_open_mid_line = false;
+                            return Ok(None);
+                        }
+                        RestDurationInput::Cancel => {
+                            self.message = "None!".to_string();
                             return Ok(None);
                         }
                         RestDurationInput::Discard => {}
@@ -158,12 +168,12 @@ impl PlayState {
                     _ => {}
                 },
                 RestPhase::WatchSlot => {
-                    // `dungeon-mode.md §11` (the resident Hole-up prompts the
-                    // overworld shares, `commands.md §5.5`): "after `Yes`,
-                    // `Who will stand guard? `, where a cancel or an
-                    // ineligible pick prints `None posted!\n\n` and re-asks
-                    // the watch question". Neither starts the camp
-                    // (playtest E30).
+                    // `dungeon-mode.md §11`: "after `Yes`, `Who will stand
+                    // guard? `, where a cancel or an ineligible pick prints
+                    // `None posted!\n\n` and re-asks the watch question".
+                    // Neither starts the camp - the resident handler the
+                    // overworld shares (`commands.md §5.5`; playtest E16,
+                    // E30).
                     let watcher = if matches!(ch, '\u{1b}' | ' ' | '0' | '\r' | '\n') {
                         None
                     } else {
@@ -378,9 +388,11 @@ impl PlayState {
             );
         }
         // `rest-and-camp.md §6`: an interruption "stops immediately and
-        // branches to the mode-appropriate interruption result" - the ambush
-        // line below, not the completed-camp result. Printing `Party rested!`
-        // there told the player the camp finished (playtest E29).
+        // branches to the mode-appropriate interruption result", and
+        // `dungeon-mode.md §11`: "The rest concludes either with `Party
+        // rested!\n` or `Ambushed!\n\n`" - the ambush line below, not the
+        // completed-camp result. Printing `Party rested!` there told the
+        // player the camp finished (playtest E10, E29).
         self.message = if interrupted {
             String::new()
         } else if refused {

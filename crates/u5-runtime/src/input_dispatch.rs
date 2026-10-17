@@ -394,6 +394,25 @@ fn handle_play_key_input_inner(
         .to_string();
         return Ok(PlayInputDisposition::Continue);
     }
+    // `dungeon-mode.md §15`: the dungeon's minute advance "sits at the head
+    // of each iteration ... so a command the dispatcher reports as \"no
+    // action\" (a digit solo-select, a refused Push, the typeahead toggle)
+    // still costs a minute underground", and `§4` step 3 dispatches the
+    // four shared Control bindings from that same iteration. The bindings
+    // still take no *turn* (`commands.md §9`); only the clock moves
+    // (playtest E17).
+    if matches!(
+        key,
+        PLAY_TYPEAHEAD_TOGGLE_KEY
+            | PLAY_MUSIC_TOGGLE_KEY
+            | PLAY_MORAL_STANDING_KEY
+            | PLAY_VERSION_BANNER_KEY
+            | PLAY_EXIT_TO_DOS_KEY
+    ) && matches!(state.area, Area::Dungeon { .. })
+        && !state.combat_active
+    {
+        state.advance_dungeon_loop_minute();
+    }
     if key == PLAY_TYPEAHEAD_TOGGLE_KEY {
         state.toggle_typeahead_buffer();
         return Ok(PlayInputDisposition::Continue);
@@ -847,6 +866,11 @@ fn handle_active_direction_prompt_key_input(
         .active_direction_prompt
         .as_ref()
         .is_some_and(|session| matches!(session.kind, DirectionPromptKind::CombatKlimb { .. }));
+    let dungeon_klimb = matches!(state.area, Area::Dungeon { .. })
+        && state
+            .active_direction_prompt
+            .as_ref()
+            .is_some_and(|session| matches!(session.kind, DirectionPromptKind::Klimb));
     let tile_command = state.active_direction_prompt.as_ref().is_some_and(|session| {
         matches!(
             session.kind,
@@ -880,6 +904,10 @@ fn handle_active_direction_prompt_key_input(
                 let _ = apply_combat_committed_action_maintenance(state, actor_slot);
                 advance_combat_round_after_actor_and_append_message(state, actor_slot);
             }
+        } else if dungeon_klimb {
+            // `dungeon-mode.md §13.1`: the up-or-down answer is a climbing
+            // arm, so the post-action pass reads the landing cell.
+            state.apply_post_turn_effects_after_dungeon_climb(turn_before, game_dir, outcome)?;
         } else {
             state.apply_post_turn_effects_after_outcome(turn_before, game_dir, outcome)?;
         }

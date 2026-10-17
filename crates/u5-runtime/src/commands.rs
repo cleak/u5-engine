@@ -1692,8 +1692,9 @@ pub const REST_HOURS_PROMPT: &str = "For how many hours? (1-9) ";
 /// shared with it".
 pub const CAMP_BODY_SLEEP_LINE: &str = "Zzzzzz...\n\n";
 /// `dungeon-mode.md §11`: "The rest concludes either with `Party rested!\n`
-/// or `Ambushed!\n\n` (and an immediate combat)" - the interruption result
-/// of the shared hole-up handler the overworld camp also runs
+/// or `Ambushed!\n\n` (and an immediate combat)" - one of the two, never
+/// both, and with no leading space. It is the interruption result of the
+/// shared hole-up handler the overworld camp also runs
 /// (`rest-and-camp.md §6`).
 pub const CAMP_AMBUSHED_LINE: &str = "Ambushed!\n\n";
 /// `commands.md §5.5`: the H-Hole-up family's sea form, "`Hole_up_&_`

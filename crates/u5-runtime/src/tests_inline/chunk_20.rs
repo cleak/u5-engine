@@ -1862,7 +1862,7 @@ fn dungeon_uppercase_s_routes_to_sidecar_secret_search() {
     assert_eq!(state.grid[dungeon_cell_index(0, 2, 1)], 0x30);
     assert_eq!(state.turn, 0);
     assert_eq!(
-        handle_play_key_input(&mut state, '8', "", &dir).unwrap(),
+        handle_play_key_input(&mut state, char::from(INPUT_CODE_NORTH), "", &dir).unwrap(),
         PlayInputDisposition::Continue
     );
     assert_eq!(state.grid[dungeon_cell_index(0, 2, 1)], 0xF0);
@@ -2681,7 +2681,7 @@ fn dungeon_search_relative_prompt_renders_dir_and_completes_with_the_relative_wo
     assert_eq!(state.message, DUNGEON_DIRECTION_PROMPT);
 
     assert_eq!(
-        handle_play_key_input(&mut state, '8', "", &dir).unwrap(),
+        handle_play_key_input(&mut state, char::from(INPUT_CODE_NORTH), "", &dir).unwrap(),
         PlayInputDisposition::Continue
     );
     assert!(state

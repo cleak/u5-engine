@@ -197,14 +197,16 @@ impl PlayState {
             'd' => {
                 handled!(self.turn_dungeon(true));
             }
-            'k' => {
-                handled!(self.klimb_command(game_dir)?);
-            }
-            '<' => {
-                handled!(self.climb(game_dir, ClimbIntent::Up)?);
-            }
-            '>' => {
-                handled!(self.climb(game_dir, ClimbIntent::Down)?);
+            // `dungeon-mode.md §13.1`: every climbing arm reports "acted",
+            // so the post-action pass reads the cell the climb landed on.
+            'k' | '<' | '>' => {
+                let outcome = match key {
+                    '<' => self.climb(game_dir, ClimbIntent::Up)?,
+                    '>' => self.climb(game_dir, ClimbIntent::Down)?,
+                    _ => self.klimb_command(game_dir)?,
+                };
+                self.apply_post_turn_effects_after_dungeon_climb(turn_before, game_dir, outcome)?;
+                return Ok(true);
             }
             'l' => {
                 let outcome = if let Some(focus) = inline_look_focus {

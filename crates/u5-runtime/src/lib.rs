@@ -619,6 +619,7 @@ pub use main_loop::{
     WORLD_RUINED_SHRINE_TILE, WORLD_SHRINE_COORDINATES, WORLD_SHRINE_TILE, WordOfPowerSeal,
     WordOfPowerTargetOutcome, WorldTickPath, apply_world_quest_tile_substitutions,
     dungeon_entry_seed, dungeon_facing_back_delta, dungeon_facing_forward_delta,
+    dungeon_facing_from_save_code, dungeon_facing_save_code,
     dungeon_facing_left_delta, dungeon_facing_right_delta, dungeon_facing_turn_around,
     dungeon_facing_turn_left, dungeon_facing_turn_right, dungeon_movement_action,
     dungeon_record_index, dungeon_resident_name, dungeon_scene_for_word_of_power,
@@ -1161,4 +1162,5 @@ mod tests {
     include!("tests_inline/rc1_paired_fixes.rs");
     include!("tests_inline/playfix_overworld.rs");
     include!("tests_inline/playfix_shops.rs");
+    include!("tests_inline/playtest_dungeons.rs");
 }

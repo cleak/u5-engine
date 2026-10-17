@@ -1,7 +1,7 @@
 //! Outer-dispatch routing per `main-loop.md` §3-§4.
 
 use crate::{
-    CHUNK_SIDE, InputDirection, PartyMember, SAVE_QUEST_TILE_FLAG_HIGH_BIT,
+    CHUNK_SIDE, Direction, InputDirection, PartyMember, SAVE_QUEST_TILE_FLAG_HIGH_BIT,
     SAVE_SHRINE_RUIN_FLAG_COUNT, SAVE_WORD_OF_POWER_SEAL_FLAG_COUNT, WORLD_CELLS, WORLD_SIDE,
     WorldPlane,
 };
@@ -546,6 +546,31 @@ pub const DUNGEON_FACING_NORTH: u8 = 0;
 pub const DUNGEON_FACING_EAST: u8 = DUNGEON_FACING_NORTH + 1;
 pub const DUNGEON_FACING_SOUTH: u8 = DUNGEON_FACING_EAST + 1;
 pub const DUNGEON_FACING_WEST: u8 = DUNGEON_FACING_SOUTH + 1;
+
+/// `dungeon-mode.md §3`: the facing byte - "zero north, one east, two
+/// south, three west" - as stored at `formats/saved-gam.md §12.1`'s
+/// `0x105D`. `None` for a non-cardinal facing, which the dungeon never holds.
+pub const fn dungeon_facing_save_code(facing: Direction) -> Option<u8> {
+    match facing {
+        Direction::North => Some(DUNGEON_FACING_NORTH),
+        Direction::East => Some(DUNGEON_FACING_EAST),
+        Direction::South => Some(DUNGEON_FACING_SOUTH),
+        Direction::West => Some(DUNGEON_FACING_WEST),
+        _ => None,
+    }
+}
+
+/// The inverse of [`dungeon_facing_save_code`]. A byte outside `0..=3` has
+/// no published meaning and decodes to `None`.
+pub const fn dungeon_facing_from_save_code(code: u8) -> Option<Direction> {
+    match code {
+        DUNGEON_FACING_NORTH => Some(Direction::North),
+        DUNGEON_FACING_EAST => Some(Direction::East),
+        DUNGEON_FACING_SOUTH => Some(Direction::South),
+        DUNGEON_FACING_WEST => Some(Direction::West),
+        _ => None,
+    }
+}
 
 /// `dungeon-mode.md §9` per-facing forward step `(dx, dy)` on the
 /// 8x8 floor. The party moves into `(x + dx, y + dy)` for the
