@@ -610,20 +610,18 @@ const INTRO_PRESENTS_SKIPPED_HOLD_BIOS_TICKS: u16 = INTRO_START_MENU_ARCHIVE_LOA
 /// established.
 const INTRO_START_MENU_ARCHIVE_LOAD_BIOS_TICKS: u16 = 19;
 
-/// **Measured**, not published (`cleak/u5-spec#298` item 39): after a key
-/// aborts subtitle ignition, stock shows the finished logo, a static flame
-/// band and the lower menu window's frame - with no `Select:` or copyright
-/// caption and no labels - for about 1.7 s before the captions and the six
-/// labels appear together. Sixteen paired captures (`chargen-prompts` and
-/// `cast-blink`, DOSBox at 3000 cycles, ~0.57 s per sampled frame) all show
-/// exactly three such frames between the frame band being drawn and the
-/// labels; 3 x 0.57 s = 1.71 s, rounded to whole BIOS ticks (31 x 54.9 ms =
-/// 1.70 s). Nothing in `intro.md §3/§5/§6` or `location-dat.md §11` accounts
-/// for it: no automatic Return-to-View content (chapter caption, revealed
-/// column, band tick) is ever visible in it, and a logo-dissolve abort, whose
-/// key is consumed, reaches the preview without it. The aborting key is still
-/// pending throughout (`intro.md §5` item 7) and keys typed in the window are
-/// kept queued, as the BIOS buffer would; no capture presses one there.
+/// `systems/intro.md §5`, "A key first seen inside subtitle ignition"
+/// (`cleak/u5-spec#298` Q39): the automatic Return-to-View preview's start-up
+/// on its first entry from the title page - it blanks the caption area, loads
+/// its script data, snapshots the screen, loads and converts the tile archive
+/// and restores the snapshot - during which "the lower window frame is up with
+/// no captions or labels over a static flame band". "This is not a published
+/// wait: it is the preview's start-up cost, measured as an emulator timing
+/// under DOSBox 0.74-3 at about 1.70 s at fixed 3000 cycles". "The same
+/// start-up cost precedes the preview's first visible output on an unskipped
+/// start", and after a logo-dissolve key "the preview runs in full after the
+/// same start-up cost". 31 x 54.9 ms = 1.70 s. The period-hardware start-up
+/// time is not established.
 const INTRO_IGNITION_ABORT_MENU_HOLD_BIOS_TICKS: u16 = 31;
 
 /// Visible phase 5: the bounded poll, then the archive load (`intro.md §3`,
@@ -10453,11 +10451,13 @@ enum VisualIntroPanel {
     /// the gated logo dissolve, presented as successive prefixes of its visit
     /// order at the published emulator cadence before step 7's ignition.
     StartMenuReveal(Box<StartMenuRevealState>),
-    /// The measured pause after an ignition abort
-    /// ([`INTRO_IGNITION_ABORT_MENU_HOLD_BIOS_TICKS`]): the start/menu screen
-    /// with the lower window's frame but no captions or labels, the band
-    /// static. `queued_keys` holds the aborting key and anything typed since,
-    /// in order; they are dispatched when the hold ends.
+    /// The automatic preview's start-up before its first tick
+    /// ([`INTRO_IGNITION_ABORT_MENU_HOLD_BIOS_TICKS`], `intro.md §5`,
+    /// u5-spec#298 Q39): the start/menu screen with the lower window's frame
+    /// but no captions or labels, the band static. `queued_keys` holds a
+    /// pending ignition-abort key and anything typed since, in order; they are
+    /// dispatched when the hold ends, the first being taken by the preview's
+    /// first consuming read.
     MenuLabelHold {
         ticks_left: u16,
         queued_keys: Vec<char>,
@@ -12050,17 +12050,15 @@ fn abort_visual_intro_subtitle_ignition(intro: &mut VisualIntroState) -> bool {
     };
     intro.title_tick_frame = next_frame;
     intro.panel = VisualIntroPanel::Menu;
+    // The skip flag is still clear, so this enters the preview start-up hold.
     complete_visual_intro_start_menu_loader(intro);
-    intro.panel = VisualIntroPanel::MenuLabelHold {
-        ticks_left: INTRO_IGNITION_ABORT_MENU_HOLD_BIOS_TICKS,
-        queued_keys: Vec::new(),
-    };
     true
 }
 
-/// One BIOS tick of the post-ignition-abort hold. When it runs out the menu
-/// takes over and the queued keys are dispatched in order, the first being the
-/// unconsumed ignition-abort key.
+/// One BIOS tick of the automatic preview's start-up. When it runs out the
+/// queued keys are dispatched in order, the first (normally the unconsumed
+/// ignition-abort key) being read by the preview's first tick; with none
+/// queued the preview starts at once (`intro.md §5`, u5-spec#298 Q39).
 fn advance_visual_intro_menu_label_hold(intro: &mut VisualIntroState) -> bool {
     let VisualIntroPanel::MenuLabelHold {
         ticks_left,
@@ -12075,6 +12073,9 @@ fn advance_visual_intro_menu_label_hold(intro: &mut VisualIntroState) -> bool {
     }
     let keys = std::mem::take(queued_keys);
     intro.panel = VisualIntroPanel::Menu;
+    if keys.is_empty() {
+        advance_visual_intro_auto_return_to_view(intro);
+    }
     for ch in keys {
         step_visual_intro(intro, ch);
     }
@@ -12370,6 +12371,16 @@ fn complete_visual_intro_start_menu_loader(intro: &mut VisualIntroState) {
     intro.modal_backing = None;
     intro.message_waiting_for_key = false;
     intro.message.clear();
+    if intro.pending_auto_return_to_view {
+        // `intro.md §5` (u5-spec#298 Q39): the automatic preview's start-up
+        // runs before its first tick on every path that reaches it - an
+        // unskipped start, an ignition abort and a logo-dissolve abort - with
+        // the window frame up and no captions or labels.
+        intro.panel = VisualIntroPanel::MenuLabelHold {
+            ticks_left: INTRO_IGNITION_ABORT_MENU_HOLD_BIOS_TICKS,
+            queued_keys: Vec::new(),
+        };
+    }
 }
 
 /// `systems/save-load.md §4.2` pre-load wait indicator. Painted into
@@ -21119,7 +21130,9 @@ mod tests {
         // the current copied pixel and any publication it caused", so that one
         // visit still clicks.
         assert_eq!(outcome.reveal_clicks.len(), 1);
-        assert!(matches!(intro.panel, VisualIntroPanel::Menu));
+        // `intro.md §5` (u5-spec#298 Q39): "the preview runs in full after
+        // the same start-up cost".
+        assert!(matches!(intro.panel, VisualIntroPanel::MenuLabelHold { .. }));
         assert!(!intro.title_sequence_skipped);
         assert!(intro.pending_auto_return_to_view);
         assert_eq!(
@@ -21158,7 +21171,8 @@ mod tests {
             char::from(u5_runtime::INPUT_CODE_SOUTH)
         ));
 
-        assert!(matches!(intro.panel, VisualIntroPanel::Menu));
+        // The preview start-up (u5-spec#298 Q39) follows the loader.
+        assert!(matches!(intro.panel, VisualIntroPanel::MenuLabelHold { .. }));
         assert_eq!(
             visual_intro_menu_highlight(&intro),
             IntroSubflow::JourneyOnward
@@ -21205,10 +21219,11 @@ mod tests {
         intro
     }
 
-    /// P12 (measured, `cleak/u5-spec#298` item 39): after an ignition abort
-    /// the start/menu screen holds for 31 BIOS ticks (~1.70 s) showing the
-    /// lower window's frame with no captions and no labels over a static
-    /// band; the labels and captions appear together when it ends.
+    /// P12 (`intro.md §5`, `cleak/u5-spec#298` Q39): after an ignition abort
+    /// the preview's start-up holds the start/menu screen for 31 BIOS ticks
+    /// (the published 1.70 s at fixed 3000 cycles) showing the lower window's
+    /// frame with no captions and no labels over a static band; the labels
+    /// and captions appear together when it ends.
     #[test]
     #[cfg(feature = "original-asset-tests")]
     fn an_ignition_abort_holds_the_unlabelled_menu_for_the_measured_time() {
@@ -21228,7 +21243,7 @@ mod tests {
             * f64::from(BIOS_USER_TICK_INTERVAL_SECS);
         assert!(
             (1.6..=1.8).contains(&held_secs),
-            "measured stock hold is ~1.7 s, got {held_secs:.3} s"
+            "published start-up is 1.70 s, got {held_secs:.3} s"
         );
 
         let band_frame = intro.title_tick_visible_frame;
@@ -21427,9 +21442,10 @@ mod tests {
     }
 
     /// `timing.md §5.1` phase by phase, from the flourish's first step to the
-    /// settled menu, on an unskipped run with no key. Published rates are
-    /// asserted exactly (to one host frame); the two measured constants are
-    /// asserted against their stock captures.
+    /// preview's first tick, on an unskipped run with no key. Published rates
+    /// are asserted exactly (to one host frame); the emulator timings of
+    /// u5-spec#298 Q35-Q37 and Q39 are asserted against their published
+    /// figures.
     #[test]
     #[cfg(feature = "original-asset-tests")]
     fn unskipped_intro_phases_run_at_their_published_and_measured_rates() {
@@ -21505,8 +21521,7 @@ mod tests {
             _ => unreachable!(),
         };
         let ignition = simulate_visual_intro_until(&mut intro, &mut pump, frame, |i| {
-            matches!(i.panel, VisualIntroPanel::Menu)
-                && !matches!(i.dispatch.tick_title(), UnifiedMenuStep::PresentTitle)
+            !matches!(i.panel, VisualIntroPanel::SubtitleIgnition { .. })
         });
         // One publication per 45- or 50-unit wait plus its burst and host
         // work: `intro.md §5` (u5-spec#298 Q37), 12.03 s at fixed 3000 cycles.
@@ -21516,11 +21531,19 @@ mod tests {
         );
         assert!((ignition - 12.03).abs() <= 0.25, "ignition: {ignition:.3} s");
 
+        // `intro.md §5` (u5-spec#298 Q39): the preview's start-up, 1.70 s at
+        // fixed 3000 cycles, before its first visible output.
+        let start_up = simulate_visual_intro_until(&mut intro, &mut pump, frame, |i| {
+            matches!(i.panel, VisualIntroPanel::ReturnToView { .. })
+        });
+        close(start_up, 31.0 * tick, "preview start-up");
+        assert!((1.65..=1.75).contains(&start_up));
+
         eprintln!(
             "intro timeline: flourish {flourish:.3} s, Presents {presents:.3} s, \
              ornament {ornament:.3} s, signature {signature:.3} s ({signature_ticks} ticks), \
              composition {composition:.3} s, logo reveal {reveal:.3} s, \
-             ignition {ignition:.3} s"
+             ignition {ignition:.3} s, preview start-up {start_up:.3} s"
         );
         let _ = fs::remove_dir_all(dir);
     }
@@ -21617,7 +21640,10 @@ mod tests {
             char::from(u5_runtime::INPUT_CODE_SOUTH)
         ));
 
-        assert!(matches!(intro.panel, VisualIntroPanel::Menu));
+        // `intro.md §5` (u5-spec#298 Q39): "a key inside the logo dissolve is
+        // consumed by the loader, so the preview runs in full after the same
+        // start-up cost".
+        assert!(matches!(intro.panel, VisualIntroPanel::MenuLabelHold { .. }));
         // P11: the click run stops with the transfer rather than playing out.
         assert_eq!(
             intro.pending_speaker_cancels,
@@ -22504,6 +22530,20 @@ mod tests {
             intro.pending_auto_return_to_view,
             "an unskipped run arms the automatic preview after ignition returns"
         );
+        // `intro.md §5` (u5-spec#298 Q39): "The same start-up cost precedes
+        // the preview's first visible output on an unskipped start: 1.70 s
+        // at fixed 3000 cycles", with the window frame up and no captions or
+        // labels; the preview then starts with no key to end it.
+        assert_eq!(
+            finish_menu_label_hold(&mut intro),
+            INTRO_IGNITION_ABORT_MENU_HOLD_BIOS_TICKS
+        );
+        assert!(
+            matches!(intro.panel, VisualIntroPanel::ReturnToView { .. }),
+            "the preview starts when its start-up ends: {}",
+            summarize_intro(&mut intro)
+        );
+        assert!(!intro.pending_auto_return_to_view);
         let _ = fs::remove_dir_all(dir);
     }
 
