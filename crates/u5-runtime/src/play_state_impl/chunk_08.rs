@@ -1766,6 +1766,15 @@ impl PlayState {
         {
             self.advance_turn();
             self.message = format!("{}\nAttacked at entrance!", live_class.text());
+            // `commands.md §5.5`: `Enter_cave\nAttacked_at_entrance!\n`, the
+            // refusal following `cave`. Commit it under the pending echo now:
+            // the combat entry below flushes the slot itself, which with the
+            // echo still pending split the row into `Enter`, a blank and
+            // `cave` (playtest E63). The refusal ends with its line feed, so
+            // the row is closed.
+            if self.commit_command_echo() {
+                self.message_row_open_mid_line = false;
+            }
             // `encounters.md §4` Scope: "the entrance-attack path forces the
             // Shadow Lord family" before calling terrain-combat entry, the
             // same shape as the bridge-toll Troll ambush.
