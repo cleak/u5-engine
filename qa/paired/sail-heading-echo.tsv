@@ -37,6 +37,15 @@
 # (`weather.md §5`), so only `hoisted`, `heading` and `sailing` are
 # comparable, and `paired_compare.py` skips the later two beats by name - the
 # deterministic three still report a difference as one.
+#
+# The `Head West` command is itself a consumed turn, so its own encounter
+# roll can land before `heading`. rc2's sweep (`20261017-162039`) is that
+# case: within 0.7 s the stock side printed `* BOOM! *` under `Hull weak!`
+# and was `Ship sunk!` by `sailing`, while the engine drew nothing and printed
+# exactly what rc1's run (`20261017-085852`) printed on both sides. Not an
+# engine difference; a `heading`/`sailing` difference whose stock side shows
+# an encounter line is that draw, and the run should simply be repeated. The
+# two beats stay compared because they carry the prompt-row contract.
 # dice-beats: sailing-more same-key
 # requires-seed: profile `seed-drowning-collision` (frigate west of a coast)
 both	wait	15000
