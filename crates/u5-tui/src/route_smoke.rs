@@ -7779,7 +7779,10 @@ fn validate_route_smoke_case_state(
             let expected_message =
                 u5_runtime::shoppe_bark::ShoppeTextRenderer::load_from_game_dir(game_dir)
                     .ok()
-                    .and_then(|renderer| renderer.render_sage_short_funds_record(None).ok())
+                    // `shops.md §8.C`: `"Sorry, `, honorific, record `91`.
+                    // The route's castle has no tavern vendor to name.
+                    .and_then(|renderer| renderer.render_sage_short_funds_record("", None).ok())
+                    .map(|record| format!("\"Sorry, sir{record}"))
                     .unwrap_or_else(|| TAVERN_AFFORDABILITY_REFUSAL_BARK.to_string());
             if state.gold != 49 || state.active_shop.is_some() || state.message != expected_message
             {

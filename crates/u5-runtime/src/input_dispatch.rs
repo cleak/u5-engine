@@ -1979,7 +1979,17 @@ fn handle_active_shop_key_input(
                     "\"That, I cannot help thee with.\n\n{}",
                     sage_topic_question(speaker_is_female)
                 ),
-                outcome => format_sage_outcome_with_shoppe(outcome, game_dir),
+                outcome => format_sage_outcome_with_shoppe(
+                    outcome,
+                    area_scene_byte.and_then(|scene| {
+                        crate::play_state_impl::shop_vendor_name_for_scene(
+                            SHOP_DIALOG_ID_TAVERN,
+                            scene,
+                        )
+                    }),
+                    speaker_is_female,
+                    game_dir,
+                ),
             };
             if paid {
                 // Measured 2026-09-08 at The Cat's Lair
@@ -4415,6 +4425,11 @@ fn format_tavern_outcome_with_shoppe(
         // counter and renders `SHOPPE.DAT` ordinal `90`, a table-scraps
         // brush-off". The record id travels on the outcome; the engine used
         // to drop it and print an invented sentence naming the tavern.
+        //
+        // `shops.md §8.C`: "No packs affordable, fewer than three food
+        // servings | `\n\n`, then record `90`", and the record's `$` is the
+        // vendor (`§4.1`). Both were missing - the brush-off ran onto the
+        // quantity row and closed on `orders .` (playtest E50).
         CharityProvisions {
             tavern, record_id, ..
         } => renderer
@@ -4422,10 +4437,12 @@ fn format_tavern_outcome_with_shoppe(
                 record_id,
                 &crate::shoppe_bark::ShoppeBarkContext {
                     shop_name: tavern.display_name(),
+                    vendor_name: tavern_vendor_name.unwrap_or(""),
                     ..Default::default()
                 },
             )
-            .ok(),
+            .ok()
+            .map(|record| format!("\n\n{record}")),
         // `shops.md §8.C`'s outcome table: a fully served quantity (or one
         // that only stopped because the 9999 food ceiling was hit) prints a
         // blank-line tail and then runs the surcharge - no sentence of its
@@ -4541,6 +4558,8 @@ fn format_sage_outcome(outcome: crate::shop_runtime::SageOutcome) -> String {
 
 fn format_sage_outcome_with_shoppe(
     outcome: crate::shop_runtime::SageOutcome,
+    vendor_name: Option<&'static str>,
+    speaker_is_female: bool,
     game_dir: &Path,
 ) -> String {
     use crate::shop_runtime::SageOutcome::*;
@@ -4555,12 +4574,21 @@ fn format_sage_outcome_with_shoppe(
                     .ok()
             })
             .unwrap_or_else(|| format_sage_outcome(QuotedFee { quote })),
+        // `shops.md §8.C` sage result table: "Short funds | `"Sorry, `,
+        // honorific, record `91`; ends visit", the record's `$` naming the
+        // tavern vendor (`§4.1`). The engine printed the record alone with an
+        // empty vendor - `,` / ... / `says .` (playtest E50).
         RefusedShortFunds {
             required,
             available,
         } => renderer
             .as_ref()
-            .and_then(|renderer| renderer.render_sage_short_funds_record(None).ok())
+            .and_then(|renderer| {
+                renderer
+                    .render_sage_short_funds_record(vendor_name.unwrap_or(""), None)
+                    .ok()
+            })
+            .map(|record| format!("\"Sorry, {}{record}", tavern_honorific(speaker_is_female)))
             .unwrap_or_else(|| {
                 format_sage_outcome(RefusedShortFunds {
                     required,

@@ -8036,3 +8036,55 @@ fn sage_unknown_topic_quotes_its_reply_and_repeats_the_question() {
     ));
     assert_eq!(state.gold, 200);
 }
+
+/// `shops.md §8.C`: sage "Short funds | `"Sorry, `, honorific, record `91`"
+/// and tavern "No packs affordable, fewer than three food servings | `\n\n`,
+/// then record `90`", each record's `$` substituting the vendor (`§4.1`).
+/// Both printed the bare record with an empty vendor (playtest E50).
+#[test]
+fn sage_short_funds_and_table_scraps_name_the_vendor() {
+    use crate::shop_runtime::{SageState, TavernState};
+    use crate::shop_session::ActiveShopSession;
+
+    let dir = debug_game_dir();
+    let shoppe = shoppe_dat_with_records(&[
+        (90, b"Asset scraps.\"\norders $.".as_slice()),
+        (91, b",\nAsset busy.\"\nsays $.".as_slice()),
+    ]);
+    std::fs::write(dir.join("SHOPPE.DAT"), shoppe).unwrap();
+
+    let mut state = test_state(open_grid(), 1, 1);
+    state.area = Area::Town {
+        scene: Scene::new(22).unwrap(),
+        floor: 0,
+    };
+    state.gold = 0;
+    state.active_shop = Some(ActiveShopSession::Sage(SageState::default()));
+    handle_play_key_input(&mut state, 'C', "OMP", &dir).unwrap();
+    handle_play_key_input(&mut state, 'Y', "", &dir).unwrap();
+    assert_eq!(
+        state.message,
+        "\"Sorry, sir,\nAsset busy.\"\nsays Dr. Cat."
+    );
+    assert!(state.active_shop.is_none());
+
+    let mut state = test_state(open_grid(), 1, 1);
+    state.area = Area::Town {
+        scene: Scene::new(22).unwrap(),
+        floor: 0,
+    };
+    state.gold = 0;
+    state.food = 2;
+    state.active_shop = Some(ActiveShopSession::Tavern(
+        TavernState::PickProvisionQuantity {
+            tavern: Tavern::TheCatsLair,
+            unit_price: 20,
+            continuation_ready: false,
+        },
+    ));
+    handle_play_key_input(&mut state, '1', "\r", &dir).unwrap();
+    assert_eq!(state.message, "\n\nAsset scraps.\"\norders Dr. Cat.");
+    assert!(state.active_shop.is_none());
+
+    let _ = fs::remove_dir_all(dir);
+}
