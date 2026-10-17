@@ -2668,6 +2668,17 @@ impl PlayState {
     /// the open `Player: ` line and the relative-focus prompt opens beneath
     /// it; an ineligible pick answers `Disabled!` and re-prompts.
     fn accept_dungeon_acting_member(&mut self, index: usize) -> bool {
+        self.accept_dungeon_acting_member_then(index, true)
+    }
+
+    /// [`Self::accept_dungeon_acting_member`] for a caller that may stop
+    /// before the relative-focus prompt: with `opens_direction_prompt`
+    /// false only the name is echoed and the `Dir-` row is left unprinted.
+    fn accept_dungeon_acting_member_then(
+        &mut self,
+        index: usize,
+        opens_direction_prompt: bool,
+    ) -> bool {
         let eligible = self
             .party
             .get(index)
@@ -2680,7 +2691,9 @@ impl PlayState {
         }
         let name = self.party_member_display_name(index);
         let _ = self.complete_open_direction_echo(PARTY_SELECTION_PROMPT, &name);
-        self.emit_message_line(DUNGEON_DIRECTION_PROMPT);
+        if opens_direction_prompt {
+            self.emit_message_line(DUNGEON_DIRECTION_PROMPT);
+        }
         true
     }
 
@@ -2716,6 +2729,14 @@ impl PlayState {
         let Some(party_index) = self.resolve_dungeon_acting_member(party_index) else {
             return MoveOutcome::Blocked;
         };
+        // `dungeon-mode.md §12` L-Look: step 1 picks the member, step 2
+        // "[c]hecks the lighting gate: if both torch and light-spell counters
+        // are zero, prints exactly `You see:\ndarkness.\n` and returns", and
+        // only step 3 opens the relative-focus chooser (playtest E14).
+        if party_index.is_some() && !self.has_personal_light() {
+            self.message = DUNGEON_LOOK_DARKNESS_REFUSAL.to_string();
+            return MoveOutcome::Observed;
+        }
         self.active_direction_prompt = Some(DirectionPromptSession::new(
             DirectionPromptKind::DungeonLook { party_index, drink },
         ));
@@ -3077,7 +3098,14 @@ impl PlayState {
                             // relative-focus prompt reads the next one,
                             // even though both accept digits.
                             selected_member_now = true;
-                            if self.accept_dungeon_acting_member(index) {
+                            // `§12` step 2: the lighting gate sits between
+                            // the member pick and the `Dir-` chooser.
+                            let lit = self.has_personal_light();
+                            if self.accept_dungeon_acting_member_then(index, lit) {
+                                if !lit {
+                                    self.emit_message_line(DUNGEON_LOOK_DARKNESS_REFUSAL);
+                                    return Ok(Some(MoveOutcome::Observed));
+                                }
                                 party_index = Some(index);
                                 session.kind =
                                     DirectionPromptKind::DungeonLook { party_index, drink };

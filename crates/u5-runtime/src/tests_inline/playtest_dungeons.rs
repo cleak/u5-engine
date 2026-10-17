@@ -235,3 +235,39 @@ fn playtest_e13_dungeon_jimmy_echoes_the_chosen_member() {
         "the chosen member's name follows `Player: `: {rows:?}"
     );
 }
+
+/// E14: `dungeon-mode.md §12` L-Look - "1. Prompts for a party-member slot
+/// ... 2. Checks the lighting gate: if both torch and light-spell counters
+/// are zero, prints exactly `You see:\ndarkness.\n` and returns. 3. Invokes
+/// the shared dungeon relative-focus helper". Unlit, no `Dir-` row opens.
+#[test]
+fn playtest_e14_unlit_dungeon_look_refuses_before_the_dir_chooser() {
+    let mut solo = dungeon_state(open_dungeon_record(), 0, 1, 1);
+    solo.torch_counter = 0;
+    solo.light_spell_counter = 0;
+    handle_play_key_input(&mut solo, 'l', "", Path::new("")).unwrap();
+    assert!(solo.active_direction_prompt.is_none(), "no chooser opens");
+    let rows = playtest_transcript_rows(&solo);
+    assert!(!rows.iter().any(|row| row.contains("Dir-")), "{rows:?}");
+    assert!(rows.iter().any(|row| row == "darkness."), "{rows:?}");
+
+    let mut party = dungeon_state(open_dungeon_record(), 0, 1, 1);
+    party.party.push(audit_g5_companion(1));
+    party.party_names = vec![*b"AVATAR\0\0\0", *b"IOLO\0\0\0\0\0"];
+    party.torch_counter = 0;
+    party.light_spell_counter = 0;
+    handle_play_key_input(&mut party, 'l', "", Path::new("")).unwrap();
+    assert!(
+        party.active_direction_prompt.is_some(),
+        "the member prompt opens"
+    );
+    handle_play_key_input(&mut party, '2', "", Path::new("")).unwrap();
+    assert!(party.active_direction_prompt.is_none(), "no chooser opens");
+    let rows = playtest_transcript_rows(&party);
+    assert!(!rows.iter().any(|row| row.contains("Dir-")), "{rows:?}");
+    let name = rows
+        .iter()
+        .position(|row| row.ends_with("IOLO"))
+        .unwrap_or_else(|| panic!("the pick is echoed: {rows:?}"));
+    assert_eq!(rows[name + 1..], ["You see:", "darkness."], "{rows:?}");
+}
