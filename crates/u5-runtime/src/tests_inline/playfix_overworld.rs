@@ -191,3 +191,28 @@ fn playfix_e23_rescue_restoration_repaints_the_stats_panel() {
         &crate::stats_panel::stats_panel_snapshot_of(&state)
     );
 }
+
+/// E24: `overworld.md §9`: when the refresh stamps `0xDC`, "Any actual tile
+/// change marks the viewport dirty and refreshes local light", and §9.1 draws
+/// the cell by its counter, not by whether the party has moved. The stamp
+/// must reach the live chunk window the viewport and light pass read.
+#[test]
+fn playfix_e24_gate_rising_while_party_stands_still_reaches_live_window() {
+    let mut state = britannia_state(open_world_grid(), 4, 5);
+    state.clock = GameClock::new(21, 0).unwrap();
+    state.moonstone_slots[1] = MoonstoneGateSlot {
+        scene: 0,
+        x: 5,
+        y: 5,
+        z: WorldPlane::Britannia.save_floor() as u8,
+    };
+
+    assert!(state.refresh_natural_moongates());
+
+    assert_eq!(state.grid[world_cell_index(5, 5)], NATURAL_MOONGATE_TERRAIN_TILE);
+    assert_eq!(state.world_live_tile_at(5, 5), NATURAL_MOONGATE_TERRAIN_TILE);
+    assert_eq!(
+        state.world_live_chunks.as_ref().unwrap().tile_at(5, 5),
+        NATURAL_MOONGATE_TERRAIN_TILE
+    );
+}
