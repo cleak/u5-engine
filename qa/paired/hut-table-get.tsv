@@ -21,7 +21,7 @@
 # The cell east of the party holds no active object, so `Get-East` answers
 # `Nothing to get!` and the *populated* pickup path is still unmeasured. That
 # needs a seed standing beside a gettable object.
-both	wait	9000
+both	wait	15000
 both	key	space
 both	wait	4000
 both	key	c

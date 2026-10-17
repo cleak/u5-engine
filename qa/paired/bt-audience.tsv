@@ -67,7 +67,7 @@
 # as a non-result and stop the suite reporting real regressions in a group
 # that took a day to bring to a match. The first revision of this note said
 # so and then tripped the marker in the very sentence saying it.
-both	wait	9000
+both	wait	15000
 both	key	space
 both	wait	4000
 both	key	j

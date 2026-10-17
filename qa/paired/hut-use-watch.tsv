@@ -1,6 +1,6 @@
 # Use the third item the shipped party carries - the pocket watch - to measure
 # its `Item: ` completion and its result line (cleak/u5-spec#225).
-both	wait	9000
+both	wait	15000
 both	key	space
 both	wait	4000
 both	key	c

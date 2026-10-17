@@ -78,7 +78,7 @@
 # `A TRAPDOOR!` and this engine does not, which is that issue's question
 # exactly. The samples from t48 read `offset+2` the other way.
 # requires-seed: the party inside Stonegate, standing in the trapdoor ring's centre cell
-both	wait	9000
+both	wait	15000
 both	key	space
 both	wait	4000
 both	key	j

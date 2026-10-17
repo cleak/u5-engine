@@ -16,7 +16,13 @@ development plan before any fix: engine defect, harness defect, spec gap,
 asset/profile problem, or platform defect.
 
 The DOS boot preamble (production card, title flourish, signature) is skipped
-with a Space keypress on both sides; the engine accepts the same skip. The
+with a Space keypress on both sides; the engine accepts the same skip. That
+Space comes 15 s in, never earlier: a Space inside the start/menu logo
+dissolve is consumed there and the automatic Return-to-View preview then runs
+in full, so the scenario's next key only aborts the preview (`intro.md §3`,
+`§5`). The harness reaches DOSBox about 1.4 s after the engine, and the old
+9 s wait split the two sides across the end of the dissolve.
+`crates/u5-tui/tests/paired_scenarios.rs` pins the opening wait. The
 shipped `SAVED.GAM` has no active Avatar, so every gameplay scenario first
 creates a character with identical answers; the questionnaire's virtue pairs
 are PRNG-selected and legitimately differ between the two sides.

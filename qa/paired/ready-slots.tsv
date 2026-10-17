@@ -1,7 +1,7 @@
 # R-Ready's slot rules: a second helm on a filled head, a two-handed
 # weapon with a shield in hand, and a shield with a two-hander in hand.
 # requires-seed: a strong party carrying two of every equipment item
-both	wait	9000
+both	wait	15000
 both	key	space
 both	wait	4000
 both	key	j

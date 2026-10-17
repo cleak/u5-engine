@@ -2,7 +2,7 @@
 # `Dir-` relative-direction prompt, and the hidden-door reveal, then the same
 # cell searched again once it is a door.
 # requires-seed: the party inside Deceit facing a wall-class cell, with a torch
-both	wait	9000
+both	wait	15000
 both	key	space
 both	wait	4000
 both	key	j

@@ -14,7 +14,7 @@
 # does not count them. The message window is fixed text, and it is what
 # this scenario measures.
 # requires-seed: the party one cell from an electric field, with a torch
-both	wait	9000
+both	wait	15000
 both	key	space
 both	wait	4000
 both	key	j

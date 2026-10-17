@@ -8,7 +8,7 @@
 # closes it. The marker row, and then the next command's echo, follow the
 # `Mantra:` row directly rather than under a blank. This engine had closed the
 # row itself and spent the blank as well.
-both	wait	9000
+both	wait	15000
 both	key	space
 both	wait	4000
 both	key	j

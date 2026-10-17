@@ -37,7 +37,7 @@
 # What this scenario pins is the listing's own shape - the letter, the dot
 # leader, the name, the blank rows around the block - and the row the prompt
 # leaves open for the accepted letter to echo onto.
-both	wait	9000
+both	wait	15000
 both	key	space
 both	wait	4000
 both	key	j

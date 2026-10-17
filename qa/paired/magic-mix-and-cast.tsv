@@ -10,7 +10,7 @@
 # target - so the cast completes without a direction or member prompt and the
 # comparison stays on the pipeline rather than on a targeting surface.
 # requires-seed: the party standing on the Britannia overworld
-both	wait	9000
+both	wait	15000
 both	key	space
 both	wait	4000
 both	key	j

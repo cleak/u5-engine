@@ -20,7 +20,7 @@
 # the demand text below them agrees character for character. A run whose step
 # counts differ has measured the coin, not the engine, and must be re-run.
 # requires-seed: profile `seed-minoc-guard-reseeded`, built by qa/tools/reseed.py
-both	wait	9000
+both	wait	15000
 both	key	space
 both	wait	4000
 both	key	j

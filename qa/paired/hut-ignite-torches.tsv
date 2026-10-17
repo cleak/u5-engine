@@ -1,7 +1,7 @@
 # Ignite the shipped four torches and then one more, to measure the refusal
 # `lighting.md` section 8 describes but does not quote: "with no torches
 # available it refuses and leaves the light state unchanged".
-both	wait	9000
+both	wait	15000
 both	key	space
 both	wait	4000
 both	key	c

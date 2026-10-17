@@ -36,7 +36,7 @@
 # between the description and the first `Your interest?` is that coin, and must
 # be re-run before it means anything. Everything from the first keyword onward
 # is comparable and agrees.
-both	wait	9000
+both	wait	15000
 both	key	space
 both	wait	4000
 both	key	j

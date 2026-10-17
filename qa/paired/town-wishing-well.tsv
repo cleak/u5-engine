@@ -20,7 +20,7 @@
 # That is a repaint-cadence question rather than an arithmetic one: the debit
 # is specified, so what differs is when the panel is redrawn to show it. Do not
 #"fix" this by removing the debit.
-both	wait	9000
+both	wait	15000
 both	key	space
 both	wait	4000
 both	key	j

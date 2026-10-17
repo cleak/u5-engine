@@ -5,7 +5,7 @@
 # completed a camp, so neither the hour prompt's wording nor the rest result
 # has been compared against the original.
 # requires-seed: the party standing on the Britannia overworld
-both	wait	9000
+both	wait	15000
 both	key	space
 both	wait	4000
 both	key	j

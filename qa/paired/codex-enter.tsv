@@ -12,7 +12,7 @@
 # `Pass` on one side and a page turn on the other. Pacing is tracked separately
 # from the text contract this scenario measures.
 # requires-seed: the party on the Britannia Codex cell (`--scene BRITANNIA --at 233,233 --time 09:15`)
-both	wait	9000
+both	wait	15000
 both	key	space
 both	wait	4000
 both	key	j

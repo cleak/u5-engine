@@ -15,7 +15,7 @@
 # two. This is the smaller repro: five keys from the seed rather than a
 # torch, a klimb and a look.
 # requires-seed: the dungeon-search save, on a dungeon level
-both	wait	9000
+both	wait	15000
 both	key	space
 both	wait	4000
 both	key	j

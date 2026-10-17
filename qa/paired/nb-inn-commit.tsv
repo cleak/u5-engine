@@ -11,7 +11,7 @@
 # Talk command", so the first Pass beside the keeper opens the overlay and the
 # script drives it from there rather than issuing Talk.
 # requires-seed: profile `seed-nb-inn-commit-reseeded`, built by qa/tools/reseed.py
-both	wait	9000
+both	wait	15000
 both	key	space
 both	wait	4000
 both	key	j

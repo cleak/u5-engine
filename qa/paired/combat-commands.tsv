@@ -1,6 +1,6 @@
 # Inside a dungeon room arena: the Get, Search, Klimb and X-it answers.
 # requires-seed: the party one step from a dungeon room trigger, with a torch
-both	wait	9000
+both	wait	15000
 both	key	space
 both	wait	4000
 both	key	j

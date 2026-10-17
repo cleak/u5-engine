@@ -3,7 +3,7 @@
 # `MISCMSG.DAT` record 30 after the third nonblank mantra. This answers the
 # Honesty shrine with the wrong virtue and then the right mantra three times.
 # requires-seed: the same seed `shrine-flow` uses
-both	wait	9000
+both	wait	15000
 both	key	space
 both	wait	4000
 both	key	j

@@ -19,7 +19,7 @@
 # engine `Healed!` - the original had rolled the forced-Orange override on a
 # yellow potion. Every other row, including `Item: Potion` and `0n who:
 # Avatar`, was identical.
-both	wait	9000
+both	wait	15000
 both	key	space
 both	wait	4000
 both	key	j

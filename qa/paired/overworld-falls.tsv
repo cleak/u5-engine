@@ -10,7 +10,7 @@
 # `find_tile` reads `(54, 137)` as the waterfall and `(54, 136)` as the
 # cell above it.
 # requires-seed: the party on Britannia directly north of the falls
-both	wait	9000
+both	wait	15000
 both	key	space
 both	wait	4000
 both	key	j

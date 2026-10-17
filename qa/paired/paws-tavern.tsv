@@ -34,7 +34,7 @@
 # and closing quotes, the blank row between the accepted letter and the offer,
 # the `How many wouldst` / `thou like?" ` question, and the row the typed
 # quantity echoes onto.
-both	wait	9000
+both	wait	15000
 both	key	space
 both	wait	4000
 both	key	j

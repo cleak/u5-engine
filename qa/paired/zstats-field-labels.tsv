@@ -10,7 +10,7 @@
 # own that window, so these land in the panel region the comparator already
 # decodes - they just needed a scenario that stops on the page.
 # requires-seed: a save placed beside Britain's fountain
-both	wait	9000
+both	wait	15000
 both	key	space
 both	wait	4000
 both	key	j

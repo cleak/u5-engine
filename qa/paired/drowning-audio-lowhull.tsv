@@ -18,7 +18,7 @@
 # The engine's own cue is compared offline, as in `drowning-audio`:
 # `cargo run --example render_cue -- long-descent out.wav`.
 # requires-seed: profile `seed-drowning-audio-lowhull` (seed-drowning-audio with SAVED.GAM 0x06B9 = 1)
-both	wait	9000
+both	wait	15000
 both	key	space
 both	wait	4000
 both	key	j

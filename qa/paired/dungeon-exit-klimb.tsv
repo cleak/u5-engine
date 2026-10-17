@@ -16,7 +16,7 @@
 # opens a row and `text-output.md` Section 10.4's next-cycle feed then adds
 # the blank; `emit_message_line` trims that trailing feed, so the engine spends
 # only one. The wording agrees on every beat.
-both	wait	9000
+both	wait	15000
 both	key	space
 both	wait	4000
 both	key	j

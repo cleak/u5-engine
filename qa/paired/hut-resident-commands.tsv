@@ -1,7 +1,7 @@
 # Create a character, Journey Onward, then exercise the resident commands the
 # other hut scenarios never send: Ignite, View, Set Active Player, Push, Klimb,
 # Enter, Board, Fire and Attack.
-both	wait	9000
+both	wait	15000
 both	key	space
 both	wait	4000
 both	key	c

@@ -17,7 +17,7 @@
 #
 # Kept under its true name rather than the one it was written under.
 # requires-seed: the combat dungeon-room save, mid-fight
-both	wait	9000
+both	wait	15000
 both	key	space
 both	wait	4000
 both	key	j

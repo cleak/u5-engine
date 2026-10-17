@@ -30,7 +30,7 @@
 # column 0 gives `\n:`, columns 1..11 a single space and no colon, columns
 # 12..15 `\n\n:`. A capture where one side shows `thee?" ` and the other `:`
 # is that rule applied to two different draws, not a defect.
-both	wait	9000
+both	wait	15000
 both	key	space
 both	wait	4000
 both	key	j

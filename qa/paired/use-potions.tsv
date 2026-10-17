@@ -18,7 +18,7 @@
 # every later beat compared unrelated windows (`cleak/u5-engine#22`).
 # `qa/tools/reseed.py` replayed that walk once into the seed named below.
 # requires-seed: profile `seed-use-potions-reseeded`, built by qa/tools/reseed.py
-both	wait	9000
+both	wait	15000
 both	key	space
 both	wait	4000
 both	key	j

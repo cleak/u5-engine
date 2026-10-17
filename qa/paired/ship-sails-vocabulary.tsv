@@ -5,7 +5,7 @@
 # save past them. Y-Yell is the sail command; `commands.md` Section 5 gives
 # the two echoes it alternates between.
 # requires-seed: the ship-commands save, aboard a frigate
-both	wait	9000
+both	wait	15000
 both	key	space
 both	wait	4000
 both	key	j

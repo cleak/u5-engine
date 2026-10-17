@@ -1,5 +1,5 @@
 # Create a character, Journey Onward, then exercise stateless commands inside the starting hut.
-both	wait	9000
+both	wait	15000
 both	key	space
 both	wait	4000
 both	key	c

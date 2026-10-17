@@ -12,7 +12,7 @@
 # Seeded with `seed_position <profile> dungeon=33 level=0 x=3 y=3`;
 # `find_tile at=3,2` reads the pit and `at=3,3` the floor below it.
 # requires-seed: the party one cell south of a secret pit in Deceit, with a torch
-both	wait	9000
+both	wait	15000
 both	key	space
 both	wait	4000
 both	key	j

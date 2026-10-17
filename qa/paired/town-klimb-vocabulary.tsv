@@ -18,7 +18,7 @@
 # tile underfoot". What that key does is the part still unverified, so the
 # beats below feed it a direction, the pass key and a letter in turn.
 # requires-seed: a save placed beside Britain's fountain
-both	wait	9000
+both	wait	15000
 both	key	space
 both	wait	4000
 both	key	j

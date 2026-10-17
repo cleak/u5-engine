@@ -21,7 +21,7 @@
 # `talk_gate_probe --script e --chase 129`, which re-plans after every step so
 # schedule drift during the walk is accounted for.
 # requires-seed: the party outside Britain on the overworld at 10:00, so the scenario can walk in through the door
-both	wait	9000
+both	wait	15000
 both	key	space
 both	wait	4000
 both	key	j

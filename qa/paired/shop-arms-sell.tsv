@@ -29,7 +29,7 @@
 # and the attribution row all agreed character for character on every beat;
 # every difference was one of the two pools, and their differing lengths then
 # shifted the rows beneath them.
-both	wait	9000
+both	wait	15000
 both	key	space
 both	wait	4000
 both	key	j

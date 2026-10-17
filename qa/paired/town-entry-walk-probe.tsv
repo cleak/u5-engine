@@ -50,7 +50,7 @@
 # carry. Neither scenario can be made deterministic without a seed that
 # places the residents.
 # requires-seed: the party outside the town, so the scenario can walk in through the door
-both	wait	9000
+both	wait	15000
 both	key	space
 both	wait	4000
 both	key	j

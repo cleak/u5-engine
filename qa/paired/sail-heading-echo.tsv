@@ -12,7 +12,7 @@
 # printed `>East` first. This scenario sails away from the coast instead, so
 # the released steps are ordinary moves, and samples the window as they go.
 # requires-seed: profile `seed-drowning-collision` (frigate west of a coast)
-both	wait	9000
+both	wait	15000
 both	key	space
 both	wait	4000
 both	key	j

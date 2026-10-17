@@ -20,7 +20,7 @@
 # The two sides are driven separately, as in `hut-audio`, so each recording
 # carries one speaker and the captures can be compared without cross-talk.
 # requires-seed: the party on the fall trap on Doom's level seven, above the final room's trigger, with a torch
-both	wait	9000
+both	wait	15000
 both	key	space
 both	wait	7000
 both	key	j

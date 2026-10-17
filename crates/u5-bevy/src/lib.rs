@@ -21689,6 +21689,55 @@ mod tests {
         let _ = fs::remove_dir_all(dir);
     }
 
+    /// The paired-play opening with its Space landing inside the logo
+    /// dissolve, as stock DOSBox did in a measured capture: the dissolve
+    /// consumes the Space, the automatic preview runs in full after its
+    /// start-up, the scenario's `j` only aborts the preview
+    /// (`formats/location-dat.md §11`: the key that aborted the preview does
+    /// not dispatch), and the next Up wraps the highlight to the last row.
+    /// This is why the paired scenarios hold their Space past the dissolve.
+    #[test]
+    #[cfg(feature = "original-asset-tests")]
+    fn a_dissolve_space_leaves_the_next_key_to_abort_the_full_preview() {
+        let dir = debug_game_dir();
+        install_intro_assets(&dir);
+        let mut intro = visual_intro_state_with_panel(dir.clone(), VisualIntroPanel::Menu);
+        intro.dispatch = UnifiedMenuDispatch::new();
+        intro.title_flourish_complete = true;
+        intro.title_signature_complete = true;
+        intro.title_card_hold_ticks = 1;
+        for _ in 0..4 {
+            assert!(advance_visual_intro_animation_tick(&mut intro));
+        }
+        assert!(matches!(intro.panel, VisualIntroPanel::StartMenuReveal(_)));
+
+        assert!(step_visual_intro(&mut intro, ' '));
+        let ticks = finish_menu_label_hold(&mut intro);
+        assert_eq!(ticks, INTRO_IGNITION_ABORT_MENU_HOLD_BIOS_TICKS);
+        assert!(
+            matches!(intro.panel, VisualIntroPanel::ReturnToView { .. }),
+            "with nothing queued the preview starts"
+        );
+
+        assert!(step_visual_intro(&mut intro, 'j'));
+        assert!(matches!(intro.panel, VisualIntroPanel::Menu));
+        assert!(intro.launch_result.lock().unwrap().is_none());
+        assert_eq!(
+            visual_intro_menu_highlight(&intro),
+            IntroSubflow::JourneyOnward
+        );
+
+        assert!(step_visual_intro(
+            &mut intro,
+            char::from(u5_runtime::INPUT_CODE_NORTH)
+        ));
+        assert_eq!(
+            visual_intro_menu_highlight(&intro),
+            IntroSubflow::ReturnToView
+        );
+        let _ = fs::remove_dir_all(dir);
+    }
+
     /// `intro.md §3` step 4: "A key during the hold, or during any segment,
     /// abandons the remaining segments — but steps 5 and 6 still run. The
     /// finished-composition hold after step 6 is then skipped" (u5-spec#298

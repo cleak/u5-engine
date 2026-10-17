@@ -1,6 +1,6 @@
 # Probe: the unpublished 'Slow progress!' line when walking brush.
 # requires-seed: the party on the published Honesty shrine coordinate
-both	wait	9000
+both	wait	15000
 both	key	space
 both	wait	4000
 both	key	j

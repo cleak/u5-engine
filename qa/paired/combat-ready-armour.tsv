@@ -8,7 +8,7 @@
 #
 # requires-seed: the party one step from a dungeon room trigger, with
 # spells, reagents, mana and equipment
-both	wait	9000
+both	wait	15000
 both	key	space
 both	wait	4000
 both	key	j

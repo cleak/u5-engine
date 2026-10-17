@@ -23,7 +23,7 @@
 # schedules drift, so expect to run this more than once before it lands - a run
 # that reaches empty floor has measured nothing.
 # requires-seed: the party outside Britain on the overworld at 10:00, so the scenario can walk in through the door
-both	wait	9000
+both	wait	15000
 both	key	space
 both	wait	4000
 both	key	j

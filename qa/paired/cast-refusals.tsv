@@ -14,7 +14,7 @@
 # `M.P. too low!` and `Insufficient reagents!` needs a save whose caster is
 # short of mana rather than a word the parser rejects.
 # requires-seed: the magic-mix save, which carries a caster and a known reagent stock
-both	wait	9000
+both	wait	15000
 both	key	space
 both	wait	4000
 both	key	j

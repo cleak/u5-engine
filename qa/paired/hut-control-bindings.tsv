@@ -1,7 +1,7 @@
 # Create a character, Journey Onward, then send the shared Control bindings
 # of `commands.md` section 9: the typeahead toggle and the four pre-dispatch
 # codes (Exit to DOS, moral standing, sound, version banner).
-both	wait	9000
+both	wait	15000
 both	key	space
 both	wait	4000
 both	key	c

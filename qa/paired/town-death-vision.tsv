@@ -16,7 +16,7 @@
 # vision!` where the other prints `Death vision!`; such a run must be re-run.
 # `prng.md` Section 3 seeds each side from the host clock, so the roll cannot
 # be made to agree.
-both	wait	9000
+both	wait	15000
 both	key	space
 both	wait	4000
 both	key	j

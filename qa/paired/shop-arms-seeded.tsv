@@ -31,7 +31,7 @@
 # Unblock by persisting the §12 band; then restore the row below.
 # requires-seed: the party beside Britain's weaponsmith, built with
 # `--write-seed --seed-beside 0x81 --from-save --play-script <the walk>`
-both	wait	9000
+both	wait	15000
 both	key	space
 both	wait	4000
 both	key	j

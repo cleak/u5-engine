@@ -15,7 +15,7 @@
 # Expect to run this several times before it lands. A run that ends with the
 # ship intact has measured nothing.
 # requires-seed: the party aboard a frigate with no skiffs, on deep water at night
-both	wait	9000
+both	wait	15000
 both	key	space
 both	wait	4000
 both	key	j

@@ -37,7 +37,7 @@
 # trapdoor ring inside Stonegate.
 #
 # requires-seed: profile `seed-stonegate-trapdoor-audio`
-both	wait	9000
+both	wait	15000
 both	key	space
 both	wait	4000
 both	key	j

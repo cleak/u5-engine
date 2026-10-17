@@ -20,7 +20,7 @@
 # drowning-collision's, which a loaded host needs to get the stock game past
 # its title menu.
 # requires-seed: profile `seed-sail-calm` (seed-drowning-collision with the wind byte set to Calm)
-both	wait	9000
+both	wait	15000
 both	key	space
 both	wait	4000
 both	key	j

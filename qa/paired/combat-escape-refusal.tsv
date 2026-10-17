@@ -10,7 +10,7 @@
 # second branch, so the first press should read `Escape-Not yet!`.
 #
 # requires-seed: the party one step from a dungeon room trigger, with a torch to hand
-both	wait	9000
+both	wait	15000
 both	key	space
 both	wait	4000
 both	key	j

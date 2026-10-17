@@ -26,7 +26,7 @@
 # runs; a divergence from `pass` onward must be re-run before it means
 # anything.
 # requires-seed: the party standing on a Deceit two-way ladder, with a torch
-both	wait	9000
+both	wait	15000
 both	key	space
 both	wait	4000
 both	key	j

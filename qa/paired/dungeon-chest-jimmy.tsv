@@ -18,7 +18,7 @@
 # rows. The shape is what this measures - which literal lands on which
 # row, and whether the pick leaves the chest shut.
 # requires-seed: the party standing on the Shame wooden chest, with a torch
-both	wait	9000
+both	wait	15000
 both	key	space
 both	wait	4000
 both	key	j

@@ -4,7 +4,7 @@
 # empty-handed refusals of `commands.md` Section 5.8 have never appeared in a
 # sampled stock frame outside the dungeon.
 # requires-seed: a save placed beside Britain's fountain
-both	wait	9000
+both	wait	15000
 both	key	space
 both	wait	4000
 both	key	j

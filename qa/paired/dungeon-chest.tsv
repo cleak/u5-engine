@@ -37,7 +37,7 @@
 # Re-running it changes the draw, not the shape, so its verdict is a
 # lottery and its value is the shape.
 # requires-seed: the party standing on the Deceit wooden chest, with a torch
-both	wait	9000
+both	wait	15000
 both	key	space
 both	wait	4000
 both	key	j

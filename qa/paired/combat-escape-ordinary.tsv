@@ -30,7 +30,7 @@
 # `cleak/u5-engine#35`. Everything after the duplicate is shifted a row, so
 # those beats are reporting the one defect rather than three.
 # requires-seed: the party beside the weaponsmith in a town
-both	wait	9000
+both	wait	15000
 both	key	space
 both	wait	4000
 both	key	j

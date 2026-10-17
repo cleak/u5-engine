@@ -25,7 +25,7 @@
 # What this scenario pins is the offer itself: records 117/118 for the vessel
 # body and 126 for the confirmation, and the Intelligence-adjusted price
 # Section 6.1 requires.
-both	wait	9000
+both	wait	15000
 both	key	space
 both	wait	4000
 both	key	j

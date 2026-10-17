@@ -11,7 +11,7 @@
 # timed. A black-box measurement, not a pairing: only the DOSBox column of
 # the `shard*` beats is read.
 # requires-seed: profile `seed-use-specials-reseeded`, shared with use-specials
-both	wait	9000
+both	wait	15000
 both	key	space
 both	wait	4000
 both	key	j

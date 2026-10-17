@@ -2,7 +2,7 @@
 # selected member's status to `P`, which the roster panel shows.
 # Seeded with `seed_position <profile> dungeon=36 level=4 x=4 y=3`.
 # requires-seed: the party standing on a poison fountain, with a torch
-both	wait	9000
+both	wait	15000
 both	key	space
 both	wait	4000
 both	key	j

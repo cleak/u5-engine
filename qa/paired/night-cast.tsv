@@ -5,7 +5,7 @@
 # creature has measured nothing and must be re-run.
 # requires-seed: the party on the Britannia overworld at 02:00 with spell
 # charges and mana (`seed_inventory <profile> spells=9 mana=99`)
-both	wait	9000
+both	wait	15000
 both	key	space
 both	wait	4000
 both	key	j

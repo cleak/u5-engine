@@ -4,7 +4,7 @@
 # Route from the engine's own `talk_gate_probe`. Filed against
 # cleak/u5-spec#198.
 # requires-seed: the party beside an NPC whose dialog id is in the high/special band
-both	wait	9000
+both	wait	15000
 both	key	space
 both	wait	4000
 both	key	j

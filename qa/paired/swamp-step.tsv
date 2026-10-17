@@ -1,6 +1,6 @@
 # Probe: what a step into swamp prints.
 # requires-seed: the party on grass at (64,14), south of the swamp at (64,12)
-both	wait	9000
+both	wait	15000
 both	key	space
 both	wait	4000
 both	key	j

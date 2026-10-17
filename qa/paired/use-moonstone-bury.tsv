@@ -24,7 +24,7 @@
 # requires-seed: profile `seed-overworld-moonstone` - the night-cast overworld
 # party with every special-item counter stocked by
 # `seed_inventory <profile> specials=1`
-both	wait	9000
+both	wait	15000
 both	key	space
 both	wait	4000
 both	key	j

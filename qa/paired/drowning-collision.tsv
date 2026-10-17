@@ -34,7 +34,7 @@
 # game is only muted once its rescue cinematic (`blackthorn.md §7`) has run
 # and been acknowledged, since Ctrl-S is a command-loop key.
 # requires-seed: profile `seed-drowning-collision` (frigate, hull 1, no skiffs or carpet, west of a coast, North wind)
-both	wait	9000
+both	wait	15000
 both	key	space
 both	wait	4000
 both	key	j

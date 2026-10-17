@@ -3,7 +3,7 @@
 # and the reveal prints `\nThou dost find\na hidden door!\n`. This stands the
 # party west of one in Britain and searches east, then opens what it found.
 # requires-seed: the party in a town beside a `0x4E` hidden-door cell
-both	wait	9000
+both	wait	15000
 both	key	space
 both	wait	4000
 both	key	j

@@ -13,7 +13,7 @@
 # that cell has measured nothing and must be re-run rather than read as a
 # difference.
 # requires-seed: the party aboard a frigate on deep water
-both	wait	9000
+both	wait	15000
 both	key	space
 both	wait	4000
 both	key	j

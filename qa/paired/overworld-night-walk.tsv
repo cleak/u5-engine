@@ -20,7 +20,7 @@
 # conflict - rather than an empty world. Read the viewports as much as the
 # message window.
 # requires-seed: the party on the Britannia overworld at 02:00, when the encounter threshold can fire
-both	wait	9000
+both	wait	15000
 both	key	space
 both	wait	4000
 both	key	j

@@ -19,7 +19,7 @@
 #     question has not been asked yet, and a held page reads no key.
 #
 # requires-seed: the party on the published Honesty shrine coordinate
-both	wait	9000
+both	wait	15000
 both	key	space
 both	wait	4000
 both	key	j

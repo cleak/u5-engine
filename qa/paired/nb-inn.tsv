@@ -22,7 +22,7 @@
 # service question; the question itself and everything below it agree exactly.
 # A difference confined to those greeting rows must be re-run before it means
 # anything.
-both	wait	9000
+both	wait	15000
 both	key	space
 both	wait	4000
 both	key	j

@@ -11,7 +11,7 @@
 # which `dungeon_class_scan` reports as the only `0x51` cell in the
 # shipped file outside Deceit.
 # requires-seed: the party standing on a heal fountain, with a torch
-both	wait	9000
+both	wait	15000
 both	key	space
 both	wait	4000
 both	key	j
