@@ -4300,7 +4300,31 @@ impl PlayState {
             // ordinary movement dispatcher, so the wind gate owns the
             // cadence counter and the release, and `overworld.md §6.2.5`
             // owns what a released step does when its destination refuses.
-            self.step_with_game_dir(direction, game_dir)?;
+            //
+            // `text-output.md §10.2`: the helper tested the prompt flag and
+            // emitted (or skipped) its pair when it was entered, before any
+            // wait pass, and a pass the wind holds back is not a command - the
+            // helper "repeats a *wait pass* instead of entering the command
+            // wait" (`timing.md §8.2`) and only a released step "returns to
+            // the normal overworld movement dispatcher" (`weather.md §5`). So
+            // a held pass leaves the flag exactly as it found it, and only a
+            // released step spends the pair and takes the direction.
+            //
+            // Measured 2026-10-16 (`qa/paired/sail-heading-echo.tsv`, beats
+            // `heading` and `sailing`): after `Head West` / `Hull weak!` the
+            // stock game shows a blank row and the end-cap row under it while
+            // the ship waits upwind, where this engine let the held passes
+            // clear the flag and drew the cursor under `Hull weak!`.
+            self.flush_message_slot();
+            let flag_before = self.overworld_prompt_pair_suppressed;
+            let marker_index = self.message_entries().len();
+            let suppressed = self.take_overworld_prompt_pair_suppression();
+            let outcome = self.step_with_game_dir(direction, game_dir)?;
+            if outcome == MoveOutcome::SailStalled {
+                self.overworld_prompt_pair_suppressed = flag_before;
+            } else if !suppressed && matches!(self.area, Area::World { .. }) {
+                self.push_overworld_bare_marker_entry(marker_index);
+            }
             self.apply_outdoor_sail_cache_marker_guard();
             return Ok(IdleWaitPass::UnderSailCursorPoll);
         }

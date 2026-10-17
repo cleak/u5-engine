@@ -1,0 +1,130 @@
+// The overworld prompt pair in front of shipboard directions that echo
+// nothing: `text-output.md §10.2`'s overworld gate together with
+// `vehicles.md §6` / `weather.md §5` as corrected by u5-spec#297.
+
+/// A hoisted frigate on open deep water facing north, with `prior` already in
+/// the transcript as the last command's echo.
+fn bare_marker_frigate(wind: WindState, hull: u8, prior: &str) -> PlayState {
+    let mut state = world_state(vec![BRIT_DEEP_WATER_TILE; WORLD_CELLS], 100, 100);
+    state.player.transport = TransportState::Ship {
+        type_byte: 168,
+        tile: 168,
+        sails_hoisted: true,
+        hull,
+        skiffs: 1,
+    };
+    state.sync_player_object();
+    state.wind = wind;
+    state.push_message_entry(prior, true);
+    assert_eq!(state.overworld_frigate_facing(), Some(Direction::North));
+    state
+}
+
+/// The window as the headless oracle and the Bevy shell assemble it: the
+/// transcript, then a live row whose kind follows the overworld gate.
+fn bare_marker_layout(state: &PlayState) -> Vec<(bool, String)> {
+    let log = message_log_from_entries(state.message_entries(), |text| {
+        (!text.trim().is_empty()).then(|| text.to_string())
+    });
+    let kind = if overworld_prompt_pair_is_suppressed(state) {
+        LiveRowKind::Continuation
+    } else {
+        LiveRowKind::CommandRow
+    };
+    let layout = layout_message_window_with_continuation(&log, Some(""), None, false, kind);
+    // Rows with their absolute positions folded into explicit blanks, so a
+    // gap in the window shows up as a `(false, "")` row.
+    let mut rows = Vec::new();
+    let mut next_row = None;
+    for row in layout.rows {
+        if let Some(expected) = next_row {
+            for _ in expected..row.row {
+                rows.push((false, String::new()));
+            }
+        }
+        next_row = Some(row.row + 1);
+        rows.push((row.prefixed, row.text));
+    }
+    rows
+}
+
+/// `sail-calm` (2026-10-16, beat `heading`): with the ship already facing the
+/// key and a crosswind, the hoisted key's step is attempted on that same
+/// command and the shoal refuses it. The stock game reads `>Yell HOIST!` /
+/// blank / `>BREAKING UP!`: the key echoes nothing, so the refusal is written
+/// on the marker row the prompt pair drew before the key.
+#[test]
+fn a_hoisted_key_that_keeps_the_facing_writes_its_refusal_on_the_marker_row() {
+    let mut state = bare_marker_frigate(WindState::East, 99, "Yell HOIST!");
+    state.grid[world_cell_index(100, 99)] = 0x03;
+    handle_play_key_input(&mut state, 'w', "", Path::new("")).unwrap();
+
+    let rows = bare_marker_layout(&state);
+    let yell = rows
+        .iter()
+        .position(|row| row.1 == "Yell HOIST!")
+        .unwrap_or_else(|| panic!("{rows:?}"));
+    assert_eq!(rows[yell], (true, "Yell HOIST!".to_string()), "{rows:?}");
+    assert_eq!(rows[yell + 1], (false, String::new()), "{rows:?}");
+    assert_eq!(
+        rows[yell + 2],
+        (true, "BREAKING UP!".to_string()),
+        "the refusal continues the marker row: {rows:?}"
+    );
+}
+
+/// `sail-heading-echo` (2026-10-16, beats `heading` and `sailing`): a course
+/// change under hoisted sail prints `Head West` and `Hull weak!` and re-arms
+/// the prompt flag (R526), so an ordinary pair follows - a blank row, then
+/// the end cap with the cursor. That row stays on screen while the ship waits
+/// upwind and while released steps sail on with nothing to print: the held
+/// passes are not commands, and a released step's suppressed prompt draws no
+/// new row (`text-output.md §10.2`).
+#[test]
+fn a_course_change_keeps_its_prompt_row_through_held_and_released_sailing_passes() {
+    let mut state = bare_marker_frigate(WindState::West, 40, "Yell HOIST!");
+    handle_play_key_input(&mut state, 'a', "", Path::new("")).unwrap();
+    assert!(!overworld_prompt_pair_is_suppressed(&state));
+
+    let expected_tail = vec![
+        (true, "Head West".to_string()),
+        (false, "Hull weak!".to_string()),
+        (false, String::new()),
+        (true, String::new()),
+    ];
+    let tail = |state: &PlayState| {
+        let rows = bare_marker_layout(state);
+        rows[rows.len() - 4..].to_vec()
+    };
+    assert_eq!(tail(&state), expected_tail);
+
+    let start_x = state.player.x;
+    let mut released = 0;
+    for _ in 0..12 {
+        let before = state.player.x;
+        state.idle_wait_pass(None).unwrap();
+        if state.player.x != before {
+            released += 1;
+        }
+        assert_eq!(
+            tail(&state),
+            expected_tail,
+            "after {released} released step(s), the prompt row must not move"
+        );
+    }
+    assert!(released >= 2, "an upwind heading still releases: {start_x} -> {}", state.player.x);
+}
+
+/// A pass the wind holds back is not a command, so it neither clears nor
+/// re-arms the prompt flag; only a released step takes the direction.
+#[test]
+fn a_held_sailing_pass_leaves_the_overworld_prompt_flag_alone() {
+    let mut state = bare_marker_frigate(WindState::Calm, 99, "Yell HOIST!");
+    state.sail_cached_direction = Some(Direction::North);
+    for _ in 0..6 {
+        state.idle_wait_pass(None).unwrap();
+        assert!(!overworld_prompt_pair_is_suppressed(&state));
+    }
+    assert_eq!((state.player.x, state.player.y), (100, 100));
+    assert!(state.message_entries().iter().all(|entry| !entry.bare_marker));
+}
