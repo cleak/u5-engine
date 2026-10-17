@@ -4174,7 +4174,13 @@ fn format_tavern_outcome(
                     .max(1);
                 rows.push_str(&format!("{prefix}{}{price}\n", ".".repeat(dots)));
             }
-            format!("{rows}\n{BLUE_BOAR_CHOICE_PROMPT}")
+            // `shops.md §8.C`: "The Blue Boar list begins `"Our wine
+            // list,\n`, honorific, `.\n\n`, then" the rows. The heading and
+            // the quote `Thy choice?" ` closes were missing (playtest E52).
+            format!(
+                "\"Our wine list,\n{}.\n\n{rows}\n{BLUE_BOAR_CHOICE_PROMPT}",
+                tavern_honorific(speaker_is_female)
+            )
         }
         // `shops.md §8.C`: "Fourth secondary drink attempt, when prior count
         // is exactly three | `\n\n"I beg thy\npardon, `, honorific, `,"\nsays `,

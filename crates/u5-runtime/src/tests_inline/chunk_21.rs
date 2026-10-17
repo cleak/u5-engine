@@ -8088,3 +8088,28 @@ fn sage_short_funds_and_table_scraps_name_the_vendor() {
 
     let _ = fs::remove_dir_all(dir);
 }
+
+/// `shops.md §8.C`: "The Blue Boar list begins `"Our wine list,\n`,
+/// honorific, `.\n\n`, then" the six rows and `Thy choice?"`. The heading
+/// and its opening quote were missing (playtest E52).
+#[test]
+fn blue_boar_wine_list_opens_with_its_quoted_heading() {
+    use crate::shop_runtime::TavernState;
+    use crate::shop_session::ActiveShopSession;
+
+    let mut state = test_state(open_grid(), 1, 1);
+    state.gold = 200;
+    state.active_shop = Some(ActiveShopSession::Tavern(TavernState::Menu {
+        tavern: Tavern::TheBlueBoarTavern,
+        continuation_ready: false,
+    }));
+    handle_play_key_input(&mut state, 'W', "", Path::new("")).unwrap();
+    assert!(
+        state
+            .message
+            .starts_with("\"Our wine list,\nsir.\n\na) Rose.......18\n"),
+        "{:?}",
+        state.message
+    );
+    assert!(state.message.ends_with("f) Chablis....98\n\nThy choice?\""));
+}
