@@ -566,21 +566,25 @@ const INTRO_PRESENTS_UNSKIPPED_HOLD_BIOS_TICKS: u16 =
     INTRO_PRESENTS_HOLD_BIOS_TICKS + INTRO_TITLE_BOUNDED_POLL_BIOS_TICKS;
 
 /// `systems/timing.md §5.1`: "On a run where the flourish was aborted the
-/// hold is skipped entirely and the frame flashes past." One tick is the
-/// shortest interval that still presents the finished mark plus `Presents`
-/// once, which `intro.md §3` requires ("`Presents` is briefly visible either
-/// way").
-const INTRO_PRESENTS_SKIPPED_HOLD_BIOS_TICKS: u16 = 1;
+/// hold is skipped entirely and the frame flashes past." Nothing waits
+/// between that frame and the start/menu loader, so the mark plus `Presents`
+/// - "on a skipped run, the last title image" - stays on the visible page
+/// through the loader's archive load alone (`intro.md §3`, "How long the last
+/// title image stays up", `cleak/u5-spec#298` Q36).
+const INTRO_PRESENTS_SKIPPED_HOLD_BIOS_TICKS: u16 = INTRO_START_MENU_ARCHIVE_LOAD_BIOS_TICKS;
 
-/// **Measured**, not published: the start/menu loader's step 1 (load the
-/// `ULTIMA` archive) runs while the finished composition is still on screen,
-/// because the visible page is only cleared at step 2. The spec gives the
-/// load no duration. Stock captures (forty paired runs, DOSBox at 3000
-/// cycles) show the composition for about 2.0 s from first appearance to the
-/// first dissolved logo pixel, against the 1.1 s of its bounded poll; this is
-/// the remaining ~0.9 s, rounded to whole BIOS ticks (16 x 54.9 ms = 0.88 s).
-/// Pending publication by the spec owner.
-const INTRO_START_MENU_ARCHIVE_LOAD_BIOS_TICKS: u16 = 16;
+/// `systems/intro.md §3` "Start/menu screen composition", "How long the last
+/// title image stays up" (`cleak/u5-spec#298` Q36): the loader's step 1 loads
+/// and unpacks the `ULTIMA` archive while the last title image is still on the
+/// visible page, because "the visible clear of step 2 is the first change".
+/// "As emulator timings under DOSBox 0.74-3, that load-and-unpack span is
+/// about 1.07 s at fixed 3000 cycles" (also `timing.md §5.1`); the engine's
+/// stock reference is 3000 cycles. In whole BIOS ticks that is 19 (19 x
+/// 54.9 ms = 1.04 s; 20 would be 1.10 s), which with the twenty-tick bounded
+/// poll keeps an unskipped composition up for 39 ticks, 2.14 s, against the
+/// published "about 2.15 s in total". The period-hardware load time is not
+/// established.
+const INTRO_START_MENU_ARCHIVE_LOAD_BIOS_TICKS: u16 = 19;
 
 /// **Measured**, not published (`cleak/u5-spec#298` item 39): after a key
 /// aborts subtitle ignition, stock shows the finished logo, a static flame
@@ -598,7 +602,8 @@ const INTRO_START_MENU_ARCHIVE_LOAD_BIOS_TICKS: u16 = 16;
 /// kept queued, as the BIOS buffer would; no capture presses one there.
 const INTRO_IGNITION_ABORT_MENU_HOLD_BIOS_TICKS: u16 = 31;
 
-/// Visible phase 5: the bounded poll, then the measured archive load.
+/// Visible phase 5: the bounded poll, then the archive load (`intro.md §3`,
+/// `cleak/u5-spec#298` Q36: "twenty tick waits ... plus the load").
 const INTRO_COMPOSITION_HOLD_BIOS_TICKS: u16 =
     INTRO_TITLE_BOUNDED_POLL_BIOS_TICKS + INTRO_START_MENU_ARCHIVE_LOAD_BIOS_TICKS;
 
@@ -21395,11 +21400,11 @@ mod tests {
         let composition = simulate_visual_intro_until(&mut intro, &mut pump, frame, |i| {
             matches!(i.panel, VisualIntroPanel::StartMenuReveal(_))
         });
-        // Bounded poll (20) plus the measured archive load (16).
-        close(composition, 36.0 * tick, "composition hold");
-        // Measured stock: about 2.0 s from the composition to the first
-        // dissolved logo pixel.
-        assert!((1.8..=2.2).contains(&composition));
+        // Bounded poll (20) plus the archive load (19), `intro.md §3`
+        // (u5-spec#298 Q36): "an unskipped composition is visible about
+        // 2.15 s in total".
+        close(composition, 39.0 * tick, "composition hold");
+        assert!((2.10..=2.20).contains(&composition));
 
         let reveal = simulate_visual_intro_until(&mut intro, &mut pump, frame, |i| {
             matches!(i.panel, VisualIntroPanel::SubtitleIgnition { .. })
@@ -21435,6 +21440,27 @@ mod tests {
              ignition {ignition:.3} s"
         );
         let _ = fs::remove_dir_all(dir);
+    }
+
+    /// `intro.md §3` "How long the last title image stays up" (u5-spec#298
+    /// Q36): the last title image stays up through the start/menu archive
+    /// load, "about 1.07 s at fixed 3000 cycles", so an unskipped composition
+    /// is visible "about 2.15 s in total"; on a skipped flourish the mark plus
+    /// `Presents` is that last image and stays up for the load alone.
+    #[test]
+    fn the_last_title_image_stays_up_through_the_published_archive_load() {
+        let tick = f64::from(BIOS_USER_TICK_INTERVAL_SECS);
+        let load = f64::from(INTRO_START_MENU_ARCHIVE_LOAD_BIOS_TICKS) * tick;
+        assert!((load - 1.07).abs() <= tick / 2.0, "archive load {load:.3} s");
+        let composition = f64::from(INTRO_COMPOSITION_HOLD_BIOS_TICKS) * tick;
+        assert!(
+            (composition - 2.15).abs() <= tick / 2.0,
+            "composition visible {composition:.3} s"
+        );
+        assert_eq!(
+            INTRO_PRESENTS_SKIPPED_HOLD_BIOS_TICKS,
+            INTRO_START_MENU_ARCHIVE_LOAD_BIOS_TICKS
+        );
     }
 
     /// The gated logo reveal presents growing prefixes of the published visit
@@ -21708,7 +21734,8 @@ mod tests {
         assert!(intro.title_sequence_skipped);
         assert!(visual_intro_presents_hold_active(&intro));
         // `timing.md §5.1`: after an aborted flourish the hold "is skipped
-        // entirely and the frame flashes past".
+        // entirely and the frame flashes past"; the frame then stays up for
+        // the archive load alone (`intro.md §3`, u5-spec#298 Q36).
         assert_eq!(
             intro.title_presents_hold_ticks,
             INTRO_PRESENTS_SKIPPED_HOLD_BIOS_TICKS
