@@ -3053,6 +3053,30 @@ impl PlayState {
         apply_hourly_party_status: bool,
         age_payment_cooldown: bool,
     ) {
+        self.advance_turn_with_minutes_policy_and_schedules(
+            minutes,
+            tick_doors,
+            advance_active_objects,
+            apply_hourly_party_status,
+            age_payment_cooldown,
+            true,
+        );
+    }
+
+    /// [`Self::advance_turn_with_minutes_policy`] with the town schedule pass
+    /// optional. `town-mode.md §7`/§12 (issue #298 Q30, `RETRACTIONS.md`
+    /// R538): the town-bed Hole-up's "ten-minute elapsed-time loop that
+    /// follows runs no schedule pass"; it is the only caller that passes
+    /// `run_town_schedules = false`.
+    pub(crate) fn advance_turn_with_minutes_policy_and_schedules(
+        &mut self,
+        minutes: u8,
+        tick_doors: bool,
+        advance_active_objects: bool,
+        apply_hourly_party_status: bool,
+        age_payment_cooldown: bool,
+        run_town_schedules: bool,
+    ) {
         // `combat.md §7`, "The middle tier's flag is a stats-panel refresh
         // request" (`RETRACTIONS.md` R358): the outdoor, town and dungeon
         // mode loops share this per-turn entry point, and each "reads it
@@ -3262,7 +3286,9 @@ impl PlayState {
                     if advance_active_objects {
                         self.advance_active_object_walkers();
                     }
-                    self.advance_npc_schedules();
+                    if run_town_schedules {
+                        self.advance_npc_schedules();
+                    }
                 }
             }
             if run_town_animator && deferred_town_tail {

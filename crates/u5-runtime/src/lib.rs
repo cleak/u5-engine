@@ -89,6 +89,7 @@ pub mod play_options;
 pub mod play_state_impl;
 pub mod play_state_struct;
 pub use play_state_impl::ExplorationTurnGateOutcome;
+pub use play_state_impl::TownRestBurstOutcome;
 pub mod predicates;
 pub mod prng;
 pub mod pth;

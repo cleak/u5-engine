@@ -6251,19 +6251,44 @@ impl PlayState {
             return Ok(MoveOutcome::Blocked);
         }
 
-        self.mark_town_rest_sleepers();
-        if !self.advance_town_rest_initial_schedule_burst(entries.as_deref(), scene, floor) {
-            let woke = self.wake_town_rest_sleepers();
-            // `rest-and-camp.md §6`: "Town/inn rest can instead produce a
-            // local refusal or \"thrown out\" style result depending on the
-            // caller context" - the wording is not published, so the engine
-            // records what happened rather than inventing a sentence.
-            self.diagnostics.push(format!(
-                "town-bed rest interrupted; woke {woke} asleep member(s)"
-            ));
-            self.message.clear();
-            return Ok(MoveOutcome::Blocked);
+        // `town-mode.md §12` (issue #298 Q30, `RETRACTIONS.md` R538): "the
+        // town-hours path runs one burst of up to sixteen schedule/world-tick
+        // passes at the current hour, with no clock advance, before anyone
+        // sleeps. If any pass leaves an arrest/conflict contact event (kind
+        // `0x61`), the command ends at once: no sleep status, no time passed,
+        // no further message; it returns the ordinary acted result, so the
+        // normal town epilogue follows and re-evaluates contact."
+        match self.advance_town_rest_initial_schedule_burst(entries.as_deref(), scene, floor) {
+            TownRestBurstOutcome::Completed => {}
+            TownRestBurstOutcome::ArrestOrConflictContact => {
+                // `npc-schedules.md §9.2` "Event lifetime": the burst "never
+                // hands its events to the consumer ... every burst-recorded
+                // event is dropped and must be re-raised by a later ordinary
+                // pass". The ordinary town epilogue is that pass: one
+                // indoor-minute turn whose schedule pass and contact consumer
+                // run in the caller's post-turn tail.
+                self.pending_town_npc_contact = None;
+                self.diagnostics
+                    .push("town-bed rest ended by an arrest/conflict contact".to_string());
+                self.message.clear();
+                self.advance_turn();
+                return Ok(MoveOutcome::Passed);
+            }
+            TownRestBurstOutcome::SurfaceRejected => {
+                // `rest-and-camp.md §6`: "Town/inn rest can instead produce a
+                // local refusal or \"thrown out\" style result depending on
+                // the caller context" - the wording is not published, so the
+                // engine records what happened rather than inventing a
+                // sentence.
+                self.diagnostics.push("town-bed rest interrupted".to_string());
+                self.message.clear();
+                return Ok(MoveOutcome::Blocked);
+            }
         }
+        // `npc-schedules.md §9.2`: every burst-recorded event is dropped,
+        // including a conversation contact, which "does not interrupt".
+        self.pending_town_npc_contact = None;
+        self.mark_town_rest_sleepers();
         if !self.advance_town_rest_until_target_hour(hours, entries.as_deref(), scene, floor) {
             let woke = self.wake_town_rest_sleepers();
             // `rest-and-camp.md §6`: "Town/inn rest can instead produce a
@@ -6319,7 +6344,16 @@ impl PlayState {
         let target_hour = Self::town_rest_target_hour(self.clock.hour, duration_digit);
         let mut ticks: u16 = 0;
         while self.clock.hour != target_hour && ticks < TOWN_REST_TICK_BUDGET {
-            self.advance_turn_with_minutes(TOWN_REST_MINUTES_PER_TICK);
+            // `town-mode.md §7` (issue #298 Q30, R538): "the elapsed-time
+            // loop that follows runs no walker".
+            self.advance_turn_with_minutes_policy_and_schedules(
+                TOWN_REST_MINUTES_PER_TICK,
+                true,
+                true,
+                true,
+                true,
+                false,
+            );
             // `moons.md §3` (issue #190), the second of the two `H` (Hole
             // up) arms: the census row for "`H` (Hole up), town-bed rest
             // loop" is "On the loop's ten-minute steps", so the repaint is
@@ -6340,7 +6374,7 @@ impl PlayState {
         entries: Option<&[TownRestBedEntry]>,
         scene: Scene,
         floor: i8,
-    ) -> bool {
+    ) -> TownRestBurstOutcome {
         for _ in 0..TOWN_REST_INITIAL_SCHEDULE_BURST_TICKS {
             // `karma.md §4.1`: these zero-minute schedule-only setup
             // ticks are not one of the ten-minute rest ticks that age the
@@ -6349,11 +6383,19 @@ impl PlayState {
             // callers, and among rest only "the town-bed rest loop's
             // ten-minute step" (`rest-and-camp.md §5`).
             self.advance_turn_with_minutes_policy(0, true, true, false, false);
+            // Issue #298 Q30: the burst "inspects only the arrest/conflict
+            // kind `0x61`, and only to abort the rest".
+            if self
+                .pending_town_npc_contact
+                .is_some_and(|event| event.behavior.raises_arrest_or_conflict_contact())
+            {
+                return TownRestBurstOutcome::ArrestOrConflictContact;
+            }
             if !self.town_rest_bed_still_accepts(entries, scene, floor) {
-                return false;
+                return TownRestBurstOutcome::SurfaceRejected;
             }
         }
-        true
+        TownRestBurstOutcome::Completed
     }
 
     pub fn town_rest_bed_still_accepts(
@@ -6370,6 +6412,17 @@ impl PlayState {
                 town_rest_bed_matches(*entry, scene, floor, self.player.x, self.player.y, tile)
             })
     }
+}
+
+/// How the town-bed Hole-up's initial schedule burst ended
+/// (`town-mode.md §12`, issue #298 Q30).
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum TownRestBurstOutcome {
+    Completed,
+    /// A pass left an arrest/conflict contact event (kind `0x61`).
+    ArrestOrConflictContact,
+    /// Engine guard: the party no longer stands on an accepted rest surface.
+    SurfaceRejected,
 }
 
 pub const fn shadowlord_stonegate_npc_slot(index: usize) -> Option<usize> {

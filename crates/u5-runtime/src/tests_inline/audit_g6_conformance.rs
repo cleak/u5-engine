@@ -406,3 +406,80 @@ fn a129_spent_search_latch_skips_a_blocked_state_two_npc() {
     assert_eq!(state.npcs[1].stuck_counter, 0);
     assert_eq!(state.prng_state, prng_before_second, "no draw is spent");
 }
+
+fn q30_town_scene(state: &PlayState) -> (Scene, i8) {
+    let Area::Town { scene, floor } = state.area else {
+        panic!("g6 fixtures are town states");
+    };
+    (scene, floor)
+}
+
+#[test]
+fn q30_town_bed_elapsed_loop_runs_no_schedule_pass() {
+    // Issue #298 Q30 / `RETRACTIONS.md` R538, `town-mode.md §7`: "the
+    // elapsed-time loop that follows runs no walker". An AI 6 NPC three
+    // cells away acts on any schedule pass (see a133 above), so it must stay
+    // put across the ten-minute step.
+    let mut state = g6_town_with(vec![g6_npc(1, 8, 5, 6, (8, 5, 0))], 5, 5);
+    let (scene, floor) = q30_town_scene(&state);
+    let minute_before = state.clock;
+    let _ = state.advance_town_rest_until_target_hour(1, None, scene, floor);
+    assert_ne!(state.clock, minute_before, "the loop took its ten-minute step");
+    assert_eq!(g6_pos(&state, 0), (8, 5));
+}
+
+#[test]
+fn q30_town_bed_burst_aborts_only_on_an_arrest_or_conflict_contact() {
+    // Issue #298 Q30, `town-mode.md §12`: "If any pass leaves an
+    // arrest/conflict contact event (kind `0x61`), the command ends at once
+    // ... A conversation-contact event (kind `0x74`) does not interrupt".
+    let bed = |state: &PlayState| {
+        let (scene, floor) = q30_town_scene(state);
+        vec![TownRestBedEntry {
+            scene,
+            floor,
+            x: state.player.x,
+            y: state.player.y,
+            expected_tile: None,
+        }]
+    };
+    let mut state = g6_town_with(vec![g6_npc(1, 6, 5, 7, (6, 5, 0))], 5, 5);
+    let entries = bed(&state);
+    let (scene, floor) = q30_town_scene(&state);
+    let clock = state.clock;
+    assert_eq!(
+        state.advance_town_rest_initial_schedule_burst(Some(&entries), scene, floor),
+        TownRestBurstOutcome::ArrestOrConflictContact
+    );
+    assert_eq!(state.clock, clock, "no time passed");
+
+    let mut state = g6_town_with(vec![g6_npc(1, 6, 5, 4, (6, 5, 0))], 5, 5);
+    let entries = bed(&state);
+    assert_eq!(
+        state.advance_town_rest_initial_schedule_burst(Some(&entries), scene, floor),
+        TownRestBurstOutcome::Completed
+    );
+}
+
+#[test]
+fn q30_town_bed_hole_up_arrest_contact_ends_with_no_sleep_and_the_ordinary_epilogue() {
+    // Issue #298 Q30, `town-mode.md §12`: on an arrest/conflict contact the
+    // command ends "at once: no sleep status, no time passed, no further
+    // message; it returns the ordinary acted result, so the normal town
+    // epilogue follows and re-evaluates contact".
+    let dir = debug_game_dir();
+    std::fs::write(dir.join(TOWN_REST_BED_TABLE_FILE), "CASTLE:0 0 5 5 4\n").unwrap();
+    let mut state = g6_town_with(vec![g6_npc(1, 6, 5, 7, (6, 5, 0))], 5, 5);
+    let clock = state.clock;
+    let outcome = state.hole_up_command(&dir, Some(2)).unwrap();
+    assert_eq!(outcome, MoveOutcome::Passed);
+    assert!(state.party.iter().all(|member| member.status != b'S'));
+    assert!(state.message.is_empty());
+    // The ordinary town epilogue is one indoor-minute turn.
+    let mut expected = clock;
+    expected.advance_minutes(MINUTES_PER_INDOOR_TURN);
+    assert_eq!(state.clock, expected);
+    // Its own schedule pass re-raised the still-adjacent NPC's contact.
+    assert!(state.pending_town_npc_schedule_pass || state.pending_town_npc_contact.is_some());
+    let _ = std::fs::remove_dir_all(dir);
+}
