@@ -1883,8 +1883,9 @@ impl PlayState {
         if !direction.is_cardinal() && !matches!(self.area, Area::Dungeon { .. }) {
             return Ok(MoveOutcome::Blocked);
         }
-        // `text-output.md §10.2`: any direction taken aboard a ship, keyed or
-        // synthesised, turning or repeating, clears the overworld prompt flag.
+        // `text-output.md §10.2` (R526): a direction taken under hoisted sail,
+        // keyed or synthesised, clears the overworld prompt flag; a facing
+        // change or an under-sail refusal sets it again below.
         self.note_overworld_direction_taken();
         // `vehicles.md §6` (u5-spec#297): a frigate key that changes the
         // facing turns the ship in place and does not move it, in either sail

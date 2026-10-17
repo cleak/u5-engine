@@ -5111,6 +5111,9 @@ impl PlayState {
         // coordinates do not change, and the cached sail direction is
         // cleared." That is what stops the auto-advance route on impact.
         self.sail_cached_direction = None;
+        // `text-output.md §10.2` (R526): an under-sail refusal sets the
+        // prompt flag again within the same command.
+        self.rearm_overworld_prompt_pair_in_command();
         self.mark_visibility_dirty();
         self.emit_sound_effect(SoundEffect::ShipCollisionRumble);
         self.apply_outdoor_impact_absorption()

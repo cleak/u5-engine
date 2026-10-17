@@ -848,6 +848,9 @@ impl PlayState {
             // marker to the same-facing furled frigate, clears the sailing
             // cache, refuses the coordinate step".
             self.sail_cached_direction = None;
+            // `text-output.md §10.2` (R526): `Docked!` is an under-sail
+            // refusal, which sets the prompt flag again.
+            self.rearm_overworld_prompt_pair_in_command();
             self.sync_player_object();
             self.mark_visibility_dirty();
             self.message = "Docked!".to_string();

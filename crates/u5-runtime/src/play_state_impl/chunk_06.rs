@@ -210,6 +210,9 @@ impl PlayState {
         } else {
             self.advance_turn();
         }
+        // `text-output.md §10.2` (R526): the facing change sets the prompt
+        // flag again, so a course change is followed by an ordinary pair.
+        self.rearm_overworld_prompt_pair_in_command();
         if hull < FRIGATE_HULL_WEAK_THRESHOLD {
             self.message = FRIGATE_HULL_WEAK_LINE.to_string();
             self.message_row_open_mid_line = false;

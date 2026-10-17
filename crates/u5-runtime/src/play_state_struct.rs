@@ -380,13 +380,13 @@ pub struct PlayState {
     /// `text-output.md §10.2`'s overworld prompt gate, stored inverted: set
     /// means the one-byte flag is **clear**, so the next overworld prompt
     /// emits neither its leading line feed nor its end-cap marker. "It is
-    /// cleared by **any direction taken while the party is aboard a ship** -
-    /// whether the requested direction repeats the heading the ship already
-    /// carries or turns it to a new one - so exactly one following prompt
-    /// pair is suppressed. On foot the flag is never touched." The helper
-    /// re-arms it as soon as it has tested it, and "the overworld's
-    /// per-entry initialiser sets the flag **unconditionally**"
-    /// (`RETRACTIONS.md` R497).
+    /// cleared by any direction taken while the sails are **hoisted**, but a
+    /// frigate facing change (either sail state) and an under-sail refusal
+    /// (`BREAKING UP!`, `COLLISION!`, `Docked!`) set it again within the same
+    /// command ... A furled ship, like a party on foot, never touches the
+    /// flag." The helper re-arms it as soon as it has tested it, and "the
+    /// overworld's per-entry initialiser sets the flag **unconditionally**"
+    /// (`RETRACTIONS.md` R497, amended by R526, u5-spec#297).
     pub overworld_prompt_pair_suppressed: bool,
     /// Narration this presentation is printing on a timer rather than all at
     /// once. `main-loop.md §9`: "presentations, cutscene beats and paced turn
