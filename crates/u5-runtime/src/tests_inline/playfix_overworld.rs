@@ -160,3 +160,34 @@ fn playfix_e22_unboardable_parked_vehicle_still_blocks() {
     assert_eq!(state.step(Direction::East), MoveOutcome::Blocked);
     assert_eq!((state.player.x, state.player.y), (5, 5));
 }
+
+/// E23: `blackthorn.md §7` "Party restoration": per in-party slot the
+/// cinematic revives, copies maximum into current hit points "and repaints
+/// the whole stats panel, before moving to the next slot". The panel must
+/// not keep the dead roster once the rescue has restored the party.
+#[test]
+fn playfix_e23_rescue_restoration_repaints_the_stats_panel() {
+    let mut state = test_state(open_grid(), 1, 1);
+    for member in &mut state.party {
+        member.hp = 0;
+        member.status = CharacterStatus::Dead.save_byte();
+    }
+    state.repaint_stats_panel();
+    assert_eq!(
+        state.displayed_stats_panel().statuses[0],
+        Some(CharacterStatus::Dead.save_byte())
+    );
+    state.pending_blackthorn_rescue =
+        Some(crate::blackthorn::BlackthornRescuePhase::AwaitingAcknowledgement);
+    let game_dir = std::path::Path::new("/nonexistent");
+    assert_eq!(state.step_blackthorn_rescue(game_dir, true).unwrap(), None);
+    state.flush_staged_narration();
+
+    let good = CharacterStatus::Good.save_byte();
+    assert_eq!(state.party[0].status, good);
+    assert_eq!(state.displayed_stats_panel().statuses[0], Some(good));
+    assert_eq!(
+        state.displayed_stats_panel(),
+        &crate::stats_panel::stats_panel_snapshot_of(&state)
+    );
+}

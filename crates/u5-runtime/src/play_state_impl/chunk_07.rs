@@ -6333,9 +6333,16 @@ impl PlayState {
                     if self.party[slot].status == b'D' {
                         self.resurrect_party_member_to_hp(slot, 1);
                     }
-                }
-                for member in &mut self.party {
+                    // `blackthorn.md §7` "Party restoration": per slot the
+                    // cinematic revives, "copies the member's maximum hit
+                    // points into their current hit points, and repaints the
+                    // whole stats panel, before moving to the next slot" -
+                    // the immediate repaint of `stats-panel.md §2.2`. Without
+                    // it the panel kept the rescue's `0D` roster (playtest
+                    // E23).
+                    let member = &mut self.party[slot];
                     member.hp = member.max_hp.max(1);
+                    self.repaint_stats_panel();
                 }
                 self.pending_blackthorn_rescue = Some(BlackthornRescuePhase::Restoration);
                 Ok(None)
