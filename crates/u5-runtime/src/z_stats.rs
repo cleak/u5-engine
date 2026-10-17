@@ -246,6 +246,16 @@ pub enum CastFollowupKind {
     },
 }
 
+/// What a key on the caster's own cell does inside a spell's arena cursor
+/// (`combat.md §8.2`).
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub(crate) enum CombatSpellCursorOwnCellKey {
+    /// Enter: "nothing happens and the loop reads another key".
+    Ignore,
+    /// Space: "Cancels if the cursor is on the attacker's own cell".
+    Cancel,
+}
+
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct RestSession {
     pub phase: RestPhase,

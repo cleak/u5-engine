@@ -3137,7 +3137,9 @@ fn active_combat_field_followup_cancels_after_spending_without_marker() {
             .is_none()
     );
     assert!(state.active_cast_followup.is_none());
-    assert_eq!(state.message, "None!");
+    // `combat.md §8.2`: the shared cursor's ranged arm "returns silently"
+    // on cancel; the former `None!` was the engine's own (playtest E34).
+    assert_eq!(state.message, "");
     assert_eq!(state.turn, 0);
     assert!(
         state
@@ -3176,7 +3178,10 @@ fn active_combat_field_followup_ignores_out_of_bounds_cursor_move() {
             .unwrap()
             .is_none()
     );
-    assert_eq!(state.message.lines().next(), Some("Target? (0, 0)"));
+    // `magic.md §8`: the field spells use the shared `Aim! ` cursor of
+    // `combat.md §8.2` (playtest E34 withdrew `Target? (x, y)`).
+    assert_eq!(state.message, "Aim! ");
+    assert_eq!(state.combat_aim_marker_cell, Some((0, 0)));
 
     assert!(
         state
@@ -3184,11 +3189,19 @@ fn active_combat_field_followup_ignores_out_of_bounds_cursor_move() {
             .unwrap()
             .is_none()
     );
-    assert_eq!(state.message.lines().next(), Some("Target? (0, 0)"));
+    assert_eq!(state.combat_aim_marker_cell, Some((0, 0)));
+    // The caster's own cell does not confirm (`§8.2`), so step off it first.
+    assert!(
+        state
+            .step_active_cast_followup('6', "", std::path::Path::new(""))
+            .unwrap()
+            .is_none()
+    );
+    assert_eq!(state.combat_aim_marker_cell, Some((1, 0)));
     let result = state
         .step_active_cast_followup(' ', "", std::path::Path::new(""))
         .unwrap()
-        .expect("confirming the unchanged cursor should cast the field");
+        .expect("confirming the moved cursor should cast the field");
 
     assert_eq!(result.0, MoveOutcome::Cast);
     assert_eq!(state.turn, 1);
@@ -3197,7 +3210,7 @@ fn active_combat_field_followup_ignores_out_of_bounds_cursor_move() {
         .iter()
         .find(|object| object.type_byte == COMBAT_FIELD_KIND_POISON)
         .expect("poison field marker should be placed");
-    assert_eq!((marker.x, marker.y), (0, 0));
+    assert_eq!((marker.x, marker.y), (1, 0));
 }
 
 #[test]
@@ -7112,6 +7125,12 @@ fn combat_command_branch_labels_include_only_exactly_published_strings() {
     assert_eq!(
         combat_scene_abort_verb_prefix(CombatSceneAbortVerb::HoleUp),
         "Hole up"
+    );
+    // combat.md §8 Shape B: `I` Ignite is "printed as `Ignite torch`"
+    // (playtest E37).
+    assert_eq!(
+        combat_scene_abort_verb_prefix(CombatSceneAbortVerb::IgniteTorch),
+        "Ignite torch"
     );
     assert_eq!(
         combat_scene_abort_tail(CombatSceneAbortVerb::Board),
@@ -12812,7 +12831,7 @@ fn combat_input_dispatch_out_of_arena_move_restores_stored_frame_snapshot() {
     state.player.x = 99;
 
     assert_eq!(
-        handle_play_key_input(&mut state, '6', "", game_dir).unwrap(),
+        handle_play_key_input(&mut state, '\u{2}', "", game_dir).unwrap(),
         PlayInputDisposition::Continue
     );
 
@@ -12958,7 +12977,7 @@ fn combat_input_dispatch_prompts_a_controlled_non_party_actor() {
     ));
 
     assert_eq!(
-        handle_play_key_input(&mut state, '6', "", game_dir).unwrap(),
+        handle_play_key_input(&mut state, '\u{2}', "", game_dir).unwrap(),
         PlayInputDisposition::Continue
     );
 
@@ -12976,7 +12995,7 @@ fn combat_input_dispatch_prompts_a_controlled_non_party_actor() {
     selected.next_combat_actor_slot = 9;
 
     assert_eq!(
-        handle_play_key_input(&mut selected, '6', "", game_dir).unwrap(),
+        handle_play_key_input(&mut selected, '\u{2}', "", game_dir).unwrap(),
         PlayInputDisposition::Continue
     );
     assert_eq!(selected.message, "");
@@ -12992,7 +13011,7 @@ fn combat_input_dispatch_prompts_a_controlled_non_party_actor() {
     driven.next_combat_actor_slot = 9;
 
     assert_eq!(
-        handle_play_key_input(&mut driven, '6', "", game_dir).unwrap(),
+        handle_play_key_input(&mut driven, '\u{2}', "", game_dir).unwrap(),
         PlayInputDisposition::Continue
     );
 
@@ -13464,7 +13483,9 @@ fn combat_input_dispatch_cancelled_field_cursor_commits_spent_cast_action() {
             .iter()
             .all(|object| object.type_byte != COMBAT_FIELD_KIND_FIRE)
     );
-    assert_eq!(state.message, "None!\nAvatar, armed with bare hands:\n");
+    // `combat.md §8.2`: the shared cursor's ranged-arm cancel "returns
+    // silently" - no `None!` (playtest E34).
+    assert_eq!(state.message, "\nAvatar, armed with bare hands:\n");
 }
 
 #[test]
@@ -21577,7 +21598,7 @@ fn dungeon_contact_and_room_fights_step_the_party_by_the_first_exit() {
         dungeon_post_combat_state(1, DungeonPostCombatApplier::MovementApplier, 10, 5, true);
     state.grid[dungeon_cell_index(1, 2, 1)] = 0xb0;
 
-    handle_play_key_input(&mut state, '6', "", game_dir).unwrap();
+    handle_play_key_input(&mut state, '\u{2}', "", game_dir).unwrap();
 
     assert!(!state.combat_active);
     assert_eq!((state.player.x, state.player.y), (2, 1));
@@ -21587,7 +21608,7 @@ fn dungeon_contact_and_room_fights_step_the_party_by_the_first_exit() {
     let mut state =
         dungeon_post_combat_state(1, DungeonPostCombatApplier::MovementApplier, 5, 0, false);
     state.combat_frame_snapshot.as_mut().unwrap().player.y = 0;
-    handle_play_key_input(&mut state, '8', "", game_dir).unwrap();
+    handle_play_key_input(&mut state, '\u{3}', "", game_dir).unwrap();
     assert_eq!((state.player.x, state.player.y), (1, 7), "wraps north");
     assert_eq!(state.player.facing, Direction::North);
 }
@@ -21600,7 +21621,7 @@ fn dungeon_attack_fight_ignores_edge_exit_codes() {
     let mut state =
         dungeon_post_combat_state(1, DungeonPostCombatApplier::AttackLevelsOnly, 10, 5, false);
 
-    handle_play_key_input(&mut state, '6', "", game_dir).unwrap();
+    handle_play_key_input(&mut state, '\u{2}', "", game_dir).unwrap();
 
     assert!(!state.combat_active);
     assert_eq!((state.player.x, state.player.y), (1, 1));

@@ -351,6 +351,8 @@ fn handle_play_key_input_inner(
     // the command loop on a live gate any other way (a load, or a closed
     // session). The transit consumes no key: once it has run, the key is
     // dispatched from the top as the next iteration's command (playtest E25).
+    // Swallowing that key also broke `North` and `Q`/`Y` after a Gate Travel
+    // onto a live gate cell (playtest E42).
     if state.resolve_natural_moongate_entry(game_dir)?.is_some() {
         return handle_play_key_input_inner(state, key, suffix, game_dir);
     }
@@ -5491,9 +5493,31 @@ fn finish_combat_cast_actor_action(state: &mut PlayState, actor_slot: usize, had
                 .message
                 .push_str(crate::combat_frame::COMBAT_VICTORY_LINE);
         }
+        close_combat_cast_result_row(state);
         advance_combat_round_after_actor_and_append_message(state, actor_slot);
     } else if state.combat_active {
+        close_combat_cast_result_row(state);
         advance_combat_round_after_actor_and_append_message(state, actor_slot);
+    }
+}
+
+/// `magic.md §7`: the shared dispatcher's result literals (`Success!`,
+/// `Not here!`, `None mixed!`, `Failed!`, `Absorbed!` ...) "carry trailing
+/// feeds", and "Combat's subsequent actor banner has its own leading feed,
+/// which leaves a blank row after a completed result" (`combat.md §8.4`
+/// says the same for `Not here!` / `None mixed!`).
+///
+/// Those results reach the transcript through the message slot, not as arena
+/// prints, so `combat_transcript_row_open` still described the `Cast...`
+/// echo row the command opened and the banner's leading feed was spent
+/// closing it. Flush the result here and record, for this caller, that its
+/// row is closed. A cast whose output was all arena prints leaves the slot
+/// already flushed, and then the flags those prints recorded stand
+/// (playtest E40).
+fn close_combat_cast_result_row(state: &mut PlayState) {
+    if state.flush_message_slot() {
+        state.combat_transcript_row_open = false;
+        state.message_row_open_mid_line = false;
     }
 }
 
@@ -5851,6 +5875,25 @@ fn handle_combat_multistage_command(
                 state.pending_combat_actor_slot = Some(actor_slot);
                 return true;
             }
+            // `combat.md §10`: "when Negate Magic's `N` tag is active, the
+            // cast is absorbed before the shared spell dispatcher or
+            // spell-selection prompt runs. The exact command output is
+            // `Cast...\nAbsorbed!\n`", followed by the manual absorption
+            // envelope. `magic.md §7`: "There is no spell-selection prompt";
+            // the attempt "completes the current combat action while
+            // spending no premixed charge or MP". The interference gate above
+            // takes precedence. This arm used to open `Spell name:` first and
+            // absorb only after the exchange (playtest E35).
+            if resolve_negate_magic_absorbs_combat_cast(
+                state.active_effect_tag,
+                state.active_effect_counter,
+            ) {
+                let had_foe = combat_has_active_non_party_actor(state);
+                state.message = format!("{SCENE_ABSORBED_CAST_MESSAGE}\n");
+                state.emit_sound_effect(SoundEffect::MagicAbsorbed);
+                finish_combat_cast_actor_action(state, actor_slot, had_foe);
+                return true;
+            }
             state.start_combat_cast_spell_prompt(
                 actor_slot,
                 combat_has_active_non_party_actor(state),
@@ -6166,6 +6209,17 @@ fn combat_player_command_input_from_key(key: char) -> CombatPlayerCommandInput {
     if key.is_ascii_uppercase() {
         return CombatPlayerCommandInput::Key(key);
     }
+    // `combat.md §8.3`: a typed digit becomes a direction only through the
+    // shared reader's numpad flag, which remaps all eight of `1`-`4` and
+    // `6`-`9` at once; with the flag clear "typed digits keep their ASCII
+    // meaning and reach the active-player-selection handler". A plain digit
+    // here is the flag-clear case - the frontend delivers a remapped keypad
+    // digit as a direction input code, exactly as the world loops'
+    // `Set Active Plr:` path assumes. Playtest E36: `2`/`4`/`6`/`8` stepped
+    // the actor while `1`/`3`/`5` selected a member, which is neither mode.
+    if key.is_ascii_digit() {
+        return CombatPlayerCommandInput::Key(key);
+    }
     if let Some(direction_code) =
         Direction::from_play_key(key).and_then(combat_direction_code_for_direction)
     {
@@ -6238,8 +6292,16 @@ fn combat_player_command_message(
             branch,
             party_side_gate: CombatCommandPartySideGate::RefusedMonsterSide,
         } => {
+            // `R` and `U` are Shape A letters too, and their verb labels are
+            // the shared world echoes `commands.md §5.2` publishes,
+            // `Ready...\n\n` and `Use_item\n\n` - the same echoes the
+            // party-side arms below print before their delegates. Without
+            // them a controlled monster's `R`/`U` printed a bare `Can't!`
+            // (playtest E38).
             let label = match branch {
                 CombatCommandBranch::CastSpell => Some(COMBAT_CAST_COMMAND_LABEL),
+                CombatCommandBranch::Ready => Some("Ready...\n\n"),
+                CombatCommandBranch::UseItem => Some("Use item\n\n"),
                 _ => combat_command_branch_published_label(*branch),
             };
             format!("{}{COMBAT_PARTY_SIDE_REFUSAL}", label.unwrap_or(""))

@@ -2140,7 +2140,7 @@ impl PlayState {
                 // probe. Variant 5 is the scroll index; the Summon Daemon
                 // *spell* is variant 8.
                 self.emit_scroll_shared_variant(SCROLL_SUMMON_DAEMON_INDEX);
-                let legal_cells = self.combat_legal_cell_mask();
+                let legal_cells = self.combat_spawn_cell_mask();
                 let applied = self.apply_combat_summon_daemon_with_random_attempts(
                     self.combat_actor_z(0),
                     &legal_cells,

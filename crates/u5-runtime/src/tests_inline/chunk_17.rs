@@ -744,8 +744,11 @@
         assert!(state.step_active_cast('P', "RV", Path::new("")).unwrap().is_none());
         assert!(state.step_active_cast(' ', "", Path::new("")).unwrap().is_none());
         assert!(state.active_cast_followup.is_some());
-        // `magic.md §8` handler-family map: "prompts `To phase:_`".
-        assert!(state.message.ends_with("To phase:_"), "{:?}", state.message);
+        // `magic.md §8` handler-family map: "prompts `To phase:_`", whose
+        // underscore is an explicit space - never a drawn underscore
+        // (playtest E41).
+        assert!(state.message.ends_with("To phase: "), "{:?}", state.message);
+        assert!(!state.message.contains('_'), "{:?}", state.message);
         // `magic.md §5` (issue #277): spent before the phase prompt opens.
         assert_eq!(state.spell_charges[GATE_TRAVEL_SPELL_INDEX], 0);
         assert_eq!(state.party[0].mana, 0);

@@ -1399,6 +1399,9 @@ pub const SLEEP_FIELD_SPELL_INDEX: usize = POISON_FIELD_SPELL_INDEX + 1;
 /// of 3. Anchored to the Sleep Field representative index.
 pub const FIELD_SPELL_COST: u8 = (SLEEP_FIELD_SPELL_INDEX / SPELLS_PER_CIRCLE) as u8 + 1;
 pub const BLINK_SPELL_INDEX: usize = 17;
+/// `magic.md §8`: Gate Travel "prompts `To phase:_`", the underscore being
+/// the spec's explicit trailing space.
+pub const GATE_TRAVEL_PHASE_PROMPT: &str = "To phase: ";
 pub const BLINK_COST: u8 = (BLINK_SPELL_INDEX / SPELLS_PER_CIRCLE) as u8 + 1;
 /// `magic.md §8` (u5-spec#298 Q3): combat Blink's budget of seven attempts
 /// of the shared random arena probe.
@@ -1477,6 +1480,10 @@ pub const AMULET_LB_ACTIVE_EFFECT_TAG: u8 = 0x0e;
 pub const CROWN_LB_ACTIVE_EFFECT_TAG: u8 = 0x1c;
 pub const BLACK_BADGE_ACTIVE_EFFECT_TAG: u8 = 0x1d;
 pub const PERMANENT_ACTIVE_EFFECT_DURATION: u8 = 0xff;
+
+/// `visibility.md §6`: "the void tile `0xFF`" - the arena's impassable void
+/// byte that `magic.md §8`'s shared spawn-cell validator rejects.
+pub const COMBAT_ARENA_VOID_TILE: u8 = 0xff;
 
 // Combat-side raw damage caps for single-target damage spells per
 // `catalogs/spell-list.md` §5. The instant-kill sentinel itself lives in
