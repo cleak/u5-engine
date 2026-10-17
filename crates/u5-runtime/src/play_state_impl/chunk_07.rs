@@ -329,20 +329,8 @@ impl PlayState {
             return MoveOutcome::Blocked;
         };
         let tile = self.combat_terrain[actor.y as usize][actor.x as usize];
-        if let Some((encounter_mode_high_bit, two_way_centre)) = self
-            .combat_frame_snapshot
-            .as_ref()
-            .filter(|snapshot| matches!(snapshot.area, Area::Dungeon { .. }))
-            .map(|snapshot| {
-                (
-                    snapshot.encounter_mode_high_bit,
-                    // `dungeon-mode.md §14.1`: the two-way flag the ambush
-                    // painter raises for a two-way-ladder dungeon cell.
-                    self.tile_restoration_pending
-                        && !snapshot.encounter_mode_high_bit
-                        && (actor.x, actor.y) == (5, 5),
-                )
-            })
+        if let Some((encounter_mode_high_bit, two_way_centre)) =
+            self.combat_dungeon_arena_klimb_context(&actor)
         {
             return self.klimb_dungeon_arena_departure(
                 actor_slot,
@@ -380,6 +368,54 @@ impl PlayState {
         };
         self.apply_combat_round_loop_exit(exit);
         MoveOutcome::Moved
+    }
+
+    /// `dungeon-mode.md §14.1`: in a dungeon arena, whether the arena is a
+    /// dungeon-room encounter, and whether `actor` stands on the ambush
+    /// centre the painter built on a two-way-ladder dungeon cell (the
+    /// two-way flag it raises). `None` outside a dungeon arena.
+    fn combat_dungeon_arena_klimb_context(
+        &self,
+        actor: &CombatActorDescriptor,
+    ) -> Option<(bool, bool)> {
+        self.combat_frame_snapshot
+            .as_ref()
+            .filter(|snapshot| matches!(snapshot.area, Area::Dungeon { .. }))
+            .map(|snapshot| {
+                (
+                    snapshot.encounter_mode_high_bit,
+                    self.tile_restoration_pending
+                        && !snapshot.encounter_mode_high_bit
+                        && (actor.x, actor.y) == (5, 5),
+                )
+            })
+    }
+
+    /// `combat.md §8` (u5-spec#298 Q1): "K prints `Klimb-` and resolves its
+    /// current-cell ladder cases first. Up/Down ladder results are `Up!\n` /
+    /// `Down!\n`; a dual ladder adds `U/D-` before its choice", and "the
+    /// dual-ladder `U/D-` form appears only on the ambush arena's centre cell
+    /// when the dungeon cell was a two-way ladder". Only a cell that is not
+    /// one of these cases reaches "the ordinary adjacent-climb branch", which
+    /// waits for the cardinal input.
+    ///
+    /// Scoped to dungeon arenas: the per-cell codes are what Q1 settles
+    /// (`dungeon-mode.md §14.1`); the town and overworld arenas keep the
+    /// adjacent-climb prompt.
+    pub fn combat_klimb_current_cell(&self, actor_slot: usize) -> Option<CombatKlimbCurrentCell> {
+        let actor = self.live_combat_party_actor(actor_slot)?;
+        let (room_encounter, two_way_centre) = self.combat_dungeon_arena_klimb_context(&actor)?;
+        let tile = *self
+            .combat_terrain
+            .get(actor.y as usize)?
+            .get(actor.x as usize)?;
+        match tile {
+            TOWN_KLIMB_ASCEND_TILE if two_way_centre => Some(CombatKlimbCurrentCell::Both),
+            TOWN_KLIMB_ASCEND_TILE => Some(CombatKlimbCurrentCell::Up),
+            TOWN_KLIMB_DESCEND_TILE => Some(CombatKlimbCurrentCell::Down),
+            TOWN_KLIMB_DESCEND_GRATE_TILE if room_encounter => Some(CombatKlimbCurrentCell::Down),
+            _ => None,
+        }
     }
 
     /// `combat.md §8` K row and `dungeon-mode.md §14.1` (u5-spec#298 Q1): in
@@ -423,7 +459,12 @@ impl PlayState {
             .combat_frame_snapshot
             .as_ref()
             .and_then(|snapshot| snapshot.established_exit_direction_code);
-        if !self.complete_open_direction_echo(DUNGEON_KLIMB_PROMPT_ONE, word.trim_end()) {
+        // The word completes whichever form K left open: `Klimb-` on a
+        // single ladder, `Klimb-U/D-` on the two-way ambush centre.
+        if !(two_way_centre
+            && self.complete_open_direction_echo(DUNGEON_KLIMB_PROMPT_BOTH, word.trim_end()))
+            && !self.complete_open_direction_echo(DUNGEON_KLIMB_PROMPT_ONE, word.trim_end())
+        {
             self.emit_message_line(word);
         }
         self.message.clear();
@@ -6751,6 +6792,21 @@ pub const fn shadowlord_stonegate_npc_slot(index: usize) -> Option<usize> {
         SHADOWLORD_COWARDICE_INDEX => Some(SHADOWLORD_COWARDICE_STONEGATE_NPC_SLOT),
         _ => None,
     }
+}
+
+/// `combat.md §8` (u5-spec#298 Q1): what a dungeon-arena K resolves on the
+/// acting member's own cell before any key is read. See
+/// [`PlayState::combat_klimb_current_cell`].
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum CombatKlimbCurrentCell {
+    /// An up ladder: `Up!` at once.
+    Up,
+    /// A down ladder, or a metal grate in a dungeon-room encounter: `Down!`
+    /// at once.
+    Down,
+    /// The ambush centre built on a two-way ladder: `U/D-`, then a wait for
+    /// up or down.
+    Both,
 }
 
 fn combat_klimb_tile_accepts_vertical(tile: u8, intent: ClimbIntent) -> bool {

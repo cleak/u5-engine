@@ -111,6 +111,10 @@ pub fn split_rendered_at_holds(
 pub struct HeldPage {
     pub hold: TextHoldKind,
     pub text: TlkRenderedText,
+    /// Sounds the producer plays after this page's hold ends and before its
+    /// text prints - a presentation whose blocking envelopes sit between two
+    /// key waits (`rest-and-camp.md §7.1`).
+    pub release_sounds: Vec<crate::audio::SoundEffect>,
 }
 
 /// A message whose remaining pages are waiting behind holds.

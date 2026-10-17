@@ -90,6 +90,7 @@ pub mod play_state_impl;
 pub mod play_state_struct;
 pub use play_state_impl::ExplorationTurnGateOutcome;
 pub use play_state_impl::TownRestBurstOutcome;
+pub use play_state_impl::CombatKlimbCurrentCell;
 pub mod predicates;
 pub mod prng;
 pub mod pth;

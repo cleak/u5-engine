@@ -2699,6 +2699,13 @@ impl PlayState {
         {
             return Some(DUNGEON_KLIMB_PROMPT_BOTH.to_string());
         }
+        // `combat.md §8` (u5-spec#298 Q1): in combat the `U/D-` form appears
+        // only on the ambush arena's two-way-ladder centre.
+        if let DirectionPromptKind::CombatKlimb { actor_slot } = kind
+            && self.combat_klimb_current_cell(actor_slot) == Some(CombatKlimbCurrentCell::Both)
+        {
+            return Some(DUNGEON_KLIMB_PROMPT_BOTH.to_string());
+        }
         Self::direction_prompt_open_verb_echo(kind)
     }
 
@@ -2787,6 +2794,12 @@ impl PlayState {
                     DUNGEON_KLIMB_PROMPT_BOTH.to_string()
                 }
                 DirectionPromptKind::Klimb => "Klimb-".to_string(),
+                DirectionPromptKind::CombatKlimb { actor_slot }
+                    if self.combat_klimb_current_cell(actor_slot)
+                        == Some(CombatKlimbCurrentCell::Both) =>
+                {
+                    DUNGEON_KLIMB_PROMPT_BOTH.to_string()
+                }
                 DirectionPromptKind::CombatKlimb { .. } => "Klimb-".to_string(),
                 DirectionPromptKind::CombatPush { .. } => "Push-".to_string(),
                 DirectionPromptKind::CombatSjog { branch, .. } => {
@@ -3070,6 +3083,31 @@ impl PlayState {
                         .map(Some);
                 }
                 continue;
+            }
+            if let DirectionPromptKind::CombatKlimb { actor_slot } = session.kind
+                && self.combat_klimb_current_cell(actor_slot) == Some(CombatKlimbCurrentCell::Both)
+            {
+                // `combat.md §8` / `dungeon-mode.md §14.1` (u5-spec#298 Q1):
+                // the two-way centre "raises `U/D-` and waits for up or
+                // down, down counting as the `0xC9` case". The keys are the
+                // exploration prompt's (`dungeon-mode.md §8.1`): the up key or
+                // the up-direction key, the down key or the down-direction
+                // key; any other key is re-read.
+                let intent = match ch {
+                    '<' => Some(ClimbIntent::Up),
+                    '>' => Some(ClimbIntent::Down),
+                    _ => match Direction::from_play_key(ch) {
+                        Some(Direction::North) => Some(ClimbIntent::Up),
+                        Some(Direction::South) => Some(ClimbIntent::Down),
+                        _ => None,
+                    },
+                };
+                match intent {
+                    Some(intent) => {
+                        return Ok(Some(self.klimb_combat_actor_vertical(actor_slot, intent)));
+                    }
+                    None => continue,
+                }
             }
             if let DirectionPromptKind::CombatKlimb { actor_slot } = session.kind {
                 match ch {
