@@ -1909,7 +1909,9 @@ fn a_attack_ordinary_town_npc_enters_the_arena_then_records_removal_on_exit() {
         PlayInputDisposition::Continue
     );
 
-    assert_eq!(state.turn, 1);
+    // `town-mode.md §7` step 4 (issue #298 Q40): nothing of the turn is
+    // spent before the arena; it is paid once after the fight.
+    assert_eq!(state.turn, 0);
     assert!(state.combat_active);
     assert_eq!(state.message, combat_banner_line());
     // "ordinary town ground resolves to the cobble arena" - selector
@@ -1992,7 +1994,9 @@ fn a_attack_guard_like_town_npc_raises_alarm_and_opens_an_eight_monster_arena() 
         PlayInputDisposition::Continue
     );
 
-    assert_eq!(state.turn, 1);
+    // `town-mode.md §7` step 4 (issue #298 Q40): nothing of the turn is
+    // spent before the arena; it is paid once after the fight.
+    assert_eq!(state.turn, 0);
     assert!(state.combat_active);
     assert_eq!(state.message, combat_banner_line());
     assert_eq!(&state.npcs[0].schedule[..3], &[7, 7, 7]);
@@ -2804,10 +2808,6 @@ fn town_attack_arena_runs_no_town_walkers_until_the_fight_ends() {
 
     handle_play_key_input(&mut state, 'A', "6", &dir).unwrap();
     assert!(state.combat_active);
-    assert!(
-        state.pending_town_npc_schedule_pass,
-        "the attack turn's town tail is owed when the arena opens"
-    );
     let arena_table = state.active_objects.clone();
     let guard_before = (state.npcs[1].x, state.npcs[1].y);
 
@@ -2823,7 +2823,6 @@ fn town_attack_arena_runs_no_town_walkers_until_the_fight_ends() {
         "no town walker touched the arena's actor table"
     );
     assert_eq!((state.npcs[1].x, state.npcs[1].y), guard_before);
-    assert!(state.pending_town_npc_schedule_pass);
 
     // The tail runs once the frame is restored, after the conflict chain.
     state.apply_combat_round_loop_exit(CombatRoundLoopExit::Victory);
@@ -2831,6 +2830,99 @@ fn town_attack_arena_runs_no_town_walkers_until_the_fight_ends() {
     state.drain_town_tail_after_combat();
     assert!(!state.pending_town_npc_schedule_pass);
     assert!(!state.pending_town_active_object_pass);
+    let _ = fs::remove_dir_all(dir);
+}
+
+/// The fixture of [`town_attack_arena_runs_no_town_walkers_until_the_fight_ends`]:
+/// a cobble arena and a merchant east of the party.
+fn town_attack_arena_fixture() -> (std::path::PathBuf, PlayState) {
+    let dir = debug_game_dir();
+    let mut record = synthetic_combat_arena_record();
+    for row in 0..COMBAT_ARENA_SIDE {
+        let row_start = row * COMBAT_ARENA_ROW_STRIDE;
+        record[row_start..row_start + COMBAT_ARENA_SIDE].fill(0x44);
+    }
+    let party_positions = [(5u8, 7u8), (6, 8), (4, 8), (5, 9), (7, 9), (3, 9)];
+    for (slot, (x, y)) in party_positions.into_iter().enumerate() {
+        record[3 * COMBAT_ARENA_ROW_STRIDE + 11 + slot] = x;
+        record[3 * COMBAT_ARENA_ROW_STRIDE + 17 + slot] = y;
+    }
+    for slot in 0..16 {
+        record[6 * COMBAT_ARENA_ROW_STRIDE + 11 + slot] = 1 + (slot % 4) as u8 * 2;
+        record[7 * COMBAT_ARENA_ROW_STRIDE + 11 + slot] = 1 + (slot / 4) as u8 * 2;
+    }
+    fs::write(dir.join(BRIT_CBT_FILE), record.repeat(BRIT_CBT_RECORDS)).unwrap();
+    let mut state = test_state(open_grid(), 1, 1);
+    let slots = [
+        NpcSlot {
+            slot: 0,
+            type_byte: 0,
+            dialog_id: 0,
+            schedule: [0; 16],
+            name: None,
+        },
+        NpcSlot {
+            slot: 1,
+            type_byte: 0x54,
+            dialog_id: 2,
+            schedule: [0, 0, 0, 2, 2, 2, 1, 1, 1, 0, 0, 0, 0, 0, 0, 0],
+            name: None,
+        },
+    ];
+    state.load_scheduled_npcs(&slots);
+    (dir, state)
+}
+
+#[test]
+fn town_attack_spends_its_turn_once_after_the_arena_not_before() {
+    // `town-mode.md §7` step 4 (issue #298 Q40): "Nothing of the turn is
+    // spent before the arena, and the fight does not consume it" - the
+    // epilogue runs once, after the fight: one indoor minute, the underfoot
+    // and status pass, both walkers and the schedule pass.
+    let (dir, mut state) = town_attack_arena_fixture();
+    let (turn_before, clock_before) = (state.turn, state.clock);
+    handle_play_key_input(&mut state, 'A', "6", &dir).unwrap();
+    assert!(state.combat_active);
+    assert_eq!(state.turn, turn_before, "no turn is spent before the arena");
+    assert_eq!(state.clock, clock_before, "no minute is spent before the arena");
+    assert!(state.pending_town_conflict.is_some_and(|pending| pending.owes_turn_epilogue));
+
+    state.apply_combat_round_loop_exit(CombatRoundLoopExit::Victory);
+    assert!(!state.combat_active);
+    let (turn_after_fight, clock_after_fight) = (state.turn, state.clock);
+    state.run_town_attack_epilogue_after_combat(&dir).unwrap();
+    assert_eq!(state.turn, turn_after_fight + 1, "the epilogue runs once");
+    let mut expected = clock_after_fight;
+    expected.advance_minutes(MINUTES_PER_INDOOR_TURN);
+    assert_eq!(state.clock, expected, "one indoor minute after the fight");
+    assert!(!state.pending_town_npc_schedule_pass);
+    assert!(!state.pending_town_status_provision_pass);
+    let _ = fs::remove_dir_all(dir);
+}
+
+#[test]
+fn a_town_fight_that_wipes_the_party_skips_the_whole_epilogue() {
+    // `town-mode.md §7` step 4, the capability recheck: "If nobody can act and
+    // nobody is asleep, the **whole** epilogue is skipped: no minute ... The
+    // next iteration's opening check then enters the total-party-defeat
+    // rescue". An all-asleep result skips nothing.
+    let (dir, mut state) = town_attack_arena_fixture();
+    handle_play_key_input(&mut state, 'A', "6", &dir).unwrap();
+    state.apply_combat_round_loop_exit(CombatRoundLoopExit::Victory);
+    for member in &mut state.party {
+        member.status = b'D';
+        member.hp = 0;
+    }
+    let (turn, clock) = (state.turn, state.clock);
+    state.run_town_attack_epilogue_after_combat(&dir).unwrap();
+    assert_eq!((state.turn, state.clock), (turn, clock));
+
+    for member in &mut state.party {
+        member.status = b'S';
+        member.hp = 10;
+    }
+    state.run_town_attack_epilogue_after_combat(&dir).unwrap();
+    assert_eq!(state.turn, turn + 1, "an all-asleep party still pays the epilogue");
     let _ = fs::remove_dir_all(dir);
 }
 

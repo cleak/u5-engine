@@ -336,6 +336,11 @@ pub struct PendingTownConflict {
     /// restore. The map reload and the Shadowlord re-install still owe a
     /// game directory, so they are drained at the input boundary.
     pub awaiting_floor_reload: bool,
+    /// `town-mode.md §7` step 4 (issue #298 Q40): the conflict was entered
+    /// from an A-Attack, whose command spends nothing of its turn before the
+    /// arena, so the turn's whole epilogue is owed once the fight is over.
+    /// A conflict raised by post-action cleanup owes nothing.
+    pub owes_turn_epilogue: bool,
 }
 
 /// `town-mode.md §5`: returns `true` when town entry hit the

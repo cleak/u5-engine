@@ -11033,6 +11033,15 @@ fn animate_static_tiles(
         return;
     }
 
+    // `endgame.md §4` (issue #298 Q43, `RETRACTIONS.md` R558/R559): the
+    // tableau sprites run on the ordinary per-slot animator "through every
+    // hold, key wait and the terminal loop", so they are ticked against the
+    // wall clock here, ahead of every branch that owns the loop below.
+    let endgame_animated = endgame_frame_should_show_tableau(&visual.state)
+        && visual
+            .state
+            .advance_endgame_tableau_animation_to(real_time.elapsed_secs_f64());
+
     if visual.sweep_idle_redraw_pending {
         visual.state.advance_visual_tick();
         visual.prompt_cursor_frame = visual.prompt_cursor_frame.wrapping_add(1);
@@ -11274,7 +11283,7 @@ fn animate_static_tiles(
             advanced = true;
         }
     }
-    if !advanced {
+    if !advanced && !endgame_animated {
         return;
     }
     let v: &mut VisualState = visual.as_mut();

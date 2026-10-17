@@ -232,15 +232,19 @@ pub struct EndgameState {
     /// `endgame.md §7`: display-owned state for the victory tableau's
     /// Orb hold, shared-moongate rise/hold/sink sequence, and actor exits.
     pub victory_tableau_phase: EndgameVictoryTableauPhase,
-    /// The measured hold between the absorption line and the tableau,
-    /// still owed. See [`ENDGAME_ABSORPTION_HOLD_BIOS_TICKS`].
+    /// `endgame.md §5.2`'s hold between the absorption line and the
+    /// tableau, still owed. See [`ENDGAME_ABSORPTION_HOLD_BIOS_TICKS`].
     pub entry_absorption_hold_owed: bool,
-    /// The measured hold between the last party member settling and Lord
-    /// British's greeting, still owed. See
+    /// `endgame.md §5.2`'s hold between the last party member settling and
+    /// Lord British's greeting, still owed. See
     /// [`ENDGAME_GREETING_HOLD_BIOS_TICKS`].
     pub entry_greeting_hold_owed: bool,
     /// `endgame.md §5.1`/`§6`: the waiting branch's display-driven beats.
     pub refusal_phase: EndgameRefusalPhase,
+    /// The BIOS tick the tableau sprite animator last ran on
+    /// ([`PlayState::advance_endgame_tableau_animation_to`]); `None` until
+    /// the first look anchors it.
+    pub tableau_animation_tick: Option<u64>,
 }
 
 /// `endgame.md §5.1` and `§6`: the waiting branch, beat by beat. The
@@ -264,8 +268,14 @@ pub enum EndgameRefusalPhase {
     RecordOwed,
     /// `§6` step 1: slot 0's Y decrement and its sting beat.
     NudgeOwed,
-    /// `§6` step 2: the three scripted walks, one round per frame.
-    Walking,
+    /// `§6` step 2: the three scripted walks. Each round is "one call per
+    /// actor in exactly that order (slot 2, slot 31, slot 0), and every
+    /// actual one-cell step carries its own two-iteration, sting,
+    /// three-iteration beat", so one display frame runs calls until one
+    /// actor has actually stepped: `next_call` indexes
+    /// [`ENDGAME_TABLEAU_REFUSAL_WALK_ORDER`] and `moved_this_round`
+    /// remembers whether the round has stepped anyone yet.
+    Walking { next_call: u8, moved_this_round: bool },
     /// `§6` step 3: the terminal jitter loop.
     Jitter,
 }
@@ -363,6 +373,15 @@ const ENDGAME_TABLEAU_LORD_BRITISH_POS: (usize, usize) = (5, 4);
 const ENDGAME_TABLEAU_LORD_BRITISH_START: (usize, usize) = (5, 8);
 const ENDGAME_TABLEAU_REFUSAL_SLOT0_TARGET: (usize, usize) = (8, 4);
 const ENDGAME_TABLEAU_REFUSAL_SLOT2_TARGET: (usize, usize) = (8, 6);
+
+/// `endgame.md §6` step 2 (issue #298 Q42): one walk round is one call per
+/// actor "in exactly that order (slot 2, slot 31, slot 0)", each with its
+/// target.
+const ENDGAME_TABLEAU_REFUSAL_WALK_ORDER: [(usize, (usize, usize)); 3] = [
+    (2, ENDGAME_TABLEAU_REFUSAL_SLOT2_TARGET),
+    (ENDGAME_TABLEAU_LORD_BRITISH_SLOT, ENDGAME_TABLEAU_REFUSAL_LORD_BRITISH_TARGET),
+    (0, ENDGAME_TABLEAU_REFUSAL_SLOT0_TARGET),
+];
 const ENDGAME_TABLEAU_REFUSAL_LORD_BRITISH_TARGET: (usize, usize) = (4, 1);
 const ENDGAME_TABLEAU_VICTORY_EXIT_TARGET: (usize, usize) = (5, 4);
 const ENDGAME_TABLEAU_SETTLE_STEP_CAP: usize = ENDGAME_TABLEAU_WIDTH * ENDGAME_TABLEAU_HEIGHT * 2;
@@ -417,6 +436,7 @@ impl EndgameState {
             entry_absorption_hold_owed: false,
             entry_greeting_hold_owed: false,
             refusal_phase: EndgameRefusalPhase::Inactive,
+            tableau_animation_tick: None,
         }
     }
 
@@ -446,6 +466,7 @@ impl EndgameState {
             entry_absorption_hold_owed: false,
             entry_greeting_hold_owed: false,
             refusal_phase: EndgameRefusalPhase::Inactive,
+            tableau_animation_tick: None,
         }
     }
 
@@ -488,6 +509,7 @@ impl EndgameState {
             entry_absorption_hold_owed: false,
             entry_greeting_hold_owed: false,
             refusal_phase: EndgameRefusalPhase::Inactive,
+            tableau_animation_tick: None,
         }
     }
 
@@ -1278,34 +1300,48 @@ pub const ENDGAME_TABLEAU_STING_HOLD_BIOS_TICKS: u16 =
 
 /// `audio.md §8.7`: "plus ... the fixed 40-tick pause after Lord British
 /// appears" - paid once, with him on stage at his starting cell and before
-/// his first step (measured; see `advance_endgame_entry_tableau_step`).
+/// his first step. `endgame.md §5.2`/`§7` step 1 (issue #298 Q41): "Let the
+/// display settle" is "forty paced iterations, after the untimed entry
+/// work", the first of which draws the tableau.
 pub const ENDGAME_TABLEAU_LORD_BRITISH_ARRIVAL_HOLD_BIOS_TICKS: u16 = 40;
 
 /// `audio.md §8.7`: "Each member also has a separate one-tick placement
 /// pause before walking."
 pub const ENDGAME_TABLEAU_PLACEMENT_HOLD_BIOS_TICKS: u16 = 1;
 
-/// The hold between the absorption line and the tableau. **Measured, not
-/// published.** Over every `doom-endgame-audio` capture from 2026-09-06 to
-/// 2026-10-16 (forty runs, one-member party) the original's action snap
-/// precedes Lord British's first movement sting by 4.08 s, within 10 ms,
-/// where this engine - paying `§8.7`'s forty-tick arrival pause and the
-/// step's two leading ticks - took 2.27 s. The timelapses of
-/// `doom-final-room` place the difference before the tableau appears: the
-/// stock arena stays on screen, the Avatar already gone, for three to four
-/// frames after `Avatar is absorbed!` prints. 1.81 s is thirty-three BIOS
-/// ticks. Spec question: `endgame.md §3` lists the bitmap loads at this
-/// point but gives them no duration.
+/// The hold between the absorption line and the tableau: the stand-in for
+/// `endgame.md §5.2`'s untimed entry block.
+///
+/// Published (`endgame.md §5.2`, issue #298 Q41): after the absorption snap
+/// comes "untimed, CPU-bound work" - the absorbed actor's removal and a bare
+/// world tick that draws the room without it, the combat exit, the overlay
+/// load, the whole-tileset colour remap that dominates it, the file reads
+/// and Lord British's placement - with "no tick wait or key poll", and only
+/// then "**forty paced iterations**; the first of them is what first draws
+/// the tableau", then the first step's two pre-sting iterations. "A frontend
+/// that stands a fixed hold in for the untimed block should treat it as a
+/// host-dependent cost: at the 3000-cycle setting it is about 1.8 s, roughly
+/// thirty-three BIOS ticks, and the forty-two paced iterations follow it."
+/// The whole snap-to-first-sting interval measured 4.08 s there. So this is
+/// thirty-three ticks, with the arena still on screen
+/// ([`PlayState::endgame_absorption_arena`]); the forty iterations are
+/// [`ENDGAME_TABLEAU_LORD_BRITISH_ARRIVAL_HOLD_BIOS_TICKS`] and the two are
+/// [`ENDGAME_TABLEAU_STING_LEADING_TICKS`]. (Previously a measured value:
+/// over forty `doom-endgame-audio` captures the original's snap preceded the
+/// first sting by 4.08 s where this engine took 2.27 s.)
 pub const ENDGAME_ABSORPTION_HOLD_BIOS_TICKS: u16 = 33;
 
 /// The hold between the last party member settling and Lord British's
-/// greeting. **Measured, not published.** `endgame.md §5.1` prints the
-/// greeting straight after the tableau walk, and this engine did; the
-/// `doom-final-room`, `-refusal` and `-waiting` timelapses (2026-10-14 and
-/// 2026-10-16) show the original's leader standing settled for 1.9 to 2.4 s
-/// before `Lord British says:` prints, which is the forty-tick pause the
-/// sequence uses elsewhere (`§5.1`'s waiting and rite pauses). Spec question
-/// recorded with the scenario.
+/// greeting.
+///
+/// Published (`endgame.md §5.2`, issue #298 Q41): "The last party member's
+/// final step ends with its own tail of **three paced iterations** ... Then
+/// come **forty paced iterations**, and the greeting prints" - forty-three
+/// after the last sting, measured 2.38 s and 2.39 s at a fixed 3000-cycle
+/// emulator setting. The three are that step's
+/// [`ENDGAME_TABLEAU_STING_TRAILING_TICKS`]; this is the forty. (Previously
+/// a measured value read off the `doom-final-room` timelapses; the reported
+/// 1.9 s lower bound did not reproduce.)
 pub const ENDGAME_GREETING_HOLD_BIOS_TICKS: u16 = 40;
 
 /// The actor byte the scene compositor actually stamps for one tableau
@@ -1387,7 +1423,7 @@ pub fn endgame_tableau_role_for_slot(
         return None;
     }
     if slot < SAVE_PARTY_SIZE_MAX as usize
-        && object.type_byte == object.tile
+        && endgame_tableau_sprite_frame_of(object)
         && endgame_tableau_party_tile(object.type_byte)
     {
         Some(EndgameTableauActorRole::PartyMember(slot as u8))
@@ -1401,12 +1437,72 @@ pub fn endgame_tableau_role_for_slot(
         Some(EndgameTableauActorRole::SandalwoodBox)
     } else if slot == ENDGAME_TABLEAU_LORD_BRITISH_SLOT
         && object.type_byte == ENDGAME_TABLEAU_LORD_BRITISH_ACTOR_BYTE
-        && object.tile == ENDGAME_TABLEAU_LORD_BRITISH_ACTOR_BYTE
+        && endgame_tableau_sprite_frame_of(object)
     {
         Some(EndgameTableauActorRole::LordBritish)
     } else {
         None
     }
+}
+
+/// Whether `object`'s displayed frame is one of the four frames of its own
+/// class: the class byte itself (frame 1) or one of the three after it.
+///
+/// `endgame.md §4` (issue #298 Q43, `RETRACTIONS.md` R559): the tableau's
+/// party sprites and Lord British are ordinary animated active objects, so
+/// their frame byte cycles through the class's four-frame run while the slot
+/// keeps its class byte - Lord British through tiles 380 to 383.
+pub const fn endgame_tableau_sprite_frame_of(object: ActiveObject) -> bool {
+    object.tile & !0x03 == object.type_byte
+}
+
+/// The snap step's pause, `active-objects.md §8`: "for every class but `0x5C`
+/// the delay is set to six and the position is held".
+pub const ENDGAME_TABLEAU_SNAP_HOLD_TICKS: u8 = 6;
+
+/// The most world ticks one look at the clock catches up
+/// ([`PlayState::advance_endgame_tableau_animation_to`]), so a host stall
+/// does not replay as a burst of frames.
+pub const ENDGAME_TABLEAU_ANIMATION_CATCH_UP_TICKS: u64 = 8;
+
+/// One decision point of `active-objects.md §8` **script A** (f2, f3, f4,
+/// snap, restart) for an endgame tableau sprite, after the eligibility coin
+/// has been accepted. The script position lives in the phase byte's high
+/// nibble; `snap_accepted` is the snap step's one draw, "accepted one time in
+/// four", and is consulted only at that step.
+///
+/// "values one to four select that frame of the class's four-frame run and
+/// advance the position"; on an accepted snap "the displayed frame is set to
+/// the slot's own type byte; ... the delay is set to six and the position is
+/// held, so the pass ends and the snap step is retried after the pause.
+/// Otherwise the position advances and the pass continues with the next
+/// step", and restart "go[es] to step 0 and continue[s]".
+pub fn endgame_tableau_script_a_decision(
+    object: &mut ActiveObject,
+    mut snap_accepted: impl FnMut() -> bool,
+) {
+    const SNAP_STEP: u8 = 3;
+    let base = object.type_byte;
+    let mut position = object.phase >> 4;
+    loop {
+        match position {
+            0..=2 => {
+                object.tile = base + position + 1;
+                position += 1;
+                break;
+            }
+            SNAP_STEP => {
+                if snap_accepted() {
+                    object.tile = base;
+                    object.phase = (SNAP_STEP << 4) | ENDGAME_TABLEAU_SNAP_HOLD_TICKS;
+                    return;
+                }
+                position += 1;
+            }
+            _ => position = 0,
+        }
+    }
+    object.phase = position << 4;
 }
 
 pub fn endgame_tableau_object_from_placement(
@@ -1774,8 +1870,8 @@ impl PlayState {
                 if let Some(endgame) = self.endgame.as_mut()
                     && endgame.entry_party_slot == ENDGAME_ENTRY_COMPLETE_SLOT
                 {
-                    // The greeting waits out the measured settle hold first
-                    // ([`ENDGAME_GREETING_HOLD_BIOS_TICKS`]).
+                    // The greeting waits out `§5.2`'s forty paced
+                    // iterations first ([`ENDGAME_GREETING_HOLD_BIOS_TICKS`]).
                     endgame.entry_party_slot = ENDGAME_ENTRY_GREETING_SLOT;
                     endgame.entry_greeting_hold_owed = true;
                 }
@@ -1885,6 +1981,89 @@ impl PlayState {
             }
         }
         frames
+    }
+
+    /// `endgame.md §4` (issue #298 Q43, `RETRACTIONS.md` R559): one world
+    /// tick of the shared per-slot animator over the tableau sprites.
+    ///
+    /// "The shared per-slot animator of `systems/active-objects.md` Section 8
+    /// runs inside every world tick of the endgame ... and the endgame does
+    /// not suspend it. Lord British (`0x7C`) and the four party sprites ...
+    /// all select script A". The box (`0x0E`) and the Orb (`0x08`) "lie below
+    /// the animator's class floor and stay static", so only the party and
+    /// Lord British roles are walked, slot zero to slot thirty-one.
+    ///
+    /// Each slot takes `active-objects.md §8`'s per-tick rule: a non-zero
+    /// delay nibble is decremented and nothing else; at a decision point the
+    /// coin ("an inclusive `0..255` draw accepted at 128 or above") gates one
+    /// step of [`endgame_tableau_script_a_decision`]. Returns whether any
+    /// displayed frame changed.
+    pub fn animate_endgame_tableau_sprites(&mut self) -> bool {
+        let mut changed = false;
+        for slot in 0..self.active_objects.len() {
+            let mut object = self.active_objects[slot];
+            if !matches!(
+                endgame_tableau_role_for_slot(slot, object),
+                Some(EndgameTableauActorRole::PartyMember(_) | EndgameTableauActorRole::LordBritish)
+            ) {
+                continue;
+            }
+            match object.tick_phase() {
+                PhaseTick::Steady => continue,
+                PhaseTick::Countdown => {
+                    self.active_objects[slot] = object;
+                    continue;
+                }
+                PhaseTick::DecisionPoint => {}
+            }
+            if self.random_range_u8(0, 255) < 128 {
+                continue;
+            }
+            let before = object.tile;
+            endgame_tableau_script_a_decision(&mut object, || {
+                self.random_range_u8(0, 255) % 4 == 0
+            });
+            changed |= object.tile != before;
+            self.active_objects[slot] = object;
+        }
+        if changed {
+            self.mark_visibility_dirty();
+        }
+        changed
+    }
+
+    /// Run [`Self::animate_endgame_tableau_sprites`] once for every BIOS tick
+    /// that has passed since the last call, so the tableau keeps animating
+    /// "through every hold, key wait and the terminal loop"
+    /// (`endgame.md §4`) whatever the frontend is waiting on.
+    ///
+    /// `endgame.md §5` (`RETRACTIONS.md` R558): while the greeting's any-key
+    /// read and both yes/no reads wait, "world-animation ticks **do** run",
+    /// while gameplay turns, NPC schedules and time advancement do not - so
+    /// this touches the tableau sprites and nothing else. The paced
+    /// iterations of `§5.2` are one world tick per BIOS tick above the
+    /// slow-CPU gate, which is the rate taken here. Nothing runs while the
+    /// absorption hold still shows the arena: `§5.2`'s forty paced
+    /// iterations, the first of which draws the tableau, follow it.
+    pub fn advance_endgame_tableau_animation_to(&mut self, now_secs: f64) -> bool {
+        if self.endgame_absorption_arena.is_some() {
+            return false;
+        }
+        let tick = (now_secs.max(0.0) / crate::narration::BIOS_TICK_SECS) as u64;
+        let Some(endgame) = self.endgame.as_mut() else {
+            return false;
+        };
+        let Some(last) = endgame.tableau_animation_tick.replace(tick) else {
+            return false;
+        };
+        let due = tick
+            .saturating_sub(last)
+            .min(ENDGAME_TABLEAU_ANIMATION_CATCH_UP_TICKS);
+        let mut changed = false;
+        for _ in 0..due {
+            changed |= self.animate_endgame_tableau_sprites();
+        }
+        changed
     }
 
     /// The final-room frame the absorption hold keeps on screen, while it
@@ -2233,27 +2412,49 @@ impl PlayState {
                     object.y = object.y.saturating_sub(1);
                 }
                 self.run_endgame_tableau_sting_beat();
-                set_phase(self, EndgameRefusalPhase::Walking);
+                set_phase(
+                    self,
+                    EndgameRefusalPhase::Walking {
+                        next_call: 0,
+                        moved_this_round: false,
+                    },
+                );
                 true
             }
-            EndgameRefusalPhase::Walking => {
-                // `§6` step 2: one round of the three scripted walks per
-                // frame, each actual step carrying the movement beat.
-                let moved = self.step_endgame_tableau_slot_once_with_sting(
-                    2,
-                    ENDGAME_TABLEAU_REFUSAL_SLOT2_TARGET,
-                ) | self.step_endgame_tableau_slot_once_with_sting(
-                    ENDGAME_TABLEAU_LORD_BRITISH_SLOT,
-                    ENDGAME_TABLEAU_REFUSAL_LORD_BRITISH_TARGET,
-                ) | self.step_endgame_tableau_slot_once_with_sting(
-                    0,
-                    ENDGAME_TABLEAU_REFUSAL_SLOT0_TARGET,
-                );
-                if !moved {
-                    set_phase(self, EndgameRefusalPhase::Jitter);
-                    return false;
+            EndgameRefusalPhase::Walking {
+                mut next_call,
+                mut moved_this_round,
+            } => {
+                // `§6` step 2 (issue #298 Q42): "Each round is one call per
+                // actor in exactly that order (slot 2, slot 31, slot 0), and
+                // every actual one-cell step carries its own two-iteration,
+                // sting, three-iteration beat; an actor already arrived, or
+                // an empty slot, adds nothing." So a frame makes calls until
+                // one actor actually steps - its beat's hold then separates
+                // it from the next actor's step - and a round in which nobody
+                // stepped ends the walk.
+                loop {
+                    if usize::from(next_call) >= ENDGAME_TABLEAU_REFUSAL_WALK_ORDER.len() {
+                        if !moved_this_round {
+                            set_phase(self, EndgameRefusalPhase::Jitter);
+                            return false;
+                        }
+                        next_call = 0;
+                        moved_this_round = false;
+                    }
+                    let (slot, target) = ENDGAME_TABLEAU_REFUSAL_WALK_ORDER[usize::from(next_call)];
+                    next_call += 1;
+                    if self.step_endgame_tableau_slot_once_with_sting(slot, target) {
+                        set_phase(
+                            self,
+                            EndgameRefusalPhase::Walking {
+                                next_call,
+                                moved_this_round: true,
+                            },
+                        );
+                        return true;
+                    }
                 }
-                true
             }
         }
     }
@@ -2545,7 +2746,19 @@ impl PlayState {
             })
     }
 
+    /// `endgame.md §6` step 3: one round of the terminal loop - one wander
+    /// call for each of slots 1, 3, 4 and 5.
+    ///
+    /// `§6` (issue #298 Q42): each call's display-tick advance "is exactly
+    /// **one paced iteration** - a world tick plus a one-tick wait request -
+    /// and it is paid by every call, for an empty slot and on a refused coin
+    /// alike, so a terminal round of four calls always costs four paced
+    /// iterations whatever the party size". The round therefore holds for
+    /// four BIOS ticks, chained so consecutive rounds run at that rate; an
+    /// empty slot still takes no coin draw.
     pub fn advance_endgame_terminal_tableau_jitter(&mut self) -> bool {
+        self.staged_narration
+            .push_ticks_chained(ENDGAME_TABLEAU_JITTER_SLOTS.len() as u16);
         let party_slots = self.party.len().min(SAVE_PARTY_SIZE_MAX as usize);
         let eligible = ENDGAME_TABLEAU_JITTER_SLOTS
             .iter()

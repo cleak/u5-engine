@@ -458,3 +458,21 @@ fn blackthorn_rescue_splits_the_cell_reveal_hold_around_the_thunder() {
     assert_eq!(3 * crate::blackthorn::BLACKTHORN_RESCUE_WAIT_CELL_REVEAL, crate::blackthorn::BLACKTHORN_RESCUE_WAIT_CELL_REVEALS);
     let _ = fs::remove_dir_all(dir);
 }
+
+/// `blackthorn.md §6.2`/`§7.1` (issue #298 Q44): at a fixed 3000-cycle emulator
+/// setting slumber to shout measured 11.65 s and the three reveals 0.90 s,
+/// 0.935 s and 0.935 s. The holds are those published spans, each within one
+/// BIOS tick, and the paired flash lies inside the published 1.67 to 1.72 s.
+#[test]
+fn blackthorn_rescue_holds_take_the_published_emulator_spans() {
+    let tick = crate::narration::BIOS_TICK_SECS;
+    let reveal = crate::narration::bios_ticks_secs(crate::blackthorn::BLACKTHORN_RESCUE_WAIT_CELL_REVEAL);
+    for published in [0.90, 0.935] {
+        assert!((reveal - published).abs() < tick, "reveal hold {reveal} s against {published} s");
+    }
+    let slumber_to_shout =
+        crate::narration::bios_ticks_secs(crate::blackthorn::BLACKTHORN_RESCUE_WAIT_ENVELOPE_SEQUENCE);
+    assert!((slumber_to_shout - 11.65).abs() < tick, "slumber-to-shout hold {slumber_to_shout} s");
+    let flashes = crate::narration::bios_ticks_secs(crate::blackthorn::BLACKTHORN_RESCUE_WAIT_PAIRED_FLASH);
+    assert!((1.67..=1.72).contains(&flashes), "paired flash hold {flashes} s");
+}

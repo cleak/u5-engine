@@ -279,9 +279,10 @@ fn endgame_waiting_branch_walks_the_tableau_after_record_ten() {
 
 #[test]
 fn endgame_absorption_and_greeting_holds_bracket_the_tableau_walk() {
-    // Measured holds (see the constants): the absorption is followed by a
-    // thirty-three-tick hold before Lord British's arrival pause, and the
-    // greeting by a forty-tick hold after the last member settles.
+    // `endgame.md §5.2`'s published holds (see the constants): the absorption
+    // is followed by the untimed block's thirty-three-tick stand-in before
+    // Lord British's forty paced iterations, and the greeting by forty paced
+    // iterations after the last member's three-iteration tail.
     let mut state = endgame_window_walked_in_state();
     assert!(state.advance_endgame_display_frame());
     assert!(state.staged_narration_active(), "absorption hold");
@@ -327,4 +328,155 @@ fn endgame_tableau_actors_on_the_bed_and_chair_draw_occupied() {
     leader.x = 8;
     leader.y = 4;
     assert_eq!(endgame_tableau_actor_drawn_byte(&grid, leader), Some(0x32));
+}
+
+#[test]
+fn endgame_tableau_script_a_steps_frames_then_snaps_or_restarts() {
+    // `active-objects.md §8` script A - f2, f3, f4, snap, restart - as the
+    // tableau sprites run it (`endgame.md §4`, issue #298 Q43).
+    let mut king = ActiveObject::empty();
+    king.type_byte = ENDGAME_TABLEAU_LORD_BRITISH_ACTOR_BYTE;
+    king.tile = ENDGAME_TABLEAU_LORD_BRITISH_ACTOR_BYTE;
+    let never = || -> bool { panic!("only the snap step draws") };
+    let mut frames = Vec::new();
+    for _ in 0..3 {
+        endgame_tableau_script_a_decision(&mut king, never);
+        frames.push(king.tile);
+    }
+    assert_eq!(frames, [0x7D, 0x7E, 0x7F], "tiles 381, 382, 383");
+    // A refused snap (three times in four) restarts at frame 2 in the same pass.
+    endgame_tableau_script_a_decision(&mut king, || false);
+    assert_eq!(king.tile, 0x7D);
+    assert_eq!(king.phase & 0x0f, 0);
+    endgame_tableau_script_a_decision(&mut king, never);
+    endgame_tableau_script_a_decision(&mut king, never);
+    // An accepted snap returns him to the seated 380 and holds six ticks,
+    // with the position kept on the snap step.
+    endgame_tableau_script_a_decision(&mut king, || true);
+    assert_eq!(king.tile, ENDGAME_TABLEAU_LORD_BRITISH_ACTOR_BYTE);
+    assert_eq!(king.phase & 0x0f, ENDGAME_TABLEAU_SNAP_HOLD_TICKS);
+    assert_eq!(
+        endgame_tableau_role_for_slot(ENDGAME_TABLEAU_LORD_BRITISH_SLOT, king),
+        Some(EndgameTableauActorRole::LordBritish)
+    );
+}
+
+#[test]
+fn endgame_lord_british_and_the_party_animate_while_the_box_stays_static() {
+    // `endgame.md §4` (issue #298 Q43, `RETRACTIONS.md` R559): the tableau
+    // sprites run on the ordinary per-slot animator through every hold and
+    // key wait; the box and the Orb lie below the animator's class floor.
+    let mut state = endgame_window_walked_in_state();
+    endgame_window_settle(&mut state);
+    assert!(state.endgame.as_ref().unwrap().greeting_page_pending);
+    if let Some(slot) = state.active_objects.get_mut(ENDGAME_TABLEAU_BOX_SLOT) {
+        *slot = endgame_tableau_object_from_placement(endgame_tableau_box_placement());
+    }
+    let mut king_tiles = std::collections::BTreeSet::new();
+    let mut leader_tiles = std::collections::BTreeSet::new();
+    for _ in 0..200 {
+        state.animate_endgame_tableau_sprites();
+        let king = state.active_objects[ENDGAME_TABLEAU_LORD_BRITISH_SLOT];
+        assert_eq!(
+            endgame_tableau_role_for_slot(ENDGAME_TABLEAU_LORD_BRITISH_SLOT, king),
+            Some(EndgameTableauActorRole::LordBritish)
+        );
+        king_tiles.insert(king.tile);
+        leader_tiles.insert(state.active_objects[0].tile);
+        assert_eq!(
+            state.active_objects[ENDGAME_TABLEAU_BOX_SLOT].tile,
+            ENDGAME_TABLEAU_BOX_ACTOR_BYTE
+        );
+    }
+    assert_eq!(king_tiles.into_iter().collect::<Vec<_>>(), [0x7C, 0x7D, 0x7E, 0x7F]);
+    assert!(leader_tiles.len() > 1, "the party sprite cycles too");
+}
+
+#[test]
+fn endgame_tableau_animation_runs_one_world_tick_per_bios_tick() {
+    // The wall-clock pump: the first look anchors, later looks run one
+    // animator tick per BIOS tick, and nothing runs while the absorption
+    // hold still shows the arena (`endgame.md §5.2`).
+    let mut state = endgame_window_walked_in_state();
+    endgame_window_settle(&mut state);
+    let tick = crate::narration::BIOS_TICK_SECS;
+    assert!(!state.advance_endgame_tableau_animation_to(10.0 * tick + tick / 2.0));
+    let prng_before = state.prng_state;
+    state.advance_endgame_tableau_animation_to(10.0 * tick + tick / 2.0);
+    assert_eq!(state.prng_state, prng_before, "no tick has passed");
+    state.advance_endgame_tableau_animation_to(12.0 * tick + tick / 2.0);
+    assert_ne!(state.prng_state, prng_before, "two ticks ran the animator");
+
+    let mut arena = endgame_window_walked_in_state();
+    arena.endgame_absorption_arena = Some(Box::new(arena.clone()));
+    assert!(!arena.advance_endgame_tableau_animation_to(0.0));
+    assert!(!arena.advance_endgame_tableau_animation_to(100.0));
+    assert!(arena.endgame.as_ref().unwrap().tableau_animation_tick.is_none());
+}
+
+#[test]
+fn endgame_terminal_jitter_round_costs_four_paced_iterations() {
+    // `endgame.md §6` (issue #298 Q42): "a terminal round of four calls always
+    // costs four paced iterations whatever the party size" - one world tick
+    // and a one-tick wait per call, empty slots included.
+    let dir = debug_game_dir();
+    let mut state = endgame_window_at_first_question(&dir);
+    handle_play_key_input(&mut state, 'y', "", &dir).unwrap();
+    state.finish_endgame_refusal_staging();
+    state.flush_staged_narration();
+    assert!(!state.staged_narration_active());
+    state.advance_endgame_terminal_tableau_jitter();
+    let holds: Vec<f64> = state.staged_narration.beats().map(|beat| beat.delay_secs).collect();
+    assert_eq!(holds.len(), 1);
+    assert!((holds[0] - crate::narration::bios_ticks_secs(4)).abs() < 1e-9);
+    let _ = fs::remove_dir_all(dir);
+}
+
+#[test]
+fn endgame_waiting_walk_steps_one_actor_per_beat_in_round_order() {
+    // `endgame.md §6` step 2 (issue #298 Q42): "Each round is one call per
+    // actor in exactly that order (slot 2, slot 31, slot 0), and every actual
+    // one-cell step carries its own two-iteration, sting, three-iteration
+    // beat". One walk frame therefore moves exactly one actor and leaves its
+    // beat's hold pending, so no two actors step at the same instant.
+    let dir = debug_game_dir();
+    let mut state = endgame_window_at_first_question(&dir);
+    handle_play_key_input(&mut state, 'y', "", &dir).unwrap();
+    assert!(state.advance_endgame_display_frame()); // pause
+    assert!(state.advance_endgame_display_frame()); // record 10
+    assert!(state.advance_endgame_display_frame()); // nudge
+    let walkers = [2usize, ENDGAME_TABLEAU_LORD_BRITISH_SLOT, 0];
+    let positions = |state: &PlayState| {
+        walkers.map(|slot| (state.active_objects[slot].x, state.active_objects[slot].y))
+    };
+    let mut movers = Vec::new();
+    loop {
+        state.flush_staged_narration();
+        let before = positions(&state);
+        if !state.advance_endgame_refusal_staging_frame() {
+            assert_eq!(positions(&state), before, "the closing round steps nobody");
+            break;
+        }
+        let after = positions(&state);
+        let moved: Vec<usize> = (0..walkers.len()).filter(|&i| before[i] != after[i]).collect();
+        assert_eq!(moved.len(), 1, "one actor per walk frame");
+        assert!(state.staged_narration_active(), "each step carries its beat");
+        movers.push(walkers[moved[0]]);
+    }
+    assert!(!movers.is_empty());
+    // Lord British's first step precedes the leader's first step, and any
+    // slot-2 step of the first round precedes both.
+    let first_king = movers.iter().position(|&slot| slot == ENDGAME_TABLEAU_LORD_BRITISH_SLOT);
+    let first_leader = movers.iter().position(|&slot| slot == 0);
+    if let (Some(king), Some(leader)) = (first_king, first_leader) {
+        assert!(king < leader);
+    }
+    if movers.contains(&2) {
+        assert_eq!(movers[0], 2);
+    }
+    assert_eq!(
+        state.endgame.as_ref().unwrap().refusal_phase,
+        EndgameRefusalPhase::Jitter
+    );
+    let _ = fs::remove_dir_all(dir);
 }
