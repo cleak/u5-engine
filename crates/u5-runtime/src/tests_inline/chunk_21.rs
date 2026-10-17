@@ -5966,12 +5966,12 @@ fn end_to_end_tavern_menu_lore_letter_reaches_paid_sage_lookup() {
     // Measured 2026-09-08 at The Cat's Lair (`qa/paired/paws-sage.tsv`): the
     // question is quoted and gendered, and a typed-input prompt follows it.
     // `shops.md` §8.C: the lore letter echoes onto the follow-up record's open
-    // row and the question follows two line feeds, so the rendered message
-    // opens with the one that leaves the blank row (measured 2026-09-10,
+    // row and the question follows two line feeds - the first closes the
+    // echo's row, the second is the blank row (measured 2026-09-10,
     // `paws-sage/lore`).
     assert_eq!(
         state.message,
-        "\n\"Of what wouldst thou hear my lore, sir?\"\n\nYou respond:"
+        "\n\n\"Of what wouldst thou hear my lore, sir?\"\n\nYou respond:"
     );
     assert!(matches!(
         state.active_shop,
@@ -6154,10 +6154,11 @@ fn end_to_end_tavern_renders_state_menu_quote_and_follow_up_records() {
     assert_eq!(state.message, "\"Asset tavern menu.\" ");
     handle_play_key_input(&mut state, 'R', "", &dir).unwrap();
     // `shops.md §8.C`, "Provision offer": "Opening quote, one uniform record
-    // from `77..83`, then `\n\nHow many wouldst\nthou like?" `".
+    // from `77..83`, then `\n\nHow many wouldst\nthou like?" `". The two
+    // leading feeds close the `R` echo's row and leave the blank under it.
     assert_eq!(
         state.message,
-        "\n\"Asset pack costs 16 gold.\n\nHow many wouldst\nthou like?\" "
+        "\n\n\"Asset pack costs 16 gold.\n\nHow many wouldst\nthou like?\" "
     );
     assert_eq!(state.prng_state, expected_prng_state);
     handle_play_key_input(&mut state, '1', "", &dir).unwrap();
@@ -7877,4 +7878,42 @@ fn inn_entry_space_echoes_no_onto_the_greeting_row() {
         .map(|entry| entry.text.as_str())
         .collect();
     assert!(rows.contains(&":No"), "{rows:?}");
+}
+
+/// `shops.md §8.C`: the bill follows "the action-letter echo and `\n\n`".
+/// The letter lands on the menu's open row (`thy travels?" A`), so the first
+/// feed closes that row and the second leaves the blank the original shows
+/// above `"That will be` (`paws-sage`, beat `ale`).
+#[test]
+fn tavern_menu_letter_echo_is_followed_by_a_blank_row() {
+    use crate::shop_runtime::TavernState;
+    use crate::shop_session::ActiveShopSession;
+
+    let mut state = test_state(open_grid(), 1, 1);
+    state.area = Area::Town {
+        scene: Scene::new(22).unwrap(),
+        floor: 0,
+    };
+    state.gold = 200;
+    state.active_shop = Some(ActiveShopSession::Tavern(TavernState::Menu {
+        tavern: Tavern::TheCatsLair,
+        continuation_ready: false,
+    }));
+    state.emit_message_line("\n\"What'll it be?\" ");
+    state.open_message_row();
+    let round = crate::shops::tavern_menu_letters(Tavern::TheCatsLair).round;
+    handle_play_key_input(&mut state, round, "", Path::new("")).unwrap();
+    state.flush_message_slot();
+
+    let rows: Vec<&str> = state
+        .message_transcript
+        .iter()
+        .map(|entry| entry.text.as_str())
+        .collect();
+    let echo = rows
+        .iter()
+        .position(|row| *row == format!("\"What'll it be?\" {round}"))
+        .unwrap_or_else(|| panic!("the letter echoes onto the menu row: {rows:?}"));
+    assert_eq!(rows[echo + 1], "", "{rows:?}");
+    assert!(rows[echo + 2].starts_with("\"That will be"), "{rows:?}");
 }

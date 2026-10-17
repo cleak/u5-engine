@@ -3883,8 +3883,14 @@ fn tavern_bill_prefix(price: u16, living_party: usize, speaker_is_female: bool) 
     // (`paws-sage/ale`): the original reads `thy travels?" A`, a blank row,
     // then `"That will be 1`; this engine ran the bill straight onto the row
     // below the echo. The lore branch already had this blank.
+    //
+    // Both of §8.C's feeds ("After the action-letter echo and `\n\n`"):
+    // the echo now lands on the menu's open row, so the first feed closes
+    // that row and the second is the blank. With one feed the bill sat
+    // directly under `thy travels?" A` (probe of `paws-sage`, beat `ale`,
+    // after `d2de5563`).
     format!(
-        "\n\"That will be {price} gold for the {} of ye,\n{}.",
+        "\n\n\"That will be {price} gold for the {} of ye,\n{}.",
         tavern_bill_count_word(living_party),
         tavern_honorific(speaker_is_female)
     )
@@ -3950,8 +3956,13 @@ fn format_tavern_outcome(
         // the follow-up record's open row, and the two line feeds after it
         // leave the blank row the original shows above the question.
         // Measured 2026-09-10 (`paws-sage/lore`).
+        //
+        // Both feeds are printed: the lore letter lands on the open row, so
+        // the first closes it and the second is the blank (`d2de5563` made
+        // the echo land there; with one feed the question sat directly under
+        // `Rations?" C`).
         EnteredSagePrompt => format!(
-            "\n\"Of what wouldst thou hear my lore, {}?\"\n\n{SAGE_RESPOND_PROMPT}",
+            "\n\n\"Of what wouldst thou hear my lore, {}?\"\n\n{SAGE_RESPOND_PROMPT}",
             if speaker_is_female { "milady" } else { "sir" }
         ),
         RoundDrinkServed { tavern, cost } => {
@@ -4237,7 +4248,10 @@ fn format_tavern_outcome_with_shoppe(
                     // between the accepted letter's echo and the offer, the
                     // same one the round/secondary bill takes. Measured
                     // 2026-09-11 (`paws-tavern/rations`).
-                    .map(|quote| format!("\n\"{quote}{TAVERN_PROVISION_QUANTITY_PROMPT}"))
+                    // Two feeds since the echo lands on the menu's open
+                    // row: one closes it, one is the blank (see
+                    // `tavern_bill_prefix`).
+                    .map(|quote| format!("\n\n\"{quote}{TAVERN_PROVISION_QUANTITY_PROMPT}"))
             })
         }
         // `shops.md §8.5`: the charitable outcome "adds `1` to the food
