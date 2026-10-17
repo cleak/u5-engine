@@ -192,6 +192,14 @@ pub fn run_play_script_commands(
         // No pump in script mode either; see the interactive loop above.
         state.flush_staged_narration();
         state.flush_text_hold();
+        // The cinematics and the shrine's third-mantra resolution need
+        // walking to their end here too, exactly as
+        // [`replay_play_script_commands`] does: the exploration gate stays
+        // closed while one is pending, so without this every command after a
+        // third shrine mantra was a no-op (playtest E58).
+        state.run_blackthorn_rescue_to_handoff(game_dir)?;
+        state.run_blackthorn_audience_exit_to_handoff(game_dir)?;
+        state.run_shrine_third_mantra_resolution_to_completion(game_dir)?;
         print_play_script_snapshot(state, tile_atlas)?;
         if disposition == PlayInputDisposition::Quit {
             break;
