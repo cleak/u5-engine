@@ -183,3 +183,119 @@ fn rc1_drowning_holds_ship_sunk_through_the_descent_then_paces_the_loop() {
     assert!(now - (100.0 + descent) > 0.5, "the loop takes time");
     assert_eq!(state.displayed_stats_panel(), &state.stats_panel);
 }
+
+fn picker_row(quantity: Option<u8>, name: &str) -> crate::stats_panel::PanelPickerRow {
+    crate::stats_panel::PanelPickerRow {
+        quantity,
+        selector: crate::stats_panel::PANEL_PICKER_SELECTOR_BLANK,
+        selector_runic: false,
+        name: name.to_string(),
+        zero_padded: false,
+    }
+}
+
+fn picker_panel_text(panel: &crate::stats_panel::PickerPanelCells, row: usize) -> String {
+    (0..crate::stats_panel::PICKER_PANEL_COLUMNS)
+        .map(|column| panel.get(column, row).map_or('.', |cell| cell.code as char))
+        .collect()
+}
+
+/// `inventory.md §4.4`: the picker repaints its list into the same
+/// rectangle without clearing it, so a shorter row, an unpadded wrapped
+/// first line and the two cells past a wrap keep the previous pass's text.
+/// Stock `use-specials` (2026-10-17) shows exactly this as the highlight
+/// moves from the Sceptre to a counted Shard of Falsehood: ` 1 ` over
+/// ` 1 Sceptre`, a stray `S` in column 0, `ed` in columns 14-15 and the
+/// bottom border gone but for its corner.
+#[test]
+fn rc1_use_picker_passes_leave_the_previous_pass_as_residue() {
+    use crate::stats_panel::{PanelPickerView, PickerPanelCells};
+    let rows = vec![
+        picker_row(Some(3), "Aa"),
+        picker_row(Some(3), "Bb"),
+        picker_row(Some(3), "White"),
+        picker_row(Some(1), "Magic Crpt"),
+        picker_row(Some(1), "Amulet"),
+        picker_row(Some(1), "Crown"),
+        picker_row(Some(1), "Sceptre"),
+        picker_row(Some(1), "Shard/Falsehd"),
+        picker_row(Some(1), "Shard/Hatred"),
+        picker_row(None, "Spyglass"),
+        picker_row(None, "Sextant"),
+    ];
+    let view = |selected| PanelPickerView {
+        label: String::new(),
+        rows: rows.clone(),
+        selected,
+        ornamental_frame: true,
+    };
+    let mut panel = PickerPanelCells::with_frame(None);
+    let mut inverse = false;
+    panel.run_pass(&view(6), &mut inverse);
+    assert!(!inverse, "a one-line highlight toggles on and off");
+    assert_eq!(picker_panel_text(&panel, 6), "Shard/Falsehd \u{17}.");
+    assert_eq!(picker_panel_text(&panel, 7), "\u{17} 1 Shard/Hatred");
+
+    panel.run_pass(&view(7), &mut inverse);
+    assert!(inverse, "a two-line highlight leaks the inverse bit (§4.4)");
+    let row4 = picker_panel_text(&panel, 4);
+    assert!(row4.starts_with("\u{17} 1 Sceptre"), "{row4:?}");
+    assert!(
+        panel.get(1, 4).unwrap().inverse,
+        "the highlight's first line"
+    );
+    // The stale `Sceptre` was the previous pass's highlight and stays inverted.
+    assert!(
+        panel.get(5, 4).unwrap().inverse,
+        "stale pixels keep their style"
+    );
+    assert_eq!(picker_panel_text(&panel, 6).chars().next(), Some('S'));
+    assert_eq!(&picker_panel_text(&panel, 7)[14..], "ed");
+    let bottom = picker_panel_text(&panel, 8);
+    assert_eq!(
+        bottom.as_bytes()[14],
+        crate::stats_panel::PANEL_PICKER_FRAME_BOTTOM_RIGHT
+    );
+    assert!(bottom[..14].chars().all(|ch| ch == ' '), "{bottom:?}");
+
+    // The next session's frame build clears columns 0-14 only.
+    let next = PickerPanelCells::with_frame(Some(&panel));
+    assert_eq!(next.get(15, 7).map(|cell| cell.code), Some(b'd'));
+    assert_eq!(next.get(5, 4), None);
+}
+
+/// With the picker's inverse leak set, the divider band's timed-effect tag is
+/// drawn dark on a light cell (stock `use-specials`, beat `sceptre`); the
+/// cell is reported opaque so a frontend does not let the band show through
+/// the glyph. Without the leak, or without a tag, nothing is reported.
+#[test]
+fn rc1_leaked_inverse_reports_the_effect_tag_cell_opaque() {
+    let mut state = test_state(open_grid(), 5, 5);
+    state.active_effect_tag = Some(PROTECTION_ACTIVE_EFFECT_TAG);
+    state.active_effect_counter = 10;
+    state.repaint_stats_panel();
+    assert_eq!(
+        crate::stats_panel::stats_panel_opaque_effect_cell(&state),
+        None
+    );
+    state.stats_panel_window_inverse = true;
+    assert_eq!(
+        crate::stats_panel::stats_panel_opaque_effect_cell(&state),
+        Some((31, 7))
+    );
+    // Column-15 residue alone is reported once the picker has closed.
+    let mut panel = crate::stats_panel::PickerPanelCells::with_frame(None);
+    let view = crate::stats_panel::PanelPickerView {
+        label: String::new(),
+        rows: vec![picker_row(Some(1), "Shard/Hatred")],
+        selected: 0,
+        ornamental_frame: true,
+    };
+    let mut inverse = false;
+    panel.run_pass(&view, &mut inverse);
+    state.use_picker_panel = Some(panel);
+    assert_eq!(
+        crate::stats_panel::picker_panel_opaque_cells(&state),
+        vec![(39, 2)]
+    );
+}

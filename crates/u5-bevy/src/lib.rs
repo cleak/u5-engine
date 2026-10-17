@@ -16945,6 +16945,19 @@ fn render_visual_play_frame_over_viewport(
         prompt_cursor_visible,
     );
     overlay_nonblack_rgba(&mut rgba, &surface.rgba);
+    // `inventory.md §4.4`: the picker's panel cells are whole text cells;
+    // their black pixels cover the chrome beneath them.
+    for (column, row) in u5_runtime::picker_panel_opaque_cells(state)
+        .into_iter()
+        .chain(u5_runtime::stats_panel_opaque_effect_cell(state))
+    {
+        let (x0, y0) = (usize::from(column) * CH_CELL_SIDE, usize::from(row) * CH_CELL_SIDE);
+        for y in y0..(y0 + CH_CELL_SIDE).min(height) {
+            let start = (y * width + x0) * 4;
+            let end = (y * width + (x0 + CH_CELL_SIDE).min(width)) * 4;
+            rgba[start..end].copy_from_slice(&surface.rgba[start..end]);
+        }
+    }
     paint_message_window_rows(&mut rgba, width, height, ctx, &surface.message_rows);
 
     blit_rgba(

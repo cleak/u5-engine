@@ -481,6 +481,11 @@ impl PlayState {
         // `cleak/u5-engine#5`.
         self.open_prompt_block();
         self.message = self.render_active_use();
+        // `inventory.md §4.4`: the frame build clears window columns 0-14
+        // and draws the border; column 15 keeps what was there.
+        self.use_picker_panel = Some(crate::stats_panel::PickerPanelCells::with_frame(
+            self.use_picker_panel.as_ref(),
+        ));
         // The picker's first draw is a repaint like any other (§9.5: "the
         // initial draw costs 0 or 1"), and it comes after `Item:_` prints.
         self.register_use_picker_render_scroll();
@@ -517,9 +522,15 @@ impl PlayState {
     /// display line (§4.5), so their passes always toggle an even number of
     /// times.
     fn register_use_picker_render_scroll(&mut self) {
-        if crate::stats_panel::active_panel_picker(self)
-            .is_some_and(|view| view.inverse_pass_flips_window())
-        {
+        let view = crate::stats_panel::active_panel_picker(self);
+        if let (Some(view), Some(mut panel)) = (view.as_ref(), self.use_picker_panel.take()) {
+            // The pass paints into the panel without clearing it, and its
+            // toggles run against the window's persistent inverse bit.
+            let mut inverse = self.stats_panel_window_inverse;
+            panel.run_pass(view, &mut inverse);
+            self.stats_panel_window_inverse = inverse;
+            self.use_picker_panel = Some(panel);
+        } else if view.is_some_and(|view| view.inverse_pass_flips_window()) {
             self.stats_panel_window_inverse = !self.stats_panel_window_inverse;
         }
         if !crate::stats_panel::active_panel_picker(self)

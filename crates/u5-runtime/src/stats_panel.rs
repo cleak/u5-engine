@@ -946,6 +946,231 @@ impl PanelPickerView {
     }
 }
 
+/// Window columns of the panel text window: `(24,1)-(39,9)`, sixteen wide.
+pub const PICKER_PANEL_COLUMNS: usize = 16;
+/// Window rows of the panel text window, the frame's top and bottom rows
+/// included.
+pub const PICKER_PANEL_ROWS: usize = 9;
+
+/// One painted cell of the panel text window.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct PanelCell {
+    pub code: u8,
+    pub runic: bool,
+    pub inverse: bool,
+}
+
+/// What the U-Use picker has painted into the panel text window.
+///
+/// `inventory.md §4.4`, "How the list is drawn: a repaint, not a scroll":
+/// every pass re-renders the visible list into the same rectangle, and "the
+/// panel is not cleared between passes. The only thing that erases the
+/// previous pass's text is each row's own pad-to-a-fixed-column before its
+/// line feed", so rows the new page does not reach, the cells right of an
+/// unpadded wrapped first line, and window columns 14-15 after a wrap keep
+/// the earlier pass's pixels - "an implementation that clears each row per
+/// pass will not match the original". The frame build clears only
+/// `(24,1)-(38,count+1)`, window columns 0-14, so column 15 also survives
+/// from one picker session to the next and through the roster repaint.
+///
+/// Measured 2026-10-17 (`use-specials`, beats `amuletrow`, `crownrow`,
+/// `sceptrerow` and the results after them): the stock panel shows a second
+/// `1 Sceptre`, a second `Shard/Falsehd`, a stray `S` in column 0 and a
+/// `d` in column 15 beside `G:150`, all residue; this engine cleared the
+/// panel on every frame.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct PickerPanelCells {
+    cells: Vec<Option<PanelCell>>,
+}
+
+impl PickerPanelCells {
+    /// The frame build: clear window columns 0-14 of every row, keep column
+    /// 15 from `previous`, and draw the ornamental border (§4.4).
+    pub fn with_frame(previous: Option<&PickerPanelCells>) -> Self {
+        let mut panel = Self {
+            cells: vec![None; PICKER_PANEL_COLUMNS * PICKER_PANEL_ROWS],
+        };
+        if let Some(previous) = previous {
+            for row in 0..PICKER_PANEL_ROWS {
+                panel.put(15, row, previous.get(15, row));
+            }
+        }
+        let frame = |code| {
+            Some(PanelCell {
+                code,
+                runic: false,
+                inverse: false,
+            })
+        };
+        let bottom = usize::from(PANEL_PICKER_FRAME_BOTTOM_ROW);
+        let right = usize::from(PANEL_PICKER_FRAME_RIGHT_COLUMN);
+        panel.put(0, 0, frame(PANEL_PICKER_FRAME_TOP_LEFT));
+        panel.put(0, bottom, frame(PANEL_PICKER_FRAME_BOTTOM_LEFT));
+        for column in 1..right {
+            panel.put(column, 0, frame(PANEL_PICKER_FRAME_TOP_EDGE));
+            panel.put(column, bottom, frame(PANEL_PICKER_FRAME_BOTTOM_EDGE));
+        }
+        panel.put(right, 0, frame(PANEL_PICKER_FRAME_TOP_RIGHT));
+        panel.put(right, bottom, frame(PANEL_PICKER_FRAME_BOTTOM_RIGHT));
+        for row in 1..bottom {
+            panel.put(0, row, frame(PANEL_PICKER_FRAME_VERTICAL_RULE));
+            panel.put(right, row, frame(PANEL_PICKER_FRAME_VERTICAL_RULE));
+        }
+        panel
+    }
+
+    pub fn get(&self, column: usize, row: usize) -> Option<PanelCell> {
+        (column < PICKER_PANEL_COLUMNS && row < PICKER_PANEL_ROWS)
+            .then(|| self.cells[row * PICKER_PANEL_COLUMNS + column])
+            .flatten()
+    }
+
+    fn put(&mut self, column: usize, row: usize, cell: Option<PanelCell>) {
+        if column < PICKER_PANEL_COLUMNS && row < PICKER_PANEL_ROWS {
+            self.cells[row * PICKER_PANEL_COLUMNS + column] = cell;
+        }
+    }
+
+    /// Emit one character at the cursor and advance it, wrapping past window
+    /// column 15 to column 0 of the next row (`text-output.md §6`).
+    fn emit(&mut self, ch: char, column: &mut usize, row: &mut usize, inverse: bool) {
+        let (code, runic) = match panel_runic_code(ch) {
+            Some(code) => (code, true),
+            None => (ch as u8, false),
+        };
+        self.put(*column, *row, Some(PanelCell { code, runic, inverse }));
+        *column += 1;
+        if *column >= PICKER_PANEL_COLUMNS {
+            *column = 0;
+            *row += 1;
+        }
+    }
+
+    /// One list pass (§4.4): home to window column 1 of row 1 and render
+    /// entries until the cursor reaches row 8, each row padded to column 14
+    /// and closed by a line feed. The inverse toggles of "The highlight can
+    /// leak into the panel" flip `inverse`, the window's persistent bit: one
+    /// before an entry that begins on the highlight row, one after an entry
+    /// that leaves the cursor exactly one row below it.
+    pub fn run_pass(&mut self, view: &PanelPickerView, inverse: &mut bool) {
+        let bottom = usize::from(PANEL_PICKER_FRAME_BOTTOM_ROW);
+        let start = view.page_start().min(view.rows.len());
+        let highlight_row = view.selected.saturating_sub(start) + 1;
+        let mut row = 1usize;
+        for entry in &view.rows[start..] {
+            if row >= bottom {
+                break;
+            }
+            if row == highlight_row {
+                *inverse = !*inverse;
+            }
+            let mut column = 1usize;
+            let lines = entry.lines();
+            for ch in lines[0].chars() {
+                self.emit(ch, &mut column, &mut row, *inverse);
+            }
+            // A label moved whole onto the next display line (§4.5) starts
+            // at column 0; the quantity line before it is not padded.
+            if let Some(label) = lines.get(1).filter(|label| !label.is_empty()) {
+                column = 0;
+                row += 1;
+                for ch in label.chars() {
+                    self.emit(ch, &mut column, &mut row, *inverse);
+                }
+            }
+            while column < usize::from(PANEL_PICKER_FRAME_RIGHT_COLUMN) {
+                self.emit(' ', &mut column, &mut row, *inverse);
+            }
+            row += 1;
+            if row == highlight_row + 1 {
+                *inverse = !*inverse;
+            }
+        }
+    }
+
+    /// Paint the cells in `columns` into the active window.
+    pub fn paint(&self, system: &mut TextWindowSystem, columns: std::ops::Range<usize>) {
+        let mut window_inverse = false;
+        for row in 0..PICKER_PANEL_ROWS {
+            for column in columns.clone() {
+                let Some(cell) = self.get(column, row) else {
+                    continue;
+                };
+                system.set_active_cursor(column as u8, row as u8);
+                if cell.inverse != window_inverse {
+                    system.emit_byte(TEXT_CTRL_INVERSE_TOGGLE);
+                    window_inverse = cell.inverse;
+                }
+                // Painted in place: a cell in column 15 of the last row must
+                // not wrap the cursor and scroll the window.
+                system.set_runic_output(cell.runic);
+                system.paint_cursor_glyph(cell.code);
+                system.set_runic_output(false);
+            }
+        }
+        if window_inverse {
+            system.emit_byte(TEXT_CTRL_INVERSE_TOGGLE);
+        }
+    }
+}
+
+/// Screen cells the U-Use picker's painted panel owns outright, black
+/// pixels included: every painted cell while the picker shows, and the
+/// window-column-15 residue once it has closed. A text cell overwrites the
+/// whole cell, so a frontend that lets chrome show through a glyph's black
+/// pixels - the divider ribbon behind window row 6, the screen edge behind
+/// column 15 - must paint these opaque.
+pub fn picker_panel_opaque_cells(state: &PlayState) -> Vec<(u8, u8)> {
+    let Some(panel) = state.use_picker_panel.as_ref() else {
+        return Vec::new();
+    };
+    let picker_shown = state.active_use.is_some() && active_panel_picker(state).is_some();
+    let columns = if picker_shown {
+        0..PICKER_PANEL_COLUMNS
+    } else {
+        PICKER_PANEL_COLUMNS - 1..PICKER_PANEL_COLUMNS
+    };
+    let mut cells = Vec::new();
+    for row in 0..PICKER_PANEL_ROWS {
+        for column in columns.clone() {
+            // Under the picker the divider row's tag cell is the picker's.
+            if !picker_shown
+                && row == usize::from(STATS_PANEL_TIMED_EFFECT_LOCAL_ROW)
+                && column == usize::from(STATS_PANEL_TIMED_EFFECT_LOCAL_COLUMN) + 1
+            {
+                continue;
+            }
+            if panel.get(column, row).is_some() {
+                cells.push((
+                    STATS_PANEL_TEXT_LEFT + column as u8,
+                    STATS_PANEL_TEXT_TOP + row as u8,
+                ));
+            }
+        }
+    }
+    cells
+}
+
+/// The divider-band cell carrying the timed-effect tag, when the panel
+/// window's inverse bit is set and a tag is shown. `inventory.md §4.4` left
+/// open "whether the separator band between the panel's boxes shows inverted
+/// cells"; stock `use-specials` (2026-10-17, beat `sceptre`) answers it for
+/// the tag: with the leak set, the crown is drawn dark on a light cell. A
+/// frontend that lets chrome show through a glyph's black pixels must paint
+/// this cell opaque, or the inverted tag vanishes into its own background.
+pub fn stats_panel_opaque_effect_cell(state: &PlayState) -> Option<(u8, u8)> {
+    if !state.stats_panel_window_inverse
+        || state.displayed_stats_panel().effect_tag.is_none()
+        || active_panel_picker(state).is_some()
+    {
+        return None;
+    }
+    Some((
+        STATS_PANEL_TEXT_LEFT + STATS_PANEL_TIMED_EFFECT_LOCAL_COLUMN + 1,
+        STATS_PANEL_TEXT_TOP + STATS_PANEL_TIMED_EFFECT_LOCAL_ROW,
+    ))
+}
+
 /// The live U-Use or R-Ready picker, if one owns the panel.
 pub fn active_panel_picker(state: &PlayState) -> Option<PanelPickerView> {
     if let Some(session) = state.active_use.as_ref() {
@@ -1119,6 +1344,15 @@ pub fn paint_panel_picker_text_window(system: &mut TextWindowSystem, state: &Pla
     system.set_active_window(STATS_PANEL_TEXT_WINDOW_INDEX);
     system.emit_byte(TEXT_CTRL_CLEAR_WINDOW);
     system.clear_active_flags();
+    // The U-Use picker paints what its passes left, residue included.
+    if state.active_use.is_some()
+        && let Some(panel) = state.use_picker_panel.as_ref()
+    {
+        panel.paint(system, 0..PICKER_PANEL_COLUMNS);
+        system.clear_active_flags();
+        system.set_active_window(MESSAGE_TEXT_WINDOW_INDEX);
+        return true;
+    }
     if picker.ornamental_frame {
         paint_panel_picker_frame(system);
     }
@@ -1424,6 +1658,15 @@ pub fn paint_stats_panel_text_window(
         system.emit_byte(crate::gameplay_chrome::RIBBON_CAP_RIGHT_SOURCE_GLYPH);
         system.emit_byte(effect);
         system.emit_byte(crate::gameplay_chrome::RIBBON_CAP_LEFT_SOURCE_GLYPH);
+    }
+
+    // `inventory.md §4.4`: the roster repaint does not reach window column
+    // 15, so whatever a picker pass left there stays (stock `use-specials`,
+    // the `d` beside `G:150` after the crown and sceptre results).
+    // An inverted repaint inverts those stale cells along with the box
+    // (stock: the `d` beside `G:150` turns dark-on-light with the panel).
+    if let Some(panel) = state.use_picker_panel.as_ref() {
+        panel.paint(system, PICKER_PANEL_COLUMNS - 1..PICKER_PANEL_COLUMNS);
     }
 
     // §2.1: a full refresh always returns to the message window without

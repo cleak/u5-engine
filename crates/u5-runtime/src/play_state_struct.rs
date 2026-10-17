@@ -500,6 +500,10 @@ pub struct PlayState {
     /// per-pass repaints (`audio.md §8.9`), which the engine applies at once
     /// but the original paints one damage pass at a time.
     pub stats_panel_hold: Option<crate::stats_panel::StatsPanelSnapshot>,
+    /// What the U-Use picker's passes have painted into the panel window,
+    /// residue included (`inventory.md §4.4`); kept after the picker closes
+    /// for its window-column-15 cells, which the roster repaint never reaches.
+    pub use_picker_panel: Option<crate::stats_panel::PickerPanelCells>,
     /// Panel bodies still owed to [`Self::stats_panel_hold`], one per staged
     /// beat that carries a repaint, in release order.
     pub staged_stats_panels: std::collections::VecDeque<crate::stats_panel::StatsPanelSnapshot>,
