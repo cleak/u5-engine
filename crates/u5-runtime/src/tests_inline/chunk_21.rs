@@ -5573,7 +5573,7 @@ fn end_to_end_tavern_blue_boar_fixed_drink_debits_gold() {
     handle_play_key_input(&mut state, 'F', "", Path::new("")).unwrap();
 
     assert_eq!(state.gold, 102);
-    assert!(state.message.contains("Ah, a fine choice"));
+    assert!(state.message.contains("Ah, a fine\nchoice"));
     assert!(state.active_shop.is_some());
 }
 
@@ -8206,7 +8206,7 @@ fn blue_boar_wine_list_opens_with_its_quoted_heading() {
         "{:?}",
         state.message
     );
-    assert!(state.message.ends_with("f) Chablis....98\n\nThy choice?\""));
+    assert!(state.message.ends_with("f) Chablis....98\n\nThy choice?\" "));
 }
 
 /// `shops.md §8.5`, "Which reader takes the number": the provision question

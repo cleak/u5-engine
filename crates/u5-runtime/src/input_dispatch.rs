@@ -1007,8 +1007,9 @@ fn handle_active_shop_key_input(
     let no = matches!(key_byte, b'N' | b'n') || suffix.chars().any(|c| matches!(c, 'N' | 'n'));
     let mut replacement_session: Option<ActiveShopSession> = None;
     // Row state a tavern or sage message leaves for the next key's echo,
-    // stated once that message is on the transcript (see
-    // [`shop_prompt_row_state`]).
+    // stated once that message is on the transcript. Each arm states it from
+    // the outcome it printed (see [`tavern_outcome_prompt_row`]); it is never
+    // read back from the message text (u5-engine#46 residual).
     let mut prompt_row_open: Option<bool> = None;
     // Measured 2026-09-07/08 at all eight overlays: the answer to the entry
     // question echoes as a word - `Yes` or `No` - onto the row the greeting
@@ -1147,7 +1148,12 @@ fn handle_active_shop_key_input(
                         };
                         // §8.C: "A sole party member is selected automatically;
                         // otherwise print `\n\n"Who needs my aid?" ` and use
-                        // the party selector."
+                        // the party selector." The question's closing quote
+                        // and space leave its row open for the cancel's
+                        // `No one`; the selector state is not one of the
+                        // inline prompts the generic rule below states, so
+                        // this caller states it.
+                        prompt_row_open = Some(true);
                         HEALER_WHO_NEEDS_AID.to_string()
                     }
                     // §8.C: "Space/Return echo `Nothing` and leave through the
@@ -1168,8 +1174,12 @@ fn handle_active_shop_key_input(
                 (HealerShopState::PickPartyMember { .. }, _, _, _) if key_byte == 0x1b => {
                     *s = HealerShopState::Continuation;
                     // §8.C: "Cancellation adds `No one`, with no trailing line
-                    // feed", then the continuation question.
-                    format!("No one{HEALER_CONTINUATION}")
+                    // feed", then the continuation question. "Adds" is onto
+                    // the row `Who needs my aid?" ` left open, as every
+                    // other shop echo continues its question's row; the
+                    // continuation's own first feed then closes that row.
+                    state.emit_message_line_continuing_row("No one");
+                    HEALER_CONTINUATION.to_string()
                 }
                 // "A digit moves the indicator; it does not commit ... the
                 // four direction keys move the indicator"; other keys leave
@@ -1814,6 +1824,11 @@ fn handle_active_shop_key_input(
             )
             .then(|| tavern_accepted_menu_letter(*s, key_byte))
             .flatten();
+            // `shops.md §8.C`, "Blue Boar wine selection accepted":
+            // "Uppercase selected letter, then `\n\n"Ah, a fine\nchoice, `".
+            // The list's `Thy choice?" ` leaves its row open for it, the same
+            // cell the menu letter echoes into. The engine echoed nothing.
+            let blue_boar_choice_list = matches!(*s, TavernState::BlueBoarDrinkList { .. });
             // `shops.md` §8.C, "Provision offer": the quantity prompt ends
             // `thou like?" `, a closing quote and a space, and
             // `text-output.md` §10.6 keeps the cursor on that space while the
@@ -2027,6 +2042,17 @@ fn handle_active_shop_key_input(
                     state.emit_message_line_continuing_row(letter.to_string());
                 }
             }
+            if blue_boar_choice_list
+                && matches!(
+                    outcome,
+                    TavernOutcome::BlueBoarDrinkServed { .. }
+                        | TavernOutcome::BlueBoarRefusedShortFunds { .. }
+                )
+            {
+                state.emit_message_line_continuing_row(
+                    (key_byte.to_ascii_uppercase() as char).to_string(),
+                );
+            }
             // `shops.md §8.C`: "N prints `No` and runs the ordinary quoted
             // farewell with its `says $.\n` attribution" - no feeds of its
             // own, so `No` continues the continuation question's open row
@@ -2044,20 +2070,20 @@ fn handle_active_shop_key_input(
                 state.emit_message_line_continuing_row("Yes");
                 state.push_explicit_blank_message_entry();
             }
+            let tavern_vendor_name = match state.area {
+                Area::Town { scene, .. } => crate::play_state_impl::shop_vendor_name_for_scene(
+                    SHOP_DIALOG_ID_TAVERN,
+                    scene.byte,
+                ),
+                _ => None,
+            };
+            let tavern_vendor_named = tavern_vendor_name.is_some();
             let tavern_message = shop_message_ignoring_surcharge(
                 format_tavern_outcome_with_shoppe(
                     outcome,
                     provision_quote_record_id,
                     no_sale_record_id,
-                    match state.area {
-                        Area::Town { scene, .. } => {
-                            crate::play_state_impl::shop_vendor_name_for_scene(
-                                SHOP_DIALOG_ID_TAVERN,
-                                scene.byte,
-                            )
-                        }
-                        _ => None,
-                    },
+                    tavern_vendor_name,
                     active_speaker_is_female(state),
                     // `shops.md` §4: the bill's count "is the number of
                     // nondead party members".
@@ -2089,7 +2115,7 @@ fn handle_active_shop_key_input(
             // a quantity left it closed, and `Yes` dropped to a row of its
             // own - measured 2026-10-16 (`paws-sage`, beats `again` and
             // `rumour`): the original reads `for thee?" Yes`.
-            prompt_row_open = shop_prompt_row_state(&tavern_message);
+            prompt_row_open = tavern_outcome_prompt_row(&outcome, tavern_vendor_named);
             if quantity_entry_pending {
                 // Still reading: the slot holds the rewritten echo row the
                 // transcript already has, and the cursor stays on it.
@@ -2162,6 +2188,7 @@ fn handle_active_shop_key_input(
                 SageState::Exited => SageOutcome::Exited,
             };
             let paid = matches!(outcome, SageOutcome::RumourFound { .. });
+            let asks_fee = matches!(outcome, SageOutcome::QuotedFee { .. });
             if paid {
                 // `shops.md §8.A`: paid advice is a completed purchase.
                 state.arms_transaction_completed = true;
@@ -2226,10 +2253,12 @@ fn handle_active_shop_key_input(
                     message.push_str(&format!("\nsays {name}."));
                 }
             }
+            let mut appended_continuation = false;
             if returns_to_continuation
                 && let Some(tavern) =
                     area_scene_byte.and_then(crate::shop_session::tavern_for_scene)
             {
+                appended_continuation = true;
                 if paid {
                     message.push_str("\n\n");
                 }
@@ -2248,8 +2277,10 @@ fn handle_active_shop_key_input(
             };
             // The fee question `Fair 'nuff?" ` and the tavern continuation
             // it returns to both leave their row open for the `Yes`/`No`
-            // echo; see the tavern arm above.
-            prompt_row_open = shop_prompt_row_state(&message);
+            // echo; see the tavern arm above. Every other sage outcome either
+            // ends the visit or hands the row to the typed-topic reader, and
+            // states nothing.
+            prompt_row_open = (asks_fee || appended_continuation).then_some(true);
             shop_message_ignoring_surcharge(message, surcharge)
         }
         ActiveShopSession::Reagent(s) => {
@@ -2777,21 +2808,17 @@ fn handle_active_shop_key_input(
     // Every other kind's quoted key prompts (`shops.md §8.B`/`§8.C`, the
     // states [`ActiveShopSession::keeps_cursor_inline`] lists) wait the same
     // way, and their `Yes`/`No`/letter echoes continue the prompt's row. The
-    // flush is verbatim and states nothing, so this caller states the row
-    // the message ended on - open after a closing quote and space, closed
-    // after a line feed - unless the tavern/sage arm already has.
+    // flush is verbatim and states nothing, so this caller states it from
+    // the state the session now waits in: each of those states waits on a
+    // question that ends on a closing quote and one space, so its row is
+    // open - unless the tavern/sage arm already stated the row itself.
     else if prompt_row_open.is_none()
         && !session.is_exited()
         && session.keeps_cursor_inline()
         && !state.message.is_empty()
-        && let Some(open) = shop_prompt_row_state(&state.message)
     {
         state.flush_message_slot();
-        if open {
-            state.open_message_row();
-        } else {
-            state.close_message_row();
-        }
+        state.open_message_row();
     }
 
     if let Some(next_session) = replacement_session {
@@ -4120,7 +4147,7 @@ const BLUE_BOAR_DRINK_ROWS: [(char, &str, crate::shops::BlueBoarDrinkChoice); 6]
     ('e', "Moselle", crate::shops::BlueBoarDrinkChoice::E),
     ('f', "Chablis", crate::shops::BlueBoarDrinkChoice::F),
 ];
-const BLUE_BOAR_CHOICE_PROMPT: &str = "Thy choice?\"";
+const BLUE_BOAR_CHOICE_PROMPT: &str = "Thy choice?\" ";
 /// The tavern's own follow-up question, measured with the zero-quantity
 /// dismissal and reused when the sage hands control back.
 ///
@@ -4326,9 +4353,13 @@ fn tavern_cant_pay_envelope(vendor_name: Option<&'static str>) -> String {
 
 /// `shops.md §8.C`, "Blue Boar wine selection accepted": the gendered
 /// fine-choice line that precedes either `Enjoy!` or the CAN'T PAY envelope.
+///
+/// "Uppercase selected letter, then `\n\n"Ah, a fine\nchoice, `, honorific
+/// and `.`": the letter echoes onto the list's open row, so the first feed
+/// closes that row and the second is the blank beneath it.
 fn blue_boar_fine_choice_prefix(speaker_is_female: bool) -> String {
     format!(
-        "\"Ah, a fine choice, {}.",
+        "\n\n\"Ah, a fine\nchoice, {}.",
         tavern_honorific(speaker_is_female)
     )
 }
@@ -4456,11 +4487,13 @@ fn format_tavern_outcome(
         DeclinedEnoughDrink => format!("Yes\n\n{TAVERN_ANYTHING_ELSE_PROMPT}"),
         // Measured: the served drink draws one gendered line, and the price
         // is not repeated back.
+        // `shops.md §8.C`: the accepted choice's line, then for a paid
+        // purchase "`\nEnjoy!"`, then `\n\n`" and the continuation.
         BlueBoarDrinkServed { choice, cost } => {
             let _ = (choice, cost);
             format!(
-                "\"Ah, a fine choice, {}. Enjoy!\"\n\n{TAVERN_ANYTHING_ELSE_PROMPT}",
-                if speaker_is_female { "milady" } else { "sir" }
+                "{}\nEnjoy!\"\n\n{TAVERN_ANYTHING_ELSE_PROMPT}",
+                blue_boar_fine_choice_prefix(speaker_is_female)
             )
         }
         BlueBoarRefusedShortFunds { .. } => format!(
@@ -4561,21 +4594,52 @@ fn tavern_accepted_menu_letter(
 
 
 
-/// State the row a tavern or sage message leaves for the next key's echo.
+/// The row a tavern outcome's message leaves for the next key's echo, stated
+/// from the outcome itself - never inferred from the text (the project rule
+/// for `message_row_open_mid_line`; u5-engine#46 residual).
 ///
 /// `shops.md §8.A`'s shared Y/N primitive and §8.C's tavern prompts end on a
 /// closing quote and a space, the cursor waiting on that row for the answer
-/// that `emit_message_line_continuing_row` echoes there; a message ending in
-/// a line feed has closed its row. Anything else is left as it was - the
-/// flag is set per caller, never inferred for every direct assignment
-/// (`518ca559`).
-fn shop_prompt_row_state(message: &str) -> Option<bool> {
-    if message.ends_with('\n') {
-        Some(false)
-    } else if message.ends_with(' ') {
-        Some(true)
-    } else {
-        None
+/// `emit_message_line_continuing_row` echoes there: every outcome that leaves
+/// the tavern waiting on its menu, wine list, enough-drink question,
+/// provision offer or `"Anything else\nfor thee?" ` continuation is `open`.
+/// The vendor-attributed refusals end on `yells $.\n` (§8.C), a closed row.
+/// The sage hand-off waits on the typed-topic reader, and the remaining
+/// outcomes print nothing or end the visit on a record whose tail is the
+/// record's own; those state nothing (`None`).
+pub(crate) fn tavern_outcome_prompt_row(
+    outcome: &crate::shop_runtime::TavernOutcome,
+    vendor_named: bool,
+) -> Option<bool> {
+    use crate::shop_runtime::TavernOutcome::*;
+    match outcome {
+        EnteredMenu { .. }
+        | RoundDrinkServed { .. }
+        | SecondaryTavernSelected { .. }
+        | PickBlueBoarDrink
+        | ConfirmEnoughDrink
+        | DeclinedEnoughDrink
+        | BlueBoarDrinkServed { .. }
+        | BlueBoarListCancelled
+        | PickProvisionQuantity { .. }
+        | ProvisionsPurchased { .. }
+        | Continued { .. }
+        | Declined => Some(true),
+        RefusedShortFunds { .. } | BlueBoarRefusedShortFunds { .. } | RefusedNoNeed
+            if vendor_named =>
+        {
+            Some(false)
+        }
+        RefusedShortFunds { .. }
+        | BlueBoarRefusedShortFunds { .. }
+        | RefusedNoNeed
+        | EnteredSagePrompt
+        | CharityProvisions { .. }
+        | DeclinedContinuation
+        | NoSaleExit
+        | IgnoredInput
+        | Exited
+        | InvalidInput => None,
     }
 }
 

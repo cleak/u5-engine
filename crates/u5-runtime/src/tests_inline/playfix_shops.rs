@@ -395,7 +395,15 @@ fn healer_member_selector_moves_on_digits_and_commits_on_return() {
     // Escape cancels with `No one` and the continuation question.
     let mut state = fresh();
     keys(&mut state, &['R', '\u{1b}']);
-    assert!(state.message.starts_with("No one"), "{:?}", state.message);
+    // `No one` is added onto the question's row (rc2 residual, §8.C).
+    assert!(
+        state
+            .message_entries()
+            .iter()
+            .any(|entry| entry.text.ends_with("aid?\" No one")),
+        "{:?}",
+        state.message_entries()
+    );
     assert!(matches!(
         state.active_shop,
         Some(ActiveShopSession::Healer(HealerShopState::Continuation, _))
