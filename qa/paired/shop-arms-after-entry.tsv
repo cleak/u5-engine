@@ -26,6 +26,18 @@
 # gate; if it refuses here too, the gate is something else. Route from
 # `talk_gate_probe --script e --chase 129`, which re-plans after every step so
 # schedule drift during the walk is accounted for.
+#
+# **A second lottery: where the weaponsmith stands.** At 10:00 the resident
+# wanders around its waypoint (`npc-schedules.md` §9 value `4`; pinned by
+# `tests_inline/town_fight_followups.rs`, `p15_*`), so on arrival it is east
+# of the party in some runs and a cell away in others, and the Look/Talk beats
+# then read `a merchant` or `cobble`, a greeting bark or `Nobody's here!`. The
+# stock side does both from the same seed and keys: measured 2026-10-16 over
+# the `look` beat of every capture since 2026-09-18 - adjacent in
+# 0918-043956/085713/153356/214956, 0919-042746 and 1016-223053, `cobble` in
+# 0919-104357, 1014-023817, 1016-165257 and 1016-204631. Any
+# `look`/`talk`/`after-space` difference whose map shows the resident in a
+# different cell has measured this roll, not the engine.
 # requires-seed: the party outside Britain on the overworld at 10:00, so the scenario can walk in through the door
 both	wait	15000
 both	key	space

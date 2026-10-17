@@ -11,6 +11,14 @@
 # `variant`. Its siblings `shop-arms-buy`, `shop-arms-menus` and
 # `shop-arms-sell` already carried this note.
 #
+# The Buy listing's heading is two draws (`shops.md` §8.B: an optional
+# affirmation row, then the stock introduction), so the listing is one or two
+# rows tall and the later `quote` beat reads `scroll` by one row whenever the
+# two sides drew differently - stock shows both shapes across its 2026-09-10
+# to 2026-10-16 captures. That `scroll` is the lottery too. Until 2026-10-16
+# the engine also put the stock letter on its own row under `interest?" `
+# (fixed on branch `triage-shops`), which added a second row to it.
+#
 # The arms Buy confirmation: quote, Y, the success line and the post-item
 # prompt, then a second item declined with N (cleak/u5-spec#238).
 #

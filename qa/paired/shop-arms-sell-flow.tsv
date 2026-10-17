@@ -11,6 +11,12 @@
 # `variant`. Its siblings `shop-arms-buy`, `shop-arms-menus` and
 # `shop-arms-sell` already carried this note.
 #
+# Not a lottery, and fixed 2026-10-16 on branch `triage-shops`: from the
+# 2026-10-14 captures on the engine put the `Sell`, `No` and `Yes` echoes on
+# rows of their own and dropped the blank rows `shops.md` §8.1 publishes before
+# the offer, the continuation and `"Done!"`. Every stock capture since
+# 2026-09-18 reads `or Sell?" Sell`, `Deal?" No` and `Deal?" Yes` on one row.
+#
 # The arms Sell flow: the browser, a step down it, an offer and its decline,
 # a second offer taken, and the exit (cleak/u5-spec#238). The header here used
 # to describe the Buy confirmation, which is `shop-arms-buy-confirm`.
