@@ -343,3 +343,31 @@ fn triage_b_dungeon_flourish_takes_one_draw_per_loop_iteration() {
     assert_eq!(eyes(&mut state), if lit { 10 } else { 0 });
     assert_eq!(state.prng_state, expected);
 }
+
+/// W10 follow-up. A keystroke-driven round is four wander calls on the same
+/// cursor the display pump uses, so a key that lands mid-round continues the
+/// slot order (`endgame.md §6` step 3: slots 1, 3, 4, 5) rather than
+/// restarting it at slot 1.
+#[test]
+fn triage_b_keyed_jitter_round_continues_the_pump_cursor() {
+    let mut state = test_state(endgame_tableau_test_grid(), 5, 5);
+    state.party = vec![state.party[0]; 6];
+    state.enter_endgame();
+    state.finish_endgame_entry_presentation();
+    state.resolve_endgame_confirmation(true);
+    state.finish_endgame_refusal_staging();
+    state.flush_staged_narration();
+
+    assert!(state.advance_endgame_display_frame());
+    assert!(state.advance_endgame_display_frame());
+    state.flush_staged_narration();
+    assert_eq!(state.endgame.as_ref().unwrap().terminal_jitter_next_call, 2);
+
+    state.advance_endgame_terminal_tableau_jitter();
+    assert_eq!(
+        state.endgame.as_ref().unwrap().terminal_jitter_next_call,
+        2,
+        "a full round of four calls lands back on the same slot"
+    );
+    assert_eq!(state.staged_narration.beats().count(), 4);
+}

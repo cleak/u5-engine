@@ -2884,10 +2884,15 @@ impl PlayState {
     /// `endgame.md §6` step 3: one round of the terminal loop - one wander
     /// call for each of slots 1, 3, 4 and 5 - for callers that drive
     /// keystrokes only. Each call still carries its own one-tick hold.
+    ///
+    /// The round runs through the same call cursor as the display pump
+    /// ([`Self::advance_endgame_terminal_tableau_jitter_call`]), so a key
+    /// that lands mid-round continues the slot order (and its PRNG draws)
+    /// where the pump left it instead of restarting at slot 1.
     pub fn advance_endgame_terminal_tableau_jitter(&mut self) -> bool {
         let mut moved = false;
-        for slot in ENDGAME_TABLEAU_JITTER_SLOTS {
-            moved |= self.run_endgame_terminal_tableau_jitter_call(slot);
+        for _ in ENDGAME_TABLEAU_JITTER_SLOTS {
+            moved |= self.advance_endgame_terminal_tableau_jitter_call();
         }
         moved
     }
