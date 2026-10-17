@@ -1478,6 +1478,10 @@ pub const CROWN_LB_ACTIVE_EFFECT_TAG: u8 = 0x1c;
 pub const BLACK_BADGE_ACTIVE_EFFECT_TAG: u8 = 0x1d;
 pub const PERMANENT_ACTIVE_EFFECT_DURATION: u8 = 0xff;
 
+/// `visibility.md §6`: "the void tile `0xFF`" - the arena's impassable void
+/// byte that `magic.md §8`'s shared spawn-cell validator rejects.
+pub const COMBAT_ARENA_VOID_TILE: u8 = 0xff;
+
 // Combat-side raw damage caps for single-target damage spells per
 // `catalogs/spell-list.md` §5. The instant-kill sentinel itself lives in
 // `combat_actor` because the damage helpers there compare it as `i16`.

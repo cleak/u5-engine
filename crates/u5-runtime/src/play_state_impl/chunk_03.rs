@@ -6661,7 +6661,7 @@ impl PlayState {
         self.emit_sound_effect(SoundEffect::SharedVariant { variant: 3 });
 
         // The caster is present, so its own cell is rejected by the mask.
-        let legal_cells = self.combat_legal_cell_mask();
+        let legal_cells = self.combat_spawn_cell_mask();
         let mut accepted = None;
         for _ in 0..COMBAT_BLINK_PROBE_ATTEMPTS {
             let x = self.random_range_u8(0, 15);

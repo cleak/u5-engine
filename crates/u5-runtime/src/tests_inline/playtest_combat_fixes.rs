@@ -223,3 +223,75 @@ fn playtest_e36_every_typed_combat_digit_selects_a_member() {
         );
     }
 }
+
+/// A dungeon-room-shaped arena: void (`0xFF`) everywhere except one floor
+/// row through the caster's cell at (5, 5).
+fn playtest_void_arena_state(spell_index: usize, prng_state: u16) -> PlayState {
+    let mut state = world_state(open_world_grid(), 10, 20);
+    state.combat_active = true;
+    state.combat_terrain = [[COMBAT_ARENA_VOID_TILE; COMBAT_ARENA_SIDE]; COMBAT_ARENA_SIDE];
+    state.combat_terrain[5] = [0x05; COMBAT_ARENA_SIDE];
+    state.active_objects = vec![ActiveObject::empty(); OOL_SLOTS];
+    state.party[0].mana = 99;
+    state.party[0].level = 8;
+    state.party_intelligence = vec![50];
+    state.prng_state = prng_state;
+    state.spell_charges[spell_index] = 1;
+    state.combat_actors[0] =
+        CombatActorDescriptor::from_row([30, 1, COMBAT_ACTOR_FLAG_SELECTABLE_80, 0, 0, 0, 5, 5]);
+    state.active_objects[0] = ActiveObject {
+        type_byte: 0x80,
+        tile: 0x80,
+        x: 5,
+        y: 5,
+        ..ActiveObject::empty()
+    };
+    state
+}
+
+/// `magic.md §8`, "The shared random arena probe": Conjure, Swarm, Summon and
+/// combat Blink put each in-range candidate "to the shared combat spawn-cell
+/// validator, which requires terrain that the placed creature's movement
+/// family can occupy, rejects the arena's impassable void byte, and rejects
+/// any cell already holding a combat actor". Playtest E32: in a dungeon room
+/// these spells placed creatures - and Blink the caster - on the void
+/// outside the room's walls.
+#[test]
+fn playtest_e32_arena_probe_spells_never_place_on_the_void() {
+    let conjure = spell_index_from_code("KX").unwrap();
+    let swarm = spell_index_from_code("BIX").unwrap();
+    let summon = spell_index_from_code("CKX").unwrap();
+    let mut placed = 0;
+    for seed in 0..48u16 {
+        let prng = seed.wrapping_mul(0x9e37).wrapping_add(1);
+        for spell in [conjure, swarm, summon, BLINK_SPELL_INDEX] {
+            let mut state = playtest_void_arena_state(spell, prng);
+            let _ = match spell {
+                s if s == conjure => state.cast_combat_conjure_spell(0, spell),
+                s if s == swarm => state.cast_combat_swarm_spell(0, spell),
+                s if s == summon => state.cast_combat_summon_daemon_spell(0, spell),
+                _ => state.cast_combat_blink(0),
+            };
+            for actor in state.combat_actors.iter().filter(|actor| !actor.is_empty()) {
+                assert_ne!(
+                    state.combat_terrain[usize::from(actor.y)][usize::from(actor.x)],
+                    COMBAT_ARENA_VOID_TILE,
+                    "spell {spell} seed {prng:#06x} placed an actor on the void at ({}, {})",
+                    actor.x,
+                    actor.y
+                );
+            }
+            if spell == BLINK_SPELL_INDEX {
+                if (state.combat_actors[0].x, state.combat_actors[0].y) != (5, 5) {
+                    placed += 1;
+                }
+            } else if state.combat_actors[COMBAT_PARTY_ACTOR_SLOTS..]
+                .iter()
+                .any(|actor| !actor.is_empty())
+            {
+                placed += 1;
+            }
+        }
+    }
+    assert!(placed > 0, "some probe reached the floor row");
+}

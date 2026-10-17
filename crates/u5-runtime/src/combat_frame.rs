@@ -3150,7 +3150,7 @@ impl PlayState {
         {
             return None;
         }
-        let legal_cells = self.combat_legal_cell_mask();
+        let legal_cells = self.combat_spawn_cell_mask();
         // `combat.md §6.1a`: "The monster AI's own summon-daemon ability
         // does *not* set this bit", and `§6.1` keeps `0x80` off every
         // monster descriptor, so the hostile placement tag stands alone.
@@ -3649,7 +3649,7 @@ impl PlayState {
         let summon_can_place_daemon = if !enemy_magic_suppressed
             && combat_class_traits(class).is_some_and(|traits| traits.summon_daemon)
         {
-            let legal_cells = self.combat_legal_cell_mask();
+            let legal_cells = self.combat_spawn_cell_mask();
             summon_candidate.is_some_and(|candidate| {
                 resolve_combat_clone_placement_coordinate(&legal_cells, &[candidate]).is_some()
             }) && resolve_clone_spell_allocation(&self.combat_actors, &self.active_objects)
@@ -4107,7 +4107,7 @@ impl PlayState {
         self.emit_sound_effect(SoundEffect::SharedVariant { variant: 2 });
 
         let class = resolve_conjure_spell_class(self.combat_conjure_class_selector());
-        let legal_cells = self.combat_legal_cell_mask();
+        let legal_cells = self.combat_spawn_cell_mask();
         let applied = self.apply_combat_conjure_class_with_random_attempts(
             class,
             self.combat_actor_z(caster_index),
@@ -4149,7 +4149,7 @@ impl PlayState {
         // plays the spell effect before the placement resolver.
         self.emit_sound_effect(SoundEffect::SharedVariant { variant: 5 });
 
-        let legal_cells = self.combat_legal_cell_mask();
+        let legal_cells = self.combat_spawn_cell_mask();
         let applied = self.apply_combat_swarm_with_random_attempts(
             self.combat_actor_z(caster_index),
             &legal_cells,
@@ -4204,7 +4204,7 @@ impl PlayState {
             self.emit_sound_effect(SoundEffect::SharedVariant { variant });
         }
 
-        let legal_cells = self.combat_legal_cell_mask();
+        let legal_cells = self.combat_spawn_cell_mask();
         let applied = self.apply_combat_summon_daemon_with_random_attempts(
             self.combat_actor_z(caster_index),
             &legal_cells,
@@ -4315,6 +4315,32 @@ impl PlayState {
         } else {
             MoveOutcome::Blocked
         }
+    }
+
+    /// `magic.md §8`, "The shared random arena probe": Conjure, Swarm,
+    /// Summon and combat Blink put each in-range candidate "to the shared
+    /// combat spawn-cell validator, which requires terrain that the placed
+    /// creature's movement family can occupy, rejects the arena's impassable
+    /// void byte, and rejects any cell already holding a combat actor or a
+    /// dynamic object". `combat.md §9` sends the monster summon-daemon
+    /// ability through "the shared picker and spawn-cell validator used by the
+    /// player's Summon spell".
+    ///
+    /// This is [`Self::combat_legal_cell_mask`] with that void rejection
+    /// added. The void is the `0xFF` tile (`visibility.md §6`, "the void tile
+    /// `0xFF`"), which fills a dungeon room's arena outside its walls; the
+    /// movement mask accepted it, so these spells placed creatures - and
+    /// Blink the caster - in the black outside the room (playtest E32).
+    pub fn combat_spawn_cell_mask(&self) -> [[bool; COMBAT_ARENA_SIDE]; COMBAT_ARENA_SIDE] {
+        let mut legal_cells = self.combat_legal_cell_mask();
+        for (row, terrain_row) in legal_cells.iter_mut().zip(self.combat_terrain.iter()) {
+            for (legal, tile) in row.iter_mut().zip(terrain_row.iter()) {
+                if *tile == COMBAT_ARENA_VOID_TILE {
+                    *legal = false;
+                }
+            }
+        }
+        legal_cells
     }
 
     pub fn combat_legal_cell_mask(&self) -> [[bool; COMBAT_ARENA_SIDE]; COMBAT_ARENA_SIDE] {
