@@ -3401,10 +3401,15 @@ impl PlayState {
                 // does not stand in for `N`. `save-load.md §5.2` step 1
                 // gives the save confirm the same "Only `Y` and `N` are
                 // accepted" rule.
+                // `dungeon-mode.md §8.1`, "Fountain drink flow": "`Will you
+                // drink?\n` blocks until `Y` or `N`" - Escape is not a third
+                // answer there either (playtest E18).
                 '\u{1b}'
                     if matches!(
                         session.kind,
-                        YesNoPromptKind::TrollBridgeToll { .. } | YesNoPromptKind::SaveGame
+                        YesNoPromptKind::TrollBridgeToll { .. }
+                            | YesNoPromptKind::SaveGame
+                            | YesNoPromptKind::DungeonFountainDrink { .. }
                     ) => {}
                 'N' | '\u{1b}' => {
                     if let YesNoPromptKind::DungeonFountainDrink { party_index, focus } =

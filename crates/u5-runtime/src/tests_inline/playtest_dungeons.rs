@@ -363,3 +363,29 @@ fn playtest_e17_dungeon_control_bindings_cost_the_loop_minute() {
         assert_eq!(state.turn, 0, "key {:#04x} takes no turn", key as u32);
     }
 }
+
+/// E18: `dungeon-mode.md §8.1`, "Fountain drink flow" - "`Will you
+/// drink?\n` blocks until `Y` or `N`". Escape is re-read, not taken for `N`.
+#[test]
+fn playtest_e18_fountain_drink_prompt_ignores_escape() {
+    let mut grid = open_dungeon_record();
+    grid[dungeon_cell_index(0, 2, 1)] = 0x50;
+    let mut state = dungeon_state(grid, 0, 1, 1);
+    state.player.facing = Direction::East;
+    state.torch_counter = 5;
+    assert_eq!(state.look_dungeon(), MoveOutcome::Observed);
+    assert!(state.active_yes_no_prompt.is_some());
+
+    handle_play_key_input(&mut state, '\u{1b}', "", Path::new("")).unwrap();
+    assert!(state.active_yes_no_prompt.is_some(), "Escape is re-read");
+    assert!(
+        !playtest_transcript_rows(&state)
+            .iter()
+            .any(|row| row.contains("No.")),
+        "{:?}",
+        playtest_transcript_rows(&state)
+    );
+
+    handle_play_key_input(&mut state, 'n', "", Path::new("")).unwrap();
+    assert!(state.active_yes_no_prompt.is_none(), "`N` still answers");
+}
