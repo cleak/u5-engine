@@ -591,13 +591,12 @@ impl PlayState {
                 return MoveOutcome::Observed;
             }
             ActingMemberSelection::NoneAble => {
-                // No published refusal covers "nobody in the party can act"
-                // on the chest path, and the shop and combat families all
-                // answer an impossible selection with silence, so this one
-                // does too rather than inventing a sentence. Reported on
-                // cleak/u5-spec#247.
-                // audit: not a player-facing line
-                self.message.clear();
+                // `dungeon-mode.md §8.1`, "Who acts": Open runs the shared
+                // acting-member prompt "before anything else", and "a party
+                // with no eligible member at all, answers `None!\n` and the
+                // command aborts" - on any cell, now that the cell is read
+                // only after the pick (playtest E12).
+                self.message = DUNGEON_ACTING_MEMBER_NONE.to_string();
                 return MoveOutcome::Blocked;
             }
         };

@@ -207,6 +207,23 @@ fn playtest_e12_dungeon_open_asks_who_acts_on_any_cell() {
     assert_eq!(open.message, PARTY_SELECTION_PROMPT);
     handle_play_key_input(&mut open, '1', "", Path::new("")).unwrap();
     assert_eq!(open.message, DUNGEON_CHEST_OPEN_ALREADY_OPEN);
+
+    // "a party with no eligible member at all, answers `None!\n` and the
+    // command aborts" - before the cell is read, so not `What?`.
+    for tile in [0x00, 0x40] {
+        let mut grid = open_dungeon_record();
+        grid[dungeon_cell_index(0, 1, 1)] = tile;
+        let mut nobody = dungeon_state(grid, 0, 1, 1);
+        nobody.party[0].status = b'S';
+        handle_play_key_input(&mut nobody, 'o', "", Path::new("")).unwrap();
+        assert!(nobody.active_surface_chest.is_none(), "{tile:#04x}");
+        assert_eq!(nobody.message, DUNGEON_ACTING_MEMBER_NONE, "{tile:#04x}");
+        assert_eq!(
+            nobody.grid[dungeon_cell_index(0, 1, 1)],
+            tile,
+            "the cell is untouched"
+        );
+    }
 }
 
 /// E13: `dungeon-mode.md §8.1`, "Who acts" - the shared acting-member prompt
