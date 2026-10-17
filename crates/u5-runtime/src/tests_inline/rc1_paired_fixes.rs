@@ -73,3 +73,53 @@ fn rc1_slot_zero_refresh_still_runs_outside_the_audience() {
         (12, 20)
     );
 }
+
+/// Play-test P22, `shops.md §8.C`: the fee question `Wilt thou\npay?" `
+/// "accept[s] Y/N only and echo[es] bare `Yes` or `No`" - the declined `No`
+/// lands after `pay?" ` on the prompt's own row, like `Yes`, not on a row of
+/// its own; the continuation question follows.
+#[test]
+fn rc1_healer_declined_fee_echoes_no_on_the_prompt_row() {
+    use crate::shop_runtime::*;
+    use crate::shop_session::ActiveShopSession;
+    use crate::shops::Healer;
+
+    let mut state = test_state(open_grid(), 1, 1);
+    state.active_shop = Some(ActiveShopSession::Healer(
+        HealerShopState::Confirm {
+            service: HealerService::Cure,
+            slot: 0,
+            cost: 10,
+        },
+        Healer::TheHealersMission,
+    ));
+    state.emit_message_line("\n\"I can cure thy poisoned body for 10 gold.\n\nWilt thou\npay?\" ");
+    state.message_row_open_mid_line = true;
+    handle_play_key_input(&mut state, 'N', "", Path::new("")).unwrap();
+    state.flush_message_slot();
+    let rows: Vec<&str> = state
+        .message_transcript
+        .iter()
+        .map(|entry| entry.text.as_str())
+        .collect();
+    let at = rows
+        .iter()
+        .position(|row| *row == "pay?\" No")
+        .unwrap_or_else(|| panic!("`No` is not on the prompt row: {rows:#?}"));
+    assert!(!rows.contains(&"No"), "{rows:#?}");
+    assert_eq!(
+        rows[at + 1],
+        "",
+        "one blank row before the continuation: {rows:#?}"
+    );
+    assert_eq!(
+        rows[at + 2],
+        "\"Is there any other way in which I may",
+        "{rows:#?}"
+    );
+    assert!(
+        state.message.ends_with("aid thee?\" "),
+        "{:?}",
+        state.message
+    );
+}

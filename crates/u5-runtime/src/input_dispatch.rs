@@ -1108,6 +1108,8 @@ fn handle_active_shop_key_input(
                     _,
                     _,
                 ) => {
+                    // The fee prompt `pay?" ` leaves its row open mid-line.
+                    state.message_row_open_mid_line = true;
                     state.emit_message_line_continuing_row("Yes");
                     let treatment = healer_treatment_for_service(service);
                     match state.buy_healer_treatment(*healer, treatment, usize::from(slot)) {
@@ -1159,9 +1161,14 @@ fn handle_active_shop_key_input(
                 (HealerShopState::Confirm { service, .. }, _, true, _) => {
                     *s = HealerShopState::Continuation;
                     let _ = service;
-                    // §8.C: the fee prompt echoes a bare `No`, and the visit
-                    // continues on its own question.
-                    format!("No{HEALER_CONTINUATION}")
+                    // §8.C: the fee prompt `Wilt thou\npay?" ` echoes a bare
+                    // `No` onto its own row, exactly as `Yes` does, and the
+                    // visit continues on its own question. Returning the echo
+                    // inside the message put it on a row of its own
+                    // (play-test P22). The prompt row is open mid-line.
+                    state.message_row_open_mid_line = true;
+                    state.emit_message_line_continuing_row("No");
+                    HEALER_CONTINUATION.to_string()
                 }
                 // §8.C: "The continuation accepts Y/N, with the same entry
                 // echoes as Section 8.B. Yes repeats the service question; No
