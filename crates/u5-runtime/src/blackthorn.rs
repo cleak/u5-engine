@@ -1164,6 +1164,15 @@ pub fn blackthorn_release_line(gender: u8) -> String {
 /// Sections 3 and 4)" - the overworld-rate argument `2`.
 pub const BLACKTHORN_WRONG_ANSWER_CLEANUP_MINUTES: u8 = 2;
 
+/// `blackthorn.md §5` step 2 (u5-spec#298 Q24): "A quiet 10-tick redraw pause"
+/// between the execution record and the swell.
+pub const BLACKTHORN_EXECUTION_QUIET_PAUSE_TICKS: u16 = 10;
+
+/// `blackthorn.md §5` step 6 / §6.1: the pendulum cell, reset after the
+/// execution "to the fixture's unoccupied member `0x80`".
+pub const BLACKTHORN_PENDULUM_CELL: (usize, usize) = (5, 7);
+pub const BLACKTHORN_PENDULUM_UNOCCUPIED_TILE: u8 = 0x80;
+
 /// `blackthorn.md §2` two player-visible Blackthorn cinematic
 /// families. Both replace the ordinary map loop and hand control
 /// back through an explicit scene/position transition.

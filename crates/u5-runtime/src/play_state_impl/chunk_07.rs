@@ -4797,21 +4797,13 @@ impl PlayState {
             crate::blackthorn_session::BlackthornChallenge::awaiting_closing_acknowledgement,
         ) {
             let challenge = self.active_blackthorn.take().expect("checked above");
-            // Both executions land on this key, as the stock captures show
-            // (`bt-correct` for the merciful death, `bt-escalate` beat `ask5`
-            // for the pendulum; see the answer arms below: the spec's §5
-            // ordering conflicts, cleak/u5-spec#298).
-            if std::mem::take(&mut self.pending_blackthorn_merciful_death) {
-                let fate = self.apply_blackthorn_correct_answer_companion_fate();
-                self.repaint_stats_panel();
-                self.push_diagnostic(format!("On acknowledgement: {fate}."));
-            }
-            if let Some(victim) = self.pending_blackthorn_execution_victim.take() {
-                let report = self
-                    .execute_blackthorn_companion(victim)
-                    .unwrap_or_else(|| "no companion remains to punish".to_string());
-                self.repaint_stats_panel();
-                self.push_diagnostic(format!("On acknowledgement: {report}."));
+            // `blackthorn.md §5` (u5-spec#298 Q31): the blade hold "is not a
+            // key wait"; the execution lands at its end, before this key's
+            // wait begins. A key that reaches here while the hold is still
+            // queued - a shell with no pump - finishes it first, so the roster
+            // edit still precedes whatever the key does.
+            if self.blackthorn_execution_hold_pending() {
+                self.flush_staged_narration();
             }
             // §5: "After the execution and roster removal, print `\n\n`, the
             // actual removed member's name, and ` is sliced in half! `." That
@@ -5008,21 +5000,19 @@ impl PlayState {
                         "",
                     )?
                 };
-                if nondead >= 2 {
-                    // SPEC CONFLICT, capture authoritative pending
-                    // cleak/u5-spec#298. `blackthorn.md §5` says "The roster
-                    // edit and its repaint both precede the held page", which
-                    // would lift the companion at answer time. The stock
-                    // DOSBox capture (paired scenario `bt-correct`, beats
-                    // `right` and `after`) contradicts it: the record-5 page
-                    // is held with the companion still listed on the panel,
-                    // and he leaves only with the key that follows. When the
-                    // spec text and a direct capture of the stock game
-                    // disagree the engine follows the capture, so the lift
-                    // waits for the acknowledgement (drained above).
+                let executes = nondead >= 2;
+                // `blackthorn.md §5` (u5-spec#298 Q24, Q31): record `5`, then
+                // the execution's quiet pause, swell and impact - "not a key
+                // wait" - with the companion leaving the panel "at the end of
+                // the blade-and-impact hold", before the exit beat's key wait
+                // begins. The engine previously deferred the lift to that key
+                // after a stock capture taken with a key sent during the hold.
+                let outcome = self.hold_blackthorn_closing(challenge, reward, executes)?;
+                if executes {
                     self.pending_blackthorn_merciful_death = true;
+                    self.stage_blackthorn_execution_hold(None);
                 }
-                self.hold_blackthorn_closing(challenge, reward, nondead >= 2)
+                Ok(outcome)
             }
             crate::blackthorn_session::BlackthornChallengeOutcome::Wrong { ordinal, expected } => {
                 // `blackthorn.md §4`: "**A wrong answer, when few companions
@@ -5174,57 +5164,54 @@ impl PlayState {
                         // §5: the tail names "the actual removed member",
                         // read before the roster record is lifted out.
                         let victim_name = self.blackthorn_victim_display_name(victim);
-                        // `blackthorn.md §6.1`: the failed-challenge script
-                        // swap "runs on the **first** wrong answer only", and
-                        // "index 3 executes a companion (Section 5) rather
-                        // than stamping", so the hourglass stays on the `0xE8`
-                        // the third answer left. Re-running that vector here
-                        // would rewrite `0xE9`. §5's two-phase blade
-                        // animation has no published vector, so none plays.
-                        let vm = self.blackthorn_cutscene_vm_from_audience_state();
-                        // SPEC CONFLICT, capture authoritative (the same
-                        // question as cleak/u5-spec#298). `blackthorn.md §5`
-                        // says "The roster edit and its repaint both precede
-                        // the held page" and that the record-4 narration is
-                        // not a key wait. The stock DOSBox capture (paired
-                        // scenario `bt-escalate`, beat `ask5`) holds the
-                        // screen on the narration's `falls!` with the victim
-                        // still listed on the panel and the sliced line not
-                        // yet printed. So the narration is held, and the lift
-                        // and its repaint wait for that key (drained in the
-                        // acknowledgement arm above).
+                        // `blackthorn.md §5` (u5-spec#298 Q24, R532): the
+                        // execution "runs no cutscene script and moves no
+                        // guard" - the failed-challenge script and its swap
+                        // ran on the first wrong answer only (§6.1), so the
+                        // hourglass stays on the `0xE8` the third answer left.
+                        //
+                        // Q31: record `4` is not a key wait. "The panel lists
+                        // the whole party through the pendulum-narration page
+                        // and the blade, and the reduced party first appears
+                        // in the same screenshot sample as the `... is sliced
+                        // in half!` page, which then waits for the key." The
+                        // engine had held the narration for a key and lifted
+                        // the victim on it, after a stock capture with a key
+                        // sent during the blade hold.
                         self.pending_blackthorn_execution_victim = Some(victim);
                         // This is the punishing branch, so no §4.2 exit beat
                         // follows its acknowledgement (`cleak/u5-spec#268`).
                         self.blackthorn_audience_punished = true;
                         self.push_diagnostic(format!(
-                            "Failed Blackthorn's prompt {}; expected {expected}; companion in slot {victim} is owed the pendulum blade; cutscene advanced {} world ticks.", // audit: not a player-facing line
+                            "Failed Blackthorn's prompt {}; expected {expected}; companion in slot {victim} is owed the pendulum blade.", // audit: not a player-facing line
                             ordinal + 1,
-                            vm.world_ticks
                         ));
                         let line = self.blackthorn_reaction_text(
                             game_dir,
                             crate::MISCMSG_BLACKTHORN_PENDULUM_NARRATION,
                             BLACKTHORN_PENDULUM_NARRATION,
                         )?;
-                        // `blackthorn.md §5`: "After the execution and roster
-                        // removal, print `\n\n`, the actual removed member's
-                        // name, and ` is sliced in half! `. After
-                        // acknowledgement, record `6` supplies the quoted
-                        // unfairness/treachery speech". The sliced line is the
-                        // page after the held narration; record `6` follows
-                        // its key with no further wait.
-                        self.pending_blackthorn_closing_page =
-                            Some(format!("\n\n{victim_name} is sliced in half! "));
                         // The narration's own line feed closes its row: the
                         // stock `ask5` beat ends on `falls!` with no blank row
-                        // under it (measured 2026-09-12).
-                        self.hold_blackthorn_closing_page(
+                        // under it (measured 2026-09-12). The key wait that
+                        // follows belongs to the sliced page (§5 step 8), so
+                        // the session waits for its closing key from here,
+                        // with record `6` behind it.
+                        let outcome = self.hold_blackthorn_closing_page(
                             challenge,
                             format!("{line}\n"),
                             false,
                             true,
-                        )
+                        )?;
+                        // §5 step 8: "On the wrong-answer arm only: print
+                        // `\n\n`, the removed member's name and ` is sliced
+                        // in half! `, wait for an acknowledgement key" - after
+                        // the roster change of step 7, so it is staged behind
+                        // the hold.
+                        self.stage_blackthorn_execution_hold(Some(format!(
+                            "\n\n{victim_name} is sliced in half! "
+                        )));
+                        Ok(outcome)
                     }
                 }
             }
@@ -5259,6 +5246,90 @@ impl PlayState {
                 Ok(MoveOutcome::PromptDeclined)
             }
         }
+    }
+
+    /// Whether a `blackthorn.md §5` execution is staged and its roster edit
+    /// has not landed yet.
+    pub fn blackthorn_execution_hold_pending(&self) -> bool {
+        self.pending_blackthorn_merciful_death || self.pending_blackthorn_execution_victim.is_some()
+    }
+
+    /// `blackthorn.md §5` steps 2-4 (u5-spec#298 Q24): after the record, "A
+    /// quiet 10-tick redraw pause", "The 920-run swell, the Blackthorn
+    /// execution row of `systems/audio.md` Section 5.4.7", then "The shared
+    /// impact presentation ... the impact figure is drawn, the 300-update
+    /// impact rumble plays, and one world tick follows". No inversion and no
+    /// guard movement. The whole of it is one staged hold with nothing to
+    /// print; the roster edit of steps 5-7 lands when it releases
+    /// ([`Self::release_blackthorn_execution_hold`]), and `page` - the
+    /// wrong arm's sliced line - prints after that.
+    fn stage_blackthorn_execution_hold(&mut self, page: Option<String>) {
+        self.emit_sound_effect(SoundEffect::BlackthornExecutionSwell);
+        self.emit_sound_effect(SoundEffect::RoughSeasImpactRumble);
+        let mut jitter = crate::audio::RumbleJitter::default();
+        let sounds = SoundEffect::BlackthornExecutionSwell
+            .program(&mut jitter)
+            .duration(true)
+            .as_secs_f64()
+            + SoundEffect::RoughSeasImpactRumble
+                .program(&mut jitter)
+                .duration(true)
+                .as_secs_f64();
+        let hold = crate::narration::bios_ticks_secs(
+            crate::blackthorn::BLACKTHORN_EXECUTION_QUIET_PAUSE_TICKS,
+        ) + sounds;
+        self.staged_narration.push_secs(hold, String::new());
+        if let Some(page) = page {
+            self.staged_narration.push_secs(0.0, page);
+        }
+    }
+
+    /// `blackthorn.md §5` steps 4-7, at the end of the blade hold: the impact
+    /// lands at "the cell where the second-member actor (slot 1) currently
+    /// stands", that actor is cleared, "the pendulum cell `(5,7)`" is reset
+    /// "to the fixture's unoccupied member `0x80`", and the second nondead
+    /// member is lifted with the stats panel "repaint[ed] **immediately
+    /// afterwards**". Called as each staged beat releases; a no-op unless an
+    /// execution is pending.
+    pub(crate) fn release_blackthorn_execution_hold(&mut self) {
+        let merciful = std::mem::take(&mut self.pending_blackthorn_merciful_death);
+        let victim = self.pending_blackthorn_execution_victim.take();
+        if !merciful && victim.is_none() {
+            return;
+        }
+        // Step 4's cell. After a first wrong answer the actor sprite was
+        // cleared on the pendulum, where §5 puts it; this engine's script VM
+        // drops a cleared actor's coordinates, so that case reads the
+        // published pendulum cell.
+        let slot = BlackthornCutsceneActor::SecondPartyMember.slot_index() as usize;
+        let impact = self
+            .active_objects
+            .get(slot)
+            .filter(|object| !object.is_empty())
+            .map_or(crate::blackthorn::BLACKTHORN_PENDULUM_CELL, |object| (object.x, object.y));
+        // Step 6: buffered, shown on the next redraw.
+        let (x, y) = crate::blackthorn::BLACKTHORN_PENDULUM_CELL;
+        if let Some(index) = crate::blackthorn::blackthorn_cutscene_tile_index(x, y) {
+            if let Some(cell) = self
+                .blackthorn_audience_map
+                .as_mut()
+                .and_then(|map| map.tiles.get_mut(index))
+            {
+                *cell = crate::blackthorn::BLACKTHORN_PENDULUM_UNOCCUPIED_TILE;
+            }
+        }
+        // Steps 5 and 7 (the actor clear is part of the shared routine).
+        let report = if merciful {
+            self.apply_blackthorn_correct_answer_companion_fate()
+        } else {
+            victim
+                .and_then(|victim| self.execute_blackthorn_companion(victim))
+                .unwrap_or_else(|| "no companion remains to punish".to_string())
+        };
+        self.repaint_stats_panel();
+        self.push_diagnostic(format!(
+            "Blackthorn execution at the end of the blade hold (impact at {impact:?}): {report}."
+        ));
     }
 
     /// `blackthorn.md §5` (u5-spec#298 Q8): "Wrong answers past the first
@@ -5490,7 +5561,8 @@ impl PlayState {
     /// `blackthorn.md §5`: "**The punishment is an execution, and it is
     /// durable.** ... the routine:
     ///
-    /// - erases that companion's on-screen actor;
+    /// - clears the second-member actor's sprite (step 5 above; that actor is
+    ///   not necessarily the removed companion when a Dead entry precedes it);
     /// - lifts their roster record out of the party, compacts the remaining
     ///   records up, and decrements the party count;
     /// - parks the lifted record in the last roster slot with a
@@ -5509,9 +5581,9 @@ impl PlayState {
             return None;
         }
 
-        // "erases that companion's on-screen actor" - the audience cinematic
-        // holds the victim in the `SecondPartyMember` actor slot of
-        // `blackthorn.md §6`.
+        // §5 step 5 (u5-spec#298 Q24): "Clear the second-member actor's
+        // sprite" - the `SecondPartyMember` actor slot of §6, whichever member
+        // is actually removed.
         let actor_slot = BlackthornCutsceneActor::SecondPartyMember.slot_index() as usize;
         if let Some(object) = self.active_objects.get_mut(actor_slot) {
             *object = ActiveObject::empty();

@@ -2461,6 +2461,9 @@
                 .as_ref()
                 .is_some_and(|challenge| challenge.awaiting_closing_acknowledgement())
         );
+        // §5 (u5-spec#298 Q31): the blade hold before that wait is not a key
+        // wait; a frontend pumps it out before reading the key.
+        state.flush_staged_narration();
         assert_eq!(
             handle_play_key_input(&mut state, ' ', "", &dir).unwrap(),
             PlayInputDisposition::Continue

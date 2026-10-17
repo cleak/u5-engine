@@ -521,6 +521,9 @@ impl PlayState {
             }
         }
         for beat in released {
+            // `blackthorn.md §5`: an execution's roster edit lands as its
+            // blade hold ends (u5-spec#298 Q31).
+            self.release_blackthorn_execution_hold();
             self.run_presentation_world_steps(beat.world_steps);
             // `karma.md §7.2`: the viewport inversion is never restored - the
             // counted steps that follow the swell simply repaint over it.
@@ -539,6 +542,7 @@ impl PlayState {
     /// Print every remaining beat now. For frontends and tests with no pump.
     pub fn flush_staged_narration(&mut self) {
         for beat in self.staged_narration.drain_all() {
+            self.release_blackthorn_execution_hold();
             self.run_presentation_world_steps(beat.world_steps);
             self.presentation_viewport_inverted = false;
             self.emit_staged_beat(beat);

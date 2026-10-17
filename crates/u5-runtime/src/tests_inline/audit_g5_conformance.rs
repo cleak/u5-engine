@@ -201,14 +201,13 @@ fn audit_a037_hourglass_runs_e9_eb_e8_and_the_first_wrong_plays_the_beat() {
     let _ = fs::remove_dir_all(dir);
 }
 
-/// Audit A036, correct-answer branch. `blackthorn.md §5` says "The roster
-/// edit and its repaint both precede the held page", but the stock DOSBox
-/// capture (paired scenario `bt-correct`, beats `right` and `after`) holds
-/// the record-5 page with the companion still listed and removes him only
-/// with the following key. The capture is authoritative pending
-/// cleak/u5-spec#298, so the lift waits for that key.
+/// Audit A036, correct-answer branch, as u5-spec#298 Q31 answers it
+/// (`blackthorn.md §5`): "on a correct answer the companion leaves the stats
+/// panel at the end of the blade-and-impact hold, in the same screenshot
+/// sample ... in which the exit beat's key-wait cursor first appears". The
+/// hold is "not a key wait", so the lift lands when it ends, not on the key.
 #[test]
-fn audit_a036_merciful_death_lifts_the_roster_on_the_acknowledgement_key() {
+fn audit_a036_merciful_death_lifts_the_roster_at_the_end_of_the_blade_hold() {
     let dir = debug_game_dir();
     let mut state = test_state(open_grid(), 5, 5);
     state.party.push(audit_g5_companion(1));
@@ -219,8 +218,29 @@ fn audit_a036_merciful_death_lifts_the_roster_on_the_acknowledgement_key() {
         state.submit_blackthorn_audience_answer("", &dir).unwrap();
     }
 
+    let sound_before = state.sound_effect_serial;
     state.submit_blackthorn_audience_answer("Ahm", &dir).unwrap();
     assert!(state.message.contains("merciful death"), "{:?}", state.message);
+    // §5 steps 2-4: the swell and the impact rumble, with the hold staged.
+    let effects = state.sound_effects_after(sound_before);
+    assert!(effects.contains(&SoundEffect::BlackthornExecutionSwell), "{effects:?}");
+    assert!(effects.contains(&SoundEffect::RoughSeasImpactRumble), "{effects:?}");
+    assert!(state.staged_narration_active(), "the blade hold is running");
+    assert_eq!(state.party.len(), 3, "the hold still lists the companion");
+    assert_eq!(
+        state.stats_panel,
+        crate::stats_panel::stats_panel_snapshot_of(&state),
+        "and the panel shows the full party"
+    );
+
+    // The hold ends: the companion leaves the panel before any key.
+    state.flush_staged_narration();
+    assert_eq!(state.party.len(), 2, "the end of the hold lifts him");
+    assert_eq!(
+        state.stats_panel,
+        crate::stats_panel::stats_panel_snapshot_of(&state),
+        "and repaints the panel"
+    );
     assert!(
         state
             .active_blackthorn
@@ -228,30 +248,19 @@ fn audit_a036_merciful_death_lifts_the_roster_on_the_acknowledgement_key() {
             .is_some_and(|c| c.awaiting_closing_acknowledgement()),
         "the exit beat's key is still to come"
     );
-    assert_eq!(state.party.len(), 3, "the held page still lists the companion");
-    assert_eq!(
-        state.stats_panel,
-        crate::stats_panel::stats_panel_snapshot_of(&state),
-        "and the panel shows the full party"
-    );
-
-    state.submit_blackthorn_audience_answer("", &dir).unwrap();
-    assert_eq!(state.party.len(), 2, "the key that follows lifts him");
-    assert_eq!(
-        state.stats_panel,
-        crate::stats_panel::stats_panel_snapshot_of(&state),
-        "and repaints the panel"
-    );
+    // §5 step 6: the pendulum cell is reset to the unoccupied member.
+    assert_eq!(audit_g5_audience_tile(&state, 5, 7), Some(0x80));
     let _ = fs::remove_dir_all(dir);
 }
 
-/// Audit A036, pendulum branch, reconciled with the stock capture. The
-/// `bt-escalate` beat `ask5` holds the record-4 narration (ending on `falls!`)
-/// with the victim still listed on the panel. The key after it lifts the
-/// victim and repaints, and holds the page that names them; the key after
-/// that prints record `6` and leaves without another wait.
+/// Audit A036, pendulum branch, as u5-spec#298 Q31 and Q24 answer it
+/// (`blackthorn.md §5`): "on the fourth wrong answer the panel lists the whole
+/// party through the pendulum-narration page and the blade, and the reduced
+/// party first appears in the same screenshot sample as the `... is sliced in
+/// half!` page, which then waits for the key"; the key after it prints record
+/// `6` and leaves without another wait.
 #[test]
-fn audit_a036_pendulum_narration_is_held_with_the_victim_still_listed() {
+fn audit_a036_pendulum_narration_is_not_a_key_wait() {
     let dir = debug_game_dir();
     let mut state = test_state(open_grid(), 5, 5);
     state.party.push(audit_g5_companion(1));
@@ -261,28 +270,42 @@ fn audit_a036_pendulum_narration_is_held_with_the_victim_still_listed() {
     while state.active_blackthorn.as_ref().is_some_and(|c| c.current_prompt().is_none()) {
         state.submit_blackthorn_audience_answer("", &dir).unwrap();
     }
-    for _ in 0..4 {
+    for _ in 0..3 {
         state.submit_blackthorn_audience_answer("wrong", &dir).unwrap();
         if state.active_blackthorn.as_ref().is_some_and(|c| c.awaiting_acknowledgement()) {
             state.submit_blackthorn_audience_answer("", &dir).unwrap();
         }
     }
+    let stingers_before = state.sound_effect_serial;
+    state.submit_blackthorn_audience_answer("wrong", &dir).unwrap();
     assert!(state.message.contains("pendulum blade falls!"), "{:?}", state.message);
-    assert!(!state.message.contains(" is sliced in half! "), "{:?}", state.message);
-    assert_eq!(state.party.len(), 3, "the held narration still lists the victim");
+    assert_eq!(
+        audit_g5_stingers_after(&state, stingers_before),
+        0,
+        "Q24: the execution runs no cutscene script"
+    );
+    assert!(state.staged_narration_active(), "the blade hold is running");
+    assert_eq!(state.party.len(), 3, "the narration still lists the victim");
     assert_eq!(
         state.stats_panel,
         crate::stats_panel::stats_panel_snapshot_of(&state),
         "and the panel shows the full party"
     );
 
-    state.submit_blackthorn_audience_answer("", &dir).unwrap();
+    state.flush_staged_narration();
     assert!(state.message.contains(" is sliced in half! "), "{:?}", state.message);
-    assert_eq!(state.party.len(), 2, "the narration's key lifts the victim");
+    assert_eq!(state.party.len(), 2, "the hold's end lifts the victim");
     assert_eq!(
         state.stats_panel,
         crate::stats_panel::stats_panel_snapshot_of(&state),
-        "and repaints the panel"
+        "and repaints the panel before the sliced page"
+    );
+    assert!(
+        state
+            .active_blackthorn
+            .as_ref()
+            .is_some_and(|c| c.awaiting_closing_acknowledgement()),
+        "the sliced page waits for the key"
     );
 
     let outcome = state.submit_blackthorn_audience_answer("", &dir).unwrap();
@@ -361,9 +384,9 @@ fn audit_a035_punishing_branch_runs_the_conditional_tableau_cleanup() {
             state.submit_blackthorn_audience_answer("", &dir).unwrap();
         }
     }
-    // The held pendulum narration's key (stock `bt-escalate` beat `ask5`)
-    // brings up the page that names the victim; the tail follows its key.
-    state.submit_blackthorn_audience_answer("", &dir).unwrap();
+    // The blade hold ends and brings up the page that names the victim
+    // (u5-spec#298 Q31); the tail follows its key.
+    state.flush_staged_narration();
     let before = state.sound_effect_serial;
     state.submit_blackthorn_audience_answer("", &dir).unwrap();
     let mut cleanup = BlackthornCutsceneVm::with_audience_setup(Vec::new());

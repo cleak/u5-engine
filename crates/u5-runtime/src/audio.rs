@@ -1376,6 +1376,12 @@ pub fn shrine_swell_program(period: u16, iterations: u32) -> SpeakerProgram {
 pub const SHARD_SWELL_PERIOD: u16 = 2640;
 pub const SHARD_SWELL_ITERATIONS: u32 = 200;
 
+/// `audio.md §5.4.7`'s "Blackthorn execution (fourth wrong answer or merciful
+/// death)" row: phase increment 2640, 200 iterations per run, 184,000 in all,
+/// about 937 Hz and 7.91 s audible (u5-spec#298 Q24).
+pub const BLACKTHORN_EXECUTION_SWELL_PERIOD: u16 = 2640;
+pub const BLACKTHORN_EXECUTION_SWELL_ITERATIONS: u32 = 200;
+
 pub fn blackthorn_rescue_envelope_program() -> SpeakerProgram {
     let mut ops = Vec::with_capacity(BLACKTHORN_RESCUE_ENVELOPES.len() * 2);
     for segment in BLACKTHORN_RESCUE_ENVELOPES {
@@ -1937,6 +1943,10 @@ pub enum SoundEffect {
     /// `audio.md §5.4.7`'s "Shadowlord destruction" swell; see
     /// [`SHARD_SWELL_PERIOD`].
     ShardSwell,
+    /// `audio.md §5.4.7`, the Blackthorn execution row (`blackthorn.md §5`
+    /// step 3, u5-spec#298 Q24): the 920-run swell at phase increment 2640,
+    /// 200 iterations per run, with no inversion before it.
+    BlackthornExecutionSwell,
     /// R494's per-slot restoration note, carrying the slot it precedes.
     BlackthornRescueRestoration(usize),
     /// `containers.md §9` moldy-corpse Plague consequence.
@@ -2038,6 +2048,10 @@ impl SoundEffect {
                 SHRINE_TURN_IN_SWELL_ITERATIONS,
             ),
             SoundEffect::ShardSwell => shrine_swell_program(SHARD_SWELL_PERIOD, SHARD_SWELL_ITERATIONS),
+            SoundEffect::BlackthornExecutionSwell => shrine_swell_program(
+                BLACKTHORN_EXECUTION_SWELL_PERIOD,
+                BLACKTHORN_EXECUTION_SWELL_ITERATIONS,
+            ),
             SoundEffect::BlackthornRescueRestoration(slot) => {
                 envelope_program(blackthorn_rescue_restoration_envelope(*slot))
             }

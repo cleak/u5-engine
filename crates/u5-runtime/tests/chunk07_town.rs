@@ -398,10 +398,9 @@ fn blackthorn_fourth_wrong_answer_executes_the_named_companion() {
         .submit_blackthorn_audience_answer("nonsense", &dir)
         .unwrap();
 
-    // `blackthorn.md §5` puts the roster lift before the held page, but the
-    // stock capture (`qa/paired/bt-escalate.tsv`, beat `ask5`) holds the
-    // record-4 narration, ending on `falls!`, with the victim still listed
-    // and the sliced line still to come (cleak/u5-spec#298's question).
+    // `blackthorn.md §5` (u5-spec#298 Q31): the record-4 narration and the
+    // blade are not a key wait; the victim stays listed through them and
+    // the sliced line comes when the hold ends.
     assert!(
         state
             .active_blackthorn
@@ -418,9 +417,9 @@ fn blackthorn_fourth_wrong_answer_executes_the_named_companion() {
         "the sliced line is the next page: {}",
         state.message
     );
-    assert_eq!(state.party.len(), 3, "the held narration still lists the victim");
+    assert_eq!(state.party.len(), 3, "the narration still lists the victim");
 
-    state.submit_blackthorn_audience_answer("", &dir).unwrap();
+    state.flush_staged_narration();
     assert!(
         state
             .active_blackthorn
@@ -432,7 +431,7 @@ fn blackthorn_fourth_wrong_answer_executes_the_named_companion() {
         "{}",
         state.message
     );
-    assert_eq!(state.party.len(), 2, "the narration's key lifts the victim");
+    assert_eq!(state.party.len(), 2, "the end of the blade hold lifts the victim");
 
     // After that single acknowledgement, record `6` and the helper's line
     // feed print and the loop leaves without another wait.
