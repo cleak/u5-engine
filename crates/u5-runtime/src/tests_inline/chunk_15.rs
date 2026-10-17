@@ -2690,6 +2690,9 @@
         });
 
         state.begin_blackthorn_audience_capture(&dir).unwrap();
+        // The greeting's key runs the guard-release route, which leaves the
+        // actors on the exit beat's published start cells (§6.3, Q9).
+        state.submit_blackthorn_audience_answer("", &dir).unwrap();
         let sound_before = state.sound_effect_serial;
         let vm = state.run_blackthorn_cutscene_beat(BlackthornCutsceneBeat::AudienceExit);
 
@@ -2700,10 +2703,10 @@
                 .and_then(|map| map.tile(0, 4)),
             Some(BLACKTHORN_LOCKED_DOOR_TILE)
         );
-        assert_eq!(
-            state.active_objects[BlackthornCutsceneActor::Avatar.slot_index() as usize].y,
-            7
-        );
+        // u5-spec#298 Q9: "At the end the Avatar actor stands at `(0,2)`,
+        // beyond the door cell, and the other three actors are cleared."
+        let avatar = state.active_objects[BlackthornCutsceneActor::Avatar.slot_index() as usize];
+        assert_eq!((avatar.x, avatar.y), (0, 2));
         for actor in [
             BlackthornCutsceneActor::SeatedBlackthorn,
             BlackthornCutsceneActor::LeftGuard,
@@ -2711,13 +2714,11 @@
         ] {
             assert!(state.active_objects[actor.slot_index() as usize].is_empty());
         }
-        // `blackthorn.md §4.2` counts the whole exit vector at 36 stings and
-        // 73 world ticks; the per-command repeats that make up the difference
-        // are unpublished (see `BLACKTHORN_CUTSCENE_AUDIENCE_EXIT`), so these
-        // pin the engine's checkpoint-only script, not the published totals.
-        assert_eq!(vm.world_ticks, 29);
-        assert_eq!(vm.bios_ticks, 28);
-        assert_eq!(vm.stinger_count, 14);
+        // `blackthorn.md §6.3` (u5-spec#298 Q9): "36 stinger-pause
+        // repetitions, 73 world ticks and 72 one-BIOS-tick delay requests".
+        assert_eq!(vm.world_ticks, 73);
+        assert_eq!(vm.bios_ticks, 72);
+        assert_eq!(vm.stinger_count, 36);
         let effects = state.sound_effects_after(sound_before);
         assert_eq!(effects.len(), usize::from(vm.stinger_count));
         assert!(effects

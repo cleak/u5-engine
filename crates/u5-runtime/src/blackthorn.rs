@@ -362,19 +362,23 @@ pub const BLACKTHORN_RESCUE_PARTY_ATLAS_INDEX: u16 = 0x11c;
 /// `0x16` is the actor-storage draw-nothing sentinel, not atlas tile
 /// `0x116`.
 pub const BLACKTHORN_AUDIENCE_ACTOR_PLACEMENTS: [BlackthornCutsceneActorPlacement; 5] = [
+    // `blackthorn.md §6.3` (u5-spec#298 Q9): the exit beat finds "slot 0
+    // `(3,5)`", and neither the approach nor the release moves it; §5 (Q24):
+    // the second-member actor's "starting cell `(7,5)`". The earlier
+    // `(5,9)` / `(6,9)` were unpublished and put the Avatar on the hourglass.
     BlackthornCutsceneActorPlacement {
         actor: BlackthornCutsceneActor::Avatar,
         type_byte: crate::PLAYER_TILE,
         tile: crate::PLAYER_TILE,
-        x: 5,
-        y: 9,
+        x: 3,
+        y: 5,
     },
     BlackthornCutsceneActorPlacement {
         actor: BlackthornCutsceneActor::SecondPartyMember,
         type_byte: crate::PLAYER_TILE,
         tile: crate::PLAYER_TILE,
-        x: 6,
-        y: 9,
+        x: 7,
+        y: 5,
     },
     BlackthornCutsceneActorPlacement {
         actor: BlackthornCutsceneActor::LeftGuard,
@@ -499,60 +503,166 @@ pub enum BlackthornCutsceneBeat {
 }
 
 /// `blackthorn.md §6.3`, the audience-exit row, played once by §4.2's exit
-/// beat after its key wait. The visible checkpoints are the published ones:
-/// the acting guard's animated westward step, cobble `0x44` buffered at
-/// `(0,4)` and exposed by the explicit tick, door `0xBB` replacing it and
-/// exposed by a one-repetition stinger pause, the tableau and both guards
-/// cleared, and a final six-repetition hold.
-///
-/// Known gap: §4.2 counts the whole vector at 36 stinger repetitions and 73
-/// world ticks, and this script reaches 14 and 29. The difference is in the
-/// per-command repeat counts and directions of the guard/Avatar repositioning
-/// and tableau moves, which §6.3 deliberately does not publish ("These vectors
-/// deliberately test visible checkpoints rather than duplicating the ...
-/// movement byte stream"), so they are not invented here.
-pub const BLACKTHORN_CUTSCENE_AUDIENCE_EXIT: [BlackthornCutsceneCommand; 18] = [
+/// beat after its key wait. "Audience exit vector, full command list"
+/// (u5-spec#298 Q9): every movement repetition is animated, a paired
+/// repetition costs one sting, and the 29 rows below give the published
+/// totals - 36 stings, 73 world ticks, 72 one-BIOS-tick delays - with the
+/// Avatar ending at `(0,2)` beyond the door and the other three actors
+/// cleared. Row numbers are the spec table's. The previous version replayed
+/// only the published checkpoints (14 stings / 29 ticks).
+pub const BLACKTHORN_CUTSCENE_AUDIENCE_EXIT: [BlackthornCutsceneCommand; 40] = [
+    // Row 1.
     BlackthornCutsceneCommand::MoveActor {
         actor: BlackthornCutsceneActor::LeftGuard,
         direction: crate::Direction::West,
     },
+    // Row 2.
     BlackthornCutsceneCommand::WriteTerrain {
         x: 0,
         y: 4,
         tile: BLACKTHORN_COBBLE_TILE,
     },
+    // Row 3.
     BlackthornCutsceneCommand::ExplicitRedraw,
+    // Row 4.
+    BlackthornCutsceneCommand::MoveActor {
+        actor: BlackthornCutsceneActor::LeftGuard,
+        direction: crate::Direction::East,
+    },
+    // Row 5.
+    BlackthornCutsceneCommand::MoveActor {
+        actor: BlackthornCutsceneActor::LeftGuard,
+        direction: crate::Direction::East,
+    },
+    // Row 6.
     BlackthornCutsceneCommand::SetRepeat(2),
+    BlackthornCutsceneCommand::SetPairedMovement {
+        actor: BlackthornCutsceneActor::Avatar,
+        direction: crate::Direction::West,
+    },
+    BlackthornCutsceneCommand::MoveActor {
+        actor: BlackthornCutsceneActor::LeftGuard,
+        direction: crate::Direction::West,
+    },
+    // Row 7.
+    BlackthornCutsceneCommand::MoveActor {
+        actor: BlackthornCutsceneActor::LeftGuard,
+        direction: crate::Direction::South,
+    },
+    // Row 8.
+    BlackthornCutsceneCommand::MoveActor {
+        actor: BlackthornCutsceneActor::LeftGuard,
+        direction: crate::Direction::East,
+    },
+    // Row 9.
+    BlackthornCutsceneCommand::MoveActor {
+        actor: BlackthornCutsceneActor::LeftGuard,
+        direction: crate::Direction::East,
+    },
+    // Row 10.
+    BlackthornCutsceneCommand::MoveActor {
+        actor: BlackthornCutsceneActor::LeftGuard,
+        direction: crate::Direction::North,
+    },
+    // Row 11.
+    BlackthornCutsceneCommand::SetPairedMovement {
+        actor: BlackthornCutsceneActor::Avatar,
+        direction: crate::Direction::West,
+    },
+    BlackthornCutsceneCommand::MoveActor {
+        actor: BlackthornCutsceneActor::LeftGuard,
+        direction: crate::Direction::West,
+    },
+    // Row 12.
     BlackthornCutsceneCommand::SetPairedMovement {
         actor: BlackthornCutsceneActor::Avatar,
         direction: crate::Direction::North,
     },
     BlackthornCutsceneCommand::MoveActor {
         actor: BlackthornCutsceneActor::LeftGuard,
+        direction: crate::Direction::West,
+    },
+    // Row 13.
+    BlackthornCutsceneCommand::SetPairedMovement {
+        actor: BlackthornCutsceneActor::Avatar,
+        direction: crate::Direction::North,
+    },
+    BlackthornCutsceneCommand::MoveActor {
+        actor: BlackthornCutsceneActor::LeftGuard,
+        direction: crate::Direction::North,
+    },
+    // Row 14.
+    BlackthornCutsceneCommand::MoveActor {
+        actor: BlackthornCutsceneActor::Avatar,
+        direction: crate::Direction::North,
+    },
+    // Row 15.
+    BlackthornCutsceneCommand::MoveActor {
+        actor: BlackthornCutsceneActor::LeftGuard,
         direction: crate::Direction::South,
     },
+    // Row 16.
     BlackthornCutsceneCommand::WriteTerrain {
         x: 0,
         y: 4,
         tile: BLACKTHORN_LOCKED_DOOR_TILE,
     },
+    // Row 17.
     BlackthornCutsceneCommand::StingerPause,
-    BlackthornCutsceneCommand::SetRepeat(2),
+    // Row 18.
     BlackthornCutsceneCommand::MoveActor {
         actor: BlackthornCutsceneActor::SeatedBlackthorn,
-        direction: crate::Direction::North,
+        direction: crate::Direction::East,
     },
+    // Row 19.
+    BlackthornCutsceneCommand::SetRepeat(4),
+    BlackthornCutsceneCommand::SetPairedMovement {
+        actor: BlackthornCutsceneActor::LeftGuard,
+        direction: crate::Direction::South,
+    },
+    BlackthornCutsceneCommand::MoveActor {
+        actor: BlackthornCutsceneActor::SeatedBlackthorn,
+        direction: crate::Direction::South,
+    },
+    // Row 20.
+    BlackthornCutsceneCommand::MoveActor {
+        actor: BlackthornCutsceneActor::SeatedBlackthorn,
+        direction: crate::Direction::South,
+    },
+    // Row 21.
+    BlackthornCutsceneCommand::MoveActor {
+        actor: BlackthornCutsceneActor::LeftGuard,
+        direction: crate::Direction::East,
+    },
+    // Row 22.
     BlackthornCutsceneCommand::ClearActor(BlackthornCutsceneActor::SeatedBlackthorn),
+    // Row 23.
+    BlackthornCutsceneCommand::SetRepeat(3),
+    BlackthornCutsceneCommand::MoveActor {
+        actor: BlackthornCutsceneActor::LeftGuard,
+        direction: crate::Direction::East,
+    },
+    // Row 24.
     BlackthornCutsceneCommand::MoveActor {
         actor: BlackthornCutsceneActor::LeftGuard,
         direction: crate::Direction::South,
     },
+    // Row 25.
     BlackthornCutsceneCommand::ClearActor(BlackthornCutsceneActor::LeftGuard),
+    // Row 26.
+    BlackthornCutsceneCommand::SetRepeat(3),
     BlackthornCutsceneCommand::MoveActor {
         actor: BlackthornCutsceneActor::RightGuard,
-        direction: crate::Direction::North,
+        direction: crate::Direction::West,
     },
+    // Row 27.
+    BlackthornCutsceneCommand::MoveActor {
+        actor: BlackthornCutsceneActor::RightGuard,
+        direction: crate::Direction::South,
+    },
+    // Row 28.
     BlackthornCutsceneCommand::ClearActor(BlackthornCutsceneActor::RightGuard),
+    // Row 29.
     BlackthornCutsceneCommand::SetRepeat(6),
     BlackthornCutsceneCommand::StingerPause,
     BlackthornCutsceneCommand::End,

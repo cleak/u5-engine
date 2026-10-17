@@ -879,3 +879,53 @@ fn q8_wrong_answers_past_the_first_each_cost_two_minutes() {
     assert_eq!(after, vec![0, 2, 4, 6]);
     let _ = fs::remove_dir_all(dir);
 }
+
+/// u5-spec#298 Q9. `blackthorn.md §6.3`, "Audience exit vector, full command
+/// list": the actors start every exit beat from slot 0 `(3,5)`, slot 6
+/// `(1,5)`, slot 7 `(9,9)` and slot 8 `(5,5)`; the door write is exposed after
+/// 14 stings, and the vector ends with the Avatar at `(0,2)` and the rest
+/// cleared after 36 stings, 73 world ticks and 72 BIOS-tick delays.
+#[test]
+fn q9_audience_exit_vector_runs_the_published_command_list() {
+    // Each beat is its own script run from the actors the last one left.
+    let next_beat = |from: &BlackthornCutsceneVm, beat| {
+        let mut vm = BlackthornCutsceneVm::new(from.tile_buffer.clone());
+        vm.actors = from.actors;
+        vm.visible_actors = from.actors;
+        vm.run(blackthorn_cutscene_beat_commands(beat));
+        vm
+    };
+    let setup = BlackthornCutsceneVm::with_audience_setup(vec![0; 32 * 11]);
+    let approach = next_beat(&setup, BlackthornCutsceneBeat::AudienceThroneApproach);
+    let vm = next_beat(&approach, BlackthornCutsceneBeat::GuardReleaseRoute);
+    let cell = |vm: &BlackthornCutsceneVm, actor| vm.actor(actor).map(|a| (a.x, a.y));
+    assert_eq!(cell(&vm, BlackthornCutsceneActor::Avatar), Some((3, 5)));
+    assert_eq!(cell(&vm, BlackthornCutsceneActor::LeftGuard), Some((1, 5)));
+    assert_eq!(cell(&vm, BlackthornCutsceneActor::RightGuard), Some((9, 9)));
+    assert_eq!(cell(&vm, BlackthornCutsceneActor::SeatedBlackthorn), Some((5, 5)));
+
+    let exit = next_beat(&vm, BlackthornCutsceneBeat::AudienceExit);
+    let stings_before_door = exit
+        .presentation_events
+        .iter()
+        .take_while(|event| {
+            !matches!(
+                event,
+                BlackthornCutscenePresentationEvent::TerrainBuffered { tile: BLACKTHORN_LOCKED_DOOR_TILE, .. }
+            )
+        })
+        .filter(|event| matches!(event, BlackthornCutscenePresentationEvent::Stinger))
+        .count();
+    assert_eq!(stings_before_door, 14);
+    assert_eq!(exit.stinger_count, 36);
+    assert_eq!(exit.world_ticks, 73);
+    assert_eq!(exit.bios_ticks, 72);
+    assert_eq!(cell(&exit, BlackthornCutsceneActor::Avatar), Some((0, 2)));
+    for actor in [
+        BlackthornCutsceneActor::LeftGuard,
+        BlackthornCutsceneActor::RightGuard,
+        BlackthornCutsceneActor::SeatedBlackthorn,
+    ] {
+        assert_eq!(cell(&exit, actor), None);
+    }
+}
