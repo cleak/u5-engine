@@ -5700,11 +5700,18 @@ impl PlayState {
         // Wind 44, Flame Wind 45): "No dispatcher call. Instead: one bare
         // random rumble `(800, T, 700)`" with `T = 8000 + 1600 x circle`.
         //
-        // The 21-by-21 raster that follows is deliberately **not** emitted:
-        // §6.1 marks its rate unresolved - "entirely a function of the
-        // cell-draw cost in the enclosing loop, which was not cycle-counted"
-        // and "cannot be published as a frequency-versus-time curve" - so
-        // there is no implementable contract for it yet.
+        // The raster tone that follows is deliberately **not** emitted, and
+        // its gameplay-PRNG draws are not reproduced either. `audio.md §6.1`
+        // item 2 and `magic.md §8` (corrected 2026-10-16, u5-spec#298 Q17,
+        // `RETRACTIONS.md` R541) make it the 21-lane pixel cone raster: one
+        // `0..15` burst draw per unfinished lane per pass and one `100..10000`
+        // pitch draw per in-bounds lane step, from the gameplay generator,
+        // with sound on or off. The target cells below are the published
+        // clipped cone with a deterministic 63-cell cap, which §8 still
+        // allows, but it "does **not** preserve gameplay-PRNG parity": the
+        // lane geometry (start pixels, step vectors, pixel bounds, lane
+        // termination) needed to replay that draw sequence is not published,
+        // so this engine's generator diverges after every mass-target cast.
         self.emit_sound_effect(SoundEffect::CircleRumbleLead {
             circle: audio::spell_circle(spell_index),
         });
