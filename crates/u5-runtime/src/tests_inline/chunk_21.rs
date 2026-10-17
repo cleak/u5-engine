@@ -6053,7 +6053,8 @@ fn end_to_end_sage_short_funds_prefers_shoppe_record_rendering() {
 
     assert_eq!(state.gold, 49);
     assert_eq!(state.prng_state, 0x2468);
-    assert_eq!(state.message, "Asset says no credit.");
+    // `shops.md §8.C`: "Short funds | `"Sorry, `, honorific, record `91`".
+    assert_eq!(state.message, "\"Sorry, sirAsset says no credit.");
     assert!(state.active_shop.is_none());
     let _ = fs::remove_dir_all(dir);
 }
