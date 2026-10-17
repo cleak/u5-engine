@@ -1886,9 +1886,10 @@ fn handle_active_shop_key_input(
                 ),
                 surcharge,
             );
-            // `tavern_quantity_echo`'s digit is the only one of this match
-            // arm's direct-assignment outcomes that a later key echoes onto
-            // (the continuation `Yes`/`No`). The row-open flag otherwise
+            // The provision quantity's echo row is one transition a later key
+            // continues (the next digit while the reader is still taking
+            // keys; `quantity_entry_pending` below states it open). The
+            // row-open flag otherwise
             // goes unmanaged here, same as every other direct `message =
             // ...` assignment in the engine - but this one specific
             // transition needs it accurate, so state it explicitly rather
