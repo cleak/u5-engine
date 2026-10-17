@@ -921,7 +921,16 @@ fn handle_active_shop_key_input(
         _ => None,
     })
     .flatten();
-    let entry_answer_echo = session.awaiting_entry_answer().then(|| {
+    // The arms entry answers through `arms_entry_echo` above, and `shops.md`
+    // §8.B has it "ignore other keys without reprinting": `Y`/`N` there echo
+    // nothing. Before this they echoed `Yes`/`No` onto the greeting row.
+    let arms_entry = matches!(
+        session,
+        ActiveShopSession::Arms(_)
+            | ActiveShopSession::ArmsLocal(..)
+            | ActiveShopSession::ArmsStocked(..)
+    );
+    let entry_answer_echo = (session.awaiting_entry_answer() && !arms_entry).then(|| {
         if yes {
             Some("Yes")
         } else if no {

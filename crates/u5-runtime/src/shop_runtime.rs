@@ -241,6 +241,15 @@ impl ArmsSellBrowser {
         if first_nonzero_equipment(stock).is_none() {
             return None;
         }
+        // `shops.md` §8.1: "a sale whose counter remains nonzero rebuilds the
+        // same page and selection"; only a sale that *removes* the item
+        // reselects around it. Measured 2026-10-14 and 2026-10-16
+        // (`shop-arms-sell-flow`, beat `sold`): the original keeps the
+        // highlight on `2-Chain Coif` after selling one of three; this engine
+        // moved it to the next row.
+        if stock[usize::from(sold_item)] != 0 {
+            return Some(self);
+        }
         let sold_page_start = sold_item == self.page_start;
         let selected = if sold_page_start {
             previous_nonzero_equipment(stock, sold_item)
@@ -2564,6 +2573,9 @@ mod tests {
         let browser = ArmsSellBrowser::new(&stock)
             .unwrap()
             .apply(ArmsSellBrowserCommand::Next, &stock);
+        // A sale that leaves the counter nonzero keeps page and selection.
+        stock[5] = 3;
+        assert_eq!(browser.after_sale(5, &stock), Some(browser));
         stock[5] = 0;
         let continued = browser.after_sale(5, &stock).unwrap();
         assert_eq!(continued.selected, 9);

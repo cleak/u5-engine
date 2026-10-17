@@ -230,3 +230,16 @@ fn shipwright_offer_question_keeps_the_cursor_inline() {
     );
     assert!(!rows.iter().any(|row| row == "No"), "{rows:#?}");
 }
+
+/// `shops.md` §8.B, arms entry: "Wait for `B`, `S`, or Space; ignore other
+/// keys without reprinting". The non-arms `Y`/`N` echo used to fire here too,
+/// appending `NoYes` to the greeting row.
+#[test]
+fn arms_entry_ignores_y_and_n_without_echo() {
+    let rows = arms_rows_after(&[' ', 'N', 'Y']);
+    assert_eq!(
+        rows.last().map(String::as_str),
+        Some("\"Hail, friend! Wouldst thou Buy or Sell?\""),
+        "{rows:#?}"
+    );
+}
