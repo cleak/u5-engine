@@ -1431,7 +1431,9 @@ impl PlayState {
         // A shard whose Shadowlord slot is already vanquished can have no live
         // matching encounter, so it belongs with these silent tests rather
         // than with the position gate.
-        if !self.shadowlord_alive(index) || !self.matching_shadowlord_name_encounter_north(index) {
+        if self.shadowlord_reads_vanquished(index)
+            || !self.matching_shadowlord_name_encounter_north(index)
+        {
             self.staged_narration
                 .push_secs_on_open_row(swell_secs, staged_tail);
             return Ok(MoveOutcome::Blocked);
