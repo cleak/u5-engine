@@ -475,6 +475,12 @@ impl ConversationSession {
                 .unwrap_or(usize::MAX),
         };
         if field_idx == usize::MAX {
+            // Framed like a response stream, quotes included. `conversation.md
+            // §6` step 7 writes the literal without quote characters, and
+            // playtest E05 read that as "unquoted"; the stock capture says
+            // otherwise: `dwelling-talk-after-entry` (rc1 `20261017-023408`,
+            // rc2 `20261017-142857`) shows `"I cannot help` / `thee with
+            // that."` on both of its no-match beats. Spec question raised.
             out.set_framed_text(TLK_NO_KEYWORD_MATCH_MESSAGE);
             return out;
         }
@@ -1873,7 +1879,10 @@ mod tests {
         let mut s = baseline_session();
         s.present_greeting(&ctx());
         let out = s.submit_keyword("xyzzy", &ctx());
+        // The stock capture frames it in quotes (see the arm's comment); the
+        // E05 reading that dropped them made `dwelling-talk-after-entry` differ.
         assert_eq!(out.text, framed_response(TLK_NO_KEYWORD_MATCH_MESSAGE));
+        assert!(out.text.contains("\"I cannot help thee with that.\""));
         assert!(out.text.ends_with("\n\n"));
     }
 
