@@ -4805,9 +4805,8 @@ impl PlayState {
             // committed step - a two-turn pacing gate applied to every class,
             // which is exactly the "do I move at all" test the section
             // denies. The class pacing that survives is the ship wind cadence
-            // handled above. The whirlpool parity bit is not modelled: the
-            // spec does not publish which byte/bit holds it or how the clear
-            // turn chooses between the random and directed steps.
+            // handled above and the whirlpool parity bit
+            // ([`Self::try_whirlpool_dispatch`], issue #298 Q2).
             //
             // What survives of the old phase test is only the steady marker.
             // §8's phase table gives the all-ones nibble as "Steady; do not
@@ -4820,7 +4819,11 @@ impl PlayState {
             let wandered = movement_allowed
                 && !ship_wind_changed
                 && !matches!(tick, PhaseTick::Steady)
-                && self.try_wander_active_object_with_last_vacated(slot, &mut last_vacated);
+                && if is_whirlpool_family_type_byte(self.active_objects[slot].type_byte) {
+                    self.try_whirlpool_dispatch(slot, &mut last_vacated)
+                } else {
+                    self.try_wander_active_object_with_last_vacated(slot, &mut last_vacated)
+                };
             if ship_wind_changed
                 || wandered
                 || matches!(tick, PhaseTick::Countdown | PhaseTick::DecisionPoint)
@@ -5555,6 +5558,43 @@ impl PlayState {
         ActiveShipWind::Drifted
     }
 
+    /// `active-objects.md §8` movement dispatch, whirlpool branch (issue #298
+    /// Q2, `RETRACTIONS.md` R533): "Whirlpool-family slots (type byte
+    /// `0xEC..0xEF`, a masked family test) toggle bit 0 of record byte 5 on
+    /// every dispatch and move only on the turns where the byte is non-zero
+    /// after the toggle; on the turn it becomes zero they take no draw and do
+    /// not move. ... On a move turn one inclusive `0..1` draw from the shared
+    /// generator picks the step: 1 runs the directed step planner below,
+    /// including its own random-walker fallback, and 0 runs the random
+    /// four-direction walker directly. The branch has no distance test."
+    pub fn try_whirlpool_dispatch(
+        &mut self,
+        slot: usize,
+        last_vacated: &mut Option<(usize, usize)>,
+    ) -> bool {
+        let Area::World { plane } = self.area else {
+            return false;
+        };
+        let object = self.active_objects[slot];
+        if object.z != plane.save_floor() || !is_whirlpool_family_type_byte(object.type_byte) {
+            return false;
+        }
+        let parity = object.aux1 ^ 0x01;
+        self.active_objects[slot].aux1 = parity;
+        if parity == 0 {
+            return false;
+        }
+        if self.random_range_u8(0, 1) == 1 {
+            return self.try_wander_active_object_with_last_vacated(slot, last_vacated);
+        }
+        // The random four-direction walker, as the directed planner's own
+        // fallback runs it: one cardinal draw and a single attempt.
+        let object = self.active_objects[slot];
+        let direction = OUTDOOR_RANDOM_WALK_DIRECTIONS[usize::from(self.random_range_u8(0, 3))];
+        let (dx, dy) = direction.delta();
+        self.try_step_outdoor_active_object(slot, object, dx, dy, direction, last_vacated)
+    }
+
     pub fn try_wander_active_object(&mut self, slot: usize) -> bool {
         let mut last_vacated = None;
         self.try_wander_active_object_with_last_vacated(slot, &mut last_vacated)
@@ -6284,6 +6324,12 @@ pub const fn merge_active_ship_cadence_phase(post_tick: u8, pre_tick: u8) -> u8 
 /// ranges", and terrain-combat classification "derives ... from the
 /// triggering slot's byte-0 type". The predicate therefore reads byte 0
 /// only; the per-frame tile byte (byte 1) does not qualify a slot.
+/// `active-objects.md §8` (issue #298 Q2): the whirlpool family `0xEC..0xEF`
+/// is "a masked family test" on the type byte.
+pub const fn is_whirlpool_family_type_byte(type_byte: u8) -> bool {
+    type_byte & 0xfc == 0xec
+}
+
 pub fn is_outdoor_active_object_walker(object: ActiveObject) -> bool {
     is_outdoor_active_object_walker_byte(object.type_byte)
 }

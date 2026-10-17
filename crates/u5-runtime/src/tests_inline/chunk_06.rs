@@ -3453,6 +3453,46 @@
     }
 
     #[test]
+    fn outdoor_whirlpool_moves_when_its_parity_bit_is_set_and_skips_without_a_draw() {
+        // Issue #298 Q2 / `RETRACTIONS.md` R533: bit 0 of record byte 5 is
+        // toggled on every dispatch; the slot moves "only on the turns where
+        // the byte is non-zero after the toggle; on the turn it becomes zero
+        // they take no draw and do not move. A spawned whirlpool starts with
+        // byte 5 at zero, so it moves on its first dispatched turn and then
+        // on every second one."
+        let mut state = world_state(vec![0x01; WORLD_CELLS], 4, 5);
+        state.active_objects.truncate(1);
+        state.active_objects.push(ActiveObject {
+            type_byte: 0xec,
+            tile: 0xec,
+            x: 100,
+            y: 100,
+            z: WorldPlane::Underworld.save_floor(),
+            phase: 0,
+            aux1: 0,
+            aux3: 0,
+        });
+        state.prng_state = 0x2468;
+        let mut moves = Vec::new();
+        for turn in 0..6 {
+            let before = (state.active_objects[1].x, state.active_objects[1].y);
+            let stream_before = state.prng_state;
+            state.advance_outdoor_active_objects();
+            let after = (state.active_objects[1].x, state.active_objects[1].y);
+            let expected_parity = if turn % 2 == 0 { 1 } else { 0 };
+            assert_eq!(state.active_objects[1].aux1, expected_parity, "turn {turn}");
+            if expected_parity == 0 {
+                assert_eq!(after, before, "turn {turn}: no move on the clear turn");
+                assert_eq!(state.prng_state, stream_before, "turn {turn}: no draw");
+            } else {
+                assert_ne!(state.prng_state, stream_before, "turn {turn}: the 0..1 draw");
+            }
+            moves.push(after != before);
+        }
+        assert!(moves[0] && moves[2] && moves[4], "{moves:?}");
+    }
+
+    #[test]
     fn outdoor_walker_shadowlord_counter_has_no_twenty_gate_and_wraps() {
         // Issue #298 Q21 / R534: the slot "increments record byte 5
         // (unsigned, wrapping at 256) and then takes the same directed step
