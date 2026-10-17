@@ -6281,15 +6281,30 @@ impl PlayState {
         }
 
         // `audio.md §6.1`: Negate Time is id 47, circle 8 - "Unconditional at
-        // helper entry". Its `Magic absorbed!` arm adds a manual envelope cue
-        // that §6.1 records as one of "two pre-commit sounds that section 8
-        // does not list"; the engine models no absorbing actor yet, so that arm
-        // has no site here.
+        // helper entry".
         self.emit_sound_effect(SoundEffect::SharedVariant {
             variant: audio::spell_circle(TIME_STOP_SPELL_INDEX),
         });
 
         self.advance_turn();
+        // `magic.md §8` (added 2026-10-16, u5-spec#298 Q15): the
+        // magic-absorption sentinel is any of the thirty-two active-object
+        // records whose **base tile is exactly `0xFC`**; frames `0xFD..0xFF`
+        // and the displayed tile are not consulted, and there is no scene,
+        // distance, visibility or liveness test. A match prints
+        // `Magic absorbed!`, plays the absorption envelope, and fails through
+        // the shared epilogue (`Failed!` plus the glissando).
+        if self
+            .active_objects
+            .iter()
+            .take(OOL_SLOTS)
+            .any(|object| object.type_byte == SHADOWLORD_ACTOR_TILE)
+        {
+            self.emit_sound_effect(SoundEffect::MagicAbsorbed);
+            self.fail_committed_spell_cast();
+            self.message = format!("{NEGATE_TIME_MAGIC_ABSORBED_LINE}\n{}", self.message);
+            return MoveOutcome::Blocked;
+        }
         self.active_effect_tag = Some(NEGATE_TIME_ACTIVE_EFFECT_TAG);
         self.active_effect_counter = TIME_STOP_DURATION;
         // `magic.md §5.1`: An Tym is in the "No generic completion line" row -

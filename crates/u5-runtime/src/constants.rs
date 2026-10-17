@@ -1015,6 +1015,9 @@ pub const SHADOWLORD_COWARDICE_STONEGATE_NPC_SLOT: usize = 3;
 /// `town-mode.md §13` / `commands.md §11`: shared Shadow Lord actor
 /// class used by both resident-town installation and name/Yell summons.
 pub const SHADOWLORD_ACTOR_TILE: u8 = 0xfc;
+/// `magic.md §8` (u5-spec#298 Q15): Negate Time's absorption line when an
+/// active-object record carries base tile [`SHADOWLORD_ACTOR_TILE`].
+pub const NEGATE_TIME_MAGIC_ABSORBED_LINE: &str = "Magic absorbed!";
 /// Backward-compatible public name retained for callers that previously
 /// treated the three Shadowlords as consecutive tile ids. Identity is
 /// carried separately; every Shadowlord actor uses [`SHADOWLORD_ACTOR_TILE`].
