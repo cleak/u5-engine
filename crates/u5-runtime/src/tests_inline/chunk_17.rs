@@ -3678,6 +3678,7 @@
             exit_announced: false,
             established_exit_direction_code: None,
             any_foe_seated: false,
+            dungeon_post_combat: None,
         });
         state.party_strengths = vec![60];
         state.party_equipment = default_party_equipment(1);
