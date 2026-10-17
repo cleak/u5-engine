@@ -274,7 +274,27 @@
                 CombatCommandBranch::CastSpell => Some(COMBAT_CAST_COMMAND_LABEL),
                 _ => combat_command_branch_published_label(branch),
             };
-            if let Some(label) = label {
+            // `R` and `U` print their shared world echoes (`commands.md
+            // §5.2`: `Ready...\n\n`, `Use_item\n\n`) before the refusal,
+            // so the label row, a blank row and `Can't!` follow each other
+            // (playtest E38: both printed a bare `Can't!`).
+            let echo_label = match branch {
+                CombatCommandBranch::Ready => Some("Ready..."),
+                CombatCommandBranch::UseItem => Some("Use item"),
+                _ => None,
+            };
+            if let Some(echo_label) = echo_label {
+                let rows = state
+                    .message_transcript
+                    .iter()
+                    .map(|entry| entry.text.trim_end_matches('\n'))
+                    .collect::<Vec<_>>();
+                assert!(
+                    rows.windows(3).any(|window| window
+                        == [echo_label, "", COMBAT_PARTY_SIDE_REFUSAL]),
+                    "{key} must print its label, a blank row, then the refusal, got {rows:?}"
+                );
+            } else if let Some(label) = label {
                 assert!(
                     printed.contains(&format!("{label}{COMBAT_PARTY_SIDE_REFUSAL}")),
                     "{key} must print its label then the refusal, got {printed:?}"

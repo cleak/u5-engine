@@ -6043,8 +6043,16 @@ fn combat_player_command_message(
             branch,
             party_side_gate: CombatCommandPartySideGate::RefusedMonsterSide,
         } => {
+            // `R` and `U` are Shape A letters too, and their verb labels are
+            // the shared world echoes `commands.md §5.2` publishes,
+            // `Ready...\n\n` and `Use_item\n\n` - the same echoes the
+            // party-side arms below print before their delegates. Without
+            // them a controlled monster's `R`/`U` printed a bare `Can't!`
+            // (playtest E38).
             let label = match branch {
                 CombatCommandBranch::CastSpell => Some(COMBAT_CAST_COMMAND_LABEL),
+                CombatCommandBranch::Ready => Some("Ready...\n\n"),
+                CombatCommandBranch::UseItem => Some("Use item\n\n"),
                 _ => combat_command_branch_published_label(*branch),
             };
             format!("{}{COMBAT_PARTY_SIDE_REFUSAL}", label.unwrap_or(""))
