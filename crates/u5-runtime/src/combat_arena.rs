@@ -3,7 +3,9 @@
 use std::io;
 use std::path::Path;
 
-use crate::{DUNGEON_ROOM_SLOTS_PER_BANK, read_disk_file};
+use crate::{
+    COMBAT_ARENA_CENTRE_SPECIAL_TILE, DUNGEON_ROOM_SLOTS_PER_BANK, DungeonCellClass, read_disk_file,
+};
 
 /// `formats/cbt.md §3`: each combat arena is an 11x11 visible
 /// grid — the same dimension as the main-mode active viewport.
@@ -168,15 +170,60 @@ pub const fn combat_arena_row_offset(arena_index: usize, row: usize) -> usize {
 pub const DEFAULT_COMBAT_ARENA_TERRAIN: [[u8; COMBAT_ARENA_SIDE]; COMBAT_ARENA_SIDE] =
     [[0; COMBAT_ARENA_SIDE]; COMBAT_ARENA_SIDE];
 
-/// `dungeon-mode.md §14.1`: dungeon wandering-monster ambush combat
-/// synthesises its arena in the room buffer instead of loading
-/// `DUNGEON.CBT` - "No arena record is read from disk on this path."
-/// The painter fills the eleven-by-eleven terrain grid with the current
-/// corridor fill byte before stamping its outline/corner/centre/per-side
-/// treatments, whose byte values §14.1 does not publish.
-pub const DUNGEON_AMBUSH_ARENA_FLOOR_TILE: u8 = 0x04;
+/// `dungeon-mode.md §14.1` step 3 (u5-spec#298 Q13): dungeon
+/// wandering-monster ambush combat synthesises its arena in the room buffer
+/// instead of loading `DUNGEON.CBT` - "No arena record is read from disk on
+/// this path." **Fill**: "Every cell gets the room floor byte: `0x45`
+/// (cobbles) in the flavour-3 dungeons Deceit, Wrong and Covetous, `0x05` in
+/// the other five." This is the `0x05` floor; the engine's earlier `0x04`
+/// was a placeholder.
+pub const DUNGEON_AMBUSH_ARENA_FLOOR_TILE: u8 = 0x05;
+/// `dungeon-mode.md §14.1` step 3.1: the flavour-3 room floor byte.
+pub const DUNGEON_AMBUSH_ARENA_FLAVOUR3_FLOOR_TILE: u8 = 0x45;
+/// `dungeon-mode.md §14.1` step 3.3: "`0xFF`, the darkness byte, goes in the
+/// four outer corners (0,0), (10,0), (0,10) and (10,10)."
+pub const DUNGEON_AMBUSH_ARENA_CORNER_TILE: u8 = 0xFF;
 pub const DUNGEON_AMBUSH_ARENA_TERRAIN: [[u8; COMBAT_ARENA_SIDE]; COMBAT_ARENA_SIDE] =
-    [[DUNGEON_AMBUSH_ARENA_FLOOR_TILE; COMBAT_ARENA_SIDE]; COMBAT_ARENA_SIDE];
+    dungeon_ambush_arena_terrain(DUNGEON_AMBUSH_ARENA_FLOOR_TILE);
+
+/// `dungeon-mode.md §14.1` step 3: the room floor byte for a dungeon whose
+/// presentation flavour is `flavour_3` (Deceit, Wrong, Covetous) or not.
+pub const fn dungeon_ambush_arena_floor_tile(flavour_3: bool) -> u8 {
+    if flavour_3 {
+        DUNGEON_AMBUSH_ARENA_FLAVOUR3_FLOOR_TILE
+    } else {
+        DUNGEON_AMBUSH_ARENA_FLOOR_TILE
+    }
+}
+
+/// `dungeon-mode.md §14.1` steps 3.1 and 3.3: the fill and the four corner
+/// markers, before any centre icon.
+pub const fn dungeon_ambush_arena_terrain(
+    fill_byte: u8,
+) -> [[u8; COMBAT_ARENA_SIDE]; COMBAT_ARENA_SIDE] {
+    let mut terrain = [[fill_byte; COMBAT_ARENA_SIDE]; COMBAT_ARENA_SIDE];
+    let last = COMBAT_ARENA_SIDE - 1;
+    terrain[0][0] = DUNGEON_AMBUSH_ARENA_CORNER_TILE;
+    terrain[0][last] = DUNGEON_AMBUSH_ARENA_CORNER_TILE;
+    terrain[last][0] = DUNGEON_AMBUSH_ARENA_CORNER_TILE;
+    terrain[last][last] = DUNGEON_AMBUSH_ARENA_CORNER_TILE;
+    terrain
+}
+
+/// `dungeon-mode.md §14.1` step 3.4 (u5-spec#298 Q13): the centre icon
+/// "keyed by the class of the party's dungeon cell: up ladder `0xC8`; down
+/// ladder `0xC9`; two-way ladder `0xC8` plus the two-way flag ...; chest
+/// `0xDC`; fountain `0xD8`. Passage, pit and open chest, and every class from
+/// `0x8?` up, leave the floor byte."
+pub const fn dungeon_ambush_centre_icon(class: DungeonCellClass) -> Option<u8> {
+    match class {
+        DungeonCellClass::UpLadder | DungeonCellClass::TwoWayLadder => Some(0xC8),
+        DungeonCellClass::DownLadder => Some(0xC9),
+        DungeonCellClass::Chest => Some(COMBAT_ARENA_CENTRE_SPECIAL_TILE),
+        DungeonCellClass::Fountain => Some(0xD8),
+        _ => None,
+    }
+}
 
 /// `dungeon-mode.md §14.1` party-entry rows for the synthesised ambush
 /// arena. "Metadata rows one through four receive fixed six-entry X and
@@ -261,20 +308,15 @@ impl CombatArenaRecord {
     /// slots". The record is then read back by the ordinary room-combat
     /// setup helper, which recovers the same class the painter encoded.
     ///
-    /// The outline, corner markers and the four per-side treatments §14.1
-    /// also describes are not stamped here: that section publishes no byte
-    /// values for them and flags the filler byte as inferred rather than
-    /// traced.
+    /// The four corner markers (`0xFF`) are stamped after the fill
+    /// (u5-spec#298 Q13). The two wall lines and the four per-side
+    /// treatments are **not** stamped: §14.1 publishes the outline byte and
+    /// rows, but not which wall-line cells the seven- and five-cell openings
+    /// carve nor which dungeon classes count as passable, door or wall for
+    /// that dispatch, and the lines alone would seal the party in.
     ///
-    /// `centre_icon` is the one part of the painter's underfoot-class
-    /// centre icon that *is* published as a value. §14.1: "The underfoot
-    /// class is the high half of the room-layout cell under the party, and
-    /// it selects one byte from a small icon table that is stamped into the
-    /// arena grid's centre cell", and "**The chest class stamps the byte the
-    /// combat setup pass tests at the arena centre** ... That is the only
-    /// way that byte ever reaches the centre cell - no shipped arena record
-    /// carries it". The caller supplies `Some(0xDC)` for a chest and `None`
-    /// for every other class, whose icon bytes §14.1 does not publish.
+    /// `centre_icon` is [`dungeon_ambush_centre_icon`] for the party's
+    /// dungeon cell class (`None` leaves the floor byte).
     pub fn synthesise_dungeon_ambush(
         fill_byte: u8,
         facing_seed: u8,
@@ -284,10 +326,9 @@ impl CombatArenaRecord {
         centre_icon: Option<u8>,
     ) -> Self {
         let mut rows = [[0u8; COMBAT_ARENA_ROW_STRIDE]; COMBAT_ARENA_SIDE];
-        for row in rows.iter_mut() {
-            for cell in row[..COMBAT_ARENA_SIDE].iter_mut() {
-                *cell = fill_byte;
-            }
+        let terrain = dungeon_ambush_arena_terrain(fill_byte);
+        for (row, terrain_row) in rows.iter_mut().zip(terrain.iter()) {
+            row[..COMBAT_ARENA_SIDE].copy_from_slice(terrain_row);
         }
         for (index, row) in rows
             .iter_mut()

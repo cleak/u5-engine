@@ -731,7 +731,9 @@ fn entering_dungeon_combat_from_a_chest_cell_converts_and_repaints_the_centre() 
         "the centre terrain is overwritten with the room's floor fill, not          left holding 0xDC"
     );
 
-    // Any other underfoot class stamps nothing, so the arm stays gated.
+    // Any other underfoot class presents no qualifying centre cell, so the
+    // arm stays gated; an up ladder stamps its own icon `0xC8` there
+    // (`dungeon-mode.md §14.1` step 3.4, u5-spec#298 Q13).
     let ladder = ambush_from_underfoot(0x10);
     assert!(
         ladder
@@ -741,10 +743,7 @@ fn entering_dungeon_combat_from_a_chest_cell_converts_and_repaints_the_centre() 
                 || (usize::from(object.x), usize::from(object.y)) != (column, row)),
         "a non-chest underfoot class presents no qualifying centre cell"
     );
-    assert_eq!(
-        ladder.combat_terrain[row][column],
-        DUNGEON_AMBUSH_ARENA_FLOOR_TILE
-    );
+    assert_eq!(ladder.combat_terrain[row][column], 0xC8);
 }
 
 /// `visibility.md §11` (`RETRACTIONS.md` R365): "There is exactly **one**

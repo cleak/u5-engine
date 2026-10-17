@@ -1364,10 +1364,16 @@ impl PlayState {
             | DungeonCellClass::Fountain => self.tile_restoration_pending = false,
             _ => {}
         }
-        let centre_icon = matches!(underfoot_class, DungeonCellClass::Chest)
-            .then_some(COMBAT_ARENA_CENTRE_SPECIAL_TILE);
+        let centre_icon = dungeon_ambush_centre_icon(underfoot_class);
+        // `dungeon-mode.md §14.1` step 3.1 (u5-spec#298 Q13): the room floor
+        // byte keys on the dungeon's flavour.
+        let floor_tile = dungeon_ambush_arena_floor_tile(matches!(
+            self.area,
+            Area::Dungeon { scene, .. }
+                if scene.presentation_flavour() == DungeonPresentationFlavour::FlavourByte3
+        ));
         let record = CombatArenaRecord::synthesise_dungeon_ambush(
-            DUNGEON_AMBUSH_ARENA_FLOOR_TILE,
+            floor_tile,
             facing_seed,
             stats.class,
             count,
@@ -1403,7 +1409,7 @@ impl PlayState {
         let mut setup_terrain = setup.terrain;
         self.place_combat_arena_centre_special(
             &mut setup_terrain,
-            Some(DUNGEON_AMBUSH_ARENA_FLOOR_TILE),
+            Some(floor_tile),
             level as i8,
             &mut active_objects,
         );

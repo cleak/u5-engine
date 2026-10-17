@@ -125,10 +125,15 @@ fn dungeon_active_monster_combat_synthesises_published_ambush_arena() {
 
     assert!(note.contains("active monster"));
     assert!(state.combat_active);
-    assert!(state.combat_terrain.iter().all(|row| {
-        row.iter()
-            .all(|tile| *tile == DUNGEON_AMBUSH_ARENA_FLOOR_TILE)
-    }));
+    // `dungeon-mode.md §14.1` step 3 (u5-spec#298 Q13): the room floor
+    // byte (`0x05` outside the flavour-3 dungeons) with `0xFF` in the four
+    // outer corners. This fixture is not a dungeon scene, so the centre
+    // carries whatever icon its underfoot byte's class selects.
+    let mut terrain = state.combat_terrain;
+    terrain[5][5] = DUNGEON_AMBUSH_ARENA_FLOOR_TILE;
+    assert_eq!(terrain, DUNGEON_AMBUSH_ARENA_TERRAIN);
+    assert_eq!(state.combat_terrain[0][0], 0xFF);
+    assert_eq!(state.combat_terrain[10][10], 0xFF);
 
     // Giant Rat's spawn-count stat byte is ten and is not one of the
     // exact-count sentinels, so the launch rolls `[1, 10]`.
@@ -21648,5 +21653,53 @@ fn dungeon_post_combat_up_from_the_top_level_owes_the_surface_exit() {
         assert!(matches!(state.area, Area::Dungeon { level: 3, .. }));
         assert_eq!((state.player.x, state.player.y), (1, 1));
         assert!(state.pending_dungeon_surface_exit.is_none());
+    }
+}
+
+#[test]
+fn dungeon_ambush_arena_uses_the_published_floor_corners_and_centre_icons() {
+    // `dungeon-mode.md §14.1` step 3 (u5-spec#298 Q13): floor `0x45` in the
+    // flavour-3 dungeons (scene 33 is Deceit) and `0x05` elsewhere (34 is
+    // Despise), `0xFF` corners, and the underfoot class's centre icon.
+    let object = ActiveObject {
+        type_byte: 0,
+        tile: 0,
+        x: 2,
+        y: 1,
+        z: 0,
+        phase: 0x60,
+        aux1: 20,
+        aux3: DUNGEON_MONSTER_FLOOR_DEP3,
+    };
+    for (scene, floor) in [(33u8, 0x45u8), (34, 0x05)] {
+        for (underfoot, centre) in [
+            (0x00u8, floor),
+            (0x10, 0xC8),
+            (0x20, 0xC9),
+            (0x30, 0xC8),
+            (0x50, 0xD8),
+            (0x70, floor),
+            (0x90, floor),
+        ] {
+            let mut grid = open_dungeon_record();
+            grid[dungeon_cell_index(0, 1, 1)] = underfoot;
+            let mut state = dungeon_state(grid, 0, 1, 1);
+            state.area = Area::Dungeon {
+                scene: DungeonScene::new(scene).unwrap(),
+                level: 0,
+            };
+            state.player.facing = Direction::North;
+            state
+                .enter_dungeon_active_monster_combat(0, object)
+                .unwrap();
+
+            let terrain = state.combat_terrain;
+            assert_eq!(terrain[5][5], centre, "scene {scene} underfoot {underfoot:#04x}");
+            for (x, y) in [(0, 0), (10, 0), (0, 10), (10, 10)] {
+                assert_eq!(terrain[y][x], 0xFF);
+            }
+            assert_eq!(terrain[1][1], floor);
+            assert_eq!(terrain[2][7], floor);
+        }
     }
 }
