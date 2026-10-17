@@ -208,10 +208,14 @@ pub const COMBAT_ACTOR_FLAG_TEAM_TOGGLE: u8 = COMBAT_ACTOR_FLAG_CONTROLLED;
 pub const COMBAT_ACTOR_FLAG_FLEEING: u8 = 0x02;
 /// `combat.md` §6.2 / public issue #8: asleep/charmed/disabled skip bit.
 pub const COMBAT_ACTOR_FLAG_STATUS_DISABLED: u8 = 0x08;
-/// `combat.md` §6.2: disabled actors wake only on their own-turn 0..16 roll.
+/// `combat.md` §6.2: self-acting disabled actors wake only on their own-turn
+/// 0..16 roll (scoped 2026-10-16, u5-spec#298 Q25).
 pub const COMBAT_SLEEP_WAKE_ROLL_LOW: u8 = 0;
 pub const COMBAT_SLEEP_WAKE_ROLL_HIGH: u8 = 16;
 pub const COMBAT_SLEEP_WAKE_SUCCESS_ROLL: u8 = 16;
+/// `combat.md §8.1` (u5-spec#298 Q25, R543): the command handler's asleep
+/// arm draws `0..255` and wakes on a value below this (chance 1/16).
+pub const COMBAT_COMMAND_ASLEEP_WAKE_BELOW: u8 = 16;
 pub const COMBAT_ACTOR_FLAG_SELECTABLE_80: u8 = 0x80;
 pub const COMBAT_ACTOR_FLAG_SELECTABLE_40: u8 = 0x40;
 pub const COMBAT_ACTOR_FLAG_MARKED_DEAD: u8 = 0x20;

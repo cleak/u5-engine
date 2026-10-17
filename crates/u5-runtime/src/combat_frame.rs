@@ -1486,6 +1486,30 @@ impl PlayState {
         self.random_range_u8(COMBAT_SLEEP_WAKE_ROLL_LOW, COMBAT_SLEEP_WAKE_ROLL_HIGH)
     }
 
+    /// `combat.md §8.1` (corrected 2026-10-16, u5-spec#298 Q25,
+    /// `RETRACTIONS.md` R543): the command handler's asleep arm draws one
+    /// value from the inclusive range `0..255` on the gameplay generator and
+    /// wakes the sleeper below 16 - roster status back to Good, displayed
+    /// sprite restored, asleep bit cleared, no message. The returned `roll`
+    /// is that `0..255` draw.
+    pub fn apply_combat_command_handler_asleep_arm(
+        &mut self,
+        slot: usize,
+    ) -> Option<CombatSleepWakeApplication> {
+        if !self.combat_actors.get(slot)?.is_status_disabled() {
+            return None;
+        }
+        let roll = self.random_range_u8(0, u8::MAX);
+        let wakes = roll < COMBAT_COMMAND_ASLEEP_WAKE_BELOW;
+        let mapped = if wakes {
+            COMBAT_SLEEP_WAKE_SUCCESS_ROLL
+        } else {
+            COMBAT_SLEEP_WAKE_ROLL_LOW
+        };
+        let wake = self.apply_combat_sleep_wake_dispatch(slot, mapped)?;
+        Some(CombatSleepWakeApplication { roll, ..wake })
+    }
+
     pub fn apply_combat_sleep_wake_dispatch(
         &mut self,
         slot: usize,
@@ -8304,14 +8328,24 @@ impl PlayState {
             //
             // `§8.1` puts the asleep early-out after the banner for a
             // prompted slot, so the banner is printed first here too.
-            if prompted {
+            let wake = if prompted {
+                // `combat.md §8.1` / `§6.2` (corrected 2026-10-16,
+                // u5-spec#298 Q25, `RETRACTIONS.md` R543): a slot routed to
+                // the command handler uses its own asleep arm - one `0..255`
+                // draw that wakes below 16 (chance 1/16) with no message, then
+                // `Zzzzz...` whether or not it woke, and no key read. The
+                // `0..16` draw below belongs to self-acting slots only.
                 self.emit_combat_turn_banner_before_status_early_out(slot);
+                let wake = self
+                    .apply_combat_command_handler_asleep_arm(slot)
+                    .expect("status-disabled actor should produce a wake dispatch");
                 self.emit_combat_print(COMBAT_ASLEEP_TURN_LINE);
-            }
-            let wake_roll = self.combat_sleep_wake_roll(slot);
-            let wake = self
-                .apply_combat_sleep_wake_dispatch(slot, wake_roll)
-                .expect("status-disabled actor should produce a wake dispatch");
+                wake
+            } else {
+                let wake_roll = self.combat_sleep_wake_roll(slot);
+                self.apply_combat_sleep_wake_dispatch(slot, wake_roll)
+                    .expect("status-disabled actor should produce a wake dispatch")
+            };
             CombatActorDispatchAction::StatusDisabledWake { wake }
         } else if dispatch_group == COMBAT_TARGET_GROUP_PARTY {
             CombatActorDispatchAction::PlayerReady
