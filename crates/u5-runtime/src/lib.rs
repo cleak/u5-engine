@@ -1138,6 +1138,7 @@ mod tests {
     include!("tests_inline/combat_ai_effects_conformance.rs");
     include!("tests_inline/spec_dd21c58_conformance.rs");
     include!("tests_inline/town_turn_loop_conformance.rs");
+    include!("tests_inline/arms_sell_row_state.rs");
     include!("tests_inline/arena_animation_conformance.rs");
     include!("tests_inline/combat_transcript_rows.rs");
     include!("tests_inline/damage_distribution_conformance.rs");
