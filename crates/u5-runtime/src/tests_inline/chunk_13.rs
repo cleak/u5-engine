@@ -26477,6 +26477,58 @@ fn dungeon_active_monster_adjacent_to_party_need_not_attack() {
 }
 
 #[test]
+fn dungeon_loaded_monster_record_walks_the_party_level_whatever_its_stamped_level() {
+    // `dungeon-mode.md §4.1`: a loaded dungeon *reuses* the saved record
+    // whole, and §14's step walks the current level with no level test.
+    // Measured 2026-10-16 (`dungeon-chest-jimmy`, `dungeon-two-way-ladder`):
+    // from a save whose record is all zeros - live (not the all-ones empty
+    // marker), stamped level 0, at (0,0), combat class 0 - the original's
+    // monster attacked the party on level 3 "from the west" and opened a
+    // Mage fight, in 8 of 22 runs. Here only the party's cell, east of the
+    // monster, is open on level 3.
+    let level = 3u8;
+    let mut grid = open_dungeon_record();
+    for (x, y) in [(0usize, 7usize), (0, 1), (7, 0)] {
+        grid[dungeon_cell_index(level, x, y)] = 0xb0;
+    }
+    let mut state = dungeon_state(grid, level, 1, 0);
+    state.player.facing = Direction::North;
+    state.active_objects.push(ActiveObject {
+        type_byte: 0,
+        tile: 0,
+        x: 0,
+        y: 0,
+        z: 0,
+        phase: 0,
+        aux1: 0,
+        aux3: 0,
+    });
+    assert!(state.dungeon_active_monster().is_some());
+    assert!(state.dungeon_active_monster_at(0, 0).is_some());
+    // A generator state whose first cardinal draw is east, so the walk's
+    // first attempt is the accepted one.
+    state.prng_state = (1u16..)
+        .find(|seed| {
+            let mut probe = *seed;
+            u5_prng_range_u16(&mut probe, 0, 3) == 1
+        })
+        .unwrap();
+
+    assert_eq!(
+        state.pass_turn_with_game_dir(Some(Path::new(""))).unwrap(),
+        MoveOutcome::Used
+    );
+
+    assert!(state.message.contains("Attacked from the west!"), "{}", state.message);
+    assert_eq!(state.player.facing, Direction::West);
+    assert!(state.combat_active);
+    assert!(state
+        .combat_actors
+        .iter()
+        .any(|actor| !actor.is_empty() && actor.owner_target_class == 0));
+}
+
+#[test]
 fn dungeon_post_turn_active_monster_contact_faces_threat_and_consumes_monster() {
     // `dungeon-mode.md §14` (Q33): only the party's cell is open, so the
     // random walk's accepted step is onto it.

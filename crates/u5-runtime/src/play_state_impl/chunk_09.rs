@@ -1333,7 +1333,7 @@ impl PlayState {
 
     fn draw_dungeon_active_monster(
         &mut self,
-        level: u8,
+        _level: u8,
         x: usize,
         y: usize,
         band: usize,
@@ -1344,11 +1344,9 @@ impl PlayState {
             return;
         }
         let slot = DUNGEON_ACTIVE_MONSTER_SLOT;
+        // No level test: see [`Self::dungeon_active_monster`].
         let Some(object) = self.active_objects.get(slot).copied().filter(|object| {
-            dungeon_monster_record_active(*object)
-                && object.z == level as i8
-                && object.x == x
-                && object.y == y
+            dungeon_monster_record_active(*object) && object.x == x && object.y == y
         }) else {
             return;
         };
