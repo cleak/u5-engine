@@ -1144,6 +1144,7 @@ mod tests {
     include!("tests_inline/arms_sell_row_state.rs");
     include!("tests_inline/arena_animation_conformance.rs");
     include!("tests_inline/combat_transcript_rows.rs");
+    include!("tests_inline/playtest_combat_fixes.rs");
     include!("tests_inline/damage_distribution_conformance.rs");
     include!("tests_inline/combat_audit_g1.rs");
     include!("tests_inline/command_echo_epilogue_rows.rs");

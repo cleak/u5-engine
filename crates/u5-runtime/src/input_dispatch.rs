@@ -5656,6 +5656,25 @@ fn handle_combat_multistage_command(
                 state.pending_combat_actor_slot = Some(actor_slot);
                 return true;
             }
+            // `combat.md §10`: "when Negate Magic's `N` tag is active, the
+            // cast is absorbed before the shared spell dispatcher or
+            // spell-selection prompt runs. The exact command output is
+            // `Cast...\nAbsorbed!\n`", followed by the manual absorption
+            // envelope. `magic.md §7`: "There is no spell-selection prompt";
+            // the attempt "completes the current combat action while
+            // spending no premixed charge or MP". The interference gate above
+            // takes precedence. This arm used to open `Spell name:` first and
+            // absorb only after the exchange (playtest E35).
+            if resolve_negate_magic_absorbs_combat_cast(
+                state.active_effect_tag,
+                state.active_effect_counter,
+            ) {
+                let had_foe = combat_has_active_non_party_actor(state);
+                state.message = format!("{SCENE_ABSORBED_CAST_MESSAGE}\n");
+                state.emit_sound_effect(SoundEffect::MagicAbsorbed);
+                finish_combat_cast_actor_action(state, actor_slot, had_foe);
+                return true;
+            }
             state.start_combat_cast_spell_prompt(
                 actor_slot,
                 combat_has_active_non_party_actor(state),
