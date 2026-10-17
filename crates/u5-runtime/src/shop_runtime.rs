@@ -71,6 +71,9 @@ pub enum ArmsShopState {
         quoted_price: u16,
         quote_record_id: usize,
     },
+    /// `shops.md §8.1`: the carry-cap refusal is on screen; the shop "waits
+    /// for one key, and returns to the buy list". The key is consumed.
+    BuyCapRefusalWait,
     /// Sell browser open. The selected id and first visible id survive
     /// redraws and quote/refusal continuations.
     SellPickItem(ArmsSellBrowser),
@@ -402,11 +405,17 @@ pub fn step_arms_shop(
         ) => {
             let item_idx = item as usize;
             if stock[item_idx] >= EQUIPMENT_STOCK_CAP {
-                *state = ArmsShopState::Greeting;
+                // `shops.md §8.1`: the refusal "waits for one key, and returns
+                // to the buy list" - not to the Buy/Sell greeting (E46).
+                *state = ArmsShopState::BuyCapRefusalWait;
                 return ArmsShopOutcome::BuyRefusedCapHit { item };
             }
             if *gold < quoted_price {
-                *state = ArmsShopState::Greeting;
+                // `shops.md §8.1`: "The short-funds branch ... **exits the
+                // whole arms buy flow** ... because leaving the buy list ends
+                // the visit the next thing the player sees is the farewell"
+                // (`§8.A`: "exits the shop flow"). Playtest E45.
+                *state = ArmsShopState::Exited;
                 return ArmsShopOutcome::BuyRefusedShortFunds { item, quoted_price };
             }
             *gold -= quoted_price;
@@ -574,6 +583,9 @@ pub enum HealerShopState {
     PickPartyMember {
         service: HealerService,
         cost: u16,
+        /// `inventory.md §4.3`'s shared selector: the indicated row. Digits
+        /// and direction keys move it; only Return or Space commits.
+        highlight: u8,
     },
     Confirm {
         service: HealerService,
@@ -652,10 +664,14 @@ pub fn step_healer_shop(
         },
         (HealerShopState::PickService, HealerShopInput::Service(service)) => {
             let cost = healer_service_cost(service);
-            *state = HealerShopState::PickPartyMember { service, cost };
+            *state = HealerShopState::PickPartyMember {
+                service,
+                cost,
+                highlight: 0,
+            };
             HealerOutcome::QuotedCost { service, cost }
         }
-        (HealerShopState::PickPartyMember { service, cost }, HealerShopInput::Slot(slot)) => {
+        (HealerShopState::PickPartyMember { service, cost, .. }, HealerShopInput::Slot(slot)) => {
             let slot_idx = slot as usize;
             if slot_idx >= members.len() {
                 return HealerOutcome::InvalidInput;
@@ -766,6 +782,10 @@ pub enum InnkeeperState {
     PickLeaveCompanion {
         inn: Inn,
         deposit: u16,
+        /// `shops.md §8.C` "Leave-companion selection": the indicated member,
+        /// initially Avatar. Digits and direction keys move it; Return or
+        /// Space commits.
+        highlight: usize,
     },
     ConfirmLeaveCompanion {
         inn: Inn,
@@ -902,7 +922,11 @@ pub fn step_innkeeper(
             InnMainAction::LeaveCompanion => {
                 let deposit =
                     inn_leave_companion_deposit_for_speaker(inn, ctx.speaker_intelligence);
-                *state = InnkeeperState::PickLeaveCompanion { inn, deposit };
+                *state = InnkeeperState::PickLeaveCompanion {
+                    inn,
+                    deposit,
+                    highlight: 0,
+                };
                 InnkeeperOutcome::PickLeaveCompanion { deposit }
             }
             InnMainAction::PickUpCompanion => {
@@ -940,7 +964,7 @@ pub fn step_innkeeper(
             InnkeeperOutcome::Declined
         }
         (
-            InnkeeperState::PickLeaveCompanion { inn, deposit },
+            InnkeeperState::PickLeaveCompanion { inn, deposit, .. },
             InnkeeperInput::Slot(party_index),
         ) => {
             *state = InnkeeperState::ConfirmLeaveCompanion {
@@ -2635,6 +2659,8 @@ mod tests {
         ));
         assert_eq!(gold, 1);
         assert_eq!(stock[5], 0);
+        // `shops.md §8.1`: short funds exits the whole arms flow (E45).
+        assert_eq!(state, ArmsShopState::Exited);
     }
 
     #[test]

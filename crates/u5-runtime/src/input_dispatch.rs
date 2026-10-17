@@ -1093,13 +1093,23 @@ fn handle_active_shop_key_input(
                         state.emit_message_line_continuing_row(healer_service_echo(treatment));
                         state.push_explicit_blank_message_entry();
                         if state.party.len() == 1 {
-                            *s = HealerShopState::PickPartyMember { service, cost };
+                            *s = HealerShopState::PickPartyMember {
+                                service,
+                                cost,
+                                highlight: 0,
+                            };
+                            // The automatic selection commits the one row the
+                            // selector can indicate.
                             return {
                                 state.active_shop = Some(session);
-                                handle_active_shop_key_input(state, '1', "", game_dir)
+                                handle_active_shop_key_input(state, '\r', "", game_dir)
                             };
                         }
-                        *s = HealerShopState::PickPartyMember { service, cost };
+                        *s = HealerShopState::PickPartyMember {
+                            service,
+                            cost,
+                            highlight: 0,
+                        };
                         // §8.C: "A sole party member is selected automatically;
                         // otherwise print `\n\n"Who needs my aid?" ` and use
                         // the party selector."
@@ -1117,14 +1127,46 @@ fn handle_active_shop_key_input(
                     // (R419)."
                     HealerServiceAction::Discard => String::new(),
                 },
-                (HealerShopState::PickPartyMember { service, .. }, _, true, _) => {
+                // `inventory.md §4.3`, the shared selector §8.C's healer uses:
+                // "Only Return or Space commits the indicated row, Escape
+                // cancels". `N` is not a cancel key there (playtest E48).
+                (HealerShopState::PickPartyMember { .. }, _, _, _) if key_byte == 0x1b => {
                     *s = HealerShopState::Continuation;
-                    let _ = service;
                     // §8.C: "Cancellation adds `No one`, with no trailing line
                     // feed", then the continuation question.
                     format!("No one{HEALER_CONTINUATION}")
                 }
-                (HealerShopState::PickPartyMember { service, .. }, _, _, Some(d)) if d >= 1 => {
+                // "A digit moves the indicator; it does not commit ... the
+                // four direction keys move the indicator"; other keys leave
+                // the message window untouched.
+                (
+                    HealerShopState::PickPartyMember {
+                        service,
+                        cost,
+                        highlight,
+                    },
+                    _,
+                    _,
+                    digit,
+                ) if !matches!(key_byte, b'\r' | b'\n' | b' ') => {
+                    let highlight = usize::from(highlight);
+                    let moved = shop_party_selector_move(state, highlight, key, digit);
+                    *s = HealerShopState::PickPartyMember {
+                        service,
+                        cost,
+                        highlight: moved as u8,
+                    };
+                    state.message.clone()
+                }
+                (
+                    HealerShopState::PickPartyMember {
+                        service, highlight, ..
+                    },
+                    _,
+                    _,
+                    _,
+                ) => {
+                    let d = highlight + 1;
                     let target_index = usize::from(d - 1);
                     let treatment = healer_treatment_for_service(service);
                     let Some(member) = state.party.get(target_index).copied() else {
@@ -1394,7 +1436,11 @@ fn handle_active_shop_key_input(
                                 inn,
                                 ctx.speaker_intelligence,
                             );
-                            *s = InnkeeperState::PickLeaveCompanion { inn, deposit };
+                            *s = InnkeeperState::PickLeaveCompanion {
+                                inn,
+                                deposit,
+                                highlight: 0,
+                            };
                             // **Measured** 2026-09-08 at Hotel Brittany with a
                             // party of three (`qa/paired/nb-inn-companion.tsv`):
                             // the innkeeper asks in the message window while
@@ -1557,13 +1603,40 @@ fn handle_active_shop_key_input(
                     format!("\n{INN_ANYTHING_MORE_PROMPT}")
                 }
                 // "A valid party digit moves the highlight; Return or Space
-                // commits the indicated member", which starts on Avatar. `Y`,
-                // `P`, `0` and out-of-party digits leave the picker waiting.
-                (InnkeeperState::PickLeaveCompanion { inn, deposit }, _, _, digit)
-                    if matches!(key_byte, b' ' | b'\r' | b'\n')
-                        || digit.is_some_and(|d| d >= 1 && usize::from(d) <= state.party.len()) =>
-                {
-                    let party_index = digit.map_or(0, |d| usize::from(d - 1));
+                // commits the indicated member", which starts on Avatar. "The
+                // direction keys move within the travelling roster's bounds.
+                // `Y`, `P`, `0` and out-of-party digits leave the picker
+                // waiting", and `inventory.md §4.3` leaves the message window
+                // untouched meanwhile. A digit used to commit at once and
+                // Down blanked the window (playtest E49).
+                (
+                    InnkeeperState::PickLeaveCompanion {
+                        inn,
+                        deposit,
+                        highlight,
+                    },
+                    _,
+                    _,
+                    digit,
+                ) if !matches!(key_byte, b' ' | b'\r' | b'\n') => {
+                    *s = InnkeeperState::PickLeaveCompanion {
+                        inn,
+                        deposit,
+                        highlight: shop_party_selector_move(state, highlight, key, digit),
+                    };
+                    state.message.clone()
+                }
+                (
+                    InnkeeperState::PickLeaveCompanion {
+                        inn,
+                        deposit,
+                        highlight,
+                    },
+                    _,
+                    _,
+                    _,
+                ) => {
+                    let party_index = highlight;
                     if party_index == 0 {
                         // "Leave selects Avatar | `\n\nThy friend`, plural `s`
                         // only when more than two members travel, then ` will
@@ -2635,6 +2708,31 @@ fn handle_active_shop_key_input(
     PlayInputDisposition::Continue
 }
 
+/// `inventory.md §4.3`'s shared member selector, for the shop callers that
+/// keep its highlight in their own state (inn Leave, the healer): "`1`
+/// through `6`, bounded by the party size, reposition the inverted row
+/// exactly as the direction keys do and leave the prompt open". Any other
+/// key leaves the highlight where it is.
+fn shop_party_selector_move(
+    state: &PlayState,
+    highlight: usize,
+    key: char,
+    digit: Option<u8>,
+) -> usize {
+    let last = state.party.len().saturating_sub(1);
+    if let Some(forward) = crate::z_stats::party_selector_direction_step(key) {
+        return if forward {
+            highlight.saturating_add(1).min(last)
+        } else {
+            highlight.saturating_sub(1)
+        };
+    }
+    match digit {
+        Some(d) if d >= 1 && usize::from(d) <= state.party.len() => usize::from(d - 1),
+        _ => highlight,
+    }
+}
+
 fn horse_sale_position(state: &PlayState) -> Option<(usize, usize)> {
     [
         Direction::South,
@@ -3024,6 +3122,24 @@ fn handle_arms_shop_key_input(
         let roll = state.random_range_u8(0, 1);
         return arms_attribution_and_greeting(vendor, roll);
     }
+    // `shops.md §8.1`: after the carry-cap refusal the shop "waits for one
+    // key, and returns to the buy list"; "A purchase, decline, or carry-cap
+    // refusal prints the post-item prompt and then the whole listing with a
+    // new stock-call draw; the next valid item letter starts another quote
+    // without another `B`." The waited key is consumed (playtest E46).
+    if matches!(prior_state, ArmsShopState::BuyCapRefusalWait) {
+        *shop_state = ArmsShopState::BuyPickItem;
+        let Some(table) = stock_table else {
+            return String::new();
+        };
+        let post = arms_post_item_prompt(
+            active_speaker_is_female(state),
+            state.arms_transaction_completed,
+        );
+        let listing = format_arms_stock_buy_menu(table, None);
+        let call = arms_stock_call_for_roll(state.random_range_u8(0, 3));
+        return format!("{post}\n\n{listing}\n{call}");
+    }
     let outcome = match (prior_state, yes, no, inline_digit) {
         (ArmsShopState::Welcome | ArmsShopState::Greeting, _, _, _) => step_arms_shop(
             shop_state,
@@ -3185,24 +3301,19 @@ fn handle_arms_shop_key_input(
         {
             state.message.clone()
         }
-        (ArmsShopOutcome::InvalidInput, _) => match prior_state {
-            ArmsShopState::BuyConfirm {
-                item,
-                quoted_price,
-                quote_record_id,
-            } => format_arms_outcome_with_rolls(
-                ArmsShopOutcome::QuotedBuyPrice {
-                    item,
-                    price: quoted_price,
-                    quote_record_id,
-                },
-                game_dir,
-                None,
-                None,
-                speech,
-            ),
-            _ => format_arms_outcome(ArmsShopOutcome::InvalidInput, game_dir),
-        },
+        // `shops.md §8.A`, "Arms item quote and confirmation": "Only `Y` and
+        // `N` advance. Other keys leave the quote/prompt visible and do not
+        // redraw or consume a random draw." Re-rendering the quote here
+        // swapped the drawn confirmation prompt for the undrawn fallback
+        // variant (playtest E54).
+        (ArmsShopOutcome::InvalidInput, _)
+            if matches!(prior_state, ArmsShopState::BuyConfirm { .. }) =>
+        {
+            state.message.clone()
+        }
+        (ArmsShopOutcome::InvalidInput, _) => {
+            format_arms_outcome(ArmsShopOutcome::InvalidInput, game_dir)
+        }
         (ArmsShopOutcome::EnteredSell, _) => arms_sell_entry_prompt(state.random_range_u8(0, 3)),
         (ArmsShopOutcome::SellBrowserMoved, _) => state.message.clone(),
         (ArmsShopOutcome::OfferedSellPrice { item, offer }, _) => {
@@ -3274,24 +3385,6 @@ fn handle_arms_shop_key_input(
             let listing = format_arms_stock_buy_menu(table, None);
             let call = arms_stock_call_for_roll(state.random_range_u8(0, 3));
             format!("{post}\n\n{listing}\n{call}")
-        }
-        // `shops.md` §8.1 groups the carry-cap refusal with the decline: "A
-        // decline or carry-cap refusal uses this same prompt, retaining
-        // whether an earlier purchase completed." The refusal line itself is
-        // the fixed `Thou canst not carry any more!` over its attribution
-        // tail, and the prompt, repeated list and stock call follow it in the
-        // shape the declined quote takes. Not separately measured - reaching
-        // the cap needs 99 of an item - so it follows the spec sentence and
-        // the decline's measured shape rather than a capture of its own.
-        (ArmsShopOutcome::BuyRefusedCapHit { .. }, Some(table)) => {
-            let post =
-                arms_post_item_prompt(speech.speaker_is_female, state.arms_transaction_completed);
-            let listing = format_arms_stock_buy_menu(table, None);
-            let call = arms_stock_call_for_roll(state.random_range_u8(0, 3));
-            format!(
-                "{}\n{post}\n\n{listing}\n{call}",
-                speech.attribute("Thou canst not carry any more!", "says")
-            )
         }
         (ArmsShopOutcome::Declined, _) if matches!(shop_state, ArmsShopState::SellPickItem(_)) => {
             // The `No` is echoed onto the open `Deal?" ` row above, not
@@ -3377,6 +3470,26 @@ fn handle_arms_shop_key_input(
                 .map(|flourish| format!("\n\n{}", speech.attribute(&flourish, "says")))
                 .unwrap_or_default()
         }
+        // `shops.md §8.1`: short funds "exits the whole arms buy flow ...
+        // the next thing the player sees is the farewell" - the bark, then
+        // the ordinary closing envelope the listing's Space exit prints, with
+        // its own draw after the bark's. Playtest E45: the visit stayed open
+        // on the Buy/Sell prompt.
+        (refusal @ ArmsShopOutcome::BuyRefusedShortFunds { .. }, _) => {
+            let bark = format_arms_outcome_with_rolls(
+                refusal,
+                game_dir,
+                confirmation_prompt_roll,
+                no_credit_roll,
+                speech,
+            );
+            let roll = state.random_range_u8(0, 3);
+            let farewell = arms_closing_bark_record(state.arms_transaction_completed, roll)
+                .and_then(|record| render_shared_shoppe_flourish(game_dir, record))
+                .map(|flourish| format!("\n\n{}", speech.attribute(&flourish, "says")))
+                .unwrap_or_default();
+            format!("{bark}{farewell}")
+        }
         (outcome, _) => format_arms_outcome_with_rolls(
             outcome,
             game_dir,
@@ -3387,6 +3500,9 @@ fn handle_arms_shop_key_input(
     };
     shop_message_ignoring_surcharge(message, surcharge)
 }
+
+/// `shops.md §8.1` / `§8.A` "Arms carry-cap refusal (verbatim)".
+const ARMS_CARRY_CAP_REFUSAL: &str = "\"Thou canst not carry any more!\"";
 
 /// **Measured** 2026-09-07 (`qa/paired/shop-arms-menus.tsv`,
 /// `shop-arms-sell.tsv`): the sell-entry prompt is *quoted* -
@@ -3740,7 +3856,10 @@ fn format_arms_outcome_with_rolls(
         // not carry any more!` followed by the shopkeeper-attribution tail
         // `says <shopkeeper>.`" (`§8.A` row "Arms carry-cap refusal
         // (verbatim)" repeats both halves).
-        BuyRefusedCapHit { .. } => speech.attribute("Thou canst not carry any more!", "says"),
+        // The `§8.A` verbatim row quotes the refusal:
+        // `"Thou canst not carry any more!"` (playtest E46). The post-item
+        // prompt and listing follow only after the one-key wait.
+        BuyRefusedCapHit { .. } => speech.attribute(ARMS_CARRY_CAP_REFUSAL, "says"),
         // `shops.md §8.B`/`§8.C`: an unrecognised key waits; there is no
         // I-do-not-understand line anywhere in the shop family.
         InvalidInput => String::new(),
@@ -4929,14 +5048,15 @@ const GUILD_QUOTE_PROMPT: &str = "Interested?\"";
 const GUILD_MENU_AGAIN_HEADING: &str = "\"What else, then?";
 const GUILD_MENU_ROW_WIDTH: usize = 14;
 
-fn guild_menu_rows() -> String {
+pub(crate) fn guild_menu_rows() -> String {
     let mut rows = String::new();
     for (letter, commodity) in [
         ('a', crate::shops::GuildCommodity::Keys),
         ('b', crate::shops::GuildCommodity::Gems),
         ('c', crate::shops::GuildCommodity::Torches),
     ] {
-        let name = commodity.display_name();
+        // Capitalised, as measured and as §8.C prints them (playtest E56).
+        let name = commodity.menu_label();
         let dots = GUILD_MENU_ROW_WIDTH.saturating_sub(1 + name.len());
         rows.push_str(&format!("{letter}{}{name}\n", ".".repeat(dots)));
     }
@@ -7225,7 +7345,7 @@ mod arms_shop_resident_literal_tests {
             None,
             speech,
         );
-        assert_eq!(rendered, "Thou canst not carry any more!\nsays Kitiara.");
+        assert_eq!(rendered, "\"Thou canst not carry any more!\"\nsays Kitiara.");
     }
 
     /// The two tails use different verbs; neither may borrow the other's.
@@ -7253,7 +7373,7 @@ mod arms_shop_resident_literal_tests {
                 None,
                 speech,
             ),
-            "Thou canst not carry any more!"
+            "\"Thou canst not carry any more!\""
         );
         assert_eq!(
             format_arms_outcome_with_rolls(

@@ -1159,4 +1159,5 @@ mod tests {
     include!("tests_inline/endgame_handover_keys.rs");
     include!("tests_inline/rc1_paired_fixes.rs");
     include!("tests_inline/playfix_overworld.rs");
+    include!("tests_inline/playfix_shops.rs");
 }

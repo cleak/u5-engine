@@ -119,7 +119,11 @@ fn every_quoted_shop_key_prompt_suppresses_the_command_row() {
     // A selector that owns the panel is not this shape, and stays as it was.
     let mut state = test_state(open_grid(), 1, 1);
     state.active_shop = Some(ActiveShopSession::Innkeeper(
-        InnkeeperState::PickLeaveCompanion { inn, deposit: 3 },
+        InnkeeperState::PickLeaveCompanion {
+            inn,
+            deposit: 3,
+            highlight: 0,
+        },
     ));
     assert!(!state.message_window_live_row_suppressed());
 }

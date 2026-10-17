@@ -66,12 +66,34 @@ impl PlayState {
         if let Some(session) = self.active_party_selector.as_ref() {
             return Some(session.highlight);
         }
+        if let Some(highlight) = self.shop_member_selector_highlight() {
+            return Some(highlight);
+        }
         // `inventory.md §5` step 1: R-Ready "selects a party member with
         // the same party-member selection surface used by Z-stats".
         self.active_ready
             .as_ref()
             .filter(|session| session.selected_party_index.is_none())
             .map(|session| session.cursor.min(self.party.len().saturating_sub(1)))
+    }
+
+    /// The indicated row of a shop's member selection, which `shops.md §8.C`
+    /// puts on `inventory.md §4.3`'s shared surface: inn Leave ("the inn uses
+    /// the shared member selector") and the healer ("use the party
+    /// selector").
+    pub fn shop_member_selector_highlight(&self) -> Option<usize> {
+        use crate::shop_runtime::{HealerShopState, InnkeeperState};
+        use crate::shop_session::ActiveShopSession;
+        match self.active_shop.as_ref()? {
+            ActiveShopSession::Innkeeper(InnkeeperState::PickLeaveCompanion {
+                highlight, ..
+            }) => Some(*highlight),
+            ActiveShopSession::Healer(HealerShopState::PickPartyMember { highlight, .. }, _) => {
+                Some(usize::from(*highlight))
+            }
+            _ => None,
+        }
+        .map(|highlight| highlight.min(self.party.len().saturating_sub(1)))
     }
 
     /// The party-roster box's border label for the current modal, if any.
@@ -95,7 +117,7 @@ impl PlayState {
     /// the stat sheet and above the `Arms` list. The four inventory
     /// pages keep their published page literals.
     pub fn roster_box_label(&self) -> Option<String> {
-        if self.active_party_selector.is_some() {
+        if self.active_party_selector.is_some() || self.shop_member_selector_highlight().is_some() {
             return Some(PARTY_SELECTOR_ROSTER_BOX_LABEL.to_string());
         }
         if let Some(session) = self.active_use.as_ref() {

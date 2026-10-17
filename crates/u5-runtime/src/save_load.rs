@@ -543,11 +543,43 @@ pub const fn inn_registry_marker_is_guest(marker: u8) -> bool {
     marker != INN_REGISTRY_EMPTY_MARKER && marker != INN_REGISTRY_UNMATCHABLE_MARKER
 }
 
+/// Roster record that holds the guest of registry slot `slot`.
+///
+/// `formats/saved-gam.md` §3.1 puts the inn-registry marker at a record's own
+/// byte `0x1F`, and `systems/karma.md` §8 / `systems/blackthorn.md` §5 read
+/// that same byte as "the save record's" whereabouts. §3.3 keeps the guest's
+/// stay counter in "that shared character counter" the time system ages on
+/// every record. So the guest of slot `N` *is* roster record `N`, intact; the
+/// shifted view only places that record's tail byte at the head of slot `N`.
+/// Reading the guest's fields relative to the slot head instead shifted every
+/// lodged record one byte into its neighbour (playtest E43).
+pub const fn inn_registry_guest_record_offset(slot: usize) -> usize {
+    SAVE_ROSTER_OFFSET + slot * SAVE_CHARACTER_RECORD_LEN
+}
+
+/// Byte holding registry slot `slot`'s leading scene marker: the head of the
+/// shifted view's slot, which is the tail byte (`0x1F`) of roster record
+/// `slot`.
+pub const fn inn_registry_marker_offset(slot: usize) -> usize {
+    SAVE_INN_REGISTRY_OFFSET + slot * SAVE_CHARACTER_RECORD_LEN
+}
+
+/// The travelling-party prefix of the roster. `formats/saved-gam.md` §3.1
+/// calls byte `0x1F` "opaque padding for ordinary active-character
+/// behaviour", so a travelling record is never read as a lodged guest.
+fn inn_registry_active_prefix(bytes: &[u8]) -> usize {
+    match bytes[SAVE_PARTY_SIZE_OFFSET] {
+        size @ 1..=SAVE_PARTY_SIZE_MAX => usize::from(size),
+        _ => 1,
+    }
+}
+
 pub fn decode_inn_registry(bytes: &[u8]) -> Vec<InnGuestRecord> {
-    (0..SAVE_INN_REGISTRY_COUNT)
+    let active = inn_registry_active_prefix(bytes);
+    (active..SAVE_INN_REGISTRY_COUNT)
         .filter_map(|slot| {
-            let record = SAVE_INN_REGISTRY_OFFSET + slot * SAVE_CHARACTER_RECORD_LEN;
-            let scene_marker = bytes[record];
+            let record = inn_registry_guest_record_offset(slot);
+            let scene_marker = bytes[inn_registry_marker_offset(slot)];
             if !inn_registry_marker_is_guest(scene_marker) {
                 return None;
             }
@@ -566,7 +598,6 @@ pub fn decode_inn_registry(bytes: &[u8]) -> Vec<InnGuestRecord> {
                 name: {
                     let mut name = [0; SAVE_CHARACTER_NAME_LEN];
                     name.copy_from_slice(&bytes[record..record + SAVE_CHARACTER_NAME_LEN]);
-                    name[0] = 0;
                     name
                 },
                 member: PartyMember {
@@ -595,9 +626,9 @@ pub fn decode_inn_registry(bytes: &[u8]) -> Vec<InnGuestRecord> {
 /// `systems/shops.md` §8.4 both state it is "a shifted legacy view over the
 /// save image rather than an independent post-roster block", and §3.3 says the
 /// range is preserved unless the inn flow is deliberately changing it.
-/// Registry slot `N` starts at byte `0x1F` of roster record `N` and continues
-/// into the first thirty-one bytes of roster record `N + 1`, so every stray
-/// write here lands on a neighbouring character record.
+/// Registry slot `N` starts at byte `0x1F` of roster record `N`, and its guest
+/// is roster record `N` itself (see [`inn_registry_guest_record_offset`]), so
+/// a write at the wrong slot lands on another character record.
 ///
 /// Two rules follow, and both are load-bearing:
 ///
@@ -612,16 +643,19 @@ pub fn decode_inn_registry(bytes: &[u8]) -> Vec<InnGuestRecord> {
 ///    §8.4 pickup requires the returned slot's marker be "cleared to zero".
 pub fn encode_inn_registry(bytes: &mut [u8], registry: &[InnGuestRecord]) {
     let mut occupied = [false; SAVE_INN_REGISTRY_COUNT];
+    let active = inn_registry_active_prefix(bytes);
 
     for guest in registry {
         let slot = guest.registry_slot as usize;
-        if slot >= SAVE_INN_REGISTRY_COUNT {
+        // A travelling record is never a guest; writing one there would
+        // overwrite a party member the roster writer just stored.
+        if slot >= SAVE_INN_REGISTRY_COUNT || slot < active {
             continue;
         }
         occupied[slot] = true;
-        let record = SAVE_INN_REGISTRY_OFFSET + slot * SAVE_CHARACTER_RECORD_LEN;
+        let record = inn_registry_guest_record_offset(slot);
         bytes[record..record + SAVE_CHARACTER_NAME_LEN].copy_from_slice(&guest.name);
-        bytes[record] = guest.scene_marker;
+        bytes[inn_registry_marker_offset(slot)] = guest.scene_marker;
         bytes[record + SAVE_CHARACTER_CLASS_OFFSET] = guest.member.class_byte;
         bytes[record + SAVE_CHARACTER_STATUS_OFFSET] = guest.member.status;
         bytes[record + SAVE_CHARACTER_STR_OFFSET] = guest.strength;
@@ -655,9 +689,9 @@ pub fn encode_inn_registry(bytes: &mut [u8], registry: &[InnGuestRecord]) {
         if slot_occupied {
             continue;
         }
-        let record = SAVE_INN_REGISTRY_OFFSET + slot * SAVE_CHARACTER_RECORD_LEN;
-        if inn_registry_marker_is_guest(bytes[record]) {
-            bytes[record] = INN_REGISTRY_EMPTY_MARKER;
+        let marker = inn_registry_marker_offset(slot);
+        if inn_registry_marker_is_guest(bytes[marker]) {
+            bytes[marker] = INN_REGISTRY_EMPTY_MARKER;
         }
     }
 }

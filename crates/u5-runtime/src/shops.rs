@@ -564,6 +564,16 @@ impl GuildCommodity {
             Self::Torches => "torches",
         }
     }
+
+    /// `shops.md §8.C`: the guild stock rows print `Keys`, `Gems` and
+    /// `Torches` - "the guild's exact three rows ... are authoritative".
+    pub const fn menu_label(self) -> &'static str {
+        match self {
+            Self::Keys => "Keys",
+            Self::Gems => "Gems",
+            Self::Torches => "Torches",
+        }
+    }
 }
 
 /// `shops.md §8.2` / `§8.C` guildmaster stock-menu key.
@@ -2684,9 +2694,21 @@ pub fn apply_inn_leave_guest(
     if party[party_index].status == b'D' {
         return Err(InnError::DeadCompanion);
     }
-    let Some(registry_slot) = crate::free_inn_registry_slot(registry) else {
+    // `shops.md §8.4`: the record moves into the registry view and "the
+    // active roster is compacted". The registry view's guest of slot `N` is
+    // roster record `N` itself (`crate::inn_registry_guest_record_offset`),
+    // so the departing record lands in the roster slot the compaction
+    // vacates - the old last travelling index - and no other character
+    // record is overwritten. Which slot the original picks is unpublished;
+    // this is the one choice that loses no record (playtest E43).
+    let registry_slot = (party.len() - 1) as u8;
+    if usize::from(registry_slot) >= crate::SAVE_INN_REGISTRY_COUNT
+        || registry
+            .iter()
+            .any(|guest| guest.registry_slot == registry_slot)
+    {
         return Err(InnError::RegistryFull);
-    };
+    }
 
     let member = party.remove(party_index);
     let name = remove_or_default(party_names, party_index, [0; SAVE_CHARACTER_NAME_LEN]);
@@ -2815,6 +2837,18 @@ pub fn apply_inn_pickup_guest_with_bill(
     let gold_before = *gold;
     *gold -= bill;
     registry.remove(registry_index);
+    // `shops.md §8.4`: "the guest's record is copied into the next active
+    // roster slot ... the registry view is compacted as needed". The returned
+    // record moves from roster slot `guest.registry_slot` to slot
+    // `party.len()`, and the records between shift up one, carrying their
+    // guests' registry slots with them (see `PlayState::pickup_inn_guest*`
+    // for the matching roster rotation).
+    let destination = party.len() as u8;
+    for other in registry.iter_mut() {
+        if (destination..guest.registry_slot).contains(&other.registry_slot) {
+            other.registry_slot += 1;
+        }
+    }
     party.push(member);
     party_names.push(guest.name);
     party_stay_counters.push(guest.stay_counter.min(INN_STAY_COUNTER_CAP));
@@ -3532,7 +3566,7 @@ impl PlayState {
         party_index: usize,
         base_lodging_charge: u16,
     ) -> Result<InnLeaveOutcome, InnError> {
-        apply_inn_leave_guest(
+        let outcome = apply_inn_leave_guest(
             &mut self.gold,
             &mut self.inn_registry,
             scene_marker,
@@ -3545,7 +3579,54 @@ impl PlayState {
             &mut self.party_equipment,
             party_index,
             base_lodging_charge,
-        )
+        )?;
+        // Keep the whole-record roster in step with the compaction: the
+        // departing record is now roster record `registry_slot`.
+        self.rotate_party_roster_record(party_index, usize::from(outcome.guest.registry_slot));
+        Ok(outcome)
+    }
+
+    /// Move the roster record at `from` to `to`, shifting the records between
+    /// by one, as the inn's Leave/Pickup compaction does to the save image's
+    /// sixteen character records (`formats/saved-gam.md` §3).
+    fn rotate_party_roster_record(&mut self, from: usize, to: usize) {
+        if from == to || from >= self.party_roster.len() || to >= self.party_roster.len() {
+            return;
+        }
+        let record = self.party_roster.remove(from);
+        self.party_roster.insert(to, record);
+    }
+
+    /// Keep the inn registry in step with a roster rotation that moves the
+    /// record at `from` to `to` and shifts the records between by one.
+    ///
+    /// A lodged guest of registry slot `N` *is* roster record `N`
+    /// ([`crate::inn_registry_guest_record_offset`]), so any other caller that
+    /// rotates roster records - recruitment pulling a reserve record into the
+    /// next active slot (`conversation.md §7.6`), the Blackthorn execution
+    /// parking the lifted record in the last slot (`blackthorn.md §5`) - must
+    /// move the guests' registry slots with their records. Otherwise the save
+    /// writer stores a guest over whichever companion now sits at its stale
+    /// slot.
+    pub(crate) fn shift_inn_registry_for_roster_move(&mut self, from: usize, to: usize) {
+        if from == to {
+            return;
+        }
+        for guest in self.inn_registry.iter_mut() {
+            let slot = usize::from(guest.registry_slot);
+            let moved = if slot == from {
+                to
+            } else if from < to && (from + 1..=to).contains(&slot) {
+                slot - 1
+            } else if to < from && (to..from).contains(&slot) {
+                slot + 1
+            } else {
+                slot
+            };
+            if let Ok(moved) = u8::try_from(moved) {
+                guest.registry_slot = moved;
+            }
+        }
     }
 
     pub fn pickup_inn_guest(
@@ -3554,7 +3635,7 @@ impl PlayState {
         registry_index: usize,
         base_lodging_charge: u16,
     ) -> Result<InnPickupOutcome, InnError> {
-        apply_inn_pickup_guest(
+        let outcome = apply_inn_pickup_guest(
             &mut self.gold,
             &mut self.inn_registry,
             scene_marker,
@@ -3567,7 +3648,12 @@ impl PlayState {
             &mut self.party_equipment,
             registry_index,
             base_lodging_charge,
-        )
+        )?;
+        self.rotate_party_roster_record(
+            usize::from(outcome.guest.registry_slot),
+            outcome.party_index,
+        );
+        Ok(outcome)
     }
 
     pub fn pickup_inn_guest_with_bill(
@@ -3576,7 +3662,7 @@ impl PlayState {
         registry_index: usize,
         bill: u16,
     ) -> Result<InnPickupOutcome, InnError> {
-        apply_inn_pickup_guest_with_bill(
+        let outcome = apply_inn_pickup_guest_with_bill(
             &mut self.gold,
             &mut self.inn_registry,
             scene_marker,
@@ -3589,6 +3675,11 @@ impl PlayState {
             &mut self.party_equipment,
             registry_index,
             bill,
-        )
+        )?;
+        self.rotate_party_roster_record(
+            usize::from(outcome.guest.registry_slot),
+            outcome.party_index,
+        );
+        Ok(outcome)
     }
 }
