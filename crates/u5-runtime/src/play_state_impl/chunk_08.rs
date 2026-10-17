@@ -361,7 +361,13 @@ impl PlayState {
                 &rest_entry_statuses,
             );
         }
-        self.message = if refused {
+        // `rest-and-camp.md §6`: an interruption "stops immediately and
+        // branches to the mode-appropriate interruption result" - the ambush
+        // line below, not the completed-camp result. Printing `Party rested!`
+        // there told the player the camp finished (playtest E29).
+        self.message = if interrupted {
+            String::new()
+        } else if refused {
             camp_messages.no_effect
         } else {
             camp_messages.success
@@ -438,9 +444,12 @@ impl PlayState {
             // reads combat state (the Lord British block above cannot run
             // on an interrupted camp), so the move is behaviour-neutral
             // apart from the message ordering it fixes.
-            self.message.push_str(" Ambushed!");
-            let narration = self.message.clone();
-            self.emit_message_line(narration);
+            // `dungeon-mode.md §11`: "The rest concludes either with `Party
+            // rested!\n` or `Ambushed!\n\n`". Emitted straight from the
+            // literal: writing it into the slot first let the emitter's own
+            // flush commit the slot and then print it again, so the
+            // transcript carried the line twice (playtest E29).
+            self.emit_message_line(CAMP_AMBUSHED_LINE);
             // Setup's own return value is an engine diagnostic, not a
             // published line; the slot is left holding the conflict banner,
             // which is what the original's pane shows on entry.

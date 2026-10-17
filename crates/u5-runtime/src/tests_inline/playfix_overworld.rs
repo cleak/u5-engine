@@ -402,3 +402,51 @@ fn playfix_e28_pirate_reply_does_not_reprint_the_fire_echo() {
     );
     let _ = fs::remove_dir_all(dir);
 }
+
+/// E29: `rest-and-camp.md §6`: an interrupted rest "stops immediately and
+/// branches to the mode-appropriate interruption result", and
+/// `dungeon-mode.md §11`: the rest "concludes either with `Party rested!\n`
+/// or `Ambushed!\n\n`". An ambushed camp prints the ambush line once and
+/// never the completed-camp result.
+#[test]
+fn playfix_e29_interrupted_camp_prints_ambushed_once_and_no_rested_line() {
+    let dir = debug_game_dir();
+    let mut checked = false;
+    for seed in 0u32..4096 {
+        let mut state = world_state(open_world_grid(), 5, 5);
+        state.clock = GameClock::new(12, 0).unwrap();
+        state.prng_state = seed as _;
+        let before = state.message_transcript.len();
+        let Ok(_) = state.rest_with_watch(
+            InlineRestRequest {
+                hours: Some(9),
+                watcher: None,
+            },
+            &dir,
+        ) else {
+            continue;
+        };
+        state.commit_command_echo();
+        state.flush_message_slot();
+        let rows: Vec<String> = state.message_transcript[before..]
+            .iter()
+            .map(|entry| entry.text.clone())
+            .collect();
+        if !rows.iter().any(|row| row.contains("Ambushed")) {
+            continue;
+        }
+        checked = true;
+        assert_eq!(
+            rows.iter().filter(|row| row.contains("Ambushed")).count(),
+            1,
+            "seed {seed}: {rows:?}"
+        );
+        assert!(
+            !rows.iter().any(|row| row.contains("RESTED") || row.contains("NO EFFECT")),
+            "seed {seed}: {rows:?}"
+        );
+        break;
+    }
+    assert!(checked, "no seed in range interrupted the camp");
+    let _ = fs::remove_dir_all(dir);
+}
