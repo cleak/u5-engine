@@ -101,3 +101,46 @@ fn playtest_e09_level_change_spell_prints_the_climb_word_once() {
     );
     assert!(!accepted.message_slot_needs_flush());
 }
+
+/// E10: `dungeon-mode.md §11` - "The rest concludes either with `Party
+/// rested!\n` or `Ambushed!\n\n` (and an immediate combat)". An interrupted
+/// dungeon camp prints the ambush line alone, once, with no leading space.
+#[test]
+fn playtest_e10_dungeon_camp_ambush_prints_only_the_ambush_line() {
+    let dir = debug_game_dir();
+    let mut state = dungeon_state(open_dungeon_record(), 0, 1, 1);
+    state.clock = GameClock::new(8, 55).unwrap();
+    // The first hour rollover's 1-in-64 interruption roll comes up zero.
+    state.prng_state = (0..=u16::MAX)
+        .find(|seed| {
+            let mut scratch = *seed;
+            u5_prng_range_u16(&mut scratch, 0, 63) == 0
+        })
+        .expect("some seed interrupts");
+
+    let _ = state.hole_up_command(
+        &dir,
+        InlineRestRequest {
+            hours: Some(9),
+            watcher: None,
+        },
+    );
+
+    let rows = playtest_transcript_rows(&state);
+    let sleep = rows
+        .iter()
+        .position(|row| row == CAMP_BODY_SLEEP_LINE.trim_end())
+        .unwrap_or_else(|| panic!("the camp body prints: {rows:?}"));
+    assert_eq!(rows[sleep + 1], "", "{rows:?}");
+    assert_eq!(rows[sleep + 2], "Ambushed!", "{rows:?}");
+    assert_eq!(
+        rows.iter().filter(|row| row.contains("Ambushed")).count(),
+        1,
+        "{rows:?}"
+    );
+    assert!(
+        !rows.iter().any(|row| row.contains("rested")),
+        "the result line is replaced, not followed: {rows:?}"
+    );
+    let _ = fs::remove_dir_all(dir);
+}
