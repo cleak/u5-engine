@@ -5296,9 +5296,31 @@ fn finish_combat_cast_actor_action(state: &mut PlayState, actor_slot: usize, had
                 .message
                 .push_str(crate::combat_frame::COMBAT_VICTORY_LINE);
         }
+        close_combat_cast_result_row(state);
         advance_combat_round_after_actor_and_append_message(state, actor_slot);
     } else if state.combat_active {
+        close_combat_cast_result_row(state);
         advance_combat_round_after_actor_and_append_message(state, actor_slot);
+    }
+}
+
+/// `magic.md §7`: the shared dispatcher's result literals (`Success!`,
+/// `Not here!`, `None mixed!`, `Failed!`, `Absorbed!` ...) "carry trailing
+/// feeds", and "Combat's subsequent actor banner has its own leading feed,
+/// which leaves a blank row after a completed result" (`combat.md §8.4`
+/// says the same for `Not here!` / `None mixed!`).
+///
+/// Those results reach the transcript through the message slot, not as arena
+/// prints, so `combat_transcript_row_open` still described the `Cast...`
+/// echo row the command opened and the banner's leading feed was spent
+/// closing it. Flush the result here and record, for this caller, that its
+/// row is closed. A cast whose output was all arena prints leaves the slot
+/// already flushed, and then the flags those prints recorded stand
+/// (playtest E40).
+fn close_combat_cast_result_row(state: &mut PlayState) {
+    if state.flush_message_slot() {
+        state.combat_transcript_row_open = false;
+        state.message_row_open_mid_line = false;
     }
 }
 

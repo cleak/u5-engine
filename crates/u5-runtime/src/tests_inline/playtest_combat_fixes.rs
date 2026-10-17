@@ -47,3 +47,31 @@ fn playtest_e35_negate_magic_absorbs_combat_cast_before_the_spell_prompt() {
     assert_eq!(state.spell_charges[spell_index], 1);
     assert_eq!(state.party[0].mana, 9);
 }
+
+/// `combat.md §8.4`: "the shared cast dispatcher emits `Not here!\n`, `None
+/// mixed!\n` ... Combat supplies the following banner's leading feed", and
+/// `magic.md §7`: the result literals carry trailing feeds and "Combat's
+/// subsequent actor banner has its own leading feed, which leaves a blank
+/// row after a completed result". Playtest E40: the cast result ran straight
+/// into the next banner.
+#[test]
+fn playtest_e40_a_combat_cast_result_is_followed_by_a_blank_row() {
+    let game_dir = std::path::Path::new(".");
+    let mut state = combat_state_after_the_conflict_banner(8, 5);
+    state.active_player = Some(0);
+    state.party[0].mana = 9;
+    state.party[0].level = 8;
+    state.ensure_pending_combat_player_turn();
+
+    for key in ['C', 'I', 'L', '\r'] {
+        handle_play_key_input(&mut state, key, "", game_dir).unwrap();
+    }
+
+    let rows = combat_message_window_rows(&state);
+    let result = rows
+        .iter()
+        .rposition(|row| row == "Not here!")
+        .unwrap_or_else(|| panic!("the Not here! result is drawn: {rows:?}"));
+    assert_eq!(rows[result + 1], "", "rows: {rows:?}");
+    assert_eq!(rows[result + 2], "Avatar, armed", "rows: {rows:?}");
+}
