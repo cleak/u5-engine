@@ -1513,9 +1513,9 @@ pub fn dissolve_click_run(pitches: &[u16]) -> SpeakerProgram {
 /// The carrier runs continuously between retunes, so a run that is to sound
 /// for as long as the reveal is on screen holds each pitch for the whole
 /// per-visit period rather than for the calibrated hold alone. `audio.md
-/// §8.6.1` leaves that period unpublished ("wall-clock retune cadence and
-/// total duration are not established"); the visual shell passes the measured
-/// [`crate::GATED_DISSOLVE_MEASURED_CLICK_PERIOD_NANOS`].
+/// §8.6.1` (`cleak/u5-spec#298` Q35) publishes that period as an emulator
+/// timing, "one retune about every 180 microseconds" at fixed 3000 cycles;
+/// the visual shell passes [`crate::GATED_DISSOLVE_MEASURED_CLICK_PERIOD_NANOS`].
 pub fn dissolve_click_run_at(pitches: &[u16], retune_period_nanos: u64) -> SpeakerProgram {
     let hold = retune_period_nanos;
     let mut ops = Vec::with_capacity(pitches.len() + 1);

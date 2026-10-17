@@ -56,20 +56,14 @@ pub const RECTANGLE_DISSOLVE_IS_ONE_BLOCKING_CALL: bool = true;
 /// second visited pixel — "about 50 to 60 microseconds ... one outer unit at
 /// the shift-four subdivision of section 6.2".
 ///
-/// §6.2's shift-four subdivision is the calibration count divided by sixteen,
-/// truncated; §7.3 converts that class to real time and gets the same figure
-/// for both of its other members: "A random-rumble step unit costs about 60
-/// microseconds" and "A title-sequence ignition burst pitch hold costs about 60
-/// microseconds." The click hold is that same class, so it is carried at the
-/// top of the published 50-to-60 band.
+/// The §5.1 cost model (`cleak/u5-spec#298` Q35) prices it: each checked visit
+/// pays "one calibrated hold of about 55 microseconds, which is
+/// host-independent because the hold is calibrated" (also `audio.md §8.6.1`).
 ///
-/// This is the only part of the gated call's cost published as fact. §5.1 adds
-/// that "A hand-built cycle model puts the whole gated call at roughly 8 to
-/// 14 s, but it omits display-memory wait states entirely and is
-/// **unverified**", so [`gated_dissolve_hold_nanos`] deliberately reports only
-/// the calibrated holds and is a floor on the real duration, not an estimate of
-/// it.
-pub const GATED_DISSOLVE_CLICK_HOLD_NANOS: u64 = 60_000;
+/// This is only the calibrated part of a visit; [`gated_dissolve_hold_nanos`]
+/// therefore reports a floor on the call's duration, not an estimate of it.
+/// The whole call is [`GATED_DISSOLVE_MEASURED_CLICK_PERIOD_NANOS`].
+pub const GATED_DISSOLVE_CLICK_HOLD_NANOS: u64 = 55_000;
 
 /// The calibrated hold a gated dissolve of `clicked_visits` clicking visits
 /// pays in total.
@@ -80,21 +74,32 @@ pub const fn gated_dissolve_hold_nanos(clicked_visits: u32) -> u64 {
     clicked_visits as u64 * GATED_DISSOLVE_CLICK_HOLD_NANOS
 }
 
-/// **Measured**, not published: the wall-clock cost of one checked visit of
-/// the gated start/menu logo dissolve — the click hold, the speaker retune,
-/// the keyboard-status test and the two pixel copies it is paired with.
+/// `timing.md §5.1` (`cleak/u5-spec#298` Q35): the first gated start/menu
+/// logo dissolve, "Measured as **emulator timings** under DOSBox 0.74-3
+/// (`machine=ega`, normal core, cold start, freshly loaded driver): **2.90 s
+/// at fixed 3000 cycles**". The engine's stock reference is DOSBox at 3000
+/// cycles, so that is the figure it paces by. `audio.md §8.6.1`: "the speaker
+/// carrier's audible span equals the dissolve".
 ///
-/// `timing.md §5.1` publishes only the calibrated part of that cost
-/// ([`GATED_DISSOLVE_CLICK_HOLD_NANOS`]) and calls its own whole-call figure
-/// ("roughly 8 to 14 s") an **unverified** cycle model; `audio.md §8.6.1`
-/// repeats that the "wall-clock retune cadence and total duration are not
-/// established". The figure here is fitted to stock black-box captures
-/// instead: across forty paired runs (DOSBox at 3000 cycles, grim timelapse at
-/// about 0.57 s per frame) the logo coverage of `(0, 0)..(319, 100)` grows
-/// linearly from first to last pixel over about 2.7 to 2.9 s. Over the
-/// rectangle's 16,160 checked visits that is about 173 microseconds each. It
-/// is a stock-reference constant awaiting publication, not a spec value.
-pub const GATED_DISSOLVE_MEASURED_CLICK_PERIOD_NANOS: u64 = 173_000;
+/// The "roughly 8 to 14 s" cycle model stays "an **unverified period-hardware
+/// estimate**" for a 4.77 MHz machine and "is **not** the duration under
+/// emulator settings comparable to the DOSBox default and must not be used as
+/// one" (`RETRACTIONS.md` R554).
+const GATED_START_MENU_DISSOLVE_3000_CYCLES_NANOS: u64 = 2_900_000_000;
+
+/// The wall-clock cost of one checked visit of the gated start/menu logo
+/// dissolve — the click hold, the speaker retune, the keyboard-status test and
+/// the two pixel copies it is paired with.
+///
+/// `timing.md §5.1` cost model (`cleak/u5-spec#298` Q35): "the 16,160 checked
+/// visits each cover two pixel copies and pay about 300 instructions of
+/// CPU-bound work ... plus one calibrated hold of about 55 microseconds",
+/// measured at "2.90 s at fixed 3000 cycles (about 180 microseconds per
+/// checked visit)". This is that published total over the published visit
+/// count: 2.90 s / 16,160 = 179,455 ns. It is an emulator timing, not a
+/// period one; the period-hardware duration is not established.
+pub const GATED_DISSOLVE_MEASURED_CLICK_PERIOD_NANOS: u64 =
+    GATED_START_MENU_DISSOLVE_3000_CYCLES_NANOS / 16_160;
 
 /// Wall-clock duration of a gated dissolve with `clicks` checked visits at
 /// the measured per-visit cost.
@@ -669,10 +674,11 @@ mod published_visit_order_tests {
             "per-click hold {per_click} ns is outside the published 50..60 us band"
         );
         // The published holds alone already take most of a second, so the
-        // gated reveal cannot be modelled as instantaneous. `timing.md §5.1`
-        // puts the whole call at "roughly 8 to 14 s", but that total "is
-        // **unverified**", so only this floor is asserted.
-        assert!(outcome.hold_nanos() > 900_000_000);
+        // gated reveal cannot be modelled as instantaneous. They are only the
+        // calibrated part of the §5.1 cost model; the whole call is the
+        // published emulator timing (`cleak/u5-spec#298` Q35, R554).
+        assert!(outcome.hold_nanos() > 800_000_000);
+        assert!(outcome.hold_nanos() < gated_dissolve_measured_nanos(outcome.clicks));
     }
 
     /// `timing.md §5.1`, start/menu logo reveal, **ungated**: "Self-paced
@@ -697,17 +703,20 @@ mod published_visit_order_tests {
     }
 
     /// The measured pacing of the gated logo reveal: 16,160 checked visits at
-    /// the fitted per-visit cost land inside the 2.7..2.9 s stock window, and
-    /// sit well above the published calibrated-hold floor.
+    /// the per-visit cost land on the published 2.90 s at fixed 3000 cycles
+    /// (`timing.md §5.1`, `cleak/u5-spec#298` Q35), not on the period-hardware
+    /// 8 to 14 s estimate (R554), and sit well above the calibrated-hold floor.
     #[test]
-    fn the_gated_start_menu_reveal_runs_for_the_measured_stock_duration() {
+    fn the_gated_start_menu_reveal_runs_for_the_published_emulator_duration() {
         let clicks = gated_dissolve_click_count(32_320);
         assert_eq!(clicks, 16_160);
         let total = gated_dissolve_measured_nanos(clicks);
         assert!(
-            (2_700_000_000..=2_900_000_000).contains(&total),
-            "gated logo reveal lasts {total} ns, outside the measured 2.7..2.9 s"
+            (2_899_000_000..=2_900_000_000).contains(&total),
+            "gated logo reveal lasts {total} ns, not the published 2.90 s"
         );
+        // "about 180 microseconds per checked visit".
+        assert!((179_000..=181_000).contains(&GATED_DISSOLVE_MEASURED_CLICK_PERIOD_NANOS));
         assert!(total > gated_dissolve_hold_nanos(clicks));
         // An odd pixel count still ends on a checked visit.
         assert_eq!(gated_dissolve_click_count(35 * 36), 630);
@@ -720,7 +729,7 @@ mod published_visit_order_tests {
         assert_eq!(gated_dissolve_clicks_due(0, 16_160), 0);
         assert_eq!(gated_dissolve_clicks_due(period - 1, 16_160), 0);
         assert_eq!(gated_dissolve_clicks_due(period, 16_160), 1);
-        assert_eq!(gated_dissolve_clicks_due(20_000_000, 16_160), 115);
+        assert_eq!(gated_dissolve_clicks_due(20_000_000, 16_160), 111);
         assert_eq!(
             gated_dissolve_clicks_due(gated_dissolve_measured_nanos(16_160) - 1, 16_160),
             16_159

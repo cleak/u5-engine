@@ -10422,7 +10422,7 @@ enum VisualIntroPanel {
     },
     /// `systems/intro.md §3` start/menu loader step 4 on the animated path:
     /// the gated logo dissolve, presented as successive prefixes of its visit
-    /// order at the measured stock cadence before step 7's ignition.
+    /// order at the published emulator cadence before step 7's ignition.
     StartMenuReveal(Box<StartMenuRevealState>),
     /// The measured pause after an ignition abort
     /// ([`INTRO_IGNITION_ABORT_MENU_HOLD_BIOS_TICKS`]): the start/menu screen
@@ -11583,7 +11583,7 @@ fn queue_start_menu_reveal_clicks(
         return;
     }
     // The carrier runs on between retunes, so each pitch sounds for the
-    // measured per-visit period and the run lasts exactly as long as the
+    // published per-visit period (`audio.md §8.6.1`, u5-spec#298 Q35) and the run lasts exactly as long as the
     // reveal is on screen.
     // Tagged: in the original the carrier is retuned from inside the dissolve
     // loop, so a key that stops the loop also reaches the shared exit's stop.
@@ -12183,7 +12183,8 @@ fn begin_visual_intro_subtitle_ignition(intro: &mut VisualIntroState) {
 /// memory as fast as the machine allows. `display-driver-abi.md §9.6` permits
 /// a frontend to present successive prefixes of the published visit order
 /// instead, provided order and final raster are kept and no tick, consuming
-/// read or abort point is added. The cadence is the measured stock one,
+/// read or abort point is added. The cadence is the published emulator one
+/// (`timing.md §5.1`, u5-spec#298 Q35: 2.90 s at fixed 3000 cycles),
 /// [`u5_runtime::GATED_DISSOLVE_MEASURED_CLICK_PERIOD_NANOS`] per checked
 /// visit.
 #[derive(Debug)]
@@ -12294,7 +12295,7 @@ fn abort_visual_intro_start_menu_reveal(intro: &mut VisualIntroState) -> bool {
     intro.surface.copy_rect_from(&source, u5_runtime::INTRO_START_MENU_REVEAL_RECT);
     // `intro.md §3` step 4 / `audio.md §8.6.1`: the carrier is retuned from
     // inside the dissolve and silenced at its exit, so the click run stops
-    // here with the transfer instead of playing out its ~2.8 s.
+    // here with the transfer instead of playing out its ~2.9 s.
     // The run is queued in the same system call that starts the reveal, so
     // nothing is normally left here; anything that is never sounded at all.
     intro.pending_reveal_clicks.clear();
@@ -21403,9 +21404,10 @@ mod tests {
         let reveal = simulate_visual_intro_until(&mut intro, &mut pump, frame, |i| {
             matches!(i.panel, VisualIntroPanel::SubtitleIgnition { .. })
         });
-        // 16,160 checked visits at the measured cadence, in 20 ms slices.
-        close(reveal, 140.0 * 0.020, "logo reveal");
-        assert!((2.7..=2.9).contains(&reveal), "measured stock reveal is 2.7..2.9 s");
+        // 16,160 checked visits at the published cadence, in 20 ms slices:
+        // `timing.md §5.1` (u5-spec#298 Q35), 2.90 s at fixed 3000 cycles.
+        close(reveal, 145.0 * 0.020, "logo reveal");
+        assert!((2.88..=2.92).contains(&reveal), "published reveal is 2.90 s");
         assert_eq!(intro.pending_reveal_clicks.len(), 16_160);
 
         let expected_ignition: f64 = match &intro.panel {
@@ -21436,7 +21438,7 @@ mod tests {
     }
 
     /// The gated logo reveal presents growing prefixes of the published visit
-    /// order, one 20 ms slice at a time at the measured per-visit cost, and
+    /// order, one 20 ms slice at a time at the published per-visit cost, and
     /// ends on the exact source raster before ignition.
     #[test]
     #[cfg(feature = "original-asset-tests")]
@@ -21466,7 +21468,8 @@ mod tests {
             assert!(advance_visual_intro_animation_tick(&mut intro));
             slices += 1;
         }
-        assert_eq!(slices, 140);
+        // 2.90 s at fixed 3000 cycles (`timing.md §5.1`, u5-spec#298 Q35).
+        assert_eq!(slices, 145);
         assert!(matches!(
             intro.panel,
             VisualIntroPanel::SubtitleIgnition { .. }
@@ -26267,7 +26270,7 @@ mod tests {
 
     /// P11: a cancel cuts the sounding interruptible program at once, and the
     /// blocking effect queued behind it starts on the same update instead of
-    /// waiting out the ~2.8 s run.
+    /// waiting out the ~2.9 s run.
     #[test]
     fn a_cancel_cuts_the_sounding_interruptible_program_and_frees_the_voice() {
         let mut app = speaker_test_app();

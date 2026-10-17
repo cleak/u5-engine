@@ -1294,9 +1294,10 @@ pub const BLACKTHORN_RESCUE_WAIT_AFTER_VERTIGO: u16 = 4;
 /// as a hold.
 ///
 /// The dissolve is modelled as a pixel walk that costs no time, so the
-/// refuge fragments followed the darkness beat immediately. §6.3 gives the
-/// shared rectangle dissolve as "roughly 8 to 14 s" and flags that figure
-/// **unverified**, which is not a number to implement from.
+/// refuge fragments followed the darkness beat immediately. The "roughly 8
+/// to 14 s" figure once cited for it belongs to the first, gated start-menu
+/// dissolve only, as an unverified 4.77 MHz estimate (`blackthorn.md §6.2`,
+/// `RETRACTIONS.md` R554); this ungated dissolve has no published wall clock.
 ///
 /// Measured instead, 2026-09-18 (`qa/paired/stonegate-rescue-pacing.tsv`,
 /// which steps both sides onto the trapdoor together and shoots every four
