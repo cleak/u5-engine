@@ -1382,6 +1382,12 @@ impl PlayState {
             // so this engine leaves the panel alone rather than guess.
             self.staged_narration
                 .push_secs_on_open_row(swell_secs, "\n\nNo effect!\n");
+            // `quest-graph.md §5` step 3 (u5-spec#296): "On that arm the
+            // result line prints first and the 50-update cast-failure
+            // glissando of `systems/audio.md` Section 5.2 (about 52 ms) plays
+            // after it." Speaker effects play in order, so queued behind the
+            // swell it starts as the swell's hold releases the line.
+            self.emit_sound_effect(SoundEffect::CastFailure);
             return Ok(MoveOutcome::Blocked);
         }
 

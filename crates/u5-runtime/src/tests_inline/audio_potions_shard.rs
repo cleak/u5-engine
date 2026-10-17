@@ -349,15 +349,17 @@ fn shadowlord_shard_refusals_never_flash() {
             .unwrap(),
         MoveOutcome::Blocked
     );
-    // Off any destruction row, so step 2's swell plays; no flash does.
+    // Off any destruction row, so step 2's swell plays, then step 3's
+    // cast-failure glissando (u5-spec#296); no flash does.
     assert_eq!(
         vanquished.sound_effects_after(serial),
-        vec![SoundEffect::ShardSwell]
+        vec![SoundEffect::ShardSwell, SoundEffect::CastFailure]
     );
 
     // Correct shard, live Shadowlord, but no Eternal Flame underfoot. The
     // position gate's refusal follows `quest-graph.md §5` step 2's swell,
-    // which is unconditional; what must not play is the flash.
+    // which is unconditional, and "the 50-update cast-failure glissando ...
+    // plays after it" (step 3, u5-spec#296); what must not play is the flash.
     let mut no_flame = test_state(open_grid(), 1, 1);
     no_flame.special_items[SPECIAL_ITEM_SHARD_FALSEHOOD_INDEX] = 1;
     no_flame.shadowlord_hideouts[SHADOWLORD_FALSEHOOD_INDEX] = 1;
@@ -370,7 +372,7 @@ fn shadowlord_shard_refusals_never_flash() {
     );
     assert_eq!(
         no_flame.sound_effects_after(serial),
-        vec![SoundEffect::ShardSwell]
+        vec![SoundEffect::ShardSwell, SoundEffect::CastFailure]
     );
 
     // On the flame, but the Shadowlord is not present to the north.
