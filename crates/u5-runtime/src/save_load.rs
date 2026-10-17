@@ -330,7 +330,16 @@ pub fn play_options_from_save_bytes_named(
         combat_round_counter: bytes[SAVE_COMBAT_ROUND_COUNTER_OFFSET],
         combat_interference_sources,
         transport,
-        facing: transport_marker_facing(transport_marker),
+        // `dungeon-mode.md §4.1`: "Loading a saved game never runs [the
+        // entry seed], so a saved facing survives untouched and the party
+        // resumes facing whatever the save recorded ... a save whose facing
+        // field is zero starts the party facing north" (playtest E11).
+        facing: if scene_byte > 32 {
+            dungeon_facing_from_save_code(bytes[SAVE_NPC_BAND_DUNGEON_FACING_OFFSET])
+                .or(transport_marker_facing(transport_marker))
+        } else {
+            transport_marker_facing(transport_marker)
+        },
         door_tracker,
         pending_vehicle: PendingVehicleSaveState {
             x: bytes[SAVE_PENDING_VEHICLE_X_OFFSET],

@@ -144,3 +144,35 @@ fn playtest_e10_dungeon_camp_ambush_prints_only_the_ambush_line() {
     );
     let _ = fs::remove_dir_all(dir);
 }
+
+/// E11: `formats/saved-gam.md §12.1` - "`0x105D` | Dungeon facing" - and
+/// `dungeon-mode.md §4.1`: "a saved facing survives untouched and the party
+/// resumes facing whatever the save recorded ... a save whose facing field is
+/// zero starts the party facing north".
+#[test]
+fn playtest_e11_dungeon_facing_round_trips_through_the_save() {
+    for (facing, code) in [
+        (Direction::North, 0u8),
+        (Direction::East, 1),
+        (Direction::South, 2),
+        (Direction::West, 3),
+    ] {
+        let mut template = saved_game_seed_bytes(33, 0, 1, 1);
+        template[SAVE_AVATAR_NAME_OFFSET] = b'A';
+        let dir = save_fidelity_game_dir(template);
+        let mut state = dungeon_state(open_dungeon_record(), 0, 1, 1);
+        state.player.facing = facing;
+        state.write_save_files(&dir).unwrap();
+
+        let bytes = fs::read(dir.join(SAVED_GAM_FILENAME)).unwrap();
+        assert_eq!(
+            bytes[SAVE_NPC_BAND_DUNGEON_FACING_OFFSET], code,
+            "{facing:?}"
+        );
+        let options = load_play_options_from_save(&dir).unwrap();
+        assert_eq!(options.facing, Some(facing));
+        let loaded = PlayState::load_scene(&dir, options).unwrap();
+        assert_eq!(loaded.player.facing, facing);
+        let _ = fs::remove_dir_all(dir);
+    }
+}

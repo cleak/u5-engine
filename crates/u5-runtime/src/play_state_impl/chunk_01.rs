@@ -578,6 +578,15 @@ impl PlayState {
         if scene_byte_is_town_family(scene) && matches!(self.area, Area::Town { .. }) {
             write_npc_band(&mut save, &self.npcs, self.active_objects.len())?;
         }
+        // `formats/saved-gam.md §12.1`: `0x105D` is the "Dungeon facing",
+        // and `dungeon-mode.md §16` lists the facing among the dungeon state
+        // that survives save and load. The on-foot transport marker holds
+        // only two facing values, so it cannot carry it (playtest E11).
+        if let Area::Dungeon { .. } = self.area
+            && let Some(code) = dungeon_facing_save_code(self.player.facing)
+        {
+            save[SAVE_NPC_BAND_DUNGEON_FACING_OFFSET] = code;
+        }
 
         disk_session.request_operation(DiskOperationFamily::GameplayResources);
         let (saved_ool, _) = stage_saved_ool_for_save(game_dir, entry_required_disk)?;
