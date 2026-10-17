@@ -899,18 +899,18 @@ impl PlayState {
             // `Invalid!` in the original, where this engine set the slot and
             // answered `Shamino`.
             //
-            // Only the dead case is measured. `inventory.md` §4.2 suppresses
-            // the roster marker for a dead *or* sleeping active player, which
-            // reads as a member changing status while selected rather than as
-            // a second rejection, so the sleeping letter is left accepted
-            // here until a capture settles it.
+            // `commands.md §5` key table, the `0`/digit row: digits "reject
+            // Dead or Asleep members with `Invalid!`", and `stats-panel.md`
+            // has `1`..`6` "select a living, awake member" (playtest E20).
             Some(slot)
                 if slot <= self.party.len()
                     && slot <= SAVE_PARTY_SIZE_MAX as usize
-                    && self
-                        .party
-                        .get(slot - 1)
-                        .is_some_and(|member| member.status != crate::PARTY_STATUS_DEAD) =>
+                    && self.party.get(slot - 1).is_some_and(|member| {
+                        !matches!(
+                            character_status_for_byte(member.status),
+                            Some(CharacterStatus::Dead | CharacterStatus::Sleeping)
+                        )
+                    }) =>
             {
                 let index = slot - 1;
                 self.active_player = Some(index);

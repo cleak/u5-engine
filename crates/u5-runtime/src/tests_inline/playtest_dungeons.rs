@@ -413,3 +413,29 @@ fn playtest_e19_dungeon_dir_chooser_ignores_top_row_digits() {
         assert!(state.active_direction_prompt.is_none(), "Up still answers");
     }
 }
+
+/// E20: `commands.md §5`, the digit row - "Digits `1` upward ... reject Dead
+/// or Asleep members with `Invalid!`"; `dungeon-mode.md §4` step 3 routes
+/// dungeon digits to that selector.
+#[test]
+fn playtest_e20_digit_solo_select_rejects_a_sleeping_member() {
+    let mut state = dungeon_state(open_dungeon_record(), 0, 1, 1);
+    state.party.push(audit_g5_companion(1));
+    state.party.push(audit_g5_companion(2));
+    state.party[1].status = b'S';
+    state.party[2].status = b'D';
+
+    for digit in ['2', '3'] {
+        handle_play_key_input(&mut state, digit, "", Path::new("")).unwrap();
+        assert_eq!(state.active_player, None, "`{digit}`");
+        assert!(
+            state
+                .message
+                .contains(SET_ACTIVE_PLAYER_INVALID_REPLY.trim_end()),
+            "`{digit}`: {:?}",
+            state.message
+        );
+    }
+    handle_play_key_input(&mut state, '1', "", Path::new("")).unwrap();
+    assert_eq!(state.active_player, Some(0));
+}
