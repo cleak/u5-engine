@@ -433,25 +433,12 @@ impl PlayState {
     ) -> io::Result<MoveOutcome> {
         let idx = dungeon_cell_index(level, self.player.x, self.player.y);
         let tile = self.grid[idx];
-        match tile >> 4 {
-            0x4 => {
-                Ok(self.open_dungeon_chest(scene, level, self.player.x, self.player.y, idx, tile))
-            }
-            // `dungeon-mode.md §8.1` chest-command table: "already-open cell:
-            // `Already Open!\n` - capital `O`, a **different** literal from
-            // Jimmy's; anything else: `What?\n`. Because those last two carry
-            // no leading line feed they render on the prefix's own row, as
-            // `Open-Already Open!` and `Open-What?`"
-            0x7 => {
-                self.advance_turn();
-                self.message = DUNGEON_CHEST_OPEN_ALREADY_OPEN.to_string();
-                Ok(MoveOutcome::ContainerOpened)
-            }
-            _ => {
-                self.message = DUNGEON_CHEST_OPEN_WHAT.to_string();
-                Ok(MoveOutcome::Blocked)
-            }
-        }
+        // `dungeon-mode.md §8.1`, "Who acts": "Dungeon L-Look, Search, Jimmy
+        // and Open all run the shared acting-member prompt before anything
+        // else", so the cell is classified only after the member is chosen
+        // (playtest E12) - by [`Self::finish_open_dungeon_chest`], which also
+        // answers the already-open and `What?` cells.
+        Ok(self.open_dungeon_chest(scene, level, self.player.x, self.player.y, idx, tile))
     }
 
     pub fn start_jimmy_party_prompt(&mut self, direction: Direction) -> MoveOutcome {

@@ -176,3 +176,35 @@ fn playtest_e11_dungeon_facing_round_trips_through_the_save() {
         let _ = fs::remove_dir_all(dir);
     }
 }
+
+/// E12: `dungeon-mode.md §8.1`, "Who acts" - "Dungeon L-Look, Search, Jimmy
+/// and Open all run the shared acting-member prompt before anything else".
+/// With three eligible members `Player: ` comes before the cell's `What?`.
+#[test]
+fn playtest_e12_dungeon_open_asks_who_acts_on_any_cell() {
+    let mut state = dungeon_state(open_dungeon_record(), 0, 1, 1);
+    state.party.push(audit_g5_companion(1));
+    state.party.push(audit_g5_companion(2));
+
+    handle_play_key_input(&mut state, 'o', "", Path::new("")).unwrap();
+    assert!(
+        state.active_surface_chest.is_some(),
+        "the member prompt is open"
+    );
+    assert_eq!(state.message, PARTY_SELECTION_PROMPT);
+    assert_eq!(state.turn, 0);
+
+    handle_play_key_input(&mut state, '2', "", Path::new("")).unwrap();
+    assert!(state.active_surface_chest.is_none());
+    assert_eq!(state.message, DUNGEON_CHEST_OPEN_WHAT);
+
+    // The already-open cell keeps its own answer behind the prompt.
+    let mut grid = open_dungeon_record();
+    grid[dungeon_cell_index(0, 1, 1)] = 0x70;
+    let mut open = dungeon_state(grid, 0, 1, 1);
+    open.party.push(audit_g5_companion(1));
+    handle_play_key_input(&mut open, 'o', "", Path::new("")).unwrap();
+    assert_eq!(open.message, PARTY_SELECTION_PROMPT);
+    handle_play_key_input(&mut open, '1', "", Path::new("")).unwrap();
+    assert_eq!(open.message, DUNGEON_CHEST_OPEN_ALREADY_OPEN);
+}
