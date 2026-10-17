@@ -21643,6 +21643,130 @@ fn dungeon_arena_klimb_on_a_ladder_departs_with_codes_five_and_six() {
 }
 
 #[test]
+fn dungeon_arena_k_resolves_a_single_ladder_underfoot_without_a_key() {
+    // `combat.md §8` (u5-spec#298 Q1): "K prints `Klimb-` and resolves its
+    // current-cell ladder cases first. Up/Down ladder results are `Up!\n` /
+    // `Down!\n`". The bare K key climbs at once - no direction is read - and
+    // the word completes the `Klimb-` row.
+    let game_dir = std::path::Path::new(".");
+    for (tile, room, level_after, row) in [
+        (0xc8u8, false, 1u8, "Klimb-Up!"),
+        (0xc9, false, 3, "Klimb-Down!"),
+        (0x86, true, 3, "Klimb-Down!"),
+    ] {
+        let mut state = dungeon_post_combat_state(
+            2,
+            DungeonPostCombatApplier::MovementApplier,
+            4,
+            4,
+            room,
+        );
+        state.combat_terrain[4][4] = tile;
+        assert_eq!(
+            state.combat_klimb_current_cell(0),
+            Some(if tile == 0xc8 {
+                CombatKlimbCurrentCell::Up
+            } else {
+                CombatKlimbCurrentCell::Down
+            })
+        );
+
+        handle_play_key_input(&mut state, 'K', "", game_dir).unwrap();
+
+        assert!(state.active_direction_prompt.is_none(), "{tile:#x}: no key is read");
+        assert!(!state.combat_active, "{tile:#x}");
+        assert!(
+            matches!(state.area, Area::Dungeon { level, .. } if level == level_after),
+            "{tile:#x}: {:?}",
+            state.area
+        );
+        let texts: Vec<_> = state
+            .message_transcript
+            .iter()
+            .map(|entry| entry.text.as_str())
+            .collect();
+        assert!(texts.iter().any(|text| text.trim() == row), "{tile:#x}: {texts:?}");
+        assert!(texts.iter().any(|text| text.contains("Leave!")), "{texts:?}");
+    }
+}
+
+#[test]
+fn dungeon_arena_k_off_a_ladder_still_waits_for_the_adjacent_climb_direction() {
+    // `combat.md §8`: "The ordinary adjacent-climb branch waits for the
+    // cardinal input" - a grate outside a room encounter is not a
+    // current-cell case (`dungeon-mode.md §14.1`).
+    let game_dir = std::path::Path::new(".");
+    for tile in [0x05u8, 0x86] {
+        let mut state =
+            dungeon_post_combat_state(2, DungeonPostCombatApplier::MovementApplier, 4, 4, false);
+        state.combat_terrain[4][4] = tile;
+        assert_eq!(state.combat_klimb_current_cell(0), None);
+        handle_play_key_input(&mut state, 'K', "", game_dir).unwrap();
+        assert!(state.combat_active);
+        assert!(
+            matches!(
+                state.active_direction_prompt.as_ref().map(|session| session.kind),
+                Some(DirectionPromptKind::CombatKlimb { actor_slot: 0 })
+            ),
+            "{tile:#x}"
+        );
+        assert_eq!(state.render_active_direction_prompt(), "Klimb-");
+    }
+}
+
+#[test]
+fn dungeon_arena_two_way_centre_raises_u_d_and_waits_for_up_or_down() {
+    // `dungeon-mode.md §14.1` (u5-spec#298 Q1): "In an ambush arena built on
+    // a two-way-ladder dungeon cell, the centre `0xC8` instead raises `U/D-`
+    // and waits for up or down, down counting as the `0xC9` case; that is the
+    // only place the two-way prompt can appear in combat."
+    let game_dir = std::path::Path::new(".");
+    for (key, level_after, row) in [
+        ('<', 1u8, "Klimb-U/D-Up!"),
+        ('>', 3, "Klimb-U/D-Down!"),
+    ] {
+        let mut state =
+            dungeon_post_combat_state(2, DungeonPostCombatApplier::MovementApplier, 5, 5, false);
+        state.combat_terrain[5][5] = 0xc8;
+        state.tile_restoration_pending = true;
+        assert_eq!(
+            state.combat_klimb_current_cell(0),
+            Some(CombatKlimbCurrentCell::Both)
+        );
+
+        handle_play_key_input(&mut state, 'K', "", game_dir).unwrap();
+        assert!(state.combat_active, "the prompt waits");
+        assert_eq!(state.render_active_direction_prompt(), "Klimb-U/D-");
+
+        // A key that is neither up nor down is re-read.
+        handle_play_key_input(&mut state, 'x', "", game_dir).unwrap();
+        assert!(state.combat_active);
+        assert!(state.active_direction_prompt.is_some());
+
+        handle_play_key_input(&mut state, key, "", game_dir).unwrap();
+        assert!(!state.combat_active, "{key}");
+        assert!(
+            matches!(state.area, Area::Dungeon { level, .. } if level == level_after),
+            "{key}: {:?}",
+            state.area
+        );
+        let texts: Vec<_> = state
+            .message_transcript
+            .iter()
+            .map(|entry| entry.text.as_str())
+            .collect();
+        assert!(texts.iter().any(|text| text.trim() == row), "{key}: {texts:?}");
+    }
+
+    // The same `0xC8` off the centre, or without the two-way flag, is a
+    // plain up ladder.
+    let mut state =
+        dungeon_post_combat_state(2, DungeonPostCombatApplier::MovementApplier, 5, 5, false);
+    state.combat_terrain[5][5] = 0xc8;
+    assert_eq!(state.combat_klimb_current_cell(0), Some(CombatKlimbCurrentCell::Up));
+}
+
+#[test]
 fn dungeon_arena_grate_is_a_down_exit_only_in_a_room_encounter() {
     // `dungeon-mode.md §14.1` (Q1): "6 on a down ladder (`0xC9`) or, only in
     // a dungeon-room encounter, on a metal grate (`0x86`)".

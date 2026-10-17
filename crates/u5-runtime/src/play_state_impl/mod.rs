@@ -12,7 +12,7 @@ mod chunk_07;
 mod chunk_08;
 mod chunk_09;
 mod chunk_10;
-pub use chunk_07::TownRestBurstOutcome;
+pub use chunk_07::{CombatKlimbCurrentCell, TownRestBurstOutcome};
 pub use chunk_11::ExplorationTurnGateOutcome;
 mod chunk_11;
 mod chunk_12;

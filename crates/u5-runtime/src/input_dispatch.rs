@@ -5502,7 +5502,29 @@ fn handle_combat_multistage_command(
             true
         }
         CombatCommandBranch::Klimb => {
-            if let Some(intent) = suffix.chars().find_map(combat_klimb_vertical_intent) {
+            // `combat.md §8` (u5-spec#298 Q1): "K prints `Klimb-` and resolves
+            // its current-cell ladder cases first" - a single ladder (or a
+            // room grate) under the acting member climbs at once, with no key
+            // read; only the two-way ambush centre waits, on `U/D-`.
+            let current_cell = suffix
+                .is_empty()
+                .then(|| state.combat_klimb_current_cell(actor_slot))
+                .flatten();
+            if let Some(intent) = match current_cell {
+                Some(CombatKlimbCurrentCell::Up) => Some(ClimbIntent::Up),
+                Some(CombatKlimbCurrentCell::Down) => Some(ClimbIntent::Down),
+                _ => None,
+            } {
+                state.message.clear();
+                state.emit_combat_command_echo_line(DUNGEON_KLIMB_PROMPT_ONE);
+                let outcome = state.klimb_combat_actor_vertical(actor_slot, intent);
+                if matches!(outcome, MoveOutcome::Blocked) {
+                    state.pending_combat_actor_slot = Some(actor_slot);
+                } else if state.combat_active {
+                    let _ = apply_combat_committed_action_maintenance(state, actor_slot);
+                    advance_combat_round_after_actor_and_append_message(state, actor_slot);
+                }
+            } else if let Some(intent) = suffix.chars().find_map(combat_klimb_vertical_intent) {
                 let outcome = state.klimb_combat_actor_vertical(actor_slot, intent);
                 if matches!(outcome, MoveOutcome::Blocked) {
                     state.pending_combat_actor_slot = Some(actor_slot);
