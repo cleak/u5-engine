@@ -36,6 +36,15 @@
 #
 # Re-running it changes the draw, not the shape, so its verdict is a
 # lottery and its value is the shape.
+#
+# Re-measured 2026-10-16 over 13 stock runs: the trap word (`ACID!`, `GAS!`,
+# `BOMB!`, `POISON!` or none shown) and the contents (three to six rows of
+# food, gold, keys, gems, torches, a scroll or a potion) differ on almost every
+# run, and with them how far the window has scrolled by `contents`, `already`
+# and `jimmy-gone` - so those beats read `text` while every row agrees in
+# shape. Unlike `dungeon-chest-jimmy`, the seed's all-zero wandering monster
+# never reaches the party here: it starts at `(0,0)` and the chest at `(5,5)`
+# is walled in, so neither side has ever been attacked on this seat.
 # requires-seed: the party standing on the Deceit wooden chest, with a torch
 both	wait	15000
 both	key	space

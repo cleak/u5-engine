@@ -25,6 +25,17 @@
 # which is what this scenario pins (the Klimb-U/D- literals), agreed on both
 # runs; a divergence from `pass` onward must be re-run before it means
 # anything.
+#
+# Where the monster comes from, traced 2026-10-16: the seed's active-monster
+# record is all zeros - live (the empty marker is all ones), stamped level 0,
+# at `(0,0)`, combat class 0, the Mage - and a load *reuses* it whole
+# (`dungeon-mode.md §4.1`). It walks level 3 from `(0,0)` through `(0,1)` onto
+# the party, which is why stock's line is always `Attacked from the west!`:
+# 4 of 13 stock runs (2026-10-12 22:06 and all three of 2026-10-16). This
+# engine gated the monster on its stamped level and was attacked in none until
+# that gate was removed (`dungeon_loaded_monster_record_walks_the_party_level_*`
+# test); headless after the fix it was attacked in 6 of 10. Still a lottery -
+# the walk's direction draws - but now one both sides can draw.
 # requires-seed: the party standing on a Deceit two-way ladder, with a torch
 both	wait	15000
 both	key	space
