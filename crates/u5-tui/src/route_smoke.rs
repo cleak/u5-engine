@@ -1906,7 +1906,9 @@ pub fn route_smoke_cases() -> Vec<RouteSmokeCase> {
         RouteSmokeCase {
             name: "shop-tavern-drink-and-food-route",
             options: PlayOptions::default(),
-            script: &["Y", "M", "Y", "R", "1", "N"],
+            // `shops.md §8.5`: the provision quantity is the two-digit
+            // reader, whose only exit is Return.
+            script: &["Y", "M", "Y", "R", "1", "return", "N"],
             expected: RouteSmokeExpectation::Town(castle),
             min_turn: 0,
             expected_frame_kind: "tile viewport",
@@ -7785,7 +7787,10 @@ fn validate_route_smoke_case_state(
             let expected_message =
                 u5_runtime::shoppe_bark::ShoppeTextRenderer::load_from_game_dir(game_dir)
                     .ok()
-                    .and_then(|renderer| renderer.render_sage_short_funds_record(None).ok())
+                    // `shops.md §8.C`: `"Sorry, `, honorific, record `91`.
+                    // The route's castle has no tavern vendor to name.
+                    .and_then(|renderer| renderer.render_sage_short_funds_record("", None).ok())
+                    .map(|record| format!("\"Sorry, sir{record}"))
                     .unwrap_or_else(|| TAVERN_AFFORDABILITY_REFUSAL_BARK.to_string());
             if state.gold != 49 || state.active_shop.is_some() || state.message != expected_message
             {

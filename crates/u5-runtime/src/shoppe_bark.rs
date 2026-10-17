@@ -332,13 +332,17 @@ impl ShoppeTextRenderer {
         Ok(format!("{record}{SAGE_FEE_CONFIRMATION_SUFFIX}"))
     }
 
+    /// `shops.md §8.C` sage short funds: record `91`, whose `$` is the
+    /// tavern vendor (`§4.1`).
     pub fn render_sage_short_funds_record(
         &self,
+        vendor_name: &str,
         dictionary: Option<&[&str; COMMON_WORD_DICTIONARY_ENTRIES]>,
     ) -> Result<String, ShoppeDatError> {
         self.render_record(
             SAGE_RUMOUR_SHORT_FUNDS_RECORD,
             &ShoppeBarkContext {
+                vendor_name,
                 dictionary,
                 ..Default::default()
             },
@@ -826,7 +830,7 @@ mod tests {
             "Pay 50 gold?\n\nFair 'nuff?\" "
         );
         assert_eq!(
-            renderer.render_sage_short_funds_record(None).unwrap(),
+            renderer.render_sage_short_funds_record("", None).unwrap(),
             "No credit."
         );
     }

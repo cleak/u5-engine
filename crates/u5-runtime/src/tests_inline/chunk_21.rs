@@ -5546,10 +5546,13 @@ fn end_to_end_tavern_provisions_partially_fill_to_food_cap() {
     handle_play_key_input(&mut state, 'R', "", Path::new("")).unwrap();
     assert!(state.message.contains("16 gold each"));
     handle_play_key_input(&mut state, '5', "", Path::new("")).unwrap();
+    handle_play_key_input(&mut state, '\r', "", Path::new("")).unwrap();
 
     assert_eq!(state.gold, 34);
     assert_eq!(state.food, SHOP_FOOD_STOCK_CAP);
-    assert!(state.message.contains("sold 1/5"));
+    // `shops.md §8.C`: "Requested packs completed / food cap reached |
+    // `\n\n`; no extra success sentence", then the continuation question.
+    assert_eq!(state.message, "\n\n\"Anything else\nfor thee?\" ");
 }
 
 #[test]
@@ -5570,7 +5573,7 @@ fn end_to_end_tavern_provisions_accept_multi_digit_inline_quantity() {
 
     assert_eq!(state.gold, 808);
     assert_eq!(state.food, 300);
-    assert!(state.message.contains("sold 12/12"));
+    assert_eq!(state.message, "\n\n\"Anything else\nfor thee?\" ");
     assert!(state.active_shop.is_some());
 }
 
@@ -6055,7 +6058,8 @@ fn end_to_end_sage_short_funds_prefers_shoppe_record_rendering() {
 
     assert_eq!(state.gold, 49);
     assert_eq!(state.prng_state, 0x2468);
-    assert_eq!(state.message, "Asset says no credit.");
+    // `shops.md §8.C`: "Short funds | `"Sorry, `, honorific, record `91`".
+    assert_eq!(state.message, "\"Sorry, sirAsset says no credit.");
     assert!(state.active_shop.is_none());
     let _ = fs::remove_dir_all(dir);
 }
@@ -6123,6 +6127,25 @@ fn brush_off_talk_skips_tlk_loading_and_attempts_forced_flight() {
     let _ = fs::remove_dir_all(dir);
 }
 
+/// `shops.md §8.5` (R432): the provision quote is "drawn uniformly from a
+/// seven-record pool - `SHOPPE.DAT` ordinals `77` through `83`", so every one
+/// of the seven is reachable. The pool's upper bound was `82` (playtest E57).
+#[test]
+fn tavern_provision_quote_draw_reaches_all_seven_records() {
+    use crate::shops::{TAVERN_PROVISION_QUOTE_RECORD_FIRST, TAVERN_PROVISION_QUOTE_RECORD_LAST};
+
+    let mut state = test_state(open_grid(), 1, 1);
+    state.prng_state = 0x1357;
+    let mut seen = std::collections::BTreeSet::new();
+    for _ in 0..500 {
+        seen.insert(usize::from(state.random_range_u8(
+            TAVERN_PROVISION_QUOTE_RECORD_FIRST as u8,
+            TAVERN_PROVISION_QUOTE_RECORD_LAST as u8,
+        )));
+    }
+    assert_eq!(seen.into_iter().collect::<Vec<_>>(), (77..=83).collect::<Vec<_>>());
+}
+
 #[test]
 fn end_to_end_tavern_renders_state_menu_quote_and_follow_up_records() {
     use crate::shop_runtime::TavernState;
@@ -6138,6 +6161,7 @@ fn end_to_end_tavern_renders_state_menu_quote_and_follow_up_records() {
         (80, b"Asset pack costs % gold.".as_slice()),
         (81, b"Asset pack costs % gold.".as_slice()),
         (82, b"Asset pack costs % gold.".as_slice()),
+        (83, b"Asset pack costs % gold.".as_slice()),
     ]);
     std::fs::write(dir.join("SHOPPE.DAT"), shoppe).unwrap();
     let mut state = test_state(open_grid(), 1, 1);
@@ -6164,6 +6188,7 @@ fn end_to_end_tavern_renders_state_menu_quote_and_follow_up_records() {
     );
     assert_eq!(state.prng_state, expected_prng_state);
     handle_play_key_input(&mut state, '1', "", &dir).unwrap();
+    handle_play_key_input(&mut state, '\r', "", &dir).unwrap();
     assert_eq!(state.food, 25);
     handle_play_key_input(&mut state, 'Y', "", &dir).unwrap();
     // `shops.md` §8.C: "Y prints `Yes\n\n\"`, the applicable follow-up
@@ -6179,8 +6204,10 @@ fn end_to_end_tavern_renders_state_menu_quote_and_follow_up_records() {
         .take(3)
         .map(|entry| entry.text.clone())
         .collect();
+    // The purchase now asks `"Anything else\nfor thee?" ` (playtest E47), so
+    // the `Yes` continues that question's open row.
     assert!(
-        tail.contains(&"Yes".to_string()),
+        tail.contains(&"for thee?\" Yes".to_string()),
         "continuation echo missing from the transcript: {tail:?}"
     );
 
@@ -6211,6 +6238,7 @@ fn end_to_end_partial_provision_sale_skips_falsehood_surcharge() {
     handle_play_key_input(&mut state, 'R', "", Path::new("")).unwrap();
     let state_after_quote_draw = state.prng_state;
     handle_play_key_input(&mut state, '2', "", Path::new("")).unwrap();
+    handle_play_key_input(&mut state, '\r', "", Path::new("")).unwrap();
 
     assert_eq!(state.gold, 4);
     assert_eq!(state.food, 25);
@@ -6239,10 +6267,11 @@ fn end_to_end_unaffordable_provisions_grant_only_the_published_charity_case() {
                 tavern: Tavern::TheHonestMeal,
                 unit_price: 10,
                 continuation_ready: false,
+                entry: Default::default(),
             },
         ));
 
-        handle_play_key_input(&mut state, '1', "", Path::new("")).unwrap();
+        handle_play_key_input(&mut state, '1', "\r", Path::new("")).unwrap();
 
         assert_eq!(state.gold, 0);
         assert_eq!(state.food, expected_food);
@@ -6284,11 +6313,12 @@ fn end_to_end_tavern_provisions_print_the_published_partial_and_refusal_arms() {
             tavern: Tavern::TheCatsLair,
             unit_price: 20,
             continuation_ready: false,
+            entry: Default::default(),
         },
     ));
 
     // Five packs requested at 20 gold each; 45 gold only affords two.
-    handle_play_key_input(&mut state, '5', "", game_dir).unwrap();
+    handle_play_key_input(&mut state, '5', "\r", game_dir).unwrap();
 
     assert_eq!(state.gold, 5);
     assert_eq!(state.food, 60);
@@ -6310,10 +6340,11 @@ fn end_to_end_tavern_provisions_print_the_published_partial_and_refusal_arms() {
             tavern: Tavern::TheCatsLair,
             unit_price: 20,
             continuation_ready: false,
+            entry: Default::default(),
         },
     ));
 
-    handle_play_key_input(&mut state, '1', "", game_dir).unwrap();
+    handle_play_key_input(&mut state, '1', "\r", game_dir).unwrap();
 
     assert_eq!(state.gold, 0);
     assert_eq!(state.food, 10);
@@ -7925,4 +7956,248 @@ fn tavern_menu_letter_echo_is_followed_by_a_blank_row() {
         .unwrap_or_else(|| panic!("the letter echoes onto the menu row: {rows:?}"));
     assert_eq!(rows[echo + 1], "", "{rows:?}");
     assert!(rows[echo + 2].starts_with("\"That will be"), "{rows:?}");
+}
+
+/// `shops.md §8.5`: "Space, Escape, or Return from that wait exits directly
+/// to the same no-sale closing-bark row", and `§8.A`'s nothing-bought row is
+/// `61..64` inside the shared `says $.` envelope. Exiting the fresh list -
+/// not only the wait a follow-up record resumes - used to end the visit with
+/// no bark at all (playtest E51).
+#[test]
+fn tavern_fresh_list_exit_keys_draw_the_no_sale_closing_bark() {
+    use crate::shop_runtime::TavernState;
+    use crate::shop_session::ActiveShopSession;
+
+    let dir = debug_game_dir();
+    let shoppe = shoppe_dat_with_records(&[
+        (61, b"Asset no-sale.\"".as_slice()),
+        (62, b"Asset no-sale.\"".as_slice()),
+        (63, b"Asset no-sale.\"".as_slice()),
+        (64, b"Asset no-sale.\"".as_slice()),
+    ]);
+    std::fs::write(dir.join("SHOPPE.DAT"), shoppe).unwrap();
+    for key in [' ', '\u{1b}', '\r'] {
+        let mut state = test_state(open_grid(), 1, 1);
+        state.area = Area::Town {
+            scene: Scene::new(22).unwrap(),
+            floor: 0,
+        };
+        state.active_shop = Some(ActiveShopSession::Tavern(TavernState::Menu {
+            tavern: Tavern::TheCatsLair,
+            continuation_ready: false,
+        }));
+        handle_play_key_input(&mut state, key, "", &dir).unwrap();
+        assert_eq!(
+            state.message, "\n\n\"Asset no-sale.\"\nsays Dr. Cat.",
+            "key {key:?}"
+        );
+        assert!(state.active_shop.is_none());
+    }
+    let _ = fs::remove_dir_all(dir);
+}
+
+/// `shops.md §8.C`, "Fourth secondary drink attempt, when prior count is
+/// exactly three": the warning carries a `says <vendor>.` row between its two
+/// quoted parts. It went straight from `pardon, sir,"` to `"But haven't`
+/// (playtest E53).
+#[test]
+fn tavern_fourth_drink_warning_is_attributed_to_the_vendor() {
+    use crate::shop_runtime::TavernState;
+    use crate::shop_session::ActiveShopSession;
+
+    let mut state = test_state(open_grid(), 1, 1);
+    state.area = Area::Town {
+        scene: Scene::new(22).unwrap(),
+        floor: 0,
+    };
+    state.gold = 200;
+    state.tavern_secondary_drink_count = 3;
+    state.active_shop = Some(ActiveShopSession::Tavern(TavernState::PostListWait {
+        tavern: Tavern::TheCatsLair,
+        continuation_ready: true,
+    }));
+    let secondary = crate::shops::tavern_menu_letters(Tavern::TheCatsLair).secondary;
+    handle_play_key_input(&mut state, secondary, "", Path::new("")).unwrap();
+    assert_eq!(
+        state.message,
+        "\n\n\"I beg thy\npardon, sir,\"\nsays Dr. Cat.\n\"But haven't\nye had enough\nto drink?\" "
+    );
+}
+
+/// `shops.md §8.C` sage result table: "Unknown topic | `"That, I cannot help
+/// thee with.\n\n`, then repeat the topic question beginning with `Of what
+/// wouldst`". The reply had no opening quote and no repeated question
+/// (playtest E55); the prompt itself keeps waiting for another topic.
+#[test]
+fn sage_unknown_topic_quotes_its_reply_and_repeats_the_question() {
+    use crate::shop_runtime::SageState;
+    use crate::shop_session::ActiveShopSession;
+
+    let mut state = test_state(open_grid(), 1, 1);
+    state.area = Area::Town {
+        scene: Scene::new(22).unwrap(),
+        floor: 0,
+    };
+    state.gold = 200;
+    state.active_shop = Some(ActiveShopSession::Sage(SageState::default()));
+
+    handle_play_key_input(&mut state, 'Z', "ZZ", Path::new("")).unwrap();
+
+    assert_eq!(
+        state.message,
+        "\"That, I cannot help thee with.\n\nOf what wouldst thou hear my lore, sir?\"\n\nYou respond:"
+    );
+    assert!(matches!(
+        state.active_shop,
+        Some(ActiveShopSession::Sage(SageState::Prompt { .. }))
+    ));
+    assert_eq!(state.gold, 200);
+}
+
+/// `shops.md §8.C`: sage "Short funds | `"Sorry, `, honorific, record `91`"
+/// and tavern "No packs affordable, fewer than three food servings | `\n\n`,
+/// then record `90`", each record's `$` substituting the vendor (`§4.1`).
+/// Both printed the bare record with an empty vendor (playtest E50).
+#[test]
+fn sage_short_funds_and_table_scraps_name_the_vendor() {
+    use crate::shop_runtime::{SageState, TavernState};
+    use crate::shop_session::ActiveShopSession;
+
+    let dir = debug_game_dir();
+    let shoppe = shoppe_dat_with_records(&[
+        (90, b"Asset scraps.\"\norders $.".as_slice()),
+        (91, b",\nAsset busy.\"\nsays $.".as_slice()),
+    ]);
+    std::fs::write(dir.join("SHOPPE.DAT"), shoppe).unwrap();
+
+    let mut state = test_state(open_grid(), 1, 1);
+    state.area = Area::Town {
+        scene: Scene::new(22).unwrap(),
+        floor: 0,
+    };
+    state.gold = 0;
+    state.active_shop = Some(ActiveShopSession::Sage(SageState::default()));
+    handle_play_key_input(&mut state, 'C', "OMP", &dir).unwrap();
+    handle_play_key_input(&mut state, 'Y', "", &dir).unwrap();
+    assert_eq!(
+        state.message,
+        "\"Sorry, sir,\nAsset busy.\"\nsays Dr. Cat."
+    );
+    assert!(state.active_shop.is_none());
+
+    let mut state = test_state(open_grid(), 1, 1);
+    state.area = Area::Town {
+        scene: Scene::new(22).unwrap(),
+        floor: 0,
+    };
+    state.gold = 0;
+    state.food = 2;
+    state.active_shop = Some(ActiveShopSession::Tavern(
+        TavernState::PickProvisionQuantity {
+            tavern: Tavern::TheCatsLair,
+            unit_price: 20,
+            continuation_ready: false,
+            entry: Default::default(),
+        },
+    ));
+    handle_play_key_input(&mut state, '1', "\r", &dir).unwrap();
+    assert_eq!(state.message, "\n\nAsset scraps.\"\norders Dr. Cat.");
+    assert!(state.active_shop.is_none());
+
+    let _ = fs::remove_dir_all(dir);
+}
+
+/// `shops.md §8.C`: "The Blue Boar list begins `"Our wine list,\n`,
+/// honorific, `.\n\n`, then" the six rows and `Thy choice?"`. The heading
+/// and its opening quote were missing (playtest E52).
+#[test]
+fn blue_boar_wine_list_opens_with_its_quoted_heading() {
+    use crate::shop_runtime::TavernState;
+    use crate::shop_session::ActiveShopSession;
+
+    let mut state = test_state(open_grid(), 1, 1);
+    state.gold = 200;
+    state.active_shop = Some(ActiveShopSession::Tavern(TavernState::Menu {
+        tavern: Tavern::TheBlueBoarTavern,
+        continuation_ready: false,
+    }));
+    handle_play_key_input(&mut state, 'W', "", Path::new("")).unwrap();
+    assert!(
+        state
+            .message
+            .starts_with("\"Our wine list,\nsir.\n\na) Rose.......18\n"),
+        "{:?}",
+        state.message
+    );
+    assert!(state.message.ends_with("f) Chablis....98\n\nThy choice?\""));
+}
+
+/// `shops.md §8.5`, "Which reader takes the number": the provision question
+/// is the shared two-digit reader - "two digits accepted and a third
+/// dropped", Backspace erasing one, "Return the only exit with an empty
+/// entry submitting as zero". `§8.5`/`§8.C`: a completed or partial purchase
+/// then asks `"Anything else\nfor thee?" `. The engine bought on the first
+/// digit, ignored a bare Return, and asked nothing after a sale (playtest
+/// E47).
+#[test]
+fn tavern_provision_quantity_reads_two_digits_until_return() {
+    use crate::shop_runtime::TavernState;
+    use crate::shop_session::ActiveShopSession;
+
+    let fresh = |gold: u16| {
+        let mut state = test_state(open_grid(), 1, 1);
+        state.gold = gold;
+        state.food = 0;
+        state.active_shop = Some(ActiveShopSession::Tavern(
+            TavernState::PickProvisionQuantity {
+                tavern: Tavern::TheHonestMeal,
+                unit_price: 10,
+                continuation_ready: false,
+                entry: Default::default(),
+            },
+        ));
+        state.emit_message_line("\nHow many wouldst");
+        state.emit_message_line_continuing_row("thou like?\" ");
+        state.open_message_row();
+        state
+    };
+    let last_row = |state: &PlayState| state.message_transcript.last().unwrap().text.clone();
+
+    // Two digits wait for Return; a third is dropped; Backspace erases one.
+    let mut state = fresh(1000);
+    for key in ['1', '2', '3'] {
+        handle_play_key_input(&mut state, key, "", Path::new("")).unwrap();
+        assert_eq!(state.food, 0, "nothing is bought before Return");
+    }
+    assert_eq!(last_row(&state), "thou like?\" 12");
+    handle_play_key_input(&mut state, '\u{8}', "", Path::new("")).unwrap();
+    handle_play_key_input(&mut state, '3', "", Path::new("")).unwrap();
+    assert_eq!(last_row(&state), "thou like?\" 13");
+    handle_play_key_input(&mut state, '\r', "", Path::new("")).unwrap();
+    assert_eq!(state.food, 13 * 25);
+    assert_eq!(state.gold, 1000 - 130);
+    assert_eq!(state.message, "\n\n\"Anything else\nfor thee?\" ");
+    assert!(matches!(
+        state.active_shop,
+        Some(ActiveShopSession::Tavern(TavernState::AnythingElse {
+            continuation_ready: true,
+            ..
+        }))
+    ));
+
+    // Gold runs out part way: the partial line, then the same question.
+    let mut state = fresh(25);
+    handle_play_key_input(&mut state, '9', "", Path::new("")).unwrap();
+    handle_play_key_input(&mut state, '\r', "", Path::new("")).unwrap();
+    assert_eq!(state.food, 50);
+    assert_eq!(
+        state.message,
+        "\n\n\"Thou canst\nafford only 2!\"\n\n\"Anything else\nfor thee?\" "
+    );
+
+    // A bare Return submits zero.
+    let mut state = fresh(1000);
+    handle_play_key_input(&mut state, '\r', "", Path::new("")).unwrap();
+    assert_eq!(state.food, 0);
+    assert!(state.message.starts_with("\n\n\"Hrumph.\""), "{:?}", state.message);
 }

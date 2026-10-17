@@ -5766,7 +5766,9 @@ fn visual_route_suite_cases() -> Vec<VisualRouteSuiteCase> {
                 target: PlayTarget::Town(castle),
                 ..PlayOptions::default()
             },
-            script: &["Y", "M", "Y", "R", "1", "N"],
+            // `shops.md §8.5`: the provision quantity is the two-digit
+            // reader, whose only exit is Return.
+            script: &["Y", "M", "Y", "R", "1", "return", "N"],
             configure: Some(seed_visual_route_tavern),
         },
         VisualRouteSuiteCase {
@@ -5776,7 +5778,9 @@ fn visual_route_suite_cases() -> Vec<VisualRouteSuiteCase> {
                 target: PlayTarget::Town(castle),
                 ..PlayOptions::default()
             },
-            script: &["Y", "M", "Y", "R", "1", "N"],
+            // `shops.md §8.5`: the provision quantity is the two-digit
+            // reader, whose only exit is Return.
+            script: &["Y", "M", "Y", "R", "1", "return", "N"],
             configure: Some(seed_visual_route_tavern),
         },
         VisualRouteSuiteCase {
@@ -18765,7 +18769,17 @@ fn handle_visual_line_key(
             let (key, suffix) = match chars.next() {
                 Some(first) => {
                     let mut suffix = chars.collect::<String>();
-                    if state.active_shrine.is_some() {
+                    // The tavern's provision quantity is the shared two-digit
+                    // reader, whose only exit is Return (`shops.md §8.5`), so
+                    // the line editor's Enter is delivered with the digits.
+                    if state.active_shrine.is_some()
+                        || matches!(
+                            state.active_shop.as_ref(),
+                            Some(ActiveShopSession::Tavern(
+                                TavernState::PickProvisionQuantity { .. }
+                            ))
+                        )
+                    {
                         suffix.push('\n');
                     }
                     (first, suffix)
@@ -25631,8 +25645,10 @@ mod tests {
         // the four reagent/guild routes (+4), and dropped the second endgame
         // Yes (`endgame.md §5`, -2) and the stray Jimmy member keys
         // (`dungeon-mode.md §11`, -3). The victory route's box hand-over
-        // (`endgame.md §7` steps 4-5) added five display frames (+5).
-        assert_eq!(reports.len(), 2064);
+        // (`endgame.md §7` steps 4-5) added five display frames (+5). The two
+        // tavern drink-and-food routes end the provision quantity with
+        // Return (`shops.md §8.5`, +2).
+        assert_eq!(reports.len(), 2066);
         for report in &reports {
             assert!(report.path.exists());
             assert_eq!(report.width, VISUAL_PLAY_FRAME_WIDTH);
@@ -25647,7 +25663,7 @@ mod tests {
             }
         }
         let manifest = fs::read_to_string(dir.join("manifest.txt")).unwrap();
-        assert!(manifest.contains("coverage\tvisual-route-steps\t2064"));
+        assert!(manifest.contains("coverage\tvisual-route-steps\t2066"));
         assert!(manifest.contains("coverage\tvisual-key-route-steps\t90"));
         assert!(manifest.contains("coverage\tvisual-route-combat-steps\t"));
         assert!(manifest.contains("route-world-movement-01-d\t320x200\t"));
@@ -25827,8 +25843,8 @@ mod tests {
         assert!(manifest.contains("route-shop-inn-rest-decline-route-04-p"));
         assert!(manifest.contains("route-shop-reagent-buy-04-_"));
         assert!(manifest.contains("route-shop-reagent-buy-route-04-_"));
-        assert!(manifest.contains("route-shop-tavern-drink-and-food-06-n"));
-        assert!(manifest.contains("route-shop-tavern-drink-and-food-route-06-n"));
+        assert!(manifest.contains("route-shop-tavern-drink-and-food-07-n"));
+        assert!(manifest.contains("route-shop-tavern-drink-and-food-route-07-n"));
         assert!(manifest.contains("route-shop-tavern-honest-meal-lore-06-y"));
         assert!(manifest.contains("route-shop-tavern-wayfarer-lore-06-y"));
         assert!(manifest.contains("route-shop-tavern-sword-and-keg-lore-06-y"));
@@ -27538,6 +27554,7 @@ mod tests {
                 tavern: Tavern::TheWayfarerTavern,
                 unit_price: 15,
                 continuation_ready: false,
+                entry: Default::default(),
             },
         ));
         assert!(visual_line_prompt_active(&state));
@@ -27653,6 +27670,7 @@ mod tests {
                 tavern: Tavern::TheWayfarerTavern,
                 unit_price: 15,
                 continuation_ready: false,
+                entry: Default::default(),
             },
         ));
         assert!(visual_line_prompt_active(&tavern));
