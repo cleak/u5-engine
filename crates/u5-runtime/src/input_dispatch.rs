@@ -2402,6 +2402,33 @@ fn handle_active_shop_key_input(
         }
     }
     state.message = message;
+    // The arms overlay's waits all sit on a row their own prompt left open:
+    // the entry question, the stock call, the buy quote, the sell browser's
+    // question and its `Deal?" ` all end in a closing quote and one space
+    // (`shops.md` §8.B, §8.1), and the next key's echo - `Sell`, the stock
+    // letter, `No`, `Yes` - "appends after the space" on that row. The slot
+    // is flushed verbatim and never says where it left the cursor, so this
+    // caller states it: flush now, then mark the row open.
+    //
+    // Measured 2026-10-16 (`shop-arms-sell-flow-20261016-223816`, beats
+    // `browser`, `declined` and `sold`; `shop-arms-buy-confirm-20261016-214848`
+    // beat `quote`): the original reads `or Sell?" Sell`, `Deal?" No`,
+    // `Deal?" Yes` and `interest?" a` on one row, where this engine had put
+    // every echo on a row of its own since the 2026-10-14 runs, because the
+    // flag still held whatever the last `emit_*` call had left.
+    let arms_row_left_open = !session.is_exited()
+        && matches!(
+            session,
+            ActiveShopSession::Arms(_)
+                | ActiveShopSession::ArmsLocal(..)
+                | ActiveShopSession::ArmsStocked(..)
+        )
+        && session.keeps_cursor_inline()
+        && !state.message.is_empty();
+    if arms_row_left_open {
+        state.flush_message_slot();
+        state.open_message_row();
+    }
 
     if let Some(next_session) = replacement_session {
         state.active_shop = Some(next_session);
@@ -2994,7 +3021,15 @@ fn handle_arms_shop_key_input(
             // gives the stock-call question and §8.B the entry greeting.
             // Measured 2026-09-10 (`shop-arms-sell-flow/sold`): the original
             // reads `Deal?" Yes`, this engine read `Deal?"Yes`.
-            format!("{quote}\n\nDeal?\" ")
+            //
+            // `shops.md` §8.1: "An ordinary offer starts with `\n\n\"`" - the
+            // first feed closes the row the browser question left open, the
+            // second leaves the blank, and the quote opens the speech that
+            // `Deal?" ` closes. Measured 2026-10-16
+            // (`shop-arms-sell-flow-20261016-223816`, beat `offer`): the
+            // original has the blank row and the opening quote; this engine
+            // had neither.
+            format!("\n\n\"{quote}\n\nDeal?\" ")
         }
         (ArmsShopOutcome::SellRefusedZeroPrice { .. }, _)
             if matches!(shop_state, ArmsShopState::SellPickItem(_)) =>
@@ -3009,8 +3044,10 @@ fn handle_arms_shop_key_input(
             // original has a blank row before the refusal and another between
             // its attribution and the prompt; this engine had neither, so the
             // browser transcript ran two rows short.
+            // §8.1: `\n\n"That, I cannot buy from thee."\nsays $.` after the
+            // browser question, whose row is still open.
             format!(
-                "\n{}\n\n{}",
+                "\n\n{}\n\n{}",
                 speech.attribute("\"That, I cannot buy from thee.\"", "says"),
                 arms_sell_continuation_prompt(state.random_range_u8(0, 3))
             )
@@ -3065,8 +3102,12 @@ fn handle_arms_shop_key_input(
             // follows two line feeds. Measured 2026-09-10
             // (`shop-arms-sell-flow/declined`): the original reads
             // `Deal?" No`, a blank row, then the prompt.
+            //
+            // `shops.md` §8.1: "The continuation supplies its own leading two
+            // line feeds after either the decline echo" - the first closes the
+            // `Deal?" No` row, the second is the blank.
             format!(
-                "\n{}",
+                "\n\n{}",
                 arms_sell_continuation_prompt(state.random_range_u8(0, 3))
             )
         }
@@ -3083,7 +3124,9 @@ fn handle_arms_shop_key_input(
             // Measured 2026-09-10 (`shop-arms-sell-flow/sold`): the original
             // reads `Deal?" Yes`, a blank row, `"Done!"` over its
             // attribution, another blank row, then the continuation prompt.
-            "\n{}\n\n{}",
+            // `shops.md` §8.1: `Yes\n\n"Done!"\nsays $.` - the `Yes` echo
+            // leaves its row open, so two feeds give the blank above `Done!`.
+            "\n\n{}\n\n{}",
             speech.attribute("\"Done!\"", "says"),
             arms_sell_continuation_prompt(state.random_range_u8(0, 3))
         ),
@@ -3097,15 +3140,17 @@ fn handle_arms_shop_key_input(
             // The sale that empties the browser takes the same spacing, with
             // the local goodbye where the continuation prompt would be. Not
             // separately measured.
-            "\n{}\n\n{}",
+            "\n\n{}\n\n{}",
             speech.attribute("\"Done!\"", "says"),
             speech.attribute(&arms_sell_goodbye(state.random_range_u8(0, 3)), "says")
         ),
         (ArmsShopOutcome::Exited, _) if matches!(prior_state, ArmsShopState::SellPickItem(_)) => {
             // Two line feeds before the local goodbye as well. Measured
             // 2026-09-10 (`shop-arms-sell-zero-price/after`).
+            // §8.1: "An ordinary browser-local goodbye prints `\n\n\"`" - the
+            // browser question's row is open, so both feeds are needed.
             format!(
-                "\n{}",
+                "\n\n{}",
                 speech.attribute(&arms_sell_goodbye(state.random_range_u8(0, 3)), "says")
             )
         }
@@ -3129,7 +3174,10 @@ fn handle_arms_shop_key_input(
                 // `shop-arms-buy-confirm/exit`): the original has a blank row
                 // between the call line and the bark, and this engine put the
                 // bark straight onto the next row.
-                .map(|flourish| format!("\n{}", speech.attribute(&flourish, "says")))
+                // The row the bark follows is open (the stock call's `" `, or
+                // the entry `No` echo), so the first feed closes it and the
+                // second is the blank.
+                .map(|flourish| format!("\n\n{}", speech.attribute(&flourish, "says")))
                 .unwrap_or_default()
         }
         (outcome, _) => format_arms_outcome_with_rolls(
