@@ -67,6 +67,44 @@ impl ActiveShopSession {
         ) {
             return true;
         }
+        // The same shape at every other key-reading service prompt `shops.md`
+        // §8.B/§8.C ends on a closing quote and one space: the tavern menu
+        // ("the state menu record, then a separately emitted closing quote and
+        // space"), the Blue Boar's `Thy choice?" ` and the enough-drink
+        // question; the healer's `need?" `, `pay?" ` and `aid thee?" `; the
+        // inn's two `it?" ` confirmations and its `thee?" ` continuation; the
+        // herbalist's `Thy interest?" ` and its offer's `need?" `; the guild's
+        // `Thy concern?" ` and `Interested?" `; and the stable's `Deal?" `.
+        // Each reads a key with its question on the row, so no command row
+        // opens beneath it. Measured for the tavern menu 2026-10-16
+        // (`paws-tavern`, beat `menu`): after `thy travels?" ` the original
+        // keeps the cursor on the prompt row, where this engine drew an
+        // empty command row under it. The tavern menu's own over-column-14
+        // line feed leaves the key wait at column 0 of a fresh row, which
+        // carries no command row either.
+        if matches!(
+            self,
+            Self::Tavern(
+                TavernState::Menu { .. }
+                    | TavernState::BlueBoarDrinkList { .. }
+                    | TavernState::ConfirmEnoughDrink { .. }
+            ) | Self::Healer(
+                HealerShopState::PickService
+                    | HealerShopState::Confirm { .. }
+                    | HealerShopState::Continuation,
+                _
+            ) | Self::Innkeeper(
+                InnkeeperState::ConfirmRest { .. }
+                    | InnkeeperState::ConfirmLeaveCompanion { .. }
+                    | InnkeeperState::Continuation { .. }
+            ) | Self::Reagent(
+                ReagentShopState::PickReagent { .. } | ReagentShopState::ConfirmBundle { .. }
+            ) | Self::Guild(
+                GuildShopState::PickItem { .. } | GuildShopState::ConfirmBundle { .. }
+            ) | Self::HorseTrader(HorseTraderState::ConfirmPurchase { .. })
+        ) {
+            return true;
+        }
         // `shops.md §8.B`/`§8.C`: record `119`, the dock-space record `125`
         // and the continuation's `?" ` all leave their row open on a closing
         // quote and a space, as the entry greeting does. The ordinary offer's

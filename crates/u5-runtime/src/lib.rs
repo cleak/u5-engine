@@ -1153,4 +1153,5 @@ mod tests {
     include!("tests_inline/sail_bare_marker_rows.rs");
     include!("tests_inline/triage_leftovers_b.rs");
     include!("tests_inline/spell_flash_hold.rs");
+    include!("tests_inline/shop_menu_cursor_rows.rs");
 }
