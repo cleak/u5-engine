@@ -2214,6 +2214,14 @@ pub const fn tavern_menu_letters(tavern: Tavern) -> TavernMenuLetters {
 
 /// `shops.md §8.5`: the four tavern menu states select `SHOPPE.DAT`
 /// list records 69..=72 and follow-up records 73..=76.
+///
+/// The state numbers are `§6`'s per-tavern table: Blue Boar is state `1`
+/// (`C`/`W`/`T`), The Slaughtered Lamb and The Fallen Virgin state `2`
+/// (`B`/`R`/`H`), and The Humble Palate state `3` (`F`/`S`/`P`/`A`) - "every
+/// letter is the initial of the menu item the state's shipped list text
+/// advertises". This used to number them Lamb/Virgin `1`, Palate `2`, Blue
+/// Boar `3`, so the Blue Boar printed the Palate's Stout/Fruits/Provisions
+/// list over its own Cheese/Wines/Talk keys (playtest E44).
 pub const fn tavern_menu_state_index(tavern: Tavern) -> usize {
     match tavern {
         Tavern::TheHonestMeal
@@ -2221,9 +2229,9 @@ pub const fn tavern_menu_state_index(tavern: Tavern) -> usize {
         | Tavern::TheSwordAndKeg
         | Tavern::TheCatsLair
         | Tavern::TheFolleyTap => 0,
-        Tavern::TheSlaughteredLamb | Tavern::TheFallenVirgin => 1,
-        Tavern::TheHumblePalate => 2,
-        Tavern::TheBlueBoarTavern => 3,
+        Tavern::TheBlueBoarTavern => 1,
+        Tavern::TheSlaughteredLamb | Tavern::TheFallenVirgin => 2,
+        Tavern::TheHumblePalate => 3,
     }
 }
 

@@ -3663,7 +3663,8 @@ mod tests {
             ),
             TavernOutcome::Continued {
                 tavern: Tavern::TheHumblePalate,
-                follow_up_record_id: 75,
+                // `shops.md §6`: The Humble Palate is menu state 3.
+                follow_up_record_id: 76,
             }
         );
         assert_eq!(

@@ -2150,6 +2150,31 @@ fn tavern_price_tables_match_public_rows() {
     assert_eq!(blue_boar_drink_price(BlueBoarDrinkChoice::F), 98);
 }
 
+/// `shops.md §6`'s per-tavern state table and `§8.5`'s state-selected list
+/// (`69..72`) and follow-up (`73..76`) records: Blue Boar is state 1,
+/// Lamb/Virgin state 2, Humble Palate state 3 (playtest E44).
+#[test]
+fn tavern_menu_state_matches_the_published_per_tavern_table() {
+    for (tavern, state_index, letters) in [
+        (Tavern::TheHonestMeal, 0, ('M', 'A', Some('R'), 'C')),
+        (Tavern::TheCatsLair, 0, ('M', 'A', Some('R'), 'C')),
+        (Tavern::TheBlueBoarTavern, 1, ('C', 'W', None, 'T')),
+        (Tavern::TheSlaughteredLamb, 2, ('B', 'R', None, 'H')),
+        (Tavern::TheFallenVirgin, 2, ('B', 'R', None, 'H')),
+        (Tavern::TheHumblePalate, 3, ('F', 'S', Some('P'), 'A')),
+    ] {
+        assert_eq!(tavern_menu_state_index(tavern), state_index, "{tavern:?}");
+        assert_eq!(tavern_menu_record_id(tavern), 69 + state_index);
+        assert_eq!(tavern_follow_up_record_id(tavern), 73 + state_index);
+        let menu = tavern_menu_letters(tavern);
+        assert_eq!(
+            (menu.round, menu.secondary, menu.provisions, menu.lore),
+            letters,
+            "{tavern:?}"
+        );
+    }
+}
+
 #[test]
 fn tavern_round_drink_debits_once_per_living_party_member() {
     let mut state = test_state(open_grid(), 3, 4);
