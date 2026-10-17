@@ -1022,12 +1022,17 @@ impl PlayState {
         self.moonstone_slots[slot_index] = MoonstoneGateSlot::invalid();
         self.mark_visibility_dirty();
         self.advance_turn();
-        // Unpublished (`cleak/u5-spec#262`).
         self.diagnostics.push(format!(
             "recovered Moonstone phase {}; Gate Travel slot cleared",
             slot_index + 1
         ));
-        self.message.clear();
+        // `commands.md §5.8`: "The Get that follows prints `A_moonstone!\n`
+        // and records the stone as carried" - the pickup table's named
+        // Moonstone row, after the leading feed (playtest E60).
+        self.message = format!(
+            "\n{}",
+            crate::world_tables::ObjectPickupKind::Moonstone(slot_index).pickup_result_line(1)
+        );
         Some(MoveOutcome::Got)
     }
 

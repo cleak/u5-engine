@@ -1641,7 +1641,8 @@
         assert_eq!(state.turn, 2);
         assert_eq!(state.clock, GameClock::new(12, 4).unwrap());
         assert!(state.diagnostics.iter().any(|n| n.contains("recovered Moonstone phase 4; Gate Travel slot cleared")), "{:?}", state.diagnostics);
-        assert!(state.message.is_empty(), "message: {}", state.message);
+        // `commands.md §5.8`: the Get prints `A_moonstone!` (playtest E60).
+        assert_eq!(state.message, "\nA moonstone!");
         let _ = fs::remove_dir_all(dir);
     }
 
@@ -2193,7 +2194,8 @@
         assert_eq!(state.turn, 2);
         assert_eq!(state.clock, GameClock::new(12, 2).unwrap());
         assert!(state.diagnostics.iter().any(|n| n.contains("recovered Moonstone phase 1; Gate Travel slot cleared")), "{:?}", state.diagnostics);
-        assert!(state.message.is_empty(), "message: {}", state.message);
+        // `commands.md §5.8`: the Get prints `A_moonstone!` (playtest E60).
+        assert_eq!(state.message, "\nA moonstone!");
         let _ = fs::remove_dir_all(dir);
     }
 
