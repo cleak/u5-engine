@@ -1401,6 +1401,55 @@ fn active_town_jimmy_picker_unlocks_with_selected_member() {
 }
 
 #[test]
+fn active_town_jimmy_picker_rejects_ineligible_pick_and_echoes_eligible_name() {
+    // `commands.md §5.8`: "a confirmed eligible pick completes that row
+    // with the member's name. An ineligible pick prints `Disabled!\n\n`
+    // and repeats the prompt." Eligible is Good or Poisoned only
+    // (`traps.md §2.1`): a Charmed member is conscious but not eligible.
+    let dir = debug_game_dir();
+    fs::write(dir.join(TOWN_LOCK_TABLE_FILE), "CASTLE:0 0 2 1 185 184\n").unwrap();
+    let mut grid = open_grid();
+    grid[32 + 2] = TOWN_DOOR_PLAIN_LOCKED_TILE;
+    let mut state = test_state(grid, 1, 1);
+    state.player.facing = Direction::East;
+    push_second_jimmy_member(&mut state);
+    let mut charmed = state.party[1];
+    charmed.slot = 2;
+    charmed.status = b'C';
+    state.party.push(charmed);
+    state.party_names = default_party_names(3);
+    state.party_names[1][..4].copy_from_slice(b"Iolo");
+    assert!(state.party[2].conscious());
+
+    handle_play_key_input(&mut state, 'J', "", &dir).unwrap();
+    handle_play_key_input(&mut state, '6', "", &dir).unwrap();
+    assert!(state.active_jimmy.is_some());
+
+    handle_play_key_input(&mut state, '3', "", &dir).unwrap();
+    assert!(state.active_jimmy.is_some());
+    assert_eq!(state.message, DUNGEON_ACTING_MEMBER_DISABLED);
+    assert_eq!(state.grid[32 + 2], TOWN_DOOR_PLAIN_LOCKED_TILE);
+    assert_eq!(state.turn, 0);
+
+    handle_play_key_input(&mut state, '2', "", &dir).unwrap();
+    assert!(state.active_jimmy.is_none());
+    assert_eq!(state.grid[32 + 2], TOWN_DOOR_PLAIN_UNLOCKED_TILE);
+    assert!(
+        state
+            .message_entries()
+            .iter()
+            .any(|entry| entry.text.contains("Iolo")),
+        "{:?}",
+        state
+            .message_entries()
+            .iter()
+            .map(|entry| entry.text.clone())
+            .collect::<Vec<_>>()
+    );
+    let _ = fs::remove_dir_all(dir);
+}
+
+#[test]
 fn town_jimmy_one_member_party_picks_silently() {
     // `commands.md §5.8`: "Exactly one is chosen silently: no prompt and
     // no name echo", and the exchange "applies whenever Get, Jimmy, Open

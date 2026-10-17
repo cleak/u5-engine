@@ -489,14 +489,16 @@ impl PlayState {
                 continue;
             }
             // `commands.md §5.8`: "a confirmed eligible pick completes that
-            // row with the member's name".
-            if self
-                .party
-                .get(digit - 1)
-                .is_some_and(|member| member.conscious())
-            {
-                self.record_container_picker_name_echo(digit - 1);
+            // row with the member's name. An ineligible pick prints
+            // `Disabled!\n\n` and repeats the prompt". Eligible means Good
+            // or Poisoned (`traps.md §2.1`), the same gate the surface
+            // chest picker uses - not the wider `conscious()`.
+            if !self.surface_chest_member_available(digit - 1) {
+                self.message = DUNGEON_ACTING_MEMBER_DISABLED.to_string();
+                self.active_jimmy = Some(session);
+                return Ok(None);
             }
+            self.record_container_picker_name_echo(digit - 1);
             let outcome = self.jimmy_direction_with_game_dir_and_member(
                 session.direction,
                 Some(game_dir),
