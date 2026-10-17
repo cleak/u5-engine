@@ -12737,7 +12737,16 @@ fn step_visual_intro(intro: &mut VisualIntroState, ch: char) -> bool {
             // R556): the key is consumed, sets the title-skip flag and skips
             // every later hold, so the mark plus `Presents` - the last title
             // image - stays up for the start/menu archive load alone (Q36).
-            intro.title_presents_hold_ticks = INTRO_START_MENU_ARCHIVE_LOAD_BIOS_TICKS;
+            // `timing.md §5.1`: the hold's first eighteen ticks are an
+            // unconditional wait and only "the second returns as soon as a
+            // key arrives", so a key typed during the unconditional part is
+            // read when the bounded poll starts; the rest of that wait still
+            // runs before the load.
+            let unconditional_left = intro
+                .title_presents_hold_ticks
+                .saturating_sub(INTRO_TITLE_BOUNDED_POLL_BIOS_TICKS);
+            intro.title_presents_hold_ticks =
+                unconditional_left + INTRO_START_MENU_ARCHIVE_LOAD_BIOS_TICKS;
             intro.title_sequence_skipped = true;
             return true;
         }
@@ -21766,6 +21775,21 @@ mod tests {
             assert!(advance_visual_intro_animation_tick(&mut intro));
             assert!(visual_intro_presents_hold_active(&intro));
         }
+
+        // `timing.md §5.1`: the first eighteen ticks are an unconditional
+        // wait; a key typed there is only read when the bounded poll starts,
+        // so the rest of the unconditional wait still runs before the load.
+        let mut intro = visual_intro_state_with_panel(dir.clone(), VisualIntroPanel::Menu);
+        intro.dispatch = UnifiedMenuDispatch::new();
+        intro.title_flourish_step = intro_title_flourish_total_steps() - 1;
+        intro.title_flourish_complete = true;
+        intro.title_presents_hold_ticks = INTRO_PRESENTS_UNSKIPPED_HOLD_BIOS_TICKS - 5;
+        assert!(step_visual_intro(&mut intro, 'x'));
+        assert!(intro.title_sequence_skipped);
+        assert_eq!(
+            intro.title_presents_hold_ticks,
+            INTRO_PRESENTS_HOLD_BIOS_TICKS - 5 + INTRO_START_MENU_ARCHIVE_LOAD_BIOS_TICKS
+        );
         let _ = fs::remove_dir_all(dir);
     }
 
