@@ -3790,6 +3790,15 @@
         assert!(state.visibility_dirty);
         // `magic.md §8` issue-#225 table: Sanct Lor prints `Success!`.
         assert_eq!(state.message, crate::commands::SPELL_SUCCESS_LINE);
+
+        // `magic.md §8` (issue #231 captures, 2026-10-16): casts "with the
+        // caster visible or already hidden" all print `Success!`.
+        state.party[0].mana = INVISIBILITY_COST;
+        state.spell_charges[INVISIBILITY_SPELL_INDEX] = 1;
+        state.message.clear();
+        assert_eq!(state.cast_invisibility(0), MoveOutcome::Cast);
+        assert!(state.combat_actors[0].is_phase_suppressed());
+        assert_eq!(state.message, crate::commands::SPELL_SUCCESS_LINE);
     }
 
     #[test]

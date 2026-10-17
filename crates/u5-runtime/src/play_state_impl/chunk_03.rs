@@ -5415,12 +5415,17 @@ impl PlayState {
 
         let eligible = caster_index < COMBAT_PARTY_ACTOR_SLOTS;
         self.advance_turn();
+        // `magic.md §8` (u5-spec d586ac4, issue #231): the full-game captures
+        // ran "with the caster visible or already hidden", and every one
+        // printed `Success!` after the flash. A caster that is already hidden
+        // therefore still succeeds; only a caster with no live descriptor
+        // takes the shared failure.
         let applied = eligible
             && apply_combat_linked_invisibility(
                 &mut self.combat_actors[caster_index],
                 &mut self.active_objects,
             )
-            .is_some_and(CombatLinkedVisibilityOutcome::changed);
+            .is_some();
         if applied {
             self.mark_visibility_dirty();
             // `magic.md §8` issue-#225 table: "Invisibility, Sanct Lor |
