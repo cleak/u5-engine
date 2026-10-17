@@ -1241,8 +1241,8 @@ pub enum TavernState {
         continuation_ready: bool,
     },
     /// The menu-shaped key wait reached after answering Yes to the resident's
-    /// anything-else question. Unlike fresh entry, its exit keys use the
-    /// randomized no-sale bark; a displayed lore key remains inert while the
+    /// anything-else question. Like fresh entry, its exit keys use the
+    /// randomized closing bark; a displayed lore key remains inert while the
     /// continuation word is zero.
     PostListWait {
         tavern: Tavern,
@@ -1397,14 +1397,14 @@ pub fn step_tavern(
             TavernInput::Key(b),
         ) => {
             let upper = b.to_ascii_uppercase();
+            // `shops.md §8.5`: "Space, Escape, or Return from that wait exits
+            // directly to the same no-sale closing-bark row". The wait the
+            // follow-up record resumes is the one the initial list opened, so
+            // its exits bark too; the fresh list used to end the visit
+            // silently (playtest E51).
             if upper == b' ' || upper == 0x1B || upper == b'\r' || upper == b'\n' {
-                let post_list_wait = matches!(*state, TavernState::PostListWait { .. });
                 *state = TavernState::Exited;
-                return if post_list_wait {
-                    TavernOutcome::NoSaleExit
-                } else {
-                    TavernOutcome::Exited
-                };
+                return TavernOutcome::NoSaleExit;
             }
             let letters = tavern_menu_letters(tavern);
             if upper == letters.round as u8 {

@@ -7940,3 +7940,41 @@ fn tavern_menu_letter_echo_is_followed_by_a_blank_row() {
     assert_eq!(rows[echo + 1], "", "{rows:?}");
     assert!(rows[echo + 2].starts_with("\"That will be"), "{rows:?}");
 }
+
+/// `shops.md §8.5`: "Space, Escape, or Return from that wait exits directly
+/// to the same no-sale closing-bark row", and `§8.A`'s nothing-bought row is
+/// `61..64` inside the shared `says $.` envelope. Exiting the fresh list -
+/// not only the wait a follow-up record resumes - used to end the visit with
+/// no bark at all (playtest E51).
+#[test]
+fn tavern_fresh_list_exit_keys_draw_the_no_sale_closing_bark() {
+    use crate::shop_runtime::TavernState;
+    use crate::shop_session::ActiveShopSession;
+
+    let dir = debug_game_dir();
+    let shoppe = shoppe_dat_with_records(&[
+        (61, b"Asset no-sale.\"".as_slice()),
+        (62, b"Asset no-sale.\"".as_slice()),
+        (63, b"Asset no-sale.\"".as_slice()),
+        (64, b"Asset no-sale.\"".as_slice()),
+    ]);
+    std::fs::write(dir.join("SHOPPE.DAT"), shoppe).unwrap();
+    for key in [' ', '\u{1b}', '\r'] {
+        let mut state = test_state(open_grid(), 1, 1);
+        state.area = Area::Town {
+            scene: Scene::new(22).unwrap(),
+            floor: 0,
+        };
+        state.active_shop = Some(ActiveShopSession::Tavern(TavernState::Menu {
+            tavern: Tavern::TheCatsLair,
+            continuation_ready: false,
+        }));
+        handle_play_key_input(&mut state, key, "", &dir).unwrap();
+        assert_eq!(
+            state.message, "\n\n\"Asset no-sale.\"\nsays Dr. Cat.",
+            "key {key:?}"
+        );
+        assert!(state.active_shop.is_none());
+    }
+    let _ = fs::remove_dir_all(dir);
+}
