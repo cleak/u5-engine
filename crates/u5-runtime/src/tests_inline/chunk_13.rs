@@ -10919,6 +10919,19 @@ fn word_of_power_scanner_accepts_the_first_complete_word_prefix() {
 }
 
 #[test]
+fn word_of_power_scanner_finds_a_word_anywhere_through_the_shared_matcher() {
+    // u5-spec#298 Q34, `RETRACTIONS.md` R552: `commands.md §11.1` takes the
+    // first word the §11.3 shared matcher finds anywhere in the line.
+    let found = |line: &str| word_of_power_seal_prefix_match(line).map(|(_, seal)| seal.word);
+    assert_eq!(found("I SAY FALLAX"), Some("FALLAX"));
+    assert_eq!(found("XVERAMOCOR"), Some("VERAMOCOR"));
+    // Restart quirk: a failed partial match of the word hides it.
+    assert_eq!(found("FFALLAX"), None);
+    // Table order decides between two words in the line.
+    assert_eq!(found("VILIS FALLAX"), Some("FALLAX"));
+}
+
+#[test]
 fn world_quest_tile_substitution_uses_chunk_owners_and_opposite_defaults() {
     let mut grid = vec![5; WORLD_CELLS];
     let fallax = WORD_OF_POWER_SEALS[0];
@@ -11734,6 +11747,56 @@ fn shadowlord_names_match_quest_graph_md_section_5() {
         let name = shadowlord_name_for_slot(slot).unwrap();
         assert_eq!(shadowlord_slot_for_name(name), Some(slot));
     }
+}
+
+#[test]
+fn shared_text_matcher_follows_commands_md_section_11_3() {
+    use crate::commands::{shared_text_matcher_find, shared_text_matcher_matches};
+    // u5-spec#298 Q34, `commands.md §11.3`'s published examples.
+    for line in ["FAULINEI", "SAY FAULINEI NOW", "XFAULINEI", "AFAULINEI", "FAXFAULINEI"] {
+        assert!(shared_text_matcher_matches(line, "FAULINEI"), "{line}");
+    }
+    for line in ["FAULINE", "FFAULINEI", "FAFAULINEI", "FAULFAULINEI"] {
+        assert!(!shared_text_matcher_matches(line, "FAULINEI"), "{line}");
+    }
+    for line in ["honesty", "I seek honesty", "HONE"] {
+        assert!(shared_text_matcher_matches(line, "hone"), "{line}");
+    }
+    for line in ["hhone", "hohone"] {
+        assert!(!shared_text_matcher_matches(line, "hone"), "{line}");
+    }
+    // Bit 7 is stripped on both sides.
+    assert_eq!(shared_text_matcher_find(&[b'x', b'h' | 0x80, b'O', b'n', b'E'], b"HONE"), Some(1));
+    assert_eq!(shared_text_matcher_find(b"abc", b""), None);
+}
+
+#[test]
+fn shrine_answers_use_the_shared_matcher_restart_quirk() {
+    // u5-spec#298 Q34, `RETRACTIONS.md` R553, `karma.md §7.1`.
+    assert!(shrine_answer_matches("honesty", "hone"));
+    assert!(shrine_answer_matches("I seek honesty", "hone"));
+    assert!(shrine_answer_matches("HONESTY", "hone"));
+    assert!(!shrine_answer_matches("hhone", "hone"));
+    assert!(!shrine_answer_matches("hohone", "hone"));
+    assert!(!shrine_answer_matches("anything", ""));
+}
+
+#[test]
+fn yell_shadowlord_names_use_the_shared_matcher_in_index_order() {
+    // u5-spec#298 Q34, `commands.md §11.3`.
+    assert_eq!(PlayState::shadowlord_name_index("FAULINEI"), Some(SHADOWLORD_FALSEHOOD_INDEX));
+    assert_eq!(
+        PlayState::shadowlord_name_index("SAY ASTAROTH NOW"),
+        Some(SHADOWLORD_HATRED_INDEX)
+    );
+    assert_eq!(PlayState::shadowlord_name_index("XNOSFENTOR"), Some(SHADOWLORD_COWARDICE_INDEX));
+    assert_eq!(PlayState::shadowlord_name_index("FFAULINEI"), None);
+    assert_eq!(PlayState::shadowlord_name_index("FAULINE"), None);
+    // Index order: the first name tested wins wherever it sits in the line.
+    assert_eq!(
+        PlayState::shadowlord_name_index("NOSFENTOR FAULINEI"),
+        Some(SHADOWLORD_FALSEHOOD_INDEX)
+    );
 }
 
 #[test]

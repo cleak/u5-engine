@@ -179,8 +179,11 @@ pub const fn all_shadowlords_vanquished(slots: [u8; 3]) -> bool {
 
 /// `catalogs/quest-graph.md §5` Shadowlord-name vocabulary in slot
 /// order: Falsehood (0) = FAULINEI, Hatred (1) = ASTAROTH,
-/// Cowardice (2) = NOSFENTOR. The Yell handler and the shard /
-/// flame destruction path consume these case-insensitive strings.
+/// Cowardice (2) = NOSFENTOR. These are the **Yell keywords**, stored in
+/// capitals and compared through the shared case-folding matcher
+/// (`commands.md §11.3`). The shard destruction's doom line prints a
+/// separate mixed-case set, [`crate::commands::USE_SHARD_DOOM_NAMES`]
+/// (`inventory.md §7.1`, u5-spec#298 Q34).
 pub const SHADOWLORD_NAME_FAULINEI: &str = "FAULINEI";
 pub const SHADOWLORD_NAME_ASTAROTH: &str = "ASTAROTH";
 pub const SHADOWLORD_NAME_NOSFENTOR: &str = "NOSFENTOR";

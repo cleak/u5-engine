@@ -405,6 +405,17 @@ fn audit_a073_ask_who_tests_only_the_first_occurrence() {
     assert_eq!(tlk_ask_who_match(b"iolo triolo", &names), 2);
 }
 
+/// `conversation.md §7.6` (u5-spec#298 Q34): the first occurrence is the one
+/// `commands.md §11.3`'s shared matcher finds. In `iiolo iolo` its restart
+/// rule skips the mid-word `iolo` after the failed `ii` partial match, so
+/// the first occurrence found is the clean one after the space.
+#[test]
+fn ask_who_first_occurrence_follows_the_shared_matcher_restart_rule() {
+    let names: [&[u8]; 2] = [b"AVATAR", b"IOLO"];
+    assert_eq!(tlk_ask_who_match(b"iiolo iolo", &names), 2);
+    assert_eq!(tlk_ask_who_match(b"iiolo", &names), 0);
+}
+
 /// Audit A066. `conversation.md §2` step 5, "The dispatcher's own lines": the
 /// silent-figure index prints `"` then `Don't hurt me!` ⏎ `Please go away!`
 /// then `"` and a line feed, after the dispatcher's own leading line feed.

@@ -402,11 +402,13 @@ mod eternal_flame_tests {
 /// shrine's virtue answer and for each of its three mantra answers. The
 /// location has already chosen the virtue, so this only ever tests the typed
 /// answer against *that* shrine's expected text.
+///
+/// `karma.md §7.1` (u5-spec#298 Q34): the matcher is `commands.md §11.3`'s,
+/// so the key may occur anywhere in a longer response "**except** where it
+/// starts inside a failed partial match of itself (`hhone` fails against
+/// `hone`; `honesty` and `I seek honesty` match)". *Corrected*
+/// (`RETRACTIONS.md` R553): this used an ordinary substring search, which
+/// accepted `hhone`.
 pub fn shrine_answer_matches(answer: &str, expected: &str) -> bool {
-    if expected.is_empty() {
-        return false;
-    }
-    answer
-        .to_ascii_lowercase()
-        .contains(&expected.to_ascii_lowercase())
+    crate::commands::shared_text_matcher_matches(answer, expected)
 }
