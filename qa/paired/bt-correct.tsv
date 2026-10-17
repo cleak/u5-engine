@@ -43,6 +43,19 @@
 # as a non-result and stop the suite reporting real regressions in a group
 # that took a day to bring to a match. The first revision of this note said
 # so and then tripped the marker in the very sentence saying it.
+#
+# **The `after` beat samples the stock game on a timing boundary.** It is
+# taken 4 s after the Space that `blackthorn.md` §4.2's exit beat waits for,
+# and the stock side lands on either side of the exit vector's end: of four
+# stock captures on 2026-10-17 two still show the cleared tableau with the
+# Avatar at `(0,2)` (bt-correct-20261017-004820, -073907) and two already show
+# the captive cell, one of them mid-redraw (-085434, -085644). The stock blade
+# hold also ran past the Space in the later two, so the key was buffered and
+# the beat started at the hold's end. Nothing stable is measured there, so the
+# beat is skipped by name; `ask`, `typed` and `right` carry the comparison.
+# §4.2 gives the exit beat a floor of roughly five seconds; the two stock
+# handoffs here came in under four, which is a question for the spec.
+# dice-beats: after
 both	wait	15000
 both	key	space
 both	wait	4000

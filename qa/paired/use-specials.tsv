@@ -5,6 +5,18 @@
 # those steps run, so the two sides arrived with it in different cells and
 # every later beat compared unrelated windows (`cleak/u5-engine#22`).
 # `qa/tools/reseed.py` replayed that walk once into the seed named below.
+#
+# The picker panel is a repaint without a clear (`inventory.md` §4.4), so the
+# scrolled beats carry the previous pass's pixels on purpose: a second
+# ` 1 Sceptre`, a second `Shard/Falsehd`, a stray `S` in column 0, `ed` past
+# the wrap and a `d` in window column 15 that outlives the picker. Measured
+# 2026-10-17 on rc1; the engine paints the same residue since `fcaf8e53`.
+#
+# Open on the `sceptre` beat, screen row 7 only: with the §4.4 inverse leak
+# set, the stock divider band draws the two ribbon end caps beside the crown
+# as solid dark arrows; the engine draws its ordinary light caps. §4.4 leaves
+# "whether the separator band between the panel's boxes shows inverted cells"
+# unestablished, so this waits on the spec.
 # requires-seed: profile `seed-use-specials-reseeded`, built by qa/tools/reseed.py
 both	wait	15000
 both	key	space
