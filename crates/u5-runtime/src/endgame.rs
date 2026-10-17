@@ -2709,7 +2709,19 @@ impl PlayState {
             })
     }
 
+    /// `endgame.md §6` step 3: one round of the terminal loop - one wander
+    /// call for each of slots 1, 3, 4 and 5.
+    ///
+    /// `§6` (issue #298 Q42): each call's display-tick advance "is exactly
+    /// **one paced iteration** - a world tick plus a one-tick wait request -
+    /// and it is paid by every call, for an empty slot and on a refused coin
+    /// alike, so a terminal round of four calls always costs four paced
+    /// iterations whatever the party size". The round therefore holds for
+    /// four BIOS ticks, chained so consecutive rounds run at that rate; an
+    /// empty slot still takes no coin draw.
     pub fn advance_endgame_terminal_tableau_jitter(&mut self) -> bool {
+        self.staged_narration
+            .push_ticks_chained(ENDGAME_TABLEAU_JITTER_SLOTS.len() as u16);
         let party_slots = self.party.len().min(SAVE_PARTY_SIZE_MAX as usize);
         let eligible = ENDGAME_TABLEAU_JITTER_SLOTS
             .iter()

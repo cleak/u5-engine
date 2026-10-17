@@ -414,3 +414,20 @@ fn endgame_tableau_animation_runs_one_world_tick_per_bios_tick() {
     assert!(arena.endgame.as_ref().unwrap().tableau_animation_tick.is_none());
 }
 
+#[test]
+fn endgame_terminal_jitter_round_costs_four_paced_iterations() {
+    // `endgame.md §6` (issue #298 Q42): "a terminal round of four calls always
+    // costs four paced iterations whatever the party size" - one world tick
+    // and a one-tick wait per call, empty slots included.
+    let dir = debug_game_dir();
+    let mut state = endgame_window_at_first_question(&dir);
+    handle_play_key_input(&mut state, 'y', "", &dir).unwrap();
+    state.finish_endgame_refusal_staging();
+    state.flush_staged_narration();
+    assert!(!state.staged_narration_active());
+    state.advance_endgame_terminal_tableau_jitter();
+    let holds: Vec<f64> = state.staged_narration.beats().map(|beat| beat.delay_secs).collect();
+    assert_eq!(holds.len(), 1);
+    assert!((holds[0] - crate::narration::bios_ticks_secs(4)).abs() < 1e-9);
+    let _ = fs::remove_dir_all(dir);
+}
