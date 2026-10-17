@@ -4582,11 +4582,11 @@ impl PlayState {
         // decrement into a class gate the player's class fails."
         //
         // Reaching slot zero costs nothing in a world scene: every transport
-        // marker the slot-zero refresh writes is below
-        // [`OUTDOOR_COMBAT_TYPE_FIRST`] (foot `0x1C`, carpet `0x14`, horse
+        // marker the slot-zero refresh writes is below the script class floor
+        // [`ANIMATION_SCRIPT_CLASS_FIRST`] (foot `0x1C`, carpet `0x14`, horse
         // `0x10`, ship `0x20`/`0x24`, skiff `0x28`), so
-        // [`active_object_next_frame_tile`] finds no family, nothing is
-        // rewritten and no coin is drawn. It matters in an arena, where
+        // [`active_object_animation_script`] selects no script, nothing is
+        // rewritten and no coin is drawn (issue #298 Q29). It matters in an arena, where
         // `active-objects.md §9` gives record zero to the party seating -
         // "record zero is overwritten because it is the first record the party
         // seating allocates, not because combat reserves a player slot" - so
@@ -6214,17 +6214,17 @@ pub const fn active_ship_frame_heading(type_byte: u8) -> Direction {
     }
 }
 
-/// `active-objects.md §8`: the outdoor walker "applies only to the outdoor
-/// animated/monster predicate ... excluding the small environment-animation
-/// ranges", and terrain-combat classification "derives ... from the
-/// triggering slot's byte-0 type". The predicate therefore reads byte 0
-/// only; the per-frame tile byte (byte 1) does not qualify a slot.
 /// `active-objects.md §8` (issue #298 Q2): the whirlpool family `0xEC..0xEF`
 /// is "a masked family test" on the type byte.
 pub const fn is_whirlpool_family_type_byte(type_byte: u8) -> bool {
     type_byte & 0xfc == 0xec
 }
 
+/// `active-objects.md §8`: the outdoor walker "applies only to the outdoor
+/// animated/monster predicate ... excluding the small environment-animation
+/// ranges", and terrain-combat classification "derives ... from the
+/// triggering slot's byte-0 type". The predicate therefore reads byte 0
+/// only; the per-frame tile byte (byte 1) does not qualify a slot.
 pub fn is_outdoor_active_object_walker(object: ActiveObject) -> bool {
     is_outdoor_active_object_walker_byte(object.type_byte)
 }
