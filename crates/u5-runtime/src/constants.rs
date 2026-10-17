@@ -639,9 +639,11 @@ pub const AMBIENT_AUDIO_SUB_TICK_PERIOD: u8 = 8;
 /// order and the counter's phase origin, both of which are pinned where
 /// they are implemented, on `PlayState::tick_ambient_audio_repeats`.
 ///
-/// "The same two residues also pick the loud envelope in the tick's own
-/// lava/shrine effect branch, so one counter drives both behaviours and
-/// an implementation should not give them separate phases."
+/// "The same two residues also pick the loud envelope in the tick's
+/// grandfather-clock branch (`systems/audio.md` Section 8.10) ... One
+/// counter drives both behaviours and an implementation should not give
+/// them separate phases." (Corrected 2026-10-16, u5-spec#298 Q16: the
+/// earlier "lava/shrine effect branch" is withdrawn, R540.)
 pub const AMBIENT_AUDIO_DECREMENT_RESIDUES: [u8; 2] = [0, 4];
 
 /// `formats/saved-gam.md §10`: durable dungeon room-clear bitmap. The

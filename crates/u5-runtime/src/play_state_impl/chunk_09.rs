@@ -3583,15 +3583,102 @@ impl PlayState {
     /// `time.md §11` also states the limit on the cadence itself: "How
     /// long the byte takes to reach zero in wall-clock terms is inferred,
     /// not measured", so no seconds figure is modelled here either.
+    ///
+    /// `audio.md §8.10` (added 2026-10-16, u5-spec#298 Q16): this is the
+    /// ambient scenery tick, and the same call first plays the nearest
+    /// source in the 11-by-11 window - see
+    /// [`Self::ambient_scenery_source`]. A grandfather clock plays the
+    /// tick-tock at residues 0 and 4, or the hour chime instead while the
+    /// countdown is non-zero (read before this call's decrement); a
+    /// waterfall or fountain rumbles on every call from the sound jitter
+    /// stream, never the gameplay generator. The minstrel's 53-step tune is
+    /// withheld shipped data (`OPEN-QUESTIONS.md` section 1), so a selected
+    /// minstrel plays nothing here; it still wins the cell, silencing any
+    /// farther source.
     pub fn tick_ambient_audio_repeats(&mut self) {
         // Test before advance, on the pre-advance residue.
         let sub_tick = self.ambient_audio_sub_tick;
         let decrements = ambient_audio_sub_tick_decrements(sub_tick);
+        match self.ambient_scenery_source() {
+            Some(crate::audio::AmbientScenerySource::GrandfatherClock) if decrements => {
+                if self.twelve_hour_audio_repeats != 0 {
+                    self.emit_sound_effect(SoundEffect::AmbientClockChime);
+                } else {
+                    self.emit_sound_effect(SoundEffect::AmbientClockTick {
+                        residue: sub_tick % AMBIENT_AUDIO_SUB_TICK_PERIOD,
+                    });
+                }
+            }
+            Some(crate::audio::AmbientScenerySource::Waterfall) => {
+                self.emit_sound_effect(SoundEffect::AmbientWaterfallRumble);
+            }
+            Some(crate::audio::AmbientScenerySource::Fountain) => {
+                self.emit_sound_effect(SoundEffect::AmbientFountainRumble);
+            }
+            _ => {}
+        }
         // Unconditional: the counter is free-running and advances even on
         // calls that decrement nothing.
         self.ambient_audio_sub_tick = (sub_tick + 1) % AMBIENT_AUDIO_SUB_TICK_PERIOD;
         if decrements {
             self.twelve_hour_audio_repeats = self.twelve_hour_audio_repeats.saturating_sub(1);
+        }
+    }
+
+    /// `audio.md §8.10`: the nearest ambient source in the 11-by-11 window
+    /// centred on the party's map cell, or on the arena centre `(5, 5)` in
+    /// combat. Terrain (the live tile) is tested before the drawn actor.
+    ///
+    /// Engine approximations, both conservative: the "drawn actor" test
+    /// reads a non-empty active object's displayed tile at the cell rather
+    /// than the viewport's per-cell draw (no line-of-sight test), and a
+    /// first-person dungeon never reaches this tick because its scene value
+    /// performs no idle world step (`timing.md §8.2`).
+    pub fn ambient_scenery_source(&self) -> Option<crate::audio::AmbientScenerySource> {
+        let minstrel_at = |x: usize, y: usize, floor: Option<i8>| {
+            self.active_objects.iter().skip(1).any(|object| {
+                !object.is_empty()
+                    && object.x == x
+                    && object.y == y
+                    && floor.is_none_or(|floor| object.z == floor)
+                    && crate::audio::AMBIENT_MINSTREL_ACTOR_TILES.contains(&object.tile)
+            })
+        };
+        let classify = |tile: u8, minstrel: bool| {
+            crate::audio::ambient_scenery_terrain_source(tile)
+                .or(minstrel.then_some(crate::audio::AmbientScenerySource::Minstrel))
+        };
+        if self.combat_active {
+            let centre = (COMBAT_ARENA_SIDE / 2) as i32;
+            return crate::audio::select_ambient_scenery_source(|dx, dy| {
+                let x = (centre + dx) as usize;
+                let y = (centre + dy) as usize;
+                classify(self.combat_terrain[y][x], minstrel_at(x, y, None))
+            });
+        }
+        let floor = self.current_floor();
+        match self.area {
+            Area::World { .. } => {
+                let (px, py) = (self.player.x as i32, self.player.y as i32);
+                let side = WORLD_SIDE as i32;
+                crate::audio::select_ambient_scenery_source(|dx, dy| {
+                    let x = (px + dx).rem_euclid(side) as usize;
+                    let y = (py + dy).rem_euclid(side) as usize;
+                    classify(self.world_live_tile_at(x, y), minstrel_at(x, y, floor))
+                })
+            }
+            Area::Town { .. } => {
+                let (px, py) = (self.player.x as i32, self.player.y as i32);
+                crate::audio::select_ambient_scenery_source(|dx, dy| {
+                    let (x, y) = (px + dx, py + dy);
+                    if !(0..32).contains(&x) || !(0..32).contains(&y) {
+                        return None;
+                    }
+                    let (x, y) = (x as usize, y as usize);
+                    classify(self.current_area_tile(x, y), minstrel_at(x, y, floor))
+                })
+            }
+            Area::Dungeon { .. } => None,
         }
     }
 
@@ -3983,9 +4070,11 @@ impl PlayState {
         // *every* call ... For the effect's full duration nothing advances:
         // no water rotation, no fire flicker, no fountain, no banner, no
         // clock or bellows, no object animation, no AI roll, no wind check,
-        // no moongate refresh, no beacon step, and **no shrine/lava
-        // ambience tick**." `§13.2` names that tick as the pass that "on
-        // two of every eight enabled steps, decrements a shared countdown
+        // no moongate refresh, no beacon step, and **no ambient scenery
+        // tick** (clock, waterfall, fountain or minstrel audio;
+        // `systems/audio.md` Section 8.10)." (Renamed 2026-10-16, u5-spec#298
+        // Q16, R540: earlier text said "shrine/lava ambience tick".)
+        // `§13.2` names that tick as the pass that "on two of every eight enabled steps, decrements a shared countdown
         // byte" - the decrement `time.md §11` attributes to the audio tick
         // and save byte `0x02DE`. Freezing the tick therefore freezes that
         // byte, which is what a save taken under Negate Time must show.
@@ -4430,8 +4519,8 @@ impl PlayState {
         // same test. For the effect's full duration nothing advances: no
         // water rotation, no fire flicker, no fountain, no banner, no clock
         // or bellows, no object animation, no AI roll, no wind check, no
-        // moongate refresh, no beacon step, and no shrine/lava ambience
-        // tick. ... An engine that keeps animating during Negate Time is
+        // moongate refresh, no beacon step, and no ambient scenery tick
+        // (clock, waterfall, fountain or minstrel audio ...). ... An engine that keeps animating during Negate Time is
         // visibly wrong."
         //
         // `magic.md §8` names the same tag: "**`T` Negate Time.** The
