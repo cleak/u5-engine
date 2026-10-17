@@ -5131,11 +5131,12 @@ impl PlayState {
                     // question index writes the hourglass cell directly ...
                     // index 1 writes `0xEB`, index 2 writes `0xE8`". The
                     // pendulum is not stamped here: the first wrong answer's
-                    // script swap already placed it. §5 also has these
-                    // answers "advance the clock and then repaint"; the
-                    // amount of that advance is not published, so only the
-                    // repaint is modelled.
+                    // script swap already placed it. §4.2's table (u5-spec#298
+                    // Q8): "A two-minute per-turn cleanup ..., the stats
+                    // repaint and the hourglass stamp of Section 6.1, then the
+                    // loop asks again".
                     Some(crate::blackthorn_session::BlackthornWrongEscalation::TileStamp) => {
+                        self.run_blackthorn_wrong_answer_cleanup();
                         let (x, y) = crate::blackthorn::BLACKTHORN_HOURGLASS_CELL;
                         let mut commands = Vec::with_capacity(2);
                         if let Some(tile) = crate::blackthorn::blackthorn_hourglass_stamp(ordinal) {
@@ -5167,6 +5168,9 @@ impl PlayState {
                     // than stamping", and the §6.3 swap script ran on the
                     // first wrong answer only, so it is not replayed here.
                     _ => {
+                        // §4.2 (u5-spec#298 Q8): "The same two-minute cleanup
+                        // and stats repaint, then the pendulum execution".
+                        self.run_blackthorn_wrong_answer_cleanup();
                         // §5: the tail names "the actual removed member",
                         // read before the roster record is lifted out.
                         let victim_name = self.blackthorn_victim_display_name(victim);
@@ -5255,6 +5259,22 @@ impl PlayState {
                 Ok(MoveOutcome::PromptDeclined)
             }
         }
+    }
+
+    /// `blackthorn.md §5` (u5-spec#298 Q8): "Wrong answers past the first
+    /// advance the clock by two minutes (the per-turn cleanup's two-minute
+    /// increment of `systems/time.md` Section 3; Quickness halves it and
+    /// Negate Time suppresses it, Section 4) and then repaint unconditionally
+    /// with the roster intact; the first wrong answer makes no cleanup call".
+    fn run_blackthorn_wrong_answer_cleanup(&mut self) {
+        let effective_minutes = if self.negate_time_active() {
+            0
+        } else {
+            TimingStatusTag::from_save_byte(self.active_effect_tag.unwrap_or(0))
+                .effective_minutes(crate::blackthorn::BLACKTHORN_WRONG_ANSWER_CLEANUP_MINUTES)
+        };
+        self.advance_clock_half(effective_minutes);
+        self.repaint_stats_panel();
     }
 
     /// `blackthorn.md §3` step 8: "the name in **roster record 0** (the

@@ -1049,6 +1049,11 @@ pub fn blackthorn_release_line(gender: u8) -> String {
     format!("{BLACKTHORN_RELEASE_PREFIX}{piece}{BLACKTHORN_RELEASE_SUFFIX}")
 }
 
+/// `blackthorn.md §4.2` / §5 (u5-spec#298 Q8): the second, third and fourth
+/// wrong answers each run "a two-minute per-turn cleanup (`systems/time.md`
+/// Sections 3 and 4)" - the overworld-rate argument `2`.
+pub const BLACKTHORN_WRONG_ANSWER_CLEANUP_MINUTES: u8 = 2;
+
 /// `blackthorn.md §2` two player-visible Blackthorn cinematic
 /// families. Both replace the ordinary map loop and hand control
 /// back through an explicit scene/position transition.

@@ -851,3 +851,31 @@ fn q8_greeting_and_release_lines_follow_record_zero() {
         let _ = fs::remove_dir_all(dir);
     }
 }
+
+/// u5-spec#298 Q8. `blackthorn.md §5`: "Wrong answers past the first advance
+/// the clock by two minutes ...; the first wrong answer makes no cleanup
+/// call, so the interrogation itself adds six minutes on an all-wrong run".
+#[test]
+fn q8_wrong_answers_past_the_first_each_cost_two_minutes() {
+    let dir = debug_game_dir();
+    let mut state = test_state(open_grid(), 5, 5);
+    state.party.push(audit_g5_companion(1));
+    state.party.push(audit_g5_companion(2));
+    state.clock = GameClock::new(10, 0).unwrap();
+    state.begin_blackthorn_audience_capture(&dir).unwrap();
+    while state.active_blackthorn.as_ref().is_some_and(|c| c.current_prompt().is_none()) {
+        state.submit_blackthorn_audience_answer("", &dir).unwrap();
+    }
+    let minutes = |state: &PlayState| u32::from(state.clock.hour) * 60 + u32::from(state.clock.minute);
+    let start = minutes(&state);
+    let mut after = Vec::new();
+    for _ in 0..4 {
+        state.submit_blackthorn_audience_answer("wrong", &dir).unwrap();
+        after.push(minutes(&state) - start);
+        if state.active_blackthorn.as_ref().is_some_and(|c| c.awaiting_acknowledgement()) {
+            state.submit_blackthorn_audience_answer("", &dir).unwrap();
+        }
+    }
+    assert_eq!(after, vec![0, 2, 4, 6]);
+    let _ = fs::remove_dir_all(dir);
+}
