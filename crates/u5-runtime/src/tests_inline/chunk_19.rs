@@ -969,6 +969,12 @@
         handle_play_key_input(&mut state, '1', "", &dir).unwrap();
         handle_play_key_input(&mut state, 'Y', "", &dir).unwrap();
         handle_play_key_input(&mut state, '2', "", &dir).unwrap();
+        // `dungeon-mode.md §11`: "an ineligible pick prints `None
+        // posted!\n\n` and re-asks the watch question" (playtest E16); the
+        // resident handler is the overworld camp's too.
+        assert!(state.active_rest.is_some());
+        assert_eq!(state.message, REST_WATCH_PROMPT);
+        handle_play_key_input(&mut state, 'N', "", &dir).unwrap();
 
         assert!(state.active_rest.is_none());
         assert_eq!(state.party[1].status, b'P');

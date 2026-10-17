@@ -301,3 +301,38 @@ fn playtest_e15_camp_hours_prompt_zero_is_silent_and_escape_is_reread() {
     );
     assert!(!state.message_slot_needs_flush());
 }
+
+/// E16: `dungeon-mode.md §11` - "after `Yes`, `Who will stand guard? `,
+/// where a cancel or an ineligible pick prints `None posted!\n\n` and
+/// re-asks the watch question."
+#[test]
+fn playtest_e16_cancelled_guard_pick_reasks_the_watch_question() {
+    let mut state = dungeon_state(open_dungeon_record(), 0, 1, 1);
+    state.party.push(audit_g5_companion(1));
+    state.party.push(audit_g5_companion(2));
+    state.party[2].status = b'P';
+    for key in ['h', '3', 'y'] {
+        handle_play_key_input(&mut state, key, "", Path::new("")).unwrap();
+    }
+    assert_eq!(state.message, REST_WATCH_MEMBER_PROMPT);
+
+    // A cancel.
+    handle_play_key_input(&mut state, '\u{1b}', "", Path::new("")).unwrap();
+    assert!(state.active_rest.is_some(), "the rest has not begun");
+    assert_eq!(state.message, REST_WATCH_PROMPT);
+    assert!(
+        playtest_transcript_rows(&state)
+            .iter()
+            .any(|row| row == REST_NO_WATCH_LITERAL.trim_end()),
+        "{:?}",
+        playtest_transcript_rows(&state)
+    );
+
+    // An ineligible (poisoned) pick does the same.
+    handle_play_key_input(&mut state, 'y', "", Path::new("")).unwrap();
+    assert_eq!(state.message, REST_WATCH_MEMBER_PROMPT);
+    handle_play_key_input(&mut state, '3', "", Path::new("")).unwrap();
+    assert!(state.active_rest.is_some(), "the rest has not begun");
+    assert_eq!(state.message, REST_WATCH_PROMPT);
+    assert_eq!(state.turn, 0);
+}
