@@ -7662,10 +7662,14 @@ fn validate_route_smoke_case_state(
                     .party
                     .first()
                     .is_none_or(|member| member.hp == member.max_hp)
-                // `shops.md §8.C`: the fee prompt echoes a bare `No`, then the
-                // visit continues on its published question. `Declined Heal`
-                // was the engine's own sentence.
-                || !state.message.starts_with("No")
+                // `shops.md §8.C`: the fee prompt echoes a bare `No` onto its
+                // own `pay?" ` row (play-test P22), then the visit continues on
+                // its published question. `Declined Heal` was the engine's own
+                // sentence.
+                || !state
+                    .message_entries()
+                    .iter()
+                    .any(|entry| entry.text.ends_with("pay?\" No"))
                 || !state.message.contains("aid thee?")
             {
                 return Err(io::Error::other(format!(
