@@ -1969,7 +1969,18 @@ fn handle_active_shop_key_input(
                 state.emit_message_line_continuing_row("Yes");
                 state.push_explicit_blank_message_entry();
             }
-            let mut message = format_sage_outcome_with_shoppe(outcome, game_dir);
+            let mut message = match outcome {
+                // `shops.md §8.C` sage result table: "Unknown topic |
+                // `"That, I cannot help thee with.\n\n`, then repeat the topic
+                // question beginning with `Of what wouldst`". The reply opens
+                // the quote the repeated question closes. The engine printed
+                // the sentence bare and never asked again (playtest E55).
+                SageOutcome::NoTopicMatch => format!(
+                    "\"That, I cannot help thee with.\n\n{}",
+                    sage_topic_question(speaker_is_female)
+                ),
+                outcome => format_sage_outcome_with_shoppe(outcome, game_dir),
+            };
             if paid {
                 // Measured 2026-09-08 at The Cat's Lair
                 // (`qa/paired/paws-sage.tsv`): the rumour is attributed to the
@@ -3823,6 +3834,16 @@ fn format_healer_treatment_error(
 
 /// The typed-input prompt the sage question ends on, measured with it.
 const SAGE_RESPOND_PROMPT: &str = "You respond:";
+
+/// `shops.md §8.C` sage topic question, from `Of what wouldst` on: the
+/// caller supplies whatever precedes it (the opening quote on entry, the
+/// unknown-topic reply on a repeat).
+fn sage_topic_question(speaker_is_female: bool) -> String {
+    format!(
+        "Of what wouldst thou hear my lore, {}?\"\n\n{SAGE_RESPOND_PROMPT}",
+        tavern_honorific(speaker_is_female)
+    )
+}
 /// **Measured** 2026-09-08 at the Blue Boar: the six drinks it sells, in the
 /// order its list prints them. The prices come from the published table.
 const BLUE_BOAR_DRINK_ROWS: [(char, &str, crate::shops::BlueBoarDrinkChoice); 6] = [
@@ -4087,10 +4108,7 @@ fn format_tavern_outcome(
         // the first closes it and the second is the blank (`d2de5563` made
         // the echo land there; with one feed the question sat directly under
         // `Rations?" C`).
-        EnteredSagePrompt => format!(
-            "\n\n\"Of what wouldst thou hear my lore, {}?\"\n\n{SAGE_RESPOND_PROMPT}",
-            if speaker_is_female { "milady" } else { "sir" }
-        ),
+        EnteredSagePrompt => format!("\n\n\"{}", sage_topic_question(speaker_is_female)),
         RoundDrinkServed { tavern, cost } => {
             // **Measured** 2026-09-08 at The Cat's Lair
             // (`qa/paired/paws-sage.tsv`): a served purchase is followed by

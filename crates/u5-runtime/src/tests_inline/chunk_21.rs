@@ -8006,3 +8006,33 @@ fn tavern_fourth_drink_warning_is_attributed_to_the_vendor() {
         "\n\n\"I beg thy\npardon, sir,\"\nsays Dr. Cat.\n\"But haven't\nye had enough\nto drink?\" "
     );
 }
+
+/// `shops.md §8.C` sage result table: "Unknown topic | `"That, I cannot help
+/// thee with.\n\n`, then repeat the topic question beginning with `Of what
+/// wouldst`". The reply had no opening quote and no repeated question
+/// (playtest E55); the prompt itself keeps waiting for another topic.
+#[test]
+fn sage_unknown_topic_quotes_its_reply_and_repeats_the_question() {
+    use crate::shop_runtime::SageState;
+    use crate::shop_session::ActiveShopSession;
+
+    let mut state = test_state(open_grid(), 1, 1);
+    state.area = Area::Town {
+        scene: Scene::new(22).unwrap(),
+        floor: 0,
+    };
+    state.gold = 200;
+    state.active_shop = Some(ActiveShopSession::Sage(SageState::default()));
+
+    handle_play_key_input(&mut state, 'Z', "ZZ", Path::new("")).unwrap();
+
+    assert_eq!(
+        state.message,
+        "\"That, I cannot help thee with.\n\nOf what wouldst thou hear my lore, sir?\"\n\nYou respond:"
+    );
+    assert!(matches!(
+        state.active_shop,
+        Some(ActiveShopSession::Sage(SageState::Prompt { .. }))
+    ));
+    assert_eq!(state.gold, 200);
+}
