@@ -246,14 +246,19 @@ pub enum CastFollowupKind {
     },
 }
 
-/// What a key on the caster's own cell does inside a spell's arena cursor
-/// (`combat.md §8.2`).
+/// What one key does inside a spell's arena cursor (`combat.md §8.2`, the
+/// shared cursor `magic.md §8` sends the spell cursors through).
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
-pub(crate) enum CombatSpellCursorOwnCellKey {
-    /// Enter: "nothing happens and the loop reads another key".
-    Ignore,
-    /// Space: "Cancels if the cursor is on the attacker's own cell".
+pub(crate) enum CombatSpellCursorKey {
+    /// Discarded keys, and Enter/`A` on the caster's own cell: "nothing
+    /// happens and the loop reads another key".
+    Hold,
+    /// Escape, or Space on the caster's own cell.
     Cancel,
+    /// Enter, `A` or Space anywhere else.
+    Confirm,
+    /// One of the eight direction codes.
+    Move(crate::InputDirection),
 }
 
 #[derive(Clone, Debug, PartialEq, Eq)]

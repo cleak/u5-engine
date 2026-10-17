@@ -3208,9 +3208,11 @@ fn active_combat_field_followup_ignores_out_of_bounds_cursor_move() {
     assert_eq!(state.message, "Aim! ");
     assert_eq!(state.combat_aim_marker_cell, Some((0, 0)));
 
+    // `combat.md §8.3`: the cursor moves on direction codes; a typed digit
+    // reaches it only already remapped by the frontend.
     assert!(
         state
-            .step_active_cast_followup('4', "", std::path::Path::new(""))
+            .step_active_cast_followup(char::from(INPUT_CODE_WEST), "", std::path::Path::new(""))
             .unwrap()
             .is_none()
     );
@@ -3218,7 +3220,7 @@ fn active_combat_field_followup_ignores_out_of_bounds_cursor_move() {
     // The caster's own cell does not confirm (`§8.2`), so step off it first.
     assert!(
         state
-            .step_active_cast_followup('6', "", std::path::Path::new(""))
+            .step_active_cast_followup(char::from(INPUT_CODE_EAST), "", std::path::Path::new(""))
             .unwrap()
             .is_none()
     );
@@ -16628,10 +16630,11 @@ fn combat_cast_magic_missile_aims_with_the_arena_cursor() {
     assert_eq!(state.spell_charges[spell_index], 0);
     assert_eq!(state.turn, 0);
 
-    // One cardinal step east puts the cursor on the orc.
+    // One cardinal step east puts the cursor on the orc. `combat.md §8.3`:
+    // the cursor moves on direction codes, not on unremapped digits.
     assert!(
         state
-            .step_active_cast_followup('6', "", std::path::Path::new(""))
+            .step_active_cast_followup(char::from(INPUT_CODE_EAST), "", std::path::Path::new(""))
             .unwrap()
             .is_none()
     );

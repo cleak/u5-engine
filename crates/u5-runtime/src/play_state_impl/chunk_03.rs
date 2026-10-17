@@ -1448,24 +1448,45 @@ impl PlayState {
         self.mark_visibility_dirty();
     }
 
-    /// `combat.md §8.2`'s cursor table for the caster's own cell: Enter
-    /// (and `A`) "nothing happens and the loop reads another key"; Space
-    /// cancels. `None` for any other cell or key.
-    fn combat_spell_cursor_own_cell_key(
+    /// `combat.md §8.2`'s cursor table, which `magic.md §8` sends the
+    /// spell cursors through ("the shared `Aim! ` cursor", "the standard
+    /// combat arena cursor"): the same key vocabulary as the Attack cursor
+    /// ([`combat_targeting_cursor_input`]).
+    ///
+    /// - "Enter, or the letter `A` (either case)" confirms - "**unless** the
+    ///   cursor is on the attacker's own cell, in which case nothing happens
+    ///   and the loop reads another key".
+    /// - Space "Cancels if the cursor is on the attacker's own cell; anywhere
+    ///   else it confirms exactly like Enter". Escape cancels.
+    /// - The eight direction codes move it, the four corner keys included:
+    ///   "a melee attack can target diagonals", and the spell cursor is the
+    ///   same cursor.
+    /// - Typed digits are inert. `§8.3`: with the numpad flag clear they
+    ///   "are inert inside the targeting cursor", and with it set they reach
+    ///   the loop already remapped to direction codes. A plain digit is the
+    ///   flag-clear case, as at the combat command prompt (playtest E36).
+    ///
+    /// A line feed is read as Enter, as the scripted routes deliver it.
+    fn combat_spell_cursor_key(
         &self,
         session: &CastFollowupSession,
         cursor: (u8, u8),
         ch: char,
-    ) -> Option<CombatSpellCursorOwnCellKey> {
+    ) -> CombatSpellCursorKey {
+        let ch = if ch == '\n' { '\r' } else { ch };
         let caster_slot = session.combat_actor_slot.unwrap_or(session.caster_index);
-        let caster = self.combat_actors.get(caster_slot)?;
-        if (caster.x, caster.y) != cursor {
-            return None;
-        }
-        match ch {
-            '\r' | '\n' => Some(CombatSpellCursorOwnCellKey::Ignore),
-            ' ' => Some(CombatSpellCursorOwnCellKey::Cancel),
-            _ => None,
+        let on_caster = self
+            .combat_actors
+            .get(caster_slot)
+            .is_some_and(|caster| (caster.x, caster.y) == cursor);
+        match combat_targeting_cursor_input(ch) {
+            CombatTargetingCursorInput::Move(direction) => CombatSpellCursorKey::Move(direction),
+            CombatTargetingCursorInput::Confirm if on_caster => CombatSpellCursorKey::Hold,
+            CombatTargetingCursorInput::Confirm => CombatSpellCursorKey::Confirm,
+            CombatTargetingCursorInput::Space if on_caster => CombatSpellCursorKey::Cancel,
+            CombatTargetingCursorInput::Space => CombatSpellCursorKey::Confirm,
+            CombatTargetingCursorInput::Escape => CombatSpellCursorKey::Cancel,
+            CombatTargetingCursorInput::Ignored => CombatSpellCursorKey::Hold,
         }
     }
 
@@ -1685,12 +1706,15 @@ impl PlayState {
                         let tail = (slot + 1).to_string();
                         return self.finish_active_cast_followup(session, &tail, game_dir);
                     }
-                    let Some(direction) =
-                        Direction::from_prompt_key(ch).filter(|direction| direction.is_cardinal())
+                    // The arena cursor's moves (`combat.md §8.2`): the eight
+                    // direction codes, with typed digits inert (`§8.3`; see
+                    // [`Self::combat_spell_cursor_key`]).
+                    let CombatTargetingCursorInput::Move(direction) =
+                        combat_targeting_cursor_input(ch)
                     else {
                         continue;
                     };
-                    let (dx, dy) = direction.delta();
+                    let (dx, dy) = combat_targeting_direction_delta(direction);
                     let nx = i16::from(x) + dx as i16;
                     let ny = i16::from(y) + dy as i16;
                     if !combat_arena_coordinate_in_bounds(nx, ny) {
@@ -1709,44 +1733,32 @@ impl PlayState {
                     // a cell holding nobody the occupancy lookup accepts -
                     // all answer `Nothing!`, which lands on the row `Aim! `
                     // left open.
-                    if ch == '\u{1b}' {
-                        self.cancel_combat_aim_cursor();
-                        return Ok(None);
-                    }
-                    // `combat.md §8.2`'s cursor table: Enter confirms
+                    //
+                    // `combat.md §8.2`'s cursor table: Enter or `A` confirms
                     // "**unless** the cursor is on the attacker's own cell,
                     // in which case nothing happens and the loop reads
                     // another key", and Space there cancels. The spell
                     // cursor is that same shared cursor (`magic.md §8`).
                     // Playtest E33: Kill, Missile and Fireball resolved
                     // against the caster.
-                    match self.combat_spell_cursor_own_cell_key(&session, (x, y), ch) {
-                        Some(CombatSpellCursorOwnCellKey::Ignore) => continue,
-                        Some(CombatSpellCursorOwnCellKey::Cancel) => {
+                    let direction = match self.combat_spell_cursor_key(&session, (x, y), ch) {
+                        CombatSpellCursorKey::Cancel => {
                             self.cancel_combat_aim_cursor();
                             return Ok(None);
                         }
-                        None => {}
-                    }
-                    if matches!(ch, ' ' | '\r' | '\n') {
-                        self.combat_aim_marker_gate = false;
-                        match self.combat_targeting_occupant_at((x, y)) {
-                            Some(slot) => {
-                                let tail = (slot + 1).to_string();
-                                return self.finish_active_cast_followup(session, &tail, game_dir);
-                            }
-                            None => {
+                        CombatSpellCursorKey::Hold => continue,
+                        CombatSpellCursorKey::Move(direction) => direction,
+                        CombatSpellCursorKey::Confirm => {
+                            self.combat_aim_marker_gate = false;
+                            let Some(slot) = self.combat_targeting_occupant_at((x, y)) else {
                                 self.cancel_combat_aim_cursor();
                                 return Ok(None);
-                            }
+                            };
+                            let tail = (slot + 1).to_string();
+                            return self.finish_active_cast_followup(session, &tail, game_dir);
                         }
-                    }
-                    let Some(direction) =
-                        Direction::from_prompt_key(ch).filter(|direction| direction.is_cardinal())
-                    else {
-                        continue;
                     };
-                    let (dx, dy) = direction.delta();
+                    let (dx, dy) = combat_targeting_direction_delta(direction);
                     let nx = i16::from(x) + dx as i16;
                     let ny = i16::from(y) + dy as i16;
                     if !combat_arena_coordinate_in_bounds(nx, ny) {
@@ -1772,29 +1784,20 @@ impl PlayState {
                     // own cell takes the same Enter/Space rule as the aimed
                     // spells above. The engine printed `None!` here and
                     // placed a field on the caster (playtests E33, E34).
-                    if ch == '\u{1b}' {
-                        self.cancel_combat_aim_cursor();
-                        return Ok(None);
-                    }
-                    match self.combat_spell_cursor_own_cell_key(&session, (x, y), ch) {
-                        Some(CombatSpellCursorOwnCellKey::Ignore) => continue,
-                        Some(CombatSpellCursorOwnCellKey::Cancel) => {
+                    let direction = match self.combat_spell_cursor_key(&session, (x, y), ch) {
+                        CombatSpellCursorKey::Cancel => {
                             self.cancel_combat_aim_cursor();
                             return Ok(None);
                         }
-                        None => {}
-                    }
-                    if matches!(ch, ' ' | '\r' | '\n') {
-                        self.combat_aim_marker_gate = false;
-                        let tail = format!("{x},{y}");
-                        return self.finish_active_cast_followup(session, &tail, game_dir);
-                    }
-                    let Some(direction) =
-                        Direction::from_prompt_key(ch).filter(|direction| direction.is_cardinal())
-                    else {
-                        continue;
+                        CombatSpellCursorKey::Hold => continue,
+                        CombatSpellCursorKey::Move(direction) => direction,
+                        CombatSpellCursorKey::Confirm => {
+                            self.combat_aim_marker_gate = false;
+                            let tail = format!("{x},{y}");
+                            return self.finish_active_cast_followup(session, &tail, game_dir);
+                        }
                     };
-                    let (dx, dy) = direction.delta();
+                    let (dx, dy) = combat_targeting_direction_delta(direction);
                     let nx = i16::from(x) + dx as i16;
                     let ny = i16::from(y) + dy as i16;
                     if !combat_arena_coordinate_in_bounds(nx, ny) {

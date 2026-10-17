@@ -166,7 +166,9 @@ fn playtest_e34_field_spells_use_the_shared_aim_cursor_without_help_text() {
     assert_eq!(state.message, "Aim! ");
     assert_eq!(state.open_prompt_line().as_deref(), Some("Aim! "));
 
-    state.step_active_cast_followup('6', "", game_dir).unwrap();
+    state
+        .step_active_cast_followup(char::from(INPUT_CODE_EAST), "", game_dir)
+        .unwrap();
     assert_eq!(state.message, "Aim! ");
     assert_eq!(state.combat_aim_marker_cell, Some((6, 5)));
     assert!(

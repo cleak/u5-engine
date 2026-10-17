@@ -147,3 +147,124 @@ fn rc2_blue_boar_choice_prompt_and_uppercase_letter_echo() {
         ]
     );
 }
+
+/// Item 4: `combat.md §8.2`'s cursor table - "Enter, or the letter `A`
+/// (either case)" confirms, and the corner keys move diagonally - holds for
+/// the spell `Aim! ` cursor as for the Attack cursor (`magic.md §8`: "the
+/// shared `Aim! ` cursor"). `§8.3`: a typed digit with the numpad flag clear
+/// is inert inside the cursor, the same flag-clear reading the combat
+/// command prompt gives digits (playtest E36).
+#[test]
+fn rc2_spell_aim_cursor_takes_a_diagonals_and_ignores_digits() {
+    let dir = std::path::Path::new("");
+    let spell_index = spell_index_from_code("GP").unwrap();
+    let stats = combat_class_stats(32).unwrap();
+    let mut state = world_state(open_world_grid(), 10, 20);
+    state.combat_active = true;
+    state.party[0].mana = 1;
+    state.party[0].level = 1;
+    state.spell_charges[spell_index] = 1;
+    state.combat_actors[0] =
+        CombatActorDescriptor::from_row([12, 1, COMBAT_ACTOR_FLAG_SELECTABLE_80, 0, 0, 0, 4, 5]);
+    state.combat_actors[COMBAT_PARTY_ACTOR_SLOTS] = CombatActorDescriptor::for_monster_placement(
+        stats,
+        7,
+        5,
+        6,
+        COMBAT_ACTOR_FLAG_SELECTABLE_40,
+        0,
+    );
+    state.start_combat_cast_spell_prompt(0, false);
+    state.step_active_cast('G', "P", dir).unwrap();
+    state.step_active_cast(' ', "", dir).unwrap();
+    assert_eq!(state.message, "Aim! ");
+    let cursor = |state: &PlayState| state.active_cast_followup.as_ref().map(|s| s.kind);
+
+    // Typed digits are inert, including the keypad corners `3` and `9`.
+    for digit in ['1', '2', '3', '4', '6', '7', '8', '9'] {
+        assert!(
+            state
+                .step_active_cast_followup(digit, "", dir)
+                .unwrap()
+                .is_none()
+        );
+        assert_eq!(
+            cursor(&state),
+            Some(CastFollowupKind::CombatAimCursor { x: 4, y: 5 }),
+            "{digit}"
+        );
+    }
+    // `A` on the caster's own cell: nothing happens.
+    assert!(
+        state
+            .step_active_cast_followup('a', "", dir)
+            .unwrap()
+            .is_none()
+    );
+    assert!(state.active_cast_followup.is_some());
+
+    // PgDn (south-east) is a diagonal step onto the orc.
+    state
+        .step_active_cast_followup(char::from(INPUT_CODE_SOUTHEAST), "", dir)
+        .unwrap();
+    assert_eq!(
+        cursor(&state),
+        Some(CastFollowupKind::CombatAimCursor { x: 5, y: 6 })
+    );
+    assert_eq!(state.combat_aim_marker_cell, Some((5, 6)));
+
+    // `A` confirms there.
+    let result = state
+        .step_active_cast_followup('A', "", dir)
+        .unwrap()
+        .expect("`A` confirms the occupied cell");
+    assert_eq!(result.0, MoveOutcome::Cast);
+    assert!(state.active_cast_followup.is_none());
+}
+
+/// Item 4, the field spells' cursor (`magic.md §8`: "the standard combat
+/// arena cursor"): the same table - diagonal moves within range, digits
+/// inert, `A` confirming off the caster's cell.
+#[test]
+fn rc2_field_spell_cursor_takes_a_and_diagonals() {
+    let dir = std::path::Path::new("");
+    let mut state = playtest_spell_cursor_state();
+    state.step_active_cast('F', "GI", dir).unwrap();
+    state.step_active_cast('\r', "", dir).unwrap();
+    assert_eq!(state.message, "Aim! ");
+    state.step_active_cast_followup('7', "", dir).unwrap();
+    assert_eq!(state.combat_aim_marker_cell, Some((5, 5)));
+    state
+        .step_active_cast_followup(char::from(INPUT_CODE_NORTHWEST), "", dir)
+        .unwrap();
+    assert_eq!(state.combat_aim_marker_cell, Some((4, 4)));
+    let result = state
+        .step_active_cast_followup('a', "", dir)
+        .unwrap()
+        .expect("`A` confirms the field cell");
+    assert_eq!(result.0, MoveOutcome::Cast);
+}
+
+/// Item 4, the Attack cursor: the one key table both cursors classify with.
+#[test]
+fn rc2_attack_cursor_table_matches_the_spell_cursor() {
+    assert_eq!(
+        combat_targeting_cursor_input('A'),
+        CombatTargetingCursorInput::Confirm
+    );
+    assert_eq!(
+        combat_targeting_cursor_input('a'),
+        CombatTargetingCursorInput::Confirm
+    );
+    assert_eq!(
+        combat_targeting_cursor_input(char::from(INPUT_CODE_NORTHEAST)),
+        CombatTargetingCursorInput::Move(InputDirection::Northeast)
+    );
+    for digit in '0'..='9' {
+        assert_eq!(
+            combat_targeting_cursor_input(digit),
+            CombatTargetingCursorInput::Ignored,
+            "{digit}"
+        );
+    }
+}
