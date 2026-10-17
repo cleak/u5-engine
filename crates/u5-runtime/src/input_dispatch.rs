@@ -1379,7 +1379,12 @@ fn handle_active_shop_key_input(
                     // row for this visit.
                     InnMainAction::Exit => {
                         *s = InnkeeperState::Exited;
-                        shop_closing_bark(state, SHOP_DIALOG_ID_INN, innkeeper_name, game_dir)
+                        shop_closing_bark_after_open_prompt(
+                            state,
+                            SHOP_DIALOG_ID_INN,
+                            innkeeper_name,
+                            game_dir,
+                        )
                     }
                     // `shops.md §8.B` "Inn actions": keys outside `L`/`P`/`R`
                     // and Space "silently wait". Measured 2026-09-11
@@ -1452,13 +1457,15 @@ fn handle_active_shop_key_input(
                 // feeds, end the visit through the ordinary farewell for the
                 // visit's existing outcome ... it does not return to the
                 // service question."
+                //
+                // The two feeds are read as the envelope's own `\n\n"`, as
+                // the arms exit measures them (`shop-arms-menus/exit`): `No`,
+                // one blank row, the quoted bark. The engine used to print one
+                // feed of its own before an envelope-less bark.
                 (InnkeeperState::ConfirmRest { .. }, _, true, _) => {
                     state.emit_message_line_continuing_row("No");
                     *s = InnkeeperState::Exited;
-                    format!(
-                        "\n{}",
-                        shop_closing_bark(state, SHOP_DIALOG_ID_INN, innkeeper_name, game_dir)
-                    )
+                    shop_closing_bark(state, SHOP_DIALOG_ID_INN, innkeeper_name, game_dir)
                 }
                 // `shops.md §8.C` "Leave-companion selection": Escape cancels
                 // and prints `Nobody\n\n`, then reaches the continuation.
@@ -2031,9 +2038,15 @@ fn handle_active_shop_key_input(
                 crate::play_state_impl::shop_vendor_name_for_scene(SHOP_DIALOG_ID_HERBALIST, scene)
             });
             let message = match outcome {
-                ReagentShopOutcome::DeclinedEntry | ReagentShopOutcome::LeftMenu => {
+                ReagentShopOutcome::DeclinedEntry => {
                     shop_closing_bark(state, SHOP_DIALOG_ID_HERBALIST, vendor_name, game_dir)
                 }
+                ReagentShopOutcome::LeftMenu => shop_closing_bark_after_open_prompt(
+                    state,
+                    SHOP_DIALOG_ID_HERBALIST,
+                    vendor_name,
+                    game_dir,
+                ),
                 outcome => format_reagent_outcome(outcome, vendor_name, game_dir),
             };
             message
@@ -2320,13 +2333,7 @@ fn handle_active_shop_key_input(
                 // original reads `take it?" No`, a blank row, then the bark;
                 // this engine had the `No` on its own row and no blank.
                 ShipBrokerOutcome::Declined => {
-                    let bark =
-                        shop_closing_bark(state, SHOP_DIALOG_ID_SHIPWRIGHT, vendor_name, game_dir);
-                    if bark.is_empty() {
-                        bark
-                    } else {
-                        format!("\n\n{bark}")
-                    }
+                    shop_closing_bark(state, SHOP_DIALOG_ID_SHIPWRIGHT, vendor_name, game_dir)
                 }
                 // `§8.C` "Affordability failure | Record `122`, then
                 // token-expanded `yells $.\n`; suppress ordinary farewell".
@@ -2410,9 +2417,15 @@ fn handle_active_shop_key_input(
                 crate::play_state_impl::shop_vendor_name_for_scene(SHOP_DIALOG_ID_GUILD, scene)
             });
             let message = match outcome {
-                GuildShopOutcome::DeclinedEntry | GuildShopOutcome::LeftMenu => {
+                GuildShopOutcome::DeclinedEntry => {
                     shop_closing_bark(state, SHOP_DIALOG_ID_GUILD, vendor_name, game_dir)
                 }
+                GuildShopOutcome::LeftMenu => shop_closing_bark_after_open_prompt(
+                    state,
+                    SHOP_DIALOG_ID_GUILD,
+                    vendor_name,
+                    game_dir,
+                ),
                 outcome => format_guild_outcome(
                     outcome,
                     vendor_name,
@@ -2511,6 +2524,25 @@ fn handle_active_shop_key_input(
     if arms_row_left_open {
         state.flush_message_slot();
         state.open_message_row();
+    }
+    // Every other kind's quoted key prompts (`shops.md §8.B`/`§8.C`, the
+    // states [`ActiveShopSession::keeps_cursor_inline`] lists) wait the same
+    // way, and their `Yes`/`No`/letter echoes continue the prompt's row. The
+    // flush is verbatim and states nothing, so this caller states the row
+    // the message ended on - open after a closing quote and space, closed
+    // after a line feed - unless the tavern/sage arm already has.
+    else if prompt_row_open.is_none()
+        && !session.is_exited()
+        && session.keeps_cursor_inline()
+        && !state.message.is_empty()
+        && let Some(open) = shop_prompt_row_state(&state.message)
+    {
+        state.flush_message_slot();
+        if open {
+            state.open_message_row();
+        } else {
+            state.close_message_row();
+        }
     }
 
     if let Some(next_session) = replacement_session {
@@ -4932,26 +4964,44 @@ pub(crate) const fn tavern_closing_bark_records(purchase_completed: bool) -> (us
     }
 }
 
-/// `shops.md §8` intro and `§8.A`'s shared closing envelope: an ordinary
-/// visit ending draws one record from the shop kind's nothing-bought row, or
-/// from its purchase-completed row when a purchase completed in this visit,
-/// and wraps it as `\n\n"`, the record, then `says $.\n`. Silent outcomes
-/// do not call this and so take no draw.
-/// The inn's entry `No`/Space exit: [`shop_closing_bark`] inside the shared
-/// closing envelope's leading `\n\n` (`shops.md §8`).
+/// The inn's entry `No`/Space exit: the ordinary farewell, whose envelope
+/// already carries its leading `\n\n` - this used to add a second pair.
 fn inn_entry_closing_bark(
     state: &mut PlayState,
     innkeeper_name: Option<&'static str>,
     game_dir: &Path,
 ) -> String {
-    let bark = shop_closing_bark(state, SHOP_DIALOG_ID_INN, innkeeper_name, game_dir);
-    if bark.is_empty() {
-        bark
-    } else {
-        format!("\n\n{bark}")
-    }
+    shop_closing_bark(state, SHOP_DIALOG_ID_INN, innkeeper_name, game_dir)
 }
 
+/// [`shop_closing_bark`] for an exit key that echoes nothing: the bark
+/// follows the service prompt's own `" ` on a row that prompt left open, so
+/// the row is stated open here rather than read from whatever the last
+/// emission left (the envelope's first feed closes it, the second is the
+/// blank).
+fn shop_closing_bark_after_open_prompt(
+    state: &mut PlayState,
+    dialog_id: u8,
+    vendor_name: Option<&'static str>,
+    game_dir: &Path,
+) -> String {
+    state.flush_message_slot();
+    state.open_message_row();
+    shop_closing_bark(state, dialog_id, vendor_name, game_dir)
+}
+
+/// `shops.md §8` intro and `§8.C`'s "Shared closing envelope": an ordinary
+/// visit ending draws one record from the shop kind's nothing-bought row, or
+/// from its purchase-completed row when a purchase completed in this visit,
+/// and wraps it as `\n\n"`, the record, then `says $.\n`. Silent outcomes
+/// do not call this and so take no draw.
+///
+/// "Both ordinary farewell pools ... use the same sequence: `\n\n\"`, the
+/// selected record ...", for every shop kind. Only the shipwright's and the
+/// arms shop's callers used to supply the `\n\n`, so the guild, herbalist,
+/// healer, inn and stable printed their farewell directly under the row it
+/// followed; the envelope now lives here, once. The arms shop renders its own
+/// bands through the same envelope in its own outcome formatter.
 fn shop_closing_bark(
     state: &mut PlayState,
     dialog_id: u8,
@@ -4967,8 +5017,8 @@ fn shop_closing_bark(
     crate::shoppe_records::shared_shop_bark_record(dialog_id, kind, roll)
         .and_then(|record_id| render_shared_shoppe_flourish(game_dir, record_id))
         .map(|line| match vendor_name {
-            Some(name) => format!("{line}\nsays {name}."),
-            None => line,
+            Some(name) => format!("\n\n{line}\nsays {name}."),
+            None => format!("\n\n{line}"),
         })
         .unwrap_or_default()
 }
