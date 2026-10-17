@@ -5424,9 +5424,10 @@ impl PlayState {
         if applied {
             self.mark_visibility_dirty();
             // `magic.md §8` issue-#225 table: "Invisibility, Sanct Lor |
-            // `Success!\n`; no `Invisibility!` banner" - a fresh trace of the
-            // shared completion, which supersedes the 2026-09-07 capture that
-            // showed nothing (issue #231, still open on the capture side).
+            // `Success!\n`; no `Invisibility!` banner". `§8`'s full-game
+            // captures (2026-10-16, issue #231) settle it: the line prints
+            // after the effect and "stays visible at that input wait"; "only
+            // the order - flash, then `Success!` - is the contract".
             self.message = crate::commands::SPELL_SUCCESS_LINE.to_string();
             MoveOutcome::Cast
         } else {
