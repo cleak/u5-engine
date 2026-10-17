@@ -1230,7 +1230,7 @@ fn play_state_shipwright_purchase_restores_pending_delivery_to_world() {
     );
     assert_eq!(state.active_objects.len(), 2);
     assert_eq!(state.active_objects[1].type_byte, SHIP_PARKED_FIRST);
-    assert_eq!(state.active_objects[1].tile, FIRST_PLAYABLE_FRIGATE_TILE);
+    assert_eq!(state.active_objects[1].tile, SHIP_PARKED_FIRST);
     assert_eq!(
         (state.active_objects[1].x, state.active_objects[1].y),
         (12, 21)
@@ -1263,7 +1263,7 @@ fn horse_purchase_debits_gold_and_places_boardable_horse_object() {
         bought.horse,
         ActiveObject {
             type_byte: HORSE_PARKED_FIRST,
-            tile: FIRST_PLAYABLE_HORSE_TILE,
+            tile: HORSE_PARKED_FIRST,
             x: 9,
             y: 8,
             z: 0,

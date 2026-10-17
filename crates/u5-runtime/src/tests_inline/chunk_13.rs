@@ -16738,7 +16738,9 @@ fn public_ship_marker_parks_as_furled_object_byte() {
     .unwrap();
 
     assert_eq!(parked.type_byte, TRANSPORT_MARKER_SHIP_FURLED_FIRST + 1);
-    assert_eq!(parked.tile, FIRST_PLAYABLE_FRIGATE_TILE + 1);
+    // Byte 1 is the displayed actor byte, not the engine's internal
+    // visual index (playtest E21).
+    assert_eq!(parked.tile, TRANSPORT_MARKER_SHIP_FURLED_FIRST + 1);
     assert_eq!(parked.aux1, 77);
     assert_eq!(parked.aux3, 2);
 }

@@ -3010,7 +3010,7 @@ pub const fn quote_horse_purchase_for_speaker(
 pub const fn horse_purchase_active_object(x: usize, y: usize, z: i8) -> ActiveObject {
     ActiveObject {
         type_byte: HORSE_PARKED_FIRST,
-        tile: FIRST_PLAYABLE_HORSE_TILE,
+        tile: HORSE_PARKED_FIRST,
         x,
         y,
         z,

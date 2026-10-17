@@ -631,7 +631,7 @@ fn exit_ship_fallbacks_save_load_round_trip_vehicle_state() {
 
     let parked_with_one_less_skiff = ActiveObject {
         type_byte: TRANSPORT_MARKER_SHIP_FURLED_FIRST,
-        tile: FIRST_PLAYABLE_FRIGATE_TILE,
+        tile: TRANSPORT_MARKER_SHIP_FURLED_FIRST,
         x: 5,
         y: 5,
         z: WorldPlane::Underworld.save_floor(),
@@ -696,7 +696,7 @@ fn exit_ship_fallbacks_save_load_round_trip_vehicle_state() {
 
     let parked_before_carpet = ActiveObject {
         type_byte: TRANSPORT_MARKER_SHIP_FURLED_FIRST,
-        tile: FIRST_PLAYABLE_FRIGATE_TILE,
+        tile: TRANSPORT_MARKER_SHIP_FURLED_FIRST,
         x: 5,
         y: 5,
         z: WorldPlane::Underworld.save_floor(),

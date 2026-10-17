@@ -1180,23 +1180,20 @@ impl PlayState {
         // skiff aboard, and the party becomes the launched skiff in place.
         if exit_position.is_none() {
             if let TransportState::Ship {
-                type_byte,
-                tile,
                 sails_hoisted: false,
-                hull,
                 skiffs,
+                ..
             } = transport
             {
+                // `vehicles.md §5`: the hull is parked as the furled-frigate
+                // object, drawn by its own object byte.
+                let parked_ship = transport
+                    .parked_object(old_x, old_y, z)
+                    .expect("a ship transport always parks an object");
                 if skiffs > 0 {
                     let parked_with_one_less_skiff = ActiveObject {
-                        type_byte,
-                        tile,
-                        x: old_x,
-                        y: old_y,
-                        z,
-                        phase: STEADY_PHASE,
-                        aux1: hull,
                         aux3: skiffs - 1,
+                        ..parked_ship
                     };
                     if self
                         .allocate_active_object_slot(parked_with_one_less_skiff)
@@ -1223,16 +1220,6 @@ impl PlayState {
                     return Ok(MoveOutcome::ExitedVehicle);
                 }
                 if self.special_items[SPECIAL_ITEM_MAGIC_CARPET_INDEX] > 0 {
-                    let parked_ship = ActiveObject {
-                        type_byte,
-                        tile,
-                        x: old_x,
-                        y: old_y,
-                        z,
-                        phase: STEADY_PHASE,
-                        aux1: hull,
-                        aux3: skiffs,
-                    };
                     if self.allocate_active_object_slot(parked_ship).is_none() {
                         self.message.clear();
                         return Ok(MoveOutcome::Blocked);
