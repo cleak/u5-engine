@@ -770,6 +770,11 @@ fn handle_active_direction_prompt_key_input(
         .active_direction_prompt
         .as_ref()
         .is_some_and(|session| matches!(session.kind, DirectionPromptKind::CombatKlimb { .. }));
+    let dungeon_klimb = matches!(state.area, Area::Dungeon { .. })
+        && state
+            .active_direction_prompt
+            .as_ref()
+            .is_some_and(|session| matches!(session.kind, DirectionPromptKind::Klimb));
     let tile_command = state.active_direction_prompt.as_ref().is_some_and(|session| {
         matches!(
             session.kind,
@@ -803,6 +808,10 @@ fn handle_active_direction_prompt_key_input(
                 let _ = apply_combat_committed_action_maintenance(state, actor_slot);
                 advance_combat_round_after_actor_and_append_message(state, actor_slot);
             }
+        } else if dungeon_klimb {
+            // `dungeon-mode.md §13.1`: the up-or-down answer is a climbing
+            // arm, so the post-action pass reads the landing cell.
+            state.apply_post_turn_effects_after_dungeon_climb(turn_before, game_dir, outcome)?;
         } else {
             state.apply_post_turn_effects_after_outcome(turn_before, game_dir, outcome)?;
         }

@@ -3496,6 +3496,54 @@ impl PlayState {
         }
     }
 
+    /// The post-action pass after a dungeon K-Klimb.
+    ///
+    /// `dungeon-mode.md §13.1`: "A K that applies something - a climb up, a
+    /// climb down, a pit fall ... - reports \"acted\" to the dungeon loop, so
+    /// the turn's post-action pass runs." That pass (`§4` step 6) reads the
+    /// new underfoot cell, so a climb that lands on a fall trap falls and one
+    /// that lands on a room cell enters it (`§8.1`, "Post-action underfoot
+    /// consequences") before the next key is read. The generic
+    /// [`Self::apply_post_turn_effects_after_outcome`] skips every
+    /// transition, which deferred both to the next command (playtest E08).
+    /// A climb that left the level stack is not in the dungeon any more and
+    /// keeps that skip.
+    pub fn apply_post_turn_effects_after_dungeon_climb(
+        &mut self,
+        turn_before: u64,
+        game_dir: &Path,
+        outcome: MoveOutcome,
+    ) -> io::Result<Option<MoveOutcome>> {
+        let level_changed = matches!(
+            outcome,
+            MoveOutcome::Transition(AreaTransition::ChangedDungeonLevel { .. })
+        );
+        if !level_changed || !matches!(self.area, Area::Dungeon { .. }) {
+            return self.apply_post_turn_effects_after_outcome(turn_before, game_dir, outcome);
+        }
+        // The climb word is already on the transcript (`climb_dungeon`), so
+        // it is not a pending result the consequence lines must be joined to.
+        // A pass that adds nothing leaves the word in the slot.
+        let climb_word = (self.message == self.message_flushed).then(|| {
+            (
+                std::mem::take(&mut self.message),
+                std::mem::take(&mut self.message_flushed),
+            )
+        });
+        let mut outcome =
+            self.apply_top_down_post_turn_effects_after_turn(turn_before, game_dir)?;
+        if outcome.is_none() {
+            outcome = self.resolve_current_dungeon_room_trigger(Some(game_dir))?;
+        }
+        if let Some((message, flushed)) = climb_word
+            && self.message.is_empty()
+        {
+            self.message = message;
+            self.message_flushed = flushed;
+        }
+        Ok(outcome)
+    }
+
     pub fn apply_world_post_turn_effects_after_turn(
         &mut self,
         turn_before: u64,
