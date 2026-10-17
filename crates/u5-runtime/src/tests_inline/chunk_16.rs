@@ -105,13 +105,16 @@
     fn idle_tick_marks_visibility_dirty_for_active_object_frame_change() {
         let mut state = world_state(open_world_grid(), 0, 0);
         state.visibility_dirty = false;
+        // Issue #298 Q29: class `0x5C` animates without the eligibility
+        // coin, and script A's first step is f2, so a decision-point slot
+        // deterministically changes frame on this tick.
         state.active_objects.push(ActiveObject {
-            type_byte: 168,
-            tile: 168,
+            type_byte: 0x5c,
+            tile: 0x5c,
             x: 1,
             y: 0,
             z: WorldPlane::Underworld.save_floor(),
-            phase: 0x22,
+            phase: 0x00,
             aux1: 0,
             aux3: 0,
         });
@@ -121,10 +124,10 @@
         let object = state
             .active_objects
             .iter()
-            .find(|object| object.type_byte == 168)
+            .find(|object| object.type_byte == 0x5c)
             .unwrap();
-        assert_eq!(object.phase, 0x21);
-        assert_eq!(object.tile, 169);
+        assert_eq!(object.phase, 0x10);
+        assert_eq!(object.tile, 0x5d);
         assert_eq!(state.turn, 0);
         assert_eq!(state.clock, GameClock::new(12, 0).unwrap());
         assert!(state.visibility_dirty);

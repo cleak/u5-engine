@@ -916,6 +916,127 @@ pub fn beggar_script_next_frame(current_tile: u8, rebase_roll: impl FnOnce() -> 
     }
 }
 
+/// One step of an `active-objects.md §3` per-class animation script (issue
+/// #298 Q29, "The per-class scripts"). The notation is the section's own:
+/// **f*n*** sets the displayed frame to the class base plus *n* minus one,
+/// advances and ends the pass; **p*n*** sets the frame-delay nibble to *n*,
+/// advances and ends the pass; **snap** is the five step; **6-step** the six
+/// step; **restart** and **goto 2** jump and continue.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum AnimationScriptStep {
+    Frame(u8),
+    Pause(u8),
+    Snap,
+    SixStep,
+    Restart,
+    GotoTwo,
+}
+
+use AnimationScriptStep::{Frame, GotoTwo, Pause, Restart, SixStep, Snap};
+
+/// `active-objects.md §3` script table (issue #298 Q29).
+pub const ANIMATION_SCRIPT_A: &[AnimationScriptStep] =
+    &[Frame(2), Frame(3), Frame(4), Snap, Restart];
+pub const ANIMATION_SCRIPT_B: &[AnimationScriptStep] =
+    &[Frame(1), Frame(2), Frame(3), Frame(4), Restart];
+pub const ANIMATION_SCRIPT_C: &[AnimationScriptStep] = &[
+    Frame(1),
+    Frame(2),
+    Frame(3),
+    Frame(4),
+    Frame(3),
+    Frame(4),
+    Frame(1),
+    Frame(2),
+    Restart,
+];
+pub const ANIMATION_SCRIPT_D: &[AnimationScriptStep] =
+    &[Frame(1), Frame(2), Frame(3), Frame(4), Pause(7), Restart];
+pub const ANIMATION_SCRIPT_E: &[AnimationScriptStep] =
+    &[Frame(1), Pause(15), Frame(2), Frame(3), Frame(4), Restart];
+pub const ANIMATION_SCRIPT_F: &[AnimationScriptStep] = &[
+    Frame(2),
+    Pause(4),
+    Frame(3),
+    Pause(4),
+    Frame(4),
+    Pause(4),
+    Snap,
+    Restart,
+];
+pub const ANIMATION_SCRIPT_G: &[AnimationScriptStep] = &[
+    Frame(1),
+    Frame(2),
+    Frame(1),
+    Frame(2),
+    Frame(3),
+    Frame(4),
+    Frame(2),
+    Frame(3),
+    Frame(4),
+    Restart,
+];
+pub const ANIMATION_SCRIPT_H: &[AnimationScriptStep] =
+    &[Frame(2), Frame(3), Frame(4), Frame(3), Frame(2), Snap, Restart];
+pub const ANIMATION_SCRIPT_I: &[AnimationScriptStep] =
+    &[Frame(1), Pause(15), Frame(2), Frame(3), Frame(4), GotoTwo];
+pub const ANIMATION_SCRIPT_J: &[AnimationScriptStep] = &[
+    Frame(2),
+    Pause(2),
+    Frame(3),
+    Pause(2),
+    Frame(4),
+    Pause(2),
+    SixStep,
+    Frame(1),
+    Restart,
+];
+pub const ANIMATION_SCRIPT_K: &[AnimationScriptStep] =
+    &[Frame(1), Frame(2), Frame(3), Snap, Restart];
+
+/// `active-objects.md §3` (issue #298 Q29): "for every class but `0x5C` the
+/// delay is set to six" on an accepted snap.
+pub const ANIMATION_SNAP_HOLD_TICKS: u8 = 6;
+/// The class whose accepted snap advances instead of pausing, and one of the
+/// two that skip the eligibility coin.
+pub const ANIMATION_SNAP_ADVANCING_CLASS: u8 = 0x5C;
+/// The mimic: the other class that skips the eligibility coin.
+pub const ANIMATION_MIMIC_CLASS: u8 = 0xA8;
+/// "Classes below `0x34` ... never reach a script."
+pub const ANIMATION_SCRIPT_CLASS_FIRST: u8 = 0x34;
+
+/// `active-objects.md §3` (issue #298 Q29): the script a type byte selects
+/// through its class (the type byte with its low two bits cleared), or `None`
+/// for "Classes below `0x34`, the field band `0xE8` and the regalia band
+/// `0xB4`", which "never reach a script". Script A is "the default for every
+/// animated class not listed in another row".
+pub const fn active_object_animation_script(type_byte: u8) -> Option<&'static [AnimationScriptStep]> {
+    let class = type_byte & 0xfc;
+    if class < ANIMATION_SCRIPT_CLASS_FIRST || class == 0xe8 || class == 0xb4 {
+        return None;
+    }
+    Some(match class {
+        0x94 | 0x9c | 0xa0 | 0xc0 | 0xc8 | 0xd0 | 0xd8 => ANIMATION_SCRIPT_B,
+        0xf0 => ANIMATION_SCRIPT_C,
+        0xb0 => ANIMATION_SCRIPT_D,
+        0xa8 => ANIMATION_SCRIPT_E,
+        0x70 => ANIMATION_SCRIPT_F,
+        0x98 => ANIMATION_SCRIPT_G,
+        0xdc | 0xe4 => ANIMATION_SCRIPT_H,
+        0xf4 => ANIMATION_SCRIPT_I,
+        0x8c => ANIMATION_SCRIPT_J,
+        0xb8 => ANIMATION_SCRIPT_K,
+        _ => ANIMATION_SCRIPT_A,
+    })
+}
+
+/// `active-objects.md §3` (issue #298 Q29): "The two classes that animate
+/// unconditionally, skipping the eligibility coin, are `0x5C` and the mimic
+/// `0xA8`".
+pub const fn active_object_animates_unconditionally(type_byte: u8) -> bool {
+    matches!(type_byte & 0xfc, ANIMATION_SNAP_ADVANCING_CLASS | ANIMATION_MIMIC_CLASS)
+}
+
 pub fn is_ambient_wanderer_object(object: ActiveObject) -> bool {
     (192..=255).contains(&object.type_byte) || (192..=255).contains(&object.tile)
 }

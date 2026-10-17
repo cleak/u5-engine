@@ -7017,8 +7017,10 @@ fn active_object_phase_respects_steady_countdown_and_decision() {
     assert_eq!(decision.phase, 0x20);
 }
 
+/// Issue #298 Q29: the displayed frame is written only by the animator's
+/// script steps; the outdoor walker's countdown leaves it alone.
 #[test]
-fn active_object_countdown_updates_vehicle_frame_tile() {
+fn active_object_walker_countdown_leaves_the_frame_to_the_animator() {
     let mut state = world_state(open_world_grid(), 0, 0);
     state.active_objects.push(ActiveObject {
         type_byte: 168,
@@ -7041,11 +7043,13 @@ fn active_object_countdown_updates_vehicle_frame_tile() {
         .find(|object| object.type_byte == 168)
         .unwrap();
     assert_eq!(object.phase, 0x21);
-    assert_eq!(object.tile, 169);
+    assert_eq!(object.tile, 168);
 }
 
+/// Issue #298 Q29: the walker no longer re-derives the frame from byte 6,
+/// whose high nibble is the script position, not a frame selector.
 #[test]
-fn active_object_decision_point_returns_to_base_frame_tile() {
+fn active_object_walker_decision_point_leaves_the_frame_to_the_animator() {
     let mut state = world_state(open_world_grid(), 0, 0);
     state.active_objects.push(ActiveObject {
         type_byte: 168,
@@ -7068,7 +7072,7 @@ fn active_object_decision_point_returns_to_base_frame_tile() {
         .find(|object| object.type_byte == 168)
         .unwrap();
     assert_eq!(object.phase, 0x20);
-    assert_eq!(object.tile, 168);
+    assert_eq!(object.tile, 171);
 }
 
 #[test]

@@ -286,7 +286,9 @@
         assert_eq!(unprompted.turn, 0);
         assert_eq!(unprompted.animation.frame, 1);
         assert_eq!(unprompted.active_objects[1].phase, 0x21);
-        assert_eq!(unprompted.active_objects[1].tile, 169);
+        // Issue #298 Q29: a countdown pass decrements the delay and leaves the
+        // displayed frame alone ("the frame is unchanged").
+        assert_eq!(unprompted.active_objects[1].tile, 168);
         assert!(unprompted.message.is_empty());
     }
 

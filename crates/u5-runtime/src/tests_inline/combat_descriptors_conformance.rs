@@ -954,9 +954,11 @@
             !transcript.contains("killed!"),
             "transcript was {transcript:?}"
         );
-        // The later dispatch's own line is unaffected.
+        // The later dispatch's own line is unaffected. Its damage wording
+        // follows the shared stream, which the animator's script draws
+        // (issue #298 Q29) also advance, so either strike line counts.
         assert!(
-            state.message.contains("hit!"),
+            state.message.contains("hit!") || state.message.contains("grazed!"),
             "message was {:?}",
             state.message
         );

@@ -949,7 +949,9 @@
             (3, 1)
         );
         assert_eq!(state.active_objects[2].phase, 0x21);
-        assert_eq!(state.active_objects[2].tile, 169);
+        // Issue #298 Q29: a countdown pass decrements the delay and leaves the
+        // displayed frame alone ("the frame is unchanged").
+        assert_eq!(state.active_objects[2].tile, 168);
     }
 
     #[test]

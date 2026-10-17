@@ -61,7 +61,9 @@ fn idle_tick_advances_visuals_without_turn_time_doors_or_schedules() {
         .find(|object| object.type_byte == 168)
         .unwrap();
     assert_eq!(object.phase, 0x21);
-    assert_eq!(object.tile, 169);
+    // Issue #298 Q29: a countdown pass decrements the delay and leaves the
+    // displayed frame alone ("the frame is unchanged").
+    assert_eq!(object.tile, 168);
 }
 
 /// Drive idle ticks until the `weather.md §2` 1-in-64 selector fires,

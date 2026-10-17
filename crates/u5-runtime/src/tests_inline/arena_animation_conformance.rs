@@ -104,6 +104,122 @@ mod arena_animation_conformance {
         );
     }
 
+    /// Issue #298 Q29 / `RETRACTIONS.md` R535: the eleven per-class scripts
+    /// of `active-objects.md §3`, their class map and the excluded bands.
+    #[test]
+    fn the_per_class_script_table_is_the_published_one() {
+        use AnimationScriptStep::*;
+        for class in [0x94u8, 0x9c, 0xa0, 0xc0, 0xc8, 0xd0, 0xd8] {
+            assert_eq!(active_object_animation_script(class), Some(ANIMATION_SCRIPT_B));
+            assert_eq!(active_object_animation_script(class | 3), Some(ANIMATION_SCRIPT_B));
+        }
+        assert_eq!(active_object_animation_script(0xf0), Some(ANIMATION_SCRIPT_C));
+        assert_eq!(active_object_animation_script(0xb0), Some(ANIMATION_SCRIPT_D));
+        assert_eq!(active_object_animation_script(0xa8), Some(ANIMATION_SCRIPT_E));
+        assert_eq!(active_object_animation_script(0x70), Some(ANIMATION_SCRIPT_F));
+        assert_eq!(active_object_animation_script(0x98), Some(ANIMATION_SCRIPT_G));
+        assert_eq!(active_object_animation_script(0xdc), Some(ANIMATION_SCRIPT_H));
+        assert_eq!(active_object_animation_script(0xe4), Some(ANIMATION_SCRIPT_H));
+        assert_eq!(active_object_animation_script(0xf4), Some(ANIMATION_SCRIPT_I));
+        assert_eq!(active_object_animation_script(0x8c), Some(ANIMATION_SCRIPT_J));
+        assert_eq!(active_object_animation_script(0xb8), Some(ANIMATION_SCRIPT_K));
+        for class in [0x34u8, 0x40, 0x5c, 0x6c, 0x78, 0x80, 0xec, 0xfc] {
+            assert_eq!(active_object_animation_script(class), Some(ANIMATION_SCRIPT_A));
+        }
+        for class in [0x00u8, 0x2c, 0x30, 0x33, 0xb4, 0xb7, 0xe8, 0xeb] {
+            assert_eq!(active_object_animation_script(class), None, "{class:#x}");
+        }
+        assert_eq!(ANIMATION_SCRIPT_A, &[Frame(2), Frame(3), Frame(4), Snap, Restart]);
+        assert_eq!(
+            ANIMATION_SCRIPT_J,
+            &[Frame(2), Pause(2), Frame(3), Pause(2), Frame(4), Pause(2), SixStep, Frame(1), Restart]
+        );
+        assert_eq!(ANIMATION_SCRIPT_I.last(), Some(&GotoTwo));
+        assert!(active_object_animates_unconditionally(0x5c));
+        assert!(active_object_animates_unconditionally(0xa9));
+        assert!(!active_object_animates_unconditionally(0x94));
+    }
+
+    /// Issue #298 Q29: "The mimic and the corpser show frame 1 and then
+    /// freeze on their p15 step"; p15 "is the freeze sentinel". The mimic
+    /// takes no coin, so the run is deterministic and draw-free.
+    #[test]
+    fn the_mimic_shows_frame_one_then_freezes_without_drawing() {
+        let mut state = arena_animation_state(&[(4, arena_record(0xa8, 3, 2, 0))]);
+        state.active_objects[4].tile = 0xab;
+        let seed = state.prng_state;
+        state.animate_active_objects();
+        assert_eq!(state.active_objects[4].tile, 0xa8, "f1");
+        assert_eq!(state.active_objects[4].phase, 0x10);
+        state.animate_active_objects();
+        assert_eq!(state.active_objects[4].phase, 0x20 | STEADY_PHASE, "p15 freezes");
+        for _ in 0..20 {
+            state.animate_active_objects();
+        }
+        assert_eq!(state.active_objects[4].tile, 0xa8);
+        assert_eq!(state.active_objects[4].phase, 0x20 | STEADY_PHASE);
+        assert_eq!(state.prng_state, seed, "the mimic is exempt from the coin");
+    }
+
+    /// Issue #298 Q29: "p*n* - set the frame-delay nibble to *n* ... The next
+    /// *n* passes only decrement the delay" (the gazer's p7, R535's "value
+    /// less 128", not "less eight"); a restart continues in the same pass.
+    #[test]
+    fn a_pause_step_holds_the_frame_for_its_delay_and_restart_continues() {
+        // The gazer runs script D (f1 f2 f3 f4 p7 restart); position 4 is
+        // its p7. Pin the eligibility coin high by searching seeds.
+        let mut state = arena_animation_state(&[(4, arena_record(0xb0, 3, 2, 0x40))]);
+        state.active_objects[4].tile = 0xb3;
+        state.prng_state = (1u16..)
+            .find(|seed| {
+                let mut probe = *seed;
+                u5_prng_range_u16(&mut probe, 0, 255) >= 128
+            })
+            .unwrap();
+        state.animate_active_objects();
+        assert_eq!(state.active_objects[4].phase, 0x57, "p7 sets the delay to 7");
+        assert_eq!(state.active_objects[4].tile, 0xb3, "the frame is unchanged");
+        for remaining in (0..7u8).rev() {
+            state.animate_active_objects();
+            assert_eq!(state.active_objects[4].phase, 0x50 | remaining);
+            assert_eq!(state.active_objects[4].tile, 0xb3);
+        }
+    }
+
+    /// Issue #298 Q29: for class `0x5C` an accepted snap sets the frame to
+    /// the type byte and "the position advances instead of pausing"; for
+    /// every other class "the delay is set to six and the position is held".
+    #[test]
+    fn an_accepted_snap_holds_six_ticks_except_for_class_0x5c() {
+        let accepted = (1u16..)
+            .find(|seed| {
+                let mut probe = *seed;
+                u5_prng_range_u16(&mut probe, 0, 255) % 4 == 0
+            })
+            .unwrap();
+        let mut state = arena_animation_state(&[(4, arena_record(0x5c, 3, 2, 0x30))]);
+        state.active_objects[4].tile = 0x5f;
+        state.prng_state = accepted;
+        state.animate_active_objects();
+        assert_eq!(state.active_objects[4].tile, 0x5c);
+        assert_eq!(state.active_objects[4].phase, 0x40);
+
+        // A coin-gated class: one coin draw, then the snap draw.
+        let seed = (1u16..)
+            .find(|seed| {
+                let mut probe = *seed;
+                u5_prng_range_u16(&mut probe, 0, 255) >= 128
+                    && u5_prng_range_u16(&mut probe, 0, 255) % 4 == 0
+            })
+            .unwrap();
+        let mut state = arena_animation_state(&[(4, arena_record(0x50, 3, 2, 0x30))]);
+        state.active_objects[4].tile = 0x53;
+        state.prng_state = seed;
+        state.animate_active_objects();
+        assert_eq!(state.active_objects[4].tile, 0x50);
+        assert_eq!(state.active_objects[4].phase, 0x30 | ANIMATION_SNAP_HOLD_TICKS);
+    }
+
     fn arena_animation_state(records: &[(usize, ActiveObject)]) -> PlayState {
         let mut state = world_state(open_world_grid(), 10, 20);
         state.combat_active = true;
@@ -141,28 +257,29 @@ mod arena_animation_conformance {
     /// stream shift.
     #[test]
     fn a_decision_point_slot_advances_its_frame_only_on_the_coin() {
-        // Find one seed whose next draw is the advancing outcome and one whose
-        // next draw is not, so both arms are exercised against the real
-        // generator rather than a stub.
+        // Issue #298 Q29: the coin "is an inclusive `0..255` draw accepted
+        // at 128 or above". Find one seed on each side of it.
         let mut heads = None;
         let mut tails = None;
         for seed in 1u16..512 {
             let mut probe = seed;
-            let flip = u5_prng_range_u16(&mut probe, 0, 1);
-            if flip == 1 && heads.is_none() {
+            let draw = u5_prng_range_u16(&mut probe, 0, 255);
+            if draw >= 128 && heads.is_none() {
                 heads = Some(seed);
             }
-            if flip == 0 && tails.is_none() {
+            if draw < 128 && tails.is_none() {
                 tails = Some(seed);
             }
         }
-        let heads = heads.expect("some seed flips heads");
-        let tails = tails.expect("some seed flips tails");
+        let heads = heads.expect("some seed draws high");
+        let tails = tails.expect("some seed draws low");
 
-        for (seed, expected_tile, expected_dirty) in
-            [(heads, 0x95u8, true), (tails, 0x94u8, false)]
+        // The bat (`0x94`) runs script B, f1 f2 f3 f4 restart; at position
+        // 1 the next step is f2.
+        for (seed, expected_tile, expected_phase, expected_dirty) in
+            [(heads, 0x95u8, 0x20u8, true), (tails, 0x94u8, 0x10u8, false)]
         {
-            let mut state = arena_animation_state(&[(4, arena_record(0x94, 3, 2, 0))]);
+            let mut state = arena_animation_state(&[(4, arena_record(0x94, 3, 2, 0x10))]);
             state.prng_state = seed;
             state.visibility_dirty = false;
 
@@ -170,21 +287,15 @@ mod arena_animation_conformance {
 
             assert_eq!(state.active_objects[4].tile, expected_tile);
             assert_eq!(state.visibility_dirty, expected_dirty);
-            // Exactly one draw, whichever way the coin fell.
+            // Exactly one draw, whichever way the coin fell: a frame step
+            // takes none of its own.
             assert_eq!(state.prng_state, u5_prng_advance_state(seed));
             // The animator never writes a coordinate: `animation.md §5`
             // R316, "**It cannot change the slot's map position.**"
             assert_eq!((state.active_objects[4].x, state.active_objects[4].y), (3, 2));
-            // Byte 6 is left alone. **This pins an inference, not the spec.**
-            // `active-objects.md §3` gate 3 says the decision point "**may**
-            // advance the script step and rewrite the byte" and
-            // `animation.md §5` says it "**can** reseed the phase counter";
-            // neither says when, and this engine never does. The consequence
-            // is that a placed combat record sits at a decision point for the
-            // whole fight, which is what sets the measured cadence. If the
-            // spec later fixes a reseed rule, this assertion is the thing
-            // that has to change.
-            assert_eq!(state.active_objects[4].phase, 0);
+            // Byte 6's high nibble is the script position, advanced by the
+            // frame step that ends the pass.
+            assert_eq!(state.active_objects[4].phase, expected_phase);
         }
     }
 
