@@ -68,3 +68,36 @@ fn playtest_e08_klimb_onto_a_room_cell_enters_it_at_once() {
     assert_eq!(two_way.message, DUNGEON_ROOM_ENTRY_NARRATION);
     assert_eq!(two_way.dungeon_cell(1, 1, 1), 0xA2, "the room helper ran");
 }
+
+/// E09: `dungeon-mode.md §13.1` - "Up or Down spell, destination refused |
+/// the climb word (already printed), then `Failed!`", and an ordinary level
+/// change prints "the same `Up!` or `Down!`, and only that". The word is
+/// printed once by the shared apply routine.
+#[test]
+fn playtest_e09_level_change_spell_prints_the_climb_word_once() {
+    let scene = DungeonScene::new(33).unwrap();
+    let mut grid = open_dungeon_record();
+    grid[dungeon_cell_index(1, 1, 1)] = 0xC0;
+    let mut refused = dungeon_state(grid, 0, 1, 1);
+    arm_spell(&mut refused, DES_POR_SPELL_INDEX);
+    handle_play_key_input(&mut refused, 'C', "1DP", Path::new("")).unwrap();
+    assert_eq!(refused.area, Area::Dungeon { scene, level: 0 });
+    let rows = playtest_transcript_rows(&refused);
+    let down = rows
+        .iter()
+        .position(|row| row == "Down!")
+        .expect("climb word");
+    assert_eq!(rows[down..], ["Down!", "Failed!"], "{rows:?}");
+
+    let mut accepted = dungeon_state(open_dungeon_record(), 0, 1, 1);
+    arm_spell(&mut accepted, DES_POR_SPELL_INDEX);
+    handle_play_key_input(&mut accepted, 'C', "1DP", Path::new("")).unwrap();
+    assert_eq!(accepted.area, Area::Dungeon { scene, level: 1 });
+    let rows = playtest_transcript_rows(&accepted);
+    assert_eq!(
+        rows.iter().filter(|row| *row == "Down!").count(),
+        1,
+        "{rows:?}"
+    );
+    assert!(!accepted.message_slot_needs_flush());
+}

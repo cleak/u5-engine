@@ -191,10 +191,22 @@
         assert_eq!(state.clock, GameClock::new(12, 1).unwrap());
         // `dungeon-mode.md §13.1`: "Any route that leaves the level stack |
         // the climb word, then the shared exit line of Section 13.2".
+        // The word is printed once (playtest E09), and the exit line beneath.
+        let rows: Vec<&str> = state
+            .message_transcript
+            .iter()
+            .map(|entry| entry.text.as_str())
+            .collect();
+        let word = rows
+            .iter()
+            .position(|row| *row == DUNGEON_KLIMB_DOWN.trim_end())
+            .expect("the climb word prints");
         assert_eq!(
-            state.message,
-            format!("{DUNGEON_KLIMB_DOWN}{DUNGEON_EXIT_TO_UNDERWORLD_NARRATION}")
+            rows[word..].join("\n").trim_end(),
+            format!("{DUNGEON_KLIMB_DOWN}{DUNGEON_EXIT_TO_UNDERWORLD_NARRATION}").trim_end(),
+            "{rows:?}"
         );
+        assert!(!state.message_slot_needs_flush());
         let _ = fs::remove_dir_all(dir);
     }
 
@@ -228,7 +240,14 @@
             assert_eq!(state.turn, 1);
             // "the climb word (already printed), then `Failed!\n` with the
             // error tone".
-            assert_eq!(state.message, format!("{DUNGEON_KLIMB_UP}Failed!"));
+            // Printed once (playtest E09).
+            let rows: Vec<&str> = state
+                .message_transcript
+                .iter()
+                .map(|entry| entry.text.as_str())
+                .collect();
+            assert_eq!(rows[rows.len() - 2..], ["Up!", "Failed!"], "{rows:?}");
+            assert_eq!(state.message, "Failed!");
         }
     }
 

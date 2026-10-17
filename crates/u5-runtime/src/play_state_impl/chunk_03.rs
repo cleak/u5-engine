@@ -6202,15 +6202,16 @@ impl PlayState {
         } else {
             DUNGEON_KLIMB_DOWN
         };
-        self.message = climb_word.to_string();
+        // Printed once, here: both later arms add their own line beneath it
+        // rather than re-printing it (playtest E09, where the slot copy was
+        // flushed and then prefixed again, doubling the word).
+        self.emit_message_line(climb_word);
 
         let next_level = level as i8 + delta;
         if !(0..=7).contains(&next_level) {
             // "Any route that leaves the level stack | the climb word, then
             // the shared exit line of Section 13.2".
-            let outcome = self.resolve_dungeon_surface_reset(game_dir, scene, level)?;
-            self.message.insert_str(0, climb_word);
-            return Ok(outcome);
+            return self.resolve_dungeon_surface_reset(game_dir, scene, level);
         }
 
         let next_level = next_level as u8;
@@ -6220,7 +6221,6 @@ impl PlayState {
             // error tone".
             self.advance_turn();
             self.fail_committed_spell_cast();
-            self.message.insert_str(0, climb_word);
             return Ok(MoveOutcome::Blocked);
         }
         self.area = Area::Dungeon {
