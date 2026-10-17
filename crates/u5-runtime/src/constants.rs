@@ -378,20 +378,6 @@ pub const PLAYER_ACTIVE_OBJECT_PHASE: u8 = 0x00;
 /// [`STEADY_PHASE`] here instead freezes every arena sprite for the whole
 /// fight, which is exactly what the pre-fix engine did.
 pub const COMBAT_PLACEMENT_ACTIVE_OBJECT_PHASE: u8 = 0x00;
-/// `systems/weather.md §7`: "The cadence counter is stored per
-/// active-object slot ... The cadence counter is persisted with the
-/// object, so it survives save and reload."
-///
-/// `formats/saved-gam.md §8.1` gives active-object byte `+6` as the
-/// "Animation phase / direction-step counter; compositor reads it for
-/// water creatures", which is this engine's `phase`. Its high nibble
-/// carries the frame heading and bits `0..1` select the drawn frame
-/// (see [`crate::active_object_frame_tile`]), so the wind cadence count
-/// takes bits `2..3` — two bits, which is exactly the `0..3` range the
-/// published `2 of 3` and `3 of 4` cycles need.
-pub const ACTIVE_SHIP_CADENCE_PHASE_SHIFT: u8 = 2;
-/// See [`ACTIVE_SHIP_CADENCE_PHASE_SHIFT`].
-pub const ACTIVE_SHIP_CADENCE_PHASE_MASK: u8 = 0b0000_1100;
 /// `systems/chargen.md §6` / `systems/save-load.md`: the canonical
 /// campaign start date. The year/month/day match the chargen
 /// starting date documented in chargen.md; the start hour is

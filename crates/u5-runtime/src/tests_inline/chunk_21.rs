@@ -7073,11 +7073,13 @@ fn active_object_decision_point_returns_to_base_frame_tile() {
 
 #[test]
 fn active_ship_drifts_with_matching_wind() {
-    let mut state = world_state(vec![1; WORLD_CELLS], 10, 10);
+    // Issue #298 Q32: the wind-driven family is `0x2C..0x2F`, `0x2D` is the
+    // east frame, and the cadence counter is record byte 7.
+    let mut state = world_state(vec![1; WORLD_CELLS], 10, 5);
     state.wind = WindState::East;
     state.active_objects.push(ActiveObject {
-        type_byte: 168,
-        tile: 168,
+        type_byte: 0x2d,
+        tile: 0x2d,
         x: 5,
         y: 5,
         z: WorldPlane::Underworld.save_floor(),
@@ -7093,16 +7095,15 @@ fn active_ship_drifts_with_matching_wind() {
     let object = state
         .active_objects
         .iter()
-        .find(|object| object.type_byte == 168)
+        .find(|object| object.type_byte == 0x2d)
         .unwrap();
     assert_eq!((object.x, object.y), (6, 5));
     // `weather.md §7`: an east frame in an east wind faces the wind
     // source, so it runs the 2-of-3 cadence. The move spends one of
-    // the two, and the per-slot counter records that in phase bits
-    // 2..3. The heading nibble and the frame-select bits 0..1 - and
-    // so the drawn tile - are untouched.
-    assert_eq!(object.phase, 0x24);
-    assert_eq!(object.tile, 168);
+    // the two, recorded in byte 7; byte 6 plays no part.
+    assert_eq!(object.aux3, 1);
+    assert_eq!(object.phase, 0x20);
+    assert_eq!(object.tile, 0x2d);
 }
 
 #[test]
@@ -7133,8 +7134,8 @@ fn active_ship_stalls_without_wind() {
 #[test]
 /// `weather.md §7`: a west frame in an east wind faces away from the
 /// wind source, so it runs the 3-of-4 cadence - "moves on three
-/// eligible passes, then resets and skips one". The counter is the
-/// low nibble of the slot's own phase byte.
+/// eligible passes, then resets and skips one". The counter is record
+/// byte 7 and the west frame is `0x2F` (issue #298 Q32).
 ///
 /// This replaced an earlier pin on a one-turn phase countdown that
 /// let the same frame move only every other turn.
@@ -7142,8 +7143,8 @@ fn active_ship_away_from_wind_uses_three_of_four_cadence() {
     let mut state = world_state(vec![1; WORLD_CELLS], 10, 10);
     state.wind = WindState::East;
     state.active_objects.push(ActiveObject {
-        type_byte: 168,
-        tile: 168,
+        type_byte: 0x2f,
+        tile: 0x2f,
         x: 20,
         y: 10,
         z: WorldPlane::Underworld.save_floor(),
@@ -7158,7 +7159,7 @@ fn active_ship_away_from_wind_uses_three_of_four_cadence() {
             let object = state
                 .active_objects
                 .iter()
-                .find(|object| object.type_byte == 168)
+                .find(|object| object.type_byte == 0x2f)
                 .unwrap();
             (object.x, object.y)
         };
@@ -7167,7 +7168,7 @@ fn active_ship_away_from_wind_uses_three_of_four_cadence() {
         let object = state
             .active_objects
             .iter()
-            .find(|object| object.type_byte == 168)
+            .find(|object| object.type_byte == 0x2f)
             .unwrap();
         moved.push((object.x, object.y) != before);
     }

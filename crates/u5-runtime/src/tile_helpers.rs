@@ -920,8 +920,12 @@ pub fn is_ambient_wanderer_object(object: ActiveObject) -> bool {
     (192..=255).contains(&object.type_byte) || (192..=255).contains(&object.tile)
 }
 
+/// `weather.md §7` / `active-objects.md §8` (issue #298 Q32): the wind-driven
+/// ship family is the pirate-ship frames `0x2C..0x2F`, selected by the type
+/// byte. The earlier `0xA8..0xAF` band (the mimic and reaper sprite runs) was
+/// never a ship family.
 pub fn is_ship_object(object: ActiveObject) -> bool {
-    (168..=175).contains(&object.type_byte) || (168..=175).contains(&object.tile)
+    (0x2c..=0x2f).contains(&object.type_byte)
 }
 
 pub fn is_whirlpool_object(object: ActiveObject) -> bool {

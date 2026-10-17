@@ -4777,13 +4777,9 @@ impl PlayState {
             let movement_allowed = reaction_count == 0;
             let ship_wind =
                 if movement_allowed && self.slot_is_wind_driven_ship(slot, phase_before_tick) {
-                    // `weather.md §7`: see `animate_active_objects` — the cadence
-                    // counter lives in the slot and is not the shared countdown.
-                    self.active_objects[slot].phase = merge_active_ship_cadence_phase(
-                        self.active_objects[slot].phase,
-                        phase_before_tick,
-                    );
-                    self.try_drift_active_ship(slot)
+                    // `weather.md §7` (issue #298 Q32): the cadence counter is
+                    // record byte 7, not the shared phase countdown.
+                    self.try_drift_active_ship(slot, &mut last_vacated)
                 } else {
                     ActiveShipWind::None
                 };
@@ -5424,13 +5420,14 @@ impl PlayState {
         self.emit_message_line(line);
     }
 
-    /// `weather.md §7`: is this slot one of the wind-driven "ship-like
-    /// water-creature class" records the overworld per-slot movement
-    /// dispatch applies prevailing wind to?
+    /// `weather.md §7`: is this slot one of the wind-driven ship-family
+    /// records the overworld per-slot movement dispatch applies prevailing
+    /// wind to? Issue #298 Q32: the family is the pirate-ship frames
+    /// `0x2C..0x2F` ([`is_ship_object`]), and "the row is selected by the
+    /// type byte (record byte 0), not by the displayed-tile byte".
     ///
-    /// `phase_before_tick` is the slot's phase byte as it stood before
-    /// the shared animation countdown ran this turn; see
-    /// [`merge_active_ship_cadence_phase`].
+    /// `phase_before_tick` is the slot's phase byte as it stood before the
+    /// walker's countdown read; a steady-marked slot is not walked at all.
     pub fn slot_is_wind_driven_ship(&self, slot: usize, phase_before_tick: u8) -> bool {
         let Area::World { plane } = self.area else {
             return false;
@@ -5441,43 +5438,41 @@ impl PlayState {
         object.z == plane.save_floor()
             && is_ship_object(object)
             // `STEADY_PHASE` is this engine's "slot does not animate"
-            // marker (see `ActiveObject::tick_phase`), which is what a
-            // parked vehicle object carries. Weather drives *active*
-            // ship-like slots; a steady slot is not one, and
-            // `merge_active_ship_cadence_phase` guarantees the cadence
-            // encoding never produces that value.
+            // marker (see `ActiveObject::tick_phase`); the walker skips such
+            // slots for every class.
             && (phase_before_tick & 0x0f) != STEADY_PHASE
-            && cardinal_direction_from_active_object_phase(phase_before_tick).is_some()
     }
 
-    /// `weather.md §7` Active Ships.
+    /// `weather.md §7` Active Ships, with the issue #298 Q32 additions.
     ///
-    /// "Calm wind suppresses this movement. For non-calm wind, the object
-    /// uses its current frame and the prevailing wind to select a cadence
-    /// cap" — perpendicular frames move every turn, a frame facing the
-    /// wind source moves 2 of 3 turns, a frame facing away moves 3 of 4.
-    /// [`WindState::active_ship_cadence`] owns that table.
+    /// "The four frames are the ship family's four headings, in the frigate
+    /// convention: the low two bits of the type byte are `0` north (`0x2C`),
+    /// `1` east (`0x2D`), `2` south (`0x2E`), `3` west (`0x2F`)." The heading
+    /// and the prevailing wind select the cadence cap from
+    /// [`WindState::active_ship_cadence`].
     ///
-    /// "The cadence counter is stored per active-object slot. A '2 of 3'
-    /// entry means the slot moves on two eligible passes, then resets and
-    /// skips one. A '3 of 4' entry moves on three eligible passes, then
-    /// resets and skips one. The cadence counter is persisted with the
-    /// object, so it survives save and reload. 'Every turn' bypasses the
-    /// counter and immediately allows the slot's movement helper to run."
+    /// "The cadence counter is the whole of active-object record byte 7, read
+    /// as one unsigned byte", and each pass runs in this order:
     ///
-    /// The counter lives in bits `2..3` of the object's phase byte —
-    /// `formats/saved-gam.md §8.1` byte `+6`, the "animation phase /
-    /// direction-step counter ... compositor reads it for water
-    /// creatures" — whose high nibble carries the frame heading and
-    /// whose bits `0..1` select the drawn frame. See
-    /// [`ACTIVE_SHIP_CADENCE_PHASE_MASK`]. The callers hand this
-    /// function the pre-tick phase so the shared animation countdown
-    /// cannot decrement the cadence count.
+    /// 1. "Calm wind: no move, and the counter is not touched."
+    /// 2. "An 'every turn' entry: the slot moves, and the counter is not
+    ///    touched."
+    /// 3. "Any other entry: the counter is incremented first, with byte wrap
+    ///    (255 becomes 0). If the new value is no greater than the cap (2 for
+    ///    '2 of 3', 3 for '3 of 4') the slot moves; otherwise the counter is
+    ///    set to zero and the slot does not move on that pass."
     ///
-    /// This replaces an ad-hoc heading-versus-wind test that stalled every
-    /// perpendicular frame forever, which is the opposite of the table's
-    /// "every turn" row.
-    pub fn try_drift_active_ship(&mut self, slot: usize) -> ActiveShipWind {
+    /// Once the cadence permits movement, `active-objects.md §8`: "they use
+    /// the same directed step planner as land monsters. On this dispatch,
+    /// each committed step rewrites the ship's type and displayed-tile bytes
+    /// to the step's heading". This replaces a drift along the frame heading
+    /// that was not published. The heading rewrite itself is the step
+    /// committer's ([`Self::try_step_outdoor_active_object`]).
+    pub fn try_drift_active_ship(
+        &mut self,
+        slot: usize,
+        last_vacated: &mut Option<(usize, usize)>,
+    ) -> ActiveShipWind {
         let Area::World { plane } = self.area else {
             return ActiveShipWind::None;
         };
@@ -5485,9 +5480,7 @@ impl PlayState {
         if object.z != plane.save_floor() || !is_ship_object(object) {
             return ActiveShipWind::None;
         }
-        let Some(heading) = cardinal_direction_from_active_object_phase(object.phase) else {
-            return ActiveShipWind::None;
-        };
+        let heading = active_ship_frame_heading(object.type_byte);
         // Calm returns `None` from the cadence table as well, but keep the
         // explicit wind read so a calm slot reports `Stalled` rather than
         // "not a ship".
@@ -5499,63 +5492,22 @@ impl PlayState {
             return ActiveShipWind::Stalled;
         };
 
-        let counter =
-            (object.phase & ACTIVE_SHIP_CADENCE_PHASE_MASK) >> ACTIVE_SHIP_CADENCE_PHASE_SHIFT;
-        let moves_per_cycle = cadence.0;
         if cadence != ACTIVE_SHIP_CADENCE_EVERY_TURN {
-            let next = if counter >= moves_per_cycle {
-                // The cycle's moves are spent: skip this pass and reset.
-                0
-            } else {
-                counter + 1
-            };
-            self.active_objects[slot].phase = (object.phase & !ACTIVE_SHIP_CADENCE_PHASE_MASK)
-                | (next << ACTIVE_SHIP_CADENCE_PHASE_SHIFT);
-            if counter >= moves_per_cycle {
+            let cap = cadence.0;
+            let counter = object.aux3.wrapping_add(1);
+            if counter > cap {
+                self.active_objects[slot].aux3 = 0;
                 return ActiveShipWind::Stalled;
             }
+            self.active_objects[slot].aux3 = counter;
         }
 
-        let (dx, dy) = heading.delta();
-        let nx = (object.x as isize + dx).rem_euclid(WORLD_SIDE as isize) as usize;
-        let ny = (object.y as isize + dy).rem_euclid(WORLD_SIDE as isize) as usize;
-        if (nx, ny) == (self.player.x, self.player.y) {
-            return ActiveShipWind::Stalled;
+        // The step committer owns the heading rewrite of both tile bytes.
+        if self.try_wander_active_object_with_last_vacated(slot, last_vacated) {
+            ActiveShipWind::Drifted
+        } else {
+            ActiveShipWind::Stalled
         }
-        if self
-            .active_objects
-            .iter()
-            .enumerate()
-            .any(|(other_slot, other)| {
-                other_slot != slot
-                    && other_slot != ACTIVE_OBJECT_PLAYER_SLOT
-                    && self.object_occupies(*other, nx, ny)
-            })
-        {
-            return ActiveShipWind::Stalled;
-        }
-        let tile = self.grid[world_cell_index(nx, ny)];
-        if !is_tile_walkable_for_transport(
-            tile,
-            self.passability.as_ref(),
-            TransportState::Ship {
-                type_byte: object.type_byte,
-                tile: object.tile,
-                sails_hoisted: true,
-                hull: object.aux1,
-                skiffs: object.aux3,
-            },
-        ) {
-            return ActiveShipWind::Stalled;
-        }
-
-        self.active_objects[slot].x = nx;
-        self.active_objects[slot].y = ny;
-        // The cadence counter written above stays: `weather.md §7` counts
-        // the passes the cadence allowed, and validation of the step it
-        // allowed belongs to `active-objects.md`.
-        self.mark_visibility_dirty();
-        ActiveShipWind::Drifted
     }
 
     /// `active-objects.md §8` movement dispatch, whirlpool branch (issue #298
@@ -5782,6 +5734,10 @@ impl PlayState {
             self.mark_visibility_dirty();
             return OutdoorActiveObjectStepAttempt::Committed;
         }
+        // `weather.md §7` (issue #298 Q32): "every step a ship commits
+        // rewrites both the type byte and the displayed-tile byte to the
+        // family base plus that step's heading ... before the position
+        // changes".
         if sea_creature_spawn_seeds_aux(object.type_byte) {
             let facing = match direction {
                 Direction::North => 0x2c,
@@ -6295,27 +6251,15 @@ pub fn cardinal_direction_from_delta(dx: i8, dy: i8) -> Option<Direction> {
     }
 }
 
-/// `systems/weather.md §7`: "The cadence counter is stored per
-/// active-object slot ... and is persisted with the object."
-///
-/// This engine keeps that counter in bits `2..3` of the slot's phase
-/// byte ([`ACTIVE_SHIP_CADENCE_PHASE_MASK`]), which the shared
-/// animation countdown in [`ActiveObject::tick_phase`] would otherwise
-/// decrement as part of the low nibble. Rejoin the two: the frame
-/// selector and heading come from the post-tick byte, the cadence count
-/// from the pre-tick byte.
-///
-/// The one forbidden result is a low nibble equal to [`STEADY_PHASE`],
-/// which is the "slot does not animate" marker a parked vehicle
-/// carries; clearing the two cosmetic frame bits keeps the encoding out
-/// of it.
-pub const fn merge_active_ship_cadence_phase(post_tick: u8, pre_tick: u8) -> u8 {
-    let merged =
-        (post_tick & !ACTIVE_SHIP_CADENCE_PHASE_MASK) | (pre_tick & ACTIVE_SHIP_CADENCE_PHASE_MASK);
-    if (merged & 0x0f) == STEADY_PHASE {
-        merged & !0x03
-    } else {
-        merged
+/// `weather.md §7` (issue #298 Q32): "the low two bits of the type byte are
+/// `0` north (`0x2C`), `1` east (`0x2D`), `2` south (`0x2E`), `3` west
+/// (`0x2F`)".
+pub const fn active_ship_frame_heading(type_byte: u8) -> Direction {
+    match type_byte & 0x03 {
+        0 => Direction::North,
+        1 => Direction::East,
+        2 => Direction::South,
+        _ => Direction::West,
     }
 }
 
