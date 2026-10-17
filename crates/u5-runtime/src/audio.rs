@@ -1363,16 +1363,23 @@ pub fn shrine_swell_program(period: u16, iterations: u32) -> SpeakerProgram {
     SpeakerProgram::new(ops)
 }
 
-/// `quest-graph.md §5` "Presentation order", step 2 of a Gem Shard use: "a
-/// rising pitch sweep, followed by a falling one, again unconditionally".
+/// `quest-graph.md §5` "Presentation order", step 2 of a Gem Shard use
+/// (corrected 2026-10-16, u5-spec#296, `RETRACTIONS.md` R522): "the 920-step
+/// envelope swell of `systems/audio.md` Section 5.4.7, again unconditionally:
+/// one held pitch (about 937 Hz) whose duty cycle ... rises over one limb and
+/// falls over an equal second limb with no gap between them". The pitch does
+/// not move; the withdrawn text called it "a rising pitch sweep, followed by a
+/// falling one".
 ///
-/// `audio.md §5.4.7` publishes it as the "Shadowlord destruction" caller of
-/// the 920-step swell: phase increment 2640, 200 iterations per run, 184,000
-/// in all, about 937 Hz and 7.91 s audible. "Every parameter and every count
-/// is exact; the pitches and the milliseconds are calibrated approximations."
-/// The stock capture (`qa/paired/use-shard-sweep.tsv`: one pitch near 891 Hz,
-/// 8.25-8.27 s) sits inside that calibration band; the earlier constants
-/// fitted to it (2511 / 209) are replaced by the published ones.
+/// `audio.md §5.4.7` publishes it as the "Shard use" row (R523 relabelled the
+/// old "Shadowlord destruction" row): phase increment 2640, 200 iterations per
+/// run, comparison 2000..24950 then 25000..2050 in steps of 50 (the shared
+/// [`shrine_swell_segment`] limbs), 184,000 iterations, about 937 Hz and
+/// 7.91 s audible. "It draws nothing, reads no key and runs no world tick or
+/// animation pass." These are the published values; the stock capture
+/// (`qa/paired/use-shard-sweep.tsv`: one pitch near 891 Hz, 8.25-8.27 s) is
+/// consistent with them "within about half a percent" of a per-iteration cost
+/// (u5-spec#296 answer).
 pub const SHARD_SWELL_PERIOD: u16 = 2640;
 pub const SHARD_SWELL_ITERATIONS: u32 = 200;
 
@@ -1933,8 +1940,8 @@ pub enum SoundEffect {
     /// `karma.md §7.2`, the Codex-turn-in arm's 920-run swell. The
     /// shared flash/rumble helper runs **after** this, not instead of it.
     ShrineTurnInSwell,
-    /// `quest-graph.md §5` step 2, the Gem Shard's rise-and-fall:
-    /// `audio.md §5.4.7`'s "Shadowlord destruction" swell; see
+    /// `quest-graph.md §5` step 2, the Gem Shard's one-pitch swell (R522):
+    /// `audio.md §5.4.7`'s "Shard use" swell (R523); see
     /// [`SHARD_SWELL_PERIOD`].
     ShardSwell,
     /// R494's per-slot restoration note, carrying the slot it precedes.

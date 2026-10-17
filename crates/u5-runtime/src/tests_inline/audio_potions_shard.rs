@@ -415,11 +415,12 @@ fn shadowlord_shard_refusals_never_flash() {
 }
 
 #[test]
-fn shard_swell_matches_the_published_shadowlord_destruction_row() {
-    // `audio.md §5.4.7`: "Shadowlord destruction | 2640 | 200 | 184,000 |
-    // about 937 Hz | 7.91 s / 6.13 s". The stock capture
-    // (`qa/paired/use-shard-sweep.tsv`, 891 Hz, 8.25-8.27 s) sits inside the
-    // calibration band of those approximations.
+fn shard_swell_matches_the_published_shard_use_row() {
+    // `audio.md §5.4.7` (u5-spec#296, R523 relabelled the row): "Shard use
+    // ... | 2640 | 200 | 184,000 | about 937 Hz | 7.91 s / 6.13 s". The stock
+    // capture (`qa/paired/use-shard-sweep.tsv`, 891 Hz, 8.25-8.27 s) sits
+    // inside the calibration band of those approximations. `quest-graph.md
+    // §5` step 2 (R522): "one held pitch", not a pitch sweep.
     assert_eq!(audio::SHARD_SWELL_PERIOD, 2640);
     assert_eq!(audio::SHARD_SWELL_ITERATIONS, 200);
     let program = SoundEffect::ShardSwell.program(&mut crate::audio::RumbleJitter::default());
@@ -481,8 +482,8 @@ fn off_position_shard_holds_no_effect_until_the_swell_ends() {
 
 #[test]
 fn on_position_shard_holds_the_cast_line_until_the_swell_ends() {
-    // `quest-graph.md §5` steps 1-4: the aloft line, then the rising and
-    // falling sweep "unconditionally" - before the position gate - and only
+    // `quest-graph.md §5` steps 1-4: the aloft line, then the one-pitch
+    // swell "unconditionally" (R522) - before the position gate - and only
     // then, on the matching row, the cast-into-the-flame line. The engine
     // used to play the swell on the refusal branch alone and print the cast
     // line at once (audit A001).

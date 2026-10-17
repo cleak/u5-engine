@@ -1277,8 +1277,10 @@ impl PlayState {
     ///    describing the party holding the evil shard aloft, completed by the
     ///    shard's own virtue word (Falsehood, Hatred, or Cowardice). This
     ///    happens before any gate is evaluated."
-    /// 2. "It then plays a rising pitch sweep, followed by a falling one,
-    ///    again unconditionally."
+    /// 2. "It then plays the 920-step envelope swell of `systems/audio.md`
+    ///    Section 5.4.7, again unconditionally: one held pitch" (corrected
+    ///    2026-10-16, u5-spec#296, `RETRACTIONS.md` R522: "The pitch does not
+    ///    move").
     /// 3. "Only the **position** gate produces the shared no-effect result."
     /// 4. "Once the position matches, it pauses, prints a line describing the
     ///    shard being cast into the Eternal Flame completed by the opposed
@@ -1296,10 +1298,10 @@ impl PlayState {
     /// Boundary: the exact heading, aloft, cast and destruction strings are
     /// not published — only their order, their completing words, and which of
     /// them are unconditional — so the literals below are engine voice. The
-    /// rising/falling sweep of phase 2 is [`SoundEffect::ShardSwell`]
-    /// (`audio.md §5.4.7`'s 920-step swell at the "Shadowlord destruction"
-    /// row's parameters) and plays before the
-    /// position gate on every path; the text after it waits the swell out.
+    /// one-pitch swell of phase 2 is [`SoundEffect::ShardSwell`]
+    /// (`audio.md §5.4.7`'s 920-step swell, "Shard use" row; u5-spec#296,
+    /// R522/R523) and plays before the position gate on every path; the text
+    /// after it waits the swell out.
     /// The `§8.4` destruction flash below is published and is preserved at
     /// its own boundary.
     pub fn use_shadowlord_shard(
@@ -1349,13 +1351,15 @@ impl PlayState {
             self.published_eternal_flame_at_current_position()
         };
         let on_position = flame_entry.is_some_and(|entry| entry.flame == required_flame);
-        // Phase 2, the unconditional rise-and-fall. `quest-graph.md §5`
-        // step 2: "It then plays a rising pitch sweep, followed by a falling
-        // one, again unconditionally" - before the position gate, so the
-        // destruction row hears it too. Measured pending u5-spec#296
-        // (`qa/paired/use-shard-sweep.tsv`, stock side): the aloft line is up
-        // within ~0.1 s of Return, the swell runs 8.25-8.27 s, and the next
-        // text is on screen by the first sample after it ends. The engine
+        // Phase 2, the unconditional swell. `quest-graph.md §5` step 2
+        // (corrected 2026-10-16, u5-spec#296, R522): "the 920-step envelope
+        // swell ... again unconditionally: one held pitch ... It draws
+        // nothing, reads no key and runs no world tick or animation pass" -
+        // before the position gate, so the destruction row hears it too.
+        // Consistent with `qa/paired/use-shard-sweep.tsv` (stock side): the
+        // aloft line is up within ~0.1 s of Return, the swell runs 8.25-8.27 s
+        // there, and the next text is on screen by the first sample after it
+        // ends. The engine
         // printed everything at once (`use-specials/sceptre`, four rows
         // apart, `cleak/u5-engine#25`). Whatever follows waits out the swell:
         // the stock window ends on the aloft row itself during it, and that
