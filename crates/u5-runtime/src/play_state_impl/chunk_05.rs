@@ -873,7 +873,20 @@ impl PlayState {
         } else {
             None
         };
-        let damage_tile = if transition.is_none() {
+        // `vehicles.md §4`/§5: B-Board probes only the party's own cell, and
+        // "a vehicle left behind must remain boardable through active-object
+        // persistence", so a parked vehicle the current transport could board
+        // must be a cell the party can step onto (`movement.md §7`: "stepping
+        // onto ... a vehicle/object may route to a command-specific
+        // interaction instead of an ordinary move"). Its static terrain - the
+        // water under a frigate - is the vehicle's, not the walker's.
+        let onto_boardable_vehicle = self
+            .boardable_vehicle_slot_at(nx, ny)
+            .is_some_and(|candidate| {
+                !candidate.blocked_by_occupant
+                    && self.player.transport.can_board(candidate.transport)
+            });
+        let damage_tile = if transition.is_none() && !onto_boardable_vehicle {
             if let Some(game_dir) = game_dir {
                 self.world_damage_tile_at(game_dir, plane, nx, ny, tile)?
             } else {
@@ -882,7 +895,7 @@ impl PlayState {
         } else {
             None
         };
-        if transition.is_none() {
+        if transition.is_none() && !onto_boardable_vehicle {
             if let Some(entry) = damage_tile {
                 if !entry.effect.allows_transport(self.player.transport) {
                     if ship_under_sail {
@@ -912,6 +925,7 @@ impl PlayState {
         }
         if let Some((object_slot, object)) = self
             .world_object_slot_at(nx, ny)
+            .filter(|_| !onto_boardable_vehicle)
             .map(|(slot, object)| (slot, *object))
         {
             if ship_under_sail {

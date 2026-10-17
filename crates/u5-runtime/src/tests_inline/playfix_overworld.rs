@@ -81,3 +81,82 @@ fn playfix_e21_ship_exit_into_skiff_parks_furled_frigate_art() {
     assert_eq!(parked.tile, SHIP_PARKED_FIRST);
     assert_eq!((parked.aux1, parked.aux3), (77, 1));
 }
+
+/// E22: `vehicles.md §4` B-Board probes only the party's own cell and §5
+/// says "a vehicle left behind must remain boardable through active-object
+/// persistence". The party must be able to step onto a parked vehicle's
+/// cell - including the water under a frigate - and then board it.
+#[test]
+fn playfix_e22_party_steps_onto_parked_vehicles_and_boards_them() {
+    for (object_byte, under) in [
+        (SHIP_PARKED_FIRST, BRIT_DEEP_WATER_TILE),
+        (SKIFF_PARKED_FIRST + 3, BRIT_DEEP_WATER_TILE),
+        (HORSE_PARKED_FIRST, 5),
+        (CARPET_PARKED, 5),
+    ] {
+        let mut grid = open_world_grid();
+        grid[world_cell_index(6, 5)] = under;
+        let mut state = world_state(grid, 5, 5);
+        state.active_objects.push(ActiveObject {
+            type_byte: object_byte,
+            tile: object_byte,
+            x: 6,
+            y: 5,
+            z: WorldPlane::Underworld.save_floor(),
+            phase: STEADY_PHASE,
+            aux1: 60,
+            aux3: 1,
+        });
+        assert_eq!(state.step(Direction::East), MoveOutcome::Moved, "{object_byte:#04x}");
+        assert_eq!((state.player.x, state.player.y), (6, 5));
+        assert_eq!(state.board_vehicle(), MoveOutcome::Boarded, "{object_byte:#04x}");
+    }
+}
+
+/// E22: the round trip of the finding - park a frigate with X-it, step off
+/// in its skiff, step back onto it and board it again.
+#[test]
+fn playfix_e22_frigate_left_by_skiff_can_be_reboarded() {
+    let mut state = world_state(vec![BRIT_DEEP_WATER_TILE; WORLD_CELLS], 5, 5);
+    state.active_objects.push(ActiveObject {
+        type_byte: SHIP_PARKED_FIRST,
+        tile: SHIP_PARKED_FIRST,
+        x: 5,
+        y: 5,
+        z: WorldPlane::Underworld.save_floor(),
+        phase: STEADY_PHASE,
+        aux1: 77,
+        aux3: 2,
+    });
+    assert_eq!(state.board_vehicle(), MoveOutcome::Boarded);
+    assert_eq!(state.exit_vehicle(), MoveOutcome::ExitedVehicle);
+    assert_eq!(state.step(Direction::South), MoveOutcome::Moved);
+    assert_eq!(state.step(Direction::North), MoveOutcome::Moved);
+    assert_eq!(state.board_vehicle(), MoveOutcome::Boarded);
+    assert!(matches!(
+        state.player.transport,
+        TransportState::Ship { hull: 77, skiffs: 1, .. }
+    ));
+}
+
+/// E22: a parked vehicle the current transport cannot board still blocks
+/// (a mounted party cannot board a second horse, `vehicles.md §4`).
+#[test]
+fn playfix_e22_unboardable_parked_vehicle_still_blocks() {
+    let mut state = world_state(open_world_grid(), 5, 5);
+    state.player.transport =
+        transport_from_vehicle_object(HORSE_PARKED_FIRST, HORSE_PARKED_FIRST, 0, 0).unwrap();
+    state.sync_player_object();
+    state.active_objects.push(ActiveObject {
+        type_byte: HORSE_PARKED_FIRST,
+        tile: HORSE_PARKED_FIRST,
+        x: 6,
+        y: 5,
+        z: WorldPlane::Underworld.save_floor(),
+        phase: STEADY_PHASE,
+        aux1: 0,
+        aux3: 0,
+    });
+    assert_eq!(state.step(Direction::East), MoveOutcome::Blocked);
+    assert_eq!((state.player.x, state.player.y), (5, 5));
+}
