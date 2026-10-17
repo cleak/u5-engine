@@ -5966,12 +5966,12 @@ fn end_to_end_tavern_menu_lore_letter_reaches_paid_sage_lookup() {
     // Measured 2026-09-08 at The Cat's Lair (`qa/paired/paws-sage.tsv`): the
     // question is quoted and gendered, and a typed-input prompt follows it.
     // `shops.md` §8.C: the lore letter echoes onto the follow-up record's open
-    // row and the question follows two line feeds, so the rendered message
-    // opens with the one that leaves the blank row (measured 2026-09-10,
+    // row and the question follows two line feeds - the first closes the
+    // echo's row, the second is the blank row (measured 2026-09-10,
     // `paws-sage/lore`).
     assert_eq!(
         state.message,
-        "\n\"Of what wouldst thou hear my lore, sir?\"\n\nYou respond:"
+        "\n\n\"Of what wouldst thou hear my lore, sir?\"\n\nYou respond:"
     );
     assert!(matches!(
         state.active_shop,
@@ -6154,10 +6154,11 @@ fn end_to_end_tavern_renders_state_menu_quote_and_follow_up_records() {
     assert_eq!(state.message, "\"Asset tavern menu.\" ");
     handle_play_key_input(&mut state, 'R', "", &dir).unwrap();
     // `shops.md §8.C`, "Provision offer": "Opening quote, one uniform record
-    // from `77..83`, then `\n\nHow many wouldst\nthou like?" `".
+    // from `77..83`, then `\n\nHow many wouldst\nthou like?" `". The two
+    // leading feeds close the `R` echo's row and leave the blank under it.
     assert_eq!(
         state.message,
-        "\n\"Asset pack costs 16 gold.\n\nHow many wouldst\nthou like?\" "
+        "\n\n\"Asset pack costs 16 gold.\n\nHow many wouldst\nthou like?\" "
     );
     assert_eq!(state.prng_state, expected_prng_state);
     handle_play_key_input(&mut state, '1', "", &dir).unwrap();
@@ -7771,4 +7772,148 @@ fn spirit_healers_low_fee_charity_treats_without_charging() {
     state.party[0].status = b'G';
     state.party[0].hp = 5;
     assert!(!healer_low_fee_charity_applies(Healer::TheShieldOfTruth, 60, 0));
+}
+
+/// `shops.md §8.C`: after a paid round the continuation question
+/// `"Anything else\nfor thee?" ` waits on its own row, and "Y prints `Yes`"
+/// onto it. The round's text carries embedded blank rows, and flushing them
+/// left the row-open flag closed, so once the continuing-row emitter honoured
+/// that flag `Yes` dropped to a row of its own. Measured 2026-10-16
+/// (`paws-sage`, beat `again`): the original reads `for thee?" Yes`.
+#[test]
+fn tavern_continuation_yes_echoes_onto_the_question_row() {
+    use crate::shop_runtime::TavernState;
+    use crate::shop_session::ActiveShopSession;
+
+    let mut state = test_state(open_grid(), 1, 1);
+    state.area = Area::Town {
+        scene: Scene::new(22).unwrap(),
+        floor: 0,
+    };
+    state.gold = 200;
+    state.active_shop = Some(ActiveShopSession::Tavern(TavernState::Menu {
+        tavern: Tavern::TheCatsLair,
+        continuation_ready: false,
+    }));
+    let round = crate::shops::tavern_menu_letters(Tavern::TheCatsLair).round;
+    handle_play_key_input(&mut state, round, "", Path::new("")).unwrap();
+    assert!(
+        state.message.ends_with("Anything else\nfor thee?\" "),
+        "{:?}",
+        state.message
+    );
+
+    handle_play_key_input(&mut state, 'Y', "", Path::new("")).unwrap();
+
+    let rows: Vec<&str> = state
+        .message_transcript
+        .iter()
+        .map(|entry| entry.text.as_str())
+        .collect();
+    assert!(
+        rows.iter().any(|row| row.ends_with("for thee?\" Yes")),
+        "{rows:?}"
+    );
+    let question = rows
+        .iter()
+        .position(|row| *row == "\"Anything else")
+        .expect("the continuation question is on the transcript");
+    assert_eq!(rows[question + 1], "for thee?\" Yes", "{rows:?}");
+}
+
+/// `shops.md §8.B`: "the accepted answer appends directly after" the entry
+/// greeting's continuation, so `Y` at a `:` row reads `:Yes`.
+#[test]
+fn shop_entry_answer_echoes_onto_the_greeting_row() {
+    use crate::shop_runtime::TavernState;
+    use crate::shop_session::ActiveShopSession;
+
+    let mut state = test_state(open_grid(), 1, 1);
+    state.area = Area::Town {
+        scene: Scene::new(22).unwrap(),
+        floor: 0,
+    };
+    state.gold = 200;
+    state.active_shop = Some(ActiveShopSession::Tavern(TavernState::Greeting {
+        tavern: Tavern::TheCatsLair,
+    }));
+    state.emit_message_line("\n\"Welcome!\"\n\n:");
+    state.close_message_row();
+
+    handle_play_key_input(&mut state, 'Y', "", Path::new("")).unwrap();
+
+    let rows: Vec<&str> = state
+        .message_transcript
+        .iter()
+        .map(|entry| entry.text.as_str())
+        .collect();
+    assert!(rows.contains(&":Yes"), "{rows:?}");
+}
+
+/// `shops.md §8.B`: "Space means No where accepted. Every No response echoes
+/// `No` without a line feed", appended to the greeting's continuation row.
+/// Measured 2026-10-16 (`shop-inn-after-entry`, beat `after-space`): the
+/// original reads `:No`; this engine put `No` on a row of its own.
+#[test]
+fn inn_entry_space_echoes_no_onto_the_greeting_row() {
+    use crate::shop_runtime::InnkeeperState;
+    use crate::shop_session::ActiveShopSession;
+
+    let mut state = test_state(open_grid(), 1, 1);
+    state.area = Area::Town {
+        scene: Scene::new(1).unwrap(),
+        floor: 0,
+    };
+    state.active_shop = Some(ActiveShopSession::Innkeeper(InnkeeperState::Greeting {
+        inn: Inn::TheWayfarerInn,
+    }));
+    state.emit_message_line("\n\"Welcome!\"\n\n:");
+    state.close_message_row();
+
+    handle_play_key_input(&mut state, ' ', "", Path::new("")).unwrap();
+
+    let rows: Vec<&str> = state
+        .message_transcript
+        .iter()
+        .map(|entry| entry.text.as_str())
+        .collect();
+    assert!(rows.contains(&":No"), "{rows:?}");
+}
+
+/// `shops.md §8.C`: the bill follows "the action-letter echo and `\n\n`".
+/// The letter lands on the menu's open row (`thy travels?" A`), so the first
+/// feed closes that row and the second leaves the blank the original shows
+/// above `"That will be` (`paws-sage`, beat `ale`).
+#[test]
+fn tavern_menu_letter_echo_is_followed_by_a_blank_row() {
+    use crate::shop_runtime::TavernState;
+    use crate::shop_session::ActiveShopSession;
+
+    let mut state = test_state(open_grid(), 1, 1);
+    state.area = Area::Town {
+        scene: Scene::new(22).unwrap(),
+        floor: 0,
+    };
+    state.gold = 200;
+    state.active_shop = Some(ActiveShopSession::Tavern(TavernState::Menu {
+        tavern: Tavern::TheCatsLair,
+        continuation_ready: false,
+    }));
+    state.emit_message_line("\n\"What'll it be?\" ");
+    state.open_message_row();
+    let round = crate::shops::tavern_menu_letters(Tavern::TheCatsLair).round;
+    handle_play_key_input(&mut state, round, "", Path::new("")).unwrap();
+    state.flush_message_slot();
+
+    let rows: Vec<&str> = state
+        .message_transcript
+        .iter()
+        .map(|entry| entry.text.as_str())
+        .collect();
+    let echo = rows
+        .iter()
+        .position(|row| *row == format!("\"What'll it be?\" {round}"))
+        .unwrap_or_else(|| panic!("the letter echoes onto the menu row: {rows:?}"));
+    assert_eq!(rows[echo + 1], "", "{rows:?}");
+    assert!(rows[echo + 2].starts_with("\"That will be"), "{rows:?}");
 }
