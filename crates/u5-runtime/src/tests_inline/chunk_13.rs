@@ -26576,11 +26576,14 @@ fn dungeon_mode_refuses_world_vehicle_and_entry_letters_without_turn() {
         state.message_transcript.last().map(|entry| entry.text.as_str()),
         Some(format!("X-it {XIT_ON_FOOT_REFUSAL}").as_str())
     );
-    assert_eq!(state.turn, 0);
+    // `dungeon-mode.md §10` (u5-spec#298 Q28): it reports acted, so the
+    // post-action pass runs.
+    assert_eq!(state.turn, 1);
+    let turn_after_x = state.turn;
 
     assert!(state.handle_dungeon_key('P', Path::new("")).unwrap());
     assert_eq!(state.message, PUSH_NOT_HERE_REFUSAL);
-    assert_eq!(state.turn, 0);
+    assert_eq!(state.turn, turn_after_x);
 
     // `dungeon-mode.md` Section 10: `Q` is not one of the refused letters -
     // "`Q` is the ordinary save-game route; the "Exit to DOS?" prompt is a
@@ -26588,7 +26591,7 @@ fn dungeon_mode_refuses_world_vehicle_and_entry_letters_without_turn() {
     assert!(state.handle_dungeon_key('Q', Path::new("")).unwrap());
     assert!(state.active_yes_no_prompt.is_some());
     assert_eq!(state.message, SAVE_PROMPT_MESSAGE);
-    assert_eq!(state.turn, 0);
+    assert_eq!(state.turn, turn_after_x);
 }
 
 #[test]

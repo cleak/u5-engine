@@ -68,6 +68,18 @@ impl PlayState {
         handled
     }
 
+    /// `dungeon-mode.md §10` (u5-spec#298 Q28, R530): X on foot underground
+    /// prints `X-it what?\n` and, by static reading, reports **acted**, so
+    /// the dungeon post-action pass runs. X-it has no working scene refusal.
+    fn dungeon_exit_vehicle_command(&mut self, game_dir: &Path) -> io::Result<MoveOutcome> {
+        let on_foot = self.player.transport.is_foot();
+        let outcome = self.exit_vehicle_with_game_dir(Some(game_dir))?;
+        if on_foot {
+            self.advance_turn();
+        }
+        Ok(outcome)
+    }
+
     fn handle_dungeon_key_with_inline_inner(
         &mut self,
         key: char,
@@ -230,7 +242,7 @@ impl PlayState {
             // underground, so it refuses with the shared `X-it what?`
             // (`commands.md §5.8`). The dungeon-specific refusal never prints.
             'x' => {
-                handled!(self.exit_vehicle_with_game_dir(Some(game_dir))?);
+                handled!(self.dungeon_exit_vehicle_command(game_dir)?);
             }
             // `commands.md §5.3`: "`Enter ` is an operand-follows echo; with
             // nothing to enter the line completes with `what?`". The original
@@ -601,7 +613,7 @@ impl PlayState {
                     handled!(self.view_gem());
                 }
                 'X' => {
-                    handled!(self.exit_vehicle_with_game_dir(Some(game_dir))?);
+                    handled!(self.dungeon_exit_vehicle_command(game_dir)?);
                 }
                 'Y' => {
                     handled!(self.start_yell_prompt());
@@ -3062,6 +3074,28 @@ mod movement_magic_karma_traps_spec_tests {
         let _ = std::fs::remove_dir_all(dir);
     }
 
+    /// `dungeon-mode.md §10` (u5-spec#298 Q28, R530): on foot in a dungeon X
+    /// prints `X-it what?` and reports acted, so the post-action pass runs
+    /// and the action counter moves; the loop-head minute is not billed twice.
+    #[test]
+    fn dungeon_x_on_foot_prints_xit_what_and_reports_acted() {
+        let dir = debug_game_dir();
+        for key in ['X', 'x'] {
+            let mut state = dungeon_state(open_dungeon_record(), 0, 1, 1);
+            let minute_before = state.clock.minute;
+
+            assert!(state.handle_dungeon_key(key, &dir).unwrap());
+
+            assert_eq!(
+                state.message_transcript.last().map(|entry| entry.text.as_str()),
+                Some(format!("X-it {XIT_ON_FOOT_REFUSAL}").as_str())
+            );
+            assert_eq!(state.turn, 1, "`{key}` reports acted");
+            assert_eq!(state.clock.minute, minute_before + 1);
+        }
+        let _ = std::fs::remove_dir_all(dir);
+    }
+
     /// `dungeon-mode.md §15`: "it does **not** gate that call on whether the
     /// command consumed a turn … so a command the dispatcher reports as \"no
     /// action\" (a digit solo-select, a refused Push, the typeahead toggle)
@@ -3070,7 +3104,8 @@ mod movement_magic_karma_traps_spec_tests {
     #[test]
     fn refused_dungeon_commands_still_cost_a_minute_but_no_action_turn() {
         let dir = debug_game_dir();
-        for key in ['B', 'E', 'X', 'F', 'P'] {
+        // `X` is not here: on foot it reports acted (u5-spec#298 Q28).
+        for key in ['B', 'E', 'F', 'P'] {
             let mut state = dungeon_state(open_dungeon_record(), 0, 1, 1);
             let minute_before = state.clock.minute;
 
