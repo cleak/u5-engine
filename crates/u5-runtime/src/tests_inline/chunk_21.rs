@@ -7978,3 +7978,31 @@ fn tavern_fresh_list_exit_keys_draw_the_no_sale_closing_bark() {
     }
     let _ = fs::remove_dir_all(dir);
 }
+
+/// `shops.md §8.C`, "Fourth secondary drink attempt, when prior count is
+/// exactly three": the warning carries a `says <vendor>.` row between its two
+/// quoted parts. It went straight from `pardon, sir,"` to `"But haven't`
+/// (playtest E53).
+#[test]
+fn tavern_fourth_drink_warning_is_attributed_to_the_vendor() {
+    use crate::shop_runtime::TavernState;
+    use crate::shop_session::ActiveShopSession;
+
+    let mut state = test_state(open_grid(), 1, 1);
+    state.area = Area::Town {
+        scene: Scene::new(22).unwrap(),
+        floor: 0,
+    };
+    state.gold = 200;
+    state.tavern_secondary_drink_count = 3;
+    state.active_shop = Some(ActiveShopSession::Tavern(TavernState::PostListWait {
+        tavern: Tavern::TheCatsLair,
+        continuation_ready: true,
+    }));
+    let secondary = crate::shops::tavern_menu_letters(Tavern::TheCatsLair).secondary;
+    handle_play_key_input(&mut state, secondary, "", Path::new("")).unwrap();
+    assert_eq!(
+        state.message,
+        "\n\n\"I beg thy\npardon, sir,\"\nsays Dr. Cat.\n\"But haven't\nye had enough\nto drink?\" "
+    );
+}

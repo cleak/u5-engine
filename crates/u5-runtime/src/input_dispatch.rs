@@ -4314,6 +4314,19 @@ fn format_tavern_outcome_with_shoppe(
                 tavern_cant_pay_envelope(tavern_vendor_name)
             );
         }
+        // `shops.md §8.C`: "Fourth secondary drink attempt ... `\n\n"I beg
+        // thy\npardon, `, honorific, `,"\nsays `, vendor name, `.\n"But
+        // haven't\nye had enough\nto drink?" `". The vendor-less fallback
+        // below drops the attribution row; with the name known it belongs
+        // here (playtest E53).
+        ConfirmEnoughDrink => {
+            if let Some(name) = tavern_vendor_name {
+                return format!(
+                    "\n\n\"I beg thy\npardon, {},\"\nsays {name}.\n\"But haven't\nye had enough\nto drink?\" ",
+                    tavern_honorific(speaker_is_female)
+                );
+            }
+        }
         _ => {}
     }
 
