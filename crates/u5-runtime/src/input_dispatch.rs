@@ -277,7 +277,15 @@ fn handle_play_key_input_inner(
         return Ok(PlayInputDisposition::Continue);
     }
     if state.resolve_natural_moongate_entry(game_dir)?.is_some() {
-        return Ok(PlayInputDisposition::Continue);
+        // `overworld.md §9.2`: the live-gate hook runs its transit "before
+        // the party is relocated and before any key is read", and reads no
+        // key itself. The key that brought this loop iteration here is still
+        // the turn's command, so it is dispatched from the post-transit state
+        // - into the meditation prompt when the hook opened one. Returning
+        // here instead dropped every other command while the party stood on
+        // a re-rising gate (playtest E61). The transit rewrote the cell to
+        // terrain `5`, so this re-entry cannot run the same transit again.
+        return handle_play_key_input_inner(state, key, suffix, game_dir);
     }
     // `timing.md §8.2`, the under-sail pass's keyboard poll, and
     // `RETRACTIONS.md` R372: "a key whose translated code **equals the cached

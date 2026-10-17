@@ -437,7 +437,7 @@ mod moongate_gate_presence_phase {
         state.natural_moongate_counter = 11;
 
         assert_eq!(
-            handle_play_key_input(&mut state, 'q', "", &dir).unwrap(),
+            handle_play_key_input(&mut state, '.', "", &dir).unwrap(),
             PlayInputDisposition::Continue
         );
 
@@ -975,7 +975,7 @@ mod moongate_transit_transition {
         let transport_before = state.player.transport;
 
         assert_eq!(
-            handle_play_key_input(&mut state, 'q', "", &dir).unwrap(),
+            handle_play_key_input(&mut state, '.', "", &dir).unwrap(),
             PlayInputDisposition::Continue
         );
 
