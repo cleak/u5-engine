@@ -1221,6 +1221,11 @@ pub const PLAYER_SUMMON_ENVELOPE: EnvelopeSegment = EnvelopeSegment::new(5, 500,
 /// `audio.md §8.3` accepted moongate transit.
 pub const MOONGATE_TRANSIT_ENVELOPE: EnvelopeSegment =
     EnvelopeSegment::new(2, 2000, 30_000, 1, 5900);
+/// `audio.md §8.3` "Shadowlord summoned by Yell" (u5-spec#298 Q11): the
+/// blocking envelope `(2, 2000, 30000, 1, 10400)`, the moongate-transit
+/// shape at a higher period.
+pub const SHADOWLORD_YELL_SUMMON_ENVELOPE: EnvelopeSegment =
+    EnvelopeSegment::new(2, 2000, 30_000, 1, 10_400);
 /// `audio.md §6.1`'s absorb cue, the manual envelope every absorbed cast
 /// plays: "phase increment 9800, idle count 1, 28000 iterations, initial
 /// comparison 1000 and comparison increment 2."
@@ -2064,6 +2069,10 @@ pub enum SoundEffect {
     /// `§10.6` the overworld falls chain's descending sweep — one site, played
     /// once per fall on every waterfall brink of either plane.
     SurfaceFallsDescent,
+    /// `§8.3` (added 2026-10-16, u5-spec#298 Q11): the Shadowlord summoned by
+    /// Yell, after `\nA_shadowlord_appears\n` prints and before the
+    /// single-cell converge. See [`SHADOWLORD_YELL_SUMMON_ENVELOPE`].
+    ShadowlordYellSummon,
     /// `§8.10` ambient scenery tick, grandfather-clock tick-tock: a blocking
     /// tone of 3000 Hz for 3 units at sub-counter residue 0 and 2000 Hz at
     /// residue 4, while the hour-chime countdown is zero.
@@ -2162,6 +2171,7 @@ impl SoundEffect {
                     None => SpeakerProgram::new(vec![SpeakerOp::Stop]),
                 }
             }
+            SoundEffect::ShadowlordYellSummon => envelope_program(SHADOWLORD_YELL_SUMMON_ENVELOPE),
             SoundEffect::AmbientClockChime => envelope_program(AMBIENT_CLOCK_CHIME_ENVELOPE),
             SoundEffect::AmbientWaterfallRumble => random_rumble(20, 60, 10_000, jitter),
             SoundEffect::AmbientFountainRumble => random_rumble(10, 30, 25_000, jitter),

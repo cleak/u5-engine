@@ -1403,6 +1403,12 @@ pub const XIT_SHIP_ARGUMENT: &str = "ship!";
 /// `cleak/u5-spec#194` (black-box): a plain Yell that matches neither a
 /// Shadowlord name nor a Word of Power prints `No effect!`.
 pub const YELL_NO_EFFECT_MESSAGE: &str = "No effect!";
+/// `commands.md §11` (u5-spec#298 Q11): the Shadowlord name summon's
+/// appearance line, `\nA_shadowlord_appears\n` (lower-case `s`).
+pub const SHADOWLORD_YELL_SUMMON_LINE: &str = "A shadowlord appears";
+/// `commands.md §11` (u5-spec#298 Q11): the fade-in converge tile, the
+/// Shadow Lord's first frame.
+pub const SHADOWLORD_YELL_SUMMON_CONVERGE_TILE: u16 = 0x1fc;
 /// The row Y-Yell's typed word is edited on. `commands.md §5.3` puts
 /// the echo behind a colon on the row under the question, and
 /// `text-output.md §10.6` keeps a prompt that is waiting for input on
