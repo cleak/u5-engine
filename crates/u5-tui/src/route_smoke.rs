@@ -1906,7 +1906,9 @@ pub fn route_smoke_cases() -> Vec<RouteSmokeCase> {
         RouteSmokeCase {
             name: "shop-tavern-drink-and-food-route",
             options: PlayOptions::default(),
-            script: &["Y", "M", "Y", "R", "1", "N"],
+            // `shops.md §8.5`: the provision quantity is the two-digit
+            // reader, whose only exit is Return.
+            script: &["Y", "M", "Y", "R", "1", "return", "N"],
             expected: RouteSmokeExpectation::Town(castle),
             min_turn: 0,
             expected_frame_kind: "tile viewport",
