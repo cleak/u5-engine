@@ -227,3 +227,20 @@ fn arms_carry_cap_refusal_waits_one_key_then_returns_to_the_buy_list() {
         Some(ArmsShopState::BuyConfirm { .. })
     ));
 }
+
+/// Playtest E54. `systems/shops.md §8.A`, "Arms item quote and confirmation":
+/// "Only `Y` and `N` advance. Other keys leave the quote/prompt visible and do
+/// not redraw or consume a random draw." An invalid key re-rendered the quote
+/// with the fallback `Wouldst thou buy one?` instead of the drawn prompt.
+#[test]
+fn arms_invalid_key_at_the_buy_confirmation_keeps_the_drawn_prompt() {
+    let mut state = arms_buy_list_state(500);
+    arms_state_after(&mut state, &['a']);
+    let quoted = state.message.clone();
+    let rng = state.prng_state;
+    arms_state_after(&mut state, &['x']);
+    assert_eq!(state.message, quoted);
+    assert_eq!(state.prng_state, rng);
+    arms_state_after(&mut state, &['x']);
+    assert_eq!(state.message, quoted);
+}

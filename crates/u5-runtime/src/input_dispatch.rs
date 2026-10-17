@@ -3128,24 +3128,19 @@ fn handle_arms_shop_key_input(
         {
             state.message.clone()
         }
-        (ArmsShopOutcome::InvalidInput, _) => match prior_state {
-            ArmsShopState::BuyConfirm {
-                item,
-                quoted_price,
-                quote_record_id,
-            } => format_arms_outcome_with_rolls(
-                ArmsShopOutcome::QuotedBuyPrice {
-                    item,
-                    price: quoted_price,
-                    quote_record_id,
-                },
-                game_dir,
-                None,
-                None,
-                speech,
-            ),
-            _ => format_arms_outcome(ArmsShopOutcome::InvalidInput, game_dir),
-        },
+        // `shops.md §8.A`, "Arms item quote and confirmation": "Only `Y` and
+        // `N` advance. Other keys leave the quote/prompt visible and do not
+        // redraw or consume a random draw." Re-rendering the quote here
+        // swapped the drawn confirmation prompt for the undrawn fallback
+        // variant (playtest E54).
+        (ArmsShopOutcome::InvalidInput, _)
+            if matches!(prior_state, ArmsShopState::BuyConfirm { .. }) =>
+        {
+            state.message.clone()
+        }
+        (ArmsShopOutcome::InvalidInput, _) => {
+            format_arms_outcome(ArmsShopOutcome::InvalidInput, game_dir)
+        }
         (ArmsShopOutcome::EnteredSell, _) => arms_sell_entry_prompt(state.random_range_u8(0, 3)),
         (ArmsShopOutcome::SellBrowserMoved, _) => state.message.clone(),
         (ArmsShopOutcome::OfferedSellPrice { item, offer }, _) => {
