@@ -262,6 +262,16 @@ impl GameplayMessageLog {
         })
     }
 
+    /// Leave a bare marker row standing as the marker alone, so the next
+    /// output starts on the row below it ([`crate::MessageEntry::starts_fresh_row`]).
+    pub fn close_bare_marker_row(&mut self) {
+        if self.ends_with_bare_marker()
+            && let Some(line) = self.lines.last_mut()
+        {
+            line.row_left_open = false;
+        }
+    }
+
     /// Append one or more handler-output lines.
     pub fn push_output(&mut self, text: &str) {
         if text.trim().is_empty() {
@@ -532,6 +542,9 @@ pub fn message_log_from_entries<'a>(
         let Some(text) = render(&entry.text) else {
             continue;
         };
+        if entry.starts_fresh_row {
+            log.close_bare_marker_row();
+        }
         if entry.is_command_echo {
             // `combat.md §8.1`: the arena's own prompt draws its marker on
             // the row the turn banner's trailing line feed opened, so the

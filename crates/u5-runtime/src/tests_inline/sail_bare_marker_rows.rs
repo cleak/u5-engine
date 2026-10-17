@@ -168,3 +168,45 @@ fn a_released_refusal_with_a_full_transcript_is_written_on_the_marker_row() {
         "the released refusal continues the marker row: {rows:?}"
     );
 }
+
+/// `sail-heading-echo` (stock runs `20261016-204248` and `-222947`, beat
+/// `sailing-more`): a released sailing step that runs into a hostile reads
+/// `Hull weak!` / blank / the bare `>` marker row / `Attacked!`. The step's
+/// own refusal is written on the marker row, but an encounter line starts
+/// the row below it.
+#[test]
+fn an_encounter_after_a_bare_marker_row_starts_the_row_below_it() {
+    let mut state = bare_marker_frigate(WindState::West, 40, "Head West");
+    state.emit_message_line("Hull weak!\n");
+    state.push_explicit_blank_message_entry();
+    state.push_overworld_bare_marker_entry(state.message_entries().len());
+    state.emit_encounter_line("Attacked!");
+    state.flush_message_slot();
+
+    let rows = bare_marker_layout(&state);
+    let hull = rows
+        .iter()
+        .position(|row| row.1 == "Hull weak!")
+        .unwrap_or_else(|| panic!("{rows:?}"));
+    assert_eq!(rows[hull + 1], (false, String::new()), "{rows:?}");
+    assert_eq!(
+        rows[hull + 2],
+        (true, String::new()),
+        "the marker row stands alone: {rows:?}"
+    );
+    assert_eq!(
+        rows[hull + 3],
+        (false, "Attacked!".to_string()),
+        "the encounter line is on the row below the marker: {rows:?}"
+    );
+
+    // The step's own output still continues the marker row.
+    let mut state = bare_marker_frigate(WindState::West, 40, "Head West");
+    state.push_overworld_bare_marker_entry(state.message_entries().len());
+    state.emit_message_line("BREAKING UP!");
+    let rows = bare_marker_layout(&state);
+    assert!(
+        rows.contains(&(true, "BREAKING UP!".to_string())),
+        "{rows:?}"
+    );
+}

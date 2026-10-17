@@ -146,6 +146,7 @@ impl PlayState {
             explicit_blank,
             prompt_column_row: false,
             bare_marker: false,
+            starts_fresh_row: false,
         });
         if self.message_transcript.len() > MESSAGE_TRANSCRIPT_CAPACITY {
             let excess = self.message_transcript.len() - MESSAGE_TRANSCRIPT_CAPACITY;
@@ -649,6 +650,7 @@ impl PlayState {
                 explicit_blank: true,
                 prompt_column_row: false,
                 bare_marker: false,
+                starts_fresh_row: false,
             };
         } else if last.explicit_blank || last.prompt_column_row || last.text != prompt {
             return None;
@@ -665,6 +667,7 @@ impl PlayState {
             explicit_blank: false,
             prompt_column_row: true,
             bare_marker: false,
+            starts_fresh_row: false,
         });
         if self.message_transcript.len() > MESSAGE_TRANSCRIPT_CAPACITY {
             let excess = self.message_transcript.len() - MESSAGE_TRANSCRIPT_CAPACITY;
@@ -1088,6 +1091,7 @@ impl PlayState {
                 explicit_blank: false,
                 prompt_column_row: false,
                 bare_marker: true,
+                starts_fresh_row: false,
             },
         );
         if self.message_transcript.len() > MESSAGE_TRANSCRIPT_CAPACITY {
@@ -1095,6 +1099,17 @@ impl PlayState {
             self.message_transcript.drain(0..excess);
         }
         self.message_transcript_revision = self.message_transcript_revision.wrapping_add(1);
+    }
+
+    /// Emit an encounter's announcement - `Attacked!` - as a row of its own,
+    /// never written on a bare marker row ([`MessageEntry::starts_fresh_row`]).
+    pub(crate) fn emit_encounter_line(&mut self, line: &str) {
+        self.emit_message_line(line);
+        if let Some(entry) = self.message_transcript.last_mut()
+            && entry.text == line
+        {
+            entry.starts_fresh_row = true;
+        }
     }
 
     /// Take back the newest [`MessageEntry::bare_marker`] row: the wind held

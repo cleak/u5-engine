@@ -1085,6 +1085,16 @@ pub struct MessageEntry {
     /// Measured 2026-10-16 (`qa/paired/sail-calm.tsv`, beat `heading`): the
     /// stock game reads `>Yell HOIST!` / blank / `>BREAKING UP!`.
     pub bare_marker: bool,
+    /// This output starts a row of its own even after a
+    /// [`Self::bare_marker`] row, rather than being written on it.
+    ///
+    /// The bare marker row takes the step's own refusal (`BREAKING UP!`),
+    /// but not an encounter the step ran into. Measured 2026-10-16
+    /// (`qa/paired/sail-heading-echo.tsv`, beat `sailing-more`, stock runs
+    /// `204248` and `222947`): under hoisted sail the original reads
+    /// `Hull weak!` / blank / the bare `>` marker row / `Attacked!`, the
+    /// encounter line on the row below the marker.
+    pub starts_fresh_row: bool,
 }
 
 /// Bookkeeping for a verb echo that has been written to the transcript

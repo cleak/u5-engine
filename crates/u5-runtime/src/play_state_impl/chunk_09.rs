@@ -6058,7 +6058,9 @@ impl PlayState {
         // The generic arm rebuilds first and emits its fixed line before
         // either the shared impact payload or terrain combat.
         self.mark_visibility_dirty();
-        self.push_impact_line("Attacked!");
+        // An encounter line starts its own row, even after the bare marker
+        // row a released sailing step drew (`MessageEntry::starts_fresh_row`).
+        self.emit_encounter_line("Attacked!");
         let party_terrain = self.grid[world_cell_index(self.player.x, self.player.y)];
         if generic_adjacent_hostile_uses_impact(party_terrain, self.player.transport.save_marker())
         {
