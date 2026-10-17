@@ -528,9 +528,10 @@ pub const INN_REGISTRY_EMPTY_MARKER: u8 = 0;
 /// §3.1 calls it opaque padding. Decoding those as guests invented thirteen
 /// phantom lodgers on the shipped image. Treating `0xFF` as "not a guest" is
 /// therefore the conservative reading: it can only drop records no published
-/// consumer can reach, and `systems/blackthorn.md` §5 confirms the one engine
-/// producer of an unmatchable marker is a tombstone that "no inn can ever
-/// retrieve" and that "nothing else in the game reads it back".
+/// consumer can reach. (`systems/blackthorn.md` §5's executed-companion
+/// tombstone is `0x7F`, not this value, and is read back by the shrine/Codex
+/// presentation - u5-spec#298 Q5, `RETRACTIONS.md` R546 - so it decodes as an
+/// ordinary registry record that no inn's scene matches.)
 pub const INN_REGISTRY_UNMATCHABLE_MARKER: u8 = 0xff;
 
 /// Whether a registry slot's leading marker byte denotes a lodged guest.

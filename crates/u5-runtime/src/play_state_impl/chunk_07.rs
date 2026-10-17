@@ -5545,18 +5545,14 @@ impl PlayState {
     }
 
     /// `blackthorn.md §5`: "parks the lifted record in the last roster slot
-    /// with a **whereabouts value that matches no location**. That
-    /// whereabouts field is the same one the innkeeper uses when a companion
-    /// is left at an inn; the value written here matches no inn and no scene,
-    /// so no inn can ever retrieve them".
-    ///
-    /// The spec pins the *property* of that byte - it matches no inn and no
-    /// scene - and leaves the exact value with the data, so the engine reuses
-    /// the no-scene sentinel it already has: [`Scene::new`] rejects `0xFF`,
-    /// and no inn's scene marker can equal it, so
-    /// [`crate::inn_guest_indices_for_scene`] can never select the parked
-    /// record.
-    pub const BLACKTHORN_EXECUTED_WHEREABOUTS: u8 = 0xff;
+    /// with a **whereabouts value that matches no location**. ... The value is
+    /// `0x7F`" (u5-spec#298 Q5, `RETRACTIONS.md` R546). It matches no inn and
+    /// no scene, so no inn can ever retrieve the record; it is not, as the
+    /// withdrawn text said, unread: "the shrine and Codex presentation counts
+    /// roster records holding it" (`karma.md` Section 8). The engine had
+    /// chosen its own no-scene sentinel `0xFF` while the value was
+    /// unpublished.
+    pub const BLACKTHORN_EXECUTED_WHEREABOUTS: u8 = 0x7f;
 
     /// `blackthorn.md §5`: "**The punishment is an execution, and it is
     /// durable.** ... the routine:

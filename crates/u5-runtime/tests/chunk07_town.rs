@@ -125,7 +125,9 @@ fn blackthorn_execution_lifts_the_record_and_parks_it_with_an_unmatchable_wherea
         Scene::new(PlayState::BLACKTHORN_EXECUTED_WHEREABOUTS).is_err(),
         "the parked whereabouts value matches no scene",
     );
-    for marker in 1u8..=0xfeu8 {
+    // u5-spec#298 Q5 / R546: the published value is `0x7F`.
+    assert_eq!(PlayState::BLACKTHORN_EXECUTED_WHEREABOUTS, 0x7f);
+    for marker in (1u8..=0xfeu8).filter(|marker| Scene::new(*marker).is_ok()) {
         assert!(
             inn_guest_indices_for_scene(&state.inn_registry, marker).is_empty(),
             "no inn scene marker {marker:#04x} can retrieve the executed companion",
