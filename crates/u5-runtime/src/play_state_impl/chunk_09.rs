@@ -1078,6 +1078,23 @@ impl PlayState {
                         dungeon_floor_wrap_coord(self.player.y as i16 + ahead_dy as i16) as usize;
                     decorations.push((x, y, band, DungeonDecorationPlacement::Forward));
                 }
+                // `dungeon-mode.md §6.4` (u5-spec#298 Q12): a `0xC?` wall one
+                // cell ahead in a flavour-3 dungeon takes one gameplay draw
+                // over `0..64`, hit or miss, and a result below 4 lights the
+                // chained skeleton's eyes.
+                if role == DungeonBillboardRole::ForwardFlavourWall
+                    && band == 1
+                    && scene.presentation_flavour() == DungeonPresentationFlavour::FlavourByte3
+                {
+                    let roll = u5_prng_range_u16(&mut self.prng_state, 0, DUNGEON_FLOURISH_ROLL_HIGH);
+                    if roll < DUNGEON_FLOURISH_HIT_BELOW {
+                        for &(y, first, last) in DUNGEON_FLOURISH_RUNS.iter() {
+                            for x in first..=last {
+                                Self::plot_dungeon_screen_pixel(viewport, x, y, DUNGEON_FLOURISH_PEN);
+                            }
+                        }
+                    }
+                }
             }
 
             // `dungeon-mode.md §6.5`: the sweep "runs the forward test,

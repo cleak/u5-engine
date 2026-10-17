@@ -2824,3 +2824,50 @@ BRITANNIA 11 21
         );
     }
 
+
+#[test]
+fn dungeon_flavour3_flourish_draws_on_four_in_sixty_five_and_always_consumes() {
+    // `dungeon-mode.md §6.4` (u5-spec#298 Q12): a `0xC?` wall one cell
+    // ahead in a flavour-3 dungeon takes one gameplay draw over `0..64`,
+    // hit or miss; below 4 it paints ten pixels in pen 12.
+    let lit = |seed: u16, record: u8| {
+        let mut grid = open_dungeon_record();
+        grid[dungeon_cell_index(0, 5, 4)] = 0xc0;
+        let mut state = dungeon_state(grid, 0, 4, 4);
+        state.area = Area::Dungeon {
+            scene: DungeonScene::from_record(record).unwrap(),
+            level: 0,
+        };
+        state.player.facing = Direction::East;
+        state.torch_counter = 10;
+        state.prng_state = seed;
+        let viewport = state
+            .render_dungeon_viewport(4, TileGraphicsDepth::Ega16, None, None)
+            .unwrap();
+        let pixel = |x: i32, y: i32| {
+            viewport.pixels[(y as usize - VIEWPORT_ORIGIN_Y) * viewport.width
+                + (x as usize - VIEWPORT_ORIGIN_X)]
+        };
+        let eyes = DUNGEON_FLOURISH_RUNS
+            .iter()
+            .flat_map(|&(y, first, last)| (first..=last).map(move |x| (x, y)))
+            .filter(|&(x, y)| pixel(x, y) == DUNGEON_FLOURISH_PEN)
+            .count();
+        (eyes, state.prng_state)
+    };
+    let hit = (1..=u16::MAX)
+        .find(|&seed| u5_prng_range_u16(&mut seed.clone(), 0, 64) < 4)
+        .unwrap();
+    let miss = (1..=u16::MAX)
+        .find(|&seed| u5_prng_range_u16(&mut seed.clone(), 0, 64) >= 4)
+        .unwrap();
+    for (seed, expected_eyes) in [(hit, 10), (miss, 0)] {
+        let mut after = seed;
+        u5_prng_range_u16(&mut after, 0, 64);
+        // Scene record 0 is Deceit, a flavour-3 dungeon.
+        assert_eq!(lit(seed, 0), (expected_eyes, after), "seed {seed:#06x}");
+    }
+    // Record 1 (Despise) is not flavour 3: no flourish (its own wall
+    // decoration pass owns any draws there).
+    assert_eq!(lit(hit, 1).0, 0);
+}

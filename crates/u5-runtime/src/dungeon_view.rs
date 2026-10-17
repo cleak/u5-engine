@@ -213,6 +213,19 @@ pub const fn dungeon_decoration_position(
     }
 }
 
+/// `dungeon-mode.md §6.4` (u5-spec#298 Q12): the flavour-3 flourish's
+/// gameplay draw is inclusive `0..64` and hits below 4 (4 in 65).
+pub const DUNGEON_FLOURISH_ROLL_HIGH: u16 = 64;
+pub const DUNGEON_FLOURISH_HIT_BELOW: u16 = 4;
+/// "UI pen slot 0 biased by 8 - palette index 12, bright red, on the
+/// 16-colour adapters; the pen select masks it to two bits on CGA."
+pub const DUNGEON_FLOURISH_PEN: u8 = 12;
+/// The four inclusive horizontal runs in screen coordinates, as
+/// `(y, first x, last x)`: "y 87 at x 92..93 and x 97..98, and y 88 at
+/// x 91..93 and x 97..99".
+pub const DUNGEON_FLOURISH_RUNS: [(i32, i32, i32); 4] =
+    [(87, 92, 93), (87, 97, 98), (88, 91, 93), (88, 97, 99)];
+
 pub const DUNGEON_MONSTER_INITIAL_STATES: [u8; 8] =
     [0x60, 0xa0, 0x00, 0x90, 0x80, 0x60, 0x00, 0x00];
 pub const DUNGEON_MONSTER_COMBAT_CLASSES: [u8; 8] = [20, 21, 22, 23, 24, 25, 28, 27];
