@@ -3137,7 +3137,9 @@ fn active_combat_field_followup_cancels_after_spending_without_marker() {
             .is_none()
     );
     assert!(state.active_cast_followup.is_none());
-    assert_eq!(state.message, "None!");
+    // `combat.md §8.2`: the shared cursor's ranged arm "returns silently"
+    // on cancel; the former `None!` was the engine's own (playtest E34).
+    assert_eq!(state.message, "");
     assert_eq!(state.turn, 0);
     assert!(
         state
@@ -3176,7 +3178,10 @@ fn active_combat_field_followup_ignores_out_of_bounds_cursor_move() {
             .unwrap()
             .is_none()
     );
-    assert_eq!(state.message.lines().next(), Some("Target? (0, 0)"));
+    // `magic.md §8`: the field spells use the shared `Aim! ` cursor of
+    // `combat.md §8.2` (playtest E34 withdrew `Target? (x, y)`).
+    assert_eq!(state.message, "Aim! ");
+    assert_eq!(state.combat_aim_marker_cell, Some((0, 0)));
 
     assert!(
         state
@@ -3184,11 +3189,19 @@ fn active_combat_field_followup_ignores_out_of_bounds_cursor_move() {
             .unwrap()
             .is_none()
     );
-    assert_eq!(state.message.lines().next(), Some("Target? (0, 0)"));
+    assert_eq!(state.combat_aim_marker_cell, Some((0, 0)));
+    // The caster's own cell does not confirm (`§8.2`), so step off it first.
+    assert!(
+        state
+            .step_active_cast_followup('6', "", std::path::Path::new(""))
+            .unwrap()
+            .is_none()
+    );
+    assert_eq!(state.combat_aim_marker_cell, Some((1, 0)));
     let result = state
         .step_active_cast_followup(' ', "", std::path::Path::new(""))
         .unwrap()
-        .expect("confirming the unchanged cursor should cast the field");
+        .expect("confirming the moved cursor should cast the field");
 
     assert_eq!(result.0, MoveOutcome::Cast);
     assert_eq!(state.turn, 1);
@@ -3197,7 +3210,7 @@ fn active_combat_field_followup_ignores_out_of_bounds_cursor_move() {
         .iter()
         .find(|object| object.type_byte == COMBAT_FIELD_KIND_POISON)
         .expect("poison field marker should be placed");
-    assert_eq!((marker.x, marker.y), (0, 0));
+    assert_eq!((marker.x, marker.y), (1, 0));
 }
 
 #[test]
@@ -13470,7 +13483,9 @@ fn combat_input_dispatch_cancelled_field_cursor_commits_spent_cast_action() {
             .iter()
             .all(|object| object.type_byte != COMBAT_FIELD_KIND_FIRE)
     );
-    assert_eq!(state.message, "None!\nAvatar, armed with bare hands:\n");
+    // `combat.md §8.2`: the shared cursor's ranged-arm cancel "returns
+    // silently" - no `None!` (playtest E34).
+    assert_eq!(state.message, "\nAvatar, armed with bare hands:\n");
 }
 
 #[test]

@@ -827,7 +827,13 @@ impl PlayState {
         if self
             .active_cast_followup
             .as_ref()
-            .is_some_and(|session| matches!(session.kind, CastFollowupKind::CombatAimCursor { .. }))
+            .is_some_and(|session| {
+                matches!(
+                    session.kind,
+                    CastFollowupKind::CombatAimCursor { .. }
+                        | CastFollowupKind::CombatCoordinate { .. }
+                )
+            })
         {
             return Some(crate::combat_frame::COMBAT_ATTACK_AIM_PROMPT.to_string());
         }
@@ -1406,7 +1412,31 @@ impl PlayState {
         self.push_explicit_blank_message_entry();
         self.message.clear();
         self.combat_aim_marker_cell = None;
+        // `combat.md §7`: the cursor lowers the marker gate "as its last"
+        // act.
+        self.combat_aim_marker_gate = false;
         self.mark_visibility_dirty();
+    }
+
+    /// `combat.md §8.2`'s cursor table for the caster's own cell: Enter
+    /// (and `A`) "nothing happens and the loop reads another key"; Space
+    /// cancels. `None` for any other cell or key.
+    fn combat_spell_cursor_own_cell_key(
+        &self,
+        session: &CastFollowupSession,
+        cursor: (u8, u8),
+        ch: char,
+    ) -> Option<CombatSpellCursorOwnCellKey> {
+        let caster_slot = session.combat_actor_slot.unwrap_or(session.caster_index);
+        let caster = self.combat_actors.get(caster_slot)?;
+        if (caster.x, caster.y) != cursor {
+            return None;
+        }
+        match ch {
+            '\r' | '\n' => Some(CombatSpellCursorOwnCellKey::Ignore),
+            ' ' => Some(CombatSpellCursorOwnCellKey::Cancel),
+            _ => None,
+        }
     }
 
     pub fn render_active_cast_followup(&self) -> String {
@@ -1443,8 +1473,12 @@ impl PlayState {
                     };
                     format!("{label}? {value}\nChoose combat slot 1-{COMBAT_ACTOR_SLOTS}; Esc cancels.")
                 }
-                CastFollowupKind::CombatCoordinate { x, y, .. } => {
-                    format!("Target? ({x}, {y})\nMove cursor with cardinal keys; Space/Enter confirms; Esc cancels.")
+                // `magic.md §8`: the field spells use "the standard combat
+                // arena cursor", the shared `Aim! ` cursor of `combat.md
+                // §8.2`. The arena marker shows the cell; the engine's
+                // `Target? (x, y)` help text is in no spec (playtest E34).
+                CastFollowupKind::CombatCoordinate { .. } => {
+                    crate::combat_frame::COMBAT_ATTACK_AIM_PROMPT.to_string()
                 }
                 // `magic.md §8`: the whole of the prompt is `Creature: `,
                 // with the arena cursor - not a message-window line - showing
@@ -1644,7 +1678,23 @@ impl PlayState {
                         self.cancel_combat_aim_cursor();
                         return Ok(None);
                     }
+                    // `combat.md §8.2`'s cursor table: Enter confirms
+                    // "**unless** the cursor is on the attacker's own cell,
+                    // in which case nothing happens and the loop reads
+                    // another key", and Space there cancels. The spell
+                    // cursor is that same shared cursor (`magic.md §8`).
+                    // Playtest E33: Kill, Missile and Fireball resolved
+                    // against the caster.
+                    match self.combat_spell_cursor_own_cell_key(&session, (x, y), ch) {
+                        Some(CombatSpellCursorOwnCellKey::Ignore) => continue,
+                        Some(CombatSpellCursorOwnCellKey::Cancel) => {
+                            self.cancel_combat_aim_cursor();
+                            return Ok(None);
+                        }
+                        None => {}
+                    }
                     if matches!(ch, ' ' | '\r' | '\n') {
+                        self.combat_aim_marker_gate = false;
                         match self.combat_targeting_occupant_at((x, y)) {
                             Some(slot) => {
                                 let tail = (slot + 1).to_string();
@@ -1680,11 +1730,27 @@ impl PlayState {
                     range_origin,
                     max_range,
                 } => {
+                    // `magic.md §8`: player combat field casts "enter the
+                    // standard combat arena cursor / impact path", which is
+                    // `combat.md §8.2`'s shared cursor: Escape cancels and
+                    // the ranged arm "returns silently", and the caster's
+                    // own cell takes the same Enter/Space rule as the aimed
+                    // spells above. The engine printed `None!` here and
+                    // placed a field on the caster (playtests E33, E34).
                     if ch == '\u{1b}' {
-                        self.message = "None!".to_string();
+                        self.cancel_combat_aim_cursor();
                         return Ok(None);
                     }
+                    match self.combat_spell_cursor_own_cell_key(&session, (x, y), ch) {
+                        Some(CombatSpellCursorOwnCellKey::Ignore) => continue,
+                        Some(CombatSpellCursorOwnCellKey::Cancel) => {
+                            self.cancel_combat_aim_cursor();
+                            return Ok(None);
+                        }
+                        None => {}
+                    }
                     if matches!(ch, ' ' | '\r' | '\n') {
+                        self.combat_aim_marker_gate = false;
                         let tail = format!("{x},{y}");
                         return self.finish_active_cast_followup(session, &tail, game_dir);
                     }
@@ -1713,6 +1779,10 @@ impl PlayState {
                         range_origin,
                         max_range,
                     };
+                    // `combat.md §7`: the cursor "**rewrites** them on every
+                    // accepted move".
+                    self.combat_aim_marker_cell = Some((nx, ny));
+                    self.mark_visibility_dirty();
                 }
             }
         }
@@ -1922,6 +1992,17 @@ impl PlayState {
         let Some(kind) = kind else {
             return false;
         };
+        // `combat.md §7`, "What owns that coordinate": the shared cursor
+        // "**seeds** them when it opens" and raises the marker gate "as its
+        // first act", so the spell cursors are drawn on the arena like the
+        // Attack cursor.
+        if let CastFollowupKind::CombatAimCursor { x, y }
+        | CastFollowupKind::CombatCoordinate { x, y, .. } = kind
+        {
+            self.combat_aim_marker_cell = Some((x, y));
+            self.combat_aim_marker_gate = true;
+            self.mark_visibility_dirty();
+        }
         self.active_cast_followup = Some(CastFollowupSession::new(
             caster_index,
             spell_code,
