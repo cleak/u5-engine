@@ -792,7 +792,7 @@ def compare_cached(artifact: pathlib.Path, cache: dict) -> tuple:
 
 
 # Bump when a classifier change would alter a cached verdict.
-CACHE_VERSION = 32
+CACHE_VERSION = 34
 
 
 # A scenario whose *roster panel* is a lottery and whose message window is
@@ -880,6 +880,86 @@ def has_no_roster_panel(scenario: str) -> bool:
     return "# no-roster-panel:" in _scenario_header(scenario)
 
 
+# The "Warriors of Destiny" flame on the title screen is a free-running
+# animation, so the two sides catch it in different phases and its lower edge
+# crosses the compared text rects. Measured over the 33 `chargen-journey-basics`
+# artifacts (2026-09-04 .. 2026-10-16): on the four title-screen beats the only
+# rows that differ in runs whose two sides show the same screen are panel rows
+# 9-10 and message-window rows 13-14 (absolute); every other differing row came
+# from a run whose sides were on different screens, which must still report.
+# So the mask is those four absolute rows and nothing else, and only on the
+# beats the scenario's own header names:
+#
+#     # title-flame-band: menu chargen-name
+#
+# The prompt cursor on those screens needs no mask: `CURSOR_GLYPHS` already
+# treats its cells as blank.
+TITLE_FLAME_MARKER = "# title-flame-band:"
+TITLE_FLAME_ROWS = frozenset({9, 10, 13, 14})
+
+
+def title_flame_beats(scenario: str) -> frozenset[str]:
+    """The beats `# title-flame-band:` declares in the scenario's header."""
+    path = SCENARIOS / f"{scenario}.tsv"
+    try:
+        lines = path.read_text().splitlines()
+    except OSError:
+        return frozenset()
+    beats: set[str] = set()
+    for line in lines:
+        if line.lower().startswith(TITLE_FLAME_MARKER):
+            beats.update(line[len(TITLE_FLAME_MARKER):].split())
+    return frozenset(beats)
+
+
+def mask_title_flame(
+    left: list[list[str]], right: list[list[str]], top: int
+) -> tuple[list[list[str]], list[list[str]]]:
+    """Blank the flame-band rows of a decoded rect whose first row is `top`.
+
+    Both sides get the same blank, so a masked row can never differ, and every
+    other row - including the box borders and prompt rows a desynchronised run
+    differs on - comes back untouched.
+    """
+
+    def masked(rows: list[list[str]]) -> list[list[str]]:
+        return [
+            [" "] * len(row) if top + index in TITLE_FLAME_ROWS else row
+            for index, row in enumerate(rows)
+        ]
+
+    return masked(left), masked(right)
+
+
+# Beats a scenario's own header declares to be dice, one by one:
+#
+#     # dice-beats: sailing-more same-key
+#
+# The scenario-wide markers in `LOTTERY_MARKERS` turn *every* difference into
+# RERUN, which is right when the premise itself is a draw (`sail-calm`'s wind)
+# but hides a real regression on the beats that are not. `sail-heading-echo`
+# is the case: its `hoisted`, `heading` and `sailing` beats are deterministic
+# and carry the prompt-row contract, while from `sailing-more` on each wait
+# pass is a consumed turn with its own encounter roll (`weather.md §5`). The
+# named beats are skipped, and every other beat is compared as usual. The
+# directive's name avoids the words `is_lottery` matches.
+DICE_BEATS_MARKER = "# dice-beats:"
+
+
+def dice_beats(scenario: str) -> frozenset[str]:
+    """The beats `# dice-beats:` declares in the scenario's header."""
+    path = SCENARIOS / f"{scenario}.tsv"
+    try:
+        lines = path.read_text().splitlines()
+    except OSError:
+        return frozenset()
+    beats: set[str] = set()
+    for line in lines:
+        if line.lower().startswith(DICE_BEATS_MARKER):
+            beats.update(line[len(DICE_BEATS_MARKER):].split())
+    return frozenset(beats)
+
+
 def is_probe(scenario: str) -> bool:
     """Is this scenario a probe rather than a comparison?
 
@@ -918,6 +998,10 @@ def compare(artifact: pathlib.Path) -> tuple[int, int, int, int, int]:
         ):
             skipped += 1
             continue
+        if label in dice_beats(scenario):
+            skipped += 1
+            print(f"  dice   {scenario}/{label}: declared a dice beat, not compared")
+            continue
         stock = artifact / f"dosbox-{label}.png"
         engine = artifact / f"engine-{label}.png"
         if not stock.exists() or not engine.exists():
@@ -927,6 +1011,9 @@ def compare(artifact: pathlib.Path) -> tuple[int, int, int, int, int]:
         if left is None or right is None:
             skipped += 1
             continue
+        flame_masked = label in title_flame_beats(scenario)
+        if flame_masked:
+            left, right = mask_title_flame(left, right, TOP)
         from viewport_audit import one_sided_beats as _one_sided_beats
 
         # A beat the scenario reaches with the two sides deliberately apart
@@ -956,6 +1043,10 @@ def compare(artifact: pathlib.Path) -> tuple[int, int, int, int, int]:
             decode_panel(engine),
         )
         if panel_left is not None and panel_right is not None:
+            if flame_masked:
+                panel_left, panel_right = mask_title_flame(
+                    panel_left, panel_right, PANEL_TOP
+                )
             panel_rows = [
                 index + PANEL_TOP
                 for index, (a, b) in enumerate(zip(panel_left, panel_right))

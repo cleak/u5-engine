@@ -1398,9 +1398,12 @@ fn frigate_world(sails_hoisted: bool, hull: u8, wind: WindState) -> PlayState {
 }
 
 fn frigate_transcript_texts(state: &PlayState) -> Vec<String> {
+    // A bare marker row is the prompt pair's end cap, not printed text
+    // (`MessageEntry::bare_marker`).
     state
         .message_entries()
         .iter()
+        .filter(|entry| !entry.bare_marker)
         .map(|entry| entry.text.clone())
         .collect()
 }

@@ -391,9 +391,11 @@ impl PlayState {
         if matches!(self.area, Area::Dungeon { .. }) {
             return Ok(false);
         }
-        if let Some(echo) = top_down_command_echo(key)
-            && !self.frigate_movement_key_prints_nothing(key)
-        {
+        if self.frigate_movement_key_prints_nothing(key) {
+            // No echo, but the prompt pair before the key still drew its
+            // marker row (`text-output.md §10.2`).
+            self.open_overworld_bare_marker_row();
+        } else if let Some(echo) = top_down_command_echo(key) {
             let echo = self.vehicle_prefixed_movement_echo(key).unwrap_or(echo);
             self.begin_command_echo(echo);
         }

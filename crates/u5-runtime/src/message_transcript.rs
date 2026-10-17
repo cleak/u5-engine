@@ -145,6 +145,7 @@ impl PlayState {
             centered,
             explicit_blank,
             prompt_column_row: false,
+            bare_marker: false,
         });
         if self.message_transcript.len() > MESSAGE_TRANSCRIPT_CAPACITY {
             let excess = self.message_transcript.len() - MESSAGE_TRANSCRIPT_CAPACITY;
@@ -647,6 +648,7 @@ impl PlayState {
                 centered: false,
                 explicit_blank: true,
                 prompt_column_row: false,
+                bare_marker: false,
             };
         } else if last.explicit_blank || last.prompt_column_row || last.text != prompt {
             return None;
@@ -662,6 +664,7 @@ impl PlayState {
             centered: false,
             explicit_blank: false,
             prompt_column_row: true,
+            bare_marker: false,
         });
         if self.message_transcript.len() > MESSAGE_TRANSCRIPT_CAPACITY {
             let excess = self.message_transcript.len() - MESSAGE_TRANSCRIPT_CAPACITY;
@@ -1007,6 +1010,76 @@ impl PlayState {
         if matches!(self.area, Area::World { .. }) {
             self.overworld_prompt_pair_suppressed = false;
         }
+    }
+
+    /// The prompt pair in front of a shipboard direction that echoes nothing.
+    ///
+    /// `text-output.md §10.2`: the overworld helper "emits the pair before
+    /// waiting for a key" unless the flag says otherwise, and "re-arms the
+    /// flag as soon as it has tested it". A verb echo records that test in
+    /// [`Self::begin_command_echo`]; a hoisted key that keeps the facing and
+    /// a synthesised sailing step have no echo (`vehicles.md §6`, u5-spec#297:
+    /// "A key that keeps the facing prints nothing under hoisted sail"), so
+    /// without this the marker row the pair drew was never recorded and the
+    /// step's own output - `BREAKING UP!` - landed under the history instead
+    /// of on that row.
+    ///
+    /// Call it before the step runs; the step's direction then clears the
+    /// flag again (`note_overworld_direction_taken`). Returns whether the
+    /// pair was suppressed.
+    pub fn open_overworld_bare_marker_row(&mut self) -> bool {
+        if !matches!(self.area, Area::World { .. }) {
+            return false;
+        }
+        self.flush_message_slot();
+        let suppressed = self.take_overworld_prompt_pair_suppression();
+        if !suppressed {
+            self.push_overworld_bare_marker_entry(self.message_transcript.len());
+        }
+        suppressed
+    }
+
+    /// Insert a [`MessageEntry::bare_marker`] row at `index`.
+    pub(crate) fn push_overworld_bare_marker_entry(&mut self, index: usize) {
+        let index = index.min(self.message_transcript.len());
+        self.message_transcript.insert(
+            index,
+            MessageEntry {
+                text: String::new(),
+                producer_blank: false,
+                glyphs: Vec::new(),
+                is_command_echo: false,
+                continues_open_row: false,
+                prompt_pair_suppressed: false,
+                leaves_row_open: false,
+                centered: false,
+                explicit_blank: false,
+                prompt_column_row: false,
+                bare_marker: true,
+            },
+        );
+        if self.message_transcript.len() > MESSAGE_TRANSCRIPT_CAPACITY {
+            let excess = self.message_transcript.len() - MESSAGE_TRANSCRIPT_CAPACITY;
+            self.message_transcript.drain(0..excess);
+        }
+        self.message_transcript_revision = self.message_transcript_revision.wrapping_add(1);
+    }
+
+    /// Take back the newest [`MessageEntry::bare_marker`] row: the wind held
+    /// the synthesised pass it was drawn for, so no direction was taken.
+    pub(crate) fn withdraw_overworld_bare_marker_entry(&mut self) {
+        let Some(index) = self.message_transcript.iter().rposition(|entry| entry.bare_marker) else {
+            return;
+        };
+        let was_last = index + 1 == self.message_transcript.len();
+        self.message_transcript.remove(index);
+        // Only a withdrawal with nothing written after it undoes its push
+        // outright; anything later was a real push and keeps its bump.
+        self.message_transcript_revision = if was_last {
+            self.message_transcript_revision.wrapping_sub(1)
+        } else {
+            self.message_transcript_revision.wrapping_add(1)
+        };
     }
 
     /// `text-output.md §10.2`: "The overworld's per-entry initialiser sets

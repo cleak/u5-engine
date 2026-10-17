@@ -11,6 +11,16 @@
 # heading key or for the released step into the shoal - where this engine
 # printed `>East` first. This scenario sails away from the coast instead, so
 # the released steps are ordinary moves, and samples the window as they go.
+# Encounter and wind dice from `sailing-more` on, measured 2026-10-16 over
+# the four runs with this seed and these keys: by 8 s the stock side was hit
+# by `* BOOM! *` and sunk (031944), attacked by SHARKS (204248) and by SEA
+# HORSES (222947) - one run's stock capture never reached the game - and the
+# engine's wind drifted to South on 222947 and ran it onto a shoal. Each wait
+# pass is a consumed turn with its own encounter roll (`weather.md §5`), so
+# only `hoisted`, `heading` and `sailing` are comparable, and
+# `paired_compare.py` skips the later two beats by name - the deterministic
+# three still report a difference as one.
+# dice-beats: sailing-more same-key
 # requires-seed: profile `seed-drowning-collision` (frigate west of a coast)
 both	wait	15000
 both	key	space

@@ -238,6 +238,30 @@ impl GameplayMessageLog {
         self.push_wrapped_plain(text, MessageLineKind::Command);
     }
 
+    /// Append the end-cap row an overworld prompt pair drew in front of a
+    /// shipboard direction that echoes nothing
+    /// ([`crate::MessageEntry::bare_marker`]). It holds the marker and the
+    /// cursor in column 25 and no text, so the next output is written on it.
+    pub fn push_bare_marker(&mut self) {
+        self.lines.push(MessageLogLine {
+            text: String::new(),
+            glyphs: Vec::new(),
+            kind: MessageLineKind::Command,
+            centered: false,
+            row_left_open: true,
+            trailing_spaces: 0,
+        });
+        self.trim();
+    }
+
+    /// Whether the last row is a [`Self::push_bare_marker`] row nothing has
+    /// been written on yet.
+    pub fn ends_with_bare_marker(&self) -> bool {
+        self.lines.last().is_some_and(|line| {
+            line.kind == MessageLineKind::Command && line.glyphs.is_empty() && line.row_left_open
+        })
+    }
+
     /// Append one or more handler-output lines.
     pub fn push_output(&mut self, text: &str) {
         if text.trim().is_empty() {
@@ -267,6 +291,11 @@ impl GameplayMessageLog {
 
     pub fn end_turn(&mut self) {
         if self.lines.is_empty() {
+            return;
+        }
+        // A bare marker row is still the cursor row: the next cycle's
+        // leading line feed leaves it rather than deriving a blank under it.
+        if self.ends_with_bare_marker() {
             return;
         }
         // Only `Blank`. A `ProducerBlank` does **not** satisfy the derived
@@ -337,6 +366,14 @@ impl GameplayMessageLog {
         // `Shrine of the` / `Codex!` - fifteen cells on the first row, sixteen
         // after it, and no marker below the first. Wrapping every row at the
         // narrow width and prefixing all of them indented the continuations.
+        // Output reaching a bare marker row is written on it, after the end
+        // cap, so its first row is that command row.
+        let kind = if kind == MessageLineKind::Output && self.ends_with_bare_marker() {
+            self.lines.pop();
+            MessageLineKind::Command
+        } else {
+            kind
+        };
         let rows = wrap_rendered_with_first_row_width(glyphs, kind.width(), MESSAGE_WINDOW_WIDTH);
         // Only the final row can own the authored trailing spaces: an interior
         // wrap point already consumed the space it broke on.
@@ -455,6 +492,11 @@ pub fn message_log_from_entries<'a>(
         // exactly one blank row after each completed command turn"), and
         // section 10.3 lists echoes that emit one deliberately ("two
         // newlines | Complete, plus one deliberate extra blank row").
+        if entry.bare_marker {
+            log.end_turn();
+            log.push_bare_marker();
+            continue;
+        }
         if entry.explicit_blank {
             log.lines.push(MessageLogLine {
                 text: String::new(),
@@ -915,6 +957,23 @@ fn layout_message_window_inner(
     live_row_follows_history: bool,
     live_row: LiveRowKind,
 ) -> MessageWindowLayout {
+    // A trailing bare marker row is where the cursor still is: nothing has
+    // been written since the pair drew it, and the suppressed prompt that
+    // follows a shipboard direction draws no new one (`text-output.md
+    // §10.2`). So the live row *is* that row - end cap, cursor in column 25 -
+    // not a continuation row under it.
+    let trimmed;
+    let (log, live_row, live_row_follows_history) =
+        if live_input.is_some() && open_prompt.is_none() && log.ends_with_bare_marker() {
+            let mut without = log.clone();
+            without.lines.pop();
+            trimmed = without;
+            // The marker row already took (or skipped) its blank when it was
+            // logged, so the live row follows the history directly.
+            (&trimmed, LiveRowKind::CommandRow, true)
+        } else {
+            (log, live_row, live_row_follows_history)
+        };
     let live_row_prefixed = live_row == LiveRowKind::CommandRow;
     // Only a continuation gives up the separating blank. A key-wait row is
     // unprefixed but still sits under one.

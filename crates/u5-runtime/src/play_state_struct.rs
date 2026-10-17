@@ -1025,6 +1025,18 @@ pub struct MessageEntry {
     /// it. While it is still only spaces it must survive renderers that
     /// drop blank-text entries, because the cursor is drawn on it.
     pub prompt_column_row: bool,
+    /// The marker row an overworld prompt pair drew before a shipboard
+    /// direction that echoes nothing: a hoisted key that keeps the facing,
+    /// or a synthesised sailing step the input helper released.
+    ///
+    /// `text-output.md §10.2`: "Each mode's shared input helper emits the
+    /// pair before waiting for a key", and `vehicles.md §6` (u5-spec#297):
+    /// "A key that keeps the facing prints nothing under hoisted sail". So
+    /// the row holds the end cap and the cursor in column 25, and whatever
+    /// the step prints next (`BREAKING UP!`, `COLLISION!`) is written on it.
+    /// Measured 2026-10-16 (`qa/paired/sail-calm.tsv`, beat `heading`): the
+    /// stock game reads `>Yell HOIST!` / blank / `>BREAKING UP!`.
+    pub bare_marker: bool,
 }
 
 /// Bookkeeping for a verb echo that has been written to the transcript
