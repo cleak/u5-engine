@@ -5191,18 +5191,24 @@ impl PlayState {
                             crate::MISCMSG_BLACKTHORN_PENDULUM_NARRATION,
                             BLACKTHORN_PENDULUM_NARRATION,
                         )?;
-                        // The narration's own line feed closes its row: the
-                        // stock `ask5` beat ends on `falls!` with no blank row
-                        // under it (measured 2026-09-12). The key wait that
-                        // follows belongs to the sliced page (§5 step 8), so
-                        // the session waits for its closing key from here,
-                        // with record `6` behind it.
-                        let outcome = self.hold_blackthorn_closing_page(
-                            challenge,
-                            format!("{line}\n"),
-                            false,
-                            true,
-                        )?;
+                        // §5 step 1 prints record `4` as it reads, with no
+                        // line feed: the row stays open after `falls!`, and
+                        // step 8's leading `\n\n` closes it and spends the one
+                        // blank row above the sliced line. The feed this
+                        // engine used to append here (from the stock `ask5`
+                        // beat, which showed `falls!` with no cursor and no
+                        // row under it) was the helper's closing feed of step
+                        // 9 read onto the narration; that sample was taken
+                        // inside the blade hold, which draws no cursor
+                        // because it is not a key wait (Q31) - as this
+                        // engine's staged hold does not either. With the
+                        // feed, the sliced line sat under two blank rows.
+                        // The key wait that follows belongs to the sliced
+                        // page (§5 step 8), so the session waits for its
+                        // closing key from here, with record `6` behind it.
+                        let outcome =
+                            self.hold_blackthorn_closing_page(challenge, line, false, true)?;
+                        self.open_message_row();
                         // §5 step 8: "On the wrong-answer arm only: print
                         // `\n\n`, the removed member's name and ` is sliced
                         // in half! `, wait for an acknowledgement key" - after
@@ -5259,13 +5265,19 @@ impl PlayState {
     /// execution row of `systems/audio.md` Section 5.4.7", then "The shared
     /// impact presentation ... the impact figure is drawn, the 300-update
     /// impact rumble plays, and one world tick follows". No inversion and no
-    /// guard movement. The whole of it is one staged hold with nothing to
-    /// print; the roster edit of steps 5-7 lands when it releases
-    /// ([`Self::release_blackthorn_execution_hold`]), and `page` - the
-    /// wrong arm's sliced line - prints after that.
+    /// guard movement. Two staged pure holds with nothing to print: the
+    /// quiet pause, at whose end the swell and the impact rumble sound
+    /// ("Nothing else happens between the record and the swell"), then the
+    /// sounds' own length, at whose end the roster edit of steps 5-7 lands
+    /// ([`Self::release_blackthorn_execution_hold`]). `page` - the wrong
+    /// arm's sliced line - prints after that, continuing the row record `4`
+    /// left open.
     fn stage_blackthorn_execution_hold(&mut self, page: Option<String>) {
-        self.emit_sound_effect(SoundEffect::BlackthornExecutionSwell);
-        self.emit_sound_effect(SoundEffect::RoughSeasImpactRumble);
+        self.pending_blackthorn_execution_swell = true;
+        self.staged_narration.push_ticks(
+            crate::blackthorn::BLACKTHORN_EXECUTION_QUIET_PAUSE_TICKS,
+            String::new(),
+        );
         let mut jitter = crate::audio::RumbleJitter::default();
         let sounds = SoundEffect::BlackthornExecutionSwell
             .program(&mut jitter)
@@ -5275,12 +5287,9 @@ impl PlayState {
                 .program(&mut jitter)
                 .duration(true)
                 .as_secs_f64();
-        let hold = crate::narration::bios_ticks_secs(
-            crate::blackthorn::BLACKTHORN_EXECUTION_QUIET_PAUSE_TICKS,
-        ) + sounds;
-        self.staged_narration.push_secs(hold, String::new());
+        self.staged_narration.push_secs(sounds, String::new());
         if let Some(page) = page {
-            self.staged_narration.push_secs(0.0, page);
+            self.staged_narration.push_secs_on_open_row(0.0, page);
         }
     }
 
@@ -5290,8 +5299,15 @@ impl PlayState {
     /// "to the fixture's unoccupied member `0x80`", and the second nondead
     /// member is lifted with the stats panel "repaint[ed] **immediately
     /// afterwards**". Called as each staged beat releases; a no-op unless an
-    /// execution is pending.
+    /// execution is pending. The first release after staging is the end of
+    /// the quiet pause, which starts the swell and the rumble (steps 3-4);
+    /// the next is the end of those sounds, which runs the roster edit.
     pub(crate) fn release_blackthorn_execution_hold(&mut self) {
+        if std::mem::take(&mut self.pending_blackthorn_execution_swell) {
+            self.emit_sound_effect(SoundEffect::BlackthornExecutionSwell);
+            self.emit_sound_effect(SoundEffect::RoughSeasImpactRumble);
+            return;
+        }
         let merciful = std::mem::take(&mut self.pending_blackthorn_merciful_death);
         let victim = self.pending_blackthorn_execution_victim.take();
         if !merciful && victim.is_none() {

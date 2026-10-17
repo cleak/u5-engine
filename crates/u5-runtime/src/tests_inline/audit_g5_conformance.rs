@@ -221,7 +221,17 @@ fn audit_a036_merciful_death_lifts_the_roster_at_the_end_of_the_blade_hold() {
     let sound_before = state.sound_effect_serial;
     state.submit_blackthorn_audience_answer("Ahm", &dir).unwrap();
     assert!(state.message.contains("merciful death"), "{:?}", state.message);
-    // §5 steps 2-4: the swell and the impact rumble, with the hold staged.
+    // §5 step 2: "A quiet 10-tick redraw pause. Nothing else happens between
+    // the record and the swell".
+    assert!(state.staged_narration_active(), "the blade hold is running");
+    assert!(
+        !state.sound_effects_after(sound_before).contains(&SoundEffect::BlackthornExecutionSwell),
+        "the swell waits for the quiet pause"
+    );
+    state.advance_staged_narration_to(0.0);
+    state.advance_staged_narration_to(crate::narration::bios_ticks_secs(10) + 0.01);
+    // Steps 3-4: then the swell and the impact rumble, with the hold still
+    // running.
     let effects = state.sound_effects_after(sound_before);
     assert!(effects.contains(&SoundEffect::BlackthornExecutionSwell), "{effects:?}");
     assert!(effects.contains(&SoundEffect::RoughSeasImpactRumble), "{effects:?}");
@@ -294,6 +304,14 @@ fn audit_a036_pendulum_narration_is_not_a_key_wait() {
 
     state.flush_staged_narration();
     assert!(state.message.contains(" is sliced in half! "), "{:?}", state.message);
+    // §5: record `4` (`... falls!`, no line feed of its own), then step 8's
+    // `\n\n` + name: the first feed closes the narration's row and the
+    // second is the one blank row above the sliced line.
+    let transcript = audit_g5_transcript(&state);
+    let falls = transcript.rfind("falls!").expect("record 4 is on screen");
+    let sliced = transcript.rfind(" is sliced in half! ").expect("sliced line");
+    let between = &transcript[falls + "falls!".len()..sliced];
+    assert_eq!(between.matches('\n').count(), 2, "{between:?}");
     assert_eq!(state.party.len(), 2, "the hold's end lifts the victim");
     assert_eq!(
         state.stats_panel,
