@@ -486,3 +486,46 @@ fn playfix_e30_cancelled_guard_pick_re_asks_the_watch_question() {
     assert_eq!(state.message, REST_WATCH_MEMBER_PROMPT);
     let _ = fs::remove_dir_all(dir);
 }
+
+/// E31: `dungeon-mode.md §11` / `rest-and-camp.md §4`: `For how many hours?
+/// (1-9) ` "loops until a digit or Space and echoes the key plus a line feed
+/// - Space or `0` aborts with no further output". Escape is not a cancel.
+#[test]
+fn playfix_e31_hours_prompt_zero_echoes_and_escape_is_read_past() {
+    let dir = debug_game_dir();
+    for cancel in ['0', ' '] {
+        let mut state = world_state(open_world_grid(), 5, 5);
+        handle_play_key_input(&mut state, 'H', "", &dir).unwrap();
+        assert!(state.active_rest.is_some());
+        let before = state.message_transcript.len();
+        handle_play_key_input(&mut state, cancel, "", &dir).unwrap();
+        assert!(state.active_rest.is_none(), "{cancel:?} aborts");
+        let rows: Vec<String> = state
+            .message_transcript
+            .iter()
+            .map(|entry| entry.text.clone())
+            .collect();
+        let _ = before;
+        assert!(!rows.iter().any(|row| row.contains("None!")), "{cancel:?}: {rows:?}");
+        assert!(
+            rows.iter().any(|row| {
+                row.trim_end() == format!("{REST_HOURS_PROMPT}{cancel}").trim_end()
+            }),
+            "{cancel:?} is echoed on the prompt row: {rows:?}"
+        );
+        assert!(!state.message_row_open_mid_line);
+    }
+
+    let mut state = world_state(open_world_grid(), 5, 5);
+    assert_eq!(state.start_rest_prompt(), MoveOutcome::Observed);
+    assert_eq!(state.step_active_rest('\u{1b}', "", &dir).unwrap(), None);
+    assert!(
+        matches!(
+            state.active_rest.as_ref().map(|session| session.phase),
+            Some(RestPhase::Hours)
+        ),
+        "Escape leaves the hours prompt waiting"
+    );
+    assert_eq!(state.message, REST_HOURS_PROMPT);
+    let _ = fs::remove_dir_all(dir);
+}

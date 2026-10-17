@@ -101,10 +101,9 @@ impl PlayState {
         for ch in std::iter::once(key).chain(suffix.chars()) {
             match session.phase {
                 RestPhase::Hours => {
-                    if ch == '\u{1b}' {
-                        self.message = "None!".to_string();
-                        return Ok(None);
-                    }
+                    // `dungeon-mode.md §11`: the hours prompt "loops until a
+                    // digit or Space" - Escape is neither, so it is read past
+                    // like any other rejected key (playtest E31).
                     let duration_input = if ch.is_ascii() {
                         rest_duration_input(ch as u8)
                     } else {
@@ -130,7 +129,14 @@ impl PlayState {
                             return self.finish_active_rest(hours, None, game_dir);
                         }
                         RestDurationInput::Cancel => {
-                            self.message = "None!".to_string();
+                            // `dungeon-mode.md §11` / `rest-and-camp.md §4`:
+                            // the prompt "echoes the key plus a line feed -
+                            // Space or `0` aborts with no further output".
+                            // The generic `None!` belongs to the selection
+                            // prompts (`commands.md §5.6`), not this one
+                            // (playtest E31).
+                            self.commit_prompt_reply(REST_HOURS_PROMPT, &ch.to_string());
+                            self.message_row_open_mid_line = false;
                             return Ok(None);
                         }
                         RestDurationInput::Discard => {}
