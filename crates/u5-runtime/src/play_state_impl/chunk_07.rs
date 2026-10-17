@@ -3597,7 +3597,19 @@ impl PlayState {
                     // Immediate reaction lines were emitted to the transcript
                     // as they occurred; preserve the command result in the
                     // compatibility message slot.
+                    //
+                    // A reaction line that replaced the slot was emitted
+                    // through `emit_message_line`, which flushed the command's
+                    // own result to the transcript first. The restored result
+                    // is therefore already printed: mark it so, or the next
+                    // flush prints it a second time - a pirate's `* BOOOM! *`
+                    // was followed by an unmarked copy of `Fire-East`
+                    // (playtest E28).
+                    let reaction_replaced_slot = self.message != pre_effect_message;
                     self.message = pre_effect_message;
+                    if reaction_replaced_slot {
+                        self.message_flushed = self.message.clone();
+                    }
                     nonterminal_outcome = Some(outcome);
                 }
                 if outcome.is_transition() || self.combat_active {

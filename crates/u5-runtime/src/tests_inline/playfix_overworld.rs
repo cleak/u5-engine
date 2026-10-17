@@ -355,3 +355,50 @@ fn playfix_e27_ship_repair_hole_up_consumes_a_turn_and_time() {
     assert_ne!(state.clock, GameClock::new(12, 0).unwrap());
     assert!(matches!(state.player.transport, TransportState::Ship { hull, .. } if hull > 77));
 }
+
+/// E28: `overworld.md §6.2.1`: the pirate's announcement is `* BOOOM! *`
+/// and a blank line; the player's broadside prints "no narration line"
+/// (§6.2.4) and no spec text prints the verb echo a second time.
+#[test]
+fn playfix_e28_pirate_reply_does_not_reprint_the_fire_echo() {
+    let dir = debug_game_dir();
+    let mut state = britannia_state(vec![BRIT_DEEP_WATER_TILE; WORLD_CELLS], 100, 128);
+    state.player.transport = TransportState::Ship {
+        type_byte: TRANSPORT_MARKER_SHIP_FURLED_FIRST,
+        tile: FIRST_PLAYABLE_FRIGATE_TILE,
+        sails_hoisted: false,
+        hull: 77,
+        skiffs: 2,
+    };
+    state.player.facing = Direction::North;
+    state.sync_player_object();
+    state.active_objects.push(ActiveObject {
+        type_byte: 0x2C,
+        tile: 0x2C,
+        x: 102,
+        y: 128,
+        z: WorldPlane::Britannia.save_floor(),
+        phase: 0x00,
+        aux1: 0x1e,
+        aux3: 0,
+    });
+    let before = state.message_transcript.len();
+
+    handle_play_key_input(&mut state, 'F', "", &dir).unwrap();
+    handle_play_key_input(&mut state, '\u{2}', "", &dir).unwrap();
+
+    let rows: Vec<String> = state.message_transcript[before..]
+        .iter()
+        .map(|entry| entry.text.clone())
+        .collect();
+    assert!(
+        rows.iter().any(|row| row.contains("BOOOM")),
+        "the fixture must draw the pirate's reply: {rows:?}"
+    );
+    assert_eq!(
+        rows.iter().filter(|row| row.contains("Fire")).count(),
+        1,
+        "{rows:?}"
+    );
+    let _ = fs::remove_dir_all(dir);
+}
