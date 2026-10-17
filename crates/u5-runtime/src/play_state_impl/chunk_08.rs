@@ -152,23 +152,33 @@ impl PlayState {
                     _ => {}
                 },
                 RestPhase::WatchSlot => {
-                    if matches!(ch, '\u{1b}' | ' ' | '0' | '\r' | '\n') {
+                    // `dungeon-mode.md §11` (the resident Hole-up prompts the
+                    // overworld shares, `commands.md §5.5`): "after `Yes`,
+                    // `Who will stand guard? `, where a cancel or an
+                    // ineligible pick prints `None posted!\n\n` and re-asks
+                    // the watch question". Neither starts the camp
+                    // (playtest E30).
+                    let watcher = if matches!(ch, '\u{1b}' | ' ' | '0' | '\r' | '\n') {
+                        None
+                    } else {
+                        let Some(digit) = ch
+                            .to_digit(10)
+                            .and_then(|digit| usize::try_from(digit).ok())
+                        else {
+                            continue;
+                        };
+                        if !(1..=self.party.len().min(6)).contains(&digit) {
+                            continue;
+                        }
+                        self.rest_prompt_watcher(digit - 1)
+                    };
+                    let Some(watcher) = watcher else {
                         self.emit_message_line(REST_NO_WATCH_LITERAL);
-                        let hours = session.hours.unwrap_or(1);
-                        return self.finish_active_rest(hours, None, game_dir);
-                    }
-                    let Some(digit) = ch
-                        .to_digit(10)
-                        .and_then(|digit| usize::try_from(digit).ok())
-                    else {
+                        session.phase = RestPhase::WatchYesNo;
                         continue;
                     };
-                    if !(1..=self.party.len().min(6)).contains(&digit) {
-                        continue;
-                    }
                     let hours = session.hours.unwrap_or(1);
-                    let watcher = self.rest_prompt_watcher(digit - 1);
-                    return self.finish_active_rest(hours, watcher, game_dir);
+                    return self.finish_active_rest(hours, Some(watcher), game_dir);
                 }
             }
         }

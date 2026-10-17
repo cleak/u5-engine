@@ -450,3 +450,39 @@ fn playfix_e29_interrupted_camp_prints_ambushed_once_and_no_rested_line() {
     assert!(checked, "no seed in range interrupted the camp");
     let _ = fs::remove_dir_all(dir);
 }
+
+/// E30: `dungeon-mode.md §11` (resident Hole-up prompts, shared by the
+/// overworld per `commands.md §5.5`): "after `Yes`, `Who will stand guard? `,
+/// where a cancel or an ineligible pick prints `None posted!\n\n` and
+/// re-asks the watch question."
+#[test]
+fn playfix_e30_cancelled_guard_pick_re_asks_the_watch_question() {
+    let dir = debug_game_dir();
+    let mut state = world_state(open_world_grid(), 5, 5);
+    state.party.push(audit_g5_companion(1));
+    state.party.push(audit_g5_companion(2));
+    state.clock = GameClock::new(13, 0).unwrap();
+    assert_eq!(state.start_rest_prompt(), MoveOutcome::Observed);
+    assert_eq!(state.step_active_rest('7', "", &dir).unwrap(), None);
+    assert_eq!(state.step_active_rest('Y', "", &dir).unwrap(), None);
+    let before = state.message_transcript.len();
+
+    assert_eq!(state.step_active_rest('\u{1b}', "", &dir).unwrap(), None);
+
+    assert!(
+        state.message_transcript[before..]
+            .iter()
+            .any(|entry| entry.text.contains("None posted!"))
+    );
+    assert!(matches!(
+        state.active_rest.as_ref().map(|session| session.phase),
+        Some(RestPhase::WatchYesNo)
+    ));
+    assert_eq!(state.message, REST_WATCH_PROMPT);
+    assert_eq!(state.clock, GameClock::new(13, 0).unwrap(), "no camp ran");
+
+    // The re-asked question still answers normally.
+    assert_eq!(state.step_active_rest('Y', "", &dir).unwrap(), None);
+    assert_eq!(state.message, REST_WATCH_MEMBER_PROMPT);
+    let _ = fs::remove_dir_all(dir);
+}

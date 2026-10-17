@@ -969,6 +969,12 @@
         handle_play_key_input(&mut state, '1', "", &dir).unwrap();
         handle_play_key_input(&mut state, 'Y', "", &dir).unwrap();
         handle_play_key_input(&mut state, '2', "", &dir).unwrap();
+        // `dungeon-mode.md §11`: an ineligible pick "prints `None
+        // posted!\n\n` and re-asks the watch question" (playtest E30); the
+        // camp only runs once that question is answered.
+        assert!(state.active_rest.is_some(), "the watch question is asked again");
+        assert_eq!(state.turn, 0);
+        handle_play_key_input(&mut state, 'N', "", &dir).unwrap();
 
         assert!(state.active_rest.is_none());
         assert_eq!(state.party[1].status, b'P');
