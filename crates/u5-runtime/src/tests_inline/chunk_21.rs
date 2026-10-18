@@ -4933,6 +4933,57 @@ fn conversation_opening_drops_a_quote_that_follows_the_entry_closing_quote() {
     assert_eq!(stranger.text, "a farmer\n\n\"I am called Eb\"");
 }
 
+/// Playtest F04. `conversation.md §9` step 3: the stranger's
+/// self-introduction "runs the Name entry ... through the byte runner".
+/// Gruman's Name entry ends on the introduce-yourself guard - quote, two
+/// feeds, `0x8C 0xFF`, `0x88` - so with the bit clear the ASK-WHO runs in
+/// full and the opening ends on §7.6's name prompt, not `Your interest?`.
+#[test]
+fn a_self_introduction_whose_name_entry_asks_who_closes_on_the_name_prompt() {
+    let enc = |s: &str| s.bytes().map(|b| b ^ 0x80).collect::<Vec<u8>>();
+    let mut name = enc("Grum\"");
+    name.extend([
+        TLK_CODE_LITERAL_NEWLINE,
+        TLK_CODE_LITERAL_NEWLINE,
+        TLK_CODE_IF_ELSE,
+        0xFF,
+        TLK_CODE_ASK_WHO,
+    ]);
+    let raw = vec![
+        name,
+        enc("a knight."),
+        enc("Well met."),
+        enc("I guard."),
+        enc("Farewell."),
+        enc("job"),
+        enc("Walls."),
+    ];
+    let decoded = raw
+        .iter()
+        .map(|field| field.iter().map(|b| char::from(b ^ 0x80)).collect())
+        .collect();
+    let seed = (0u16..64)
+        .find(|seed| {
+            let mut stream = *seed;
+            u5_prng_range_u16(&mut stream, 0, 1) != 0
+        })
+        .expect("some seed introduces");
+    let mut state = test_state(open_grid(), 1, 1);
+    state.active_conversation_npc_slot = Some(1);
+    state.active_conversation = Some(Box::new(
+        crate::conversation_session::ConversationSession::new(raw, decoded),
+    ));
+
+    let opening = state.advance_active_conversation_greeting_with_seed(Some(seed));
+    assert!(opening.contains("\"I am called Grum\""), "{opening:?}");
+    assert!(opening.ends_with(crate::TLK_ASK_WHO_PROMPT), "{opening:?}");
+    assert!(!opening.contains(TLK_KEYWORD_PROMPT), "{opening:?}");
+
+    // The first typed word answers the name prompt, not the keyword loop.
+    let (answer, _) = state.submit_active_conversation_keyword("job");
+    assert!(answer.contains(crate::TLK_ASK_WHO_DISMISSIVE_LINE), "{answer:?}");
+}
+
 #[test]
 fn conversation_keyword_line_is_capped_at_fifteen_characters() {
     // `conversation.md §6` step 2: the reader "accepts up to fifteen

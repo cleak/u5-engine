@@ -5495,7 +5495,17 @@ impl PlayState {
     /// Render the active conversation's greeting and put it in
     /// `state.message`. Returns the rendered text.
     pub fn advance_active_conversation_greeting(&mut self) -> String {
-        let (rendered, suspended) = self.active_conversation_opening_rendered();
+        self.advance_active_conversation_greeting_with_seed(None)
+    }
+
+    /// [`Self::advance_active_conversation_greeting`] with the stranger
+    /// coin's host-clock seed supplied, so tests can pick the branch.
+    pub(crate) fn advance_active_conversation_greeting_with_seed(
+        &mut self,
+        stranger_host_seed: Option<u16>,
+    ) -> String {
+        let (rendered, suspended) =
+            self.active_conversation_opening_rendered_with_seed(stranger_host_seed);
         let opening =
             conversation_opening_rendered(&rendered, self.open_conversation_prompt(suspended));
         let text = opening.text.clone();
@@ -5605,12 +5615,20 @@ impl PlayState {
             self.prng_state = stranger_host_seed.unwrap_or_else(host_clock_prng_seed_now);
             self.random_range_u8(0, 1) != 0
         };
+        let mut suspended_after_opening = false;
         if let Some(session) = self.active_conversation.as_mut() {
             let output = if knows_party {
                 session.present_greeting(&ctx)
             } else {
                 session.present_stranger_opening(&ctx, stranger_introduces)
             };
+            // `conversation.md §9` step 3: the self-introduction "runs the
+            // Name entry ... through the byte runner", and a shipped Name
+            // entry can end on the introduce-yourself guard (`0x8C 0xFF`
+            // then `0x88`). With the bit clear that ASK-WHO runs in full, so
+            // the opening closes on its name prompt, not `Your interest?`
+            // (playtest F04, Gruman).
+            suspended_after_opening = session.awaiting_ask_who();
             rendered = output.rendered_text();
             self.apply_tlk_action_grants(&output.action_grants);
             self.apply_tlk_gold_payments(&output.gold_payments);
@@ -5647,7 +5665,7 @@ impl PlayState {
                 }
             }
         }
-        (opening, false)
+        (opening, suspended_after_opening)
     }
 
     /// Submit one typed keyword line to the active conversation.
