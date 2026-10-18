@@ -88,3 +88,53 @@ fn playfix_f18_saved_slot_warp_keeps_the_horse_or_carpet() {
         let _ = fs::remove_dir_all(dir);
     }
 }
+
+/// F20/F56: `commands.md §5.5` and `dungeon-mode.md §11` print the watch
+/// question as `\nWilt thou set a watch? ` (trailing space, no feed),
+/// answered `Yes\n\n`/`No\n\n`, and the guard prompt as `Who will stand
+/// guard? ` in the same form, its cancel printing `None posted!\n\n`. Each
+/// answer continues its question's row, and while either waits no
+/// command-row end cap is drawn (`§5.1`). (`No` starts the camp body, which
+/// needs the asset tables, so the `Yes` and guard-cancel arms carry it.)
+#[test]
+fn playfix_f20_watch_answers_continue_the_prompt_row_without_a_marker() {
+    let mut state = world_state(open_world_grid(), 5, 5);
+    state.party.push(audit_g5_companion(1));
+    state.party.push(audit_g5_companion(2));
+    let rows = |state: &PlayState| -> Vec<String> {
+        state
+            .message_transcript
+            .iter()
+            .map(|entry| entry.text.clone())
+            .collect()
+    };
+    for key in ['h', '3'] {
+        handle_play_key_input(&mut state, key, "", Path::new("")).unwrap();
+    }
+    assert_eq!(state.message, REST_WATCH_PROMPT);
+    assert!(
+        state.message_window_live_row_suppressed(),
+        "the watch question keeps the cursor inline"
+    );
+
+    handle_play_key_input(&mut state, 'y', "", Path::new("")).unwrap();
+    let answered = format!(
+        "{}{}",
+        REST_WATCH_PROMPT.trim_start(),
+        REST_WATCH_YES_LITERAL.trim_end()
+    );
+    assert!(rows(&state).contains(&answered), "{:?}", rows(&state));
+    assert_eq!(state.message, REST_WATCH_MEMBER_PROMPT);
+    assert!(
+        state.message_window_live_row_suppressed(),
+        "the guard prompt keeps the cursor inline"
+    );
+
+    handle_play_key_input(&mut state, '\u{1b}', "", Path::new("")).unwrap();
+    let cancelled = format!(
+        "{REST_WATCH_MEMBER_PROMPT}{}",
+        REST_NO_WATCH_LITERAL.trim_end()
+    );
+    assert!(rows(&state).contains(&cancelled), "{:?}", rows(&state));
+    assert_eq!(state.message, REST_WATCH_PROMPT);
+}

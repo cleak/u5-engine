@@ -337,10 +337,11 @@ fn playtest_e16_cancelled_guard_pick_reasks_the_watch_question() {
     handle_play_key_input(&mut state, '\u{1b}', "", Path::new("")).unwrap();
     assert!(state.active_rest.is_some(), "the rest has not begun");
     assert_eq!(state.message, REST_WATCH_PROMPT);
+    // The guard prompt ends in a trailing space, so the refusal continues
+    // its row (playtest F20/F56).
     assert!(
-        playtest_transcript_rows(&state)
-            .iter()
-            .any(|row| row == REST_NO_WATCH_LITERAL.trim_end()),
+        playtest_transcript_rows(&state).iter().any(|row| row
+            == &format!("{REST_WATCH_MEMBER_PROMPT}{}", REST_NO_WATCH_LITERAL.trim_end())),
         "{:?}",
         playtest_transcript_rows(&state)
     );

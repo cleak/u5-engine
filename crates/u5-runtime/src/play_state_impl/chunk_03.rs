@@ -390,10 +390,20 @@ impl PlayState {
             // `For how many hours? (1-9)`, the wishing well's `Drop a coin?`,
             // and the mixer's `How much? `. Each showed as `offset+2` - the
             // blank and the fresh command row this engine added under them.
-            || self
-                .active_rest
-                .as_ref()
-                .is_some_and(|session| matches!(session.phase, crate::z_stats::RestPhase::Hours))
+            //
+            // The camp's watch question and its guard prompt are the same
+            // shape: `commands.md §5.5` gives `\nWilt_thou_set_a_watch?_` and
+            // `Who_will_stand_guard?_`, each with a trailing space and no
+            // line feed, and `§5.1` keeps the end cap for the turn loop
+            // (playtest F20/F56).
+            || self.active_rest.as_ref().is_some_and(|session| {
+                matches!(
+                    session.phase,
+                    crate::z_stats::RestPhase::Hours
+                        | crate::z_stats::RestPhase::WatchYesNo
+                        | crate::z_stats::RestPhase::WatchSlot
+                )
+            })
             || self
                 .active_wishing_well
                 .as_ref()

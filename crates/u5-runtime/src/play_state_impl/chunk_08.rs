@@ -154,14 +154,22 @@ impl PlayState {
                 }
                 RestPhase::WatchYesNo => match ch.to_ascii_uppercase() {
                     'Y' => {
-                        self.emit_message_line(REST_WATCH_YES_LITERAL);
+                        // `commands.md §5.5` / `dungeon-mode.md §11`: the
+                        // question ends in a trailing space, so its answer
+                        // `Yes\n\n` prints on the question's own row
+                        // (`watch? Yes`). The prompt left that row open;
+                        // say so rather than infer it (playtest F20/F56).
+                        self.open_message_row();
+                        self.emit_message_line_continuing_row(REST_WATCH_YES_LITERAL);
                         session.phase = RestPhase::WatchSlot;
                         self.active_rest = Some(session);
                         self.message = self.render_active_rest();
                         return Ok(None);
                     }
                     'N' | '\u{1b}' | ' ' | '0' | '\r' | '\n' => {
-                        self.emit_message_line(REST_WATCH_NO_LITERAL);
+                        // As `Yes` above: `No\n\n` lands on `watch? `.
+                        self.open_message_row();
+                        self.emit_message_line_continuing_row(REST_WATCH_NO_LITERAL);
                         let hours = session.hours.unwrap_or(1);
                         return self.finish_active_rest(hours, None, game_dir);
                     }
@@ -189,7 +197,10 @@ impl PlayState {
                         self.rest_prompt_watcher(digit - 1)
                     };
                     let Some(watcher) = watcher else {
-                        self.emit_message_line(REST_NO_WATCH_LITERAL);
+                        // `Who will stand guard? ` keeps its trailing space
+                        // too, so `None posted!\n\n` continues that row.
+                        self.open_message_row();
+                        self.emit_message_line_continuing_row(REST_NO_WATCH_LITERAL);
                         session.phase = RestPhase::WatchYesNo;
                         continue;
                     };
