@@ -266,3 +266,33 @@ fn playtest_f42_an_outdoor_engagement_does_not_reprint_the_command_result() {
     );
     let _ = fs::remove_dir_all(dir);
 }
+
+
+/// `combat.md §14`: "The stored string has one leading and one trailing
+/// newline". Playtest F38: after a Kill spell's `Merchant killed!` the
+/// `VICTORY!` line followed with no blank row.
+#[test]
+fn playtest_f38_victory_after_a_cast_kill_keeps_its_leading_blank_row() {
+    let game_dir = std::path::Path::new(".");
+    let mut state = combat_state_after_the_conflict_banner(6, 5);
+    state.ensure_pending_combat_player_turn();
+    // A cast whose result killed the last foe: the result line is in the
+    // slot, the foe is gone.
+    state.combat_actors[8].mark_dead();
+    state.message = "Giant Rat killed!".to_string();
+    state.pending_combat_actor_slot = None;
+
+    crate::input_dispatch::finish_combat_cast_actor_action(&mut state, 0, true);
+
+    let texts = combat2a_entry_texts(&state);
+    let killed = texts
+        .iter()
+        .position(|text| text == "Giant Rat killed!")
+        .unwrap_or_else(|| panic!("the result is printed: {texts:?}"));
+    assert_eq!(
+        texts[killed + 1..killed + 3],
+        [String::new(), "VICTORY!".to_string()],
+        "transcript: {texts:?}"
+    );
+    let _ = game_dir;
+}

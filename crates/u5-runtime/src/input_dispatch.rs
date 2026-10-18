@@ -5742,7 +5742,11 @@ fn handle_combat_cast_key_input(
 /// Finish an accepted combat C-Cast action, including cancel/no-spell paths.
 /// The dead-caster refusal never reaches this helper and remains a free
 /// re-prompt under `combat.md §8`.
-fn finish_combat_cast_actor_action(state: &mut PlayState, actor_slot: usize, had_foe: bool) {
+pub(crate) fn finish_combat_cast_actor_action(
+    state: &mut PlayState,
+    actor_slot: usize,
+    had_foe: bool,
+) {
     state.pending_combat_actor_slot = None;
     let cast_message = state.message.clone();
     let ring_pass = apply_combat_committed_action_maintenance(state, actor_slot);
@@ -5758,12 +5762,17 @@ fn finish_combat_cast_actor_action(state: &mut PlayState, actor_slot: usize, had
     } else if state.combat_active && had_foe && !combat_has_active_non_party_actor(state) {
         // `combat.md §7`: "If party actors remain and foes do not, it
         // prints `VICTORY!` once and continues" (`RETRACTIONS.md` R289).
-        if state.announce_combat_victory_if_needed() {
-            state
-                .message
-                .push_str(crate::combat_frame::COMBAT_VICTORY_LINE);
-        }
+        //
+        // `§14`: "The stored string has one leading and one trailing
+        // newline", and the kill line it follows is a completed result
+        // (`magic.md §7`: the results "carry trailing feeds"). Appending it
+        // to the slot let its leading feed close the result's row instead,
+        // so `Merchant killed!` ran straight into `VICTORY!` (playtest F38).
+        // Close the result first, then print it as the weapon path does.
         close_combat_cast_result_row(state);
+        if state.announce_combat_victory_if_needed() {
+            state.emit_combat_print(crate::combat_frame::COMBAT_VICTORY_LINE);
+        }
         advance_combat_round_after_actor_and_append_message(state, actor_slot);
     } else if state.combat_active {
         close_combat_cast_result_row(state);
