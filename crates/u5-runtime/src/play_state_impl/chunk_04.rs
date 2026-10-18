@@ -639,7 +639,7 @@ impl PlayState {
             }
             UseInputAction::Confirm => {
                 let turn_before = self.turn;
-                let Some(row) = self.use_selected_item(&session) else {
+                let Some(mut row) = self.use_selected_item(&session) else {
                     self.message = USE_NO_USABLE_ITEMS_REFUSAL.to_string();
                     self.ensure_use_action_turn(turn_before);
                     self.apply_post_turn_effects_after_outcome(
@@ -658,13 +658,35 @@ impl PlayState {
                 let echoed = Self::use_item_echo_family(row.request).inspect(|family| {
                     self.commit_prompt_reply(&prompt, family);
                 });
+                // `inventory.md §7.1`: "Combat potion use binds the current
+                // party combatant without this prompt" - the `On who:_`
+                // selector is the non-combat potion's (playtest F28).
+                if let UseItemRequest::Potion {
+                    index,
+                    target: None,
+                } = row.request
+                {
+                    if let Some(slot) = self.combat_use_bound_party_member() {
+                        row.request = UseItemRequest::Potion {
+                            index,
+                            target: Some(slot),
+                        };
+                    }
+                }
                 // `inventory.md §7.1`: in dungeon exploration the Skull Key
                 // refuses `Not here!` with no `Direction-` prompt (its key
                 // already spent), so it takes the direct handler path.
+                // `item-list.md §7.1`: the Resurrection scroll prompts only
+                // in non-combat scenes; combat refuses without the
+                // `On who:` selector (playtest F29).
                 let pending = pending_action_for_use_request(row.request)
                     .filter(|pending| {
                         !(matches!(pending, UsePendingAction::SkullKeyDirection)
                             && self.skull_key_refused_here())
+                    })
+                    .filter(|pending| {
+                        !(matches!(pending, UsePendingAction::ScrollResurrectionTarget { .. })
+                            && self.combat_active)
                     })
                     .or_else(|| {
                         (row.request == UseItemRequest::Sceptre
@@ -739,6 +761,38 @@ impl PlayState {
         Ok(true)
     }
 
+    /// The party member a combat U-Use acts as: the combatant whose command
+    /// prompt is open. `None` outside combat, or when the acting slot is not
+    /// a party slot.
+    ///
+    /// The acting slot is a combat **descriptor** slot; `combat.md §5` packs
+    /// the party descriptors past a dead member, so the roster member is the
+    /// descriptor's owner/target/class byte, not the descriptor index.
+    fn combat_use_bound_party_member(&self) -> Option<usize> {
+        if !self.combat_active {
+            return None;
+        }
+        self.pending_combat_actor_slot
+            .and_then(|slot| self.combat_roster_slot_for_actor_slot(slot))
+            .filter(|slot| *slot < self.party.len())
+    }
+
+    /// Redraw an open U-Use argument prompt after a key that neither commits
+    /// nor cancels it.
+    ///
+    /// `inventory.md §7.1`: there is one `On who:_` line, and "The selected
+    /// member's name completes that line". The scroll prompts open under
+    /// their banner (`\nResurrection!\nOn who: `), so re-rendering the bare
+    /// prompt into the slot made the transcript log it as a second row
+    /// (playtest F30). The open row already shows the prompt, so a slot that
+    /// still ends with it is left alone.
+    fn redraw_pending_use_prompt(&mut self, session: &UseSession) {
+        let prompt = self.render_use_session(session);
+        if !self.message.ends_with(&prompt) {
+            self.message = prompt;
+        }
+    }
+
     fn step_pending_use_action(
         &mut self,
         mut session: UseSession,
@@ -789,7 +843,7 @@ impl PlayState {
                     self.use_skull_key_direction(Some(game_dir), direction)?
                 } else {
                     session.pending = Some(pending);
-                    self.message = self.render_use_session(&session);
+                    self.redraw_pending_use_prompt(&session);
                     self.active_use = Some(session);
                     return Ok(true);
                 }
@@ -800,7 +854,7 @@ impl PlayState {
                     self.use_sceptre_arena_field_direction(direction)
                 } else {
                     session.pending = Some(pending);
-                    self.message = self.render_use_session(&session);
+                    self.redraw_pending_use_prompt(&session);
                     self.active_use = Some(session);
                     return Ok(true);
                 }
@@ -812,13 +866,13 @@ impl PlayState {
                             index,
                             highlight: next,
                         });
-                        self.message = self.render_use_session(&session);
+                        self.redraw_pending_use_prompt(&session);
                         self.active_use = Some(session);
                         return Ok(true);
                     }
                     UseTargetStep::Waiting => {
                         session.pending = Some(pending);
-                        self.message = self.render_use_session(&session);
+                        self.redraw_pending_use_prompt(&session);
                         self.active_use = Some(session);
                         return Ok(true);
                     }
@@ -837,7 +891,7 @@ impl PlayState {
                     self.use_wind_change_scroll(Some(direction))
                 } else {
                     session.pending = Some(pending);
-                    self.message = self.render_use_session(&session);
+                    self.redraw_pending_use_prompt(&session);
                     self.active_use = Some(session);
                     return Ok(true);
                 }
@@ -849,13 +903,13 @@ impl PlayState {
                             index,
                             highlight: next,
                         });
-                        self.message = self.render_use_session(&session);
+                        self.redraw_pending_use_prompt(&session);
                         self.active_use = Some(session);
                         return Ok(true);
                     }
                     UseTargetStep::Waiting => {
                         session.pending = Some(pending);
-                        self.message = self.render_use_session(&session);
+                        self.redraw_pending_use_prompt(&session);
                         self.active_use = Some(session);
                         return Ok(true);
                     }
@@ -2108,7 +2162,12 @@ impl PlayState {
                     // `audio.md §6.1`: "Refused with `Not here!` and **no
                     // sound** outside the permitted scene class." `§9` lists
                     // this refusal among the explicit silence boundaries.
-                    self.message = "Not here!".to_string();
+                    // `item-list.md §7.1`: the scroll path "prints the
+                    // scroll-use label and the branch's effect label", and
+                    // scroll 4 "Prints `View!`. Combat-class scenes print
+                    // `Not here!` and stop" - the banner comes first
+                    // (playtest F32).
+                    self.message = "View!\nNot here!".to_string();
                     return MoveOutcome::Blocked;
                 }
                 // `audio.md §6.1`: "Dispatcher, then the look helper" - and
@@ -2123,8 +2182,10 @@ impl PlayState {
             SCROLL_SUMMON_DAEMON_INDEX => {
                 if !self.combat_active {
                     // `audio.md §6.1`: "only in the permitted scene class, else
-                    // `Not here!` and silence" (§9).
-                    self.message = "Not here!".to_string();
+                    // `Not here!` and silence" (§9). `item-list.md §7.1`,
+                    // scroll 5: "Prints `Summon Daemon!`. ... non-combat
+                    // scenes print `Not here!`" - banner first (playtest F32).
+                    self.message = "Summon Daemon!\nNot here!".to_string();
                     return MoveOutcome::Blocked;
                 }
                 let Some(caster) = self.combat_actors.first().copied() else {
@@ -2148,18 +2209,23 @@ impl PlayState {
                     &legal_cells,
                 );
                 self.advance_turn();
-                let Some(applied) = applied else {
-                    self.message = "Failed!".to_string();
+                // The banner precedes the helper (`item-list.md §7.1`), so a
+                // placement that finds no cell still shows it above the
+                // U-Use failure tail.
+                let Some(_applied) = applied else {
+                    self.message = "Summon Daemon!\nFailed!".to_string();
                     return MoveOutcome::Blocked;
                 };
-                if self.combat_summon_daemon_self_check_oops(0) {
-                    self.message = "Oops...".to_string();
-                    MoveOutcome::Blocked
-                } else {
-                    self.combat_actors[applied.actor_slot].flags |= COMBAT_ACTOR_FLAG_CONTROLLED;
-                    self.message = "Summon Daemon!".to_string();
-                    MoveOutcome::Used
-                }
+                // `item-list.md §7.1`, scroll 5: the scroll invokes "the
+                // summon **placement** helper" and what it does "is create a
+                // hostile actor at the first accepted cell". The caster
+                // self-check and its controlled-bit stamp belong to the Kal
+                // Xen Corp *spell* path (`magic.md §8`: "This spell path uses
+                // the helper's self-checking mode"; `spell-list.md` row 43),
+                // so the scroll's Daemon is never handed to the player and
+                // there is no `Oops...` roll (playtest F31).
+                self.message = "Summon Daemon!".to_string();
+                MoveOutcome::Used
             }
             SCROLL_RESURRECTION_INDEX => self.use_resurrection_scroll(target),
             SCROLL_NEGATE_TIME_INDEX => self.use_negate_time_scroll(),
@@ -2196,7 +2262,11 @@ impl PlayState {
 
     pub fn use_resurrection_scroll(&mut self, target: Option<usize>) -> MoveOutcome {
         if self.combat_active {
-            self.message = "Not here!".to_string();
+            // `item-list.md §7.1`, scroll 6: "Prints `Resurrection!`.
+            // Non-combat scenes prompt for a party member ... Combat-class
+            // scenes print `Not here!`." No `On who:` prompt opens in combat
+            // (playtest F29); the banner still prints first.
+            self.message = format!("{SCROLL_RESURRECTION_RESULT}\nNot here!");
             return MoveOutcome::Blocked;
         }
         let Some(target_index) = target else {

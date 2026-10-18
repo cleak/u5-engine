@@ -7547,6 +7547,17 @@ fn advance_combat_round_after_actor_and_append_message(state: &mut PlayState, ac
     state.clear_combat_interference_for_completed_action(actor_slot);
     state.next_combat_actor_slot = actor_slot.saturating_add(1).min(COMBAT_ACTOR_SLOTS);
     if !state.pace_combat_presentations {
+        // A staged beat the action queued - the Shard's `\n\nNo effect!\n`
+        // behind its swell (`inventory.md §7.1`) - is still part of this
+        // actor's output, and the next actor's banner (`combat.md §8.1`)
+        // follows it. The paced shell holds the walk while the narration
+        // owns the loop; an unpaced walk runs now, so print the beat first
+        // (playtest F33). A spell flash's holds are not such beats: they
+        // print nothing and already hold the window display over whatever
+        // the walk prints (`magic.md §8`), so they are left to run out.
+        if state.staged_narration_active() && !state.message_window_flash_hold_active() {
+            state.flush_staged_narration();
+        }
         drive_combat_round_walk_and_append_message(state);
     }
 }

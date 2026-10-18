@@ -140,7 +140,9 @@ fn a_scroll_refused_outside_its_scene_class_stays_silent() {
         state.use_scroll(SCROLL_VIEW_INDEX, None, None),
         MoveOutcome::Blocked
     );
-    assert_eq!(state.message, "Not here!");
+    // `item-list.md §7.1`: the banner prints before the scene gate
+    // (playtest F32); only the sound is withheld.
+    assert_eq!(state.message, "View!\nNot here!");
     assert!(state.sound_effects_after(serial).is_empty());
 
     let mut out_of_combat = test_state(open_grid(), 4, 4);
@@ -150,7 +152,7 @@ fn a_scroll_refused_outside_its_scene_class_stays_silent() {
         out_of_combat.use_scroll(SCROLL_SUMMON_DAEMON_INDEX, None, None),
         MoveOutcome::Blocked
     );
-    assert_eq!(out_of_combat.message, "Not here!");
+    assert_eq!(out_of_combat.message, "Summon Daemon!\nNot here!");
     assert!(out_of_combat.sound_effects_after(serial).is_empty());
 }
 

@@ -1729,6 +1729,16 @@ impl PlayState {
                     // were settled before the prompt opened (§5), so every
                     // other key - Escape included - is a committed handler
                     // failure, not a `None!` cancel and not ignored.
+                    //
+                    // The same row "echoes the typed key and a line feed"
+                    // before either outcome, so `To phase: 3` / `Failed!`
+                    // and a successful `To phase: 2` (playtest F34). A key
+                    // with no printable glyph (Escape, Return) echoes
+                    // nothing visible; the line feed still closes the row.
+                    if ch.is_ascii_graphic() {
+                        self.commit_prompt_reply(GATE_TRAVEL_PHASE_PROMPT, &ch.to_string());
+                    }
+                    self.message_row_open_mid_line = false;
                     let digit = ch
                         .to_digit(10)
                         .and_then(|digit| usize::try_from(digit).ok())
