@@ -221,3 +221,48 @@ fn playtest_f40_combat_ready_keeps_the_blank_row_before_the_item_prompt() {
     assert_eq!(rows[echo + 1], "", "rows: {rows:?}");
     assert!(rows[echo + 2].starts_with("Item:"), "rows: {rows:?}");
 }
+
+/// `combat.md §4.1`: the conflict banner is printed once, and both banners go
+/// "through the ordinary wrap-aware string printer"; nothing reprints an
+/// earlier row. Playtest F42: an overworld monster's attack during a command
+/// re-joined the command's result with the engagement text, and the flush
+/// printed `With what? *** CONFLICT ***` under the banner.
+#[test]
+fn playtest_f42_an_outdoor_engagement_does_not_reprint_the_command_result() {
+    let dir = debug_game_dir();
+    let record = synthetic_combat_arena_record();
+    fs::write(dir.join(BRIT_CBT_FILE), record.repeat(BRIT_CBT_RECORDS)).unwrap();
+    let mut state = world_state(open_world_grid(), 5, 5);
+    state.climbing_gear = 0;
+    state.active_objects.push(ActiveObject {
+        type_byte: 0xc0,
+        tile: 0xc0,
+        x: 6,
+        y: 5,
+        z: WorldPlane::Underworld.save_floor(),
+        phase: STEADY_PHASE,
+        aux1: 0,
+        aux3: 0,
+    });
+
+    handle_play_key_input(&mut state, 'K', "", &dir).unwrap();
+
+    let texts = combat2a_entry_texts(&state);
+    assert!(
+        state.combat_active,
+        "the adjacent hostile engaged: {texts:?}"
+    );
+    assert_eq!(
+        texts
+            .iter()
+            .filter(|text| text.contains("CONFLICT"))
+            .count(),
+        1,
+        "transcript: {texts:?}"
+    );
+    assert!(
+        !texts.iter().any(|text| text.contains("With what? ")),
+        "transcript: {texts:?}"
+    );
+    let _ = fs::remove_dir_all(dir);
+}

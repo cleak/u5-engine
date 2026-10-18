@@ -3677,12 +3677,14 @@ impl PlayState {
                         format!("{pre_effect_message} {transition_message}")
                     };
                 } else if self.combat_active {
-                    let engagement_message = self.message.clone();
-                    self.message = if pre_effect_message.is_empty() {
-                        engagement_message
-                    } else {
-                        format!("{pre_effect_message} {engagement_message}")
-                    };
+                    // `combat.md §4.1`: the engagement's `Attacked!`, group
+                    // name and `*** CONFLICT ***` went to the transcript as
+                    // they were printed, and each of those emits flushed the
+                    // command's own result above them first. Joining the two
+                    // back into the slot made it a new, unflushed line, so the
+                    // next flush printed `With what? *** CONFLICT ***` a
+                    // second time under the banner (playtest F42). The slot
+                    // keeps the engagement text it already recorded.
                 } else {
                     // Immediate reaction lines were emitted to the transcript
                     // as they occurred; preserve the command result in the
