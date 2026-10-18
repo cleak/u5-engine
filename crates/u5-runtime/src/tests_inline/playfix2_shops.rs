@@ -48,6 +48,17 @@ fn pf2_healer_state() -> PlayState {
     state
 }
 
+/// Playtest F45. `shops.md §8.C` Healers: "C/H/R echo `Curing`, `Healing`,
+/// or `Resurrect`". The engine echoed the invented `Resurrecting`.
+#[test]
+fn pf2_healer_resurrect_echoes_the_published_word() {
+    let mut state = pf2_healer_state();
+    pf2_keys(&mut state, &['R']);
+    let rows = pf2_rows(&state);
+    pf2_row_index(&rows, "\"What is the nature of thy need?\" Resurrect");
+    assert!(!rows.iter().any(|row| row.contains("Resurrecting")), "{rows:#?}");
+}
+
 /// Playtest F47. `shops.md §8.B`: the question ends `need?" ` (closing quote
 /// and space). §8.C: the echo is followed by `\n\n"Who needs my aid?" `, and
 /// the paid introduction, the untreatable refusal and the continuation each

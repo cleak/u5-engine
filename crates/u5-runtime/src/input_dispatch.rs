@@ -3046,7 +3046,9 @@ fn healer_service_echo(treatment: crate::shops::HealerTreatment) -> &'static str
     match treatment {
         crate::shops::HealerTreatment::Cure => "Curing",
         crate::shops::HealerTreatment::Heal => "Healing",
-        crate::shops::HealerTreatment::Resurrect => "Resurrecting",
+        // §8.C: "C/H/R echo `Curing`, `Healing`, or `Resurrect`". Playtest
+        // F45: the engine invented `Resurrecting`.
+        crate::shops::HealerTreatment::Resurrect => "Resurrect",
     }
 }
 
