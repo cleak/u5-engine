@@ -316,13 +316,18 @@ fn rc2_dungeon_jimmy_picker_rejects_ineligible_and_ignores_zero() {
     assert_eq!(state.grid[index], 0x4b);
     assert_eq!(state.keys, 3);
 
-    // Escape cancels with `None!`.
+    // Escape cancels with `None!`, "on the prompt row" (`commands.md
+    // §5.8`) - after the re-prompt that is the bare `Player: ` row.
     assert_eq!(
         state.step_active_jimmy('\u{1b}', "", dir).unwrap(),
         Some(MoveOutcome::PromptDeclined)
     );
     assert!(state.active_jimmy.is_none());
-    assert_eq!(state.message, "None!");
+    assert_eq!(state.message, "Player: None!");
+    assert_eq!(
+        state.message_transcript.last().map(|entry| entry.text.as_str()),
+        Some("Player: None!")
+    );
     assert_eq!(state.grid[index], 0x4b);
 }
 

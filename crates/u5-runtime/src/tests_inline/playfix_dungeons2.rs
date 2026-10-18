@@ -217,6 +217,32 @@ fn playfix2_f13_dungeon_jimmy_picker_keeps_its_prompt_open_and_reprompts() {
     assert!(rows.iter().any(|row| row == "Player: AVATAR"), "{rows:?}");
 }
 
+/// F13 follow-up: `commands.md §5.8` - "An ineligible pick prints
+/// `Disabled!\n\n` and repeats the prompt; Escape prints `None!\n` on the
+/// prompt row and aborts." After the re-prompt that row is a bare
+/// `Player: `, so the cancel reads `Player: None!` on one row, as it already
+/// does at the shared Look and Search picker.
+#[test]
+fn playfix2_f13_escape_after_a_disabled_reprompt_answers_on_the_player_row() {
+    let mut state = playfix2_lit_party_state();
+    state.party[1].status = b'D';
+    state.keys = 1;
+
+    handle_play_key_input(&mut state, 'J', "", Path::new("")).unwrap();
+    handle_play_key_input(&mut state, '2', "\r", Path::new("")).unwrap();
+    assert!(state.active_jimmy.is_some(), "a disabled pick re-prompts");
+
+    handle_play_key_input(&mut state, '\u{1b}', "", Path::new("")).unwrap();
+    assert!(state.active_jimmy.is_none());
+    let rows = playfix2_transcript_rows(&state);
+    let disabled = rows
+        .iter()
+        .rposition(|row| row == DUNGEON_ACTING_MEMBER_DISABLED.trim_end())
+        .unwrap_or_else(|| panic!("`Disabled!` prints: {rows:?}"));
+    assert_eq!(rows[disabled + 1..], ["", "Player: None!"], "{rows:?}");
+    assert!(!state.message_row_open_mid_line, "{rows:?}");
+}
+
 /// F17: `dungeon-mode.md §12` - each Look class line ends "in one line
 /// feed", so a Look leaves the row closed; `§13.2`'s line-feed-led
 /// `Exit to ` then gets its blank row. A multi-member Look left the row

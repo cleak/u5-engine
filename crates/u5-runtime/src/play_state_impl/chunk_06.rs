@@ -472,7 +472,7 @@ impl PlayState {
             let digit = match acting_member_picker_key(ch, session.highlight, self.party.len()) {
                 ActingMemberPickerKey::Cancel => {
                     self.advance_turn();
-                    self.message = "None!".to_string();
+                    self.answer_container_picker_cancel();
                     return Ok(Some(MoveOutcome::PromptDeclined));
                 }
                 ActingMemberPickerKey::Move(row) => {
@@ -581,7 +581,7 @@ impl PlayState {
             let member_index =
                 match acting_member_picker_key(ch, session.highlight, self.party.len()) {
                     ActingMemberPickerKey::Cancel => {
-                        self.message = "None!".to_string();
+                        self.answer_container_picker_cancel();
                         return Ok(Some(MoveOutcome::PromptDeclined));
                     }
                     ActingMemberPickerKey::Move(row) => {
@@ -660,6 +660,30 @@ impl PlayState {
             .is_some_and(|member| acting_member_status_eligible(member.status))
     }
 
+    /// Whether the open row is the bare `Player: ` a `Disabled!` re-prompt
+    /// printed, rather than the verb echo the first prompt continued.
+    fn container_picker_reprompt_row_open(&self) -> bool {
+        self.message_transcript
+            .last()
+            .is_some_and(|entry| entry.text == PARTY_SELECTION_PROMPT)
+    }
+
+    /// `commands.md §5.8`: "Escape prints `None!\n` on the prompt row and
+    /// aborts". After a `Disabled!` re-prompt that row is a bare `Player: `,
+    /// which `None!` completes (`Player: None!`, thirteen columns); on the
+    /// first prompt the row is `Jimmy-Player: ` or `Open-Player: `, and the
+    /// answer word-wraps below it either way.
+    fn answer_container_picker_cancel(&mut self) {
+        if self.container_picker_reprompt_row_open()
+            && self.complete_open_direction_echo(PARTY_SELECTION_PROMPT, "None!")
+        {
+            // `None!\n` ends the row it completed.
+            self.close_message_row();
+            return;
+        }
+        self.message = "None!".to_string();
+    }
+
     fn record_container_picker_name_echo(&mut self, member_index: usize) {
         let Some(name) = self
             .party_names
@@ -675,11 +699,9 @@ impl PlayState {
         // with the member's name". After a `Disabled!` re-prompt the row is
         // a bare `Player: `, which the name completes; the first prompt
         // continues the verb echo and its name wraps below either way.
-        let reprompt_row_open = self
-            .message_transcript
-            .last()
-            .is_some_and(|entry| entry.text == PARTY_SELECTION_PROMPT);
-        if reprompt_row_open && self.complete_open_direction_echo(PARTY_SELECTION_PROMPT, &name) {
+        if self.container_picker_reprompt_row_open()
+            && self.complete_open_direction_echo(PARTY_SELECTION_PROMPT, &name)
+        {
             return;
         }
         self.message = name;
