@@ -3781,6 +3781,24 @@ fn arms_buy_menu_heading(affirmation_roll: u8, introduction_roll: u8) -> String 
     )
 }
 
+/// `shops.md §8.1`: the buy-list display name "is the canonical equipment name
+/// from `catalogs/item-list.md`, *except* that a canonical name of thirteen
+/// characters or more is replaced by that item's shorter panel label, so the
+/// entry fits the shop's list column". `catalogs/item-list.md §5.1.2` owns the
+/// label row. The engine printed the canonical name unconditionally, so
+/// `Ring of Regeneration` wrapped and `Amulet/Turning` broke mid-word.
+fn arms_buy_list_name(item_id: usize) -> &'static str {
+    let canonical = equipment_name(item_id);
+    if canonical.len() >= 13 {
+        crate::EQUIPMENT_SHORT_LABELS
+            .get(item_id)
+            .copied()
+            .unwrap_or(canonical)
+    } else {
+        canonical
+    }
+}
+
 /// The stock rows read `a...Dagger` - the separator is three ASCII full stops,
 /// read back by glyph index rather than guessed from the blank-cell filler.
 fn format_arms_stock_buy_menu(
@@ -3798,7 +3816,7 @@ fn format_arms_stock_buy_menu(
     for index in 0..table.len() {
         let item = table.item_ids[index] as usize;
         let letter = (b'a' + index as u8) as char;
-        rows.push_str(&format!("{letter}...{}\n", equipment_name(item)));
+        rows.push_str(&format!("{letter}...{}\n", arms_buy_list_name(item)));
     }
     // `shops.md §8.B`: "These two draws occur once per accepted Buy entry.
     // Repeated item listings do not redraw either heading." The engine drew a
@@ -7463,6 +7481,28 @@ mod arms_shop_resident_literal_tests {
                 arms_stock_call_for_roll(roll % 4)
             );
         }
+    }
+
+    /// `shops.md §8.1` / `catalogs/item-list.md §5.1.2`: canonical names of
+    /// thirteen or more characters swap to their short label in the buy list,
+    /// and shorter names keep the canonical spelling. Playtest F43: the
+    /// Shattered Shield list wrapped `Ring of Regeneration` and broke
+    /// `Amulet/Turning` mid-word.
+    #[test]
+    fn arms_buy_list_swaps_long_names_for_their_short_labels() {
+        let rows = format_arms_stock_buy_menu(
+            crate::shops::ArmsStockTable::new([7, 32, 36, 27, 31, 44, 45, 0], 7),
+            None,
+        );
+        assert_eq!(
+            rows,
+            "a...Magic Shield\nb...2H Axe\nc...Magic Bow\nd...Arrows\n\
+             e...2H Hammer\nf...Regen Ring\ng...Am/Turning\n"
+        );
+        let swapped: Vec<usize> = (0..crate::EQUIPMENT_COUNT)
+            .filter(|&id| arms_buy_list_name(id) != equipment_name(id))
+            .collect();
+        assert_eq!(swapped, vec![6, 10, 15, 35, 40, 42, 43, 44, 45, 46]);
     }
 
     /// Put a stocked arms shop in front of the player, already at its
