@@ -214,8 +214,10 @@ impl ConversationSessionOutput {
         // `conversation.md §9`: "The renderer drops a quote that would
         // immediately follow another quote" - a response whose stream
         // ends on its own closing quote keeps just that one. Playtest E02
-        // (`thank thee!""`).
-        if !already_quoted && !rendered.text[..body_len].ends_with('"') {
+        // (`thank thee!""`). The quote it would follow may be the framing's
+        // own opening one: an empty Job or Bye entry shows a single quote,
+        // not `""` (playtest F07, `tlk.md §9.2`).
+        if !already_quoted && !self.text.ends_with('"') {
             self.push_plain_text("\"");
         }
         if body_len < rendered.text.len() {
@@ -1230,6 +1232,27 @@ mod tests {
         s.present_greeting(&ctx());
         let out = s.submit_keyword("join", &ctx());
         assert_eq!(out.text, "\n\"We thank thee!\"\n\n");
+    }
+
+    /// Playtest F07. `conversation.md §9`: "The renderer drops a quote that
+    /// would immediately follow another quote", so an empty Job or Bye
+    /// entry renders one quote, not `""`.
+    #[test]
+    fn an_empty_entry_renders_a_single_quote() {
+        let raw = vec![enc("Fl"), enc("a mage"), enc("Hi."), Vec::new(), Vec::new()];
+        let decoded = vec![
+            "Fl".to_string(),
+            "a mage".to_string(),
+            "Hi.".to_string(),
+            String::new(),
+            String::new(),
+        ];
+        let mut s = ConversationSession::new(raw, decoded);
+        s.present_greeting(&ctx());
+        let job = s.submit_keyword("job", &ctx());
+        assert_eq!(job.text, "\n\"\n\n");
+        let bye = s.submit_keyword("", &ctx());
+        assert_eq!(bye.text, format!("{TLK_EMPTY_INPUT_BYE_MESSAGE}\"\n\n"));
     }
 
     #[test]
