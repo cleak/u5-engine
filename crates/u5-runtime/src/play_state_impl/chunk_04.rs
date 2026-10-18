@@ -661,10 +661,17 @@ impl PlayState {
                 // `inventory.md §7.1`: in dungeon exploration the Skull Key
                 // refuses `Not here!` with no `Direction-` prompt (its key
                 // already spent), so it takes the direct handler path.
+                // `item-list.md §7.1`: the Resurrection scroll prompts only
+                // in non-combat scenes; combat refuses without the
+                // `On who:` selector (playtest F29).
                 let pending = pending_action_for_use_request(row.request)
                     .filter(|pending| {
                         !(matches!(pending, UsePendingAction::SkullKeyDirection)
                             && self.skull_key_refused_here())
+                    })
+                    .filter(|pending| {
+                        !(matches!(pending, UsePendingAction::ScrollResurrectionTarget { .. })
+                            && self.combat_active)
                     })
                     .or_else(|| {
                         (row.request == UseItemRequest::Sceptre
@@ -2208,7 +2215,11 @@ impl PlayState {
 
     pub fn use_resurrection_scroll(&mut self, target: Option<usize>) -> MoveOutcome {
         if self.combat_active {
-            self.message = "Not here!".to_string();
+            // `item-list.md §7.1`, scroll 6: "Prints `Resurrection!`.
+            // Non-combat scenes prompt for a party member ... Combat-class
+            // scenes print `Not here!`." No `On who:` prompt opens in combat
+            // (playtest F29); the banner still prints first.
+            self.message = format!("{SCROLL_RESURRECTION_RESULT}\nNot here!");
             return MoveOutcome::Blocked;
         }
         let Some(target_index) = target else {

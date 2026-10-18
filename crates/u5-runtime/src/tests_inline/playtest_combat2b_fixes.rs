@@ -65,6 +65,45 @@ fn combat2b_rows_text(state: &PlayState) -> Vec<String> {
         .collect()
 }
 
+/// `catalogs/item-list.md §7.1`, scroll 6: "Prints `Resurrection!`.
+/// Non-combat scenes prompt for a party member ... Combat-class scenes print
+/// `Not here!`." Playtest F29: combat opened `On who:` and refused only
+/// after a member had been chosen.
+#[test]
+fn playtest_f29_the_resurrection_scroll_refuses_in_combat_without_on_who() {
+    let game_dir = std::path::Path::new(".");
+    let mut state = combat2b_two_member_state();
+    state.scroll_stock[SCROLL_RESURRECTION_INDEX] = 1;
+
+    combat2b_use_row(
+        &mut state,
+        |request| {
+            matches!(
+                request,
+                UseItemRequest::Scroll {
+                    index: SCROLL_RESURRECTION_INDEX,
+                    ..
+                }
+            )
+        },
+        game_dir,
+    );
+
+    assert!(state.active_use.is_none(), "no target selector may open");
+    // `inventory.md §8`: debited before the branch's scene gate.
+    assert_eq!(state.scroll_stock[SCROLL_RESURRECTION_INDEX], 0);
+    let rows = combat2b_rows_text(&state);
+    assert!(
+        !rows.iter().any(|row| row.contains("On who")),
+        "rows: {rows:?}"
+    );
+    let banner = rows
+        .iter()
+        .position(|row| row == SCROLL_RESURRECTION_RESULT)
+        .unwrap_or_else(|| panic!("the banner prints: {rows:?}"));
+    assert_eq!(rows.get(banner + 1).map(String::as_str), Some("Not here!"));
+}
+
 /// `catalogs/item-list.md §7.1`, scroll 5: combat "invoke[s] the summon
 /// **placement** helper", which "create[s] a hostile actor at the first
 /// accepted cell". The caster self-check that stamps the controlled bit is
