@@ -6565,7 +6565,18 @@ impl PlayState {
         // word "exactly", so this is a bare clock spin: no provision pass and
         // no gameplay-PRNG draws beyond the flashes §7.1 counts.
         while self.clock.hour != crate::blackthorn::BLACKTHORN_RESCUE_HANDOFF_HOUR {
+            let previous_day = self.clock.day;
             self.clock.advance_hour();
+            // `time.md §7` / `stats-panel.md §2.4`: "The day rollover also
+            // repaints the stats panel ... it fires exactly once per in-game
+            // day boundary", and the u5-spec#299 Q17 answer has the panel
+            // date advance when this spin crosses midnight. The cinematic
+            // runs outside the command dispatcher's snapshot test, so
+            // nothing else repainted it and the date row kept the old day
+            // for the rest of the run (playtest F57).
+            if self.clock.day != previous_day {
+                self.repaint_stats_panel();
+            }
         }
         self.torch_counter = 0;
         self.light_spell_counter = 0;
