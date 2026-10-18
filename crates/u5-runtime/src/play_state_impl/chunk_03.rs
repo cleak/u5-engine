@@ -4237,6 +4237,9 @@ impl PlayState {
                         // `Player: ` line; `Item: ` opens on the next.
                         let chosen = self.party_member_display_name(index);
                         let _ = self.complete_open_direction_echo(PARTY_SELECTION_PROMPT, &chosen);
+                        if self.close_empty_handed_ready_session(&session) {
+                            return true;
+                        }
                         self.message = self.render_ready_session(&session);
                     }
                     self.active_ready = Some(session);
@@ -4275,6 +4278,9 @@ impl PlayState {
         match action {
             ReadyInputAction::SelectParty(index) => {
                 if self.ready_select_party_for_session(&mut session, index) {
+                    if self.close_empty_handed_ready_session(&session) {
+                        return true;
+                    }
                     self.message = self.render_ready_session(&session);
                 }
                 self.active_ready = Some(session);
@@ -4393,6 +4399,28 @@ impl PlayState {
             }
             ReadyInputAction::Exit => unreachable!(),
         }
+        true
+    }
+
+    /// `inventory.md §5` step 2: with no displayable item for the chosen
+    /// member, R-Ready "prints the normal \"nothing to ready\" refusal and
+    /// exits". No picker opens, so the session is not reinstated and the
+    /// next key is an ordinary command. Keeping it open swallowed every key
+    /// up to an Escape, which then printed `Item: Done` (playtest F26).
+    ///
+    /// Returns whether the refusal closed the command.
+    fn close_empty_handed_ready_session(&mut self, session: &ReadySession) -> bool {
+        let Some(party_index) = session.selected_party_index else {
+            return false;
+        };
+        if !self.ready_visible_items_for_party(party_index).is_empty() {
+            return false;
+        }
+        self.message = READY_EMPTY_HANDED_REFUSAL.to_string();
+        // The literal ends on `handed!` with no line feed of its own, so the
+        // row it wrote is still open for the next print to close.
+        self.open_message_row();
+        self.active_ready = None;
         true
     }
 

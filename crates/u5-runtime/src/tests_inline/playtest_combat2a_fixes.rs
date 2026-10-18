@@ -163,3 +163,39 @@ fn playtest_f39_a_blank_row_separates_the_asleep_line_from_the_next_banner() {
         "transcript: {texts:?}"
     );
 }
+
+/// `inventory.md §5` step 2: with no displayable item R-Ready "prints the
+/// normal \"nothing to ready\" refusal and exits". Playtest F26: the picker
+/// stayed open behind the refusal and swallowed every key up to an Escape.
+#[test]
+fn playtest_f26_an_empty_handed_ready_closes_the_command() {
+    let game_dir = std::path::Path::new(".");
+    let mut state = world_state(open_world_grid(), 10, 20);
+    state.equipment_stock = [0; EQUIPMENT_COUNT];
+    for block in &mut state.party_equipment {
+        block.fill(EQUIPMENT_EMPTY_SLOT_SENTINEL);
+    }
+
+    handle_play_key_input(&mut state, 'R', "", game_dir).unwrap();
+    if state
+        .active_ready
+        .as_ref()
+        .is_some_and(|session| session.selected_party_index.is_none())
+    {
+        handle_play_key_input(&mut state, '\r', "", game_dir).unwrap();
+    }
+
+    assert!(
+        state.active_ready.is_none(),
+        "no picker opens behind the refusal"
+    );
+    assert!(
+        state.message.contains("handed!"),
+        "the refusal is printed: {:?}",
+        state.message
+    );
+    // The next key is an ordinary command again.
+    let before = (state.player.x, state.player.y);
+    handle_play_key_input(&mut state, 'd', "", game_dir).unwrap();
+    assert_ne!((state.player.x, state.player.y), before);
+}
