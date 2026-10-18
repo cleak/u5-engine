@@ -620,7 +620,12 @@ pub fn run_tlk_stream_from(bytes: &[u8], start: usize, inputs: &TlkRunInputs) ->
                 // `0xFF` argument, which became bit index `0x7F` and so
                 // always read as clear.
                 let bit = inputs.npc_slot.unwrap_or(TALK_BRANCH_FLAG_BANK_BITS);
-                let flag_set = talk_branch_flag_is_set(inputs.branch_flags, bit);
+                // §7.6: `0x88` "sets" the bit and `0x8C` "tests" it, and the
+                // one-time reward form tests "if the bit is set now (that
+                // is, the prompt just matched)" - so a bit this run's own
+                // ASK-WHO wrote is visible here (playtest F01).
+                let flag_set =
+                    talk_branch_flag_is_set(inputs.branch_flags | out.branch_flags_set, bit);
                 out.events.push(TlkRunEvent::IfElseBranchTaken {
                     bit,
                     target_label,
@@ -1412,6 +1417,25 @@ mod tests {
                 .iter()
                 .any(|e| matches!(e, TlkRunEvent::RecruitSpeaker))
         );
+    }
+
+    /// Playtest F01: §7.6's one-time reward form tests the bit "now (that
+    /// is, the prompt just matched)", so the next `0x8C` in the same run
+    /// sees the bit this run's ASK-WHO set and ends the response on `0xFF`.
+    #[test]
+    fn if_else_sees_the_bit_an_earlier_ask_who_in_the_run_set() {
+        let mut bytes = vec![TLK_CODE_ASK_WHO, TLK_CODE_IF_ELSE, 0xFF];
+        bytes.extend_from_slice(&enc("not set"));
+        let out = run_tlk_stream(
+            &bytes,
+            &TlkRunInputs {
+                npc_slot: Some(5),
+                ask_who_response: 1,
+                ..Default::default()
+            },
+        );
+        assert_eq!(out.stop, TlkRunStop::EndOfResponse);
+        assert!(!out.text.contains("not set"), "{:?}", out.text);
     }
 
     #[test]

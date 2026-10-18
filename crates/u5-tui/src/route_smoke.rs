@@ -4654,6 +4654,15 @@ fn asset_backed_conversation_route_family(case_name: &str) -> Option<&str> {
 }
 
 fn asset_backed_conversation_route_exits(case_name: &str) -> bool {
+    // The dwelling routes all talk to the dwelling file's dialogue 2, whose
+    // Description entry GOTOs a labelled yes/no block, so the opening
+    // suspends on that block's scoped prompt. `conversation.md §7.7`: there
+    // "top-level reserved words such as `NAME`, `JOB`, `WORK`, `BYE`, and
+    // `THANK` do not run their ordinary global responses" - the typed word
+    // takes the block's default arm and the conversation stays open.
+    if asset_backed_conversation_route_family(case_name) == Some("dwelling") {
+        return false;
+    }
     case_name.ends_with("-reserved-bye") || case_name.ends_with("-reserved-thank")
 }
 
