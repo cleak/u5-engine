@@ -147,6 +147,75 @@ fn playtest_f29_the_resurrection_scroll_refuses_in_combat_without_on_who() {
     assert_eq!(rows.get(banner + 1).map(String::as_str), Some("Not here!"));
 }
 
+/// `inventory.md §7.1`: one `On who:_` line, which "The selected member's
+/// name completes". Playtest F30: the first arrow or digit under the
+/// Resurrection scroll's prompt logged a second `On who:` row.
+#[test]
+fn playtest_f30_moving_the_on_who_selection_does_not_reprint_the_prompt() {
+    let game_dir = std::path::Path::new("");
+    let mut state = test_state(open_grid(), 5, 5);
+    state.party.push(PartyMember {
+        slot: 1,
+        class_byte: 1,
+        status: b'D',
+        climb_stat: 0,
+        mana: 0,
+        hp: 0,
+        max_hp: 20,
+        level: 1,
+    });
+    state.scroll_stock[SCROLL_RESURRECTION_INDEX] = 1;
+
+    handle_play_key_input(&mut state, 'U', "", game_dir).unwrap();
+    handle_play_key_input(&mut state, '\r', "", game_dir).unwrap();
+    assert!(state.active_use.is_some());
+    handle_play_key_input(&mut state, char::from(INPUT_CODE_SOUTH), "", game_dir).unwrap();
+    handle_play_key_input(&mut state, '2', "", game_dir).unwrap();
+    handle_play_key_input(&mut state, 'x', "", game_dir).unwrap();
+    assert!(state.active_use.is_some());
+    handle_play_key_input(&mut state, '\r', "", game_dir).unwrap();
+    assert!(state.active_use.is_none());
+    assert_eq!(state.party[1].status, b'G');
+
+    let rows = combat2b_rows_text(&state);
+    let prompts: Vec<_> = rows.iter().filter(|row| row.contains("On who")).collect();
+    assert_eq!(prompts.len(), 1, "rows: {rows:?}");
+    assert!(
+        prompts[0].starts_with(USE_POTION_TARGET_PROMPT),
+        "rows: {rows:?}"
+    );
+    assert!(
+        prompts[0].len() > USE_POTION_TARGET_PROMPT.len(),
+        "completed: {rows:?}"
+    );
+}
+
+/// The same single-row rule for the Wind Change scroll's `Direction-`
+/// prompt, whose unrecognised keys "wait for another input" (§7.1).
+#[test]
+fn playtest_f30_an_ignored_key_does_not_reprint_the_wind_scroll_prompt() {
+    let game_dir = std::path::Path::new("");
+    let mut state = test_state(open_grid(), 5, 5);
+    state.scroll_stock[SCROLL_WIND_CHANGE_INDEX] = 1;
+
+    handle_play_key_input(&mut state, 'U', "", game_dir).unwrap();
+    handle_play_key_input(&mut state, '\r', "", game_dir).unwrap();
+    handle_play_key_input(&mut state, 'x', "", game_dir).unwrap();
+    handle_play_key_input(&mut state, 'q', "", game_dir).unwrap();
+    assert!(state.active_use.is_some());
+    handle_play_key_input(&mut state, '6', "", game_dir).unwrap();
+    assert!(state.active_use.is_none());
+
+    let rows = combat2b_rows_text(&state);
+    assert_eq!(
+        rows.iter()
+            .filter(|row| row.starts_with(SPELL_DIRECTION_PROMPT_PREFIX))
+            .count(),
+        1,
+        "rows: {rows:?}"
+    );
+}
+
 /// `catalogs/item-list.md §7.1`, scroll 5: combat "invoke[s] the summon
 /// **placement** helper", which "create[s] a hostile actor at the first
 /// accepted cell". The caster self-check that stamps the controlled bit is

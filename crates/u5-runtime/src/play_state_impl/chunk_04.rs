@@ -772,6 +772,22 @@ impl PlayState {
             .filter(|slot| *slot < self.party.len())
     }
 
+    /// Redraw an open U-Use argument prompt after a key that neither commits
+    /// nor cancels it.
+    ///
+    /// `inventory.md §7.1`: there is one `On who:_` line, and "The selected
+    /// member's name completes that line". The scroll prompts open under
+    /// their banner (`\nResurrection!\nOn who: `), so re-rendering the bare
+    /// prompt into the slot made the transcript log it as a second row
+    /// (playtest F30). The open row already shows the prompt, so a slot that
+    /// still ends with it is left alone.
+    fn redraw_pending_use_prompt(&mut self, session: &UseSession) {
+        let prompt = self.render_use_session(session);
+        if !self.message.ends_with(&prompt) {
+            self.message = prompt;
+        }
+    }
+
     fn step_pending_use_action(
         &mut self,
         mut session: UseSession,
@@ -822,7 +838,7 @@ impl PlayState {
                     self.use_skull_key_direction(Some(game_dir), direction)?
                 } else {
                     session.pending = Some(pending);
-                    self.message = self.render_use_session(&session);
+                    self.redraw_pending_use_prompt(&session);
                     self.active_use = Some(session);
                     return Ok(true);
                 }
@@ -833,7 +849,7 @@ impl PlayState {
                     self.use_sceptre_arena_field_direction(direction)
                 } else {
                     session.pending = Some(pending);
-                    self.message = self.render_use_session(&session);
+                    self.redraw_pending_use_prompt(&session);
                     self.active_use = Some(session);
                     return Ok(true);
                 }
@@ -845,13 +861,13 @@ impl PlayState {
                             index,
                             highlight: next,
                         });
-                        self.message = self.render_use_session(&session);
+                        self.redraw_pending_use_prompt(&session);
                         self.active_use = Some(session);
                         return Ok(true);
                     }
                     UseTargetStep::Waiting => {
                         session.pending = Some(pending);
-                        self.message = self.render_use_session(&session);
+                        self.redraw_pending_use_prompt(&session);
                         self.active_use = Some(session);
                         return Ok(true);
                     }
@@ -870,7 +886,7 @@ impl PlayState {
                     self.use_wind_change_scroll(Some(direction))
                 } else {
                     session.pending = Some(pending);
-                    self.message = self.render_use_session(&session);
+                    self.redraw_pending_use_prompt(&session);
                     self.active_use = Some(session);
                     return Ok(true);
                 }
@@ -882,13 +898,13 @@ impl PlayState {
                             index,
                             highlight: next,
                         });
-                        self.message = self.render_use_session(&session);
+                        self.redraw_pending_use_prompt(&session);
                         self.active_use = Some(session);
                         return Ok(true);
                     }
                     UseTargetStep::Waiting => {
                         session.pending = Some(pending);
-                        self.message = self.render_use_session(&session);
+                        self.redraw_pending_use_prompt(&session);
                         self.active_use = Some(session);
                         return Ok(true);
                     }
