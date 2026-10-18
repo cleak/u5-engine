@@ -43,3 +43,48 @@ fn playfix_f23_z_stats_sheet_charges_on_exit() {
     assert!(state.active_z_stats.is_none());
     assert_eq!(state.turn, turn + 1);
 }
+
+/// F18: `overworld.md §9.2` - "Nothing about ... party transport ... gates
+/// it" and "The party's transport marker is restored on every path that ran
+/// the transition"; the hook "calls the same saved-slot warp helper used by
+/// Gate Travel". A mounted horse or a boarded carpet arrives with the party
+/// instead of being dropped (and, for the carpet, lost for good).
+#[test]
+fn playfix_f18_saved_slot_warp_keeps_the_horse_or_carpet() {
+    for transport in [
+        TransportState::Horse {
+            type_byte: 160,
+            tile: 160,
+        },
+        TransportState::Carpet {
+            type_byte: 184,
+            tile: 184,
+        },
+    ] {
+        let dir = debug_game_dir();
+        let mut state = britannia_state(open_world_grid(), 5, 5);
+        state.player.transport = transport;
+        state.sync_player_object();
+        state.spell_charges[GATE_TRAVEL_SPELL_INDEX] = 1;
+        state.party[0].mana = 9;
+        state.party[0].level = 8;
+        state.moonstone_slots[1] = MoonstoneGateSlot {
+            scene: 0,
+            x: 6,
+            y: 7,
+            z: 0,
+        };
+
+        handle_play_key_input(&mut state, 'C', "1PRV2", &dir).unwrap();
+
+        assert_eq!((state.player.x, state.player.y), (6, 7), "{transport:?}");
+        assert_eq!(state.player.transport, transport);
+        let slot_zero = state.active_objects[0];
+        assert_eq!(
+            (slot_zero.x as usize, slot_zero.y as usize),
+            (6, 7),
+            "slot zero follows the party"
+        );
+        let _ = fs::remove_dir_all(dir);
+    }
+}

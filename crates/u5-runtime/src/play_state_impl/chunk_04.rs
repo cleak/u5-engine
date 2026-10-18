@@ -2813,6 +2813,11 @@ impl PlayState {
         let prior_sound_serial = self.sound_effect_serial;
         self.cache_current_world_overlay();
         let previous_turn = self.turn;
+        let arrival_transport = if matches!(target, PlayTarget::World(_)) {
+            self.player.transport
+        } else {
+            TransportState::Foot
+        };
         let mut options = PlayOptions {
             target,
             floor,
@@ -2881,7 +2886,13 @@ impl PlayState {
             active_player: self.active_player,
             combat_round_counter: self.combat_round_counter,
             combat_interference_sources: self.combat_interference_sources,
-            transport: TransportState::Foot,
+            // `overworld.md §9.2`: "Nothing about ... party transport ...
+            // gates it" and "The party's transport marker is restored on
+            // every path that ran the transition"; `magic.md` refuses Gate
+            // Travel only shipboard. An outdoor warp therefore keeps the
+            // mounted horse or the carpet, which `active-objects.md §10`'s
+            // overworld entry re-syncs into slot zero (playtest F18).
+            transport: arrival_transport,
             facing: Some(self.player.facing),
             door_tracker: None,
             pending_vehicle: None,
@@ -2904,7 +2915,9 @@ impl PlayState {
         if matches!(target, PlayTarget::World(_)) {
             next.cache_current_world_overlay();
         }
-        next.force_foot_transport();
+        if !matches!(target, PlayTarget::World(_)) {
+            next.force_foot_transport();
+        }
         next.sync_player_object();
         next.pending_town_arrest = None;
         next.active_blackthorn = None;
