@@ -331,6 +331,30 @@ fn playtest_f41_the_world_prompt_follows_the_battle_lost_line_directly() {
         layout.rows[lost + 1].prefixed,
         "the prompt marker: {rows:?}"
     );
+
+    // The echo of the next world key lands on that same row: the leading
+    // feed that closes the open row derives no blank, so the prompt does not
+    // drop a row once the key is typed.
+    handle_play_key_input(&mut state, ' ', "", game_dir).unwrap();
+    let mut log = message_log_from_entries(state.message_entries(), |text| {
+        (!text.trim().is_empty()).then(|| text.to_string())
+    });
+    log.set_top_offset(usize::from(state.message_window_top_offset()));
+    let layout = layout_message_window_with_prompt(&log, Some(""), None, false);
+    let rows: Vec<&str> = layout.rows.iter().map(|row| row.text.as_str()).collect();
+    let lost = rows
+        .iter()
+        .rposition(|row| *row == "BATTLE IS LOST!")
+        .unwrap_or_else(|| panic!("the loss line is drawn: {rows:?}"));
+    assert_eq!(
+        layout.rows[lost + 1].row,
+        layout.rows[lost].row + 1,
+        "the echo follows the loss line directly: {rows:?}"
+    );
+    assert!(
+        layout.rows[lost + 1].prefixed && !layout.rows[lost + 1].text.is_empty(),
+        "the next key's echo: {rows:?}"
+    );
 }
 
 /// `combat.md §6.3`: "the accepted drop branch leaves a chest object standing

@@ -4426,9 +4426,10 @@ impl PlayState {
             return false;
         }
         self.message = READY_EMPTY_HANDED_REFUSAL.to_string();
-        // The literal ends on `handed!` with no line feed of its own, so the
-        // row it wrote is still open for the next print to close.
-        self.open_message_row();
+        // `inventory.md §5`'s string table publishes the refusal as
+        // `Thou_art_empty-\nhanded!\n`: it closes its own row, so the next
+        // prompt's leading feed derives `text-output.md §10.4`'s blank.
+        self.close_message_row();
         self.active_ready = None;
         true
     }

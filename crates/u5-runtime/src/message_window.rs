@@ -348,6 +348,20 @@ impl GameplayMessageLog {
         {
             return;
         }
+        // The same rule for a row its producer explicitly left open
+        // ([`MessageLogLine::row_left_open`]) with text on it: the layout's
+        // waiting prompt already follows such a row directly, so the echo
+        // written there must too, or the prompt drops a row the moment a
+        // key is typed. `combat.md §14`: `BATTLE IS LOST!` "has no trailing
+        // newline" and the accepted Escape "appends no newline" after
+        // `Escape!` (playtest F41).
+        if self
+            .lines
+            .last()
+            .is_some_and(|line| line.row_left_open && !line.glyphs.is_empty())
+        {
+            return;
+        }
         self.lines.push(MessageLogLine {
             text: String::new(),
             glyphs: Vec::new(),
