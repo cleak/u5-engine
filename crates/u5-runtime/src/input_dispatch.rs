@@ -1451,8 +1451,12 @@ fn handle_active_shop_key_input(
                             // §8.C "Rest offer | Opening quote, room record,
                             // then `\nWilt thou take\nit?" `. Records by inn
                             // row are `186, 187, 188, 188, 189, 190`."
+                            //
+                            // The capacity check's `\n\n` comes first: one
+                            // feed closes the `night?" R` row, the other is
+                            // the blank (playtest F48).
                             format!(
-                                "\n\"{}{INN_TAKE_IT_PROMPT}",
+                                "\n\n\"{}{INN_TAKE_IT_PROMPT}",
                                 render_shared_shoppe_record(
                                     game_dir,
                                     inn_room_record(inn),
@@ -1486,9 +1490,9 @@ fn handle_active_shop_key_input(
                                 inn.display_name(),
                             );
                             if record.is_empty() {
-                                format!("\n{INN_NOBODY_TO_LEAVE_REFUSAL}")
+                                format!("\n\n{INN_NOBODY_TO_LEAVE_REFUSAL}")
                             } else {
-                                format!("\n{record}")
+                                format!("\n\n{record}")
                             }
                         } else {
                             let deposit = inn_leave_companion_deposit_for_speaker(
@@ -1505,7 +1509,8 @@ fn handle_active_shop_key_input(
                             // the innkeeper asks in the message window while
                             // the *panel* becomes a framed `Select:` picker
                             // over the party rows. No deposit is quoted here.
-                            format!("\n{}", who_will_stay())
+                            // The capacity check's `\n\n`, then the question.
+                            format!("\n\n{}", who_will_stay())
                         }
                     }
                     // §8.C: "P has no separate echo."
@@ -1516,14 +1521,14 @@ fn handle_active_shop_key_input(
                             // `\n\nOne must first be left behind!\n\n`; this
                             // check precedes the no-guests check".
                             *s = InnkeeperState::Continuation { inn };
-                            format!("\nOne must first be left behind!\n\n{INN_ANYTHING_MORE_PROMPT}")
+                            format!("\n\nOne must first be left behind!\n\n{INN_ANYTHING_MORE_PROMPT}")
                         } else if guests.is_empty() {
                             // "Pickup with no guest at this inn |
                             // Token-expanded `\n\n"No one here is from thy
                             // party!"\nsays $.\n\n`".
                             *s = InnkeeperState::Continuation { inn };
                             format!(
-                                "\n\"No one here is from thy party!\"{}\n\n{INN_ANYTHING_MORE_PROMPT}",
+                                "\n\n\"No one here is from thy party!\"{}\n\n{INN_ANYTHING_MORE_PROMPT}",
                                 attribution("says")
                             )
                         } else if guests.len() == 1 {
@@ -1558,7 +1563,7 @@ fn handle_active_shop_key_input(
                             };
                             // "Multiple-guest selection | `\n\n"Who will\ncheck
                             // out?" `"; the framed register is the side panel.
-                            format!("\n{INN_WHO_WILL_CHECK_OUT_PROMPT}")
+                            format!("\n\n{INN_WHO_WILL_CHECK_OUT_PROMPT}")
                         }
                     }
                     // `shops.md §8.A` "Shared closing envelope": the ordinary
@@ -1605,8 +1610,10 @@ fn handle_active_shop_key_input(
                             // "Paid Rest | `"Have a pleasant\nnight, `,
                             // honorific, token-expanded `!"\nsays $.\n\n`, then
                             // the rest sequence."
+                            // The offer's `\n\n` after the bare echo: one
+                            // feed closes `it?" Yes`, one is the blank.
                             let mut message = format!(
-                                "\n\"Have a pleasant\nnight, {honorific}!\"{}\n\n",
+                                "\n\n\"Have a pleasant\nnight, {honorific}!\"{}\n\n",
                                 attribution("says")
                             );
                             message.push_str(&apply_paid_inn_rest(
@@ -1632,7 +1639,7 @@ fn handle_active_shop_key_input(
                         // "Accepted Rest, short funds | `"Highwaymen!\nCheap,
                         // at that!\nOUT!" `, then token-expanded `screams\n$.\n`".
                         Err(err) => format!(
-                            "\n{}{}",
+                            "\n\n{}{}",
                             format_inn_error(err, speaker_is_female),
                             innkeeper_name
                                 .map(|name| format!("screams\n{name}."))
@@ -1659,7 +1666,7 @@ fn handle_active_shop_key_input(
                 (InnkeeperState::PickLeaveCompanion { inn, .. }, _, _, _) if key_byte == 0x1b => {
                     state.emit_message_line_continuing_row("Nobody");
                     *s = InnkeeperState::Continuation { inn };
-                    format!("\n{INN_ANYTHING_MORE_PROMPT}")
+                    format!("\n\n{INN_ANYTHING_MORE_PROMPT}")
                 }
                 // "A valid party digit moves the highlight; Return or Space
                 // commits the indicated member", which starts on Avatar. "The
@@ -1702,7 +1709,7 @@ fn handle_active_shop_key_input(
                         // not leave thee!\n\n`; repeat the target question".
                         let plural = if state.party.len() > 2 { "s" } else { "" };
                         format!(
-                            "\nThy friend{plural} will not leave thee!\n\n{}",
+                            "\n\nThy friend{plural} will not leave thee!\n\n{}",
                             who_will_stay()
                         )
                     } else if state.party[party_index].status == b'D' {
@@ -1711,7 +1718,7 @@ fn handle_active_shop_key_input(
                         // ordinary farewell".
                         *s = InnkeeperState::Exited;
                         format!(
-                            "\n{}",
+                            "\n\n{}",
                             render_shared_shoppe_record(
                                 game_dir,
                                 INN_DEAD_COMPANION_RECORD,
@@ -1730,8 +1737,10 @@ fn handle_active_shop_key_input(
                         // comfortable room will be `, token-expanded `% gold
                         // per month, due at check-out.`, then `\nWilt thou
                         // take\nit?" `."
+                        // Playtest F48: with one feed the rate ran straight
+                        // under `stay?" `.
                         format!(
-                            "\n\"The rate for\nour most comfortable room will be {deposit} gold per month, due at check-out.{INN_TAKE_IT_PROMPT}"
+                            "\n\n\"The rate for\nour most comfortable room will be {deposit} gold per month, due at check-out.{INN_TAKE_IT_PROMPT}"
                         )
                     }
                 }
@@ -1753,13 +1762,14 @@ fn handle_active_shop_key_input(
                         // thee."\nsays $.\n\n`", then the inn's continuation.
                         Ok(_) => {
                             state.arms_transaction_completed = true;
+                            // "Leave rate | ... bare echo, then `\n\n`".
                             format!(
-                                "\n{INN_THANKS_LINE}{}\n\n{INN_ANYTHING_MORE_PROMPT}",
+                                "\n\n{INN_THANKS_LINE}{}\n\n{INN_ANYTHING_MORE_PROMPT}",
                                 attribution("says")
                             )
                         }
                         Err(err) => format!(
-                            "\n{}{INN_ANYTHING_MORE_PROMPT}",
+                            "\n\n{}{INN_ANYTHING_MORE_PROMPT}",
                             format_inn_error(err, speaker_is_female)
                         ),
                     }
@@ -1767,14 +1777,14 @@ fn handle_active_shop_key_input(
                 (InnkeeperState::ConfirmLeaveCompanion { inn, .. }, _, true, _) => {
                     state.emit_message_line_continuing_row("No");
                     *s = InnkeeperState::Continuation { inn };
-                    format!("\n{INN_ANYTHING_MORE_PROMPT}")
+                    format!("\n\n{INN_ANYTHING_MORE_PROMPT}")
                 }
                 // "Cancel guest selection | Escape prints `No one\n\n`;
                 // Space/Return instead select the highlighted guest".
                 (InnkeeperState::PickUpCompanion { inn, .. }, _, _, _) if key_byte == 0x1b => {
                     state.emit_message_line_continuing_row("No one");
                     *s = InnkeeperState::Continuation { inn };
-                    format!("\n{INN_ANYTHING_MORE_PROMPT}")
+                    format!("\n\n{INN_ANYTHING_MORE_PROMPT}")
                 }
                 (
                     InnkeeperState::PickUpCompanion {
@@ -1808,7 +1818,9 @@ fn handle_active_shop_key_input(
                 (InnkeeperState::Continuation { inn }, true, _, _) => {
                     state.emit_message_line_continuing_row("Yes");
                     *s = InnkeeperState::ServiceMenu { inn };
-                    format!("\n{}", service_question())
+                    // §8.B's `Yes` then `\n\n$ asks,`: the echo row closes
+                    // and one blank follows, as at entry.
+                    format!("\n\n{}", service_question())
                 }
                 (InnkeeperState::Continuation { .. }, _, _, _) if no || key_byte == b' ' => {
                     state.emit_message_line_continuing_row("No");
@@ -4254,7 +4266,7 @@ const fn inn_room_record(inn: crate::shops::Inn) -> usize {
 /// question.
 fn return_inn_capacity_refusal(honorific: &str) -> String {
     format!(
-        "\n\"I am sorry,\n{honorific}, but we\nhave no room\navailable.\"\n\n{INN_ANYTHING_MORE_PROMPT}"
+        "\n\n\"I am sorry,\n{honorific}, but we\nhave no room\navailable.\"\n\n{INN_ANYTHING_MORE_PROMPT}"
     )
 }
 
@@ -4283,7 +4295,7 @@ fn inn_pickup_selected_guest(
         .unwrap_or(0);
     // "Pickup bill | Token-expanded `\n\n"That will be % gold,
     // please."\n\n"`".
-    let bill_line = format!("\n\"That will be {bill} gold, please.\"\n\n\"");
+    let bill_line = format!("\n\n\"That will be {bill} gold, please.\"\n\n\"");
     let attribution = innkeeper_name
         .map(|name| format!("says {name}.\n\n"))
         .unwrap_or_else(|| "\n".to_string());

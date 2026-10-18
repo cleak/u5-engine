@@ -116,14 +116,35 @@ fn every_quoted_shop_key_prompt_suppresses_the_command_row() {
         );
     }
 
-    // A selector that owns the panel is not this shape, and stays as it was.
-    let mut state = test_state(open_grid(), 1, 1);
-    state.active_shop = Some(ActiveShopSession::Innkeeper(
-        InnkeeperState::PickLeaveCompanion {
+    // The member selector and the guest register wait on their caller's
+    // quoted question too: `inventory.md §4.3` leaves "the message window ...
+    // untouched apart from the caller's prompt itself" (playtest F49).
+    for session in [
+        ActiveShopSession::Innkeeper(InnkeeperState::PickLeaveCompanion {
             inn,
             deposit: 3,
             highlight: 0,
-        },
-    ));
-    assert!(!state.message_window_live_row_suppressed());
+        }),
+        ActiveShopSession::Innkeeper(InnkeeperState::PickUpCompanion {
+            inn,
+            guest_indices: [0; crate::shops::INN_REGISTRY_CAP],
+            guest_count: 2,
+            base_lodging_charge: 3,
+        }),
+        ActiveShopSession::Healer(
+            HealerShopState::PickPartyMember {
+                service: HealerService::Cure,
+                cost: 10,
+                highlight: 0,
+            },
+            Healer::TheHealersMission,
+        ),
+    ] {
+        let mut state = test_state(open_grid(), 1, 1);
+        state.active_shop = Some(session.clone());
+        assert!(
+            state.message_window_live_row_suppressed(),
+            "{session:?} draws a command row under its selector question"
+        );
+    }
 }

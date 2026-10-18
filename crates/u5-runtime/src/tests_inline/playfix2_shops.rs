@@ -101,3 +101,62 @@ fn pf2_healer_transcript_takes_one_blank_before_each_reply() {
     assert_eq!(rows[aid + 1], "", "{rows:#?}");
     assert_eq!(rows[aid + 2], "\"Thou hast no need of this art!\"", "{rows:#?}");
 }
+
+/// A Hotel Brittany visit at its entry greeting, party of three.
+fn pf2_inn_state() -> PlayState {
+    use crate::shop_runtime::InnkeeperState;
+    use crate::shop_session::ActiveShopSession;
+    let mut state = test_state(open_grid(), 1, 1);
+    state.area = Area::Town {
+        scene: Scene::new(20).unwrap(),
+        floor: 0,
+    };
+    three_member_party(&mut state);
+    state.gold = 3000;
+    state.active_shop = Some(ActiveShopSession::Innkeeper(InnkeeperState::Greeting {
+        inn: Inn::HotelBrittany,
+    }));
+    state.emit_message_line("\n\"Welcome!\" ");
+    state.open_message_row();
+    pf2_keys(&mut state, &['Y']);
+    state
+}
+
+/// Playtest F48. `shops.md §8.B`: the inn question ends `night?" `; §8.C:
+/// "L and R echo those uppercase letters", the capacity check prints `\n\n`
+/// first, the Rest and Leave-rate offers echo a bare `Yes`/`No` "then
+/// `\n\n`", and the Leave rate begins "After `\n\n`" - one blank row each.
+#[test]
+fn pf2_inn_echoes_continue_their_rows_and_replies_take_one_blank() {
+    let mut state = pf2_inn_state();
+    pf2_keys(&mut state, &['L']);
+    let rows = pf2_rows(&state);
+    let echo = pf2_row_index(&rows, "night?\" L");
+    assert_eq!(rows[echo + 1], "", "{rows:#?}");
+    assert!(rows[echo + 2].ends_with(" asks,"), "{rows:#?}");
+    assert_eq!(rows[echo + 3..], ["\"Who will", "stay?\""], "{rows:#?}");
+
+    pf2_keys(&mut state, &['2', '\r']);
+    let rows = pf2_rows(&state);
+    let stay = pf2_row_index(&rows, "stay?\"");
+    assert_eq!(rows[stay + 1], "", "{rows:#?}");
+    assert_eq!(rows[stay + 2], "\"The rate for", "{rows:#?}");
+
+    pf2_keys(&mut state, &['Y']);
+    let rows = pf2_rows(&state);
+    let yes = pf2_row_index(&rows, "it?\" Yes");
+    assert_eq!(rows[yes + 1], "", "{rows:#?}");
+    assert_eq!(rows[yes + 2], "\"I thank thee.\"", "{rows:#?}");
+
+    let mut state = pf2_inn_state();
+    pf2_keys(&mut state, &['R']);
+    let rows = pf2_rows(&state);
+    let echo = pf2_row_index(&rows, "night?\" R");
+    assert_eq!(rows[echo + 1], "", "{rows:#?}");
+    assert!(rows[echo + 2].starts_with('"'), "{rows:#?}");
+    pf2_keys(&mut state, &['Y']);
+    let rows = pf2_rows(&state);
+    let yes = pf2_row_index(&rows, "it?\" Yes");
+    assert_eq!(rows[yes + 1], "", "{rows:#?}");
+    assert_eq!(rows[yes + 2], "\"Have a pleasant", "{rows:#?}");
+}

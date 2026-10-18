@@ -644,6 +644,30 @@ fn write_rgba_png(out: &Path, width: u32, height: u32, rgba: Vec<u8>) -> io::Res
 /// The `--save-screen` live-row classification. It mirrors the Bevy shell's
 /// message-window assembly, so a key wait that is not a command (the
 /// endgame's greeting page) takes no end cap here either (playtest E66).
+/// The open prompt row `--save-screen` hands the layout: the state's own
+/// prompt literal, or - as the Bevy shell does - the log's last row when that
+/// row already owns the cursor, as the tavern's provision quantity question
+/// does. Without the fallback this oracle drew a `>` command row under
+/// `thou like?" 3` that the shell does not (playtest F49).
+pub(crate) fn save_screen_open_prompt(
+    state: &PlayState,
+    log: &u5_runtime::GameplayMessageLog,
+    flash_hold: bool,
+) -> Option<String> {
+    if flash_hold {
+        return None;
+    }
+    state.open_prompt_line().or_else(|| {
+        if !u5_runtime::open_row_owns_the_cursor(state) {
+            return None;
+        }
+        log.lines()
+            .last()
+            .filter(|line| !line.text.is_empty())
+            .map(|line| format!("{}{}", line.text, " ".repeat(line.trailing_spaces as usize)))
+    })
+}
+
 pub(crate) fn save_screen_live_row_kind(
     state: &PlayState,
     spell_echo_present: bool,
@@ -758,6 +782,43 @@ mod tests {
         };
         assert_eq!(save_screen_cursor_cell(&state, &layout), None);
         let _ = fs::remove_dir_all(dir);
+    }
+
+    /// Playtest F49: the tavern's provision quantity question keeps the
+    /// cursor on its own row (`text-output.md §10.6`), so the oracle places
+    /// no live command row under it - the Bevy shell's rule.
+    #[test]
+    fn save_screen_keeps_the_tavern_quantity_on_its_question_row() {
+        use u5_runtime::shop_runtime::TavernState;
+        use u5_runtime::shop_session::ActiveShopSession;
+        use u5_runtime::test_fixtures::{open_grid, test_state};
+
+        let mut state = test_state(open_grid(), 1, 1);
+        state.active_shop = Some(ActiveShopSession::Tavern(
+            TavernState::PickProvisionQuantity {
+                tavern: u5_runtime::Tavern::TheHonestMeal,
+                unit_price: 10,
+                continuation_ready: false,
+                entry: Default::default(),
+            },
+        ));
+        state.emit_message_line("\n\nHow many wouldst\nthou like?\" 3");
+        let log = u5_runtime::message_log_from_entries(state.displayed_message_entries(), |text| {
+            (!text.trim().is_empty()).then(|| text.to_string())
+        });
+        let open_prompt = save_screen_open_prompt(&state, &log, false);
+        assert_eq!(open_prompt.as_deref(), Some("thou like?\" 3"));
+        let live_row = (!state.message_window_live_row_suppressed()).then_some("");
+        let layout = u5_runtime::layout_message_window_with_continuation(
+            &log,
+            live_row,
+            open_prompt.as_deref(),
+            false,
+            save_screen_live_row_kind(&state, false),
+        );
+        let last = layout.rows.last().expect("rows");
+        assert_eq!(last.text.trim_end(), "thou like?\" 3", "{:?}", layout.rows);
+        assert!(!last.prefixed);
     }
 
     #[test]
@@ -990,7 +1051,7 @@ pub fn compose_gameplay_screen(
     // `text-output.md §10.6`: a prompt awaiting a key keeps its own line
     // open and carries the input cursor inline, so the headless
     // composition places it exactly where the Bevy renderer does.
-    let open_prompt = state.open_prompt_line().filter(|_| !flash_hold);
+    let open_prompt = save_screen_open_prompt(state, &log, flash_hold);
     // The spell-name colon line is a live row served from the cast/mix
     // session rather than from the log, so the oracle has to ask for it
     // the same way the shell does. There is no typed-input buffer here,
