@@ -664,15 +664,6 @@ impl EndgameState {
             })
     }
 
-    /// Text the current cinematic beat puts on the endgame surface.
-    ///
-    /// `banner_label()` is a debug/pacing aid for tests; it is never a
-    /// display fallback. A missing `ENDMSG.DAT` rite record or a
-    /// missing `END.DAT` narrative window is an asset/contract failure
-    /// (`endgame.md §7`, `§8`) and fails loudly instead of printing a
-    /// label at the player. Beats that carry no prose of their own
-    /// (the throne tableau and the late full-screen rectangle
-    /// operation) return an empty string.
     /// The current `endgame.md §8` narrative window's `END.DAT` text with
     /// the `{` first-line indent and `_` soft hyphen kept in place, for the
     /// proportional page renderer that consumes them (`formats/end-dat.md
@@ -689,6 +680,15 @@ impl EndgameState {
             .layout_window_by_number(index.saturating_add(1))
     }
 
+    /// Text the current cinematic beat puts on the endgame surface.
+    ///
+    /// `banner_label()` is a debug/pacing aid for tests; it is never a
+    /// display fallback. A missing `ENDMSG.DAT` rite record or a
+    /// missing `END.DAT` narrative window is an asset/contract failure
+    /// (`endgame.md §7`, `§8`) and fails loudly instead of printing a
+    /// label at the player. Beats that carry no prose of their own
+    /// (the throne tableau and the late full-screen rectangle
+    /// operation) return an empty string.
     pub fn current_cinematic_text(&self) -> String {
         use crate::endgame_cinematic::EndgameCinematicStep as Step;
         match self.cinematic.step {
