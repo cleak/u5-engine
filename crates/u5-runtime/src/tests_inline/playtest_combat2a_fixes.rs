@@ -137,3 +137,29 @@ fn playtest_f36_the_waiting_marker_sits_on_the_row_its_echo_lands_on() {
         .unwrap_or_else(|| panic!("the echo is drawn: {after:?}"));
     assert_eq!(after[echo - 1], "bare hands:", "rows: {after:?}");
 }
+
+/// `rest-and-camp.md §4`: "the sleeping combatant's `Zzzzz...\n` (five z,
+/// three dots)", and `combat.md §8.1`: every banner opens with its own
+/// newline. Playtest F39: `Zzzzz...` ran straight into the next banner.
+#[test]
+fn playtest_f39_a_blank_row_separates_the_asleep_line_from_the_next_banner() {
+    let mut state = combat_player_command_state(8, 5);
+    state.combat_actors[0].flags |= COMBAT_ACTOR_FLAG_STATUS_DISABLED;
+    state.combat_actors[0].phase_counter = 1;
+    state.message_transcript.clear();
+
+    let _ = state.apply_combat_actor_slot_dispatch(0, 30);
+    state.open_pending_combat_player_turn(Some(0));
+
+    let texts = combat2a_entry_texts(&state);
+    let asleep = texts
+        .iter()
+        .position(|text| text == COMBAT_ASLEEP_TURN_LINE)
+        .unwrap_or_else(|| panic!("the asleep line is printed: {texts:?}"));
+    let banner = state.combat_turn_banner_for_actor(0).unwrap();
+    assert_eq!(
+        texts[asleep + 1..asleep + 3],
+        [String::new(), banner.trim_matches('\n').to_string()],
+        "transcript: {texts:?}"
+    );
+}

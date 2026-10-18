@@ -8428,7 +8428,11 @@ impl PlayState {
                 let wake = self
                     .apply_combat_command_handler_asleep_arm(slot)
                     .expect("status-disabled actor should produce a wake dispatch");
-                self.emit_combat_print(COMBAT_ASLEEP_TURN_LINE);
+                // `rest-and-camp.md §4`: the sleeping combatant's line is
+                // "`Zzzzz...\n` (five z, three dots)". Its own feed closes
+                // the row, so the next banner's leading newline leaves the
+                // blank row every other turn result has (playtest F39).
+                self.emit_combat_print(&format!("{COMBAT_ASLEEP_TURN_LINE}\n"));
                 wake
             } else {
                 let wake_roll = self.combat_sleep_wake_roll(slot);
