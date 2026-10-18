@@ -5089,8 +5089,10 @@ fn format_reagent_outcome(
             let quantity = crate::shops::herbalist_reagent_bundle_quantity(herbalist, reagent)
                 .map(u16::from)
                 .unwrap_or_default();
+            // The question's row is open, so §8.C's two leading feeds close
+            // it and leave one blank row (playtest F46).
             format!(
-                "\n\"{} Is this thy need?\"",
+                "\n\n\"{} Is this thy need?\" ",
                 render(REAGENT_OFFER_RECORD_FIRST + ordinal, price, quantity)
             )
         }
@@ -5104,8 +5106,10 @@ fn format_reagent_outcome(
             let attribution = vendor_name
                 .map(|name| format!("\nsays {name}."))
                 .unwrap_or_default();
+            // `Yes\n` then `\n"I thank thee!"`: the echo row closes and one
+            // blank follows (playtest F46).
             format!(
-                "\n\"I thank thee!\"{attribution}\n\"Anything else?\n\n{}",
+                "\n\n\"I thank thee!\"{attribution}\n\"Anything else?\n\n{}",
                 reagent_stock_menu(herbalist)
             )
         }
@@ -5113,7 +5117,7 @@ fn format_reagent_outcome(
         RefusedShortFunds { cost } => render(REAGENT_SHORT_FUNDS_RECORD, cost, 0),
         // "Decline | `No\n\n"What else?\n\n`, then stock".
         Declined { herbalist } => format!(
-            "\n\"What else?\n\n{}",
+            "\n\n\"What else?\n\n{}",
             reagent_stock_menu(herbalist)
         ),
         // Closing barks are rendered by the caller through the shared
@@ -5126,7 +5130,9 @@ fn format_reagent_outcome(
 }
 
 const REAGENT_MENU_HEADING: &str = "\"Fine! We sell:";
-const REAGENT_MENU_QUESTION: &str = "Thy interest?\"";
+/// §8.C: `\nThy interest?" ` - the closing quote and one space. Playtest
+/// F46: without the space the cursor abutted the quote.
+const REAGENT_MENU_QUESTION: &str = "Thy interest?\" ";
 
 /// `shops.md §8.6`, the horse trader's one placement refusal.
 const HORSE_TRADER_CLOSED_REFUSAL: &str = "The stables are closed.\n";
@@ -5301,9 +5307,12 @@ fn format_ship_broker_outcome(
 /// leader so that letter, dots and name occupy fourteen columns, right
 /// aligning the names.
 const GUILD_MENU_HEADING: &str = "\"We sell:";
-const GUILD_MENU_QUESTION: &str = "Thy concern?\"";
+/// §8.C: the menu ends `Thy concern?" ` and the offer `\n\nInterested?" ` -
+/// each with the space the next echo lands after. Playtest F46 read
+/// `Thy concern?"a` and `Interested?"No`.
+const GUILD_MENU_QUESTION: &str = "Thy concern?\" ";
 /// The prompt a quoted commodity ends on.
-const GUILD_QUOTE_PROMPT: &str = "Interested?\"";
+const GUILD_QUOTE_PROMPT: &str = "Interested?\" ";
 /// The heading the list takes when a declined quote redraws it.
 const GUILD_MENU_AGAIN_HEADING: &str = "\"What else, then?";
 const GUILD_MENU_ROW_WIDTH: usize = 14;
@@ -5378,7 +5387,9 @@ fn format_guild_outcome(
             commodity,
             price,
         } => format!(
-            "\n\"{}\n\n{GUILD_QUOTE_PROMPT}",
+            // After the letter echo on the open `Thy concern?" ` row: one
+            // feed closes it, one is the blank (playtest F46).
+            "\n\n\"{}\n\n{GUILD_QUOTE_PROMPT}",
             render(guild_offer_record(commodity), Some(shop), price)
         ),
         // "D renders record `164`, then redraws the stock menu."
@@ -5395,7 +5406,7 @@ fn format_guild_outcome(
                 .map(|name| format!("\nsays {name}."))
                 .unwrap_or_default();
             format!(
-                "\n\"Sold!\"{attribution}\n\n\"What else, \n{}?\n\n{}",
+                "\n\n\"Sold!\"{attribution}\n\n\"What else, \n{}?\n\n{}",
                 if speaker_is_female { "m'lady" } else { "m'lord" },
                 guild_stock_menu()
             )
@@ -5403,7 +5414,7 @@ fn format_guild_outcome(
         // "Short funds | Record `163`; visit ends without ordinary farewell".
         RefusedShortFunds { cost } => render(GUILD_SHORT_FUNDS_RECORD, None, cost),
         // "Decline | `No\n\n"What else, then?\n\n`, then stock menu".
-        Declined => format!("\n{GUILD_MENU_AGAIN_HEADING}\n\n{}", guild_stock_menu()),
+        Declined => format!("\n\n{GUILD_MENU_AGAIN_HEADING}\n\n{}", guild_stock_menu()),
         // Closing barks are rendered by the caller through the shared
         // envelope; these are the silent arms.
         DeclinedEntry | LeftMenu | Exited => String::new(),

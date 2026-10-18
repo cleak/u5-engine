@@ -160,3 +160,96 @@ fn pf2_inn_echoes_continue_their_rows_and_replies_take_one_blank() {
     assert_eq!(rows[yes + 1], "", "{rows:#?}");
     assert_eq!(rows[yes + 2], "\"Have a pleasant", "{rows:#?}");
 }
+
+fn pf2_guild_state() -> PlayState {
+    use crate::shop_runtime::GuildShopState;
+    use crate::shop_session::ActiveShopSession;
+    let mut state = test_state(open_grid(), 1, 1);
+    state.area = Area::Town {
+        scene: Scene::new(22).unwrap(),
+        floor: 0,
+    };
+    state.gold = 3000;
+    state.active_shop = Some(ActiveShopSession::Guild(GuildShopState::Greeting {
+        shop: crate::shops::GuildShop::TheGuild,
+    }));
+    state.emit_message_line("\n\"Welcome!\" ");
+    state.open_message_row();
+    pf2_keys(&mut state, &['Y']);
+    state
+}
+
+fn pf2_herbalist_state() -> PlayState {
+    use crate::shop_runtime::ReagentShopState;
+    use crate::shop_session::ActiveShopSession;
+    let mut state = test_state(open_grid(), 1, 1);
+    state.area = Area::Town {
+        scene: Scene::new(1).unwrap(),
+        floor: 0,
+    };
+    state.gold = 3000;
+    state.active_shop = Some(ActiveShopSession::Reagent(ReagentShopState::Greeting {
+        herbalist: Herbalist::TheHerbalist,
+    }));
+    state.emit_message_line("\n\"Welcome!\" ");
+    state.open_message_row();
+    pf2_keys(&mut state, &['Y']);
+    state
+}
+
+/// Playtest F46. `shops.md §8.C` Guild: the menu ends `Thy concern?" `, the
+/// offer is `\n\n"` + record + `\n\nInterested?" `, the decline
+/// `No\n\n"What else, then?\n\n` and the paid reply `\n"Sold!"` after
+/// `Yes\n`: a space before each echo and one blank row before each reply.
+#[test]
+fn pf2_guild_prompts_keep_their_space_and_replies_take_one_blank() {
+    let mut state = pf2_guild_state();
+    pf2_keys(&mut state, &['a']);
+    let rows = pf2_rows(&state);
+    let echo = pf2_row_index(&rows, "Thy concern?\" a");
+    assert_eq!(rows[echo + 1], "", "{rows:#?}");
+    assert!(rows[echo + 2].starts_with('"'), "{rows:#?}");
+
+    pf2_keys(&mut state, &['N']);
+    let rows = pf2_rows(&state);
+    let no = pf2_row_index(&rows, "Interested?\" No");
+    assert_eq!(rows[no + 1], "", "{rows:#?}");
+    assert_eq!(rows[no + 2], "\"What else, then?", "{rows:#?}");
+
+    pf2_keys(&mut state, &['a', 'Y']);
+    let rows = pf2_rows(&state);
+    let yes = pf2_row_index(&rows, "Interested?\" Yes");
+    assert_eq!(rows[yes + 1], "", "{rows:#?}");
+    assert_eq!(rows[yes + 2], "\"Sold!\"", "{rows:#?}");
+}
+
+/// Playtest F46. `shops.md §8.C` Reagents: `\nThy interest?" `, the offer
+/// `\n\n"` + record + ` Is this thy need?" `, the decline
+/// `No\n\n"What else?\n\n` and the paid `\n"I thank thee!"` after `Yes\n`.
+#[test]
+fn pf2_herbalist_prompts_keep_their_space_and_replies_take_one_blank() {
+    let mut state = pf2_herbalist_state();
+    pf2_keys(&mut state, &['A']);
+    let rows = pf2_rows(&state);
+    let question = pf2_row_index(&rows, "Thy interest?\"");
+    assert_eq!(rows[question + 1], "", "{rows:#?}");
+    assert!(rows[question + 2].starts_with('"'), "{rows:#?}");
+
+    pf2_keys(&mut state, &['N']);
+    let rows = pf2_rows(&state);
+    let no = rows
+        .iter()
+        .rposition(|row| row.ends_with("need?\" No"))
+        .unwrap_or_else(|| panic!("{rows:#?}"));
+    assert_eq!(rows[no + 1], "", "{rows:#?}");
+    assert_eq!(rows[no + 2], "\"What else?", "{rows:#?}");
+
+    pf2_keys(&mut state, &['A', 'Y']);
+    let rows = pf2_rows(&state);
+    let yes = rows
+        .iter()
+        .rposition(|row| row.ends_with("need?\" Yes"))
+        .unwrap_or_else(|| panic!("{rows:#?}"));
+    assert_eq!(rows[yes + 1], "", "{rows:#?}");
+    assert_eq!(rows[yes + 2], "\"I thank thee!\"", "{rows:#?}");
+}
