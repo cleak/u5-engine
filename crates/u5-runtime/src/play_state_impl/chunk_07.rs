@@ -925,7 +925,9 @@ impl PlayState {
         let transport = candidate.transport;
         let starting_transport_marker = self.player.transport.save_marker();
         if !self.player.transport.can_board(transport) {
-            self.message = "On foot.".to_string();
+            // `vehicles.md §4`: "the stock \"On foot\" refusal", which
+            // `commands.md §5.5` publishes as `On_foot!\n` (playtest F21).
+            self.message = "On foot!".to_string();
             return MoveOutcome::Blocked;
         }
         if matches!(self.area, Area::Town { .. })
@@ -950,6 +952,11 @@ impl PlayState {
         self.sync_player_object();
         self.mark_visibility_dirty();
         self.advance_turn();
+        // Spec gap (playtest F21): `vehicles.md §4` says only that each
+        // family "prints the horse/carpet/skiff/ship line" and that the ship
+        // "warns if hull condition is below ten, warns if no skiffs are
+        // aboard"; none of the four literals is published. This wording is a
+        // placeholder until the spec gives them.
         let mut message = format!("Boarded {}.", transport.kind_name());
         transport.append_ship_auxiliary_warnings(&mut message);
         self.message = message;

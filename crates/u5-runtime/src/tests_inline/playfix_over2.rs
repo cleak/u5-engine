@@ -160,3 +160,28 @@ fn playfix_f19_each_under_sail_collision_prints_its_own_line() {
         assert_eq!(printed, 3, "{line}");
     }
 }
+
+/// F21: `vehicles.md §4` - a mounted party over a skiff gets "the stock
+/// \"On foot\" refusal", and `commands.md §5.5` publishes that stock
+/// literal as `On_foot!\n`, not `On foot.`.
+#[test]
+fn playfix_f21_board_refusal_is_the_stock_on_foot_literal() {
+    let mut state = world_state(open_world_grid(), 5, 5);
+    state.player.transport = TransportState::Horse {
+        type_byte: 160,
+        tile: 160,
+    };
+    state.sync_player_object();
+    state.active_objects.push(ActiveObject {
+        type_byte: SKIFF_PARKED_FIRST,
+        tile: SKIFF_PARKED_FIRST,
+        x: 5,
+        y: 5,
+        z: WorldPlane::Underworld.save_floor(),
+        phase: STEADY_PHASE,
+        aux1: 0,
+        aux3: 0,
+    });
+    assert_eq!(state.board_vehicle(), MoveOutcome::Blocked);
+    assert_eq!(state.message, "On foot!");
+}
