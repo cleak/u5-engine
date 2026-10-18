@@ -138,3 +138,25 @@ fn playfix_f20_watch_answers_continue_the_prompt_row_without_a_marker() {
     assert!(rows(&state).contains(&cancelled), "{:?}", rows(&state));
     assert_eq!(state.message, REST_WATCH_PROMPT);
 }
+
+/// F19: `overworld.md §6.2.5` - every released refused under-sail step
+/// "prints COLLISION!" (`BREAKING UP!` on shoal) before the rumble and the
+/// hull draw, and `weather.md §5.1` clears the cached heading so the next
+/// key tries again. A repeat is byte-identical to the line before it and
+/// must still reach the window.
+#[test]
+fn playfix_f19_each_under_sail_collision_prints_its_own_line() {
+    for (tile, line) in [(0x05_u8, "COLLISION!"), (0x03, "BREAKING UP!")] {
+        let mut state = world_state(open_world_grid(), 5, 5);
+        for _ in 0..3 {
+            let _ = state.apply_sailing_collision(tile);
+        }
+        state.flush_message_slot();
+        let printed = state
+            .message_transcript
+            .iter()
+            .filter(|entry| entry.text == line)
+            .count();
+        assert_eq!(printed, 3, "{line}");
+    }
+}
