@@ -23,6 +23,49 @@ pub fn handle_play_key_input(
     suffix: &str,
     game_dir: &Path,
 ) -> io::Result<PlayInputDisposition> {
+    run_with_command_epilogue(state, game_dir, |state| {
+        handle_play_key_input_inner(state, key, suffix, game_dir)
+    })
+}
+
+/// `combat.md §8.1` and `§14`, for the turns combat takes **without** a key.
+///
+/// The round walker reads a key only for a keyboard-driven combatant that
+/// can act: a sleeping one gets its banner, its asleep arm's wake draw and
+/// `Zzzzz...` "and the turn ends with no key read", and "a wipe that leaves
+/// a sleeping member instead simply passes turns until someone wakes or
+/// dies". `main-loop.md §6`: "combat has no such [party-capability] check of
+/// its own", so the exploration gate's world sleep pass must never stand in
+/// for those turns (playtest F24).
+///
+/// One call drives the walker exactly as a committed action's tail does, up
+/// to the next prompted combatant or the end of the fight, and then runs the
+/// same post-command hooks a key would - a fight that ends here still drains
+/// its town tail and outdoor reactions.
+pub fn advance_combat_without_input(state: &mut PlayState, game_dir: &Path) -> io::Result<()> {
+    if !combat_awaits_automatic_turns(state) {
+        return Ok(());
+    }
+    run_with_command_epilogue(state, game_dir, |state| {
+        drive_combat_round_walk_and_append_message(state);
+        Ok(PlayInputDisposition::Continue)
+    })
+    .map(|_| ())
+}
+
+/// Combat is running and no combatant is waiting at the prompt, so the
+/// walker owes turns that read no key.
+pub(crate) fn combat_awaits_automatic_turns(state: &PlayState) -> bool {
+    state.combat_active
+        && state.pending_combat_actor_slot.is_none()
+        && state.active_combat_targeting.is_none()
+}
+
+fn run_with_command_epilogue(
+    state: &mut PlayState,
+    game_dir: &Path,
+    command: impl FnOnce(&mut PlayState) -> io::Result<PlayInputDisposition>,
+) -> io::Result<PlayInputDisposition> {
     // `stats-panel.md §2.2`: every site that changes a displayed number
     // either repaints the panel itself or raises the deferred request, and
     // which one is a property of the site. Immediate is the default because
@@ -31,7 +74,7 @@ pub fn handle_play_key_input(
     state.stats_panel_command_refresh = crate::stats_panel::PanelRefreshMode::Immediate;
     state.stats_panel_command_baseline = crate::stats_panel::stats_panel_snapshot_of(state);
     let combat_was_active = state.combat_active;
-    let mut result = handle_play_key_input_inner(state, key, suffix, game_dir);
+    let mut result = command(state);
     // A generic adjacent terrain combat suspends the high-to-low outdoor
     // reaction walk. As soon as the combat frame returns, continue the
     // remaining lower slots before accepting another world command.
