@@ -29,6 +29,29 @@ impl PlayState {
         &mut self,
         game_dir: &std::path::Path,
     ) -> std::io::Result<ExplorationTurnGateOutcome> {
+        // `main-loop.md §6`: the party-capability check belongs to "the
+        // three exploration loops"; "combat has no such check of its own and
+        // reaches the defeat sequence only through the loop it returned to".
+        // A party asleep in an arena is the round walker's business
+        // (`combat.md §8.1`'s asleep arm, `§14`'s sleeping wipe), so the
+        // world sleep pass must not run here - it spun forever without
+        // reading a key and never reached the combat wake draw (playtest
+        // F24). While no combatant is at the prompt, walk the turns that read
+        // no key and report an automatic pass; otherwise the prompt is ready.
+        if self.combat_active {
+            if crate::input_dispatch::combat_awaits_automatic_turns(self) {
+                crate::input_dispatch::advance_combat_without_input(self, game_dir)?;
+                if crate::input_dispatch::combat_awaits_automatic_turns(self) || !self.combat_active
+                {
+                    return Ok(ExplorationTurnGateOutcome::Slept { transition: None });
+                }
+            }
+            let member_index = self
+                .pending_combat_actor_slot
+                .filter(|&slot| slot < self.party.len())
+                .unwrap_or(0);
+            return Ok(ExplorationTurnGateOutcome::Ready { member_index });
+        }
         // `stats-panel.md §2.3`: the deferred request is consumed at "the
         // head of that loop's command prompt, not at the end of a turn" -
         // test, refresh if set, clear. This gate is that position for the

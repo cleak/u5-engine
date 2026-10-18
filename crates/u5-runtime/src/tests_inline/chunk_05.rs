@@ -1946,7 +1946,11 @@ fn a_attack_ordinary_town_npc_enters_the_arena_then_records_removal_on_exit() {
     // spent before the arena; it is paid once after the fight.
     assert_eq!(state.turn, 0);
     assert!(state.combat_active);
-    assert_eq!(state.message, combat_banner_line());
+    assert!(
+        state.message.starts_with(&combat_banner_line()),
+        "{}",
+        state.message
+    );
     // "ordinary town ground resolves to the cobble arena" - selector
     // arena 8 (encounters.md §4: "anything else | 2 when the scene byte
     // is zero (overworld), otherwise 8").
@@ -2031,7 +2035,11 @@ fn a_attack_guard_like_town_npc_raises_alarm_and_opens_an_eight_monster_arena() 
     // spent before the arena; it is paid once after the fight.
     assert_eq!(state.turn, 0);
     assert!(state.combat_active);
-    assert_eq!(state.message, combat_banner_line());
+    assert!(
+        state.message.starts_with(&combat_banner_line()),
+        "{}",
+        state.message
+    );
     assert_eq!(&state.npcs[0].schedule[..3], &[7, 7, 7]);
     assert_eq!(&state.npcs[0].schedule[12..16], &[0, 0, 0, 0]);
 
@@ -2053,10 +2061,10 @@ fn a_attack_guard_like_town_npc_raises_alarm_and_opens_an_eight_monster_arena() 
         "the fixture must exercise a shipped roster HP, not an inflated one"
     );
 
-    let walk = state
-        .ensure_pending_combat_player_turn()
-        .expect("guard combat must advance to a player-controlled actor");
-    assert_eq!(walk.stop_reason, CombatRoundWalkStopReason::AwaitingPlayer);
+    // `combat.md §8.1`: the command that opened the fight already walked the
+    // round to the first keyboard-driven turn and printed its banner, before
+    // any key is read (playtest F35), so no further walk is owed here.
+    assert!(state.ensure_pending_combat_player_turn().is_none());
     let actor_slot = state
         .pending_combat_actor_slot
         .expect("guard combat exposes a player actor");
@@ -2157,7 +2165,11 @@ fn world_attack_adjacent_combat_class_object_selects_brit_cbt_arena() {
     assert_eq!(state.turn, 1);
     assert!(state.combat_active);
     assert_eq!(state.pending_combat_terrain_trigger_slot, Some(1));
-    assert_eq!(state.message, combat_banner_line());
+    assert!(
+        state.message.starts_with(&combat_banner_line()),
+        "{}",
+        state.message
+    );
     // `combat.md §5`: monster descriptors start at index six, but their
     // active-object records "continue from the first record left free by
     // the seated party", so "the descriptor's active-object link byte is

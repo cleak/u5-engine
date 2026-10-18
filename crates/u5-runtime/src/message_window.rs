@@ -348,6 +348,20 @@ impl GameplayMessageLog {
         {
             return;
         }
+        // The same rule for a row its producer explicitly left open
+        // ([`MessageLogLine::row_left_open`]) with text on it: the layout's
+        // waiting prompt already follows such a row directly, so the echo
+        // written there must too, or the prompt drops a row the moment a
+        // key is typed. `combat.md §14`: `BATTLE IS LOST!` "has no trailing
+        // newline" and the accepted Escape "appends no newline" after
+        // `Escape!` (playtest F41).
+        if self
+            .lines
+            .last()
+            .is_some_and(|line| line.row_left_open && !line.glyphs.is_empty())
+        {
+            return;
+        }
         self.lines.push(MessageLogLine {
             text: String::new(),
             glyphs: Vec::new(),
@@ -660,6 +674,21 @@ pub fn combat_prompt_row_follows_history(state: &crate::PlayState) -> bool {
             .active_mix
             .as_ref()
             .is_some_and(|session| matches!(session.phase, crate::z_stats::MixPhase::Quantity))
+        // The arena prompt a turn banner opened is the same shape. The banner's
+        // colon and the turn handler's line feed (`combat.md §8.1`) leave the
+        // cursor at column 0 of the row under the banner, and the marker is drawn
+        // there: `Short Sword:` / ` South`, measured 2026-09-19
+        // (`qa/paired/combat-same-exit.tsv`), which is where the echo already
+        // lands ([`crate::PlayState::emit_combat_command_echo_line`]). A banner
+        // whose last row is exactly full costs its blank as an explicit entry
+        // ([`crate::PlayState::open_pending_combat_player_turn`]), so
+        // `with bare hands:` / blank / marker still holds. Without this the
+        // *waiting* marker sat one row under where its echo then landed, so the
+        // prompt jumped up a row on every short banner (playtest F36).
+        || (state.combat_active
+            && state.pending_combat_actor_slot.is_some()
+            && state.active_combat_targeting.is_none()
+            && state.combat_prompt_row_opened_by_banner)
 }
 
 /// Whether the overworld's waiting prompt row emits neither line feed nor

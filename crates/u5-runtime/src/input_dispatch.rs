@@ -23,6 +23,49 @@ pub fn handle_play_key_input(
     suffix: &str,
     game_dir: &Path,
 ) -> io::Result<PlayInputDisposition> {
+    run_with_command_epilogue(state, game_dir, |state| {
+        handle_play_key_input_inner(state, key, suffix, game_dir)
+    })
+}
+
+/// `combat.md §8.1` and `§14`, for the turns combat takes **without** a key.
+///
+/// The round walker reads a key only for a keyboard-driven combatant that
+/// can act: a sleeping one gets its banner, its asleep arm's wake draw and
+/// `Zzzzz...` "and the turn ends with no key read", and "a wipe that leaves
+/// a sleeping member instead simply passes turns until someone wakes or
+/// dies". `main-loop.md §6`: "combat has no such [party-capability] check of
+/// its own", so the exploration gate's world sleep pass must never stand in
+/// for those turns (playtest F24).
+///
+/// One call drives the walker exactly as a committed action's tail does, up
+/// to the next prompted combatant or the end of the fight, and then runs the
+/// same post-command hooks a key would - a fight that ends here still drains
+/// its town tail and outdoor reactions.
+pub fn advance_combat_without_input(state: &mut PlayState, game_dir: &Path) -> io::Result<()> {
+    if !combat_awaits_automatic_turns(state) {
+        return Ok(());
+    }
+    run_with_command_epilogue(state, game_dir, |state| {
+        drive_combat_round_walk_and_append_message(state);
+        Ok(PlayInputDisposition::Continue)
+    })
+    .map(|_| ())
+}
+
+/// Combat is running and no combatant is waiting at the prompt, so the
+/// walker owes turns that read no key.
+pub(crate) fn combat_awaits_automatic_turns(state: &PlayState) -> bool {
+    state.combat_active
+        && state.pending_combat_actor_slot.is_none()
+        && state.active_combat_targeting.is_none()
+}
+
+fn run_with_command_epilogue(
+    state: &mut PlayState,
+    game_dir: &Path,
+    command: impl FnOnce(&mut PlayState) -> io::Result<PlayInputDisposition>,
+) -> io::Result<PlayInputDisposition> {
     // `stats-panel.md §2.2`: every site that changes a displayed number
     // either repaints the panel itself or raises the deferred request, and
     // which one is a property of the site. Immediate is the default because
@@ -30,8 +73,23 @@ pub fn handle_play_key_input(
     // exceptions sets its own mode while it runs.
     state.stats_panel_command_refresh = crate::stats_panel::PanelRefreshMode::Immediate;
     state.stats_panel_command_baseline = crate::stats_panel::stats_panel_snapshot_of(state);
-    let combat_was_active = state.combat_active;
-    let mut result = handle_play_key_input_inner(state, key, suffix, game_dir);
+    let mut combat_was_active = state.combat_active;
+    let mut result = command(state);
+    // `combat.md §8.1`: the turn banner is "emitted at the start of every
+    // keyboard-driven combatant's turn, *before any key is read*". A
+    // committed combat action already drives the walker to the next prompt
+    // before it returns; the command that *opens* a fight did not, so the
+    // first banner only appeared together with the next key's echo
+    // (playtest F35). Drive it here, once the entry framing has printed.
+    // The paced (graphical) shell walks the same turns from its own pump.
+    if result.is_ok()
+        && !combat_was_active
+        && combat_awaits_automatic_turns(state)
+        && !state.pace_combat_presentations
+    {
+        combat_was_active = true;
+        drive_combat_round_walk_and_append_message(state);
+    }
     // A generic adjacent terrain combat suspends the high-to-low outdoor
     // reaction walk. As soon as the combat frame returns, continue the
     // remaining lower slots before accepting another world command.
@@ -826,13 +884,18 @@ fn handle_active_yell_key_input(
         }
         line.push_str(suffix);
         session.buffer.push_str(&line);
-        state.message = if session.buffer.trim().is_empty() {
+        // `commands.md §5` transcript: the typed word is echoed on the
+        // prompt's own colon row - `Yell what?` / `:WORD` - and the result
+        // follows, the no-effect line under its own blank row
+        // (`[blank]` / `No effect!`), the nothing-said one directly beneath.
+        let word = PlayState::normalize_yell_word(&session.buffer);
+        state.commit_typed_prompt_line(":", &word);
+        state.message = if word.is_empty() {
             YELL_NOTHING_SAID_MESSAGE.to_string()
         } else {
             // `combat.md §8`, the `Y` row: nonempty combat Yell "reaches the
             // handler's no-effect path", whose literal is the shared one.
-            let _ = PlayState::normalize_yell_word(&session.buffer);
-            YELL_NO_EFFECT_MESSAGE.to_string()
+            format!("\n{YELL_NO_EFFECT_MESSAGE}")
         };
         state.pending_combat_actor_slot = None;
         let _ = apply_combat_committed_action_maintenance(state, actor_slot);
@@ -5679,7 +5742,11 @@ fn handle_combat_cast_key_input(
 /// Finish an accepted combat C-Cast action, including cancel/no-spell paths.
 /// The dead-caster refusal never reaches this helper and remains a free
 /// re-prompt under `combat.md §8`.
-fn finish_combat_cast_actor_action(state: &mut PlayState, actor_slot: usize, had_foe: bool) {
+pub(crate) fn finish_combat_cast_actor_action(
+    state: &mut PlayState,
+    actor_slot: usize,
+    had_foe: bool,
+) {
     state.pending_combat_actor_slot = None;
     let cast_message = state.message.clone();
     let ring_pass = apply_combat_committed_action_maintenance(state, actor_slot);
@@ -5695,12 +5762,17 @@ fn finish_combat_cast_actor_action(state: &mut PlayState, actor_slot: usize, had
     } else if state.combat_active && had_foe && !combat_has_active_non_party_actor(state) {
         // `combat.md §7`: "If party actors remain and foes do not, it
         // prints `VICTORY!` once and continues" (`RETRACTIONS.md` R289).
-        if state.announce_combat_victory_if_needed() {
-            state
-                .message
-                .push_str(crate::combat_frame::COMBAT_VICTORY_LINE);
-        }
+        //
+        // `§14`: "The stored string has one leading and one trailing
+        // newline", and the kill line it follows is a completed result
+        // (`magic.md §7`: the results "carry trailing feeds"). Appending it
+        // to the slot let its leading feed close the result's row instead,
+        // so `Merchant killed!` ran straight into `VICTORY!` (playtest F38).
+        // Close the result first, then print it as the weapon path does.
         close_combat_cast_result_row(state);
+        if state.announce_combat_victory_if_needed() {
+            state.emit_combat_print(crate::combat_frame::COMBAT_VICTORY_LINE);
+        }
         advance_combat_round_after_actor_and_append_message(state, actor_slot);
     } else if state.combat_active {
         close_combat_cast_result_row(state);
@@ -5967,8 +6039,24 @@ fn handle_combat_key_input(state: &mut PlayState, key: char, suffix: &str) -> Pl
             // The edge-exit echo is already on the transcript, so the defeat
             // line is its own print on the row below it.
             state.emit_combat_print("\nBATTLE IS LOST!");
+            // `combat.md §14`: the stored string "begins with a newline and
+            // has no trailing newline", so the world prompt that follows
+            // closes its row and takes no blank (playtest F41).
+            state.leave_last_transcript_row_open();
         } else {
             state.apply_combat_round_loop_exit(exit);
+            // `combat.md §14`: the accepted Escape key "appends the character
+            // `!`, producing `Escape!`; this handler appends no newline after
+            // it" - the echo row stays open for the next prompt's feed to
+            // close (playtest F41).
+            if matches!(
+                application.action,
+                CombatPlayerCommandAction::EscapeCleanup { application }
+                    if application.decision == CombatEscapeCleanupDecision::Accepted
+            ) && !state.combat_active
+            {
+                state.leave_last_transcript_row_open();
+            }
         }
     } else if matches!(
         application.action,
@@ -6132,8 +6220,20 @@ fn handle_combat_multistage_command(
         CombatCommandBranch::Yell => {
             match combat_yell_word_from_suffix(suffix) {
                 CombatInlineYell::Prompt => {
+                    // `combat.md §8`, the `Y` row: "Prints the combat Yell
+                    // label and dispatches to the shared Yell handler", and
+                    // `commands.md §11` has combat's scene `0xFF` ask "the
+                    // ordinary `Yell what?` question". The arena opened the
+                    // reader with nothing on screen - no label, no question,
+                    // no colon row (playtest F27) - so it is the world
+                    // prompt's own echo here.
+                    state.begin_command_echo_for(Command::Yell);
                     state.active_yell = Some(YellSession::new());
-                    state.message = yell_prompt_message();
+                    if state.complete_open_direction_echo("Yell ", YELL_QUESTION) {
+                        state.message = state.render_active_yell();
+                    } else {
+                        state.message = format!("Yell {YELL_QUESTION}\n:");
+                    }
                     state.pending_combat_actor_slot = Some(actor_slot);
                 }
                 CombatInlineYell::Empty => {

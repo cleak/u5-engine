@@ -127,15 +127,15 @@ impl PlayState {
             self.message = GET_NOTHING_REFUSAL.to_string();
             return MoveOutcome::Blocked;
         };
+        self.get_combat_arena_object(object_slot, object)
+    }
 
-        self.free_active_object_slot(object_slot);
-        self.mark_visibility_dirty();
-        // Measured 2026-09-07 (`qa/paired/combat-commands.tsv`): the arena's
-        // Get, Search and X-it print no line of their own; the round banner
-        // is all that stays in the window.
-        let _ = object;
-        self.message.clear();
-        MoveOutcome::Got
+    /// The roster member behind an arena actor: `traps.md §2.1` has a
+    /// combat-class scene bypass the acting-member prompt and act as the
+    /// combatant whose turn it is.
+    fn combat_chest_member(&self, actor_slot: usize) -> usize {
+        self.combat_roster_slot_for_actor_slot(actor_slot)
+            .unwrap_or(actor_slot)
     }
 
     pub fn search_combat_actor_direction(
@@ -149,6 +149,15 @@ impl PlayState {
             return MoveOutcome::Blocked;
         };
 
+        // `containers.md §4`: "A container may be found by Search through the
+        // map object table. Search announces only the container's assessed
+        // trap state" - the arena's drop chest included (playtest F25).
+        if self.surface_object_chest_slot_at(x, y).is_some() {
+            let member = self.combat_chest_member(actor_slot);
+            if let Some(outcome) = self.finish_surface_object_trap_search_at(x, y, member) {
+                return outcome;
+            }
+        }
         if let Some((_, object)) =
             self.combat_loose_object_slot_at(x, y, actor.active_object_slot as usize)
         {
@@ -192,6 +201,19 @@ impl PlayState {
         else {
             return MoveOutcome::Blocked;
         };
+        // `combat.md §8`, the `O` row: the shared Open handler "carries no
+        // combat-specific branch of its own, so in an arena it behaves as it
+        // does on the surface" - a chest record at the cell runs the chest
+        // helper. `§6.3`'s accepted drop is exactly such a record, and the
+        // arena answered `Nothing to open!` beside one (playtest F25).
+        if self.surface_object_chest_slot_at(x, y).is_some() {
+            let member = self.combat_chest_member(actor_slot);
+            if let Some(outcome) =
+                self.consume_surface_object_chest_at(x, y, member, SurfaceChestVerb::Open.label())
+            {
+                return outcome;
+            }
+        }
         let tile = self.combat_terrain[y][x];
         if tile == TOWN_OPEN_ALREADY_OPEN_TILE {
             self.message = "It's open!".to_string();
@@ -239,9 +261,15 @@ impl PlayState {
         // `combat.md §7.1` / `doors-and-z-transitions.md §3.1`: the roll uses
         // the selected member's Dexterity. A descriptor index is not a roster
         // index once a dead member has packed out, so resolve it first.
-        let member_index = self
-            .combat_roster_slot_for_actor_slot(actor_slot)
-            .unwrap_or(actor_slot);
+        let member_index = self.combat_chest_member(actor_slot);
+        // `combat.md §6.3`: the drop chest's byte-5 high bit "is the same
+        // lock/trap flag the Jimmy and Search command family reads", and
+        // `containers.md §4` has a locked container "Jimmied first".
+        if self.surface_object_chest_slot_at(x, y).is_some()
+            && let Some(outcome) = self.jimmy_surface_object_chest_at(x, y, member_index)
+        {
+            return outcome;
+        }
         let tile = self.combat_terrain[y][x];
         if jimmy_magic_locked_door(tile) {
             self.message = "Key broke!".to_string();
@@ -3677,12 +3705,14 @@ impl PlayState {
                         format!("{pre_effect_message} {transition_message}")
                     };
                 } else if self.combat_active {
-                    let engagement_message = self.message.clone();
-                    self.message = if pre_effect_message.is_empty() {
-                        engagement_message
-                    } else {
-                        format!("{pre_effect_message} {engagement_message}")
-                    };
+                    // `combat.md §4.1`: the engagement's `Attacked!`, group
+                    // name and `*** CONFLICT ***` went to the transcript as
+                    // they were printed, and each of those emits flushed the
+                    // command's own result above them first. Joining the two
+                    // back into the slot made it a new, unflushed line, so the
+                    // next flush printed `With what? *** CONFLICT ***` a
+                    // second time under the banner (playtest F42). The slot
+                    // keeps the engagement text it already recorded.
                 } else {
                     // Immediate reaction lines were emitted to the transcript
                     // as they occurred; preserve the command result in the

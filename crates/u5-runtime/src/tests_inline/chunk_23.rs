@@ -11213,15 +11213,20 @@ fn combat_klimb_prompt_cancel_commits_but_blocked_direction_reprompts() {
 
 #[test]
 fn combat_sjog_get_removes_loose_combat_object() {
+    // `containers.md §3` step 4: the record's class byte "selects the grant
+    // arm", the counter is updated and the consumed slot is cleared. A gold
+    // record (class `0x02`) carries its amount in the auxiliary byte.
     let game_dir = std::path::Path::new(".");
     let mut state = combat_player_command_state(10, 10);
     state.active_objects[1] = ActiveObject {
-        type_byte: 0x50,
-        tile: 0x50,
+        type_byte: 0x02,
+        tile: 0x02,
         x: 6,
         y: 5,
+        aux1: 7,
         ..ActiveObject::empty()
     };
+    let gold_before = state.gold;
     state.visibility_dirty = false;
 
     assert_eq!(
@@ -11231,10 +11236,30 @@ fn combat_sjog_get_removes_loose_combat_object() {
 
     assert!(state.active_objects[1].is_empty());
     assert!(state.visibility_dirty);
-    // Measured: the arena Get and Search print no line of their own -
-    // the next round banner is all that lands in the window.
+    assert_eq!(state.gold, gold_before + 7);
     assert!(state.message.contains("armed with"));
     assert!(!state.message.contains("Giant Rat"));
+}
+
+#[test]
+fn combat_sjog_get_leaves_a_record_with_no_grant_arm_standing() {
+    // `containers.md §3` step 4: "a zero class byte reaches the dispatcher's
+    // default arm and answers `Nothing_to_get!`" and does not clear the slot;
+    // the arena used to free any loose record it found (playtest F25).
+    let game_dir = std::path::Path::new(".");
+    let mut state = combat_player_command_state(10, 10);
+    state.active_objects[1] = ActiveObject {
+        type_byte: 0x50,
+        tile: 0x50,
+        x: 6,
+        y: 5,
+        ..ActiveObject::empty()
+    };
+
+    handle_play_key_input(&mut state, 'G', "6", game_dir).unwrap();
+
+    assert_eq!(state.active_objects[1].type_byte, 0x50);
+    assert!(state.message.contains(GET_NOTHING_REFUSAL.trim_end()));
 }
 
 #[test]
@@ -13115,7 +13140,19 @@ fn combat_input_dispatch_yell_prompt_keeps_same_actor_pending() {
         PlayInputDisposition::Continue
     );
 
-    assert_eq!(state.message, "");
+    // `combat.md §8`, the `Y` row: "Prints the combat Yell label and
+    // dispatches to the shared Yell handler", which asks `commands.md §11`'s
+    // "ordinary `Yell what?` question" and waits on its colon row
+    // (playtest F27: the arena printed nothing at all here).
+    assert_eq!(state.message, ":");
+    assert!(
+        state
+            .message_entries()
+            .iter()
+            .any(|entry| entry.is_command_echo && entry.text == "Yell what?"),
+        "{:?}",
+        state.message_entries()
+    );
     assert_eq!(state.pending_combat_actor_slot, Some(0));
     assert!(state.active_yell.is_some());
     assert_eq!(state.active_effect_counter, 3);
@@ -13126,9 +13163,23 @@ fn combat_input_dispatch_yell_prompt_keeps_same_actor_pending() {
     );
 
     assert!(state.active_yell.is_none());
-    assert_eq!(
-        state.message,
-        format!("{YELL_NO_EFFECT_MESSAGE}\nAvatar, armed with bare hands:\n")
+    // `commands.md §5`: `Yell what?` / `:WORD` / blank / `No effect!`.
+    let texts: Vec<&str> = state
+        .message_entries()
+        .iter()
+        .map(|entry| entry.text.as_str())
+        .collect();
+    let colon = texts
+        .iter()
+        .position(|text| *text == ":FALLAX")
+        .unwrap_or_else(|| panic!("typed word on the colon row: {texts:?}"));
+    assert_eq!(texts[colon + 1..colon + 3], ["", YELL_NO_EFFECT_MESSAGE]);
+    assert!(
+        state.message.ends_with(&format!(
+            "{YELL_NO_EFFECT_MESSAGE}\nAvatar, armed with bare hands:\n"
+        )),
+        "{:?}",
+        state.message
     );
     assert_eq!(state.active_effect_counter, 2);
     assert_eq!(state.pending_combat_actor_slot, Some(0));

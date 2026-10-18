@@ -250,6 +250,28 @@ impl PlayState {
         self.message_row_open_mid_line = false;
     }
 
+    /// Record that the newest transcript row was written without a closing
+    /// line feed and is still the row the cursor stands on.
+    ///
+    /// `text-output.md §10.4`: for a result that does not end in a feed "the
+    /// next poll's leading feed closes the open row and no blank row
+    /// appears: the prompt marker lands on the row directly beneath". The
+    /// caller states this explicitly - it is not inferred from the text -
+    /// and the flag covers both the window's derived blank (the entry's
+    /// [`MessageEntry::leaves_row_open`]) and the next world print's first
+    /// feed ([`Self::open_message_row`]).
+    pub(crate) fn leave_last_transcript_row_open(&mut self) {
+        if let Some(last) = self
+            .message_transcript
+            .last_mut()
+            .filter(|entry| !entry.explicit_blank)
+        {
+            last.leaves_row_open = true;
+            self.message_transcript_revision = self.message_transcript_revision.wrapping_add(1);
+        }
+        self.open_message_row();
+    }
+
     pub fn push_explicit_blank_message_entry(&mut self) {
         // A completed blank row leaves the cursor at column 0 of the next
         // one, the same as any other line feed.

@@ -5336,6 +5336,18 @@ fn combat_utility_route_spell(case_name: &str) -> (usize, u8, u8, u8, &'static s
     }
 }
 
+/// The message slot without the turn banner the arena prints for the next
+/// keyboard-driven combatant. `combat.md §8.1` prints that banner "before
+/// any key is read", so a command that leaves a combatant at the prompt ends
+/// with it (playtest F35); the checks below are about what came before it.
+fn route_message_before_turn_banner(state: &PlayState) -> &str {
+    state
+        .pending_combat_actor_slot
+        .and_then(|slot| state.combat_turn_banner_for_actor(slot))
+        .and_then(|banner| state.message.strip_suffix(banner.as_str()))
+        .unwrap_or(&state.message)
+}
+
 fn seed_combat_utility_tile_route(
     state: &mut PlayState,
     spell_index: usize,
@@ -6491,7 +6503,7 @@ fn validate_route_smoke_case_state(
                 || state.spell_charges[DISPEL_FIELD_SPELL_INDEX] != 0
                 || state.party.first().is_none_or(|member| member.mana != 0)
                 || state.find_combat_arena_field_marker(6, 5).is_some()
-                || state.message != "Success!"
+                || route_message_before_turn_banner(state) != "Success!"
             {
                 return Err(io::Error::other(format!(
                     "route smoke `{case_name}` did not remove the public combat field marker"
@@ -6502,7 +6514,7 @@ fn validate_route_smoke_case_state(
             if !state.combat_active
                 || state.spell_charges[DISPEL_FIELD_SPELL_INDEX] != 0
                 || state.party.first().is_none_or(|member| member.mana != 0)
-                || state.message != "Failed!"
+                || route_message_before_turn_banner(state) != "Failed!"
             {
                 return Err(io::Error::other(format!(
                     "route smoke `{case_name}` did not spend resources and fail on a missing combat field"
@@ -6518,7 +6530,7 @@ fn validate_route_smoke_case_state(
             if !state.combat_active
                 || state.spell_charges[spell_index] != 0
                 || state.party.first().is_none_or(|member| member.mana != 0)
-                || state.message != expected_message
+                || route_message_before_turn_banner(state) != expected_message
                 || state
                     .active_objects
                     .get(1)
@@ -7240,7 +7252,7 @@ fn validate_route_smoke_case_state(
                 || !npc_schedule_swept
                 || placed_monsters != 8
                 || !is_cobble_arena
-                || state.message != u5_runtime::combat_banner_line()
+                || route_message_before_turn_banner(state) != u5_runtime::combat_banner_line()
             {
                 return Err(io::Error::other(format!(
                     "route smoke `{case_name}` did not raise the town alarm and enter the cobble \
@@ -8285,7 +8297,8 @@ fn validate_route_smoke_case_state(
                 // or its direction-bearing form; §14.1 has the A-Attack path
                 // print nothing beyond its own command transcript. The setup
                 // report is a diagnostic on both.
-                || !(state.message.is_empty() || state.message.starts_with("Attacked"))
+                || !(route_message_before_turn_banner(state).is_empty()
+                    || state.message.starts_with("Attacked"))
                 || !state
                     .diagnostics
                     .iter()
