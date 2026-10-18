@@ -107,3 +107,33 @@ fn playtest_f35_the_first_turn_banner_is_printed_before_the_first_key() {
     );
     let _ = fs::remove_dir_all(dir);
 }
+
+/// `combat.md §8.1`: the banner ends with its colon and the turn handler's one
+/// line feed, so "whatever the player types next is announced on a fresh
+/// row" directly beneath it - measured as `Short Sword:` / ` South`
+/// (`qa/paired/combat-same-exit.tsv`). Playtest F36: while the prompt waited
+/// its marker sat one row lower than the row its echo then landed on.
+#[test]
+fn playtest_f36_the_waiting_marker_sits_on_the_row_its_echo_lands_on() {
+    let game_dir = std::path::Path::new(".");
+    let mut state = combat_state_after_the_conflict_banner(6, 5);
+    // `Iolo, armed with` fills the row and `bare hands:` does not, so the
+    // banner's own feed - not a full-row wrap - opens the marker row.
+    state.party_names[0] = *b"Iolo\0\0\0\0\0";
+    state.ensure_pending_combat_player_turn();
+
+    let waiting = combat_message_window_rows(&state);
+    let marker = waiting
+        .iter()
+        .rposition(|row| row.starts_with('>'))
+        .unwrap_or_else(|| panic!("the marker row is drawn: {waiting:?}"));
+    assert_eq!(waiting[marker - 1], "bare hands:", "rows: {waiting:?}");
+
+    handle_play_key_input(&mut state, ' ', "", game_dir).unwrap();
+    let after = combat_message_window_rows(&state);
+    let echo = after
+        .iter()
+        .position(|row| row == ">Pass")
+        .unwrap_or_else(|| panic!("the echo is drawn: {after:?}"));
+    assert_eq!(after[echo - 1], "bare hands:", "rows: {after:?}");
+}
