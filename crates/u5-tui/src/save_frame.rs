@@ -821,6 +821,43 @@ mod tests {
         assert!(!last.prefixed);
     }
 
+    /// Playtest F51: `shops.md §8.1` puts the sell browser's rows at
+    /// window-local `(1, 1)..(1, 4)` of the framed side panel, and the
+    /// `--save-screen` oracle has to paint them as the Bevy shell does.
+    #[test]
+    fn save_screen_paints_the_arms_sell_browser_rows() {
+        use u5_runtime::shop_runtime::{ArmsSellBrowser, ArmsShopState};
+        use u5_runtime::shop_session::ActiveShopSession;
+        use u5_runtime::test_fixtures::{open_grid, test_state};
+
+        let mut state = test_state(open_grid(), 1, 1);
+        state.equipment_stock = [0; u5_runtime::EQUIPMENT_COUNT];
+        state.equipment_stock[0] = 3;
+        state.equipment_stock[16] = 2;
+        let browser = ArmsSellBrowser::new(&state.equipment_stock).unwrap();
+        state.active_shop = Some(ActiveShopSession::ArmsStocked(
+            ArmsShopState::SellPickItem(browser),
+            u5_runtime::ArmsShop::IolosBows.stock_table(),
+        ));
+        let mut system = TextWindowSystem::new();
+        configure_play_text_windows(&mut system);
+        paint_save_screen_panel_windows(&mut system, &state, None);
+        let row = |local_row: u8| -> String {
+            (1..14)
+                .map(|local_column| {
+                    system
+                        .cell(
+                            u5_runtime::ARMS_SELL_BROWSER_LEFT + local_column,
+                            u5_runtime::ARMS_SELL_BROWSER_TOP + local_row,
+                        )
+                        .map_or(' ', |cell| cell.byte as char)
+                })
+                .collect()
+        };
+        assert_eq!(row(1).trim_end(), " 3-Leath Helm");
+        assert_eq!(row(2).trim_end(), " 2-Dagger");
+    }
+
     #[test]
     fn write_rgba_png_creates_parent_dirs_and_round_trips_pixels() {
         let dir = temp_output_dir("round-trip");
@@ -986,6 +1023,23 @@ pub fn run_save_screen(
     Ok(())
 }
 
+/// The side-panel text windows, painted in the Bevy shell's order: the
+/// stats panel, then - while a shop is up - its two framed side panels, the
+/// arms sell browser and the inn guest register (`shops.md §8.A`). This
+/// oracle painted the stats panel alone, so `--save-screen` showed the
+/// ordinary roster where the sell browser's item rows belong (playtest F51).
+fn paint_save_screen_panel_windows(
+    system: &mut TextWindowSystem,
+    state: &PlayState,
+    active_cursor: Option<usize>,
+) {
+    paint_stats_panel_text_window(system, state, active_cursor);
+    if state.active_shop.is_some() {
+        u5_runtime::paint_arms_sell_browser_text_window(system, state);
+        u5_runtime::paint_inn_pickup_register_text_window(system, state);
+    }
+}
+
 /// Compose the full gameplay screen into a fresh RGBA buffer.
 pub fn compose_gameplay_screen(
     state: &mut PlayState,
@@ -1018,7 +1072,7 @@ pub fn compose_gameplay_screen(
     let active_cursor = state.active_player;
     let mut system = TextWindowSystem::new();
     configure_play_text_windows(&mut system);
-    paint_stats_panel_text_window(&mut system, state, active_cursor);
+    paint_save_screen_panel_windows(&mut system, state, active_cursor);
     // `inventory.md §4.5`: a decorated picker row, the Z-stats moonstone row
     // and `magic.md §8`'s sextant coordinate row all mark individual cells
     // runic, and this composer was drawing every cell from `IBM.CH` - the
