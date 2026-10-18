@@ -256,6 +256,13 @@ pub struct ConversationSession {
     /// names one, which makes those tests read clear and those sets
     /// no-ops (§10).
     npc_slot: Option<u8>,
+    /// Branch-flag bits an ASK-WHO in this session has set. The caller
+    /// merges them into the scene bank only after the step returns, but
+    /// §7.6's one-time reward form tests the bit "now (that is, the prompt
+    /// just matched)" with the very next `0x8C` of the resumed stream, so
+    /// every run in the session reads them over the caller's snapshot
+    /// (playtest F01).
+    branch_flags_written: u32,
     /// Set for the duration of one step when a stream in it reached
     /// `0x84` RECRUIT-SPEAKER.
     recruit_speaker_pending: bool,
@@ -280,6 +287,7 @@ impl ConversationSession {
             keyword_turns: 0,
             moral_standing: None,
             npc_slot: None,
+            branch_flags_written: 0,
             recruit_speaker_pending: false,
             label_records_running: Vec::new(),
             opening_ask_who: false,
@@ -378,16 +386,21 @@ impl ConversationSession {
                 let slot = tlk_ask_who_match(&input, ctx.party_member_names);
                 let from_opening = std::mem::take(&mut self.opening_ask_who);
                 self.phase = ConversationSessionPhase::AwaitingKeyword;
-                let mut out = self.run_field_from(field_idx, cursor, ctx, slot);
                 // §7.6: on a match ASK-WHO "sets the active scene's
                 // branch-flag bit for the NPC currently speaking". The
                 // resume cursor is already past the control byte, so the
                 // runner's own setter arm never re-runs on this path and
-                // the session owns the write. §10: an unnameable slot
-                // builds a zero mask, so the set is a no-op.
-                if slot != 0 {
-                    out.branch_flags_set |= self.npc_slot.map_or(0, talk_branch_flag_mask);
-                }
+                // the session owns the write. It lands before the stream
+                // resumes, so a following `0x8C` sees it. §10: an
+                // unnameable slot builds a zero mask, so the set is a no-op.
+                let written = if slot != 0 {
+                    self.npc_slot.map_or(0, talk_branch_flag_mask)
+                } else {
+                    0
+                };
+                self.branch_flags_written |= written;
+                let mut out = self.run_field_from(field_idx, cursor, ctx, slot);
+                out.branch_flags_set |= written;
                 // `conversation.md §7`'s `0x88` row: the code prints an
                 // acknowledgement of its own after the typed line - the
                 // affirmative one on a match, "on empty input or no match ...
@@ -697,6 +710,7 @@ impl ConversationSession {
         loop {
             let inputs = make_inputs(
                 ctx,
+                self.branch_flags_written,
                 self.moral_standing.unwrap_or(ctx.moral_standing),
                 self.npc_slot,
                 ask_who_response,
@@ -798,6 +812,7 @@ impl ConversationSession {
         out.text.push_str(&run.text);
         out.rendered_glyphs.extend_from_slice(&run.rendered_glyphs);
         out.branch_flags_set |= run.branch_flags_set;
+        self.branch_flags_written |= run.branch_flags_set;
         out.action_grants.extend(run.action_grants.iter().copied());
         out.gold_payments
             .extend(run.events.iter().filter_map(|event| match event {
@@ -1036,13 +1051,14 @@ fn merge_session_output(out: &mut ConversationSessionOutput, nested: Conversatio
 
 fn make_inputs<'a>(
     ctx: &'a ConversationContext<'a>,
+    branch_flags_written: u32,
     moral_standing: u8,
     npc_slot: Option<u8>,
     ask_who_response: u8,
 ) -> TlkRunInputs<'a> {
     TlkRunInputs {
         avatar_name: ctx.avatar_name,
-        branch_flags: ctx.branch_flags,
+        branch_flags: ctx.branch_flags | branch_flags_written,
         moral_standing,
         dictionary: ctx.dictionary,
         gold_available: ctx.gold_available,
@@ -1384,6 +1400,43 @@ mod tests {
         // and the bit is the speaking NPC's own roster slot.
         assert_eq!(second.branch_flags_set, 1u32 << 6);
         assert_eq!(s.phase, ConversationSessionPhase::AwaitingKeyword);
+    }
+
+    /// Playtest F01. `conversation.md §7.6`, the one-time reward form: after
+    /// the ASK-WHO, "IF-ELSE with a *bonus* target label - if the bit is set
+    /// now (that is, the prompt just matched a party member), transfer to the
+    /// bonus record". The bit a match sets must be visible to the very next
+    /// `0x8C` of the resumed stream, before the caller merges it.
+    #[test]
+    fn ask_who_match_is_visible_to_the_next_if_else_in_the_same_stream() {
+        let mut response = enc("Welcome!");
+        response.push(TLK_CODE_ASK_WHO);
+        response.extend([TLK_CODE_IF_ELSE, 0x92]);
+        response.extend(enc_with_stop("Indeed.", TLK_CODE_END_OF_RESPONSE));
+        let mut bonus = vec![TLK_CODE_LABEL_RECORD, 0x92];
+        bonus.extend([TLK_CODE_STANDING_UP; 5]);
+        bonus.extend(enc_with_stop("A bonus!", TLK_CODE_END_OF_RESPONSE));
+        let names: [&[u8]; 1] = [b"AVATAR"];
+        let context = ConversationContext {
+            party_member_names: &names,
+            moral_standing: 10,
+            ..ctx()
+        };
+
+        let mut s = label_session(response.clone(), vec![enc("OTHER"), bonus.clone()]);
+        s.submit_keyword("ask", &context);
+        assert!(s.awaiting_ask_who());
+        let matched = s.submit_keyword("Avatar", &context);
+        assert!(matched.text.contains("A bonus!"), "{:?}", matched.text);
+        assert!(!matched.text.contains("Indeed."), "{:?}", matched.text);
+        assert_eq!(matched.moral_standing, Some(15));
+        assert_eq!(matched.branch_flags_set, 1 << 3);
+
+        let mut s = label_session(response, vec![enc("OTHER"), bonus]);
+        s.submit_keyword("ask", &context);
+        let missed = s.submit_keyword("nobody", &context);
+        assert!(missed.text.contains("Indeed."), "{:?}", missed.text);
+        assert_eq!(missed.moral_standing, None);
     }
 
     #[test]
