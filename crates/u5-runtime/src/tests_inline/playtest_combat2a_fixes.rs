@@ -267,7 +267,6 @@ fn playtest_f42_an_outdoor_engagement_does_not_reprint_the_command_result() {
     let _ = fs::remove_dir_all(dir);
 }
 
-
 /// `combat.md §14`: "The stored string has one leading and one trailing
 /// newline". Playtest F38: after a Kill spell's `Merchant killed!` the
 /// `VICTORY!` line followed with no blank row.
@@ -331,5 +330,111 @@ fn playtest_f41_the_world_prompt_follows_the_battle_lost_line_directly() {
     assert!(
         layout.rows[lost + 1].prefixed,
         "the prompt marker: {rows:?}"
+    );
+}
+
+/// `combat.md §6.3`: "the accepted drop branch leaves a chest object standing
+/// on the dead monster's cell ... The G-Get command does not pick these
+/// records up", and `containers.md §3`: "a container record answers
+/// `Open_it_first!`" without clearing the slot. Playtest F25: the arena's Get
+/// deleted the chest and granted nothing.
+#[test]
+fn playtest_f25_arena_get_refuses_a_drop_chest_and_leaves_it_standing() {
+    let mut state = combat_player_command_state(8, 5);
+    state.active_objects[9] = ActiveObject {
+        type_byte: COMBAT_DEFAULT_DEATH_DROP_TILE,
+        tile: COMBAT_DEFAULT_DEATH_DROP_TILE,
+        x: 6,
+        y: 5,
+        phase: STEADY_PHASE,
+        aux1: 12,
+        ..ActiveObject::empty()
+    };
+
+    let outcome = state.get_combat_actor_direction(0, Direction::East);
+
+    assert_eq!(outcome, MoveOutcome::Blocked);
+    assert_eq!(state.message, GET_MUST_OPEN_FIRST_REFUSAL);
+    assert_eq!(
+        state.active_objects[9].type_byte,
+        COMBAT_DEFAULT_DEATH_DROP_TILE
+    );
+    assert_eq!(state.active_objects[9].aux1, 12);
+}
+
+/// `combat.md §8`, the `O` row: the shared Open handler "carries no
+/// combat-specific branch of its own, so in an arena it behaves as it does on
+/// the surface", and `containers.md §4.1` publishes that chest helper's
+/// transcript - `Found:` rows or `Chest empty!` - and stamps its staged grants
+/// `0x20` "when the scene byte is `0x80` or above". Playtest F25: the arena
+/// answered `Nothing to open!` beside a drop chest.
+#[test]
+fn playtest_f25_arena_open_runs_the_chest_helper_on_a_drop_chest() {
+    let mut state = combat_player_command_state(8, 5);
+    let turn_before = state.turn;
+    state.active_objects[9] = ActiveObject {
+        type_byte: COMBAT_DEFAULT_DEATH_DROP_TILE,
+        tile: COMBAT_DEFAULT_DEATH_DROP_TILE,
+        x: 6,
+        y: 5,
+        phase: STEADY_PHASE,
+        aux1: 30,
+        ..ActiveObject::empty()
+    };
+
+    let outcome = state.open_combat_actor_direction(0, Direction::East);
+
+    assert_eq!(outcome, MoveOutcome::ContainerOpened);
+    assert!(
+        state.message.starts_with(CHEST_TRANSCRIPT_FOUND_HEADING)
+            || state.message == CHEST_TRANSCRIPT_EMPTY_LINE,
+        "{:?}",
+        state.message
+    );
+    assert_ne!(
+        state.active_objects[9].type_byte, COMBAT_DEFAULT_DEATH_DROP_TILE,
+        "the chest record is consumed"
+    );
+    let staged: Vec<ActiveObject> = state
+        .active_objects
+        .iter()
+        .copied()
+        .filter(|object| !object.is_empty() && (object.x, object.y) == (6, 5))
+        .collect();
+    assert!(
+        staged.iter().all(|object| object.aux3 == 0x20),
+        "{staged:?}"
+    );
+    assert_eq!(state.turn, turn_before, "the arena spends no world turn");
+}
+
+/// `containers.md §4`: "A container may be found by Search through the map
+/// object table. Search announces only the container's assessed trap state".
+/// Playtest F25: the arena's Search printed nothing beside a drop chest.
+#[test]
+fn playtest_f25_arena_search_assesses_a_drop_chest() {
+    let mut state = combat_player_command_state(8, 5);
+    state.active_objects[9] = ActiveObject {
+        type_byte: COMBAT_DEFAULT_DEATH_DROP_TILE,
+        tile: COMBAT_DEFAULT_DEATH_DROP_TILE,
+        x: 6,
+        y: 5,
+        phase: STEADY_PHASE,
+        aux1: 0x80 | 12,
+        ..ActiveObject::empty()
+    };
+
+    let outcome = state.search_combat_actor_direction(0, Direction::East);
+
+    assert_eq!(outcome, MoveOutcome::Searched);
+    assert!(
+        state.message.starts_with(SEARCH_PREAMBLE),
+        "{:?}",
+        state.message
+    );
+    assert_eq!(
+        state.active_objects[9].aux1,
+        0x80 | 12,
+        "Search grants nothing"
     );
 }

@@ -1160,6 +1160,9 @@ impl PlayState {
         x: usize,
         y: usize,
     ) -> Option<(usize, ActiveObject)> {
+        if self.combat_active {
+            return self.combat_arena_chest_slot_at(x, y);
+        }
         self.active_objects
             .iter()
             .copied()
@@ -1170,6 +1173,56 @@ impl PlayState {
                     && Self::surface_object_chest_stat(object).is_some())
                 .then_some((slot, object))
             })
+    }
+
+    /// `combat.md §6.3`: "The accepted-drop marker is a chest object, and
+    /// its byte-5 high bit is the ordinary lock/trap flag" - "`0x01` is a
+    /// **chest**" in the shared searchable-object class space, and its low
+    /// seven bits "carry the contents/difficulty value". `§8`'s `O` row then
+    /// has Open behave in the arena "as it does on the surface", so the
+    /// surface chest helper is the one that opens it (`containers.md §4.1`
+    /// stamps the grants it stages `0x20` "when the scene byte is `0x80` or
+    /// above"). The arena record is any loose record at the cell - not the
+    /// one a live combatant stands on - carrying that class.
+    fn combat_arena_chest_slot_at(&self, x: usize, y: usize) -> Option<(usize, ActiveObject)> {
+        self.active_objects
+            .iter()
+            .copied()
+            .enumerate()
+            .skip(1)
+            .find_map(|(slot, object)| {
+                let linked_to_live_actor = self.combat_actors.iter().copied().any(|actor| {
+                    combat_actor_is_active_not_dead(actor)
+                        && usize::from(actor.active_object_slot) == slot
+                });
+                (!object.is_empty()
+                    && object.x == x
+                    && object.y == y
+                    && !linked_to_live_actor
+                    && self.object_chest_stat(object).is_some())
+                .then_some((slot, object))
+            })
+    }
+
+    /// The flag/class byte of a record the chest helper accepts: a surface
+    /// furniture chest anywhere, and in an arena also the container-class
+    /// drop record of `combat.md §6.3`.
+    pub fn object_chest_stat(&self, object: ActiveObject) -> Option<u8> {
+        Self::surface_object_chest_stat(object).or_else(|| {
+            (self.combat_active
+                && object.type_byte == INVENTORY_ADD_CLASS_CODE_CONTAINER
+                && object.aux1 != 0)
+                .then_some(object.aux1)
+        })
+    }
+
+    /// The chest helpers' world turn. In an arena the acting combatant's
+    /// dispatch is what the action spends (`combat.md §8`'s turn rule), and
+    /// the world clock moves only at round end (`main-loop.md §6`).
+    fn advance_chest_helper_turn(&mut self) {
+        if !self.combat_active {
+            self.advance_turn();
+        }
     }
 
     pub fn surface_object_chest_stat(object: ActiveObject) -> Option<u8> {
@@ -1186,11 +1239,11 @@ impl PlayState {
         member_index: usize,
     ) -> Option<MoveOutcome> {
         let (slot, object) = self.surface_object_chest_slot_at(x, y)?;
-        let stat = Self::surface_object_chest_stat(object)?;
+        let stat = self.object_chest_stat(object)?;
         let Some(threshold) =
             object_chest_jimmy_threshold(stat, self.party[member_index].climb_stat)
         else {
-            self.advance_turn();
+            self.advance_chest_helper_turn();
             self.message = "Key broke!".to_string();
             // audio.md §8.1 Jimmy key breaks: failure only — the break line,
             // then the 40-update action snap, then the key decrement.
@@ -1203,10 +1256,10 @@ impl PlayState {
             if let Some(object) = self.active_objects.get_mut(slot) {
                 object.aux1 &= 0x7f;
             }
-            self.advance_turn();
+            self.advance_chest_helper_turn();
             self.message = "Unlocked!".to_string();
         } else {
-            self.advance_turn();
+            self.advance_chest_helper_turn();
             self.message = "Key broke!".to_string();
             // audio.md §8.1 Jimmy key breaks: failure only — the break line,
             // then the 40-update action snap, then the key decrement.
@@ -1242,7 +1295,7 @@ impl PlayState {
         verb: &str,
     ) -> Option<MoveOutcome> {
         let (slot, object) = self.surface_object_chest_slot_at(x, y)?;
-        let stat = Self::surface_object_chest_stat(object)?;
+        let stat = self.object_chest_stat(object)?;
         let chest_class = stat & 0x7f;
         let trapped = stat & 0x80 != 0;
         // `containers.md §4`: "The clear happens **after** the helper has
@@ -1276,14 +1329,19 @@ impl PlayState {
             self.apply_surface_container_trap_combat_cleanup(member_index);
         }
         let content_note = self.generate_surface_object_chest_content(x, y, chest_class);
-        self.rewrite_surface_object_chest_cell(x, y);
-        if matches!(self.area, Area::Town { .. }) {
-            self.moral_standing = town_chest_open_standing(self.moral_standing);
-        } else if matches!(self.area, Area::World { .. }) {
-            self.cache_current_world_overlay();
+        // An arena's chest is the cleared record itself: there is no chest
+        // tile under it to rewrite, and a combat-class scene is neither
+        // town-family nor the overworld map.
+        if !self.combat_active {
+            self.rewrite_surface_object_chest_cell(x, y);
+            if matches!(self.area, Area::Town { .. }) {
+                self.moral_standing = town_chest_open_standing(self.moral_standing);
+            } else if matches!(self.area, Area::World { .. }) {
+                self.cache_current_world_overlay();
+            }
         }
         self.mark_visibility_dirty();
-        self.advance_turn();
+        self.advance_chest_helper_turn();
         // `commands.md §8.1`: a command "never prints tile ids, coordinates,
         // active-object slot numbers, terrain-class names", so the verb and
         // the cell go to diagnostics rather than the message window.
@@ -1749,7 +1807,7 @@ impl PlayState {
         member_index: usize,
     ) -> Option<MoveOutcome> {
         let (_slot, object) = self.surface_object_chest_slot_at(x, y)?;
-        let stat = Self::surface_object_chest_stat(object)?;
+        let stat = self.object_chest_stat(object)?;
         let member_intelligence = self
             .party_intelligence
             .get(member_index)
@@ -1763,7 +1821,7 @@ impl PlayState {
         let detection_bit = u16::from(roll) >= threshold;
         let visibility = search_trap_visibility(trappable, difficulty, detection_bit);
 
-        self.advance_turn();
+        self.advance_chest_helper_turn();
         self.diagnostics.push(format!(
             "searched active-object tile {} at ({x}, {y}); {}",
             object.tile,
@@ -1780,6 +1838,37 @@ impl PlayState {
             surface_search_trap_visibility_line(visibility)
         );
         Some(MoveOutcome::Searched)
+    }
+
+    /// `combat.md §8`'s `G` row hands the arena's Get to "the shared Get
+    /// handler", whose record arm is `containers.md §3` step 4: the record's
+    /// class byte "selects the grant arm", "a container record answers
+    /// `Open_it_first!`" and a class with no arm answers `Nothing_to_get!`,
+    /// and neither refusal "clears the slot". `combat.md §6.3`: "The G-Get
+    /// command does not pick these records up" - the drop chest and the
+    /// corpse markers stay where they are.
+    ///
+    /// The arena handler used to free whatever loose record stood at the
+    /// cell, granting nothing, so a monster's drop chest vanished on Get
+    /// (playtest F25). The world-only steps of the surface handler - the
+    /// overworld overlay cache and the world turn - do not apply here.
+    pub(crate) fn get_combat_arena_object(
+        &mut self,
+        slot: usize,
+        object: ActiveObject,
+    ) -> MoveOutcome {
+        let Some(grant) = native_object_pickup_grant(object) else {
+            self.message = match inventory_add_class(object.type_byte) {
+                InventoryAddClass::MustOpenFirst => GET_MUST_OPEN_FIRST_REFUSAL.to_string(),
+                _ => GET_NOTHING_REFUSAL.to_string(),
+            };
+            return MoveOutcome::Blocked;
+        };
+        self.clear_consumed_active_object_slot(slot);
+        self.apply_object_pickup(grant.kind, grant.amount);
+        self.mark_visibility_dirty();
+        self.message = format!("\n{}", grant.kind.pickup_result_line(grant.amount));
+        MoveOutcome::Got
     }
 
     pub fn get_native_object_pickup_at(&mut self, x: usize, y: usize) -> Option<MoveOutcome> {
