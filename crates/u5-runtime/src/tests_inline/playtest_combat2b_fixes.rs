@@ -105,3 +105,45 @@ fn playtest_f31_the_summon_daemon_scroll_places_a_hostile_daemon() {
         }
     }
 }
+
+/// `catalogs/item-list.md §7.1`: the scroll path "prints the scroll-use
+/// label and the branch's effect label" before its gate - scroll 4 "Prints
+/// `View!`. Combat-class scenes print `Not here!`", scroll 5 "Prints `Summon
+/// Daemon!`. ... non-combat scenes print `Not here!`". Playtest F32: both
+/// refusals dropped their banner.
+#[test]
+fn playtest_f32_refused_scrolls_print_their_banner_first() {
+    let game_dir = std::path::Path::new(".");
+    let mut state = combat2b_two_member_state();
+    state.scroll_stock[SCROLL_VIEW_INDEX] = 1;
+    combat2b_use_row(
+        &mut state,
+        |request| {
+            matches!(
+                request,
+                UseItemRequest::Scroll {
+                    index: SCROLL_VIEW_INDEX,
+                    ..
+                }
+            )
+        },
+        game_dir,
+    );
+    let rows = combat2b_rows_text(&state);
+    let banner = rows
+        .iter()
+        .position(|row| row == "View!")
+        .unwrap_or_else(|| panic!("View! prints in combat: {rows:?}"));
+    assert_eq!(rows.get(banner + 1).map(String::as_str), Some("Not here!"));
+
+    let mut state = test_state(open_grid(), 5, 5);
+    state.scroll_stock[SCROLL_SUMMON_DAEMON_INDEX] = 1;
+    handle_play_key_input(&mut state, 'U', "", std::path::Path::new("")).unwrap();
+    handle_play_key_input(&mut state, '\r', "", std::path::Path::new("")).unwrap();
+    let rows = combat2b_rows_text(&state);
+    let banner = rows
+        .iter()
+        .position(|row| row == "Summon Daemon!")
+        .unwrap_or_else(|| panic!("Summon Daemon! prints outside combat: {rows:?}"));
+    assert_eq!(rows.get(banner + 1).map(String::as_str), Some("Not here!"));
+}

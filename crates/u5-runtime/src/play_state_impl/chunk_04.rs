@@ -2108,7 +2108,12 @@ impl PlayState {
                     // `audio.md §6.1`: "Refused with `Not here!` and **no
                     // sound** outside the permitted scene class." `§9` lists
                     // this refusal among the explicit silence boundaries.
-                    self.message = "Not here!".to_string();
+                    // `item-list.md §7.1`: the scroll path "prints the
+                    // scroll-use label and the branch's effect label", and
+                    // scroll 4 "Prints `View!`. Combat-class scenes print
+                    // `Not here!` and stop" - the banner comes first
+                    // (playtest F32).
+                    self.message = "View!\nNot here!".to_string();
                     return MoveOutcome::Blocked;
                 }
                 // `audio.md §6.1`: "Dispatcher, then the look helper" - and
@@ -2123,8 +2128,10 @@ impl PlayState {
             SCROLL_SUMMON_DAEMON_INDEX => {
                 if !self.combat_active {
                     // `audio.md §6.1`: "only in the permitted scene class, else
-                    // `Not here!` and silence" (§9).
-                    self.message = "Not here!".to_string();
+                    // `Not here!` and silence" (§9). `item-list.md §7.1`,
+                    // scroll 5: "Prints `Summon Daemon!`. ... non-combat
+                    // scenes print `Not here!`" - banner first (playtest F32).
+                    self.message = "Summon Daemon!\nNot here!".to_string();
                     return MoveOutcome::Blocked;
                 }
                 let Some(caster) = self.combat_actors.first().copied() else {
