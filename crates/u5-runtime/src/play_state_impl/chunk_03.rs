@@ -4110,6 +4110,15 @@ impl PlayState {
             self.active_ready = None;
             return MoveOutcome::Blocked;
         }
+        // The same two newlines stand in front of the picker's `Item: `
+        // prompt. `combat.md §8`'s R row only binds the selection to the
+        // acting combatant - it skips the `Player: ` exchange, not the
+        // verb label's blank row - so the arena reads `Ready...` / blank /
+        // `Item: `, as `Use item` / blank / `Item: ` already does
+        // (playtest F40).
+        if self.active_ready.is_some() {
+            self.push_explicit_blank_message_entry();
+        }
         outcome
     }
 

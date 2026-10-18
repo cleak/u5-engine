@@ -199,3 +199,25 @@ fn playtest_f26_an_empty_handed_ready_closes_the_command() {
     handle_play_key_input(&mut state, 'd', "", game_dir).unwrap();
     assert_ne!((state.player.x, state.player.y), before);
 }
+
+/// `commands.md §5` verb table: R prints `Ready...\n\n`; `combat.md §8`'s R
+/// row only binds the selection to the acting combatant. Playtest F40: the
+/// arena's `Item: ` prompt sat directly under `Ready...`.
+#[test]
+fn playtest_f40_combat_ready_keeps_the_blank_row_before_the_item_prompt() {
+    let game_dir = std::path::Path::new(".");
+    let mut state = combat_state_after_the_conflict_banner(8, 5);
+    state.equipment_stock[0] = 2;
+    state.ensure_pending_combat_player_turn();
+
+    handle_play_key_input(&mut state, 'R', "", game_dir).unwrap();
+
+    assert!(state.active_ready.is_some());
+    let rows = combat_message_window_rows(&state);
+    let echo = rows
+        .iter()
+        .position(|row| row == ">Ready...")
+        .unwrap_or_else(|| panic!("the Ready echo is drawn: {rows:?}"));
+    assert_eq!(rows[echo + 1], "", "rows: {rows:?}");
+    assert!(rows[echo + 2].starts_with("Item:"), "rows: {rows:?}");
+}
