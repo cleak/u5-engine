@@ -780,6 +780,57 @@ fn town_jimmy_restraint_release_updates_live_npc_and_native_removal_mask() {
     assert!(state.npcs.is_empty());
 }
 
+/// Playtest F02. `doors-and-z-transitions.md`, Jimmy restraints: the
+/// release "attempts to set the persistent removal bit through the
+/// ordinary removable-NPC class filter", and "If an already-marked NPC is
+/// successfully targeted again before leaving, the command ... does not
+/// repeat the schedule rewrite, thanks line, or moral-standing reward."
+/// A townsperson (type 0x44) passes `town-mode.md §4`'s filter; a guard
+/// does not, so its release stays repeatable.
+#[test]
+fn town_jimmy_restraint_release_marks_a_townsperson_once() {
+    let release = |type_byte: u8| {
+        let mut grid = open_grid();
+        grid[32 + 2] = JIMMY_STOCKS_TILE;
+        let mut state = test_state(grid, 1, 1);
+        state.player.facing = Direction::East;
+        state.party[0].climb_stat = 30;
+        state.moral_standing = 0;
+        state.load_scheduled_npcs(&[
+            NpcSlot {
+                slot: 0,
+                type_byte: 0,
+                dialog_id: 0,
+                schedule: [0; 16],
+                name: None,
+            },
+            NpcSlot {
+                slot: 1,
+                type_byte,
+                dialog_id: 0x17,
+                schedule: [0, 0, 0, 2, 2, 2, 1, 1, 1, 0, 0, 0, 0, 0, 0, 0],
+                name: None,
+            },
+        ]);
+        let mut messages = Vec::new();
+        for _ in 0..2 {
+            assert_eq!(state.jimmy_facing(), MoveOutcome::LockTried);
+            messages.push(state.message.clone());
+        }
+        (state, messages)
+    };
+
+    let (state, messages) = release(0x44);
+    assert_eq!(state.removed_town_npc_flags.get(&17), Some(&0b10));
+    assert_eq!(messages, vec!["I thank thee!".to_string(), String::new()]);
+    assert_eq!(state.moral_standing, 2);
+
+    let (state, messages) = release(0x70);
+    assert!(state.removed_town_npc_flags.get(&17).is_none_or(|mask| *mask == 0));
+    assert_eq!(messages, vec!["I thank thee!".to_string(); 2]);
+    assert_eq!(state.moral_standing, 4);
+}
+
 #[test]
 fn town_jimmy_restraint_failure_preserves_actor_and_tile() {
     let mut grid = open_grid();

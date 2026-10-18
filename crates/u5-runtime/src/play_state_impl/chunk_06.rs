@@ -1146,7 +1146,12 @@ impl PlayState {
                 [NPC_SCHEDULE_AI_OFFSET..NPC_SCHEDULE_AI_OFFSET + NPC_SCHEDULE_WAYPOINT_COUNT]
                 .fill(JIMMY_RELEASE_AI_MODE);
             self.add_moral_standing(JIMMY_PRISONER_RELEASE_KARMA_REWARD);
-            if town_npc_activation_mask_eligible(type_byte) {
+            // "then attempts to set the persistent removal bit through the
+            // ordinary removable-NPC class filter" - `town-mode.md §4`'s
+            // write-path filter, which records townspeople and named
+            // characters and rejects guards and creatures (playtest F02:
+            // Yew's prisoner, type 0x44, was never marked).
+            if town_npc_removal_recorded(type_byte) {
                 self.mark_removed_town_npc_once(scene, npc_slot);
             }
             self.message = "I thank thee!".to_string();
