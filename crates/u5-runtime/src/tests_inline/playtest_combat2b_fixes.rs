@@ -6,6 +6,8 @@
 
 /// A fight under way with two party members, party slot 1 holding the open
 /// command prompt (slot 0 is the Avatar), as in `sanct_lor_flash_state`.
+/// Descriptor 1's owner/target/class byte names roster slot 1 (`combat.md
+/// §5`).
 fn combat2b_two_member_state() -> PlayState {
     let mut state = combat_state_after_the_conflict_banner(8, 5);
     state.party.push(PartyMember {
@@ -30,7 +32,7 @@ fn combat2b_two_member_state() -> PlayState {
         ..ActiveObject::empty()
     };
     state.combat_actors[1] =
-        CombatActorDescriptor::from_row([20, 1, COMBAT_ACTOR_FLAG_SELECTABLE_80, 0, 1, 0, 4, 5]);
+        CombatActorDescriptor::from_row([20, 1, COMBAT_ACTOR_FLAG_SELECTABLE_80, 1, 1, 0, 4, 5]);
     state.next_combat_actor_slot = 1;
     state.ensure_pending_combat_player_turn();
     assert_eq!(state.pending_combat_actor_slot, Some(1));
@@ -381,4 +383,117 @@ fn playtest_f34_gate_travel_echoes_the_phase_key() {
             "rows: {rows:?}"
         );
     }
+}
+
+/// F28 with a packed party (`combat.md §5`): a dead roster member 1 has no
+/// descriptor, so roster member 2 acts from descriptor 1. The potion binds
+/// the roster member the descriptor names, not the descriptor index.
+#[test]
+fn playtest_f28_a_combat_potion_binds_the_roster_member_of_a_packed_descriptor() {
+    let game_dir = std::path::Path::new(".");
+    let mut state = combat2b_two_member_state();
+    state.party[1].status = b'D';
+    state.party[1].hp = 0;
+    state.party.push(PartyMember {
+        slot: 2,
+        class_byte: 1,
+        status: b'G',
+        climb_stat: 0,
+        mana: 0,
+        hp: 5,
+        max_hp: 20,
+        level: 1,
+    });
+    state.party_experience.push(0);
+    state.party_strengths.push(20);
+    state.party_intelligence.push(20);
+    state.party_equipment = default_party_equipment(3);
+    state.combat_actors[1].owner_target_class = 2;
+    state.party[0].hp = 5;
+    state.potion_stock[POTION_YELLOW_INDEX] = 1;
+    let hour = (0..24u8)
+        .find(|hour| {
+            state.clock.hour = *hour;
+            state.potion_variation_roll(POTION_YELLOW_INDEX, 2)
+                <= POTION_VARIATION_SELECTED_THRESHOLD
+        })
+        .expect("some hour keeps the selected colour");
+    state.clock.hour = hour;
+
+    combat2b_use_row(
+        &mut state,
+        |request| matches!(request, UseItemRequest::Potion { .. }),
+        game_dir,
+    );
+
+    assert!(state.active_use.is_none(), "no target selector may open");
+    assert!(state.party[2].hp > 5, "roster member 2 drank it");
+    assert_eq!(state.party[1].hp, 0, "the dead member was not the target");
+    assert_eq!(state.party[1].status, b'D');
+    assert_eq!(state.party[0].hp, 5, "the Avatar was not the target");
+}
+
+/// F34: Escape has no glyph to echo, so the prompt row stays bare and the
+/// ordinary `Failed!` follows on its own row.
+#[test]
+fn playtest_f34_gate_travel_escape_leaves_the_prompt_row_bare() {
+    let mut state = britannia_state(open_world_grid(), 1, 1);
+    state.spell_charges[GATE_TRAVEL_SPELL_INDEX] = 1;
+    state.party[0].mana = GATE_TRAVEL_COST;
+    state.party[0].level = GATE_TRAVEL_COST;
+    state.active_player = Some(0);
+    assert_eq!(state.start_cast_spell_prompt(), MoveOutcome::Observed);
+    assert!(state.step_active_cast('P', "RV", Path::new("")).unwrap().is_none());
+    assert!(state.step_active_cast(' ', "", Path::new("")).unwrap().is_none());
+    state.flush_message_slot();
+
+    let _ = state
+        .step_active_cast_followup('\u{1b}', "", Path::new(""))
+        .unwrap()
+        .expect("Escape ends the phase prompt");
+    state.flush_message_slot();
+
+    let rows = combat2b_rows_text(&state);
+    let prompt = rows
+        .iter()
+        .rposition(|row| row.trim_end() == GATE_TRAVEL_PHASE_PROMPT.trim_end())
+        .unwrap_or_else(|| panic!("the bare prompt row: {rows:?}"));
+    assert_eq!(rows.get(prompt + 1).map(String::as_str), Some("Failed!"), "rows: {rows:?}");
+}
+
+/// F34: a successful travel echoes its digit on the prompt row too.
+#[test]
+fn playtest_f34_gate_travel_echoes_a_successful_phase_digit() {
+    let dir = debug_game_dir();
+    let mut state = britannia_state(open_world_grid(), 1, 1);
+    state.moonstone_slots[1] = MoonstoneGateSlot {
+        scene: 0,
+        x: 6,
+        y: 7,
+        z: WorldPlane::Britannia.save_floor() as u8,
+    };
+    state.spell_charges[GATE_TRAVEL_SPELL_INDEX] = 1;
+    state.party[0].mana = GATE_TRAVEL_COST;
+    state.party[0].level = GATE_TRAVEL_COST;
+    state.active_player = Some(0);
+    assert_eq!(state.start_cast_spell_prompt(), MoveOutcome::Observed);
+    assert!(state.step_active_cast('P', "RV", Path::new("")).unwrap().is_none());
+    assert!(state.step_active_cast(' ', "", Path::new("")).unwrap().is_none());
+    state.flush_message_slot();
+
+    let _ = state
+        .step_active_cast_followup('2', "", &dir)
+        .unwrap()
+        .expect("the phase digit ends the prompt");
+    state.flush_message_slot();
+
+    assert_eq!((state.player.x, state.player.y), (6, 7), "the party travelled");
+    let rows = combat2b_rows_text(&state);
+    let echoed = format!("{GATE_TRAVEL_PHASE_PROMPT}2");
+    assert_eq!(
+        rows.iter().filter(|row| **row == echoed).count(),
+        1,
+        "rows: {rows:?}"
+    );
+    let _ = fs::remove_dir_all(dir);
 }

@@ -764,11 +764,16 @@ impl PlayState {
     /// The party member a combat U-Use acts as: the combatant whose command
     /// prompt is open. `None` outside combat, or when the acting slot is not
     /// a party slot.
+    ///
+    /// The acting slot is a combat **descriptor** slot; `combat.md §5` packs
+    /// the party descriptors past a dead member, so the roster member is the
+    /// descriptor's owner/target/class byte, not the descriptor index.
     fn combat_use_bound_party_member(&self) -> Option<usize> {
         if !self.combat_active {
             return None;
         }
         self.pending_combat_actor_slot
+            .and_then(|slot| self.combat_roster_slot_for_actor_slot(slot))
             .filter(|slot| *slot < self.party.len())
     }
 
