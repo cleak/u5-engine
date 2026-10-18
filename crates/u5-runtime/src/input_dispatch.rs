@@ -1136,7 +1136,11 @@ fn handle_active_shop_key_input(
                         // one-member party is then treated without a prompt
                         // of any kind: the refusal followed the echo directly.
                         state.emit_message_line_continuing_row(healer_service_echo(treatment));
-                        state.push_explicit_blank_message_entry();
+                        // No blank of its own: §8.C's `\n\n"Who needs my aid?" `
+                        // and every result row bring their own `\n\n`, whose
+                        // first feed closes this echo's row. Pushing a blank
+                        // here as well gave three blank rows above the
+                        // question (playtest F47).
                         if state.party.len() == 1 {
                             *s = HealerShopState::PickPartyMember {
                                 service,
@@ -1301,10 +1305,11 @@ fn handle_active_shop_key_input(
                                     None
                                 };
                             *s = HealerShopState::Continuation;
-                            shop_message_ignoring_surcharge(
-                                HEALER_CONTINUATION[1..].to_string(),
-                                surcharge,
-                            )
+                            // §8.C's continuation keeps both of its feeds
+                            // here: the first closes `pay?" Yes`, the second
+                            // is the blank row. Playtest F47: dropping one ran
+                            // `"Is there any other way` straight under it.
+                            shop_message_ignoring_surcharge(HEALER_CONTINUATION.to_string(), surcharge)
                         }
                         // §8.C "Ordinary short funds | Record `173`, then the
                         // continuation question below, exactly as after a
@@ -2939,14 +2944,21 @@ fn healer_service_menu(name: Option<&'static str>) -> String {
 
 /// The question the service menu ends on, and the one a completed or refused
 /// treatment returns to.
-const HEALER_SERVICE_QUESTION: &str = "\"What is the nature of thy need?\"";
+///
+/// `shops.md §8.B`: `"What is the nature of thy need?" ` - the closing quote
+/// and one space are the cell the service echo lands in. Playtest F47: the
+/// engine stopped at the quote and read `need?"Curing`.
+const HEALER_SERVICE_QUESTION: &str = "\"What is the nature of thy need?\" ";
 
 /// `shops.md §8.C`'s healer result table: "Selected member is untreatable |
 /// Token-expanded `\n\n"Thou hast no need of this art!"\nsays $.`", then
 /// separately "Continuation after treatment, refusal, or member cancellation |
 /// `\n\n"Is there any other way in which I may\n`, then `aid thee?" `".
 fn healer_no_need_refusal(name: Option<&'static str>) -> String {
-    let refusal = "\"Thou hast no need of this art!\"";
+    // The leading `\n\n` is the published text's: the selector's question
+    // (or the service echo, for a sole member) leaves its row open, so the
+    // first feed closes it and the second is the one blank row. Playtest F47.
+    let refusal = "\n\n\"Thou hast no need of this art!\"";
     match name {
         Some(name) => format!("{refusal}\nsays {name}.{HEALER_CONTINUATION}"),
         None => format!("{refusal}{HEALER_CONTINUATION}"),
@@ -2958,7 +2970,7 @@ fn healer_no_need_refusal(name: Option<&'static str>) -> String {
 const HEALER_CONTINUATION: &str = "\n\n\"Is there any other way in which I may\naid thee?\" ";
 
 /// §8.C "Minoc free Cure/Heal | `\n\n"Receive now the Light!"`".
-const HEALER_RECEIVE_THE_LIGHT: &str = "\"Receive now the Light!\"";
+const HEALER_RECEIVE_THE_LIGHT: &str = "\n\n\"Receive now the Light!\"";
 
 /// §8.C "Ordinary short funds | Record `173`".
 const HEALER_SHORT_FUNDS_RECORD: usize = 173;
@@ -2993,10 +3005,13 @@ fn render_shared_shoppe_record(
 /// §8.C's three paid introductions. The fee row completes each of them.
 fn healer_paid_introduction(treatment: crate::shops::HealerTreatment) -> &'static str {
     match treatment {
-        crate::shops::HealerTreatment::Cure => "\"I can cure thy poisoned body ",
-        crate::shops::HealerTreatment::Heal => "\"I can heal thee ",
+        // Each opens with §8.C's own `\n\n`: one feed closes the open
+        // selector (or echo) row, the other is the blank above the reply.
+        // Playtest F47: the reply started on the very next row.
+        crate::shops::HealerTreatment::Cure => "\n\n\"I can cure thy poisoned body ",
+        crate::shops::HealerTreatment::Heal => "\n\n\"I can heal thee ",
         crate::shops::HealerTreatment::Resurrect => {
-            "\"I can raise this unfortunate person from the dead "
+            "\n\n\"I can raise this unfortunate person from the dead "
         }
     }
 }
