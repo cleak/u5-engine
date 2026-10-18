@@ -641,9 +641,6 @@ fn write_rgba_png(out: &Path, width: u32, height: u32, rgba: Vec<u8>) -> io::Res
     Ok(())
 }
 
-/// The `--save-screen` live-row classification. It mirrors the Bevy shell's
-/// message-window assembly, so a key wait that is not a command (the
-/// endgame's greeting page) takes no end cap here either (playtest E66).
 /// The open prompt row `--save-screen` hands the layout: the state's own
 /// prompt literal, or - as the Bevy shell does - the log's last row when that
 /// row already owns the cursor, as the tavern's provision quantity question
@@ -668,6 +665,9 @@ pub(crate) fn save_screen_open_prompt(
     })
 }
 
+/// The `--save-screen` live-row classification. It mirrors the Bevy shell's
+/// message-window assembly, so a key wait that is not a command (the
+/// endgame's greeting page) takes no end cap here either (playtest E66).
 pub(crate) fn save_screen_live_row_kind(
     state: &PlayState,
     spell_echo_present: bool,
