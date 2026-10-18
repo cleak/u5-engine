@@ -2148,18 +2148,23 @@ impl PlayState {
                     &legal_cells,
                 );
                 self.advance_turn();
-                let Some(applied) = applied else {
-                    self.message = "Failed!".to_string();
+                // The banner precedes the helper (`item-list.md §7.1`), so a
+                // placement that finds no cell still shows it above the
+                // U-Use failure tail.
+                let Some(_applied) = applied else {
+                    self.message = "Summon Daemon!\nFailed!".to_string();
                     return MoveOutcome::Blocked;
                 };
-                if self.combat_summon_daemon_self_check_oops(0) {
-                    self.message = "Oops...".to_string();
-                    MoveOutcome::Blocked
-                } else {
-                    self.combat_actors[applied.actor_slot].flags |= COMBAT_ACTOR_FLAG_CONTROLLED;
-                    self.message = "Summon Daemon!".to_string();
-                    MoveOutcome::Used
-                }
+                // `item-list.md §7.1`, scroll 5: the scroll invokes "the
+                // summon **placement** helper" and what it does "is create a
+                // hostile actor at the first accepted cell". The caster
+                // self-check and its controlled-bit stamp belong to the Kal
+                // Xen Corp *spell* path (`magic.md §8`: "This spell path uses
+                // the helper's self-checking mode"; `spell-list.md` row 43),
+                // so the scroll's Daemon is never handed to the player and
+                // there is no `Oops...` roll (playtest F31).
+                self.message = "Summon Daemon!".to_string();
+                MoveOutcome::Used
             }
             SCROLL_RESURRECTION_INDEX => self.use_resurrection_scroll(target),
             SCROLL_NEGATE_TIME_INDEX => self.use_negate_time_scroll(),
