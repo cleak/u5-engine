@@ -253,3 +253,23 @@ fn pf2_herbalist_prompts_keep_their_space_and_replies_take_one_blank() {
     assert_eq!(rows[yes + 1], "", "{rows:#?}");
     assert_eq!(rows[yes + 2], "\"I thank thee!\"", "{rows:#?}");
 }
+
+/// Playtest F50. `shops.md §8.C` Shipwrights: "Invalid service keys redraw
+/// record `119`, unlike invalid initial Y/N keys, which wait silently." The
+/// redraw is byte-identical to the menu already in the slot, so the slot
+/// flush took it for no write and nothing was appended.
+#[test]
+fn pf2_shipwright_invalid_menu_key_redraws_the_menu() {
+    let menu = shipwright_rows_after(&['Y'], Path::new(""));
+    let question = menu.last().cloned().expect("menu rows");
+    let redrawn = shipwright_rows_after(&['Y', 'x'], Path::new(""));
+    assert_eq!(
+        redrawn.iter().filter(|row| **row == question).count(),
+        2,
+        "{redrawn:#?}"
+    );
+    assert_eq!(redrawn.last(), Some(&question), "{redrawn:#?}");
+    // An invalid key at the entry question still waits silently.
+    let entry = shipwright_rows_after(&[], Path::new(""));
+    assert_eq!(shipwright_rows_after(&['x'], Path::new("")), entry);
+}

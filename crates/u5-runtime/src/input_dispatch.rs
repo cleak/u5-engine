@@ -2628,6 +2628,14 @@ fn handle_active_shop_key_input(
                 }
                 _ => {}
             }
+            // `§8.C` "Shipwrights": "Invalid service keys redraw record
+            // `119`". The redraw is the same text the menu already printed,
+            // so leaving it in the slot was indistinguishable from no write
+            // and the flush dropped it (playtest F50). Emit it outright; the
+            // record's own leading feeds close the open `see?" ` row and
+            // leave one blank above the second copy.
+            let menu_redraw = matches!(prior, ShipBrokerState::Menu { .. })
+                && matches!(outcome, ShipBrokerOutcome::EnteredMenu);
             let message = match outcome {
                 // `§8.A`/`§8.C`: "Ordinary ship endings use the shared
                 // farewell", nothing-bought or purchase-completed by the visit.
@@ -2676,6 +2684,9 @@ fn handle_active_shop_key_input(
                 }
                 outcome => format_ship_broker_outcome(outcome, menu_record, offer_record),
             };
+            if menu_redraw && !message.is_empty() {
+                state.emit_message_line(message.clone());
+            }
             shop_message_ignoring_surcharge(message, surcharge)
         }
         ActiveShopSession::Guild(s) => {
