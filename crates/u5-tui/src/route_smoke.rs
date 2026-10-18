@@ -3267,6 +3267,14 @@ fn append_public_location_route_smoke_cases(cases: &mut Vec<RouteSmokeCase>) {
         }
         let (expected, expected_frame_kind) = match entry.target {
             PlayTarget::Town(scene) => (RouteSmokeExpectation::Town(scene), "tile viewport"),
+            // `dungeon-mode.md §4` Initialisation runs the room-entry
+            // helper on an arrival cell whose high nibble is a room trigger,
+            // before any key is read (playtest F08). Shame's and Doom's
+            // surface entries land on such a cell in the shipped data, so
+            // their first frame is the room's arena.
+            PlayTarget::Dungeon(scene) if matches!(scene.record, 5 | 7) => {
+                (RouteSmokeExpectation::Dungeon(scene), "combat viewport")
+            }
             PlayTarget::Dungeon(scene) => (
                 RouteSmokeExpectation::Dungeon(scene),
                 "dungeon first-person viewport",
@@ -7252,6 +7260,8 @@ fn validate_route_smoke_case_state(
                 || !npc_schedule_swept
                 || placed_monsters != 8
                 || !is_cobble_arena
+                // `combat.md §8.1`: the first turn banner follows the entry
+                // banner before any key is read (playtest F09, F35).
                 || route_message_before_turn_banner(state) != u5_runtime::combat_banner_line()
             {
                 return Err(io::Error::other(format!(
@@ -8292,13 +8302,16 @@ fn validate_route_smoke_case_state(
                     actor.x == DUNGEON_AMBUSH_PARTY_ENTRY_X[party_row][slot]
                         && actor.y == DUNGEON_AMBUSH_PARTY_ENTRY_Y[party_row][slot]
                 });
+            // `combat.md §8.1`: the first keyboard-driven actor's turn banner
+            // is printed before any key is read (playtest F09), so it closes
+            // the slot on both paths; what precedes it is the launch's own.
+            let launch_message = route_message_before_turn_banner(state);
             if !state.combat_active
                 // `dungeon-mode.md §14`: the *contact* path prints `Attacked!`
                 // or its direction-bearing form; §14.1 has the A-Attack path
                 // print nothing beyond its own command transcript. The setup
                 // report is a diagnostic on both.
-                || !(route_message_before_turn_banner(state).is_empty()
-                    || state.message.starts_with("Attacked"))
+                || !(launch_message.is_empty() || launch_message.starts_with("Attacked"))
                 || !state
                     .diagnostics
                     .iter()

@@ -25456,19 +25456,17 @@ fn dungeon_l_key_relative_focus_prompt_uses_selected_party_member() {
         handle_play_key_input(&mut state, 'L', "", Path::new("")).unwrap(),
         PlayInputDisposition::Continue
     );
+    // `dungeon-mode.md §8.1` "Who acts": the shared roster picker, where a
+    // digit moves the indicator and Return commits (playtest F10).
     assert_eq!(
-        state
-            .active_direction_prompt
-            .as_ref()
-            .map(|session| session.kind),
-        Some(DirectionPromptKind::DungeonLook {
-            party_index: None,
-            drink: None,
-        })
+        state.active_party_selector.map(|session| session.target),
+        Some(PartySelectorTarget::DungeonLook { drink: None })
     );
 
+    handle_play_key_input(&mut state, '2', "", Path::new("")).unwrap();
+    assert!(state.active_party_selector.is_some(), "a digit does not commit");
     assert_eq!(
-        handle_play_key_input(&mut state, '2', "", Path::new("")).unwrap(),
+        handle_play_key_input(&mut state, '\r', "", Path::new("")).unwrap(),
         PlayInputDisposition::Continue
     );
     assert_eq!(

@@ -3080,6 +3080,13 @@ impl PlayState {
         }
 
         self.message = format!("{DUNGEON_LOOK_PREAMBLE}{description}.");
+        // `dungeon-mode.md §12`: each class line ends "in one line feed", so
+        // the Look closes its row. The slot is taken verbatim and its text
+        // carries no feed, so the row state is stated here: a multi-member
+        // Look had left it open from the `Dir-` prompt, and the next
+        // line-feed-led line - `§13.2`'s `Exit to ` - spent its feed closing
+        // that row and lost its blank (playtest F17).
+        self.close_message_row();
         MoveOutcome::Observed
     }
 

@@ -2317,6 +2317,32 @@ impl PlayState {
 
     pub fn render_text_view(&self, radius: usize) -> String {
         let mut out = String::new();
+        // `combat.md §5`: a fight is drawn on its own eleven-by-eleven arena,
+        // whatever mode framed it. `self.area` keeps the pre-combat mode for
+        // the exit, so without this the text frame waiting on the first
+        // combat command still showed the first-person dungeon (playtest
+        // F09) - the pixel path already branches the same way in
+        // `render_top_down_viewport`.
+        if self.combat_active {
+            out.push_str(&format!(
+                "Combat arena {:02}:{:02} turn {}\n",
+                self.clock.hour, self.clock.minute, self.turn
+            ));
+            for y in 0..COMBAT_ARENA_SIDE {
+                for x in 0..COMBAT_ARENA_SIDE {
+                    let glyph = match self.combat_render_sprite_at(x, y) {
+                        Some(sprite) => u8::try_from(sprite).map(render_glyph).unwrap_or('?'),
+                        None => render_glyph(
+                            self.animation.resolve_static_tile(self.combat_terrain[y][x]),
+                        ),
+                    };
+                    out.push(glyph);
+                }
+                out.push('\n');
+            }
+            out.push_str(&self.message);
+            return out;
+        }
         match self.area {
             Area::Town { scene, floor } => {
                 out.push_str(&format!(

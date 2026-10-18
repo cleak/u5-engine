@@ -206,7 +206,7 @@ fn a062_search_trap_assessment_prompts_for_the_acting_member() {
     assert_eq!(state.search_facing_secret(&[], None), MoveOutcome::Observed);
     assert!(state.active_surface_chest.is_some());
     assert_eq!(
-        state.step_active_surface_chest('2', "").unwrap(),
+        state.step_active_surface_chest('2', "\r").unwrap(),
         Some(MoveOutcome::Searched)
     );
     // Member 2's Intelligence 30 always detects: `no trap!`. Member 1's 60

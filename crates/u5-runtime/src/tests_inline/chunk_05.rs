@@ -1946,10 +1946,17 @@ fn a_attack_ordinary_town_npc_enters_the_arena_then_records_removal_on_exit() {
     // spent before the arena; it is paid once after the fight.
     assert_eq!(state.turn, 0);
     assert!(state.combat_active);
-    assert!(
-        state.message.starts_with(&combat_banner_line()),
-        "{}",
-        state.message
+    // `combat.md §8.1`: the first actor's turn banner follows the entry
+    // banner "before any key is read" (playtest F09), printed once.
+    assert!(state.message.starts_with(&combat_banner_line()), "{:?}", state.message);
+    assert!(state.pending_combat_actor_slot.is_some());
+    assert_eq!(
+        state
+            .message_transcript
+            .iter()
+            .filter(|entry| entry.text == combat_banner_line())
+            .count(),
+        1
     );
     // "ordinary town ground resolves to the cobble arena" - selector
     // arena 8 (encounters.md §4: "anything else | 2 when the scene byte
@@ -2035,10 +2042,17 @@ fn a_attack_guard_like_town_npc_raises_alarm_and_opens_an_eight_monster_arena() 
     // spent before the arena; it is paid once after the fight.
     assert_eq!(state.turn, 0);
     assert!(state.combat_active);
-    assert!(
-        state.message.starts_with(&combat_banner_line()),
-        "{}",
-        state.message
+    // `combat.md §8.1`: the first actor's turn banner follows the entry
+    // banner "before any key is read" (playtest F09), printed once.
+    assert!(state.message.starts_with(&combat_banner_line()), "{:?}", state.message);
+    assert!(state.pending_combat_actor_slot.is_some());
+    assert_eq!(
+        state
+            .message_transcript
+            .iter()
+            .filter(|entry| entry.text == combat_banner_line())
+            .count(),
+        1
     );
     assert_eq!(&state.npcs[0].schedule[..3], &[7, 7, 7]);
     assert_eq!(&state.npcs[0].schedule[12..16], &[0, 0, 0, 0]);
@@ -2063,7 +2077,8 @@ fn a_attack_guard_like_town_npc_raises_alarm_and_opens_an_eight_monster_arena() 
 
     // `combat.md §8.1`: the command that opened the fight already walked the
     // round to the first keyboard-driven turn and printed its banner, before
-    // any key is read (playtest F35), so no further walk is owed here.
+    // any key is read (playtest F35, F09), so no further walk is owed here;
+    // the first party seat precedes every monster slot.
     assert!(state.ensure_pending_combat_player_turn().is_none());
     let actor_slot = state
         .pending_combat_actor_slot
@@ -2165,10 +2180,17 @@ fn world_attack_adjacent_combat_class_object_selects_brit_cbt_arena() {
     assert_eq!(state.turn, 1);
     assert!(state.combat_active);
     assert_eq!(state.pending_combat_terrain_trigger_slot, Some(1));
-    assert!(
-        state.message.starts_with(&combat_banner_line()),
-        "{}",
-        state.message
+    // `combat.md §8.1`: the first actor's turn banner follows the entry
+    // banner "before any key is read" (playtest F09), printed once.
+    assert!(state.message.starts_with(&combat_banner_line()), "{:?}", state.message);
+    assert!(state.pending_combat_actor_slot.is_some());
+    assert_eq!(
+        state
+            .message_transcript
+            .iter()
+            .filter(|entry| entry.text == combat_banner_line())
+            .count(),
+        1
     );
     // `combat.md §5`: monster descriptors start at index six, but their
     // active-object records "continue from the first record left free by

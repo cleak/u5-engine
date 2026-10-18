@@ -80,6 +80,12 @@ impl PlayState {
         }
         match self.party_capability() {
             PartyCapability::CanAct { member_index } => {
+                // `dungeon-mode.md §4` Initialisation: a dungeon entered by
+                // loading a save onto a room cell runs the room-entry helper
+                // before the first key is read (playtest F08). A command that
+                // arrives on one is caught by the same helper after it
+                // returns; this is the arm no command precedes.
+                crate::input_dispatch::run_dungeon_entry_underfoot_reaction(self, game_dir)?;
                 // The gate reports who can act; it does not *select* anybody.
                 // `stats-panel.md §4.1`/§11: the active-player marker is drawn
                 // "while a member is selected", the selector is persistent and

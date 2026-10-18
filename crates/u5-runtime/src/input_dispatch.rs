@@ -148,8 +148,25 @@ fn run_with_command_epilogue(
     // the original would already have printed, so record it before the
     // next key can overwrite it.
     state.flush_message_slot();
+    // `combat.md §8.1`: the turn banner is printed "before any key is
+    // read". A command that *started* a fight - a step onto a dungeon room
+    // trigger, a camp ambush, a Doom-mouth ambush - left the round walker
+    // un-run, so the banner only appeared once the next key arrived and was
+    // followed straight away by that key's echo (playtest F09). It runs
+    // after the slot flush so the banner lands under the entry narration.
+    // Only a command that framed the fight owes it: inside combat the
+    // handlers open the next turn themselves, and an actor whose sub-prompt
+    // (a spell name, an Attack aim) is still open has no pending slot either.
+    if result.is_ok() && !combat_was_active {
+        open_owed_combat_player_turn(state);
+    }
     if result.is_ok() {
         if let Err(error) = run_overworld_loop_head_hooks(state, game_dir) {
+            result = Err(error);
+        }
+    }
+    if result.is_ok() {
+        if let Err(error) = run_dungeon_entry_underfoot_reaction(state, game_dir) {
             result = Err(error);
         }
     }
@@ -241,6 +258,42 @@ pub fn run_overworld_loop_head_hooks(state: &mut PlayState, game_dir: &Path) -> 
         }
     }
     Ok(())
+}
+
+/// `dungeon-mode.md §4`, Initialisation and the underfoot reaction: dungeon
+/// mode reads the underfoot tile when it is entered and, "if the cached high
+/// nibble is room-helper state (`0xA`) or room trigger (`0xF`), run[s] the
+/// room-entry helper" - before the inner loop reads a key. `§5`: these
+/// effects "fire before the player can act".
+///
+/// The engine only resolved a room cell at the head of the *next* key's
+/// dispatch, so a surface entry onto Shame's or Doom's `0xF0` entry cell, or
+/// a save loaded onto one, waited at an ordinary prompt; the next key was
+/// echoed, did nothing, and only then did `Entering room...` print (playtest
+/// F08). This runs where the original's initialisation would: after the
+/// command that brought the party into dungeon mode, and from the
+/// exploration gate before the first key after a load.
+///
+/// Returns whether a room was entered.
+pub fn run_dungeon_entry_underfoot_reaction(
+    state: &mut PlayState,
+    game_dir: &Path,
+) -> io::Result<bool> {
+    if !matches!(state.area, Area::Dungeon { .. })
+        || state.combat_active
+        || !next_key_is_a_command(state)
+    {
+        return Ok(false);
+    }
+    if state
+        .resolve_current_dungeon_room_trigger(Some(game_dir))?
+        .is_none()
+    {
+        return Ok(false);
+    }
+    state.flush_message_slot();
+    open_owed_combat_player_turn(state);
+    Ok(true)
 }
 
 /// `timing.md §8.2` / `RETRACTIONS.md` R372: the cardinal direction a key
@@ -7422,6 +7475,25 @@ fn drive_combat_round_walk_and_append_message(state: &mut PlayState) {
         if should_stop {
             break;
         }
+    }
+}
+
+/// `combat.md §8.1` / `dungeon-mode.md §8.1` (issue #210): once a fight is
+/// framed, the round walker runs to the first keyboard-driven actor and its
+/// turn banner is on the screen before the first combat key is read - the
+/// verified rows for a fall into a room are "`Entering room...`, combat's
+/// blank row, a word-wrapped banner ... and the prompt".
+///
+/// A no-op unless combat is active with no actor pending. The paced
+/// frontends walk the round on their own presentation pump instead
+/// ([`advance_paced_combat_presentation`]), one automatic action per frame.
+pub fn open_owed_combat_player_turn(state: &mut PlayState) {
+    if state.combat_active
+        && state.pending_combat_actor_slot.is_none()
+        && state.active_combat_targeting.is_none()
+        && !state.pace_combat_presentations
+    {
+        drive_combat_round_walk_and_append_message(state);
     }
 }
 
