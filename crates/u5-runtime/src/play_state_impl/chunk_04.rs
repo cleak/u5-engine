@@ -639,7 +639,7 @@ impl PlayState {
             }
             UseInputAction::Confirm => {
                 let turn_before = self.turn;
-                let Some(row) = self.use_selected_item(&session) else {
+                let Some(mut row) = self.use_selected_item(&session) else {
                     self.message = USE_NO_USABLE_ITEMS_REFUSAL.to_string();
                     self.ensure_use_action_turn(turn_before);
                     self.apply_post_turn_effects_after_outcome(
@@ -658,6 +658,21 @@ impl PlayState {
                 let echoed = Self::use_item_echo_family(row.request).inspect(|family| {
                     self.commit_prompt_reply(&prompt, family);
                 });
+                // `inventory.md §7.1`: "Combat potion use binds the current
+                // party combatant without this prompt" - the `On who:_`
+                // selector is the non-combat potion's (playtest F28).
+                if let UseItemRequest::Potion {
+                    index,
+                    target: None,
+                } = row.request
+                {
+                    if let Some(slot) = self.combat_use_bound_party_member() {
+                        row.request = UseItemRequest::Potion {
+                            index,
+                            target: Some(slot),
+                        };
+                    }
+                }
                 // `inventory.md §7.1`: in dungeon exploration the Skull Key
                 // refuses `Not here!` with no `Direction-` prompt (its key
                 // already spent), so it takes the direct handler path.
@@ -744,6 +759,17 @@ impl PlayState {
             }
         }
         Ok(true)
+    }
+
+    /// The party member a combat U-Use acts as: the combatant whose command
+    /// prompt is open. `None` outside combat, or when the acting slot is not
+    /// a party slot.
+    fn combat_use_bound_party_member(&self) -> Option<usize> {
+        if !self.combat_active {
+            return None;
+        }
+        self.pending_combat_actor_slot
+            .filter(|slot| *slot < self.party.len())
     }
 
     fn step_pending_use_action(

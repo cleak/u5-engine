@@ -65,6 +65,49 @@ fn combat2b_rows_text(state: &PlayState) -> Vec<String> {
         .collect()
 }
 
+/// `inventory.md §7.1`: "The Resurrection scroll and non-combat potion share
+/// `On who:_` ... Combat potion use binds the current party combatant
+/// without this prompt." Playtest F28: combat opened the `On who:` selector
+/// and let the acting member's turn heal anybody.
+#[test]
+fn playtest_f28_a_combat_potion_binds_the_acting_combatant_without_on_who() {
+    let game_dir = std::path::Path::new(".");
+    let mut state = combat2b_two_member_state();
+    state.party[0].hp = 5;
+    state.party[1].hp = 5;
+    state.potion_stock[POTION_YELLOW_INDEX] = 1;
+    // Pin the bottle's variation roll to its own colour for party slot 1 so
+    // the heal can be read off the bound member.
+    let hour = (0..24u8)
+        .find(|hour| {
+            state.clock.hour = *hour;
+            state.potion_variation_roll(POTION_YELLOW_INDEX, 1)
+                <= POTION_VARIATION_SELECTED_THRESHOLD
+        })
+        .expect("some hour keeps the selected colour");
+    state.clock.hour = hour;
+
+    combat2b_use_row(
+        &mut state,
+        |request| matches!(request, UseItemRequest::Potion { .. }),
+        game_dir,
+    );
+
+    assert!(state.active_use.is_none(), "no target selector may open");
+    assert_eq!(state.potion_stock[POTION_YELLOW_INDEX], 0);
+    let rows = combat2b_rows_text(&state);
+    assert!(
+        !rows.iter().any(|row| row.contains("On who")),
+        "rows: {rows:?}"
+    );
+    assert!(
+        rows.iter().any(|row| row.contains("Healed!")),
+        "rows: {rows:?}"
+    );
+    assert!(state.party[1].hp > 5, "the acting member drank it");
+    assert_eq!(state.party[0].hp, 5, "the Avatar was not the target");
+}
+
 /// `catalogs/item-list.md §7.1`, scroll 6: "Prints `Resurrection!`.
 /// Non-combat scenes prompt for a party member ... Combat-class scenes print
 /// `Not here!`." Playtest F29: combat opened `On who:` and refused only
