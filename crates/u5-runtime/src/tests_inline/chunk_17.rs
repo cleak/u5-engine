@@ -49,9 +49,11 @@
         // word of its own, and the dispatcher discards whatever it returns,
         // so both letters always report the default 'acted'. Opening either
         // panel and immediately backing out therefore costs a turn in every
-        // non-combat mode". The charge lands once, at the `Z` keystroke, so
-        // the selector and the sheet below it add nothing further.
-        assert_eq!(state.turn, 1);
+        // non-combat mode". The mode loop consumes that status after the
+        // whole exchange (`inventory.md §5`, "Once in the post-action mode
+        // epilogue"), so nothing is charged while the selector or the sheet
+        // is open (playtest F23).
+        assert_eq!(state.turn, 0);
         // inventory.md §4: "The command starts by choosing a character...
         // outside combat they use the normal party-member selector."
         assert!(state.active_z_stats.is_none());
@@ -70,7 +72,7 @@
             handle_play_key_input(&mut state, '\r', "", Path::new("")).unwrap(),
             PlayInputDisposition::Continue
         );
-        assert_eq!(state.turn, 1);
+        assert_eq!(state.turn, 0);
         assert!(state.active_party_selector.is_none());
         assert_eq!(state.selector_highlight(), None);
         assert_eq!(
@@ -3049,10 +3051,11 @@
         );
         assert!(state.active_ready.is_some());
         assert_eq!(state.message, PARTY_SELECTION_PROMPT);
-        // Opening the picker is the invocation, and it is what costs the
-        // turn: `inventory.md §8` charges even for opening it and
-        // immediately backing out.
-        assert_eq!(state.turn, 1);
+        // Opening the picker is the invocation: `inventory.md §8` charges
+        // even for opening it and immediately backing out. §5 places that
+        // single charge in the post-action epilogue, after the picker has
+        // closed (playtest F23), so nothing is spent yet.
+        assert_eq!(state.turn, 0);
 
         handle_play_key_input(&mut state, '1', "", Path::new("")).unwrap();
         handle_play_key_input(&mut state, '\r', "", Path::new("")).unwrap();
@@ -3067,7 +3070,7 @@
             EQUIPMENT_ID_BOW as u8
         );
         assert_eq!(state.equipment_stock[EQUIPMENT_ID_BOW], 0);
-        assert_eq!(state.turn, 1);
+        assert_eq!(state.turn, 0);
         assert!(state.active_ready.is_some());
         // `inventory.md` §5.2: an ordinary successful equip prints no result
         // message. The detail moved to the diagnostics channel.
@@ -3078,7 +3081,7 @@
         handle_play_key_input(&mut state, '\n', "", Path::new("")).unwrap();
         assert_eq!(state.party_equipment[0][EQUIP_SLOT_WEAPON], EQUIPMENT_EMPTY);
         assert_eq!(state.equipment_stock[EQUIPMENT_ID_BOW], 1);
-        assert_eq!(state.turn, 1);
+        assert_eq!(state.turn, 0);
         assert!(state.message.is_empty());
         assert!(state.diagnostics.iter().any(|d| d.contains("Unequipped Bow")));
 
@@ -3156,6 +3159,10 @@
             );
 
             assert!(state.active_ready.is_some(), "{label}");
+            // `inventory.md §5`: the charge is the post-action epilogue's,
+            // so it lands when the picker closes (playtest F23).
+            handle_play_key_input(&mut state, '\u{1b}', "", Path::new("")).unwrap();
+            assert!(state.active_ready.is_none(), "{label}");
             assert_eq!(state.turn, 1, "{label}");
             assert_eq!((state.clock.hour, state.clock.minute), (12, expected_minutes), "{label}");
         }

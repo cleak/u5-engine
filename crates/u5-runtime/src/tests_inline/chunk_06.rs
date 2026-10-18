@@ -2599,8 +2599,14 @@
         run_overworld_loop_head_hooks(&mut state, &dir).unwrap();
 
         assert_eq!(state.grid[origin_idx], NATURAL_MOONGATE_RESTORED_TERRAIN_TILE);
-        assert!(state.active_shrine.is_some());
-        assert_eq!(state.message, SHRINE_MANTRA_PROMPT);
+        // `overworld.md §9.2`: the overlay is "the same shrine/urn kneel
+        // overlay used by E-Enter at a shrine" - approach, kneel and the
+        // virtue question, not a bare mantra prompt (playtest F22). The
+        // sidecar row names the virtue, as it does for E-Enter.
+        let shrine = state.active_shrine.as_ref().expect("the overlay opened");
+        assert_eq!(shrine.phase, ShrinePhase::Virtue);
+        assert_eq!(shrine.virtue, ShrineVirtue::Honesty);
+        assert!(state.staged_narration_active());
         assert_eq!(state.turn, 0);
         let _ = fs::remove_dir_all(dir);
     }
@@ -2629,8 +2635,9 @@
         assert_eq!((state.player.x, state.player.y), (5, 4));
         assert_eq!(state.turn, 1);
 
-        // At midnight the hook opens the meditation prompt, and the key goes
-        // into it as the first typed character.
+        // At midnight the hook dispatches the shrine kneel overlay, whose
+        // staged approach owns the loop; the key is kept for the virtue
+        // prompt rather than dropped (playtest F22).
         fs::write(dir.join(SHRINE_TABLE_FILE), "BRITANNIA 5 5 HONESTY 5\n").unwrap();
         let mut grid = open_world_grid();
         grid[origin_idx] = NATURAL_MOONGATE_TERRAIN_TILE;
@@ -2642,8 +2649,12 @@
             PlayInputDisposition::Continue
         );
 
-        let shrine = state.active_shrine.as_ref().expect("the prompt opened");
-        assert_eq!(shrine.mantra_buffer, "A");
+        assert!(state.active_shrine.is_some(), "the overlay opened");
+        assert!(state.staged_narration_active());
+        assert_eq!(
+            state.keys_buffered_during_hold.front().map(|(key, _)| *key),
+            Some('A')
+        );
         assert_eq!(state.turn, 0);
         let _ = fs::remove_dir_all(dir);
     }
@@ -2687,7 +2698,10 @@
         run_overworld_loop_head_hooks(&mut state, Path::new("")).unwrap();
 
         assert_eq!(state.grid[origin_idx], NATURAL_MOONGATE_RESTORED_TERRAIN_TILE);
-        assert!(state.message.is_empty());
+        // `karma.md §7`: no coordinate row matches, so the meditation
+        // resolves to Spirituality instead of being dropped (playtest F22).
+        let shrine = state.active_shrine.as_ref().expect("the overlay opened");
+        assert_eq!(shrine.virtue, ShrineVirtue::Spirituality);
     }
 
     #[test]

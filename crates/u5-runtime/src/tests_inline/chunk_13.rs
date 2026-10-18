@@ -26103,8 +26103,9 @@ fn transcript_is_capped_so_a_long_session_cannot_grow_without_bound() {
 #[test]
 fn top_down_uppercase_command_letters_preempt_vi_movement() {
     // `commands.md §4`: `Z` Z-stats "always report[s] the default 'acted'",
-    // so opening the selector costs a turn even though every other letter
-    // here only raises a prompt.
+    // but `inventory.md §5` takes that charge in the post-action epilogue,
+    // after the selector closes, so opening it is still free here
+    // (playtest F23).
     for (key, expected, expected_turn) in [
         ('A', "Attack-", 0),
         // The acting-member prompt is silent for the fixture's
@@ -26116,7 +26117,7 @@ fn top_down_uppercase_command_letters_preempt_vi_movement() {
         ('Q', "Save game?", 0),
         ('U', ITEM_SELECTION_PROMPT, 0),
         ('W', "What?", 0),
-        ('Z', PARTY_SELECTION_PROMPT, 1),
+        ('Z', PARTY_SELECTION_PROMPT, 0),
     ] {
         let mut state = test_state(open_grid(), 5, 5);
 
@@ -26775,7 +26776,8 @@ fn dungeon_command_letters_do_not_fall_through_to_diagonal_movement_refusal() {
     // `commands.md §4` puts `Z` Z-stats in the same class: the overlay
     // "produces no status word of its own ... so both letters always report
     // the default 'acted'". The other letters here only open a prompt and
-    // stay free.
+    // stay free. R and Z owe their charge from here and pay it when the
+    // prompt closes, not while `Player: ` waits (playtest F23).
     for (key, expected, expected_turn) in [
         // The acting-member prompt is silent for the fixture's
         // one-member party, so `C` reaches the spell prompt directly.
@@ -26783,11 +26785,11 @@ fn dungeon_command_letters_do_not_fall_through_to_diagonal_movement_refusal() {
         ('D', "What?", 0),
         ('M', MMIX_SPELL_PROMPT_MESSAGE, 0),
         ('N', NEW_ORDER_FIRST_PROMPT, 0),
-        ('R', PARTY_SELECTION_PROMPT, 1),
+        ('R', PARTY_SELECTION_PROMPT, 0),
         ('U', USE_NO_USABLE_ITEMS_REFUSAL, 1),
         ('W', "What?", 0),
         ('Y', ":", 0),
-        ('Z', PARTY_SELECTION_PROMPT, 1),
+        ('Z', PARTY_SELECTION_PROMPT, 0),
     ] {
         let mut state = dungeon_state(open_dungeon_record(), 0, 1, 1);
 

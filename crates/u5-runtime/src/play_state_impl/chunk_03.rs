@@ -390,10 +390,20 @@ impl PlayState {
             // `For how many hours? (1-9)`, the wishing well's `Drop a coin?`,
             // and the mixer's `How much? `. Each showed as `offset+2` - the
             // blank and the fresh command row this engine added under them.
-            || self
-                .active_rest
-                .as_ref()
-                .is_some_and(|session| matches!(session.phase, crate::z_stats::RestPhase::Hours))
+            //
+            // The camp's watch question and its guard prompt are the same
+            // shape: `commands.md §5.5` gives `\nWilt_thou_set_a_watch?_` and
+            // `Who_will_stand_guard?_`, each with a trailing space and no
+            // line feed, and `§5.1` keeps the end cap for the turn loop
+            // (playtest F20/F56).
+            || self.active_rest.as_ref().is_some_and(|session| {
+                matches!(
+                    session.phase,
+                    crate::z_stats::RestPhase::Hours
+                        | crate::z_stats::RestPhase::WatchYesNo
+                        | crate::z_stats::RestPhase::WatchSlot
+                )
+            })
             || self
                 .active_wishing_well
                 .as_ref()
@@ -933,9 +943,12 @@ impl PlayState {
         // non-combat mode". R-Ready charges at entry in
         // [`Self::charge_ready_equipment_turn`]; Z-stats charges here for
         // the same reason, so a cancelled member selector costs the same
-        // as a fully browsed sheet.
-        self.advance_turn();
-        self.start_party_selector(PartySelectorTarget::ZStats)
+        // as a fully browsed sheet. The charge is paid when the selector or
+        // the sheet closes ([`Self::settle_exploration_acted_charge`]), not
+        // while `Player: ` waits (playtest F23).
+        let outcome = self.start_party_selector(PartySelectorTarget::ZStats);
+        self.exploration_acted_charge_owed = true;
+        outcome
     }
 
     /// `commands.md §5.2`, the `0` row: the Set Active Player command.
@@ -4095,8 +4108,38 @@ impl PlayState {
     /// round walk, so no world turn is charged here.
     fn charge_ready_equipment_turn(&mut self) {
         if !self.combat_active {
-            self.advance_turn();
+            // Owed now, paid by [`Self::settle_exploration_acted_charge`]
+            // once the picker closes (playtest F23).
+            self.exploration_acted_charge_owed = true;
         }
+    }
+
+    /// Pay the exploration charge R-Ready or Z-stats owes once none of
+    /// their prompts is open any more. Returns the turn counter before the
+    /// charge so the caller can run the post-action pass, or `None` when
+    /// nothing was owed or a prompt is still waiting.
+    ///
+    /// `inventory.md §5`: the overworld and town charge is "Once in the
+    /// post-action mode epilogue", and `commands.md §4` has the mode loop
+    /// consume the default "acted" status after the handler returns. The
+    /// clock, the active-object walk and the encounter checks therefore
+    /// follow the whole exchange; they must not run between `Player: `
+    /// and its answer (playtest F23).
+    pub fn settle_exploration_acted_charge(&mut self) -> Option<u64> {
+        if !self.exploration_acted_charge_owed
+            || self.active_ready.is_some()
+            || self.active_party_selector.is_some()
+            || self.active_z_stats.is_some()
+        {
+            return None;
+        }
+        self.exploration_acted_charge_owed = false;
+        if self.combat_active {
+            return None;
+        }
+        let turn_before = self.turn;
+        self.advance_turn();
+        Some(turn_before)
     }
 
     /// `text-output.md §10.4`: a prompt that opens its own block spends a
@@ -5172,8 +5215,12 @@ impl PlayState {
         // `inventory.md §8`: the inline one-shot form is a whole R-Ready
         // invocation, so it carries the turn charge for every outcome
         // below — including the silently refused ammunition row, which
-        // leaves no message at all.
-        self.charge_ready_equipment_turn();
+        // leaves no message at all. It opens no prompt, so nothing waits
+        // between the dispatch and the epilogue and the charge is paid at
+        // once.
+        if !self.combat_active {
+            self.advance_turn();
+        }
         let request = match parse_inline_ready_request(suffix) {
             Ok(Some(request)) => request,
             Ok(None) => {

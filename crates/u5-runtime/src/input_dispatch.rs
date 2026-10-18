@@ -416,7 +416,9 @@ fn handle_play_key_input_inner(
         return Ok(PlayInputDisposition::Continue);
     }
     if state.active_ready.is_some() {
-        return Ok(handle_active_ready_key_input(state, key, suffix));
+        let disposition = handle_active_ready_key_input(state, key, suffix);
+        settle_exploration_acted_charge(state, game_dir)?;
+        return Ok(disposition);
     }
     if state.active_use.is_some() {
         return handle_active_use_key_input(state, key, suffix, game_dir);
@@ -435,10 +437,13 @@ fn handle_play_key_input_inner(
                 state.apply_top_down_post_turn_effects_after_turn(turn_before, game_dir)?;
             }
         }
+        settle_exploration_acted_charge(state, game_dir)?;
         return Ok(PlayInputDisposition::Continue);
     }
     if state.active_z_stats.is_some() {
-        return Ok(handle_active_z_stats_key_input(state, key, suffix));
+        let disposition = handle_active_z_stats_key_input(state, key, suffix);
+        settle_exploration_acted_charge(state, game_dir)?;
+        return Ok(disposition);
     }
     if state.active_shop.is_some() {
         return Ok(handle_active_shop_key_input(state, key, suffix, game_dir));
@@ -732,6 +737,36 @@ fn handle_active_z_stats_key_input(
         finish_combat_modal_actor_action(state, combat_actor);
     }
     PlayInputDisposition::Continue
+}
+
+/// `inventory.md §5` / `commands.md §4`: once R-Ready's or Z-stats' last
+/// prompt has closed, pay the owed exploration charge and run the
+/// post-action pass that follows it (playtest F23).
+fn settle_exploration_acted_charge(state: &mut PlayState, game_dir: &Path) -> io::Result<()> {
+    if let Some(turn_before) = state.settle_exploration_acted_charge() {
+        // The exchange's closing reply (`Item: Done`, `Status: Done`,
+        // `Player: None!`) is already committed when the charge is paid.
+        // The world pass joins whatever the slot holds onto an engagement's
+        // own text (`pre_effect_message`), so a reply left there came back
+        // after the banner as `Item: Done *** CONFLICT ***`. Take it out of
+        // the slot for the pass, as the dungeon climb word is, and put it
+        // back only when the pass printed nothing.
+        state.flush_message_slot();
+        let reply = (state.message == state.message_flushed).then(|| {
+            (
+                std::mem::take(&mut state.message),
+                std::mem::take(&mut state.message_flushed),
+            )
+        });
+        state.apply_post_turn_effects_after_outcome(turn_before, game_dir, MoveOutcome::Used)?;
+        if let Some((message, flushed)) = reply
+            && state.message.is_empty()
+        {
+            state.message = message;
+            state.message_flushed = flushed;
+        }
+    }
+    Ok(())
 }
 
 fn handle_active_ready_key_input(

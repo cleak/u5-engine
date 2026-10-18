@@ -5278,11 +5278,16 @@ impl PlayState {
     /// terrain; the collision rumble owns the audio stream and absorption
     /// owns the single gameplay draw.
     pub fn apply_sailing_collision(&mut self, destination_tile: u8) -> OutdoorImpactAbsorption {
-        self.message = if destination_tile == 0x03 {
-            "BREAKING UP!".to_string()
+        // Every refused step prints its own line (`§6.2.5`; `weather.md
+        // §5.1` lets the next unchanged-heading key try again). Assigned to
+        // the slot, a repeat was byte-identical to the line already flushed
+        // and the slot dropped it, so the second and later hull hits were
+        // silent and left bare marker rows (playtest F19). Emitted instead.
+        self.emit_message_line(if destination_tile == 0x03 {
+            "BREAKING UP!"
         } else {
-            "COLLISION!".to_string()
-        };
+            "COLLISION!"
+        });
         self.sail_cadence = 0;
         // `overworld.md §6.2.5`: "The step remains refused, party
         // coordinates do not change, and the cached sail direction is

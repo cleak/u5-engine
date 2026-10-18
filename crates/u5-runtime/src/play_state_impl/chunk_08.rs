@@ -154,14 +154,22 @@ impl PlayState {
                 }
                 RestPhase::WatchYesNo => match ch.to_ascii_uppercase() {
                     'Y' => {
-                        self.emit_message_line(REST_WATCH_YES_LITERAL);
+                        // `commands.md §5.5` / `dungeon-mode.md §11`: the
+                        // question ends in a trailing space, so its answer
+                        // `Yes\n\n` prints on the question's own row
+                        // (`watch? Yes`). The prompt left that row open;
+                        // say so rather than infer it (playtest F20/F56).
+                        self.open_message_row();
+                        self.emit_message_line_continuing_row(REST_WATCH_YES_LITERAL);
                         session.phase = RestPhase::WatchSlot;
                         self.active_rest = Some(session);
                         self.message = self.render_active_rest();
                         return Ok(None);
                     }
                     'N' | '\u{1b}' | ' ' | '0' | '\r' | '\n' => {
-                        self.emit_message_line(REST_WATCH_NO_LITERAL);
+                        // As `Yes` above: `No\n\n` lands on `watch? `.
+                        self.open_message_row();
+                        self.emit_message_line_continuing_row(REST_WATCH_NO_LITERAL);
                         let hours = session.hours.unwrap_or(1);
                         return self.finish_active_rest(hours, None, game_dir);
                     }
@@ -189,7 +197,10 @@ impl PlayState {
                         self.rest_prompt_watcher(digit - 1)
                     };
                     let Some(watcher) = watcher else {
-                        self.emit_message_line(REST_NO_WATCH_LITERAL);
+                        // `Who will stand guard? ` keeps its trailing space
+                        // too, so `None posted!\n\n` continues that row.
+                        self.open_message_row();
+                        self.emit_message_line_continuing_row(REST_NO_WATCH_LITERAL);
                         session.phase = RestPhase::WatchYesNo;
                         continue;
                     };
@@ -1613,6 +1624,96 @@ impl PlayState {
         ))
     }
 
+    /// The shrine/urn kneel overlay that `E`-Enter at a shrine runs after its
+    /// `Enter the shrine of` prefix: the presentation grid, the approach
+    /// walk, then the staged kneel narration and the virtue question.
+    /// `overworld.md §9.2` dispatches the same overlay from the
+    /// natural-moongate midnight hook (playtest F22).
+    pub(crate) fn begin_shrine_kneel_presentation(
+        &mut self,
+        game_dir: &Path,
+        virtue: ShrineVirtue,
+    ) -> io::Result<MoveOutcome> {
+        // `karma.md §12`: "Record `45`, including its leading newline
+        // **and trailing blank row**". The engine printed the leading one
+        // and not the trailing one, which only showed once the narration
+        // was staged and the record stood alone on screen - measured
+        // 2026-09-12 (`qa/paired/shrine-enter.tsv`, beats `early` and
+        // `mid`, reading `offset-2`).
+        // `karma.md §7` "Entry pacing", before any of the narration: the
+        // presentation "copies the whole active-object table aside and
+        // clears every slot's **type** byte ... The compositor skips any
+        // slot whose type byte is zero, so for the duration of the
+        // presentation the party and every nearby actor are invisible
+        // while their records survive intact." Then it "loads the
+        // shrine's eleven-by-eleven display grid - record `1` of
+        // `MISCMAPS.DAT`".
+        //
+        // The approach walk follows. It was unimplemented while §7 gave
+        // its frame shape and cell path but not the two pose tiles;
+        // `cleak/u5-spec#273` published both, and §7's "The two poses,
+        // exactly" table now carries their atlas indices and every cell
+        // of the path. See `crate::shrine_presentation`.
+        self.shrine_presentation_map =
+            load_miscmaps_cutscene_map(game_dir, SHRINE_PRESENTATION_CUTSCENE_MAP_RECORD)?;
+        // §7's approach walk, which `cleak/u5-spec#273` unblocked by
+        // publishing the two pose tiles. It runs across the
+        // Approach-to-Kneel interval below.
+        let mut walk = crate::shrine_presentation::ShrineApproachWalk::new();
+        walk.seed_animator(self.prng_state);
+        self.shrine_approach_walk = Some(walk);
+        // §7: the presentation "builds the display, and runs one world
+        // step. It prints the Approach record, and only then begins the
+        // walk."
+        self.advance_presentation_world_step();
+        self.emit_message_line(format!("\n{SHRINE_APPROACH_NARRATION}\n\n"));
+        // `karma.md §12`'s entry table paces this: the kneel record, then
+        // "After ten world ticks, record `29`: the question asking which
+        // virtue". The engine used to print all three in this one call,
+        // so the window jumped straight to the question.
+        //
+        // The table gives no interval before the kneel record. Measured
+        // 2026-09-12 (`qa/paired/shrine-enter-pacing.tsv`, stock side,
+        // sampled every 600 ms after the `E` keypress): the approach
+        // record stands alone through `t1800` and the kneel record is up
+        // by `t2400`, so the hold is bounded to (1800, 2400] ms - about
+        // forty ~55 ms BIOS ticks. The question follows within the next
+        // 600 ms sample, which fits the published ten. Asked as
+        // `cleak/u5-spec#271`; forty is the midpoint of the measured
+        // bound, not a published figure.
+        // §7 "Entry pacing": the Approach-to-Kneel interval is the walk's
+        // forty-five world steps "plus the handler's own repaint step -
+        // forty-six world steps in all", spread across the measured hold.
+        self.staged_narration.push_ticks_counting_world_steps(
+            SHRINE_KNEEL_HOLD_BIOS_TICKS,
+            SHRINE_KNEEL_WORLD_STEPS,
+            // No leading feed of its own: the approach record's trailing
+            // blank row above is already the separator, and adding one
+            // here put a second blank between them once that blank was
+            // being printed. Measured 2026-09-12 (`shrine-enter/full`
+            // and `shrine-flow`, both a row adrift with it).
+            // `cleak/u5-spec#271`, checked against the shipped file:
+            // "record 45 begins with a newline and ends with two; record
+            // 28 begins with its text ... and ends with two newlines;
+            // record 29 likewise has no leading feed. The blank between
+            // Approach and Kneel is record 45's trailing blank row
+            // alone."
+            format!("{SHRINE_KNEEL_NARRATION}\n\n"),
+        );
+        // The question is logged once, with the blank row the capture
+        // shows beneath it; the answer row is the *live* row the shrine
+        // session serves (`text-output.md` §10.6), so typing into it
+        // edits one row instead of re-logging the question per letter.
+        self.staged_narration.push_ticks_counting_world_steps(
+            SHRINE_VIRTUE_QUESTION_HOLD_WORLD_TICKS,
+            SHRINE_VIRTUE_QUESTION_WORLD_STEPS,
+            format!("{SHRINE_VIRTUE_PROMPT}\n\n"),
+        );
+        self.active_shrine = Some(ShrineSession::entering(virtue));
+        self.adopt_shrine_prompt_row();
+        Ok(MoveOutcome::Observed)
+    }
+
     pub fn enter_current_location(&mut self, game_dir: &Path) -> io::Result<MoveOutcome> {
         let Area::World { plane } = self.area else {
             // `commands.md §5.3`: `Enter ` is an operand-follows echo; with
@@ -1661,84 +1762,7 @@ impl PlayState {
             if self.complete_open_direction_echo("Enter ", SHRINE_ENTER_ECHO_PREFIX) {
                 self.push_message_entry(virtue.name(), false);
             }
-            // `karma.md §12`: "Record `45`, including its leading newline
-            // **and trailing blank row**". The engine printed the leading one
-            // and not the trailing one, which only showed once the narration
-            // was staged and the record stood alone on screen - measured
-            // 2026-09-12 (`qa/paired/shrine-enter.tsv`, beats `early` and
-            // `mid`, reading `offset-2`).
-            // `karma.md §7` "Entry pacing", before any of the narration: the
-            // presentation "copies the whole active-object table aside and
-            // clears every slot's **type** byte ... The compositor skips any
-            // slot whose type byte is zero, so for the duration of the
-            // presentation the party and every nearby actor are invisible
-            // while their records survive intact." Then it "loads the
-            // shrine's eleven-by-eleven display grid - record `1` of
-            // `MISCMAPS.DAT`".
-            //
-            // The approach walk follows. It was unimplemented while §7 gave
-            // its frame shape and cell path but not the two pose tiles;
-            // `cleak/u5-spec#273` published both, and §7's "The two poses,
-            // exactly" table now carries their atlas indices and every cell
-            // of the path. See `crate::shrine_presentation`.
-            self.shrine_presentation_map =
-                load_miscmaps_cutscene_map(game_dir, SHRINE_PRESENTATION_CUTSCENE_MAP_RECORD)?;
-            // §7's approach walk, which `cleak/u5-spec#273` unblocked by
-            // publishing the two pose tiles. It runs across the
-            // Approach-to-Kneel interval below.
-            let mut walk = crate::shrine_presentation::ShrineApproachWalk::new();
-            walk.seed_animator(self.prng_state);
-            self.shrine_approach_walk = Some(walk);
-            // §7: the presentation "builds the display, and runs one world
-            // step. It prints the Approach record, and only then begins the
-            // walk."
-            self.advance_presentation_world_step();
-            self.emit_message_line(format!("\n{SHRINE_APPROACH_NARRATION}\n\n"));
-            // `karma.md §12`'s entry table paces this: the kneel record, then
-            // "After ten world ticks, record `29`: the question asking which
-            // virtue". The engine used to print all three in this one call,
-            // so the window jumped straight to the question.
-            //
-            // The table gives no interval before the kneel record. Measured
-            // 2026-09-12 (`qa/paired/shrine-enter-pacing.tsv`, stock side,
-            // sampled every 600 ms after the `E` keypress): the approach
-            // record stands alone through `t1800` and the kneel record is up
-            // by `t2400`, so the hold is bounded to (1800, 2400] ms - about
-            // forty ~55 ms BIOS ticks. The question follows within the next
-            // 600 ms sample, which fits the published ten. Asked as
-            // `cleak/u5-spec#271`; forty is the midpoint of the measured
-            // bound, not a published figure.
-            // §7 "Entry pacing": the Approach-to-Kneel interval is the walk's
-            // forty-five world steps "plus the handler's own repaint step -
-            // forty-six world steps in all", spread across the measured hold.
-            self.staged_narration.push_ticks_counting_world_steps(
-                SHRINE_KNEEL_HOLD_BIOS_TICKS,
-                SHRINE_KNEEL_WORLD_STEPS,
-                // No leading feed of its own: the approach record's trailing
-                // blank row above is already the separator, and adding one
-                // here put a second blank between them once that blank was
-                // being printed. Measured 2026-09-12 (`shrine-enter/full`
-                // and `shrine-flow`, both a row adrift with it).
-                // `cleak/u5-spec#271`, checked against the shipped file:
-                // "record 45 begins with a newline and ends with two; record
-                // 28 begins with its text ... and ends with two newlines;
-                // record 29 likewise has no leading feed. The blank between
-                // Approach and Kneel is record 45's trailing blank row
-                // alone."
-                format!("{SHRINE_KNEEL_NARRATION}\n\n"),
-            );
-            // The question is logged once, with the blank row the capture
-            // shows beneath it; the answer row is the *live* row the shrine
-            // session serves (`text-output.md` §10.6), so typing into it
-            // edits one row instead of re-logging the question per letter.
-            self.staged_narration.push_ticks_counting_world_steps(
-                SHRINE_VIRTUE_QUESTION_HOLD_WORLD_TICKS,
-                SHRINE_VIRTUE_QUESTION_WORLD_STEPS,
-                format!("{SHRINE_VIRTUE_PROMPT}\n\n"),
-            );
-            self.active_shrine = Some(ShrineSession::entering(virtue));
-            self.adopt_shrine_prompt_row();
-            return Ok(MoveOutcome::Observed);
+            return self.begin_shrine_kneel_presentation(game_dir, virtue);
         }
         // `karma.md §8` (`cleak/u5-spec#250`, `RETRACTIONS.md` R451): "Use
         // **E-Enter while standing on live terrain tile `0x11`** to begin the
@@ -2190,11 +2214,22 @@ impl PlayState {
             // E-Enter on tile `0x11` (`RETRACTIONS.md` R451), and this cell has
             // just been rewritten to the restored moongate terrain, so nothing
             // reaches the reader from here.
-            if let Some(outcome) = self.start_shrine_prompt_at_current_position(game_dir)? {
-                return Ok(Some(outcome));
-            }
-            self.message.clear();
-            return Ok(Some(MoveOutcome::Observed));
+            //
+            // §9.2: the hook "reports success to the outer loop; the outer
+            // loop then dispatches the same shrine/urn kneel overlay used by
+            // E-Enter at a shrine". The overlay runs without E's own `Enter
+            // the shrine of` prefix, which belongs to the E handler. Its
+            // virtue comes from `karma.md §7`'s coordinate scan, and a gate
+            // cell matches no mapped shrine, so it resolves to Spirituality.
+            // `OPEN-QUESTIONS.md` (the Spirituality row) leaves open where the
+            // route puts the party; this engine keeps it on the gate cell,
+            // as the ordinary shrine overlay does (playtest F22). The old
+            // path required a shrine tile underfoot and so dropped the
+            // dispatch silently.
+            let virtue = self.shrine_virtue_by_coordinates(game_dir)?;
+            return self
+                .begin_shrine_kneel_presentation(game_dir, virtue)
+                .map(Some);
         }
 
         let Some(slot_index) = self.cached_natural_moongate_slot_index() else {
