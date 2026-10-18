@@ -336,3 +336,49 @@ fn playtest_f33_a_combat_shard_result_prints_before_the_next_banner() {
         "no turn banner between the shard text and its result: {rows:?}"
     );
 }
+
+/// `magic.md §8` handler-family map, Gate travel: "prompts `To phase:_`,
+/// echoes the typed key and a line feed, accepts a digit `1`..`8`".
+/// Playtest F34: the digit never appeared on the prompt row.
+#[test]
+fn playtest_f34_gate_travel_echoes_the_phase_key() {
+    for key in ['3', 'x'] {
+        let mut state = britannia_state(open_world_grid(), 1, 1);
+        state.spell_charges[GATE_TRAVEL_SPELL_INDEX] = 1;
+        state.party[0].mana = GATE_TRAVEL_COST;
+        state.party[0].level = GATE_TRAVEL_COST;
+        state.active_player = Some(0);
+        assert_eq!(state.start_cast_spell_prompt(), MoveOutcome::Observed);
+        assert!(
+            state
+                .step_active_cast('P', "RV", Path::new(""))
+                .unwrap()
+                .is_none()
+        );
+        assert!(
+            state
+                .step_active_cast(' ', "", Path::new(""))
+                .unwrap()
+                .is_none()
+        );
+        state.flush_message_slot();
+
+        let _ = state
+            .step_active_cast_followup(key, "", Path::new(""))
+            .unwrap()
+            .expect("the phase key ends the prompt");
+        state.flush_message_slot();
+
+        let rows = combat2b_rows_text(&state);
+        let echoed = format!("{GATE_TRAVEL_PHASE_PROMPT}{key}");
+        let prompt = rows
+            .iter()
+            .position(|row| *row == echoed)
+            .unwrap_or_else(|| panic!("key {key:?} echoes on the prompt row: {rows:?}"));
+        assert_eq!(
+            rows.get(prompt + 1).map(String::as_str),
+            Some("Failed!"),
+            "rows: {rows:?}"
+        );
+    }
+}
