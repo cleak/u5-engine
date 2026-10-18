@@ -800,6 +800,23 @@ impl PlayState {
             // the command end cap.
             return None;
         }
+        // `commands.md §5.8`: the Jimmy and chest sites' acting-member
+        // exchange "prints `Player: ` and opens the roster picker", and
+        // `inventory.md §4.3` leaves the caller's question as the line being
+        // edited. `Player: ` continues the verb echo's row (`Jimmy-Player: `,
+        // `Open-Player: `) or opens one of its own after a re-prompt, so the
+        // open row is whichever the transcript ends on. Without this the
+        // layout drew a fresh command row under the question (playtest F13).
+        if self.active_jimmy.is_some() || self.active_surface_chest.is_some() {
+            let prompt = PARTY_SELECTION_PROMPT.trim_end();
+            return self
+                .message_transcript
+                .last()
+                .map(|entry| entry.text.trim_end())
+                .filter(|text| text.ends_with(prompt))
+                .map(|text| format!("{text} "))
+                .or_else(|| Some(PARTY_SELECTION_PROMPT.to_string()));
+        }
         if self.active_z_stats.is_some() {
             return Some(Z_STATS_STATUS_PROMPT.to_string());
         }
@@ -1061,6 +1078,10 @@ impl PlayState {
             self.active_z_stats = Some(z_stats);
             return true;
         }
+        if key == '0' && session.target.ignores_zero() {
+            self.message = session.target.prompt().to_string();
+            return true;
+        }
         if matches!(key, '\u{1b}' | '0') {
             self.active_party_selector = None;
             let prompt = session.target.prompt();
@@ -1121,6 +1142,12 @@ impl PlayState {
         }
         let index = session.highlight;
         self.active_party_selector = None;
+        if let PartySelectorTarget::DungeonLook { .. } | PartySelectorTarget::DungeonSearch =
+            session.target
+        {
+            self.commit_dungeon_acting_member_pick(session, index);
+            return true;
+        }
         // `commands.md §5.6`: `Player:_` is "colon then exactly one
         // trailing space", so the chosen name lands on that same line -
         // the original shows `Player: Avatar`.
@@ -1204,8 +1231,39 @@ impl PlayState {
             PartySelectorTarget::DeathVision { x, y } => {
                 self.apply_death_vision_look_for_member(x, y, index);
             }
+            // Committed above, before the generic name echo.
+            PartySelectorTarget::DungeonLook { .. } | PartySelectorTarget::DungeonSearch => {}
         }
         true
+    }
+
+    /// `dungeon-mode.md §8.1`, "Who acts": a committed pick at the dungeon
+    /// Look or Search acting-member prompt. "A pick whose status is neither
+    /// Good nor Poisoned answers `Disabled!\n\n` and re-prompts from
+    /// `Player: `"; an eligible one echoes the name and the `Dir-` chooser
+    /// opens - after `§12` step 2's lighting gate for Look.
+    fn commit_dungeon_acting_member_pick(&mut self, session: PartySelectorSession, index: usize) {
+        let look_drink = match session.target {
+            PartySelectorTarget::DungeonLook { drink } => Some(drink),
+            _ => None,
+        };
+        let lit = look_drink.is_none() || self.has_personal_light();
+        if !self.accept_dungeon_acting_member_then(index, lit) {
+            self.active_party_selector = Some(session);
+            self.message = session.target.prompt().to_string();
+            return;
+        }
+        let party_index = Some(index);
+        let kind = match look_drink {
+            Some(_) if !lit => {
+                self.emit_message_line(DUNGEON_LOOK_DARKNESS_REFUSAL);
+                return;
+            }
+            Some(drink) => DirectionPromptKind::DungeonLook { party_index, drink },
+            None => DirectionPromptKind::DungeonSearch { party_index },
+        };
+        self.active_direction_prompt = Some(DirectionPromptSession::new(kind));
+        self.message = self.render_active_direction_prompt();
     }
 
     pub fn z_stats(&mut self) -> MoveOutcome {
@@ -2839,6 +2897,12 @@ impl PlayState {
         let Some(party_index) = self.resolve_dungeon_acting_member(None) else {
             return MoveOutcome::Blocked;
         };
+        // `dungeon-mode.md §8.1`, "Who acts": the shared acting-member
+        // prompt, on `inventory.md §4.3`'s shared roster picker (playtest
+        // F10, F11).
+        if party_index.is_none() {
+            return self.start_party_selector(PartySelectorTarget::DungeonSearch);
+        }
         self.active_direction_prompt = Some(DirectionPromptSession::new(
             DirectionPromptKind::DungeonSearch { party_index },
         ));
@@ -2867,6 +2931,11 @@ impl PlayState {
         let Some(party_index) = self.resolve_dungeon_acting_member(party_index) else {
             return MoveOutcome::Blocked;
         };
+        // `dungeon-mode.md §12` step 1, "the standard \"by whom?\" prompt",
+        // is the shared roster picker (`§8.1` "Who acts"; playtest F10).
+        if party_index.is_none() {
+            return self.start_party_selector(PartySelectorTarget::DungeonLook { drink });
+        }
         // `dungeon-mode.md §12` L-Look: step 1 picks the member, step 2
         // "[c]hecks the lighting gate: if both torch and light-spell counters
         // are zero, prints exactly `You see:\ndarkness.\n` and returns", and

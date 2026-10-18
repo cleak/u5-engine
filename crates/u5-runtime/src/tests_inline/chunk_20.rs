@@ -763,7 +763,7 @@ fn town_jimmy_restraint_release_updates_live_npc_and_native_removal_mask() {
     assert_eq!(state.turn, 0);
 
     assert_eq!(
-        state.step_active_jimmy('1', "", Path::new("")).unwrap(),
+        state.step_active_jimmy('1', "\r", Path::new("")).unwrap(),
         Some(MoveOutcome::LockTried)
     );
     assert_eq!(state.npcs.len(), 1);
@@ -866,7 +866,7 @@ fn town_open_object_chest_consumes_slot_trap_and_public_reward_pools() {
         assert!(state.active_surface_chest.is_some());
         assert_eq!(state.message, PARTY_SELECTION_PROMPT);
         assert_eq!(
-            state.step_active_surface_chest('2', "").unwrap(),
+            state.step_active_surface_chest('2', "\r").unwrap(),
             Some(MoveOutcome::ContainerOpened)
         );
         let notes = state.diagnostics.join(" ");
@@ -891,7 +891,9 @@ fn town_open_object_chest_consumes_slot_trap_and_public_reward_pools() {
         state
             .message_entries()
             .iter()
-            .any(|entry| entry.text == selected_name),
+            // `commands.md §5.8`: the pick "completes that row with the
+            // member's name" - the bare `Player: ` row this fixture opens.
+            .any(|entry| entry.text.ends_with(&selected_name)),
         "a prompted pick echoes the selected member's name"
     );
     // `containers.md §4.1`: the surface/town transcript is a `Found:`
@@ -1391,7 +1393,7 @@ fn active_town_jimmy_picker_unlocks_with_selected_member() {
     assert_eq!(state.turn, 0);
 
     assert_eq!(
-        handle_play_key_input(&mut state, '1', "", &dir).unwrap(),
+        handle_play_key_input(&mut state, '1', "\r", &dir).unwrap(),
         PlayInputDisposition::Continue
     );
 
@@ -1427,13 +1429,17 @@ fn active_town_jimmy_picker_rejects_ineligible_pick_and_echoes_eligible_name() {
     handle_play_key_input(&mut state, '6', "", &dir).unwrap();
     assert!(state.active_jimmy.is_some());
 
-    handle_play_key_input(&mut state, '3', "", &dir).unwrap();
+    handle_play_key_input(&mut state, '3', "\r", &dir).unwrap();
     assert!(state.active_jimmy.is_some());
-    assert_eq!(state.message, DUNGEON_ACTING_MEMBER_DISABLED);
+    assert!(state
+        .message_entries()
+        .iter()
+        .any(|entry| entry.text == DUNGEON_ACTING_MEMBER_DISABLED.trim_end()));
+    assert_eq!(state.message, PARTY_SELECTION_PROMPT);
     assert_eq!(state.grid[32 + 2], TOWN_DOOR_PLAIN_LOCKED_TILE);
     assert_eq!(state.turn, 0);
 
-    handle_play_key_input(&mut state, '2', "", &dir).unwrap();
+    handle_play_key_input(&mut state, '2', "\r", &dir).unwrap();
     assert!(state.active_jimmy.is_none());
     assert_eq!(state.grid[32 + 2], TOWN_DOOR_PLAIN_UNLOCKED_TILE);
     assert!(
@@ -1508,7 +1514,7 @@ fn active_dungeon_jimmy_picker_preserves_prompt_before_key_check() {
     assert_eq!(state.keys, 0);
 
     assert_eq!(
-        handle_play_key_input(&mut state, '1', "", Path::new("")).unwrap(),
+        handle_play_key_input(&mut state, '1', "\r", Path::new("")).unwrap(),
         PlayInputDisposition::Continue
     );
 
@@ -2430,7 +2436,7 @@ fn dungeon_open_chest_prompts_and_uses_the_confirmed_member() {
 
     let slot_zero_hp = state.party[0].hp;
     assert_eq!(
-        state.step_active_surface_chest('2', "").unwrap(),
+        state.step_active_surface_chest('2', "\r").unwrap(),
         Some(MoveOutcome::ContainerOpened)
     );
 
@@ -2444,7 +2450,9 @@ fn dungeon_open_chest_prompts_and_uses_the_confirmed_member() {
         state
             .message_entries()
             .iter()
-            .any(|entry| entry.text == selected_name)
+            // `commands.md §5.8`: the pick "completes that row with the
+            // member's name" - the bare `Player: ` row this fixture opens.
+            .any(|entry| entry.text.ends_with(&selected_name))
     );
     assert!(state.diagnostics.iter().any(|note| note.contains("Acid trap hit party member 2")));
 }
@@ -2477,9 +2485,14 @@ fn dungeon_chest_picker_reprompts_disabled_and_cancel_leaves_chest_closed() {
     });
 
     assert_eq!(state.open_facing(), MoveOutcome::Observed);
-    assert_eq!(state.step_active_surface_chest('3', "").unwrap(), None);
+    assert_eq!(state.step_active_surface_chest('3', "\r").unwrap(), None);
     assert!(state.active_surface_chest.is_some());
-    assert!(state.message.contains(DUNGEON_ACTING_MEMBER_DISABLED.trim()));
+    // `Disabled!` and the prompt again (playtest F13).
+    assert!(state
+        .message_entries()
+        .iter()
+        .any(|entry| entry.text == DUNGEON_ACTING_MEMBER_DISABLED.trim_end()));
+    assert_eq!(state.message, PARTY_SELECTION_PROMPT);
     assert_eq!(state.grid[index], 0x4b);
     assert_eq!(state.turn, 0);
 
@@ -2852,8 +2865,9 @@ fn dungeon_search_runs_the_shared_acting_member_prompt() {
     state.party[1].status = b'G';
     assert!(state.handle_dungeon_key('S', &dir).unwrap());
     assert_eq!(state.message, PARTY_SELECTION_PROMPT);
+    handle_play_key_input(&mut state, '2', "", &dir).unwrap();
     assert_eq!(
-        handle_play_key_input(&mut state, '2', "", &dir).unwrap(),
+        handle_play_key_input(&mut state, '\r', "", &dir).unwrap(),
         PlayInputDisposition::Continue
     );
     assert!(state
@@ -2889,8 +2903,9 @@ fn dungeon_search_acting_member_prompt_refuses_a_disabled_pick() {
 
     assert!(state.handle_dungeon_key('S', &dir).unwrap());
     assert_eq!(state.message, PARTY_SELECTION_PROMPT);
+    handle_play_key_input(&mut state, '3', "", &dir).unwrap();
     assert_eq!(
-        handle_play_key_input(&mut state, '3', "", &dir).unwrap(),
+        handle_play_key_input(&mut state, '\r', "", &dir).unwrap(),
         PlayInputDisposition::Continue
     );
     assert!(state
@@ -2899,11 +2914,8 @@ fn dungeon_search_acting_member_prompt_refuses_a_disabled_pick() {
         .any(|entry| entry.text == "Disabled!"));
     assert_eq!(state.message, PARTY_SELECTION_PROMPT);
     assert_eq!(
-        state
-            .active_direction_prompt
-            .as_ref()
-            .map(|session| session.kind),
-        Some(DirectionPromptKind::DungeonSearch { party_index: None })
+        state.active_party_selector.map(|session| session.target),
+        Some(PartySelectorTarget::DungeonSearch)
     );
     let _ = fs::remove_dir_all(dir);
 }

@@ -305,9 +305,14 @@ fn rc2_dungeon_jimmy_picker_rejects_ineligible_and_ignores_zero() {
     assert_eq!(state.turn, 0);
 
     // The Asleep member is refused with `Disabled!` and the prompt repeats.
-    assert_eq!(state.step_active_jimmy('3', "", dir).unwrap(), None);
+    assert_eq!(state.step_active_jimmy('3', "\r", dir).unwrap(), None);
     assert!(state.active_jimmy.is_some());
-    assert_eq!(state.message, DUNGEON_ACTING_MEMBER_DISABLED);
+    // ... and re-prompts from `Player: ` (playtest F13).
+    assert!(state
+        .message_entries()
+        .iter()
+        .any(|entry| entry.text == DUNGEON_ACTING_MEMBER_DISABLED.trim_end()));
+    assert_eq!(state.message, PARTY_SELECTION_PROMPT);
     assert_eq!(state.grid[index], 0x4b);
     assert_eq!(state.keys, 3);
 
@@ -342,9 +347,11 @@ fn rc2_acting_member_pickers_commit_the_indicated_row_on_space() {
         acting_member_picker_key('4', 0, 3),
         ActingMemberPickerKey::Ignore
     );
+    // `inventory.md §4.3`: a digit moves the indicator; it does not
+    // commit (playtest F10).
     assert_eq!(
         acting_member_picker_key('2', 0, 3),
-        ActingMemberPickerKey::Pick(1)
+        ActingMemberPickerKey::Move(1)
     );
     assert_eq!(
         acting_member_picker_key('\u{1b}', 0, 3),

@@ -490,8 +490,13 @@ impl PlayState {
             // shared acting-member prompt echoes the name the same way
             // (`dungeon-mode.md §8.1`, "Who acts"; playtest E13).
             if !self.surface_chest_member_available(digit - 1) {
-                self.message = DUNGEON_ACTING_MEMBER_DISABLED.to_string();
+                // "... and repeats the prompt" - `dungeon-mode.md §8.1`
+                // re-prompts "from `Player: `". The refusal alone left the
+                // picker waiting under a fresh command row with no question
+                // on screen (playtest F13).
+                self.emit_message_line(DUNGEON_ACTING_MEMBER_DISABLED);
                 self.active_jimmy = Some(session);
+                self.message = self.render_active_jimmy();
                 return Ok(None);
             }
             self.record_container_picker_name_echo(digit - 1);
@@ -591,8 +596,11 @@ impl PlayState {
                 // Good-or-Poisoned is rejected with the short "disabled"
                 // notice and **the prompt repeats** - it does not abort.
                 // `dungeon-mode.md §11` publishes that notice.
-                self.message = DUNGEON_ACTING_MEMBER_DISABLED.to_string();
+                // ... and re-prompts "from `Player: `" (`dungeon-mode.md
+                // §8.1`; playtest F13).
+                self.emit_message_line(DUNGEON_ACTING_MEMBER_DISABLED);
                 self.active_surface_chest = Some(session);
+                self.message = self.render_active_surface_chest();
                 return Ok(None);
             }
             // `traps.md §2.1`: only a prompted choice echoes the selected
@@ -663,6 +671,17 @@ impl PlayState {
             // line for a name the runtime was never given.
             return;
         };
+        // `commands.md §5.8`: "a confirmed eligible pick completes that row
+        // with the member's name". After a `Disabled!` re-prompt the row is
+        // a bare `Player: `, which the name completes; the first prompt
+        // continues the verb echo and its name wraps below either way.
+        let reprompt_row_open = self
+            .message_transcript
+            .last()
+            .is_some_and(|entry| entry.text == PARTY_SELECTION_PROMPT);
+        if reprompt_row_open && self.complete_open_direction_echo(PARTY_SELECTION_PROMPT, &name) {
+            return;
+        }
         self.message = name;
         self.flush_message_slot();
     }

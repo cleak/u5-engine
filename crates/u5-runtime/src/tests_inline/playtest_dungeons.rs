@@ -194,7 +194,7 @@ fn playtest_e12_dungeon_open_asks_who_acts_on_any_cell() {
     assert_eq!(state.message, PARTY_SELECTION_PROMPT);
     assert_eq!(state.turn, 0);
 
-    handle_play_key_input(&mut state, '2', "", Path::new("")).unwrap();
+    handle_play_key_input(&mut state, '2', "\r", Path::new("")).unwrap();
     assert!(state.active_surface_chest.is_none());
     assert_eq!(state.message, DUNGEON_CHEST_OPEN_WHAT);
 
@@ -205,7 +205,7 @@ fn playtest_e12_dungeon_open_asks_who_acts_on_any_cell() {
     open.party.push(audit_g5_companion(1));
     handle_play_key_input(&mut open, 'o', "", Path::new("")).unwrap();
     assert_eq!(open.message, PARTY_SELECTION_PROMPT);
-    handle_play_key_input(&mut open, '1', "", Path::new("")).unwrap();
+    handle_play_key_input(&mut open, '1', "\r", Path::new("")).unwrap();
     assert_eq!(open.message, DUNGEON_CHEST_OPEN_ALREADY_OPEN);
 
     // "a party with no eligible member at all, answers `None!\n` and the
@@ -240,7 +240,7 @@ fn playtest_e13_dungeon_jimmy_echoes_the_chosen_member() {
 
     handle_play_key_input(&mut state, 'j', "", Path::new("")).unwrap();
     assert!(state.active_jimmy.is_some(), "the member prompt is open");
-    handle_play_key_input(&mut state, '2', "", Path::new("")).unwrap();
+    handle_play_key_input(&mut state, '2', "\r", Path::new("")).unwrap();
 
     let rows = playtest_transcript_rows(&state);
     let prompt = rows
@@ -275,10 +275,11 @@ fn playtest_e14_unlit_dungeon_look_refuses_before_the_dir_chooser() {
     party.light_spell_counter = 0;
     handle_play_key_input(&mut party, 'l', "", Path::new("")).unwrap();
     assert!(
-        party.active_direction_prompt.is_some(),
+        party.active_party_selector.is_some(),
         "the member prompt opens"
     );
     handle_play_key_input(&mut party, '2', "", Path::new("")).unwrap();
+    handle_play_key_input(&mut party, '\r', "", Path::new("")).unwrap();
     assert!(party.active_direction_prompt.is_none(), "no chooser opens");
     let rows = playtest_transcript_rows(&party);
     assert!(!rows.iter().any(|row| row.contains("Dir-")), "{rows:?}");

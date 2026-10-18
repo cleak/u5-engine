@@ -109,3 +109,127 @@ fn playfix2_f09_room_entry_prints_the_first_turn_banner_before_any_key() {
     );
     let _ = fs::remove_dir_all(dir);
 }
+
+/// A lit three-member dungeon party, everyone able to act.
+fn playfix2_lit_party_state() -> PlayState {
+    let mut state = dungeon_state(open_dungeon_record(), 0, 1, 1);
+    state.party.push(audit_g5_companion(1));
+    state.party.push(audit_g5_companion(2));
+    state.party_names = vec![*b"AVATAR\0\0\0", *b"IOLO\0\0\0\0\0", *b"SHAMINO\0\0"];
+    state.torch_counter = 5;
+    state
+}
+
+/// F10: `inventory.md §4.3` - "**A digit moves the indicator; it does not
+/// commit.** ... Only Return or Space commits the indicated row, Escape
+/// cancels, and `0` commits the explicit 'no one' answer only in the
+/// callers that allow it ... This is one shared routine, so the rule is the
+/// same for ... Search and every other caller." `dungeon-mode.md §8.1` puts
+/// dungeon Look and Search on that shared prompt.
+#[test]
+fn playfix2_f10_dungeon_look_and_search_pickers_move_on_digits_and_commit_on_return() {
+    for verb in ['l', 'S'] {
+        let mut state = playfix2_lit_party_state();
+        handle_play_key_input(&mut state, verb, "", Path::new("")).unwrap();
+        assert!(state.active_party_selector.is_some(), "{verb}: the picker opens");
+
+        for key in ['2', '0'] {
+            handle_play_key_input(&mut state, key, "", Path::new("")).unwrap();
+            assert!(
+                state.active_party_selector.is_some(),
+                "{verb}: `{key}` does not commit"
+            );
+            assert!(state.active_direction_prompt.is_none());
+        }
+        // `2` moved the indicator to the second row; a direction key moves
+        // it on to the third, and Return commits that row.
+        handle_play_key_input(&mut state, char::from(INPUT_CODE_SOUTH), "", Path::new(""))
+            .unwrap();
+        assert_eq!(state.selector_highlight(), Some(2), "{verb}");
+        handle_play_key_input(&mut state, '\r', "", Path::new("")).unwrap();
+
+        assert!(state.active_party_selector.is_none(), "{verb}");
+        let rows = playfix2_transcript_rows(&state);
+        assert!(rows.iter().any(|row| row == "Player: SHAMINO"), "{verb}: {rows:?}");
+        let party_index = state
+            .active_direction_prompt
+            .map(|session| match session.kind {
+                DirectionPromptKind::DungeonLook { party_index, .. }
+                | DirectionPromptKind::DungeonSearch { party_index } => party_index,
+                other => panic!("{verb}: unexpected prompt {other:?}"),
+            });
+        assert_eq!(party_index, Some(Some(2)), "{verb}: the `Dir-` chooser opens");
+    }
+    // The chest sites' picker is the same routine.
+    assert_eq!(acting_member_picker_key('2', 0, 3), ActingMemberPickerKey::Move(1));
+}
+
+/// F11, F12: `dungeon-mode.md §8.1` "Who acts" - "a cancel ... answers
+/// `None!\n` and the command aborts"; `commands.md §5.8` - "Escape prints
+/// `None!\n` on the prompt row". Search ignored Escape, and Look put the
+/// answer on a row of its own.
+#[test]
+fn playfix2_f11_f12_escape_cancels_dungeon_look_and_search_on_the_prompt_row() {
+    for verb in ['l', 'S'] {
+        let mut state = playfix2_lit_party_state();
+        handle_play_key_input(&mut state, verb, "", Path::new("")).unwrap();
+        handle_play_key_input(&mut state, '\u{1b}', "", Path::new("")).unwrap();
+
+        assert!(state.active_party_selector.is_none(), "{verb}");
+        assert!(state.active_direction_prompt.is_none(), "{verb}");
+        let rows = playfix2_transcript_rows(&state);
+        assert_eq!(
+            rows.last().map(String::as_str),
+            Some("Player: None!"),
+            "{verb}: {rows:?}"
+        );
+    }
+}
+
+/// F13: `dungeon-mode.md §8.1` - "A pick whose status is neither Good nor
+/// Poisoned answers `Disabled!\n\n` and re-prompts from `Player: `"; and
+/// while the picker waits the question is the line being edited
+/// (`inventory.md §4.3`), not a fresh command row under it.
+#[test]
+fn playfix2_f13_dungeon_jimmy_picker_keeps_its_prompt_open_and_reprompts() {
+    let mut state = playfix2_lit_party_state();
+    state.party[1].status = b'D';
+    state.keys = 1;
+
+    handle_play_key_input(&mut state, 'J', "", Path::new("")).unwrap();
+    assert!(state.active_jimmy.is_some());
+    let open = state.open_prompt_line().expect("the member prompt is open");
+    assert!(open.ends_with(PARTY_SELECTION_PROMPT), "{open:?}");
+
+    handle_play_key_input(&mut state, '2', "\r", Path::new("")).unwrap();
+    assert!(state.active_jimmy.is_some(), "a disabled pick re-prompts");
+    let rows = playfix2_transcript_rows(&state);
+    let disabled = rows
+        .iter()
+        .rposition(|row| row == DUNGEON_ACTING_MEMBER_DISABLED.trim_end())
+        .unwrap_or_else(|| panic!("`Disabled!` prints: {rows:?}"));
+    assert_eq!(rows[disabled + 1..], ["", PARTY_SELECTION_PROMPT], "{rows:?}");
+    assert_eq!(state.open_prompt_line().as_deref(), Some(PARTY_SELECTION_PROMPT));
+
+    handle_play_key_input(&mut state, '1', "\r", Path::new("")).unwrap();
+    assert!(state.active_jimmy.is_none());
+    let rows = playfix2_transcript_rows(&state);
+    assert!(rows.iter().any(|row| row == "Player: AVATAR"), "{rows:?}");
+}
+
+/// F17: `dungeon-mode.md §12` - each Look class line ends "in one line
+/// feed", so a Look leaves the row closed; `§13.2`'s line-feed-led
+/// `Exit to ` then gets its blank row. A multi-member Look left the row
+/// marked open from its `Dir-` prompt.
+#[test]
+fn playfix2_f17_a_party_look_closes_its_row() {
+    let mut state = playfix2_lit_party_state();
+    handle_play_key_input(&mut state, 'l', "", Path::new("")).unwrap();
+    handle_play_key_input(&mut state, '\r', "", Path::new("")).unwrap();
+    assert!(state.active_direction_prompt.is_some());
+    handle_play_key_input(&mut state, char::from(INPUT_CODE_NORTH), "", Path::new("")).unwrap();
+
+    let rows = playfix2_transcript_rows(&state);
+    assert!(rows.iter().any(|row| row == "You see:"), "{rows:?}");
+    assert!(!state.message_row_open_mid_line, "{rows:?}");
+}

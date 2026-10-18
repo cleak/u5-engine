@@ -1010,8 +1010,12 @@ pub enum ActingMemberPickerKey {
 /// roster picker (`inventory.md §4.3`) with the chest sites' argument:
 ///
 /// - Escape cancels.
-/// - "Number keys `1` through `6` select directly, bounded by the current
-///   party size", the way this engine's pickers have always taken them.
+/// - "**A digit moves the indicator; it does not commit.** `1` through `6`,
+///   bounded by the party size, reposition the inverted row exactly as the
+///   direction keys do and leave the prompt open" (`inventory.md §4.3`,
+///   clarified by issue #192: the older "select directly" bullet "was read
+///   as a commit"). This picker committed on a digit, unlike the shared
+///   selector every other caller uses (playtest F10).
 /// - "Only Return or Space commits the indicated row", and "the four
 ///   direction keys move the indicator". Neither is a cancel.
 /// - `0` "commits the explicit 'no one' answer only in the callers that
@@ -1033,7 +1037,7 @@ pub fn acting_member_picker_key(key: char, highlight: usize, party_len: usize) -
         });
     }
     match key.to_digit(10).map(|digit| digit as usize) {
-        Some(digit) if (1..=rows).contains(&digit) => ActingMemberPickerKey::Pick(digit - 1),
+        Some(digit) if (1..=rows).contains(&digit) => ActingMemberPickerKey::Move(digit - 1),
         _ => ActingMemberPickerKey::Ignore,
     }
 }
@@ -1228,6 +1232,15 @@ pub enum PartySelectorTarget {
         x: usize,
         y: usize,
     },
+    /// `dungeon-mode.md §8.1`, "Who acts": dungeon L-Look and Search "run
+    /// the shared acting-member prompt", which is `inventory.md §4.3`'s one
+    /// shared routine - a digit moves the indicator, Return or Space
+    /// commits, Escape cancels and `0` is ignored (playtest F10, F11).
+    /// On a pick the `Dir-` relative-focus chooser opens.
+    DungeonLook {
+        drink: Option<bool>,
+    },
+    DungeonSearch,
 }
 
 impl PartySelectorTarget {
@@ -1256,6 +1269,14 @@ impl PartySelectorTarget {
             Self::NewOrder { .. } => NEW_ORDER_CANCEL_REPLY,
             _ => crate::SELECTION_CANCELLED_LITERAL,
         }
+    }
+
+    /// `inventory.md §4.3`: "`0` commits the explicit 'no one' answer only
+    /// in the callers that allow it ... other callers ignore `0`." The
+    /// dungeon acting-member callers are among the others: `dungeon-mode.md
+    /// §8.1` gives that prompt a pick, a re-prompt and a cancel only.
+    pub const fn ignores_zero(self) -> bool {
+        matches!(self, Self::DungeonLook { .. } | Self::DungeonSearch)
     }
 
     pub fn prompt(self) -> &'static str {
