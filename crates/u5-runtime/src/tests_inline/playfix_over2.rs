@@ -44,6 +44,54 @@ fn playfix_f23_z_stats_sheet_charges_on_exit() {
     assert_eq!(state.turn, turn + 1);
 }
 
+/// F23 follow-up: the charge paid at prompt close can start a fight, and
+/// the exchange's closing reply must not come back after the conflict
+/// banner. The world pass joins the slot onto the engagement's text, so a
+/// reply left there was reprinted as `Status: Done *** CONFLICT ***` (and
+/// `Item: Done *** CONFLICT ***` for R-Ready) on a row under the banner.
+#[test]
+fn playfix_f23_closing_reply_is_not_rejoined_onto_the_conflict_banner() {
+    for (key, closing) in [('R', "\u{1b}"), ('Z', "\r\u{1b}")] {
+        let dir = debug_game_dir();
+        fs::write(
+            dir.join(BRIT_CBT_FILE),
+            synthetic_combat_arena_record().repeat(BRIT_CBT_RECORDS),
+        )
+        .unwrap();
+        let mut state = world_state(open_world_grid(), 5, 5);
+        state.active_objects.push(ActiveObject {
+            type_byte: 0x80,
+            tile: 0x80,
+            x: 6,
+            y: 5,
+            z: WorldPlane::Underworld.save_floor(),
+            phase: 0,
+            aux1: 0,
+            aux3: 0,
+        });
+        handle_play_key_input(&mut state, key, "", &dir).unwrap();
+        assert!(!state.combat_active, "{key}: no fight while the prompt waits");
+        for ch in closing.chars() {
+            handle_play_key_input(&mut state, ch, "", &dir).unwrap();
+        }
+        assert!(state.combat_active, "{key}: the paid turn starts the fight");
+        state.flush_message_slot();
+        let rows: Vec<&str> = state
+            .message_entries()
+            .iter()
+            .map(|entry| entry.text.as_str())
+            .collect();
+        let banner = combat_banner_line();
+        assert_eq!(
+            rows.iter().filter(|row| row.contains("CONFLICT")).count(),
+            1,
+            "{key}: {rows:?}"
+        );
+        assert_eq!(rows.last().copied(), Some(banner.as_str()), "{key}: {rows:?}");
+        let _ = fs::remove_dir_all(dir);
+    }
+}
+
 /// F18: `overworld.md §9.2` - "Nothing about ... party transport ... gates
 /// it" and "The party's transport marker is restored on every path that ran
 /// the transition"; the hook "calls the same saved-slot warp helper used by

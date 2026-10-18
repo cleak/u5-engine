@@ -633,7 +633,27 @@ fn handle_active_z_stats_key_input(
 /// post-action pass that follows it (playtest F23).
 fn settle_exploration_acted_charge(state: &mut PlayState, game_dir: &Path) -> io::Result<()> {
     if let Some(turn_before) = state.settle_exploration_acted_charge() {
+        // The exchange's closing reply (`Item: Done`, `Status: Done`,
+        // `Player: None!`) is already committed when the charge is paid.
+        // The world pass joins whatever the slot holds onto an engagement's
+        // own text (`pre_effect_message`), so a reply left there came back
+        // after the banner as `Item: Done *** CONFLICT ***`. Take it out of
+        // the slot for the pass, as the dungeon climb word is, and put it
+        // back only when the pass printed nothing.
+        state.flush_message_slot();
+        let reply = (state.message == state.message_flushed).then(|| {
+            (
+                std::mem::take(&mut state.message),
+                std::mem::take(&mut state.message_flushed),
+            )
+        });
         state.apply_post_turn_effects_after_outcome(turn_before, game_dir, MoveOutcome::Used)?;
+        if let Some((message, flushed)) = reply
+            && state.message.is_empty()
+        {
+            state.message = message;
+            state.message_flushed = flushed;
+        }
     }
     Ok(())
 }
