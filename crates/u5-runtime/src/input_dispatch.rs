@@ -73,8 +73,23 @@ fn run_with_command_epilogue(
     // exceptions sets its own mode while it runs.
     state.stats_panel_command_refresh = crate::stats_panel::PanelRefreshMode::Immediate;
     state.stats_panel_command_baseline = crate::stats_panel::stats_panel_snapshot_of(state);
-    let combat_was_active = state.combat_active;
+    let mut combat_was_active = state.combat_active;
     let mut result = command(state);
+    // `combat.md §8.1`: the turn banner is "emitted at the start of every
+    // keyboard-driven combatant's turn, *before any key is read*". A
+    // committed combat action already drives the walker to the next prompt
+    // before it returns; the command that *opens* a fight did not, so the
+    // first banner only appeared together with the next key's echo
+    // (playtest F35). Drive it here, once the entry framing has printed.
+    // The paced (graphical) shell walks the same turns from its own pump.
+    if result.is_ok()
+        && !combat_was_active
+        && combat_awaits_automatic_turns(state)
+        && !state.pace_combat_presentations
+    {
+        combat_was_active = true;
+        drive_combat_round_walk_and_append_message(state);
+    }
     // A generic adjacent terrain combat suspends the high-to-low outdoor
     // reaction walk. As soon as the combat frame returns, continue the
     // remaining lower slots before accepting another world command.

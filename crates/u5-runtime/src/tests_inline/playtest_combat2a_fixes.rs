@@ -63,3 +63,47 @@ fn playtest_f24_a_sleeping_party_in_an_arena_takes_combat_turns_until_it_wakes()
         "the world sleep pass never runs inside an arena: {texts:?}"
     );
 }
+
+/// `combat.md §8.1`: the turn banner is "emitted at the start of every
+/// keyboard-driven combatant's turn, *before any key is read*". Playtest F35:
+/// the command that opened the fight left the round unwalked, so the first
+/// banner only appeared together with the next key's echo.
+#[test]
+fn playtest_f35_the_first_turn_banner_is_printed_before_the_first_key() {
+    let dir = debug_game_dir();
+    let record = synthetic_combat_arena_record();
+    fs::write(dir.join(BRIT_CBT_FILE), record.repeat(BRIT_CBT_RECORDS)).unwrap();
+    let mut state = world_state(open_world_grid(), 5, 5);
+    state.active_objects.push(ActiveObject {
+        type_byte: 0xc0,
+        tile: 0xc0,
+        x: 6,
+        y: 5,
+        z: WorldPlane::Underworld.save_floor(),
+        phase: STEADY_PHASE,
+        aux1: 0,
+        aux3: 0,
+    });
+
+    handle_play_key_input(&mut state, 'A', "6", &dir).unwrap();
+
+    assert!(state.combat_active);
+    let actor_slot = state
+        .pending_combat_actor_slot
+        .expect("a keyboard-driven combatant is already at the prompt");
+    let banner = state
+        .combat_turn_banner_for_actor(actor_slot)
+        .expect("a party actor has a banner");
+    let texts = combat2a_entry_texts(&state);
+    let conflict = texts
+        .iter()
+        .position(|text| *text == combat_banner_line())
+        .unwrap_or_else(|| panic!("the conflict banner is printed: {texts:?}"));
+    assert!(
+        texts[conflict..]
+            .iter()
+            .any(|text| text == banner.trim_matches('\n')),
+        "the turn banner follows the conflict banner before any key: {texts:?}"
+    );
+    let _ = fs::remove_dir_all(dir);
+}
