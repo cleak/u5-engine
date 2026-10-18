@@ -1162,6 +1162,7 @@ mod tests {
     include!("tests_inline/rc1_paired_fixes.rs");
     include!("tests_inline/playfix_overworld.rs");
     include!("tests_inline/playfix_shops.rs");
+    include!("tests_inline/playfix_systems2.rs");
     include!("tests_inline/playtest_dungeons.rs");
     include!("tests_inline/rc2_residuals.rs");
 }
