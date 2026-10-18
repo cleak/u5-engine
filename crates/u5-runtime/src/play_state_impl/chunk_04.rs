@@ -5793,16 +5793,13 @@ impl PlayState {
         }
         if let Some(answer_slot) = asked_party_name {
             if let Some(candidate) = self.active_conversation_join_candidate.take() {
-                if let Some(join_text) =
-                    self.apply_conversation_join_candidate(&candidate, answer_slot)
-                {
-                    if !text.is_empty() {
-                        text.push(' ');
-                        rendered.push_plain(" ");
-                    }
-                    text.push_str(&join_text);
-                    rendered.push_plain(&join_text);
-                }
+                // `conversation.md §7.6` (`0x84` row): the recruit swaps the
+                // roster record, bumps the party size and removes the NPC;
+                // its only published outputs are the full-party refusal and
+                // the no-match diagnostic. The helper's `<name> joined.`
+                // summary is not game text, so nothing is printed for a
+                // successful recruit (playtest F06).
+                let _ = self.apply_conversation_join_candidate(&candidate, answer_slot);
             }
         } else if !join_keyword && !join_prompted_for_roster_companion {
             self.active_conversation_join_candidate = None;

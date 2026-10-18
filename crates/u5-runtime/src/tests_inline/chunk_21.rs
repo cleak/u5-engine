@@ -3686,7 +3686,8 @@ fn conversation_join_adds_inactive_roster_companion() {
     let (text, ended) = state.submit_active_conversation_keyword("JOIN");
 
     assert!(text.contains("Accepted."));
-    assert!(text.contains("joined."));
+    // §7.6 publishes no success line for `0x84` (playtest F06).
+    assert!(!text.contains("joined."), "{text:?}");
     assert!(!ended);
     assert_eq!(state.party.len(), 2);
     assert_eq!(state.party_names[1], *b"GWENNO\0\0\0");
@@ -3757,7 +3758,8 @@ fn conversation_join_is_triggered_by_the_control_byte_not_the_join_keyword() {
     let (text, ended) = state.submit_active_conversation_keyword("help");
 
     assert!(text.contains("Accepted."));
-    assert!(text.contains("joined."));
+    // §7.6 publishes no success line for `0x84` (playtest F06).
+    assert!(!text.contains("joined."), "{text:?}");
     assert!(!ended);
     assert_eq!(state.party.len(), 2);
     assert_eq!(state.party_names[1], *b"GWENNO\0\0\0");
