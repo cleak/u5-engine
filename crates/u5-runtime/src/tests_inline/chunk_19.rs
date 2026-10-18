@@ -321,10 +321,14 @@
 
     #[test]
     fn town_rest_bed_tile_predicate_matches_public_pair() {
-        assert!(!is_town_rest_bed_tile(0x47));
-        assert!(is_town_rest_bed_tile(0x48));
-        assert!(is_town_rest_bed_tile(0x49));
-        assert!(!is_town_rest_bed_tile(0x4a));
+        // tile-catalog.md §3/§6: the bed is `0xAB..0xAC`; `0x48..0x49` is
+        // the bridge structure-piece pair (playtest F52).
+        assert!(!is_town_rest_bed_tile(0x48));
+        assert!(!is_town_rest_bed_tile(0x49));
+        assert!(!is_town_rest_bed_tile(0xAA));
+        assert!(is_town_rest_bed_tile(0xAB));
+        assert!(is_town_rest_bed_tile(0xAC));
+        assert!(!is_town_rest_bed_tile(0xAD));
     }
 
     #[test]
@@ -480,7 +484,7 @@
         let dir = debug_game_dir();
         let _ = fs::remove_file(dir.join(TOWN_REST_BED_TABLE_FILE));
         let mut grid = open_grid();
-        grid[32 + 1] = 0x48;
+        grid[32 + 1] = 0xAC;
         let mut state = test_state(grid, 1, 1);
         state.area = Area::Town {
             scene: Scene::new(2).unwrap(),
@@ -509,7 +513,7 @@
         let dir = debug_game_dir();
         let _ = fs::remove_file(dir.join(TOWN_REST_BED_TABLE_FILE));
         let mut grid = open_grid();
-        grid[32 + 1] = 0x48;
+        grid[32 + 1] = 0xAC;
         let mut state = test_state(grid, 1, 1);
 
         assert_eq!(
