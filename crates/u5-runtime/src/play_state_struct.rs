@@ -865,6 +865,14 @@ pub struct PlayState {
     /// [`PlayState::roster_box_label`].
     pub active_party_selector: Option<crate::z_stats::PartySelectorSession>,
     pub active_ready: Option<crate::z_stats::ReadySession>,
+    /// `inventory.md §5` timing contract and `commands.md §4`: outside
+    /// combat R-Ready and Z-stats report the default "acted" status, which
+    /// the mode loop consumes *after* the handler returns - "Once in the
+    /// post-action mode epilogue". The charge is owed from the moment the
+    /// command is dispatched and is paid when its last prompt closes, so no
+    /// world turn (clock, active objects, encounters) runs while `Player: `
+    /// or the picker is still waiting (playtest F23).
+    pub exploration_acted_charge_owed: bool,
     pub active_use: Option<crate::z_stats::UseSession>,
     pub active_cast: Option<crate::z_stats::CastSession>,
     pub active_cast_followup: Option<crate::z_stats::CastFollowupSession>,
