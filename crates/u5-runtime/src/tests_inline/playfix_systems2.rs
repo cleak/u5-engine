@@ -51,3 +51,40 @@ fn playfix_f57_blackthorn_rescue_spin_across_midnight_repaints_the_panel_date() 
     assert_eq!(state.displayed_stats_panel().date_row, live.date_row);
     let _ = fs::remove_dir_all(dir);
 }
+
+/// F58: `formats/end-dat.md §3` - "`_` Soft hyphen: draws nothing" - and
+/// `text-output.md §8.2` make the soft hyphen and the `{` indent invisible.
+/// The message slot that the headless frames and the composed screen print
+/// must not carry either marker; only the proportional page renderer sees
+/// them.
+#[test]
+fn playfix_f58_endgame_narrative_message_slot_drops_end_dat_markers() {
+    let mut raw = Vec::new();
+    let mut table = String::new();
+    for index in 0..6 {
+        let start = raw.len();
+        raw.extend_from_slice(b"{\"In_stead, famil_iar furn_i_ture");
+        raw.push(0);
+        table.push_str(&format!("{} {start} {}\n", index + 1, raw.len()));
+    }
+    let ranges = parse_end_narrative_window_ranges(&table).unwrap();
+    let narrative = EndNarrative::new(raw).with_window_ranges(ranges);
+    let mut endgame = EndgameState::terminal(
+        true,
+        true,
+        true,
+        endgame_certificate_fields("MARIA", GameClock::with_date(141, 5, 6, 12, 0).unwrap()),
+        endgame_final_report(GameClock::with_date(141, 5, 6, 12, 0).unwrap()),
+        None,
+        Some(narrative),
+    );
+    assert_eq!(endgame.current_narrative_layout_text(), None);
+    endgame.advance_cinematic();
+    assert!(endgame.advance_cinematic_frame_operation());
+
+    assert_eq!(endgame.current_cinematic_text(), "\"Instead, familiar furniture");
+    assert_eq!(
+        endgame.current_narrative_layout_text().as_deref(),
+        Some("{\"In_stead, famil_iar furn_i_ture")
+    );
+}

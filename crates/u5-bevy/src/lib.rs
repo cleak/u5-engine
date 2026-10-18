@@ -17277,14 +17277,21 @@ fn render_endgame_narrative_window_framebuffer(
         panel.top_left_y,
         Some((usize::from(panel.width), usize::from(panel.height))),
     );
-    // Steps 6 and 7. The prose is the window's `END.DAT` record, which
-    // the cinematic driver has already resolved into the message slot
-    // (`endgame.md §8.1` binds window N to record N).
+    // Steps 6 and 7. The prose is the window's `END.DAT` record
+    // (`endgame.md §8.1` binds window N to record N), taken with its `{`
+    // indent and `_` soft hyphens intact for the proportional layout
+    // (`formats/end-dat.md §3`). The message slot holds the marker-free
+    // text for the fixed-cell surfaces (playtest F58).
+    let prose = display_state
+        .endgame
+        .as_ref()
+        .and_then(|endgame| endgame.current_narrative_layout_text())
+        .unwrap_or_else(|| display_state.message.clone());
     draw_proportional_paragraph_to_buffer(
         &mut buffer,
         ctx.game_dir,
         &descriptor,
-        &display_state.message,
+        &prose,
         ENDGAME_NARRATIVE_TEXT_COLOR,
     )
     .unwrap_or_else(|err| {
@@ -23716,8 +23723,18 @@ mod tests {
             None
         );
         // Completing the fade publishes window one; the beat consumes
-        // no input, so nothing else can publish it.
-        assert_eq!(state.message, "{Window one");
+        // no input, so nothing else can publish it. The message slot
+        // holds the marker-free text; the page renderer takes the
+        // `{`-indented layout text (playtest F58).
+        assert_eq!(state.message, "Window one");
+        assert_eq!(
+            state
+                .endgame
+                .as_ref()
+                .and_then(|endgame| endgame.current_narrative_layout_text())
+                .as_deref(),
+            Some("{Window one")
+        );
     }
 
     #[test]
