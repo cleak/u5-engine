@@ -296,3 +296,40 @@ fn playtest_f38_victory_after_a_cast_kill_keeps_its_leading_blank_row() {
     );
     let _ = game_dir;
 }
+
+/// `combat.md §14`: `BATTLE IS LOST!` "begins with a newline and has no
+/// trailing newline", and `text-output.md §10.4`: for a result that does not
+/// end in a feed "the next poll's leading feed closes the open row and no
+/// blank row appears". Playtest F41: the world prompt took a blank row under
+/// the arena's last line.
+#[test]
+fn playtest_f41_the_world_prompt_follows_the_battle_lost_line_directly() {
+    let game_dir = std::path::Path::new(".");
+    let mut state = combat_player_command_state(8, 0);
+    state.combat_actors[0].y = 0;
+    state.active_objects[0].y = 0;
+    state.pending_combat_actor_slot = Some(0);
+    state.next_combat_actor_slot = 1;
+
+    handle_play_key_input(&mut state, 'w', "", game_dir).unwrap();
+
+    assert!(!state.combat_active, "the edge exit ended the fight");
+    let last = state.message_entries().last().expect("a transcript");
+    assert_eq!(last.text, "BATTLE IS LOST!");
+    assert!(last.leaves_row_open, "the loss line leaves its row open");
+    let mut log = message_log_from_entries(state.message_entries(), |text| {
+        (!text.trim().is_empty()).then(|| text.to_string())
+    });
+    log.set_top_offset(usize::from(state.message_window_top_offset()));
+    let layout = layout_message_window_with_prompt(&log, Some(""), None, false);
+    let rows: Vec<&str> = layout.rows.iter().map(|row| row.text.as_str()).collect();
+    let lost = rows
+        .iter()
+        .position(|row| *row == "BATTLE IS LOST!")
+        .unwrap_or_else(|| panic!("the loss line is drawn: {rows:?}"));
+    assert_eq!(layout.rows[lost + 1].row, layout.rows[lost].row + 1);
+    assert!(
+        layout.rows[lost + 1].prefixed,
+        "the prompt marker: {rows:?}"
+    );
+}

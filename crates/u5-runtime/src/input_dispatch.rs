@@ -6039,8 +6039,24 @@ fn handle_combat_key_input(state: &mut PlayState, key: char, suffix: &str) -> Pl
             // The edge-exit echo is already on the transcript, so the defeat
             // line is its own print on the row below it.
             state.emit_combat_print("\nBATTLE IS LOST!");
+            // `combat.md §14`: the stored string "begins with a newline and
+            // has no trailing newline", so the world prompt that follows
+            // closes its row and takes no blank (playtest F41).
+            state.leave_last_transcript_row_open();
         } else {
             state.apply_combat_round_loop_exit(exit);
+            // `combat.md §14`: the accepted Escape key "appends the character
+            // `!`, producing `Escape!`; this handler appends no newline after
+            // it" - the echo row stays open for the next prompt's feed to
+            // close (playtest F41).
+            if matches!(
+                application.action,
+                CombatPlayerCommandAction::EscapeCleanup { application }
+                    if application.decision == CombatEscapeCleanupDecision::Accepted
+            ) && !state.combat_active
+            {
+                state.leave_last_transcript_row_open();
+            }
         }
     } else if matches!(
         application.action,
