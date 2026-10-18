@@ -184,8 +184,18 @@ impl ConversationSessionOutput {
         let already_quoted = rendered.text.trim_start().starts_with('"');
         // The closing quote hugs the text: a response whose own stream
         // ends in line feeds keeps them *outside* the quotes, where the
-        // original puts them.
-        let body_len = rendered.text.trim_end_matches('\n').len();
+        // original puts them. A `0x83` / `0x8F` hold marker among those
+        // trailing feeds is not text either - a stream that closes its own
+        // quote, feeds twice and key-waits before an ASK-WHO (Anthony's
+        // `reci`) must not get a second closing quote after the hold, which
+        // showed as a stray lone-quote row (playtest F05, `conversation.md
+        // §7.6` "What ASK-WHO prints").
+        let is_hold = |byte: u8| crate::text_hold::TextHoldKind::from_marker(byte).is_some();
+        let body_len = rendered
+            .text
+            .bytes()
+            .rposition(|byte| byte != b'\n' && !is_hold(byte))
+            .map_or(0, |index| index + 1);
         // §6's framing opens with a line feed, but the `BYE` header of
         // the empty-input exit has already printed its own two - "Print
         // `BYE` followed by two line feeds, run the NPC's mandatory Bye
@@ -216,9 +226,16 @@ impl ConversationSessionOutput {
         // §6's framing closes with a blank row before the reprompt, the
         // same shape the no-match literal already carries. Two line
         // feeds, because `text-output.md §5`'s feed is a combined
-        // CR+LF, so a run of *k* leaves *k - 1* blank rows.
-        while !self.text.ends_with("\n\n") {
-            self.push_plain_text("\n");
+        // CR+LF, so a run of *k* leaves *k - 1* blank rows. Feeds the
+        // stream put in front of a hold marker count towards the two.
+        let tail_feeds = rendered.text.as_bytes()[body_len..]
+            .iter()
+            .filter(|byte| **byte == b'\n')
+            .count();
+        if tail_feeds < 2 || !rendered.text.ends_with(|c: char| is_hold(c as u8)) {
+            while !self.text.ends_with("\n\n") {
+                self.push_plain_text("\n");
+            }
         }
     }
 
@@ -1437,6 +1454,28 @@ mod tests {
         let missed = s.submit_keyword("nobody", &context);
         assert!(missed.text.contains("Indeed."), "{:?}", missed.text);
         assert_eq!(missed.moral_standing, None);
+    }
+
+    /// Playtest F05. `conversation.md §7.6` "What ASK-WHO prints": the
+    /// handler emits the only opening quote before its question, and a
+    /// stray lone quote row is the symptom of getting the quotes wrong.
+    /// Anthony's `reci` record is a closed quote, two feeds, a `0x8F`
+    /// key-wait and the ASK-WHO: the framing's closing quote must not land
+    /// after the hold marker, where it became a row of its own.
+    #[test]
+    fn a_hold_before_ask_who_gets_no_second_closing_quote() {
+        let mut response = enc("I can't yet.\"");
+        response.extend([
+            TLK_CODE_LITERAL_NEWLINE,
+            TLK_CODE_LITERAL_NEWLINE,
+            TLK_CODE_WAIT_KEY,
+            TLK_CODE_ASK_WHO,
+        ]);
+        let mut s = label_session(response, Vec::new());
+        let out = s.submit_keyword("ask", &ctx());
+        assert!(s.awaiting_ask_who());
+        let hold = crate::text_hold::TextHoldKind::WaitKey.marker_str();
+        assert_eq!(out.text, format!("\n\"I can't yet.\"\n\n{hold}"));
     }
 
     #[test]
