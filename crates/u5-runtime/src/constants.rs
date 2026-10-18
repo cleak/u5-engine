@@ -683,6 +683,12 @@ pub const SAVE_SPELL_CHARGE_BLOCK_OFFSET: usize = 0x024A;
 pub const SAVE_SCROLL_COUNTERS_OFFSET: usize = 0x027A;
 pub const SAVE_POTION_COUNTERS_OFFSET: usize = 0x0282;
 pub const SAVE_FIXED_HIDDEN_TREASURE_DAILY_COOKIE_OFFSET: usize = 0x020C;
+/// `formats/saved-gam.md` §10: "Rare-reagent harvest cooldown cookies" at
+/// `0x02B2..0x02B4`, one per fixed harvest point in the containers.md
+/// harvest-table order; "a harvest is refused when the byte equals the
+/// current day, and success writes the current day into it. ... The 28-day
+/// month rollover zeroes all three." Durable SAVED.GAM state (playtest F54).
+pub const SAVE_RARE_REAGENT_HARVEST_COOKIES_OFFSET: usize = 0x02B2;
 /// `formats/saved-gam.md` §10, record 15: "Not a dedicated cookie. This
 /// is the **equipment-inventory counter for item id `39` (Glass Sword)**
 /// from Section 7, and record 15's granted item is that same Glass Sword.

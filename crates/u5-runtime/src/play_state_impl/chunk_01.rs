@@ -452,6 +452,9 @@ impl PlayState {
             ..SAVE_FIXED_HIDDEN_TREASURE_FOUND_OFFSET + FIXED_HIDDEN_TREASURE_FOUND_BYTES]
             .copy_from_slice(&self.fixed_hidden_treasure_found);
         save[SAVE_FIXED_HIDDEN_TREASURE_DAILY_COOKIE_OFFSET] = self.fixed_hidden_treasure_daily_day;
+        save[SAVE_RARE_REAGENT_HARVEST_COOKIES_OFFSET
+            ..SAVE_RARE_REAGENT_HARVEST_COOKIES_OFFSET + RARE_REAGENT_HARVEST_POINT_COUNT]
+            .copy_from_slice(&self.rare_reagent_harvest_days);
         // `formats/saved-gam.md` §10, record 15: the gate at `0x0241` is
         // "Not a dedicated cookie. This is the **equipment-inventory counter
         // for item id `39` (Glass Sword)** from Section 7". It is inside the

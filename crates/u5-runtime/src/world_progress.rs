@@ -98,10 +98,6 @@ impl WorldProgressState {
         }
     }
 
-    pub fn apply_sidecar_only_to_play_options(self, options: &mut PlayOptions) {
-        options.rare_reagent_harvest_days = self.rare_reagent_harvest_days;
-    }
-
     pub fn encoded(self) -> [u8; WORLD_PROGRESS_STATE_LEN] {
         let mut bytes = [0; WORLD_PROGRESS_STATE_LEN];
         bytes[0..4].copy_from_slice(&WORLD_PROGRESS_STATE_MAGIC);
